@@ -32,6 +32,12 @@ const NATIVE_CHANNELS = [
   // redeems the code with OpenRouter; opening its page again is the browser too.
   "studio:openrouter.signin",
   "studio:openrouter.signin.reopen",
+  // Connecting asks the person's own model server on this computer or the local network, and keeps
+  // its key in the OS secret store; finding one asks this computer's usual ports. A fixture
+  // profile reaches no server.
+  "studio:local-server.connect",
+  "studio:local-server.forget",
+  "studio:local-server.find",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
   "studio:claude-login.browser",

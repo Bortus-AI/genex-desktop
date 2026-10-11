@@ -1,7 +1,7 @@
 /**
- * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode and OpenRouter
- * stand-ins that answer from fixed text, never reach an account, a key or the network, and start no
- * vendor worker. Markers in
+ * The scripted engines of a fixture session: Ollama, Claude Code, Codex, OpenCode, OpenRouter and
+ * local server stand-ins that answer from fixed text, never reach an account, a key, a server or the
+ * network, and start no vendor worker. Markers in
  * the user's words (`fixture:pending`, `fixture:stream`, `fixture:plan`, …) choose the script.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
@@ -9,6 +9,7 @@ import { EngineKind, EngineStatusCode } from "../../shared/engine-descriptor.ts"
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { HOUR_MS } from "../../shared/duration.ts";
 import { EngineId } from "../../shared/providers.ts";
+import { type LocalServerInfo, LocalServerKind } from "../../shared/local-server.ts";
 import {
   type CompleteRequest,
   DelegateEventType,
@@ -30,10 +31,24 @@ const FIXTURE_ENGINES = [
   EngineId.Codex,
   EngineId.OpenCode,
   EngineId.OpenRouter,
+  EngineId.LocalServer,
 ] as const;
-/** The fixture engines the studio's own loop drives: the local model, and OpenRouter's API. */
-const DIRECT_FIXTURES: ReadonlySet<string> = new Set([EngineId.Ollama, EngineId.OpenRouter]);
+/** The fixture engines the studio's own loop drives: the local model, OpenRouter's API and a local server. */
+const DIRECT_FIXTURES: ReadonlySet<string> = new Set([EngineId.Ollama, EngineId.OpenRouter, EngineId.LocalServer]);
 const READY_STATUS: EngineStatus = { code: EngineStatusCode.Ready, detail: "AG-933 fixture; no account or network" };
+/** No local server is connected in a fixture session, so the picker's lists stay as they were. */
+const NO_LOCAL_SERVER: EngineStatus = {
+  code: EngineStatusCode.NotInstalled,
+  detail: "AG-933 fixture; no local server is connected",
+};
+/** The server a ready local server stand-in reaches: TabbyAPI's default address, with a key kept. */
+const FIXTURE_SERVER: LocalServerInfo = {
+  url: "http://127.0.0.1:5000/v1",
+  kind: LocalServerKind.TabbyApi,
+  hasKey: true,
+};
+/** The status each fixture starts with when the session names none: ready, but for the local server. */
+const DEFAULT_STATUS: Partial<Record<string, EngineStatus>> = { [EngineId.LocalServer]: NO_LOCAL_SERVER };
 /** How long naming a game takes, so home's Naming step can be seen. */
 const NAMING_DELAY_MS = 2500;
 /** How long a scripted plan takes to come back, so its progress can be seen. */
@@ -73,7 +88,7 @@ const LATEST_MESSAGE = "LATEST USER MESSAGE:\n";
 
 /**
  * First launch: an empty library, Claude Code waiting for a sign-in, Codex and OpenCode not
- * installed, and OpenRouter with no key.
+ * installed, OpenRouter with no key, and no local server.
  */
 export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   [EngineId.ClaudeCode]: {
@@ -83,6 +98,7 @@ export const FIRST_LAUNCH_STATUS: Record<string, EngineStatus> = {
   [EngineId.Codex]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no Codex app" },
   [EngineId.OpenCode]: { code: EngineStatusCode.NotInstalled, detail: "AG-933 fixture; no OpenCode CLI" },
   [EngineId.OpenRouter]: { code: EngineStatusCode.NeedsLogin, detail: "AG-933 fixture; no OpenRouter key" },
+  [EngineId.LocalServer]: NO_LOCAL_SERVER,
 };
 
 export function fixtureEngines(directChat = false, statuses: Record<string, EngineStatus> = {}): Engine[] {
@@ -98,7 +114,7 @@ function fixtureEngine(
   pendingSessions: Set<string>,
 ): Engine {
   const direct = DIRECT_FIXTURES.has(id);
-  // Ollama completes one turn at a time; OpenRouter holds a Genex session, as the real one does.
+  // Ollama completes one turn at a time; OpenRouter and a local server hold Genex sessions, as the real ones do.
   const local = id === EngineId.Ollama;
   return {
     id,
@@ -107,7 +123,14 @@ function fixtureEngine(
     supportsSessions: !(directChat && local),
     // Claude Code reads the person's messages mid-turn; Codex is interrupted and resumed instead.
     ...(id === EngineId.ClaudeCode ? { steersMidTurn: true } : {}),
-    status: async () => statuses[id] ?? READY_STATUS,
+    status: async () => statuses[id] ?? DEFAULT_STATUS[id] ?? READY_STATUS,
+    // A local server stand-in names its server only while the session has it ready.
+    ...(id === EngineId.LocalServer
+      ? {
+          server: async () =>
+            (statuses[id] ?? NO_LOCAL_SERVER).code === EngineStatusCode.Ready ? FIXTURE_SERVER : null,
+        }
+      : {}),
     models: async () => [
       {
         id: FIXTURE_MODEL,

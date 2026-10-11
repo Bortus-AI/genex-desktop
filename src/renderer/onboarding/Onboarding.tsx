@@ -35,7 +35,8 @@ import { LoaderGrid } from "../ui/LoadingState.tsx";
 import { CODE_FALLBACK_LABEL, useCodeFallback } from "../ui/SignInCard.tsx";
 import { useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
-import { problemWords } from "../words.ts";
+import { LOCAL_SERVER_WORDS, problemWords } from "../words.ts";
+import { openSettings, SettingsSection } from "../settings-navigation.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
 import { prefersReducedMotion, REDUCED_MOTION_QUERY } from "../ui/media-queries.ts";
 import { ArtCanvas, type Draw } from "./ArtCanvas.tsx";
@@ -110,7 +111,7 @@ const WAY_SCREEN: Record<OtherWay, Screen> = {
   [OtherWay.OpenCode]: Screen.OpenCode,
 };
 /** The engines besides OpenCode that, once ready, are something to build with. */
-const BUILDS_WITH: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex, EngineId.OpenRouter];
+const BUILDS_WITH: readonly string[] = [EngineId.ClaudeCode, EngineId.Codex, EngineId.LocalServer, EngineId.OpenRouter];
 
 /** Each subscription's mark on the connect art. */
 const MARK_OF: Record<Subscription, Provider> = {
@@ -1127,18 +1128,38 @@ function LocalBody({ local }: { local: LocalModel }): JSX.Element {
   return <ModelRow local={local} pick={pick} />;
 }
 
+/** A server the person already runs (LM Studio, llama.cpp, TabbyAPI) is connected in Settings. */
+function ServerLink({ onServer }: { onServer: () => void }): JSX.Element {
+  return (
+    <p className="onboarding-note">
+      {LOCAL_SERVER_WORDS.onboardingLine}{" "}
+      <button
+        type="button"
+        className="onboarding-link"
+        data-state="idle"
+        data-onboarding-action={OnboardingAction.Server}
+        onClick={onServer}
+      >
+        {LOCAL_SERVER_WORDS.connectServer}
+      </button>
+    </p>
+  );
+}
+
 function Local({
   local,
   anyOn,
   onBack,
   onSkip,
   onStart,
+  onServer,
 }: {
   local: LocalModel;
   anyOn: boolean;
   onBack: () => void;
   onSkip: () => void;
   onStart: () => void;
+  onServer: () => void;
 }): JSX.Element {
   const heading = useHeadingFocus();
   const { load } = local;
@@ -1174,6 +1195,7 @@ function Local({
         className="onboarding-chip"
       />
       <LocalBody local={local} />
+      <ServerLink onServer={onServer} />
       <p role="alert" className="onboarding-problem">
         {local.error ?? ""}
       </p>
@@ -1287,7 +1309,14 @@ export function Onboarding({
       case Screen.OpenCode:
         return <OpenCodeScreen key={Screen.OpenCode} code={code} free={freeModel.free} {...after} />;
       default:
-        return <Local key={Screen.Local} local={local} {...after} />;
+        return (
+          <Local
+            key={Screen.Local}
+            local={local}
+            {...after}
+            onServer={() => end(() => openSettings(SettingsSection.Providers))}
+          />
+        );
     }
   };
 

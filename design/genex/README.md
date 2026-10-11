@@ -508,7 +508,12 @@ connected row adds Show in the model picker; the model list refreshes by itself 
 while it first loads or after a refresh failed (Showing saved models… with Try again); a CLI update
 in progress reads Updating…. A signed-out row's one action is Sign in. No filesystem path or
 executable picker is shown; a missing or outdated CLI offers Install (or Update) and Check again, shows Installing… while the vendor's
-installer runs, and adds the vendor's Install guide after a failure. Local Models ranks models that fit with a
+installer runs, and adds the vendor's Install guide after a failure. The last row, Local server, connects a model server the person
+runs: until one is saved it lists the servers found on this computer (each with Use) above an
+address field, an optional API key and Connect; a refusal says why in red under the fields, with
+where the server keeps its key when Genex knows. A saved server's line names it ("TabbyAPI at
+127.0.0.1:5000"), its Server menu holds Check connection, Change address… and Disconnect, and its
+models list in mono with their context, "sees images" or "can't call tools". Local Models ranks models that fit with a
 Best fit tag, a memory meter and "Needs a N GB Mac" for the rest, plus Add from Ollama. An installed
 row keeps the quiet Installed badge beside a ghost trash button; it asks on the row ("Delete it from
 this Mac?") with Cancel, which takes focus, and a destructive Delete. Closing or switching sections preserves host installation

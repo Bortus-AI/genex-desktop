@@ -27,6 +27,8 @@ export const OnboardingAction = {
   Next: "next",
   Start: "start",
   Skip: "skip",
+  /** Leave the welcome for Settings to connect a model server the person already runs. */
+  Server: "server",
 } as const;
 
 /** A width that follows its content, so a button's box glides to hug each new label. */
