@@ -5,6 +5,7 @@ import { type ModelPullProgress, UiEvent } from "../../shared/ui-events.ts";
 import type { ProviderUsageReport } from "../../shared/provider-usage.ts";
 import { isBonsaiModelId } from "../../substrate/bonsai/manifest.ts";
 import { BonsaiEngine } from "../../substrate/engines/bonsai.ts";
+import { LocalServerEngine } from "../../substrate/engines/local-server.ts";
 import { detectHardware, fitFor } from "../../substrate/hardware.ts";
 import { lookupOllamaModel } from "../../substrate/ollama-registry.ts";
 import { hardwareReport } from "../core/hardware-report.ts";
@@ -20,9 +21,10 @@ const REFRESHABLE: ReadonlySet<string> = new Set([
   EngineId.Codex,
   EngineId.OpenCode,
   EngineId.OpenRouter,
+  EngineId.LocalServer,
 ]);
 /** The engines with no subscription sign-in: a recheck reads their models (and status) again. */
-const RECHECKED_BY_MODELS: readonly string[] = [EngineId.OpenCode, EngineId.OpenRouter];
+const RECHECKED_BY_MODELS: readonly string[] = [EngineId.OpenCode, EngineId.OpenRouter, EngineId.LocalServer];
 
 /** An engine whose API key is pasted in Settings (OpenRouter). */
 interface ApiKeyEngine {
@@ -38,6 +40,7 @@ const isApiKeyEngine = (engine: unknown): engine is ApiKeyEngine =>
 const MESSAGE = {
   unknownProvider: "Unknown coding provider",
   noKeyEngine: "OpenRouter is unavailable",
+  noLocalServer: "Local servers are unavailable",
   bonsaiUnavailable: "Bonsai runtime is unavailable",
   noModel: "Name the model to delete",
   cannotRemove: "This model cannot be deleted here",
@@ -59,6 +62,7 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
     return true;
   });
   registerApiKeyIpc(handle, { core, pushUiEvent });
+  registerLocalServerIpc(handle, { core, pushUiEvent });
   // The composer's plan limits: every signed-in subscription, read without starting a turn.
   handle("studio:provider-usage", async () => {
     const reports = await Promise.all(
@@ -168,4 +172,31 @@ function registerApiKeyIpc(
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
     return status;
   });
+}
+
+/**
+ * The person's own model server: connect it (its address checked as local, its key kept in the OS
+ * secret store, neither saved unless the server answers), forget it, or find one on this computer.
+ */
+function registerLocalServerIpc(
+  handle: IpcHandle,
+  { core, pushUiEvent }: Pick<ModelsIpcDeps, "core" | "pushUiEvent">,
+): void {
+  const localServer = (): LocalServerEngine => {
+    const engine = core.engines.has(EngineId.LocalServer) ? core.engines.get(EngineId.LocalServer) : null;
+    if (!(engine instanceof LocalServerEngine)) throw new Error(MESSAGE.noLocalServer);
+    return engine;
+  };
+  const changed = (): void => pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.LocalServer } });
+  handle("studio:local-server.connect", async (payload) => {
+    const result = await localServer().connect({ url: payload?.url, key: payload?.key });
+    if (result.ok) changed();
+    return result;
+  });
+  handle("studio:local-server.forget", async () => {
+    const status = await localServer().forget();
+    changed();
+    return status;
+  });
+  handle("studio:local-server.find", async () => localServer().find());
 }

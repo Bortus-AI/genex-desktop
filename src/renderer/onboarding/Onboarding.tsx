@@ -34,7 +34,8 @@ import { LoaderGrid } from "../ui/LoadingState.tsx";
 import { CODE_FALLBACK_LABEL, useCodeFallback } from "../ui/SignInCard.tsx";
 import { useClaudeLogin, useSubscriptionAuth } from "../subscription-auth.ts";
 import { useCliInstall } from "../cli-install.ts";
-import { problemWords } from "../words.ts";
+import { LOCAL_SERVER_WORDS, problemWords } from "../words.ts";
+import { openSettings, SettingsSection } from "../settings-navigation.ts";
 import { SHOW_TERMINAL_EVENT } from "../panels/terminal-events.ts";
 import { prefersReducedMotion, REDUCED_MOTION_QUERY } from "../ui/media-queries.ts";
 import { ArtCanvas, type Draw } from "./ArtCanvas.tsx";
@@ -76,6 +77,8 @@ const OnboardingAction = {
   Next: "next",
   Start: "start",
   Skip: "skip",
+  /** Leave the welcome for Settings to connect a model server the person already runs. */
+  Server: "server",
 } as const;
 
 /** The three onboarding screens, in the order the person meets them. */
@@ -1226,18 +1229,38 @@ function LocalBody({ local }: { local: LocalModel }): JSX.Element {
   return <ModelRow local={local} pick={pick} />;
 }
 
+/** A server the person already runs (LM Studio, llama.cpp, TabbyAPI) is connected in Settings. */
+function ServerLink({ onServer }: { onServer: () => void }): JSX.Element {
+  return (
+    <p className="onboarding-note">
+      {LOCAL_SERVER_WORDS.onboardingLine}{" "}
+      <button
+        type="button"
+        className="onboarding-link"
+        data-state="idle"
+        data-onboarding-action={OnboardingAction.Server}
+        onClick={onServer}
+      >
+        {LOCAL_SERVER_WORDS.connectServer}
+      </button>
+    </p>
+  );
+}
+
 function Local({
   local,
   anyOn,
   onBack,
   onSkip,
   onStart,
+  onServer,
 }: {
   local: LocalModel;
   anyOn: boolean;
   onBack: () => void;
   onSkip: () => void;
   onStart: () => void;
+  onServer: () => void;
 }): JSX.Element {
   const heading = useHeadingFocus();
   const { load } = local;
@@ -1273,6 +1296,7 @@ function Local({
         className="onboarding-chip"
       />
       <LocalBody local={local} />
+      <ServerLink onServer={onServer} />
       <p role="alert" className="onboarding-problem">
         {local.error ?? ""}
       </p>
@@ -1326,7 +1350,7 @@ export function Onboarding({
   const local = useLocalModel(engines, onEnginesRefresh);
   const { closing, leaving, finish } = useWelcomeExit(idea, onReady, onFinish);
   const ready = (id: string) => engines.find((engine) => engine.id === id)?.status.code === EngineStatusCode.Ready;
-  const anyOn = ready(EngineId.ClaudeCode) || ready(EngineId.Codex) || local.installed;
+  const anyOn = ready(EngineId.ClaudeCode) || ready(EngineId.Codex) || ready(EngineId.LocalServer) || local.installed;
 
   useEffect(() => {
     root.current?.focus({ preventScroll: true });
@@ -1371,6 +1395,7 @@ export function Onboarding({
         onBack={() => go(Screen.Connect, true)}
         onSkip={() => finish()}
         onStart={() => finish()}
+        onServer={() => finish(() => openSettings(SettingsSection.Providers))}
       />
     );
   };
