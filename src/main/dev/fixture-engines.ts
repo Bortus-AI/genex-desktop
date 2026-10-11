@@ -18,6 +18,7 @@ import {
   EngineError,
   type EngineStatus,
 } from "../../substrate/engines/types.ts";
+import { BACKDROP_SYSTEM_PROMPT, REPAIR_OPENING } from "../core/backdrop-generation-prompts.ts";
 import { GAME_NAME_SYSTEM_PROMPT } from "../core/game-naming-prompts.ts";
 import { FIXTURE_MODEL } from "./fixture-kit.ts";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -36,6 +37,10 @@ const DIRECT_FIXTURES: ReadonlySet<string> = new Set([EngineId.Ollama, EngineId.
 const READY_STATUS: EngineStatus = { code: EngineStatusCode.Ready, detail: "AG-933 fixture; no account or network" };
 /** How long naming a game takes, so home's Naming step can be seen. */
 const NAMING_DELAY_MS = 2500;
+/** How long making a background takes, so the panel's progress can be seen. */
+const BACKDROP_DELAY_MS = 1500;
+/** A description holding this gets a shader the GPU refuses first, so the repair can be seen. */
+const BROKEN_BACKDROP_MARKER = "fixture:broken";
 /** How long a scripted plan takes to come back, so its progress can be seen. */
 const PLAN_DELAY_MS = 1200;
 /** Pauses between streamed pieces: a Studio reply, a slow one, and a game chat's. */
@@ -51,6 +56,7 @@ const LONG_REPLY_SECTIONS = 12;
 const MESSAGE = {
   plainReply: "Fixture response. No new build was started.",
   gameName: "Tiny Island Fishing",
+  backdropTitle: "Fixture Waves",
   studioReply:
     "Fixture Studio reply: game chats build games. This conversation explains Studio, its runs, and the instruction changes in Activity.",
   studioFollowUp: "Fixture follow-up: the earlier conversation and recorded Studio activity are still in context.",
@@ -176,6 +182,10 @@ async function completeFixture(id: EngineId, request: CompleteRequest) {
     return reply(id, MESSAGE.gameName);
   }
   const latestUser = request.messages.findLast((message) => message.role === "user")?.content ?? "";
+  if (request.systemPrompt === BACKDROP_SYSTEM_PROMPT) {
+    await sleep(BACKDROP_DELAY_MS, undefined, { signal: request.signal }).catch(() => {});
+    return reply(id, backdropReply(latestUser));
+  }
   if (latestUser.includes(PENDING_MARKER)) await pending(request.signal, id);
   if (request.systemPrompt?.startsWith("You are the Harness assistant")) return studioReply(id, request, latestUser);
   const transcript = JSON.stringify(request.messages);
@@ -187,6 +197,26 @@ async function completeFixture(id: EngineId, request: CompleteRequest) {
     return reply(id, MESSAGE.streamedReply);
   }
   return reply(id, MESSAGE.plainReply);
+}
+
+/**
+ * A background's waves. The first answer to a `fixture:broken` description returns a float as a
+ * colour; a repair gets the working one.
+ */
+function backdropReply(request: string): string {
+  const broken = request.includes(BROKEN_BACKDROP_MARKER) && !request.includes(REPAIR_OPENING);
+  const result = broken ? "wave" : "vec4f(color, 1.0)";
+  return `Title: ${MESSAGE.backdropTitle}
+\`\`\`wgsl
+@fragment fn fs_main(@location(0) uv: vec2f) -> @location(0) vec4f {
+  let p = bd_centered(uv);
+  let wave = 0.5 + 0.5 * sin(p.x * 6.0 * backdrop.scale + backdrop.time + sin(p.y * 4.0 + backdrop.time * 0.7) * 2.0);
+  let band = smoothstep(0.02, 0.0, abs(fract(p.y * 5.0 * backdrop.scale + wave * 0.6) - 0.5) - 0.2);
+  var color = bd_glow(backdrop.page.rgb, backdrop.accent.rgb, wave * 0.18);
+  color = bd_glow(color, backdrop.ink.rgb, band * 0.7);
+  return ${result};
+}
+\`\`\``;
 }
 
 /** The Studio thread's assistant: a first reply, a follow-up, or nothing for `fixture:failure`. */

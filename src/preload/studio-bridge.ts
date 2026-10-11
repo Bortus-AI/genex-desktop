@@ -109,6 +109,7 @@ function gameCalls(bridge: BridgeCalls) {
     createGame: (title, options) =>
       invoke("studio:game.create", { title, ...(options?.parent === undefined ? {} : { parent: options.parent }) }),
     nameGame: (request) => invoke("studio:game.name", request),
+    makeBackdrop: (request) => invoke("studio:backdrop.make", request),
     pickGameLocation: () => invoke("studio:game.location.pick"),
     chooseGamesRoot: () => invoke("studio:games-root.choose"),
     updateGame: (project, patch) => invoke("studio:game.update", { project, patch }),

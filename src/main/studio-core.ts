@@ -19,6 +19,7 @@ import path from "node:path";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
+import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/backdrop-shader.ts";
 import type { GameLocation, GameName, GameNameRequest } from "../shared/game-project.ts";
 import type { GameSoundRequest } from "../shared/game-sound.ts";
 import { latestRun } from "../shared/coordinator.ts";
@@ -109,6 +110,7 @@ import { ConversationService } from "./core/conversation.ts";
 import { DelegationService } from "./core/delegation.ts";
 import { GameFileService } from "./core/game-files.ts";
 import { nameFromIdea, nameGame } from "./core/game-naming.ts";
+import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { GameThreadService } from "./core/game-threads.ts";
@@ -1489,6 +1491,11 @@ export class StudioCore {
   /** A name for a game started from its first request, before its folder is made (`core/game-naming.ts`). */
   nameGame(request: GameNameRequest): Promise<GameName> {
     return nameGame({ engines: this.engines, budget: this.budget }, request);
+  }
+
+  /** A live background for home from a description (`core/backdrop-generation.ts`). */
+  makeBackdrop(request: BackdropShaderRequest): Promise<BackdropShaderResult> {
+    return makeBackdropShader({ engines: this.engines, budget: this.budget }, request);
   }
 
   /** Games being named from an idea now: a second message while the first names it waits its turn. */

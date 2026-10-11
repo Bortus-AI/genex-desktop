@@ -289,6 +289,13 @@ const glyphs = {
       <path className="a-l3" pathLength={1} d="M8.5 15.5h4" />
     </>
   ),
+  // A four-point sparkle and a small one: something a model makes (home's Make your own background).
+  sparkle: (
+    <>
+      <path d="M11 3.5c.7 4.4 2.3 6 6.75 6.75-4.45.75-6.05 2.35-6.75 6.75-.7-4.4-2.3-6-6.75-6.75C8.7 9.5 10.3 7.9 11 3.5z" />
+      <path d="M18.5 15.5v4.5M16.25 17.75h4.5" />
+    </>
+  ),
   // A lightbulb: Add's Plan mode, a plan before anything is built (its row and the bulb that shows it).
   bulb: (
     <>

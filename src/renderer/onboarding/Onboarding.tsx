@@ -27,6 +27,7 @@ import { EngineStatusCode } from "../../shared/engine-descriptor.ts";
 import type { ModelInstallJob } from "../../shared/model-install.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { type ModelPullProgress, UiEvent } from "../../shared/ui-events.ts";
+import { preloadHomeBackdrop } from "../home-backdrop/preload.ts";
 import { Button } from "../ui/Button.tsx";
 import { GenexLogo } from "../ui/GenexLogo.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -1331,6 +1332,10 @@ export function Onboarding({
   useEffect(() => {
     root.current?.focus({ preventScroll: true });
   }, []);
+  // Past the welcome, home's background gets ready behind these screens, so home opens on it.
+  useEffect(() => {
+    if (screen.id !== Screen.Welcome) void preloadHomeBackdrop();
+  }, [screen.id]);
   const go = (id: Screen, back = false) => setScreen({ id, back });
 
   const current = (): JSX.Element => {
