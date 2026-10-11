@@ -122,6 +122,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:opencode.signin": "openCodeSignIn",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
+  "studio:openrouter.signin": "openRouterSignIn",
+  "studio:openrouter.signin.reopen": "openRouterSignInReopen",
+  "studio:openrouter.signin.cancel": "openRouterSignInCancel",
   "studio:local-server.connect": "localServerConnect",
   "studio:local-server.forget": "localServerForget",
   "studio:local-server.find": "localServerFind",
@@ -309,6 +312,9 @@ export interface StudioInvokePayloads {
   "studio:opencode.signin": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
+  "studio:openrouter.signin": undefined;
+  "studio:openrouter.signin.reopen": undefined;
+  "studio:openrouter.signin.cancel": undefined;
   "studio:local-server.connect": { url: string; key?: string };
   "studio:local-server.forget": undefined;
   "studio:local-server.find": undefined;

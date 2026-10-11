@@ -113,10 +113,18 @@ local finish and the reference judge never pick one. Only the person's explicit 
 **OpenRouter** ([openrouter.ts](../src/substrate/engines/openrouter.ts)) is a direct engine on the
 same pi-ai path as Ollama ([pi-completions.ts](../src/substrate/engines/pi-completions.ts)), and a
 game chat or build runs as a Genex session (`LocalSessions`, under OpenRouter's own id), as Bonsai's
-does. Settings sends a pasted key over `studio:openrouter.key.save` (native); main checks it with
-`GET /key`, keeps it only when accepted (`openrouter-api-key` in the SecretStore under
-`userData/secrets/providers`, which no agent process may read) and answers with the engine status,
-never the key. A locked store saves nothing and says so. The public `/models` list is read without
+does. Settings and first launch send a pasted key over `studio:openrouter.key.save` (native); main
+checks it with `GET /key`, keeps it only when accepted (`openrouter-api-key` in the SecretStore
+under `userData/secrets/providers`, which no agent process may read) and answers with the engine
+status, never the key. First launch's Connect OpenRouter (`studio:openrouter.signin`, native) is
+OpenRouter's OAuth with PKCE ([openrouter-login.ts](../src/main/openrouter-login.ts)): the browser
+opens `openrouter.ai/auth` with an S256 challenge and a random `state`, comes back to a one-time
+callback on `localhost` (127.0.0.1 and ::1, a free port), and main redeems the code once with its
+verifier at `/auth/keys`; the key goes to the same `saveKey`, and the call answers only how it ended.
+A callback without this sign-in's state is refused; ten minutes without one ends it. While OpenCode's
+free models are all a person can build with, first launch lists them to pick one, OpenCode's
+default first (`opencode::default` names no model, so it follows OpenCode's own choice), and the
+pick seeds the first game's chat (`rememberWelcomeModel`). A locked store saves nothing and says so. The public `/models` list is read without
 the key; only tool-calling models are listed, with their context, reply cap, vision, reasoning
 efforts and price. OpenRouter picks no default model. Context is estimated from characters before
 each request (compaction runs early rather than late); 401/403 is a sign-in failure, 402 a usage

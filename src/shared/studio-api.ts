@@ -349,6 +349,16 @@ export interface StudioApi {
   /** Forget the saved OpenRouter key. */
   openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /**
+   * Connect OpenRouter in the browser: OpenRouter's page opens, and the call settles once the
+   * person approved Genex there (the key is then checked and saved, never sent back), cancelled,
+   * or it failed. A new call replaces one still waiting.
+   */
+  openRouterSignIn(): Promise<import("./openrouter-login.ts").OpenRouterSignInResult>;
+  /** Open the waiting sign-in's page again; false when none is waiting. */
+  openRouterSignInReopen(): Promise<boolean>;
+  /** Stop the waiting sign-in; false when none is waiting. */
+  openRouterSignInCancel(): Promise<boolean>;
+  /**
    * Connect a model server the person runs (`shared/local-server.ts`): check the address is on this
    * computer or the local network, ask the server for its models with the key when one is given,
    * and save both only when it answers. The key never comes back.
