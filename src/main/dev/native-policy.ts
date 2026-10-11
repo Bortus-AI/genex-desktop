@@ -28,6 +28,10 @@ const NATIVE_CHANNELS = [
   // deletes it there. A fixture profile has no key and no network.
   "studio:openrouter.key.save",
   "studio:openrouter.key.clear",
+  // The browser sign-in opens OpenRouter in the person's browser, listens on a loopback port and
+  // redeems the code with OpenRouter; opening its page again is the browser too.
+  "studio:openrouter.signin",
+  "studio:openrouter.signin.reopen",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
   "studio:claude-login.browser",
@@ -250,6 +254,8 @@ const FIXTURE_SAFE = [
   "studio:codex-login.state",
   "studio:codex-login.cancel",
   "studio:codex-login.dismiss",
+  // Stopping OpenRouter's browser sign-in only closes its loopback callback.
+  "studio:openrouter.signin.cancel",
   // Adoption opens no network and writes only inside the profile's own games root.
   "studio:project.inspect",
   "studio:project.adopt",

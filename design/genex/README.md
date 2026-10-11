@@ -458,8 +458,18 @@ stand in two columns 24px apart, each hugging its button, each extruded mark ove
 glides to the next label; sign-in and install progress use the app's LoaderGrid. Install stays in the
 welcome: no browser trip, no arrow. Both sign-ins read Finish in your browser, which finishes on
 its own; Claude's code box opens only from **Browser showed a code?** and the Connect ChatGPT window
-only for a device code or a failed sign-in (Settings and the chat card alike). The marks are the vendors'
-own paths, unaltered (`ui/provider-marks.ts`). All art is canvas in the empty states' wireframe
+only for a device code or a failed sign-in (Settings and the chat card alike). Under the buttons,
+a 13px small-caps ink-3 **or use** leads one row of quiet 32px buttons, each a 16px icon and its
+name (Local models, OpenRouter, OpenCode): no underline, the control-hover fill only under the
+pointer or focus, and one 13px ink-3 line under the row saying what the button pointed at offers.
+A way under way shows the LoaderGrid and its progress; a ready one a green check and its status.
+OpenRouter and OpenCode each open a screen like Connect's: its title, words held to 380px in
+balanced lines (the lines under the action too), its mark alone, one accent-tint action that
+hugs its words, quiet links under it, and OpenCode's sign-in as a terminal card (a 40px bar with
+Cancel over the terminal). While OpenCode's free models are all a person can build with, its ready
+screen lists them under a small-caps **build with** as one radio group of 36px rows (the picked one
+on a surface with an accent dot), OpenCode default first and picked; a short window drops the mark
+for it. The marks are the vendors' own paths, unaltered (`ui/provider-marks.ts`). All art is canvas in the empty states' wireframe
 language, reads theme colours from CSS and holds a still frame under Reduce Motion. Skip for now
 and Start building fade into home, the welcome's idea waiting in its composer.
 

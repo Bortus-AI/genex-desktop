@@ -9,6 +9,7 @@ import { detectHardware, fitFor } from "../../substrate/hardware.ts";
 import { lookupOllamaModel } from "../../substrate/ollama-registry.ts";
 import { hardwareReport } from "../core/hardware-report.ts";
 import type { SubscriptionEngine } from "../login-controllers.ts";
+import type { OpenRouterLogin } from "../openrouter-login.ts";
 import type { IpcHandle } from "./registrar.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EngineId } from "../../shared/providers.ts";
@@ -47,9 +48,14 @@ export interface ModelsIpcDeps {
   core: Pick<StudioCore, "engines">;
   subscription(id: string): SubscriptionEngine | null;
   pushUiEvent(event: UiEvent): void;
+  /** OpenRouter's browser sign-in, which hands the key it gets to the engine. */
+  openRouterLogin: OpenRouterLogin;
 }
 
-export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushUiEvent }: ModelsIpcDeps): void {
+export function registerModelsIpc(
+  handle: IpcHandle,
+  { core, subscription, pushUiEvent, openRouterLogin }: ModelsIpcDeps,
+): void {
   handle("studio:engines", async () => core.engines.describe());
   handle("studio:models.refresh", async (payload) => {
     const provider = payload?.provider;
@@ -58,7 +64,7 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
     await core.engines.get(provider).refreshModels?.(true);
     return true;
   });
-  registerApiKeyIpc(handle, { core, pushUiEvent });
+  registerApiKeyIpc(handle, { core, pushUiEvent, openRouterLogin });
   // The composer's plan limits: every signed-in subscription, read without starting a turn.
   handle("studio:provider-usage", async () => {
     const reports = await Promise.all(
@@ -148,10 +154,13 @@ export function registerModelsIpc(handle: IpcHandle, { core, subscription, pushU
   });
 }
 
-/** The OpenRouter key: checked with OpenRouter, kept in the OS secret store, never sent back. */
+/**
+ * The OpenRouter key, pasted or got by the browser sign-in: checked with OpenRouter, kept in the OS
+ * secret store, never sent back.
+ */
 function registerApiKeyIpc(
   handle: IpcHandle,
-  { core, pushUiEvent }: Pick<ModelsIpcDeps, "core" | "pushUiEvent">,
+  { core, pushUiEvent, openRouterLogin }: Pick<ModelsIpcDeps, "core" | "pushUiEvent" | "openRouterLogin">,
 ): void {
   const keyEngine = (): ApiKeyEngine => {
     const engine = core.engines.has(EngineId.OpenRouter) ? core.engines.get(EngineId.OpenRouter) : null;
@@ -168,4 +177,12 @@ function registerApiKeyIpc(
     pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
     return status;
   });
+  handle("studio:openrouter.signin", async () => {
+    const engine = keyEngine();
+    const result = await openRouterLogin.start((key) => engine.saveKey(key));
+    pushUiEvent({ type: UiEvent.EnginesChanged, payload: { engine: EngineId.OpenRouter } });
+    return result;
+  });
+  handle("studio:openrouter.signin.reopen", async () => openRouterLogin.reopen());
+  handle("studio:openrouter.signin.cancel", async () => openRouterLogin.cancel());
 }
