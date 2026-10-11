@@ -11,7 +11,7 @@ import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
 
 const COMPACT = "(max-width: 900px)";
 /** The sidebar toggles' labels. Smoke runners and focus moves find the toggles by them. */
-const SIDEBAR_TOGGLE = { Show: "Show sidebar", Hide: "Hide sidebar" } as const;
+export const SIDEBAR_TOGGLE = { Show: "Show sidebar", Hide: "Hide sidebar" } as const;
 
 /** Focus the sidebar toggle with this label, once the toggle it replaced is gone. */
 function focusSidebarToggle(label: string): void {
@@ -48,40 +48,54 @@ export function useChatWidthVariable(shell: RefObject<HTMLDivElement | null>, ap
 }
 
 /** Plugins opens over the workspace, from the sidebar or from a window event naming a plugin. */
-function usePluginsRoom(dialogs: Dialogs, setDrawerOpen: (open: boolean) => void) {
+function usePluginsRoom(dialogs: Dialogs, setDrawerOpen: (open: boolean) => void, leavePlay: () => void) {
   const [pluginsOpen, setPluginsOpen] = useState(false);
   const [setupPlugin, setSetupPlugin] = useState<string | undefined>();
   useEffect(() => {
     const open = (event: Event) => {
       setSetupPlugin((event as CustomEvent<{ plugin?: string }>).detail?.plugin);
       dialogs.dispatch({ type: "close-settings" });
+      leavePlay();
       setPluginsOpen(true);
       setDrawerOpen(false);
     };
     window.addEventListener(OPEN_PLUGINS_EVENT, open);
     return () => window.removeEventListener(OPEN_PLUGINS_EVENT, open);
-  }, [dialogs.dispatch, setDrawerOpen]);
+  }, [dialogs.dispatch, setDrawerOpen, leavePlay]);
   const openPlugins = useCallback(() => {
     setSetupPlugin(undefined);
+    leavePlay();
     setPluginsOpen(true);
     setDrawerOpen(false);
-  }, [setDrawerOpen]);
+  }, [setDrawerOpen, leavePlay]);
   return { pluginsOpen, setPluginsOpen, setupPlugin, openPlugins };
 }
 
 /**
- * The shell's chrome: the compact drawer, Plugins over the workspace, and the sidebar toggle,
+ * The shell's chrome: the compact drawer, Plugins or Play over the workspace, and the sidebar toggle,
  * which puts focus on the toggle that replaces the one pressed.
  */
 export function useShellChrome(app: Studio, dialogs: Dialogs, sidebarOpen: boolean) {
   const { compactWindow, drawerOpen, setDrawerOpen } = useCompactWindow();
-  const plugins = usePluginsRoom(dialogs, setDrawerOpen);
+  // Play is the sidebar's other side: launch opens Create (home), and any way into Create leaves it.
+  const [playOpen, setPlayOpen] = useState(false);
+  const leavePlay = useCallback(() => setPlayOpen(false), []);
+  const plugins = usePluginsRoom(dialogs, setDrawerOpen, leavePlay);
   const { setPluginsOpen } = plugins;
   const sidebarVisible = compactWindow ? drawerOpen : sidebarOpen;
   const closeOverlays = useCallback(() => {
     setPluginsOpen(false);
+    setPlayOpen(false);
     setDrawerOpen(false);
   }, [setPluginsOpen, setDrawerOpen]);
+  /** Play or Create, from the sidebar's switch. Play closes Plugins; the drawer stays. */
+  const choosePlay = useCallback(
+    (play: boolean) => {
+      if (play) setPluginsOpen(false);
+      setPlayOpen(play);
+    },
+    [setPluginsOpen],
+  );
   const toggleSidebar = useCallback(() => {
     if (compactWindow) setDrawerOpen((open) => !open);
     else app.layout.setState((s) => sidebarToggled(s), true);
@@ -101,6 +115,11 @@ export function useShellChrome(app: Studio, dialogs: Dialogs, sidebarOpen: boole
       setPluginsOpen,
       setupPlugin,
       openPlugins,
+      /** Play's dashboard is up in place of the workspace. */
+      playOpen,
+      setPlayOpen: choosePlay,
+      /** Something covers the workspace (Plugins or Play): it is hidden and inert. */
+      workspaceCovered: pluginsOpen || playOpen,
       compactWindow,
       setDrawerOpen,
       sidebarVisible,
@@ -117,6 +136,8 @@ export function useShellChrome(app: Studio, dialogs: Dialogs, sidebarOpen: boole
       setPluginsOpen,
       setupPlugin,
       openPlugins,
+      playOpen,
+      choosePlay,
       compactWindow,
       setDrawerOpen,
       sidebarVisible,

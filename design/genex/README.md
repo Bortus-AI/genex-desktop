@@ -35,7 +35,9 @@ for principles and skill routing.
   a faster start sees only the page), fades out in 200ms and never returns, and the window can be
   dragged by it. Reduced motion shows it at once and still. A failed start shows each
   area's failure and Retry, which stays up, busy (**Retrying…**), while it runs.
-- **Loading:** there are no skeletons. A region whose content is on its way uses `Pending`: nothing
+- **Loading:** there are no skeletons, except, at the owner's request, Play's grid: a tab on its
+  way draws eight cards' shapes (cover tile, title and author bars) shimmering in a faint ink tint,
+  fading in after 120ms, still under reduced motion. Elsewhere a region whose content is on its way uses `Pending`: nothing
   for 400ms (the local reads behind chats, settings, activity and files usually finish unseen),
   then its label ("Loading conversation…") shimmering in ink-3, still under reduced motion.
   Nothing claims to be empty (No matches, No screenshot, stripes for a missing still) before its
@@ -199,8 +201,8 @@ those already attached, up to the composer's limit.
 
 ## Studio hierarchy and progressive disclosure
 
-The shell is conversation-led: a full-height sidebar contains the theme-aware Genex wordmark,
-Search, the Notifications bell, **New game**, **Plugins**, **Harness**, **Settings**, then **Games**. Everything above the game
+The shell is conversation-led: a full-height sidebar contains Search, the Notifications bell and
+Send feedback on the toggle's line, the theme-aware Genex wordmark with the Play / Create switch, **New game**, **Plugins**, **Harness**, **Settings**, then **Games**. Everything above the game
 list stays fixed; only the flat game list scrolls, with a 24px fade into the sidebar colour once it
 has moved. The four actions are one stack of 36px rows, 2px apart, with labels styled like game titles, 18px animated
 icons (their ink in line with the wordmark's left edge) and an 18px accent count badge on Harness. Game rows use 28px circular covers, 14px Medium
@@ -231,6 +233,79 @@ waiting work or an 8px dot for unread news; the mark slides in diagonally and po
 the bell, and the glyph rings once (`data-announce`) when something arrives. With the sidebar
 hidden, Show sidebar carries the dot. Arrivals while Studio is unfocused also post macOS
 notifications (at most three, else one summary); the Dock badge counts waiting work.
+
+**Play.** Beside the wordmark a small segmented **Play** / **Create** switch (a tablist; arrow keys,
+Home and End) splits the sidebar: two 22px Geist Mono 11px tabs (44px and 54px) on a faint
+2px-padded track, the side that is on in ink under a pill of Play's blue secondary (genex.games'
+#4b60bf at 12%, a 1px edge at 40%, no glow) that slides between them; the colour tweaker's first
+group, "Play: switch and tabs", sets that blue with its edge and text, the track with its edge, the
+other tabs' backing, edge and text, and the focused search's edge (muted ink at 18% until set); the
+Genex presets set the blue, the track, the backing and the edges. Create is everything else, and every
+launch opens it; opening a game, home, Harness, Plugins or Command-N returns to it. Play folds New
+game, Plugins and Harness away and unfolds genex.games' shelves in their place, rows built exactly
+like them: **Games** (gamepad), **Tools** (wrench), **Assets** (cube), each with its count in mono
+11px ink-3 at the end; the shelf shown is the current row. **Settings** stays under either set. Games becomes
+**Recent** (games last played, newest first, 2px apart; 28px-tall 16:9 covers with 7px corners and
+a theme-line edge, 8px from the title, rectangles so Play reads apart from Create's round pictures; "Games you play show up here." while empty), the
+two lists sliding 16px past each other; Recent sits as far below the shelves as Games below Create's rows. Play's page replaces the workspace, on the plain page colour: the shelf's tabs (15px, 30px tall,
+9px corners, ink-3; the chosen one in the switch's blue secondary; only tabs with something in them; Games: Featured and its categories, Tools:
+All, Physics, Terrain, Lighting, VFX; none for Assets) on the header line and **Search games /
+tools / assets** (32px, mono 13px, at most 240px) at its right, 16px below the window's top. The
+bar has no background and the grid scrolls under it; scrolling on down it slides up out of the
+window (220ms), and any scroll up brings it back (300ms; a control with the keyboard keeps it). Once
+scrolled, every tab, the search and the sidebar toggle get a backing of the page colour at 90% with
+a 1px edge of ink at 9% (the chosen tab its blue over it), and the cards fade out under the bar as
+the sidebar's games do under its chrome: the page colour solid behind the bar's top, then a wide
+cosine fall (no slope at either end) to nothing 152px down; once the bar has stepped away, a 96px
+fall of the same curve with no solid part. The page's foot fades
+the cards out the same way over 48px. Below, a grid
+of cards at least 320px wide (16px rows, 12px columns, 20px from the page's sides, as wide as the page).
+A card sits straight on the page: a 16:9 cover (12px radius, a 1px inner edge in the theme's border
+colour that inks a little on hover, 1.03 scale on hover) with players now (a 7px green dot) and plays in 14px
+white mono over a shaded corner, a 17px medium title, "By <author>" in 12px mono ink-3 and a
+secondary **Remix** when the source is public. The next 24 load before the grid runs out; an empty
+tab, a search without matches and a failed read (with Try again) each say so in one centred line,
+and a next page that fails says so under the cards with Try again. Offline (no network at all), the
+bar wears a small mono **Offline** mark (a hollow dot) beside the search; a tab or a search with
+nothing to show says "You're offline" over a 32×24 signal of four dot-matrix bars (2px dots on a
+3px grid) lighting one after another, "Games load as soon as you're back online." and Try again;
+cards already shown stay (covers not yet loaded keep their plain tile) and the next page waits
+under them. Each reloads by itself once the Mac is back online.
+
+A card opens the game under the viewer's header: the app's own 48px bar across the window in the
+sidebar's colours over a hairline (80px in on macOS for the traffic lights), the game's view under
+it. Left: a 32px Back chevron and the game's name (14px) over its facts in 11px mono ink-3 (a 6px
+green dot and "8 playing" when people are in it, plays, the maker; offline, a hollow dot and
+"Offline" in the players' place, while Like and Remix wait). Right: 32px buttons with 9px
+corners, never pills, in ink at 6% (11% on hover), 13px labels with 16px glyphs: Like with its
+count, Share, Invite a friend, Remix in Play's blue secondary (only for public source), and an
+icon-only Exit. A note is worn by the button it is about, for 2.2s: the label folds into it and the
+button's width eases along ("Link copied" on Share, "Invite link copied" on Invite, "Connect Genex
+to like games" on Like, a pulsing "Making your copy…" on Remix); a copied link also swaps the glyph
+for a check drawn in, over a green tint (green at 14%, a 1px edge at 40%). The player's own like
+pops the heart (filled #ff5c7a), throws eight 2px square sparks in pink and blue in steps and rolls
+the count up; a like taken back at once (signed out) stops them. A guest without a Genex account
+sees, once the game plays, a strip in Play's blue secondary with 8px corners wipe in from the left,
+14px after the facts: the Genex G alone (16px, in ink, no tile), "Save your progress with the Genex
+plugin" and **Install plugin** (24px, 6px corners, solid blue); its × sits just outside the strip.
+It stays until that × or the game closes. The
+header's empty space drags the window. Holding Esc in the game puts the keyboard on Like; Esc gives
+it back to the game; a tap stays the game's. Until the game loads, the space under the header shows
+the cover coming up out of black as a dimmed colour 8×8 Bayer ordered dither (four steps a channel)
+in 2px cells, small close-set dots: cell by cell in Bayer order, bright cells first, easing in and
+out over 1.4s, then holding; no blue phase. Fine scan lines and a dark edge over it. Centred, the 28px title over a 240px 1px dot rail (a dot every 4px) with a lit 72px run sweeping
+along it every 1.3s. No "Loading" word; nothing of it draws once the game plays. A failure is a
+navy card with a blue hairline, Back to Play and Try again; offline it says "You're offline" over
+the signal, "<game> opens as soon as you're back online.", and opens it by itself once back.
+
+At the sidebar's foot in Play, while the Genex plugin is missing, off or not connected, sits the
+Genex card: an 8px-inset surface card with a 19:10 muted looping film (`play-publish.mp4`, rendered
+with Remotion from `design/play-publish-video/`; its poster under Reduce Motion; paused while a game
+is played or the window is hidden; dropped below 640px of window height), the 28px close, a
+"Genex plugin" eyebrow, the title "Put your game on Play", three rows of an 18px glyph in Play's
+blue and a 14px medium line (Publish in one click, Make it multiplayer, Every game dev tool), then
+Learn and the filled **Install plugin**, which connects the account or opens Plugins on Genex. It
+rises 12px over 480ms and goes for good when dismissed.
 
 Selecting Harness (internally the Studio conversation) opens its assistant conversation beside Activity; selecting a game chat
 restores chat + game stage. There is no global Build/Review switch. Command-2 enters Harness;
@@ -476,7 +551,8 @@ hover, and copies the link where the browser may not open). A failure only turns
 ↻ Try again, its reason in the tooltip. Waiting shows the LoaderGrid with Cancel; connected, a
 green-dot title and Done. It stays hidden until the film has a first frame (at most
 1.5s), then rises whole 16px over 480ms; it leaves 6px over 180ms and drops the film below 640px
-of window height.
+of window height. It does not show while Play is up, where the sidebar's own Genex card (see
+[Play](#studio-hierarchy-and-progressive-disclosure)) offers the plugin.
 
 ## Application settings
 

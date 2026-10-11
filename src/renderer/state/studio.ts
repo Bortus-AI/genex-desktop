@@ -67,6 +67,7 @@ import {
   type LibraryStore,
 } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
+import { createPlayStore, type PlayStore, viewerReported } from "./play.ts";
 import {
   bootstrapFailed,
   bootstrapReady,
@@ -121,6 +122,8 @@ export interface Studio {
   readonly library: LibraryStore;
   readonly engines: EnginesStore;
   readonly plugins: PluginsStore;
+  /** Play: genex.games' catalog, Recent and the viewer (`play.ts`). */
+  readonly play: PlayStore;
   readonly agentScreens: AgentScreensStore;
   readonly commandRuns: CommandRunsStore;
   /** What commands a reply offered have printed, outside React state. */
@@ -199,6 +202,7 @@ interface Stores {
   readonly library: LibraryStore;
   readonly engines: EnginesStore;
   readonly plugins: PluginsStore;
+  readonly play: PlayStore;
   readonly agentScreens: AgentScreensStore;
   readonly commandRuns: CommandRunsStore;
   readonly commandOutput: CommandOutput;
@@ -227,6 +231,7 @@ function createStores(
     library: createLibraryStore(api, timers, visibility, publication.publish),
     engines: createEnginesStore(api),
     plugins: createPluginsStore(api),
+    play: createPlayStore(api, storage),
     agentScreens: createAgentScreensStore(),
     commandRuns: createCommandRunsStore(),
     commandOutput: createCommandOutput(),
@@ -342,8 +347,11 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
 }
 
 /** The events that change a store directly, beyond the reads they ask for. */
-function applyUiEvent({ agentScreens, threads, layout, library, update }: Stores, event: UiEvent): void {
+function applyUiEvent({ agentScreens, threads, layout, library, update, play }: Stores, event: UiEvent): void {
   switch (event.type) {
+    case UiEvent.PlayViewer:
+      play.setState((state) => viewerReported(state, event.payload), true);
+      break;
     case UiEvent.PreviewFrame:
       agentScreens.setState((state) => frameReceived(state, event.payload), true);
       break;

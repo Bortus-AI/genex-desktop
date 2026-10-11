@@ -33,6 +33,10 @@ export const STORAGE_KEYS = {
   welcomed: "studio.welcomed",
   /** The Genex promo after the welcome: queued, then settled (`genex-promo.ts` owns the values). */
   genexPromo: "studio.genexPromo",
+  /** The games last opened in Play, newest first (`play/play-model.ts` owns the format). */
+  playRecent: "studio.play.recent",
+  /** Play's Genex card in the sidebar: "done" once dismissed (`play/play-model.ts` owns the value). */
+  playPromo: "studio.play.promo",
   /** The developer colour tweaker: open ("1") or not. */
   colorTweakerOpen: "studio.dev.colorTweaker.open",
   /** The developer colour tweaker's drafts and place (`appearance/tweaker/tweaker-memory.ts` owns the format). */

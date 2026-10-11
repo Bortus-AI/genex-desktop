@@ -1,0 +1,223 @@
+/**
+ * Play: the genex.games catalog inside the app. Main reads the gallery (the API refuses the
+ * renderer's origin), the renderer draws the dashboard, and a game plays full screen in a native
+ * view main owns. These are the shapes and names both sides share.
+ */
+
+/** Where Play's games and pages live. */
+export const PLAY_ORIGIN = { api: "https://api.genex.games", web: "https://genex.games" } as const;
+/** The host every published game is served under: `https://<slug>.genex.technology/`. */
+export const PLAY_GAMES_DOMAIN = "genex.technology";
+
+/**
+ * The website's three shelves, each with its own tabs: what Play's sidebar lists. Values are the
+ * gallery's bucket names on the wire: never rename one.
+ */
+export const PlayShelf = { Games: "games", Tools: "tools", Assets: "assets" } as const;
+export type PlayShelf = (typeof PlayShelf)[keyof typeof PlayShelf];
+
+/** The shelves in the website's order. */
+export const PLAY_SHELVES: readonly PlayShelf[] = Object.values(PlayShelf);
+
+/** Whether a value names a shelf. */
+export const isPlayShelf = (value: unknown): value is PlayShelf =>
+  typeof value === "string" && (PLAY_SHELVES as readonly string[]).includes(value);
+
+/**
+ * The dashboard's tabs. Featured is the gallery read with no category; every other value is the
+ * gallery's own category name on the wire, and Tools and Assets are their shelves' whole lists.
+ * Never rename a value.
+ */
+export const PlayCategory = {
+  Featured: "featured",
+  Arcade: "arcade",
+  Shooter: "shooter",
+  Racing: "racing",
+  Sports: "sports",
+  Survival: "survival",
+  Exploration: "exploration",
+  Multiplayer: "multiplayer",
+  Fighting: "fighting",
+  Tools: "tools",
+  Physics: "physics",
+  Terrain: "terrain",
+  Lighting: "lighting",
+  Vfx: "vfx",
+  Assets: "assets",
+} as const;
+export type PlayCategory = (typeof PlayCategory)[keyof typeof PlayCategory];
+
+/** Each shelf's tabs in the website's order; the first is the one a shelf opens on. */
+export const PLAY_SHELF_TABS = {
+  [PlayShelf.Games]: [
+    PlayCategory.Featured,
+    PlayCategory.Arcade,
+    PlayCategory.Shooter,
+    PlayCategory.Racing,
+    PlayCategory.Sports,
+    PlayCategory.Survival,
+    PlayCategory.Exploration,
+    PlayCategory.Multiplayer,
+    PlayCategory.Fighting,
+  ],
+  [PlayShelf.Tools]: [
+    PlayCategory.Tools,
+    PlayCategory.Physics,
+    PlayCategory.Terrain,
+    PlayCategory.Lighting,
+    PlayCategory.Vfx,
+  ],
+  [PlayShelf.Assets]: [PlayCategory.Assets],
+} as const satisfies Record<PlayShelf, readonly PlayCategory[]>;
+
+/** Every tab, shelf by shelf, in the website's order. */
+export const PLAY_CATEGORIES: readonly PlayCategory[] = PLAY_SHELVES.flatMap((shelf) => PLAY_SHELF_TABS[shelf]);
+
+/** Whether a value names one of the tabs. */
+export const isPlayCategory = (value: unknown): value is PlayCategory =>
+  typeof value === "string" && (PLAY_CATEGORIES as readonly string[]).includes(value);
+
+/** The shelf a tab belongs to. */
+export const shelfOf = (category: PlayCategory): PlayShelf =>
+  PLAY_SHELVES.find((shelf) => (PLAY_SHELF_TABS[shelf] as readonly PlayCategory[]).includes(category)) ??
+  PlayShelf.Games;
+
+/** The shelves' counts and the tabs worth showing. */
+export interface PlayShelves {
+  /** Each shelf's size as the website shows it beside the name; null while it could not be read. */
+  counts: Record<PlayShelf, number | null>;
+  /** The tabs with something in them (each shelf's first always), shelf by shelf. */
+  categories: PlayCategory[];
+}
+
+/** A published game as the dashboard shows it. */
+export interface PlayGame {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  /** The 16:9 cover, or null when the game has none the app may load. */
+  coverUrl: string | null;
+  multiplayer: boolean;
+  /** Plays so far, as the gallery counts them. */
+  plays: number;
+  /** Players in it now; null when the game is single-player or the count is unknown. */
+  online: number | null;
+  author: { name: string; imageUrl: string | null };
+  /** Anyone may make their own copy: its source is public. */
+  remixable: boolean;
+}
+
+/** One page of a tab. */
+export interface PlayFeedPage {
+  games: PlayGame[];
+  /** Where the next page starts, or null at the end. */
+  nextCursor: string | null;
+}
+
+/** Which page of which tab to read. */
+export interface PlayFeedRequest {
+  category: PlayCategory;
+  cursor?: string | null;
+}
+
+/** A gallery slug: lowercase letters, digits and dashes. */
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/;
+
+/** Whether a value is a slug the app will build an address from. */
+export const isPlaySlug = (value: unknown): value is string => typeof value === "string" && SLUG.test(value);
+
+/** The game itself, served on its own subdomain. */
+export const playGameUrl = (slug: string): string => `https://${slug}.${PLAY_GAMES_DOMAIN}/`;
+
+/** The game's page on genex.games: what Share hands out. */
+export const playPageUrl = (slug: string): string => `${PLAY_ORIGIN.web}/${slug}`;
+
+/** Where a game's viewer stands. Wire values: never rename one. */
+export const PlayViewerPhase = {
+  /** The view is loading the game; the renderer shows the cover under it. */
+  Loading: "loading",
+  /** The game's page is up and painting. */
+  Playing: "playing",
+  /** The page could not be loaded; the renderer offers Try again and Back. */
+  Failed: "failed",
+  /** The viewer is gone: Back, Exit, the guest card's Install plugin or a remix that opened in Create. */
+  Closed: "closed",
+} as const;
+export type PlayViewerPhase = (typeof PlayViewerPhase)[keyof typeof PlayViewerPhase];
+
+/** The viewer's header: the app's own bar across the window's top, the game's view under it. */
+export const PLAY_BAR_HEIGHT = 48;
+
+/** What the viewer's header asks main for (`studio:play.control`). Wire values: never rename one. */
+export const PlayControl = {
+  Back: "back",
+  Like: "like",
+  Share: "share",
+  Invite: "invite",
+  Remix: "remix",
+  Exit: "exit",
+  /** The guest card's Install plugin: the viewer closes and the app installs Genex. */
+  Install: "install",
+  /** The guest card's ×. */
+  DismissCard: "dismiss-card",
+  /** Esc in the header: the keyboard goes back to the game. */
+  Resume: "resume",
+} as const;
+export type PlayControl = (typeof PlayControl)[keyof typeof PlayControl];
+
+const CONTROLS: ReadonlySet<string> = new Set(Object.values(PlayControl));
+/** Whether a value names a control. */
+export const isPlayControl = (value: unknown): value is PlayControl => typeof value === "string" && CONTROLS.has(value);
+
+/** The note the header shows after an action. Wire values: never rename one. */
+export const PlayNote = {
+  Copied: "copied",
+  InviteCopied: "invite-copied",
+  SignIn: "sign-in",
+  LikeFailed: "like-failed",
+  Remixing: "remixing",
+  RemixFailed: "remix-failed",
+} as const;
+export type PlayNote = (typeof PlayNote)[keyof typeof PlayNote];
+
+/** The game's facts under its name in the header. */
+export interface PlayFacts {
+  author: string;
+  plays: number;
+  /** Players in it now; null for a single-player game or an unknown count. */
+  online: number | null;
+}
+
+/** What the viewer's header draws. */
+export interface PlayBarState {
+  liked: boolean;
+  likes: number;
+  /** The game may be remixed: the header shows Remix. */
+  remixable: boolean;
+  note: PlayNote | null;
+  /** A remix is being made: the header's actions wait. */
+  busy: boolean;
+  /** The header offers a signed-out guest the Genex plugin. */
+  guestCard: boolean;
+  /** Null until the game's page facts are read. */
+  facts: PlayFacts | null;
+}
+
+/** What main tells the renderer about the viewer (`UiEvent.PlayViewer`). */
+export interface PlayViewerEvent {
+  slug: string;
+  /** Which opening of the viewer this is about: each open counts up, so news of an earlier one is told apart. */
+  openId: number;
+  phase: PlayViewerPhase;
+  /** The header as it should be drawn now. */
+  bar?: PlayBarState;
+  /** An Esc held in the game: the keyboard is the header's now. */
+  focusBar?: boolean;
+  /** A remix finished: the new game's library name, to open in Create. */
+  remixed?: string;
+  /** A remix finished after its viewer had closed, and failed: there is no header left to say so. */
+  remixFailed?: boolean;
+  /** The guest card's Install plugin closed the viewer: the app runs Play's Install plugin. */
+  install?: boolean;
+}

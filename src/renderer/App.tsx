@@ -19,17 +19,30 @@ import { ColorTweakerHost } from "./appearance/tweaker/ColorTweakerHost.tsx";
 import { Onboarding } from "./onboarding/Onboarding.tsx";
 import { AppDialogs } from "./panels/AppDialogs.tsx";
 import { GenexPromo } from "./panels/GenexPromo.tsx";
+import { nativeViewsUp } from "./play/play-model.ts";
+import { PlayRoom } from "./play/PlayRoom.tsx";
+import { PlayViewerLayer } from "./play/PlayViewerLayer.tsx";
+import { usePlayInstallAsked } from "./play/use-play-install.ts";
+import { usePlayRemixes } from "./play/use-play-remixes.ts";
 import { AppSidebar } from "./shell/AppSidebar.tsx";
 import { PluginsRoom, Toasts } from "./shell/store-leaves.tsx";
 import { useChatWidthVariable } from "./shell/use-shell-chrome.ts";
 import { noticeState } from "./shell/use-shell-notices.ts";
 import { useShell } from "./shell/use-shell.ts";
 import { Workspace } from "./shell/Workspace.tsx";
-import { useEngines, useUpdate } from "./state/hooks.ts";
+import { useEngines, usePlay, useUpdate } from "./state/hooks.ts";
 import { CodexLoginPanel } from "./ui/CodexLoginPanel.tsx";
 
 /** `data-room` while Plugins covers the workspace. */
 const PLUGINS_ROOM = "plugins";
+/** `data-room` while Play's dashboard covers it. */
+const PLAY_ROOM = "play";
+
+/** The room `data-room` names: Plugins or Play over the workspace, else the open conversation's. */
+const roomName = (chrome: { pluginsOpen: boolean; playOpen: boolean }, room: string): string => {
+  if (chrome.pluginsOpen) return PLUGINS_ROOM;
+  return chrome.playOpen ? PLAY_ROOM : room;
+};
 
 export function App(): JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
@@ -39,6 +52,10 @@ export function App(): JSX.Element {
   const engines = useEngines((s) => s.list);
   const updateReady = useUpdate((s) => s.ready !== null);
   useChatWidthVariable(shell, app);
+  const openRemix = usePlayRemixes(navigation);
+  usePlayInstallAsked();
+  // While Play's game or its menu lies over the window, no drag region takes the pointer from them (play.css).
+  const playNative = usePlay((s) => nativeViewsUp(s.viewer));
   useEffect(() => {
     const refresh = () => {
       void app.engines.refresh();
@@ -50,13 +67,14 @@ export function App(): JSX.Element {
     <div
       ref={shell}
       data-studio-state
-      data-room={chrome.pluginsOpen ? PLUGINS_ROOM : room}
+      data-room={roomName(chrome, room)}
       data-active-thread={activeThreadId ?? ""}
       data-project={project ?? ""}
       data-sidebar-open={chrome.sidebarVisible}
       data-compact={chrome.compactWindow}
       data-notices={noticeState(notices)}
       data-update-ready={updateReady || undefined}
+      data-play-native={playNative || undefined}
       className="studio-shell h-full bg-canvas"
     >
       <AppSidebar
@@ -96,6 +114,9 @@ export function App(): JSX.Element {
             onToggleSidebar={chrome.toggleSidebar}
           />
         )}
+        {chrome.playOpen && !chrome.pluginsOpen && (
+          <PlayRoom sidebarHidden={chrome.sidebarHidden} onToggleSidebar={chrome.toggleSidebar} onRemixed={openRemix} />
+        )}
       </main>
       <AppDialogs
         dialogs={dialogs}
@@ -113,7 +134,8 @@ export function App(): JSX.Element {
           onFinish={welcome.finishWelcome}
         />
       )}
-      <GenexPromo welcoming={welcoming} pluginsOpen={chrome.pluginsOpen} project={project} />
+      <GenexPromo welcoming={welcoming} pluginsOpen={chrome.workspaceCovered} project={project} />
+      <PlayViewerLayer />
       <Toasts />
       <CodexLoginPanel />
       <ColorTweakerHost />

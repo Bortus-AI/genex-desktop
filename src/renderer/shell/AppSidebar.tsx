@@ -94,6 +94,8 @@ export function AppSidebar({
           }
           pluginsOpen={pluginsOpen}
           onPlugins={chrome.openPlugins}
+          playOpen={chrome.playOpen}
+          onPlayMode={chrome.setPlayOpen}
           onSettings={() => dialogs.openSettings()}
           stagedCount={stagedCount}
           threads={threads}

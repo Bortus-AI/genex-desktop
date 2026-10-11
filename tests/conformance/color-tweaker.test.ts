@@ -487,3 +487,29 @@ test("the selected Settings tab's text is the accent ink until set, read as text
     "the panel offers it",
   );
 });
+
+test("Play's switch and tabs take their blue, track, texts, edges and the unselected tabs' backing from the palette when given, Play's own until then", () => {
+  // Genex's own presets set some of Play's colours: start from one that sets none.
+  const plain = Object.fromEntries(
+    Object.entries(genexDark.colors).filter(([role]) => !role.startsWith("play")),
+  ) as typeof genexDark.colors;
+  for (const [role, variable] of [
+    ["playSelected", "--play-selected"],
+    ["playSelectedEdge", "--play-selected-edge"],
+    ["playTrack", "--play-switch-track"],
+    ["playTrackEdge", "--play-switch-edge"],
+    ["playSelectedText", "--play-selected-text"],
+    ["playTab", "--play-tab-backing"],
+    ["playTabEdge", "--play-tab-edge"],
+    ["playTabText", "--play-tab-text"],
+    ["playSearchFocus", "--play-search-focus"],
+  ] as const) {
+    assert.equal(themeVariables(plain, DEFAULT_CONTRAST)[variable], undefined, `${role} unset`);
+    assert.equal(themeVariables({ ...plain, [role]: "#2f6bff" }, DEFAULT_CONTRAST)[variable], "#2f6bff");
+    assert.ok(hex(shownColor(plain, role)), `${role}: the panel shows a colour while it is unset`);
+    assert.ok(
+      ROLE_GROUPS.some((group) => group.roles.includes(role)),
+      `the panel offers ${role}`,
+    );
+  }
+});

@@ -234,6 +234,19 @@ const FIXTURE_SAFE = [
   "studio:plugins.genex-publish-review",
   "studio:plugins.index",
   "studio:plugins.watch",
+  // Play: a fixture launch answers the catalog from its own fixture data and plays a local stand-in
+  // page (`dev/fixture-play.ts`), so no socket opens; Remix inside the viewer is not a channel.
+  "studio:play.feed",
+  "studio:play.shelves",
+  "studio:play.search",
+  // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
+  // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
+  "studio:play.remix",
+  "studio:play.online",
+  "studio:play.open",
+  "studio:play.close",
+  // The viewer header's controls: a fixture launch has no Genex account, so likes and invites answer signed out.
+  "studio:play.control",
   // Connectors write a file inside the profile; only the trust step is native.
   "studio:mcp.list",
   "studio:mcp.save",

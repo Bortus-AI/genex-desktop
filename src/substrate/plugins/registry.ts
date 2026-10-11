@@ -897,6 +897,16 @@ export class PluginRegistry {
   async hostCredentialFile(id: string): Promise<string | undefined> {
     return this.#mcpLaunch(id, this.#active(id)).credentialFile();
   }
+  /**
+   * The account token of a live plugin for the host's own calls (Play's likes and sign-in tickets):
+   * the same gate as {@link hostCredentialFile}, so nothing until the user unlocked the account, and
+   * nothing for a plugin that is removed or off.
+   */
+  async hostCredential(id: string): Promise<string | undefined> {
+    const p = this.#installed.get(id);
+    if (!p || !isLive(p)) return undefined;
+    return this.#mcpCredential(id);
+  }
   #active(id: string) {
     const p = this.#installed.get(id);
     if (!p || !isLive(p)) throw new Error(MESSAGE.Unavailable(id));

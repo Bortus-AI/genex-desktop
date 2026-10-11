@@ -82,6 +82,8 @@ const READ_ON_SURFACES: readonly AnyRole[] = [
   "danger",
   "settingsTab",
 ];
+/** Play's blue (genex.games' own): the selected tab and switch side unless a palette sets one (play.css `--play-blue`). */
+const PLAY_BLUE = "#4b60bf";
 /** WCAG AA: body text, and icons and other graphics that identify a control. */
 const TEXT_CONTRAST = 4.5;
 const GRAPHIC_CONTRAST = 3;
@@ -102,6 +104,11 @@ const DETAIL_VARIABLE: Record<
     | "promptChipFill"
     | "sidebarSelected"
     | "sidebarHover"
+    | "playSelected"
+    | "playSelectedEdge"
+    | "playTrackEdge"
+    | "playTabEdge"
+    | "playSearchFocus"
   >,
   string
 > = {
@@ -123,6 +130,10 @@ const DETAIL_VARIABLE: Record<
   meterHigh: "--orange",
   meterFull: "--destructive",
   viewSwitch: "--accent-fill",
+  playTrack: "--hover",
+  playSelectedText: "--foreground",
+  playTab: "--background",
+  playTabText: "--muted-foreground",
   wireArt: "--accent-ink",
   hatchGround: "--background",
   settingsTab: "--accent-ink",
@@ -139,6 +150,21 @@ const ON_GROUND: readonly { marks: readonly DetailRole[]; grounds: readonly Deta
 
 /** The panel's role groups and the names it shows (the order comment above `PRESETS`). */
 export const ROLE_GROUPS: readonly { label: string; roles: readonly AnyRole[] }[] = [
+  // First while Play's colours are being tuned, so the panel opens on them.
+  {
+    label: "Play: switch and tabs",
+    roles: [
+      "playSelected",
+      "playSelectedEdge",
+      "playSelectedText",
+      "playTrack",
+      "playTrackEdge",
+      "playTab",
+      "playTabEdge",
+      "playTabText",
+      "playSearchFocus",
+    ],
+  },
   { label: "Surfaces", roles: ["background", "sidebar", "surface", "popover", "field", "hover"] },
   { label: "Sidebar rows", roles: ["sidebarSelected", "sidebarHover"] },
   { label: "Lines", roles: ["border", "controlBorder"] },
@@ -201,6 +227,15 @@ export const ROLE_LABEL: Record<AnyRole, string> = {
   meterFull: "Meter full",
   promptEdge: "Prompt bar edge",
   viewSwitch: "View switch",
+  playSelected: "Selected blue",
+  playTrack: "Switch track",
+  playSelectedText: "Selected text",
+  playSelectedEdge: "Selected edge",
+  playTrackEdge: "Switch edge",
+  playTab: "Tab backing",
+  playTabEdge: "Tab edge",
+  playTabText: "Tab text",
+  playSearchFocus: "Search focus edge",
   wireArt: "Cube",
   hatch: "Stripes",
   hatchGround: "Stripe ground",
@@ -277,6 +312,14 @@ const ACCENT_TINT = 0.12;
 const PROMPT_EDGE_SHARE = 0.65;
 /** How much text the stage's stripes carry over the canvas (theme.css `--stripe`). */
 const STRIPE_INK = 0.04;
+/**
+ * Play's edges while unset (play.css): the selected blue's, the switch track's grey, the scrolled
+ * tabs' ink and the focused search's muted ink.
+ */
+const PLAY_SELECTED_EDGE_SHARE = 0.4;
+const PLAY_TRACK_EDGE = { color: "#797f8b", share: 0.21 } as const;
+const PLAY_TAB_EDGE_SHARE = 0.09;
+const PLAY_SEARCH_FOCUS_SHARE = 0.18;
 /** How much of the logo the wordmark's secondary ink keeps against the muted text (`--logo-2`). */
 const LOGO_SHADE_SHARE = 0.7;
 /** `color` at `alpha` over `ground`, blended as the browser composites it. */
@@ -302,6 +345,27 @@ function sidebarRowColor(palette: Palette, row: SidebarRow): string {
   return mixOklab(color, palette.sidebar, percent / 100);
 }
 
+/** {@link DETAIL_VARIABLE} looked up by any role: the details with no variable of their own answer nothing. */
+const DETAIL_VARIABLES: ReadonlyMap<string, string> = new Map(Object.entries(DETAIL_VARIABLE));
+
+/**
+ * Details drawn, while unset, as one colour over a ground: the ground, the colour and its share. The
+ * onboarding art's sheet and marks are faint ink over the canvas and its buttons the accent tint; the
+ * prompt bar's edge is the divider over its panel; the stage's stripes are faint ink; Play's edges are
+ * its blue, a grey and faint ink over the page.
+ */
+const LAYERED: Partial<Record<AnyRole, (p: Palette) => [string, string, number]>> = {
+  artPaper: (p) => [p.background, p.foreground, SHEET_INK],
+  artMark: (p) => [p.background, p.foreground, MARK_FACE_INK],
+  artButton: (p) => [p.background, p.accent, ACCENT_TINT],
+  promptEdge: (p) => [p.surface, p.border, PROMPT_EDGE_SHARE],
+  hatch: (p) => [p.background, p.foreground, STRIPE_INK],
+  playSelectedEdge: (p) => [p.background, p.playSelected ?? PLAY_BLUE, PLAY_SELECTED_EDGE_SHARE],
+  playTrackEdge: (p) => [p.background, PLAY_TRACK_EDGE.color, PLAY_TRACK_EDGE.share],
+  playTabEdge: (p) => [p.background, p.foreground, PLAY_TAB_EDGE_SHARE],
+  playSearchFocus: (p) => [p.background, p.foreground, PLAY_SEARCH_FOCUS_SHARE],
+};
+
 /** The colour a role is drawn in: its own, or for an unset detail the one the app derives. */
 export function shownColor(palette: Palette, role: AnyRole): string {
   const own = palette[role];
@@ -311,15 +375,13 @@ export function shownColor(palette: Palette, role: AnyRole): string {
   if (isSidebarRow(role)) return sidebarRowColor(palette, role);
   // Unset, the prompt bar's chips wear the canvas chip's fill (theme.css `--prompt-chip-fill`).
   if (role === "promptChipFill") return shownColor(palette, "controlFill");
-  // Unset, the onboarding art draws these as faint ink over the canvas, and its buttons as the accent tint.
-  if (role === "artPaper") return over(palette.background, palette.foreground, SHEET_INK);
-  if (role === "artMark") return over(palette.background, palette.foreground, MARK_FACE_INK);
-  if (role === "artButton") return over(palette.background, palette.accent, ACCENT_TINT);
-  // Unset, the prompt bar's edge is the divider over its panel, and the logo's shade is mixed as --ink-2 is.
-  if (role === "promptEdge") return over(palette.surface, palette.border, PROMPT_EDGE_SHARE);
-  if (role === "hatch") return over(palette.background, palette.foreground, STRIPE_INK);
+  const layered = LAYERED[role]?.(palette);
+  if (layered) return over(...layered);
+  // Unset, the logo's shade is mixed as --ink-2 is.
   if (role === "logoShade") return mixOklab(palette.logo ?? palette.foreground, palette.muted, LOGO_SHADE_SHARE);
-  return themeVariables(palette, DEFAULT_CONTRAST)[DETAIL_VARIABLE[role]] ?? "";
+  if (role === "playSelected") return PLAY_BLUE;
+  const variable = DETAIL_VARIABLES.get(role);
+  return variable ? (themeVariables(palette, DEFAULT_CONTRAST)[variable] ?? "") : "";
 }
 
 /** Each shadow's name in the panel, and what it falls on. */

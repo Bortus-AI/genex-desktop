@@ -16,14 +16,15 @@ import { WorkspaceStage } from "./WorkspaceStage.tsx";
 /** The chat column beside the stage (a game's build stage, or Studio's review), with home over both. */
 export const Workspace = memo(function Workspace(props: WorkspaceProps): JSX.Element {
   const { chrome } = props;
-  const { pluginsOpen } = chrome;
+  // Plugins or Play is up in its place.
+  const away = chrome.workspaceCovered;
   const activeThread = useThreads(activeThreadOf);
   const covered = useCoveredByHome();
   return (
     <div
       className="studio-workspace absolute inset-0"
-      inert={pluginsOpen}
-      style={{ visibility: pluginsOpen ? "hidden" : "visible", opacity: pluginsOpen ? 0 : 1 }}
+      inert={away}
+      style={{ visibility: away ? "hidden" : "visible", opacity: away ? 0 : 1 }}
     >
       <div className="relative flex min-h-0 min-w-0 flex-col" inert={covered}>
         <BootstrapGate

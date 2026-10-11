@@ -1,3 +1,4 @@
+import type { PlayControl, PlayFeedPage, PlayFeedRequest, PlayGame, PlayShelf, PlayShelves } from "./play.ts";
 import type { PerformanceMark } from "./performance.ts";
 import type { ComposerSendOptions } from "./composer.ts";
 import type {
@@ -371,6 +372,22 @@ export interface StudioApi {
   onCodexLogin(listener: (state: CodexLoginState) => void): () => void;
   subscriptionForgetStudioLogin(engine?: string): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
+  /** Play: one page of a tab of genex.games' catalog. */
+  playFeed(request: PlayFeedRequest): Promise<PlayFeedPage>;
+  /** Play: each shelf's count and the tabs with something in them, shelf by shelf. */
+  playShelves(): Promise<PlayShelves>;
+  /** Play: what on one shelf of the catalog answers a search, best first. */
+  playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
+  /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
+  playRemix(slug: string): Promise<string>;
+  /** Play: players in each named game now; a game nobody counts is left out. */
+  playOnline(slugs: string[]): Promise<Record<string, number>>;
+  /** Play: open a game full screen in the viewer; how it goes arrives as `UiEvent.PlayViewer`. */
+  playOpen(slug: string): Promise<void>;
+  /** Play: close the viewer. */
+  playClose(): Promise<void>;
+  /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
+  playControl(control: PlayControl): Promise<void>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */
   notify(note: { id?: string; title: string; subtitle?: string; body: string }): Promise<boolean>;
   /** The Dock badge: how much work waits on the person. Zero clears it. */

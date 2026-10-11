@@ -341,6 +341,22 @@ const glyphs = {
       <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.8" />
     </>
   ),
+  // A heart: it beats once. A liked one is filled (`fill` on the glyph's path).
+  heart: <path className="a-pulse" d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z" />,
+  // A pad: it bobs once, the way a hand picks it up.
+  gamepad: (
+    <g className="a-bob">
+      <path d="M7.5 6.5h9a4 4 0 0 1 3.95 3.37l.85 5.4a2.5 2.5 0 0 1-4.37 2.03L15.5 15.5h-7l-1.43 1.8A2.5 2.5 0 0 1 2.7 15.27l.85-5.4A4 4 0 0 1 7.5 6.5z" />
+      <path d="M8 9.5V13M6.25 11.25h3.5" />
+      <path d="M15.5 10.5h.01M17.5 12.5h.01" strokeWidth={2.4} />
+    </g>
+  ),
+  // A wrench: it twists once, as if tightening.
+  wrench: (
+    <g className="a-wig">
+      <path d="M14.5 6.5a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a5.5 5.5 0 0 1-7.3 7.3l-6.6 6.6a2.05 2.05 0 0 1-2.9-2.9l6.6-6.6a5.5 5.5 0 0 1 7.3-7.3z" />
+    </g>
+  ),
   box: (
     <g className="a-lift">
       <path d="M12 3.5l7.5 4.2v8.6L12 20.5l-7.5-4.2V7.7z" />
@@ -366,6 +382,25 @@ const glyphs = {
         <circle cx="12" cy="8" r="3.5" />
       </g>
       <path d="M5 20c.6-3.8 3.4-6.2 7-6.2s6.4 2.4 7 6.2" />
+    </>
+  ),
+  // Two figures side by side, for players together: the front head nods once.
+  users: (
+    <>
+      <g className="a-bob">
+        <circle cx="9" cy="8.5" r="3.2" />
+      </g>
+      <path d="M3.5 19.5c.5-3.4 2.8-5.5 5.5-5.5s5 2.1 5.5 5.5" />
+      <path d="M15.5 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.3c1.6.8 2.7 2.6 3 5.2" />
+    </>
+  ),
+  // A fork: one game, two ways on.
+  remix: (
+    <>
+      <circle cx="6.5" cy="5.5" r="2" />
+      <circle cx="17.5" cy="5.5" r="2" />
+      <circle cx="12" cy="18.5" r="2" />
+      <path d="M6.5 7.5v.8a3 3 0 0 0 3 3h5a3 3 0 0 0 3-3v-.8M12 11.3v5.2" />
     </>
   ),
   // Level meter: the bars rise back in one after another.

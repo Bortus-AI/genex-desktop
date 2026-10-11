@@ -129,6 +129,14 @@ const METHODS = [
   "onCodexLogin",
   "subscriptionForgetStudioLogin",
   "openUrl",
+  "playFeed",
+  "playShelves",
+  "playSearch",
+  "playRemix",
+  "playOnline",
+  "playOpen",
+  "playClose",
+  "playControl",
   "notify",
   "setBadge",
   "rollback",
@@ -291,6 +299,13 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pickProject: () => null,
     pickGameLocation: () => null,
     nameGame: () => ({ title: "Untitled game" }),
+    playFeed: () => ({ games: [], nextCursor: null }),
+    playShelves: () => ({
+      counts: { games: null, tools: null, assets: null },
+      categories: ["featured", "tools", "assets"],
+    }),
+    playOnline: () => ({}),
+    playSearch: () => [],
   };
 }
 

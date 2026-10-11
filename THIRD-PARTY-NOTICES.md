@@ -95,14 +95,17 @@ SOFTWARE.
 
 Zalando Sans SemiExpanded, Geist and Geist Mono are used as published under the SIL Open Font
 License 1.1 (Geist Mono as its Google Fonts Latin subset). Their OFL texts ship beside them in
-`dist/renderer/fonts`. Copies with their OFL texts in `design/genex-promo-video/public/fonts`
-render the Genex promo film.
+`dist/renderer/fonts`. Copies with their OFL texts in `design/genex-promo-video/public/fonts` and
+`design/play-publish-video/public/fonts` render the promo films.
 
-## Promo film
+## Promo films
 
-The film in `src/renderer/media` is made by Genex with Remotion, which is not bundled, from
-recordings of genex.games. One clip, `village-game.mp4`, was generated through fal.ai with Nano
-Banana Pro and Seedance 2.5 (`design/genex-promo-video/README.md`).
+The films in `src/renderer/media` are made by Genex with Remotion, which is not bundled. The
+Genex promo film is made from recordings of genex.games; one clip, `village-game.mp4`, was
+generated through fal.ai with Nano Banana Pro and Seedance 2.5 (`design/genex-promo-video/README.md`).
+The Play film, `play-publish.mp4`, shows game covers from the public genex.games gallery
+(`design/play-publish-video/README.md`); its players and its desk were made with Genex image
+generation for the film.
 
 ## Components under other terms
 

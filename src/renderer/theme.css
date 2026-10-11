@@ -6,6 +6,7 @@
 @import "./styles/empty-states.css";
 @import "./styles/onboarding.css";
 @import "./styles/genex.css";
+@import "./styles/play.css";
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @source "./";
@@ -1427,9 +1428,13 @@ button.chat-header-title:hover {
   justify-content: space-between;
   height: 44px;
 }
-/* Send feedback ends the toggle's line, its glyph centred over the bell's 28px column below. */
-.sidebar-feedback {
-  margin-inline-end: -2px;
+/* Search, the bell and Send feedback end the toggle's line, 28px each, centred on the toggle. */
+.sidebar-titlebar .sidebar-brand-actions {
+  height: 32px;
+}
+.sidebar-brand-actions .sidebar-feedback {
+  width: 28px;
+  height: 28px;
 }
 /* 72px keeps the toggle just clear of macOS's traffic lights; 8px down centres it on them and on the
  * headers' line, 24px from the top, where the chat and Plugins headers put it while the sidebar is hidden. */

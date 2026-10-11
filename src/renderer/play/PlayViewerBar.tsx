@@ -1,0 +1,287 @@
+/**
+ * The viewer's header: the app's own bar across the window's top while a game plays under it. Back
+ * and the game's name with its facts (players now, plays, maker) on the left; Like, Share, Invite a
+ * friend, Remix and Exit on the right, as 32px buttons with 9px corners. A note is worn by the button
+ * it is about, in place of its label ("Link copied" on Share), and the button turns back when main
+ * drops it; a like of the player's own bursts. Main keeps what it shows (`PlayViewerEvent.bar`) and
+ * acts on what it asks (`studio:play.control`). An Esc held in the game puts the keyboard here (Esc
+ * gives it back: `PlayViewerLayer.tsx`). A signed-out guest is offered the Genex plugin here until its ×.
+ * Offline, the facts say so in place of the players, and Like and Remix wait for the connection.
+ */
+import type { CSSProperties, JSX, ReactNode, RefObject } from "react";
+import { useEffect, useRef, useState } from "react";
+import { type PlayBarState, PlayControl } from "../../shared/play.ts";
+import { studio } from "../state/studio.ts";
+import { Icon, type IconName } from "../ui/icons.tsx";
+import { useOnline } from "../ui/use-online.ts";
+import { PLAY_WORDS } from "../words.ts";
+import { formatCount, justLiked, noteOn, type ViewerShown } from "./play-model.ts";
+
+const WORDS = PLAY_WORDS.bar;
+/** The sparks a like throws, as angles around the heart. */
+const SPARKS = [0, 45, 90, 135, 180, 225, 270, 315];
+/** The Genex G, as About and the plugin's tool icon draw it. */
+const G_MARK =
+  "M526.479 314.98H239.981V266.964H683V397.295C683 397.295 648.57 532.96 347.968 532.96C347.968 532.96 0 542.868 0 252.483C0 -16.5617 376.426 0.205967 376.426 0.205967C666.184 0.205967 683 141.207 683 141.207L607.973 153.401C607.973 153.401 584.689 45.1737 371.252 45.1737C371.252 45.1737 85.375 34.5034 85.375 257.818C85.375 257.818 78.9072 480.37 351.849 486.467C566.58 493.327 597.625 379.002 600.212 359.186C607.973 334.034 574.341 314.98 526.479 314.98Z";
+
+/** Ask main for one of the header's controls. */
+export const sendPlayControl = (control: PlayControl): void => void studio().api.playControl(control);
+const send = sendPlayControl;
+
+/**
+ * Players now, plays so far and the maker, in one muted line; nothing until main has read them.
+ * Offline, Offline leads in place of the players (whose count would be stale), facts or none.
+ */
+function Facts({ bar, online }: { bar: PlayBarState | undefined; online: boolean }): JSX.Element | null {
+  const facts = bar?.facts;
+  if (!facts && online) return null;
+  const parts = facts ? [WORDS.plays(formatCount(facts.plays)), facts.author].filter(Boolean) : [];
+  const players = online && facts?.online ? facts.online : 0;
+  return (
+    <span className="play-viewer-bar-facts">
+      {!online && (
+        <>
+          <span className="play-viewer-bar-online" data-offline aria-hidden="true" />
+          {PLAY_WORDS.offline.chip}
+          {parts.length > 0 && " · "}
+        </>
+      )}
+      {players > 0 && (
+        <>
+          <span className="play-viewer-bar-online" aria-hidden="true" />
+          {WORDS.playing(players)} ·{" "}
+        </>
+      )}
+      {parts.join(" · ")}
+    </span>
+  );
+}
+
+/** The Genex G, alone, in ink. */
+function GenexMark(): JSX.Element {
+  return (
+    <svg
+      className="play-genex-mark"
+      width="16"
+      height="12"
+      viewBox="0 0 683 533"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d={G_MARK} />
+    </svg>
+  );
+}
+
+/**
+ * The guest's offer of the Genex plugin: a strip in Play's blue secondary wipes in around the G, one
+ * line and Install plugin, its × just outside it. It stays until that × or the game closes.
+ */
+function GuestOffer(): JSX.Element {
+  return (
+    <div className="play-viewer-bar-guest" role="status">
+      <div className="play-viewer-bar-guest-strip">
+        <GenexMark />
+        <span className="play-viewer-bar-guest-text">{WORDS.guest}</span>
+        <button type="button" className="play-viewer-bar-install" onClick={() => send(PlayControl.Install)}>
+          {WORDS.install}
+        </button>
+      </div>
+      <button
+        type="button"
+        className="play-viewer-bar-dismiss"
+        aria-label={WORDS.dismissGuest}
+        onClick={() => send(PlayControl.DismissCard)}
+      >
+        <Icon name="close" size={13} />
+      </button>
+    </div>
+  );
+}
+
+/** The last note a button wore, kept while it folds away so its words leave with it. */
+function useLastNote(note: string | null): string {
+  const last = useRef("");
+  if (note) last.current = note;
+  return last.current;
+}
+
+/**
+ * One of the header's buttons. While main has a note about it the button wears the note in place of
+ * its label (a done note with a check in place of its icon, tinted); the two labels fold into each
+ * other, so the button changes width smoothly, and it turns back when the note goes.
+ */
+function BarButton({
+  control,
+  icon,
+  label,
+  bar,
+  className = "",
+  buttonRef,
+  ariaLabel,
+  ariaPressed,
+  disabled,
+  glyph,
+}: {
+  control: PlayControl;
+  icon: IconName;
+  label: ReactNode;
+  bar: PlayBarState | undefined;
+  className?: string;
+  buttonRef?: RefObject<HTMLButtonElement | null>;
+  ariaLabel?: string;
+  ariaPressed?: boolean;
+  disabled?: boolean;
+  /** The icon as drawn, when it is more than the glyph (the like's heart and its sparks). */
+  glyph?: ReactNode;
+}): JSX.Element {
+  const worn = noteOn(bar, control);
+  const said = useLastNote(worn ? WORDS.notes[worn.note] : null);
+  return (
+    <button
+      ref={buttonRef}
+      type="button"
+      className={`play-viewer-bar-pill ${className}`}
+      aria-label={worn ? said : ariaLabel}
+      aria-pressed={ariaPressed}
+      data-play-bar={control}
+      data-note={worn?.look}
+      disabled={disabled}
+      onClick={() => send(control)}
+    >
+      <span className="play-bar-icon">
+        {glyph ?? <Icon name={icon} size={16} />}
+        <Icon name="check" size={16} className="play-bar-check" />
+      </span>
+      <span className="play-bar-label" data-shown={worn ? undefined : true}>
+        <span>{label}</span>
+      </span>
+      <span className="play-bar-label" data-shown={worn ? true : undefined} aria-hidden={!worn}>
+        <span>{said}</span>
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The heart, popping and throwing sparks each time the player's own like turns it on; a like taken
+ * back at once (signed out) stops them where they are.
+ */
+function Heart({ bursts, liked }: { bursts: number; liked: boolean }): JSX.Element {
+  const lit = bursts > 0 && liked;
+  return (
+    <span key={bursts} className="play-like-heart" data-burst={lit ? true : undefined}>
+      <Icon name="heart" size={16} />
+      {lit && (
+        <span className="play-like-sparks" aria-hidden="true">
+          {SPARKS.map((angle) => (
+            <i key={angle} style={{ "--angle": `${angle}deg` } as CSSProperties} />
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** How many times the player's own like has turned the heart on since the header first drew. */
+function useLikeBursts(bar: PlayBarState | undefined): number {
+  const before = useRef(bar);
+  const [bursts, setBursts] = useState(0);
+  useEffect(() => {
+    if (justLiked(before.current, bar)) setBursts((count) => count + 1);
+    before.current = bar;
+  }, [bar]);
+  return bursts;
+}
+
+/** The game's actions: Like with its count, Share, Invite a friend, Remix when it may be remixed, Exit. */
+function Actions({
+  bar,
+  first,
+  online,
+}: {
+  bar: PlayBarState | undefined;
+  first: RefObject<HTMLButtonElement | null>;
+  online: boolean;
+}): JSX.Element {
+  const busy = bar?.busy === true;
+  // Like and Remix need genex.games; Share and Invite copy a link, which works offline.
+  const waits = busy || !online;
+  const likes = formatCount(bar?.likes ?? 0);
+  const bursts = useLikeBursts(bar);
+  return (
+    <div className="play-viewer-bar-actions">
+      <BarButton
+        control={PlayControl.Like}
+        icon="heart"
+        glyph={<Heart bursts={bursts} liked={bar?.liked === true} />}
+        label={
+          <span key={likes} className="play-like-count" data-rolled={bursts > 0 ? true : undefined}>
+            {likes}
+          </span>
+        }
+        bar={bar}
+        buttonRef={first}
+        ariaLabel={WORDS.likes(likes)}
+        ariaPressed={bar?.liked === true}
+        disabled={waits}
+      />
+      <BarButton control={PlayControl.Share} icon="export" label={WORDS.share} bar={bar} />
+      <BarButton control={PlayControl.Invite} icon="users" label={WORDS.invite} bar={bar} />
+      {bar?.remixable && (
+        <BarButton
+          control={PlayControl.Remix}
+          icon="remix"
+          label={WORDS.remix}
+          bar={bar}
+          className="play-viewer-bar-remix"
+          disabled={waits}
+        />
+      )}
+      <button
+        type="button"
+        className="play-viewer-bar-pill play-viewer-bar-exit"
+        aria-label={WORDS.exit}
+        data-play-bar={PlayControl.Exit}
+        onClick={() => send(PlayControl.Exit)}
+      >
+        <Icon name="close" size={16} />
+      </button>
+    </div>
+  );
+}
+
+/** The header over the viewer, for the game `viewer` shows. */
+export function PlayViewerBar({ viewer }: { viewer: ViewerShown }): JSX.Element {
+  const { bar } = viewer;
+  const first = useRef<HTMLButtonElement>(null);
+  const online = useOnline();
+  // An Esc held in the game asked for the keyboard: it lands on the first action.
+  useEffect(() => {
+    if (viewer.focusAsks) first.current?.focus();
+  }, [viewer.focusAsks]);
+  return (
+    <div role="group" className="play-viewer-bar" aria-label={WORDS.label(viewer.title)} data-play-viewer-bar>
+      <button
+        type="button"
+        className="play-viewer-bar-back"
+        aria-label={WORDS.back}
+        data-play-bar={PlayControl.Back}
+        onClick={() => send(PlayControl.Back)}
+      >
+        <Icon name="chevron-left" size={16} />
+      </button>
+      <div className="play-viewer-bar-name">
+        <span className="play-viewer-bar-title">{viewer.title}</span>
+        <Facts bar={bar} online={online} />
+      </div>
+      {bar?.guestCard && <GuestOffer />}
+      <span className="play-viewer-bar-gap" />
+      {/* The note is worn by its button; this says it to a screen reader. */}
+      <span className="sr-only" role="status">
+        {bar?.note ? WORDS.notes[bar.note] : null}
+      </span>
+      <Actions bar={bar} first={first} online={online} />
+    </div>
+  );
+}

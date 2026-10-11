@@ -107,6 +107,14 @@ import { registerPermissionsIpc } from "./ipc/permissions.ts";
 import { registerPluginsIpc } from "./ipc/plugins.ts";
 import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
+import { registerPlayIpc } from "./ipc/play.ts";
+import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
+import type { PlayViewer } from "./play/viewer.ts";
+import { wirePlayViewer } from "./play/viewer-view.ts";
+import { GENEX_PLUGIN_ID } from "../shared/genex.ts";
+import { PLAY_ORIGIN } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
 import { readLicenseTexts } from "./licenses.ts";
@@ -372,6 +380,10 @@ let window: BrowserWindow | null = null;
 let preview: GamePreview | null = null;
 /** The Live game's full screen in the current window. */
 let gameScreen: GameFullScreen | null = null;
+/** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
+let playCatalog: PlayGallery | null = null;
+/** Play's game viewer in the current window. */
+let playView: PlayViewer | null = null;
 /** Where startup stands for the window: Ready, or the sandbox setup screen with its Retry. */
 const bootGate = createBootGate(
   process.platform,
@@ -725,6 +737,7 @@ async function createWindow(studio: StudioCore): Promise<BrowserWindow> {
   performanceRecorder.mark("window-created");
   win.on("unresponsive", () => studioLog.write("main", "studio window unresponsive"));
   attachPreviews(studio, win);
+  attachPlay(studio, win);
   collectRendererConsole(win);
   keepLinksOutside(studio, win);
   if (dev) {
@@ -804,6 +817,42 @@ function attachPreviews(studio: StudioCore, win: BrowserWindow): void {
   view.setOccluded(codexLogin.snapshot().visible);
   wireGameSound(studio, win, view);
   gameScreen = wireGameFullScreen({ studio, win, view, boundsSeen: previewBoundsSeen });
+}
+
+/** Play's catalog for this core: genex.games over the network, or a fixture launch's own answers. */
+function playCatalogFor(studio: StudioCore): PlayGallery {
+  playCatalog ??= playGallery({
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
+    token: () => studio.plugins.hostCredential(GENEX_PLUGIN_ID),
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+  });
+  return playCatalog;
+}
+
+/** A Play game's public source as a new game of the person's own; answers its library name. */
+function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
+  return remixGame(world, {
+    gamesRoot: () => studio.layout.gamesRoot,
+    // A fixture launch never reaches the network: its copy is a local stand-in.
+    clone: fixtureNativePolicy ? fixtureClone : gitClone,
+    adopt: async (dir, title) =>
+      (await studio.adoptProject(dir, { title, template: false, trustProjectSettings: false })).name,
+  });
+}
+
+/** Play's full-screen viewer in `win`: a published game, the studio's small menu over its corner. */
+function attachPlay(studio: StudioCore, win: BrowserWindow): void {
+  playView = wirePlayViewer({
+    win,
+    gallery: playCatalogFor(studio),
+    remix: (world) => remixPlayGame(studio, world),
+    emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
+    openExternal: (url) => {
+      if (!fixtureNativePolicy) void openOutside(studio, win, url);
+    },
+    offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
+  });
 }
 
 /**
@@ -1148,6 +1197,11 @@ function registerIpc(studio: StudioCore): void {
     }),
   );
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel });
+  registerPlayIpc(handle, {
+    gallery: playCatalogFor(studio),
+    remix: (world) => remixPlayGame(studio, world),
+    viewer: () => playView,
+  });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },
     window: () => window,

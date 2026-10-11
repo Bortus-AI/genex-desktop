@@ -1,6 +1,6 @@
 # Desktop data and privacy
 
-Updated October 9, 2026. Contact: **team@genex.games**. This describes the desktop
+Updated October 11, 2026. Contact: **team@genex.games**. This describes the desktop
 application. Connected providers, plugins and the hosted Genex service have separate policies.
 
 ## Local storage
@@ -51,6 +51,7 @@ undo a remote action or recall data already sent.
 | Blender assets | Blender on this Mac, or one click downloads a pinned release from download.blender.org |
 | Plugin catalog | Anonymous downloads from `plugins.genex.games` and GitHub |
 | Genex asset generation, credits and hosted publishing | A Genex account (paid credits); publishing also needs `git-lfs` |
+| Play | Nothing to browse and play; likes, signed-in play and invite links need a Genex account; Remix needs `git` |
 
 Studio finds Claude Code and Codex through a manual override, your login-shell `PATH`, then
 standard locations, and never installs or updates them unless you choose that in Settings.
@@ -62,6 +63,29 @@ bundled Genex CLI runs with its crash reporting off unless you set `GENEX_TELEME
 Opening a folder does not authorize its Claude settings or hooks. The Open Game trust checkbox
 is an explicit choice because hooks can run commands with the user's access. Interactive
 permission modes and native plugins have broader reach than unattended sandboxed workers.
+
+## Play
+
+Play reads the genex.games catalog from `https://api.genex.games` without a sign-in: the lists of
+games, tools and assets, which tabs have something in them, the search catalog and, every 20 seconds while the dashboard
+is in view, how many people are in its multiplayer games. Covers and author pictures load from
+cdn.genex.technology, assets.genex.games, assets.genex.technology, api.genex.games, Google
+(lh3.googleusercontent.com) and GitHub (avatars.githubusercontent.com).
+
+Playing a game loads it from its own `https://<name>.genex.technology/` address, and genex.games
+counts the play. The game runs in Play's own storage, apart from your games and the rest of the
+app, where it keeps its saves; it may use only pointer lock, full screen and clipboard writes, and
+links that leave Genex games open in your browser. With a connected Genex account, the app sends
+the account's token to the Genex API to get a single-use sign-in ticket for that game (without
+one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
+and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
+only copy a genex.games link to the clipboard.
+
+Remix clones the game's public source over https from git.genex.games into a new folder in your
+games folder, without its history, hooks, content filters, LFS files or symbolic links. The copy's
+Claude settings and hooks are not trusted. Recent (the last 12 games played) and a dismissed Genex
+card stay in the app profile. Development fixture launches answer from local data and open no
+connection.
 
 ## Publication
 

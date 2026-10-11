@@ -26,6 +26,7 @@ import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
+import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView } from "../shared/run-summary.ts";
 import {
@@ -2737,3 +2738,115 @@ export function privacyDeleteWords(result: RunSharingDeleteResult): string {
   };
   return words[result.outcome];
 }
+
+/** Play: the genex.games catalog inside the app, its sidebar and its Genex card. */
+export const PLAY_WORDS = {
+  modes: { label: "Mode", play: "Play", create: "Create" },
+  recent: "Recent",
+  recentEmpty: "Games you play show up here.",
+  page: "Play",
+  shelvesLabel: "Shelves",
+  shelves: {
+    [PlayShelf.Games]: "Games",
+    [PlayShelf.Tools]: "Tools",
+    [PlayShelf.Assets]: "Assets",
+  } satisfies Record<PlayShelf, string>,
+  /** What a shelf holds, as its messages name it. */
+  nouns: {
+    [PlayShelf.Games]: "games",
+    [PlayShelf.Tools]: "tools",
+    [PlayShelf.Assets]: "assets",
+  } satisfies Record<PlayShelf, string>,
+  categoriesLabel: "Categories",
+  categories: {
+    [PlayCategory.Featured]: "Featured",
+    [PlayCategory.Arcade]: "Arcade",
+    [PlayCategory.Shooter]: "Shooter",
+    [PlayCategory.Racing]: "Racing",
+    [PlayCategory.Sports]: "Sports",
+    [PlayCategory.Survival]: "Survival",
+    [PlayCategory.Exploration]: "Exploration",
+    [PlayCategory.Multiplayer]: "Multiplayer",
+    [PlayCategory.Fighting]: "Fighting",
+    [PlayCategory.Tools]: "All",
+    [PlayCategory.Physics]: "Physics",
+    [PlayCategory.Terrain]: "Terrain",
+    [PlayCategory.Lighting]: "Lighting",
+    [PlayCategory.Vfx]: "VFX",
+    [PlayCategory.Assets]: "All",
+  } satisfies Record<PlayCategory, string>,
+  search: (noun: string) => `Search ${noun}`,
+  searchLabel: "Search Play",
+  play: (title: string) => `Play ${title}`,
+  by: (author: string) => `By ${author}`,
+  plays: (count: string) => `${count} plays`,
+  online: (count: number) => `${count} playing now`,
+  remix: "Remix",
+  remixing: "Remixing…",
+  remixLabel: (title: string) => `Remix ${title}`,
+  remixFailed: "Couldn’t make a copy of that game.",
+  loading: (noun: string) => `Loading ${noun}…`,
+  loadingMore: "Loading more…",
+  failed: (noun: string) => `Couldn’t load ${noun}. Check your connection and try again.`,
+  retry: "Try again",
+  empty: (noun: string) => `No ${noun} here yet.`,
+  noMatches: (query: string, noun: string) => `No ${noun} match “${query}”.`,
+  moreFailed: (noun: string) => `Couldn’t load more ${noun}.`,
+  /** No network: what the dashboard, its search and the viewer say, each coming back by itself. */
+  offline: {
+    chip: "Offline",
+    title: "You’re offline",
+    shelf: (things: string) => `${things} load as soon as you’re back online.`,
+    search: "Search works again as soon as you’re back online.",
+    more: (noun: string) => `More ${noun} load when you’re back online.`,
+    game: (title: string) => `${title} opens as soon as you’re back online.`,
+  },
+  viewer: {
+    loading: (title: string) => `Loading ${title}…`,
+    failedTitle: (title: string) => `Couldn’t load ${title}`,
+    failedText: "Check your connection, then try again.",
+    retry: "Try again",
+    back: "Back to Play",
+  },
+  /** The viewer's header across the window's top. */
+  bar: {
+    label: (title: string) => `${title}: game controls`,
+    back: "Back to Play",
+    like: "Like",
+    likes: (count: string) => `Like, ${count} likes`,
+    share: "Share",
+    invite: "Invite a friend",
+    remix: "Remix",
+    exit: "Exit",
+    playing: (count: number) => `${count} playing`,
+    plays: (count: string) => `${count} plays`,
+    notes: {
+      [PlayNote.Copied]: "Link copied",
+      [PlayNote.InviteCopied]: "Invite link copied",
+      [PlayNote.SignIn]: "Connect Genex to like games",
+      [PlayNote.LikeFailed]: "Couldn’t save your like",
+      [PlayNote.Remixing]: "Making your copy…",
+      [PlayNote.RemixFailed]: "Couldn’t make a copy",
+    } satisfies Record<PlayNote, string>,
+    guest: "Save your progress with the Genex plugin",
+    install: "Install plugin",
+    dismissGuest: "Close",
+  },
+  promo: {
+    label: "Genex plugin",
+    eyebrow: "Genex plugin",
+    title: "Put your game on Play",
+    publish: "Publish in one click",
+    multiplayer: "Make it multiplayer",
+    tools: "Every game dev tool",
+    learn: "Learn",
+    learnLabel: "Learn about the Genex plugin",
+    linkCopied: "Link copied",
+    install: "Install plugin",
+    waiting: "Finish in your browser",
+    cancel: "Cancel",
+    failed: "Sign-in didn’t finish.",
+    retry: "Try again",
+    dismiss: "Close",
+  },
+} as const;
