@@ -28,6 +28,12 @@ const NATIVE_CHANNELS = [
   // deletes it there. A fixture profile has no key and no network.
   "studio:openrouter.key.save",
   "studio:openrouter.key.clear",
+  // Connecting asks the person's own model server on this computer or the local network, and keeps
+  // its key in the OS secret store; finding one asks this computer's usual ports. A fixture
+  // profile reaches no server.
+  "studio:local-server.connect",
+  "studio:local-server.forget",
+  "studio:local-server.find",
   "studio:codex-login.browser",
   "studio:codex-login.retry",
   "studio:claude-login.browser",
