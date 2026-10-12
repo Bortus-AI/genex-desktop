@@ -33,6 +33,29 @@ export function workerKeyOf(payload: { runId?: unknown; turn?: unknown; workerId
 export const isWorkerOfGraph = (workerKey: string, graphKey: string): boolean =>
   workerKey.startsWith(`${graphKey}\u0000`);
 
+/**
+ * The queue records of the person's message a run answers: the last message the chat began
+ * answering before the run's first record, as it was queued and then begun. They name no run, so a
+ * run's own records leave them out; the start node reads its pictures from them.
+ */
+export function answeredRecords(events: readonly EventEnvelope[], runId: string): EventEnvelope[] {
+  const first = events.findIndex((event) => customPayloadOf(event)?.runId === runId);
+  const before = first < 0 ? [] : events.slice(0, first);
+  const begun = before.findLast((event) => customTypeOf(event) === CustomEvent.CoordinatorMessageProcessing);
+  const messageId = begun ? customPayloadOf(begun)?.messageId : undefined;
+  if (!begun || typeof messageId !== "string") return [];
+  const queued = before.findLast(
+    (event) =>
+      customTypeOf(event) === CustomEvent.CoordinatorMessageQueued && customPayloadOf(event)?.messageId === messageId,
+  );
+  return queued ? [queued, begun] : [begun];
+}
+
+const customTypeOf = (event: EventEnvelope): string | null =>
+  event.data.type === EventKind.Custom ? event.data.event_type : null;
+const customPayloadOf = (event: EventEnvelope): Record<string, unknown> | null =>
+  event.data.type === EventKind.Custom ? (event.data.payload as Record<string, unknown>) : null;
+
 /** Graph-only transport offsets preserve chronology when bulky trace events are omitted. */
 export type RunGraphEvent = EventEnvelope & { graphSequence?: number; graphLastAt?: string };
 

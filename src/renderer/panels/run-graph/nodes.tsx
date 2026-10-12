@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import { PerformanceBoundary } from "../../performance.tsx";
 import { PerformanceComponent } from "../../../shared/performance.ts";
 /**
@@ -21,7 +21,7 @@ import type {
   Rect,
   RunNode,
 } from "../../run-graph.ts";
-import { runIdOf, thumbShot, truncate } from "../../run-graph.ts";
+import { runIdOf, thumbShot } from "../../run-graph.ts";
 import type { JobInfo } from "../../run-graph-workers.ts";
 import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
 import {
@@ -47,9 +47,9 @@ import { sameStepNode, type StepNodeProps } from "./step-props.ts";
 import { useRoundStill } from "../run-stills.ts";
 import { FINISH_CHECK_WORDS, JOBS_EYEBROW, LEAD_WORDS } from "../../words.ts";
 import { useNow } from "./use-builds-model.ts";
+import type { ReferenceFrame } from "../../../shared/protocol.ts";
+import { imageSrc, useMessageImages } from "../../chat/MessageImages.tsx";
 
-/** How much of the prompt the start node shows. */
-const GOAL_CHARS = 48;
 /** How many asset pictures the assets tile shows before it counts the rest. */
 const ASSETS_SHOWN = 3;
 
@@ -375,49 +375,146 @@ export const StepNode = memo(function StepNode({
 /** A step being checked says so before its checker's action; a step being built says only the action. */
 const checkingWord = (step: Step, word: string): string | null => (step.state === StepState.Judging ? word : null);
 
-/** The start node's face: building its starting point, failed to, or the prompt itself. */
-function StartFace({
-  src,
-  building,
-  failed,
-  goal,
-}: {
-  src: string | null;
-  building: boolean;
-  failed: boolean;
-  goal: string;
-}): JSX.Element {
-  if (building)
-    return (
-      <NodeFace
-        src={src}
-        fill={Fill.Shimmer}
-        name="You asked"
-        word="Starting point…"
-        tone={Tone.Accent}
-        glyph={<StateGlyph state={StepState.Building} />}
-      />
-    );
-  if (failed)
-    return (
-      <NodeFace
-        src={src}
-        fill={Fill.Flat}
-        name="You asked"
-        word="Start failed"
-        tone={Tone.Red}
-        glyph={<StateGlyph state={StepState.Undone} />}
-      />
-    );
-  return <NodeFace src={src} fill={Fill.Flat} name="You asked" word={`“${goal}”`} tone={Tone.Muted} glyph={null} />;
+/** The start node's words. */
+const START_WORDS = {
+  label: "You asked",
+  noPrompt: "No prompt recorded",
+  starting: "Starting point…",
+  failed: "Start failed",
+  showAll: "Show all",
+  showLess: "Show less",
+} as const;
+/** The start's request folded: to five lines in its own place, to three under its pictures (a class, so a far zoom still hides it). */
+const START_FOLD = { Alone: "line-clamp-5", UnderPictures: "line-clamp-3" } as const;
+type StartFold = (typeof START_FOLD)[keyof typeof START_FOLD];
+/** How many pictures the start shows; from one more on, the last of them counts the rest. */
+const START_PICTURES = 4;
+
+/** The start's state while its starting point is built, or after that failed; null for neither. */
+function startState(building: boolean, failed: boolean): ReactNode {
+  if (!building && !failed) return null;
+  const tone = building ? Tone.Accent : Tone.Red;
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-[12px] leading-4" style={{ color: TONE[tone] }}>
+      <StateGlyph state={building ? StepState.Building : StepState.Undone} />
+      <span className="truncate">{building ? START_WORDS.starting : START_WORDS.failed}</span>
+    </span>
+  );
 }
 
-/** What you asked: the game's starting still and the prompt. */
+/**
+ * The pictures sent with the request, at the foot of the start's place so its words follow them
+ * at once: one kept whole, two side by side, more two by two, the last counting the rest.
+ */
+function StartPictures({ images }: { images: ReferenceFrame[] }): JSX.Element {
+  const [first] = images;
+  if (images.length === 1 && first)
+    return (
+      <span className="flex size-full items-end justify-center">
+        <img
+          src={imageSrc(first)}
+          alt=""
+          decoding="async"
+          draggable={false}
+          className="max-h-full max-w-full rounded-[14px]"
+          style={{ boxShadow: IMAGE_OUTLINE }}
+        />
+      </span>
+    );
+  const shown = images.slice(0, START_PICTURES);
+  const more = images.length > START_PICTURES ? images.length - START_PICTURES + 1 : 0;
+  // Two share one row, tall enough to meet the line into the lead; three or more fill the place.
+  const grid = shown.length > 2 ? "h-full grid-rows-2" : "h-[76px] grid-rows-1";
+  return (
+    <span className="flex size-full items-end">
+      <span className={`grid w-full grid-cols-2 gap-1.5 ${grid}`}>
+        {shown.map((image, index) => (
+          <span
+            key={`${image.label}-${index}`}
+            className="relative overflow-hidden rounded-[8px] bg-inset"
+            style={{ boxShadow: IMAGE_OUTLINE }}
+          >
+            <img src={imageSrc(image)} alt="" decoding="async" draggable={false} className="size-full object-cover" />
+            {more && index === shown.length - 1 ? (
+              <span className="absolute inset-0 grid place-items-center bg-black/70 text-[13px] leading-[18px] font-semibold text-white tabular-nums">
+                +{more}
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/** Whether a clamped paragraph hides lines: measured after each paint of its words. */
+function useClamped(text: string, fold: StartFold): [RefObject<HTMLParagraphElement | null>, boolean] {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [clamped, setClamped] = useState(false);
+  useLayoutEffect(() => {
+    const paragraph = ref.current;
+    if (paragraph) setClamped(paragraph.scrollHeight > paragraph.clientHeight + 1);
+  }, [text, fold]);
+  return [ref, clamped];
+}
+
+/** The start's words: its label, its starting point's state, and the request, folded unless open. */
+function StartWords({
+  goal,
+  state,
+  fold,
+  open,
+  words,
+}: {
+  goal: string;
+  state: ReactNode;
+  fold: StartFold;
+  open: boolean;
+  words: RefObject<HTMLParagraphElement | null>;
+}): JSX.Element {
+  return (
+    <span className="flex min-w-0 flex-col gap-1">
+      <span className="text-[11px] leading-[14px] text-ink-3 transition-colors group-hover/start:text-ink-2">
+        {START_WORDS.label}
+      </span>
+      {state}
+      <p
+        ref={words}
+        className={`m-0 text-[13px] leading-[18px] text-pretty whitespace-pre-wrap text-ink [overflow-wrap:anywhere] group-data-[zoom=far]/canvas:hidden ${open ? "" : fold}`}
+      >
+        {goal}
+      </p>
+    </span>
+  );
+}
+
+/** Show all opens the start's words in place; Show less folds them back. */
+function ShowAll({ open, onToggle }: { open: boolean; onToggle: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      className="mt-1 cursor-pointer self-start rounded-[4px] p-0 text-[12px] leading-4 text-ink-3 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-accent group-data-[zoom=far]/canvas:hidden"
+      onClick={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+    >
+      {open ? START_WORDS.showLess : START_WORDS.showAll}
+    </button>
+  );
+}
+
+/**
+ * What you asked: the request itself, no card, with the pictures sent with it above the words
+ * (in the strip `wordsRect` keeps under them); words alone sit in the start's own place, on its
+ * line. Folded, they keep their place; Show all opens them in place, over what is below.
+ */
 export function StartNode({
   run,
   base,
   rect,
-  src,
+  wordsRect,
   active,
   selected,
   onSelect,
@@ -425,25 +522,58 @@ export function StartNode({
   run: RunNode;
   base: BaseNode | null;
   rect: Rect | undefined;
-  src: string | null;
+  wordsRect: Rect | undefined;
   active: boolean;
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element | null {
+  const [open, setOpen] = useState(false);
+  const images = useMessageImages(run.asked?.threadId, run.asked?.messageId) ?? [];
+  const goal = run.goal || START_WORDS.noPrompt;
+  const pictured = images.length > 0 && wordsRect !== undefined;
+  const fold = pictured ? START_FOLD.UnderPictures : START_FOLD.Alone;
+  const [words, clamped] = useClamped(goal, fold);
   if (!rect) return null;
   const building = active && base !== null && !base.done;
-  const goal = run.goal ? truncate(run.goal, GOAL_CHARS) : "No prompt recorded";
+  const ring = frameRing(building ? Variant.Working : Variant.Ghost, selected, null);
+  const place: CSSProperties = { left: rect.x, top: rect.y, width: rect.w, minHeight: rect.h };
   return (
-    <NodeFrame
-      id={GraphSelection.Start}
-      rect={rect}
-      variant={building ? Variant.Working : Variant.Normal}
-      selected={selected}
-      label={`You asked: ${goal}`}
-      onSelect={onSelect}
+    <div
+      className={`absolute flex flex-col ${pictured ? "" : "justify-center"} ${open ? "z-10 rounded-[14px] bg-canvas" : ""}`}
+      style={place}
     >
-      <StartFace src={src} building={building} failed={base?.ok === false} goal={goal} />
-    </NodeFrame>
+      <button
+        type="button"
+        data-graph-node={GraphSelection.Start}
+        data-working={building && !selected ? "true" : undefined}
+        aria-label={`${START_WORDS.label}: ${goal}`}
+        aria-pressed={selected}
+        className="group/start relative flex cursor-pointer flex-col gap-2.5 rounded-[14px] p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-[10px] focus-visible:outline-accent"
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute -inset-2.5 rounded-[18px] transition-[box-shadow] duration-150"
+          style={{ boxShadow: ring }}
+        />
+        {pictured ? (
+          <span className="block" style={{ height: rect.h }}>
+            <StartPictures images={images} />
+          </span>
+        ) : null}
+        <StartWords
+          goal={goal}
+          state={startState(building, base?.ok === false)}
+          fold={fold}
+          open={open}
+          words={words}
+        />
+      </button>
+      {clamped || open ? <ShowAll open={open} onToggle={() => setOpen((value) => !value)} /> : null}
+    </div>
   );
 }
 

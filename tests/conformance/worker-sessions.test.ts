@@ -309,7 +309,7 @@ describe("a worker's session follows the chat's mode", () => {
     }
   });
 
-  it("a worker's question reaches the host with its own words, and never changes its mode", async () => {
+  it("a worker's question reaches the host with its own words, never changes its mode itself, and the picker reaches it", async () => {
     const f = await fixture();
     const asked: PermissionAsk[] = [];
     const controls: unknown[] = [];
@@ -359,7 +359,9 @@ describe("a worker's session follows the chat's mode", () => {
     const refused = await canUseTool("AskUserQuestion", { questions: [] }, { signal, toolUseID: "tu_2" });
     assert.equal(refused.behavior, "deny");
     assert.equal(asked.length, 1, "its own way to ask the person is refused without asking");
-    assert.deepEqual(controls, [], "no picker reaches a worker: its mode is fixed for the session");
+    assert.equal(controls.length, 2, "the picker held the running session, then let it go");
+    assert.equal(typeof (controls[0] as { setMode?: unknown })?.setMode, "function");
+    assert.equal(controls[1], null);
   });
 
   it("a research worker may search the web; a reader without research may not", async () => {

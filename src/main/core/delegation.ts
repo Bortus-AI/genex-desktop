@@ -807,9 +807,8 @@ export class DelegationService {
       const { writeRoots, neverTouch } = reach.worker;
       const owner = workerJobOwner(p.project, found);
       if (!owner) return null;
-      const runStartedAt = found.runId ? await this.#runStartedAt(found.runId) : null;
       const jobReach = { writeRoots, neverTouch, home, gameFolder: game };
-      return { folder: target.workCwd, reach: jobReach, owner, runStartedAt };
+      return { folder: target.workCwd, reach: jobReach, owner };
     }
     const chatThreadId = await this.#projectToolChat(p, grants, session);
     if (!chatThreadId) return null;
@@ -1398,7 +1397,6 @@ export class DelegationService {
       threadId: found.chatThreadId,
       worker: { id: found.id, title: found.title },
       runId: found.runId,
-      runStartedAt: found.runId ? await this.#runStartedAt(found.runId) : null,
       engine: target.engineId,
       model: p.model ?? "",
       asks: this.#core.engines.get(target.engineId).permissionPrompts === true,
@@ -1839,28 +1837,6 @@ export class DelegationService {
     const starts = await this.#runStarts(runId);
     if (!starts.some((event) => event.thread_id === threadId)) return false;
     return this.#startedInGame(project, starts);
-  }
-
-  /**
-   * The run started in this chat that is going now (`#runChat`, `#runRunning`), and when it first
-   * started; null when none is. What the person's "Don't wait for me" reaches while a run goes.
-   */
-  async runOfChatNow(threadId: string): Promise<{ runId: string; startedAt: number } | null> {
-    const meta = (await this.#core.store.getRecord(threadId).catch(() => null))?.metadata;
-    const project = meta?.kind === ThreadKind.Game && typeof meta.project === "string" ? meta.project : null;
-    if (!project) return null;
-    for (const item of await this.#core.activityItems()) {
-      const going = item.project === project && item.runOutcome?.state === ExecutionStatus.Running;
-      if (!going || !item.runId || (await this.#runChat(project, item.runId)) !== threadId) continue;
-      return { runId: item.runId, startedAt: await this.#runStartedAt(item.runId) };
-    }
-    return null;
-  }
-
-  /** When a run first started, by the host's own records (ms since the epoch; 0 when it has none). */
-  async #runStartedAt(runId: string): Promise<number> {
-    const times = (await this.#runStarts(runId)).map((event) => Date.parse(event.created_at)).filter(Number.isFinite);
-    return times.length ? Math.min(...times) : 0;
   }
 
   /** The records that started (or restarted) this run, in any chat. */

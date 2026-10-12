@@ -62,8 +62,6 @@ export interface JobCaller {
   folder: string;
   reach: JobReach;
   owner: JobOwner;
-  /** A run worker's run's first start (ms since the epoch): a "Don't wait for me" made before it reaches it. */
-  runStartedAt?: number | null;
 }
 
 /**
@@ -175,7 +173,6 @@ function jobAsk(
     signal,
     ...(owner.worker ? { worker: owner.worker } : {}),
     runId,
-    runStartedAt: caller.runStartedAt ?? null,
   };
 }
 

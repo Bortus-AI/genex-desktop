@@ -448,4 +448,13 @@ describe("the end of a turn that changed what the project is", () => {
     };
     for (const [label, row] of Object.entries(rows)) assert.equal((await turnOn(row)).length, 1, label);
   });
+
+  it("with Loop on, the session that goes on starts the build with its launch tool instead of building it itself", async () => {
+    const delegated = await turnOn({ before: WEB, after: GODOT, turn: { autopilot: { roles: {} } } });
+    assert.equal(delegated.length, 2, "one turn, then one continuation");
+    const prompt = String(delegated[1]?.prompt);
+    assert.equal(prompt, factsReadyPrompt([{ id: "godot-project", path: "." }], "mcp__studio__start_autopilot"));
+    assert.ok(prompt.includes("mcp__studio__start_autopilot"), "it names the launch tool as this engine calls it");
+    assert.ok(!prompt.includes("Go on with what you said you would build first"), "it is not told to build itself");
+  });
 });

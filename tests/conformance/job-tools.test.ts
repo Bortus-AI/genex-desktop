@@ -260,7 +260,7 @@ describe("job tools", () => {
     assert.deepEqual(await chat.core.jobs.list(chat.game), [], "no record");
   });
 
-  it("a worker's job card names the worker and waits; don't wait for me refuses it at once", {
+  it("a worker's job card names the worker and waits; the person's switch to Bypass answers it", {
     ...POSIX,
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
@@ -282,24 +282,27 @@ describe("job tools", () => {
     await chat.delegate(chat.runWorker());
     assert.match(answers[0] ?? "", /did not allow this job/);
 
-    await chat.core.setDontWait(chat.threadId, true);
     known = new Set((await chat.rows()).map((row) => row.requestId));
     chat.whileRunning(async (request) => {
-      answers.push(textOf(await request.onLiveTool?.(JobTool.Start, { title: "Bake lights", command: LONG })));
+      const call = request.onLiveTool?.(JobTool.Start, { title: "Bake lights", command: LONG });
+      await chat.nextCard(known);
+      await chat.core.setPermissionMode(chat.threadId, PermissionMode.Bypass);
+      answers.push(textOf(await call));
     });
+    const before = chat.spawned.length;
     await chat.delegate(chat.runWorker());
     chat.whileRunning(async () => {});
-    assert.match(answers[1] ?? "", /asked not to be waited for/, "refused at once");
+    startedId(answers[1] ?? "");
+    assert.equal(chat.spawned.length - before, 1, "Bypass asks nothing: the job starts");
     const kept = (await chat.rows()).filter((row) => !known.has(row.requestId));
     assert.deepEqual(
       kept.map((row) => [row.state, row.by ?? null]),
       [
         ["pending", null],
-        ["denied", "not_waited"],
+        ["allowed", "mode"],
       ],
-      "the question stays in the chat, settled",
+      "the card stays in the chat, answered by the switch",
     );
-    assert.equal(chat.spawned.length, 0);
   });
 
   it("a worker's job writes only its own folders and never reaches the never-touch list", {

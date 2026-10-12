@@ -1958,7 +1958,7 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
 });
 
 describe("an unlimited Loop on any of these: the lead, the facts' hooks and observers, workers, the finish check", () => {
-  it("workers in a Loop follow the chat's permission mode, and a worker's question waits for the person unless they switched on don't wait for me", async (t) => {
+  it("workers in a Loop follow the chat's permission mode, and a worker's question waits for the person until they answer or switch to Bypass", async (t) => {
     const { core } = lite;
     const loop = await loopWithWorker(t);
     for (const mode of Object.values(PermissionMode)) {
@@ -1977,15 +1977,19 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
     assert.equal(card.state, "pending", "the question waits for the person");
     assert.equal(core.answerPermission(card.requestId, { decision: "deny" }), true);
     await waiting;
-    await core.setDontWait(loop.threadId, true);
-    await loop.worker();
+    const known = new Set((await loop.rows()).map((row) => row.requestId));
+    const next = loop.worker();
+    for (let tries = 0; tries < 200 && (await loop.rows()).every((row) => known.has(row.requestId)); tries++)
+      await pause(25);
+    await core.setPermissionMode(loop.threadId, PermissionMode.Bypass);
+    await next;
     assert.deepEqual(
       answers.map((answer) => answer?.decision),
-      ["deny", "deny"],
-      "the person's answer, then refused at once",
+      ["deny", "allow"],
+      "the person's answer, then their switch to Bypass",
     );
     const settled = (await loop.rows()).at(-1);
-    assert.equal(settled?.by, "not_waited", "and kept in the chat");
+    assert.equal(settled?.by, "mode", "kept in the chat, answered by the switch");
     assert.equal(settled?.worker?.title, "Stair builder");
   });
   it("a worker's question is answered only by the person: a message from the lead or another worker never counts as approval", async (t) => {
@@ -2096,7 +2100,7 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
     assert.ok(snapshot >= 0 && snapshot < trail.indexOf("engine.delegate"), trail.join(", "));
   });
   it(
-    "an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap and don't wait for me live in the run record",
+    "an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap lives in the run record",
     LOOP_TIMEOUT,
     async () => {
       const unlimited = { wallClockMs: 2 * HOUR, untilSatisfied: true, completionPolicy: "goal" };
@@ -2138,7 +2142,7 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
       assert.ok(workerCalls.length > 0, "a worker ran");
       for (const call of workerCalls) {
         assert.equal(call.creditCap, 600, "every worker is capped");
-        // The host reads "Don't wait for me" by the run: every worker names it.
+        // A run worker's card waits as the lead's does: every worker names its run.
         assert.equal((call.worker as { runId?: unknown }).runId, host.run.runId);
       }
 

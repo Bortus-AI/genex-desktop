@@ -160,7 +160,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
-| `scaffolds[]` | 3 | Up to 8 `{id, label, tool?, facts?}`: the kinds of project the plugin's tools make, each with its own label; see [Scaffolds](#scaffolds) |
+| `scaffolds[]` | 3 | Up to 8 `{id, label, tool?, game?, facts?}`: the kinds of project the plugin's tools make, each with its own label; see [Scaffolds](#scaffolds) |
 | `folders[]` | 3 | Up to 8 `{path, why}`: folders outside the game the plugin's engine programs write to, workers' write roots; see [Folders](#folders) |
 | `locks[]` | 3 | Up to 8 `{id, label, per, personFirst?}`: what one holder at a time may use, giving way to the person; see [Locks](#locks-the-person-comes-first) |
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
@@ -323,7 +323,9 @@ program Studio itself ships and is reserved for the bundled Genex plugin.) `cwd`
 a folder inside whichever you pick, so a CLI that reads dotfiles on startup cannot reach the user's.
 `description` is required, 1–4000 characters, and rides along in the prompt guidance. `toolPolicy`
 (deny wins) and `maxTools` keep an enthusiastic server out of every prompt's tool list; Studio caps a
-connector at 64 tools regardless. `callTimeoutMs` is 1 000–1 800 000. `facts` (API 3) limits the
+connector at 64 tools regardless. `reads` (API 3, up to 64 distinct raw tool names) are the tools
+that only read, listing or describing what the server offers: they run with no card in any mode, as
+a file read does (a local plugin's still ask every call). `callTimeoutMs` is 1 000–1 800 000. `facts` (API 3) limits the
 server to the sessions of games that hold one of those facts: for any other game it is not listed and
 never started (the harness's `mcp.invoke` included), and a session's call to a connector it was not
 handed is refused as an unknown tool before anyone is asked. Unknown keys are dropped and the section is canonicalised in a fixed key
@@ -412,7 +414,8 @@ port lies outside Genex's block (Epic's 8000, from before ports moved
 there) is not trusted until the project is set up again.
 
 The bridge lists Epic's three meta-tools itself
-(`list_toolsets`, `describe_toolset`, `call_tool`), so they are there before the editor opens, and
+(`list_toolsets`, `describe_toolset`, `call_tool`; the first two declared `reads`, so only
+`call_tool` asks, and not in Auto), so they are there before the editor opens, and
 opens one editor session per call, so a restarted editor answers the next call and nothing is
 sent twice. While a call waits, the bridge reads the editor's log every second, so a call fails
 within seconds when Unreal crashes ("Unreal crashed while this call ran (<Unreal's own text>), so
@@ -1224,8 +1227,9 @@ on disk stays out of every later commit. A line of the person's git reads as mat
 (`[z-a]`) says nothing.
 A worker's copy is a git worktree and always holds every tracked file: `copySkip` and the ignore
 rules apply to what it receives outside history, the files of the game's nested repositories (only
-the ignore rules when the copy versions them). The Assets tab lists `assets/` and `public/assets/`,
-then the folders of the facts the game holds (`assetFoldersFor`: none for `unreal-project` and
+the ignore rules when the copy versions them). The Assets tab lists the media of `assets/` and
+`public/assets/` (images, models, audio, video; data a script writes there is no asset, and a
+model's `.bin`/`.mtl` stay readable beside it), then the folders of the facts the game holds (`assetFoldersFor`: none for `unreal-project` and
 `unreal-plugin`, whose `.uasset`/`.umap` packages have no preview; `godot-project` the folder's media; `unity-project`
 `Assets` media; `blender-assets` `.blend` and media; a `web-game` below the root its own two), then
 each enabled plugin's `assets.folders` at its facts' folders, keeping only its `formats` (none: any
@@ -1261,7 +1265,8 @@ the lead says otherwise, its isolation ([harness runtime](harness-runtime.md#wor
 `scaffolds` (API 3, `substrate/plugins/scaffold-manifest.ts`) names the kinds of project the
 plugin's tools make: `id` a fact id, unique in the manifest; `label` 1–40 characters ("Unreal
 plugin"); `tool` an agent tool of the manifest that declares `makes`, named by one scaffold only;
-`facts` at most four rules
+`game: false` when what it makes is no game (the Unreal plugin's "Unreal plugin"): the new game's
+question never offers it, and the agent makes it when the request asks for it; `facts` at most four rules
 in the `detect` grammar, each of a fact that tool makes (a scaffold with `facts` needs a `tool`).
 Each scaffold whose tool reaches a game is a kind on offer of its own, named by its label (a plugin
 with no scaffold naming a tool offers each reaching `makes` tool as before; one without a tool
@@ -1287,8 +1292,9 @@ in `Plugins/` is an `unreal-plugin` fact).
 part and no glob; `why` 1–120 characters. Turning the plugin on approves them as write roots for
 the engine programs of workers and jobs (the registry's `workerFolders()`, `~` expanded and
 deduped); the trust dialog of every install or update (each path and why, new ones marked; an
-install turns the plugin on), the plugin's page (Information, Folders: each path and why) and its
-suggestion card in the chat ("Turning it on lets its programs write in: …") name them first. A manifest is
+install turns the plugin on), the plugin's page (Information, Folders: each path and why) and the
+Turn on button of its suggestion card in the chat (on hover: "Turning it on lets its programs write
+in: …") name them first. A manifest is
 refused when a folder is `/`, the home folder or a folder holding it, `~/Library`,
 `~/Library/Application Support`, `~/Documents`, `~/Desktop` or `~/Downloads`, or is, holds or sits
 inside a login or Genex's own data (`~/.claude`, `~/.codex`, `~/.genex`, `~/.ssh`, `~/.aws`,
@@ -1338,7 +1344,9 @@ lacks the files it needs; a plugin's project is never refused for a missing `ind
 Genex runs them in `main/core/plugin-hooks.ts` (`HookService`), each step as a harness step through
 the registry, under the union of the steps' locks held for the whole moment (a checkpoint's before
 and after steps and its snapshot together); a run's moments pass the locks its own workers hold
-(`runHolders`), so its recovery never waits on its own writer in place. The host fires `checkpoint.*` (`checkpoint.take`, and
+(`runHolders`), so its recovery never waits on its own writer in place. A run's start or resume
+(`run.prepare`) waits up to 10 minutes for the person to finish in the app (`HOOK_LOCK_WAIT_MS`), the
+chat's line saying so, then starts; a checkpoint waits a minute, a restore two, `health` not at all, the rest 30 s or less. The host fires `checkpoint.*` (`checkpoint.take`, and
 the chat's `checkpoint` tool on a game whose plugins hook checkpoints, which then answers what was
 saved and the snapshot's id), `restore.*` around every restore of a game folder (the person's file
 Rewind with `forPerson`: no wait for the person or the plan) and `tool.*` around an agent's call of

@@ -173,6 +173,20 @@ describe("tries fold into steps", () => {
   });
 });
 
+describe("the start node", () => {
+  it("with pictures, keeps a strip for its words under them, and the assets move down past it", () => {
+    const plain = layoutSteps([], { assets: true });
+    const pictured = layoutSteps([], { assets: true, startWords: true });
+    const start = pictured.rects.start!;
+    const words = pictured.rects["start:words"]!;
+    assert.deepEqual(start, plain.rects.start, "the pictures keep the start's place on the middle line");
+    assert.equal(plain.rects["start:words"], undefined, "words alone fit the start's own place");
+    assert.deepEqual(words, { x: start.x, y: start.y + start.h, w: STEPS.startW, h: STEPS.startWordsH });
+    assert.equal(pictured.rects.assets!.y, words.y + words.h + STEPS.assetsGap);
+    assert.ok(pictured.height > plain.height, "the canvas makes room for it");
+  });
+});
+
 describe("a step's state comes from the build first, the judges second", () => {
   it("draws the kept steps on the line, the undone one below it, and says who stopped the last try", () => {
     const { graph, rows } = rowsOf(loopRun());

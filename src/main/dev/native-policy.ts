@@ -248,9 +248,6 @@ const FIXTURE_SAFE = [
   "studio:permissions.mode",
   "studio:permissions.answer",
   "studio:permissions.forget",
-  // The person's "Don't wait for me" and its state: the profile's own file and the chat's log.
-  "studio:loop.dontWait",
-  "studio:loop.dontWaitState",
   "studio:plugins.list",
   "studio:plugins.catalog",
   "studio:plugins.enable",

@@ -2,8 +2,6 @@ import { providerInfo } from "../shared/providers.ts";
 import type { ExportReview } from "../shared/plugins.ts";
 import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
 import { parseSuggestion } from "./chat/plugin-suggestion.ts";
-import type { DontWaitOfferPayload } from "../shared/dont-wait.ts";
-import { dontWaitSetLine, parseDontWaitOffer } from "./chat/dont-wait-offer.ts";
 import { type JobHandle, type JobStart, jobEndLine, jobStart, missingPanes } from "./chat/job-lines.ts";
 import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
@@ -64,9 +62,7 @@ import {
   chatSourceName,
   connectorStepWords,
   consentAskWords,
-  consentActionWords,
   consentOutcomeWords,
-  consentToolWords,
   decisionWords,
   fixWords,
   flagWords,
@@ -119,8 +115,6 @@ export const EntryKind = {
   Compaction: "compaction",
   /** A session's card to turn a Genex plugin on or install it (`plugin_suggested`). */
   PluginSuggestion: "plugin-suggestion",
-  /** An agent's card offering "Don't wait for me" (`dont_wait_offer`). */
-  DontWaitOffer: "dont-wait-offer",
 } as const;
 export type EntryKind = (typeof EntryKind)[keyof typeof EntryKind];
 
@@ -168,8 +162,6 @@ export type Entry =
   | { kind: typeof EntryKind.Compaction; id: string; messages: number | null; summary: string | null }
   /** The turn-it-on card a session showed: its button is read from the live plugin list. */
   | { kind: typeof EntryKind.PluginSuggestion; id: string; suggestion: PluginSuggestedPayload }
-  /** An agent's "Don't wait for me" card: `on` once the person's click on it switched it on. */
-  | { kind: typeof EntryKind.DontWaitOffer; id: string; offer: DontWaitOfferPayload; on: boolean }
   /** One plain line about what Harness learned; `link` opens Activity. */
   | { kind: typeof EntryKind.Learning; id: string; text: string; link: string }
   | {
@@ -200,9 +192,7 @@ export type Entry =
       consentSource?: string;
       consentPrompt?: string;
       consentExport?: ExportReview;
-      /** A connector's card: what the call does in a few words, its tool's words, and that Always allow is offered. */
-      consentAction?: string;
-      consentTool?: string;
+      /** A connector's card: Always allow is offered. */
       consentAlwaysOffered?: boolean;
       /** action "permission": Claude's own Allow / Deny question (or a plan to approve), as first asked, and how it ended. */
       permission?: ToolPermissionEvent;
@@ -1337,28 +1327,6 @@ function narratePluginSuggested(chat: ChatDraft, event: EventEnvelope): void {
   chat.entries.push({ kind: EntryKind.PluginSuggestion, id: event.id, suggestion });
 }
 
-/** An agent's "Don't wait for me" card; an old or partial record draws nothing. */
-function narrateDontWaitOffer(chat: ChatDraft, event: EventEnvelope): void {
-  const offered = customPayload(event.data, CustomEvent.DontWaitOffer);
-  const offer = offered ? parseDontWaitOffer(offered) : null;
-  if (!offer) return;
-  closeGroup(chat);
-  chat.entries.push({ kind: EntryKind.DontWaitOffer, id: event.id, offer, on: false });
-}
-
-/** The person's switch: a line in the chat, and the card their click came from says so. */
-function narrateDontWaitSet(chat: ChatDraft, event: EventEnvelope): void {
-  const set = customPayload(event.data, CustomEvent.DontWaitSet);
-  const line = set ? dontWaitSetLine(set) : null;
-  if (!set || !line) return;
-  const card = chat.entries.find(
-    (entry) => entry.kind === EntryKind.DontWaitOffer && entry.offer.offerId === set.offerId,
-  );
-  if (card?.kind === EntryKind.DontWaitOffer) card.on = set.on === true;
-  closeGroup(chat);
-  say(chat, event.id, SystemTag.Ask, line);
-}
-
 /** Undo took a link back: its line says what the game builds in now, and offers Undo no more. */
 function narrateEngineUndone(chat: ChatDraft, event: EventEnvelope): void {
   const undone = customPayload(event.data, CustomEvent.EngineLinkUndone);
@@ -1744,13 +1712,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     consentSource: consent.pluginName || A_PLUGIN,
     consentPrompt: consent.prompt || undefined,
     consentExport: consent.exportReview,
-    ...(consent.alwaysOffered
-      ? {
-          consentAlwaysOffered: true,
-          consentAction: consentActionWords(consent.tool, consent.args),
-          consentTool: consentToolWords(consent.tool),
-        }
-      : {}),
+    ...(consent.alwaysOffered ? { consentAlwaysOffered: true } : {}),
     text: consentAskWords({
       pluginName: consent.pluginName,
       tool: consent.tool,
@@ -1982,8 +1944,6 @@ const NARRATORS: readonly Narrator[] = [
   narrateRunFinishSettled,
   narrateAppAccess,
   narratePluginSuggested,
-  narrateDontWaitOffer,
-  narrateDontWaitSet,
   narrateImprovement,
   narrateSkillAccepted,
   narrateRunStart,

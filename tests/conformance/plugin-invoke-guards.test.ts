@@ -136,7 +136,7 @@ it("a run's plugin call answers to the Plan mode of the chat the run was started
       activeConnectorCalls: new Map(),
       cutOffCalls: new Map(),
       planning: async (thread) => thread === parent,
-      bypassing: async () => false,
+      chatMode: async () => PermissionMode.Manual,
       locks: core.locks,
       hooks: core.hooks,
     });

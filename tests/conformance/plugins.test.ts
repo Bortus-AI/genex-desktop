@@ -1397,6 +1397,20 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
     () => validateManifest(withServers([mcpServer({ requires: { settings: ["missing"] } })])),
     /requires.settings: "missing" is not declared/,
   );
+  // The tools a server says only read: a list of distinct names, nothing else.
+  for (const reads of [
+    "list",
+    [""],
+    [1],
+    ["list", "list"],
+    Array.from({ length: 65 }, (_, i) => `t${i}`),
+    ["x".repeat(129)],
+  ])
+    assert.throws(
+      () => validateManifest(withServers([mcpServer({ reads })])),
+      /mcpServers reads/,
+      JSON.stringify(reads),
+    );
   // What survives is canonical: the section last, its keys in one order, unknown fields dropped.
   const canonical = validateManifest(
     withServers([
@@ -1404,6 +1418,7 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
         extra: "dropped",
         env: { ZED: "literal:z", ALPHA: "setting:greeting" },
         toolPolicy: { deny: ["dangerous"] },
+        reads: ["list", "describe"],
         maxTools: 8,
         callTimeoutMs: 900_000,
       }),
@@ -1418,6 +1433,7 @@ test("mcpServers is API 2 only, and what a plugin may declare about a server it 
     "cwd",
     "env",
     "toolPolicy",
+    "reads",
     "maxTools",
     "callTimeoutMs",
     "description",

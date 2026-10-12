@@ -18,7 +18,8 @@ const MAX_SCAFFOLDS = 8;
 const MESSAGE = {
   NeedsApi3: "scaffolds requires apiVersion 3",
   NotList: `Invalid scaffolds (a list of at most ${MAX_SCAFFOLDS})`,
-  NotScaffold: "Invalid scaffolds entry (an object with id, label and optional tool and facts)",
+  NotScaffold: "Invalid scaffolds entry (an object with id, label and optional tool, game and facts)",
+  InvalidGame: (id: string) => `Invalid scaffold ${id} game (true or false)`,
   InvalidId: "Invalid scaffold id (lowercase letters, digits and dashes, starting with a letter, at most 40)",
   RepeatedId: (id: string) => `Duplicate scaffold id: ${id}`,
   RepeatedTool: (tool: string) => `Duplicate scaffold tool: ${tool} (each scaffold has a tool of its own)`,
@@ -62,6 +63,10 @@ function validateScaffold(raw: unknown, tools: readonly PluginManifestTool[]): P
   const tool = kindTool(tools, raw.tool);
   if (!tool) throw new Error(MESSAGE.InvalidTool(raw.id));
   scaffold.tool = tool.name;
+  if (raw.game !== undefined) {
+    if (typeof raw.game !== "boolean") throw new Error(MESSAGE.InvalidGame(raw.id));
+    scaffold.game = raw.game;
+  }
   if (raw.facts !== undefined) scaffold.facts = scaffoldRules(raw.id, raw.facts, tool.makes ?? []);
   return scaffold;
 }

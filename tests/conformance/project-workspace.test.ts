@@ -197,7 +197,10 @@ describe("the registry's sections", () => {
 });
 
 /** Today's folders, which every game keeps. */
-const DEFAULTS: AssetFolder[] = [{ folder: "assets" }, { folder: "public/assets" }];
+const DEFAULTS: AssetFolder[] = [
+  { folder: "assets", formats: MEDIA_FORMATS },
+  { folder: "public/assets", formats: MEDIA_FORMATS },
+];
 const BLENDER = [...new Set(["blend", ...MEDIA_FORMATS])];
 const toy: PluginWorkspace = {
   pluginId: TOY_PLUGIN_ID,
@@ -215,7 +218,11 @@ const ASSET_FOLDER_CASES: Array<[string, FactRef[], PluginWorkspace[], AssetFold
     "a web game in site/",
     [fact(CoreFact.WebGame, "site")],
     [],
-    [...DEFAULTS, { folder: "site/assets" }, { folder: "site/public/assets" }],
+    [
+      ...DEFAULTS,
+      { folder: "site/assets", formats: MEDIA_FORMATS },
+      { folder: "site/public/assets", formats: MEDIA_FORMATS },
+    ],
   ],
   [
     "Blender files in props/",
@@ -269,7 +276,7 @@ describe("where a project's assets live", () => {
     const folders = assetFoldersFor([fact(CoreFact.UnrealProject, ROOT), fact(CoreFact.BlenderAssets, "props")], []);
     const table: Array<[string, boolean]> = [
       ["assets/a.png", true],
-      ["assets/notes.txt", true],
+      ["assets/notes.txt", false],
       ["public/assets/x.glb", true],
       ["Content/Hero.uasset", false],
       ["Content/Maps/Main.umap", false],

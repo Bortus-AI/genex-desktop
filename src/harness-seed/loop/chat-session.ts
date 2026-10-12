@@ -254,6 +254,15 @@ function sessionIn(type: unknown, payload: AnyRecord, engine: string | undefined
 /** The prefix of a delegated session's mirrored events (`delegated.<engine>`). */
 const DELEGATED_PREFIX = "delegated.";
 
+/**
+ * Whether an engine's answer says the session it was asked to resume does not exist: a session
+ * another account made, or one the engine never saved. Narrower than `isResumeFailure`, since an
+ * answer's words (a cap's "press Resume") are not an error's.
+ */
+export function isLostSession(text: unknown): boolean {
+  return /no conversation found|conversation not found|session (id )?not found/i.test(String(text ?? ""));
+}
+
 /** A delegated session's mirrored `init` event: the session the engine opened. */
 function mirroredInit(type: string, payload: AnyRecord, engine: string | undefined): ContractorSession | null {
   const inner = payload.data ?? {};

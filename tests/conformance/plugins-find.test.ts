@@ -449,7 +449,6 @@ describe("plugin search by seat", () => {
       ProjectTool.PluginsSuggest,
       { plugin: UNREAL, reason: "asked" },
     ];
-    const offer: [string, Record<string, unknown>] = [ProjectTool.OfferDontWait, {}];
 
     /** A search no plugin answers: its answer says how to write one. */
     const nothingFits: [string, Record<string, unknown>] = [ProjectTool.PluginsFind, { fact: "nowhere-project" }];
@@ -460,21 +459,16 @@ describe("plugin search by seat", () => {
       assert.doesNotMatch(note, /plugin_check/, `${who}: never a tool it wasn't handed`);
     };
 
-    // The run's lead: the plugin search, the card and the offer, each shown in the chat the run was started in.
-    callsDuringTurn([suggest, offer, nothingFits]);
+    // The run's lead: the plugin search and the card, shown in the chat the run was started in.
+    callsDuringTurn([suggest, nothingFits]);
     await chat.delegate({
       threadId: runThread,
       cwd: integration,
       director: { runId: RUN_ID, threadId: runThread, project: game, root: integration, setup: null, tools: [] },
     });
-    assert.deepEqual(
-      projectToolsOf(0),
-      [ProjectTool.OfferDontWait, ProjectTool.PluginsFind, ProjectTool.PluginsSuggest].sort(),
-    );
+    assert.deepEqual(projectToolsOf(0), [ProjectTool.PluginsFind, ProjectTool.PluginsSuggest].sort());
     assert.equal(await cardsIn(threadId, CustomEvent.PluginSuggested), 1, "the card is in the chat the lead answers");
-    assert.equal(await cardsIn(threadId, CustomEvent.DontWaitOffer), 1, "and so is the offer");
     assert.equal(await cardsIn(runThread, CustomEvent.PluginSuggested), 0, "never in the thread the harness named");
-    assert.equal(await cardsIn(runThread, CustomEvent.DontWaitOffer), 0);
     notesWithoutCheck("the lead");
 
     // A lead of a run nobody started in a chat shows nothing anywhere.

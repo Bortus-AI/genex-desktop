@@ -241,7 +241,11 @@ function SettledRequest({ event }: { event: ToolPermissionEvent }): JSX.Element 
 /** A settled request in the conversation, one line ("Allowed · npm install three") that opens to the request. */
 export function PermissionOutcome({ event }: { event: ToolPermissionEvent }): JSX.Element {
   return (
-    <ChatDisclosure data-permission-outcome label={permissionLineWords(event)}>
+    <ChatDisclosure
+      data-permission-outcome
+      lead={<Icon name="shield" size={14} className="shrink-0" />}
+      label={permissionLineWords(event)}
+    >
       <SettledRequest event={event} />
     </ChatDisclosure>
   );

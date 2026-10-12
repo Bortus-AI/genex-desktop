@@ -44,6 +44,8 @@ export const OPEN_PROJECTS = {
 
 const GODOT_GAME = { name: OPEN_PROJECTS.godot, title: "Moon base" } as const;
 const PLUGIN_GAME = { name: OPEN_PROJECTS.plugin, title: "Level tools" } as const;
+/** The command the plugin project's lead was allowed to run. */
+const PLUGIN_BUILD_COMMAND = "./build-plugin.sh";
 const BOTH_GAME = { name: OPEN_PROJECTS.webAndUnreal, title: "Lantern racer" } as const;
 const PORTED_GAME = { name: OPEN_PROJECTS.ported, title: "Paper plane" } as const;
 
@@ -360,7 +362,7 @@ export async function seedOpenLoops(core: StudioCore): Promise<void> {
     await core.append(godotLoop(GODOT_GAME.name, godotThread), godotThread);
   const pluginThread = await core.threadForGame(PLUGIN_GAME.name);
   if (!(await seeded(core, pluginThread, PLUGIN_LOOP_RUN)))
-    await core.append(pluginLoop(PLUGIN_GAME.name), pluginThread);
+    await core.append(pluginLoop(PLUGIN_GAME.name, pluginThread), pluginThread);
 }
 
 /** The Godot game's Loop going in place: one save point, and a worker that asks before it exports. */
@@ -391,18 +393,64 @@ function godotLoop(project: string, threadId: string): EventData[] {
   ];
 }
 
-/** The plugin project's Loop going in place: one save point, and the lead's next call waits on the editor. */
-function pluginLoop(project: string): EventData[] {
+/**
+ * The plugin project's Loop going in place: one save point, the lead's two answered requests, and
+ * its next call waits on the editor.
+ */
+function pluginLoop(project: string, threadId: string): EventData[] {
   const run = fixtureRun({ runId: PLUGIN_LOOP_RUN, project });
   return [
     ...openStart(run, PLUGIN_ASK),
     ...savePoint(run, project, 1, "Button", "the toolbar shows the lamp button"),
+    ...answeredAsks(project, threadId),
     run(CustomEvent.FinishCheck, { round: 1, step: FinishCheckStep.Checking, claim: PLUGIN_CLAIM }),
     run(CustomEvent.FinishCheck, {
       round: 1,
       step: FinishCheckStep.Rejected,
       reasons: PLUGIN_NOT_YET,
       rejections: 1,
+    }),
+  ];
+}
+
+/**
+ * The lead's requests in the plugin project's chat, answered, so each reads as one line: the
+ * Unreal editor always allowed, and a build command allowed once.
+ */
+function answeredAsks(project: string, threadId: string): EventData[] {
+  const consent = {
+    consentId: "fixture-open-unreal-call",
+    pluginId: "unreal-editor",
+    pluginName: "Unreal Engine",
+    tool: "unreal-editor__call_tool",
+    args: { toolset_name: "editor_toolset.toolsets.actor", tool_name: "spawn_actor" },
+    project,
+    threadId,
+    prompt: "Let the agent use Unreal Engine?",
+    alwaysOffered: true,
+  };
+  const command = {
+    requestId: "fixture-open-lead-build",
+    project,
+    threadId,
+    tool: "Bash",
+    title: `Claude wants to run ${PLUGIN_BUILD_COMMAND}`,
+    displayName: "Run command",
+    subject: PLUGIN_BUILD_COMMAND,
+    input: { command: PLUGIN_BUILD_COMMAND },
+    always: [],
+  };
+  const custom = (event_type: string, payload: Record<string, unknown>): EventData =>
+    ({ type: EventKind.Custom, event_type, payload }) as EventData;
+  return [
+    custom(CustomEvent.PluginConsent, { ...consent, state: "pending" }),
+    custom(CustomEvent.PluginConsent, { ...consent, state: "approved", by: "user", always: true }),
+    custom(CustomEvent.ToolPermission, { ...command, state: ToolPermissionState.Pending }),
+    custom(CustomEvent.ToolPermission, {
+      ...command,
+      state: ToolPermissionState.Allowed,
+      by: "user",
+      granted: "once",
     }),
   ];
 }

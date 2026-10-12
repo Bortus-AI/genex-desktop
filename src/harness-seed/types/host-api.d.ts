@@ -767,6 +767,8 @@ export interface PluginKindOffer {
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
   label?: string;
+  /** False when what it makes is no game (`PluginScaffold.game`): the new game's question never offers it. */
+  game?: boolean;
 }
 // ↑ src/shared/plugins.ts
 

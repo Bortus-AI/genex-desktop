@@ -20,10 +20,6 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.PluginSuggested,
   // Files too large to save are reported by the host that took the checkpoint or the rewind.
   CustomEvent.CheckpointSkipped,
-  // "Don't wait for me" is the person's alone: its card is shown by `offer_dont_wait`, its switch
-  // by the person's click, so the harness may write neither.
-  CustomEvent.DontWaitOffer,
-  CustomEvent.DontWaitSet,
   // A job's start and end are recorded by the app that owns the job (`substrate/jobs.ts`).
   CustomEvent.JobStarted,
   CustomEvent.JobEnded,

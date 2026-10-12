@@ -398,7 +398,15 @@ function kindOffers({ manifest, reach }: PluginPart): PluginKindOffer[] {
   if (scaffolds.length === 0) return reach.tools.filter((t) => t.makes).map((t) => kindOffer(manifest, t));
   return scaffolds.flatMap((scaffold) => {
     const t = reach.tools.find((reaching) => reaching.name === scaffold.tool);
-    return t ? [{ ...kindOffer(manifest, t), scaffold: scaffold.id, label: scaffold.label }] : [];
+    if (!t) return [];
+    return [
+      {
+        ...kindOffer(manifest, t),
+        scaffold: scaffold.id,
+        label: scaffold.label,
+        ...(scaffold.game === false ? { game: false } : {}),
+      },
+    ];
   });
 }
 /** The file a skill read names: the skill's own, or one of its references spelled exactly as listed. */
@@ -561,6 +569,8 @@ const DECLINED_MESSAGE: Record<PluginConsentBy, (name: string) => string> = {
   stop: (name) => `${name} was declined because the session stopped`,
   turn: (name) => `${name} was declined because the turn ended`,
   restart: (name) => `${name} was declined because the turn ended`,
+  // A mode answers only with a yes; listed so every ending has its words.
+  mode: (name) => `${name} was answered by the chat's mode`,
 };
 /** Rejects with the reason `signal` is aborted with, once it is: a host tool call's cut-off. */
 function cutOffOf(signal: AbortSignal): Promise<never> {

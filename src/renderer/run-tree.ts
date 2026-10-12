@@ -59,6 +59,10 @@ export const leadNodeOf = (graph: RunGraph): LeadNode | null =>
 const hasNode = (graph: RunGraph, kind: RunGraph["nodes"][number]["kind"]): boolean =>
   graph.nodes.some((node) => node.kind === kind);
 
+/** The run was asked with pictures: its start shows them, its words under them. */
+const asksWithPictures = (graph: RunGraph): boolean =>
+  graph.nodes.some((node) => node.kind === GraphNodeKind.Run && node.asked !== null);
+
 /**
  * The Builds tab's layout of a graph: today's options (the assets under the start, the
  * optimisation card, the result's gate, the lead while it has the run), plus the tree's when the
@@ -71,6 +75,7 @@ export function buildsLayout(graph: RunGraph, rows: PartRow[], summary: RunSumma
     : {};
   return layoutSteps(rows, {
     assets: hasNode(graph, GraphNodeKind.Blender) || hasNode(graph, GraphNodeKind.Assets),
+    startWords: asksWithPictures(graph),
     optimization: hasNode(graph, GraphNodeKind.Optimization),
     resultGate: resultGate(graph),
     lead: leadWorking(graph, summary, rows),

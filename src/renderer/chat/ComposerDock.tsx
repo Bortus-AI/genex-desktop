@@ -43,7 +43,7 @@ function consentChoices(entry: Omit<Consent, "consentId" | "permission">): ChatC
     ? [
         {
           id: ConsentChoice.Always,
-          ...CONSENT_CHOICE_WORDS.always(entry.consentTool ?? "", entry.consentSource ?? ""),
+          ...CONSENT_CHOICE_WORDS.always(entry.consentSource ?? ""),
         },
       ]
     : [];
@@ -56,7 +56,8 @@ function consentChoices(entry: Omit<Consent, "consentId" | "permission">): ChatC
 
 /**
  * A plugin's or connector's permission request: Allow once, Always allow (a connector's only) or
- * Don't allow, with the request itself under Request details.
+ * Don't allow, with the request itself (the tool and what it was given) under Request details. A
+ * connector's question already names it; a plugin tool's own question is subtitled with the plugin.
  */
 function ConsentCard({
   consentId,
@@ -67,7 +68,7 @@ function ConsentCard({
   entry: Omit<Consent, "consentId" | "permission">;
   onConsent: (consentId: string, approved: boolean, always: boolean) => Promise<void>;
 }): JSX.Element {
-  const subtitle = entry.consentAction ?? (entry.consentPrompt ? entry.consentSource : undefined);
+  const subtitle = entry.consentPrompt && !entry.consentAlwaysOffered ? entry.consentSource : undefined;
   return (
     <ChatQuestion
       title={entry.consentPrompt || consentNeededWords(entry.consentSource)}

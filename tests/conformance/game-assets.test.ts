@@ -8,6 +8,7 @@ import { copyProject, Project, TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/proj
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { joinProjectAssets, readContainedImage, readGenexJobs, walkGameAssets } from "../../src/main/game-assets.ts";
 import { assetKind, isAudioFile } from "../../src/shared/game-assets.ts";
+import { DEFAULT_ASSET_FOLDERS, isAssetPath } from "../../src/shared/project-workspace.ts";
 import { isImageFile } from "../../src/substrate/game-workspace.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 
@@ -366,6 +367,25 @@ it("walks the folders it is given, with their formats, each file once", async ()
     linked.entries.map((entry) => entry.file),
     ["assets/a.png"],
   );
+});
+
+it("a game's asset folders list media only: data a script wrote there is no asset, a model's buffers stay readable", async () => {
+  const root = path.join(await tmpDir("studio-asset-media-"), "game");
+  await writeIn(root, {
+    "assets/terrain/T_m00032_p00032_64.bin": "tile",
+    "assets/terrain/manifest.json": "{}",
+    "assets/notes.txt": "notes",
+    "assets/rock.gltf": "{}",
+    "assets/rock.bin": "buffers",
+    "assets/rock.png": "png",
+    "public/assets/level.json": "{}",
+  });
+  assert.deepEqual(
+    (await walkGameAssets(root)).entries.map((entry) => entry.file),
+    ["assets/rock.gltf", "assets/rock.png"],
+  );
+  assert.equal(isAssetPath("assets/rock.bin", DEFAULT_ASSET_FOLDERS), true, "a glTF's buffers are read beside it");
+  assert.equal(isAssetPath("assets/terrain/manifest.json", DEFAULT_ASSET_FOLDERS), false);
 });
 
 it("a whole folder leaves out Genex's mood boards and build output", async () => {

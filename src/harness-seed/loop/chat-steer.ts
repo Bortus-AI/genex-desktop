@@ -8,7 +8,7 @@
  * chat's too, and the chat's own session after a run it led), or a run's coordinator — runs
  * through here unchanged.
  */
-import { isResumeFailure } from "./chat-session.ts";
+import { isLostSession, isResumeFailure } from "./chat-session.ts";
 import { steeredTurnPrompt, withSteers } from "./chat-steer-prompts.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
@@ -98,15 +98,25 @@ export async function steeredCall(
   }
 }
 
-/** One leg; a saved session that cannot be resumed is started afresh with everything the turn was told. */
+/**
+ * One leg; a saved session that cannot be resumed — the engine threw, or answered that it has no
+ * such session (another account's, one never saved) — is started afresh with everything the turn
+ * was told, so the chat never stays stuck on a session that is gone.
+ */
 async function callOrStartFresh(options: SteeredCallOptions, told: QueueAction[], leg: Leg): Promise<DelegateResult> {
-  try {
-    return await options.call(leg.prompt, leg.resume, leg.images);
-  } catch (err) {
-    if (!leg.resume || !isResumeFailure(err)) throw err;
+  const startFresh = () => {
     const fresh = options.fresh?.() ?? options.prompt;
     return options.call(withSteers(fresh, textsOf(told)), null, [...(options.images ?? []), ...stillsOf(told)]);
+  };
+  let result: DelegateResult;
+  try {
+    result = await options.call(leg.prompt, leg.resume, leg.images);
+  } catch (err) {
+    if (!leg.resume || !isResumeFailure(err)) throw err;
+    return startFresh();
   }
+  const lost = Boolean(leg.resume) && !result.ok && isLostSession(result.errorText);
+  return lost ? startFresh() : result;
 }
 
 /** The turn's legs, until one ends it: its own ending, a Stop, a failure, or a question already asked. */

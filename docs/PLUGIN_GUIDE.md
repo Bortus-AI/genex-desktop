@@ -215,7 +215,8 @@ may name a harness tool in `ready` that answers `{ ready, note }`. See
 A plugin whose tools make more than one kind of project names each with a label:
 `"scaffolds": [{ "id": "plugin", "label": "Toy plugin", "tool": "new-toy-plugin", "facts": [{ "fact": "toy-plugin", "files": ["**/*.toyplug"] }] }]`.
 Each scaffold whose `tool` (an agent tool that `makes` a kind) reaches a game is a kind of its own
-on the first message's question, named by its label. Once that tool made its kind, Genex records
+on the first message's question, named by its label; `"game": false` keeps one that makes no game
+(a plugin or tool project) off that question, made only when the request asks for it. Once that tool made its kind, Genex records
 the scaffold in the game's `studio.json`, and its `facts` rules (at most 4, each of a fact the tool
 makes) keep finding facts your `detect` skips, even while your plugin is off. See
 [Scaffolds](plugins.md#scaffolds).
@@ -368,7 +369,8 @@ What Studio will and will not do with it:
   the server waits until the user has explicitly run your `unlock` action; until then it is listed,
   switched off, with the reason on it. `settings` names settings that must be filled in.
 - **`toolPolicy`** and **`maxTools`** keep an enthusiastic server out of every prompt's tool list;
-  Studio caps a connector at 64 tools regardless. `callTimeoutMs` is at most 1 800 000 (30 minutes).
+  Studio caps a connector at 64 tools regardless. **`reads`** (API 3) names the tools that only
+  read (list or describe what the server offers): they run with no card in any mode. `callTimeoutMs` is at most 1 800 000 (30 minutes).
 - At most **4 servers**, ids lowercase with no `_` (the `__` in a tool name must stay unambiguous),
   and the whole section needs `apiVersion: 2`.
 - Changing what a server runs, where it runs or what it is handed is a **permission expansion**:

@@ -228,8 +228,9 @@ async function consentWorld() {
     title: "Second chat",
     metadata: { kind: "game", project: "valley" },
   });
+  // Manual, where a connector's card asks: Auto sends a plugin connector's calls with none.
   for (const threadId of [...Object.values(threads), otherChat])
-    await core.setPermissionMode(threadId, PermissionMode.Auto);
+    await core.setPermissionMode(threadId, PermissionMode.Manual);
   const projects = await realpath(await mkdtemp(path.join(os.tmpdir(), "studio-run-consent-uproject-")));
   await mkdir(path.join(projects, "Valley"));
   const uproject = path.join(projects, "Valley", "Valley.uproject");
@@ -346,7 +347,7 @@ describe("the run's own consent for the game's engine connector", () => {
       director: { runId: "run_valley" },
     };
     const outcome = await world.call(planning);
-    await world.core.setPermissionMode(world.threads.valley, PermissionMode.Auto);
+    await world.core.setPermissionMode(world.threads.valley, PermissionMode.Manual);
     assert.equal(outcome.asked, false, "no card: Plan answers it");
     assert.equal(outcome.called, false);
     assert.match(outcome.answer, /refused: .*Plan mode/);
@@ -376,7 +377,7 @@ describe("the run's own consent for the game's engine connector", () => {
       const { answer, called } = await world.call(row);
       seen.push({ label: row.label, called, covered: answer === row.label });
     }
-    await world.core.setPermissionMode(world.threads.valley, PermissionMode.Auto);
+    await world.core.setPermissionMode(world.threads.valley, PermissionMode.Manual);
     assert.deepEqual(
       seen,
       rows.map(({ label }) => ({ label, called: false, covered: false })),

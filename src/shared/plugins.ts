@@ -253,6 +253,8 @@ export interface PluginKindOffer {
   scaffold?: string;
   /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
   label?: string;
+  /** False when what it makes is no game (`PluginScaffold.game`): the new game's question never offers it. */
+  game?: boolean;
 }
 /**
  * API 3: a kind of project a plugin's tool makes, with its own label. With a `tool` (an agent tool
@@ -265,6 +267,11 @@ export interface PluginScaffold {
   id: string;
   label: string;
   tool?: string;
+  /**
+   * False when what it makes is no game (a plugin or tool project): the new game's question
+   * ("Where should your game play?") never offers it, and the agent makes it when the request asks for it.
+   */
+  game?: boolean;
   facts?: FactRule[];
 }
 /** What of one plugin reaches a game's session: its agent tools, its skills and whether its skill reader does. */
@@ -395,6 +402,8 @@ export interface PluginMcpServer {
   /** What must be true before the server is started at all, rather than started to fail. */
   requires?: { credential?: boolean; settings?: string[] };
   toolPolicy?: { allow?: string[]; deny?: string[] };
+  /** API 3: raw MCP tool names that only read (list or describe what the server offers): they run with no card in any mode, as a file read does. A local plugin's still ask. */
+  reads?: string[];
   maxTools?: number;
   callTimeoutMs?: number;
   description: string;
@@ -633,7 +642,8 @@ export interface PluginChange {
   /** Set when an update or reload changed the plugin's skills. */
   skills?: PluginSkillChange;
 }
-export type PluginConsentBy = "user" | "timeout" | "stop" | "turn" | "restart";
+/** How a consent question ended; `mode`: the person switched the chat to a mode that asks nothing first for it. */
+export type PluginConsentBy = "user" | "timeout" | "stop" | "turn" | "restart" | "mode";
 /** Host-generated paths in the staged public copy, shown before upload approval. */
 export interface ExportReview {
   included: string[];

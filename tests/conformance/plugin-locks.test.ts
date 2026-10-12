@@ -1873,7 +1873,7 @@ function ownService(lite: CoreLite): PluginToolService {
     activeConnectorCalls: new Map(),
     cutOffCalls: new Map(),
     planning: async () => false,
-    bypassing: async () => true,
+    chatMode: async () => PermissionMode.Bypass,
     locks: lite.core.locks,
     hooks: lite.core.hooks,
   });

@@ -1528,22 +1528,14 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
 
 /** The composer during a build: Stop, then Send for a follow-up that starts no new run. */
 async function checkComposerDuringBuild(buildSmoke: BuildSmoke): Promise<void> {
-  const { wc, check, checkAsync, threadId, waitFor } = buildSmoke;
+  const { wc, check, threadId, waitFor } = buildSmoke;
   const { core } = buildSmoke.ctx;
-  // The build owns the Loop, so Mode opens read-only: no Loop choice, only "Don't wait for me".
-  const modePanel = `document.querySelector('[data-slot="popover-content"][aria-label="Mode options"]')`;
-  await checkAsync("a running build's Mode opens read-only with only the Don't wait for me switch", async () => {
-    if (!(await waitFor(`document.querySelector('[data-promptbar] button[aria-label="Mode"]')?.disabled === false`)))
-      return false;
-    await wc.executeJavaScript(`document.querySelector('[data-promptbar] button[aria-label="Mode"]').click()`);
-    const readOnly = await waitFor(
-      `(() => { const panel = ${modePanel}; return !!panel && !panel.querySelector('[aria-label="Loop time limit"]') && !!panel.querySelector('[data-dont-wait-row] [role="switch"]'); })()`,
-    );
-    await wc.executeJavaScript(
-      `${modePanel}?.querySelector('[role="switch"]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`,
-    );
-    return readOnly && (await waitFor(`!${modePanel}`));
-  });
+  check(
+    "a running build's Mode is disabled and dimmed like the composer's disabled icons",
+    await waitFor(
+      `(() => { const mode = document.querySelector('[data-promptbar] button[aria-label="Mode"]'); return mode?.disabled === true && getComputedStyle(mode).opacity === '0.45'; })()`,
+    ),
+  );
   await wc.executeJavaScript(
     `(() => { const input = document.querySelector('textarea[aria-label="Prompt"]'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Is the river ready?'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`,
   );

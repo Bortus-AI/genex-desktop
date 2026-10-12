@@ -1,8 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { useState } from "react";
 import type { LoopSetting } from "../loop-setting.ts";
-import { DONT_WAIT_WORDS, UNREAL_WORDS } from "../words.ts";
+import { UNREAL_WORDS } from "../words.ts";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover.tsx";
-import { PickerCaption, PickerSegmented, PickerSeparator, PickerSwitch, pickerItem } from "./PickerPanel.tsx";
+import { PickerCaption, PickerSegmented, pickerItem } from "./PickerPanel.tsx";
 import { Icon } from "./icons.tsx";
 import {
   formatDuration,
@@ -141,65 +141,10 @@ function loopOptions(unavailable: boolean) {
 }
 
 /**
- * "Don't wait for me" while the Loop is on: the chat's setting, read each time the menu opens, for
- * the run going now or the chat's next run. Only the person's switch here (or their click on an
- * agent's card) changes it; the host keeps it.
- */
-function DontWaitRow({ threadId }: { threadId: string }) {
-  const [on, setOn] = useState(false);
-  const [busy, setBusy] = useState(true);
-  const id = useId();
-  useEffect(() => {
-    let open = true;
-    // Through a promise, so a window without the call (an older preload) leaves the switch off, never broken.
-    void Promise.resolve()
-      .then(() => window.studio.dontWaitState(threadId))
-      .then(
-        (state) => open && setOn(state.on),
-        () => undefined,
-      )
-      .finally(() => open && setBusy(false));
-    return () => {
-      open = false;
-    };
-  }, [threadId]);
-  const toggle = (next: boolean) => {
-    setBusy(true);
-    void Promise.resolve()
-      .then(() => window.studio.setDontWait(threadId, next))
-      .then(
-        (state) => setOn(state.on),
-        () => undefined,
-      )
-      .finally(() => setBusy(false));
-  };
-  const described = `${id}-description`;
-  return (
-    <div className={pickerItem} data-dont-wait-row>
-      <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 self-stretch">
-        <span className="shrink-0">{DONT_WAIT_WORDS.label}</span>
-        <span id={described} className="picker-desc" title={DONT_WAIT_WORDS.description}>
-          {DONT_WAIT_WORDS.description}
-        </span>
-      </label>
-      <PickerSwitch
-        id={id}
-        checked={on}
-        disabled={busy}
-        label={DONT_WAIT_WORDS.label}
-        describedBy={described}
-        onChange={toggle}
-      />
-    </div>
-  );
-}
-
-/**
  * One Loop control: Off, until the build passes, a preset or a custom time. Without `onChange` the
  * Loop is shown, not changed (a build already owns it). With `loopUnavailable` (an Unreal game
  * until the Unreal Loop exists) it shows Off, offers Off alone and says why. Plan mode lives in
- * Add (`ComposerAddMenu`). With `dontWaitThread`, while the Loop is on, it also holds the chat's
- * "Don't wait for me" switch.
+ * Add (`ComposerAddMenu`).
  */
 export function ComposerModeMenu({
   value,
@@ -207,7 +152,6 @@ export function ComposerModeMenu({
   disabled,
   loopUnavailable = false,
   unavailableWhy,
-  dontWaitThread,
 }: {
   value: LoopSetting;
   onChange?: (next: LoopSetting) => void;
@@ -215,8 +159,6 @@ export function ComposerModeMenu({
   loopUnavailable?: boolean;
   /** Why there is no Loop, when the game can say (its project and where it is). */
   unavailableWhy?: string;
-  /** The game chat whose "Don't wait for me" the menu switches while the Loop is on. */
-  dontWaitThread?: string;
 }) {
   const { on: loopOn, hours } = value;
   const timed = hours !== null;
@@ -306,12 +248,6 @@ export function ComposerModeMenu({
             {loopUnavailable ? (unavailableWhy ?? UNREAL_WORDS.loopUnavailable(null, "")) : caption}
           </PickerCaption>
         </div>
-        {loopOn && !loopUnavailable && dontWaitThread && (
-          <>
-            <PickerSeparator />
-            <DontWaitRow threadId={dontWaitThread} />
-          </>
-        )}
       </PopoverContent>
     </Popover>
   );

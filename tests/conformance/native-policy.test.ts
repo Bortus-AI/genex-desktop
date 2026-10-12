@@ -72,14 +72,10 @@ test("a live profile runs native channels", async () => {
   handle("studio:open-url", () => true);
   assert.deepEqual(await listeners.get("studio:open-url")!(studio, {}), { ok: true, value: true });
 });
-test("plugin, connector, terminal, don't-wait, job and Privacy settings channels answer only Studio's main frame", async () => {
+test("plugin, connector, terminal, job and Privacy settings channels answer only Studio's main frame", async () => {
   const { ipc, listeners } = recorder();
   const handle = createIpcHandle(ipc, { fixture: false, isStudioUi });
   let ran = 0;
-  handle("studio:loop.dontWait", () => {
-    ran++;
-    return { on: true, scope: "run" as const };
-  });
   handle("studio:plugins.list", () => {
     ran++;
     return [];
@@ -110,7 +106,6 @@ test("plugin, connector, terminal, don't-wait, job and Privacy settings channels
     "studio:plugins.list",
     "studio:mcp.list",
     "studio:terminal.list",
-    "studio:loop.dontWait",
     "studio:jobs.stop",
     "studio:app-look.open-settings",
   ]) {
@@ -123,7 +118,7 @@ test("plugin, connector, terminal, don't-wait, job and Privacy settings channels
     assert.equal((await listeners.get(channel)!(studio, {})).ok, true, channel);
   }
   assert.deepEqual(await listeners.get("studio:games")!(other, {}), { ok: true, value: [] });
-  assert.equal(ran, 7);
+  assert.equal(ran, 6);
 });
 test("a channel is never both fixture-safe and native", () => {
   assert.deepEqual(
@@ -195,9 +190,6 @@ test("fixture-safe channels run in fixtures and an unclassified one is refused t
     "studio:message-images",
     "studio:provider-usage",
     "studio:badge",
-    // The person's "Don't wait for me" and its state: the profile's own file and the chat's log.
-    "studio:loop.dontWait",
-    "studio:loop.dontWaitState",
     // The person's Stop on a job this profile's own agent started.
     "studio:jobs.stop",
   ]) {

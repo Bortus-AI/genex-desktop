@@ -838,8 +838,8 @@ function switchFailure(mode: string, cause: unknown): Error & { code: ModeSwitch
 
 /**
  * The mode picker's hold on a running session that asks (the chat's own, a lead's, the
- * coordinator's): handed to the host once the session starts, and taken back once when it stops
- * taking control requests (`release`).
+ * coordinator's, a worker's): handed to the host once the session starts, and taken back once when
+ * it stops taking control requests (`release`).
  */
 export function liveControl(asks: DelegateAsks | undefined, stream: unknown): { release(): void } {
   const onControl = asks?.onControl;

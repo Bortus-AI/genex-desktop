@@ -300,8 +300,10 @@ it builds…" instead of "Sends when the build finishes…" (renderer `chat/live
   exists, so a message sent while it prepares reaches the lead's first message; the wake loop
   shuts it when the wrap-up begins, and the run releases it at its close (a Stop's too).
 - **The hand-over.** The queue asks `leadDoor` (`loop/live-chat.ts`) for each message. The lead
-  takes words from the run's own chat — no pictures, slash text or Studio chat — while
-  its line is open and nothing older waits. Its receipt then carries `coordinator_message_delivered
+  takes words from the run's own chat — no slash text or Studio chat — while its line is open and
+  nothing older waits, and pictures the chat saved in the game's `references/` (every one of the
+  message's: its `references`), named in the words the lead reads (`live-chat-prompts.ts`) so it
+  looks at them there; a picture not saved there waits. Its receipt then carries `coordinator_message_delivered
   {into: <runId>, how: "lead"}` and a `run_steering {runId, text, sourceMessageId}` the lead's
   inbox reads: never Queued, never processed, no turn or checkpoint of its own, and its bubble sits
   where it was delivered. A message that waited (sent while the run prepared) is handed the same
@@ -723,7 +725,9 @@ from `engine-status`); the recorded
 question is asked like a Loop chat's, and the next turn resumes the same session, which calls
 `unreal__new-game` for Unreal. A chat turn whose game's served facts changed (a port, or files it
 wrote) goes on by itself in the same session, with the tools and a fresh brief writer for the new
-kind (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)); when the new kind's plugins hook
+kind (`continueOnNewFacts`, [plugins](plugins.md#scope-by-facts)), told to go on with what it said
+it would build; with Loop on it is told instead to decide by its Loop rules and to start a build of
+the game with its launch tool, never building it itself (`factsReadyPrompt`); when the new kind's plugins hook
 `health` (an Unreal project linked or switched), it first waits until nothing is pending. A delegation that gave
 a game with no kind its kind by files it wrote tells the app the game changed when it ends. The health pass waits on the page's own readiness (`preview.ready`
 with `gesture: false`, so the user's window is never clicked): up to the project's boot budget

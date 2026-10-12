@@ -128,7 +128,7 @@ const rowsOf = (graph: RunGraph) =>
 async function seeded(seed: (core: never, project: string, threadId: string) => Promise<void>) {
   const appended: EventData[] = [];
   const core = {
-    store: { listEvents: async () => [] },
+    store: { listEvents: async () => [], writeArtifact: async () => 0 },
     layout: { runs: await tmpDir("studio-graph-workers-") },
     append: async (events: EventData[]) => void appended.push(...events),
   };

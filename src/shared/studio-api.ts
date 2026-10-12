@@ -31,7 +31,6 @@ import type { ProviderUsageReport } from "./provider-usage.ts";
 import type { BootState, SandboxSetupResult } from "./boot.ts";
 import type { AppAbout, ReadyUpdate, UpdateCheckResult } from "./app-update.ts";
 import type { PermissionMode, PermissionSettingsView, ToolPermissionAnswer } from "./permissions.ts";
-import type { DontWaitState } from "./dont-wait.ts";
 import type { LiveBehindEvent } from "./live-behind.ts";
 import type { FieldRow, RunSharingDeleteResult, RunSharingStatus } from "./run-sharing.ts";
 
@@ -196,13 +195,6 @@ export interface StudioApi {
   answerPermission(requestId: string, answer: ToolPermissionAnswer): Promise<{ resolved: boolean }>;
   /** Stop allowing a saved "always allow" rule for a game. */
   forgetPermission(project: string, rule: string): Promise<PermissionSettingsView>;
-  /**
-   * The person's "Don't wait for me" in a game chat, from the Loop menu or an agent's card
-   * (`offerId`): for the run going in the chat now, else its next run. Studio UI only.
-   */
-  setDontWait(threadId: string, on: boolean, offerId?: string): Promise<DontWaitState>;
-  /** What the Loop menu shows for "Don't wait for me" in a game chat. */
-  dontWaitState(threadId: string): Promise<DontWaitState>;
 
   /**
    * MCP connectors. Values never cross this boundary in either direction: a connector carries

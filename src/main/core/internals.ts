@@ -8,6 +8,7 @@ import path from "node:path";
 import type { BuildProblem } from "../../shared/build-problem.ts";
 import type { AgentScreen, AgentScreenFrame } from "../../shared/agent-screen.ts";
 import type { Revision } from "../../shared/optimization.ts";
+import type { PermissionMode } from "../../shared/permissions.ts";
 import type { PluginAppliedSet, PluginBinding } from "../../shared/plugins.ts";
 import type { LiveToolResult } from "../../substrate/engines/types.ts";
 import type { GameProject } from "../../substrate/game-workspace.ts";
@@ -313,8 +314,8 @@ export interface CoreServices {
   readonly permissions: ChatPermissionService;
   /** Whether a game chat is in Plan mode, when nothing may act on its behalf (`ChatPermissionService.planning`). */
   planning(threadId: string): Promise<boolean>;
-  /** Whether a game chat is in Bypass, which asks nothing first (`ChatPermissionService.bypassing`). */
-  bypassing(threadId: string): Promise<boolean>;
+  /** A game chat's permission mode now, as its questions are answered by (`ChatPermissionService.modeOf`). */
+  chatMode(threadId: string): Promise<PermissionMode>;
 }
 
 /**

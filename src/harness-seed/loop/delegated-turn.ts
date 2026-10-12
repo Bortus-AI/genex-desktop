@@ -38,6 +38,7 @@ import {
   servedFactsOf,
 } from "./folder-facts.ts";
 import { factsReadyPrompt } from "./project-prompts.ts";
+import { toolCall } from "./model-roles.ts";
 import {
   endOfTurnCheckpoint,
   fireHooks,
@@ -379,7 +380,8 @@ async function continueOnNewFacts(
   const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : ReadyWait.Ready;
   if (waited === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
   if (waited === ReadyWait.Ended) return turn.outcome;
-  return goOnInSession(ctx, options, next, turn, factsReadyPrompt(servedFactsOf(game)));
+  const launch = next.launchTool ? toolCall(options.engine, next.launchTool.name) : undefined;
+  return goOnInSession(ctx, options, next, turn, factsReadyPrompt(servedFactsOf(game), launch));
 }
 
 /** The engine project a game is linked to, or null: a web game, or a folder whose project isn't linked. */

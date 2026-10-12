@@ -2,7 +2,7 @@
 
 ## Assets in a game
 
-Assets groups `assets/`, `public/assets/` and the project kind's asset folders (Unreal `Content`,
+Assets groups media in `assets/`, `public/assets/` and the project kind's asset folders (Unreal `Content`,
 Unity `Assets`, Blender files, a plugin's) by source and generation, engine files by name;
 deliveries and outside changes refresh it. Cards hide metadata; animation-only GLBs fold into their
 model.

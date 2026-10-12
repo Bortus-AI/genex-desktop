@@ -934,7 +934,7 @@ describe("Genex's moments in a real core", () => {
       activeConnectorCalls: new Map(),
       cutOffCalls: new Map(),
       planning: async () => false,
-      bypassing: async () => true,
+      chatMode: async () => PermissionMode.Bypass,
       locks: lite.core.locks,
       hooks: lite.core.hooks,
     });
@@ -967,7 +967,7 @@ describe("Genex's moments in a real core", () => {
         activeConnectorCalls: new Map(),
         cutOffCalls: new Map(),
         planning: async () => false,
-        bypassing: async () => true,
+        chatMode: async () => PermissionMode.Bypass,
         locks: lite.core.locks,
         hooks: lite.core.hooks,
       });
@@ -1145,6 +1145,22 @@ describe("Genex's moments in a real core", () => {
     } finally {
       await lite.core.setPermissionMode(pondThread, PermissionMode.Manual);
     }
+  });
+
+  it("a run's start waits minutes for the person to finish (Play, a click), says so in the chat, then runs its steps", async () => {
+    skew += PERSON_FIRST_FRESH_MS;
+    const busyForTwoMinutes = Array.from({ length: 24 }, () => ({ personActive: true }));
+    await hk.script({ probe: [...busyForTwoMinutes, { personActive: false }] });
+    const heard = uiEvents.length;
+    const prepare = await fire({ on: HookEvent.RunPrepare });
+    assert.equal(prepare.blocked, null, "the build starts once the person is done");
+    assert.deepEqual(await steps(), ["run.prepare:ready", "run.prepare:tidy"]);
+    const waits = uiEvents.slice(heard).filter((event) => event.type === UiEvent.PersonFirst);
+    assert.deepEqual(
+      waits.map((event) => (event.payload as { waiting: boolean }).waiting),
+      [true, false],
+      "the chat hears the wait begin and end",
+    );
   });
 
   it("while the person uses what a moment's steps need, health is pending, a blocking moment is held and any other notes it, each typed", async () => {

@@ -55,7 +55,7 @@ through the JS API imports `@typescript/typescript6`.
   page by page) and its example plugin written into a project where the skill says.
 - `worker-chat.ts`: a game chat with a run started in it, fake engines (two delegated, one local)
   that record each request, a copy of the game in that run's folder and the chat's permission rows,
-  for worker seats and their questions (`worker-seats`, `worker-questions`, `dont-wait`,
+  for worker seats and their questions (`worker-seats`, `worker-questions`,
   `chat-workers`), agent jobs through a `jobSpawn` the test gives it (`job-tools`), and `app_look`
   through the stub port and a recording `screenAccess` (`app-look-tool`). Its waits are on what
   happened (`untilSeen`, `nextCard`), never on a clock.

@@ -11,7 +11,7 @@ import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { ResultButton } from "../ui/ResultButton.tsx";
 import { ToolRow } from "../ui/ToolChips.tsx";
-import { compactedWords, consentRequestedWords } from "../words.ts";
+import { compactedWords, consentLineWords } from "../words.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { AssetResults } from "./AssetResults.tsx";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
@@ -24,7 +24,6 @@ import { WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
-import { DontWaitOfferCard } from "./DontWaitOfferCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
 import { WorkLog } from "./WorkLog.tsx";
@@ -137,8 +136,6 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
     case EntryKind.PluginSuggestion:
       return <PluginSuggestionCard entry={entry} onNotice={onNotice} />;
-    case EntryKind.DontWaitOffer:
-      return <DontWaitOfferCard entry={entry} onNotice={onNotice} />;
     default:
       return null;
   }
@@ -230,22 +227,19 @@ function SystemEntry({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind
   );
 }
 
+/** A plugin's or connector's question once answered: one line, as Claude's own are, the request inside. */
 function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind.Action }> }): JSX.Element {
   return (
-    <div className="text-chat text-ink-2">
-      <p>{entry.consentPrompt || consentRequestedWords(entry.consentSource)}</p>
+    <ChatDisclosure
+      data-consent-outcome
+      lead={<Icon name="shield" size={14} className="shrink-0" />}
+      label={consentLineWords(entry.outcome ?? "", entry.consentSource)}
+    >
       {entry.consentExport && <ExportReview review={entry.consentExport} />}
-      <p className="mt-1 text-chat-sub text-ink-3">{entry.outcome}</p>
-      <details className="group/request mt-1">
-        <summary className="chat-disclosure">
-          Request details
-          <Icon name="chevron-right" size={14} className="chat-chevron group-open/request:rotate-90" />
-        </summary>
-        <p className="mt-1 text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
-          <FileText text={entry.text} />
-        </p>
-      </details>
-    </div>
+      <p className="text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
+        <FileText text={entry.text} />
+      </p>
+    </ChatDisclosure>
   );
 }
 

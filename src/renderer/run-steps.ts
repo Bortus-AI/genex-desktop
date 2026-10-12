@@ -995,6 +995,9 @@ function finishedLine(summary: RunSummary | null, rows: PartRow[], facts: LineFa
 
 // ── layout ────────────────────────────────────────────────────────────────────────────────
 
+/** The strip under the start's pictures that holds its words (`placeStart`). */
+export const START_WORDS = "start:words";
+
 /**
  * Fixed frame sizes, in canvas pixels. Every picture node is one size — its picture fills it and
  * its words sit on the picture — so no state, try count or zoom level changes a node's height.
@@ -1003,6 +1006,8 @@ export const STEPS = {
   pad: 24,
   startW: 208,
   startH: 130,
+  /** Under the start's pictures, its words: the label and up to three lines of the request, then Show all. */
+  startWordsH: 102,
   assetsW: 208,
   assetsH: 96,
   assetsGap: 32,
@@ -1070,6 +1075,8 @@ export interface TreeOptions {
 /** What the layout draws besides the rows. */
 export interface LayoutOptions {
   assets?: boolean;
+  /** the start shows the person's pictures, its words in a strip under them */
+  startWords?: boolean;
   optimization?: boolean;
   resultGate?: Gate | null;
   /** the lead has the run to itself: drawn after the result, or in a tree, on a live line into it */
@@ -1155,7 +1162,7 @@ export function layoutSteps(rows: PartRow[], options: LayoutOptions = {}): Steps
     y += (heights[index] ?? 0) + S.rowGap;
   });
 
-  placeStart(draft, midY, options.assets === true);
+  placeStart(draft, midY, options.assets === true, options.startWords === true);
   if (options.tree) placeTreeLead(draft, midY, options.tree.jobs, options.lead === true);
   const rightBus = drawn.length ? right + S.resultGap : origin.from + EMPTY_BUS_REACH;
   // A row's label may use the row's whole width, never the result's.
@@ -1249,16 +1256,21 @@ function placeHanging(draft: LayoutDraft, cursor: RowCursor, step: Step, at: { h
   if (step.gate) draft.gates.push({ target: step.id, gate: step.gate, x: toX, y: at.hangY });
 }
 
-/** The start on the middle of the rows, and the assets card under it with its dotted link. */
-function placeStart(draft: LayoutDraft, midY: number, assets: boolean): void {
+/**
+ * The start on the middle of the rows (with pictures, its words in a strip under them), and the
+ * assets card under it with its dotted link.
+ */
+function placeStart(draft: LayoutDraft, midY: number, assets: boolean, words: boolean): void {
   const S = STEPS;
   draft.rects.start = { x: S.pad, y: midY - S.startH / 2, w: S.startW, h: S.startH };
+  const bottom = midY + S.startH / 2 + (words ? S.startWordsH : 0);
+  if (words) draft.rects[START_WORDS] = { x: S.pad, y: midY + S.startH / 2, w: S.startW, h: S.startWordsH };
   if (!assets) return;
-  const assetsTop = midY + S.startH / 2 + S.assetsGap;
+  const assetsTop = bottom + S.assetsGap;
   draft.rects.assets = { x: S.pad, y: assetsTop, w: S.assetsW, h: S.assetsH };
   draft.edges.push({
     id: "assets",
-    d: `M${S.pad + S.startW / 2} ${midY + S.startH / 2} V${assetsTop}`,
+    d: `M${S.pad + S.startW / 2} ${bottom} V${assetsTop}`,
     kind: StepEdgeKind.Dotted,
   });
 }

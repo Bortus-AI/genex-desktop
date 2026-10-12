@@ -371,7 +371,10 @@ opens to the summary in one framed box when there is one.
 The person may switch a game chat's model at any message, and the chat stays one conversation
 (`loop/chat-continuity.ts`). A session goes on only while it is the chat's latest (`goesOn`): a
 model switched back to after another one answered starts a fresh session, since its own missed
-those turns, and Compact now works on that latest session only. A fresh session mid-conversation
+those turns, and Compact now works on that latest session only. A session the engine cannot
+resume — it throws, or answers that it has no such conversation (another account's, one never
+saved) — is replaced by a fresh one in the same turn (`loop/chat-steer.ts`), so the chat never
+stays stuck on it. A fresh session mid-conversation
 is briefed with the original request, the latest instruction, the last messages verbatim
 (`loop/brief-window.ts`: 20 messages, at most 18,000 characters) and the latest written summary
 (`compactedSummary`, which reads past a Codex compaction's sealed one). When that brief cannot

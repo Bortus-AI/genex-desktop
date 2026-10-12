@@ -46,8 +46,8 @@ Every chat's pill after Mode picks **Auto** (Recommended; stops dangerous action
 only the game); modes the engine cannot honour are greyed with why
 ([by engine](../tool-permissions.md#other-engines)). Chats keep their mode; new ones inherit the
 last Auto, Manual or Accept edits. Claude's chat and build lead work anywhere on your Mac with
-your access, workers in your mode but never in sign-ins, Genex's data or other games; their
-questions wait unless **Don't wait for me** (Mode) is on ([details](../tool-permissions.md)).
+your access, workers in your mode but never in sign-ins, Genex's data or other games; a Loop
+worker's question lapses after five minutes ([details](../tool-permissions.md)).
 
 Read denials cover sensitive system/account locations; Codex's are advisory, not whole-disk
 isolation.

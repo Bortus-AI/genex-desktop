@@ -777,7 +777,6 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           disabled={disabled}
           coordinating={coordinating}
           project={props.project}
-          conversationKey={props.conversationKey}
           loop={loop}
           limits={{
             contextUsage: props.contextUsage,
@@ -879,8 +878,6 @@ interface ComposerToolbarProps {
   disabled: boolean;
   coordinating: boolean;
   project?: string | null;
-  /** The game chat the composer sends to: its "Don't wait for me" is in Mode while the Loop is on. */
-  conversationKey?: string | undefined;
   loop: ReturnType<typeof useLoopSettings>;
   limits: ComposerLimitsInput;
   panelRef: RefObject<HTMLDivElement | null>;
@@ -898,10 +895,8 @@ interface ComposerToolbarProps {
 function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
   const { gameMode, loop, permissions } = props;
   const { view } = loop;
-  // Mode's Loop changes only while no build owns the chat; during a run it opens read-only, so the
-  // person can still switch "Don't wait for me" for the run going now, on and off.
-  const reach = modeMenuReach({ view, coordinating: props.coordinating, threadId: props.conversationKey });
-  const { dontWaitThread } = reach;
+  // Mode's Loop changes only while no build owns the chat.
+  const reach = modeMenuReach({ view, coordinating: props.coordinating });
   const toolbar = useRef<HTMLDivElement>(null);
   useToolbarFit(toolbar);
   return (
@@ -914,7 +909,6 @@ function ComposerToolbar(props: ComposerToolbarProps): JSX.Element {
           disabled={!reach.opens}
           loopUnavailable={view.loopUnavailable === true}
           unavailableWhy={loop.gate}
-          {...(dontWaitThread ? { dontWaitThread } : {})}
         />
       )}
       {gameMode && permissions && (

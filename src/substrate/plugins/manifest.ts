@@ -94,6 +94,8 @@ const LIMIT = {
   McpRequiredSettings: 32,
   McpMaxTools: 64,
   McpPolicyNames: 64,
+  /** The longest raw tool name a server's `reads` may name. */
+  McpToolNameChars: 128,
   ToolbarItems: 4,
   ToolbarLabelChars: 24,
   ToolbarAriaChars: 60,
@@ -213,6 +215,7 @@ const MESSAGE = {
   InvalidRequiresCredential: "Invalid mcpServers requires.credential",
   CredentialNeedsCapability: "mcpServers requires.credential needs the credentials capability",
   InvalidToolPolicy: "Invalid mcpServers toolPolicy",
+  InvalidReads: "Invalid mcpServers reads (up to 64 distinct tool names)",
   InvalidToolPolicyList: (label: string) => `Invalid mcpServers toolPolicy ${label}`,
   InvalidToolbarLabel: "Invalid toolbar label (1-24 characters)",
   ReservedToolbarLabel: (label: string) => `Invalid toolbar label: "${label}" is reserved by Studio`,
@@ -714,6 +717,8 @@ function validateMcpServer(raw: PluginMcpServer, m: PluginManifest): PluginMcpSe
   if (requires) server.requires = requires;
   const toolPolicy = raw.toolPolicy === undefined ? undefined : mcpToolPolicy(raw.toolPolicy);
   if (toolPolicy) server.toolPolicy = toolPolicy;
+  const reads = raw.reads === undefined ? undefined : mcpReads(raw.reads);
+  if (reads) server.reads = reads;
   applyServerLimits(raw, server);
   server.description = raw.description;
   const facts = serverFacts(raw, m);
@@ -814,6 +819,18 @@ function mcpToolPolicy(value: unknown): PluginMcpServer["toolPolicy"] {
   if (allow) out.allow = allow;
   if (deny) out.deny = deny;
   return Object.keys(out).length ? out : undefined;
+}
+
+/** The tools a server says only read: distinct names, within the policy list's cap. */
+function mcpReads(value: unknown): string[] | undefined {
+  const names = Array.isArray(value) ? value : null;
+  const valid =
+    names !== null &&
+    names.length <= LIMIT.McpPolicyNames &&
+    names.every((name) => isText(name, 1, LIMIT.McpToolNameChars)) &&
+    new Set(names).size === names.length;
+  if (!valid) throw new Error(MESSAGE.InvalidReads);
+  return names.length ? [...(names as string[])] : undefined;
 }
 
 /** A toolbar item's label and aria label: in length, trimmed, unique and none of Studio's own. */

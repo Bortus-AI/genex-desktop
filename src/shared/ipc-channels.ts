@@ -107,8 +107,6 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:permissions.mode": "setPermissionMode",
   "studio:permissions.answer": "answerPermission",
   "studio:permissions.forget": "forgetPermission",
-  "studio:loop.dontWait": "setDontWait",
-  "studio:loop.dontWaitState": "dontWaitState",
   "studio:mcp.list": "mcpList",
   "studio:context.get": "contextSettings",
   "studio:context.set": "setContextPolicy",
@@ -307,8 +305,6 @@ export interface StudioInvokePayloads {
   "studio:permissions.mode": { threadId: string | null; mode: Arg<"setPermissionMode", 1> };
   "studio:permissions.answer": { requestId: string; answer: Arg<"answerPermission", 1> };
   "studio:permissions.forget": { project: string; rule: string };
-  "studio:loop.dontWait": { threadId: string; on: boolean; offerId?: string };
-  "studio:loop.dontWaitState": { threadId: string };
   /** The one channel whose payload is not an object: the project name, `null` or nothing. */
   "studio:mcp.list": Arg<"mcpList", 0>;
   "studio:context.get": { engine: string; model: string; threadId?: string };

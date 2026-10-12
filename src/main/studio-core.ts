@@ -47,7 +47,6 @@ import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
-import type { DontWaitState } from "../shared/dont-wait.ts";
 import {
   type BootNotice,
   BootReason,
@@ -123,7 +122,6 @@ import type { EventData, EventEnvelope } from "../substrate/types.ts";
 import { AssetCheckpoints } from "./asset-checkpoints.ts";
 import { AssetService } from "./core/assets.ts";
 import { ChatPermissionService } from "./core/chat-permissions.ts";
-import { dontWaitState, setDontWait } from "./core/dont-wait.ts";
 import { ConnectionService } from "./core/connections.ts";
 import { ConversationService } from "./core/conversation.ts";
 import { DelegationService } from "./core/delegation.ts";
@@ -712,7 +710,7 @@ export class StudioCore {
         return core.#permissions;
       },
       planning: (threadId) => core.#permissions.planning(threadId),
-      bypassing: (threadId) => core.#permissions.bypassing(threadId),
+      chatMode: (threadId) => core.#permissions.modeOf(threadId),
     };
   }
 
@@ -2138,27 +2136,27 @@ export class StudioCore {
 
   /** The composer's picker: the chat's mode (a running reply switches now), and the mode new chats start in. */
   setPermissionMode(threadId: string | null, mode: unknown): ReturnType<ChatPermissionService["setMode"]> {
-    return this.#permissions.setMode(threadId, mode);
+    const settings = this.#permissions.setMode(threadId, mode);
+    // A connector's card that the chat's new mode would not have asked goes on: the mode answers it.
+    const answers = () => {
+      if (threadId !== null && typeof mode === "string") this.#consent.approveForMode(threadId, mode);
+    };
+    return settings.then(
+      (view) => {
+        answers();
+        return view;
+      },
+      (error: unknown) => {
+        // The chat's mode was set even when a running session could not switch to it.
+        answers();
+        throw error;
+      },
+    );
   }
 
   /** The person's answer to a `tool_permission` card; false once it is no longer waiting. */
   answerPermission(requestId: unknown, answer: unknown): boolean {
     return this.#permissions.answer(requestId, answer);
-  }
-
-  /**
-   * The person's "Don't wait for me" (the Loop menu, or an agent's card when `offerId` names it):
-   * for the run started in this chat that is going now, else the chat's next run.
-   */
-  setDontWait(threadId: unknown, on: unknown, offerId?: unknown): Promise<DontWaitState> {
-    const run = (thread: string) => this.#delegation.runOfChatNow(thread);
-    return setDontWait(this, this.#permissions.runSettings, { threadId, on, offerId }, run);
-  }
-
-  /** What the Loop menu shows for "Don't wait for me" in a chat. */
-  dontWaitState(threadId: unknown): Promise<DontWaitState> {
-    const run = (thread: string) => this.#delegation.runOfChatNow(thread);
-    return dontWaitState(this, this.#permissions.runSettings, threadId, run);
   }
 
   /** Stop allowing a saved "always allow" rule for a game. */

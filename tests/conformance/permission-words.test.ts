@@ -7,6 +7,8 @@ import { describe, it } from "node:test";
 import {
   alwaysWords,
   bypassPermissionsWords,
+  consentLineWords,
+  consentOutcomeWords,
   permissionCommandWords,
   permissionInsteadWords,
   permissionLineWords,
@@ -281,9 +283,21 @@ describe("permissionOutcomeWords", () => {
       "Withdrawn: nobody answered",
     );
     assert.equal(
-      permissionOutcomeWords(ask({ tool: "Bash", state: "denied", by: "not_waited" })),
-      "Not asked: you said not to wait",
+      permissionOutcomeWords(ask({ tool: "Bash", state: "allowed", by: "mode", granted: "once" })),
+      "Allowed in Bypass",
     );
+  });
+});
+
+describe("a settled plugin or connector question", () => {
+  it("is one line as Claude's own are: how it ended, then whose it was", () => {
+    const line = (outcome: Parameters<typeof consentOutcomeWords>[0]) =>
+      consentLineWords(consentOutcomeWords(outcome), "Unreal Engine");
+    assert.equal(line({ state: "approved", by: "user", always: true }), "Always allowed · Unreal Engine");
+    assert.equal(line({ state: "approved", by: "user" }), "Allowed · Unreal Engine");
+    assert.equal(line({ state: "approved", by: "mode" }), "Allowed · Unreal Engine");
+    assert.equal(line({ state: "declined", by: "user" }), "Declined · Unreal Engine");
+    assert.equal(line({ state: "declined", by: "timeout" }), "Nobody answered · Unreal Engine");
   });
 });
 

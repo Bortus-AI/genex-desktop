@@ -1613,31 +1613,14 @@ export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", co
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {
-  title: (name: string) => `Genex plugin: ${name}`,
   turnOn: "Turn on",
   install: "Install…",
   on: "On",
-  onlyYou: "Only you turn a Genex plugin on. It runs with your access to this Mac.",
+  close: "Put this suggestion away",
   folders: (paths: string) => `Turning it on lets its programs write in: ${paths}`,
   /** A plugin loaded from a folder on this Mac: its code isn't sandboxed, and its tools ask first. */
   localAccess:
     "Loaded from a folder on this Mac. It runs with your access, and each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",
-} as const;
-
-/**
- * "Don't wait for me" (`shared/dont-wait.ts`): the Loop menu's switch, the card an agent may show
- * (`chat/DontWaitOfferCard.tsx`) and the line the person's switch leaves in the chat.
- */
-export const DONT_WAIT_WORDS = {
-  label: "Don't wait for me",
-  description: "Workers carry on without asking you; their questions stay in the chat",
-  cardTitle: "Let workers carry on without you?",
-  onlyYou: "Only you can turn this on.",
-  button: "Don't wait for me",
-  on: "On",
-  /** The line a switch leaves: on or off, for the run going now or the chat's next run. */
-  set: (on: boolean, forRun: boolean) =>
-    `You turned ${on ? "on" : "off"} Don't wait for me for ${forRun ? "this run" : "the next run"}`,
 } as const;
 
 /** Each game engine as the chat names it. */
@@ -2551,25 +2534,6 @@ export function consentAskWords(ask: {
   return `${who} asks to run ${tool}${args}${prompt ? ` — ${prompt}` : ""}`;
 }
 
-/** A dotted identifier's last part (`editor_toolset.toolsets.asset.AssetTools` → `AssetTools`). */
-const lastPart = (value: string): string => (/^[\w.]+$/.test(value) ? (value.split(".").pop() ?? value) : value);
-/** Words a consent card shows per detail, and how many details. */
-const CONSENT_DETAIL_CHARS = 40;
-const CONSENT_DETAILS = 2;
-
-/** What a connector call does, in a few words: the tool, then its first short text arguments. */
-export function consentActionWords(
-  tool: string | null | undefined,
-  args: Record<string, unknown> | null | undefined,
-): string {
-  const words = consentToolWords(tool);
-  const details = Object.values(args ?? {})
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .slice(0, CONSENT_DETAILS)
-    .map((value) => clip(lastPart(value.trim()), CONSENT_DETAIL_CHARS));
-  return [words, ...details].join(" · ");
-}
-
 /** A connector tool's name as words (`unreal-editor__call_tool` → `call tool`). */
 export const consentToolWords = (tool: string | null | undefined): string =>
   (tool ?? "").split("__").pop()?.replace(/[-_]+/g, " ").trim() || "a tool";
@@ -2577,19 +2541,19 @@ export const consentToolWords = (tool: string | null | undefined): string =>
 /** The consent card's choices. Always allow is offered on a connector's card only. */
 export const CONSENT_CHOICE_WORDS = {
   once: { label: "Allow once", description: "Ask again next time." },
-  always: (tool: string, source: string) => ({
+  always: (source: string) => ({
     label: "Always allow",
-    description: `Don't ask again for “${tool}” in ${source}.`,
+    description: `Don't ask again for this action in ${source}.`,
   }),
   decline: { label: "Don't allow", description: "The agent carries on without it." },
 } as const;
 
-/** A settled consent row's line when the plugin wrote no prompt of its own. */
-export const consentRequestedWords = (source: string | undefined): string =>
-  `${source || A_PLUGIN} requested permission.`;
-
 /** A waiting consent question's title when the plugin wrote no prompt of its own. */
 export const consentNeededWords = (source: string | undefined): string => `${source || A_PLUGIN} needs your permission`;
+
+/** A settled consent question as one line, as Claude's own are: how it ended, then whose it was. */
+export const consentLineWords = (outcome: string, source: string | undefined): string =>
+  `${outcome} · ${source || A_PLUGIN}`;
 
 /** How a consent question ended, once it is no longer waiting on the user. */
 export function consentOutcomeWords(outcome: {
@@ -2597,7 +2561,7 @@ export function consentOutcomeWords(outcome: {
   by?: string | null;
   always?: boolean | null;
 }): string {
-  if (outcome.state === "approved") return outcome.always ? "Always allowed by you" : "Approved by you";
+  if (outcome.state === "approved") return outcome.always ? "Always allowed" : "Allowed";
   if (outcome.by === "timeout") return "Nobody answered";
   if (outcome.by === "restart") return "Withdrawn when the studio restarted";
   if (outcome.by === "stop" || outcome.by === "turn") return "Withdrawn when the turn stopped";
@@ -2775,7 +2739,6 @@ const PERMISSION_WITHDRAWN: Partial<Record<string, string>> = {
   [ToolPermissionBy.Turn]: "Withdrawn when the turn ended",
   [ToolPermissionBy.Restart]: "Withdrawn by a restart",
   [ToolPermissionBy.Timeout]: "Withdrawn: nobody answered",
-  [ToolPermissionBy.NotWaited]: "Not asked: you said not to wait",
 };
 
 /** How a permission request ended, once it no longer waits on the person. */
@@ -2783,6 +2746,7 @@ export function permissionOutcomeWords(event: Partial<ToolPermissionEvent>): str
   if (event.state === ToolPermissionState.Allowed) {
     if (isPlanRequest(event) && event.mode)
       return `Plan approved · ${PERMISSION_MODE_WORDS[event.mode]?.label ?? event.mode}`;
+    if (event.by === ToolPermissionBy.Mode) return "Allowed in Bypass";
     return event.granted === PermissionGranted.Always ? "Always allowed" : "Allowed";
   }
   const withdrawn = PERMISSION_WITHDRAWN[event.by ?? ""];

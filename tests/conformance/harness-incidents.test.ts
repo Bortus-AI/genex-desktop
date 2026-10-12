@@ -111,6 +111,8 @@ import { setAsideStrays } from "../../src/harness-seed/loop/director/lead-sessio
 import { landIntegration } from "../../src/harness-seed/loop/director/integrate.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { chatWaitsFor, leadDoor, passCtx, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
+import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
+import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
 import { leadLineOf, openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
@@ -5108,6 +5110,21 @@ describe("live chat during a build, reviewed", () => {
     chat.closeBuild();
     assert.ok(await settleOn(() => chat.answered.length === 1));
     assert.deepEqual(chat.answered, ["does it look like this?"]);
+  });
+
+  it("LC11. a picture the chat saved in the game's references reaches the lead, its file named in the words the lead reads", async () => {
+    const chat = liveChat();
+    chat.loopRun();
+    const saved = { ...picture, references: ["references/skydome-warning-1a2b3c4d.png"] };
+    await chat.say("i got this msg", saved);
+    await chat.say("does it look like this?", picture);
+    assert.deepEqual(standing(chat), {
+      "i got this msg": `delivered ${chat.RUN}`,
+      "does it look like this?": "queued",
+    });
+    const heard = chat.log.find((e) => e.data.event_type === "run_steering")?.data.payload.text;
+    assert.match(String(heard), /^i got this msg/);
+    assert.match(String(heard), /references\/skydome-warning-1a2b3c4d\.png/, "the lead is told where to look");
   });
 
   it("LC9. a run that crashed before its lead's loop began gives every message it was handed back to the chat", async () => {
@@ -12581,5 +12598,46 @@ describe("the scout under a local main agent (issue #47)", () => {
     assert.deepEqual(recorder.paramsOf("engine.delegate"), [], "no session is asked of an engine that holds none");
     assert.equal(answer.report, null);
     assert.equal(answer.skipped, "direct engine");
+  });
+});
+
+describe("a Loop chat whose turn made the game's project (an Unreal game)", () => {
+  it("LL1. the session that goes on is told to launch the build with its launch tool, never to build the game itself", () => {
+    const unreal = [{ id: "unreal-project", path: "unreal" }];
+    const loopOn = factsReadyPrompt(unreal, "mcp__studio__start_autopilot");
+    assert.match(loopOn, /mcp__studio__start_autopilot/);
+    assert.match(loopOn, /do not build it yourself/);
+    assert.doesNotMatch(loopOn, /Go on with what you said you would build first/);
+    assert.match(
+      factsReadyPrompt(unreal),
+      /Go on with what you said you would build first/,
+      "without Loop it builds on",
+    );
+  });
+});
+
+describe("a chat whose saved session is gone (another account, or never saved)", () => {
+  it("LS1. the engine's answer that it has no such session starts a fresh one, never 'the build stopped early'", async () => {
+    const calls: Array<string | null> = [];
+    const result = await steeredCall({ cancelled: false }, undefined, {
+      prompt: "PROMPT",
+      resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
+      fresh: () => "FRESH",
+      call: async (_prompt, resume) => {
+        calls.push(resume);
+        if (resume)
+          return {
+            ok: false,
+            summary: "",
+            turns: 0,
+            usage: {},
+            engine: "claude-code",
+            errorText: `No conversation found with session ID: ${resume}`,
+          };
+        return { ok: true, summary: "built", turns: 1, usage: {}, engine: "claude-code", sessionId: "fresh-1" };
+      },
+    });
+    assert.deepEqual(calls, ["aa932c8a-f6c0-463c-8fa0-87a9ae52895c", null]);
+    assert.equal(result.ok, true);
   });
 });

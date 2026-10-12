@@ -25,7 +25,6 @@ import type { BuildObservation, ReadyResult, ReadyVia } from "./preview-contract
 import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload } from "./game-engine.ts";
 import type { RunSpec } from "./protocol.ts";
 import type { PluginSuggestedPayload } from "./project-tools.ts";
-import type { DontWaitOfferPayload, DontWaitSetPayload } from "./dont-wait.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
 import type { WorkerFinishedPayload, WorkerStartedPayload } from "./workers.ts";
 import type { ObserverCapturePayload } from "./observers.ts";
@@ -57,10 +56,6 @@ export const CustomEvent = {
   PluginToolStarted: "plugin_tool_started",
   /** Claude asking the person before it uses a tool (shared/permissions.ts); written by the host only. */
   ToolPermission: "tool_permission",
-  /** An agent's card offering "Don't wait for me" (shared/dont-wait.ts); written by the host only. */
-  DontWaitOffer: "dont_wait_offer",
-  /** The person switched "Don't wait for me" for a run; written by the host only. */
-  DontWaitSet: "dont_wait_set",
   /** An agent's job started in the background (shared/jobs.ts); written by the host only. */
   JobStarted: "job_started",
   /** An agent's job ended, however it ended (shared/jobs.ts); written by the host only. */
@@ -696,8 +691,6 @@ export interface CustomEventMap {
   plugin_tool: PluginToolFinishedPayload & { facetTitle?: string };
   plugin_tool_started: PluginToolStartedPayload & { facetTitle?: string };
   tool_permission: ToolPermissionEvent;
-  dont_wait_offer: Partial<DontWaitOfferPayload>;
-  dont_wait_set: Partial<DontWaitSetPayload>;
   job_started: Partial<JobStartedPayload>;
   job_ended: Partial<JobEndedPayload>;
   app_look_access: Partial<AppLookAccessPayload>;

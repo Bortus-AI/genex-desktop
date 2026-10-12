@@ -62,9 +62,13 @@ saved limit it, as the chat's own session: the host adds no restriction of its o
 runs in its chat's Auto, Accept edits or Bypass, so Claude Code decides as for the chat's own
 session, or in Manual (`default`) for Manual and Plan (`leadModeFor`; `LeadAsks.mode` when it
 starts). The picker switches it while it runs, as it switches the chat's own session: `#live` holds
-every running session of a chat (its own, a lead, the coordinator), and a pick switches each; so
-does a mode an answer on the chat's own card sets (a plan approved, "always" with a mode), which
-the asking session takes itself. A lead switches one switch after another (`#switchLead`), each to
+every running session of a chat (its own, a lead, the coordinator, a worker that asks), and a pick
+switches each; so does a mode an answer on the chat's own card sets (a plan approved, "always" with
+a mode), which the asking session takes itself. An "always" moves the chat only from Manual: a chat
+the person moved to Auto or Bypass while the card waited keeps that mode, and the answer keeps its
+other grants (`#keptGrants`). A switch to Bypass answers every card still waiting that was asked
+while the chat was in another mode (`ToolPermissions.allowInBypass`, `by: mode`, "Allowed in
+Bypass"); a plan, and a card Claude Code asked in Bypass itself, still wait for the person. A lead switches one switch after another (`#switchLead`), each to
 `leadModeFor` the chat's mode when it runs, so a later pick wins; a pick made while a lead starts is
 applied once its control arrives. Each question is routed by the host (`#leadAsk`) for the chat's
 mode at that moment, whether or not the person is talking to it: Bypass allows one running in
@@ -181,9 +185,14 @@ any session's later ask it never counts as a decline; a yes to a call whose plug
 around it or that needs a lock leaves the call only what is left of its one deadline, and one
 answered too late to run in time does not run, [plugins](plugins.md)), asked
 each time rather than declined by an earlier answer in its run (`priorConsentDecline`), and a connector waits on its card unless its exact tool is saved as
-always allowed or the chat is in Bypass (`ChatPermissionService.bypassing`), which asks nothing
-first. A connector's card ("Let the agent use <name>?") offers Allow once, Always allow and Don't
-allow; Always allow saves that exact tool (`McpRegistry.alwaysAllow`): the person's own connector
+always allowed, its plugin's manifest says the tool only reads (`mcpServers[].reads`,
+`McpRegistry.toolOnlyReads`; the Unreal editor's `list_toolsets` and `describe_toolset`), the chat
+is in Bypass (any connector) or in Auto (a plugin's connector, which works on this Mac; the
+person's own may reach services beyond it), as `PluginToolService#unaskedIn` reads the chat's mode
+(`chatMode`). A card those modes would not have asked is answered when the person switches the chat
+to one (`PluginConsent.approveForMode`, `by: mode`). A connector's card ("Let the agent use
+<name>?", the tool and its arguments under Request details) offers Allow once, Always allow ("Don't
+ask again for this action in <name>") and Don't allow; Always allow saves that exact tool (`McpRegistry.alwaysAllow`): the person's own connector
 in connectors.json, where its card's checkbox shows it, and a plugin's in `always-allowed.json`
 beside it, listed on the plugin's page under Connections with **Ask every time** to take it back.
 A plugin tool's own `confirmation` card never offers it. A local plugin's agent tool asks each call
@@ -251,9 +260,11 @@ the lead drives that editor alone.
 
 Its seat (`WorkerSeat`, `#workerReach`) carries:
 
-- the chat's mode, as its engine honours it (`engineMode`), and Plan whenever the chat plans, fixed
-  for the session: no picker reaches it, and while the chat is in a stricter mode than the one it
-  runs in, its screen asks first (`#screenLeadCall`), as a lead's;
+- the chat's mode, as its engine honours it (`engineMode`), and Plan whenever the chat plans; the
+  picker switches its running session as it switches a lead's (`#onLeadControl`, through
+  `liveControl`), and while the chat is in a mode it could not be switched to, its screen asks first
+  (`#screenLeadCall`). Its box stays the one its start's mode gave it (a worker started in Plan
+  stays read-only);
 - its write roots: its working folder, the folders the person granted the chat
   (`ChatPermissionService.chatDirs`) and the enabled plugins' `folders`
   (`PluginRegistry.workerFolders`), by their real paths; a folder that does not exist yet is left
@@ -319,29 +330,13 @@ typed worker refused for room under the Settings ceiling wait for room until the
 Its questions go to the chat ([`chat-permissions.ts`](../src/main/core/chat-permissions.ts)
 `forWorker`, `#workerAsk`): a chat closed since denies at once, Bypass allows one running in another
 mode, Plan denies, and anything else is a `tool_permission` card naming the worker
-(`ToolPermissionEvent.worker`; the card reads "Scene builder wants to …") with no timeout. Only the
-person's answer, a Stop, the worker's end or, for a turn worker, its turn's end settles it; a run
-worker's card outlives the chat's turns. "Always" keeps grants as for the chat's own session (never a
+(`ToolPermissionEvent.worker`; the card reads "Scene builder wants to …"). A run worker's card waits
+as a lead's does (`#workerCard`): it outlives the chat's turns and is withdrawn when nobody answers
+within `LEAD_ASK_TIMEOUT_MS`, a no the worker reads as such; a turn worker's waits until its turn
+ends. The person's answer, a switch to Bypass, a Stop or the worker's end settle it too. "Always" keeps grants as for the chat's own session (never a
 mode), so the next worker and the chat's own session stand on them. No agent's message answers a
 card: the harness cannot write `tool_permission` rows (`refuseHostRecords`), and a steered message
 saying "approved" is a message, not an answer.
-
-**Don't wait for me.** By default a worker's question waits. The person, and only the person, can
-switch "Don't wait for me" on: from the Loop menu's switch while the Loop is on (during a run the
-menu opens read-only to reach it, on and off, `modeMenuReach`), or with the button
-on a card an agent showed (`offer_dont_wait`, a project tool of the chat's own session and of a
-run's lead, whose card shows in the chat its run was started in; it only appends `dont_wait_offer`). Both reach the host over `studio:loop.dontWait`, main-frame guarded like
-`studio:permissions.*` and named by no RPC; the harness can write neither `dont_wait_offer` nor
-`dont_wait_set` (`refuseHostRecords`). A switch reaches the run started in the chat that is going now
-(`DelegationService.runOfChatNow`), else the chat's next run, and is recorded in the chat as
-`dont_wait_set` ("You turned on Don't wait for me for this run"). The setting is kept on the run in
-[`src/main/run-settings.ts`](../src/main/run-settings.ts) (`engine-homes/run-settings.json`, atomic
-and serialized; a store that could not be read fails the call and is never written over, and the
-question then waits): a next-run setting made before a run started is taken by that run and cleared.
-With it on, a run worker's question is refused at once (`#workerAsk`): the chat gets its pending and
-settled rows together (`by: not_waited`, naming the worker; "Not asked: you said not to wait"), and
-the worker reads a deny telling it to carry on. Bypass, Plan and a closed chat answer first, as
-above; a worker the chat's own turn started always waits.
 
 A run worker's plugin calls are recorded under its run with its id as the part (`workerAttribution`),
 and its plugin and connector calls answer to the Plan mode and Bypass of the chat the run was
@@ -387,8 +382,8 @@ workCwd`: a web lead's in the build it leads, never the game folder it sits in; 
 chat's jobs; a worker only its own of its run or turn.
 
 The card (`askForJob`, `tool: "Job"`) follows the asker's terms: the chat's own session's ends with
-its turn, a lead's waits `LEAD_ASK_TIMEOUT_MS` and outlives the turn, a worker's names the worker,
-waits with no timeout and is refused at once in a run whose person said "Don't wait for me". Its
+its turn, a lead's waits `LEAD_ASK_TIMEOUT_MS` and outlives the turn, a worker's names the worker
+and waits as its other questions do (a run worker's as a lead's). Its
 question is plain words ("Scene builder wants to run Unreal build in the background"); the command
 sits only in the row's `input` (`{title, command, folder}`), folded under Details. No "always".
 
@@ -696,8 +691,7 @@ Loop run must confirm the two known changes: builders can no longer read sibling
 - A harness `game.start` that names no chat is not held in Plan: an edited harness, or a kept older
   `tools/game-tools.ts`, can write the web starter while the chat plans (the boot reports the kept
   copy).
-- A worker's card waits with no timeout: a run nobody watches in Manual waits on it until the person
-  answers or stops the work, unless they switched on "Don't wait for me" for it.
+- A turn worker's card waits until its turn ends: a chat turn nobody watches in Manual waits on it.
 - A person's session has no sandbox: its shell runs with the person's access. Manual asks before
   each command, Auto leaves it to Claude Code's classifier, Bypass runs it. The fence binds Claude
   Code's file tools, not commands.

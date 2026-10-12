@@ -330,6 +330,8 @@ export interface RunNode {
   builderEngine: string | null;
   /** labels of the reference stills the run was given */
   referenceFrames: string[];
+  /** The pictures the person sent with the message the run answers, for its start node; null when none. */
+  asked: AskedPictures | null;
   /**
    * A run the lead runs itself (`autopilot_started.director`). It has no shared-base stage
    * unless it built a starting point of its own, and its builders are single sessions rather
@@ -715,6 +717,10 @@ interface GraphDraft {
   eventAt: string | null;
   /** the place in the log of the record being read */
   seq: number;
+  /** The chat's messages that carried pictures (their queue records), by id: how many each sent. */
+  sentPictures: Map<string, number>;
+  /** The person's message the chat answers now, with its pictures: what a run starting now was asked with. */
+  answering: AskedPictures | null;
 }
 
 /** One record of this run, read once: the part and round it names, after restarts are folded in. */
@@ -725,6 +731,13 @@ interface RunEntry {
   facetTitle: string | undefined;
   /** the round it names, counted on from the rounds of the attempt a restart replaced */
   round: number | null;
+}
+
+/** A chat message's pictures, as `studio:message-images` reads them: the chat, the message, how many. */
+export interface AskedPictures {
+  threadId: string;
+  messageId: string;
+  count: number;
 }
 
 /** What a lead's worker reports about itself (`director_worker.state`, a summary task's `state`). */
@@ -820,9 +833,32 @@ function readRecord(graph: GraphDraft, event: RunGraphEvent): boolean {
     if (!graph.turn) readNote(graph, event, custom.payload);
     return false;
   }
+  if (followQueue(graph, event, custom)) return false;
   if (graphKeyOf(custom.payload) !== graph.runId) return false;
   if (!graph.turn) trackExecution(graph, custom, event.created_at);
   applyRunEvent(graph, custom, runEntry(graph, event, custom.payload));
+  return true;
+}
+
+/**
+ * The chat's queue records, which name no run: a queued message that carried pictures, and the one
+ * the chat answers now. True when the record was one of them.
+ */
+function followQueue(
+  graph: GraphDraft,
+  event: RunGraphEvent,
+  custom: { event_type: string; payload: Payload },
+): boolean {
+  const messageId = strOrNull(custom.payload.messageId);
+  if (custom.event_type === CustomEvent.CoordinatorMessageQueued) {
+    const action = record(custom.payload.action);
+    const count = typeof action?.imageCount === "number" ? action.imageCount : 0;
+    if (messageId && action?.attachmentsArtifact && count > 0) graph.sentPictures.set(messageId, count);
+    return true;
+  }
+  if (custom.event_type !== CustomEvent.CoordinatorMessageProcessing) return false;
+  const count = messageId ? (graph.sentPictures.get(messageId) ?? 0) : 0;
+  graph.answering = messageId && count > 0 ? { threadId: event.thread_id, messageId, count } : null;
   return true;
 }
 
@@ -830,6 +866,8 @@ function newGraphDraft(runId: string, turn: string | null): GraphDraft {
   return {
     runId,
     turn,
+    sentPictures: new Map(),
+    answering: null,
     workers: newWorkerLedger(),
     leadsWorkers: false,
     jobs: new Map(),
@@ -894,6 +932,7 @@ function newRunNode(runId: string): RunNode {
     model: null,
     builderEngine: null,
     referenceFrames: [],
+    asked: null,
     director: false,
     paused: false,
   };
@@ -1212,6 +1251,8 @@ function onRunStarted(graph: GraphDraft, entry: RunEntry): void {
   const { payload } = entry;
   run.project = strOrNull(payload.project);
   run.goal = str(payload.goal, "");
+  // Its first start record is the message it answers; a resume or a later steer is not.
+  if (run.startedAt === null) run.asked = graph.answering;
   run.startedAt = entry.event.created_at;
   // Absent budgets leave the earlier value; an ∞ build has only a safety ceiling, never a duration.
   const loop = recordedRunLoop(payload.budgets);

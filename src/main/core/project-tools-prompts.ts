@@ -110,17 +110,3 @@ export const PLUGINS_SUGGEST_ANSWER = {
     `No card was shown: "${plugin}" is not a Genex plugin that is off or in Genex's catalog. Call plugins_find to see which are.`,
   noChat: "No card was shown: there is no chat to show it in.",
 } as const;
-
-/** `offer_dont_wait`: shows the person a card; it never switches the setting. Takes no parameters. */
-export const OFFER_DONT_WAIT_TOOL: LiveToolSpec = {
-  name: ProjectTool.OfferDontWait,
-  description:
-    "Show the person a card offering \"Don't wait for me\": with it on, a worker's question no longer waits for them; it is refused at once, the worker carries on, and the question stays in the chat. Offer it when the person says they will be away while workers run. Only the person's click turns it on.",
-  parameters: { type: "object", properties: {} },
-};
-
-/** What `offer_dont_wait` answers. */
-export const DONT_WAIT_ANSWER = {
-  shown: "The card is in the chat; only the person's click turns it on. Until then a worker's question waits for them.",
-  noChat: "No card was shown: there is no chat to show it in.",
-} as const;

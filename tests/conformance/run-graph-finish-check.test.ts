@@ -76,7 +76,7 @@ const kinds = (graph: RunGraph | null) => graph?.nodes.map((node) => node.kind);
 async function seeded(seed: (core: never, project: string, threadId: string) => Promise<void>) {
   const appended: EventData[] = [];
   const core = {
-    store: { listEvents: async () => [] },
+    store: { listEvents: async () => [], writeArtifact: async () => 0 },
     layout: { runs: await tmpDir("studio-finish-check-") },
     append: async (events: EventData[]) => void appended.push(...events),
   };

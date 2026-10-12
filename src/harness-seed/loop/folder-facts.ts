@@ -38,11 +38,6 @@ export const ProjectTool = {
   PluginsSuggest: "plugins_suggest",
   /** Checks a plugin folder the agent wrote in the project, in place; installs nothing. The chat's own session's. */
   PluginCheck: "plugin_check",
-  /**
-   * Shows the person the "Don't wait for me" card; only their click switches it. A delegated
-   * session's only: a local model's turns run no workers.
-   */
-  OfferDontWait: "offer_dont_wait",
 } as const;
 export type ProjectTool = (typeof ProjectTool)[keyof typeof ProjectTool];
 

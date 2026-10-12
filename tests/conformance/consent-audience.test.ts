@@ -1,3 +1,4 @@
+import { PermissionMode } from "../../src/shared/permissions.ts";
 import assert from "node:assert/strict";
 import { it } from "node:test";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -47,7 +48,7 @@ it("records one actionable parent card and resolves the original worker exactly 
     activeConnectorCalls: new Map(),
     cutOffCalls: new Map(),
     planning: async () => false,
-    bypassing: async () => false,
+    chatMode: async () => PermissionMode.Manual,
     locks: core.locks,
     hooks: core.hooks,
   });
@@ -181,7 +182,7 @@ for (const answer of ["stop", "decline", "timeout"] as const) {
       activeConnectorCalls: new Map(),
       cutOffCalls: new Map(),
       planning: async () => false,
-      bypassing: async () => false,
+      chatMode: async () => PermissionMode.Manual,
       locks: core.locks,
       hooks: core.hooks,
     });

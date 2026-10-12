@@ -209,8 +209,8 @@ export const ToolPermissionState = { Pending: "pending", Allowed: "allowed", Den
 export type ToolPermissionState = (typeof ToolPermissionState)[keyof typeof ToolPermissionState];
 
 /**
- * Who settled a request: the person, the work ending around it, nobody answering a lead's card in
- * time (`timeout`), or the person's "Don't wait for me" for the run (`not_waited`). Persisted: never
+ * Who settled a request: the person, the work ending around it, nobody answering a lead's or a run
+ * worker's card in time (`timeout`), or the person's switch to Bypass (`mode`). Persisted: never
  * rename a value.
  */
 export const ToolPermissionBy = {
@@ -219,8 +219,8 @@ export const ToolPermissionBy = {
   Turn: "turn",
   Restart: "restart",
   Timeout: "timeout",
-  /** The person asked not to be waited for in this run: a worker's question was refused at once. */
-  NotWaited: "not_waited",
+  /** The person switched the chat to Bypass while the card waited: allowed, as Bypass asks nothing. */
+  Mode: "mode",
 } as const;
 export type ToolPermissionBy = (typeof ToolPermissionBy)[keyof typeof ToolPermissionBy];
 

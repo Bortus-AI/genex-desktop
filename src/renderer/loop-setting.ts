@@ -133,28 +133,19 @@ export function composerLoopView(input: {
   return { shown: own, editable: true };
 }
 
-/** How far the person reaches Mode: whether it opens, whether its Loop can change, and the chat whose "Don't wait for me" it holds. */
+/** How far the person reaches Mode: whether it opens, and whether its Loop can change. */
 export interface ModeMenuReach {
   opens: boolean;
   changes: boolean;
-  dontWaitThread?: string;
 }
 
 /**
- * How far the person reaches Mode: its Loop changes only while no build owns the chat (and the run's
- * coordinator is not answering), and while the Loop shown is on it holds the chat's "Don't wait for
- * me" switch, for the run going now or the chat's next one. So it opens during a run too, read-only,
- * whenever there is that switch to reach.
+ * How far the person reaches Mode: it opens, and its Loop changes, only while no build owns the
+ * chat and the run's coordinator is not answering.
  */
-export function modeMenuReach(input: {
-  view: ComposerLoopView;
-  coordinating: boolean;
-  threadId: string | undefined;
-}): ModeMenuReach {
-  const { view, coordinating, threadId } = input;
-  const changes = view.editable && !coordinating;
-  const dontWaitThread = view.shown.on && !view.loopUnavailable ? threadId : undefined;
-  return { opens: changes || dontWaitThread !== undefined, changes, ...(dontWaitThread ? { dontWaitThread } : {}) };
+export function modeMenuReach(input: { view: ComposerLoopView; coordinating: boolean }): ModeMenuReach {
+  const changes = input.view.editable && !input.coordinating;
+  return { opens: changes, changes };
 }
 
 /** What a send carries besides its text: plan review, the pictures, and the Loop's commission. */

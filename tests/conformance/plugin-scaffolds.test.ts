@@ -110,6 +110,7 @@ describe("a plugin's scaffolds", () => {
       ["a rule of a fact its tool doesn't make", [{ ...SCAFFOLDS[1], facts: [{ ...TOY_PLUGIN_RULE, fact: "other" }] }]],
       ["facts that are no list", [{ ...SCAFFOLDS[1], facts: TOY_PLUGIN_RULE }]],
       ["on API 2", [{ id: "game", label: "Toy game" }], { apiVersion: 2, tools: [tool("greet")] }],
+      ["a game flag that is no true or false", [{ ...SCAFFOLDS[0], game: "no" }]],
     ];
     for (const [name, scaffolds, fields] of rows)
       assert.throws(() => validateManifest(manifestWith({ scaffolds, ...fields })), /scaffold/i, name);
@@ -168,6 +169,36 @@ describe("a plugin's scaffolds", () => {
     } finally {
       plain.cancel();
     }
+  });
+
+  it("the question offers only what makes a game; a scaffold that makes something else is made when the request asks for it", () => {
+    const offers: PluginKindOffer[] = [
+      {
+        plugin: "unreal",
+        name: "Unreal Engine",
+        tool: "unreal__new-game",
+        makes: [],
+        scaffold: "game",
+        label: "Unreal game",
+      },
+      {
+        plugin: "unreal",
+        name: "Unreal Engine",
+        tool: "unreal__new-plugin",
+        makes: [],
+        scaffold: "plugin",
+        label: "Unreal plugin",
+        game: false,
+      },
+    ];
+    const rule = engineChoiceRule("claude-code", null, offers);
+    const question = rule.slice(0, rule.indexOf("and end your reply"));
+    assert.ok(question.includes('"Unreal game"'), "a game's kind is an option");
+    assert.ok(!question.includes("Unreal plugin"), "an Unreal plugin project is no answer to where a game plays");
+    assert.match(rule, /When the request asks for an Unreal plugin, call mcp__studio__unreal__new-plugin/);
+    const only = engineChoiceRule("claude-code", null, [offers[1]!]);
+    assert.doesNotMatch(only, /ask the user/, "with no game on offer but the web, nothing is asked");
+    assert.match(only, /asks for an Unreal plugin/);
   });
 
   it("the card offers each scaffold by its label", () => {
@@ -312,6 +343,11 @@ describe("a plugin's scaffolds", () => {
           ["Unreal game", "unreal__new-game", true],
           ["Unreal plugin", "unreal__new-plugin", true],
         ],
+      );
+      assert.deepEqual(
+        registry.snapshot([]).kinds.map((kind) => kind.game),
+        [undefined, false],
+        "an Unreal plugin project is no game: the new game's question never offers it",
       );
       assert.deepEqual(registry.scaffoldOf("unreal", "new-plugin")?.facts, [
         { fact: "unreal-plugin", files: ["**/*.uplugin"], notUnder: ["**/GenexEditorHelper/"] },

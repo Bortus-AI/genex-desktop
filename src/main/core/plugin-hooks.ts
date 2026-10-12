@@ -45,9 +45,13 @@ import {
   runHolders,
 } from "./plugin-locks.ts";
 
-/** The longest a moment waits for its steps' locks: a checkpoint a minute, a restore two, health not at all. */
+/**
+ * The longest a moment waits for its steps' locks: a checkpoint a minute, a restore two, health not at
+ * all. A run's start (or resume) waits ten: the person who just asked for a build is often still in
+ * the app (in Play, looking around), and the build should start once they are done, not fail.
+ */
 export const HOOK_LOCK_WAIT_MS = {
-  [HookEvent.RunPrepare]: 30 * SECOND_MS,
+  [HookEvent.RunPrepare]: 10 * MINUTE_MS,
   [HookEvent.RunEnd]: 30 * SECOND_MS,
   [HookEvent.TurnStart]: 30 * SECOND_MS,
   [HookEvent.TurnEnd]: 30 * SECOND_MS,

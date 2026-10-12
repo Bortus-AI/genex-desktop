@@ -48,8 +48,6 @@ const METHODS = [
   "setPermissionMode",
   "answerPermission",
   "forgetPermission",
-  "setDontWait",
-  "dontWaitState",
   "mcpList",
   "connections",
   "mcpSave",

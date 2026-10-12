@@ -31,7 +31,7 @@ quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any m
 - Permission requests need an explicit answer, pinned above the composer; a worker's plugin
   questions appear in its run's conversation, cancelled with it. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
-  into a mode. Stop, the turn's end or a restart withdraws one.
+  into a mode. Stop, the turn's end or a restart withdraws one; answered ones collapse.
 - A game reply's one-line `bash` block offers **Run** and **Copy**; output shows below and
   reaches the agent unseen, reopening no build.
 - **Plan mode** (Add's bulb) is a one-message choice: the plan is Markdown with **Approve**,

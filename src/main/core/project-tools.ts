@@ -2,8 +2,7 @@
  * Genex's own project tools (`ProjectTool`), handed by seat (`ProjectToolSeat`): `start_web_game`
  * writes the web starter into a game with no kind yet; `plugins_find` looks for a Genex plugin and
  * `plugins_suggest` shows the person a card to turn one on; `plugin_check` checks a plugin the agent
- * wrote in the game, installing nothing (`plugin-check.ts`); `offer_dont_wait` shows the person the
- * "Don't wait for me" card (`dont-wait.ts`). They sit beside the cover tool in delegation
+ * wrote in the game, installing nothing (`plugin-check.ts`). They sit beside the cover tool in delegation
  * (`delegation.ts`); the harness's `game.start`, `plugins.find` and `plugins.suggest` do the same
  * for a local model.
  */
@@ -22,10 +21,8 @@ import { UiEvent } from "../../shared/ui-events.ts";
 import type { StudioCore } from "../studio-core.ts";
 import type { CoreInternals } from "./internals.ts";
 import { findPlugins, type PluginQuery, suggestable } from "./plugin-finder.ts";
-import { offerDontWait } from "./dont-wait.ts";
 import { checkPluginFolder } from "./plugin-check.ts";
 import {
-  OFFER_DONT_WAIT_TOOL,
   PLUGIN_CHECK_TOOL,
   PLUGINS_FIND_TOOL,
   PLUGINS_SUGGEST_ANSWER,
@@ -55,7 +52,7 @@ export interface ProjectToolCall {
 export const ProjectToolSeat = {
   /** The chat's own session: every project tool, the plugin check included. */
   Chat: "chat",
-  /** A run's lead: the plugin search, the plugin card and the "Don't wait for me" card, shown in the chat it answers. */
+  /** A run's lead: the plugin search and the plugin card, shown in the chat it answers. */
   Lead: "lead",
   /** A worker the host seated: the plugin search only; the card is the lead's to show. */
   Worker: "worker",
@@ -69,15 +66,15 @@ export type ProjectToolSeat = (typeof ProjectToolSeat)[keyof typeof ProjectToolS
 /**
  * The project tools a session is handed, by its seat: the chat's own gets the web starter while its
  * game has no kind yet (never for a folder of its own files of a kind Genex can't name), the plugin
- * search, card and check, and the "Don't wait for me" card on every game; a lead the search and both
- * cards; a worker the search; anyone else (a reviewer included) nothing.
+ * search, card and check; a lead the search and the card; a worker the search; anyone else (a
+ * reviewer included) nothing.
  */
 export function projectTools(game: GameKind, seat: ProjectToolSeat): LiveToolSpec[] {
   if (seat === ProjectToolSeat.Worker) return [PLUGINS_FIND_TOOL];
-  if (seat === ProjectToolSeat.Lead) return [PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, OFFER_DONT_WAIT_TOOL];
+  if (seat === ProjectToolSeat.Lead) return [PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL];
   if (seat !== ProjectToolSeat.Chat) return [];
   const start = kindPending(game) ? [START_WEB_GAME_TOOL] : [];
-  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, PLUGIN_CHECK_TOOL, OFFER_DONT_WAIT_TOOL];
+  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, PLUGIN_CHECK_TOOL];
 }
 
 /** One of Genex's project tools as a chat's session calls it, by name. */
@@ -96,7 +93,6 @@ export async function callProjectTool(
   if (name === ProjectTool.PluginCheck)
     return JSON.stringify(await checkPluginFolder(core.games.dirFor(call.project), args, localPluginOn(core)));
   if (name === ProjectTool.StartWebGame) return startWebGame(core, x, call.project, call.threadId);
-  if (name === ProjectTool.OfferDontWait) return offerDontWait(core, call);
   throw new Error(MESSAGE.unknownTool(name));
 }
 

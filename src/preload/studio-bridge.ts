@@ -254,9 +254,6 @@ function pluginCalls(bridge: BridgeCalls) {
     setPermissionMode: (threadId, mode) => invoke("studio:permissions.mode", { threadId, mode }),
     answerPermission: (requestId, answer) => invoke("studio:permissions.answer", { requestId, answer }),
     forgetPermission: (project, rule) => invoke("studio:permissions.forget", { project, rule }),
-    setDontWait: (threadId, on, offerId) =>
-      invoke("studio:loop.dontWait", { threadId, on, ...(offerId ? { offerId } : {}) }),
-    dontWaitState: (threadId) => invoke("studio:loop.dontWaitState", { threadId }),
     mcpList: (project) => invoke("studio:mcp.list", project),
     connections: (threadId, project) => invoke("studio:connections", { threadId, project }),
     mcpSave: (connector, secrets) => invoke("studio:mcp.save", { connector, secrets }),

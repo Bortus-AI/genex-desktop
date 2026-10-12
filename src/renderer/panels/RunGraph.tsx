@@ -25,6 +25,7 @@ import {
   isJudgedTry,
   resultStatus,
   rowMeta,
+  START_WORDS,
   StepState,
   statusLine,
 } from "../run-steps.ts";
@@ -631,7 +632,7 @@ const GraphNodes = memo(function GraphNodes({
         run={model.run}
         base={model.base}
         rect={layout.rects.start}
-        src={stills.baseSrc}
+        wordsRect={layout.rects[START_WORDS]}
         active={graph.active}
         selected={selected === GraphSelection.Start}
         onSelect={() => onSelect(GraphSelection.Start)}

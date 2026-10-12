@@ -130,7 +130,7 @@ const boxes = (rects: Record<string, { x: number; y: number; w: number; h: numbe
 async function seeded(seed: (core: never, project: string, threadId: string) => Promise<void>) {
   const appended: EventData[] = [];
   const core = {
-    store: { listEvents: async () => [] },
+    store: { listEvents: async () => [], writeArtifact: async () => 0 },
     layout: { runs: await tmpDir("studio-run-tree-") },
     append: async (events: EventData[]) => void appended.push(...events),
   };
@@ -173,10 +173,14 @@ describe("a graph without workers or jobs keeps today's layout", () => {
         (node) => node.kind === GraphNodeKind.Assets || node.kind === GraphNodeKind.Blender,
       );
       const optimization = graph.nodes.some((node) => node.kind === GraphNodeKind.Optimization);
+      // The running run answers a message sent with pictures: its start keeps a strip for its words.
+      const startWords = graph.nodes.some((node) => node.kind === GraphNodeKind.Run && node.asked !== null);
+      assert.equal(startWords, runId === "fixture-graph-live", runId);
       assert.deepEqual(
         buildsLayout(graph, rows, summary),
         layoutSteps(rows, {
           assets,
+          startWords,
           optimization,
           resultGate: resultGate(graph),
           lead: leadWorking(graph, summary, rows),

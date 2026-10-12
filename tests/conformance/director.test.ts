@@ -3605,9 +3605,8 @@ describe("a director's run through the real core and harness", () => {
         "judge",
         "look",
         "note",
-        // Flipped: a lead may look for a Genex plugin and show the person its card (and the
-        // "Don't wait for me" card), each in the chat its run was started in.
-        "offer_dont_wait",
+        // Flipped: a lead may look for a Genex plugin and show the person its card, in the chat its
+        // run was started in.
         "plan",
         "playtest",
         "plugins_find",

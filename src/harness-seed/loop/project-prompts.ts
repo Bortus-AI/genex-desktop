@@ -219,8 +219,13 @@ export function unrealWithoutPlugin(engine: string | undefined): string[] {
 /**
  * What the chat's own session is told when its turn changed what the project is (a port, or files
  * it wrote): the project's kind now, and to go on with what it said it would build first, with the
- * tools this new turn hands it.
+ * tools this new turn hands it. With Loop on (`launch`, its launch tool as the session calls it) a
+ * build of the game is that tool's, never the session's own, even after its last reply said it
+ * would build it: the session decides by its Loop rules again.
  */
-export function factsReadyPrompt(facts: readonly FactRef[]): string {
-  return `The project now holds ${holdsWords(facts)}; your tools fit it now. Go on with what you said you would build first, look at the result, then tell the user what you made and what to try.`;
+export function factsReadyPrompt(facts: readonly FactRef[], launch?: string): string {
+  const ready = `The project now holds ${holdsWords(facts)}; your tools fit it now.`;
+  if (launch)
+    return `${ready} Loop is on, so decide as your Loop rules say: when the ask is to build the game or change it substantially, start that build now with ${launch} (call it last, then recap in one short paragraph) and do not build it yourself; anything smaller, finish it here and tell the user what you did.`;
+  return `${ready} Go on with what you said you would build first, look at the result, then tell the user what you made and what to try.`;
 }

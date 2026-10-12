@@ -351,12 +351,13 @@ describe("a harness crash and the plugins", () => {
   });
 
   it("a connector call still waiting on its card when the harness dies never went out: no outcome unknown, no notice", async () => {
-    // Another game's chat, which asks before each connector action (the test's own chat bypasses).
+    // Another game's chat, in Manual, which asks before each connector action (the test's own chat
+    // bypasses, and Auto sends a plugin connector's calls without a card).
     const other = "cut-off-asks";
     await lite.core.games.scaffold(other);
     const asking = await lite.core.createGameThread(other);
     assert.notEqual(asking, threadId);
-    await lite.core.setPermissionMode(asking, PermissionMode.Auto);
+    await lite.core.setPermissionMode(asking, PermissionMode.Manual);
     await lite.core.mcp.toolsFor(other);
     const tool = `${PLUGIN}-editor__hang`;
     const call = api["mcp.invoke"]!({ project: other, threadId: asking, name: tool, args: { held: true } }).then(

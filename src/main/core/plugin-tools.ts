@@ -57,6 +57,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
+import { PermissionMode } from "../../shared/permissions.ts";
+import type { PluginConsentRequest } from "../plugin-consent.ts";
 
 /** Nine minutes: under the Codex bridge's 600 s tool ceiling, so a slow answer still reaches the engine as "declined". */
 export const CONSENT_TIMEOUT_MS = 9 * MINUTE_MS;
@@ -259,7 +261,7 @@ export class PluginToolService {
   readonly #x: Pick<
     CoreInternals,
     | "activeConnectorCalls"
-    | "bypassing"
+    | "chatMode"
     | "consent"
     | "cutOffCalls"
     | "hooks"
@@ -274,7 +276,7 @@ export class PluginToolService {
     x: Pick<
       CoreInternals,
       | "activeConnectorCalls"
-      | "bypassing"
+      | "chatMode"
       | "consent"
       | "cutOffCalls"
       | "hooks"
@@ -302,7 +304,7 @@ export class PluginToolService {
     binding: PluginBinding,
     signal?: AbortSignal,
     exportReview?: PluginConsentEvent["exportReview"],
-    options: { offerAlways?: boolean; displayName?: string } = {},
+    options: { offerAlways?: boolean; displayName?: string; modeAnswers?: PluginConsentRequest["modeAnswers"] } = {},
   ): Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean }> {
     const consentId = shortId("consent");
     const attribution = this.#x.pluginCallAttribution.get(binding);
@@ -337,6 +339,7 @@ export class PluginToolService {
       ...(signal ? { signal } : {}),
       // A build's lead is not the chat's turn: another turn ending leaves its question waiting.
       ...(attribution?.lead ? { outlivesTurn: true } : {}),
+      ...(options.modeAnswers ? { modeAnswers: options.modeAnswers } : {}),
     });
     try {
       await this.#core.append([customEventData(CustomEvent.PluginConsent, { ...asked })], threadId);
@@ -393,11 +396,11 @@ export class PluginToolService {
     return this.#x.planning(await consentAudience(this.#core, binding, runId));
   }
 
-  /** Whether the chat a call answers to is in Bypass, as `#planning` finds that chat. */
-  async #bypassing(project: string, threadId: string | undefined, runId?: string): Promise<boolean> {
-    if (!threadId) return false;
+  /** The chat a call answers to, as `#planning` finds it; null for a call no chat makes. */
+  async #audience(project: string, threadId: string | undefined, runId?: string): Promise<string | null> {
+    if (!threadId) return null;
     const binding: PluginBinding = { project, directory: this.#core.games.dirFor(project), threadId };
-    return this.#x.bypassing(await consentAudience(this.#core, binding, runId));
+    return consentAudience(this.#core, binding, runId);
   }
 
   /** The name a consent card shows: the connector's or plugin's own, else its id. */
@@ -839,10 +842,13 @@ export class PluginToolService {
     const id = name.slice(0, split);
     const displayName = this.#connectorName(id);
     // A server a plugin loaded from a folder runs runs with the person's access: it asks every call,
-    // and no saved grant, Bypass or run of theirs answers for it.
+    // and no saved grant, read, mode or run of theirs answers for it.
     const local = this.#localOwner(id);
-    if (!local && (await this.#answeredWithoutCard(name, binding.project, binding.threadId, signal, runId, runConsent)))
-      return;
+    const audience = await this.#audience(binding.project, binding.threadId, runId);
+    const unasked: true | PermissionMode[] = local
+      ? []
+      : await this.#unaskedIn(name, audience, binding.project, signal, runConsent);
+    if (unasked === true) return;
     const tool: PluginTool = {
       name: name.slice(split + 2),
       description: "Connector action",
@@ -857,9 +863,11 @@ export class PluginToolService {
       ...(binding.threadId ? { threadId: binding.threadId } : {}),
     };
     if (outlivesTurn) this.#x.pluginCallAttribution.set(asking, { lead: true });
+    const modeAnswers = audience && unasked.length ? { threadId: audience, modes: unasked } : null;
     const grant = await this.requestConsent(id, tool, args, asking, signal, undefined, {
       offerAlways: !local,
       displayName,
+      ...(modeAnswers ? { modeAnswers } : {}),
     });
     if (!grant.approved) throw new PluginConsentDeclined(name, grant.by);
     if (grant.always)
@@ -870,20 +878,26 @@ export class PluginToolService {
   }
 
   /**
-   * Whether a connector call goes out with no card: a saved Always allow, the chat's Bypass, or the
-   * run the person started covering its own builder's calls (none of them lifts Plan, checked before).
+   * Whether a connector call goes out with no card (true), else the chat modes that would send it
+   * with none, so the person's switch to one answers its card: a saved Always allow, a tool its
+   * plugin says only reads, the chat's Bypass (any connector) or Auto (a plugin's, which works on
+   * this Mac; the person's own may reach services beyond it), or the run the person started
+   * covering its own builder's calls. None of them lifts Plan, checked before.
    */
-  async #answeredWithoutCard(
+  async #unaskedIn(
     name: string,
+    audience: string | null,
     project: string,
-    threadId: string | undefined,
     signal: AbortSignal,
-    runId: string | undefined,
     runConsent: ConnectorCallOptions["runConsent"],
-  ): Promise<boolean> {
+  ): Promise<true | PermissionMode[]> {
     if (await this.#core.mcp.toolAutoApproved(name, project, signal)) return true;
-    if (await this.#bypassing(project, threadId, runId)) return true;
-    return Boolean(await runConsent?.());
+    if (await this.#core.mcp.toolOnlyReads(name, project, signal)) return true;
+    const plugin = this.#core.mcp.ownerOf(name.slice(0, name.indexOf("__"))) !== undefined;
+    const modes: PermissionMode[] = plugin ? [PermissionMode.Bypass, PermissionMode.Auto] : [PermissionMode.Bypass];
+    if (audience && modes.includes(await this.#x.chatMode(audience))) return true;
+    if (await runConsent?.()) return true;
+    return modes;
   }
 
   /** Whether connector `id` is a server of a plugin loaded from a folder on this Mac. */
@@ -977,6 +991,7 @@ export class PluginToolService {
       command: process.execPath,
       args,
       ...(server.toolPolicy ? { toolPolicy: server.toolPolicy } : {}),
+      ...(server.reads ? { reads: server.reads } : {}),
       ...(server.maxTools ? { maxTools: server.maxTools } : {}),
       ...(server.callTimeoutMs ? { callTimeoutMs: server.callTimeoutMs } : {}),
       description: server.description,
@@ -1253,6 +1268,8 @@ export const CONSENT_DECLINED_MESSAGES: Record<PluginConsentBy, string> = {
   stop: "The turn was stopped before the user answered.",
   turn: "The turn was stopped before the user answered.",
   restart: "The studio restarted before the user answered. Ask again before trying this action.",
+  // A mode answers only with a yes; listed so every ending has its words.
+  mode: "The chat's mode answered this request.",
 };
 
 export const requireFromHere = createRequire(import.meta.url);

@@ -54,8 +54,16 @@ const BASE_SEGMENT = /^[A-Za-z0-9._-]([A-Za-z0-9._ -]*[A-Za-z0-9._-])?$/;
 
 /** What each kind Genex knows leaves out of history, and where its assets live. */
 export const CORE_WORKSPACE = {
-  // The generic rules (`substrate/nested-repos.ts`) are the web rules.
-  [CoreFact.WebGame]: { ignore: [], copySkip: [], assets: [{ folder: "assets" }, { folder: "public/assets" }] },
+  // The generic rules (`substrate/nested-repos.ts`) are the web rules. Its asset folders list media
+  // only: data a script writes there (tiles, manifests, notes) is the game's input, not an asset.
+  [CoreFact.WebGame]: {
+    ignore: [],
+    copySkip: [],
+    assets: [
+      { folder: "assets", formats: MEDIA_FORMATS },
+      { folder: "public/assets", formats: MEDIA_FORMATS },
+    ],
+  },
   [CoreFact.UnrealProject]: {
     ignore: [
       "Saved/",

@@ -1113,9 +1113,9 @@ export class ClaudeCodeEngine implements Engine {
     this.#catalogEpoch.set(stream, this.#catalog.epoch());
     running.stream = stream as RunningSession["stream"];
     // The mode picker reaches a running turn of a session that asks (the chat's own, a lead's, the
-    // coordinator's): the host holds this until the session takes no more control requests (its
-    // input ended at a result) or its end, whichever comes first.
-    run.control = liveControl(asksOf(request), stream);
+    // coordinator's, a worker's): the host holds this until the session takes no more control
+    // requests (its input ended at a result) or its end, whichever comes first.
+    run.control = liveControl(rulesAsks(request), stream);
     // Started after the stream exists: a throw during setup must not leave a live timer whose
     // only job would be aborting a build that never began.
     const deadlineTimer = startDeadline(request.timeoutMs, startedAt, () => {

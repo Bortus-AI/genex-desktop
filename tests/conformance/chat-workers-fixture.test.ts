@@ -34,7 +34,7 @@ async function fakeCore() {
   let seq = 0;
   const core = {
     layout: { runs },
-    store: { listEvents: async (threadId: string) => logs.get(threadId) ?? [] },
+    store: { listEvents: async (threadId: string) => logs.get(threadId) ?? [], writeArtifact: async () => 0 },
     append: async (events: EventData[], threadId: string) => {
       const log = logs.get(threadId) ?? [];
       for (const data of events) {

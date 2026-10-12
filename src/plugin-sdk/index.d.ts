@@ -227,6 +227,8 @@ export interface PluginMcpServer {
   requires?: { credential?: boolean; settings?: string[] };
   /** Raw MCP tool names. Deny wins; Studio caps a connector at 64 tools regardless. */
   toolPolicy?: { allow?: string[]; deny?: string[] };
+  /** API 3: raw MCP tool names that only read (list or describe what the server offers): they run with no card in any mode, as a file read does. A local plugin's still ask. */
+  reads?: string[];
   maxTools?: number;
   /** At most 1 800 000. */
   callTimeoutMs?: number;

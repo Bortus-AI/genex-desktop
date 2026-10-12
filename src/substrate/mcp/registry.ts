@@ -83,6 +83,8 @@ export interface McpPluginServer {
   /** Environment variable names the host materializes; values never come from the manifest. */
   env?: string[];
   toolPolicy?: { allow?: string[]; deny?: string[] };
+  /** The raw tools the plugin's manifest says only read: they run with no card (`toolOnlyReads`). */
+  reads?: string[];
   maxTools?: number;
   callTimeoutMs?: number;
   description?: string;
@@ -187,6 +189,8 @@ interface Entry {
   unavailable?: string;
   /** A plugin's server for some facts only: never started for a game whose facts it does not reach. */
   facts?: string[];
+  /** A plugin's raw tools that only read, as its manifest says. */
+  reads?: string[];
 }
 
 /** Whether an entry reaches a game; a caller that names no game (no facts) is not narrowed. */
@@ -275,6 +279,7 @@ function pluginEntry(
   if (definition.description) entry.description = definition.description;
   if (definition.unavailable) entry.unavailable = definition.unavailable;
   if (definition.facts) entry.facts = [...definition.facts];
+  if (definition.reads?.length) entry.reads = [...definition.reads];
   return entry;
 }
 
@@ -1117,6 +1122,19 @@ export class McpRegistry {
       } else await this.#persist();
       this.#fire(id);
     });
+  }
+
+  /**
+   * Whether a plugin connector's tool only reads, as the plugin's manifest says: it runs with no
+   * card. Never a user's connector (it has no manifest), and never a tool its policy refuses.
+   */
+  async toolOnlyReads(name: string, project: string | null, signal?: AbortSignal): Promise<boolean> {
+    if (!MCP_QUALIFIED_TOOL.test(name)) return false;
+    const id = name.slice(0, name.indexOf("__"));
+    const entry = this.#entries.get(id);
+    if (!entry?.plugin || !entry.reads?.length) return false;
+    const raw = await this.#rawToolName(id, name.slice(id.length + 2), project, signal).catch(() => null);
+    return raw !== null && entry.reads.includes(raw) && this.#allowed(entry, raw);
   }
 
   /** The exact tools a connector runs without asking. */

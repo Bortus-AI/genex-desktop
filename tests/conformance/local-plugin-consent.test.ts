@@ -527,6 +527,8 @@ createInterface({ input: process.stdin }).on("line", (line) => {
           command: "node",
           args: ["server.mjs"],
           cwd: "storage:project",
+          // Said to only read: a local plugin's server asks every call all the same.
+          reads: ["echo"],
           description: "Echoes.",
         },
       ],
@@ -537,7 +539,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     return folder;
   }
 
-  it("ask every call: Bypass, a saved Always allow and silence never run them", async () => {
+  it("ask every call: Bypass, Auto, the tool's own reads, a saved Always allow and silence never run them", async () => {
     const lite = await coreLite({ consentTimeoutMs: CONSENT_TIMEOUT_MS });
     try {
       const project = "echo-bench";
