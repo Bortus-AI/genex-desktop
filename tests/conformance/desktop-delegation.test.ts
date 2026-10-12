@@ -5,13 +5,18 @@
  * read-only lead) never get it, and the driver stops with the session.
  */
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { UiEvent, type UiEvent as UiEventData } from "../../src/shared/ui-events.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import type { DesktopDriver } from "../../src/substrate/desktop-driver.ts";
+import { connectCuaDriver } from "../../src/substrate/cua-driver-client.ts";
 import { coreLite } from "../helpers/core-lite.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 
 const text = (result: LiveToolResult): string => (typeof result === "string" ? result : result.text);
 
@@ -202,6 +207,63 @@ it("without a desktop driver, nothing is offered and desktop.computer says why",
     const api = core.api() as unknown as Record<string, (input: unknown) => Promise<Record<string, unknown>>>;
     const answered = await api[HostMethod.DesktopComputer]!({ project: "no-driver", threadId, describe: true });
     assert.match(String(answered.unavailable), /install cua-driver/);
+  } finally {
+    await lite.close();
+  }
+});
+
+it("end to end: a chat's click goes through consent, the cua client and a real MCP driver process", async () => {
+  const fake = fileURLToPath(new URL("../fixtures/fake-cua-driver.mjs", import.meta.url));
+  const log = path.join(await tmpDir("desktop-e2e-"), "calls.jsonl");
+  const desktop = desktopControl({
+    findDriver: async () => process.execPath,
+    connect: (binary) => connectCuaDriver({ command: binary, args: [fake, "--log", log] }, { local: false }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.games.scaffold("desk-e2e");
+    const threadId = await core.createGameThread("desk-e2e");
+    let said = "";
+    core.engines.register({
+      id: "fixture-delegate",
+      label: "Fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "Fixture" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        await request.onLiveTool!("desktop", { action: "screenshot" });
+        said = text(await request.onLiveTool!("desktop", { action: "left_click", coordinate: "100,200" }));
+        return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
+      },
+    } as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project: "desk-e2e", threadId, prompt: "go" });
+    assert.match(said, /OK — left click at 100,200/);
+    assert.match(said, /AXTextArea/, "the answer carries the app's accessibility tree");
+    const calls = (await readFile(log, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { name: string; args: Record<string, unknown> });
+    const click = calls.find((call) => call.name === "click");
+    assert.deepEqual(click?.args, {
+      target: { kind: "desktop", display_id: "primary" },
+      delivery_mode: "foreground",
+      x: 100,
+      y: 200,
+      button: "left",
+      count: 1,
+    });
   } finally {
     await lite.close();
   }

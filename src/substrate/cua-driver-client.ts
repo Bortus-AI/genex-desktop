@@ -26,15 +26,22 @@ import type { DesktopApp, DesktopDriver, DesktopFocus, DesktopShot } from "./des
 const MAX_IMAGE_DIMENSION = 1366;
 /** How long one driver call may take. */
 const CALL_TIMEOUT_MS = 30 * SECOND_MS;
-/** How long the driver has to start and answer its first call. */
+/** How long the driver has to start and answer its first call: its own daemon wait is 10 s. */
 const CONNECT_TIMEOUT_MS = 15 * SECOND_MS;
+/** How much of the driver's stderr is kept to say why it did not start. */
+const MAX_STDERR_CHARS = 2_000;
+/** How long the secure-input check may take. */
+const SECURE_INPUT_TIMEOUT_MS = 2 * SECOND_MS;
 /** The most wheel notches one scroll sends, and how many a scroll that names none sends. */
 const MAX_SCROLL_NOTCHES = 50;
 const DEFAULT_SCROLL_NOTCHES = 3;
 /** How many accessibility elements a state read brings back. */
 const MAX_ELEMENTS = 250;
-/** The accessibility role of a password field. */
-const SECURE_FIELD_ROLE = "AXSecureTextField";
+/**
+ * A password field in an accessibility tree row: cua prints a field's role, not its secure
+ * subrole, so a text field labelled as a password is taken for one.
+ */
+const PASSWORD_FIELD = /AX(?:Secure)?TextField[^\n]*(?:password|passcode|passwort|mot de passe|contraseña|пароль)/i;
 /** Where the driver's installer puts its command, and where a package manager might. */
 const DRIVER_PLACES = [".local/bin/cua-driver", "/opt/homebrew/bin/cua-driver", "/usr/local/bin/cua-driver"] as const;
 /** A VM's SSH address: a user and a host, nothing a shell or ssh could read as an option. */
@@ -168,7 +175,8 @@ function windowOf(row: Record<string, unknown>, index: number): CuaWindow {
     b && num(b.x) !== null && num(b.y) !== null && num(b.width) !== null && num(b.height) !== null
       ? { x: b.x as number, y: b.y as number, width: b.width as number, height: b.height as number }
       : null;
-  return { pid: num(row.pid), windowId: num(row.window_id), z: num(row.z_index) ?? index, bounds };
+  // cua numbers windows so the largest z_index is the frontmost; without one, the list is front first.
+  return { pid: num(row.pid), windowId: num(row.window_id), z: num(row.z_index) ?? -index, bounds };
 }
 
 /** Whether a window holds a point. */
@@ -190,7 +198,10 @@ function scrollOf(dx: number, dy: number): { direction: string; amount: number }
  * The driver over one connection: each studio call as the driver's tools. `screenshot` remembers
  * the picture's size and the screen's, so `appAt` can find the window under a picture's point.
  */
-export function cuaDriver(connection: CuaConnection): DesktopDriver {
+export function cuaDriver(
+  connection: CuaConnection,
+  options: { secureInput?: () => Promise<boolean> } = {},
+): DesktopDriver {
   let picture = { width: 1, height: 1 };
   let screen = { width: 1, height: 1 };
   const call = async (tool: string, args: Record<string, unknown>): Promise<CuaAnswer> => {
@@ -207,7 +218,7 @@ export function cuaDriver(connection: CuaConnection): DesktopDriver {
   };
   const windows = async (pid?: number): Promise<CuaWindow[]> => {
     const rows = listOf(await call("list_windows", { on_screen_only: true, ...(pid ? { pid } : {}) }), "windows");
-    return rows.map(windowOf).sort((a, b) => a.z - b.z);
+    return rows.map(windowOf).sort((a, b) => b.z - a.z);
   };
   const frontTree = async (app: DesktopApp | null): Promise<CuaAnswer | null> => {
     if (!app?.pid) return null;
@@ -227,14 +238,13 @@ export function cuaDriver(connection: CuaConnection): DesktopDriver {
       const answer = await call("get_desktop_state", { max_image_dimension: MAX_IMAGE_DIMENSION });
       const image = (answer.content ?? []).find((item) => item.type === "image" && item.data);
       if (!image?.data) throw new Error(MESSAGE.noPicture);
-      const size = structured(await call("get_screen_size", {}));
       const body = structured(answer);
       const bytes = Buffer.from(image.data, "base64");
       picture = {
-        width: num(body.width) ?? num(body.image_width) ?? pngWidth(bytes) ?? MAX_IMAGE_DIMENSION,
-        height: num(body.height) ?? num(body.image_height) ?? pngHeight(bytes) ?? MAX_IMAGE_DIMENSION,
+        width: num(body.screenshot_width) ?? pngWidth(bytes) ?? MAX_IMAGE_DIMENSION,
+        height: num(body.screenshot_height) ?? pngHeight(bytes) ?? MAX_IMAGE_DIMENSION,
       };
-      screen = { width: num(size.width) ?? picture.width, height: num(size.height) ?? picture.height };
+      screen = { width: num(body.screen_width) ?? picture.width, height: num(body.screen_height) ?? picture.height };
       return {
         image: bytes,
         mime: image.mimeType === "image/jpeg" ? "image/jpeg" : "image/png",
@@ -247,7 +257,8 @@ export function cuaDriver(connection: CuaConnection): DesktopDriver {
     focus: async (): Promise<DesktopFocus> => {
       const app = await frontApp();
       const tree = await frontTree(app).catch(() => null);
-      return { app, secure: tree ? textOf(tree).includes(SECURE_FIELD_ROLE) : false };
+      const typingSecret = (await options.secureInput?.().catch(() => false)) === true;
+      return { app, secure: typingSecret || (tree !== null && PASSWORD_FIELD.test(textOf(tree))) };
     },
     appAt: async (x, y) => {
       const point = { x: (x * screen.width) / picture.width, y: (y * screen.height) / picture.height };
@@ -257,7 +268,8 @@ export function cuaDriver(connection: CuaConnection): DesktopDriver {
       const row = apps.find((app) => num(app.pid) === under.pid);
       return row ? appOf(row) : { name: "", bundleId: null, pid: under.pid };
     },
-    move: (x, y) => act("move_cursor", { x, y, scope: "desktop" }),
+    // move_cursor takes no delivery mode, and a desktop target is its own scope.
+    move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),
     click: (x, y, o) =>
       act("click", {
         x,
@@ -307,13 +319,6 @@ function driverEnv(): Record<string, string> {
   return env;
 }
 
-/** Start the CuaDriver.app daemon `cua-driver mcp` relays to, in the background. */
-async function startDaemon(): Promise<void> {
-  await promisify(execFile)("open", ["-n", "-g", "-a", "CuaDriver", "--args", "serve"], {
-    timeout: CONNECT_TIMEOUT_MS,
-  }).catch(() => {});
-}
-
 /** An MCP connection to a driver command, over the SDK's stdio transport. */
 async function openConnection(command: CuaCommand): Promise<CuaConnection> {
   const { Client } = (await import("@modelcontextprotocol/sdk/client/index.js")) as unknown as {
@@ -335,12 +340,18 @@ async function openConnection(command: CuaCommand): Promise<CuaConnection> {
       command: string;
       args: string[];
       env: Record<string, string>;
-      stderr: "ignore";
-    }) => unknown;
+      stderr: "pipe";
+    }) => { stderr: NodeJS.ReadableStream | null };
   };
   const client = new Client({ name: "genex-studio", version: "1" });
-  await client.connect(new StdioClientTransport({ ...command, env: driverEnv(), stderr: "ignore" }), {
-    timeout: CONNECT_TIMEOUT_MS,
+  const transport = new StdioClientTransport({ ...command, env: driverEnv(), stderr: "pipe" });
+  // The driver says why it could not start on stderr (its daemon never came up, a grant is missing).
+  let said = "";
+  transport.stderr?.on("data", (chunk: Buffer) => {
+    said = `${said}${chunk.toString()}`.slice(-MAX_STDERR_CHARS);
+  });
+  await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS }).catch((error: unknown) => {
+    throw new Error(said.trim() || errorMessage(error));
   });
   return {
     call: (tool, args) => client.callTool({ name: tool, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS }),
@@ -348,36 +359,42 @@ async function openConnection(command: CuaCommand): Promise<CuaConnection> {
   };
 }
 
-/** Whether the driver holds what it needs to see and move: both grants, or why not. */
+/**
+ * Whether the driver holds what it needs to see and move: both grants. Never asks macOS to prompt:
+ * the standalone daemon refuses a prompt from an untrusted host; the person grants CuaDriver itself.
+ */
 async function permitted(connection: CuaConnection): Promise<boolean> {
-  const answer = await connection.call("check_permissions", { prompt: true });
+  const answer = await connection.call("check_permissions", { prompt: false });
   const body = structured(answer);
   if (body.accessibility === undefined && body.screen_recording === undefined) return !answer.isError;
   return body.accessibility === true && body.screen_recording === true;
 }
 
 /**
- * Connect to a driver and check it can see and move: the local daemon is started once when the
- * first try finds it not running. Throws with the sentence the person reads when it cannot.
+ * Whether macOS is guarding typed input for a password field right now (secure event input): the
+ * console session then names the process holding it. This Mac only; a VM's is out of reach.
+ */
+export async function secureInputActive(): Promise<boolean> {
+  const { stdout } = await promisify(execFile)("ioreg", ["-l", "-w", "0", "-d", "1", "-k", "IOConsoleUsers"], {
+    timeout: SECURE_INPUT_TIMEOUT_MS,
+  });
+  return stdout.includes("kCGSSessionSecureInputPID");
+}
+
+/**
+ * Connect to a driver and check it can see and move. `cua-driver mcp` starts its own daemon and
+ * waits for it; when it cannot, its own words are the error. Throws with the sentence the person
+ * reads when it cannot be used. On this Mac, a focused password field is also read from macOS.
  */
 export async function connectCuaDriver(command: CuaCommand, options: { local: boolean }): Promise<DesktopDriver> {
-  const attempt = async () => {
-    const connection = await openConnection(command);
-    const ok = await permitted(connection).catch(async (error: unknown) => {
-      await connection.close();
-      throw error;
-    });
-    if (!ok) {
-      await connection.close();
-      throw new Error(MESSAGE.permissions);
-    }
-    return cuaDriver(connection);
-  };
-  try {
-    return await attempt();
-  } catch (error) {
-    if (!options.local || errorMessage(error) === MESSAGE.permissions) throw error;
-    await startDaemon();
-    return attempt();
+  const connection = await openConnection(command);
+  const ok = await permitted(connection).catch(async (error: unknown) => {
+    await connection.close();
+    throw error;
+  });
+  if (!ok) {
+    await connection.close();
+    throw new Error(MESSAGE.permissions);
   }
+  return cuaDriver(connection, options.local ? { secureInput: secureInputActive } : {});
 }

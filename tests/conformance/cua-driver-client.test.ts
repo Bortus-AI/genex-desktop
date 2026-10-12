@@ -5,12 +5,14 @@
  * a hostile table: a VM address can never become an ssh option or a shell word.
  */
 import assert from "node:assert/strict";
-import { chmod, mkdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   type CuaAnswer,
   type CuaConnection,
+  connectCuaDriver,
   cuaDriver,
   findCuaDriver,
   localDriverCommand,
@@ -28,11 +30,11 @@ const json = (value: unknown): CuaAnswer => ({ content: [{ type: "text", text: J
 function fakeConnection(overrides: Record<string, CuaAnswer> = {}) {
   const calls: Array<{ tool: string; args: Record<string, unknown> }> = [];
   const answers: Record<string, CuaAnswer> = {
+    // The shapes cua-driver 0.34 answers with (get_desktop_state.rs, list_apps.rs, list_windows.rs).
     get_desktop_state: {
       content: [{ type: "image", data: PIXEL.toString("base64"), mimeType: "image/png" }],
-      structuredContent: { width: 1366, height: 854 },
+      structuredContent: { screenshot_width: 1366, screenshot_height: 854, screen_width: 1512, screen_height: 945 },
     },
-    get_screen_size: json({ width: 1512, height: 945 }),
     list_apps: json({
       apps: [
         { name: "Notes", bundle_id: "com.apple.Notes", pid: 7, active: true },
@@ -41,8 +43,9 @@ function fakeConnection(overrides: Record<string, CuaAnswer> = {}) {
     }),
     list_windows: json({
       windows: [
-        { pid: 7, window_id: 70, z_index: 0, bounds: { x: 0, y: 0, width: 756, height: 945 } },
-        { pid: 3, window_id: 30, z_index: 1, bounds: { x: 0, y: 0, width: 1512, height: 945 } },
+        // The largest z_index is the frontmost window.
+        { pid: 3, window_id: 30, z_index: 0, bounds: { x: 0, y: 0, width: 1512, height: 945 } },
+        { pid: 7, window_id: 70, z_index: 1, bounds: { x: 0, y: 0, width: 756, height: 945 } },
       ],
     }),
     get_window_state: { content: [{ type: "text", text: "- AXWindow Notes\n  - AXTextArea body" }] },
@@ -59,7 +62,7 @@ function fakeConnection(overrides: Record<string, CuaAnswer> = {}) {
 }
 
 /** The driver's read-only tools, apart from the actions a test looks for. */
-const READS = new Set(["get_desktop_state", "get_screen_size", "list_apps", "list_windows", "get_window_state"]);
+const READS = new Set(["get_desktop_state", "list_apps", "list_windows", "get_window_state"]);
 
 describe("cua-driver as the desktop driver", () => {
   it("takes the whole display's picture, at the size the driver drew it", async () => {
@@ -84,6 +87,7 @@ describe("cua-driver as the desktop driver", () => {
     await driver.press(["return"]);
     await driver.scroll(5, 6, 0, -4);
     await driver.drag({ x: 1, y: 2 }, { x: 3, y: 4 }, "left");
+    await driver.move(7, 8);
     const desktop = { target: { kind: "desktop", display_id: "primary" }, delivery_mode: "foreground" };
     assert.deepEqual(fake.actions(), [
       { tool: "click", args: { ...desktop, x: 10, y: 20, button: "left", count: 2, modifier: ["cmd"] } },
@@ -92,6 +96,8 @@ describe("cua-driver as the desktop driver", () => {
       { tool: "press_key", args: { ...desktop, key: "return" } },
       { tool: "scroll", args: { ...desktop, x: 5, y: 6, direction: "up", amount: 4 } },
       { tool: "drag", args: { ...desktop, from_x: 1, from_y: 2, to_x: 3, to_y: 4, button: "left" } },
+      // move_cursor refuses a delivery mode and a legacy scope beside a target (move_cursor.rs, action_target.rs).
+      { tool: "move_cursor", args: { target: desktop.target, x: 7, y: 8 } },
     ]);
   });
 
@@ -103,10 +109,18 @@ describe("cua-driver as the desktop driver", () => {
     assert.equal((await driver.focus()).secure, false);
     assert.equal((await driver.appAt?.(100, 100))?.name, "Notes", "the front window holds the left half");
     assert.equal((await driver.appAt?.(1200, 100))?.name, "Finder", "the right half is Finder's window behind it");
+    // cua prints a field's role, never its secure subrole: a field labelled as a password counts as one.
     const login = fakeConnection({
-      get_window_state: { content: [{ type: "text", text: "- AXWindow Sign in\n  - AXSecureTextField Password" }] },
+      get_window_state: { content: [{ type: "text", text: '- AXWindow Sign in\n  - [3] AXTextField "Password"' }] },
     });
     assert.equal((await cuaDriver(login.connection).focus()).secure, true);
+    const russian = fakeConnection({
+      get_window_state: { content: [{ type: "text", text: '- AXWindow Вход\n  - [3] AXTextField "Пароль"' }] },
+    });
+    assert.equal((await cuaDriver(russian.connection).focus()).secure, true);
+    // On this Mac, macOS's own secure input says so even when the tree does not.
+    const guarded = cuaDriver(fakeConnection().connection, { secureInput: async () => true });
+    assert.equal((await guarded.focus()).secure, true);
   });
 
   it("says why a call failed, with the driver's own words", async () => {
@@ -150,5 +164,62 @@ describe("cua-driver as the desktop driver", () => {
       "",
     ];
     for (const address of hostile) assert.equal(vmDriverCommand(address), null, address);
+  });
+});
+
+describe("cua-driver over a real MCP connection (a stand-in driver process)", () => {
+  const FAKE = fileURLToPath(new URL("../fixtures/fake-cua-driver.mjs", import.meta.url));
+
+  it("connects, checks its grants, and carries a screenshot and a click across stdio", async () => {
+    const log = path.join(await tmpDir("cua-real-"), "calls.jsonl");
+    const driver = await connectCuaDriver({ command: process.execPath, args: [FAKE, "--log", log] }, { local: false });
+    try {
+      const shot = await driver.screenshot();
+      assert.deepEqual([shot.width, shot.height], [1366, 854]);
+      assert.equal(shot.image.subarray(1, 4).toString(), "PNG");
+      assert.deepEqual((await driver.focus()).app?.bundleId, "com.apple.Notes");
+      await driver.click(12, 34, { button: "left", count: 1, modifiers: [] });
+    } finally {
+      await driver.close();
+    }
+    const calls = (await readFile(log, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { name: string; args: Record<string, unknown> });
+    assert.equal(calls[0]?.name, "check_permissions", "the grants are checked before anything else");
+    const click = calls.find((call) => call.name === "click");
+    assert.deepEqual(click?.args, {
+      target: { kind: "desktop", display_id: "primary" },
+      delivery_mode: "foreground",
+      x: 12,
+      y: 34,
+      button: "left",
+      count: 1,
+    });
+  });
+
+  it("asks for the grants without a macOS prompt, which the standalone daemon refuses", async () => {
+    const log = path.join(await tmpDir("cua-real-"), "calls.jsonl");
+    const driver = await connectCuaDriver({ command: process.execPath, args: [FAKE, "--log", log] }, { local: false });
+    await driver.close();
+    const [first] = (await readFile(log, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(first, { name: "check_permissions", args: { prompt: false } });
+  });
+
+  it("says the driver's own reason when it cannot start", async () => {
+    await assert.rejects(
+      connectCuaDriver({ command: process.execPath, args: [FAKE, "--fail-start"] }, { local: false }),
+      /daemon did not appear/,
+    );
+  });
+
+  it("refuses to start when the driver lacks Accessibility or Screen Recording, and says how to fix it", async () => {
+    await assert.rejects(
+      connectCuaDriver({ command: process.execPath, args: [FAKE, "--denied"] }, { local: false }),
+      /needs Accessibility and Screen Recording/,
+    );
   });
 });

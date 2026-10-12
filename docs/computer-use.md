@@ -112,7 +112,8 @@ conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
 driven by [cua-driver](https://github.com/trycua/cua) (MIT): `cua-driver mcp` relays to the
 CuaDriver.app daemon, which holds the Accessibility and Screen Recording grants; a VM's driver is
-reached as `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest
+reached as `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest; `cua-driver mcp`
+starts its own daemon, and the grants are checked without a macOS prompt
 ([`cua-driver-client.ts`](../src/substrate/cua-driver-client.ts)). Every action targets the whole
 display in the foreground, because background clicks into a canvas are rerouted and reported as
 success (cua #4350). The driver is a host helper started with fixed arguments and a minimal
@@ -127,7 +128,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   session's yes covers every app.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
-  password field (`AXSecureTextField` in front). A refusal ends the plan and its reason is the answer.
+  password field (macOS's secure input on this Mac, or a field labelled as a password in the front
+window's tree). A refusal ends the plan and its reason is the answer.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘⎋ (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in

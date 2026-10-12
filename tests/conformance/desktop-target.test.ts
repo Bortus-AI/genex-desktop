@@ -101,6 +101,10 @@ describe("desktop target", () => {
     assert.equal(driverKey("KeyA"), "a");
     assert.equal(driverKey("Enter"), "return");
     assert.equal(driverKey("MetaLeft"), "cmd");
+    // cua's "delete" is Backspace; forward delete and punctuation have their own names (keyboard.rs).
+    assert.equal(driverKey("Delete"), "forward_delete");
+    assert.equal(driverKey("BracketLeft"), "[");
+    assert.equal(driverKey("ShiftRight"), "shift");
   });
 
   const hostile: Array<{
