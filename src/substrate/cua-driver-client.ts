@@ -222,24 +222,15 @@ function scrollOf(dx: number, dy: number): { direction: string; amount: number }
   return { direction: delta < 0 ? back : forth, amount };
 }
 
+/** A tool call that throws the driver's own words when it answers with an error. */
+type CuaCall = (tool: string, args: Record<string, unknown>) => Promise<CuaAnswer>;
+
 /**
- * The driver over one connection: each studio call as the driver's tools. `screenshot` remembers
- * the picture's size and the screen's, so `appAt` can find the window under a picture's point.
+ * What the driver says about the desktop: the apps (one slow listing serves the calls of one
+ * action), the on-screen windows front first — never the driver's own cursor overlay, which no click
+ * is meant for — and the front window's accessibility tree.
  */
-export function cuaDriver(
-  connection: CuaConnection,
-  options: { secureInput?: () => Promise<boolean> } = {},
-): DesktopDriver {
-  let picture = { width: 1, height: 1 };
-  let screen = { width: 1, height: 1 };
-  const call = async (tool: string, args: Record<string, unknown>): Promise<CuaAnswer> => {
-    const answer = await connection.call(tool, args);
-    if (answer.isError) throw new Error(MESSAGE.failed(tool, textOf(answer) || "an error"));
-    return answer;
-  };
-  const act = (tool: string, args: Record<string, unknown>) =>
-    call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
-  // list_apps walks every installed app (seconds): one listing serves the calls of one action.
+function desktopReads(call: CuaCall) {
   let apps: { at: number; rows: Promise<Record<string, unknown>[]> } | null = null;
   const appRows = (): Promise<Record<string, unknown>[]> => {
     if (!apps || Date.now() - apps.at > APPS_TTL_MS) {
@@ -251,11 +242,6 @@ export function cuaDriver(
     }
     return apps.rows;
   };
-  const frontApp = async (): Promise<DesktopApp | null> => {
-    const front = (await appRows()).find((row) => row.active === true);
-    return front ? appOf(front) : null;
-  };
-  /** On-screen windows, front first — never the driver's own overlay, which no click is meant for. */
   const windows = async (pid?: number): Promise<CuaWindow[]> => {
     const rows = listOf(await call("list_windows", { on_screen_only: true, ...(pid ? { pid } : {}) }), "windows");
     const driverPids = new Set(
@@ -267,18 +253,46 @@ export function cuaDriver(
       .filter((window) => !ours(window))
       .sort((a, b) => b.z - a.z);
   };
-  const frontTree = async (app: DesktopApp | null): Promise<CuaAnswer | null> => {
-    if (!app?.pid) return null;
-    const [front] = await windows(app.pid);
-    if (!front?.windowId) return null;
-    return call("get_window_state", {
-      pid: app.pid,
-      window_id: front.windowId,
-      include_screenshot: false,
-      include_accessibility_tree: true,
-      max_elements: MAX_ELEMENTS,
-    });
+  return {
+    appRows,
+    windows,
+    frontApp: async (): Promise<DesktopApp | null> => {
+      const front = (await appRows()).find((row) => row.active === true);
+      return front ? appOf(front) : null;
+    },
+    frontTree: async (app: DesktopApp | null): Promise<CuaAnswer | null> => {
+      if (!app?.pid) return null;
+      const [front] = await windows(app.pid);
+      if (!front?.windowId) return null;
+      return call("get_window_state", {
+        pid: app.pid,
+        window_id: front.windowId,
+        include_screenshot: false,
+        include_accessibility_tree: true,
+        max_elements: MAX_ELEMENTS,
+      });
+    },
   };
+}
+
+/**
+ * The driver over one connection: each studio call as the driver's tools. `screenshot` remembers
+ * the picture's size and the screen's, so `appAt` can find the window under a picture's point.
+ */
+export function cuaDriver(
+  connection: CuaConnection,
+  options: { secureInput?: () => Promise<boolean> } = {},
+): DesktopDriver {
+  let picture = { width: 1, height: 1 };
+  let screen = { width: 1, height: 1 };
+  const call: CuaCall = async (tool, args) => {
+    const answer = await connection.call(tool, args);
+    if (answer.isError) throw new Error(MESSAGE.failed(tool, textOf(answer) || "an error"));
+    return answer;
+  };
+  const act = (tool: string, args: Record<string, unknown>) =>
+    call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
+  const { appRows, windows, frontApp, frontTree } = desktopReads(call);
   return {
     screenshot: async (): Promise<DesktopShot> => {
       const answer = await call("get_desktop_state", { max_image_dimension: MAX_IMAGE_DIMENSION });
