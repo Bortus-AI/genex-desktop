@@ -52,6 +52,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:hardware": "hardware",
   "studio:game.create": "createGame",
   "studio:game.name": "nameGame",
+  "studio:backdrop.make": "makeBackdrop",
   "studio:game.location.pick": "pickGameLocation",
   "studio:games-root.choose": "chooseGamesRoot",
   "studio:game.update": "updateGame",
@@ -241,6 +242,7 @@ export interface StudioInvokePayloads {
   "studio:hardware": undefined;
   "studio:game.create": { title: string } & NonNullable<Arg<"createGame", 1>>;
   "studio:game.name": Arg<"nameGame", 0>;
+  "studio:backdrop.make": Arg<"makeBackdrop", 0>;
   "studio:game.location.pick": undefined;
   "studio:games-root.choose": undefined;
   "studio:game.update": { project: string; patch: Arg<"updateGame", 1> };

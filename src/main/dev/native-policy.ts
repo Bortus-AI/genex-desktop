@@ -159,6 +159,8 @@ const FIXTURE_SAFE = [
   "studio:game.create",
   // Naming a new game is one completion on the picked engine, like a chat message (`studio:send`).
   "studio:game.name",
+  // Making home's background is one completion on the picked engine too.
+  "studio:backdrop.make",
   "studio:game.update",
   "studio:game.remove",
   "studio:game.references",

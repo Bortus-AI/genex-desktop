@@ -13,6 +13,7 @@ import type { McpConnectorView, McpTestResult, McpToolSummary } from "./mcp.ts";
 import type { McpConnectorDraft } from "./mcp-import.ts";
 import type { ConversationRecord, EventEnvelope, SnapshotRecord } from "./event-log.ts";
 import type { EngineDescriptor } from "./engine-descriptor.ts";
+import type { BackdropShaderRequest, BackdropShaderResult } from "./backdrop-shader.ts";
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
 import type { LoopRunReview } from "./run-review.ts";
@@ -276,6 +277,8 @@ export interface StudioApi {
   createGame(title: string, options?: { parent?: string; provisional?: boolean }): Promise<GameProject>;
   /** A name for a game started from its first request, by the model picked for it; never fails for want of a model. */
   nameGame(request: GameNameRequest): Promise<GameName>;
+  /** A live background for home from a description, by the model picked on home (`core/backdrop-generation.ts`). */
+  makeBackdrop(request: BackdropShaderRequest): Promise<BackdropShaderResult>;
   /**
    * Create game's location: the native folder dialog, answered with the folder checked as
    * creating there will be. Resolves to null when cancelled; a refused folder rejects with why.

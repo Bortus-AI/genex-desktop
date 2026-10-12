@@ -309,13 +309,34 @@ Medium line (“Everything you need to ship a game”) over the game composer (�
 make?”). Under it sit a quiet mono folder chip (Save the new game in: the games folder or Another
 folder…, then Open a folder…) and, at the right, a ghost **Suggest prompt** (dice, mono 12px ink-3,
 like the chip) that puts one of 100 ideas in an empty box; it steps aside while the
-user writes their own. Behind them, an experimental background (`home-backdrop/`): a picture
-(four bundled, or up to eight the user adds, kept 1600px WebP in IndexedDB) drawn once on a
-canvas as dots, lines or ASCII (lines over the City picture by default) in a colour per theme
-(#171717 dark, #e8e8e8 light, or the theme's ink), at the window's size and centred on the window, so the sidebar only covers or
-uncovers it; a window resize redraws once it settles. Only the chips under the composer carry a
-page-coloured halo. Home's top-right image button opens every setting in a 380px popover; Settings
-→ Appearance repeats them under a preview of home. Entering a game crossfades it away. An empty
+user writes their own. Behind them, an experimental background (`home-backdrop/`) with a source
+and an effect over it. The source is a picture (four bundled, or up to eight the user adds, kept
+1600px WebP in IndexedDB) or a live background: a WGSL shader drawn every frame through vgpu on
+WebGPU (Thermal, Datamosh, Phosphor, VHS, Flare, Pixel sort, or one the user's model writes with
+Make your own, kept on this Mac). Make your own asks for a filter over the picture (the default)
+or a scene of its own, with a few ideas to start from; the model sees one of the bundled shaders
+as its standard, its first shader goes behind home at once, and then the model is shown it drawn
+(three moments, and what stood out: empty, still, a busy middle, slow) and its better version
+takes the place unless it fails or comes out emptier. Home starts on fine lines over Datamosh on the City picture,
+faint (15% strength, drawn at half that on a dark page, where light marks read twice as strong)
+and slow (speed 0.35), in white and a pale steel blue (#a9bad6) on either page
+until colours are picked (Use theme takes the theme's ink and accent); only a colour too dark to
+show is lifted, in its own hue. They draw into an HDR frame whose highlights bloom; one that reads its
+last frame keeps trails or state. Choosing another keeps every setting but the colours. The effect
+(lines, dots or ASCII, all fine: 462 columns, 1.5pt dots) draws a picture once on a canvas, and over
+a live background on the GPU every frame, reading the scene as its distance from the page so its
+levels mean the same in both themes; choosing one puts its tuned look in place (strength,
+speed, size, glow and how the scene is read into ink: lines faint and grainy, dots and characters
+a cleaner silhouette). A picture is drawn at the window's size and centred
+on the window, so the sidebar only covers or uncovers it; a window resize redraws once it
+settles; a live one fills home; it keeps one clock while sliders move, lets trails in old colours go once
+picked colours hold, and draws nothing out of sight; the welcome's last screen readies it
+(GPU, shader, picture, every pass drawn once off screen), so home opens on it. Only the chips under the composer carry a page-coloured halo.
+Home's top-right image button (until it is first opened, a light sweeps across its picture every
+four seconds) opens every setting in a 384px popover: tiles that show their look
+(Off, Picture, the live ones, which move under the pointer, and Make your own), Effect tiles
+(marks coarsened to read at tile size), then the chosen look's picture, colours and every slider
+it has, all shown; Settings → Appearance repeats them under a preview of home. Entering a game crossfades it away. An empty
 library adds no sidebar text. Its first message makes
 the game: in one view transition the composer glides into the chat's place and the stage slides
 in with the welcome's Planner (25% smaller, written once, then floating); the header and a
