@@ -7,12 +7,24 @@
  * what the target can do, and a judge weighs evidence by the route its input took.
  */
 
-/** How the studio runs and reaches a game: its own browser window, or a process speaking the Play Protocol. */
+/**
+ * What the computer drives and how the studio reaches it: a game in its own browser window or as a
+ * process speaking the Play Protocol, or — from outside any game — the person's desktop or a
+ * virtual machine, through the desktop driver (cua-driver).
+ */
 export const TargetRuntime = {
   Browser: "browser",
   Bridge: "bridge",
+  Desktop: "desktop",
+  Vm: "vm",
 } as const;
 export type TargetRuntime = (typeof TargetRuntime)[keyof typeof TargetRuntime];
+
+/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+export type GameRuntime = typeof TargetRuntime.Browser | typeof TargetRuntime.Bridge;
+
+/** The runtimes a game may declare. */
+export const GAME_RUNTIMES: readonly GameRuntime[] = [TargetRuntime.Browser, TargetRuntime.Bridge];
 
 /** How far the studio can hold the target's time still. */
 export const ClockLevel = {
@@ -109,6 +121,27 @@ export const BROWSER_CAPABILITIES: TargetCapabilities = {
   surfaces: true,
   actions: false,
 };
+
+/**
+ * The person's desktop, or a VM's, driven from outside: clicks and keys anywhere, the accessibility
+ * tree of the app in front, and no clock, seed, camera or console — nothing can stand it still.
+ */
+export const DESKTOP_CAPABILITIES: TargetCapabilities = {
+  runtime: TargetRuntime.Desktop,
+  pointer: PointerLevel.Absolute,
+  clock: ClockLevel.None,
+  state: StateLevel.A11y,
+  seed: false,
+  reload: false,
+  cameras: false,
+  console: false,
+  zoom: false,
+  surfaces: false,
+  actions: false,
+};
+
+/** A VM's screen: the desktop's abilities, reached inside the machine. */
+export const VM_CAPABILITIES: TargetCapabilities = { ...DESKTOP_CAPABILITIES, runtime: TargetRuntime.Vm };
 
 /** Can the target's time be stood still between moves? */
 export function canPause(caps: Pick<TargetCapabilities, "clock">): boolean {

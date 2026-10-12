@@ -81,6 +81,7 @@ export const HostMethod = {
   PreviewDiff: "preview.diff",
   PreviewInput: "preview.input",
   PreviewComputer: "preview.computer",
+  DesktopComputer: "desktop.computer",
   PreviewConsole: "preview.console",
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",

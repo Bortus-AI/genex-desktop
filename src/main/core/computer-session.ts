@@ -100,6 +100,8 @@ export interface ComputerSessionOptions {
   offer?: (caps: TargetCapabilities) => TargetCapabilities;
   /** Whether answers carry the game's own state after a move; a judge's never do. */
   showState?: boolean;
+  /** The tool's name the session answers to: `computer` unless it drives the desktop. */
+  toolName?: string;
   /** Told once, when the goal is reached: the trace that shows it and the goal (the host vouches for it). */
   onReached?: (tracePath: string, questId: string) => void;
 }
@@ -763,7 +765,7 @@ export function computerSession<T extends ComputerTarget>(
     return answer;
   };
   const run = async (name: string, args: Record<string, unknown>): Promise<LiveToolResult> => {
-    if (name !== COMPUTER_TOOL_NAME) return `unknown tool ${name}`;
+    if (name !== (options.toolName ?? COMPUTER_TOOL_NAME)) return `unknown tool ${name}`;
     const parsed = parseComputerArgs(args);
     if (!parsed.ok) return parsed.error;
     const request = parsed.request;

@@ -1,0 +1,383 @@
+/**
+ * cua-driver (trycua/cua, MIT) as the studio's desktop driver. The driver speaks MCP over stdio
+ * (`cua-driver mcp`); on this Mac it relays to the CuaDriver.app daemon, which holds the
+ * Accessibility and Screen Recording grants. A VM is reached the same way, over SSH into the guest
+ * (`ssh -T lume@<ip> cua-driver mcp`), so one client drives both.
+ *
+ * Every action targets the whole display (`{kind: "desktop"}`) in the foreground: the real pointer
+ * and keyboard, the way a person would, because background clicks into a canvas are rerouted and
+ * reported as success (cua #4350). Pointer coordinates are pixels of the last `get_desktop_state`
+ * picture, which the driver maps back to the screen itself.
+ *
+ * The driver is a host helper, not an agent or a game: it is started with a fixed argument list and
+ * a minimal environment, outside the ProcessSandbox, which would deny it the screen it exists to see.
+ */
+import { constants } from "node:fs";
+import { access } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { SECOND_MS } from "../shared/duration.ts";
+import { errorMessage } from "../shared/errors.ts";
+import type { DesktopApp, DesktopDriver, DesktopFocus, DesktopShot } from "./desktop-driver.ts";
+
+/** The longest side of a desktop picture the model is shown: the driver's own default on macOS. */
+const MAX_IMAGE_DIMENSION = 1366;
+/** How long one driver call may take. */
+const CALL_TIMEOUT_MS = 30 * SECOND_MS;
+/** How long the driver has to start and answer its first call. */
+const CONNECT_TIMEOUT_MS = 15 * SECOND_MS;
+/** The most wheel notches one scroll sends, and how many a scroll that names none sends. */
+const MAX_SCROLL_NOTCHES = 50;
+const DEFAULT_SCROLL_NOTCHES = 3;
+/** How many accessibility elements a state read brings back. */
+const MAX_ELEMENTS = 250;
+/** The accessibility role of a password field. */
+const SECURE_FIELD_ROLE = "AXSecureTextField";
+/** Where the driver's installer puts its command, and where a package manager might. */
+const DRIVER_PLACES = [".local/bin/cua-driver", "/opt/homebrew/bin/cua-driver", "/usr/local/bin/cua-driver"] as const;
+/** A VM's SSH address: a user and a host, nothing a shell or ssh could read as an option. */
+const VM_ADDRESS = /^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}$/;
+/** Where the guest image keeps the driver. */
+const VM_DRIVER_PATH = "/Users/lume/.local/bin/cua-driver";
+
+/** The whole primary display, the target of every action. */
+const DESKTOP = { kind: "desktop", display_id: "primary" } as const;
+
+/** What the person reads when the driver cannot be used. */
+const MESSAGE = {
+  permissions:
+    "cua-driver needs Accessibility and Screen Recording: allow CuaDriver in System Settings → Privacy & Security, then try again",
+  noPicture: "cua-driver answered without a picture of the screen",
+  failed: (tool: string, why: string) => `cua-driver ${tool} failed: ${why}`,
+} as const;
+
+/** One MCP content item, as the driver returns it. */
+interface CuaContent {
+  type: string;
+  text?: string;
+  data?: string;
+  mimeType?: string;
+}
+
+/** One tool call's answer. */
+export interface CuaAnswer {
+  content?: CuaContent[];
+  structuredContent?: unknown;
+  isError?: boolean;
+}
+
+/** A tool call over the driver's MCP connection, and how to close it. */
+export interface CuaConnection {
+  call(tool: string, args: Record<string, unknown>): Promise<CuaAnswer>;
+  close(): Promise<void>;
+}
+
+/** The command line that starts a driver: this Mac's, or a VM's over SSH. */
+export interface CuaCommand {
+  command: string;
+  args: string[];
+}
+
+/** The local driver's command, once found. */
+export function localDriverCommand(binary: string): CuaCommand {
+  return { command: binary, args: ["mcp"] };
+}
+
+/** A VM's driver over SSH, when its address is a plain `user@host`; null otherwise. */
+export function vmDriverCommand(address: string): CuaCommand | null {
+  if (!VM_ADDRESS.test(address)) return null;
+  return { command: "ssh", args: ["-T", "-o", "BatchMode=yes", "--", address, VM_DRIVER_PATH, "mcp"] };
+}
+
+/** The installed driver: the installer's wrapper, or one on a usual path; null when there is none. */
+export async function findCuaDriver(home: string = os.homedir()): Promise<string | null> {
+  for (const place of DRIVER_PLACES) {
+    const full = path.isAbsolute(place) ? place : path.join(home, place);
+    const runnable = await access(full, constants.X_OK).then(
+      () => true,
+      () => false,
+    );
+    if (runnable) return full;
+  }
+  return null;
+}
+
+/** The answer as one object: its structured content, or its text read as JSON. */
+function structured(answer: CuaAnswer): Record<string, unknown> {
+  const own = answer.structuredContent;
+  if (own && typeof own === "object" && !Array.isArray(own)) return own as Record<string, unknown>;
+  for (const item of answer.content ?? []) {
+    if (item.type !== "text" || !item.text) continue;
+    try {
+      const parsed: unknown = JSON.parse(item.text);
+      if (parsed && typeof parsed === "object")
+        return (Array.isArray(parsed) ? { items: parsed } : parsed) as Record<string, unknown>;
+    } catch {
+      // Prose, not JSON: the caller reads the text itself.
+    }
+  }
+  return {};
+}
+
+/** The answer's text, joined. */
+function textOf(answer: CuaAnswer): string {
+  return (answer.content ?? [])
+    .filter((item) => item.type === "text" && item.text)
+    .map((item) => item.text)
+    .join("\n");
+}
+
+/** A list field of an answer, whatever it is called. */
+function listOf(answer: CuaAnswer, ...names: string[]): Record<string, unknown>[] {
+  const body = structured(answer);
+  for (const name of [...names, "items"]) {
+    const value = body[name];
+    if (Array.isArray(value))
+      return value.filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === "object");
+  }
+  return [];
+}
+
+/** A number, or null. */
+function num(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** An app as the studio names it, from a `list_apps` row. */
+function appOf(row: Record<string, unknown>): DesktopApp {
+  return {
+    name: typeof row.name === "string" ? row.name : "",
+    bundleId: typeof row.bundle_id === "string" ? row.bundle_id : null,
+    pid: num(row.pid),
+  };
+}
+
+/** A window from a `list_windows` row: its owner and where it is on screen, in points. */
+interface CuaWindow {
+  pid: number | null;
+  windowId: number | null;
+  z: number;
+  bounds: { x: number; y: number; width: number; height: number } | null;
+}
+
+function windowOf(row: Record<string, unknown>, index: number): CuaWindow {
+  const b = row.bounds && typeof row.bounds === "object" ? (row.bounds as Record<string, unknown>) : null;
+  const bounds =
+    b && num(b.x) !== null && num(b.y) !== null && num(b.width) !== null && num(b.height) !== null
+      ? { x: b.x as number, y: b.y as number, width: b.width as number, height: b.height as number }
+      : null;
+  return { pid: num(row.pid), windowId: num(row.window_id), z: num(row.z_index) ?? index, bounds };
+}
+
+/** Whether a window holds a point. */
+function holds(window: CuaWindow, x: number, y: number): boolean {
+  const b = window.bounds;
+  return b !== null && x >= b.x && y >= b.y && x < b.x + b.width && y < b.y + b.height;
+}
+
+/** A scroll as the driver takes it: a direction and a number of notches. */
+function scrollOf(dx: number, dy: number): { direction: string; amount: number } {
+  const vertical = Math.abs(dy) >= Math.abs(dx);
+  const delta = vertical ? dy : dx;
+  const [back, forth] = vertical ? ["up", "down"] : ["left", "right"];
+  const amount = Math.max(1, Math.min(MAX_SCROLL_NOTCHES, Math.round(Math.abs(delta)) || DEFAULT_SCROLL_NOTCHES));
+  return { direction: delta < 0 ? back : forth, amount };
+}
+
+/**
+ * The driver over one connection: each studio call as the driver's tools. `screenshot` remembers
+ * the picture's size and the screen's, so `appAt` can find the window under a picture's point.
+ */
+export function cuaDriver(connection: CuaConnection): DesktopDriver {
+  let picture = { width: 1, height: 1 };
+  let screen = { width: 1, height: 1 };
+  const call = async (tool: string, args: Record<string, unknown>): Promise<CuaAnswer> => {
+    const answer = await connection.call(tool, args);
+    if (answer.isError) throw new Error(MESSAGE.failed(tool, textOf(answer) || "an error"));
+    return answer;
+  };
+  const act = (tool: string, args: Record<string, unknown>) =>
+    call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
+  const frontApp = async (): Promise<DesktopApp | null> => {
+    const apps = listOf(await call("list_apps", {}), "apps");
+    const front = apps.find((row) => row.active === true);
+    return front ? appOf(front) : null;
+  };
+  const windows = async (pid?: number): Promise<CuaWindow[]> => {
+    const rows = listOf(await call("list_windows", { on_screen_only: true, ...(pid ? { pid } : {}) }), "windows");
+    return rows.map(windowOf).sort((a, b) => a.z - b.z);
+  };
+  const frontTree = async (app: DesktopApp | null): Promise<CuaAnswer | null> => {
+    if (!app?.pid) return null;
+    const [front] = await windows(app.pid);
+    if (!front?.windowId) return null;
+    return call("get_window_state", {
+      pid: app.pid,
+      window_id: front.windowId,
+      include_screenshot: false,
+      include_accessibility_tree: true,
+      tree_format: "markdown",
+      max_elements: MAX_ELEMENTS,
+    });
+  };
+  return {
+    screenshot: async (): Promise<DesktopShot> => {
+      const answer = await call("get_desktop_state", { max_image_dimension: MAX_IMAGE_DIMENSION });
+      const image = (answer.content ?? []).find((item) => item.type === "image" && item.data);
+      if (!image?.data) throw new Error(MESSAGE.noPicture);
+      const size = structured(await call("get_screen_size", {}));
+      const body = structured(answer);
+      const bytes = Buffer.from(image.data, "base64");
+      picture = {
+        width: num(body.width) ?? num(body.image_width) ?? pngWidth(bytes) ?? MAX_IMAGE_DIMENSION,
+        height: num(body.height) ?? num(body.image_height) ?? pngHeight(bytes) ?? MAX_IMAGE_DIMENSION,
+      };
+      screen = { width: num(size.width) ?? picture.width, height: num(size.height) ?? picture.height };
+      return {
+        image: bytes,
+        mime: image.mimeType === "image/jpeg" ? "image/jpeg" : "image/png",
+        width: picture.width,
+        height: picture.height,
+        // The driver maps the picture's pixels back to the screen: the picture is the space actions use.
+        screen: { ...picture },
+      };
+    },
+    focus: async (): Promise<DesktopFocus> => {
+      const app = await frontApp();
+      const tree = await frontTree(app).catch(() => null);
+      return { app, secure: tree ? textOf(tree).includes(SECURE_FIELD_ROLE) : false };
+    },
+    appAt: async (x, y) => {
+      const point = { x: (x * screen.width) / picture.width, y: (y * screen.height) / picture.height };
+      const under = (await windows()).find((window) => holds(window, point.x, point.y));
+      if (!under?.pid) return null;
+      const apps = listOf(await call("list_apps", {}), "apps");
+      const row = apps.find((app) => num(app.pid) === under.pid);
+      return row ? appOf(row) : { name: "", bundleId: null, pid: under.pid };
+    },
+    move: (x, y) => act("move_cursor", { x, y, scope: "desktop" }),
+    click: (x, y, o) =>
+      act("click", {
+        x,
+        y,
+        button: o.button,
+        count: o.count,
+        ...(o.modifiers.length ? { modifier: o.modifiers } : {}),
+      }),
+    mouse: () =>
+      Promise.reject(
+        new Error(MESSAGE.failed("mouse", "the desktop driver presses and releases only as a click or a drag")),
+      ),
+    drag: (from, to, button) => act("drag", { from_x: from.x, from_y: from.y, to_x: to.x, to_y: to.y, button }),
+    scroll: (x, y, dx, dy) => act("scroll", { x, y, ...scrollOf(dx, dy) }),
+    type: (text) => act("type_text", { text }),
+    press: (keys) => {
+      const key = keys.at(-1);
+      if (!key) return Promise.resolve();
+      return act("press_key", { key, ...(keys.length > 1 ? { modifiers: keys.slice(0, -1) } : {}) });
+    },
+    accessibility: async () => {
+      const app = await frontApp();
+      const tree = await frontTree(app);
+      return tree ? textOf(tree) : null;
+    },
+    close: () => connection.close(),
+  };
+}
+
+/** A PNG's width from its header, or null for anything else. */
+function pngWidth(bytes: Buffer): number | null {
+  return bytes.length > 24 && bytes.readUInt32BE(12) === 0x49484452 ? bytes.readUInt32BE(16) : null;
+}
+
+/** A PNG's height from its header, or null for anything else. */
+function pngHeight(bytes: Buffer): number | null {
+  return bytes.length > 24 && bytes.readUInt32BE(12) === 0x49484452 ? bytes.readUInt32BE(20) : null;
+}
+
+/** The driver's environment: enough to run, nothing of the studio's own (no API key reaches it). */
+function driverEnv(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const name of ["PATH", "HOME", "TMPDIR", "LANG", "USER", "LOGNAME"]) {
+    const value = process.env[name];
+    if (value) env[name] = value;
+  }
+  return env;
+}
+
+/** Start the CuaDriver.app daemon `cua-driver mcp` relays to, in the background. */
+async function startDaemon(): Promise<void> {
+  await promisify(execFile)("open", ["-n", "-g", "-a", "CuaDriver", "--args", "serve"], {
+    timeout: CONNECT_TIMEOUT_MS,
+  }).catch(() => {});
+}
+
+/** An MCP connection to a driver command, over the SDK's stdio transport. */
+async function openConnection(command: CuaCommand): Promise<CuaConnection> {
+  const { Client } = (await import("@modelcontextprotocol/sdk/client/index.js")) as unknown as {
+    Client: new (info: {
+      name: string;
+      version: string;
+    }) => {
+      connect(transport: unknown, options?: { timeout?: number }): Promise<void>;
+      callTool(
+        params: { name: string; arguments: Record<string, unknown> },
+        schema?: unknown,
+        options?: { timeout?: number },
+      ): Promise<CuaAnswer>;
+      close(): Promise<void>;
+    };
+  };
+  const { StdioClientTransport } = (await import("@modelcontextprotocol/sdk/client/stdio.js")) as unknown as {
+    StdioClientTransport: new (options: {
+      command: string;
+      args: string[];
+      env: Record<string, string>;
+      stderr: "ignore";
+    }) => unknown;
+  };
+  const client = new Client({ name: "genex-studio", version: "1" });
+  await client.connect(new StdioClientTransport({ ...command, env: driverEnv(), stderr: "ignore" }), {
+    timeout: CONNECT_TIMEOUT_MS,
+  });
+  return {
+    call: (tool, args) => client.callTool({ name: tool, arguments: args }, undefined, { timeout: CALL_TIMEOUT_MS }),
+    close: () => client.close().catch(() => {}),
+  };
+}
+
+/** Whether the driver holds what it needs to see and move: both grants, or why not. */
+async function permitted(connection: CuaConnection): Promise<boolean> {
+  const answer = await connection.call("check_permissions", { prompt: true });
+  const body = structured(answer);
+  if (body.accessibility === undefined && body.screen_recording === undefined) return !answer.isError;
+  return body.accessibility === true && body.screen_recording === true;
+}
+
+/**
+ * Connect to a driver and check it can see and move: the local daemon is started once when the
+ * first try finds it not running. Throws with the sentence the person reads when it cannot.
+ */
+export async function connectCuaDriver(command: CuaCommand, options: { local: boolean }): Promise<DesktopDriver> {
+  const attempt = async () => {
+    const connection = await openConnection(command);
+    const ok = await permitted(connection).catch(async (error: unknown) => {
+      await connection.close();
+      throw error;
+    });
+    if (!ok) {
+      await connection.close();
+      throw new Error(MESSAGE.permissions);
+    }
+    return cuaDriver(connection);
+  };
+  try {
+    return await attempt();
+  } catch (error) {
+    if (!options.local || errorMessage(error) === MESSAGE.permissions) throw error;
+    await startDaemon();
+    return attempt();
+  }
+}

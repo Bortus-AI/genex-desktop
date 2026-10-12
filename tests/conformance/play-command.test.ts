@@ -50,9 +50,11 @@ describe("studio.json — a bridge game's runtime and play command", () => {
     assert.equal(shape.entry, TEMPLATE_SHAPE.entry);
   });
 
-  const unusableRuntimes: unknown[] = ["vm", "", 3, null, ["bridge"], { bridge: true }];
+  // The desktop and a VM are runtimes the studio knows, but only the person grants them: a game's
+  // folder declaring one is dropped like any unknown runtime.
+  const unusableRuntimes: unknown[] = ["vm", "desktop", "", 3, null, ["bridge"], { bridge: true }];
   for (const runtime of unusableRuntimes) {
-    it(`drops an unknown runtime: ${JSON.stringify(runtime)}`, async () => {
+    it(`drops a runtime a game may not declare: ${JSON.stringify(runtime)}`, async () => {
       const dir = await project({ runtime, play: { command: "bin/game" } });
       assert.equal("runtime" in (await readProjectShape(dir)), false);
     });

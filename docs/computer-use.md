@@ -9,7 +9,7 @@ How agents play and look at what they build: one tool, one referee, swappable ta
 | 0 · delivery | How a provider's CLI receives the tool: Claude Code as an in-process MCP tool, OpenCode as a local MCP server relayed over the file bridge (`studio-mcp-shim.ts`, pictures inline), Codex through the file bridge (`studio-bridge.ts`, the fallback) or app-server dynamic tools where enabled, Bonsai and OpenRouter in `LocalSessions`, Ollama through `preview.computer` | `src/substrate/engines/*` |
 | 1 · tool | One `computer` tool: Anthropic's `computer_toolset_20260801` actions, the studio verbs (`camera`, `state`, `reload`, `console`), `batch` and `observe`. Its description and action list are built from the target's capabilities, so a verb the target lacks is never offered and calling it gets a sentence, not a silent no-op | `src/substrate/computer-tool.ts`, `computer-tool-prompts.ts`, `computer-vocabulary.ts` |
 | 2 · session | The referee: parse, refuse what the target cannot do, keep the action budget, pace the clock, answer, check a goal, write the trace | `src/main/core/computer-session.ts`, `src/substrate/computer-trace.ts` |
-| 3 · targets | A `ComputerTarget` with graded capabilities: the browser preview today, a game speaking the Genex Play Protocol, later a window, desktop or VM | `src/substrate/computer-target.ts`, `src/shared/computer-target.ts`, `src/main/core/browser-preview-target.ts` |
+| 3 · targets | A `ComputerTarget` with graded capabilities: the browser preview, a game speaking the Genex Play Protocol, and the person's desktop or a VM (cua-driver) | `src/substrate/computer-target.ts`, `src/shared/computer-target.ts`, `src/main/core/browser-preview-target.ts` |
 
 A new target is a new `ComputerTarget` and a `TargetSource` (how it loads, where its frames go).
 Nothing in the tool, the session or any engine changes for it.
@@ -107,5 +107,28 @@ the `ProcessSandbox`. The playtest shorthands are not offered there; its moves a
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
 conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
-Window, desktop and VM targets (cua-driver, outside the window) plug into the same interface at a
-lower trust level: they cannot hold the clock or read game state.
+## The person's computer
+
+The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
+driven by [cua-driver](https://github.com/trycua/cua) (MIT): `cua-driver mcp` relays to the
+CuaDriver.app daemon, which holds the Accessibility and Screen Recording grants; a VM's driver is
+reached as `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest
+([`cua-driver-client.ts`](../src/substrate/cua-driver-client.ts)). Every action targets the whole
+display in the foreground, because background clicks into a canvas are rerouted and reported as
+success (cua #4350). The driver is a host helper started with fixed arguments and a minimal
+environment, outside the ProcessSandbox, which would deny it the screen.
+
+- **Who holds it.** The chat's own session on every engine is handed a `desktop` tool (the computer
+  vocabulary under its own name, so it sits beside a game's `computer`), where the driver is
+  installed (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
+  `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
+- **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
+  `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
+  session's yes covers every app.
+- **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
+  System Settings, Keychain Access and the system's password prompts; nothing is typed into a
+  password field (`AXSecureTextField` in front). A refusal ends the plan and its reason is the answer.
+- **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘⎋ (registered only while a driver is
+  connected) and quitting all stop the driver (`desktop-control.ts`).
+- **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
+  front. A judge's "studio-verified" is never claimed on it.

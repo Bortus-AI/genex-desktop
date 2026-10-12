@@ -111,6 +111,8 @@ export const RPC_CLASSES = {
   "preview.input": RpcClass.Page,
   // Its first call loads the build into the window, and a wait may run five minutes.
   "preview.computer": RpcClass.PageLoad,
+  // The person may take minutes to answer the consent card; the card's own timeout bounds it.
+  "desktop.computer": RpcClass.Work,
   "preview.console": RpcClass.Page,
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,

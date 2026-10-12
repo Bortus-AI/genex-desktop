@@ -474,6 +474,16 @@ export interface HarnessHostApi {
     };
     result: { tool: LiveToolSpec } | { answer: LiveToolResult; trace: ComputerTraceSummary };
   };
+  /**
+   * The `desktop` tool, run by the host for an engine whose tool loop is the harness's own
+   * (Ollama): the person's computer, behind the consent asked on a card in `threadId`. `describe`
+   * answers the tool's schema and starts the chat's session afresh; `unavailable` says why there is
+   * none (no desktop driver, no chat to ask in).
+   */
+  "desktop.computer": {
+    params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
+    result: { tool: LiveToolSpec } | { answer: LiveToolResult } | { unavailable: string };
+  };
   "preview.input": {
     params: { actions?: PreviewInputAction[]; handle?: string };
     result: { ok: boolean; applied: number; width: number; height: number };
@@ -641,6 +651,7 @@ export const HostMethod = {
   PreviewDiff: "preview.diff",
   PreviewInput: "preview.input",
   PreviewComputer: "preview.computer",
+  DesktopComputer: "desktop.computer",
   PreviewConsole: "preview.console",
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
@@ -712,6 +723,7 @@ export const HARNESS_PARAM_SCHEMAS = {
     director: z.object({ project, root: text, runId: text }).nullish(),
   }),
   "preview.computer": z.object({ project, root: text, handle: text, runId: optionalText, facetId: optionalText }),
+  "desktop.computer": z.object({ project }),
   "game.setCover": z.object({ project }),
   "game.setCoverShader": z.object({ project }),
   "game.contentStamp": z.object({ project }),

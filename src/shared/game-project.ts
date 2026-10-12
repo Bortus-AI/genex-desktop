@@ -3,7 +3,7 @@
  * Game sheet shows about a picked folder. `substrate/game-workspace.ts` decides and writes these
  * and re-exports the types; the renderer reads them through `window.studio`.
  */
-import type { TargetRuntime } from "./computer-target.ts";
+import type { GameRuntime } from "./computer-target.ts";
 import type { GameLibraryEntry } from "./game-library.ts";
 
 export interface GameProject {
@@ -85,7 +85,7 @@ export interface ProjectShape {
    * How the studio runs and reaches the game: its own browser window (the default, when absent)
    * or a process speaking the Genex Play Protocol (`docs/play-protocol.md`).
    */
-  runtime?: TargetRuntime;
+  runtime?: GameRuntime;
   /** How a `bridge` game is started; absent for a browser game or when studio.json's is unusable. */
   play?: PlayCommand;
 }

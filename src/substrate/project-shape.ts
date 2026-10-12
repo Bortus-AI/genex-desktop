@@ -4,7 +4,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { TargetRuntime } from "../shared/computer-target.ts";
+import { GAME_RUNTIMES, TargetRuntime } from "../shared/computer-target.ts";
 import type { GameCandidate, PlayCommand, ProjectKind, ProjectShape } from "../shared/game-project.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
 import { isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
@@ -222,9 +222,12 @@ function declaredPlay(raw: unknown): PlayCommand | null {
   return { command, args: [...args] };
 }
 
-/** The runtime studio.json declares, and a bridge game's play command; nothing for an unknown runtime. */
+/**
+ * The runtime studio.json declares, and a bridge game's play command; nothing for an unknown
+ * runtime — or for the desktop or a VM, which a game's folder never grants itself.
+ */
 function declaredRuntime(meta: ShapeMeta | null): Pick<ProjectShape, "runtime" | "play"> {
-  const runtime = Object.values(TargetRuntime).find((known) => known === meta?.runtime);
+  const runtime = GAME_RUNTIMES.find((known) => known === meta?.runtime);
   if (!runtime) return {};
   const play = runtime === TargetRuntime.Bridge ? declaredPlay(meta?.play) : null;
   return play ? { runtime, play } : { runtime };

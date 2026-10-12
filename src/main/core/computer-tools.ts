@@ -11,6 +11,7 @@ import {
   BROWSER_CAPABILITIES,
   ComputerPacing,
   type ComputerTraceSummary,
+  type GameRuntime,
   StateLevel,
   type TargetCapabilities,
   TargetRuntime,
@@ -43,6 +44,7 @@ const TOOL_ROLE: Record<AgentScreenRole, ComputerToolRole> = {
   director: "director",
   playtester: "playtester",
   judge: "judge",
+  operator: "operator",
 };
 
 /**
@@ -135,7 +137,7 @@ const TARGET_FRAME_QUALITY = 60;
  * A target that is no preview window, read as one by the agent screen: its picture, its size and
  * its pointer, so a Play Protocol game's moves are drawn on the worker's node as a browser game's are.
  */
-function targetFramePort(target: ComputerTarget): FramePort {
+export function targetFramePort(target: ComputerTarget): FramePort {
   const centre = () => {
     const size = target.viewSize();
     return { x: Math.round(size.width / 2), y: Math.round(size.height / 2) };
@@ -260,7 +262,7 @@ export function computerTools(
     screen,
     ...(sessionOptions.offer ? { offer: sessionOptions.offer } : {}),
   };
-  const runtime = options.bridge ? TargetRuntime.Bridge : TargetRuntime.Browser;
+  const runtime: GameRuntime = options.bridge ? TargetRuntime.Bridge : TargetRuntime.Browser;
   const deps: SourceDeps = { previews, grant, role, sessionPort, screen, options };
   return TARGET_SOURCES[runtime](deps, (source, parts) =>
     toolsOver(computerSession(source, initialRoot, sessionOptions), { ...shared, ...parts }),
@@ -284,10 +286,11 @@ type ToolsBuilder = <T extends ComputerTarget>(
 ) => ComputerTools;
 
 /**
- * One row per runtime: how its target source is made. A new kind of target — a window, a desktop,
- * a VM — is a new runtime and a new row here; the session, the tool and every engine stay as they are.
+ * One row per game runtime: how its target source is made. A new kind of game target is a new
+ * runtime and a new row here; the desktop and a VM, which no game declares, are built by
+ * `desktop-tools.ts` over the same session. The session, the tool and every engine stay as they are.
  */
-const TARGET_SOURCES: Record<TargetRuntime, (deps: SourceDeps, build: ToolsBuilder) => ComputerTools> = {
+const TARGET_SOURCES: Record<GameRuntime, (deps: SourceDeps, build: ToolsBuilder) => ComputerTools> = {
   [TargetRuntime.Browser]: (deps, build) => {
     const source = browserSource(deps.previews, deps.grant, deps.role, deps.sessionPort, deps.screen);
     return build(source, { caps: source.caps, portOf: (target) => target.port, release: async () => {} });

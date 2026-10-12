@@ -16,6 +16,7 @@
 import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
@@ -147,6 +148,7 @@ import { gameRpc } from "./harness-rpc/game.ts";
 import { optimizationRpc } from "./harness-rpc/optimization.ts";
 import { pluginsRpc } from "./harness-rpc/plugins.ts";
 import { previewRpc } from "./harness-rpc/preview.ts";
+import { desktopRpc } from "./harness-rpc/desktop.ts";
 import { runsRpc } from "./harness-rpc/runs.ts";
 import { snapshotRpc } from "./harness-rpc/snapshot.ts";
 import { studioRpc } from "./harness-rpc/studio.ts";
@@ -283,6 +285,8 @@ export interface StudioPaths {
 
 export interface StudioCoreOptions {
   renderGameCover?: (surface: string, seed: number) => Promise<string>;
+  /** Computer control (`desktop-control.ts`): absent where no desktop driver can be reached, and in tests. */
+  desktop?: DesktopControl;
   /** Notes each boot step as it finishes (`main/performance.ts`); a launch without diagnostics passes nothing. */
   markBoot?: (step: string) => void;
   engines?: Engine[];
@@ -1766,6 +1770,7 @@ export class StudioCore {
       ...engineRpc(this, this.#x),
       ...studioRpc(this, this.#x),
       ...previewRpc(this, this.#x),
+      ...desktopRpc(this, this.#x),
     };
     return table;
   }

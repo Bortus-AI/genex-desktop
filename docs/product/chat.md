@@ -5,17 +5,15 @@
 Each game has one conversation. User messages are soft right-aligned bubbles, their images
 above; long ones fold with Show more/Show less. Replies are Markdown prose. Any file the chat
 names that exists is a link: game Markdown and images open beside the chat, others in their app
-(programs only shown). Empty chat is blank. Only the prompt bar writes and sends; a pasted image
+(programs only shown). An empty chat is blank. Only the prompt bar sends; a pasted image
 adds the picture, not its file name.
 
-The chat's own work shows a short truthful status, its elapsed time beside it; waiting for an
-answer is static. A running build is not the chat working: it is one card
+The chat's own work shows a short truthful status and its elapsed time; waiting for an answer is
+static. A running build is not the chat working: it is one card
 (time used of its hours, what happens now, Builds), nothing under it. No duplicate Stop
 controls or narration.
 
-Neighboring tools group under a muted **Worked on N steps** disclosure of truncated rows;
-failures stay visible. Delivered assets are previews that open on click, with Open in
-Assets on hover. Build updates use a short status and See it;
+Neighboring tools fold under a muted **Worked on N steps**; failures stay visible. Delivered assets are previews opening on click (Open in Assets on hover). Build updates use a short status and See it;
 a finished build is that card with Play; it opens Builds; checks stay in Builds and Studio.
 What Studio learned is one line with **Review in Studio**; builds that taught nothing add none.
 The [design specification](../agent/design.md#chat-reading-and-activity) owns exact values.
@@ -33,6 +31,8 @@ never resumes a build.
   cancelled with their worker. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
   into a mode. Stop, the turn's end or a restart withdraws one.
+- With cua-driver, the agent uses the Mac after Approve per session and app; ⌃⌥⌘⎋ stops it
+  ([computer use](../computer-use.md#the-persons-computer)).
 - A game reply's one-line `bash` block offers **Run** and **Copy**; output shows below and
   reaches the agent unseen, reopening no build.
 - **Plan mode** (Add's bulb) is a one-message choice: the plan is Markdown with **Approve**,
@@ -48,7 +48,7 @@ Otherwise (a picture, another model) it waits as **Queued** with Remove, then mo
 sendable draft shows Send; otherwise the same action becomes Stop, and the status reads
 Stopping until the work ends; after five seconds Stop works again. Stop hands over to
 the oldest queued message; the stopped build then shows only its result, else Stopped once, with
-Resume. A message cut off by a quit is retried once, then left for the user to resend.
+Resume. A message a quit cut off is retried once, then left to resend.
 
 **Rewind** sits beside every sent bubble (on hover or focus) unless the chat answers; a running
 build stops first, cutting off any answer under way. That message and all after it leave the
@@ -57,13 +57,12 @@ returns to the composer with its pictures and waiting follow-ups. **Restore game
 the folder to its checkpoint before that message, off at first if files changed outside the
 chat; otherwise one line says why only the conversation rewinds.
 
-History is paged and windowed; media loads lazily. Streamed replies grow smoothly
-and stay until saved. Reading older messages stops following live output.
+History is paged and windowed, media lazy. Streamed replies grow smoothly until saved; reading
+older messages stops following live output.
 
 ## Where to work
 
 [ChatPanel](../../src/renderer/panels/ChatPanel.tsx) feeds the transcript,
-[chat components](../../src/renderer/chat) draw it and
-[PromptBar](../../src/renderer/ui/PromptBar.tsx) owns writing.
+[chat components](../../src/renderer/chat) draw it, [PromptBar](../../src/renderer/ui/PromptBar.tsx) writes.
 Queue and session internals: [conversation coordinator](../conversation-coordinator.md); workers
 and build results: [Builds and Live](builds-live.md).

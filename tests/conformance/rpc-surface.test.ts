@@ -20,6 +20,7 @@ const API_KEYS = [
   "capabilities.describe",
   "context.policy",
   "coordinator.tool",
+  "desktop.computer",
   "engine.abort",
   "engine.complete",
   "engine.delegate",

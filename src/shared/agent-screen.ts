@@ -11,6 +11,8 @@ export const ScreenRole = {
   Scout: "scout",
   Judge: "judge",
   Director: "director",
+  /** An agent at the person's desktop or a VM, with their consent (`desktop-target.ts`). */
+  Operator: "operator",
 } as const;
 export type AgentScreenRole = (typeof ScreenRole)[keyof typeof ScreenRole];
 

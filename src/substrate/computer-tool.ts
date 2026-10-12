@@ -48,6 +48,12 @@ import {
 
 export const COMPUTER_TOOL_NAME = "computer";
 
+/**
+ * The same tool on the person's desktop or a VM: its own name, so a session that also holds its
+ * game's `computer` can hold both — one vocabulary, two targets.
+ */
+export const DESKTOP_TOOL_NAME = "desktop";
+
 /** Actions that become input events on the preview. */
 export const COMPUTER_INPUT_ACTIONS = [
   "left_click",
@@ -573,6 +579,8 @@ export function computerToolDefinition(
     capabilities?: TargetCapabilities;
     view?: { width: number; height: number };
     observeByDefault?: boolean;
+    /** The tool's name: `computer` unless the target is the desktop's (`DESKTOP_TOOL_NAME`). */
+    name?: string;
   } = {},
 ): ComputerToolSchema {
   const capabilities = options.capabilities ?? BROWSER_CAPABILITIES;
@@ -580,7 +588,7 @@ export function computerToolDefinition(
   const text = COMPUTER_PARAMETER_TEXT;
   const view = options.view ?? COMPUTER_VIEW;
   return {
-    name: COMPUTER_TOOL_NAME,
+    name: options.name ?? COMPUTER_TOOL_NAME,
     description: computerToolDescription({
       role: options.role ?? "builder",
       view,

@@ -4,6 +4,8 @@
  * Composed by `StudioCore`; its state stays in the core.
  */
 import { ScreenRole } from "../../shared/agent-screen.ts";
+import type { DesktopTools } from "./desktop-tools.ts";
+import { desktopSessionTools } from "./desktop-session.ts";
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
 import { COVER_TOOL } from "../../shared/cover-recipe.ts";
@@ -40,7 +42,7 @@ import {
   type LiveToolResult,
 } from "../../substrate/engines/types.ts";
 import { DispatchActionType, HarnessCapability, type ReferenceFrame } from "../../shared/protocol.ts";
-import { COMPUTER_TOOL_NAME } from "../../substrate/computer-tool.ts";
+import { COMPUTER_TOOL_NAME, DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
 import { WorkClass, workClassOf } from "../../substrate/budget.ts";
 import type { OptimizationCandidate } from "../../shared/optimization.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
@@ -139,6 +141,15 @@ const DIRECTOR_LOOK: LiveTool = {
     required: ["target"],
   },
 };
+
+/**
+ * Stop what a session's tools started and give back its windows: the computers' games, the
+ * desktop driver, the pooled windows. One that fails to stop never keeps the rest from stopping.
+ */
+async function releaseSessionTools(tools: SessionTools, windows: SessionWindows): Promise<void> {
+  const held = [tools.playtest, tools.builder, tools.director, tools.desktop, windows.self, windows.director];
+  for (const one of held) await one?.release().catch(() => {});
+}
 
 /** A playtest's or judge's result, with what its computer's trace adds up to. */
 function withPlayTrace(result: DelegateResult, tools: SessionTools): DelegateResult {
@@ -268,6 +279,8 @@ interface SessionTools {
   builder: ComputerTools | null;
   playtest: PlaytestTools | null;
   director: DirectorTools | null;
+  /** The person's computer, behind their consent: only the chat's own session holds it. */
+  desktop: DesktopTools | null;
 }
 
 /**
@@ -819,6 +832,7 @@ export class DelegationService {
       builder: null,
       playtest: null,
       director: null,
+      desktop: null,
     };
     // Take the lock before any await — an async deny-list walk used to leave a gap
     // where a second brief into the same folder could also pass the running check.
@@ -869,11 +883,7 @@ export class DelegationService {
       // never skips the rest: the folder's lock, the budget and the windows are freed below.
       await releasePlugins().catch((error) => this.#logCleanupFailure("plugin lease", error));
       await releaseMcp().catch((error) => this.#logCleanupFailure("connector lease", error));
-      if (tools.playtest) await tools.playtest.release().catch(() => {});
-      if (tools.builder) await tools.builder.release().catch(() => {});
-      if (tools.director) await tools.director.release().catch(() => {});
-      if (windows.self) await windows.self.release().catch(() => {});
-      if (windows.director) await windows.director.release().catch(() => {});
+      await releaseSessionTools(tools, windows);
       this.#core.budget.endWork(workClass);
       // Nothing more is handed in; a steer still waiting to hear from the engine hears no.
       delegation.ended = true;
@@ -1302,6 +1312,17 @@ export class DelegationService {
     if (session.hostTools) tools.mcp = await this.#core.mcp.toolsFor(p.project, { signal: session.abort.signal });
     if (session.hostTools) await this.#applyPlugins(p, session, engineId, tools);
     await this.#prepareWindowTools(p, cwd, grants, windows, tools);
+    if (session.hostTools && isChatsOwnSession(p)) tools.desktop = await this.#desktopTools(p, target, session);
+  }
+
+  /** The person's computer for the chat's own session (`desktop-session.ts`), behind their consent. */
+  #desktopTools(p: DelegateParams, target: DelegationTarget, session: DelegationSession): Promise<DesktopTools | null> {
+    const binding = { project: p.project, directory: target.cwd, ...(p.threadId ? { threadId: p.threadId } : {}) };
+    return desktopSessionTools(this.#core, this.#x, {
+      binding,
+      threadId: session.threadId,
+      signal: session.abort.signal,
+    });
   }
 
   /**
@@ -1532,8 +1553,16 @@ export class DelegationService {
   ): Partial<DelegateRequest> {
     const windowTools = tools.director ?? tools.builder;
     const controls = session.runControls ? runControlTools : [];
+    const desktop = tools.desktop?.liveTools ?? [];
     return {
-      liveTools: [...(windowTools?.liveTools ?? []), ...tools.cover, ...controls, ...tools.plugins, ...tools.mcp],
+      liveTools: [
+        ...(windowTools?.liveTools ?? []),
+        ...desktop,
+        ...tools.cover,
+        ...controls,
+        ...tools.plugins,
+        ...tools.mcp,
+      ],
       onLiveTool: (name: string, args: Record<string, unknown>) =>
         this.#hostTool(name, args, p, target, grants, session, tools),
     };
@@ -1553,6 +1582,7 @@ export class DelegationService {
       return this.#x.setGameCover(p.project, args, p.threadId, signal);
     if (session.runControls && isRunControl(name))
       return this.#x.conversation.runControl(session.threadId, session.runControls, name, args, session.abort);
+    if (tools.desktop && name === DESKTOP_TOOL_NAME) return tools.desktop.onLiveTool(name, args);
     // A lead's plugins act on the build it leads, never the live game folder it sits in, and its
     // calls outlive the chat's turns, ending with its own session instead.
     const directory = session.leads ?? target.cwd;

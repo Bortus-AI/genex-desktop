@@ -2,6 +2,8 @@ import { isClaudeLoginActive } from "../shared/claude-login.ts";
 import { isCodexLoginActive } from "../shared/codex-login.ts";
 import { updateCodingCli } from "../substrate/cli-update.ts";
 import { HarnessLogBatch } from "./harness-log-batch.ts";
+import { createDesktopControl } from "./desktop-control-host.ts";
+import type { DesktopControl } from "./core/desktop-control.ts";
 import { showAfterPaint } from "./window-ready.ts";
 import { PerformanceRecorder, watchEventLoop } from "./performance.ts";
 import { registerPerformanceIpc } from "./ipc/performance.ts";
@@ -605,9 +607,14 @@ function launchCoreOptions(): Partial<ConstructorParameters<typeof StudioCore>[0
   return { gamesRoot: path.join(app.getPath("home"), "AI Games") };
 }
 
+/** Computer control (cua-driver), made with the first core: one registry, stopped on quit. */
+let desktop: DesktopControl | undefined;
+
 async function createCore(userData: string): Promise<StudioCore> {
+  desktop ??= createDesktopControl({ automated: isSmoke || isSelfTest });
   const studio = new StudioCore({
     renderGameCover,
+    ...(desktop ? { desktop } : {}),
     paths: { userData, resources },
     // Smoke runs keep everything under their throwaway userData.
     ...launchCoreOptions(),
@@ -1644,6 +1651,11 @@ let shutdownInProgress = false;
 function quitSteps(): ShutdownStep[] {
   return shutdownSteps({ keepAwake, codexLogin, claudeLogin, terminals, core });
 }
+
+// Nothing drives the person's computer once the studio is going away.
+app.on("will-quit", () => {
+  void desktop?.stopAll();
+});
 
 app.on("before-quit", async (event) => {
   harnessLogBatch.flush();
