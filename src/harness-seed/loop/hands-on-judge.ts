@@ -173,7 +173,7 @@ function unproven(proof: QuestProof): string | null {
 
 /**
  * The pass rule. Every answer but the quest's own stands as the model gave it, on its word. The
- * quest's own yes stands only when the studio verified the goal and the frame it rests on is lit
+ * quest's own yes (the judge's answer, whatever the check expects) stands only when the studio verified the goal and the frame it rests on is lit
  * and from then on; any other yes there is incomplete. A "no" stands either way: a judge that
  * failed to reach the goal is not overruled by the studio having seen it.
  */
@@ -186,13 +186,19 @@ export function questRuled(
   const why = tied ? unproven(proof) : null;
   const objectives: Record<string, InteractionObjective> = {};
   const ruled = results.map((result) => {
-    const own = result.id === tied && result.pass === true;
+    const own = result.id === tied && saidYes(result);
     objectives[result.id] = own && why === null ? InteractionObjective.StudioVerified : InteractionObjective.ModelSaid;
     if (!own || why === null) return result;
     return { ...unmeasured(result, why), answer: result.answer, note: result.note };
   });
   const objective = (tied && objectives[tied]) || InteractionObjective.ModelSaid;
   return { results: ruled, objective, objectives };
+}
+
+/** Did the judge answer "yes": its own word, or its pass when a kept older reader left no answer. */
+function saidYes(result: CheckResult): boolean {
+  if (result.answer === undefined) return result.pass === true;
+  return result.answer === "yes";
 }
 
 /** Every answer as the model's word: what a session that never played rests on. */

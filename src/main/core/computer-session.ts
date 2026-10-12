@@ -9,7 +9,7 @@
  * added later share this one implementation. What is particular to a target (how it loads, how
  * its frames reach the agent screen) comes in through a {@link TargetSource}.
  */
-import { appendFile, writeFile } from "node:fs/promises";
+import { appendFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
@@ -100,8 +100,8 @@ export interface ComputerSessionOptions {
   offer?: (caps: TargetCapabilities) => TargetCapabilities;
   /** Whether answers carry the game's own state after a move; a judge's never do. */
   showState?: boolean;
-  /** Told once, when the goal is reached: the trace that shows it (the host vouches for it). */
-  onReached?: (tracePath: string) => void;
+  /** Told once, when the goal is reached: the trace that shows it and the goal (the host vouches for it). */
+  onReached?: (tracePath: string, questId: string) => void;
 }
 
 /** One session on one target: its tool call, its shared load, the build it shows and its trace. */
@@ -509,18 +509,52 @@ function clockKeeper(options: ComputerSessionOptions) {
   };
 }
 
-/** Frames and traces of every session in one folder: numbered on, so no session overwrites another's. */
-const FOLDERS = new Map<string, { shots: number; sessions: number }>();
+/** A folder's numbering: the last frame and session numbers used, read from the folder once. */
+interface FolderNumbering {
+  shots: number;
+  sessions: number;
+  /** Settles once the numbers are past what the folder already holds (an earlier process's frames and traces). */
+  ready: Promise<void>;
+}
 
-/** A folder's numbering, made on first use; the oldest folder is forgotten past a bound. */
-function folderNumbering(dir: string): { shots: number; sessions: number } {
+/** A frame file the session saved (`s<N>_…`), and a trace file (`trace.jsonl`, `trace-<N>.jsonl`). */
+const FRAME_FILE = /^s(\d+)_/;
+const TRACE_FILE_NAME = /^trace(?:-(\d+))?\.jsonl$/;
+
+/** Frames and traces of every session in one folder: numbered on, so no session overwrites another's. */
+const FOLDERS = new Map<string, FolderNumbering>();
+
+/** The highest frame and session numbers a folder already holds; none for a folder not made yet. */
+async function numbersOnDisk(dir: string): Promise<{ shots: number; sessions: number }> {
+  const names = await readdir(dir).catch(() => [] as string[]);
+  let shots = 0;
+  let sessions = 0;
+  for (const name of names) {
+    const shot = FRAME_FILE.exec(name);
+    if (shot) shots = Math.max(shots, Number(shot[1]));
+    const traced = TRACE_FILE_NAME.exec(name);
+    if (traced) sessions = Math.max(sessions, traced[1] ? Number(traced[1]) : 1);
+  }
+  return { shots, sessions };
+}
+
+/**
+ * A folder's numbering, made on first use and read from the folder itself, so a session after a
+ * restart (or after the oldest numbering was forgotten past a bound) numbers on past the frames and
+ * traces already there instead of appending to them.
+ */
+function folderNumbering(dir: string): FolderNumbering {
   const known = FOLDERS.get(dir);
   if (known) return known;
   if (FOLDERS.size >= MAX_NUMBERED_FOLDERS) {
     const oldest = FOLDERS.keys().next().value;
     if (oldest !== undefined) FOLDERS.delete(oldest);
   }
-  const made = { shots: 0, sessions: 0 };
+  const made: FolderNumbering = { shots: 0, sessions: 0, ready: Promise.resolve() };
+  made.ready = numbersOnDisk(dir).then((found) => {
+    made.shots = Math.max(made.shots, found.shots);
+    made.sessions = Math.max(made.sessions, found.sessions);
+  });
   FOLDERS.set(dir, made);
   return made;
 }
@@ -528,14 +562,22 @@ function folderNumbering(dir: string): { shots: number; sessions: number } {
 /** The session's trace: rows appended beside the frames, and what they add up to. */
 function traceKeeper(options: ComputerSessionOptions) {
   const now = options.now ?? Date.now;
-  const session = ++folderNumbering(options.frameDir).sessions;
-  const file = path.join(options.frameDir, session === 1 ? TRACE_FILE : `trace-${session}.jsonl`);
+  const numbering = folderNumbering(options.frameDir);
+  /** The session's own trace file, numbered on its first row past every trace the folder holds. */
+  let file: string | null = null;
+  let claimed: Promise<string> | null = null;
+  const claimFile = async (): Promise<string> => {
+    await numbering.ready;
+    const session = ++numbering.sessions;
+    file = path.join(options.frameDir, session === 1 ? TRACE_FILE : `trace-${session}.jsonl`);
+    return file;
+  };
   let started: number | null = null;
   let steps = 0;
   let reachedAt: number | null = null;
   const routes = new Set<InputRoute>();
   return {
-    file,
+    path: (): string | null => file,
     write: async (
       request: ComputerRequest,
       caption: string,
@@ -562,8 +604,10 @@ function traceKeeper(options: ComputerSessionOptions) {
         ...(record.failed ? { failed: record.failed } : {}),
         ...(record.reached ? { reached: true as const } : {}),
       };
+      claimed ??= claimFile();
+      const into = await claimed;
       await ensureDir(options.frameDir);
-      await appendFile(file, traceLine(row));
+      await appendFile(into, traceLine(row));
     },
     summary: (deterministic: boolean): TraceSummary => ({
       path: steps ? file : null,
@@ -614,6 +658,7 @@ function sessionHelpers<T extends ComputerTarget>(
     },
     saveFrame: async (jpeg, name, mime = StillMimeType.Jpeg) => {
       await ensureDir(options.frameDir);
+      await numbering.ready;
       const ext = mime === StillMimeType.Png ? "png" : "jpg";
       const base = `s${++numbering.shots}_${safePathSegment(name).slice(0, FRAME_NAME_CHARS)}`;
       const file = path.join(options.frameDir, `${base}.${ext}`);
@@ -713,7 +758,8 @@ export function computerSession<T extends ComputerTarget>(
       },
     );
     await trace.write(request, ctx.caption, ctx.record, loaded.target.pointer(), false);
-    if (ctx.record.reached) options.onReached?.(trace.file);
+    const tracePath = trace.path();
+    if (ctx.record.reached && options.quest && tracePath) options.onReached?.(tracePath, options.quest.id);
     return answer;
   };
   const run = async (name: string, args: Record<string, unknown>): Promise<LiveToolResult> => {

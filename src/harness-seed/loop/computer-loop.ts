@@ -153,6 +153,7 @@ async function runCalls(loop: Loop, calls: NonNullable<Message["tool_calls"]>): 
   }
   if (!images.length) return;
   const kept = images.slice(-MAX_TURN_IMAGES);
+  forgetPictures(loop.messages);
   loop.messages.push({
     role: "user",
     content: MESSAGE.look(kept.map((i) => i.label ?? "shot").join(", ")),
@@ -162,6 +163,18 @@ async function runCalls(loop: Loop, calls: NonNullable<Message["tool_calls"]>): 
       ...(i.label ? { label: i.label } : {}),
     })),
   });
+}
+
+/**
+ * Drop the pictures earlier turns showed, keeping their words: only the latest turn's pictures ride
+ * along, so a local model's context holds a few screenshots, not one per move.
+ */
+function forgetPictures(messages: Message[]): void {
+  for (const [index, message] of messages.entries()) {
+    if (!message.images?.length) continue;
+    const { images: _shown, ...words } = message;
+    messages[index] = words;
+  }
 }
 
 /** One call through `preview.computer`; a throw comes back as a failed answer the model can read. */

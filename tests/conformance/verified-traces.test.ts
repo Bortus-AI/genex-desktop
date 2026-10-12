@@ -19,7 +19,7 @@ const interaction = (payload: Record<string, unknown>): EventData => ({
 
 describe("studio-verified interactions", () => {
   it("keeps the studio's word for a trace it saw reach the goal, and only that one", () => {
-    markVerified("/runs/r/facet_x/playtest/iter_001/trace.jsonl");
+    markVerified("/runs/r/facet_x/playtest/iter_001/trace.jsonl", "reach-play");
     const [seen, claimed, forged, said, other] = vouchedInteractions([
       interaction({ objective: "studio-verified", trace: "/runs/r/facet_x/playtest/iter_001/trace.jsonl" }),
       interaction({ objective: "studio-verified", trace: "/runs/r/facet_x/playtest/iter_001/trace-2.jsonl" }),
@@ -33,5 +33,21 @@ describe("studio-verified interactions", () => {
     assert.equal(said?.payload.objective, "model-said");
     assert.equal(other?.payload.objective, "studio-verified", "other records pass untouched");
     assert.equal(isVerified(42), false);
+  });
+
+  it("vouches for one record per goal it saw, and names that goal: a verified trace never vouches twice", () => {
+    const trace = "/runs/r/facet_y/playtest/iter_001/trace.jsonl";
+    markVerified(trace, "open-gate");
+    const [first, again] = vouchedInteractions([
+      interaction({ objective: "studio-verified", label: "the gate opens", trace }),
+      interaction({ objective: "studio-verified", label: "the boss falls", trace }),
+    ]) as Array<{ payload: { objective?: string; quest?: string } }>;
+    assert.equal(first?.payload.objective, "studio-verified");
+    assert.equal(first?.payload.quest, "open-gate", "the record names the goal the studio checked");
+    assert.equal(again?.payload.objective, "model-said", "the same trace cannot vouch for another check");
+    const [later] = vouchedInteractions([interaction({ objective: "studio-verified", trace })]) as Array<{
+      payload: { objective?: string };
+    }>;
+    assert.equal(later?.payload.objective, "model-said", "nor in a later batch");
   });
 });

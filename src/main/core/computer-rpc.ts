@@ -84,11 +84,13 @@ async function allowedRoot(host: ComputerRpcHost, p: ComputerParams): Promise<st
   return run && isInside(run, root) ? root : null;
 }
 
-/** What makes two calls the same session: the window, the build, and how it was asked to play. */
+/** What makes two calls the same session: the window, the build and its page, and how it was asked to play. */
 function sessionKey(p: ComputerParams, root: string): string {
   return JSON.stringify([
     p.handle,
     root,
+    p.entry ?? null,
+    p.setup ?? null,
     p.runId ?? null,
     p.facetId ?? null,
     p.iteration ?? null,
@@ -99,9 +101,31 @@ function sessionKey(p: ComputerParams, root: string): string {
   ]);
 }
 
-/** The service: one computer per leased window, rebuilt when the harness asks for another build or role. */
+/**
+ * Work on one window, one piece at a time: two calls on a window never both build a session, so
+ * none is replaced without being stopped.
+ */
+function oneAtATime() {
+  const queues = new Map<string, Promise<unknown>>();
+  return <R>(handle: string, work: () => Promise<R>): Promise<R> => {
+    const next = (queues.get(handle) ?? Promise.resolve()).catch(() => {}).then(work);
+    queues.set(handle, next);
+    const settle = () => {
+      if (queues.get(handle) === next) queues.delete(handle);
+    };
+    next.then(settle, settle);
+    return next;
+  };
+}
+
+/**
+ * The service: one computer per leased window, rebuilt when the harness asks for another build or
+ * role, and on every describe — a describe opens a player's session, so the next player on the
+ * same window never inherits the last one's spent budget, reached goal or trace.
+ */
 export function computerRpc(host: ComputerRpcHost) {
   const kept = new Map<string, Kept>();
+  const inTurn = oneAtATime();
   /** Drop a window's computer, stopping what it started (a Play Protocol game's process). */
   const drop = async (handle: string): Promise<void> => {
     const current = kept.get(handle);
@@ -111,7 +135,7 @@ export function computerRpc(host: ComputerRpcHost) {
   const toolsFor = async (p: ComputerParams, root: string): Promise<ComputerTools> => {
     const key = sessionKey(p, root);
     const current = kept.get(p.handle);
-    if (current && current.key === key && !p.fresh) return current.tools;
+    if (current && current.key === key && !p.fresh && !p.describe) return current.tools;
     if (current) await drop(p.handle);
     const { handle: _handle, args: _args, describe: _describe, fresh: _fresh, ...grant } = p;
     const outDir = runShotsDir(host.runs(), p.runId, p.facetId, ShotKind.Playtest);
@@ -130,13 +154,13 @@ export function computerRpc(host: ComputerRpcHost) {
       if (!p?.handle || SHARED_HANDLES.has(p.handle)) throw new Error(MESSAGE.needsLease);
       const root = await allowedRoot(host, p);
       if (!root) throw new Error(MESSAGE.notThisRun(String(p.root)));
-      const tools = await toolsFor(p, root);
+      const tools = await inTurn(p.handle, () => toolsFor(p, root));
       const [tool] = tools.liveTools;
       if (p.describe && tool) return { tool };
       const answer = await tools.onLiveTool(COMPUTER_TOOL_NAME, p.args ?? {});
       return { answer, trace: tools.trace() };
     },
     /** Forget a released window's computer, stopping what it started. */
-    forget: (handle: string): Promise<void> => drop(handle),
+    forget: (handle: string): Promise<void> => inTurn(handle, () => drop(handle)),
   };
 }

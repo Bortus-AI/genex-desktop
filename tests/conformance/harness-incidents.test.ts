@@ -12516,4 +12516,58 @@ describe("computer use: the judge that plays, escalation and routes", () => {
       "a run resumed from its journal spends no probe it already spent",
     );
   });
+
+  it("CU15. a direct engine's computer loop kept every move's screenshots in its conversation: only the latest turn's pictures go back", async () => {
+    const { runPlaytest } = await import("../../src/harness-seed/loop/playtester.ts");
+    const answer = JSON.stringify({ answers: { gate: { answer: "yes" } }, report: "ok" });
+    let moves = 0;
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.complete": () =>
+          moves++ < 3
+            ? {
+                message: {
+                  role: "assistant",
+                  content: "",
+                  tool_calls: [{ id: `c${moves}`, name: "computer", arguments: { action: "key", text: "e" } }],
+                },
+              }
+            : { message: { role: "assistant", content: answer } },
+        "preview.computer": (p) =>
+          p.describe
+            ? {
+                tool: { name: "computer", description: "the computer", parameters: { type: "object", properties: {} } },
+              }
+            : {
+                answer: { text: "moved", images: [{ mimeType: "image/jpeg", data: "AAAA", label: "shot" }] },
+                trace: { path: null, steps: 1, deterministic: false, reachedAt: null },
+              },
+      },
+    });
+    const local = { runId: "run_cu", project: "marsh", engine: "ollama", model: "vl", goal: "a marsh" };
+    await runPlaytest(recorder.ctx as never, {
+      run: local as never,
+      checks: [question] as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      maxActions: 6,
+    });
+    const last = recorder.paramsOf("engine.complete").at(-1)?.messages as Array<{ images?: unknown[] }>;
+    const pictured = last.filter((message) => message.images?.length);
+    assert.equal(pictured.length, 1, "only the latest turn's pictures ride along");
+  });
+
+  it("CU16. the pass rule read a quest's 'yes' from the check's pass: a 'no' that a check expects was ruled incomplete for lacking the goal", async () => {
+    const { questRuled } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const quest = { id: "gate", until: { path: "gate.open", equals: true }, checkId: "closed" };
+    const proof = { reachedAt: null, frameLit: null, frameAt: null };
+    const no = { id: "closed", kind: "play", weight: "normal", pass: true, reason: "", answer: "no", note: "" };
+    const ruledNo = questRuled([no] as never, quest as never, proof);
+    assert.equal(ruledNo.results[0]?.pass, true, "a 'no' stands either way");
+    assert.equal(ruledNo.objective, "model-said");
+    const yes = { ...no, pass: false, answer: "yes", reason: "judge answered yes" };
+    const ruledYes = questRuled([yes] as never, quest as never, proof);
+    assert.equal(ruledYes.results[0]?.pass, null, "a 'yes' without the goal is incomplete");
+  });
 });

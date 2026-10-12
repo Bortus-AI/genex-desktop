@@ -4,7 +4,7 @@
  * pacing — are tested without a window.
  */
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { computerSession, type TargetSource } from "../../src/main/core/computer-session.ts";
@@ -176,6 +176,19 @@ describe("computer session — the trace", () => {
     assert.equal(s.trace().steps, 2);
     assert.equal(s.trace().path, path.join(frameDir, "trace.jsonl"));
   });
+
+  it("numbers on past what an earlier process left in the folder: no trace is appended to, no frame overwritten", async () => {
+    const frameDir = await tmpDir("computer-session-");
+    await writeFile(path.join(frameDir, "trace.jsonl"), '{"i":1,"action":"key"}\n');
+    await writeFile(path.join(frameDir, "s7_after-key.jpg"), "earlier");
+    const { target } = fakeTarget();
+    const s = computerSession(sourceOf(target), "/build", { pacing: "running", frameDir });
+    const answer = await s.run("computer", { action: "key", text: "w", observe: "screenshot" });
+    assert.match(text(answer), /s8_after-key/);
+    assert.equal(s.trace().path, path.join(frameDir, "trace-2.jsonl"));
+    assert.equal(await readFile(path.join(frameDir, "trace.jsonl"), "utf8"), '{"i":1,"action":"key"}\n');
+    assert.equal(await readFile(path.join(frameDir, "s7_after-key.jpg"), "utf8"), "earlier");
+  });
 });
 
 describe("computer session — the clock", () => {
@@ -244,6 +257,21 @@ describe("computer session — a goal the studio checks", () => {
       .split("\n")
       .map((l) => JSON.parse(l));
     assert.equal(rows[1].reached, true);
+  });
+
+  it("tells the host which goal it saw reached, with the trace that shows it", async () => {
+    const { target } = fakeTarget();
+    let won = false;
+    const told: Array<[string, string]> = [];
+    const { s, frameDir } = await session({
+      target: { ...target, state: async () => ({ won }) },
+      quest: { id: "win", until: { path: "won", equals: true } },
+      onReached: (trace, quest) => told.push([trace, quest]),
+    });
+    await s.run("computer", { action: "key", text: "w" });
+    won = true;
+    await s.run("computer", { action: "key", text: "w" });
+    assert.deepEqual(told, [[path.join(frameDir, "trace.jsonl"), "win"]]);
   });
 
   it("a state the studio cannot read never reaches the goal", async () => {

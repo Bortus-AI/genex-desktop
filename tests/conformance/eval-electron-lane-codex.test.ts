@@ -97,6 +97,23 @@ describe("codex host-skill suppression", () => {
     assert.equal((broken.argvs[0] ?? []).includes("--disable"), false, "a CLI that cannot list features is sent none");
   });
 
+  it("asks again after a listing that failed: one slow `features list` never leaves Codex's own computer use on", async () => {
+    const skills = await tmpDir("studio-eval-skills-");
+    let listings = 0;
+    const { engine, root, argvs } = await engineWith({
+      hostSkillsDir: skills,
+      listFeatures: async () => {
+        listings += 1;
+        if (listings === 1) throw new Error("features list timed out");
+        return "computer_use  stable  true\n";
+      },
+    });
+    await engine.delegate({ cwd: root, prompt: "Build" });
+    await engine.delegate({ cwd: root, prompt: "Build" });
+    assert.equal((argvs[0] ?? []).includes("--disable"), false);
+    assert.deepEqual((argvs[1] ?? []).slice(-3, -1), ["--disable", "computer_use"]);
+  });
+
   it("disables each host skill by path and the browser features, before the stdin prompt", async () => {
     const skills = await tmpDir("studio-eval-skills-");
     await mkdir(path.join(skills, "alpha"));

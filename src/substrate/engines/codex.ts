@@ -1213,7 +1213,8 @@ export class CodexEngine implements Engine {
   /**
    * `--disable` for each feature the studio owns that this CLI knows. A CLI refuses a feature flag it
    * does not know ("Unknown feature flag"), so an older one is never sent a name it lacks; one whose
-   * listing cannot be read is sent none. A test that injected the process gets every flag.
+   * listing cannot be read is sent none this time and asked again next launch, so one slow listing
+   * never leaves Codex's own computer use on for good. A test that injected the process gets every flag.
    */
   async #ownedFeatureArgs(installation: CodexInstallation | null, env: Record<string, string>): Promise<string[]> {
     const binary = installation?.path ?? null;
@@ -1221,7 +1222,10 @@ export class CodexEngine implements Engine {
     const key = `${binary ?? "injected"}@${installation?.status.version ?? ""}`;
     let known = this.#knownFeatures.get(key);
     if (!known) {
-      known = this.#readFeatures(binary, env).catch(() => new Set<string>());
+      known = this.#readFeatures(binary, env).catch(() => {
+        this.#knownFeatures.delete(key);
+        return new Set<string>();
+      });
       this.#knownFeatures.set(key, known);
     }
     const listed = await known;

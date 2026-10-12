@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 import { computerRpc, type ComputerRpcHost } from "../../src/main/core/computer-rpc.ts";
 import type { ComputerGrant, ComputerTools } from "../../src/main/core/computer-tools.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -76,6 +77,49 @@ describe("preview.computer", () => {
     assert.equal(built.length, 4, "a new round is a new session: its own budget, goal and trace");
     await rpc.call({ ...grant, role: "playtester", iteration: 2, fresh: true, args: { action: "key" } });
     assert.equal(built.length, 5, "fresh asks for a new session on the same round");
+  });
+
+  it("starts a new session on every describe: a second player on the same window never inherits a spent budget", async () => {
+    const { host, built, released, games } = await hostWith();
+    const rpc = computerRpc(host);
+    const grant = { project: "kart", root: path.join(games, "kart"), handle: "pool-1", role: "judge" as const };
+    await rpc.call({ ...grant, describe: true });
+    await rpc.call({ ...grant, args: { action: "key" } });
+    assert.equal(built.length, 1, "the describe and the moves after it are one session");
+    await rpc.call({ ...grant, describe: true });
+    assert.equal(built.length, 2, "the next player's describe is a new session");
+    assert.equal(released.length, 1, "and the spent one is stopped");
+  });
+
+  it("is another session for another entry page or setup on the same window and build", async () => {
+    const { host, built, games } = await hostWith();
+    const rpc = computerRpc(host);
+    const grant = { project: "kart", root: path.join(games, "kart"), handle: "pool-1" };
+    await rpc.call({ ...grant, args: { action: "key" } });
+    await rpc.call({ ...grant, entry: "level2.html", args: { action: "key" } });
+    assert.equal(built.length, 2, "another entry page");
+    await rpc.call({ ...grant, entry: "level2.html", setup: { begin: true }, args: { action: "key" } });
+    assert.equal(built.length, 3, "another setup");
+  });
+
+  it("builds one session at a time per window: concurrent calls leave nothing running unreleased", async () => {
+    const { host, built, released, games } = await hostWith();
+    const slow: ComputerRpcHost = {
+      ...host,
+      computerTools: async (...args) => {
+        await sleep(30);
+        return host.computerTools(...args);
+      },
+    };
+    const rpc = computerRpc(slow);
+    const grant = { project: "kart", root: path.join(games, "kart"), handle: "pool-1" };
+    await Promise.all([
+      rpc.call({ ...grant, role: "judge", args: { action: "key" } }),
+      rpc.call({ ...grant, role: "playtester", args: { action: "key" } }),
+    ]);
+    await rpc.forget("pool-1");
+    assert.equal(built.length, 2);
+    assert.equal(released.length, 2, "every session built was stopped");
   });
 
   it("refuses the person's own window, and any build that is not this game's or this run's", async () => {

@@ -58,14 +58,15 @@ than evidence from inside it.
   (studio-verified)` and the trace row is marked `reached`. A goal that already held before the first
   move never counts until it has stopped holding and holds again.
 - **Trace.** `trace.jsonl` beside the session's frames (a second session in the same folder writes
-  `trace-2.jsonl`, and frames are numbered on, so none overwrites another's): one row per action with
+  `trace-2.jsonl`, and frames are numbered on past what the folder already holds, even after a
+restart, so none overwrites another's): one row per action with
   its arguments, route, frame, cursor, simulated milliseconds, input taken of planned, and
   `refused`/`failed`/`reached` marks. The delegation's result carries the summary
   (`DelegateResult.trace`), including every input route used.
-- **Studio-verified is the host's word.** A session that reaches its goal registers the trace
-  (`verified-traces.ts`); when the harness records an interaction as `studio-verified`,
-  `events.append` keeps that word only for a registered trace and records anything else as
-  `model-said` (`harness-events.ts` `vouchedInteractions`).
+- **Studio-verified is the host's word.** A session that reaches its goal registers the trace and
+  the goal (`verified-traces.ts`); when the harness records an interaction as `studio-verified`,
+  `events.append` keeps that word for one record per registered trace, stamps it with the goal
+  (`quest`), and records anything else as `model-said` (`harness-events.ts` `vouchedInteractions`).
 
 ## Who holds it
 
@@ -85,13 +86,14 @@ build's path. Its interaction evidence carries `source: hands-on-judge` and
 is the harness's own (Ollama). It refuses Live and the stand-in, and accepts only the game's folder
 or a build under this game's run folder: the run id is a plain name, its folder is checked by real
 path, and the host's own records must say the run is this game's. One session per leased window and
-round (run, part, iteration, role, goal); `fresh` starts a new one; a replaced or released session
-stops what it started.
+round (run, part, iteration, role, goal, entry, setup); a `describe` or `fresh` starts a new one, so
+the next player on a window never inherits a spent budget; calls on one window build one session at
+a time, and a replaced or released session stops what it started.
 
 Codex's own computer use and browsers (`computer_use`, `in_app_browser`, `browser_use`,
 `browser_use_external`) are disabled on every launch: they would drive the person's real screen past
 the studio's consent. Only features the installed CLI lists (`codex features list`) are named, since a
-CLI refuses a feature flag it does not know.
+CLI refuses a feature flag it does not know; a listing that fails is asked for again on the next launch.
 
 ## Game engines and other targets
 
