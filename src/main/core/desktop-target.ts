@@ -337,12 +337,21 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     return driver.appAt(point.x, point.y);
   };
   /** Whether this action may go ahead: the app it lands in is allowed, and no secret is typed. */
+  /**
+   * The app an aim lands in, and whether it would type into a password field: a click is checked
+   * against the app under it, keys and text against the app in front and its focused field.
+   */
+  const landing = async (aim: NonNullable<Aim>): Promise<{ app: DesktopApp | null; secret: boolean }> => {
+    const under = "at" in aim ? await appUnder(aim.at) : null;
+    if (under) return { app: under, secret: false };
+    const focus = await driver.focus();
+    return { app: focus.app, secret: focus.secure && "keyboard" in aim };
+  };
   const cleared = async (action: PreviewInputAction): Promise<boolean> => {
     const aim = aimOf(state, action);
     if (!aim) return true;
-    const focus = await driver.focus();
-    if ("keyboard" in aim && focus.secure) return refuse(action.type, MESSAGE.secureField);
-    const app = ("at" in aim ? await appUnder(aim.at) : null) ?? focus.app;
+    const { app, secret } = await landing(aim);
+    if (secret) return refuse(action.type, MESSAGE.secureField);
     if (!app) return refuse(action.type, MESSAGE.noApp);
     if (neverDriven(app)) return refuse(action.type, MESSAGE.neverDriven(appName(app)));
     if (!(await options.allowApp(app))) return refuse(action.type, MESSAGE.declined(appName(app)));

@@ -18,6 +18,7 @@ import {
   localDriverCommand,
   vmDriverCommand,
 } from "../../src/substrate/cua-driver-client.ts";
+import { macApps, parseAppInfo } from "../../src/substrate/mac-apps.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const PIXEL = Buffer.from(
@@ -130,6 +131,34 @@ describe("cua-driver as the desktop driver", () => {
     // On this Mac, macOS's own secure input says so even when the tree does not.
     const guarded = cuaDriver(fakeConnection().connection, { secureInput: async () => true });
     assert.equal((await guarded.focus()).secure, true);
+  });
+
+  it("on this Mac, guards each move in milliseconds: no slow app listing, no tree read", async () => {
+    const fake = fakeConnection();
+    const mac = macApps(async (args) => {
+      if (args[0] === "front") return "ASN:0x0-0x5c05c:\n";
+      const who = args.at(-1);
+      if (who === "pid:3") return '"CFBundleIdentifier"="com.apple.finder"\n"LSDisplayName"="Finder"\n"pid"=3\n';
+      return '"CFBundleIdentifier"="com.apple.Notes"\n"LSDisplayName"="Notes"\n"pid"=7\n';
+    });
+    const driver = cuaDriver(fake.connection, { secureInput: async () => false, mac });
+    await driver.screenshot();
+    assert.deepEqual(await driver.focus(), {
+      app: { name: "Notes", bundleId: "com.apple.Notes", pid: 7 },
+      secure: false,
+    });
+    assert.equal((await driver.appAt?.(1200, 100))?.name, "Finder");
+    const slow = fake.calls.filter((call) => call.tool === "list_apps" || call.tool === "get_window_state");
+    assert.deepEqual(slow, [], "list_apps walks every installed app (seconds); the tree is not needed to type");
+  });
+
+  it("reads an lsappinfo answer, and nothing from an empty one", () => {
+    assert.deepEqual(
+      parseAppInfo('"CFBundleIdentifier"="com.anthropic.claudefordesktop"\n"LSDisplayName"="Claude"\n"pid"=4049\n'),
+      { name: "Claude", bundleId: "com.anthropic.claudefordesktop", pid: 4049 },
+    );
+    assert.equal(parseAppInfo(""), null);
+    assert.equal(parseAppInfo('"LSDisplayName"="x"\n"pid"=abc'), null);
   });
 
   it("says why a call failed, with the driver's own words", async () => {

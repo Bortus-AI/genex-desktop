@@ -21,6 +21,7 @@ import { promisify } from "node:util";
 import { SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 import type { DesktopApp, DesktopDriver, DesktopFocus, DesktopShot } from "./desktop-driver.ts";
+import { type MacApps, macApps } from "./mac-apps.ts";
 
 /** The longest side of a desktop picture the model is shown: the driver's own default on macOS. */
 const MAX_IMAGE_DIMENSION = 1366;
@@ -226,11 +227,12 @@ function scrollOf(dx: number, dy: number): { direction: string; amount: number }
 type CuaCall = (tool: string, args: Record<string, unknown>) => Promise<CuaAnswer>;
 
 /**
- * What the driver says about the desktop: the apps (one slow listing serves the calls of one
- * action), the on-screen windows front first — never the driver's own cursor overlay, which no click
- * is meant for — and the front window's accessibility tree.
+ * What the driver says about the desktop: the apps, the on-screen windows front first — never the
+ * driver's own cursor overlay, which no click is meant for — and the front window's accessibility
+ * tree. On this Mac, apps come from Launch Services (`mac-apps.ts`, milliseconds); the driver's own
+ * listing, which walks every installed app, is the fallback (one listing serves one action's calls).
  */
-function desktopReads(call: CuaCall) {
+function desktopReads(call: CuaCall, mac: MacApps | undefined) {
   let apps: { at: number; rows: Promise<Record<string, unknown>[]> } | null = null;
   const appRows = (): Promise<Record<string, unknown>[]> => {
     if (!apps || Date.now() - apps.at > APPS_TTL_MS) {
@@ -242,21 +244,27 @@ function desktopReads(call: CuaCall) {
     }
     return apps.rows;
   };
+  const appOfPid = async (pid: number): Promise<DesktopApp | null> => {
+    if (mac) return mac.byPid(pid);
+    const row = (await appRows()).find((app) => num(app.pid) === pid);
+    return row ? appOf(row) : null;
+  };
   const windows = async (pid?: number): Promise<CuaWindow[]> => {
     const rows = listOf(await call("list_windows", { on_screen_only: true, ...(pid ? { pid } : {}) }), "windows");
-    const driverPids = new Set(
-      (await appRows()).filter((app) => app.bundle_id === DRIVER_BUNDLE).map((app) => num(app.pid)),
-    );
-    const ours = (window: CuaWindow) => window.appName === DRIVER_APP_NAME || driverPids.has(window.pid);
-    return rows
-      .map(windowOf)
-      .filter((window) => !ours(window))
-      .sort((a, b) => b.z - a.z);
+    const listed = rows.map(windowOf).sort((a, b) => b.z - a.z);
+    const kept: CuaWindow[] = [];
+    for (const window of listed) {
+      const named = window.appName === DRIVER_APP_NAME;
+      const owner = !named && window.pid !== null && mac ? await mac.byPid(window.pid) : null;
+      if (!named && owner?.bundleId !== DRIVER_BUNDLE) kept.push(window);
+    }
+    return kept;
   };
   return {
-    appRows,
+    appOfPid,
     windows,
     frontApp: async (): Promise<DesktopApp | null> => {
+      if (mac) return mac.front();
       const front = (await appRows()).find((row) => row.active === true);
       return front ? appOf(front) : null;
     },
@@ -281,7 +289,7 @@ function desktopReads(call: CuaCall) {
  */
 export function cuaDriver(
   connection: CuaConnection,
-  options: { secureInput?: () => Promise<boolean> } = {},
+  options: { secureInput?: () => Promise<boolean>; mac?: MacApps } = {},
 ): DesktopDriver {
   let picture = { width: 1, height: 1 };
   let screen = { width: 1, height: 1 };
@@ -292,7 +300,7 @@ export function cuaDriver(
   };
   const act = (tool: string, args: Record<string, unknown>) =>
     call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
-  const { appRows, windows, frontApp, frontTree } = desktopReads(call);
+  const { appOfPid, windows, frontApp, frontTree } = desktopReads(call, options.mac);
   return {
     screenshot: async (): Promise<DesktopShot> => {
       const answer = await call("get_desktop_state", { max_image_dimension: MAX_IMAGE_DIMENSION });
@@ -314,18 +322,19 @@ export function cuaDriver(
         screen: { ...picture },
       };
     },
+    // On this Mac, macOS's own secure input says a password field has the keyboard, in milliseconds;
+    // elsewhere (a VM) a field labelled as a password in the front window's tree stands in for it.
     focus: async (): Promise<DesktopFocus> => {
       const app = await frontApp();
+      if (options.secureInput) return { app, secure: await options.secureInput().catch(() => false) };
       const tree = await frontTree(app).catch(() => null);
-      const typingSecret = (await options.secureInput?.().catch(() => false)) === true;
-      return { app, secure: typingSecret || (tree !== null && hasPasswordField(tree)) };
+      return { app, secure: tree !== null && hasPasswordField(tree) };
     },
     appAt: async (x, y) => {
       const point = { x: (x * screen.width) / picture.width, y: (y * screen.height) / picture.height };
       const under = (await windows()).find((window) => holds(window, point.x, point.y));
       if (!under?.pid) return null;
-      const row = (await appRows()).find((app) => num(app.pid) === under.pid);
-      return row ? appOf(row) : { name: "", bundleId: null, pid: under.pid };
+      return (await appOfPid(under.pid)) ?? { name: under.appName, bundleId: null, pid: under.pid };
     },
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
     move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),
@@ -475,7 +484,7 @@ export async function connectCuaDriver(
     opened = await attempt();
   }
   if (opened.grants !== Grants.Held) throw new Error(MESSAGE.permissions);
-  return cuaDriver(opened.connection, options.local ? { secureInput: secureInputActive } : {});
+  return cuaDriver(opened.connection, options.local ? { secureInput: secureInputActive, mac: macApps() } : {});
 }
 
 /** Stop this Mac's driver daemon, so the next `cua-driver mcp` starts one that sees the person's grants. */

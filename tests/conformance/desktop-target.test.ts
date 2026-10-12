@@ -192,6 +192,18 @@ describe("desktop target", () => {
     assert.deepEqual(asked, ["TextEdit", "TextEdit"], "the host's allow-list answers; the target asks every time");
   });
 
+  it("a click asks only which app is under it; keys ask which app is in front and whether its field is secret", async () => {
+    const fake = fakeDriver({ under: EDITOR });
+    let focused = 0;
+    const counting = { ...fake.driver, focus: async () => (focused++, fake.driver.focus()) };
+    const target = desktopTarget({ driver: counting, allowApp: async () => true });
+    await target.screenshot({ quality: 80, surface: "auto" as never });
+    await target.input([{ type: "click", x: 10, y: 10, px: true }]);
+    assert.equal(focused, 0, "a click never waits on the keyboard's checks");
+    await target.input([{ type: "type", text: "x" }]);
+    assert.equal(focused, 1);
+  });
+
   it("never reads the accessibility tree of an app the studio never drives", async () => {
     const fake = fakeDriver({ focus: { app: STUDIO, secure: false } });
     const { target } = await targetOver(fake);
