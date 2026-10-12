@@ -1,7 +1,7 @@
 /**
  * Computer control as this Mac's app wires it: cua-driver found where its installer puts it, its
  * daemon reached over MCP (or a VM's, over SSH, when `GENEX_COMPUTER_VM` names one), the studio's
- * own windows never driven, and one global shortcut — ⌃⌥⌘⎋ — that stops every desktop session,
+ * own windows never driven, and one global shortcut — ⌃⌥⌘Esc — that stops every desktop session,
  * registered only while one holds the computer.
  */
 import { app, globalShortcut } from "electron";

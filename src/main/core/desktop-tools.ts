@@ -35,6 +35,8 @@ export type DesktopQuestion = (typeof DesktopQuestion)[keyof typeof DesktopQuest
 const MESSAGE = {
   declined: "the person did not allow computer control this session — ask them in words what to do instead",
   noDriver: (why: string) => `computer control is not available: ${why}`,
+  stopped:
+    "the person stopped computer control (Stop, or Control-Option-Command-Escape) — nothing more moved; ask before using it again",
 } as const;
 
 /** What a desktop session is built from. */
@@ -158,10 +160,19 @@ export function desktopTools(deps: DesktopToolsDeps): DesktopTools {
     capabilities: source.caps,
     observeByDefault: true,
   });
+  // A stop during a call cuts the driver off under it: that call says the person stopped it.
+  let stops = 0;
   return {
     liveTools: [tool],
-    onLiveTool: (name, args) => session.run(name, args),
+    onLiveTool: async (name, args) => {
+      const before = stops;
+      const answer = await session.run(name, args);
+      return stops === before ? answer : MESSAGE.stopped;
+    },
     trace: () => session.trace(),
-    release: () => source.release(),
+    release: () => {
+      stops += 1;
+      return source.release();
+    },
   };
 }

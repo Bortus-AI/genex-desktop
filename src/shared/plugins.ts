@@ -593,6 +593,18 @@ export type GithubLookup =
   | { kind: typeof GithubLookupKind.Choose; repo: string; version: GithubVersion; plugins: GithubPluginFound[] }
   | { kind: typeof GithubLookupKind.Problem; problem: GithubLookupProblem; detail?: string };
 
+/**
+ * Consent cards the studio itself asks with, not a plugin: their source id, and the name the card
+ * shows for it. Persisted in every log: never rename an id.
+ */
+export const StudioConsentSource = { Desktop: "studio-desktop" } as const;
+export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof StudioConsentSource];
+
+/** The name a studio consent card shows. */
+export const STUDIO_CONSENT_NAMES: Readonly<Record<StudioConsentSource, string>> = {
+  [StudioConsentSource.Desktop]: "Computer control",
+};
+
 export interface PluginBinding {
   project: string;
   directory: string;

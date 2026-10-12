@@ -6,7 +6,7 @@
  */
 import path from "node:path";
 import { type AgentScreen, ScreenRole } from "../../shared/agent-screen.ts";
-import type { PluginBinding } from "../../shared/plugins.ts";
+import { type PluginBinding, StudioConsentSource } from "../../shared/plugins.ts";
 import { DESKTOP_TOOL_NAME } from "../../substrate/computer-tool.ts";
 import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
@@ -18,12 +18,12 @@ import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 const MESSAGE = {
   label: "your computer",
   session:
-    "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or ⌃⌥⌘⎋ (Control-Option-Command-Escape).",
+    "Let this chat's agent see your screen and use your computer during this session? Each app it reaches asks you first. Stop it any time with Stop, or Control-Option-Command-Escape (⌃⌥⌘Esc).",
   app: (app: string) => `Let this chat's agent use ${app}? It can click, type and read what ${app} shows.`,
 } as const;
 
 /** Who asks for computer control on the consent card: the studio itself, never a plugin. */
-export const DESKTOP_CONSENT_SOURCE = "studio-desktop";
+export const DESKTOP_CONSENT_SOURCE = StudioConsentSource.Desktop;
 
 /** The consent card's tool: the `desktop` tool, asked about before it moves anything. */
 const DESKTOP_CONSENT_TOOL = {

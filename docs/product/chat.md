@@ -31,7 +31,7 @@ never resumes a build.
   cancelled with their worker. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
   into a mode. Stop, the turn's end or a restart withdraws one.
-- With cua-driver, the agent uses the Mac after Approve per session and app; ⌃⌥⌘⎋ stops it
+- With cua-driver, the agent uses the Mac after Approve per session and app; ⌃⌥⌘Esc stops it
   ([computer use](../computer-use.md#the-persons-computer)).
 - A game reply's one-line `bash` block offers **Run** and **Copy**; output shows below and
   reaches the agent unseen, reopening no build.

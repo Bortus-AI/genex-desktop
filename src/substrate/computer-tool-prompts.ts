@@ -205,10 +205,10 @@ export const COMPUTER_ARG_PROBLEM = {
     `step ${step} (${caption}) failed: ${why} — ${done} step${done === 1 ? "" : "s"} before it ran`,
   observeFailed: (why: string) => `(no picture of the result: ${why} — take a screenshot to look)`,
   partlyTaken: (caption: string, taken: number, planned: number) =>
-    `PARTLY — ${caption}: the game took ${taken} of ${planned} input actions and refused the rest`,
-  allRefused: "the game refused every input of that step",
+    `PARTLY — ${caption}: ${taken} of ${planned} input actions were taken and the rest refused`,
+  allRefused: "every input of that step was refused",
   refusedBecause: (reasons: string[]) => ` (${reasons.slice(0, 3).join("; ")})`,
-  actionFailed: (action: string, why: string) => `${action} failed: ${why} — the game may have stopped answering`,
+  actionFailed: (action: string, why: string) => `${action} failed: ${why} — what it drives may have stopped answering`,
   budgetSpent: (max: number) =>
     `action budget spent (${max} of ${max} moves) — no more input this session; answer with what you have seen`,
 } as const;

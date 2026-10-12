@@ -341,7 +341,10 @@ describe("computer session — review findings", () => {
       input: async (actions) => ({ applied: Math.min(taken, actions.length), route: InputRoute.Bridge }),
     };
     const { s, frameDir } = await session({ target: picky });
-    assert.match(text(await s.run("computer", { action: "key", text: "w" })), /PARTLY — key w: the game took 0 of 1/);
+    assert.match(
+      text(await s.run("computer", { action: "key", text: "w" })),
+      /PARTLY — key w: 0 of 1 input actions were taken/,
+    );
     const stopped = await s.run("computer", {
       action: "batch",
       actions: [
@@ -349,7 +352,7 @@ describe("computer session — review findings", () => {
         { action: "key", text: "a" },
       ],
     });
-    assert.match(text(stopped), /step 1 \(key w\) failed: the game refused every input/);
+    assert.match(text(stopped), /step 1 \(key w\) failed: every input of that step was refused/);
     taken = 5;
     assert.match(text(await s.run("computer", { action: "key", text: "w" })), /^OK — key w/);
     const rows = (await readFile(path.join(frameDir, "trace.jsonl"), "utf8"))

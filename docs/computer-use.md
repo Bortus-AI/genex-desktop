@@ -132,7 +132,7 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front
 window's tree). A refusal ends the plan and its reason is the answer.
-- **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘⎋ (registered only while a driver is
+- **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
   front. A judge's "studio-verified" is never claimed on it.

@@ -113,6 +113,15 @@ describe("the desktop tool", () => {
     assert.deepEqual(asked, ["session"]);
   });
 
+  it("a stop during a call is what that call answers: the person stopped computer control", async () => {
+    const { tools, fake } = await toolsWith({ session: true, apps: { Notes: true } });
+    await tools.onLiveTool("desktop", { action: "screenshot" });
+    const waiting = tools.onLiveTool("desktop", { action: "wait", duration: 0.2 });
+    await tools.release();
+    assert.match(text(await waiting), /the person stopped computer control/);
+    assert.deepEqual(fake.calls, ["close"]);
+  });
+
   it("stops the driver on release", async () => {
     const { tools, fake } = await toolsWith({ session: true, apps: { Notes: true } });
     await tools.onLiveTool("desktop", { action: "screenshot" });

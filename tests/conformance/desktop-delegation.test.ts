@@ -101,7 +101,11 @@ it("the chat's own session gets the desktop tool behind the person's consent; ot
     assert.deepEqual(active, [1, 0], "the stop shortcut was held only while the driver ran");
     const cards = (await core.store.listEvents(threadId))
       .filter((event) => event.data.type === "custom" && event.data.event_type === "plugin_consent")
-      .map((event) => (event.data as { payload: { pluginId: string; state: string; prompt: string } }).payload);
+      .map(
+        (event) =>
+          (event.data as { payload: { pluginId: string; pluginName: string; state: string; prompt: string } }).payload,
+      );
+    assert.equal(cards[0]?.pluginName, "Computer control", "the card names the studio's own ask, not an id");
     assert.deepEqual(
       cards.map((card) => [card.pluginId, card.state]),
       [
