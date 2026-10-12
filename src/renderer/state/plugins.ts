@@ -72,15 +72,15 @@ export function pluginUpdates(list: PluginInfo[], index: PluginIndexView | null)
 }
 
 /**
- * Install one update. Main shows the plugin's trust dialog first, and a "no" there resolves like
- * a "yes": the plugin list says which it was.
+ * Install one update. For an index release main shows the plugin's trust dialog first, and a "no"
+ * there resolves like a "yes": the plugin list says which it was. A seed installs without asking.
  */
 export function installPluginUpdate(
   api: Pick<StudioApi, "pluginInstall" | "pluginUpdate">,
   update: PluginUpdate,
 ): Promise<void> {
   const { id } = update.plugin.manifest;
-  // A seed has no index entry: it is installed again, through the same review as its first install.
+  // A seed has no index entry: it is installed again, through the same path as its first install.
   return update.source === PluginUpdateSource.Seed ? api.pluginInstall(id) : api.pluginUpdate(id);
 }
 

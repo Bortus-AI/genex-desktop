@@ -59,9 +59,9 @@ cannot grant authority. Plugin upload staging lists every included/excluded file
 for a second approval. Revocation prevents future calls; remote side effects remain.
 
 Removal preserves data, credentials and jobs; another source reusing a plugin's id needs
-**Replace and erase data**; bundled ids cannot be taken. Reinstall is explicit, even for bundled plugins;
+**Replace and erase data**; bundled ids cannot be taken. Reinstall is explicit; bundled plugins never ask;
 local reinstall reviews a fresh snapshot. Updates (a newer compatible release) preserve data;
-rows offer **Update to x**, the sidebar **Update plugins** (all, each approved).
+rows offer **Update to x**, the sidebar **Update plugins** (all).
 Host-managed secrets never enter composer text.
 
 Skills lists Studio’s own (local chat, planner, director), this game’s, each provider’s global
