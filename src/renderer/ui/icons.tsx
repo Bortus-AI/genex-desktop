@@ -428,6 +428,13 @@ const glyphs = {
     </>
   ),
   circle: <circle className="a-pulse" cx="12" cy="12" r="7" />,
+  // A model chip: the die and its pins, for models that run on this Mac.
+  chip: (
+    <>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
+      <path d="M10 3.5v3M14 3.5v3M10 17.5v3M14 17.5v3M3.5 10h3M3.5 14h3M17.5 10h3M17.5 14h3" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof glyphs;

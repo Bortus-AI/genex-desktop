@@ -351,6 +351,26 @@ export interface StudioApi {
   openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /** Forget the saved OpenRouter key. */
   openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /**
+   * Connect OpenRouter in the browser: OpenRouter's page opens, and the call settles once the
+   * person approved Genex there (the key is then checked and saved, never sent back), cancelled,
+   * or it failed. A new call replaces one still waiting.
+   */
+  openRouterSignIn(): Promise<import("./openrouter-login.ts").OpenRouterSignInResult>;
+  /** Open the waiting sign-in's page again; false when none is waiting. */
+  openRouterSignInReopen(): Promise<boolean>;
+  /** Stop the waiting sign-in; false when none is waiting. */
+  openRouterSignInCancel(): Promise<boolean>;
+  /**
+   * Connect a model server the person runs (`shared/local-server.ts`): check the address is on this
+   * computer or the local network, ask the server for its models with the key when one is given,
+   * and save both only when it answers. The key never comes back.
+   */
+  localServerConnect(url: string, key?: string): Promise<import("./local-server.ts").LocalServerConnectResult>;
+  /** Forget the saved local server's address and key. */
+  localServerForget(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** The model servers answering on this computer's usual ports, for Settings to offer. */
+  localServerFind(): Promise<import("./local-server.ts").FoundLocalServer[]>;
   terminalList(): Promise<import("./terminal.ts").TerminalSession[]>;
   terminalAccessibility(): Promise<boolean>;
   terminalOpen(project: string): Promise<import("./terminal.ts").TerminalSession>;
