@@ -508,8 +508,8 @@ flow installs this added server with launch-change review and preserves the save
 
 ### Genex skills, CLI and packages
 
-Genex 1.5.0 reaches existing installations through the standard Update flow, whose trust dialog
-lists its skills and the tools Studio runs for it. Builder briefs index Genex's guide and its
+Genex 1.5.0 reaches existing installations through the standard Update flow, which installs a
+bundled plugin's newer version without a trust dialog. Builder briefs index Genex's guide and its
 platform cards (multiplayer, player identity, LLM in games, monetization, publishing, cover, updates);
 agents read a card with `genex__skill` before that work, and the host serves it from the plugin,
 never from or into the game folder.

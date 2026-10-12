@@ -120,7 +120,9 @@ version until the user chooses Update; active leases defer activation, while dis
 blocks calls immediately. The renderer lists a seed's newer version and the index's newer release
 as one set (`pluginUpdates` in `renderer/state/plugins.ts`; none for a plugin whose update already
 waits for sessions): each plugin's row and page offer **Update to x**, and the sidebar's **Update
-plugins** runs them one after another, each through its own trust dialog. A removed preference suppresses the seed across Studio upgrades.
+plugins** runs them one after another. A seed's update asks nothing: it is Genex's own code, shipped
+inside the app the user installed (`asksBeforeInstall` in `main/plugin-local-install.ts`); an index
+release goes through its own trust dialog. A removed preference suppresses the seed across Studio upgrades.
 Normal updates preserve settings, protected credentials and job state. The Genex plugin adopts
 `engine-homes/genex`, keeping existing allowances and unresolved jobs; remove/reinstall is not a
 required upgrade step.
@@ -596,12 +598,18 @@ reads `dangerous`. The verdict is stored on the install record and shown as `Sca
 the plugin's detail page. A scan runs every time code is read: install, update, **Allow…**, a hot reload
 and a restore from a local folder or a pinned commit all recompute it against the copy being
 installed, so the page never keeps a verdict for code that has since changed. Bundled seeds are
-reported as `bundled — not scanned`.
+not scanned.
 
-The trust dialog is one function for every way a plugin can arrive, and says: *"{name} {version}
-from {GitHub owner/repo@sha (cataloged, not audited) | a curated release | local folder | bundled}
-runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: …
-Capabilities: … (new: …). Scan: …"*.
+The trust dialog is one function for every way a plugin can arrive from outside Genex
+(`main/plugin-install-words.ts`). It asks **Install {name} {version}?**, **Update {name} to
+{version}?** when another version is installed, or **Replace … with …?**, and its body is one
+short block per fact: what a replacement erases; *From {GitHub owner/repo@sha (cataloged, not
+audited) | a curated release | the folder … | Genex (built in)}* with the publisher; that the code
+runs on the computer like an installed app and is not sandboxed; **It asks to:** with each
+capability in plain words; the programs it starts with the environment each is given; the tools
+Genex runs for it; the skills it adds; and **Scan: {verdict}, {findings}** or **Not scanned.** An
+update marks what is new or changed. A bundled seed installs and updates without the dialog unless
+it would replace a plugin from elsewhere.
 
 ## Hot reload and debug logs
 

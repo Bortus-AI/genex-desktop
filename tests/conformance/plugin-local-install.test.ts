@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { installLocalPlugin, pluginOriginWords, reviewPluginInstall } from "../../src/main/plugin-local-install.ts";
+import {
+  asksBeforeInstall,
+  installLocalPlugin,
+  pluginOriginWords,
+  reviewPluginInstall,
+} from "../../src/main/plugin-local-install.ts";
 import type { PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
 import { accountFixture, accountPackage, copyOfExample, pluginFixture } from "../helpers/plugins.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
@@ -157,6 +162,38 @@ test("the install review names a replacement, refuses a connector id and never c
     assert.match(pluginOriginWords({ ...GITHUB, kind: "index" }), /cataloged, not audited/);
   } finally {
     await f.close();
+  }
+});
+
+test("Studio's own plugin installs and updates without asking; code from anywhere else, or a seed that takes over another plugin, asks", async () => {
+  const BUNDLED: PluginSource = { kind: "bundled" };
+  const seeded = await pluginFixture();
+  try {
+    const seed = seeded.registry.bundledManifest("example");
+    assert.ok(seed);
+    const update = { ...seed, version: "9.0.0" };
+    assert.equal(asksBeforeInstall(BUNDLED, reviewPluginInstall(seeded.registry, update, BUNDLED, [])), false);
+  } finally {
+    await seeded.close();
+  }
+  const elsewhere: PluginSource[] = [
+    { kind: "local", directory: "/tmp/example" },
+    GITHUB,
+    { ...GITHUB, kind: "index" },
+    { kind: "catalog", url: "https://plugins.example.invalid/a.zip", sha256: "c".repeat(64) },
+  ];
+  for (const origin of elsewhere) assert.equal(asksBeforeInstall(origin, {}), true, origin.kind);
+  assert.equal(asksBeforeInstall(undefined, {}), true, "an unnamed origin is not taken for Studio's own");
+  // A local plugin took the id before Studio shipped a seed under it: the seed erases its account and data.
+  const local = await pluginFixture({ installed: "local" });
+  try {
+    const manifest = local.registry.list()[0]?.manifest;
+    assert.ok(manifest);
+    const review = reviewPluginInstall(local.registry, { ...manifest, publisher: "Genex" }, BUNDLED, []);
+    assert.ok(review.replaces);
+    assert.equal(asksBeforeInstall(BUNDLED, review), true);
+  } finally {
+    await local.close();
   }
 });
 
