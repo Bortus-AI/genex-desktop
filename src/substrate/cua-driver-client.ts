@@ -35,6 +35,8 @@ const SECURE_INPUT_TIMEOUT_MS = 2 * SECOND_MS;
 /** The most wheel notches one scroll sends, and how many a scroll that names none sends. */
 const MAX_SCROLL_NOTCHES = 50;
 const DEFAULT_SCROLL_NOTCHES = 3;
+/** How long one app listing answers for: the calls of one action, never a stale front app later. */
+const APPS_TTL_MS = 1_500;
 /** How many accessibility elements a state read brings back. */
 const MAX_ELEMENTS = 250;
 /**
@@ -48,6 +50,10 @@ const DRIVER_PLACES = [".local/bin/cua-driver", "/opt/homebrew/bin/cua-driver", 
 const VM_ADDRESS = /^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}$/;
 /** Where the guest image keeps the driver. */
 const VM_DRIVER_PATH = "/Users/lume/.local/bin/cua-driver";
+
+/** The driver's own app: its agent-cursor overlay is a full-screen window above every other. */
+const DRIVER_BUNDLE = "com.trycua.driver";
+const DRIVER_APP_NAME = "Cua Driver";
 
 /** The whole primary display, the target of every action. */
 const DESKTOP = { kind: "desktop", display_id: "primary" } as const;
@@ -128,6 +134,26 @@ function structured(answer: CuaAnswer): Record<string, unknown> {
   return {};
 }
 
+/** A window state's tree as text: its Markdown rendering, else whatever text the answer carries. */
+function treeText(answer: CuaAnswer): string {
+  const markdown = structured(answer).tree_markdown;
+  return typeof markdown === "string" ? markdown : textOf(answer);
+}
+
+/** A password field in a window state: an element's role and label, else one Markdown row. */
+function hasPasswordField(answer: CuaAnswer): boolean {
+  const elements = structured(answer).elements;
+  if (Array.isArray(elements)) {
+    return elements.some((element) => {
+      const row = element && typeof element === "object" ? (element as Record<string, unknown>) : {};
+      return PASSWORD_FIELD.test(`${String(row.role ?? "")} ${String(row.label ?? "")}`);
+    });
+  }
+  return treeText(answer)
+    .split("\n")
+    .some((line) => PASSWORD_FIELD.test(line));
+}
+
 /** The answer's text, joined. */
 function textOf(answer: CuaAnswer): string {
   return (answer.content ?? [])
@@ -165,6 +191,7 @@ function appOf(row: Record<string, unknown>): DesktopApp {
 interface CuaWindow {
   pid: number | null;
   windowId: number | null;
+  appName: string;
   z: number;
   bounds: { x: number; y: number; width: number; height: number } | null;
 }
@@ -176,7 +203,8 @@ function windowOf(row: Record<string, unknown>, index: number): CuaWindow {
       ? { x: b.x as number, y: b.y as number, width: b.width as number, height: b.height as number }
       : null;
   // cua numbers windows so the largest z_index is the frontmost; without one, the list is front first.
-  return { pid: num(row.pid), windowId: num(row.window_id), z: num(row.z_index) ?? -index, bounds };
+  const appName = typeof row.app_name === "string" ? row.app_name : "";
+  return { pid: num(row.pid), windowId: num(row.window_id), appName, z: num(row.z_index) ?? -index, bounds };
 }
 
 /** Whether a window holds a point. */
@@ -211,14 +239,33 @@ export function cuaDriver(
   };
   const act = (tool: string, args: Record<string, unknown>) =>
     call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
+  // list_apps walks every installed app (seconds): one listing serves the calls of one action.
+  let apps: { at: number; rows: Promise<Record<string, unknown>[]> } | null = null;
+  const appRows = (): Promise<Record<string, unknown>[]> => {
+    if (!apps || Date.now() - apps.at > APPS_TTL_MS) {
+      const rows = call("list_apps", {}).then((answer) => listOf(answer, "apps"));
+      apps = { at: Date.now(), rows };
+      rows.catch(() => {
+        apps = null;
+      });
+    }
+    return apps.rows;
+  };
   const frontApp = async (): Promise<DesktopApp | null> => {
-    const apps = listOf(await call("list_apps", {}), "apps");
-    const front = apps.find((row) => row.active === true);
+    const front = (await appRows()).find((row) => row.active === true);
     return front ? appOf(front) : null;
   };
+  /** On-screen windows, front first — never the driver's own overlay, which no click is meant for. */
   const windows = async (pid?: number): Promise<CuaWindow[]> => {
     const rows = listOf(await call("list_windows", { on_screen_only: true, ...(pid ? { pid } : {}) }), "windows");
-    return rows.map(windowOf).sort((a, b) => b.z - a.z);
+    const driverPids = new Set(
+      (await appRows()).filter((app) => app.bundle_id === DRIVER_BUNDLE).map((app) => num(app.pid)),
+    );
+    const ours = (window: CuaWindow) => window.appName === DRIVER_APP_NAME || driverPids.has(window.pid);
+    return rows
+      .map(windowOf)
+      .filter((window) => !ours(window))
+      .sort((a, b) => b.z - a.z);
   };
   const frontTree = async (app: DesktopApp | null): Promise<CuaAnswer | null> => {
     if (!app?.pid) return null;
@@ -229,7 +276,6 @@ export function cuaDriver(
       window_id: front.windowId,
       include_screenshot: false,
       include_accessibility_tree: true,
-      tree_format: "markdown",
       max_elements: MAX_ELEMENTS,
     });
   };
@@ -258,14 +304,13 @@ export function cuaDriver(
       const app = await frontApp();
       const tree = await frontTree(app).catch(() => null);
       const typingSecret = (await options.secureInput?.().catch(() => false)) === true;
-      return { app, secure: typingSecret || (tree !== null && PASSWORD_FIELD.test(textOf(tree))) };
+      return { app, secure: typingSecret || (tree !== null && hasPasswordField(tree)) };
     },
     appAt: async (x, y) => {
       const point = { x: (x * screen.width) / picture.width, y: (y * screen.height) / picture.height };
       const under = (await windows()).find((window) => holds(window, point.x, point.y));
       if (!under?.pid) return null;
-      const apps = listOf(await call("list_apps", {}), "apps");
-      const row = apps.find((app) => num(app.pid) === under.pid);
+      const row = (await appRows()).find((app) => num(app.pid) === under.pid);
       return row ? appOf(row) : { name: "", bundleId: null, pid: under.pid };
     },
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
@@ -293,7 +338,7 @@ export function cuaDriver(
     accessibility: async () => {
       const app = await frontApp();
       const tree = await frontTree(app);
-      return tree ? textOf(tree) : null;
+      return tree ? treeText(tree) : null;
     },
     close: () => connection.close(),
   };
@@ -363,12 +408,22 @@ async function openConnection(command: CuaCommand): Promise<CuaConnection> {
  * Whether the driver holds what it needs to see and move: both grants. Never asks macOS to prompt:
  * the standalone daemon refuses a prompt from an untrusted host; the person grants CuaDriver itself.
  */
-async function permitted(connection: CuaConnection): Promise<boolean> {
+async function permitted(connection: CuaConnection): Promise<Grants> {
   const answer = await connection.call("check_permissions", { prompt: false });
+  // A daemon started before the person granted keeps macOS's old answer until it restarts.
+  if (textOf(answer).includes(PERMISSIONS_PENDING)) return Grants.Pending;
   const body = structured(answer);
-  if (body.accessibility === undefined && body.screen_recording === undefined) return !answer.isError;
-  return body.accessibility === true && body.screen_recording === true;
+  const unreported = body.accessibility === undefined && body.screen_recording === undefined;
+  if (unreported) return answer.isError ? Grants.Missing : Grants.Held;
+  return body.accessibility === true && body.screen_recording === true ? Grants.Held : Grants.Missing;
 }
+
+/** What the driver's grants are: held, missing, or granted but not yet seen by a daemon started before. */
+const Grants = { Held: "held", Missing: "missing", Pending: "pending" } as const;
+type Grants = (typeof Grants)[keyof typeof Grants];
+
+/** The words cua-driver answers with while its permission gate still waits. */
+const PERMISSIONS_PENDING = "permissions_pending";
 
 /**
  * Whether macOS is guarding typed input for a password field right now (secure event input): the
@@ -386,15 +441,32 @@ export async function secureInputActive(): Promise<boolean> {
  * waits for it; when it cannot, its own words are the error. Throws with the sentence the person
  * reads when it cannot be used. On this Mac, a focused password field is also read from macOS.
  */
-export async function connectCuaDriver(command: CuaCommand, options: { local: boolean }): Promise<DesktopDriver> {
-  const connection = await openConnection(command);
-  const ok = await permitted(connection).catch(async (error: unknown) => {
-    await connection.close();
-    throw error;
-  });
-  if (!ok) {
-    await connection.close();
-    throw new Error(MESSAGE.permissions);
+export async function connectCuaDriver(
+  command: CuaCommand,
+  options: { local: boolean; restart?: () => Promise<void> },
+): Promise<DesktopDriver> {
+  const attempt = async (): Promise<{ connection: CuaConnection; grants: Grants }> => {
+    const connection = await openConnection(command);
+    const grants = await permitted(connection).catch(async (error: unknown) => {
+      await connection.close();
+      throw error;
+    });
+    if (grants !== Grants.Held) await connection.close();
+    return { connection, grants };
+  };
+  let opened = await attempt();
+  // Granted after its daemon started: the daemon is restarted once (`cua-driver mcp` starts a fresh one).
+  if (opened.grants === Grants.Pending && options.restart) {
+    await options.restart().catch(() => {});
+    opened = await attempt();
   }
-  return cuaDriver(connection, options.local ? { secureInput: secureInputActive } : {});
+  if (opened.grants !== Grants.Held) throw new Error(MESSAGE.permissions);
+  return cuaDriver(opened.connection, options.local ? { secureInput: secureInputActive } : {});
+}
+
+/** Stop this Mac's driver daemon, so the next `cua-driver mcp` starts one that sees the person's grants. */
+export function restartLocalDriver(binary: string): () => Promise<void> {
+  return async () => {
+    await promisify(execFile)(binary, ["stop"], { timeout: CONNECT_TIMEOUT_MS });
+  };
 }

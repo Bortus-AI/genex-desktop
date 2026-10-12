@@ -5,9 +5,10 @@
  * handshake, the permission check) without touching this Mac. Settings come as arguments, since the
  * studio hands its driver only a minimal environment: `--log <file>` appends every tool call as one
  * JSON line, `--denied` answers that a grant is missing, `--fail-start` exits the way the real
- * driver does when its daemon never comes up.
+ * driver does when its daemon never comes up, and `--pending <file>` answers `permissions_pending`
+ * until that file exists (the restart a test stands in for creates it).
  */
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import readline from "node:readline";
 
 /** A 1×1 PNG. */
@@ -15,6 +16,7 @@ const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QD
 const argv = process.argv.slice(2);
 const denied = argv.includes("--denied");
 const logFile = argv.includes("--log") ? argv[argv.indexOf("--log") + 1] : null;
+const pendingUntil = argv.includes("--pending") ? argv[argv.indexOf("--pending") + 1] : null;
 if (argv.includes("--fail-start")) {
   process.stderr.write("cua-driver-rs: daemon did not appear on /tmp/cua.sock within 10s. If this is the first launch, grant Accessibility + Screen Recording\n");
   process.exit(1);
@@ -23,7 +25,13 @@ if (argv.includes("--fail-start")) {
 const json = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value });
 
 const ANSWERS = {
-  check_permissions: () => json({ accessibility: !denied, screen_recording: !denied }),
+  check_permissions: () =>
+    pendingUntil && !existsSync(pendingUntil)
+      ? {
+          isError: true,
+          content: [{ type: "text", text: "permissions_pending: macOS Accessibility or Screen Recording permission is still pending" }],
+        }
+      : json({ accessibility: !denied, screen_recording: !denied }),
   get_desktop_state: () => ({
     content: [{ type: "image", data: PIXEL, mimeType: "image/png" }],
     structuredContent: { screenshot_width: 1366, screenshot_height: 854, screen_width: 1512, screen_height: 945 },

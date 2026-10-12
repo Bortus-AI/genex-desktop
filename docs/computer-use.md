@@ -113,7 +113,9 @@ The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/des
 driven by [cua-driver](https://github.com/trycua/cua) (MIT): `cua-driver mcp` relays to the
 CuaDriver.app daemon, which holds the Accessibility and Screen Recording grants; a VM's driver is
 reached as `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest; `cua-driver mcp`
-starts its own daemon, and the grants are checked without a macOS prompt
+starts its own daemon, the grants are checked without a macOS prompt, and a daemon that started
+before the person granted them is restarted once; the driver's own cursor overlay is never "the app
+under a point"
 ([`cua-driver-client.ts`](../src/substrate/cua-driver-client.ts)). Every action targets the whole
 display in the foreground, because background clicks into a canvas are rerouted and reported as
 success (cua #4350). The driver is a host helper started with fixed arguments and a minimal

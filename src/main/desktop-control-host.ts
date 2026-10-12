@@ -10,6 +10,7 @@ import {
   connectCuaDriver,
   findCuaDriver,
   localDriverCommand,
+  restartLocalDriver,
   vmDriverCommand,
 } from "../substrate/cua-driver-client.ts";
 import type { DesktopApp } from "../substrate/desktop-driver.ts";
@@ -42,7 +43,7 @@ export function createDesktopControl(options: { automated: boolean }): DesktopCo
     connect: (binary) =>
       vmCommand
         ? connectCuaDriver(vmCommand, { local: false })
-        : connectCuaDriver(localDriverCommand(binary), { local: true }),
+        : connectCuaDriver(localDriverCommand(binary), { local: true, restart: restartLocalDriver(binary) }),
     ownApp: isStudio,
     ...(vmCommand ? { vm: true } : {}),
     onActive,

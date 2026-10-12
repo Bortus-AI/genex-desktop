@@ -39,13 +39,21 @@ function fakeConnection(overrides: Record<string, CuaAnswer> = {}) {
       apps: [
         { name: "Notes", bundle_id: "com.apple.Notes", pid: 7, active: true },
         { name: "Finder", bundle_id: "com.apple.finder", pid: 3, active: false },
+        { name: "Cua Driver", bundle_id: "com.trycua.driver", pid: 99, active: false },
       ],
     }),
     list_windows: json({
       windows: [
-        // The largest z_index is the frontmost window.
+        // The largest z_index is the frontmost window; above all, the driver's own cursor overlay.
         { pid: 3, window_id: 30, z_index: 0, bounds: { x: 0, y: 0, width: 1512, height: 945 } },
         { pid: 7, window_id: 70, z_index: 1, bounds: { x: 0, y: 0, width: 756, height: 945 } },
+        {
+          pid: 99,
+          window_id: 990,
+          app_name: "Cua Driver",
+          z_index: 15,
+          bounds: { x: 0, y: 0, width: 1512, height: 967 },
+        },
       ],
     }),
     get_window_state: { content: [{ type: "text", text: "- AXWindow Notes\n  - AXTextArea body" }] },
@@ -107,6 +115,7 @@ describe("cua-driver as the desktop driver", () => {
     await driver.screenshot();
     assert.deepEqual((await driver.focus()).app, { name: "Notes", bundleId: "com.apple.Notes", pid: 7 });
     assert.equal((await driver.focus()).secure, false);
+    // The driver's full-screen cursor overlay is never the app under a point (it would refuse every click).
     assert.equal((await driver.appAt?.(100, 100))?.name, "Notes", "the front window holds the left half");
     assert.equal((await driver.appAt?.(1200, 100))?.name, "Finder", "the right half is Finder's window behind it");
     // cua prints a field's role, never its secure subrole: a field labelled as a password counts as one.
@@ -207,6 +216,28 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
       .split("\n")
       .map((line) => JSON.parse(line));
     assert.deepEqual(first, { name: "check_permissions", args: { prompt: false } });
+  });
+
+  it("restarts a daemon that started before the person granted access, once, then connects", async () => {
+    const marker = path.join(await tmpDir("cua-pending-"), "restarted");
+    let restarts = 0;
+    const driver = await connectCuaDriver(
+      { command: process.execPath, args: [FAKE, "--pending", marker] },
+      {
+        local: false,
+        restart: async () => {
+          restarts += 1;
+          await writeFile(marker, "");
+        },
+      },
+    );
+    await driver.close();
+    assert.equal(restarts, 1);
+    // Without a way to restart it, a pending grant is said as missing, with how to fix it.
+    await assert.rejects(
+      connectCuaDriver({ command: process.execPath, args: [FAKE, "--pending", `${marker}-never`] }, { local: false }),
+      /needs Accessibility and Screen Recording/,
+    );
   });
 
   it("says the driver's own reason when it cannot start", async () => {
