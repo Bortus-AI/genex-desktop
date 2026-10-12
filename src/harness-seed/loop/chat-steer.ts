@@ -8,12 +8,22 @@
  * chat's too, and the chat's own session after a run it led), or a run's coordinator — runs
  * through here unchanged.
  */
-import { isLostSession, isResumeFailure } from "./chat-session.ts";
+import { isResumeFailure } from "./chat-session.ts";
 import { steeredTurnPrompt, withSteers } from "./chat-steer-prompts.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
 import type { DelegateImage, DelegateResult } from "../types/host-api.d.ts";
+
+/**
+ * Whether an engine's answer says the session it was asked to resume does not exist: a session
+ * another account made, or one the engine never saved. Here, not in chat-session.ts: an agent's kept
+ * copy of that module would lack it. Narrower than `isResumeFailure` (chat-session.ts), since an
+ * answer's words (a cap's "press Resume") are not an error's.
+ */
+function isLostSession(text: unknown): boolean {
+  return /no conversation found|conversation not found|session (id )?not found/i.test(String(text ?? ""));
+}
 
 /** One engine call of the turn: the prompt it sends, the session it resumes, and its pictures. */
 interface Leg {

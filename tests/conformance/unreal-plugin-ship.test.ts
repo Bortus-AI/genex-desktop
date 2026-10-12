@@ -71,6 +71,8 @@ const QUIT_TAKES_MS = 6_000;
 const OPEN_TAKES_MS = 20_000;
 const SEPARATE_LINKS = process.platform === "win32" && "links need privileges on Windows";
 const PROCESS_GROUPS = process.platform === "win32" && "process groups are POSIX";
+/** How long a forked backend may take to import itself and start its job (a slow CI runner included). */
+const BACKEND_START_MS = 20_000;
 
 /** Automation's report: two passes and a failure with its error. */
 const REPORT = {
@@ -947,7 +949,13 @@ describe("when Genex stops the backend", () => {
       ].join("\n"),
     );
     const child = fork(script, [], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
-    await until(async () => existsSync(pidFile) && (await readFile(pidFile, "utf8")).trim() !== "");
+    const written = async () => existsSync(pidFile) && (await readFile(pidFile, "utf8")).trim() !== "";
+    // A fresh Node process imports the whole backend before its job starts: wait in real time, not turns.
+    for (const end = Date.now() + BACKEND_START_MS; !(await written()); await pause(20)) {
+      if (Date.now() < end) continue;
+      child.kill("SIGKILL");
+      throw new Error(`the backend's job never started its child within ${BACKEND_START_MS} ms`);
+    }
     return { child, grandchild: Number((await readFile(pidFile, "utf8")).trim()) };
   }
   const exited = (child: ChildProcess) =>

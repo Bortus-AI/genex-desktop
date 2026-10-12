@@ -99,7 +99,7 @@ test("characterization: a scanned replacement from a local folder leads with wha
       "This replaces Old Example by Someone (from a local folder). Its saved account, settings and data will be erased.",
       "From the folder /Users/me/plugins/example\nPublisher: Studio development",
       "Its code runs on your computer like an app you install. It isn't sandboxed.",
-      "It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
+      "It runs with your access: Genex doesn't sandbox its code. It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
       "It asks to:\n• keep its own settings",
       "Adds 1 skill for agents: greeting.",
       "Scan: caution, 1 finding: child-process in backend.mjs:12.",
@@ -248,7 +248,7 @@ test("names the folders outside the games a plugin's programs will write in, eac
 test("loading again a local plugin that is on says it stays on and its new code runs at once", () => {
   const origin = { kind: PluginSourceKind.Local, directory: "/Users/someone/genex-plugins/example" } as const;
   const update = installDetail({ manifest: example, origin, before: example, staysOn: true });
-  assert.match(update, /It isn't sandboxed\./);
+  assert.match(update, /It runs with your access: Genex doesn't sandbox its code\./);
   assert.match(
     update,
     /It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs\./,

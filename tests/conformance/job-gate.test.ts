@@ -109,6 +109,8 @@ describe("a job's gate and box", () => {
   it("a job's box writes only its roots, Bypass adds the home folder, and neither reaches the never-touch list or the network", async () => {
     const f = await fixture();
     const fence = await neverTouchFence(f.list);
+    // Off a Mac the box denies only a Claude Code folder that exists, so each root holds one.
+    for (const root of [f.copy, f.granted]) await mkdir(path.join(root, ".claude"), { recursive: true });
     for (const gate of [JobGate.Wide, JobGate.Boxed, JobGate.Ask]) {
       const policy = jobPolicy(gate, reachOf(f), fence);
       const roots = [f.copy, f.granted];

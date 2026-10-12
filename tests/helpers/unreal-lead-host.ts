@@ -596,6 +596,10 @@ function handlers(host: Internals) {
   };
 }
 
+/** Whether the code under test waits on a real file request: the test's clock holds still meanwhile. */
+const fileWorkInFlight = (): boolean =>
+  process.getActiveResourcesInfo().some((resource) => resource.startsWith("FSReq"));
+
 /** A fake host for one or more lead runs on the tower game; `options.turns` scripts the lead's turns. */
 export function leadHost(
   options: {
@@ -641,6 +645,9 @@ export function leadHost(
   } as unknown as Internals;
   host.now = () => host.clock.now;
   host.sleep = async (ms: number) => {
+    // A watch loop's sleep never outruns real file work (the finish check reads the lead's proof
+    // files): on a slow disk it would spend the run's clock while one read is still on its way.
+    while (fileWorkInFlight()) await tick();
     host.clock.now += ms;
     await tick();
   };

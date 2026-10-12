@@ -55,6 +55,7 @@ const MESSAGE = {
   new: "new",
   changed: "changed",
   folders: (count: number) => `Turning it on lets its programs write in ${plural(count, "folder")} outside your games:`,
+  localAccess: "It runs with your access: Genex doesn't sandbox its code.",
   startsOff: "It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
   staysOn:
     "It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs.",
@@ -236,7 +237,8 @@ function ownSteps(manifest: PluginManifest): string[] {
 }
 
 /**
- * A plugin from a local folder starts off, each of its tools asking before an agent runs it; every
+ * A plugin from a local folder runs with the person's access and starts off, each of its tools
+ * asking before an agent runs it; every
  * step Genex runs on its own (hooks, observers, person-first probes, readiness checks) is named,
  * and runs without asking once it is on. Loading again one that is on keeps it on (`staysOn`): its
  * new code runs at once, and its tools ask again.
@@ -248,7 +250,7 @@ function localAccessBlock(
 ): string | undefined {
   if (origin?.kind !== PluginSourceKind.Local) return undefined;
   const steps = ownSteps(manifest);
-  const state = staysOn ? MESSAGE.staysOn : MESSAGE.startsOff;
+  const state = `${MESSAGE.localAccess} ${staysOn ? MESSAGE.staysOn : MESSAGE.startsOff}`;
   if (!steps.length) return state;
   return `${state} ${MESSAGE.steps(staysOn ? MESSAGE.runs : MESSAGE.runsOnceOn, steps.join(", "))}`;
 }
