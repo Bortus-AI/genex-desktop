@@ -3,8 +3,8 @@
 ## What the user sees
 
 The sidebar contains Search, Notifications, Send feedback
-([what it sends](../../PRIVACY.md#send-feedback)), New game, Plugins, Harness, Settings, the Games
-library and, once an update waits, **Relaunch to update** (Linux: **Download**); only games
+([what it sends](../../PRIVACY.md#send-feedback)), New game, Plugins, Harness, Settings, Games and,
+once updates wait, **Update plugins** and **Relaunch to update** (Linux: **Download**); only games
 scroll. Pinned games come first, then recent activity. Every launch opens **home** (also the wordmark): nothing
 selected, one composer over an optional dithered picture. A game opens its conversation beside
 the stage (Live, Builds once planned, Assets); Harness opens its conversation and Activity;
@@ -20,13 +20,13 @@ unfocused, macOS notifications and the Dock badge carry them.
 ## First launch
 
 An empty, never-welcomed profile opens a full-window welcome: a prompt plays through Plan your
-game, Build with workers and Reviewers test it, then Claude Code, ChatGPT or a local model connects. Skip or
-Start building opens home; a typed idea waits in its composer.
+game, Build with workers and Reviewers test it, then Claude Code, ChatGPT, a local model, OpenRouter
+or OpenCode connects. Skip or Start building opens home, a typed idea in its composer.
 
-Then a bottom-right Genex Tools card offers **Connect Genex plugin** once.
+Then a Genex Tools card offers **Connect Genex plugin** once.
 
-If the process sandbox cannot start, the window shows **Set up the protected workspace**: what
-is missing, commands to copy, Retry.
+A sandbox that cannot start opens **Set up the protected workspace**: what is missing or
+blocked, commands to copy, Retry.
 
 ## Main actions
 

@@ -151,8 +151,13 @@ Asset grids omit per-file metadata and job headers. The viewer is the file on th
 (88%, blurred), with only Reveal in Finder and Close in the top corner and no title; a click on a
 picture shows it at full size around the point clicked; a model opens playing its first clip, with
 play, the clips and speed in one floating bar and "Drag to turn · Scroll to zoom · Double-click to
-reset" above it. Chat build outcomes show
-the finished build card: capture, delivery status and Play; the card itself opens Builds.
+reset" above it. A kept Genex cover is one card once its turn ends, after the reply (never
+mid-turn), the build card's composer-coloured 16px-radius surface with an 8px inset and a 1px line:
+the shot at 16:9 (10px radius, object-cover, at most 26rem wide, the preview tile's hover; a click
+opens it whole beside the chat), and under it a 15px ink caption, "Genex cover", 8px in, with
+Publish on the right, the result button's size and type (as Play) in the accent fill, globe glyph.
+Chat build outcomes show the finished build card: capture, delivery status and Play; the card itself
+opens Builds.
 Only current-revision captures are selected from checks. Failures stay explicit; detailed checks
 and evidence limits remain in Builds/Studio. Learning counts link to Studio and omit zeros.
 What appears in the chat opens in place over 250ms: its height grows from nothing while it fades in,
@@ -264,7 +269,10 @@ what is missing, one line and one press (an accent-tinted line "Publishing goes 
 plugin, a blue chip with ↗ that closes the dialog and opens the plugin's page, and Install Genex plugin or
 Turn on Genex plugin in the footer; Connect Genex with the
 browser code), then shows the Game page row (a Test version row only while a draft is online and
-the game is not public), a stepped progress bar, and the accent Publish (Publish update once public). While it asks to set up (under the tinted line) or to publish, "Native app export for Mac,
+the game is not public), a stepped progress bar, and the accent Publish (Publish update once public). While the plugin
+reports no Genex cover shot to send and the owner chose none, one 13px ink-3 line under the game row ("No cover yet.
+Genex shows a real frame of your game.") carries a quiet sm Ask for a cover at its trailing edge; it closes the dialog
+and leaves the ask in that game's composer, cursor at the end, never sent. Hidden while publishing. While it asks to set up (under the tinted line) or to publish, "Native app export for Mac,
 Windows and Mobile coming soon" sits just above the buttons, in the description's type. More (⋯) and the switch sit beside every
 plugin's title. Back to workspace and sidebar navigation restore the preserved conversation. Export is the first item of the game
 chat header's ⋯ menu and uses that chat's bound game; it is disabled on drafts and absent from Harness. Preserve the mounted
@@ -450,8 +458,18 @@ stand in two columns 24px apart, each hugging its button, each extruded mark ove
 glides to the next label; sign-in and install progress use the app's LoaderGrid. Install stays in the
 welcome: no browser trip, no arrow. Both sign-ins read Finish in your browser, which finishes on
 its own; Claude's code box opens only from **Browser showed a code?** and the Connect ChatGPT window
-only for a device code or a failed sign-in (Settings and the chat card alike). The marks are the vendors'
-own paths, unaltered (`ui/provider-marks.ts`). All art is canvas in the empty states' wireframe
+only for a device code or a failed sign-in (Settings and the chat card alike). Under the buttons,
+a 13px small-caps ink-3 **or use** leads one row of quiet 32px buttons, each a 16px icon and its
+name (Local models, OpenRouter, OpenCode): no underline, the control-hover fill only under the
+pointer or focus, and one 13px ink-3 line under the row saying what the button pointed at offers.
+A way under way shows the LoaderGrid and its progress; a ready one a green check and its status.
+OpenRouter and OpenCode each open a screen like Connect's: its title, words held to 380px in
+balanced lines (the lines under the action too), its mark alone, one accent-tint action that
+hugs its words, quiet links under it, and OpenCode's sign-in as a terminal card (a 40px bar with
+Cancel over the terminal). While OpenCode's free models are all a person can build with, its ready
+screen lists them under a small-caps **build with** as one radio group of 36px rows (the picked one
+on a surface with an accent dot), OpenCode default first and picked; a short window drops the mark
+for it. The marks are the vendors' own paths, unaltered (`ui/provider-marks.ts`). All art is canvas in the empty states' wireframe
 language, reads theme colours from CSS and holds a still frame under Reduce Motion. Skip for now
 and Start building fade into home, the welcome's idea waiting in its composer.
 
@@ -490,7 +508,12 @@ connected row adds Show in the model picker; the model list refreshes by itself 
 while it first loads or after a refresh failed (Showing saved models… with Try again); a CLI update
 in progress reads Updating…. A signed-out row's one action is Sign in. No filesystem path or
 executable picker is shown; a missing or outdated CLI offers Install (or Update) and Check again, shows Installing… while the vendor's
-installer runs, and adds the vendor's Install guide after a failure. Local Models ranks models that fit with a
+installer runs, and adds the vendor's Install guide after a failure. The last row, Local server, connects a model server the person
+runs: until one is saved it lists the servers found on this computer (each with Use) above an
+address field, an optional API key and Connect; a refusal says why in red under the fields, with
+where the server keeps its key when Genex knows. A saved server's line names it ("TabbyAPI at
+127.0.0.1:5000"), its Server menu holds Check connection, Change address… and Disconnect, and its
+models list in mono with their context, "sees images" or "can't call tools". Local Models ranks models that fit with a
 Best fit tag, a memory meter and "Needs a N GB Mac" for the rest, plus Add from Ollama. An installed
 row keeps the quiet Installed badge beside a ghost trash button; it asks on the row ("Delete it from
 this Mac?") with Cancel, which takes focus, and a destructive Delete. Closing or switching sections preserves host installation

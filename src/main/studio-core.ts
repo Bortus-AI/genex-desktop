@@ -67,7 +67,9 @@ import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
 import { OpenCodeEngine } from "../substrate/engines/opencode.ts";
 import { LOCK_RECOVERY_DIR } from "../substrate/engines/ownership-locks.ts";
 import { OpenRouterEngine } from "../substrate/engines/openrouter.ts";
-import { OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
+import { LocalServerEngine } from "../substrate/engines/local-server.ts";
+import { serverSettings } from "../substrate/local-server/settings.ts";
+import { LOCAL_SERVER_KEY_SECRET, OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
 import { EventStore } from "../substrate/event-store.ts";
@@ -97,6 +99,7 @@ import { DEFAULT_POOL_MAX } from "../substrate/preview-pool.ts";
 import type { PreviewConsoleEntry, PreviewPixelStats, PreviewPort } from "../substrate/preview-port.ts";
 import { SnapshotEngine, SnapshotIndex, HARNESS_WORKSPACE } from "../substrate/snapshots.ts";
 import { claudeFolderDenyWrites, ProcessSandbox } from "../substrate/spawn.ts";
+import { checkLinuxIsolation } from "../substrate/linux-isolation.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { TurnFactory } from "../substrate/turns.ts";
 import type { EventData, EventEnvelope } from "../substrate/types.ts";
@@ -591,6 +594,12 @@ export class StudioCore {
       this.#createSandbox(listed).finally(() => mark("sandbox")),
       this.#wirePluginServices().finally(() => mark("plugins")),
     ]);
+    // Linux: a sandbox that cannot start a process (AppArmor's user-namespace restriction) is a
+    // setup problem the window shows, not a harness that never boots.
+    await checkLinuxIsolation(sandbox).catch(async (error: unknown) => {
+      await sandbox.dispose();
+      throw error;
+    });
     this.sandbox = sandbox;
     await this.#wireMcp();
     this.builds = this.#createBuilds();
@@ -971,6 +980,7 @@ export class StudioCore {
     this.engines.setPreferredOrder([
       EngineId.Bonsai,
       EngineId.Ollama,
+      EngineId.LocalServer,
       ...SUBSCRIPTION_ENGINES,
       EngineId.OpenCode,
       EngineId.OpenRouter,
@@ -986,6 +996,17 @@ export class StudioCore {
         toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
       }),
       new OllamaEngine({ ...(this.options.ollamaHost ? { host: this.options.ollamaHost } : {}) }),
+      // The person's own model server (LM Studio, llama.cpp, TabbyAPI, …), once connected in Settings.
+      new LocalServerEngine({
+        root: path.join(this.layout.engineHomes, EngineId.LocalServer),
+        scratchRoot: path.join(this.layout.scratch, EngineId.LocalServer),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        settings: serverSettings(path.join(this.layout.engineHomes, EngineId.LocalServer, "server.json")),
+        keys: secretKeyStore(path.join(this.layout.secrets, "providers"), LOCAL_SERVER_KEY_SECRET),
+        ...(this.options.ollamaHost ? { ollamaHost: this.options.ollamaHost } : {}),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.LocalServer }),
+      }),
       new ClaudeCodeEngine({
         onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.ClaudeCode }),
         engineHome: path.join(this.layout.engineHomes, EngineId.ClaudeCode),

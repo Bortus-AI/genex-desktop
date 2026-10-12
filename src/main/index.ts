@@ -71,6 +71,7 @@ import {
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
   fixtureEngines,
+  installOlderPlugins,
   isChatFixture,
   prepareFixture,
 } from "./dev/fixtures.ts";
@@ -115,6 +116,7 @@ import { registerThreadsIpc } from "./ipc/threads.ts";
 import { KeepAwake } from "./keep-awake.ts";
 import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
+import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
@@ -474,6 +476,11 @@ const { codexLogin, claudeLogin, openCodeLogin } = createLoginControllers({
     if (page) pushToRenderer(page, "studio:claude-login", state);
   },
 });
+// The person approved Genex on OpenRouter in the browser: the app comes forward to show it connected.
+const openRouterLogin = createOpenRouterLogin({
+  openExternal: (url) => shell.openExternal(url),
+  onReturn: () => showExistingWindow(),
+});
 
 /** The studio window's page, while there is one alive to receive a push (not closed, not crashed). */
 function livePage(): Electron.WebContents | null {
@@ -620,6 +627,9 @@ async function createCore(userData: string): Promise<StudioCore> {
       harnessLogBatch.push(line, stream);
     },
   });
+  // The plugin-updates fixture's profile holds older plugins before the core reads its plugin store.
+  if (fixtureProviders && dev?.fixture === FixtureName.PluginUpdates)
+    await installOlderPlugins(studio.layout.engineHomes, resources);
   performanceRecorder.mark("core-start");
   await studio.init();
   performanceRecorder.mark("core-ready");
@@ -1088,7 +1098,7 @@ function registerIpc(studio: StudioCore): void {
     developer: !app.isPackaged,
   });
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
-  registerModelsIpc(handle, { core: studio, subscription, pushUiEvent });
+  registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin });
   registerPreviewIpc(handle, {
     core: studio,
     preview: () => preview,

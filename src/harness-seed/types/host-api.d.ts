@@ -750,7 +750,7 @@ export interface EngineAccount {
  * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
  * through its native login reported from the in-app console, OpenCode through its own `auth login`
  * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
- * no sign-in of its own (a local model, or OpenRouter, whose key is pasted in Settings).
+ * no sign-in of its own (a local model, a local server, or OpenRouter, whose key is pasted in Settings).
  */
 export type LoginKind = "terminal" | "console" | "cli" | "none";
 // ↑ src/shared/providers.ts
@@ -801,6 +801,19 @@ export interface ProviderInfo {
 }
 // ↑ src/shared/providers.ts
 
+export type LocalServerKind = 'tabbyapi' | 'llama-cpp' | 'lm-studio' | 'vllm' | 'koboldcpp' | 'ollama';
+// ↑ src/shared/local-server.ts
+
+/** What the engine descriptor says about the saved server: its address and software, never its key. */
+export interface LocalServerInfo {
+  /** The API's base URL, as saved (`http://127.0.0.1:5000/v1`). */
+  url: string;
+  kind: LocalServerKind | null;
+  /** An API key is saved for it. */
+  hasKey: boolean;
+}
+// ↑ src/shared/local-server.ts
+
 export interface EngineDescriptor {
   id: string;
   label: string;
@@ -814,6 +827,8 @@ export interface EngineDescriptor {
   account?: EngineAccount | null;
   /** The provider table's row for this engine (`shared/providers.ts`); null for an unlisted engine. */
   provider?: ProviderInfo | null;
+  /** A local server engine: the saved server's address and software (never its key); null while none is saved. */
+  server?: LocalServerInfo | null;
   models: Array<{
     id: string;
     label: string;
@@ -828,6 +843,8 @@ export interface EngineDescriptor {
     /** A short alias the CLI resolves to another listed model, so pickers list that model once. */
     aliasOf?: string;
     note?: string;
+    /** Runs at no cost and with no account (OpenCode's own free models). */
+    free?: boolean;
     /** What the composer's effort menu offers for this model; empty = no effort dial. */
     efforts?: string[];
     defaultEffort?: string;

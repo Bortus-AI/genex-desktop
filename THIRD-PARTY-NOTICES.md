@@ -44,9 +44,9 @@ text behind a Studio-written preface; `vendor.json` records each source, version
 `npm run genex:skills` refreshes them.
 
 - Eight platform cards and their references, copied unchanged from
-  `@genex-ai/cli-demo` 1.36.2 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
+  `@genex-ai/cli-demo` 1.36.4 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
   license text ships beside them as `skills/LICENSE-cards`, copied from the CLI's `LICENSE`.
-- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.2), which is not part of the npm
+- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.4), which is not part of the npm
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
@@ -322,9 +322,11 @@ SOFTWARE.
 
 ## Provider marks from lobe-icons
 
-The Claude Code and Codex marks in `src/renderer/ui/provider-marks.ts` are copied unaltered from
-@lobehub/icons-static-svg 1.95.1 (claudecode.svg, codex.svg). Claude Code is a trademark of
-Anthropic and Codex of OpenAI; the marks only name the subscriptions Studio connects to.
+The Claude Code, Codex, OpenRouter and OpenCode marks in `src/renderer/ui/provider-marks.ts` are
+copied unaltered from @lobehub/icons-static-svg 1.95.1 (claudecode.svg, codex.svg,
+openrouter-color.svg, opencode.svg). Claude Code is a trademark of Anthropic, Codex of OpenAI,
+OpenRouter of OpenRouter, Inc. and OpenCode of its owners; the marks only name the providers
+Studio connects to.
 Source: https://github.com/lobehub/lobe-icons/blob/master/LICENSE
 
 MIT License

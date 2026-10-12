@@ -19,7 +19,7 @@ import type { LoopRunReview } from "./run-review.ts";
 import type { StagedTarget } from "./self-change-files.ts";
 import type { CodexLoginState } from "./codex-login.ts";
 import type { ClaudeLoginState } from "./claude-login.ts";
-import type { ProjectAsset, ProjectAssets } from "./game-assets.ts";
+import type { ProjectAsset, ProjectAssetRead, ProjectAssets } from "./game-assets.ts";
 import type { ModelRig } from "./model-rig.ts";
 import type { UiEvent } from "./ui-events.ts";
 import type { GameFile } from "./game-file.ts";
@@ -348,6 +348,26 @@ export interface StudioApi {
   openRouterKeySave(key: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /** Forget the saved OpenRouter key. */
   openRouterKeyClear(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /**
+   * Connect OpenRouter in the browser: OpenRouter's page opens, and the call settles once the
+   * person approved Genex there (the key is then checked and saved, never sent back), cancelled,
+   * or it failed. A new call replaces one still waiting.
+   */
+  openRouterSignIn(): Promise<import("./openrouter-login.ts").OpenRouterSignInResult>;
+  /** Open the waiting sign-in's page again; false when none is waiting. */
+  openRouterSignInReopen(): Promise<boolean>;
+  /** Stop the waiting sign-in; false when none is waiting. */
+  openRouterSignInCancel(): Promise<boolean>;
+  /**
+   * Connect a model server the person runs (`shared/local-server.ts`): check the address is on this
+   * computer or the local network, ask the server for its models with the key when one is given,
+   * and save both only when it answers. The key never comes back.
+   */
+  localServerConnect(url: string, key?: string): Promise<import("./local-server.ts").LocalServerConnectResult>;
+  /** Forget the saved local server's address and key. */
+  localServerForget(): Promise<import("./engine-descriptor.ts").EngineStatus>;
+  /** The model servers answering on this computer's usual ports, for Settings to offer. */
+  localServerFind(): Promise<import("./local-server.ts").FoundLocalServer[]>;
   terminalList(): Promise<import("./terminal.ts").TerminalSession[]>;
   terminalAccessibility(): Promise<boolean>;
   terminalOpen(project: string): Promise<import("./terminal.ts").TerminalSession>;
@@ -402,15 +422,10 @@ export interface StudioApi {
   projectAssets(project: string): Promise<ProjectAssets>;
   /**
    * One image from inside the game, contained and byte-sniffed. `maxPx` asks for a thumbnail;
-   * `scope: "genex-inspection"` reads the one saved frame of the named job instead.
+   * `scope: "genex-inspection"` reads the one saved frame of the named job instead, and
+   * `scope: "genex-cover"` the game's kept Genex cover shot (no file: the host knows where it is).
    */
-  readProjectAsset(p: {
-    project: string;
-    file: string;
-    maxPx?: number;
-    scope?: "game" | "genex-inspection";
-    jobId?: string;
-  }): Promise<{ mimeType: string; data: string } | null>;
+  readProjectAsset(p: ProjectAssetRead): Promise<{ mimeType: string; data: string } | null>;
   runFeedback(p: {
     threadId: string;
     runId?: string;

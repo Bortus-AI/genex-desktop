@@ -25,6 +25,7 @@ import { ChatFileOpen } from "../shared/chat-files.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
+import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
@@ -1457,6 +1458,7 @@ export const MODEL_PICKER_WORDS = {
   cannotSeeImages: "This model cannot see images, so it cannot review screenshots",
   subscription: "subscription",
   signIn: "sign in",
+  free: "Free",
 } as const;
 
 /** Settings → Model Providers: the metered rows, OpenCode and OpenRouter (`panels/MeteredProviders.tsx`). */
@@ -1509,6 +1511,68 @@ export const METERED_PROVIDER_WORDS = {
     remove: "Remove key",
     cancel: "Cancel",
   },
+} as const;
+
+/** Settings → Model Providers: the person's own model server (`panels/LocalServerRow.tsx`). */
+export const LOCAL_SERVER_WORDS = {
+  name: "Local server",
+  notConnectedLine: "Use a model you run in LM Studio, llama.cpp, TabbyAPI, vLLM or KoboldCpp.",
+  addressLabel: "Server address",
+  addressPlaceholder: "http://127.0.0.1:5000/v1",
+  keyLabel: "API key",
+  keyPlaceholder: "API key (optional)",
+  connect: "Connect",
+  connecting: "Connecting…",
+  saveKey: "Save key",
+  cancel: "Cancel",
+  found: "Running on this computer",
+  use: "Use",
+  foundModels: (count: number) => `${count} ${count === 1 ? "model" : "models"}`,
+  foundNeedsKey: "asks for a key",
+  connected: "Connected",
+  notRunning: "Not running",
+  needsKey: "Needs a key",
+  noModels: "No models",
+  /** "TabbyAPI at 127.0.0.1:5000", or the address alone for a server Genex can't name. */
+  serverAt: (name: string | null, host: string) => (name ? `${name} at ${host}` : host),
+  notRunningLine: (host: string) => `Nothing answers at ${host}. Start the server, then check again.`,
+  needsKeyLine: (server: string) => `${server} asks for an API key.`,
+  noModelsLine: (name: string) => `Load a model in ${name}, then check again.`,
+  theServer: "the server",
+  menu: "Server",
+  menuName: "Local server options",
+  change: "Change address…",
+  changeLine: "Connect another server or port",
+  disconnect: "Disconnect",
+  models: "Models on this server",
+  context: (size: string) => `${size} context`,
+  seesImages: "sees images",
+  cannotCallTools: "can't call tools, so it can't build",
+  /** Where TabbyAPI keeps the key it asks for: it writes one on its first start. */
+  tabbyKeyHint: "TabbyAPI writes its key to api_tokens.yml in its folder on first start.",
+  otherServer: "Running another server?",
+  connectIt: "Connect it in Model Providers",
+  onboardingLine: "Already running LM Studio, llama.cpp or TabbyAPI?",
+  connectServer: "Connect your server",
+  problem: {
+    [LocalServerProblem.Empty]: "Enter the server's address, like 127.0.0.1:5000.",
+    [LocalServerProblem.Malformed]: "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.",
+    [LocalServerProblem.Scheme]: "Use an address that starts with http:// or https://.",
+    [LocalServerProblem.Credentials]: "Leave the user name and password out of the address. Put a key under API key.",
+    [LocalServerProblem.NotLocal]:
+      "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.",
+    [LocalServerProblem.NotFound]:
+      "Couldn't find that computer on your network. Check the name, or use its IP address.",
+    [LocalServerProblem.NotAnswering]: "Nothing answers at that address. Start the server and check the port.",
+    [LocalServerProblem.NotOpenAi]:
+      "Something answers there, but not as a model server. Check the port, and that the address ends in /v1.",
+    [LocalServerProblem.NeedsKey]: "This server asks for an API key. Paste it under API key.",
+    [LocalServerProblem.KeyRefused]: "The server didn't accept that key. Check it and paste it again.",
+    [LocalServerProblem.BadKey]: "That doesn't look like a key. Paste the whole key, with no spaces.",
+    [LocalServerProblem.OwnOllama]: "That's the Ollama on this computer. Its models are already under Local models.",
+    [LocalServerProblem.StoreLocked]:
+      "This computer's secure storage is locked or unavailable, so the key can't be saved.",
+  } satisfies Record<LocalServerProblem, string>,
 } as const;
 
 /** Settings → Model Providers: which models the picker lists (`panels/PickerModels.tsx`). */
@@ -1604,6 +1668,21 @@ export const UPDATE_WORDS = {
   /** Linux: a newer release to download and install over this one. */
   download: (version: string | null) => (version ? `Download Genex ${version}` : "Download the new Genex"),
   downloadHint: "Opens the release page",
+} as const;
+
+/** How many waiting releases the Update plugins tooltip names before it counts them instead. */
+const PLUGIN_RELEASES_NAMED = 3;
+const RELEASE_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** The sidebar's Update plugins, while installed plugins have newer versions waiting (`state/plugins.ts`). */
+export const PLUGIN_UPDATE_WORDS = {
+  update: (count: number) => (count === 1 ? "Update plugin" : `Update ${count} plugins`),
+  updating: "Updating plugins…",
+  /** The button's tooltip: the releases it installs ("Local Blender 1.2.0"), each after its own approval. */
+  hint: (releases: readonly string[]) =>
+    releases.length > PLUGIN_RELEASES_NAMED
+      ? `Installs ${releases.length} plugin updates`
+      : `Installs ${RELEASE_LIST.format(releases)}`,
 } as const;
 
 /** Send feedback, from the bug button at the top of the sidebar (`panels/FeedbackDialog.tsx`). */
@@ -2226,8 +2305,13 @@ export const SANDBOX_SETUP_WORDS = {
     "not-provisioned": "Windows needs a one-time setup of the protected workspace, approved by an administrator.",
     "git-missing":
       "Agents run their commands in Git Bash, which comes with Git for Windows. Install it from git-scm.com, then retry.",
+    "isolation-blocked": "This system is blocking the isolation the protected workspace uses to keep agents apart.",
   } satisfies Record<SandboxProblemCode, string>,
   installThenRetry: "Install them in a terminal, then retry:",
+  /** Isolation blocked by AppArmor: the profile only applies to a Studio started after it. */
+  allowThenReopen: "Allow it for Studio in a terminal, then quit and reopen Studio:",
+  /** Who the allow command is for. */
+  allowFor: "Ubuntu 24.04 and later (AppArmor)",
   /** Who each install command is for, by `PackageManager`. */
   system: { apt: "Ubuntu, Debian", dnf: "Fedora" } satisfies Record<PackageManager, string>,
   copy: "Copy",
@@ -2566,6 +2650,16 @@ export const GENEX_WORDS = {
     filesLoading: "Listing files…",
     filesLabel: "Files Publish uploads",
     filesLeftOut: (count: number) => `${count} left out`,
+    /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
+    coverNone: "No cover yet. Genex shows a real frame of your game.",
+    coverAsk: "Ask for a cover",
+    coverAskLabel: "Ask for a cover in this game's chat",
+    /** What that press leaves in the game's composer, for the person to send. */
+    coverPrompt: "Make this game's Genex cover.",
+    /** The chat's card for the cover a builder kept: its caption, its picture's name, and Publish, which opens this dialog. */
+    coverCard: "Genex cover",
+    coverCardAlt: "This game's Genex cover",
+    coverCardPublishLabel: "Publish this game",
     failedTitle: "It didn't go online this time",
     failedText: "Your game is safe and nothing changed. Check your internet connection and try again.",
     failedKept: "Your game is safe, and players still get the version they had. Try again in a moment.",
@@ -2624,6 +2718,8 @@ export const GENEX_WORDS = {
   review: {
     title: "Waiting for your review",
     button: (candidate: number | null) => (candidate === null ? "Review remesh" : `Review candidate ${candidate}`),
+    /** A candidate's picture above its Review button. */
+    picture: (candidate: number) => `Candidate ${candidate}`,
   },
   /** A generation's state, by `JobState`. */
   state: {
