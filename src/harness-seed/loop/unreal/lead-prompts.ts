@@ -6,6 +6,7 @@
  * answers. Pure text from plain facts: nothing here reads the run. Tools are spelled the way the
  * session's engine calls them.
  */
+import { CLAIM_BEFORE_END_MINUTES } from "../finish-check.ts";
 import { toolCall } from "../model-roles.ts";
 import { type FactRef, ProjectTool } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
@@ -168,7 +169,7 @@ function assetText(engine: string | undefined, offers: LeadBriefOptions["offers"
     offers.genex ? "" : "Genex Tools isn't on, so no Genex characters, sound or textures this run.",
   ].filter(Boolean);
   return [
-    `ASSETS: Blender first for hard-surface work (weapons, kit pieces, props); Genex's Meshy lanes for characters and creatures; images only for decals, signage and UI, never a photo standing in for 3D; nothing from BasicShapes in the shipped look. When nothing on meets a wish, say so once and use the next tool, or find a Genex plugin with ${find} (${suggest} shows the person its card). Follow Genex jobs with genex__asset status and wait: the genex-creator tools ask the owner first, who may be away.`,
+    `ASSETS: Blender first for hard-surface work (weapons, kit pieces, props); Genex's Meshy lanes for characters and creatures; images only for decals, signage and UI, never a photo standing in for 3D; nothing from BasicShapes in the shipped look. When nothing on meets a wish, say so once and use the next tool, or find a Genex plugin with ${find} (${suggest} shows the person its card). Follow Genex jobs with genex__asset status and wait: the genex-creator tools ask the owner first.`,
     ...missing,
   ].join(" ");
 }
@@ -186,11 +187,12 @@ function savingText(engine: string | undefined): string {
   const tool = (name: LeadTool) => runTool(engine, name);
   return `SAVING AND THE RUN:
 - ${tool(LeadTool.SavePoint)} after you have looked: Genex saves all, snapshots the game and captures the hero cameras. Save often, at least every 15 minutes of work; never while the game plays.
-- ${tool(LeadTool.Milestone)} names what you work on now (a column on the owner's Builds graph): name one before your first save point and a new one whenever you move to another part of the game (the look, a space, combat, a creature, the finish). ${tool(LeadTool.Rewind)} goes back to a save point between turns, your own undo.
+- ${tool(LeadTool.Milestone)} names what you work on now (a column on the owner's Builds graph): name one before your first save point and a new one for each new part of the game. ${tool(LeadTool.Rewind)} goes back to a save point between turns, your own undo.
 - ${tool(LeadTool.RebuildUnreal)} restarts Unreal between turns: after C++ changes in unreal/Source (never Live Coding), or when the editor renders differently from play.
-- Act on the owner's words when they come in, right after the edit you are in.
-- NOTES.md in this folder is your memory across compactions and sessions: keep it current (what is built, how, what is next).
+- Act on the owner's words right after the edit you are in.
+- NOTES.md in this folder is your memory across sessions: keep it current.
 - ${tool(LeadTool.Note)} leaves the owner one line.
+- When you believe the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, test reports). A reviewer who did none of the work checks it; a no comes back with reasons, and three in a row stop the Loop.
 - Your last words are honest: what you built, and what you did not test.`;
 }
 
@@ -282,7 +284,7 @@ export const STEER = {
     `Unreal crashed at ${at} and couldn't be reopened on the level as it was, so Genex put the game back to save point '${label}' and reopened it. Look at the level as it is now before you go on.`,
   /** The run's end is near: fix visible defects, set the hero cameras, save "Final", update NOTES.md. */
   WrapUp: (engine: string | undefined, minutesLeft: number): string =>
-    `About ${minutesLeft} minutes are left: wrap up. Fix the defects you can see, set the hero cameras (${HERO_CAMERA_PREFIX}…), call ${runTool(engine, LeadTool.SavePoint)} with label "Final", update NOTES.md, and end with honest words: what you built and what you did not test.`,
+    `About ${minutesLeft} minutes are left: wrap up. Fix the defects you can see, set the hero cameras (${HERO_CAMERA_PREFIX}…), call ${runTool(engine, LeadTool.SavePoint)} with label "Final", update NOTES.md, and end with honest words: what you built and what you did not test. If the game meets the request, call ${runTool(engine, LeadTool.Finish)} at least ${CLAIM_BEFORE_END_MINUTES} minutes before the end: a reviewer needs that long to check your claim.`,
 } as const;
 
 /** Why a session was handed over, in the handover's words. */

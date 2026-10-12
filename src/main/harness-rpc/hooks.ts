@@ -51,19 +51,25 @@ function answersTo(p: { threadId?: string | null; runId?: string | null }): Pick
 export function hooksRpc(core: StudioCore, x: CoreInternals) {
   return {
     [HostMethod.CheckpointTake]: async (p) => {
+      const boot = x.harnessBoot;
       if (!isHookLabel(p.label)) throw new Error(MESSAGE.badLabel);
       const project = await knownGame(core, p.project);
       const scope = { project, ...answersTo(p) };
-      return stoppableMoment(x, scope, (signal) =>
-        x.hooks.takeCheckpoint({
-          ...scope,
-          label: p.label,
-          ...(p.onlyIfUnsaved === true ? { onlyIfUnsaved: true } : {}),
-          signal,
-        }),
+      return stoppableMoment(
+        x,
+        scope,
+        (signal) =>
+          x.hooks.takeCheckpoint({
+            ...scope,
+            label: p.label,
+            ...(p.onlyIfUnsaved === true ? { onlyIfUnsaved: true } : {}),
+            signal,
+          }),
+        boot,
       );
     },
     [HostMethod.HooksFire]: async (p) => {
+      const boot = x.harnessBoot;
       if (!isSeedFiredHookEvent(p.on)) throw new Error(MESSAGE.notSeedFired(p.on));
       const turn = optionalLabel(p.turn);
       const label = optionalLabel(p.label);
@@ -71,7 +77,7 @@ export function hooksRpc(core: StudioCore, x: CoreInternals) {
       const project = await knownGame(core, p.project);
       const scope = { project, ...answersTo(p) };
       const told = { ...(turn ? { turn } : {}), ...(label ? { label } : {}), ...(worker ? { worker } : {}) };
-      return stoppableMoment(x, scope, (signal) => x.hooks.fire(p.on, { ...scope, ...told }, { signal }));
+      return stoppableMoment(x, scope, (signal) => x.hooks.fire(p.on, { ...scope, ...told }, { signal }), boot);
     },
   } satisfies Partial<HarnessHostHandlers>;
 }

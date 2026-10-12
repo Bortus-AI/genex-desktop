@@ -126,11 +126,17 @@ async function restoreSnapshot(lead: EditorRun, snapshot: { id: string; label: s
   }
 }
 
-/** A restart: the restore moments with no file changed; why it was stopped, or null. */
+/**
+ * A restart: the restore moments with no file changed. Genex holding back the moment that reopens
+ * (Plan mode, another holder of the app) leaves the apps closed: that hold is the outcome, never
+ * read as an app that failed to reopen.
+ */
 async function restart(lead: EditorRun): Promise<RestoreOutcome> {
   const closed = await closeEditor(lead);
   if (!closed.ok) return closed;
-  await fireHooks(lead.ctx, lead.game, HookEvent.RestoreAfter, runScope(lead));
+  const reopening = await fireHooks(lead.ctx, lead.game, HookEvent.RestoreAfter, runScope(lead));
+  const held = reopening.blocked ? holdOf(reopening.blocked) : null;
+  if (reopening.blocked && held) return failed(RestoreFailure.NotReopened, reopening.blocked.reason, held);
   return { ok: true };
 }
 
@@ -162,7 +168,8 @@ export async function coldRestore(
   options: { snapshot: { id: string; label: string } | null; wait?: boolean },
 ): Promise<RestoreOutcome> {
   const restored = options.snapshot ? await restoreSnapshot(lead, options.snapshot) : await restart(lead);
-  if (!restored.ok && restored.failure === RestoreFailure.NotSaved) return restored;
+  // Nothing to wait for: the apps were left open, or Genex held back their reopen.
+  if (!restored.ok && (restored.failure === RestoreFailure.NotSaved || restored.held)) return restored;
   const ready = await reopened(lead, options.wait !== false);
   lead.journal.builtStamp = await sourceStamp(lead).catch(() => null);
   return restored.ok ? ready : restored;

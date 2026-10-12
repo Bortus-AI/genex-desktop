@@ -21,7 +21,7 @@ import type {
   Rect,
   RunNode,
 } from "../../run-graph.ts";
-import { FinishCheckState, runIdOf, thumbShot, truncate } from "../../run-graph.ts";
+import { runIdOf, thumbShot, truncate } from "../../run-graph.ts";
 import type { JobInfo } from "../../run-graph-workers.ts";
 import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
 import {
@@ -34,7 +34,7 @@ import {
   stepWord,
   Tone,
 } from "../../run-steps.ts";
-import { jobsTileStatus, LeadFace } from "../../run-tree.ts";
+import { FinishLook, finishCheckFace, finishCheckLook, jobsTileStatus, LeadFace } from "../../run-tree.ts";
 import { useStill } from "../../stills.ts";
 import { Icon } from "../../ui/icons.tsx";
 import { ASSET_THUMB_PX, blenderRender, firstImage, isMaking } from "../inspector/asset-jobs.ts";
@@ -74,11 +74,22 @@ const RING: Record<Variant, string> = {
 };
 const SELECTED_RING = "0 0 0 2px var(--accent), 0 0 0 6px var(--accent-tint)";
 
+/** A ring of one state colour, drawn as the variants' rings are: the finish check's tinted edge. */
+const edgeRing = (edge: string): string => `0 0 0 1.5px ${edge}`;
+
+/** The frame's ring: selected first, then a settled node's own edge colour when it has one, else its variant's. */
+function frameRing(variant: Variant, selected: boolean, edge: string | null): string {
+  if (selected) return SELECTED_RING;
+  if (edge && variant === Variant.Normal) return edgeRing(edge);
+  return RING[variant];
+}
+
 /** A node's frame: a button at its rect, ringed by its variant; a ghost adds a dashed edge inside. */
 function NodeFrame({
   id,
   rect,
   variant = Variant.Normal,
+  edge = null,
   selected,
   label,
   screen = null,
@@ -88,6 +99,8 @@ function NodeFrame({
   id: string;
   rect: Rect;
   variant?: Variant;
+  /** A settled node's edge in its state's colour (a token), instead of the plain outline: only the finish check has one. */
+  edge?: string | null;
   selected: boolean;
   label: string;
   /** The window whose screen the node shows, while it shows one. */
@@ -100,7 +113,7 @@ function NodeFrame({
     top: rect.y,
     width: rect.w,
     height: rect.h,
-    boxShadow: selected ? SELECTED_RING : RING[variant],
+    boxShadow: frameRing(variant, selected, edge),
   };
   return (
     <button
@@ -154,13 +167,14 @@ const LOOK_STYLE: Record<Look, CSSProperties | undefined> = {
   [Look.Soft]: { opacity: 0.6 },
 };
 
-/** What a node shows while it has no picture: a shimmer while work is in hand, a flat inset, or the hatch. */
-const Fill = { Hatch: "hatch", Shimmer: "shimmer", Flat: "flat" } as const;
+/** What a node shows while it has no picture: a shimmer while work is in hand, a flat inset, the plain surface, or the hatch. */
+const Fill = { Hatch: "hatch", Shimmer: "shimmer", Flat: "flat", Surface: "surface" } as const;
 type Fill = (typeof Fill)[keyof typeof Fill];
 const FILL_CLASS: Record<Fill, string> = {
   [Fill.Hatch]: "hatch",
   [Fill.Shimmer]: "graph-shimmer",
   [Fill.Flat]: "bg-inset",
+  [Fill.Surface]: "bg-surface",
 };
 
 /** The status glyph alone, grown, at the bottom right: all that is left of a node zoomed far out. */
@@ -185,8 +199,11 @@ function NodeFace({
   src,
   look = Look.Plain,
   fill = Fill.Hatch,
+  tint = null,
   over = null,
   chip = null,
+  eyebrow = null,
+  eyebrowTone = Tone.Muted,
   name,
   word,
   tone,
@@ -196,9 +213,15 @@ function NodeFace({
   src: string | null;
   look?: Look;
   fill?: Fill;
+  /** A state's tint (a token) laid over the fill: only the finish check has one. */
+  tint?: string | null;
   /** Drawn on the picture, under the words: an agent's cursor. */
   over?: ReactNode;
   chip?: string | null;
+  /** A first line over the name that says what the node is, as a tile's (`TileText`). */
+  eyebrow?: string | null;
+  /** The first line's ink: muted, or the state's for the finish check. */
+  eyebrowTone?: Tone;
   name: string;
   word: ReactNode;
   tone: Tone;
@@ -220,6 +243,7 @@ function NodeFace({
       ) : (
         <span aria-hidden="true" className={`absolute inset-0 ${FILL_CLASS[fill]}`} />
       )}
+      {tint ? <span aria-hidden="true" className="absolute inset-0" style={{ background: tint }} /> : null}
       {over}
       {chip ? (
         <span
@@ -234,6 +258,11 @@ function NodeFace({
         className="absolute inset-x-0 bottom-0 flex min-w-0 flex-col gap-px px-3 pt-7 pb-2.5 group-data-[zoom=far]/canvas:hidden"
         style={pictured ? PICTURED_CAPTION : PLAIN_CAPTION}
       >
+        {eyebrow ? (
+          <span className="truncate text-[11px] leading-[14px]" style={{ color: TONE[eyebrowTone] }}>
+            {eyebrow}
+          </span>
+        ) : null}
         <span className={`truncate text-[13.5px] leading-[18px] font-semibold ${pictured ? "text-white" : "text-ink"}`}>
           {name}
         </span>
@@ -692,12 +721,16 @@ export function JobsTile({
   );
 }
 
-/** How the finish check looks in each state: a ghost until it runs, at work while it checks. */
-const FINISH_LOOK: Record<FinishCheckState, { variant: Variant; glyph: StepState | null }> = {
-  [FinishCheckState.NotYet]: { variant: Variant.Ghost, glyph: null },
-  [FinishCheckState.Checking]: { variant: Variant.Working, glyph: StepState.Judging },
-  [FinishCheckState.Done]: { variant: Variant.Normal, glyph: StepState.InBuild },
-  [FinishCheckState.Stopped]: { variant: Variant.Normal, glyph: StepState.Undone },
+/**
+ * How the finish check's frame looks in each of its looks (`finishCheckLook` gives the colours):
+ * a ghost until it runs, at work while it checks, settled on the plain surface once it answered.
+ */
+const FINISH_FRAME: Record<FinishLook, { variant: Variant; fill: Fill; glyph: StepState | null }> = {
+  [FinishLook.Placeholder]: { variant: Variant.Ghost, fill: Fill.Hatch, glyph: null },
+  [FinishLook.NotYet]: { variant: Variant.Normal, fill: Fill.Surface, glyph: null },
+  [FinishLook.Checking]: { variant: Variant.Working, fill: Fill.Shimmer, glyph: StepState.Judging },
+  [FinishLook.Done]: { variant: Variant.Normal, fill: Fill.Surface, glyph: StepState.InBuild },
+  [FinishLook.Stopped]: { variant: Variant.Normal, fill: Fill.Surface, glyph: StepState.Undone },
 };
 
 /** The finish check, the last node of a run's tree: the reviewer's check that the run is done. */
@@ -712,24 +745,28 @@ export function FinishCheckNode({
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
-  const look = FINISH_LOOK[node.state];
-  const state = FINISH_CHECK_WORDS.state[node.state];
-  const word = node.state === FinishCheckState.NotYet ? `${state} · ${FINISH_CHECK_WORDS.placeholder}` : state;
+  const colours = finishCheckLook(node);
+  const look = FINISH_FRAME[colours.look];
+  const face = finishCheckFace(node);
   return (
     <NodeFrame
       id={GraphSelection.FinishCheck}
       rect={rect}
       variant={look.variant}
+      edge={colours.edge}
       selected={selected}
-      label={`${FINISH_CHECK_WORDS.name}: ${word}`}
+      label={`${FINISH_CHECK_WORDS.name}: ${face.name} · ${face.word}`}
       onSelect={onSelect}
     >
       <NodeFace
         src={null}
-        fill={look.variant === Variant.Working ? Fill.Shimmer : Fill.Hatch}
-        name={FINISH_CHECK_WORDS.name}
-        word={word}
-        tone={look.glyph ? STATE_TONE[look.glyph] : Tone.Muted}
+        fill={look.fill}
+        tint={colours.fill}
+        eyebrow={FINISH_CHECK_WORDS.name}
+        eyebrowTone={colours.tone}
+        name={face.name}
+        word={face.word}
+        tone={colours.tone}
         glyph={look.glyph ? <StateGlyph state={look.glyph} /> : null}
       />
     </NodeFrame>

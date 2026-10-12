@@ -6,7 +6,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { HOOK_CALL_MS } from "../../src/main/core/plugin-hooks.ts";
-import { OPEN_FOR_RUN_MAX_MS, RESTORE_SAVE_MAX_MS } from "../../src/plugins/unreal/editor-moments.ts";
+import {
+  CHECKPOINT_SAVE_MAX_MS,
+  OPEN_FOR_RUN_MAX_MS,
+  RESTORE_SAVE_MAX_MS,
+} from "../../src/plugins/unreal/editor-moments.ts";
+import { HERO_SHOTS_MAX_MS } from "../../src/plugins/unreal/loop-tools.ts";
 import { HookEvent, hookEventsOf, hookPlan, LockScope } from "../../src/shared/plugin-hooks.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { FolderHolds, type GameKind } from "../../src/shared/project-facts.ts";
@@ -291,7 +296,7 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   it("the bundled Unreal manifest is valid and its lock's probe needs no lock", () => {
     const raw = JSON.parse(readFileSync("src/plugins/unreal/plugin.json", "utf8")) as PluginManifest;
     const unreal = validateManifest(raw);
-    assert.equal(unreal.version, "0.7.0");
+    assert.equal(unreal.version, "0.10.2");
     assert.deepEqual(unreal.locks, [
       { id: "editor", label: "Unreal", per: LockScope.Project, personFirst: "editor-activity" },
     ]);
@@ -328,6 +333,11 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     );
   });
 
+  it("gives the Unreal plugin's checkpoint save and its hero shots longer than they take, each editor call's session counted", () => {
+    assert.ok(HOOK_CALL_MS[HookEvent.CheckpointBefore] > CHECKPOINT_SAVE_MAX_MS, "the save answers in its own words");
+    assert.ok(HOOK_CALL_MS[HookEvent.CheckpointAfter] > HERO_SHOTS_MAX_MS, "the hero shots answer in their own words");
+  });
+
   it("gives the Unreal plugin's open-for-run longer than its slowest start: a busy wait, a helper update and two opens", () => {
     assert.ok(
       HOOK_CALL_MS[HookEvent.RunPrepare] > OPEN_FOR_RUN_MAX_MS,
@@ -336,7 +346,7 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   });
 });
 
-/** The Unreal plugin's harness tools that work in the open editor, and so wait for its lock. */
+/** The Unreal plugin's tools that work in the open editor, and so wait for its lock. */
 const UNREAL_EDITOR_STEPS = [
   "open-for-run",
   "save-all",
@@ -344,6 +354,7 @@ const UNREAL_EDITOR_STEPS = [
   "reopen-editor",
   "update-helper",
   "add-cpp-module",
+  "plugin-build",
   "export-reference",
   "hero-shots",
   "play-check",

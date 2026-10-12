@@ -1,5 +1,6 @@
 import { keepCheckpoint } from "./progress.ts";
 import { retainSpan, timedOperation } from "./timing.ts";
+import { capRefusesWorker, runNow } from "./cap-lines.ts";
 import { GoalBlocker, GoalStatus, goalDecision, recordGoalEvidence, replanGoal } from "./goals.ts";
 /**
  * The director's tools as its session calls them: the handler the studio forwards every call to,
@@ -29,6 +30,7 @@ import {
   steerStageWords,
 } from "../facet/stage-prompts.ts";
 import { fireHooks, HookEvent, runScope } from "../hooks.ts";
+import { FINAL_JUDGE_MS, finishCallOf } from "./finish-claim.ts";
 import { HOOK_PROMPTS } from "../hooks-prompts.ts";
 import { CLIP_REASON } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
@@ -80,12 +82,6 @@ const STOPPED_BY_USER = "STOPPED BY THE USER: the run is over; end your session 
 const JUDGE_STATE_CHARS = 1_200;
 /** How many GPU errors a judge's answer carries. */
 const JUDGE_GPU_ERRORS = 4;
-/**
- * How soon after it starts the close's own judge must be done asking (`judgeTheLanding`). The close
- * runs inside the lead's `finish` call, which the engine gives up on after ten minutes, and the
- * settle, the close's look and the judge's own look share that time.
- */
-const FINAL_JUDGE_MS = 4 * MINUTE_MS;
 /** judge.ts's confidence for an answer that states none — a coin flip; the close counts only a surer one. */
 const COIN_FLIP = 0.5;
 /** A playtest's minutes: at least two, at most eight, five unless the director says otherwise. */
@@ -794,19 +790,25 @@ function finallyJudged(judged: LastJudge | null, head: string | null): boolean {
  * finish, so builds went live with no judge having looked. A build the user had a picture of is
  * compared blind with it; a new game, or one whose start nobody could photograph, is asked whether
  * it shows what the user asked for. It looks through the studio's window when every other is
- * taken, its calls end by `FINAL_JUDGE_MS` (and with the user's Stop), and its word is kept as
- * every judge's is (`state.lastJudge`, a judge verdict), for the landing's claim.
+ * taken, its calls end by `FINAL_JUDGE_MS` (or `judgeBy`, a lead's call's end, when sooner; and
+ * with the user's Stop), and its word is kept as every judge's is (`state.lastJudge`, a judge
+ * verdict), for the landing's claim.
  */
-export async function judgeTheLanding(loopRun: LoopRun, head: string | null): Promise<void> {
+export async function judgeTheLanding(loopRun: LoopRun, head: string | null, judgeBy?: number): Promise<void> {
   const { note } = loopRun;
   const ask = closeJudgeAsk(loopRun, head);
   if (!ask) return;
-  const options = { borrow: true, final: true, until: Date.now() + FINAL_JUDGE_MS };
+  const options = { borrow: true, final: true, until: landingJudgeUntil(Date.now(), judgeBy) };
   await judge(loopRun, ask, options).catch((err: unknown) =>
     note(
       `the close could not judge ${shortSha(head)}: ${String((err as Error)?.message ?? err).slice(0, CLIP_REASON)}`,
     ),
   );
+}
+
+/** When the close's judge must be done, from `now`: its own time at most, and by `judgeBy` when that is sooner (a claim's call). */
+export function landingJudgeUntil(now: number, judgeBy?: number): number {
+  return Math.min(now + FINAL_JUDGE_MS, judgeBy ?? Number.POSITIVE_INFINITY);
 }
 
 /**
@@ -1326,9 +1328,11 @@ function oneAtATime<T>(loopRun: LoopRun, change: () => T | Promise<T>): Promise<
  * on. Only the lead's own call asks; the close's own finish fires no moment.
  */
 async function finishUnlessHeld(loopRun: LoopRun, args: AnyRecord): Promise<unknown> {
+  // The call's clock starts here: the moment, a reviewer of a claim and the close share it.
+  const started = Date.now();
   const held = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Finish, runScope(loopRun));
   if (held.blocked) return HOOK_PROMPTS.finishHeld(held.blocked.reason);
-  return loopRun.finish(args);
+  return loopRun.finish(args, finishCallOf(started, held));
 }
 
 /**
@@ -1339,7 +1343,9 @@ async function finishUnlessHeld(loopRun: LoopRun, args: AnyRecord): Promise<unkn
 const HANDED_OFF = {
   [DirectorTool.Plan]: (loopRun, args) => oneAtATime(loopRun, () => loopRun.setPlan(args)),
   // `task` is the brief's name; a kept prompt's `brief` is still read (`briefOf`).
+  // From the Loop's cap on no worker starts (cap-lines.ts): the time is for putting the build together.
   [DirectorTool.WorkerStart]: (loopRun, args) =>
+    capRefusesWorker(loopRun, runNow(loopRun)) ??
     oneAtATime(loopRun, () => loopRun.startWorker({ ...args, brief: briefOf(args) })),
   [DirectorTool.Wait]: (loopRun, args) => loopRun.wait(args),
   [DirectorTool.Judge]: (loopRun, args) => loopRun.judge(args),

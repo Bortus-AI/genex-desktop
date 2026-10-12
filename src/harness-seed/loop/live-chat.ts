@@ -133,6 +133,7 @@ export async function runUnderWay(studio: Studio, threadId: string, project: str
  */
 export function stopRun(active: ActiveRun): void {
   active.stopped = true;
+  active.stops = (active.stops ?? 0) + 1;
 }
 
 /** The composer's Stop: it reaches every run of this chat — or of every chat, when none is named. */

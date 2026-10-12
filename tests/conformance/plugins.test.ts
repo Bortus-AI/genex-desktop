@@ -11,13 +11,15 @@ import path from "node:path";
 import { PluginConsentDeclined, PluginRegistry, type PluginMcpLaunch } from "../../src/substrate/plugins/registry.ts";
 import { SecretStorageIssue } from "../../src/shared/secret-storage.ts";
 import { SecretStorageUnavailableError } from "../../src/substrate/secrets.ts";
-import { EXAMPLE_PLUGIN, copyOfExample as copyOf, pluginFixture as fixture } from "../helpers/plugins.ts";
 import {
-  RESERVED_TOOLBAR_LABELS,
-  canonicalManifest,
-  inspectPackage,
-  validateManifest,
-} from "../../src/substrate/plugins/manifest.ts";
+  EXAMPLE_PLUGIN,
+  copyOfExample as copyOf,
+  installLocalOn,
+  personAllowsLocalTools,
+  pluginFixture as fixture,
+} from "../helpers/plugins.ts";
+import { canonicalManifest, inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
+import { RESERVED_TOOLBAR_LABELS } from "../../src/substrate/plugins/reserved-labels.ts";
 import type { PluginChange, PluginInfo, PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
 import { CallCutOff } from "../../src/shared/plugins.ts";
 import { PluginCallCutOff } from "../../src/substrate/plugins/process.ts";
@@ -621,6 +623,8 @@ test("onChange reports install, update (including a leased update), enable, disa
         return d;
       }),
     );
+    // Loaded from a folder, it starts off: the person turns it on.
+    await f.registry.setEnabled("crash", true);
     changes.length = 0;
     await assert.rejects(f.registry.tool("crash__greet", { name: "Ada" }, f.binding), /exited/);
     assert.deepEqual(changes, [{ id: "crash", reason: "failed" }]);
@@ -672,7 +676,7 @@ test("restore re-acquires a local plugin from its recorded origin and names a go
       m.id = "local-one";
       m.name = "Local one";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const find = (r: PluginRegistry) => r.list().find((p) => p.manifest.id === "local-one")!;
     assert.deepEqual(find(f.registry).origin, { kind: "local", directory: dir });
     assert.equal(find(f.registry).state, "enabled");
@@ -686,7 +690,9 @@ test("restore re-acquires a local plugin from its recorded origin and names a go
     try {
       assert.deepEqual(find(next).origin, { kind: "local", directory: dir });
       await next.restore("local-one");
-      assert.equal(next.enabled("local-one"), true);
+      assert.equal(next.enabled("local-one"), false, "loaded again from its folder, it starts off");
+      await next.setEnabled("local-one", true);
+      personAllowsLocalTools(next);
       assert.deepEqual(await next.tool("local-one__greet", { name: "Ada" }, f.binding), {
         text: "Hello Ada",
         project: "game",
@@ -746,6 +752,9 @@ test("code dropped under packages is listed as not-enabled until allowed; record
       assert.match(find("outside").error!, /outside Studio storage/);
       await assert.rejects(next.tool("outside__greet", { name: "Ada" }, f.binding), /unavailable/);
       await next.allowUnlisted("dropped", ["settings"]);
+      assert.equal(find("dropped").state, "disabled", "allowed, it is installed off");
+      await next.setEnabled("dropped", true);
+      personAllowsLocalTools(next);
       assert.equal(find("dropped").state, "enabled");
       assert.equal(find("dropped").unlisted, undefined);
       assert.equal(next.list().filter((p) => p.manifest.id === "dropped").length, 1);
@@ -1059,7 +1068,8 @@ test("watch reloads a local plugin from the folder it was loaded from, defers un
       m.id = "watched";
       m.name = "Watched";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
     const watcher = watchByHand(f.registry);
     const find = () => f.registry.list().find((p) => p.manifest.id === "watched")!;
     assert.equal(find().watching, false);
@@ -1131,7 +1141,7 @@ test("code that is read again is scanned again: a reload and a restore never kee
         scannedAt: new Date().toISOString(),
       };
     };
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const find = () => f.registry.list().find((p) => p.manifest.id === "rescanned")!;
     assert.equal(find().scan!.verdict, "safe");
     assert.equal(scanned.length, 1);
@@ -1174,7 +1184,8 @@ test("a watched edit never brings back a plugin removed while the reload was que
       m.id = "racing";
       m.name = "Racing";
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
     const find = () => f.registry.list().find((p) => p.manifest.id === "racing")!;
     const watcher = watchByHand(f.registry);
     const changes: PluginChange[] = [];
@@ -1284,7 +1295,8 @@ test("backend stderr reaches the developer debug sink without becoming plugin st
     f.registry.debug = (id, line) => {
       lines.push({ id, line });
     };
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
+    personAllowsLocalTools(f.registry);
     assert.equal(lines.length, 0);
     assert.deepEqual(await f.registry.tool("noisy__greet", { name: "Ada" }, f.binding), {
       text: "ok",
@@ -2041,8 +2053,8 @@ test("re-enable and reinstall restore prior account consent once without retryin
 
 /**
  * R5: an installed bundled plugin is replaced only through an offered update, and one is offered
- * only for a newer version. This build's Genex (publish settle, "Allow a new upload", telemetry
- * off) must reach a profile that still holds the last released Genex, 1.4.2.
+ * only for a newer version. This build's Genex (the game's Genex cover: genex__cover, genex__cover-set
+ * and the cover card) must reach a profile that still holds the last released Genex, 1.5.0.
  */
 test("a profile holding the last released Genex is offered this build's Genex", async () => {
   const { makeResources } = await import("../helpers/resources.ts");
@@ -2052,7 +2064,7 @@ test("a profile holding the last released Genex is offered this build's Genex", 
   await mkdir(released);
   await cp(path.join(resources, "plugins", "genex"), path.join(released, "genex"), { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(released, "genex", "plugin.json"), "utf8"));
-  manifest.version = "1.4.2";
+  manifest.version = "1.5.0";
   await writeFile(path.join(released, "genex", "plugin.json"), JSON.stringify(manifest));
   const installed = path.join(root, "installed");
   const bootstrap = path.join(resources, "plugin-sdk", "backend.mjs");
@@ -2066,7 +2078,7 @@ test("a profile holding the last released Genex is offered this build's Genex", 
   try {
     await after.init();
     const genex = after.list().find((p) => p.manifest.id === "genex")!;
-    assert.equal(genex.manifest.version, "1.4.2", "the installed copy stays until the user updates");
+    assert.equal(genex.manifest.version, "1.5.0", "the installed copy stays until the user updates");
     assert.ok(genex.availableVersion, "an update to this build's Genex is offered");
   } finally {
     after.cancel();
@@ -2120,11 +2132,27 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     assert.match(guidance, /genex__skill \{"name":"genex-threejs-multiplayer"\}/);
     assert.doesNotMatch(guidance, /Two rules that decide whether it feels good/, "a card's body is never in the brief");
     assert.doesNotMatch(guidance, /\[genex\/asset-workflow\]/, "the duplicate of the asset tool's description is gone");
+    // The Genex cover: an inline skill every brief carries, beside the card read on demand.
+    assert.match(guidance, /\[genex\/cover\]\n[^\n]*set_game_cover[^\n]*genex-cover/);
+    assert.match(guidance, /\[genex\/genex-cover\] [^\n]*genex__skill \{"name":"genex-cover"\}/);
     const tools = registry.tools().filter((t) => t.name.startsWith("genex__"));
     for (const text of [guidance, ...tools.map((t) => t.description)]) assert.doesNotMatch(text, /npx genex/);
     const names = tools.map((t) => t.name);
-    for (const name of ["genex__skill", "genex__cli", "genex__cli-paid", "genex__package"])
+    for (const name of [
+      "genex__skill",
+      "genex__cli",
+      "genex__cli-paid",
+      "genex__package",
+      "genex__cover",
+      "genex__cover-set",
+    ])
       assert.ok(names.includes(name), `${name} in ${names.join(", ")}`);
+    const cover = splitVendoredSkill(await readGenexSkill(registry, "genex-cover", binding));
+    assert.equal(
+      cover.preface,
+      await readFile(path.resolve("src/plugins/genex/skills/genex-cover/PREFACE.md"), "utf8"),
+      "Studio's own way to stage, check and send the cover comes first",
+    );
     const multiplayer = splitVendoredSkill(await readGenexSkill(registry, "genex-threejs-multiplayer", binding));
     const preface = await readFile(
       path.resolve("src/plugins/genex/skills/genex-threejs-multiplayer/PREFACE.md"),
@@ -2138,6 +2166,7 @@ test("bundled Genex indexes its vendored skills, serves them through genex__skil
     await noAgentFiles();
     await registry.setEnabled("genex", false);
     assert.doesNotMatch(registry.guidance(), /\[genex\//);
+    assert.doesNotMatch(registry.guidance(), /genex-cover/, "a game's cover demo is Genex's only while Genex is on");
     assert.ok(!registry.tools().some((t) => t.name.startsWith("genex__")));
     await assert.rejects(
       registry.tool("genex__skill", { name: "genex-threejs-multiplayer" }, binding),

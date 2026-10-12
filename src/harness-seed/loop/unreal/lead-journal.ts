@@ -9,6 +9,7 @@
  */
 import type { HarnessCtx, Run } from "../../types/harness.d.ts";
 import type { LeadSeat } from "../director/lead-session.ts";
+import { tallyOf } from "../finish-check.ts";
 import type { FactRef } from "../folder-facts.ts";
 import { HostMethod } from "../host-methods.ts";
 import { isPlainRecord } from "../json.ts";
@@ -29,12 +30,13 @@ import {
   type LeadMilestone,
 } from "./lead-contract.ts";
 import { LIVE_JOURNAL_KIND } from "./live-contract.ts";
+import { DEFAULT_CREDIT_CAP } from "../director/open/contract.ts";
 
 /** The scope of the game folder's snapshots the lead's run takes (save points, inputs, the C++ module). */
 export const SNAPSHOT_SCOPE = "game";
 
-/** The Genex credits a run's sub-agents may spend unless the run names its own cap. */
-export const DEFAULT_CREDIT_CAP = 600;
+/** The Genex credits a run's sub-agents may spend unless the run names its own cap (the open Loop's, one number). */
+export { DEFAULT_CREDIT_CAP };
 
 const MESSAGE = {
   /** The lead's own part, before it names a milestone. */
@@ -180,6 +182,7 @@ export function leadJournalOf(saved: unknown): LeadJournal | null {
     between: isPlainRecord(saved.between) ? saved.between : fresh.between,
     logOffset: typeof saved.logOffset === "number" ? saved.logOffset : null,
     jobsCursor: Number.isSafeInteger(saved.jobsCursor) && saved.jobsCursor > 0 ? saved.jobsCursor : 0,
+    ...(saved.finishTally === undefined ? {} : { finishTally: tallyOf(saved.finishTally) }),
   };
 }
 

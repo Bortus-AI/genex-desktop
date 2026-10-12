@@ -3,7 +3,9 @@
  * plugin on or off, someone's web folder, an Unreal editor plugin, a Godot game, an assets-only
  * folder, an Unreal game with a web site, a Genex plugin for an engine Genex lacks, and a Loop on
  * any of them. Each runs on a synthetic folder from `tests/fixtures/projects/` (copied, with the
- * files its engine writes while it runs) or the toy engine plugin.
+ * files its engine writes while it runs) or the toy engine plugin. A whole Loop on the toy project
+ * and on the Godot folder needs the harness, so it is proven through the real studio in
+ * `one-loop-projects.test.ts`.
  *
  * A test marked `todo: "phase N: …"` is a target: its body runs today and fails for the reason it
  * names, without failing the suite; phase N makes it pass and removes the mark. An `it.todo` names a
@@ -19,6 +21,7 @@ import { cp, mkdir, mkdtemp, readdir, readFile, realpath, writeFile } from "node
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
+import { setTimeout as pause } from "node:timers/promises";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { chatWorkerTool, closeChatWorkers, openChatWorkers } from "../../src/harness-seed/loop/workers/chat-workers.ts";
 import { WORKER_TOOLS } from "../../src/harness-seed/loop/workers/specs.ts";
@@ -27,14 +30,32 @@ import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
 import { UNREAL_NEW_GAME_TOOL } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
-import { SnapshotScope } from "../../src/shared/event-log.ts";
+import { type EventEnvelope, EventKind, SnapshotScope } from "../../src/shared/event-log.ts";
+import { ObserverLive, PREVIEW_OBSERVER } from "../../src/shared/observers.ts";
+import { latestCaptures, liveViewFor, liveViewsFor } from "../../src/renderer/live-views.ts";
+import { stageTabs } from "../../src/renderer/panels/stage/stage-tabs.ts";
+import { STAGE_WORDS } from "../../src/renderer/words.ts";
+import { projectKindLabel } from "../../src/renderer/project-kind.ts";
+import type { GameProject } from "../../src/shared/game-project.ts";
+import { buildRunGraph } from "../../src/renderer/run-graph.ts";
 import { isAgentTool, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { FolderHolds } from "../../src/shared/project-facts.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { runUnrealLead } from "../../src/harness-seed/loop/unreal/lead.ts";
-import { customRecord } from "../../src/shared/custom-events.ts";
+import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
+import {
+  checkFinish,
+  type FinishOutcome,
+  type FinishScope,
+  type FinishTally,
+  newTally,
+} from "../../src/harness-seed/loop/finish-check.ts";
+import { FinishCheckStep, MAX_FINISH_REJECTIONS, ObserverSource } from "../../src/harness-seed/loop/finish-contract.ts";
+import { GRACE_MS } from "../../src/harness-seed/loop/time-cap.ts";
+import type { Evidence } from "../../src/harness-seed/loop/evidence.ts";
+import type { Run } from "../../src/harness-seed/types/harness.d.ts";
 import { PERMISSION_MODES, PermissionMode, type ToolPermissionEvent } from "../../src/shared/permissions.ts";
 import { APP_LOOK_TOOL_NAME, JobTool } from "../../src/shared/jobs.ts";
 import { stubAppLook } from "../../src/substrate/app-look.ts";
@@ -47,14 +68,26 @@ import type {
   WorkerSeat,
 } from "../../src/substrate/engines/types.ts";
 import { type NeverTouchHit, NeverTouchKind, neverTouchVerdict } from "../../src/substrate/engines/never-touch.ts";
-import { MAX_WORKERS_AT_ONCE, type WorkerType } from "../../src/shared/workers.ts";
+import { MAX_WORKERS_AT_ONCE, WorkerIsolation, type WorkerType } from "../../src/shared/workers.ts";
+import unrealManifest from "../../src/plugins/unreal/plugin.json" with { type: "json" };
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
-import { ctxRecorder } from "../helpers/ctx-recorder.ts";
+import { type CtxHandler, ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { gitFile } from "../helpers/git.ts";
-import { copyOfExample, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { copyOfExample, PLUGIN_SDK_BACKEND, personAllowsLocalTools } from "../helpers/plugins.ts";
+import { unrealBackendFixture } from "../helpers/unreal-fake-engine.ts";
+import { writeSkillExample } from "../helpers/plugin-author.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { Changes, until } from "../helpers/worker-chat.ts";
 import { buildsOnly, leadHost, RUN, textOf, type Turn } from "../helpers/unreal-lead-host.ts";
+import {
+  CHAT_SESSION,
+  gameRepo,
+  type LoopHost,
+  type LoopManifest,
+  type LoopTurn,
+  loopHost,
+} from "../helpers/loop-host.ts";
+import { fakeFinishReview, reviewerAnswer } from "../helpers/reviewer.ts";
 import {
   copyProject,
   factIds,
@@ -84,7 +117,44 @@ const BOOKKEEPING = [".git", ".gitignore", "studio.json"];
 const UNREAL_PLUGIN = "unreal";
 const GENEX_PLUGIN = "genex";
 
+/** A Loop on a copy of the Unreal game, through the one Loop, is over in seconds when it works. */
+const LOOP_TIMEOUT = { timeout: 60_000 };
+const HOUR = 3_600_000;
+/** The Unreal plugin as the fake hook bus plans its moments, and its C++ worker type as `plugins.workerTypes` lists it. */
+const UNREAL_LOOP_MANIFEST = unrealManifest as unknown as LoopManifest;
+const CPP_WORKER: WorkerType = {
+  pluginId: "unreal",
+  id: "cpp",
+  description: "Writes C++ in a copy",
+  tools: ["unreal__check-part"],
+  isolation: WorkerIsolation.Copy,
+};
+let unrealLoops = 0;
+
+/** A Loop's host on a copy of the Unreal game made a git repository, with the Unreal plugin's moments. */
+async function unrealLoopHost(turns: LoopTurn[], run: Record<string, unknown> = {}): Promise<LoopHost> {
+  const dir = await gameRepo(await copyProject(Project.UnrealGame, await tmpDir("use-case-loop-")));
+  unrealLoops += 1;
+  return loopHost({
+    dir,
+    facts: [{ id: "unreal-project", path: "." }],
+    manifest: UNREAL_LOOP_MANIFEST,
+    workerTypes: [CPP_WORKER],
+    turns,
+    run: { runId: `run-use-case-${unrealLoops}`, ...run },
+  });
+}
+
+/** A lead turn that claims the goal is reached, naming the project file as proof. */
+const finishesLoop: LoopTurn = async ({ tool }) => {
+  await tool("finish", { summary: "The level is built and the door opens.", proof: "Lantern.uproject" });
+  return undefined;
+};
+
 let lite: CoreLite;
+/** How often, and how many times, a case looks for a consent card before it says none came. */
+const CARD_POLL_MS = 20;
+const CARD_TRIES = 250;
 /** Every job the core started, as asked: its process is a shell that exits at once, never the command. */
 const jobsSpawned: Array<Parameters<JobSpawn>[0]> = [];
 const recordingJobSpawn: JobSpawn = async (request) => {
@@ -231,6 +301,85 @@ async function listed(name: string): Promise<object> {
   return game;
 }
 
+/** The run a use case's finish checks belong to. */
+const FINISH_RUN_ID = "run_finish_check";
+/** The lead's claim at a use case's finish. */
+const FINISH_CLAIM = {
+  summary: "The game meets the request.",
+  proof: ["reports/tests.txt"],
+  hookNotes: [],
+  hookImages: [],
+};
+/** A render as a prop's turntable writes it: a PNG's first bytes. */
+const RENDER_PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+/** A preview pass's answer: one still with pixels. */
+const PREVIEW_PASS = {
+  ok: true,
+  problems: [],
+  warnings: [],
+  consoleErrors: [],
+  shots: [{ camera: "default", path: "/runs/finish/default.jpg", base64: "PREVIEW" }],
+  motion: [],
+} as unknown as Evidence;
+
+/** A reviewer's answer as its session's summary. */
+const reviewerSays = (verdict: string, reasons: string[]) => ({
+  ok: true,
+  engine: CLAUDE,
+  turns: 1,
+  usage: {},
+  summary: JSON.stringify({ verdict, reasons }),
+});
+
+/**
+ * A Loop's finish check on the lite core (`liteHost`): Claude Code holds the reviewer's sessions and
+ * answers from `answers` in order, a scripted preview pass stands in for the evidence pass, and every
+ * record is kept: the harness's, and the host's finish check records (`fakeFinishReview`).
+ * `reviewers` holds the reviewer sessions the host started, with their params.
+ */
+function finishHost(game: object, dir: string, answers: unknown[], handlers: Record<string, CtxHandler> = {}) {
+  const records: Array<{ event_type: string; payload: Record<string, unknown> }> = [];
+  const checks = () =>
+    records.filter((record) => record.event_type === CustomEvent.FinishCheck).map((record) => record.payload);
+  const review = fakeFinishReview({
+    delegate: () => answers.shift(),
+    append: (payload) => records.push({ event_type: CustomEvent.FinishCheck, payload }),
+    records: checks,
+  });
+  const r = liteHost(lite, {
+    [HostMethod.EngineDescribe]: () => [
+      { id: CLAUDE, label: CLAUDE, kind: "delegated", supportsSessions: true, models: [] },
+    ],
+    ...review.handlers,
+    [HostMethod.EventsAppend]: (params) => {
+      records.push(...(params.batch as typeof records));
+      return "e1";
+    },
+    ...handlers,
+  });
+  const name = String((game as { name?: unknown }).name);
+  const run = {
+    runId: FINISH_RUN_ID,
+    project: name,
+    goal: "a kite racing game with three laps",
+    engine: CLAUDE,
+  } as unknown as Run;
+  const scope = (tally: FinishTally): FinishScope => ({
+    ctx: r.ctx as never,
+    run,
+    threadId: "chat-finish",
+    game: game as never,
+    leadFolder: dir,
+    tally,
+    now: Date.now,
+    callStarted: Date.now(),
+    closeMs: 0,
+    said: [],
+    previewPass: async () => PREVIEW_PASS,
+  });
+  return { r, records, checks, scope, reviewers: review.asked };
+}
+
 /** Whether a file exists in a folder. */
 const exists = (dir: string, file: string) =>
   readFile(path.join(dir, file)).then(
@@ -303,6 +452,22 @@ async function writeIn(dir: string, files: Record<string, string>): Promise<void
 /** The files a commit of a game's repository holds. */
 const trackedAt = async (dir: string, commit: string) =>
   (await gitFile(["ls-tree", "-r", "--name-only", commit], { cwd: dir })).stdout.split("\n").filter(Boolean);
+
+/** A run's records as the chat's log hands them to the Builds graph: its start, then each record. */
+function runLog(runId: string, records: Array<{ event_type: string; payload: Record<string, unknown> }>) {
+  const started = { event_type: CustomEvent.RunStarted, payload: { runId, goal: "Make it", project: "game" } };
+  return [started, ...records].map(
+    (data, n) =>
+      ({
+        id: `e${n + 1}`,
+        thread_id: "t1",
+        session_id: null,
+        turn_id: null,
+        created_at: new Date(Date.UTC(2026, 0, 1, 9, 0, n)).toISOString(),
+        data: { type: EventKind.Custom, ...data },
+      }) as EventEnvelope,
+  );
+}
 
 /** A listed game's facts, read structurally: what and where. */
 const factsOfListed = (game: object) =>
@@ -594,10 +759,162 @@ export async function activate() {
   );
   await lite.core.plugins.installLocal(dir, PluginSourceKind.Local, []);
   await lite.core.plugins.setEnabled(id, true);
+  // The person allows its tools: this case is about the port, not the card.
+  const asksAgain = personAllowsLocalTools(lite.core.plugins);
   t.after(async () => {
+    asksAgain();
     await lite.core.plugins.setEnabled(id, false);
   });
   return `${id}__start-toy`;
+}
+
+/** The files the Unreal plugin's new-plugin makes for `LevelTools`, as the stand-in writes them. */
+const LEVEL_TOOLS_SHAPE: Record<string, string> = {
+  "unreal/LevelToolsHost.uproject": "{}\n",
+  "unreal/Source/LevelToolsHost/LevelToolsHost.Build.cs": "// the host's module\n",
+  "unreal/Plugins/LevelTools/LevelTools.uplugin": "{}\n",
+  "unreal/Plugins/LevelTools/Source/LevelTools/LevelTools.Build.cs": "// the plugin's module\n",
+  "unreal/Plugins/GenexEditorHelper/GenexEditorHelper.uplugin": "{}\n",
+};
+
+/**
+ * A local stand-in of the Unreal plugin, turned on, whose `new-plugin` writes the host project with
+ * its plugin and the Genex editor helper (the real one needs Unreal installed). Its kind tools,
+ * their readiness tool and its scaffolds are the bundled manifest's, copied at test time.
+ */
+async function unrealStandIn(t: { after: (fn: () => Promise<void>) => void }): Promise<string> {
+  const id = "unreal-standin";
+  const dir = path.join(await tmpDir("studio-unreal-standin-"), id);
+  await cp(TOY_PLUGIN, dir, { recursive: true });
+  const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
+  manifest.id = id;
+  const real = unrealManifest as unknown as { tools: Array<{ name: string }>; scaffolds: unknown };
+  manifest.tools.push(
+    ...real.tools.filter((declared) => ["new-game", "new-plugin", "engine-status"].includes(declared.name)),
+  );
+  manifest.scaffolds = real.scaffolds;
+  await writeFile(path.join(dir, "plugin.json"), JSON.stringify(manifest, null, 2));
+  await writeFile(
+    path.join(dir, "backend.mjs"),
+    `import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+export async function activate() {
+  return {
+    async tool(name, _args, ctx) {
+      if (name !== "new-plugin") return "nothing";
+      for (const [file, text] of Object.entries(${JSON.stringify(LEVEL_TOOLS_SHAPE)})) {
+        await mkdir(path.dirname(path.join(ctx.directory, file)), { recursive: true });
+        await writeFile(path.join(ctx.directory, file), text);
+      }
+      return "Made LevelTools in unreal/Plugins/LevelTools/, inside the host project LevelToolsHost.";
+    },
+  };
+}\n`,
+  );
+  await lite.core.plugins.installLocal(dir, PluginSourceKind.Local, []);
+  await lite.core.plugins.setEnabled(id, true);
+  // The person's yes on its card: this case is about the scaffold, not the card.
+  const asksAgain = personAllowsLocalTools(lite.core.plugins);
+  t.after(async () => {
+    asksAgain();
+    await lite.core.plugins.setEnabled(id, false);
+  });
+  return `${id}__new-plugin`;
+}
+
+/** A JPEG's first bytes: the plugin window's picture as app_look keeps it. */
+const WINDOW_JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 16, 0x4a, 0x46, 0x49, 0x46]);
+
+/** What UBT, the headless editor and UAT answer in the plugin's backend: a build, two passing tests and a package. */
+const SHIP_PROGRAMS = {
+  compile: async () => ({
+    ok: true,
+    seconds: 30,
+    errors: [],
+    summary: "LevelToolsHostEditor built in 30 s.",
+    retryable: false,
+  }),
+  runProgram: async (_file: string, args: readonly string[]) => {
+    const report = (args.find((arg) => arg.startsWith("-ReportExportPath=")) ?? "").split("=")[1] ?? "";
+    const tests = ["Opens", "Lists"].map((name) => ({ fullTestPath: `LevelTools.Window.${name}`, state: "Success" }));
+    await writeFile(path.join(report, "index.json"), JSON.stringify({ tests }));
+    return { code: 0, output: "", timedOut: false };
+  },
+  prepareSandbox: async () => {
+    const scratch = await tmpDir("studio-ship-sandbox-");
+    return { profile: path.join(scratch, "ubt.sb"), env: {}, cwd: scratch, dispose: async () => {} };
+  },
+  runCommand: async (_file: string, args: readonly string[]) => {
+    const packaged = (args.find((arg) => arg.startsWith("-Package=")) ?? "").slice("-Package=".length);
+    await writeFile(path.join(packaged, "LevelTools.uplugin"), JSON.stringify({ VersionName: "1.0" }));
+    return { code: 0, output: "BUILD SUCCESSFUL\n" };
+  },
+};
+
+/** Waits until a file exists. */
+async function untilFile(file: string): Promise<void> {
+  for (let i = 0; i < 2_000; i++) {
+    if (await exists(path.dirname(file), path.basename(file))) return;
+    await pause(5);
+  }
+  throw new Error(`${path.basename(file)} never appeared`);
+}
+
+/**
+ * A local stand-in of the Unreal plugin, turned on, with the bundled manifest's editor lock and its
+ * `plugin-build` and `editor-activity` declarations copied at test time: its probe says the person
+ * isn't at Unreal, and its build marks that it runs, then answers once the test lets it. The
+ * person's yes on the build's card is recorded in `asked`.
+ */
+async function shipStandIn(t: { after: (fn: () => Promise<void>) => void }) {
+  const id = "unreal-ship-standin";
+  const root = await tmpDir("studio-unreal-ship-standin-");
+  const dir = path.join(root, id);
+  const markers = path.join(root, "markers");
+  await mkdir(markers);
+  await cp(TOY_PLUGIN, dir, { recursive: true });
+  const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
+  const real = unrealManifest as unknown as { tools: Array<{ name: string }>; locks: unknown[] };
+  manifest.id = id;
+  manifest.locks.push(...real.locks);
+  manifest.tools.push(...real.tools.filter((declared) => ["plugin-build", "editor-activity"].includes(declared.name)));
+  manifest.detect.push({ fact: "unreal-plugin", files: ["**/*.uplugin"], notUnder: ["**/GenexEditorHelper/"] });
+  await writeFile(path.join(dir, "plugin.json"), JSON.stringify(manifest, null, 2));
+  await writeFile(
+    path.join(dir, "backend.mjs"),
+    `import { access, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { setTimeout as pause } from "node:timers/promises";
+const markers = ${JSON.stringify(markers)};
+const there = (name) => access(path.join(markers, name)).then(() => true, () => false);
+export async function activate() {
+  return {
+    async tool(name) {
+      if (name === "editor-activity") {
+        await writeFile(path.join(markers, "probed"), "");
+        return { personActive: false, pie: false, dirty: 0 };
+      }
+      if (name !== "plugin-build") return "nothing";
+      await writeFile(path.join(markers, "inside"), "");
+      while (!(await there("release"))) await pause(10);
+      return { started: true };
+    },
+  };
+}\n`,
+  );
+  await lite.core.plugins.installLocal(dir, PluginSourceKind.Local, []);
+  await lite.core.plugins.setEnabled(id, true);
+  const asked: string[] = [];
+  const ask = lite.core.plugins.consent;
+  lite.core.plugins.consent = async (_plugin, tool) => {
+    asked.push(tool.name);
+    return { approved: true, by: "user" };
+  };
+  t.after(async () => {
+    lite.core.plugins.consent = ask;
+    await lite.core.plugins.setEnabled(id, false);
+  });
+  return { id, tool: `${id}__plugin-build`, markers, inside: path.join(markers, "inside"), asked };
 }
 
 /** A chat turn on an opened copy of the project whose builder changes one of the game's files. */
@@ -712,9 +1029,39 @@ describe("a new web game: the first message picks web, and a Loop ends on the fi
     assert.equal(sessions[0]?.includes(START_WEB_GAME), true, "the first turn is offered the starter");
     assert.equal(sessions[1]?.includes(START_WEB_GAME), false, "a web game's next turn is not");
   });
-  it.todo(
-    "phase 8: a Loop on it ends only after a reviewer accepts the lead's finish, and three rejections in a row stop it with what isn't done",
-  );
+  it("a Loop on it ends only after a reviewer accepts the lead's finish, and three rejections in a row stop it with what isn't done", async () => {
+    const game = await lite.core.createGame("Kite Finish");
+    const dir = lite.core.games.dirFor(game.name);
+    await mkdir(path.join(dir, "reports"), { recursive: true });
+    await writeFile(path.join(dir, "reports", "tests.txt"), "8 passed\n");
+    const notDone = ["The race has two laps, not three."];
+    const { reviewers, checks, scope } = finishHost(game, dir, [
+      reviewerSays("no", notDone),
+      reviewerSays("no", notDone),
+      reviewerSays("no", notDone),
+    ]);
+    const tally = newTally();
+    const outcomes: FinishOutcome[] = [];
+    for (let n = 0; n < MAX_FINISH_REJECTIONS; n++) outcomes.push(await checkFinish(scope(tally), FINISH_CLAIM));
+    const last = outcomes.at(-1);
+    assert.ok(last && !("noTime" in last) && last.step === FinishCheckStep.Rejected, "the third check is a no");
+    assert.equal(last.stop, true, "and it stops the Loop");
+    assert.deepEqual(last.reasons, notDone, "with what isn't done");
+    for (const asked of reviewers) {
+      assert.equal(asked.readOnly, true, "the reviewer only reads");
+      assert.deepEqual(asked.reviewer, { runId: FINISH_RUN_ID, reads: dir }, "the lead's folder, for this run");
+    }
+    const ends = checks().filter((check) => check.step === FinishCheckStep.Rejected);
+    assert.deepEqual(
+      ends.map((check) => check.reasons),
+      [notDone, notDone, notDone],
+      "each record names the reasons",
+    );
+    const accepting = finishHost(game, dir, [reviewerSays("yes", ["Three laps and a timer."])]);
+    const yes = await checkFinish(accepting.scope(newTally()), FINISH_CLAIM);
+    assert.ok(!("noTime" in yes) && yes.step === FinishCheckStep.Accepted, "a reviewer's yes ends the Loop");
+    assert.equal(accepting.checks().at(-1)?.step, FinishCheckStep.Accepted);
+  });
 });
 
 describe("a new Unreal game, plugin on: the editor under its lock, workers in copies, the Unreal card", () => {
@@ -755,9 +1102,7 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
     assert.equal(cpp?.isolation, "copy");
   });
 
-  it("the plugin's viewport observer gives Live the Unreal card", {
-    todo: "phase 8: the plugin's viewport observer gives Live the Unreal card",
-  }, () => {
+  it("the plugin's viewport observer gives Live the Unreal card", () => {
     const viewport = entriesOf(UNREAL_MANIFEST, "observers").find((observer) => observer.id === "viewport");
     assert.equal(viewport?.live, "unreal-card");
   });
@@ -808,7 +1153,35 @@ describe("a new Unreal game, plugin on: the editor under its lock, workers in co
       "each works in its own copy",
     );
   });
-  it.todo("phase 9: a Loop on it is led by the chat's own session, under the editor lock, with workers in copies");
+  it(
+    "a Loop on it is led by the chat's own session, under the editor lock, with workers in copies",
+    LOOP_TIMEOUT,
+    async () => {
+      const answers: string[] = [];
+      const host = await unrealLoopHost([
+        async ({ tool }) => {
+          await tool("save_point", { label: "One", summary: "the first room" });
+          answers.push(textOf(await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." })));
+          await tool("finish", { summary: "The level is built and the door opens.", proof: "Lantern.uproject" });
+          return undefined;
+        },
+      ]);
+      await host.dispatch();
+      const [first] = host.leadCalls();
+      assert.equal(first?.resume, CHAT_SESSION, "the chat's own session leads");
+      assert.equal((first?.director as { inPlace?: unknown } | undefined)?.inPlace, true, "in the game folder");
+      const trail = host.trail();
+      const probe = trail.indexOf("tool:unreal__editor-activity");
+      const save = trail.indexOf("tool:unreal__save-all");
+      assert.ok(probe >= 0 && probe < save, `the editor lock asked first: ${trail.join(", ")}`);
+      assert.ok(save < trail.lastIndexOf("snapshot.create"), "the editor saved before the snapshot");
+      assert.match(answers[0] ?? "", /^Started w1 \(copy\)/, answers.join("\n"));
+      const [copy] = host.rec.paramsOf("snapshot.worktree");
+      assert.ok(copy, "the worker got a copy of the game");
+      const worker = host.workers[0];
+      assert.notEqual(worker?.params.cwd, host.dir, "it works in its copy, not the game folder");
+    },
+  );
 });
 
 describe("Unreal asked for with the plugin off: find the plugin, or go on with generic tools", () => {
@@ -1053,12 +1426,101 @@ describe("an Unreal C++ editor plugin: build, test and package it", () => {
     await opensWithoutStarter(Project.UnrealPluginSource);
   });
 
-  it.todo(
-    "phase 10: the plugin scaffold makes a host project with the plugin in Plugins/<Name>, and its kind label says plugin",
-  );
-  it.todo(
-    "phase 10: plugin tools build under the editor lock, run the automation tests headless and package with BuildPlugin; the finish carries the test report, the package path and a screenshot of the plugin's window",
-  );
+  it("the plugin scaffold makes a host project with the plugin in Plugins/<Name>, and its kind label says plugin", async (t) => {
+    const tool = await unrealStandIn(t);
+    const game = await lite.core.createGame("Level Tools");
+    const answer = await lite.api()[HostMethod.PluginsInvoke]({
+      project: game.name,
+      threadId: await lite.core.threadForGame(game.name),
+      name: tool,
+      args: { name: "LevelTools", template: "window" },
+    });
+    assert.match(JSON.stringify(answer), /LevelToolsHost/);
+    const kind = (await listed(game.name)) as GameProject;
+    assert.deepEqual(
+      kind.facts.map((fact) => [fact.id, fact.path]),
+      [
+        ["unreal-project", "unreal"],
+        ["unreal-plugin", "unreal/Plugins/LevelTools"],
+      ],
+      "the host and its plugin; never the Genex editor helper",
+    );
+    assert.equal(kind.scaffold?.label, "Unreal plugin");
+    assert.match(projectKindLabel(kind) ?? "", /plugin/i);
+  });
+  it("plugin tools build under the editor lock, run the automation tests headless and package with BuildPlugin; the finish carries the test report, the package path and a screenshot of the plugin's window", async (t) => {
+    // Under the editor lock: the person-first check comes first, and the call holds the project's lock.
+    const ship = await shipStandIn(t);
+    const game = await lite.core.createGame("Level Ship");
+    const dir = lite.core.games.dirFor(game.name);
+    for (const [file, text] of Object.entries(LEVEL_TOOLS_SHAPE)) {
+      await mkdir(path.dirname(path.join(dir, file)), { recursive: true });
+      await writeFile(path.join(dir, file), text);
+    }
+    const building = lite.api()[HostMethod.PluginsInvoke]({
+      project: game.name,
+      threadId: await lite.core.threadForGame(game.name),
+      name: ship.tool,
+      args: {},
+    });
+    await untilFile(ship.inside);
+    assert.ok(await exists(ship.markers, "probed"), "the person-first check ran before the call");
+    const key = `${game.name}:${ship.id}:editor`;
+    assert.ok(
+      lite.core.locks.holders().some((held) => held.key === key),
+      "the project's editor lock is held during the call",
+    );
+    await writeFile(path.join(ship.markers, "release"), "");
+    assert.match(JSON.stringify(await building), /started/);
+    assert.ok(!lite.core.locks.holders().some((held) => held.key === key), "and let go after");
+    assert.deepEqual(ship.asked, ["plugin-build"], "the person was asked first");
+
+    // The plugin's backend on a fake engine: build, tests and package, and the proof plugin-status lists.
+    const f = await unrealBackendFixture({ programs: SHIP_PROGRAMS });
+    await f.call("new-plugin", { name: "LevelTools" });
+    const status = async () =>
+      (await f.call("plugin-status", {})) as { proof: string[] } & Record<string, { state: string }>;
+    for (const [tool, job] of [
+      ["plugin-build", "build"],
+      ["plugin-test", "test"],
+      ["plugin-package", "package"],
+    ] as const) {
+      await f.call(tool, {});
+      for (let i = 0; i < 2_000 && (await status())[job]?.state === "running"; i++) await pause(5);
+      assert.equal((await status())[job]?.state, "done", `${job} is done`);
+    }
+    const shot = path.join(f.dir, "unreal", "Saved", "Genex", "Shots", "LevelTools-window.jpg");
+    await mkdir(path.dirname(shot), { recursive: true });
+    await writeFile(shot, WINDOW_JPEG);
+    const { proof } = await status();
+    assert.deepEqual(proof, [
+      "unreal/Saved/Genex/Tests/LevelTools/summary.md",
+      "unreal/Saved/Genex/Packages/LevelTools.md",
+      "unreal/Saved/Genex/Shots/LevelTools-window.jpg",
+    ]);
+
+    // The finish names that proof: its reviewer reads the test summary, the package note's path and one picture.
+    const proofGame = await lite.core.createGame("Level Proof");
+    const proofDir = lite.core.games.dirFor(proofGame.name);
+    for (const file of proof) await cp(path.join(f.dir, file), path.join(proofDir, file), { recursive: true });
+    const api = lite.api() as unknown as Record<string, (params: unknown) => Promise<unknown>>;
+    const kept = {
+      [HostMethod.RunArtifact]: (params: Record<string, unknown>) => api[HostMethod.RunArtifact]?.(params),
+    };
+    const { reviewers, scope } = finishHost(
+      await listed(proofGame.name),
+      proofDir,
+      [reviewerSays("yes", ["Built, tested and packaged."])],
+      kept,
+    );
+    const outcome = await checkFinish(scope(newTally()), { ...FINISH_CLAIM, proof });
+    assert.ok(!("noTime" in outcome) && outcome.step === FinishCheckStep.Accepted);
+    const [asked] = reviewers;
+    const brief = JSON.stringify(asked);
+    assert.ok(brief.includes("2 passed, 0 failed, 0 not run."), "the test summary's text");
+    assert.ok(brief.includes("unreal/Saved/Genex/Packages/LevelTools.md"), "the package note's path");
+    assert.equal(((asked?.images ?? []) as unknown[]).length, 1, "one picture: the plugin's window");
+  });
 });
 
 describe("a Godot game, no plugin: generic tools, jobs and looking at the app", () => {
@@ -1217,7 +1679,48 @@ describe("assets only, a Blender pack: Blender workers, renders and the Assets t
       assert.notEqual(request.cwd, dir, "each works in its own copy");
     }
   });
-  it.todo("phase 8: each prop gets a turntable render; the finish check reads the renders and Live shows them");
+  it("each prop gets a turntable render; the finish check reads the renders and Live shows them", async () => {
+    const { dir, game } = await adopted(Project.BlenderAssets);
+    await mkdir(path.join(dir, "renders"), { recursive: true });
+    for (const prop of ["crate", "lamp"]) await writeFile(path.join(dir, "renders", `${prop}.png`), RENDER_PNG);
+    const api = lite.api() as unknown as Record<string, (params: unknown) => Promise<unknown>>;
+    const kept = {
+      [HostMethod.RunArtifact]: (params: Record<string, unknown>) => api[HostMethod.RunArtifact]?.(params),
+    };
+    const listedGame = await listed(game.name);
+    const { reviewers, records, scope } = finishHost(
+      listedGame,
+      dir,
+      [reviewerSays("yes", ["Both props have renders."])],
+      kept,
+    );
+    const claim = { ...FINISH_CLAIM, proof: ["renders/crate.png", "renders/lamp.png"] };
+    const outcome = await checkFinish(scope(newTally()), claim);
+    assert.ok(!("noTime" in outcome) && outcome.step === FinishCheckStep.Accepted);
+    const [asked] = reviewers;
+    const images = (asked?.images ?? []) as Array<{ label: string; data: string }>;
+    assert.deepEqual(
+      images.map((image) => image.data),
+      [RENDER_PNG.toString("base64"), RENDER_PNG.toString("base64")],
+      "the reviewer is handed both renders",
+    );
+    const proofs = records.filter(
+      (record) => record.event_type === CustomEvent.ObserverCapture && record.payload.source === ObserverSource.Proof,
+    );
+    assert.equal(proofs.length, 1, "one capture of the lead's proof");
+    const files = ((proofs[0]?.payload.images ?? []) as Array<{ file: string }>).map((image) =>
+      path.basename(image.file),
+    );
+    assert.deepEqual(files, ["1-crate.png", "2-lamp.png"], "listing both renders, kept with the run");
+    // Live: a Blender pack has no view of its own, so it shows the run's latest pictures.
+    assert.equal(liveViewFor({ facts: factsOfListed(listedGame) }, lite.core.plugins.list()).live, ObserverLive.Stills);
+    const graph = buildRunGraph(runLog(FINISH_RUN_ID, records));
+    assert.deepEqual(
+      latestCaptures(graph).map((picture) => path.basename(picture.file)),
+      ["1-crate.png", "2-lamp.png"],
+      "Live shows both renders",
+    );
+  });
 });
 
 describe("an Unreal game with a web site: two facts, two views", () => {
@@ -1245,7 +1748,44 @@ describe("an Unreal game with a web site: two facts, two views", () => {
     const unreal = lines.filter((line) => line.includes("the Unreal editor connector's tools"));
     assert.ok(unreal.length > 0 && unreal.every((line) => !line.startsWith("For the ")));
   });
-  it.todo("phase 8: two observers, and Live switches between the Unreal card and the site's preview");
+  it("two observers; Live shows the Unreal card, picked by the facts", async () => {
+    const { descriptor, observers, plugins } = await withUnrealOn(async () => {
+      const descriptor = await listed((await adopted(Project.UnrealAndSite)).game.name);
+      const kind = { facts: factsOfListed(descriptor) };
+      return { descriptor, observers: lite.core.plugins.observers(kind), plugins: lite.core.plugins.list() };
+    });
+    assert.deepEqual(
+      observers.map((observer) => [observer.key, observer.at]),
+      [
+        [`${UNREAL_PLUGIN}/viewport`, "."],
+        [PREVIEW_OBSERVER, "site"],
+      ],
+    );
+    assert.deepEqual(liveViewFor({ facts: factsOfListed(descriptor) }, plugins), {
+      live: ObserverLive.UnrealCard,
+      at: ".",
+      observer: `${UNREAL_PLUGIN}/viewport`,
+    });
+  });
+  it("Live switches between them: a tab for the Unreal card, then one for the site's preview", async () => {
+    const { descriptor, plugins } = await withUnrealOn(async () => {
+      const descriptor = await listed((await adopted(Project.UnrealAndSite)).game.name);
+      return { descriptor, plugins: lite.core.plugins.list() };
+    });
+    const views = liveViewsFor({ facts: factsOfListed(descriptor) }, plugins);
+    assert.deepEqual(
+      views.map((view) => [view.live, view.at]),
+      [
+        [ObserverLive.UnrealCard, "."],
+        [ObserverLive.Preview, "site"],
+      ],
+    );
+    const tabs = stageTabs({ views, plugins, hasBuilds: true, buildsLive: false, beside: null });
+    assert.deepEqual(
+      tabs.map((tab) => tab.label),
+      [STAGE_WORDS.tabs.unreal, STAGE_WORDS.tabs.webGame, STAGE_WORDS.tabs.builds, STAGE_WORDS.tabs.assets],
+    );
+  });
 });
 
 describe("a Genex plugin for an engine Genex lacks: written, loaded by the person, off until turned on", () => {
@@ -1271,7 +1811,7 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
     );
   });
 
-  it("a loaded local plugin starts off", { todo: "phase 10: a loaded local plugin starts off" }, () => {
+  it("a loaded local plugin starts off", () => {
     assert.equal(registry.enabled(TOY_PLUGIN_ID), false);
   });
 
@@ -1281,11 +1821,11 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
     { part: "locks", read: (m) => sectionOf(m, "locks") },
     { part: "folders", read: (m) => sectionOf(m, "folders") },
     { part: "hooks", read: (m) => sectionOf(m, "hooks") },
-    { part: "observers", todo: "phase 8: the manifest keeps observers", read: (m) => sectionOf(m, "observers") },
+    { part: "observers", read: (m) => sectionOf(m, "observers") },
     { part: "workspace", read: (m) => sectionOf(m, "workspace") },
     { part: "assets", read: (m) => sectionOf(m, "assets") },
     { part: "workerTypes", read: (m) => sectionOf(m, "workerTypes") },
-    { part: "scaffolds", todo: "phase 10: the manifest keeps scaffolds", read: (m) => sectionOf(m, "scaffolds") },
+    { part: "scaffolds", read: (m) => sectionOf(m, "scaffolds") },
     {
       part: "tools[].needs",
       read: (m) => toolOf(m, "build")?.needs,
@@ -1353,17 +1893,71 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
     });
   });
 
-  it.todo(
-    "phase 10: only the person loads a local plugin and turns it on; an agent's request never does; its tools ask consent per tool and its card says it runs with your access",
-  );
-  it.todo("phase 10: the plugin-author skill writes a plugin like this one into a local folder");
+  it("only the person loads a local plugin and turns it on; an agent's request never does; its tools ask consent per tool and its card says it runs with your access", async () => {
+    const { core } = lite;
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, false);
+    const { game } = await adopted(Project.ToyProject);
+    const threadId = await core.store.createThread({ title: "Toy", metadata: { kind: "game", project: game.name } });
+    const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.PluginsSuggest]!({ project: game.name, threadId, plugin: TOY_PLUGIN_ID, reason: "a toy" });
+    await api[HostMethod.PluginsFind]!({ project: game.name, text: "toy" });
+    assert.equal(core.plugins.enabled(TOY_PLUGIN_ID), false, "an agent's search and card leave it off");
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    const consents = async () =>
+      (await core.store.listEvents(threadId)).flatMap((event) => {
+        const record = customRecord(event.data);
+        return record?.event_type === CustomEvent.PluginConsent
+          ? [record.payload as { consentId: string; state: string; prompt: string; alwaysOffered?: boolean }]
+          : [];
+      });
+    const build = api[HostMethod.PluginsInvoke]!({
+      project: game.name,
+      threadId,
+      name: `${TOY_PLUGIN_ID}__build`,
+      args: {},
+    });
+    let card: Awaited<ReturnType<typeof consents>>[number] | undefined;
+    for (let tries = 0; tries < CARD_TRIES && !card; tries++) {
+      card = (await consents()).find((c) => c.state === "pending");
+      if (!card) await pause(CARD_POLL_MS);
+    }
+    assert.ok(card, "the call asks first");
+    assert.match(card.prompt, /Toy Engine was loaded from a folder on this Mac and runs with your access/);
+    assert.equal(card.alwaysOffered, true, "its card offers Always allow for this tool");
+    core.resolveConsent(card.consentId, false);
+    assert.equal(((await build) as { consent?: string }).consent, "declined", "a no runs nothing");
+  });
+  it("the plugin-author skill writes a plugin like this one into a local folder", async () => {
+    const dir = await mkdtemp(path.join(cases, "plugin-author-"));
+    const binding = { project: "plugin-author", directory: dir };
+    // The guide comes with Genex Tools, on as it ships.
+    const genexWas = lite.core.plugins.enabled(GENEX_PLUGIN);
+    await lite.core.plugins.setEnabled(GENEX_PLUGIN, true);
+    const { folder } = await writeSkillExample(lite.core.plugins, binding, dir).finally(() =>
+      lite.core.plugins.setEnabled(GENEX_PLUGIN, genexWas),
+    );
+    const written = await inspectPackage(path.join(dir, folder));
+    const filled = (value: unknown) => (Array.isArray(value) ? value.length > 0 : value !== undefined);
+    for (const [section, value] of Object.entries(RAW)) {
+      if (!filled(value) || typeof value !== "object") continue;
+      assert.ok(filled(sectionOf(written, section)), `the written plugin declares ${section}, as the toy one does`);
+    }
+    const tools = entriesOf(written, "tools");
+    assert.ok(
+      tools.some((tool) => tool.needs && tool.facts),
+      "an agent tool with needs and facts",
+    );
+    assert.ok(
+      entriesOf(written, "skills").some((skill) => skill.file && skill.facts && skill.tools),
+      "a skill read on demand, scoped by facts and tools",
+    );
+    await lite.core.plugins.installLocal(path.join(dir, folder), PluginSourceKind.Local, []);
+    assert.equal(lite.core.plugins.enabled(written.id), false, "loaded from that folder, it starts off");
+  });
 });
 
 describe("an unlimited Loop on any of these: the lead, the facts' hooks and observers, workers, the finish check", () => {
-  it.todo(
-    "phase 9: a Loop on the toy project with the toy plugin on needs no seed change: the plugin's hooks run at run.prepare, checkpoint.before and .after, restore.after and run.end, its observer feeds the evidence, and the Loop ends on the reviewer's finish check",
-  );
-  it.todo("phase 9: a Loop on the Godot folder with no plugin runs with generic tools and ends on the finish check");
   it("workers in a Loop follow the chat's permission mode, and a worker's question waits for the person unless they switched on don't wait for me", async (t) => {
     const { core } = lite;
     const loop = await loopWithWorker(t);
@@ -1494,22 +2088,75 @@ describe("an unlimited Loop on any of these: the lead, the facts' hooks and obse
     }
   });
   // A web Loop's starting snapshot before its first session: director.test.ts ("a run from scratch").
-  it("the Unreal Loop's lead snapshots the game before its first turn", {
-    todo: "phase 9: the Unreal Loop's lead takes its first snapshot only at its first save point",
-  }, async () => {
-    const host = leadHost({ turns: [buildsOnly] });
-    await runUnrealLead(host.rec.ctx as never, {
-      threadId: "t1",
-      run: { ...RUN, budgets: { ...RUN.budgets, wallClockMs: 20 * 60_000 } } as never,
-      resume: false,
-      now: host.now,
-      sleep: host.sleep,
-    });
+  it("the Unreal Loop's lead snapshots the game before its first turn", LOOP_TIMEOUT, async () => {
+    const host = await unrealLoopHost([finishesLoop]);
+    await host.dispatch();
     const trail = host.trail();
     const snapshot = trail.indexOf("snapshot.create");
     assert.ok(snapshot >= 0 && snapshot < trail.indexOf("engine.delegate"), trail.join(", "));
   });
-  it.todo(
-    "phase 9: an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap and don't wait for me live in the run record",
+  it(
+    "an unlimited Loop runs until the finish check passes, capped at 24 hours; the credit cap and don't wait for me live in the run record",
+    LOOP_TIMEOUT,
+    async () => {
+      const unlimited = { wallClockMs: 2 * HOUR, untilSatisfied: true, completionPolicy: "goal" };
+      const host = await unrealLoopHost(
+        [
+          async ({ tool }) => {
+            await tool(WORKER_START, { type: "cpp", title: "Door", task: "A door that opens." });
+            await tool("finish", { summary: "The level is built.", proof: "Lantern.uproject" });
+            return undefined;
+          },
+          finishesLoop,
+        ],
+        { budgets: unlimited },
+      );
+      host.reviews.push(reviewerAnswer("no", ["the door does not open"]));
+      await host.start();
+      const id = `autopilot_${host.run.runId}`;
+      const journal = host.artifacts.get(id) as { run: Run; director: { clock: Record<string, string> } };
+      const { started, finalDeadline } = journal.director.clock;
+      assert.equal(
+        Date.parse(finalDeadline) - Date.parse(started),
+        24 * HOUR + GRACE_MS,
+        "24 hours at most, then the grace to wrap up",
+      );
+      const steps = host.appended("finish_check").map((check) => check.step);
+      assert.deepEqual(
+        steps.filter((step) => step !== FinishCheckStep.Checking),
+        [FinishCheckStep.Rejected, FinishCheckStep.Accepted],
+        "a no goes on, a yes closes it",
+      );
+      assert.equal(host.appended("run_finished").length, 1);
+      assert.equal(host.appended("run_finished")[0]?.victory, true);
+      const [startedRecord] = host.appended("run_started");
+      const recorded = startedRecord?.budgets as Record<string, unknown> | undefined;
+      assert.equal(recorded?.creditCap, 600, "the cap is in the run record");
+      assert.equal(journal.run.budgets.creditCap, 600, "and in the journal a resume reads");
+      for (const lead of host.leadCalls()) assert.equal(lead.creditCap, 600, "every lead turn is capped");
+      const workerCalls = host.rec.paramsOf("engine.delegate").filter((params) => params.worker);
+      assert.ok(workerCalls.length > 0, "a worker ran");
+      for (const call of workerCalls) {
+        assert.equal(call.creditCap, 600, "every worker is capped");
+        // The host reads "Don't wait for me" by the run: every worker names it.
+        assert.equal((call.worker as { runId?: unknown }).runId, host.run.runId);
+      }
+
+      const idle = await unrealLoopHost(
+        [
+          ({ host }) => {
+            host.pass(24 * HOUR);
+            return undefined;
+          },
+        ],
+        { budgets: unlimited },
+      );
+      const report = await idle.start();
+      assert.equal(
+        report.stoppedBecause,
+        "the Loop's time ran out before a reviewer accepted the goal; here is where it stands",
+      );
+      assert.equal(idle.reviewed().length, 0, "no reviewer was asked");
+    },
   );
 });

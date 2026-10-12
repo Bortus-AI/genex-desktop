@@ -39,6 +39,7 @@ const MESSAGE = {
   DanglingLink: (file: string) => `refused: ${file} is a symlink to something that does not exist`,
   BrokenLink: (file: string) => `refused: ${file} is a symlink that cannot be followed`,
   Link: (file: string) => `refused: ${file} is a link`,
+  NotAFolder: (dir: string) => `refused: ${dir} is a link or a file, not a folder`,
   TooLarge: (file: string, maxBytes: number) => `${file} is larger than ${maxBytes} bytes`,
   NotRegular: (file: string) => `${file} is not a regular file`,
   InvalidJson: (file: string, cause: unknown) =>
@@ -128,6 +129,64 @@ export async function writeFileNoFollow(file: string, data: string | Uint8Array)
   }
 }
 
+/**
+ * Write `data` as `name` in `dir`, a folder {@link ensureDirBelow} made in a folder a box can write
+ * (the runs folder). The name is opened without following a link and without emptying what is
+ * there; only once the handle is the very file `name` names in `dir`, and `dir` still resolves to
+ * itself, is it emptied and written. A folder on the way swapped for a link after the check is
+ * refused (ELOOP) and nothing is written through it, nor any file emptied. `between` runs after the
+ * caller's check and before the open: a test's swap.
+ */
+export async function writeFileInDir(
+  dir: string,
+  name: string,
+  data: string | Uint8Array,
+  between?: () => Promise<void>,
+): Promise<void> {
+  await between?.();
+  const file = path.join(dir, name);
+  const handle = await openNoFollow(file, FS.O_WRONLY | FS.O_CREAT, 0o666);
+  try {
+    const [opened, named, real] = await Promise.all([
+      handle.stat(),
+      lstat(file).catch(() => null),
+      realpath(dir).catch(() => null),
+    ]);
+    const placed = real === dir && named !== null && !named.isSymbolicLink() && sameFile(opened, named);
+    if (!placed) throw linkRefused(file);
+    await handle.truncate(0);
+    await handle.writeFile(data);
+  } finally {
+    await handle.close();
+  }
+}
+
+/**
+ * Create `name` in `dir` (a folder {@link ensureDirBelow} made) and write `data`, refusing a name
+ * already there (a file or a link: EEXIST) and a `dir` swapped for a link after its check (ELOOP,
+ * the file it made through the link removed again). `between` runs before the open: a test's swap.
+ */
+export async function createFileInDir(
+  dir: string,
+  name: string,
+  data: string | Uint8Array,
+  between?: () => Promise<void>,
+): Promise<void> {
+  await between?.();
+  const file = path.join(dir, name);
+  const handle = await openNoFollow(file, FS.O_WRONLY | FS.O_CREAT | FS.O_EXCL, 0o666);
+  let placed = false;
+  try {
+    placed = (await realpath(dir).catch(() => null)) === dir;
+    if (placed) await handle.writeFile(data);
+  } finally {
+    await handle.close();
+  }
+  if (placed) return;
+  await unlink(file).catch(() => {});
+  throw linkRefused(file);
+}
+
 /** Why {@link readRegularFile} refused: not a regular file (a FIFO, a socket, a device), or too big. */
 export class NotARegularFileError extends Error {
   readonly code: "ENOTREG" | "EFBIG";
@@ -164,6 +223,26 @@ export async function readRegularFile(file: string, maxBytes: number): Promise<B
   } finally {
     await handle.close();
   }
+}
+
+/**
+ * The folder `parts` names below `root`, made where missing, by real path: each part on the way
+ * must be a folder of its own, never a link (to anywhere, inside `root` too) or a file, which is
+ * refused (ELOOP) before anything is made through it. For a host that writes in a folder its agents
+ * can write too (the runs folder); answers the real path of the folder.
+ */
+export async function ensureDirBelow(root: string, parts: readonly string[]): Promise<string> {
+  let dir = await realpath(root);
+  for (const part of parts) {
+    dir = path.join(dir, part);
+    await mkdir(dir).catch((err: NodeJS.ErrnoException) => {
+      if (err.code !== "EEXIST") throw err;
+    });
+    const info = await lstat(dir);
+    if (!info.isDirectory()) throw Object.assign(new Error(MESSAGE.NotAFolder(dir)), { code: "ELOOP" });
+  }
+  if ((await realpath(dir)) !== dir) throw Object.assign(new Error(MESSAGE.NotAFolder(dir)), { code: "ELOOP" });
+  return dir;
 }
 
 export async function ensureDir(dir: string): Promise<void> {

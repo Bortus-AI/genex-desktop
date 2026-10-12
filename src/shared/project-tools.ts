@@ -1,4 +1,4 @@
-import type { PluginCallBlocker } from "./plugins.ts";
+import type { PluginCallBlocker, PluginScan, PluginScanFinding } from "./plugins.ts";
 
 /**
  * Genex's own project tools, by the name a session calls them: the chat's own session is handed
@@ -10,6 +10,8 @@ export const ProjectTool = {
   StartWebGame: "start_web_game",
   PluginsFind: "plugins_find",
   PluginsSuggest: "plugins_suggest",
+  /** Checks a plugin folder the agent wrote in the project, in place; installs nothing. The chat's own session's. */
+  PluginCheck: "plugin_check",
   /**
    * Shows the person the "Don't wait for me" card; only their click switches it. A delegated
    * session's only: a local model's turns run no workers.
@@ -62,6 +64,26 @@ export interface PluginsSuggestAnswer {
   shown: boolean;
   message: string;
 }
+
+/**
+ * What `plugin_check` answers for a folder that is a plugin Genex would load: who it is, what it adds
+ * (its tools, its skills and the manifest's sections it declares), what the install-time scan reads
+ * in its code, and what to tell the person next.
+ */
+export interface PluginChecked {
+  ok: true;
+  id: string;
+  version: string;
+  name: string;
+  tools: string[];
+  skills: string[];
+  sections: string[];
+  scan: { verdict: PluginScan["verdict"]; findings: Array<Omit<PluginScanFinding, "excerpt">> };
+  next: string;
+}
+
+/** What `plugin_check` answers: the plugin as Genex reads it, or the first problem that stops it. */
+export type PluginCheckAnswer = PluginChecked | { ok: false; problem: string };
 
 /**
  * What a start of the web starter answers instead of writing it while its chat is in Plan mode: the

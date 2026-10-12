@@ -62,8 +62,8 @@ function distinctList(value: unknown, max: number, valid: (entry: unknown) => bo
   return [...(value as string[])];
 }
 
-/** The manifest tool `name` when it is one a moment may run: harness only, no question, no host program. */
-function quietHarnessTool(tools: readonly PluginManifestTool[], name: unknown): PluginManifestTool | undefined {
+/** The manifest tool `name` when it is one a moment or an observer may run: harness only, no question, no host program. */
+export function quietHarnessTool(tools: readonly PluginManifestTool[], name: unknown): PluginManifestTool | undefined {
   const tool = tools.find((t) => t.name === name);
   const quiet = tool && !isAgentTool(tool) && tool.confirmation === undefined && tool.host === undefined;
   return quiet ? tool : undefined;

@@ -1,4 +1,5 @@
 import { ReferenceKind } from "../../src/harness-seed/loop/run-events.ts";
+import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { gitFile } from "../helpers/git.ts";
@@ -153,7 +154,7 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
   }
 });
 
-import { timedWorkRemaining, wrapReserveMs } from "../../src/harness-seed/loop/director/budgets.ts";
+import { timedWorkRemaining } from "../../src/harness-seed/loop/director/budgets.ts";
 import { restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { reopenedJournal } from "../../src/harness-seed/loop/director/reopen.ts";
 import { applySeed } from "../../src/substrate/seed-upgrade.ts";
@@ -3686,7 +3687,8 @@ describe("a run the loop died in, resumed (the full journal)", () => {
     // The resumed run's clock was set between the Resume and its lead's first turn, to the
     // working time the budget had left: never a fresh budget, and the pause did not count.
     const soft = Date.parse(after.clock.softDeadline);
-    const workingLeft = BUDGET_MS - wrapReserveMs(BUDGET_MS) - worked;
+    // Flipped: the hours are the working time, a grace after them (time-cap.ts), so no reserve comes off them.
+    const workingLeft = BUDGET_MS - worked;
     assert.ok(soft >= resumeAsked + workingLeft, `${iso(soft)} is before ${iso(resumeAsked + workingLeft)}`);
     assert.ok(soft <= resumedTurnAt + workingLeft, `${iso(soft)} is after ${iso(resumedTurnAt + workingLeft)}`);
     assert.match(stands, new RegExp(`wrap-up at ${utc(soft)}`), "the wrap-up when the working time it had left ends");
@@ -5733,7 +5735,8 @@ describe("a run started again after a close of its own", () => {
    * `closeFailedRun` took the earlier session's `run_finished` for this session's and wrote none,
    * so the log kept the new `run_registered` unmatched and the run read as running for good.
    */
-  it("a resumed run whose journal cannot be read fails, instead of starting over with a full budget", async () => {
+  // Flipped: refused with words at the run's start and kept paused (Resume tries again), never failed for good.
+  it("a resumed run whose journal cannot be read stays paused, instead of starting over with a full budget", async () => {
     const log = closedLog();
     await startAgain(
       log,
@@ -5745,11 +5748,12 @@ describe("a run started again after a close of its own", () => {
         },
       },
     );
-    const errors = log.filter((entry) => entry.data.type === "error").map((entry) => String(entry.data.message));
-    assert.ok(
-      errors.some((message) => /journal read failed/.test(message)),
-      `the run stops on the unreadable journal, not somewhere after it: ${JSON.stringify(errors)}`,
-    );
+    const closes = log
+      .map((entry) => entry.data)
+      .filter((data) => data.event_type === "run_finished" && data.payload?.runId === runId);
+    const own = closes.at(-1)?.payload;
+    assert.equal(own?.stoppedBecause, OPEN_LOOP_REFUSAL.journalUnreadable, JSON.stringify(closes));
+    assert.equal(own?.executionStatus, "paused", "the run stays paused for a Resume");
   });
 
   it("a resumed or reopened run that throws before its own close still closes: an earlier session's close is not this one's", async () => {
@@ -6351,7 +6355,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
   const loopUnusedSaid = (said: readonly string[]) =>
     said.filter((words) => /Loop can't continue this build/.test(words));
 
-  it("a Loop message after the game's finished Unreal Loop was answered with Loop off: it starts a new Unreal Loop", async () => {
+  it("a Loop message after the game's finished Unreal Loop was answered with Loop off: it starts a new Loop", async () => {
     const chat = coordinatedChat(true, { game: unrealGame, recorded: [{ name: "start_autopilot", args: dirtBike }] });
     chat.store.journal = null;
     const loopOn = {
@@ -6370,7 +6374,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
       ["start_autopilot", "ask_user"],
       "the chat's own session is handed the Loop's launch",
     );
-    assert.match(String(chat.asked.builders[0]?.prompt), /the Unreal Loop/);
+    assert.match(String(chat.asked.builders[0]?.prompt), /the lead builds the whole project itself in this folder/);
     const runs = await chat.registered();
     assert.equal(runs.length, 2, JSON.stringify(chat.log.map((entry) => entry.data.event_type ?? entry.data.type)));
     assert.notEqual(runs[1]?.runId, RUN, "a new run, never the finished one reopened");
@@ -6378,7 +6382,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
     assert.equal(runs[1]?.goal, dirtBike.goal, "the ask is its goal");
     assert.equal(runs[1]?.budgets?.wallClockMs, HOUR_MS, "with the Loop's hours");
     const finished = chat.notified.find((note) => note.event === "run.finished")?.payload;
-    assert.equal(finished?.engineGame, GameEngine.Unreal, "conducted by the Unreal Loop");
+    assert.equal(finished?.profile, "open", "conducted by the one Loop, in place");
   });
 
   it("with Loop off, a message after the game's finished Unreal Loop is still answered as a chat: one builder turn, no run", async () => {
@@ -9413,8 +9417,6 @@ describe("a Loop on a vehicle template", () => {
       UnrealLoopTool.RollbackPart,
       UnrealLoopTool.ReloadLevel,
       UnrealLoopTool.ExportReference,
-      UnrealLoopTool.CppStatus,
-      UnrealLoopTool.AddCppModule,
     ];
     assert.equal(handed.length, 2);
     for (const [who, tools = []] of [
@@ -9423,6 +9425,9 @@ describe("a Loop on a vehicle template", () => {
     ] as const) {
       for (const name of runnerOnly) assert.ok(!tools.includes(name), `${who} is not handed ${name}`);
       assert.ok(tools.includes(UnrealLoopTool.CheckPart), `${who} still has the builder's gate`);
+      // The C++ module's tools are any Unreal project's agents' own: the one Loop's lead calls them.
+      for (const name of [UnrealLoopTool.CppStatus, UnrealLoopTool.AddCppModule])
+        assert.ok(tools.includes(name), `${who} is handed ${name}`);
     }
   });
 
@@ -11440,9 +11445,19 @@ describe("MAP-5. scope inflated without the user", () => {
 
     await rig.core.stopThread(thread).catch(() => {});
     await waitForLog(rig.core, paused(1), 60_000, "the run to pause");
-    // The resumed run goes on until it is stopped; the Resume is the user's click, not awaited.
+    // The Resume is the user's click, sent as soon as the pause shows, while the paused run may still be
+    // closing: it waits for that close, never refused. Not awaited: the resumed run goes on until it is
+    // stopped, and its dispatch's own wait is not this test's.
     void rig.core.resumeAutopilot(runId).catch(() => {});
-    const second = await waitForLog(rig.core, leading(2), 60_000, "the resumed run's lead at work");
+    const refused = (log: Log) => customEvents(log, "run_start_blocked").length > 0;
+    const second = await waitForLog(
+      rig.core,
+      (log) => leading(2)(log) || refused(log),
+      60_000,
+      "the resumed run's lead at work",
+    );
+    // Flipped (was swallowed): a Resume while the paused run closes is never refused as a second run.
+    assert.deepEqual(customEvents(second, "run_start_blocked"), [], "the Resume is not refused");
     const resumed = (customEvents(second, "run_registered") as Array<Record<string, any>>)[1];
     assert.equal(resumed?.resumed, true);
     assert.deepEqual(resumed?.scope, launched.scope, "a Resume restores the same scope");
@@ -12048,6 +12063,125 @@ describe("MAP-5. scope inflated without the user", () => {
       1,
       "the log is read once per start of the loop, not once per card",
     );
+  });
+});
+
+/**
+ * A Resume pressed as soon as the pause shows reaches the harness while the paused run still writes
+ * its close (its report, its tear-down): it waits for that close and then starts, and is never
+ * refused as a second run of the same chat. The paused run's report is held until the harness has
+ * read the Resume's journal and answered one more message, so the Resume has met the closing run.
+ */
+describe("a Resume pressed as the pause shows", () => {
+  it("the web director's Resume waits for the paused run's close, then starts: never refused as a second run", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    let calls = 0;
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        calls++;
+        // Only the chat's launch matters here; each run's lead thinks until it is stopped.
+        if (calls > 1)
+          return new Promise((resolve) =>
+            request.signal?.addEventListener("abort", () =>
+              resolve({ ok: false, stopReason: "stopped", summary: "" } as never),
+            ),
+          );
+        return {
+          ok: true,
+          engine: "vendor",
+          summary: "Starting the garden now.",
+          turns: 1,
+          usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cost_usd: 0 },
+          studioToolCalls: [{ name: "start_autopilot", args: { goal: "A small walled garden to explore" } }],
+        };
+      },
+    });
+    await rig.core.games.scaffold("garden", { title: "garden" });
+    const thread = await rig.core.threadForGame("garden");
+    type Log = Awaited<ReturnType<typeof rig.core.listAllEvents>>;
+    const leading = (n: number) => (log: Log) => customEvents(log, "run_registered").length >= n && calls > n;
+    const paused = (n: number) => (log: Log) =>
+      customEvents(log, "autopilot_paused").length + customEvents(log, "run_finished").length >= n;
+
+    await rig.core.sendUserMessage("Make a small walled garden to explore", {
+      thread,
+      engine: "vendor",
+      autopilot: { hours: 1 },
+    });
+    const first = await waitForLog(rig.core, leading(1), 60_000, "the run's lead at work");
+    const runId = String((customEvents(first, "run_registered")[0] as Record<string, unknown>).runId);
+
+    // The host calls the harness makes, as the host serves them: the paused run's report is held.
+    type Serve = (params: Record<string, unknown>) => Promise<unknown>;
+    const api = rig.core.host.options.api as unknown as Record<string, Serve>;
+    const serve = {
+      report: api[HostMethod.RunArtifact]!,
+      read: api[HostMethod.ArtifactRead]!,
+      list: api[HostMethod.GameList]!,
+    };
+    let reportHeld = () => {};
+    const held = new Promise<void>((resolve) => {
+      reportHeld = resolve;
+    });
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let resumeRead = () => {};
+    const read = new Promise<void>((resolve) => {
+      resumeRead = resolve;
+    });
+    let resumeSent = false;
+    let listsWhileHeld = 0;
+    api[HostMethod.RunArtifact] = async (params) => {
+      if (params.runId === runId && params.name === "report.json") {
+        reportHeld();
+        await released;
+      }
+      return serve.report(params);
+    };
+    api[HostMethod.ArtifactRead] = async (params) => {
+      const value = await serve.read(params);
+      // Answered first; the next turn is after the answer went to the harness.
+      if (resumeSent && params.artifactId === `autopilot_${runId}`) setImmediate(resumeRead);
+      return value;
+    };
+    api[HostMethod.GameList] = async (params) => {
+      if (resumeSent) listsWhileHeld += 1;
+      return serve.list(params);
+    };
+
+    await rig.core.stopThread(thread).catch(() => {});
+    await held;
+    assert.equal(customEvents(await rig.core.listAllEvents(), "autopilot_paused").length, 1, "the pause shows");
+    resumeSent = true;
+    void rig.core.resumeAutopilot(runId).catch(() => {});
+    await read;
+    // The harness answers in order: once it answers this, it has run the Resume's start past the
+    // journal it read, up to where that start waits (or would be refused, or would begin).
+    assert.equal(await rig.core.host.healthcheck(), true);
+    const startsWhileHeld = listsWhileHeld;
+    release();
+
+    const second = await waitForLog(
+      rig.core,
+      (log) => leading(2)(log) || customEvents(log, "run_start_blocked").length > 0,
+      60_000,
+      "the resumed run's lead at work",
+    );
+    assert.deepEqual(customEvents(second, "run_start_blocked"), [], "the Resume is not refused");
+    assert.equal(startsWhileHeld, 0, "while the paused run closed, the Resume only waited: it read no game list");
+    const resumed = (customEvents(second, "run_registered") as Array<Record<string, unknown>>)[1];
+    assert.equal(resumed?.resumed, true, "the Resume started once the paused run had closed");
+    await rig.core.stopThread(thread).catch(() => {});
+    await waitForLog(rig.core, paused(2), 60_000, "the resumed run to pause").catch(() => {});
   });
 });
 

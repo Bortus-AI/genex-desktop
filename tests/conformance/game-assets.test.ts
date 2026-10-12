@@ -428,14 +428,12 @@ async function listsByFactsAndPlugins(): Promise<void> {
     "Content/Maps/Main.umap": "umap",
     "Content/Hero.uasset": "uasset",
     "Saved/x.uasset": "uasset",
+    "assets/models/rock.obj": "o rock\nv 0 0 0\n",
   });
   assert.deepEqual(
     (await listed(unreal.name)).map((asset) => [asset.file, asset.kind]).sort(),
-    [
-      ["Content/Hero.uasset", "other"],
-      ["Content/Maps/Main.umap", "other"],
-    ],
-    "Content's engine files, never the editor's scratch",
+    [["assets/models/rock.obj", "model"]],
+    "the media agents brought in, never Unreal's own packages (no preview) or the editor's scratch",
   );
 
   await lite.core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);

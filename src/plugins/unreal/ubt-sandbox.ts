@@ -4,12 +4,14 @@
  * the copy's C# rules, so the build reads nothing in the user's home folder but the copy, the
  * engine, Xcode and UBT's own per-user folders; writes only the copy's build output, UBT's log
  * folder and a private scratch folder; never touches a coding CLI's sign-in home, wherever it
- * lives; has no network; and starts with none of Genex's environment. UBT finds its per-user
+ * lives; has no network; and starts with none of Genex's environment. A host project's build also
+ * writes its plugins' build output (`Plugins/<Name>/Intermediate`, `Binaries`), nothing else of theirs,
+ * and a plugin's package writes its own folder (`extraWrites`). UBT finds its per-user
  * folders from the account, not from HOME, so they are named here; its configuration there is
  * read only, so a build can't plant settings for the user's own builds. A sandboxed full build
  * takes as long as an unconfined one.
  */
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { credentialHomes } from "../../substrate/credential-homes.ts";
@@ -34,10 +36,19 @@ export type BuildSandboxRequest = {
   home?: string;
   /** Folders never read or written: the coding CLIs' sign-in homes unless a test names others. */
   denied?: string[];
+  /**
+   * The project's own plugins the build compiles (`Plugins/<Name>`): each a real folder inside the
+   * project, of which only its build output (`Intermediate`, `Binaries`) is written.
+   */
+  pluginDirs?: string[];
+  /** Further folders the build writes (BuildPlugin's package folder): each a real folder inside the project. */
+  extraWrites?: string[];
 };
 
 /** The folders of a project UBT writes: its build output. */
 const PROJECT_OUTPUT = ["Intermediate", "Binaries", "Saved"];
+/** The folders of a project plugin UBT writes: its build output. */
+const PLUGIN_OUTPUT = ["Intermediate", "Binaries"];
 const APP_SUPPORT = ["Library", "Application Support"];
 const EPIC = [...APP_SUPPORT, "Epic"];
 /** UBT's own folder in the home folder: its log and trace, written on every build. */
@@ -76,6 +87,8 @@ const MESSAGE = {
   NotAbsolute: (what: string) => `The ${what} folder isn't a full path.`,
   HoldsHome: (what: string) => `The ${what} folder holds the home folder, so it can't be confined.`,
   Unquotable: (what: string) => `The ${what} folder's path has a character the sandbox can't name.`,
+  NotInProject: "A plugin folder the build writes to isn't a real folder inside the project.",
+  WriteNotInProject: "A folder the build writes to isn't a real folder inside the project.",
 } as const;
 
 /** The paths of one build's profile, each spelled as the kernel resolves it. */
@@ -131,6 +144,43 @@ async function confinable(what: string, folder: string, home: string): Promise<s
   return names;
 }
 
+/** A folder by its real path: absolute, nameable in a profile, a folder and not a link; else null. */
+async function realFolder(dir: string): Promise<string | null> {
+  if (!path.isAbsolute(dir) || UNQUOTABLE.test(dir)) return null;
+  const info = await lstat(dir).catch(() => null);
+  if (!info?.isDirectory()) return null;
+  return realpath(dir).catch(() => null);
+}
+
+/**
+ * The build output folders of the project's plugins (`PLUGIN_OUTPUT`): each plugin folder must be a
+ * real folder, not a link, strictly inside the project's real folder; else the sandbox is refused.
+ */
+async function pluginOutputs(projectDir: string, pluginDirs: readonly string[]): Promise<string[]> {
+  if (pluginDirs.length === 0) return [];
+  const project = await realpath(projectDir);
+  const outputs: string[] = [];
+  for (const dir of pluginDirs) {
+    const real = await realFolder(dir);
+    if (real === null || real === project || !within(project, real)) throw new Error(MESSAGE.NotInProject);
+    outputs.push(...PLUGIN_OUTPUT.map((name) => path.join(real, name)));
+  }
+  return outputs;
+}
+
+/** The further folders a build writes, by their real paths: each a real folder strictly inside the project, else refused. */
+async function extraOutputs(projectDir: string, dirs: readonly string[]): Promise<string[]> {
+  if (dirs.length === 0) return [];
+  const project = await realpath(projectDir);
+  const outputs: string[] = [];
+  for (const dir of dirs) {
+    const real = await realFolder(dir);
+    if (real === null || real === project || !within(project, real)) throw new Error(MESSAGE.WriteNotInProject);
+    outputs.push(real);
+  }
+  return outputs;
+}
+
 /** The profile's paths for `request`, with the build's scratch folder. */
 async function profilePaths(request: BuildSandboxRequest, scratch: string): Promise<ProfilePaths> {
   const home = await realpath(request.home ?? os.homedir());
@@ -138,7 +188,13 @@ async function profilePaths(request: BuildSandboxRequest, scratch: string): Prom
   const engine = await confinable("engine", request.engineDir, home);
   const xcode = request.xcodeApp ? await confinable("Xcode", request.xcodeApp, home) : [];
   const inHome = (parts: readonly string[]) => path.join(home, ...parts);
-  const output = project.flatMap((folder) => PROJECT_OUTPUT.map((name) => path.join(folder, name)));
+  const plugins = await pluginOutputs(request.projectDir, request.pluginDirs ?? []);
+  const extra = await extraOutputs(request.projectDir, request.extraWrites ?? []);
+  const output = [
+    ...project.flatMap((folder) => PROJECT_OUTPUT.map((name) => path.join(folder, name))),
+    ...plugins,
+    ...extra,
+  ];
   const denied = (request.denied ?? credentialHomes([], process.env, home)).filter((d) => !UNQUOTABLE.test(d));
   return {
     home,

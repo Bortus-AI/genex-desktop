@@ -18,6 +18,11 @@ export type StudioLayout = {
    * outside every writable root and inside the never-touch list's Genex data.
    */
   jobs: string;
+  /**
+   * The homes of Loops' reviewers, one fresh folder per call. Never writable by an agent process
+   * (unlike scratch), so no box can swap a folder on the way for a link while the host makes one.
+   */
+  reviewers: string;
 };
 
 export function layoutFor(userData: string): StudioLayout {
@@ -33,5 +38,6 @@ export function layoutFor(userData: string): StudioLayout {
     engineHomes: path.join(userData, "engine-homes"),
     exports: path.join(userData, "exports"),
     jobs: path.join(userData, "jobs"),
+    reviewers: path.join(userData, "reviewers"),
   };
 }

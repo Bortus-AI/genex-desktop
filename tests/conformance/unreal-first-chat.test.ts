@@ -63,15 +63,33 @@ function relinked(project: string) {
   });
 }
 
-/** How one `health` moment answers: ready, pending (still opening) or blocked (it stopped opening). */
-const Health = { Ok: "ok", Pending: "pending", Blocked: "blocked" } as const;
+/**
+ * How one `health` moment answers: ready, pending (still opening), blocked (it stopped opening), or
+ * pending because Genex itself held it back while the person used Unreal.
+ */
+const Health = { Ok: "ok", Pending: "pending", Blocked: "blocked", HeldForPerson: "held-for-person" } as const;
 type Health = (typeof Health)[keyof typeof Health];
+
+/** Genex's own hold at `health`, as the host types it: words for agents, the hold and the lock's label. */
+const PERSON_HELD = {
+  plugin: "@genex",
+  reason:
+    "The person is using Unreal, and this waited for them to finish: they were still at it. Try again later, or ask them in the chat.",
+  hold: "person_first",
+  label: "Unreal",
+};
+
+/** What a health reading's pending is, if any. */
+function pendingOf(health: Health) {
+  if (health === Health.Pending) return { plugin: "unreal", reason: OPENING };
+  return health === Health.HeldForPerson ? PERSON_HELD : null;
+}
 
 /** A `hooks.fire` answer for one health reading. */
 function healthReport(health: Health) {
   return {
     blocked: health === Health.Blocked ? { plugin: "unreal", tool: "editor-state", reason: NOT_OPENED } : null,
-    pending: health === Health.Pending ? { plugin: "unreal", reason: OPENING } : null,
+    pending: pendingOf(health),
     notes: [],
     images: [],
     ran: ["unreal__editor-state"],
@@ -127,7 +145,7 @@ async function turnOn(options: {
         const health = (healths.length > 1 ? healths.shift() : healths[0]) ?? Health.Ok;
         // A pending answer is followed by the poll's sleep, on the test's clock: it passes as soon as
         // it is set (a turn Stop ended sets none, and the test may be over by then).
-        if (options.timers && health === Health.Pending) setImmediate(() => tickQuietly(options.timers, READY_POLL_MS));
+        if (options.timers && pendingOf(health)) setImmediate(() => tickQuietly(options.timers, READY_POLL_MS));
         return healthReport(health);
       },
     },
@@ -236,6 +254,23 @@ describe("the turn that makes a game's Unreal project", () => {
     assert.equal(waited.delegated.length, 1, "nothing goes on while it's pending");
     assert.ok(waited.said.includes(READY_WORDS.timedOut(OPENING)), waited.said.join(" | "));
     assert.ok(!waited.said.includes(NOT_OPENED));
+  });
+
+  it("Genex's own hold while the person uses Unreal is worded for them, waiting and once the cap passes", async (t) => {
+    t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+    const waited = await turnOn({
+      healths: [Health.HeldForPerson],
+      onHealth: () => t.mock.timers.tick(READY_WAIT_MS),
+      timers: t.mock.timers,
+    });
+    const words = "Waiting for you to finish in Unreal.";
+    assert.equal(waited.delegated.length, 1, "nothing goes on while it's held");
+    assert.ok(waited.said.includes(words), waited.said.join(" | "));
+    assert.ok(waited.said.includes(READY_WORDS.timedOut(words)), waited.said.join(" | "));
+    assert.ok(
+      waited.said.every((line) => !line.includes("ask them in the chat")),
+      "never the words written for agents",
+    );
   });
 
   it("Stop during the wait ends it: nothing goes on, and the chat says how to pick up", async (t) => {

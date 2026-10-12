@@ -43,6 +43,46 @@ export interface GameImageRead {
 }
 // ↑ src/shared/harness-api.ts
 
+/** One picture of a capture, kept as a file with its run. */
+export interface CapturedFile {
+  name: string;
+  file: string;
+}
+// ↑ src/shared/observers.ts
+
+/** One picture of a capture: its file kept with the run, and its pixels (downscaled) for a reviewer's prompt. */
+export interface CapturedImage extends CapturedFile {
+  mimeType: string;
+  data: string;
+}
+// ↑ src/shared/harness-api.ts
+
+export type FinishCheckStep = 'checking' | 'accepted' | 'rejected' | 'unanswered';
+// ↑ src/shared/finish-check.ts
+
+/** A finish check's round as the host answers it: the reviewer's yes or no with reasons, or no answer and why. */
+export interface FinishRoundAnswer {
+  round: number;
+  step: FinishCheckStep;
+  reasons?: string[];
+  why?: string;
+}
+// ↑ src/shared/harness-api.ts
+
+/**
+ * One observer's capture (`observers.capture`): its pictures and its play recording's frames in
+ * order, its note, or the problem that kept it from capturing (a lock not given, a failed step).
+ */
+export interface ObserverCaptureResult {
+  observer: string;
+  label: string;
+  images: CapturedImage[];
+  recording: CapturedImage[];
+  note?: string;
+  problem?: string;
+}
+// ↑ src/shared/harness-api.ts
+
 /** A stills source for `preview.pair`: inline bytes, or a path under the studio's runs. */
 export interface StillSource {
   base64?: string;
@@ -316,6 +356,11 @@ export interface DelegateDirectorGrant {
    * lead in its game's folder.
    */
   chatSession?: boolean;
+  /**
+   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
+   * this game started in this chat.
+   */
+  inPlace?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -356,7 +401,11 @@ export interface HarnessDelegateParams {
    * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
    * run and message as the coordinator's tools are. Honoured only for the chat's own session.
    */
-  runControls?: { runId: string; messageId?: string };
+  /**
+   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
+   * its controls are only the status, never a build to show or land.
+   */
+  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -425,6 +474,13 @@ export interface HarnessDelegateParams {
    * on a harness that claims `workers`, and never for a worker: depth is one.
    */
   workers?: { tools?: LiveToolSpec[] };
+  /**
+   * A Loop's reviewer: read-only, in a fresh home of its own, reading `reads` (the lead's folder) and
+   * the run's captures (on Codex a brief, not a boundary), looking at app windows with `app_look` and nothing else. Honoured only when
+   * `readOnly`, for a run of this game, reading the game's folder or its own copy in the run's
+   * folder; anything else is refused before an engine starts. Every other grant is dropped.
+   */
+  reviewer?: { runId: string; reads: string };
 }
 // ↑ src/shared/harness-api.ts
 
@@ -707,6 +763,10 @@ export interface PluginKindOffer {
   asksReady?: boolean;
   ready?: boolean;
   note?: string;
+  /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
+  scaffold?: string;
+  /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
+  label?: string;
 }
 // ↑ src/shared/plugins.ts
 
@@ -803,11 +863,14 @@ export interface HookImage {
 }
 // ↑ src/shared/plugin-hooks.ts
 
-/** What a moment's handlers answered: the first block, the first pending, every note and picture, and who ran (agent names, in order). */
+/**
+ * What a moment's handlers answered: the first block, the first pending, every note and picture, and
+ * who ran (agent names, in order). Genex's own (a lock not given) carries its hold and the lock's label.
+ */
 export interface HookReport {
   blocked: ({ plugin: string; tool: string; reason: string } & HookHeld) | null;
-  pending: { plugin: string; reason: string } | null;
-  notes: Array<{ plugin: string; text: string }>;
+  pending: ({ plugin: string; reason: string } & HookHeld) | null;
+  notes: Array<{ plugin: string; text: string } & HookHeld>;
   images: HookImage[];
   ran: string[];
 }
@@ -902,7 +965,7 @@ export interface EngineAccount {
  * How a provider signs in: Claude through a piped or embedded terminal plus status polling, Codex
  * through its native login reported from the in-app console, OpenCode through its own `auth login`
  * in the embedded terminal (which keeps every provider it signs in to), `none` for an engine with
- * no sign-in of its own (a local model, or OpenRouter, whose key is pasted in Settings).
+ * no sign-in of its own (a local model, a local server, or OpenRouter, whose key is pasted in Settings).
  */
 export type LoginKind = "terminal" | "console" | "cli" | "none";
 // ↑ src/shared/providers.ts
@@ -953,6 +1016,19 @@ export interface ProviderInfo {
 }
 // ↑ src/shared/providers.ts
 
+export type LocalServerKind = 'tabbyapi' | 'llama-cpp' | 'lm-studio' | 'vllm' | 'koboldcpp' | 'ollama';
+// ↑ src/shared/local-server.ts
+
+/** What the engine descriptor says about the saved server: its address and software, never its key. */
+export interface LocalServerInfo {
+  /** The API's base URL, as saved (`http://127.0.0.1:5000/v1`). */
+  url: string;
+  kind: LocalServerKind | null;
+  /** An API key is saved for it. */
+  hasKey: boolean;
+}
+// ↑ src/shared/local-server.ts
+
 export interface EngineDescriptor {
   id: string;
   label: string;
@@ -966,6 +1042,8 @@ export interface EngineDescriptor {
   account?: EngineAccount | null;
   /** The provider table's row for this engine (`shared/providers.ts`); null for an unlisted engine. */
   provider?: ProviderInfo | null;
+  /** A local server engine: the saved server's address and software (never its key); null while none is saved. */
+  server?: LocalServerInfo | null;
   models: Array<{
     id: string;
     label: string;
@@ -980,6 +1058,8 @@ export interface EngineDescriptor {
     /** A short alias the CLI resolves to another listed model, so pickers list that model once. */
     aliasOf?: string;
     note?: string;
+    /** Runs at no cost and with no account (OpenCode's own free models). */
+    free?: boolean;
     /** What the composer's effort menu offers for this model; empty = no effort dial. */
     efforts?: string[];
     defaultEffort?: string;
@@ -1019,6 +1099,8 @@ export interface OutcomeView {
   delivered: "delivered" | "superseded" | "available" | "none";
   /** The checks recorded on the current build: one failed, or they are incomplete. */
   verification: "attention" | "incomplete";
+  /** What was delivered was kept in the project's own folder by a Loop led there: nothing to play in Live. */
+  inPlace?: true;
 }
 // ↑ src/shared/run-summary.ts
 
@@ -1278,10 +1360,10 @@ export interface ProjectShape {
 export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
 // ↑ src/shared/game-engine.ts
 
-export type FactSource = 'core' | 'link';
+export type FactSource = 'core' | 'link' | 'scaffold';
 // ↑ src/shared/project-facts.ts
 
-/** Where a fact came from: the core table, an engine link, or the `detect` of the plugin named. */
+/** Where a fact came from: the core table, an engine link, a recorded scaffold, or the `detect` of the plugin named. */
 export type ProjectFactSource = FactSource | `plugin:${string}`;
 // ↑ src/shared/project-facts.ts
 
@@ -1332,6 +1414,11 @@ export interface GameProject {
   hookEvents?: HookEvent[];
   /** What a port replaced, kept in the folder as the reference and no longer a kind of this game. */
   portedFrom?: ProjectFact[];
+  /**
+   * The scaffold a plugin's tool made this project with, as studio.json records it (its rules stay
+   * there): what the sidebar names a project that isn't a game ("Unreal plugin").
+   */
+  scaffold?: { plugin: string; id: string; label: string };
   /**
    * Whether `facts` hold `web-game` at the root; kept for parts that read it. Absent from a
    * descriptor made before it was recorded, read as a web game.
@@ -1883,6 +1970,24 @@ export interface HarnessHostApi {
     };
     result: HookReport;
   };
+  /**
+   * Run the game's observers for a run of this game (one, when `observer` names it as
+   * `<plugin>/<id>`): each of a plugin that is on runs its tool as a harness step under that tool's
+   * locks, the person first, the run's own holds passing. Its pictures are kept with the run and
+   * recorded as `observer_capture`; a failing or held observer answers a `problem`. Plan mode never
+   * holds it: it only looks. `withinMs` is the time the harness still waits: every observer's lock
+   * wait and call fit in it, and nothing is kept or recorded after it.
+   */
+  "observers.capture": {
+    params: {
+      project: string;
+      runId: string;
+      threadId?: string | null;
+      observer?: string | null;
+      withinMs?: number | null;
+    };
+    result: ObserverCaptureResult[];
+  };
   /** A worker writing in place ended: every lock it holds in the game is let go; another's are untouched. */
   "locks.release": {
     params: { project: string; threadId: string; runId?: string | null; holder: { id: string } };
@@ -1912,10 +2017,12 @@ export interface HarnessHostApi {
   "engine.complete": { params: HarnessCompleteParams; result: CompleteResponse };
   /**
    * Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree
-   * (with `worker`, the in-place worker of that id working in `cwd`).
+   * (with `worker`, the in-place worker of that id working in `cwd`; with `lead`, a run id, only the
+   * session the host seated there as that run's lead in place). With `reviewer` (a run id), only
+   * the sessions the host seated as that run's reviewers (of `project`, when named), nothing else.
    */
   "engine.abort": {
-    params: { threadId?: string; cwd?: string; project?: string; worker?: string };
+    params: { threadId?: string; cwd?: string; project?: string; worker?: string; reviewer?: string; lead?: string };
     result: { aborted: number };
   };
   /**
@@ -1924,6 +2031,40 @@ export interface HarnessHostApi {
    */
   "engine.interrupt": { params: { cwd: string; worker?: string }; result: { interrupted: boolean } };
   "engine.delegate": { params: HarnessDelegateParams; result: DelegateResult };
+  /**
+   * A Loop's finish check, asked by the harness and answered by the host: only the host writes the
+   * reviewer's verdict. The run must be a running run of this game with no round held. The host
+   * records the round's `checking` step, seats the reviewer read-only (as `engine.delegate`'s
+   * `reviewer` grant seats one, reading `reads`), reads its yes or no, and holds that answer until
+   * the harness settles the round.
+   */
+  "finish.review": {
+    params: {
+      project: string;
+      runId: string;
+      engine: string;
+      model?: string | null;
+      effort?: string | null;
+      prompt: string;
+      images: DelegateImage[];
+      reads: string;
+      timeoutMs: number;
+      maxTurns: number;
+      claim: string;
+      proof: string[];
+      observers: string[];
+    };
+    result: FinishRoundAnswer;
+  };
+  /**
+   * End the held round of a run: the host records its outcome and counts the no's in a row from its
+   * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
+   * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
+   */
+  "finish.settle": {
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
+  };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
    * turn (`chatTurn` is `into`). `accepted` lists what the session took; `how` is how (`SteerDelivery`
@@ -1972,7 +2113,8 @@ export interface HarnessHostApi {
   };
   "game.validate": {
     params: { project: string; candidateId?: string };
-    result: { ok: boolean; problems: string[]; warnings: string[]; contract: ContractWord };
+    /** `missing`: the files a web page needs that are not there, by name (`problems` says it in sentences). */
+    result: { ok: boolean; problems: string[]; missing: string[]; warnings: string[]; contract: ContractWord };
   };
   /** The live half of `game.validate`: serve the page, wait for it, ask what the hook got hold of. */
   "game.attached": {
@@ -2249,6 +2391,8 @@ export interface RunSpec {
     wallClockMs: number;
     /** The composer's ∞: run until the judge is satisfied; `wallClockMs` is then only the safety ceiling. */
     untilSatisfied?: boolean;
+    /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
+    creditCap?: number;
     /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
     completionPolicy?: "goal" | "duration";
     maxIterations?: number;

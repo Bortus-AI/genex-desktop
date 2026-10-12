@@ -11,11 +11,15 @@ import {
   CoreFact,
   FactSource,
   factsOfFiles,
+  FolderHolds,
   globMatches,
+  LoopProfile,
+  loopProfileOf,
   parsePortedFrom,
   pluginFactSource,
   scopePaths,
   type FactRule,
+  WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
@@ -89,6 +93,42 @@ describe("the core table", () => {
       ["Saved/a", "../Saved/", false],
     ];
     for (const [file, glob, matches] of table) assert.equal(globMatches(file, glob), matches, `${file} ~ ${glob}`);
+  });
+});
+
+describe("a Loop's profile", () => {
+  it("is web only for a web game served at the root beside nothing but Blender files; anything else is open", () => {
+    const at = (id: string, where: string) => ({ id, path: where, source: FactSource.Core });
+    const { Web, Open } = LoopProfile;
+    const table: Array<[string, Parameters<typeof loopProfileOf>[0], LoopProfile]> = [
+      ["a folder with no kind yet", { facts: [] }, Web],
+      ["a folder of its own files of a kind no rule knows", { facts: [], holds: FolderHolds.OwnFiles }, Open],
+      ["a web game", { facts: [at(CoreFact.WebGame, ".")] }, Web],
+      ["a web game with a second site", { facts: [at(CoreFact.WebGame, "."), at(CoreFact.WebGame, "site")] }, Web],
+      [
+        "a web game holding Blender files",
+        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.BlenderAssets, "assets")] },
+        Web,
+      ],
+      ["a site in a subfolder only", { facts: [at(CoreFact.WebGame, "site")] }, Open],
+      ["an Unreal project", { facts: [at(CoreFact.UnrealProject, ".")] }, Open],
+      [
+        "a web game with an Unreal project linked in",
+        { facts: [at(CoreFact.WebGame, "."), at(CoreFact.UnrealProject, "unreal")] },
+        Open,
+      ],
+      [
+        "an Unreal project with a site",
+        { facts: [at(CoreFact.UnrealProject, "."), at(CoreFact.WebGame, "site")] },
+        Open,
+      ],
+      ["a Godot project", { facts: [at(CoreFact.GodotProject, ".")] }, Open],
+      ["a plugin's kind", { facts: [at("toy-project", ".")] }, Open],
+      ["Blender files alone", { facts: [at(CoreFact.BlenderAssets, ".")] }, Open],
+      ["an Unreal plugin", { facts: [at(CoreFact.UnrealPlugin, ".")] }, Open],
+    ];
+    for (const [name, game, profile] of table) assert.equal(loopProfileOf(game), profile, name);
+    assert.deepEqual([...WEB_LOOP_FACTS].sort(), [CoreFact.BlenderAssets, CoreFact.WebGame]);
   });
 });
 

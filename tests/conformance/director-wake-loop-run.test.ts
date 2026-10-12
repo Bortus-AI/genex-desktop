@@ -9,6 +9,7 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import type { DelegateRequest, DelegateResult, LiveToolResult } from "../../src/substrate/engines/types.ts";
+import { reviewerAnswer, seatedReviewer } from "../helpers/reviewer.ts";
 import {
   customEvents,
   type FakePreview,
@@ -1118,6 +1119,8 @@ it("G3. current integrated acceptance permits early completion and keeps a recov
           answers: { "director-play": { answer: "yes", note: "Reached the dusk scene through interaction" } },
         }),
       );
+    // Flipped: the lead's claim is checked by a reviewer first, which says yes here.
+    if (seatedReviewer(request)) return reviewerAnswer("yes") as never;
     assert.ok(request.director, "no builder is needed after current acceptance passes");
     assert.ok(request.onLiveTool);
     await request.onLiveTool("plan", plan);

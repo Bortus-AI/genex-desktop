@@ -21,6 +21,7 @@ import { SyntaxCode } from "../ui/SyntaxCode.tsx";
 import {
   alwaysWords,
   permissionCommandWords,
+  permissionInsteadWords,
   permissionLineWords,
   permissionPath,
   permissionTitleWords,
@@ -33,7 +34,6 @@ const WORDS = {
   allow: "Allow",
   allowOnce: "Just this once.",
   deny: "Deny",
-  insteadPlaceholder: "Tell Claude what to do instead…",
   keepPlanningPlaceholder: "Keep planning: what should change?",
   reviewRequest: "Review permission request",
   reviewPlan: "Review plan",
@@ -192,7 +192,7 @@ export function PermissionRequest({
       description={description}
       choices={choices}
       reopenLabel={WORDS.reviewRequest}
-      answerPlaceholder={WORDS.insteadPlaceholder}
+      answerPlaceholder={permissionInsteadWords(event)}
       onConfirm={(id) => onAnswer(choiceAnswer(id))}
       onAnswerText={(message) => onAnswer({ decision: PermissionDecision.Deny, message })}
     >

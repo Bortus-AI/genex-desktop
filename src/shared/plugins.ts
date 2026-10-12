@@ -1,8 +1,10 @@
 import type { GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
+import type { ObserveContext, PluginObserver } from "./observers.ts";
 import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
 import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./project-facts.ts";
 import type { WorkerIsolation } from "./workers.ts";
+import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
 
 /** Where a plugin's native runtime stands on this Mac (`PluginNativeStatus.state`). */
 export const NativeRuntimeState = {
@@ -247,6 +249,23 @@ export interface PluginKindOffer {
   asksReady?: boolean;
   ready?: boolean;
   note?: string;
+  /** The scaffold this offer is (`PluginScaffold.id`), when the plugin declares scaffolds. */
+  scaffold?: string;
+  /** The scaffold's label, what the card names this kind ("Unreal plugin"); else the plugin's name. */
+  label?: string;
+}
+/**
+ * API 3: a kind of project a plugin's tool makes, with its own label. With a `tool` (an agent tool
+ * of the same manifest that declares `makes`) it is a kind on offer of its own, and once that tool
+ * made the project Genex records the scaffold in the game's studio.json (`ScaffoldRecord`): its
+ * `facts` rules (the `detect` grammar, each of a fact the tool makes) then find facts detection
+ * skips, such as a plugin inside its host project's `Plugins/`.
+ */
+export interface PluginScaffold {
+  id: string;
+  label: string;
+  tool?: string;
+  facts?: FactRule[];
 }
 /** What of one plugin reaches a game's session: its agent tools, its skills and whether its skill reader does. */
 export interface PluginReach {
@@ -453,12 +472,19 @@ export interface PluginManifest {
   assets?: { facts?: string[]; folders: string[]; formats?: string[] };
   /** API 3: the kinds of worker the plugin declares; the first declaration of an id wins. */
   workerTypes?: PluginWorkerType[];
+  /** API 3: the kinds of project its tools make, each with its own label (`PluginScaffold`). */
+  scaffolds?: PluginScaffold[];
   /** API 3: folders outside the game its engine programs write to: workers' write roots. */
   folders?: PluginFolder[];
   /** API 3: what one holder at a time may use (an editor), each giving way to the person (`shared/plugin-hooks.ts`). */
   locks?: PluginLock[];
   /** API 3: the plugin's harness tools Genex runs at its moments (`shared/plugin-hooks.ts`). */
   hooks?: PluginHook[];
+  /**
+   * API 3: what Genex can capture of a project with these facts (evidence for a reviewer), and the
+   * Live view it shows (`shared/observers.ts`).
+   */
+  observers?: PluginObserver[];
   /** Host-managed account flow. Status may finish a pending browser authorization. */
   account?: { connect: string; unlock: string; disconnect: string; status: string; cancel?: string };
   /**
@@ -543,6 +569,8 @@ export interface PluginInfo {
   lastSkillChange?: PluginSkillChange;
   /** Where the plugin's picture loads from, when it has one (its own, or for a bundled plugin the one Studio bundles now). */
   iconUrl?: string;
+  /** Agent tools of a local plugin the person allowed to run without asking; cleared when its code changes or it is turned off. */
+  allowedTools?: string[];
 }
 /**
  * The plugins and skills one session was handed, as `plugin` ids and `plugin/skill` names: the
@@ -775,6 +803,8 @@ export interface PluginBinding {
   threadId?: string;
   /** Set when Genex runs the tool at one of its moments: which, and for what. */
   hook?: HookContext;
+  /** Set when Genex runs the tool as one of the plugin's observers: which, for which run, and why. */
+  observe?: ObserveContext;
 }
 export interface PluginCatalogEntry {
   manifest: PluginManifest;
@@ -828,6 +858,65 @@ export type PluginService = (typeof PluginService)[keyof typeof PluginService];
 
 /** The folder in a `game-engine` plugin's storage where the host keeps each game's link, `<game>.json`. */
 export const ENGINE_LINKS_FOLDER = "links";
+
+/** A still's view name: a `config.demos` or `config.cameras` key, or a built-in `eye:*` camera. */
+export const PLUGIN_STILL_VIEW_NAME = /^[A-Za-z0-9][A-Za-z0-9:_-]{0,63}$/;
+/** The least, the most and the default size of a still's encoded image. */
+export const PLUGIN_STILL_MIN_BYTES = 64 * 1024;
+export const PLUGIN_STILL_MAX_BYTES = 16 * 1024 * 1024;
+export const PLUGIN_STILL_DEFAULT_BYTES = 8 * 1024 * 1024;
+/** The most view names a `view_unknown` answer lists. */
+export const PLUGIN_STILL_AVAILABLE_MAX = 32;
+
+/** Which view a still photographs: a demo run to its end state, or a camera placed. Exactly one. */
+export type PluginStillView = { demo: string; camera?: undefined } | { camera: string; demo?: undefined };
+/**
+ * `observe` with a `still` (API 3, additive): one named view of the bound game on a hidden window
+ * of its own at `width`×`height` (each within a pooled window's least and most size), encoded in at
+ * most `maxBytes`. Mirrors `PluginStillRequest` in `src/plugin-sdk/index.d.ts`.
+ */
+export type PluginStillRequest = PluginStillView & { width: number; height: number; maxBytes?: number };
+/** A still request as the host checked it: one view, whole-pixel sides, the byte limit filled in. */
+export type PluginStillOrder = PluginStillView & { width: number; height: number; maxBytes: number };
+
+/** Why `observe` took no still. Published to plugins: never rename a value. */
+export const PluginStillProblemCode = {
+  /**
+   * This host cannot take a still: it has no hidden window (a still never borrows the person's
+   * own), or the window could not be opened, sized or asked for one.
+   */
+  Unavailable: "unavailable",
+  LoadFailed: "load_failed",
+  /** The game has no demo or camera by that name; `available` lists the ones it has. */
+  ViewUnknown: "view_unknown",
+  ViewFailed: "view_failed",
+  CaptureFailed: "capture_failed",
+  /** Not even the lowest-quality JPEG fits `maxBytes`. */
+  TooLarge: "too_large",
+  Timeout: "timeout",
+} as const;
+export type PluginStillProblemCode = (typeof PluginStillProblemCode)[keyof typeof PluginStillProblemCode];
+
+/** A still: the encoded image, its size, which path read it, the view, its exposure and a small JPEG preview. */
+export interface PluginStill {
+  image: Uint8Array;
+  mimeType: StillMimeType;
+  width: number;
+  height: number;
+  /** `page` is the page's own read of its canvas; `compositor` is the window's frame. */
+  source: CaptureSource;
+  view: PluginStillView;
+  stats: StillExposure;
+  /** JPEG, at most 1280 px on its long side. */
+  preview: Uint8Array;
+}
+export interface PluginStillProblem {
+  code: PluginStillProblemCode;
+  reason?: string;
+  available?: string[];
+}
+/** What `observe` with a `still` answers. A host older than the option answers an ordinary observation instead. */
+export type PluginStillAnswer = { still: PluginStill } | { stillProblem: PluginStillProblem };
 
 /** Whether a plugin's own saved account is usable right now (`PluginRegistry.accountState`). */
 export const PluginAccountState = {

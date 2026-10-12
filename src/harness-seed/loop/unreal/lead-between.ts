@@ -3,7 +3,8 @@
  * crash (Genex's health check blocked) runs Genex's crash moment, at which the plugin reopens
  * Unreal in place, and waits until health is quiet (twice at most); when it won't come back, the
  * game goes back to the last save point, never when Genex held the crash moment back (nothing was
- * tried in place, so the run halts and keeps the work). Between turns, a turn that left unsaved work and no save
+ * tried in place, so the run halts, keeps the work and says Unreal crashed), and never after a Stop
+ * (nothing is recorded or said). Between turns, a turn that left unsaved work and no save
  * point gets an autosave, then the lead's rewind or rebuild runs, then the game's C++ module a C++
  * agent asked for is added. What the lead should know of it is carried into its next digest. A run
  * whose Unreal can't be closed or reopened halts with why, in the words the plugin's steps gave.
@@ -12,7 +13,7 @@ import { fireHooks, HookEvent, holdOf, REOPEN_WAIT_MS, runScope, waitReady } fro
 import { HostMethod } from "../host-methods.ts";
 import { minutes } from "../time.ts";
 import { landPending, relandAgents } from "./agents.ts";
-import { betweenHeldWords } from "./hold-words.ts";
+import { betweenHeldWords, crashHeldWords, crashRestoreHeldWords, restartHeldWords } from "./hold-words.ts";
 import { cppSupport, ensureCppModule, readCppStatus, type CppSetup, whileAdding } from "./cpp.ts";
 import type { LeadCrash, SavePoint } from "./lead-contract.ts";
 import { tellUser } from "./lead-graph.ts";
@@ -48,7 +49,9 @@ function clause(words: string): string {
 
 /** Why the run halts when a restore or restart failed, in words the user can act on. */
 export function haltedBy(outcome: Extract<RestoreOutcome, { ok: false }>): string {
-  const held = outcome.held ? betweenHeldWords(outcome.held) : null;
+  // Genex held the reopen back once a restart closed Unreal: it stays closed, which the words say.
+  const words = outcome.failure === RestoreFailure.NotReopened ? restartHeldWords : betweenHeldWords;
+  const held = outcome.held ? words(outcome.held) : null;
   if (held) return held;
   if (outcome.failure === RestoreFailure.NotSaved) return MESSAGE.NotSaved(outcome.why);
   if (outcome.failure === RestoreFailure.NotEnded) return MESSAGE.NotClosed(outcome.why);
@@ -121,6 +124,8 @@ async function recover(lead: LeadRun): Promise<string | null> {
   const at = lead.clock.now();
   const time = clockTime(at);
   const failed = await reopenInPlace(lead);
+  // A Stop during the crash moment or its wait: nothing is known to be reopened, and nothing is said.
+  if (lead.ctx.cancelled) return null;
   const last = savePointOf(lead);
   if (!failed) {
     const said = { lead: STEER.Crashed(time, last?.label ?? null), owner: MESSAGE.Crashed(time) };
@@ -134,7 +139,11 @@ async function recover(lead: LeadRun): Promise<string | null> {
     const said = { lead: STEER.Restored(time, last.label), owner: MESSAGE.RestoredAfterCrash(time, last.label) };
     return recordCrash(lead, { at, reopened: false, restoredTo: last.label }, said);
   }
-  lead.halted = haltedBy(restored && !restored.ok ? restored : failed);
+  // Held back by Genex, the crash itself is told: Unreal is closed and nothing reopened it, or its
+  // reopens failed and Genex held the way back to the save point.
+  const heldCrash = failed.held ? crashHeldWords(failed.held) : null;
+  const heldRestore = restored && !restored.ok && restored.held ? crashRestoreHeldWords(restored.held) : null;
+  lead.halted = heldCrash ?? heldRestore ?? haltedBy(restored && !restored.ok ? restored : failed);
   lead.journal.crashes.push({ at, reopened: false, restoredTo: null });
   await saveLead(lead);
   return null;
@@ -162,6 +171,8 @@ export async function recoverEditor(lead: LeadRun): Promise<string | null> {
 
 /** The lead's rewind, between turns: back to the save point it named. */
 async function rewind(lead: LeadRun, label: string): Promise<void> {
+  // A Stop before it began: nothing is restored, and the rewind stays asked for.
+  if (lead.ctx.cancelled) return;
   const { between } = lead.journal;
   between.rewind = null;
   const point = savePointOf(lead, label);
@@ -187,8 +198,12 @@ async function rebuild(lead: LeadRun): Promise<void> {
     lead.journal.digest.carried.push(CARRIED.Rebuilt);
     return;
   }
+  // Genex held the restart back (its reopen, or its start): the rebuild stays asked for, so Resume
+  // runs it before the lead's next turn, on an Unreal reopened with its C++ built.
+  if (rebuilt.held) lead.journal.between.rebuild = true;
   const last = savePointOf(lead);
-  const notBuilt = rebuilt.failure === RestoreFailure.NotReopened && last !== undefined;
+  // Unreal that didn't come back after its build; never one whose reopen Genex itself held back.
+  const notBuilt = rebuilt.failure === RestoreFailure.NotReopened && !rebuilt.held && last !== undefined;
   const restored = notBuilt && last ? await restoreTo(lead, last) : rebuilt;
   if (restored.ok && last) lead.journal.digest.carried.push(CARRIED.NotBuilt(rebuilt.why, last.label));
   else if (!restored.ok) lead.halted = haltedBy(restored);
@@ -259,11 +274,13 @@ export async function betweenTurns(lead: LeadRun, savedInTurn: boolean): Promise
   // A delivery git couldn't check out while the turn ran goes in now, before anything is saved.
   await landPending(lead).catch(() => {});
   if (!savedInTurn) await autosaveAfter(lead);
+  // A Stop that lands between these steps ends them: no step after it closes or restores Unreal.
+  const goesOn = () => !lead.halted && !lead.ctx.cancelled;
   const { between } = lead.journal;
-  if (between.rewind) await rewind(lead, between.rewind);
+  if (between.rewind && !lead.ctx.cancelled) await rewind(lead, between.rewind);
   // A rebuild the lead asked for, or one a rewind's relanded C++ needs.
-  if (between.rebuild && !lead.halted) await rebuild(lead);
-  if (!lead.halted) await addModuleIfAsked(lead);
+  if (between.rebuild && goesOn()) await rebuild(lead);
+  if (goesOn()) await addModuleIfAsked(lead);
   await saveLead(lead);
 }
 

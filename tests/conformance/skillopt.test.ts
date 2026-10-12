@@ -181,6 +181,42 @@ describe("ranking and task mining", () => {
     assert.equal(mineValidationTasks(events as never, 10).length, 4, "the game list is what sets them aside");
   });
 
+  it("leaves out what the web preview saw of a project that isn't a web game", () => {
+    const observed = (project: string) => ({
+      data: {
+        type: "custom",
+        event_type: "build_observation",
+        payload: { project, brief: `build ${project}`, ok: false },
+      },
+    });
+    const events = ["moth", "godot-moth", "unreal-site", "toy", "kite", "fresh"].map(observed);
+    const games = [
+      { name: "moth", facts: [{ id: "web-game", path: "." }] },
+      { name: "godot-moth", facts: [{ id: "godot-project", path: "." }] },
+      {
+        name: "unreal-site",
+        facts: [
+          { id: "unreal-project", path: "." },
+          { id: "web-game", path: "site" },
+        ],
+      },
+      { name: "toy", facts: [{ id: "toy-project", path: "." }] },
+      {
+        name: "kite",
+        facts: [
+          { id: "web-game", path: "." },
+          { id: "blender-assets", path: "assets" },
+        ],
+      },
+      { name: "fresh", facts: [] },
+    ];
+    assert.deepEqual(
+      mineValidationTasks(events as never, 10, games).map((task) => task.prompt),
+      ["build moth", "build kite", "build fresh"],
+      "only web games' builds are evidence",
+    );
+  });
+
   it("never hands a win to an unparseable judge", () => {
     assert.equal(parseVerdict("I think A is nicer, honestly").pick, "tie");
     assert.equal(parseVerdict('```json\n{"pick":"A","biggest_gap":"g"}\n```').pick, "A");

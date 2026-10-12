@@ -12,6 +12,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { buildChallenger } from "../../src/harness-seed/loop/facet/phases/build.ts";
 import { withWorkerRoom } from "../../src/harness-seed/loop/workers/room.ts";
+import { GIT_TIMEOUT_MS } from "../../src/harness-seed/loop/config.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import {
@@ -30,6 +31,7 @@ import {
   finish,
   gameRepo,
   grantOf,
+  type Host,
   leadCommits,
   PROJECT,
   poolHost,
@@ -156,6 +158,43 @@ describe("the worker pool", { timeout: TEST_TIMEOUT_MS }, () => {
       "no refused verdict is recorded",
     );
     assert.equal(await readFile(path.join(repo, "enemy.js"), "utf8"), "export const enemy = 1;\n");
+  });
+
+  /** The game folder's fingerprints the pool asked git for, in order (`game-change.ts`). */
+  const fingerprintsOf = (host: Host) =>
+    host.recorder.paramsOf(HostMethod.RunExec).filter((p) => String(p.command).includes("genex-fingerprint-"));
+
+  it("a writer in place's end fingerprint has as long as its start's", async () => {
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const tuned = await start(pool, { title: "Tune", task: "Tune the jump.", isolation: "lock" });
+    await writeFile(path.join(repo, "jump.js"), "export const jump = 3;\n");
+    await finish(host, pool, tuned, { ok: true, sessionId: "s1", summary: "tuned" });
+    const limits = fingerprintsOf(host).map((p) => p.timeoutMs);
+    assert.deepEqual(
+      limits,
+      [GIT_TIMEOUT_MS.slow, GIT_TIMEOUT_MS.slow],
+      "the end, which reads the worker's changes too, is not cut shorter",
+    );
+  });
+
+  it("a writer in place whose end fingerprint git couldn't take may not be rejected: its work may be in the game", async () => {
+    const repo = await gameRepo();
+    let fingerprints = 0;
+    // The end fingerprint runs out of time, as a slow git on a big game folder does.
+    const host = poolHost(repo, {
+      exec: (p, run) => {
+        if (!String(p.command).includes("genex-fingerprint-")) return run();
+        fingerprints += 1;
+        return fingerprints === 1 ? run() : { code: 124, stdout: "", stderr: "timed out" };
+      },
+    });
+    const pool = await chatPool(host, repo);
+    const tuned = await start(pool, { title: "Tune", task: "Tune the jump.", isolation: "lock" });
+    await writeFile(path.join(repo, "jump.js"), "export const jump = 4;\n");
+    await finish(host, pool, tuned, { ok: true, sessionId: "s1", summary: "tuned" });
+    assert.match(await pool.call(WorkerTool.Mark, { id: tuned, verdict: "rejected" }), /in your folder already/);
   });
 
   it("a writer in place that finished without changing the game folder may be rejected", async () => {

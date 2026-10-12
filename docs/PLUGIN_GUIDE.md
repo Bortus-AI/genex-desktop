@@ -2,7 +2,9 @@
 
 This is the working guide for a person — or a coding agent — building a plugin. It is a
 walkthrough plus the checks to run. The normative reference is [docs/plugins.md](plugins.md);
-where the two disagree, that document wins.
+where the two disagree, that document wins. An agent in a Genex chat gets the short form as Genex
+Tools' `plugin-author` skill: it writes the plugin into `genex-plugins/<id>/` in the game, checks it
+with `plugin_check`, and leaves loading and turning it on to you.
 
 A plugin is a **prebuilt directory**. Studio installs the files as they are: no `npm install`, no
 build hook, no archive extraction. Build your JavaScript before you hand the folder over.
@@ -102,7 +104,7 @@ undeclared method is a compile error.
 | `assets.deliver` | `project.write` | Copies your output into a unique asset directory in the game; delivered files reach the host ledger |
 | `jobs.read` / `jobs.write` | `jobs` | Durable provider references. Not a credit ledger |
 | `events.emit` | `jobs` | Sanitized progress, attributed to the bound project/thread. `{kind:'toolbar', …}` updates a toolbar badge |
-| `observe` | `observe` | Loading/capture/audio evidence for authorized files in the bound worktree |
+| `observe` | `observe` | Loading/capture/audio evidence for authorized files in the bound worktree. API 3: with `still: { demo \| camera, width, height, maxBytes? }` and `files: []`, one named view on a hidden window at that size, as a PNG (or JPEG past `maxBytes`) with exposure numbers, or a `stillProblem` code; an older host ignores `still` and answers a plain observation (`PluginStillIgnored`), so check for each |
 | `export.stage` | `export` | Studio writes the public export of the bound game under `storage.root/publish/<project>/dist` and returns the result |
 | `credentials.session` | `credentials`, API 3 | Reuse an explicitly unlocked host-memory lease; never opens the OS store |
 | `runtime.detect` / `runtime.installation` | `native-runtime`, API 3 | Read declared native runtime readiness and durable installation progress |
@@ -209,6 +211,33 @@ note?, pending?, images? }`. A handler that throws blocks a moment that can be b
 git stays Genex's. An agent tool that `makes` a kind
 may name a harness tool in `ready` that answers `{ ready, note }`. See
 [Hooks](plugins.md#hooks-genexs-moments) and [Locks](plugins.md#locks-the-person-comes-first).
+
+A plugin whose tools make more than one kind of project names each with a label:
+`"scaffolds": [{ "id": "plugin", "label": "Toy plugin", "tool": "new-toy-plugin", "facts": [{ "fact": "toy-plugin", "files": ["**/*.toyplug"] }] }]`.
+Each scaffold whose `tool` (an agent tool that `makes` a kind) reaches a game is a kind of its own
+on the first message's question, named by its label. Once that tool made its kind, Genex records
+the scaffold in the game's `studio.json`, and its `facts` rules (at most 4, each of a fact the tool
+makes) keep finding facts your `detect` skips, even while your plugin is off. See
+[Scaffolds](plugins.md#scaffolds).
+
+An observer is what Genex can capture of a project of your kind, for the reviewer who checks a
+Loop's finish: `"observers": [{ "id": "viewport", "facts": ["toy-project"], "tool": "capture" }]`
+names one of your harness tools that asks nothing and answers pictures. Add `"live": "stills"` to
+have Live show its latest pictures for such a project (`unreal-card` is the bundled Unreal
+plugin's own view; `preview` and `proof` are Genex's ids). Add `"label": "Board"` to name that
+view's tab when a folder has more than one view (1–24 characters, not a name the stage strip
+already shows); without it the tab takes your plugin's name. Your observer captures only while your
+plugin is on, inside a run: the tool is called with `context.observe` set (`{observer, runId, why}`)
+under its `needs` locks, and answers `{ images, recording?, note? }`, where `recording` is a short
+play recording as at most 8 frames in order; a `block` or `pending` answer is reported as why
+nothing was captured. See [Observers](plugins.md#observers).
+
+Together these give your kind of project a Loop with no code in Genex. While your plugin is on, a
+Loop on a folder your `detect` recognises is led in place by the chat's own session: your hooks run
+at its start, its save points, rewinds, restarts, health checks and its end, its lead starts your
+worker types, and your observers feed the reviewer who checks its finish. The toy engine plugin in
+Genex's tests (`tests/fixtures/toy-engine-plugin/`) runs such a Loop, and so does a copy of it with
+every tool renamed. See [the open Loop](harness-runtime.md).
 
 ## 3. Panels
 
@@ -373,12 +402,19 @@ and panel CSP problems as warnings:
 ## 8. Load it, then edit with hot reload
 
 In Studio: **Plugins → Add → Load local plugin…**, choose the folder, read the trust dialog (it names the
-publisher, the capabilities and the scan verdict), and install. Then choose **Watch folder** in
-the plugin's page's More (…) menu: every save re-installs the package through the normal lease path, so an edit lands as soon
-as no session is holding the plugin. Hot reload is best-effort — recursive file watching coalesces
+publisher, the capabilities and the scan verdict), and install. A plugin loaded from a folder starts
+off: turn it on on its page; each of its tools then asks you before an agent runs it until you answer
+Always allow for it, and new code asks again; its own steps at Genex's moments (hooks, observers,
+person-first probes, readiness checks) run without asking. Then choose **Watch folder** in
+the plugin's page's More (…) menu: every save re-installs the package (its new backend starts at once
+to prove it loads), and the new version takes the old one's place as soon as no session is holding
+the plugin. Hot reload is best-effort — recursive file watching coalesces
 events on macOS — so if a change does not appear, press Reinstall. A reload that changes
-`mcpServers` or `network.hosts` is refused (`MCP servers changed; load the folder again to review`):
-load the folder again so the user sees the dialog. Old package copies are deleted as each reload
+`mcpServers` or `network.hosts` is refused (`MCP servers changed; load the folder again to review`),
+and so is one that changes the steps Genex runs without asking (hooks, observers, locks, folders,
+harness tools or `ready`): load the folder again so the user sees the dialog. Watch folder is refused
+for a folder agents write in (a game's folder, the games folder, workers' copies), so a plugin an
+agent wrote in a game is loaded again by hand after each change. Old package copies are deleted as each reload
 lands, and stored settings keep only keys your current manifest declares, with the declared type.
 
 If you are working inside this repository, `npm run watch` now rebuilds plugin packages into

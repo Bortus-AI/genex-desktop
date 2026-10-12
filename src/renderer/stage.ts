@@ -104,11 +104,19 @@ export interface StageWatch {
   visible: boolean;
   /** Live shows the empty scaffold's placeholder, not a game. */
   showEmpty: boolean;
+  /**
+   * Live's chosen view is Genex's web preview (absent: it is). On another view (the Unreal card of a
+   * folder that also holds a web game) nobody watches the web game, as on another tab.
+   */
+  preview?: boolean;
 }
 
+/** Live is on the stage with the web preview as its view. */
+const previewOnStage = (stage: StageWatch): boolean =>
+  stage.visible && stage.view === StageView.Live && stage.preview !== false;
+
 /** Whether the person is watching a game in Live: then only they change it. */
-export const watchingLive = (stage: StageWatch): boolean =>
-  stage.visible && stage.view === StageView.Live && !stage.showEmpty;
+export const watchingLive = (stage: StageWatch): boolean => previewOnStage(stage) && !stage.showEmpty;
 
 /**
  * Whether what waits for Live (anything but a run's newest build, which only ever waits for
@@ -121,7 +129,7 @@ export function appliesUnseen(behind: LiveBehind | null, stage: StageWatch): boo
 
 /** The empty scaffold's exception: its placeholder has no game to lose, so the run's first healthy build shows. */
 export function firstBuildShows(offer: BuildOffer | null, stage: StageWatch): boolean {
-  const onPlaceholder = stage.visible && stage.view === StageView.Live && stage.showEmpty;
+  const onPlaceholder = previewOnStage(stage) && stage.showEmpty;
   return offer?.healthy === true && onPlaceholder;
 }
 

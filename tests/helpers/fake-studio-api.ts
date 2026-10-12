@@ -5,6 +5,7 @@
  * counterparts, so a component under test hears pushes exactly as it would from the preload.
  */
 import type { StudioApi } from "../../src/shared/studio-api.ts";
+import { ShaderFailure } from "../../src/shared/backdrop-shader.ts";
 import { CliInstallPhase } from "../../src/shared/cli-install.ts";
 
 export type StudioMethod = keyof StudioApi;
@@ -41,6 +42,7 @@ const METHODS = [
   "pluginGithubVersions",
   "pluginUpdate",
   "pluginWatch",
+  "pluginForgetAllowed",
   "pluginConsent",
   "permissions",
   "setPermissionMode",
@@ -93,6 +95,7 @@ const METHODS = [
   "games",
   "createGame",
   "nameGame",
+  "makeBackdrop",
   "pickGameLocation",
   "updateGame",
   "removeGame",
@@ -117,6 +120,12 @@ const METHODS = [
   "openCodeSignIn",
   "openRouterKeySave",
   "openRouterKeyClear",
+  "openRouterSignIn",
+  "openRouterSignInReopen",
+  "openRouterSignInCancel",
+  "localServerConnect",
+  "localServerForget",
+  "localServerFind",
   "terminalList",
   "terminalAccessibility",
   "terminalOpen",
@@ -277,6 +286,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pluginSkillText: () => "",
     pluginsList: empty,
     pluginsCatalog: empty,
+    pluginsIndex: () => ({ url: "", studioVersion: "0.1.0", fetchedAt: null, stale: true, entries: [], updates: [] }),
     mcpList: empty,
     mcpTools: empty,
     terminalList: empty,
@@ -300,6 +310,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pickGameLocation: () => null,
     pluginChooseFile: () => null,
     nameGame: () => ({ title: "Untitled game" }),
+    makeBackdrop: () => ({ ok: false, failure: ShaderFailure.NoModel }),
   };
 }
 

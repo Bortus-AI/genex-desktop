@@ -50,6 +50,7 @@ import { GLIDE_MS, useGraphCamera } from "./run-graph/use-graph-camera.ts";
 import { Inspector, Lightbox, type LightItem, type Reply } from "./RunInspector.tsx";
 import { type ReferenceFrame, useReferenceFrames } from "./run-stills.ts";
 import { StageLoading } from "./stage/LiveLoaderArt.tsx";
+import { webBuildShown } from "../web-build-shown.ts";
 
 export { gateWords } from "./run-graph/gates.tsx";
 export { assetsStatus } from "./run-graph/nodes.tsx";
@@ -236,7 +237,10 @@ function useBuildActions(
     if (!project || !outcome?.head) return;
     return window.studio
       .showBuild(project, outcome.head)
-      .then(() => onShowLive?.())
+      .then(() => {
+        webBuildShown(project);
+        onShowLive?.();
+      })
       .catch(notifyProblem(onNotice));
   };
   const openJob = (job: AssetInfo): void => {

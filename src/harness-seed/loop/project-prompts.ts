@@ -5,7 +5,7 @@
  * kind-pending folder's words never name an engine: the person's first message decides.
  */
 import type { PluginKindOffer } from "../types/host-api.d.ts";
-import { CoreFact, type FactRef, FolderHolds, ProjectTool } from "./folder-facts.ts";
+import { CoreFact, type FactRef, FolderHolds, PLUGIN_FACT_SOURCE_PREFIX, ProjectTool } from "./folder-facts.ts";
 import { toolCall } from "./model-roles.ts";
 // A kept older `unreal-prompts.ts` exports only what it did: new names live here, never there.
 import { engineChoiceRule, UNREAL_NEW_GAME_TOOL } from "./unreal-prompts.ts";
@@ -100,6 +100,10 @@ function newProjectWords(holds: FolderHolds | null | undefined): string {
   return "This project is new and empty: your first step decides what it becomes.";
 }
 
+/** A kind on offer by name: its scaffold's label (two scaffolds of one plugin are two kinds), else its plugin's name. */
+const offerName = (kind: PluginKindOffer): string =>
+  typeof kind.label === "string" && kind.label.trim() ? kind.label.trim() : kind.name;
+
 /**
  * The first rule for a folder with no kind yet (`holds`: nothing, or notes to read first), on every
  * message until it has one. With engine plugins' kinds on offer (`kinds`) and the question card
@@ -120,10 +124,10 @@ export function pendingKindRule(
   const start = toolCall(engine, ProjectTool.StartWebGame);
   return [
     `${newProjectWords(holds)} For a game that plays in Genex (the default when the request names no engine), call ${start} first, then build on its starter.`,
-    ...offered.map(
-      (kind) =>
-        `When the request names ${kind.name}, call ${toolCall(engine, kind.tool)}: it makes the game's ${kind.name} project in this folder; then build it with that plugin's tools.`,
-    ),
+    ...offered.map((kind) => {
+      const name = offerName(kind);
+      return `When the request names ${name}, call ${toolCall(engine, kind.tool)}: it makes the game's ${name} project in this folder; then build it with that plugin's tools.`;
+    }),
     findRule(engine, offered.length > 0 ? "none of those plugins covers" : "Genex has no plugin on for"),
   ];
 }
@@ -149,15 +153,24 @@ export function factLine(fact: FactRef): string {
   return `This folder holds ${factWords(fact.id)} ${whereWords(fact.path)}: build it with its own files and tools from the shell, never as a web page, and say plainly what you could not run or look at.`;
 }
 
-/** Whether a fact is one of Genex's own kinds (the core table), not one an enabled plugin detected. */
+/** Whether a fact is one of Genex's own kinds (the core table). */
 const isCoreFact = (id: string) => (Object.values(CoreFact) as string[]).includes(id);
 
 /**
- * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, a plugin is
- * looked for first (`pluginFirstRule`); one an enabled plugin detected has that plugin on already.
+ * Whether an enabled plugin's `detect` found the fact, so that plugin is on now. A plugin's kind held
+ * only by a scaffold's record outlives the plugin being turned off; a fact whose source isn't said
+ * (an older caller) reads as detected.
  */
-export function ownKindRules(engine: string | undefined, fact: FactRef): string[] {
-  if (!isCoreFact(fact.id)) return [factLine(fact)];
+const detectedByPlugin = (fact: FactRef & { source?: string }) =>
+  fact.source === undefined || fact.source.startsWith(PLUGIN_FACT_SOURCE_PREFIX);
+
+/**
+ * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, or a plugin's
+ * kind its plugin's `detect` didn't find (held by a scaffold's record), a plugin is looked for first
+ * (`pluginFirstRule`); one an enabled plugin detected has that plugin on already.
+ */
+export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }): string[] {
+  if (!isCoreFact(fact.id) && detectedByPlugin(fact)) return [factLine(fact)];
   return [pluginFirstRule(engine, `the fact "${fact.id}"`), factLine(fact)];
 }
 

@@ -44,7 +44,7 @@ const STRIP_WAIT_MAX_MS = 150 * SECOND_MS;
  * Unreal's automation screenshot writes its file a second time about a second after the first, so a
  * still is read again once this long has passed since it first decoded, when the file changed.
  */
-const SHOT_SETTLE_MS = 1500;
+export const SHOT_SETTLE_MS = 1500;
 /** The largest capture file read. */
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 /** A strip's contact sheet: frames to a row and each frame's width. */
@@ -185,20 +185,26 @@ type Lifted = Array<{ type: "text"; text: string } | { type: "image"; mimeType: 
 
 const notRead = (file: unknown, why: string): Lifted => [{ type: "text", text: MESSAGE.NotRead(String(file), why) }];
 
-/** A still or a play shot the helper queued, once it landed: its file, its PNG bytes and the picture, or why there is none. */
+/**
+ * A still or a play shot the helper queued, once it landed: its file, its PNG bytes and the picture,
+ * or why there is none. `ends` (on the clock), when given, ends every wait of it: a caller with a
+ * deadline of its own (`hero-shots`) never waits past it.
+ */
 export async function landedShot(
   tool: CaptureTool,
   answer: Record<string, unknown>,
   projectFile: string,
   clock: CaptureClock,
   signal: AbortSignal,
+  ends?: number,
 ): Promise<{ file: string; bytes: Buffer; image: RgbImage } | { why: string }> {
-  const landed = await awaitFile(projectFile, answer.file, clock, SHOT_WAIT_MS, signal);
+  const waitMs = () => (ends === undefined ? SHOT_WAIT_MS : Math.max(0, Math.min(SHOT_WAIT_MS, ends - clock.now())));
+  const landed = await awaitFile(projectFile, answer.file, clock, waitMs(), signal);
   if ("why" in landed) return landed;
-  let read = await readFrame(landed.file, clock, SHOT_WAIT_MS, signal);
+  let read = await readFrame(landed.file, clock, waitMs(), signal);
   if (tool === CaptureTool.Shot && "bytes" in read) {
     await clock.sleep(SHOT_SETTLE_MS, signal);
-    const again = await readFrame(landed.file, clock, SHOT_WAIT_MS, signal);
+    const again = await readFrame(landed.file, clock, waitMs(), signal);
     if ("bytes" in again) read = again;
   }
   return "why" in read ? read : { file: landed.file, ...read };

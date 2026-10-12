@@ -22,7 +22,7 @@ const PLUGIN = "unreal";
 const NOW = () => new Date("2026-10-04T12:00:00.000Z");
 const LATER = () => new Date("2026-10-04T12:05:00.000Z");
 
-async function world(now = NOW) {
+async function world(now = NOW, { failAppend = false } = {}) {
   const root = await realpath(await tmpDir("studio-engine-links-"));
   const games = path.join(root, "games");
   const storage = path.join(root, "plugins", PLUGIN);
@@ -48,6 +48,7 @@ async function world(now = NOW) {
     root: (id) => path.join(root, "plugins", id),
     gameDir: (project) => path.join(games, project),
     append: async (record, threadId) => {
+      if (failAppend) throw new Error("the chat could not be written");
       appended.push({ record, threadId });
     },
     changed: (project) => changed.push(project),
@@ -435,5 +436,34 @@ test("the studio names each game whose run it holds awake and still runs, with t
     assert.deepEqual(await core.pluginServices.call(PLUGIN, "game.engine.runs", {}), [], "settled: nothing going");
   } finally {
     await lite.close();
+  }
+});
+
+test("a link whose chat line can't be written takes back both its records: the game is linked as before", async () => {
+  for (const linkedBefore of [false, true]) {
+    const w = await world(NOW, { failAppend: true });
+    await w.makeGame("valley");
+    const earlier = await w.makeProject("Earlier");
+    const project = await w.makeProject("Valley");
+    if (linkedBefore) {
+      // The same storage and games: an earlier link made while the chat could be written.
+      const links = createEngineLinks({
+        root: (id) => path.join(w.root, "plugins", id),
+        gameDir: (id) => path.join(w.root, "games", id),
+        append: async () => {},
+        changed: () => {},
+        gameThread: async (id) => `thread-of-${id}`,
+        now: NOW,
+      });
+      await links.link(PLUGIN, w.binding("valley"), { project: earlier });
+    }
+    const before = await snapshot(w.root);
+    await assert.rejects(
+      w.links.link(PLUGIN, w.binding("valley", "t1"), { project }),
+      /the chat could not be written/,
+      `linked before: ${linkedBefore}`,
+    );
+    assert.deepEqual(await snapshot(w.root), before, `linked before: ${linkedBefore}`);
+    assert.deepEqual(w.changed, []);
   }
 });

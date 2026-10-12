@@ -23,6 +23,7 @@ import { openOptions } from "../../src/shared/shape-words.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { stageFlags } from "../../src/renderer/panels/stage/stage-flags.ts";
 import { gameStartedSince, kindPendingGame, StageView } from "../../src/renderer/stage.ts";
+import { ObserverLive } from "../../src/shared/observers.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { copyProject, Project } from "../helpers/project-fixtures.ts";
@@ -520,7 +521,7 @@ describe("new projects start empty", () => {
         graph: null,
         planning: false,
         project: "kite",
-        unreal: false,
+        liveView: ObserverLive.Preview,
         pending: kindPendingGame(game),
         live: state,
       });

@@ -9,7 +9,13 @@
  * whose person-first probe is `probe`. `paint` is its agent tool (it needs the desk too), and
  * `new-desk` its kind tool (it makes a desk game), whose readiness `ready` answers; `hk2`, a second
  * plugin with no hooks, has the agent tool `wave`; `hk3` hooks one checkpoint step, `note`, that
- * needs no lock, for games holding a `*.hklite` file.
+ * needs no lock, for games holding a `*.hklite` file; `hk4` hooks two steps (`first`, `second`) to
+ * `tool.before` and one (`last`, which needs its lock `bench`) to `tool.after` around its agent tool
+ * `carve`, which asks its card first; `hk5` hooks a run's start (`gate`, which needs its lock `stage`,
+ * whose probe is `probe`), each lead turn's start (`curtain`) and its end (`farewell`) for every game. `{hangs: true}` never answers; `{until: <path>}` answers the rest once that file exists.
+ * `hk` also declares three observers of desk games: `still` (its tool `shot`), `bad` (`blur`, which
+ * hooks nothing) and `held` (`save`, which needs the desk); each call logs what `context.observe`
+ * told it.
  */
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -19,12 +25,20 @@ import { tmpDir } from "./tmp.ts";
 export const HOOK_PLUGIN = "hk";
 export const OTHER_PLUGIN = "hk2";
 export const LIGHT_PLUGIN = "hk3";
+export const CARVE_PLUGIN = "hk4";
+export const STAGE_PLUGIN = "hk5";
+/** The label of `hk5`'s lock, which its run's start step needs. */
+export const STAGE_LABEL = "Stage";
+/** The label of `hk4`'s lock, which only its `tool.after` step needs. */
+export const CARVE_LOCK_LABEL = "Carving bench";
 /** The fact a game with a `*.hklite` file holds, which only `hk3` hooks. */
 export const LIGHT_FACT = "hk-lite";
 /** The fact a game with a `*.hkproj` file holds. */
 export const HOOK_FACT = "hk-project";
 /** The label of the plugin's lock. */
 export const DESK_LABEL = "Desk";
+/** `hk`'s observers by key, in its manifest's order, and the tool each runs. */
+export const HOOK_OBSERVERS = { Still: "hk/still", Bad: "hk/bad", Held: "hk/held" } as const;
 
 /**
  * The backend: log the call, then answer from the script. Its log and script are named by absolute
@@ -32,8 +46,9 @@ export const DESK_LABEL = "Desk";
  */
 const backend = (log: string, script: string) => `
 import { execFileSync } from "node:child_process";
-import { appendFile, readFile, writeFile } from "node:fs/promises";
+import { access, appendFile, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 const LOG = ${JSON.stringify(log)};
 const SCRIPT = ${JSON.stringify(script)};
 const turns = new Map();
@@ -42,7 +57,7 @@ export async function activate() {
     async tool(name, args, ctx) {
       let head = null;
       try { head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ctx.directory, stdio: ["ignore", "pipe", "ignore"] }).toString().trim(); } catch {}
-      await appendFile(LOG, JSON.stringify({ tool: name, hook: ctx.hook ?? null, args, head }) + "\\n");
+      await appendFile(LOG, JSON.stringify({ tool: name, hook: ctx.hook ?? null, observe: ctx.observe ?? null, args, head }) + "\\n");
       const script = JSON.parse(await readFile(SCRIPT, "utf8").catch(() => "{}"));
       const key = ctx.hook ? ctx.hook.on + ":" + name : name;
       let answer = script[key] ?? script[name] ?? {};
@@ -52,6 +67,12 @@ export async function activate() {
         answer = answer[Math.min(turn, answer.length - 1)];
       }
       if (answer && typeof answer.throws === "string") throw new Error(answer.throws);
+      if (answer && answer.hangs === true) await new Promise(() => {});
+      if (answer && typeof answer.until === "string") {
+        for (;;) { try { await access(answer.until); break; } catch { await sleep(20); } }
+        const { until, ...rest } = answer;
+        answer = rest;
+      }
       if (answer && typeof answer.writes === "string") {
         await writeFile(path.join(ctx.directory, answer.writes), "{}\\n");
         const { writes, ...rest } = answer;
@@ -127,8 +148,14 @@ function hookManifest() {
       harnessTool("ready"),
       harnessTool("check"),
       harnessTool("probe"),
+      harnessTool("blur"),
     ],
     hooks: HOOKS.map(([on, tool]) => ({ on, tool, facts: [HOOK_FACT] })),
+    observers: [
+      { id: "still", facts: [HOOK_FACT], tool: "shot" },
+      { id: "bad", facts: [HOOK_FACT], tool: "blur" },
+      { id: "held", facts: [HOOK_FACT], tool: "save" },
+    ],
     skills: [],
     panels: [],
     settings: [],
@@ -174,10 +201,69 @@ function lightManifest() {
   };
 }
 
-/** One logged call: the tool, what it was told of the moment, its arguments, and the game's commit then. */
+function carveManifest() {
+  return {
+    apiVersion: 3,
+    id: CARVE_PLUGIN,
+    version: "1.0.0",
+    name: "Hook carver",
+    publisher: "Studio tests",
+    description: "Two steps before its own tool and one after.",
+    backend: "backend.mjs",
+    capabilities: [],
+    tools: [
+      {
+        name: "carve",
+        description: "Carve the desk.",
+        confirmation: "Carve the desk?",
+        parameters: { type: "object", properties: { depth: { type: "number" } } },
+      },
+      harnessTool("first"),
+      harnessTool("second"),
+      harnessTool("last", ["bench"]),
+    ],
+    locks: [{ id: "bench", label: CARVE_LOCK_LABEL, per: "project" }],
+    hooks: [
+      { on: "tool.before", tool: "first", facts: [HOOK_FACT] },
+      { on: "tool.before", tool: "second", facts: [HOOK_FACT] },
+      { on: "tool.after", tool: "last", facts: [HOOK_FACT] },
+    ],
+    skills: [],
+    panels: [],
+    settings: [],
+    actions: [],
+  };
+}
+
+function stageManifest() {
+  return {
+    apiVersion: 3,
+    id: STAGE_PLUGIN,
+    version: "1.0.0",
+    name: "Hook stagehand",
+    publisher: "Studio tests",
+    description: "Steps at a run's start and end.",
+    backend: "backend.mjs",
+    capabilities: [],
+    locks: [{ id: "stage", label: STAGE_LABEL, per: "project", personFirst: "probe" }],
+    tools: [harnessTool("gate", ["stage"]), harnessTool("curtain"), harnessTool("farewell"), harnessTool("probe")],
+    hooks: [
+      { on: "run.prepare", tool: "gate" },
+      { on: "turn.start", tool: "curtain" },
+      { on: "run.end", tool: "farewell" },
+    ],
+    skills: [],
+    panels: [],
+    settings: [],
+    actions: [],
+  };
+}
+
+/** One logged call: the tool, what it was told of the moment (or as an observer), its arguments, and the game's commit then. */
 export interface HookCall {
   tool: string;
   hook: Record<string, unknown> | null;
+  observe: Record<string, unknown> | null;
   args: Record<string, unknown>;
   head: string | null;
 }
@@ -221,3 +307,7 @@ export const hookPackage = (): Promise<HookPackage> => writePackage(hookManifest
 export const otherPackage = (): Promise<HookPackage> => writePackage(otherManifest());
 /** The `hk3` package: one checkpoint step that needs no lock. */
 export const lightPackage = (): Promise<HookPackage> => writePackage(lightManifest());
+/** The `hk5` package: a run's start and end steps, for every game. */
+export const stagePackage = (): Promise<HookPackage> => writePackage(stageManifest());
+/** The `hk4` package: two `tool.before` steps and one `tool.after` step around its carded tool `carve`. */
+export const carvePackage = (): Promise<HookPackage> => writePackage(carveManifest());

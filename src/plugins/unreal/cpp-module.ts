@@ -7,7 +7,8 @@
  * The project folder is the user's: every check comes before the first write, nothing is written
  * through a link or outside the project's real folder, a file already there is kept as it is,
  * and the .uproject is rewritten last and atomically, every other field and its indentation kept.
- * A second call changes nothing.
+ * A second call changes nothing. A project plugin is enabled in the .uproject the same way
+ * (`enableProjectPlugin`).
  */
 import { lstat, mkdir, readdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -181,6 +182,7 @@ const MESSAGE = {
   NotJson: "it isn't JSON",
   NotObject: "it isn't a JSON object",
   ModulesNotList: '"Modules" isn\'t a list',
+  PluginsNotList: '"Plugins" isn\'t a list',
   TooLarge: `it is larger than ${UPROJECT_MAX_BYTES / 1024} KB`,
   Link: (what: string) => `${what} is a link, so Genex won't write through it.`,
   Escapes: (what: string) => `${what} doesn't resolve to itself inside the project folder, so Genex won't write there.`,
@@ -347,13 +349,22 @@ export async function hotLibraryLoaded(projectFile: string, module: string): Pro
   return library?.[1] === module && library[2] !== undefined;
 }
 
+/**
+ * Whether Unreal itself uses a name for a module: one Genex knows (compared without case), or a
+ * folder of the installed engine's own modules when `engineDir` is given.
+ */
+export async function isEngineModule(name: string, engineDir?: string): Promise<boolean> {
+  if (ENGINE_MODULES.has(name.toLowerCase())) return true;
+  if (engineDir === undefined) return false;
+  for (const group of ENGINE_SOURCE_GROUPS)
+    if ((await kindOf(path.join(engineDir, "Engine", "Source", group, name))) === PathKind.Folder) return true;
+  return false;
+}
+
 /** Refuses a name Unreal itself uses: a known one, or a folder of the installed engine's own modules. */
 async function assertFreeName(module: string, engineDir: string | undefined): Promise<void> {
-  const reserved = () => refusal(CppModuleErrorCode.ReservedName, MESSAGE.ReservedName(module));
-  if (!isModuleName(module) || ENGINE_MODULES.has(module.toLowerCase())) throw reserved();
-  if (engineDir === undefined) return;
-  for (const group of ENGINE_SOURCE_GROUPS)
-    if ((await kindOf(path.join(engineDir, "Engine", "Source", group, module))) === PathKind.Folder) throw reserved();
+  if (!isModuleName(module) || (await isEngineModule(module, engineDir)))
+    throw refusal(CppModuleErrorCode.ReservedName, MESSAGE.ReservedName(module));
 }
 
 /** Whether the .uproject already declares the module; refuses one that declares any other. */
@@ -532,4 +543,35 @@ export async function addCppModule(projectFile: string, options: AddCppModuleOpt
   for (const file of plan.files) await writeFile(onDisk(project.root, file.relative), file.text, { flag: "wx" });
   if (!declared) await atomicWriteText(project.file, withModule(project, module));
   return { module, created: plan.files.map((f) => f.relative), declared: !declared };
+}
+
+/** The .uproject's text with the project plugin `name` enabled in its Plugins, written the way the file was. */
+function withPlugin(project: Project, name: string): string {
+  const { json, format } = project;
+  const listed = listOf(json[PLUGINS_KEY]);
+  const named = (entry: unknown): entry is Record<string, unknown> => isJsonObject(entry) && entry.Name === name;
+  const plugins = listed.some(named)
+    ? listed.map((entry) => (named(entry) ? { ...entry, Enabled: true } : entry))
+    : [...listed, { Name: name, Enabled: true }];
+  const next = { ...json, [PLUGINS_KEY]: plugins };
+  const text = JSON.stringify(next, null, format.indent).replaceAll("\n", format.eol);
+  return `${format.bom ? BOM : ""}${text}${format.trailingNewline ? format.eol : ""}`;
+}
+
+/**
+ * Enables the project plugin `name` in the .uproject's Plugins (an entry there already is turned
+ * on), atomically and keeping every other field and the file's indentation, as {@link addCppModule}
+ * writes it. Refuses, writing nothing, a project file that is a link, isn't a plain .uproject or
+ * doesn't read, and a name that isn't a module name. Answers whether the file changed.
+ */
+export async function enableProjectPlugin(projectFile: string, name: string): Promise<boolean> {
+  if (!isModuleName(name)) throw refusal(CppModuleErrorCode.ReservedName, MESSAGE.ReservedName(name));
+  const project = await readProject(projectFile);
+  const listed = project.json[PLUGINS_KEY];
+  if (listed !== undefined && !Array.isArray(listed))
+    throw refusal(CppModuleErrorCode.Unreadable, MESSAGE.Unreadable(MESSAGE.PluginsNotList));
+  const enabled = listOf(listed).some((entry) => isJsonObject(entry) && entry.Name === name && entry.Enabled === true);
+  if (enabled) return false;
+  await atomicWriteText(project.file, withPlugin(project, name));
+  return true;
 }

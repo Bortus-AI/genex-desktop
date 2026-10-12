@@ -340,7 +340,8 @@ export async function ended(
   record.stopCode = next === WorkerState.Done ? null : code;
   record.question = null;
   record.endedAt = state.scope.clock.now();
-  // Before the folder is free for another writer: did this one change it?
+  // Before the folder is free for another writer: did this one change it? The end reads the
+  // worker's changes on top of the start's work, so it has as long as the start had.
   if (record.isolation === WorkerIsolation.Lock && next === WorkerState.Done)
     record.changedGame = changedBetween(record.gameTree, await gameFingerprint(state.scope.ctx, state.scope.project));
   await persist(state);

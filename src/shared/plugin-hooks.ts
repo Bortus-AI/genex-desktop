@@ -69,6 +69,22 @@ export const WRITING_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set([
 ]);
 
 /**
+ * The moments whose steps a Stop never cuts short once they run: a restore's after steps reopen
+ * what its before steps closed, on files that may already have changed.
+ */
+export const STOP_OUTLIVING_HOOK_EVENTS: ReadonlySet<HookEvent> = new Set([HookEvent.RestoreAfter]);
+
+/**
+ * Whether a step's call is the host's own work, which the harness's end never cuts: a restore's
+ * after steps (`STOP_OUTLIVING_HOOK_EVENTS`) and every step of the person's own action (their
+ * Rewind), which runs in the host, not for the harness.
+ */
+export function outlivesHarness(hook: Pick<HookContext, "on" | "forPerson"> | undefined): boolean {
+  if (!hook) return false;
+  return hook.forPerson === true || STOP_OUTLIVING_HOOK_EVENTS.has(hook.on);
+}
+
+/**
  * The moments the harness itself announces. Genex fires the checkpoint and tool moments around
  * its own work; a restore the harness announces is a restart in which no file changes.
  */
@@ -140,13 +156,15 @@ export interface HookImage {
 
 /**
  * A handler's answer: `block` stops a blocking moment with a reason, `note` adds a line to the
- * record, `pending` says it is not ready yet (Genex asks again), `images` hands back pictures.
+ * record, `pending` says it is not ready yet (Genex asks again), `images` hands back pictures, and
+ * `recording` a short play recording as its frames in order (an observer's, beside its stills).
  */
 export interface HookAnswer {
   block?: string;
   note?: string;
   pending?: string;
   images?: HookImage[];
+  recording?: HookImage[];
 }
 
 /** The longest reason a block or a pending answer keeps. */
@@ -155,6 +173,8 @@ export const HOOK_REASON_CHARS = 300;
 export const HOOK_NOTE_CHARS = 2_000;
 /** How many pictures one answer keeps. */
 export const HOOK_IMAGES_MAX = 8;
+/** How many frames of a play recording one answer keeps: a play recording is its frames in order. */
+export const HOOK_RECORDING_MAX = 8;
 /** The largest picture one answer keeps, decoded. */
 export const HOOK_IMAGE_MAX_BYTES = 8 * 1024 * 1024;
 /** How many measures one picture keeps. */
@@ -206,14 +226,20 @@ export function hookAnswerOf(answer: unknown): HookAnswer {
   if (block) kept.block = block;
   if (note) kept.note = note;
   if (pending) kept.pending = pending;
-  const images = Array.isArray(answer.images)
-    ? answer.images
-        .map(hookImageOf)
-        .filter((image): image is HookImage => image !== null)
-        .slice(0, HOOK_IMAGES_MAX)
-    : [];
+  const images = picturesOf(answer.images, HOOK_IMAGES_MAX);
   if (images.length) kept.images = images;
+  const recording = picturesOf(answer.recording, HOOK_RECORDING_MAX);
+  if (recording.length) kept.recording = recording;
   return kept;
+}
+
+/** The pictures of a list Genex keeps, in order, at most `max`; anything that is no picture dropped. */
+function picturesOf(value: unknown, max: number): HookImage[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(hookImageOf)
+    .filter((image): image is HookImage => image !== null)
+    .slice(0, max);
 }
 
 /** One handler a moment runs: the plugin, its harness tool's manifest name, and the locks that tool needs. */
@@ -238,11 +264,14 @@ export interface HookHeld {
   label?: string;
 }
 
-/** What a moment's handlers answered: the first block, the first pending, every note and picture, and who ran (agent names, in order). */
+/**
+ * What a moment's handlers answered: the first block, the first pending, every note and picture, and
+ * who ran (agent names, in order). Genex's own (a lock not given) carries its hold and the lock's label.
+ */
 export interface HookReport {
   blocked: ({ plugin: string; tool: string; reason: string } & HookHeld) | null;
-  pending: { plugin: string; reason: string } | null;
-  notes: Array<{ plugin: string; text: string }>;
+  pending: ({ plugin: string; reason: string } & HookHeld) | null;
+  notes: Array<{ plugin: string; text: string } & HookHeld>;
   images: HookImage[];
   ran: string[];
 }

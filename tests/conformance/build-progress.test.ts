@@ -437,6 +437,8 @@ test("nothing goes into Live on its own while someone is watching a game in it",
     { ...watching, view: "builds" as const },
     { ...watching, visible: false },
     { ...watching, showEmpty: true },
+    // Live on a view that is not the web preview (the Unreal card of a folder with both).
+    { ...watching, preview: false },
   ]) {
     assert.equal(appliesUnseen(held, stage), true, JSON.stringify(stage));
     assert.equal(appliesUnseen(broken, stage), true, JSON.stringify(stage));
@@ -453,6 +455,7 @@ test("only the empty scaffold takes the run's first healthy build by itself", ()
   assert.equal(firstBuildShows(offer, { ...empty, showEmpty: false }), false, "a game is on the stage");
   assert.equal(firstBuildShows({ ...offer, healthy: null }, empty), false, "nothing has confirmed it runs");
   assert.equal(firstBuildShows(offer, { ...empty, view: "builds" }), false);
+  assert.equal(firstBuildShows(offer, { ...empty, preview: false }), false, "Live shows another view");
   assert.equal(firstBuildShows(null, empty), false);
 });
 
@@ -752,4 +755,36 @@ test("the stage reads a run as building only from a run's own graph, never from 
   assert.equal(both.run?.mergedHead?.healthy, false, "and its build found broken is still its own");
   const none = stage(twoWorkers);
   assert.equal(none.run, null, "a chat with no run has none to answer to");
+});
+
+test("an open Loop that kept its work in place is titled as kept in the project, never live, from its graph alone", () => {
+  const graph = projectBuildGraph(
+    [
+      ...start,
+      event(3, "run_finished", { victory: true, landed: true, executionStatus: "completed", profile: "open" }),
+    ],
+    "parent",
+    [],
+    null,
+  )!;
+  const final = graph.nodes.find((node) => node.kind === "final") as { profile?: string } | undefined;
+  assert.equal(final?.profile, "open");
+  const { title } = buildProgress(graph);
+  assert.match(title, /kept in your project/);
+  assert.doesNotMatch(title, /live/i);
+});
+
+test("a later close that names no profile is not read as an earlier close's open Loop", () => {
+  const graph = projectBuildGraph(
+    [
+      ...start,
+      event(3, "run_finished", { victory: false, landed: false, executionStatus: "paused", profile: "open" }),
+      event(4, "run_finished", { victory: true, landed: true, executionStatus: "completed" }),
+    ],
+    "parent",
+    [],
+    null,
+  )!;
+  const final = graph.nodes.find((node) => node.kind === "final") as { profile?: string } | undefined;
+  assert.equal(final?.profile, undefined);
 });

@@ -872,7 +872,12 @@ export class CodexEngine implements Engine {
       ownershipNote,
       planScratch
         ? planModeNote(ctx.cwd, planScratch)
-        : readOnlyNote(ctx.cwd, ctx.scratch, request.director ? path.resolve(request.director.root) : null),
+        : readOnlyNote(
+            // A reviewer's cwd is its own empty home: the build it tests is the folder it reads.
+            request.reviewer?.reads ?? ctx.cwd,
+            ctx.scratch,
+            request.director ? path.resolve(request.director.root) : null,
+          ),
       offLimitsNote(offLimits),
     ]
       .filter((part) => part?.trim())

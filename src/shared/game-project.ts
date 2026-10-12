@@ -42,6 +42,11 @@ export interface GameProject {
   /** What a port replaced, kept in the folder as the reference and no longer a kind of this game. */
   portedFrom?: ProjectFact[];
   /**
+   * The scaffold a plugin's tool made this project with, as studio.json records it (its rules stay
+   * there): what the sidebar names a project that isn't a game ("Unreal plugin").
+   */
+  scaffold?: { plugin: string; id: string; label: string };
+  /**
    * Whether `facts` hold `web-game` at the root; kept for parts that read it. Absent from a
    * descriptor made before it was recorded, read as a web game.
    */

@@ -170,6 +170,9 @@ export const REASON_WORDS = {
   [NoteKind.DefectRouted]: "a defect was handed to its owner",
   [NoteKind.UserToWorker]: "the user spoke to a worker",
   [NoteKind.JobEnded]: "a job of the run ended",
+  [NoteKind.WorkerAsks]: "a worker asks the person something",
+  [NoteKind.AppCrashed]: "the project's app stopped",
+  [NoteKind.AppStopping]: "the project's app stopped answering",
   [WakeCause.UserMessage]: "the user spoke",
   [WakeCause.FinishRequested]: "the user asked to finish",
   [WakeCause.News]: "news",
@@ -180,6 +183,8 @@ export const REASON_WORDS = {
   [WakeCause.IdleAsk]: "nothing is running",
   [WakeCause.FinishMark]: "the finish mark — the art director looked at the whole game",
   [WakeCause.ShipLook]: "the art director's regular look at the whole game",
+  [WakeCause.TurnCap]: "your turn reached its cap",
+  [WakeCause.CarryOn]: "your turn ended; carry on",
 } as const satisfies Record<WakeReason, string>;
 
 /** The one line a finish request adds to the user's part of a digest. */
@@ -374,9 +379,9 @@ function standsSection(facts: DigestFacts): string {
 /** A timed build's completion rule, before its finish mark and from it on. */
 const TIMED_RULE = {
   building:
-    "- An explicit duration commission: spend the working time building, testing and improving; finish in the wrap-up, or when the user asks.",
+    "- An explicit duration commission: its hours are a cap. Build, test and improve; call finish with victory=yes as soon as the goal is reached, and a reviewer's yes ends the build. A finish that claims nothing waits for the wrap-up, unless the user asks.",
   finishing:
-    "- An explicit duration commission in its finish stage: no new parts or systems — the owners finish theirs (stage=finish), integrate, judge ship=yes; finish in the wrap-up, or when the user asks.",
+    "- An explicit duration commission in its finish stage: no new parts or systems — the owners finish theirs (stage=finish), integrate, judge ship=yes; call finish with victory=yes once the goal is reached (a reviewer's yes ends the build). A finish that claims nothing waits for the wrap-up, unless the user asks.",
 } as const;
 
 /** A build's completion rule when it is not a duration commission: optional polish is not its work. */

@@ -1,10 +1,11 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.7.0",
-  "name": "Unreal Editor",
+  "version": "0.10.2",
+  "icon": "icon.svg",
+  "name": "Unreal Engine",
   "publisher": "Genex",
-  "description": "Agents build your game in Unreal Editor 5.8 on this computer. Getting Unreal needs a free Epic account; each game has its own Unreal project.",
+  "description": "Agents build your game in Unreal Editor 5.8 on this computer. Getting Unreal needs a free Epic account; each game has its own Unreal project. Unreal® is a trademark or registered trademark of Epic Games, Inc.",
   "backend": "backend.mjs",
   "capabilities": ["game-engine"],
   "detect": [
@@ -57,6 +58,26 @@
           }
         },
         "required": ["template", "name"]
+      }
+    },
+    {
+      "name": "new-plugin",
+      "makes": ["unreal-project", "unreal-plugin"],
+      "ready": "engine-status",
+      "description": "Make an Unreal C++ plugin in this game's folder: a host project unreal/<name>Host.uproject from Epic's Blank template (set up for Genex and linked to this game) with a C++ module of its own, and the plugin in unreal/Plugins/<name>/ from Epic's plugin template, enabled in the host. Use it only when the user wants an Unreal plugin (an editor tool, a window, a toolbar button, a runtime module) and this game has no Unreal project yet; a game folder that already has an unreal folder is refused. It opens nothing: build the plugin next.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The plugin's name: a letter first, then letters, digits or underscores, no spaces, at most 16 characters, such as LevelTools."
+          },
+          "template": {
+            "type": "string",
+            "description": "Optional. window (an editor tab with a menu entry and a toolbar button, the default), toolbar-button (a toolbar button that runs code) or blank (a runtime module with no editor parts)."
+          }
+        },
+        "required": ["name"]
       }
     },
     {
@@ -175,8 +196,8 @@
     },
     {
       "name": "cpp-status",
-      "audience": "harness",
-      "description": "For Genex's Unreal Loop only: whether this computer compiles Unreal C++, the game's C++ module and how adding it goes.",
+      "facts": ["unreal-project"],
+      "description": "Whether this computer compiles Unreal C++ and whether the game has its C++ module.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -184,12 +205,77 @@
     },
     {
       "name": "add-cpp-module",
-      "audience": "harness",
+      "facts": ["unreal-project"],
       "needs": ["editor"],
-      "description": "For Genex's Unreal Loop only: add the game's C++ module in the background (save, quit Unreal, write and build the module, open Unreal again). Answers {started} at once, or the module the game has; read cpp-status.",
+      "description": "Add the game's C++ module, once the user confirms: Genex saves their open work in Unreal, then quits and reopens it in the background; after C++ changes call restart to rebuild. Answers {started} at once, or the module the game has; read cpp-status.",
       "parameters": {
         "type": "object",
         "properties": {}
+      },
+      "confirmation": "Add a C++ module to this Unreal game: Genex saves your open work in Unreal, then quits and reopens the editor in the background to build it."
+    },
+    {
+      "name": "plugin-build",
+      "facts": ["unreal-plugin"],
+      "needs": ["editor"],
+      "description": "Build this game's Unreal plugin with its host project, once the user confirms: Genex saves their open work in Unreal and quits it, then builds in the background and opens Unreal again after a good build (after a failed one it stays closed). Answers {started} at once; read plugin-status for the result and the errors to fix.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "description": "Optional. The plugin's folder name under unreal/Plugins/; needed only when the project holds more than one."
+          }
+        }
+      },
+      "confirmation": "Build this Unreal plugin: Genex saves your open work in Unreal, quits it, builds the plugin in the background and opens Unreal again when the build passes."
+    },
+    {
+      "name": "plugin-test",
+      "facts": ["unreal-plugin"],
+      "description": "Run the plugin's automation tests headless in the background (no window; Unreal can stay open). Tests whose names start with filter run (the plugin's name unless given). Answers {started, filter} at once; read plugin-status for passes, failures and the summary. stop: true ends a running test run.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "description": "Optional. The plugin's folder name under unreal/Plugins/; needed only when the project holds more than one."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Optional. The start of the tests' names: letters, digits, _ and dots, such as LevelTools.Window."
+          },
+          "stop": { "type": "boolean", "description": "Optional. true ends the running test run instead." }
+        }
+      }
+    },
+    {
+      "name": "plugin-package",
+      "facts": ["unreal-plugin"],
+      "description": "Package the plugin for the Mac with Epic's BuildPlugin in the background, into unreal/Saved/Genex/Packages/<Plugin>/ with a note beside it. Answers {started} at once; read plugin-status. stop: true ends a running package.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "description": "Optional. The plugin's folder name under unreal/Plugins/; needed only when the project holds more than one."
+          },
+          "stop": { "type": "boolean", "description": "Optional. true ends the running package instead." }
+        }
+      }
+    },
+    {
+      "name": "plugin-status",
+      "facts": ["unreal-plugin"],
+      "description": "How the plugin's build, tests and package stand (running, done, failed or stopped, with errors, test counts and failures), and proof: the paths of the test summary, the package note and the plugin window's picture, ready to name in finish.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "description": "Optional. The plugin's folder name under unreal/Plugins/; needed only when the project holds more than one."
+          }
+        }
       }
     },
     {
@@ -337,8 +423,14 @@
     {
       "name": "unreal-editor",
       "facts": ["unreal-project"],
-      "tools": ["blueprint-guide", "find-nodes", "check-part"],
-      "text": "This game is built in the user's open Unreal Editor 5.8 through unreal-editor__list_toolsets, unreal-editor__describe_toolset and unreal-editor__call_tool. Find a toolset with list_toolsets, read its tools and input schemas with describe_toolset, then call_tool with toolset_name, tool_name (without the toolset prefix) and arguments matching the schema. Calls go to this game's own Unreal project once it is linked, and each answer names it. unreal__use-project links the project in this game's folder once the user has set it up from the Unreal button (until then, never call these tools: they reach whichever project the Unreal panel chose, which can be another game's), and switches to another set-up project only when the user asks.\nEvery change lands in the user's editor at once; save only when asked. A project inside the game folder (unreal/) is covered by the game's checkpoints and Rewind; one elsewhere is not. Never build file watchers, polling scripts or exec bridges between the game folder and Unreal: the tools are the only way in.\nBlueprints: read the Blueprint guides in Epic's AgentSkillToolset first, and look up every node before you write Blueprint text (find the node by name; never guess). Write events without the AddEvent| prefix. A function needs its graph created before its text. There are no key-event nodes: use Enhanced Input actions or poll in Tick. A literal can't be bound to a name: pass it where it is used.\nPlay-testing: stop play before editing the level. Start with call_tool EditorToolset.EditorAppToolset StartPIE with {\"options\":{\"bSimulate\":false,\"playMode\":\"PlayMode_InViewPort\",\"warmupSeconds\":2}} and look with the Genex editor helper's eyes in genex_build.tools.GenexBuildTools, never CaptureEditorImage (it shows the whole editor window) or CaptureViewport (the editor camera): capture_play shows the 3D frame the player sees during play (on-screen UI such as the HUD and screen-space bars is not in it), motion_strip takes frames a set number of game seconds apart with where the pawn was in each (start a move with hold first), and capture_shot takes a still from a hero camera without playing. Each answer is the picture with its tone numbers (black point, contrast, near against far contrast) and, in play, the frame rate. When list_toolsets shows genex_play.tools.GenexPlayTools (the Genex editor helper), play like the player: list_actions shows the controls, hold with {name, x, seconds} presses an input action (Throttle) or a key (W) and returns at once while the game keeps receiving it, player_state reads the pawn's position and speed, probe_route measures it against the game's GenexRoute and drive_route drives it along the route. Call release_all, then StopPIE, when you are done; imports and retargets refuse during play.\nBuilding: when list_toolsets shows genex_build.tools.GenexBuildTools (the Genex editor helper), build with code, not clicks: keep each system's geometry, materials and light in a Python file in the game's unreal/build/ folder and run it with run_script {file, args_json}. A script gets unreal, args and the gx library (read genex_build.gx's notes): gx.scope makes a script idempotent (running it again replaces what it made), gx.instances draws one mesh many times as one actor (never one actor per copy), gx.kit_module makes bevelled Nanite kit pieces, gx.world_material makes world-aligned concrete, steel, grime or emissive, gx.atmosphere(\"megastructure\" or \"daylight\") replaces the template sky with light, volumetric fog, manual exposure and a grade, and gx.shot_camera places the hero cameras capture_shot uses. A failing script answers its file and line; an MCP timeout does not stop a running script; a run that changed a level with navigation bounds rebuilds its nav mesh. Use execute_tool_script only for small queries. import_model brings a model file of the game's assets/ in as one static mesh with the collision and Nanite you choose, and answers its real path and the file's own triangle count; import_character, import_animation and import_sound bring rigged characters, clips and .wav, .mp3, .ogg or .flac sounds in; retarget plays one skeleton's clips on another; attach_to_socket puts a mesh in a hand on a Blueprint; audit counts primitives, instances and triangles; attach_mesh adds a mesh to a Blueprint component. set_route, track_terrain and dirt_material serve racing games. Pass compound arguments as JSON text. In Unreal's Python, a function's out-parameters come back as a tuple: pick the value you want by its type, not its position. genex_loop.tools.GenexLoopTools is Genex's own Loop toolset: calls to it are refused.\nOn a Mac, the editor log is ~/Library/Logs/Unreal Engine/<Project>Editor/<Project>.log and crash reports are in ~/Library/Application Support/Epic/UnrealEngine/5.8/Saved/Crashes/. When a call says Unreal crashed, or that the project is not answering, another project is open instead, or it is not set up, tell the user what the message says to do from the Unreal button instead of retrying, and look before repeating it once it answers.\nXcode is recommended, not required: without it, work in Blueprints and Python only. Call unreal__show-steps when C++ would clearly help."
+      "tools": ["blueprint-guide", "find-nodes", "check-part", "cpp-status", "add-cpp-module"],
+      "text": "This game is built in the user's open Unreal Editor 5.8 through unreal-editor__list_toolsets, unreal-editor__describe_toolset and unreal-editor__call_tool. Find a toolset with list_toolsets, read its tools and input schemas with describe_toolset, then call_tool with toolset_name, tool_name (without the toolset prefix) and arguments matching the schema. Calls go to this game's own Unreal project once it is linked, and each answer names it. unreal__use-project links the project in this game's folder once the user has set it up from the Unreal button (until then, never call these tools: they reach whichever project the Unreal panel chose, which can be another game's), and switches to another set-up project only when the user asks.\nEvery change lands in the user's editor at once; save only when asked. A project inside the game folder (unreal/) is covered by the game's checkpoints and Rewind; one elsewhere is not. Never build file watchers, polling scripts or exec bridges between the game folder and Unreal: the tools are the only way in.\nBlueprints: read the Blueprint guides in Epic's AgentSkillToolset first, and look up every node before you write Blueprint text (find the node by name; never guess). Write events without the AddEvent| prefix. A function needs its graph created before its text. There are no key-event nodes: use Enhanced Input actions or poll in Tick. A literal can't be bound to a name: pass it where it is used.\nPlay-testing: stop play before editing the level. Start with call_tool EditorToolset.EditorAppToolset StartPIE with {\"options\":{\"bSimulate\":false,\"playMode\":\"PlayMode_InViewPort\",\"warmupSeconds\":2}} and look with the Genex editor helper's eyes in genex_build.tools.GenexBuildTools, never CaptureEditorImage (it shows the whole editor window) or CaptureViewport (the editor camera): capture_play shows the 3D frame the player sees during play (on-screen UI such as the HUD and screen-space bars is not in it), motion_strip takes frames a set number of game seconds apart with where the pawn was in each (start a move with hold first), and capture_shot takes a still from a hero camera without playing. Each answer is the picture with its tone numbers (black point, contrast, near against far contrast) and, in play, the frame rate. When list_toolsets shows genex_play.tools.GenexPlayTools (the Genex editor helper), play like the player: list_actions shows the controls, hold with {name, x, seconds} presses an input action (Throttle) or a key (W) and returns at once while the game keeps receiving it, player_state reads the pawn's position and speed, probe_route measures it against the game's GenexRoute and drive_route drives it along the route. Call release_all, then StopPIE, when you are done; imports and retargets refuse during play.\nBuilding: when list_toolsets shows genex_build.tools.GenexBuildTools (the Genex editor helper), build with code, not clicks: keep each system's geometry, materials and light in a Python file in the game's unreal/build/ folder and run it with run_script {file, args_json}. A script gets unreal, args and the gx library (read genex_build.gx's notes): gx.scope makes a script idempotent (running it again replaces what it made), gx.instances draws one mesh many times as one actor (never one actor per copy), gx.kit_module makes bevelled Nanite kit pieces, gx.world_material makes world-aligned concrete, steel, grime or emissive, gx.atmosphere(\"megastructure\" or \"daylight\") replaces the template sky with light, volumetric fog, manual exposure and a grade, and gx.shot_camera places the hero cameras capture_shot uses. A failing script answers its file and line; an MCP timeout does not stop a running script; a run that changed a level with navigation bounds rebuilds its nav mesh. Use execute_tool_script only for small queries. import_model brings a model file of the game's assets/ in as one static mesh with the collision and Nanite you choose, and answers its real path and the file's own triangle count; import_character, import_animation and import_sound bring rigged characters, clips and .wav, .mp3, .ogg or .flac sounds in; retarget plays one skeleton's clips on another; attach_to_socket puts a mesh in a hand on a Blueprint; audit counts primitives, instances and triangles; attach_mesh adds a mesh to a Blueprint component. set_route, track_terrain and dirt_material serve racing games. Pass compound arguments as JSON text. In Unreal's Python, a function's out-parameters come back as a tuple: pick the value you want by its type, not its position. genex_loop.tools.GenexLoopTools is Genex's own Loop toolset: calls to it are refused.\nA mesh you make for Unreal needs UV coordinates: export it as glTF or FBX (Genex's Blender plugin can), or write vt lines in an OBJ; an OBJ without UVs trips Unreal's importer, which shows Epic's crash reporter though the import goes on.\nOn a Mac, the editor log is ~/Library/Logs/Unreal Engine/<Project>Editor/<Project>.log and crash reports are in ~/Library/Application Support/Epic/UnrealEngine/5.8/Saved/Crashes/. When a call says Unreal crashed, or that the project is not answering, another project is open instead, or it is not set up, tell the user what the message says to do from the Unreal button instead of retrying, and look before repeating it once it answers.\nXcode is recommended, not required: without it, work in Blueprints and Python only. Call unreal__show-steps when C++ would clearly help. unreal__cpp-status says whether this computer compiles C++ and whether the game has its C++ module, and unreal__add-cpp-module adds the module once the user confirms; in a Loop, call Genex's restart after changing C++ source: it rebuilds."
+    },
+    {
+      "name": "unreal-plugin",
+      "facts": ["unreal-plugin"],
+      "tools": ["plugin-build", "plugin-test", "plugin-package", "plugin-status"],
+      "text": "This game is an Unreal plugin in unreal/Plugins/<Plugin>/, built inside its host project unreal/<Plugin>Host.uproject. Ship it in this order. 1. unreal__plugin-build (the user confirms; Genex saves their work and quits Unreal, builds, then opens Unreal again). Read unreal__plugin-status while you do other work; fix every error it names and build again until it passes. 2. Write automation tests in the plugin's module under Source/<Plugin>/Private/Tests/ with IMPLEMENT_SIMPLE_AUTOMATION_TEST, each named <Plugin>.<Area>.<Case> and flagged EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter, guarded by WITH_DEV_AUTOMATION_TESTS; build again. 3. unreal__plugin-test runs them headless; read unreal__plugin-status, fix what fails and run them again. 4. unreal__plugin-package packages the plugin with BuildPlugin; read unreal__plugin-status until it is done. 5. Open the plugin's window in Unreal (its menu entry or toolbar button), then call app_look with app UnrealEditor, window <Plugin> and save unreal/Saved/Genex/Shots/<Plugin>-window.jpg. 6. Call finish with the proof unreal__plugin-status lists: the test summary, the package note and the window's picture. One plugin job runs at a time."
     }
   ],
   "panels": [
@@ -462,5 +554,15 @@
   "folders": [
     { "path": "~/Library/Application Support/Epic/UnrealBuildTool", "why": "Unreal's build tool writes its log here" },
     { "path": "/private/tmp/.dotnet", "why": ".NET keeps the build tool's configuration lock here" }
+  ],
+  "observers": [{ "id": "viewport", "facts": ["unreal-project"], "tool": "hero-shots", "live": "unreal-card" }],
+  "scaffolds": [
+    { "id": "game", "label": "Unreal game", "tool": "new-game" },
+    {
+      "id": "plugin",
+      "label": "Unreal plugin",
+      "tool": "new-plugin",
+      "facts": [{ "fact": "unreal-plugin", "files": ["**/*.uplugin"], "notUnder": ["**/GenexEditorHelper/"] }]
+    }
   ]
 }

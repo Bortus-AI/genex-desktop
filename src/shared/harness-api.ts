@@ -32,6 +32,7 @@ import type {
   ToolDefinition,
 } from "./engine-requests.ts";
 import type { ConversationRecord, EventData, EventEnvelope, Message, SnapshotRecord } from "./event-log.ts";
+import { FINISH_REASON_CHARS, type FinishCheckStep } from "./finish-check.ts";
 import type { ProjectAssets } from "./game-assets.ts";
 import type {
   AttachReport,
@@ -53,6 +54,7 @@ import {
   isHookLabel,
   isSeedFiredHookEvent,
 } from "./plugin-hooks.ts";
+import { type CapturedFile, isPluginObserverKey } from "./observers.ts";
 import type { PluginKindOffer, PluginTool } from "./plugins.ts";
 import type {
   BuildObservation,
@@ -112,6 +114,33 @@ export interface GameImageRead {
   file: string;
 }
 
+/** One picture of a capture: its file kept with the run, and its pixels (downscaled) for a reviewer's prompt. */
+export interface CapturedImage extends CapturedFile {
+  mimeType: string;
+  data: string;
+}
+
+/** A finish check's round as the host answers it: the reviewer's yes or no with reasons, or no answer and why. */
+export interface FinishRoundAnswer {
+  round: number;
+  step: FinishCheckStep;
+  reasons?: string[];
+  why?: string;
+}
+
+/**
+ * One observer's capture (`observers.capture`): its pictures and its play recording's frames in
+ * order, its note, or the problem that kept it from capturing (a lock not given, a failed step).
+ */
+export interface ObserverCaptureResult {
+  observer: string;
+  label: string;
+  images: CapturedImage[];
+  recording: CapturedImage[];
+  note?: string;
+  problem?: string;
+}
+
 /** A stills source for `preview.pair`: inline bytes, or a path under the studio's runs. */
 export interface StillSource {
   base64?: string;
@@ -165,7 +194,11 @@ export interface HarnessDelegateParams {
    * `show_build`, `land_build`, shared/coordinator.ts `RunControl`), answered by the host for this
    * run and message as the coordinator's tools are. Honoured only for the chat's own session.
    */
-  runControls?: { runId: string; messageId?: string };
+  /**
+   * `inPlace`: the run was a Loop that worked in the game folder itself, with no build of its own:
+   * its controls are only the status, never a build to show or land.
+   */
+  runControls?: { runId: string; messageId?: string; inPlace?: boolean };
   /**
    * This session is its chat's current turn: the message it answers. What the person sends
    * meanwhile can reach it (`engine.steer`); honoured only for the chat's own session, and for a
@@ -234,6 +267,13 @@ export interface HarnessDelegateParams {
    * on a harness that claims `workers`, and never for a worker: depth is one.
    */
   workers?: { tools?: LiveToolSpec[] };
+  /**
+   * A Loop's reviewer: read-only, in a fresh home of its own, reading `reads` (the lead's folder) and
+   * the run's captures (on Codex a brief, not a boundary), looking at app windows with `app_look` and nothing else. Honoured only when
+   * `readOnly`, for a run of this game, reading the game's folder or its own copy in the run's
+   * folder; anything else is refused before an engine starts. Every other grant is dropped.
+   */
+  reviewer?: { runId: string; reads: string };
 }
 
 /**
@@ -430,6 +470,24 @@ export interface HarnessHostApi {
     };
     result: HookReport;
   };
+  /**
+   * Run the game's observers for a run of this game (one, when `observer` names it as
+   * `<plugin>/<id>`): each of a plugin that is on runs its tool as a harness step under that tool's
+   * locks, the person first, the run's own holds passing. Its pictures are kept with the run and
+   * recorded as `observer_capture`; a failing or held observer answers a `problem`. Plan mode never
+   * holds it: it only looks. `withinMs` is the time the harness still waits: every observer's lock
+   * wait and call fit in it, and nothing is kept or recorded after it.
+   */
+  "observers.capture": {
+    params: {
+      project: string;
+      runId: string;
+      threadId?: string | null;
+      observer?: string | null;
+      withinMs?: number | null;
+    };
+    result: ObserverCaptureResult[];
+  };
   /** A worker writing in place ended: every lock it holds in the game is let go; another's are untouched. */
   "locks.release": {
     params: { project: string; threadId: string; runId?: string | null; holder: { id: string } };
@@ -459,10 +517,12 @@ export interface HarnessHostApi {
   "engine.complete": { params: HarnessCompleteParams; result: CompleteResponse };
   /**
    * Stop: aborts a thread's completions, a project's delegations, or the delegation in one worktree
-   * (with `worker`, the in-place worker of that id working in `cwd`).
+   * (with `worker`, the in-place worker of that id working in `cwd`; with `lead`, a run id, only the
+   * session the host seated there as that run's lead in place). With `reviewer` (a run id), only
+   * the sessions the host seated as that run's reviewers (of `project`, when named), nothing else.
    */
   "engine.abort": {
-    params: { threadId?: string; cwd?: string; project?: string; worker?: string };
+    params: { threadId?: string; cwd?: string; project?: string; worker?: string; reviewer?: string; lead?: string };
     result: { aborted: number };
   };
   /**
@@ -471,6 +531,40 @@ export interface HarnessHostApi {
    */
   "engine.interrupt": { params: { cwd: string; worker?: string }; result: { interrupted: boolean } };
   "engine.delegate": { params: HarnessDelegateParams; result: DelegateResult };
+  /**
+   * A Loop's finish check, asked by the harness and answered by the host: only the host writes the
+   * reviewer's verdict. The run must be a running run of this game with no round held. The host
+   * records the round's `checking` step, seats the reviewer read-only (as `engine.delegate`'s
+   * `reviewer` grant seats one, reading `reads`), reads its yes or no, and holds that answer until
+   * the harness settles the round.
+   */
+  "finish.review": {
+    params: {
+      project: string;
+      runId: string;
+      engine: string;
+      model?: string | null;
+      effort?: string | null;
+      prompt: string;
+      images: DelegateImage[];
+      reads: string;
+      timeoutMs: number;
+      maxTurns: number;
+      claim: string;
+      proof: string[];
+      observers: string[];
+    };
+    result: FinishRoundAnswer;
+  };
+  /**
+   * End the held round of a run: the host records its outcome and counts the no's in a row from its
+   * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
+   * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
+   */
+  "finish.settle": {
+    params: { project: string; runId: string; round: number; unanswered?: string | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
+  };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
    * turn (`chatTurn` is `into`). `accepted` lists what the session took; `how` is how (`SteerDelivery`
@@ -519,7 +613,8 @@ export interface HarnessHostApi {
   };
   "game.validate": {
     params: { project: string; candidateId?: string };
-    result: { ok: boolean; problems: string[]; warnings: string[]; contract: ContractWord };
+    /** `missing`: the files a web page needs that are not there, by name (`problems` says it in sentences). */
+    result: { ok: boolean; problems: string[]; missing: string[]; warnings: string[]; contract: ContractWord };
   };
   /** The live half of `game.validate`: serve the page, wait for it, ask what the hook got hold of. */
   "game.attached": {
@@ -766,6 +861,7 @@ export const HostMethod = {
   LocksRelease: "locks.release",
   CheckpointTake: "checkpoint.take",
   HooksFire: "hooks.fire",
+  ObserversCapture: "observers.capture",
   RunExec: "run.exec",
   EngineDescribe: "engine.describe",
   StudioContext: "studio.context",
@@ -775,6 +871,8 @@ export const HostMethod = {
   EngineAbort: "engine.abort",
   EngineInterrupt: "engine.interrupt",
   EngineDelegate: "engine.delegate",
+  FinishReview: "finish.review",
+  FinishSettle: "finish.settle",
   EngineSteer: "engine.steer",
   CoordinatorTool: "coordinator.tool",
   EngineDelegations: "engine.delegations",
@@ -850,6 +948,16 @@ const workerId = z.custom<string>(isWorkerId);
 const workerTitle = z.custom<string>(isWorkerTitle);
 /** A moment's label: one line of at most 120 characters. */
 const hookLabel = z.custom<string>(isHookLabel);
+/** A run named as one plain path segment, as the host names runs. */
+const runIdSegment = z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/);
+/** The longest folder a reviewer may name to read, in characters. */
+const REVIEWER_READS_CHARS = 1024;
+/** The longest claim a finish review records, in characters. */
+const FINISH_CLAIM_CHARS = 4_000;
+/** The most proof files or observers a finish review names. */
+const FINISH_NAMES_MAX = 64;
+/** A plugin's observer by key (`<plugin>/<id>`): `isPluginObserverKey`. */
+const observerKey = z.custom<string>(isPluginObserverKey);
 
 /**
  * Engine control on a worktree (`engine.abort`, `engine.interrupt`) is deliberately absent: its
@@ -907,6 +1015,13 @@ export const HARNESS_PARAM_SCHEMAS = {
       })
       .nullish(),
   }),
+  "observers.capture": z.object({
+    project,
+    runId: runIdSegment,
+    threadId: optionalText,
+    observer: observerKey.nullish(),
+    withinMs: z.number().finite().nullish(),
+  }),
   "run.exec": z.object({ cwd: optionalText, project: optionalText }),
   "engine.delegate": z.object({
     project,
@@ -914,9 +1029,30 @@ export const HARNESS_PARAM_SCHEMAS = {
     extraReads: z.array(text).nullish(),
     selfCapture: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
     playtest: z.object({ project, root: text, runId: optionalText, facetId: optionalText }).nullish(),
-    director: z.object({ project, root: text, runId: text }).nullish(),
+    director: z.object({ project, root: text, runId: text, inPlace: z.boolean().nullish() }).nullish(),
     worker: z
       .object({ id: text, title: text, runId: optionalText, turn: optionalText, research: z.boolean().nullish() })
+      .nullish(),
+    reviewer: z.object({ runId: runIdSegment, reads: z.string().min(1).max(REVIEWER_READS_CHARS) }).nullish(),
+  }),
+  "finish.review": z.object({
+    project,
+    runId: runIdSegment,
+    reads: z.string().min(1).max(REVIEWER_READS_CHARS),
+    claim: z.string().max(FINISH_CLAIM_CHARS),
+    proof: z.array(z.string().max(REVIEWER_READS_CHARS)).max(FINISH_NAMES_MAX),
+    observers: z.array(z.string().max(REVIEWER_READS_CHARS)).max(FINISH_NAMES_MAX),
+  }),
+  // Settling names nothing but its round: a field it does not take (a step, a verdict) is refused.
+  "finish.settle": z.strictObject({
+    project,
+    runId: runIdSegment,
+    round: z.number().int().min(1),
+    // One reason, as clipped and marked (`…`).
+    unanswered: z
+      .string()
+      .min(1)
+      .max(FINISH_REASON_CHARS + 1)
       .nullish(),
   }),
   "game.setCover": z.object({ project }),

@@ -14,7 +14,7 @@
  * outside it: no absolute path of the user's machine reaches an agent.
  */
 import { spawn } from "node:child_process";
-import { realpath } from "node:fs/promises";
+import { readdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { killProcessTree } from "../../substrate/process-tree.ts";
@@ -48,6 +48,9 @@ const CONFIGURATION = "Development";
 const EDITOR_SUFFIX = "Editor";
 const NO_MUTEX = "-NoMutex";
 const NO_ACCELERATOR = "-NoUBA";
+/** Where a project keeps its own plugins, each in a folder with its descriptor. */
+const PLUGINS_FOLDER = "Plugins";
+const DESCRIPTOR_EXTENSION = ".uplugin";
 
 /** Why a compile didn't pass. Only Conflicting is retryable as it is. */
 export const CompileFailure = {
@@ -214,8 +217,8 @@ export function canCompileCpp(
   return platform === MAC && xcode.state === XcodeState.Ready;
 }
 
-/** Keeps a build's output from its start, and past the cap only its end, where UBT's result is. */
-function outputCollector() {
+/** Keeps a program's output from its start, and past the cap only its end, where a build's result is. */
+export function outputCollector() {
   const head: Buffer[] = [];
   let headBytes = 0;
   let tail = Buffer.alloc(0);
@@ -315,6 +318,15 @@ function scrubbed(message: string, roots: Roots): string {
 }
 
 /**
+ * Scrubs text an agent will read of the computer's paths: the project's folder taken out (its files
+ * read relative to it), the engine's too, and any other absolute path cut to its base name.
+ */
+export async function pathScrubber(projectDir: string, engineDir: string): Promise<(text: string) => string> {
+  const [project, engine] = await Promise.all([spellings(projectDir), spellings(engineDir)]);
+  return (text) => scrubbed(text, { project, engine });
+}
+
+/**
  * An error that names its file: clang's, UnrealHeaderTool's or a C# rules file's. One in a foreign
  * file says only where it is: its text could be that file's, which the agent may not read.
  */
@@ -352,6 +364,18 @@ function lineError(line: string, next: string, roots: Roots): CompileError | und
   }
   const tool = TOOL_ERROR.exec(text)?.groups?.message;
   return tool !== undefined && !WARNING.test(tool) ? unplaced(tool, roots) : undefined;
+}
+
+/**
+ * The first errors of an Unreal build's output (UBT's, clang's, the linker's, UAT's `ERROR:` lines),
+ * each file relative to the project and every other absolute path cut to its base name.
+ */
+export async function parseBuildErrors(
+  output: string,
+  folders: { projectDir: string; engineDir: string },
+): Promise<CompileError[]> {
+  const [project, engine] = await Promise.all([spellings(folders.projectDir), spellings(folders.engineDir)]);
+  return ubtErrors(output, { project, engine });
 }
 
 /** The first {@link MAX_ERRORS} distinct errors in UBT's output, in order. */
@@ -408,14 +432,33 @@ function errorCode(failure: unknown): string {
   return typeof code === "string" && ERROR_CODE.test(code) ? code : "unknown";
 }
 
+/**
+ * The project's own plugins a build of it compiles: the plain folders under its `Plugins/` that hold
+ * a .uplugin, sorted; a link there, or anything else, is none. Empty for a project with no plugins.
+ */
+export async function projectPluginDirs(projectFile: string): Promise<string[]> {
+  const plugins = path.join(path.dirname(projectFile), PLUGINS_FOLDER);
+  const dirs: string[] = [];
+  for (const entry of await readdir(plugins, { withFileTypes: true }).catch(() => [])) {
+    if (!entry.isDirectory()) continue;
+    const folder = path.join(plugins, entry.name);
+    const inside = await readdir(folder, { withFileTypes: true }).catch(() => []);
+    if (inside.some((file) => file.isFile() && file.name.endsWith(DESCRIPTOR_EXTENSION))) dirs.push(folder);
+  }
+  return dirs.sort();
+}
+
 /** Runs Build.sh once in its sandbox, which is gone afterwards; rejects when either can't start. */
 async function runConfined(options: CompileOptions, args: string[], signal: AbortSignal): Promise<RunOutcome> {
   const script = path.join(options.engineDir, "Engine", "Build", "BatchFiles", "Mac", "Build.sh");
+  // A host project's build compiles its plugins too, and writes their build output.
+  const pluginDirs = await projectPluginDirs(options.projectFile);
   const sandbox = await (options.prepareSandbox ?? prepareBuildSandbox)({
     projectDir: path.dirname(options.projectFile),
     engineDir: options.engineDir,
     xcodeApp: options.xcodeApp ?? null,
     ...(options.home ? { home: options.home } : {}),
+    ...(pluginDirs.length > 0 ? { pluginDirs } : {}),
   });
   try {
     return await (options.run ?? systemRunCommand)(script, args, { signal, sandbox });

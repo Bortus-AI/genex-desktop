@@ -10,6 +10,7 @@ import { IN_PLACE_LOCK, isLockRefused, workerHolder } from "../core/plugin-locks
 import { isWorkerId, isWorkerTitle, WORKER_NAMING } from "../../shared/workers.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
 import { kindsWithReadiness } from "../core/kind-readiness.ts";
+import { stoppableMoment } from "../core/moment-stops.ts";
 import { pluginsFind, pluginsSuggest } from "../core/project-tools.ts";
 
 /** Why a plugin or connector call from the harness is refused. */
@@ -21,6 +22,8 @@ const MESSAGE = {
   unknownConnectorTool: "Unknown connector tool",
   unknownGame: "No such game",
   badHolder: WORKER_NAMING,
+  harnessEnded: "The harness that asked for this has ended, so nothing was held for it.",
+  connectorHarnessEnded: "The harness that asked for this has ended, so the connector was not called.",
 } as const;
 
 /** The engine the local harness's own plugin calls are recorded under. */
@@ -79,6 +82,7 @@ async function holdInPlace(
   x: CoreInternals,
   p: { project: string; threadId: string; runId?: string | null; holder: { id: string; title: string } },
 ): Promise<{ held: true; labels: string[] } | { busy: string }> {
+  const boot = x.harnessBoot;
   const holder = holderOf(p.holder, true);
   // A game of any kind: an Unreal game's folder holds no web page.
   await core.games.kindOf(p.project).catch(() => {
@@ -86,11 +90,12 @@ async function holdInPlace(
   });
   const binding = await requirePluginBinding(core, p.project, p.threadId);
   const plugins = core.plugins.locksFor(await kindOf(core, p.project));
+  const held = workerHolder({ threadId: p.threadId, runId: p.runId, id: holder.id });
   try {
     await x.locks.hold([IN_PLACE_LOCK, ...plugins], {
       binding,
       waitMs: 0,
-      holder: workerHolder({ threadId: p.threadId, runId: p.runId, id: holder.id }),
+      holder: held,
       title: holder.title,
       personFirst: false,
       forHarness: true,
@@ -98,6 +103,11 @@ async function holdInPlace(
   } catch (error) {
     if (isLockRefused(error)) return { busy: error.message };
     throw error;
+  }
+  // The harness that asked ended while this was read: nothing of it is left to let the hold go.
+  if (boot !== x.harnessBoot) {
+    x.locks.releaseHolder(held);
+    throw new Error(MESSAGE.harnessEnded);
   }
   return { held: true, labels: plugins.map(({ lock }) => lock.label) };
 }
@@ -125,15 +135,24 @@ export function pluginsRpc(core: StudioCore, x: CoreInternals) {
     [HostMethod.CapabilitiesDescribe]: async (p) =>
       (await x.capabilityFacts(p.threadId, p.project, CapabilityAudience.Conversation)).text,
     [HostMethod.PluginsInvoke]: async (p) => {
+      const boot = x.harnessBoot;
       const binding = await requirePluginBinding(core, p.project, p.threadId);
       // The local harness reaches plugins here; the same record pair is written so the ledger
       // reads the same whichever engine made the call. Only the harness's own steps say `step`:
-      // its agents' calls never do, so a tool kept for the harness stays out of their reach.
-      return x.pluginTools.invokePluginTool(p.name, p.args, binding, undefined, {
-        engine: LOCAL_HARNESS_ENGINE,
-        caller: p.step === true ? PluginToolAudience.Harness : PluginToolAudience.Agents,
-        checkpoint: p.checkpoint === true,
-      });
+      // its agents' calls never do, so a tool kept for the harness stays out of their reach. The
+      // call runs as a moment does: Stop of its game or chat, or the harness's end, ends its wait.
+      const scope = { project: binding.project, ...(binding.threadId ? { threadId: binding.threadId } : {}) };
+      return stoppableMoment(
+        x,
+        scope,
+        (signal) =>
+          x.pluginTools.invokePluginTool(p.name, p.args, binding, signal, {
+            engine: LOCAL_HARNESS_ENGINE,
+            caller: p.step === true ? PluginToolAudience.Harness : PluginToolAudience.Agents,
+            checkpoint: p.checkpoint === true,
+          }),
+        boot,
+      );
     },
     // Connectors, for the local harness. Two methods and no more: an agent may see what is
     // connected and use it, and nothing here can add, change, enable or remove a connector —
@@ -143,6 +162,7 @@ export function pluginsRpc(core: StudioCore, x: CoreInternals) {
       return { tools, guidance: core.mcp.guidance(tools), revision: x.toolRegistryRevision };
     },
     [HostMethod.McpInvoke]: async (p) => {
+      const boot = x.harnessBoot;
       // The name is checked here as well as in the registry: this is the doorway an agent
       // reaches, and `<connector>__<tool>` is the only shape that may pass through it.
       // The host tracks this call by its project/thread. Stop aborts local waiting even when
@@ -156,7 +176,9 @@ export function pluginsRpc(core: StudioCore, x: CoreInternals) {
       const connector = p.name.slice(0, p.name.indexOf("__"));
       const game = await kindOf(core, binding.project);
       if (!core.mcp.reaches(connector, game.facts, game.holds)) throw new Error(MESSAGE.unknownConnectorTool);
-      return x.pluginTools.invokeConnectorTool(p.name, args, binding);
+      // The harness that asked ended while this was read: its call is never made for the next one.
+      if (boot !== x.harnessBoot) throw new Error(MESSAGE.connectorHarnessEnded);
+      return x.pluginTools.invokeConnectorTool(p.name, args, binding, undefined, { byHarness: true });
     },
     [HostMethod.LocksHold]: (p) => holdInPlace(core, x, p),
     // Only the worker's own locks go: another holder's, or a holder that holds nothing, change nothing.

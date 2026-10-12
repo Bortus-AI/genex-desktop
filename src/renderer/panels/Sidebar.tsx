@@ -3,12 +3,13 @@ import type { ComponentPropsWithRef, JSX, ReactNode, RefObject } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { type ReadyUpdate, UpdateAction } from "../../shared/app-update.ts";
 import { ThreadKind } from "../../shared/event-log.ts";
-import { FEEDBACK_WORDS, statusWords, UPDATE_WORDS } from "../words.ts";
+import { FEEDBACK_WORDS, PLUGIN_UPDATE_WORDS, statusWords, UPDATE_WORDS } from "../words.ts";
 import type { ConversationRecord, GameProject, ThreadMeta } from "../types.ts";
 import { Dot, IconButton } from "../ui/kit.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { GenexLogo } from "../ui/GenexLogo.tsx";
 import { GameAvatar } from "../ui/GameAvatar.tsx";
+import { projectKindLabel } from "../project-kind.ts";
 import { Shortcut } from "../ui/Shortcut.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip.tsx";
 import {
@@ -61,6 +62,12 @@ interface Props {
   onRestartToUpdate: () => Promise<boolean>;
   /** Open the waiting release's download page (Linux). */
   onDownloadUpdate: () => void;
+  /** The plugin releases waiting to be installed, as the tooltip names them ("Local Blender 1.2.0"). */
+  pluginUpdates: readonly string[];
+  /** Update plugins is installing them. */
+  updatingPlugins: boolean;
+  /** Install every waiting plugin update, one after another. */
+  onUpdatePlugins: () => void;
 }
 const meta = (thread: ConversationRecord) => (thread.metadata ?? {}) as ThreadMeta;
 
@@ -148,12 +155,7 @@ export function Sidebar(props: Props): JSX.Element {
           </div>
         </div>
         <span className="sidebar-fade" aria-hidden="true" />
-        {props.update?.action === UpdateAction.Download && (
-          <SidebarDownload update={props.update} onDownload={props.onDownloadUpdate} />
-        )}
-        {props.update?.action === UpdateAction.Restart && (
-          <SidebarUpdate update={props.update} onRestart={props.onRestartToUpdate} />
-        )}
+        <SidebarFooter {...props} />
       </div>
     </nav>
   );
@@ -179,7 +181,61 @@ function LaunchRow({ title }: { title: string | null }): JSX.Element {
   );
 }
 
-/** Relaunch to update, over the foot of the game list while a downloaded version waits. */
+/**
+ * What waits to be installed, over the foot of the game list: Update plugins above the app's own
+ * Relaunch to update or Download.
+ */
+function SidebarFooter({
+  update,
+  onRestartToUpdate,
+  onDownloadUpdate,
+  pluginUpdates,
+  updatingPlugins,
+  onUpdatePlugins,
+}: Props): JSX.Element | null {
+  const pluginsWait = pluginUpdates.length > 0 || updatingPlugins;
+  if (!update && !pluginsWait) return null;
+  return (
+    <div className="sidebar-footer">
+      {pluginsWait && (
+        <SidebarPluginUpdates releases={pluginUpdates} updating={updatingPlugins} onUpdate={onUpdatePlugins} />
+      )}
+      {update?.action === UpdateAction.Download && <SidebarDownload update={update} onDownload={onDownloadUpdate} />}
+      {update?.action === UpdateAction.Restart && <SidebarUpdate update={update} onRestart={onRestartToUpdate} />}
+    </div>
+  );
+}
+
+/** Update plugins: installs every waiting plugin update, each after its own approval. */
+function SidebarPluginUpdates({
+  releases,
+  updating,
+  onUpdate,
+}: {
+  releases: readonly string[];
+  updating: boolean;
+  onUpdate: () => void;
+}): JSX.Element {
+  // The last release installs before the run ends: nothing is left to name then.
+  const hint = releases.length > 0 ? PLUGIN_UPDATE_WORDS.hint(releases) : PLUGIN_UPDATE_WORDS.updating;
+  return (
+    <Hint label={hint} side="top">
+      <button
+        type="button"
+        className="sidebar-update"
+        data-plugins-update
+        aria-busy={updating}
+        disabled={updating}
+        onClick={onUpdate}
+      >
+        <span>{updating ? PLUGIN_UPDATE_WORDS.updating : PLUGIN_UPDATE_WORDS.update(releases.length)}</span>
+        <Icon name="reload" size={16} />
+      </button>
+    </Hint>
+  );
+}
+
+/** Relaunch to update, while a downloaded version waits. */
 function SidebarUpdate({ update, onRestart }: { update: ReadyUpdate; onRestart: () => Promise<boolean> }): JSX.Element {
   const [restarting, setRestarting] = useState(false);
   const restart = (): void => {
@@ -190,35 +246,31 @@ function SidebarUpdate({ update, onRestart }: { update: ReadyUpdate; onRestart: 
     });
   };
   return (
-    <div className="sidebar-footer">
-      <Hint label={UPDATE_WORDS.hint(update.version)} side="top">
-        <button
-          type="button"
-          className="sidebar-update"
-          data-update-restart
-          aria-busy={restarting}
-          disabled={restarting}
-          onClick={restart}
-        >
-          <span>{restarting ? UPDATE_WORDS.restarting : UPDATE_WORDS.restart}</span>
-          <Icon name="reload" size={16} />
-        </button>
-      </Hint>
-    </div>
+    <Hint label={UPDATE_WORDS.hint(update.version)} side="top">
+      <button
+        type="button"
+        className="sidebar-update"
+        data-update-restart
+        aria-busy={restarting}
+        disabled={restarting}
+        onClick={restart}
+      >
+        <span>{restarting ? UPDATE_WORDS.restarting : UPDATE_WORDS.restart}</span>
+        <Icon name="reload" size={16} />
+      </button>
+    </Hint>
   );
 }
 
-/** Download Genex X, over the foot of the game list while a release Linux installs by hand waits. */
+/** Download Genex X, while a release Linux installs by hand waits. */
 function SidebarDownload({ update, onDownload }: { update: ReadyUpdate; onDownload: () => void }): JSX.Element {
   return (
-    <div className="sidebar-footer">
-      <Hint label={UPDATE_WORDS.downloadHint} side="top">
-        <button type="button" className="sidebar-update" data-update-download onClick={onDownload}>
-          <span>{UPDATE_WORDS.download(update.version)}</span>
-          <Icon name="arrow-up-right" size={16} />
-        </button>
-      </Hint>
-    </div>
+    <Hint label={UPDATE_WORDS.downloadHint} side="top">
+      <button type="button" className="sidebar-update" data-update-download onClick={onDownload}>
+        <span>{UPDATE_WORDS.download(update.version)}</span>
+        <Icon name="arrow-up-right" size={16} />
+      </button>
+    </Hint>
   );
 }
 
@@ -451,6 +503,8 @@ function GameRow({
   onCover: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // A project that isn't a game says what it is beside its name.
+  const kind = projectKindLabel(game);
   // The row's end is one slot: the working dot, else the pin — and ⋯ in their place on hover.
   return (
     <div className="sidebar-game" data-game={game.name} data-active={active} data-busy={busy} data-menu-open={open}>
@@ -459,12 +513,15 @@ function GameRow({
         data-project={game.name}
         data-thread={threadId}
         aria-current={active ? "page" : undefined}
-        title={game.pathLabel}
+        title={kind ? `${game.pathLabel} · ${kind}` : game.pathLabel}
         className="sidebar-game-select"
         onClick={onSelect}
       >
         <GameAvatar cover={game.cover} active={active} gameKey={game.name} />
-        <span className="min-w-0 flex-1 truncate">{game.title}</span>
+        {/* The kind label keeps its words: the name shortens first, down to its first letters, and only a
+            row narrower than that shortens the label too. */}
+        <span className="min-w-8 flex-1 truncate">{game.title}</span>
+        {kind && <span className="ms-1.5 min-w-0 truncate text-ink-3">{kind}</span>}
         {busy && <span className="sr-only">Working</span>}
       </button>
       <GameRowEnd busy={busy} pinned={game.pinned} />

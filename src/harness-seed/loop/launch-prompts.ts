@@ -6,10 +6,12 @@
  * became a seventeen-hour build of a title card.
  */
 import { MAX_RUN_HOURS } from "./config.ts";
+import { LoopProfile } from "./folder-facts.ts";
 import { GameEngine } from "./game-engine.ts";
 import { askUser } from "./interview-question.ts";
 import { toolCall } from "./model-roles.ts";
 import { NARROW_TO_THE_ASK } from "./narrow-prompts.ts";
+import { OPEN_QUICK_IS_A_BUILD, openBuildWords, openStillsWords } from "./open-loop-prompts.ts";
 
 /** The build a Loop chat may start: its launch tool, the composer's hours, stills and folder. */
 export interface LaunchGrant {
@@ -75,31 +77,46 @@ function buildWords(gameEngine: GameEngine, hours: number | null | undefined): s
   return `builders working in parallel and judges checking their work (${budgetWords(hours)})`;
 }
 
+/** What a build is and how a quick one reads, for the Loop a project gets: the web Loop, the Unreal Loop, or the one Loop in place. */
+function buildOf(gameEngine: GameEngine, profile: LoopProfile | undefined, hours: number | null | undefined) {
+  if (profile === LoopProfile.Open) return { words: openBuildWords(hours), quick: OPEN_QUICK_IS_A_BUILD };
+  const quick = gameEngine === GameEngine.Unreal ? QUICK_IS_AN_UNREAL_BUILD : QUICK_IS_A_BUILD;
+  return { words: buildWords(gameEngine, hours), quick };
+}
+
+/** Who receives the commission's stills: a web build's judges, or an open Loop's lead. */
+function stillsWords(frames: number, profile: LoopProfile | undefined): string {
+  if (frames <= 0) return "";
+  if (profile === LoopProfile.Open) return openStillsWords(frames);
+  return `The user attached ${frames} still(s); a build's judges receive them automatically.`;
+}
+
 /**
  * What a delegated Loop chat adds to the contractor's rules, its tools spelled the way `engine`
- * calls them: answer, research, plan and edit here; launch only when the ask is a build. An Unreal
- * game's build is the Unreal Loop.
+ * calls them: answer, research, plan and edit here; launch only when the ask is a build. A project
+ * that isn't a web game (`LoopProfile.Open`) builds in the one Loop, its lead in place and a
+ * reviewer checking its finish; with no profile named, an Unreal game's build is the Unreal Loop.
  */
 export function launchRules(
   engine: string | undefined,
   grant: LaunchGrant,
   gameEngine: GameEngine = GameEngine.Web,
+  profile?: LoopProfile,
 ): string[] {
   const launch = toolCall(engine, grant.toolName);
   const ask = toolCall(engine, askUser.name);
-  const frames = grant.frameCount ?? 0;
-  const quick = gameEngine === GameEngine.Unreal ? QUICK_IS_AN_UNREAL_BUILD : QUICK_IS_A_BUILD;
+  const build = buildOf(gameEngine, profile, grant.hours);
   return [
-    `Loop is on: you may start a build — ${buildWords(gameEngine, grant.hours)}. It is allowed, not required. Decide from the latest message:`,
+    `Loop is on: you may start a build — ${build.words}. It is allowed, not required. Decide from the latest message:`,
     `- ${SMALL_TALK}`,
     "- A question, research, a plan, a design document or a review: do it yourself and answer here; put plans and documents in this folder (docs/) when they are asked for. A request for research or a plan is not a request to build — deliver it, then offer to build from it.",
     "- A contained change (a fix, a tweak, one feature): make it yourself in this folder.",
-    `- Building the game or changing it substantially (a new game from a pitch, several systems at once, the look of the whole game, hours of work): call ${launch} with the goal in the user's words, what it delivers in in_scope and what it leaves out in cut — ${quick}. Reading and research first are fine; do not build the game yourself.`,
+    `- Building the game or changing it substantially (a new game from a pitch, several systems at once, the look of the whole game, hours of work): call ${launch} with the goal in the user's words, what it delivers in in_scope and what it leaves out in cut — ${build.quick}. Reading and research first are fine; do not build the game yourself.`,
     `- If it is unclear whether they want a build, or a build would take hours they may not expect, ask with ${ask} (recommended choice first) and end your reply. Never call ${launch} in the same reply as a question, and never recommend what the user ruled out.`,
     askFirst(ask),
     gameEngine === GameEngine.Unreal ? UNREAL_GOAL_LOOK_FIRST : "",
     `A build starts when your reply ends, from this folder exactly as you leave it: call ${launch} last, then recap in one short paragraph.`,
-    frames > 0 ? `The user attached ${frames} still(s); a build's judges receive them automatically.` : "",
+    stillsWords(grant.frameCount ?? 0, profile),
     grant.project ? `Pass "${grant.project}" as the tool's project argument.` : "",
   ].filter(Boolean);
 }

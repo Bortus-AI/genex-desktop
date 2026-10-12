@@ -14,7 +14,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, lstat, mkdir, readdir, realpath, rm, rmdir } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, realpath, rm, rmdir, stat, utimes } from "node:fs/promises";
 import { GIT_ENV } from "../substrate/snapshots.ts";
 import { hostGitArgs, hostGitConfig, hostGitEnv } from "../substrate/git-policy.ts";
 import { pathExists } from "../substrate/fsx.ts";
@@ -164,6 +164,9 @@ export interface ChatCheckpointOptions {
   neverCaptured?: (dir: string) => Promise<readonly PlacedRule[]>;
 }
 
+/** A file time in milliseconds as whole seconds, rounded down: never later than the time itself. */
+const wholeSeconds = (ms: number) => Math.floor(ms / 1000);
+
 export class ChatCheckpoints {
   readonly #indexes: string;
   readonly #tails = new Map<string, Promise<unknown>>();
@@ -216,7 +219,15 @@ export class ChatCheckpoints {
     // all), but entries it tells git to skip must be read like any other.
     const own = path.join(dir, ".git", "index");
     if (!fromHead && (await pathExists(own))) {
+      // With its times: git re-reads a file whose time (to the second) is not older than its
+      // index's own, so a same-size edit in the second the repository last read it is still seen.
+      // A copy dated now would read every such entry as unchanged. The times are read before the
+      // copy and rounded down to the second, so the copy is never dated later than its content: a
+      // git that rewrites the index in between, or a time in a second's last half millisecond,
+      // only makes more entries racy, which costs a re-read and never misses an edit.
+      const { atimeMs, mtimeMs } = await stat(own);
       await copyFile(own, file);
+      await utimes(file, wholeSeconds(atimeMs), wholeSeconds(mtimeMs));
       const flagged = (await read(dir, ["ls-files", "-v", "-z"], { GIT_INDEX_FILE: file }))
         .split("\0")
         .filter((line) => /^([a-z]|S) /.test(line))

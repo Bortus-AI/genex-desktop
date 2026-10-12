@@ -553,6 +553,12 @@ describe("the lead and its background work", () => {
       state: FinishCheckState.NotYet,
       reasons: [],
       round: null,
+      // Flipped: the node also carries the no's in a row, why a round had no answer, its rounds,
+      // and whether the run still waits for its check.
+      rejections: 0,
+      why: null,
+      rounds: [],
+      over: false,
     });
     assert.ok(
       running?.edges.some((edge) => edge.from === GraphNodeKind.Final && edge.to === GraphNodeKind.FinishCheck),

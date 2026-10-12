@@ -15,27 +15,30 @@ import {
   LockRefused,
   LockRefusal,
   LockService,
+  PERSON_FIRST_ASK_MS,
   PERSON_FIRST_FRESH_MS,
   PERSON_FIRST_POLL_MS,
   runHolders,
   workerHolder,
 } from "../../src/main/core/plugin-locks.ts";
 import { PluginToolService } from "../../src/main/core/plugin-tools.ts";
+import { WRITERS_LET_GO_MS } from "../../src/main/core/recovery.ts";
 import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
-import { EventKind } from "../../src/shared/event-log.ts";
+import { EventKind, SnapshotScope } from "../../src/shared/event-log.ts";
 import { HostMethod, harnessParamsProblem } from "../../src/shared/harness-api.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { HookEvent, LockScope, type PluginLock } from "../../src/shared/plugin-hooks.ts";
-import { HOOK_CALL_MS, HOOK_LOCK_WAIT_MS } from "../../src/main/core/plugin-hooks.ts";
 import { PluginCallBlocker, PluginSourceKind, type PluginBinding } from "../../src/shared/plugins.ts";
 import { CoreFact, type GameKind } from "../../src/shared/project-facts.ts";
 import { UiEvent, type UiEvent as UiEventEnvelope } from "../../src/shared/ui-events.ts";
 import { BRIDGE_TOOL_DEADLINE_MS } from "../../src/substrate/engines/studio-bridge.ts";
-import { PLUGIN_CALL_TIMEOUT_MS } from "../../src/substrate/plugins/registry.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import { closeWorkerChats, LOCAL, RUN_ID, workerChat } from "../helpers/worker-chat.ts";
+import { personAllowsLocalTools } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
+/** Where the lock plugin came from: GitHub, so its connector follows the chat's mode (a local plugin's server asks every call). */
+const FROM_GITHUB = { kind: PluginSourceKind.Github, repo: "studio-tests/locks", sha: "a".repeat(40) } as const;
 /** How many turns of the event loop a test lets the service take before it reads what happened. */
 const SETTLE_TICKS = 20;
 
@@ -400,7 +403,8 @@ describe("LockService", () => {
   it("a run's moment passes the locks the run's own workers hold; another run's or a chat's waits", async () => {
     const { locks } = service();
     const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
-    const whole = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false }));
+    const life = { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false, forHarness: true };
+    const whole = track(locks.hold([quiet], life));
     await settle();
     assert.ok(granted(whole));
     const own = track(
@@ -420,10 +424,74 @@ describe("LockService", () => {
     assert.ok(granted(other), "the next in turn once both let go");
   });
 
+  it("two moments of a run that pass its writer's whole-life hold still go one at a time", async () => {
+    const { locks } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    const life = { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false, forHarness: true };
+    const whole = track(locks.hold([quiet], life));
+    await settle();
+    assert.ok(granted(whole));
+    const moment = (holder: string) =>
+      track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder, passes: runHolders("r1") }));
+    const first = moment("moment-1");
+    const second = moment("moment-2");
+    await settle();
+    assert.ok(granted(first), "the first passes the writer's hold");
+    assert.equal(granted(second), false, "the second waits for the first, never beside it");
+    first.release?.();
+    await settle();
+    assert.ok(granted(second), "then the second goes, still passing the writer's hold");
+    second.release?.();
+    whole.release?.();
+    await settle();
+    assert.deepEqual(locks.holders(), []);
+  });
+
+  it("a run's moment queued behind its writer joins the writer once the writer's whole-life hold is given", async () => {
+    const { locks } = service();
+    const call = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "lead" }));
+    await settle();
+    assert.ok(granted(call));
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    const life = { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false, forHarness: true };
+    const whole = track(locks.hold([quiet], life));
+    const moment = track(
+      locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "moment-1", passes: runHolders("r1") }),
+    );
+    await settle();
+    assert.equal(granted(whole) || granted(moment), false, "both wait for the lead's call");
+    call.release?.();
+    await settle();
+    assert.ok(granted(whole), "the writer is next in turn");
+    assert.ok(granted(moment), "and the run's moment passes it at once, never waiting out the writer's life");
+    moment.release?.();
+    whole.release?.();
+    await settle();
+    assert.deepEqual(locks.holders(), []);
+  });
+
+  it("a moment never passes a worker's hold for one call: it waits for that call to end", async () => {
+    const { locks } = service();
+    const reader = workerHolder({ threadId: "t1", runId: "r1", id: "w2" });
+    const call = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: reader }));
+    await settle();
+    assert.ok(granted(call));
+    const moment = track(
+      locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "moment-3", passes: runHolders("r1") }),
+    );
+    await settle();
+    assert.equal(granted(moment), false, "the moment waits while the worker's call runs");
+    call.release?.();
+    await settle();
+    assert.ok(granted(moment), "and goes once it ends");
+    moment.release?.();
+  });
+
   it("a moment that passed a worker's lock keeps it when the worker ends first, until the moment lets go", async () => {
     const { locks } = service();
     const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
-    const whole = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false }));
+    const life = { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false, forHarness: true };
+    const whole = track(locks.hold([quiet], life));
     await settle();
     const moment = track(
       locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "moment-1", passes: runHolders("r1") }),
@@ -444,6 +512,135 @@ describe("LockService", () => {
     moment.release?.();
     await settle();
     assert.ok(granted(next), "the next in turn once the moment lets go");
+  });
+
+  it("a moment never joins a writer's own call on a lock its whole-life hold did not take", async () => {
+    const { locks } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    const life = { binding: binding(), waitMs: 0, holder: worker, personFirst: false, forHarness: true };
+    const whole = track(locks.hold([quiet], life));
+    await settle();
+    const call = track(locks.hold([shared], { binding: binding(), waitMs: HOUR, holder: worker, personFirst: false }));
+    await settle();
+    assert.ok(granted(whole) && granted(call));
+    const moment = track(
+      locks.hold([shared], { binding: binding(), waitMs: HOUR, holder: "moment-1", passes: runHolders("r1") }),
+    );
+    await settle();
+    assert.equal(granted(moment), false, "the writer's call on another lock is one call: the moment waits for it");
+    call.release?.();
+    await settle();
+    assert.ok(granted(moment), "and goes once that call ends");
+    moment.release?.();
+    whole.release?.();
+  });
+
+  it("a moment let in beside a writer keeps the lock to itself when the writer lets go in the same turn", async () => {
+    const { locks } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    track(locks.hold([quiet], { binding: binding(), waitMs: 0, holder: worker, personFirst: false, forHarness: true }));
+    await settle();
+    const moment = (holder: string) =>
+      track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder, passes: runHolders("r1") }));
+    const first = moment("moment-1");
+    await settle();
+    const second = moment("moment-2");
+    const lead = track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder: "lead" }));
+    await settle();
+    first.release?.();
+    locks.releaseHolder(worker);
+    await settle();
+    assert.ok(granted(second), "the moment let in holds the lock");
+    assert.equal(granted(lead), false, "one holder at a time: the lead waits for the moment");
+    assert.deepEqual(
+      locks.holders().map((held) => held.holder),
+      ["moment-2"],
+    );
+    second.release?.();
+    await settle();
+    assert.ok(granted(lead), "the lead goes once the moment lets go");
+  });
+
+  it("a moment let in as its writer lets go, with nobody behind it, still holds the lock against a new caller", async () => {
+    const { locks } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    track(locks.hold([quiet], { binding: binding(), waitMs: 0, holder: worker, personFirst: false, forHarness: true }));
+    await settle();
+    const moment = (holder: string) =>
+      track(locks.hold([quiet], { binding: binding(), waitMs: HOUR, holder, passes: runHolders("r1") }));
+    const first = moment("moment-1");
+    await settle();
+    const second = moment("moment-2");
+    await settle();
+    first.release?.();
+    locks.releaseHolder(worker);
+    await settle();
+    assert.ok(granted(second));
+    const late = track(locks.hold([quiet], { binding: binding(), waitMs: 0, holder: "lead" }));
+    await settle();
+    assert.ok(late.error instanceof LockRefused, "a new caller is refused while the moment holds the lock");
+    assert.deepEqual(
+      locks.holders().map((held) => held.holder),
+      ["moment-2"],
+    );
+  });
+
+  it("a run's moment queued behind a call that gives up joins its writer at once", async () => {
+    const { locks, clock } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    track(locks.hold([quiet], { binding: binding(), waitMs: 0, holder: worker, personFirst: false, forHarness: true }));
+    await settle();
+    const moment = (holder: string) =>
+      track(locks.hold([quiet], { binding: binding(), waitMs: 60_000, holder, passes: runHolders("r1") }));
+    const first = moment("moment-1");
+    await settle();
+    const call = track(locks.hold([quiet], { binding: binding(), waitMs: 15_000, holder: "lead" }));
+    await settle();
+    const second = moment("moment-2");
+    await settle();
+    first.release?.();
+    await settle();
+    assert.equal(granted(second), false, "in turn behind the call");
+    await clock.advance(15_000);
+    assert.ok(call.error instanceof LockRefused);
+    assert.ok(granted(second), "joins the writer once the call ahead gave up");
+  });
+
+  it("a passing moment whose wait runs out as it is let in holds nothing, and the next moment still joins the writer", async () => {
+    const { locks, clock } = service();
+    const worker = workerHolder({ threadId: "t1", runId: "r1", id: "w1" });
+    track(locks.hold([quiet], { binding: binding(), waitMs: 0, holder: worker, personFirst: false, forHarness: true }));
+    await settle();
+    const moment = (holder: string, waitMs: number) =>
+      track(locks.hold([quiet], { binding: binding(), waitMs, holder, passes: runHolders("r1") }));
+    const first = moment("moment-1", HOUR);
+    await settle();
+    const second = moment("moment-2", 1000);
+    await settle();
+    // Its wait runs out, and one turn later the first moment's release lets it in: the wait answers first.
+    const advancing = clock.advance(1000);
+    await Promise.resolve();
+    first.release?.();
+    await advancing;
+    assert.ok(second.error instanceof LockRefused, "refused: its wait ran out");
+    const third = moment("moment-3", 0);
+    await settle();
+    assert.ok(granted(third), "nothing of the refused moment is left to stand in the next one's way");
+  });
+
+  it("a hold whose wait was already stopped takes nothing, free lock or fresh probe", async () => {
+    const { locks } = service();
+    const warm = track(locks.hold([bench], { binding: binding(), waitMs: HOUR, holder: "a" }));
+    await settle();
+    warm.release?.();
+    await settle();
+    const stopped = AbortSignal.abort(new Error("Stopped"));
+    for (const ref of [quiet, bench]) {
+      const held = track(locks.hold([ref], { binding: binding(), waitMs: HOUR, holder: "late", signal: stopped }));
+      await settle();
+      assert.equal(granted(held), false, ref.lock.id);
+    }
+    assert.deepEqual(locks.holders(), []);
   });
 
   it("a probe still unanswered when the wait runs out grants nothing: the call is refused at the wait's end", async () => {
@@ -480,16 +677,179 @@ describe("LockService", () => {
     assert.deepEqual(locks.holders(), []);
   });
 
-  it("an agent's call, its wait, its own tool moments and the call itself, ends before the engine bridge gives up", () => {
-    // A plugin's own tool moments run only its own steps: one before and one after the call.
-    const toolMoment = (on: typeof HookEvent.ToolBefore | typeof HookEvent.ToolAfter) =>
-      HOOK_LOCK_WAIT_MS[on] + HOOK_CALL_MS[on];
-    const longest =
-      toolMoment(HookEvent.ToolBefore) + AGENT_LOCK_WAIT_MS + PLUGIN_CALL_TIMEOUT_MS + toolMoment(HookEvent.ToolAfter);
+  /** A service whose probe answers `answers` in turn and then never settles, its call ended by its signal, on one clock. */
+  function hangingAfter(answers: unknown[]) {
+    const clock = manualClock();
+    const said: boolean[] = [];
+    const probes: Array<{ ended: boolean; answer: (value: unknown) => void }> = [];
+    const locks = new LockService({
+      probe: (_plugin, _lock, _binding, signal) => {
+        const index = probes.length;
+        const probe = { ended: false, answer: (_value: unknown) => {} };
+        probes.push(probe);
+        if (index < answers.length) return Promise.resolve(answers[index]);
+        return new Promise((resolve, reject) => {
+          probe.answer = resolve;
+          signal?.addEventListener("abort", () => {
+            probe.ended = true;
+            reject(signal.reason);
+          });
+        });
+      },
+      now: clock.now,
+      sleep: clock.sleep,
+      timeout: (ms) => {
+        const timer = new AbortController();
+        clock.sleep(ms).then(() => timer.abort(new Error("the wait ran out")));
+        return timer.signal;
+      },
+      onPersonFirst: ({ waiting }) => said.push(waiting),
+    });
+    return { locks, clock, said, probes };
+  }
+
+  it("a wait on the person that runs out is refused at its end, never probing again after it", async () => {
+    const { locks, clock, said, probes } = hangingAfter([{ personActive: true }, { personActive: true }]);
+    const waitMs = 2 * PERSON_FIRST_POLL_MS;
+    const held = track(locks.hold([bench], { binding: binding(), waitMs, holder: "lead" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_POLL_MS);
+    await clock.advance(PERSON_FIRST_POLL_MS);
+    assert.ok(held.error instanceof LockRefused, "refused at the wait's end");
+    assert.equal((held.error as LockRefused).code, LockRefusal.PersonFirst, "in the words of the last answer");
+    assert.deepEqual(locks.holders(), [], "nothing is held");
+    assert.deepEqual(said, [true, false], "the waiting line is taken back");
     assert.ok(
-      longest < BRIDGE_TOOL_DEADLINE_MS,
-      `the agent reads why it was refused, or the call's own answer, never the bridge's deadline (${longest} ms)`,
+      probes.slice(2).every((probe) => probe.ended),
+      "no probe is still asking past the wait",
     );
+    for (const probe of probes) probe.answer({ personActive: false });
+    await settle();
+    assert.equal(granted(held), false, "a late answer grants nothing");
+    assert.deepEqual(locks.holders(), []);
+  });
+
+  it("a read of what is unsaved whose probe never answers can't tell once one short ask ran out, the probe's call ended", async () => {
+    const { locks, clock, probes } = hangingAfter([]);
+    let read: number | null | undefined;
+    void locks.unsaved([bench], binding()).then((value) => {
+      read = value;
+    });
+    await settle();
+    assert.equal(read, undefined, "still asking");
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.equal(read, null, "Genex can't tell");
+    assert.ok(probes[0]?.ended, "the probe's call ended with the ask");
+  });
+
+  it("a hold that may not wait asks the person's probe once, for a short while, and the next holder goes after", async () => {
+    const { locks, clock, probes } = hangingAfter([]);
+    const health = track(locks.hold([bench], { binding: binding(), waitMs: 0, holder: "health" }));
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: HOUR, holder: "next", forPerson: true }));
+    await settle();
+    assert.equal(probes.length, 1, "asked once");
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.ok(probes[0]?.ended, "its probe's call ended with that while");
+    assert.ok(health.error instanceof LockRefused);
+    assert.equal((health.error as LockRefused).code, LockRefusal.CantTell);
+    assert.ok(granted(next), "the next holder is granted right after");
+    next.release?.();
+  });
+
+  it("a hold of several locks with no wait left gets one short ask for all of them, never one per lock", async () => {
+    const clock = manualClock();
+    const asked: string[] = [];
+    const locks = new LockService({
+      // The bench's probe takes a while to say the person is not there; the cellar's never answers.
+      probe: (_plugin, lock, _binding, signal) => {
+        asked.push(lock.id);
+        if (lock.id === "bench") return clock.sleep(3_000).then(() => ({ personActive: false }));
+        return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(signal.reason)));
+      },
+      now: clock.now,
+      sleep: clock.sleep,
+      timeout: (ms) => {
+        const timer = new AbortController();
+        clock.sleep(ms).then(() => timer.abort(new Error("the ask ran out")));
+        return timer.signal;
+      },
+    });
+    const CELLAR: PluginLock = { id: "cellar", label: "Cellar", per: LockScope.Project, personFirst: "busy" };
+    const cellar = { plugin: "tl", lock: CELLAR };
+    const held = track(locks.hold([bench, cellar], { binding: binding(), waitMs: 0, holder: "health" }));
+    await settle();
+    await clock.advance(3_000);
+    assert.deepEqual(asked.toSorted(), ["bench", "cellar"], "both asked");
+    await clock.advance(PERSON_FIRST_ASK_MS - 3_000);
+    assert.ok(held.error instanceof LockRefused, "refused once the hold's one short ask ran out");
+    assert.deepEqual(locks.holders(), []);
+  });
+
+  it("a hold whose turn comes just before its wait runs out still asks the person's probe for a short while", async () => {
+    const clock = manualClock();
+    const locks = new LockService({
+      // The person is not at it, which the probe takes a moment to say.
+      probe: () => clock.sleep(50).then(() => ({ personActive: false })),
+      now: clock.now,
+      sleep: clock.sleep,
+      timeout: (ms) => {
+        const timer = new AbortController();
+        clock.sleep(ms).then(() => timer.abort(new Error("the wait ran out")));
+        return timer.signal;
+      },
+    });
+    const first = track(locks.hold([bench], { binding: binding(), waitMs: HOUR, holder: "a", forPerson: true }));
+    await settle();
+    assert.ok(granted(first));
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: 30_000, holder: "b" }));
+    await clock.advance(29_990);
+    first.release?.();
+    await settle();
+    await clock.advance(50);
+    assert.equal(next.error, null, String(next.error));
+    assert.ok(granted(next), "granted: the probe had its short while to say the person is not at it");
+    next.release?.();
+  });
+
+  it("a probe that sees the person at it takes back an earlier 'not at it': the holder's next call asks again", async () => {
+    const clock = manualClock();
+    const answers: Array<(answer: unknown) => void> = [];
+    const locks = new LockService({
+      // Each probe answers when the test says, in any order.
+      probe: () => new Promise((resolve) => answers.push(resolve)),
+      now: clock.now,
+      sleep: clock.sleep,
+    });
+    const holder = "lead";
+    const hold = () => track(locks.hold([bench], { binding: binding(), waitMs: HOUR, holder }));
+    const first = hold();
+    const second = hold();
+    await settle();
+    assert.equal(answers.length, 2, "both ask at once");
+    answers[0]?.({ personActive: false });
+    await settle();
+    assert.ok(granted(first));
+    answers[1]?.({ personActive: true });
+    await settle();
+    assert.equal(granted(second), false, "the later answer sees the person at it");
+    const third = hold();
+    await settle();
+    assert.equal(answers.length, 3, "the next call asks the probe again, never trusting the earlier answer");
+    answers[2]?.({ personActive: true });
+    await settle();
+    assert.equal(granted(third), false, "and waits for the person too");
+  });
+
+  it("a hold queued behind a call that waits on the person is refused as the person's, never as busy", async () => {
+    const { locks, clock } = service([{ personActive: true }]);
+    const agent = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "agent" }));
+    await settle();
+    const moment = track(locks.hold([bench], { binding: binding(), waitMs: 60_000, holder: "moment" }));
+    await clock.advance(60_000);
+    assert.ok(moment.error instanceof LockRefused, String(moment.error));
+    assert.equal((moment.error as LockRefused).code, LockRefusal.PersonFirst);
+    await clock.advance(AGENT_LOCK_WAIT_MS);
+    assert.ok(agent.error instanceof LockRefused);
   });
 
   it("names a worker by the run or the chat it works for", () => {
@@ -509,7 +869,10 @@ describe("LockService", () => {
 const PROJECT = "bench-game";
 const PLUGIN_ID = "tl";
 
-/** The test plugin's backend: `paint` logs its start, waits for a `release` file, logs its end; `busy` reads `person.json`. */
+/**
+ * The test plugin's backend: `paint` logs its start, waits for a `release` file, logs its end; `stamp`
+ * (a card, no lock) logs and waits the same way; `busy` reads `person.json`.
+ */
 const BACKEND = `
 import { access, appendFile, readFile } from "node:fs/promises";
 import path from "node:path";
@@ -522,9 +885,18 @@ export async function activate() {
         try { return JSON.parse(await readFile(path.join(dir, "person.json"), "utf8")); }
         catch { return { personActive: false }; }
       }
+      if (name === "varnish") {
+        await appendFile(path.join(dir, "paint.log"), "varnish\\n");
+        return { varnished: true };
+      }
       if (name === "sand") {
         await appendFile(path.join(dir, "paint.log"), "sand\\n");
         return { sanded: true };
+      }
+      if (name === "stamp") {
+        await appendFile(path.join(dir, "paint.log"), "stamp\\n");
+        for (;;) { try { await access(path.join(dir, "release")); break; } catch { await sleep(20); } }
+        return { stamped: true };
       }
       if (name === "paint") {
         await appendFile(path.join(dir, "paint.log"), "start\\n");
@@ -580,6 +952,14 @@ async function lockPackage(): Promise<string> {
     tools: [
       { name: "paint", description: "Paint at the bench.", parameters: empty, needs: ["bench"] },
       { name: "plain", description: "Needs nothing.", parameters: empty },
+      {
+        name: "varnish",
+        description: "Varnish the bench.",
+        confirmation: "Varnish the bench?",
+        parameters: empty,
+        needs: ["bench"],
+      },
+      { name: "stamp", description: "Stamp the sheet.", confirmation: "Stamp the sheet?", parameters: empty },
       { name: "busy", audience: "harness", description: "Whether the person is at the bench.", parameters: empty },
       { name: "sand", audience: "harness", description: "Sand at the bench.", parameters: empty, needs: ["bench"] },
     ],
@@ -648,8 +1028,10 @@ describe("locks in a real core", () => {
     dir = lite.core.games.dirFor(PROJECT);
     threadId = await lite.core.createGameThread(PROJECT);
     await lite.core.setPermissionMode(threadId, PermissionMode.Bypass);
-    await lite.core.plugins.installLocal(await lockPackage(), PluginSourceKind.Local, []);
+    await lite.core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
     await lite.core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(lite.core.plugins);
     api = lite.api() as unknown as Api;
     await mkdir(dir, { recursive: true });
   });
@@ -730,6 +1112,65 @@ describe("locks in a real core", () => {
       assert.deepEqual(await paintLog(), [], "nothing ran");
     } finally {
       await call(HostMethod.LocksRelease, writer);
+    }
+  });
+
+  it("an agent's call holds no lock while its card waits for the person, and a declined card takes nothing", async () => {
+    await reset();
+    const asking = await lite.core.createGameThread(PROJECT);
+    const cards = async () =>
+      (await lite.core.listAllEvents()).flatMap((event) =>
+        event.data.type === EventKind.Custom && event.data.event_type === CustomEvent.PluginConsent
+          ? [event.data.payload as { consentId: string; state: string; threadId?: string }]
+          : [],
+      );
+    const known = new Set((await cards()).map((card) => card.consentId));
+    const varnish = call(HostMethod.PluginsInvoke, {
+      project: PROJECT,
+      threadId: asking,
+      name: `${PLUGIN_ID}__varnish`,
+      args: {},
+    });
+    let card: { consentId: string } | undefined;
+    for (let tries = 0; tries < 200 && !card; tries++) {
+      card = (await cards()).find((c) => c.state === "pending" && !known.has(c.consentId));
+      if (!card) await sleep(20);
+    }
+    assert.ok(card, "the call asks its card");
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held while the card waits");
+    const other = { project: PROJECT, threadId, holder: { id: "w8", title: "Polish" } };
+    assert.deepEqual(
+      await call(HostMethod.LocksHold, other),
+      { held: true, labels: ["Bench"] },
+      "another holder goes at once",
+    );
+    await call(HostMethod.LocksRelease, other);
+    lite.core.resolveConsent(card.consentId, false);
+    assert.equal(((await varnish) as { consent?: string }).consent, "declined");
+    assert.deepEqual(lite.core.locks.holders(), [], "a declined call took nothing");
+    assert.deepEqual(await paintLog(), [], "and never ran");
+  });
+
+  it("a plugin turned off while its call waits its turn is refused once granted: its backend never runs", async () => {
+    await reset();
+    await writeFile(path.join(dir, "release"), "");
+    // The person was just asked and is not at the bench: the call's turn, once it comes, asks no probe.
+    assert.deepEqual(await invoke(`${PLUGIN_ID}__paint`), { painted: true });
+    await writeFile(path.join(dir, "paint.log"), "");
+    const writer = { project: PROJECT, threadId, holder: { id: "w9", title: "Glue" } };
+    assert.deepEqual(await call(HostMethod.LocksHold, writer), { held: true, labels: ["Bench"] });
+    const waiting = outcomeOf(invoke(`${PLUGIN_ID}__paint`));
+    try {
+      await sleep(200);
+      assert.deepEqual(await paintLog(), [], "the call waits behind the writer");
+      await lite.core.plugins.setEnabled(PLUGIN_ID, false);
+      await call(HostMethod.LocksRelease, writer);
+      assert.match(await waiting, /Plugin tl is unavailable/, "refused as a plugin turned off, once its turn came");
+      assert.deepEqual(await paintLog(), [], "its backend never ran");
+      assert.deepEqual(lite.core.locks.holders(), []);
+    } finally {
+      await call(HostMethod.LocksRelease, writer);
+      await lite.core.plugins.setEnabled(PLUGIN_ID, true);
     }
   });
 
@@ -886,6 +1327,52 @@ describe("locks in a real core", () => {
     }
   });
 
+  it("a connector whose own call time takes all of the call's leaves it no wait for the person: refused after one short ask", async () => {
+    await reset();
+    events.length = 0;
+    await person({ personActive: true });
+    const { tool, callTimeoutOf } = lite.core.mcp;
+    let reached = 0;
+    lite.core.mcp.tool = (async () => {
+      reached += 1;
+      return "looked";
+    }) as typeof tool;
+    // Its connector's own time for one call leaves five seconds of the agent's call.
+    lite.core.mcp.callTimeoutOf = () => BRIDGE_TOOL_DEADLINE_MS - 10_000;
+    try {
+      const look = call(HostMethod.McpInvoke, {
+        project: PROJECT,
+        threadId,
+        name: `${PLUGIN_ID}-desk__look`,
+        args: {},
+      });
+      let settled = false;
+      void look.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      for (let polls = 0; polls < 50 && !settled; polls++) {
+        await sleep(30);
+        await clock.advance(PERSON_FIRST_POLL_MS);
+      }
+      await assert.rejects(look, /Bench/, "refused naming the lock");
+      assert.deepEqual(
+        events.filter((event) => event.type === UiEvent.PersonFirst),
+        [],
+        "it never waited for the person: the chat was never told it does",
+      );
+      assert.equal(reached, 0, "the connector was never called");
+      assert.deepEqual(lite.core.locks.holders(), []);
+    } finally {
+      lite.core.mcp.tool = tool;
+      lite.core.mcp.callTimeoutOf = callTimeoutOf;
+    }
+  });
+
   it("a lock is taken only for what the manifest says", async () => {
     await reset();
     const hold = (params: Record<string, unknown>) => call(HostMethod.LocksHold, params);
@@ -944,6 +1431,215 @@ describe("locks in a real core", () => {
     }
     assert.deepEqual(seen, [0], "the restart found the game free");
     assert.deepEqual(lite.core.locks.holders(), []);
+  });
+
+  /** The planned restarts and the watchdog's rewind, each started as the core starts it. */
+  const restarts: Array<[string, () => Promise<unknown>]> = [
+    ["a self-update", () => lite.core.requestSelfRestart("test", 0)],
+    [
+      "the person's rollback",
+      async () =>
+        lite.core.rollbackTo((await lite.core.snapshot(SnapshotScope.Harness, "a rollback point")).snapshot_id),
+    ],
+    ["the watchdog's rewind", () => lite.core.recover("harness stopped responding for 600s")],
+  ];
+  for (const [name, restartBy] of restarts)
+    it(`${name} stops the old harness before it ends the moments that harness asked for`, async () => {
+      await reset();
+      await person({ personActive: true });
+      events.length = 0;
+      const order: string[] = [];
+      let settled = false;
+      const checkpoint = call(HostMethod.CheckpointTake, { project: PROJECT, threadId, label: "Before the restart" });
+      void checkpoint.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      for (let tries = 0; tries < 100 && !events.some((event) => event.type === UiEvent.PersonFirst); tries++)
+        await sleep(20);
+      const { restart, healthcheck, stop } = lite.core.host;
+      lite.core.host.stop = (async () => {
+        order.push(settled ? "stopped after its moment ended" : "stopped while its moment ran");
+      }) as never;
+      lite.core.host.restart = (async () => {
+        order.push("restarted");
+      }) as never;
+      lite.core.host.healthcheck = (async () => true) as never;
+      try {
+        await restartBy();
+        for (let tries = 0; tries < 100 && !order.includes("restarted"); tries++) await sleep(20);
+        await sleep(100);
+      } finally {
+        lite.core.host.stop = stop;
+        lite.core.host.restart = restart;
+        lite.core.host.healthcheck = healthcheck;
+      }
+      assert.equal(order[0], "stopped while its moment ran", `no live harness hears its moment stopped: ${order}`);
+      assert.equal(order.at(-1), "restarted");
+      assert.ok(settled, "the moment ended with the old harness");
+      assert.deepEqual(lite.core.locks.holders(), []);
+    });
+
+  it("calls a harness made whose handler was still reading as it died run stopped: no step runs, nothing is called or held", async () => {
+    await reset();
+    const { kindOf } = lite.core.games;
+    const { pluginBinding } = lite.core;
+    const { tool } = lite.core.mcp;
+    let reached = 0;
+    lite.core.mcp.tool = (async () => {
+      reached += 1;
+      return "looked";
+    }) as typeof tool;
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    // Each handler is still reading the game when the harness dies.
+    lite.core.games.kindOf = (async (project: string) => {
+      await gate;
+      return kindOf.call(lite.core.games, project);
+    }) as typeof kindOf;
+    lite.core.pluginBinding = (async (...args: Parameters<typeof pluginBinding>) => {
+      await gate;
+      return pluginBinding.apply(lite.core, args);
+    }) as typeof pluginBinding;
+    try {
+      const calls: Array<[string, Promise<string>]> = [
+        [
+          HostMethod.HooksFire,
+          outcomeOf(call(HostMethod.HooksFire, { project: PROJECT, threadId, on: HookEvent.Crash })),
+        ],
+        [
+          HostMethod.CheckpointTake,
+          outcomeOf(call(HostMethod.CheckpointTake, { project: PROJECT, threadId, label: "Late" })),
+        ],
+        [
+          HostMethod.PluginsInvoke,
+          outcomeOf(
+            call(HostMethod.PluginsInvoke, {
+              project: PROJECT,
+              threadId,
+              name: `${PLUGIN_ID}__sand`,
+              args: {},
+              step: true,
+            }),
+          ),
+        ],
+        [
+          HostMethod.McpInvoke,
+          outcomeOf(
+            call(HostMethod.McpInvoke, { project: PROJECT, threadId, name: `${PLUGIN_ID}-desk__look`, args: {} }),
+          ),
+        ],
+      ];
+      await sleep(50);
+      await lite.core.host.options.onUnexpectedExit?.({ at: Date.now(), code: 1, signal: null, harnessVersion: null });
+      open();
+      for (const [method, pending] of calls) assert.notEqual(await pending, "answered", method);
+      assert.deepEqual(await paintLog(), [], "no step ran for the harness that is gone");
+      assert.equal(reached, 0, "its connector call was never made");
+      assert.deepEqual(lite.core.locks.holders(), [], "and nothing is held for it");
+    } finally {
+      lite.core.games.kindOf = kindOf;
+      lite.core.pluginBinding = pluginBinding;
+      lite.core.mcp.tool = tool;
+    }
+  });
+
+  it("a planned restart cuts off the connector call its harness made while that call waits its turn", async () => {
+    await reset();
+    const binding = { project: PROJECT, directory: dir, threadId };
+    const other = await lite.core.locks.hold([{ plugin: PLUGIN_ID, lock: BENCH }], {
+      binding,
+      waitMs: 0,
+      holder: "other",
+    });
+    const { tool } = lite.core.mcp;
+    let reached = 0;
+    lite.core.mcp.tool = (async () => {
+      reached += 1;
+      return "looked";
+    }) as typeof tool;
+    const { restart, healthcheck, stop } = lite.core.host;
+    let restarted = false;
+    lite.core.host.stop = (async () => {}) as never;
+    lite.core.host.restart = (async () => {
+      restarted = true;
+    }) as never;
+    lite.core.host.healthcheck = (async () => true) as never;
+    try {
+      const look = outcomeOf(
+        call(HostMethod.McpInvoke, { project: PROJECT, threadId, name: `${PLUGIN_ID}-desk__look`, args: {} }),
+      );
+      await sleep(200);
+      await lite.core.requestSelfRestart("test", 0);
+      for (let tries = 0; tries < 100 && !restarted; tries++) await sleep(20);
+      const cut = await Promise.race([look, sleep(2000).then(() => "still waiting")]);
+      assert.match(cut, /loop ended/, "the call is cut off with the harness that made it");
+      other();
+      await sleep(100);
+      assert.equal(reached, 0, "the connector was never called for the harness that is gone");
+      assert.deepEqual(lite.core.locks.holders(), []);
+    } finally {
+      other();
+      lite.core.mcp.tool = tool;
+      lite.core.host.stop = stop;
+      lite.core.host.restart = restart;
+      lite.core.host.healthcheck = healthcheck;
+    }
+  });
+
+  it("a planned restart after a crash tells the booted harness of the runs the crash left open", async () => {
+    await reset();
+    const runId = "run-left-open";
+    lite.core.host.options.onNotify?.(UiEvent.RunKeepawake, { runId });
+    await lite.core.host.options.onUnexpectedExit?.({ at: Date.now(), code: 1, signal: null, harnessVersion: null });
+    const notices: Array<{ notice?: { openRuns?: string[] } }> = [];
+    const { restart, healthcheck, stop } = lite.core.host;
+    lite.core.host.stop = (async () => {}) as never;
+    lite.core.host.restart = (async (notice: { notice?: { openRuns?: string[] } }) => {
+      notices.push(notice);
+    }) as never;
+    lite.core.host.healthcheck = (async () => true) as never;
+    try {
+      await lite.core.requestSelfRestart("test", 0);
+      for (let tries = 0; tries < 100 && notices.length < 1; tries++) await sleep(20);
+      await sleep(100);
+    } finally {
+      lite.core.host.stop = stop;
+      lite.core.host.restart = restart;
+      lite.core.host.healthcheck = healthcheck;
+    }
+    assert.deepEqual(notices[0]?.notice?.openRuns, [runId], "the boot notice names the run the crash left open");
+  });
+
+  it("a hold the harness asked for whose answer comes after the harness died holds nothing", async () => {
+    await reset();
+    const writer = { project: PROJECT, threadId, holder: { id: "w10", title: "Late" } };
+    const { kindOf } = lite.core.games;
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    // The handler is still reading the game when the harness dies.
+    lite.core.games.kindOf = (async (project: string) => {
+      await gate;
+      return kindOf.call(lite.core.games, project);
+    }) as typeof kindOf;
+    try {
+      const pending = outcomeOf(call(HostMethod.LocksHold, writer));
+      await sleep(50);
+      await lite.core.host.options.onUnexpectedExit?.({ at: Date.now(), code: 1, signal: null, harnessVersion: null });
+      open();
+      assert.notEqual(await pending, "answered", "the dead harness's hold is refused");
+      assert.deepEqual(lite.core.locks.holders(), [], "and nothing is held for it");
+    } finally {
+      lite.core.games.kindOf = kindOf;
+    }
   });
 
   it("a harness that dies lets go only of the holds it asked for: the host's own hold and its waiter keep their place", async () => {
@@ -1035,10 +1731,15 @@ describe("locks in a real core", () => {
   };
   const board = () => readFile(path.join(dir, "board.txt"), "utf8");
 
-  it("Stop ends a moment, a checkpoint and a game restore while they wait for the person: nothing runs, nothing is held", async () => {
+  /** A harness step of its own (`plugins.invoke` with `step`), which needs the bench. */
+  const harnessStep = () =>
+    call(HostMethod.PluginsInvoke, { project: PROJECT, threadId, name: `${PLUGIN_ID}__sand`, args: {}, step: true });
+
+  it("Stop ends a moment, a checkpoint, a harness step and a game restore while they wait for the person: nothing runs, nothing is held", async () => {
     const asks: Array<[string, () => Promise<unknown>]> = [
       ["a moment", () => call(HostMethod.HooksFire, { project: PROJECT, threadId, runId: "run-own", on: "crash" })],
       ["a checkpoint", () => call(HostMethod.CheckpointTake, { project: PROJECT, threadId, label: "Halfway" })],
+      ["a harness step", harnessStep],
     ];
     for (const [what, ask] of asks) {
       await reset();
@@ -1048,7 +1749,14 @@ describe("locks in a real core", () => {
       const pending = outcomeOf(ask());
       await untilWaitingOnPerson();
       await call(HostMethod.EngineAbort, { project: PROJECT });
-      assert.match(await pending, /Stopped/, `${what}: the Stop ended it`);
+      const ended = await Promise.race([pending, sleep(2000).then(() => "still waiting")]);
+      await person({ personActive: false });
+      for (let polls = 0; polls < 5; polls++) {
+        await sleep(20);
+        await clock.advance(PERSON_FIRST_POLL_MS);
+      }
+      await pending;
+      assert.match(ended, /Stopped/, `${what}: the Stop ended it`);
       assert.deepEqual(await paintLog(), [], `${what}: no step ran`);
       assert.equal(lite.core.snapshotIndex.all().length, snapshots, `${what}: no snapshot`);
       assert.deepEqual(lite.core.locks.holders(), [], `${what}: nothing held`);
@@ -1064,6 +1772,36 @@ describe("locks in a real core", () => {
     assert.equal(await board(), "after\n", "the game's files are as they were");
     assert.deepEqual(await paintLog(), [], "no step ran");
     assert.deepEqual(lite.core.locks.holders(), []);
+  });
+
+  it("a harness that dies while its moment, harness step or game restore waits for the person ends them: no step runs afterwards", async () => {
+    const asks: Array<[string, () => Promise<unknown>]> = [
+      ["a moment", () => call(HostMethod.HooksFire, { project: PROJECT, threadId, runId: "run-own", on: "crash" })],
+      ["a harness step", harnessStep],
+      [
+        "a game restore",
+        async () => call(HostMethod.SnapshotRestore, { snapshotId: await changedSince(), project: PROJECT, threadId }),
+      ],
+    ];
+    for (const [what, ask] of asks) {
+      await reset();
+      events.length = 0;
+      await person({ personActive: true });
+      const pending = outcomeOf(ask());
+      await untilWaitingOnPerson();
+      await lite.core.host.options.onUnexpectedExit?.({ at: Date.now(), code: 1, signal: null, harnessVersion: null });
+      const ended = await Promise.race([pending, sleep(2000).then(() => "still waiting")]);
+      await person({ personActive: false });
+      for (let polls = 0; polls < 5; polls++) {
+        await sleep(20);
+        await clock.advance(PERSON_FIRST_POLL_MS);
+      }
+      assert.match(ended, /Stopped/, `${what}: the harness's death ended it`);
+      assert.deepEqual(await paintLog(), [], `${what}: no step ran, then or later`);
+      assert.deepEqual(lite.core.locks.holders(), [], `${what}: nothing held`);
+      await pending;
+    }
+    assert.equal(await board(), "after\n", "the game's files are as they were");
   });
 
   it("Stop of another game or another chat leaves a moment waiting, and it runs once the person is done", async () => {
@@ -1141,6 +1879,177 @@ function ownService(lite: CoreLite): PluginToolService {
   });
 }
 
+describe("an agent's call answers within the engine bridge's deadline", () => {
+  let lite: CoreLite;
+  let threadId: string;
+  let dir: string;
+  const events: UiEventEnvelope[] = [];
+  // One clock for the locks, their timers and the call's own time: it moves only when a test moves it.
+  const clock = manualClock();
+  const timeout = (ms: number) => {
+    const timer = new AbortController();
+    clock.sleep(ms).then(() => timer.abort(new Error("the time ran out")));
+    return timer.signal;
+  };
+  const person = (answer: unknown) => writeFile(path.join(dir, "person.json"), JSON.stringify(answer));
+  /** An agent's call, as the local harness's agents make one. */
+  const invoke = (name: string) =>
+    (lite.api() as unknown as Api)[HostMethod.PluginsInvoke]?.({ project: PROJECT, threadId, name, args: {} }) ??
+    Promise.reject(new Error("no plugins.invoke"));
+  /** A call's answer or error, and whether it came yet. */
+  const watched = (pending: Promise<unknown>) => {
+    const state: { done: boolean; outcome: unknown } = { done: false, outcome: null };
+    pending.then(
+      (value) => Object.assign(state, { done: true, outcome: value }),
+      (error: unknown) => Object.assign(state, { done: true, outcome: error }),
+    );
+    return state;
+  };
+
+  before(async () => {
+    lite = await coreLite({
+      onUiEvent: (event) => events.push(event),
+      locks: { now: clock.now, sleep: clock.sleep, timeout },
+    });
+    await lite.core.games.scaffold(PROJECT);
+    dir = lite.core.games.dirFor(PROJECT);
+    threadId = await lite.core.createGameThread(PROJECT);
+    await lite.core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
+    await lite.core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(lite.core.plugins);
+  });
+
+  after(async () => {
+    lite.core.plugins.cancel();
+    await lite.close();
+  });
+
+  const cards = async () =>
+    (await lite.core.listAllEvents()).flatMap((event) =>
+      event.data.type === EventKind.Custom && event.data.event_type === CustomEvent.PluginConsent
+        ? [event.data.payload as { consentId: string; state: string }]
+        : [],
+    );
+  /** The card a call asks, one not answered yet (bounded, in real time). */
+  const pendingCard = async () => {
+    let card: { consentId: string } | undefined;
+    for (let tries = 0; tries < 200 && !card; tries++) {
+      const all = await cards();
+      const answered = new Set(all.filter((c) => c.state !== "pending").map((c) => c.consentId));
+      card = all.find((c) => c.state === "pending" && !answered.has(c.consentId));
+      if (!card) await sleep(20);
+    }
+    assert.ok(card, "the call asks its card");
+    return card;
+  };
+  const paintLog = async (): Promise<string[]> =>
+    (await readFile(path.join(dir, "paint.log"), "utf8").catch(() => "")).split("\n").filter(Boolean);
+  /** Waits (in real time, bounded) until a call answers. */
+  const untilDone = async (state: { done: boolean }) => {
+    for (let tries = 0; tries < 300 && !state.done; tries++) await sleep(10);
+  };
+
+  it("a card answered late leaves the call's wait for the person only what is left of the call's time", async () => {
+    await person({ personActive: true });
+    const started = clock.now();
+    const varnish = watched(invoke(`${PLUGIN_ID}__varnish`));
+    const card = await pendingCard();
+    // The person reads the card for seven and a half minutes.
+    await clock.advance(450_000);
+    lite.core.resolveConsent(card.consentId, true);
+    // The clock moves only while the call waits on the person: their time, not Genex's work.
+    const waitingOnPerson = () => events.some((event) => event.type === UiEvent.PersonFirst);
+    for (let tries = 0; tries < 300 && !varnish.done; tries++) {
+      await sleep(10);
+      if (waitingOnPerson()) await clock.advance(PERSON_FIRST_POLL_MS);
+    }
+    assert.ok(varnish.done, "the call answered");
+    assert.equal(
+      (varnish.outcome as { blocker?: string }).blocker,
+      PluginCallBlocker.Lock,
+      JSON.stringify(varnish.outcome),
+    );
+    const tookMs = clock.now() - started;
+    assert.ok(tookMs < BRIDGE_TOOL_DEADLINE_MS, `answered after ${tookMs} ms, within the bridge's deadline`);
+  });
+
+  it("a call with no steps around it and no lock, its card answered late, still runs to its own end", async () => {
+    await person({ personActive: false });
+    await rm(path.join(dir, "release"), { force: true });
+    await writeFile(path.join(dir, "paint.log"), "");
+    const stamping = watched(invoke(`${PLUGIN_ID}__stamp`));
+    const card = await pendingCard();
+    // The person reads the card for eight minutes and forty seconds.
+    await clock.advance(520_000);
+    lite.core.resolveConsent(card.consentId, true);
+    for (let tries = 0; tries < 200 && !(await paintLog()).includes("stamp"); tries++) await sleep(20);
+    assert.deepEqual(await paintLog(), ["stamp"], "the approved call started");
+    await clock.advance(PERSON_FIRST_POLL_MS);
+    await sleep(100);
+    assert.equal(stamping.done, false, "and is not cut for the late card");
+    await writeFile(path.join(dir, "release"), "");
+    await untilDone(stamping);
+    assert.deepEqual(stamping.outcome, { stamped: true });
+  });
+
+  it("a call that needs a lock, its card answered with too little of its time left, does not run and says so", async () => {
+    await person({ personActive: false });
+    await writeFile(path.join(dir, "paint.log"), "");
+    const varnish = watched(invoke(`${PLUGIN_ID}__varnish`));
+    const card = await pendingCard();
+    await clock.advance(BRIDGE_TOOL_DEADLINE_MS - 8_000);
+    lite.core.resolveConsent(card.consentId, true);
+    await untilDone(varnish);
+    assert.ok(varnish.done, "the call answered");
+    const answer = varnish.outcome as { notRun?: boolean; message?: string };
+    assert.equal(answer.notRun, true, JSON.stringify(varnish.outcome));
+    assert.match(String(answer.message), /did not run/);
+    assert.deepEqual(await paintLog(), [], "its plugin was never called");
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held");
+  });
+
+  it("a call's wait for its lock leaves the call its own ceiling: a person still at it past that wait refuses it", async () => {
+    events.length = 0;
+    await person({ personActive: true });
+    await writeFile(path.join(dir, "paint.log"), "");
+    const varnish = watched(invoke(`${PLUGIN_ID}__varnish`));
+    const card = await pendingCard();
+    await clock.advance(300_000);
+    const answeredAt = clock.now();
+    lite.core.resolveConsent(card.consentId, true);
+    const waitingOnPerson = () => events.some((event) => event.type === UiEvent.PersonFirst);
+    for (let tries = 0; tries < 400 && !varnish.done; tries++) {
+      await sleep(10);
+      if (waitingOnPerson()) await clock.advance(PERSON_FIRST_POLL_MS);
+    }
+    assert.equal((varnish.outcome as { blocker?: string }).blocker, PluginCallBlocker.Lock, String(varnish.outcome));
+    // What is left after the card (295 s) less the call's own ceiling (190 s) and one short ask:
+    // about 100 s (the test moves the clock a few polls more while the answer comes back), never
+    // an agent's whole wait.
+    const waited = clock.now() - answeredAt;
+    assert.ok(waited < AGENT_LOCK_WAIT_MS - 60_000, `waited ${waited} ms for the person`);
+    assert.deepEqual(await paintLog(), [], "the call never ran");
+  });
+
+  it("a call that never answers is ended where its time runs out, saying whether it took effect is unknown", async () => {
+    await person({ personActive: false });
+    await rm(path.join(dir, "release"), { force: true });
+    const started = clock.now();
+    const painting = watched(invoke(`${PLUGIN_ID}__paint`));
+    for (let tries = 0; tries < 200 && !(await readFile(path.join(dir, "paint.log"), "utf8").catch(() => "")); tries++)
+      await sleep(20);
+    // Just short of the bridge's deadline from the call's start: the call must have been ended by then.
+    await clock.advance(BRIDGE_TOOL_DEADLINE_MS - 1 - (clock.now() - started));
+    for (let tries = 0; tries < 300 && !painting.done; tries++) await sleep(10);
+    assert.ok(painting.done, "the call answered before the bridge gave up");
+    assert.ok(painting.outcome instanceof Error, String(painting.outcome));
+    assert.match(painting.outcome.message, /ran out of the time one call may take/);
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held");
+    await writeFile(path.join(dir, "release"), "");
+  });
+});
+
 describe("the Unreal plugin's editor lock", () => {
   let lite: CoreLite;
   before(async () => {
@@ -1176,8 +2085,10 @@ describe("a worker's own session passes the locks its pool holds for it", () => 
     const { core, game, threadId, worktree, delegate, runWorker, whileRunning } = chat;
     cores.push(core);
     await core.setPermissionMode(threadId, PermissionMode.Bypass);
-    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Local, []);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
     await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
     await writeFile(path.join(worktree, "release"), "");
     const api = core.api() as unknown as Api;
     const writer = { project: game, threadId, runId: RUN_ID, holder: { id: "w1", title: "Tune" } };
@@ -1220,8 +2131,10 @@ describe("a worker's own session passes the locks its pool holds for it", () => 
     const { core, game, threadId, delegate, runWorker, whileRunning } = chat;
     cores.push(core);
     await core.setPermissionMode(threadId, PermissionMode.Bypass);
-    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Local, []);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
     await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
     const gameDir = core.games.dirFor(game);
     await writeFile(path.join(gameDir, "release"), "");
     const api = core.api() as unknown as Api;
@@ -1236,6 +2149,173 @@ describe("a worker's own session passes the locks its pool holds for it", () => 
       await delegate(runWorker("w1", gameDir), LOCAL);
       assert.equal(answers.length, 1, "the local session called the tool");
       assert.match(String(answers[0]), /painted/, "its own call passed the lock it holds for its life");
+    } finally {
+      await api[HostMethod.LocksRelease]?.(writer);
+    }
+  });
+
+  it("a planned harness restart ends the in-place worker sessions whose holds it lets go", async () => {
+    const chat = await workerChat({ locks: { agentWaitMs: 300 } });
+    const { core, game, threadId, delegate, runWorker, whileRunning } = chat;
+    cores.push(core);
+    await core.setPermissionMode(threadId, PermissionMode.Bypass);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
+    await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
+    const gameDir = core.games.dirFor(game);
+    const api = core.api() as unknown as Api;
+    const writer = { project: game, threadId, runId: RUN_ID, holder: { id: "w1", title: "Tune" } };
+    assert.deepEqual(await api[HostMethod.LocksHold]?.(writer), { held: true, labels: ["Bench"] });
+    let begun = () => {};
+    const working = new Promise<void>((resolve) => {
+      begun = resolve;
+    });
+    let ended = false;
+    // Told to stop, the worker's engine takes a while to let go: the test says when.
+    let letGo = () => {};
+    const lettingGo = new Promise<void>((resolve) => {
+      letGo = resolve;
+    });
+    const holdersWhileStopping: string[][] = [];
+    whileRunning(async (request) => {
+      begun();
+      await new Promise<void>((resolve) => {
+        if (request.signal?.aborted) resolve();
+        request.signal?.addEventListener("abort", () => resolve(), { once: true });
+      });
+      ended = request.signal?.aborted === true;
+      await sleep(50);
+      holdersWhileStopping.push([...new Set(core.locks.holders().map((held) => held.holder))]);
+      await lettingGo;
+    });
+    const session = delegate(runWorker("w1", gameDir), LOCAL).catch(() => {});
+    await working;
+    const seen: number[] = [];
+    const { restart, healthcheck } = core.host;
+    core.host.restart = (async () => {
+      seen.push(core.locks.holders().length);
+    }) as never;
+    core.host.healthcheck = (async () => true) as never;
+    try {
+      await core.requestSelfRestart("test", 0);
+      for (let tries = 0; tries < 100 && holdersWhileStopping.length < 1; tries++) await sleep(20);
+      assert.deepEqual(
+        holdersWhileStopping,
+        [[workerHolder({ threadId, runId: RUN_ID, id: "w1" })]],
+        "the worker's holds stay until its session has ended",
+      );
+      assert.deepEqual(seen, [], "and the restart waits for it");
+      letGo();
+      for (let tries = 0; tries < 100 && seen.length < 1; tries++) await sleep(20);
+      await Promise.race([session, sleep(2000)]);
+      // The applied update's own record is written after the restart: let it land before the stubs go.
+      await sleep(100);
+    } finally {
+      core.host.restart = restart;
+      core.host.healthcheck = healthcheck;
+    }
+    assert.deepEqual(seen, [0], "the restart found the game free");
+    assert.equal(ended, true, "the worker's session that wrote in place was ended, not left writing");
+  });
+
+  it("a planned harness restart lets a hung in-place worker's holds go once its bounded wait runs out", async () => {
+    // Each wait on the locks' clock the test may end at once; each also ends in its own time.
+    const waits: Array<{ ms: number; end: () => void }> = [];
+    const timeout = (ms: number) => {
+      const ended = new AbortController();
+      waits.push({ ms, end: () => ended.abort(new Error("the wait ran out")) });
+      return AbortSignal.any([ended.signal, AbortSignal.timeout(ms)]);
+    };
+    const chat = await workerChat({ locks: { agentWaitMs: 300, timeout } });
+    const { core, game, threadId, delegate, runWorker, whileRunning } = chat;
+    cores.push(core);
+    await core.setPermissionMode(threadId, PermissionMode.Bypass);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
+    await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
+    const gameDir = core.games.dirFor(game);
+    const api = core.api() as unknown as Api;
+    const writer = { project: game, threadId, runId: RUN_ID, holder: { id: "w1", title: "Tune" } };
+    assert.deepEqual(await api[HostMethod.LocksHold]?.(writer), { held: true, labels: ["Bench"] });
+    let begun = () => {};
+    const working = new Promise<void>((resolve) => {
+      begun = resolve;
+    });
+    let release = () => {};
+    const hung = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    // Told to stop, the worker's engine never lets go (until the test is done with it).
+    whileRunning(async () => {
+      begun();
+      await hung;
+    });
+    const session = delegate(runWorker("w1", gameDir), LOCAL).catch(() => {});
+    await working;
+    const seen: number[] = [];
+    const { restart, healthcheck } = core.host;
+    core.host.restart = (async () => {
+      seen.push(core.locks.holders().length);
+    }) as never;
+    core.host.healthcheck = (async () => true) as never;
+    try {
+      void core.requestSelfRestart("test", 0);
+      let bound: { ms: number; end: () => void } | undefined;
+      for (let tries = 0; tries < 100 && !bound; tries++) {
+        await sleep(20);
+        bound = waits.find((wait) => wait.ms === WRITERS_LET_GO_MS);
+      }
+      assert.ok(bound, "the restart waits for the writer on the locks' clock");
+      assert.deepEqual(seen, [], "and holds the restart while it waits");
+      bound.end();
+      for (let tries = 0; tries < 100 && seen.length < 1; tries++) await sleep(20);
+      await sleep(100);
+    } finally {
+      core.host.restart = restart;
+      core.host.healthcheck = healthcheck;
+      release();
+      await Promise.race([session, sleep(2000)]);
+    }
+    assert.deepEqual(seen, [0], "the restart went on with the game free once the wait ran out");
+    assert.deepEqual(core.locks.holders(), []);
+  });
+
+  it("a session on such an engine passes no worker's lock outside the game folder, nor one naming no chat", async () => {
+    const chat = await workerChat({ locks: { agentWaitMs: 300 } });
+    const { core, game, threadId, worktree, delegate, runWorker, whileRunning } = chat;
+    cores.push(core);
+    await core.setPermissionMode(threadId, PermissionMode.Bypass);
+    await core.plugins.installLocal(await lockPackage(), PluginSourceKind.Github, [], FROM_GITHUB);
+    await core.plugins.setEnabled(PLUGIN_ID, true);
+    // Its agent tools would ask the person first; these cases are about locks, so the person allows them.
+    personAllowsLocalTools(core.plugins);
+    const gameDir = core.games.dirFor(game);
+    await writeFile(path.join(gameDir, "release"), "");
+    await writeFile(path.join(worktree, "release"), "");
+    const api = core.api() as unknown as Api;
+    const writer = { project: game, threadId, runId: RUN_ID, holder: { id: "w1", title: "Tune" } };
+    assert.deepEqual(await api[HostMethod.LocksHold]?.(writer), { held: true, labels: ["Bench"] });
+    try {
+      const answers: string[] = [];
+      whileRunning(async (request) => {
+        const call = request.onLiveTool;
+        if (call) answers.push(JSON.stringify(await call(`${PLUGIN_ID}__paint`, {})));
+      });
+      const sessions: Array<[string, Record<string, unknown>]> = [
+        ["in the run's copy", runWorker("w1", worktree)],
+        ["naming no chat", { ...runWorker("w1", gameDir), threadId: undefined }],
+      ];
+      for (const [name, params] of sessions) {
+        answers.length = 0;
+        await delegate(params, LOCAL);
+        assert.equal(answers.length, 1, `${name}: the local session called the tool`);
+        for (const answer of answers) {
+          assert.match(answer, new RegExp(PluginCallBlocker.Lock), `${name}: its call waited, then was told why`);
+          assert.doesNotMatch(answer, /painted/, `${name}: never painted`);
+        }
+      }
     } finally {
       await api[HostMethod.LocksRelease]?.(writer);
     }

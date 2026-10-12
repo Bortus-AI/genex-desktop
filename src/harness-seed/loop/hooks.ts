@@ -155,7 +155,7 @@ export function turnHeldLine(blocked: { reason: string } & HookHeldBy): string {
 }
 
 /** Genex itself, as the one that held a moment back (the app's): no plugin id is spelled with `@`. */
-const GENEX = "@genex";
+export const GENEX = "@genex";
 
 /** A moment no step ran at. */
 const EMPTY_REPORT: HookReport = Object.freeze({ blocked: null, pending: null, notes: [], images: [], ran: [] });
@@ -269,9 +269,37 @@ export function holdOf(held: HookHeldBy): { hold: HookHold; label: string | null
   return { hold, label };
 }
 
-/** The notes a moment's steps added, as lines. */
+/** What a chat says while Genex itself keeps the game's apps from being ready (a lock not given at `health`), by its hold. */
+const READY_HELD_WORDS = {
+  [HookHold.PersonFirst]: (app: string) => `Waiting for you to finish in ${app}.`,
+  [HookHold.CantTell]: (app: string) => `Genex couldn't tell whether you were using ${app}.`,
+  [HookHold.Busy]: (app: string) => `Something else was working in ${app}.`,
+  [HookHold.Plan]: () => "The chat is in Plan mode.",
+} as const satisfies Record<HookHold, (app: string) => string>;
+
+/** What the person reads when Genex itself skipped a step at a moment that only notes it, by its hold. */
+const NOTE_HELD_WORDS = {
+  [HookHold.PersonFirst]: (app: string) => `Genex skipped a step of the game's plugins while you were using ${app}.`,
+  [HookHold.CantTell]: (app: string) =>
+    `Genex skipped a step of the game's plugins: it couldn't tell whether you were using ${app}.`,
+  [HookHold.Busy]: (app: string) => `Genex skipped a step of the game's plugins: something else was working in ${app}.`,
+  [HookHold.Plan]: () => "Genex skipped a step of the game's plugins: the chat is in Plan mode.",
+} as const satisfies Record<HookHold, (app: string) => string>;
+
+/** Why the game's apps aren't ready yet, for the person: Genex's own hold in their words, a step's reason as given. */
+export function pendingLine(pending: { reason: string } & HookHeldBy): string {
+  const held = holdOf(pending);
+  return held ? READY_HELD_WORDS[held.hold](held.label ?? MESSAGE.TheApp) : pending.reason;
+}
+
+/** The notes a moment's steps added, as lines: one Genex added for its own hold in the person's words. */
 export function notesText(report: Pick<HookReport, "notes">): string[] {
-  return report.notes.map((note) => String(note.text ?? "")).filter(Boolean);
+  return report.notes
+    .map((note) => {
+      const held = holdOf(note as HookHeldBy);
+      return held ? NOTE_HELD_WORDS[held.hold](held.label ?? MESSAGE.TheApp) : String(note.text ?? "");
+    })
+    .filter(Boolean);
 }
 
 /** How a wait until the game's apps are ready ended: ready, or why not (and whether its time ran out). */
@@ -283,7 +311,7 @@ export type ReadyClock = { now: () => number; sleep: (ms: number) => Promise<voi
 /**
  * Asks `health` until the game's apps are ready: ready once no step says it is pending, not once a
  * step blocks (it can't come back by itself), or once `until` passes with a step still pending.
- * The run's Stop ends the wait.
+ * The run's Stop ends the wait, never read as ready, and so does `stopped` (its caller closing).
  */
 export async function waitReady(
   ctx: HarnessCtx,
@@ -291,13 +319,16 @@ export async function waitReady(
   scope: HookScope,
   clock: ReadyClock,
   until: number,
+  stopped: () => boolean = () => false,
 ): Promise<ReadyOutcome> {
   for (;;) {
+    if (stopped()) return { ok: false, reason: MESSAGE.Stopped, timedOut: false };
     const health = await fireHooks(ctx, game, HookEvent.Health, scope);
+    // A Stop first: a health check the Stop cut short answers as no step ran, never as ready.
+    if (ctx.cancelled || stopped()) return { ok: false, reason: MESSAGE.Stopped, timedOut: false };
     if (health.blocked) return { ok: false, reason: health.blocked.reason, timedOut: false };
     if (!health.pending) return { ok: true };
-    if (ctx.cancelled) return { ok: false, reason: MESSAGE.Stopped, timedOut: false };
-    if (clock.now() >= until) return { ok: false, reason: health.pending.reason, timedOut: true };
+    if (clock.now() >= until) return { ok: false, reason: pendingLine(health.pending), timedOut: true };
     await clock.sleep(READY_POLL_MS);
   }
 }

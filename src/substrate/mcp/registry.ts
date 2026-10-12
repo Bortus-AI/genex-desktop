@@ -1159,6 +1159,12 @@ export class McpRegistry {
     return currentGrant && pendingGrant;
   }
 
+  /** The longest one call of a connector tool (by its agent name) may take: its connector's, or the default. */
+  callTimeoutOf(name: string): number {
+    const id = name.slice(0, Math.max(0, name.indexOf("__")));
+    return this.#entries.get(id)?.callTimeoutMs ?? CALL_TIMEOUT_MS;
+  }
+
   /**
    * Run one connector tool. Fails closed on anything it cannot positively allow, and resolves
    * the exposed name back to the server's own — the sanitizing is Studio's, not the server's.

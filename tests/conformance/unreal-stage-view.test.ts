@@ -137,6 +137,17 @@ describe("the Live card's Unreal step", () => {
     assert.match(stageView(status(PanelStep.Choose, { project: null }), NAME).line, /^Lantern isn’t where it was/);
   });
 
+  it("a folder holding an Unreal project with no link yet is told to choose it in the Unreal panel", () => {
+    const view = stageView(status(PanelStep.Choose, { project: null }), NAME, { linked: false });
+    assert.equal(view.line, "Choose this game’s Unreal project in the Unreal panel.");
+    assert.equal(view.button?.act, StageAct.Panel);
+    assert.equal(
+      stageView(status(PanelStep.Connected), NAME, { linked: false }).line,
+      "Ready in Unreal",
+      "every other step reads as for a linked project",
+    );
+  });
+
   it("before the plugin answers, offers Open in Unreal as before; an answer of another shape counts as none", () => {
     assert.equal(stageView(null, NAME).button?.act, StageAct.Open);
     for (const odd of [null, "ready", { next: "launch" }, { next: 3 }]) assert.equal(parseStageStatus(odd), null);

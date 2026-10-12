@@ -295,6 +295,7 @@ export async function startRig(
       | "rewindBuildStop"
       | "jobSpawn"
       | "jobProbe"
+      | "locks"
     >
   > = {},
 ): Promise<Rig> {

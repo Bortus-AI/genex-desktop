@@ -16,7 +16,7 @@ import { CallCutOff } from "../../src/shared/plugins.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { type PluginMcpLaunch, PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
-import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND } from "../helpers/plugins.ts";
+import { copyOfExample, EXAMPLE_PLUGIN, PLUGIN_SDK_BACKEND, personAllowsLocalTools } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 type Api = Record<string, (input: unknown) => Promise<unknown>>;
@@ -155,8 +155,15 @@ describe("a harness crash and the plugins", () => {
     await lite.core.setPermissionMode(threadId, PermissionMode.Bypass);
     await lite.core.plugins.setEnabled("unreal", true);
     const root = await tmpDir("studio-cut-plugin-");
-    await lite.core.plugins.installLocal(await cutPackage(root), "local", []);
+    // From GitHub, so its server follows the chat's Bypass: a local plugin's server asks every call.
+    await lite.core.plugins.installLocal(await cutPackage(root), "github", [], {
+      kind: "github",
+      repo: "studio-tests/cut",
+      sha: "a".repeat(40),
+    });
     await lite.core.plugins.setEnabled(PLUGIN, true);
+    // Its agent tool would ask the person first; these cases are about the crash, so the person allows it.
+    personAllowsLocalTools(lite.core.plugins);
     await lite.core.mcp.toolsFor(project);
     lite.core.engines.register({
       id: "claude-code",

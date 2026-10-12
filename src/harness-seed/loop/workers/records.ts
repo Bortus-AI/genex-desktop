@@ -74,6 +74,11 @@ export interface WorkerScope {
    * save points and restores): two at once fight over the game's one index. With none, it runs at once.
    */
   gitWrite?: <T>(write: () => Promise<T>) => Promise<T>;
+  /**
+   * Why a copy's merge into the lead's folder is refused at its turn on the git-write queue (the run
+   * it serves closing, stopped or paused), or null: no merge lands after that run kept its folder.
+   */
+  mergeRefused?: () => string | null;
 }
 
 /** A git write to the game folder, chained after the lead's own when its scope chains them (`gitWrite`). */

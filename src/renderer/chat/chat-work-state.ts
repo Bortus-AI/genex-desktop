@@ -95,6 +95,15 @@ export function chatWorkState(input: ChatWorkInput): ChatWorkState {
   };
 }
 
+/**
+ * A running build's one line: what the work waits for the person to finish in (a lock's label),
+ * when it does, else the build's own caption; nothing while no build runs.
+ */
+export function runCaption(state: { running: boolean; caption: string; personFirst?: string | null }): string {
+  if (!state.running) return "";
+  return state.personFirst ? PERSON_FIRST_WORDS.waiting(state.personFirst) : state.caption;
+}
+
 /** The busy line's label: a stop, a send, a question, a wait for the person or a plan change comes before the work itself. */
 export function busyLabel(state: {
   stopping: boolean;

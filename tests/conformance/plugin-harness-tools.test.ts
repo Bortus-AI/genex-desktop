@@ -103,13 +103,15 @@ test("the registry hands agents every tool but a harness one, and still runs tha
 });
 
 /** The Unreal plugin's tools an agent is handed in any game: the chat's. */
-const AGENT_TOOLS = ["unreal__use-project", "unreal__show-steps", "unreal__new-game"];
-/** And, once the game holds an Unreal project, a builder's gate and lookups besides. */
+const AGENT_TOOLS = ["unreal__use-project", "unreal__show-steps", "unreal__new-game", "unreal__new-plugin"];
+/** And, once the game holds an Unreal project, a builder's gate and lookups besides, and its C++ module's tools. */
 const UNREAL_PROJECT_TOOLS = [
   ...AGENT_TOOLS,
   UnrealLoopTool.BlueprintGuide,
   UnrealLoopTool.FindNodes,
   UnrealLoopTool.CheckPart,
+  UnrealLoopTool.CppStatus,
+  UnrealLoopTool.AddCppModule,
 ];
 /** The steps only the Unreal Loop's runner and the live builder's checkpoint take, through the harness's own plugin calls. */
 const RUNNER_TOOLS = [
@@ -118,8 +120,6 @@ const RUNNER_TOOLS = [
   UnrealLoopTool.RollbackPart,
   UnrealLoopTool.ReloadLevel,
   UnrealLoopTool.ExportReference,
-  UnrealLoopTool.CppStatus,
-  UnrealLoopTool.AddCppModule,
   UnrealLoopTool.ReopenEditor,
   UnrealLoopTool.EditorState,
   ...Object.values(UnrealLivePluginTool),
@@ -214,11 +214,18 @@ test("the Unreal plugin's runner-only tools reach no chat, builder, plan or coun
       Promise.resolve(),
     /Unknown tool: unreal__run-part/,
   );
-  // add-cpp-module's handler is reached too: a game with no Unreal project has no module to add.
+  // add-cpp-module's handler is reached too, once the person confirms it (it saves and restarts
+  // their editor, whoever asks): a game with no Unreal project has no module to add.
+  const asked: string[] = [];
+  core.plugins.consent = async (_id, declaration) => {
+    asked.push(declaration.name);
+    return { approved: true, by: "user" };
+  };
   await assert.rejects(
     api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.AddCppModule, args: {} }) ?? Promise.resolve(),
     /isn't linked to an Unreal project/,
   );
+  assert.deepEqual(asked, ["add-cpp-module"], "the person was asked first");
   // So are reopen-editor's and editor-state's: there is no Unreal to reopen, and none answers.
   await assert.rejects(
     api["plugins.invoke"]?.({ ...step, name: UnrealLoopTool.ReopenEditor, args: {} }) ?? Promise.resolve(),

@@ -31,6 +31,7 @@ export const GENEX_CARDS = [
   "genex-tool-llm",
   "genex-monetization",
   "genex-tool-publish",
+  "genex-cover",
   "genex-updates",
   "genex-tool-model",
   "genex-tool-character",
@@ -38,6 +39,8 @@ export const GENEX_CARDS = [
   "genex-tool-audio",
   "genex-tool-image",
 ] as const;
+/** Skills Studio writes itself beside the vendored ones: never fetched, never in `vendor.json`. */
+export const STUDIO_SKILLS: readonly string[] = ["plugin-author"];
 /** The CLI's own license, copied beside the cards so every build of the payload carries it. */
 export const CARDS_LICENSE = "LICENSE-cards";
 const CLI_PACKAGE = "@genex-ai/cli-demo";
@@ -180,12 +183,14 @@ async function vendorCard(v: Vendoring, cards: string, card: string) {
 /**
  * Where plugin.json's file skills disagree with what was vendored: a declared file or reference that
  * is not vendored, a vendored reference the skill does not list, or a vendored skill never declared.
+ * Studio's own skills (`STUDIO_SKILLS`) are not vendored and are not compared.
  */
 export function manifestDisagreements(manifest: Pick<PluginManifest, "skills">, vendored: string[]): string[] {
   const packaged = new Set(vendored.map((f) => `${PACKAGE_SKILLS}/${f}`));
   const problems: string[] = [];
   const declared = new Set<string>();
   for (const skill of manifest.skills.filter(isFileSkill)) {
+    if (STUDIO_SKILLS.includes(skill.name)) continue;
     for (const file of [skill.file, ...(skill.references ?? [])]) {
       declared.add(file);
       if (!packaged.has(file)) problems.push(`${skill.name}: ${file} is declared but not vendored`);

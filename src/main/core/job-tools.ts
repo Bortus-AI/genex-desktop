@@ -68,10 +68,11 @@ export interface JobCaller {
 
 /**
  * The job tools a session is handed, by its seat: the chat's own session, a lead and a worker the
- * host seated (a worker with host tools writes: a reader has none) get all four; anyone else none.
+ * host seated (a worker with host tools writes: a reader has none) get all four; anyone else (a
+ * reviewer included) none.
  */
 export function jobToolsFor(seat: ProjectToolSeat): LiveToolSpec[] {
-  if (seat === ProjectToolSeat.None) return [];
+  if (seat === ProjectToolSeat.None || seat === ProjectToolSeat.Reviewer) return [];
   return [JOB_START_TOOL, JOB_STATUS_TOOL, JOB_TAIL_TOOL, JOB_STOP_TOOL];
 }
 

@@ -35,14 +35,24 @@ through the JS API imports `@typescript/typescript6`.
   drives the Zustand stores through `createStudio` with it, with no DOM.
 - `fake-ollama.ts`, `scripted-claude.ts`, `scripted-codex.ts`: scripted engines, no network.
 - `snapshot-fixtures.ts`: dirty, untracked and nested user repositories.
-- `unreal-lead-host.ts`: a fake host for the Unreal Loop's lead (its scripted turns calling the
+- `unreal-lead-host.ts`: a fake host for the Unreal runner's lead (its scripted turns calling the
   run tools, the editor's answers, the clock), whose moments run on `unreal-moment-bus.ts`, a fake
   of Genex's hook bus that plans each moment from a plugin manifest;
-  `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to.
+  `unreal-editor-stand-in.ts`: the editor the Unreal plugin's queue talks to;
+  `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
+  templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
+  a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
+- `loop-host.ts`: a fake host for the one Loop (`runDirector` on a project of any kind): a real git
+  repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
+  the lead's scripted turns, the pool's workers and the reviewer as three kinds of delegation, on
+  the test's clock; `dispatch()` starts the run through the run's start instead, on the wall clock.
+- `director-run.ts`: a director's run without a rig (`fakeLoopRun`, `fakeClock`, `lead`).
 - `project-fixtures.ts`: the synthetic project folders in `fixtures/projects/` (`copyProject`
   copies one into a test's folder and adds the files its engine writes while it runs), reads of a
   listed game's facts, a fake harness `ctx` whose `game.*` calls reach a `coreLite`, and a plugin
   registry with the toy engine plugin (`fixtures/toy-engine-plugin/`) installed.
+- `plugin-author.ts`: Genex Tools' plugin-author skill read as an agent reads it (`genex__skill`,
+  page by page) and its example plugin written into a project where the skill says.
 - `worker-chat.ts`: a game chat with a run started in it, fake engines (two delegated, one local)
   that record each request, a copy of the game in that run's folder and the chat's permission rows,
   for worker seats and their questions (`worker-seats`, `worker-questions`, `dont-wait`,
@@ -64,16 +74,18 @@ through the JS API imports `@typescript/typescript6`.
   nothing behind asks it, not `process.kill(pid, 0)`, which also finds a process that exited but
   is not reaped yet.
 
-Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`,
-`rpc-surface`), the seed contracts the app keeps its own copy of (`seed-contracts`), spike
-snapshot/worktree sequences (`loop-sequences`), snapshots of a user's own repository
-(`snapshots`), which loop runs a run, the tools each lead is offered and the Unreal lead's editor
-calls, events, graph and journal (`loop-survival`), and the ten use cases of any project
-(`project-use-cases`; a test marked `todo` names the phase that turns it green, and a marked
-test whose body passes prints `✔ … # phase N:` under `--test-reporter=spec`: that phase removes
-its mark). Not yet: autopilot, gauntlet and facet-loop sequences, and golden `studio:dev`
-snapshots of the `app-basics`, `chat-history` and `run-controls` fixtures; until then those paths
-rely on the rig suites and the source gates in the allowlisted tests.
+Characterization so far: the `api()` keys and `StudioCore` surface (`core-surface`, `rpc-surface`),
+the seed contracts the app keeps its own copy of (`seed-contracts`), spike snapshot/worktree
+sequences (`loop-sequences`), snapshots of a user's own repository (`snapshots`), which loop runs a
+run, the tools each lead is offered and the one Loop's and the Unreal runner's calls, events, graph
+and journal (`loop-survival`), the one Loop on a project that isn't a web game (`one-loop`), which
+Loop a run gets (`one-loop-dispatch`), a whole Loop through the real studio on a plugin's project
+and on a folder with no plugin (`one-loop-projects`, L3), and the ten use cases of any project
+(`project-use-cases`; a test marked `todo` names the phase that turns it green, and a marked test
+whose body passes prints `✔ … # phase N:` under `--test-reporter=spec`: that phase removes its
+mark). Not yet: autopilot, gauntlet and facet-loop sequences, and golden `studio:dev` snapshots of
+the `app-basics`, `chat-history` and `run-controls` fixtures; until then those paths rely on the rig
+suites and the source gates in the allowlisted tests.
 
 ## Fixtures (`fixtures/`)
 

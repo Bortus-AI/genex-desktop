@@ -6,6 +6,7 @@
  */
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { isJsonObject } from "../../substrate/fsx.ts";
 import { PortBlockedError } from "./editor-log.ts";
 import { pollUntil } from "./editor-queue.ts";
 import type { CompileResult } from "./ubt.ts";
@@ -36,8 +37,64 @@ export type RestartTarget = { storage: string; game: string; project: string };
 /** How often a job looks at Unreal, and how long it waits for the project to answer once opened. */
 export const RESTART_POLL_MS = 2 * SECOND_MS;
 export const OPEN_WAIT_MS = 5 * MINUTE_MS;
+/** How long a job waits for Unreal to close. */
+export const QUIT_WAIT_MS = 90 * SECOND_MS;
 /** How many of a failed build's errors a job's error names. */
 const MAX_BUILD_ERRORS = 3;
+/** The most unsaved packages a refusal names. */
+const MAX_UNSAVED_NAMED = 5;
+
+/** What closing Unreal for a build says when it can't: each job words it for what it was about to do. */
+export type CloseWords = {
+  otherEditor: string;
+  notSaved(why: string): string;
+  noSaveAnswer: string;
+  unsaved(names: string): string;
+  notClosed: string;
+  /** The call was stopped before Unreal was asked to quit. */
+  stopped?: string;
+};
+
+/** Saves every unsaved level and asset through `save` (the Genex editor helper's save_all); throws why it couldn't. */
+async function saveAll(save: () => Promise<unknown>, words: CloseWords): Promise<void> {
+  const answer = await save().catch((failure: unknown) => ({ error: errorMessage(failure) }));
+  const reply = isJsonObject(answer) ? answer : {};
+  if (reply.error !== undefined) throw new Error(words.notSaved(String(reply.error)));
+  if (!Array.isArray(reply.dirty)) throw new Error(words.notSaved(words.noSaveAnswer));
+  const unsaved = reply.dirty.filter((name): name is string => typeof name === "string");
+  if (unsaved.length > 0) throw new Error(words.unsaved(unsaved.slice(0, MAX_UNSAVED_NAMED).join(", ")));
+}
+
+/**
+ * Closes Unreal for a build when this game's editor is open: saves its work, quits it the normal
+ * way and waits until no editor runs. Answers whether it was open; refuses an editor that runs
+ * without this game's project answering (its work can't be saved, and it may be another project's).
+ * A `signal` that aborts before the quit is asked for stops it there, Unreal left open.
+ */
+export async function closeForBuild(
+  deps: RestartDeps,
+  target: RestartTarget,
+  save: () => Promise<unknown>,
+  words: CloseWords,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const stopped = () => {
+    if (signal?.aborted) throw new Error(words.stopped ?? words.notClosed);
+  };
+  stopped();
+  const answers = await deps.editorAnswers(target.storage, target.game).catch(() => false);
+  if (!answers) {
+    if ((await deps.restart.editors()) > 0) throw new Error(words.otherEditor);
+    return false;
+  }
+  stopped();
+  await saveAll(save, words);
+  stopped();
+  await deps.restart.quit(target.storage, target.project);
+  const closed = await pollUntil(deps, async () => (await deps.restart.editors()) === 0, RESTART_POLL_MS, QUIT_WAIT_MS);
+  if (!closed) throw new Error(words.notClosed);
+  return true;
+}
 
 /** Whether the game's editor answers; a failed ask is a no, but an editor that can never answer ends the wait. */
 export async function answering(deps: RestartDeps, target: Omit<RestartTarget, "project">): Promise<boolean> {
@@ -61,7 +118,7 @@ export async function openAndWait(deps: RestartDeps, target: RestartTarget, notA
 }
 
 /** A failed build's first errors, each on a line of its own. */
-export function buildErrors(result: CompileResult): string {
+export function buildErrors(result: Pick<CompileResult, "errors">): string {
   const lines = result.errors
     .slice(0, MAX_BUILD_ERRORS)
     .map((e) => (e.file ? `${e.file}:${e.line}: ${e.message}` : e.message));

@@ -42,7 +42,12 @@ import {
   windowsSetupProblem,
 } from "./sandbox-unavailable.ts";
 import { childEnv, windowsBaseEnv } from "./child-env.ts";
-import { credentialHomes, HOME_SIGN_IN_STORES, sandboxedCliHomes } from "./credential-homes.ts";
+import {
+  credentialHomes,
+  HOME_SIGN_IN_STORES,
+  openCodeServicePassword,
+  sandboxedCliHomes,
+} from "./credential-homes.ts";
 import { isInside } from "./paths.ts";
 import { envValue } from "./toolchain.ts";
 import {
@@ -202,6 +207,13 @@ const DEFAULT_MAX_OUTPUT_CHARS = 256 * 1024;
 const DEFAULT_TIMEOUT_MS = 10 * MINUTE_MS;
 /** The shell srt runs a wrapped command under on macOS. */
 const SANDBOX_SHELL = "/bin/bash";
+/**
+ * Marks srt's outer `bash -c` as a nested shell. A top-level `bash -c` (SHLVL unset) whose stdin
+ * is a socket, as node's stdio pipes are, takes itself for an rshd login and reads ~/.bashrc:
+ * that shell runs outside the sandbox, so the user's rc file would run before every command and
+ * whatever it printed would lead the command's output.
+ */
+const NESTED_SHELL_ENV = { SHLVL: "1" } as const;
 /** The shell a command runs under when the sandbox is off (tests of the fallback path only). */
 const UNSANDBOXED_SHELL = "/bin/sh";
 
@@ -269,6 +281,8 @@ interface LaunchPlan {
   cwd: string;
   /** Windows: gives the grant session back and removes the env file once the process is gone. */
   release?: () => void;
+  /** Windows: srt-win does not pass stdin on, so a run's input reaches the command only through its stdin file. */
+  stdinInFile?: boolean;
 }
 
 /** Collect a child's stdout and stderr as text, each clipped at `maxChars`. */
@@ -320,11 +334,14 @@ export function baseDenyRead(
   platform: NodeJS.Platform = process.platform,
   env: Record<string, string | undefined> = process.env,
 ): string[] {
-  if (platform === StudioPlatform.Windows) return [...windowsDenyRead(home, env), ...credentialHomes()];
+  const openCodeService = openCodeServicePassword(env, home);
+  if (platform === StudioPlatform.Windows)
+    return [...windowsDenyRead(home, env), openCodeService, ...credentialHomes()];
   const linuxStores =
     platform === StudioPlatform.Linux ? LINUX_SECRET_STORES.map((parts) => path.join(home, ...parts)) : [];
   return [
     ...HOME_SIGN_IN_STORES.map((parts) => path.join(home, ...parts)),
+    openCodeService,
     ...linuxStores,
     // SEC-3: the coding CLIs' sign-in homes, wherever the environment has moved them.
     ...credentialHomes(),
@@ -693,7 +710,8 @@ export class ProcessSandbox {
     );
     const [file, ...args] = wrapped.argv;
     if (!file) throw new Error(MESSAGE.EmptyArgv);
-    return { file, args, env: await this.#env(wrapped.env, request.env), sandboxed: true, cwd: request.cwd };
+    const env = { ...(await this.#env(wrapped.env, request.env)), ...NESTED_SHELL_ENV };
+    return { file, args, env, sandboxed: true, cwd: request.cwd };
   }
 
   /**
@@ -746,7 +764,7 @@ export class ProcessSandbox {
         release();
         void removeFiles();
       };
-      return { file, args, env: wrapped.env, sandboxed: true, cwd, release: done };
+      return { file, args, env: wrapped.env, sandboxed: true, cwd, release: done, stdinInFile: true };
     } catch (err) {
       release();
       await removeFiles();
@@ -907,7 +925,10 @@ export class ProcessSandbox {
         });
       });
 
-      if (request.stdin !== undefined) child.stdin.end(request.stdin);
+      // The prelude swaps a Windows command's stdin for its file: input sent down the pipe as well
+      // would race the swap and fail with EPIPE once the command's end of the pipe is closed.
+      const piped = plan.stdinInFile ? undefined : request.stdin;
+      if (piped !== undefined) child.stdin.end(piped);
       else child.stdin.end();
     });
   }

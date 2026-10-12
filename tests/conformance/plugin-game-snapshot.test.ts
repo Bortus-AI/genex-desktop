@@ -11,6 +11,7 @@ import path from "node:path";
 import { after, it } from "node:test";
 import { SnapshotScope } from "../../src/shared/event-log.ts";
 import { coreLite, type CoreLite } from "../helpers/core-lite.ts";
+import { personAllowsLocalTools } from "../helpers/plugins.ts";
 
 const SNAP_TOOL = "snapdemo__snap";
 const PLAIN_TOOL = "plaindemo__snap";
@@ -63,6 +64,9 @@ async function world() {
   const { core } = lite;
   await core.plugins.installLocal(await snapPackage("snapdemo", ["game-engine"]), "local", ["game-engine"]);
   await core.plugins.installLocal(await snapPackage("plaindemo", []), "local", []);
+  // Loaded from folders, they start off: the person turns them on and allows their tools.
+  for (const id of ["snapdemo", "plaindemo"]) await core.plugins.setEnabled(id, true);
+  personAllowsLocalTools(core.plugins);
   const game = await core.games.scaffold("valley");
   const threadId = await core.threadForGame(game.name);
   const binding = { project: game.name, directory: game.dir, threadId };

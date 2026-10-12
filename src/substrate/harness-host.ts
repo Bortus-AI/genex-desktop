@@ -298,7 +298,12 @@ export class HarnessHost {
 
     child.stdout?.setEncoding("utf8");
     child.stdout?.on("data", (chunk: string) => {
-      for (const message of this.#codec.push<HarnessToHost>(chunk)) void this.#onMessage(message);
+      for (const message of this.#codec.push<HarnessToHost>(chunk)) {
+        // A host call from a process that has ended (stopped, or exited and since replaced) is never
+        // served: stdout may still deliver lines after 'exit', and its harness is gone.
+        if (message.kind === "rpc" && this.#child !== child) continue;
+        void this.#onMessage(message);
+      }
     });
     let stderr = "";
     const emitStderr = (line: string) => {
@@ -371,6 +376,15 @@ export class HarnessHost {
     clearTimeout(timer);
     this.#child = null;
     this.#setState(HarnessState.Stopped);
+  }
+
+  /**
+   * Stop once any restart already under way has booted or failed: a planned restart never kills
+   * another's boot (a crash restart, the watchdog's) as it starts.
+   */
+  async stopAfterRestarts(graceMs = STOP_GRACE_MS): Promise<void> {
+    while (this.#restarting) await this.#restarting.catch(() => {});
+    await this.stop(graceMs);
   }
 
   /**

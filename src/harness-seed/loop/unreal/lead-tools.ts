@@ -25,6 +25,7 @@ import {
 import { milestoneColumn, tellUser } from "./lead-graph.ts";
 import { type Lead, milestoneNow, requiredNow, saveLead } from "./lead-journal.ts";
 import { LEAD_TOOL_WORDS, RUN_STATUS } from "./lead-prompts.ts";
+import { type FinishingLead, leadFinish } from "./lead-finish.ts";
 import { workerTools } from "./lead-workers.ts";
 import { savePoint } from "./save-point.ts";
 
@@ -162,6 +163,21 @@ export const LEAD_TOOLS: LiveToolSpec[] = [
     parameters: { type: "object", properties: { reason: text("What changed, in one line.") }, required: ["reason"] },
   },
   {
+    name: LeadTool.Finish,
+    description:
+      "Claim the game meets the request. A reviewer who did none of the work checks your proof: a yes closes the run, a no comes back with reasons, and three in a row stop the Loop.",
+    parameters: {
+      type: "object",
+      properties: {
+        summary: text("What the game holds now and what you verified, for the person."),
+        proof: text(
+          "Comma-separated paths that prove it, relative to the game folder or full paths inside it: pictures, logs, test reports.",
+        ),
+      },
+      required: ["summary"],
+    },
+  },
+  {
     name: LeadTool.Note,
     description: "Leave the user a decision card in the run's feed: what you decided and why.",
     parameters: {
@@ -250,7 +266,7 @@ function leadSavePoint(lead: Lead, args: AnyRecord): Promise<string> {
 }
 
 /** Each run tool's answer. */
-function tools(lead: Lead): Record<LeadTool, (args: AnyRecord) => Promise<unknown>> {
+function tools(lead: FinishingLead): Record<LeadTool, (args: AnyRecord) => Promise<unknown>> {
   const workers = workerTools(lead);
   return {
     [LeadTool.RunStatus]: async () => runStatusText(lead),
@@ -266,6 +282,7 @@ function tools(lead: Lead): Record<LeadTool, (args: AnyRecord) => Promise<unknow
     [LeadTool.Critic]: (args) => askCritic(lead, args),
     [LeadTool.RebuildUnreal]: (args) => askRebuild(lead, args),
     [LeadTool.Note]: (args) => leaveNote(lead, args),
+    [LeadTool.Finish]: (args) => leadFinish(lead, args),
   };
 }
 
@@ -273,7 +290,7 @@ const LEAD_TOOL_NAMES: readonly string[] = Object.values(LeadTool);
 const isLeadTool = (name: string): name is LeadTool => LEAD_TOOL_NAMES.includes(name);
 
 /** The handler the studio's dispatch reaches for this run: one answer per run tool, a sentence for anything else. */
-export function leadToolHandler(lead: Lead): (name: string, args: AnyRecord) => Promise<unknown> {
+export function leadToolHandler(lead: FinishingLead): (name: string, args: AnyRecord) => Promise<unknown> {
   const answers = tools(lead);
   return async (name, args) => (isLeadTool(name) ? answers[name](args ?? {}) : LEAD_TOOL_WORDS.UnknownTool(name));
 }

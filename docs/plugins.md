@@ -26,8 +26,12 @@ exports work with no enabled plugins.
   (`toolbar requires apiVersion 2`, `network requires apiVersion 2`,
   `mcpServers requires apiVersion 2`, `tools[].confirmation requires apiVersion 2`) rather than silently ignored, so a package cannot
   claim API 1 and still ship API 2 behaviour.
-- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`. Lower-version manifests cannot claim those declarations.
-- Plugin tool parameters stay scalar (`string` / `number` / `boolean` properties). External MCP tools retain their full nested schemas.
+- API 3 adds `native-runtime`, `nativeRuntimes`, `nativeJobs`, `assetLimits`, host-memory credential-session access, file skills, `tools[].audience` and (bundled Genex only) `tools[].host`, and the sections that shape a project's Loop: `detect`, `facts` and `tools[].makes` ([Project facts](#project-facts)), `workspace` and `assets`, `workerTypes`, `scaffolds`, `folders`, `hooks`, `locks` (with `needs` and `tools[].ready`) and `observers`. Lower-version manifests cannot claim those declarations.
+- API 3's `observe` also takes an optional `still` (additive; no manifest field or capability of
+  its own). A host older than the option ignores it and answers an ordinary observation, so a
+  caller checks the answer for `still`, then `stillProblem`, and handles neither (the SDK types the
+  answer as `PluginStillAnswer | PluginStillIgnored`).
+- Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
 ## Package and distribution
 
@@ -44,7 +48,13 @@ dot-folders anywhere (`.git`, `.env`) and the scaffold's authoring files at its 
 from GitHub or scanned (`isPackageEntry` in `substrate/plugins/pack.ts`). Local packages are unreviewed. Backends execute trusted native
 code; a child process is crash isolation, not an OS security sandbox — the trust dialog says so.
 Never load a package merely because an agent placed it in a game. Agents cannot install, enable,
-update, allow or approve plugins.
+update, allow or approve plugins. A plugin from a local folder (Load local plugin, a re-load after
+removal, a replacement from a folder, dropped code the person allows) is installed **off**: only the
+person turns it on, and the trust dialog says it runs with their access and, for one with `hooks`,
+at which of Genex's moments. One that starts off runs none of its code: its backend is proven to
+start when the person turns it on. An update or a watch reload keeps the person's choice (the trust
+dialog says an update of one that is on stays on, its new code running at once); bundled,
+catalog, GitHub and index installs start on as before (`startsEnabled` in `registry.ts`).
 
 The curated catalog is an app-owned `catalog.json` containing exact manifests, HTTPS artifact
 URLs and SHA-256 digests. No remote catalog releases are configured yet. A release artifact is a
@@ -111,9 +121,14 @@ Reinstalling a removed plugin is an **install**, not an update: the dialog is an
 manifest that is about to land, so a seed that has grown new capabilities or a new MCP server since
 the record was written installs rather than being refused with no way forward.
 
-Bundled seeds are inspected for explicit versioned updates. Existing profiles keep their pinned
+Bundled seeds are inspected for explicit versioned updates, so a change to a bundled plugin's files needs a
+higher `version` in its `plugin.json`: `scripts/check-plugin-versions.ts` (run by `check:static`) refuses
+one that changed against where the branch left `origin/dev` without it. Existing profiles keep their pinned
 version until the user chooses Update; active leases defer activation, while disabling still
-blocks calls immediately. A removed preference suppresses the seed across Studio upgrades.
+blocks calls immediately. The renderer lists a seed's newer version and the index's newer release
+as one set (`pluginUpdates` in `renderer/state/plugins.ts`; none for a plugin whose update already
+waits for sessions): each plugin's row and page offer **Update to x**, and the sidebar's **Update
+plugins** runs them one after another, each through its own trust dialog. A removed preference suppresses the seed across Studio upgrades.
 Normal updates preserve settings, protected credentials and job state. The Genex plugin adopts
 `engine-homes/genex`, keeping existing allowances and unresolved jobs; remove/reinstall is not a
 required upgrade step.
@@ -145,10 +160,12 @@ and the Plugins page — no polling is needed for a change to show.
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
+| `scaffolds[]` | 3 | Up to 8 `{id, label, tool?, facts?}`: the kinds of project the plugin's tools make, each with its own label; see [Scaffolds](#scaffolds) |
 | `folders[]` | 3 | Up to 8 `{path, why}`: folders outside the game the plugin's engine programs write to, workers' write roots; see [Folders](#folders) |
 | `locks[]` | 3 | Up to 8 `{id, label, per, personFirst?}`: what one holder at a time may use, giving way to the person; see [Locks](#locks-the-person-comes-first) |
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
+| `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
 
@@ -512,16 +529,19 @@ then asks for `project.json`; that call failing fails nothing). Of the part tool
 still uses `export-reference`, `part-result` (its play-check fallback) and `check-part` (its C++
 sub-agents check their folder as a part); `run-part`, `rollback-part`, `reload-level`,
 `blueprint-guide` and `find-nodes` have no caller in the seed now. The harness's tools
-(`run-part`, `part-result`, `rollback-part`, `reload-level`, `export-reference`, `cpp-status`,
-`add-cpp-module`, `reopen-editor`, `editor-state`, `play-check`, `save-all`, `log-errors`,
-`end-editor`, `update-helper`, `editor-activity`, `hero-shots`, `open-for-run`, `wait-editor`,
-`engine-status`) are
+(`run-part`, `part-result`, `rollback-part`, `reload-level`, `export-reference`, `reopen-editor`,
+`editor-state`, `play-check`, `save-all`, `log-errors`, `end-editor`, `update-helper`,
+`editor-activity`, `hero-shots`, `open-for-run`, `wait-editor`, `engine-status`) are
 `"audience": "harness"`: no chat, builder or plan sees them, the harness calls them through
 `plugins.invoke` as its own steps (`step: true`), and they write no `plugin_tool` records. An agent
 that names one on any path is refused (`Unknown tool`) before anything runs, and the registry runs
-one only for the harness (`PluginRegistry.tool`'s `caller`). A step runs while the chat is in Plan
-mode unless it writes (`checkpoint: true`: the Unreal Loop runner's `add-cpp-module`), which waits.
-A held write answers the runner the Plan answer (`blocker: "plan_mode"`, `PluginCallBlocker`), which
+one only for the harness (`PluginRegistry.tool`'s `caller`). `cpp-status` and `add-cpp-module` are
+agent tools for an `unreal-project` (`facts`), which the one Loop's lead calls; `add-cpp-module`
+asks the person first (its `confirmation`) and holds the `editor` lock. While its job restarts
+Unreal, `editor-state` reads as reopening, so Genex's health watch waits and a crash step starts no
+second editor or build (`editor-reopen.ts` `createReopenTools`). A step runs while the chat is in
+Plan mode unless it writes (`checkpoint: true`), which waits. A held write answers the Unreal
+runner behind its switch the Plan answer (`blocker: "plan_mode"`, `PluginCallBlocker`), which
 `loop/unreal/lead-steps.ts` turns into a refusal. The seed calls no other Unreal tool by name: a
 chat turn's end save is Genex's checkpoint and its wait after a kind change Genex's `health`
 ([a game's engine](#a-games-engine)). A harness workspace that kept an agent-edited copy of
@@ -617,7 +637,9 @@ question's words for it. The handlers answer in hook terms when `context.hook` i
 the `unreal-project` fact: `run.prepare` → `open-for-run`, `log-errors`; `checkpoint.before` →
 `save-all`, `log-errors`; `checkpoint.after` → `hero-shots`; `restore.before` → `save-all`,
 `end-editor`; `restore.after` → `reopen-editor`; `health` → `editor-state`; `crash` →
-`reopen-editor`. Nothing hooks `run.end`: the person's editor stays open when a run ends.
+`reopen-editor`. Nothing hooks `run.end`: the person's editor stays open when a run ends. Since
+0.8.0 the manifest also declares its `viewport` [observer](#observers) (`hero-shots`, Live's Unreal
+card) for the same games.
 
 | Handler at its moment | In a run | In a chat |
 | --- | --- | --- |
@@ -628,9 +650,25 @@ the `unreal-project` fact: `run.prepare` → `open-for-run`, `log-errors`; `chec
 | `editor-state` at `health` | quiet while it answers; pending while reopening, opening, busy or can't tell; blocks once reopening failed, its port is blocked or it is gone three asks in a row | same, gone in the chat's words |
 | `log-errors` at `run.prepare`, `checkpoint.before` | marks the log's end per game; notes the new errors since | same |
 | `hero-shots` at `checkpoint.after` | the stills as images, their tone as measures | nothing: no stills are taken |
-| `open-for-run` at `run.prepare` | opens a closed Unreal and waits for it; updates an outdated helper once its process exits (saved first, no snapshot); exports missing template facts; blocks without a helper or when Unreal can't be opened; its slowest path (`OPEN_FOR_RUN_MAX_MS`) stays under Genex's 30-minute ceiling for `run.prepare` | — |
+| `open-for-run` at `run.prepare` | opens a closed Unreal and waits for it; updates an outdated helper once its process exits (saved first, no snapshot); exports missing template facts; blocks without a helper or when Unreal can't be opened; a Stop updates nothing after it, but an Unreal it closed for the update is still reopened (without the update), as a restore's after steps reopen what its before steps closed; its slowest path (`OPEN_FOR_RUN_MAX_MS`) stays under Genex's 33-minute ceiling for `run.prepare` | — |
 
-The Loop is one lead (the seed's `loop/unreal/lead.ts`), the only builder: a fresh session in the
+Each handler's editor calls have limits its own longest path counts, each call's session with the
+editor (connect, the helper's identity call and the session's end) held within its limit
+(`callProjectTool`), and each ask of whether Unreal answers and runs counted too: a checkpoint's
+save (`CHECKPOINT_SAVE_MAX_MS`) and `hero-shots` (`HERO_SHOTS_MAX_MS`, every wait for a still ending
+with its two minutes) stay under the checkpoint step's ceiling, the save before a restore
+(`RESTORE_SAVE_MAX_MS`) under the restore's.
+
+Since 0.9.0 a Loop on an Unreal project is the one Loop ([harness runtime](harness-runtime.md)): the
+chat's own session leads it in the game folder, its save points, rewinds and `restart` run the
+moments above, its health watch asks `editor-state`, and `cpp-status` and `add-cpp-module` are agent
+tools for Unreal projects (`add-cpp-module` asks the person first, since it saves and restarts
+their editor; Plan's refusal in a planning chat as for any agent tool) that the lead calls itself;
+its brief says to call `restart` after C++ changes, which
+rebuilds through `reopen-editor`. The runner below runs only behind the developers' switch
+(`STUDIO_UNREAL_RUNNER=lead`) until a live Unreal Loop passes on the one Loop.
+
+That runner's Loop is one lead (the seed's `loop/unreal/lead.ts`), the only builder: a fresh session in the
 game folder on the Workers role's engine and model (high effort unless the person chose one; the
 chat's bookmark follows it), briefed once with the chat so far, NOTES.md, the whole goal, the
 look-first checklist and the facts of the template the game is built on (`lead-prompts.ts`). It
@@ -641,7 +679,10 @@ words, the workers' news, the last save point, the critic's advice). Its run too
 `save_point`, `rewind`, `milestone`, Genex's six worker tools `worker_start`, `worker_status`,
 `worker_wait`, `worker_steer`, `worker_stop` and `worker_mark`, `critic`, `rebuild_unreal` (a
 restart between turns: after C++ changes, or when the editor renders differently from play),
-`note`) come with the director grant and no window. While a turn runs
+`note`, `finish`) come with the director grant and no window. `finish` is the lead's claim that the
+game meets the request: Genex's `finish` moment runs first (a block keeps the lead working), then a
+reviewer that did none of the work checks the claim on the game's folder and the named proof; a yes
+ends the Loop, a no comes back with reasons, and three in a row stop it with what isn't done. While a turn runs
 the harness looks every 15 s: the owner's words are steered at once, to be acted on now; a finished
 worker's news too; a save is asked for after 15 minutes of unsaved work, and the wrap-up 12
 minutes before the working deadline.
@@ -710,7 +751,8 @@ end the run as failed, with why.
 project's `Saved/Genex/captures/`), the game's `references/` stills and ART.md go to a fresh vision
 call on the Reviewers role's engine that counts light, atmosphere, materials and composition as
 structure, and the characters as hero pieces; it answers at most five defects with their fixes, one
-bold move and its own Art checks, and changes nothing. A later look is shown its last look's open
+bold move and its own Art checks, and changes nothing; it never stands between the lead and the
+finish check. A later look is shown its last look's open
 items and names the ones it still sees (`stillOpen`): those are required (a defect seen in two looks
 in a row), and lead every digest, every `save_point` answer and `run_status` until a look no longer
 sees them; the brief puts them before any new mechanic. When a model's sub-agent delivers renders,
@@ -1018,6 +1060,17 @@ acts beyond the game folder. The host — never the plugin, never the agent — 
   chat folds onto one ASK card with Approve and Decline. The card's own channel,
   `studio:plugins.consent`, is Studio-UI only: it keeps the main-frame guard and the core's RPC
   table has no equivalent method, so nothing an agent can call answers a card.
+- A local plugin's agent tools ask too, each call, even with no `confirmation`: the card says the
+  plugin was loaded from a folder on this Mac and runs with your access, and offers **Always
+  allow** for that one tool. The grant (`PluginInfo.allowedTools`) goes when the plugin's code
+  changes (an update or reload) or it is turned off; its page lists the grants with **Ask every
+  time** (`studio:plugins.forget-allowed`). A yes answered after the plugin was loaded again or
+  turned off runs nothing and keeps no grant: the call is refused and asks again. Its harness steps
+  (hooks, `personFirst` probes, observers, `ready`) run without a card; the trust dialog names each
+  kind it declares. Bypass, a run's own consent and an agent's message never answer it.
+  A tool with its own `confirmation` asks it after those words, every call, with no Always allow, and
+  so does each tool of a local plugin's own MCP server (`mcpServers`): no saved grant, Bypass or run
+  answers for those either.
 - Timing: a question nobody answers ends after nine minutes (`by: 'timeout'`) — deliberately under
   the Codex bridge's ten-minute tool ceiling, so the engine hears an answer instead of a dead tool
   call. It is not a no: the card reads "Nobody answered", and the agent reads that the person may be
@@ -1029,8 +1082,9 @@ acts beyond the game folder. The host — never the plugin, never the agent — 
   chat's main agent, is asked each time. It is not the chat's turn either: its questions and
   connector calls outlive the chat's other turns and end with its own session instead. Its tools are bound to the worktree it leads, so
   what they deliver lands with the build ([tool permissions](tool-permissions.md)).
-- The run's own consent: the Unreal Loop's lead (a director session whose grant is
-  honoured for its own Unreal game's folder) calls its game's engine connector with no card while
+- The run's own consent: a Loop's lead in place (or the Unreal runner's, behind its switch: a
+  director session whose grant is honoured for its own game's folder) calls its game's engine
+  connector with no card while
   its run is active (held awake by the harness and running by its records), the run is this game's
   and was started in the chat the delegation names, and the connector belongs to the `game-engine`
   plugin holding the game's current link (`delegation.ts` `#runConsents`). Another game's run, a
@@ -1068,7 +1122,22 @@ Available services are capability checked and scoped to the calling plugin:
 - `jobs.read` / `jobs.write`: durable provider references, not a credit ledger.
 - `events.emit`: sanitized progress to Studio, with host-bound project/thread attribution. A
   payload of kind `toolbar` is a toolbar status update (see above).
-- `observe`: current game loading/capture/audio evidence for authorized local files.
+- `observe`: current game loading/capture/audio evidence for authorized local files. With
+  `still` (API 3, additive) it photographs one named view instead: `{ project, root, files: [],
+  still: { demo | camera, width, height, maxBytes? } }` loads the bound game on a hidden window of
+  its own at `width`×`height` (whole pixels, 320–1920 × 240–1200), puts it in play, runs the
+  `config.demos` entry to its end state or places the camera (one the page lists in `cameras()` or
+  `eyes()`, or `default`; any other name is never called), and reads the canvas. The answer is `{ still: { image, mimeType, width, height, source,
+  view, stats, preview } }`: a PNG, or the first JPEG at quality 95, 90 or 85 that fits `maxBytes`
+  (64 KiB–16 MiB, default 8 MiB), never larger than asked; `stats` holds `lumaMean`, `lumaStdDev`,
+  `nearBlackFraction` (luma below 0.10) and `litFraction`, each 0–1 on a small downscale; `preview`
+  is a JPEG at most 1280 px. Otherwise it is `{ stillProblem: { code, reason?, available? } }` with
+  `unavailable`, `load_failed`, `view_unknown` (with the names the game has, at most 32),
+  `view_failed`, `capture_failed`, `too_large` or `timeout` (one minute for the whole still). A
+  still never borrows Live: a build with no hidden window answers `unavailable`. Every field is
+  checked before anything runs, and the window is given back however the still ends; once its
+  budget gives a still up, nothing reaches that window again, and a closed preview refuses every
+  later call rather than build a new view (`core/view-still.ts`).
 - `export.stage` (capability `export`, API 2): Studio writes the public export of the bound game
   under the plugin's own storage (`publish/<project>/dist`) and returns the export result; it
   needs a project binding and is `Export unavailable` in sessions without the host export. The
@@ -1094,8 +1163,12 @@ Available services are capability checked and scoped to the calling plugin:
 The host never retries a failed tool invocation. Persist remote references before returning and
 reconcile uncertain submissions instead of creating again. Cancellation stops local waiting;
 it does not promise remote cancellation or refunds. Genex keeps its CLI admission ledger as the
-single billing authority. Plugin process failures are shown in Plugins and reported as a
-`failed` change.
+single billing authority. Every client of a Genex account shares one per-account request limit,
+and a paid request refused by it fails: a status read asks Genex again only about generations it
+has not seen settle (`completed`, `failed`, `canceled`; remembered by the backend until sign-out),
+and the Genex page re-reads every 5 s only while a job is requested, submitting, accepted or
+generating or a sign-in waits, otherwise once a minute (`genexPollMs`). Plugin process failures
+are shown in Plugins and reported as a `failed` change.
 
 ## Project facts
 
@@ -1109,11 +1182,16 @@ output and vendored folders, `unreal-project`, `unreal-plugin` outside a `Plugin
 plugins (an installed plugin that is off detects nothing; source `plugin:<id>`). A fact below a
 folder that already has the same one is dropped. The engine link reads as `unreal-project` at its
 `.uproject`'s folder (source `link`) and stands for the game's Unreal project: another `.uproject`
-the folder holds is not a second one. Never counted: the web template beside an older engine link,
+the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
+`scaffold`, see [Scaffolds](#scaffolds)). Never counted: the web template beside an older engine link,
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
 New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). New game
 now makes an empty folder. Either way the game lists no facts and has no kind until its first
 message picks one (`start_web_game`, or `game.start` from the harness, writes the web starter).
+A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by the chat's own
+session, and the plugins whose facts reach the folder shape it with no code in Genex: their hooks
+run at its moments, their observers feed its finish check and their worker types are its lead's
+([the open Loop](harness-runtime.md)).
 `web` is `web-game` at the root.
 
 ### Workspace rules
@@ -1147,8 +1225,8 @@ on disk stays out of every later commit. A line of the person's git reads as mat
 A worker's copy is a git worktree and always holds every tracked file: `copySkip` and the ignore
 rules apply to what it receives outside history, the files of the game's nested repositories (only
 the ignore rules when the copy versions them). The Assets tab lists `assets/` and `public/assets/`,
-then the folders of the facts the game holds (`assetFoldersFor`: `unreal-project` and
-`unreal-plugin` `Content` `.uasset`/`.umap`; `godot-project` the folder's media; `unity-project`
+then the folders of the facts the game holds (`assetFoldersFor`: none for `unreal-project` and
+`unreal-plugin`, whose `.uasset`/`.umap` packages have no preview; `godot-project` the folder's media; `unity-project`
 `Assets` media; `blender-assets` `.blend` and media; a `web-game` below the root its own two), then
 each enabled plugin's `assets.folders` at its facts' folders, keeping only its `formats` (none: any
 file). `assets.folders` may not name a hidden or bookkeeping folder. Each folder is walked only by
@@ -1177,6 +1255,30 @@ Unreal lead's kinds: Unreal `cpp` (`check-part`, so only on an Unreal game), Loc
 The harness reads a game's kinds with `plugins.workerTypes {project}` (by the game's facts, as
 `plugins.tools`); `worker_start`'s `type` gives a worker its kind's tools (`toolAllow`) and, unless
 the lead says otherwise, its isolation ([harness runtime](harness-runtime.md#workers-in-a-chat)).
+
+### Scaffolds
+
+`scaffolds` (API 3, `substrate/plugins/scaffold-manifest.ts`) names the kinds of project the
+plugin's tools make: `id` a fact id, unique in the manifest; `label` 1–40 characters ("Unreal
+plugin"); `tool` an agent tool of the manifest that declares `makes`, named by one scaffold only;
+`facts` at most four rules
+in the `detect` grammar, each of a fact that tool makes (a scaffold with `facts` needs a `tool`).
+Each scaffold whose tool reaches a game is a kind on offer of its own, named by its label (a plugin
+with no scaffold naming a tool offers each reaching `makes` tool as before; one without a tool
+offers nothing). Once a scaffold's tool made one of its kinds (`main/core/kind-change.ts`: a fact
+its rules find counts as made only when it was not there before the call, read with the same rules), Genex
+writes `scaffold: {plugin, id, label, facts}` into the game's `studio.json` beside `portedFrom`;
+its rules join the folder's walk with source `scaffold` while the plugin is on or off, and the
+listed game carries `scaffold: {plugin, id, label}`. A brief treats a plugin's own fact found only
+by such a record (not by its plugin's `detect`, so the plugin may be off) as one Genex's own kinds
+are: it looks for the plugin first. With no question card, a folder with no kind yet is told each
+scaffold by its label, beside its own tool. A record that doesn't parse in full
+(`parseScaffoldRecord`) adds nothing. The sidebar shows a project that isn't a game by its kind
+beside its name: the scaffold's label while a fact its rules found is there, else `Unreal plugin`
+or `Blender assets` for a folder holding no game (`renderer/project-kind.ts`). The Unreal plugin
+declares `game` (`Unreal game`, `new-game`) and `plugin` (`Unreal plugin`, `new-plugin`, a rule
+finding `**/*.uplugin` but not under the Genex editor helper's folder, so a host project's plugin
+in `Plugins/` is an `unreal-plugin` fact).
 
 ### Folders
 
@@ -1225,6 +1327,13 @@ note?, pending?, images?}` (`hookAnswerOf`: reasons up to 300 characters, notes 
 handler never rewrites arguments and never gives instructions, and git stays Genex's: no handler
 takes or restores a snapshot. The moments that write (`run.prepare`, `checkpoint.*`, `restore.*`,
 `crash`) wait while the chat plans, except the person's own Rewind.
+In a Loop on a project that isn't a web game, Genex asks `health` every 15 s while the Loop runs
+(only when a plugin hooks it), fires `crash` on a block, and fires `restore.*` around the lead's
+rewind and alone for its `restart` (offered only when a plugin hooks a restore moment), whatever the
+plugin's engine ([the open Loop's turns](harness-runtime.md)).
+Genex's own gates run beside the plugins' hooks at the same moments (`loop/builtin-hooks.ts`):
+`web.ready` at `run.prepare`, only where a web game is served at the root, refuses a Loop whose page
+lacks the files it needs; a plugin's project is never refused for a missing `index.html`.
 
 Genex runs them in `main/core/plugin-hooks.ts` (`HookService`), each step as a harness step through
 the registry, under the union of the steps' locks held for the whole moment (a checkpoint's before
@@ -1233,10 +1342,21 @@ and after steps and its snapshot together); a run's moments pass the locks its o
 the chat's `checkpoint` tool on a game whose plugins hook checkpoints, which then answers what was
 saved and the snapshot's id), `restore.*` around every restore of a game folder (the person's file
 Rewind with `forPerson`: no wait for the person or the plan) and `tool.*` around an agent's call of
-the plugin's own agent tool (a `tool.before` block is the call's answer, `{blocked}`, and nothing
-runs or is recorded; `tool.after` notes join the answer under `genex.notes`; each waits at most 15 s
-for its locks and runs a step at most a minute, so the agent's call, its 4-minute wait included,
-answers within the engine bridge's 10-minute deadline). The harness announces
+the plugin's own agent tool, once the call's arguments passed and its card was answered yes (a
+`tool.before` block is the call's answer, `{blocked}`, and the tool never runs; the call's record,
+opened before its card, closes as not run with the block's words; `tool.after` notes join the
+answer under `genex.notes`; each waits at most 15 s for its locks, passing no worker's lock as the
+call itself passes none, and its steps share one limit of a minute however many the plugin hooks
+there, a step still running then failing and no later one running). An agent's call has one
+deadline from its start (`AGENT_CALL_MS`, within the engine bridge's 10-minute one): its tool
+moments and its lock wait get what is left of it after the card, the lock wait leaving the call its
+ceiling (and its after steps theirs, when its plugin has `tool.after` steps for the game), and a
+call with after steps or locks still running where its after steps' time begins is ended,
+answering that whether it took effect is unknown. Such a call with too little of its time left to
+start (5 s or less, or no time for its before steps) does not run and answers `{notRun: true,
+message}`, as does one ended before it was sent; a call with neither steps around it nor locks keeps
+the time it always had, so an approved call is never cut for a late card. A connector's lock wait
+leaves the call its connector's own time. The harness announces
 the rest through `hooks.fire` ([harness runtime](harness-runtime.md)): a chat turn its `turn.*`,
 every worker pool, the director's builders and the Unreal lead's typed workers `worker.*` (a
 `worker.start` block starts nothing and writes no record), the director `run.prepare`, `run.end`,
@@ -1247,11 +1367,27 @@ skipped when every probe of its steps' locks answers `unsaved: 0`, or one can't 
 that before Plan mode holds it. When Genex itself holds a moment, a checkpoint or a restore back,
 the block carries `hold` (`HookHold`: `plan`, `person_first`, `cant_tell`, `busy`) and the lock's
 `label` beside its reason (on `HookBlockedError` too), at a writing moment (`crash`) as at a blocking
-one, and callers word the person's line from them, never from the reason, which is written for
-agents. A run's moments pass the locks its own workers hold, a chat's moments its chat's workers'
-(the person's Rewind passes none); a lock passed into stays held until every holder lets go. The
-run's or the chat's Stop (`engine.abort`) ends a moment the harness asked for
-(`main/core/moment-stops.ts`), its wait for locks included; a restore's after steps still run.
+one, and so do Genex's own `pending` at `health` and its note at any other moment; callers word the
+person's line from them, never from the reason, which is written for agents. After an agent's call
+that ran, a `tool.after` lock not given is only a note that the call ran and its after steps were
+skipped. A run's moments pass the whole-life locks its own workers writing in place hold, a chat's
+moments its chat's workers' (the person's Rewind and `tool.*` pass none); a hold passes only when
+every holder of the lock is itself or such a worker holding that very lock for its whole life, so
+two moments still go one at a time and none walks into a worker's single call, on that lock or
+another; a moment queued behind such a worker joins it once the worker's hold is given, or once a
+waiter ahead of it gives up, and a lock passed into stays held until every holder lets go (a hold is
+counted the moment it is given). A hold whose wait was stopped before it began takes nothing. A wait
+on the person in a run's moment is told in the chat the run was started from. The run's or the
+chat's Stop (`engine.abort`) ends a moment the harness asked for (`main/core/moment-stops.ts`), its
+own plugin calls through `plugins.invoke` too, their waits for locks included, and so does the
+harness's end, which also cuts off its own connector calls (`mcp.invoke`); a moment, hold or
+connector call asked for by a harness that has ended by the time its handler gets to it runs
+stopped, holds nothing or is never made, and a host call an ended harness process wrote is never
+served. Once a restore's files may have changed its after steps still
+run (a restart's announced `restore.after` too), and neither a Stop nor the harness's end cuts them
+short (`STOP_OUTLIVING_HOOK_EVENTS`); nor does the harness's end, or the Stop of everything a
+harness sends as it shuts down, cut a step of the person's own Rewind (`outlivesHarness`). A Stop during a restore's before steps runs none; a Stop during a
+checkpoint's after steps keeps its snapshot, with a note that they were stopped.
 `GameProject.hookEvents` lists a game's moments; absent, no plugin hooks it and nothing runs.
 
 ### Locks: the person comes first
@@ -1269,25 +1405,93 @@ nothing.
 
 Genex holds them (`main/core/plugin-locks.ts`). A call of a tool or connector that needs locks takes
 them in one key order, first come first served per lock, and then asks the probe straight through
-the registry, ending a probe's call when the wait does: while the person uses what the lock guards
-(or Genex can't tell) it asks again every 5 s, and once a probe saw the person at it the chat's working line reads "Waiting for you to finish
-in <label>" (`UiEvent.PersonFirst`, once per chat however many of its calls wait); a "not using it"
-answer stands 3 s. An agent's call has its
+the registry, ending a probe's call when the wait does and never asking again once it ran out (a
+hold with no wait left, `health`'s or one whose turn came as its wait ran out, asks once for at most
+5 s, once for the whole hold however many locks it takes): while the person uses what the lock guards
+(or Genex can't tell) it asks again every 5 s, and once a probe saw the person at it the chat's working line (a running build's line too) reads "Waiting for you to finish
+in <label>" (`UiEvent.PersonFirst`, once per chat however many of its calls wait, each app's wait kept on its own); a "not using it"
+answer stands 3 s, unless a later probe sees the person at it. A hold queued behind a holder that
+waits on the person is refused as the person's (`person_first` or `cant_tell`), never as `busy`.
+An agent's call has its
 arguments checked and its card answered before it waits (`registry.prepareTool`), and waits up
-to 4 minutes (within the engine bridge's 10-minute deadline for one call), then answers like a
-declined consent (`{blocker: "lock", lock, message}`, its record closed with the message); a
+to 4 minutes (less when its call's deadline leaves less), then answers like a
+declined consent (`{blocker: "lock", lock, reason, hold, message}`: `reason` the lock's refusal,
+`hold` Genex's `HookHold` the harness words the person's line from, its record closed with the message); a
 person's own action never waits for the person. A worker writing in place holds Genex's in-place
 lock and the game's `project` locks for its whole life (`locks.hold`/`locks.release`,
 [harness runtime](harness-runtime.md#workers-in-a-chat)); its own calls pass them (on an engine the
 host seats no worker on too, as `unseatedHolder`), still giving way to the person, and its line and row read "Working in <label>". Any end of the harness, a planned
-restart's too, releases what it held for its workers (`releaseHarnessHolds`); the host's own holds (a
-restore, the person's Rewind) end with their own work.
+restart's too (which stops the old harness first, once any boot already under way has finished, so
+it never hears its moments stopped; the watchdog's rewind stops it first as well), ends the moments
+it asked for, tells those workers' sessions (and its runs' leads in place) to stop and, once each has let go (at most 10 s, on the
+locks' clock), releases what it held for its workers (`releaseHarnessHolds`); a planned restart's
+boot notice carries the runs an earlier crash left open (`openRuns`); the host's own holds (a restore, the
+person's Rewind) end with their own work. Genex's own hold of the person's Rewind is worded for them
+from its hold and label.
 
 `needs` covers one call, never a job it leaves running: a tool that answers at once and works on
 in the background (the Unreal plugin's `add-cpp-module`, `reopen-editor`, `run-part`,
 `play-check`) lets its locks go as it answers, so another holder may take the editor while the job
 still closes, reopens or plays it. This is a known gap in "editor work waits its turn"; the Unreal
 runner covers adding C++ with its own wait (`whileAdding`).
+
+### Observers
+
+`observers` (API 3, `substrate/plugins/observer-manifest.ts`; vocabulary in `shared/observers.ts`)
+names what Genex can capture of a project, as evidence a reviewer reads: up to 8 `{id, facts, tool,
+live?, label?}`. `id` is a slug (`^[a-z][a-z0-9-]{0,39}$`, unique in the manifest), never `preview` or
+`proof`, which are Genex's own; `facts` is 1–8 fact ids, each once; `tool` is one of the manifest's
+tools as a hook's is chosen (only the harness calls it, it asks nothing and runs no host program);
+`live` is the Live view Genex draws for it: `stills` (any plugin) or `unreal-card` (only the bundled
+Unreal plugin); `label` names that view's tab when a folder has more than one view (1–24 printable
+characters on one line, not blank; shown as plain text), else the tab takes the plugin's `name`. A
+label that repeats, in any case, a name the stage strip already shows (a reserved toolbar label such
+as `Live`, `Builds` or `Assets`, or Genex's own `Web game` and `Unreal`) is refused. Only
+these keys are kept. `observersFor` (`registry.observers(game)`) lists a game's
+observers: each plugin's in plugin order, one per folder its facts reach (the hooks' rule), then
+Genex's own `preview` of each folder served as a web game (a game with no kind yet at its root). Only
+a plugin that is on captures (`registry.observerTool(key)` answers null otherwise). The bundled Unreal
+plugin's `viewport` observer runs `hero-shots` and shows the Unreal card.
+
+How Genex runs one (`main/core/observers.ts` `ObserverService`, host call `observers.capture`
+[in the harness runtime](harness-runtime.md)): only inside a run of the game, each observer of a
+plugin that is on in turn, its tool called as a harness step with `context.observe = {observer,
+runId, why: "finish", withinMs}` (never `context.hook`) under the locks the tool `needs`. The person
+comes first and the run's own holds pass, as for a moment of the run: a lock not given within 30 s
+(`OBSERVE_LOCK_WAIT_MS`) is a `problem` on that capture worded by Genex's hold, never the lock's
+text, and the tool never runs; a call is cut at 40 s (`OBSERVE_CALL_MS`). Both fit in the time the
+harness still waits (`withinMs` of the call, counted from the moment it comes in), less 3 s
+(`OBSERVE_KEEP_MS`) for keeping the pictures and the answer's trip: past that no observer is asked,
+and an answer after it is neither kept nor recorded, so the whole answer reaches the harness in time.
+`withinMs` tells the tool its own time, so it can answer the pictures it has (the Unreal viewport
+answers the stills taken by then, and asks for none that could not land before it). The answer is read as
+a hook's is (`hookAnswerOf`): `images`, `recording` (a short play recording, at most 8 frames in
+order) and `note`; a `block` or `pending` answer, or a call that fails, is that capture's `problem`
+and the other observers still run. Plan mode never holds a capture: it only looks. The pictures
+(PNG or JPEG by their bytes, 8 MiB each at most) are kept under the run's folder
+(`runs/<run>/observers/<plugin>-<id>/`) and recorded as one `observer_capture` (files, never
+data); the harness gets them back downscaled to 1280 px for a reviewer's prompt. A run's checkpoint
+whose `checkpoint.after` step is an observer's tool keeps that step's pictures the same way, as a
+capture with `source: checkpoint`, written and recorded only (nothing resized; none when no picture
+was kept; the checkpoint's own answer is unchanged; a chat's checkpoint keeps none). The Unreal `hero-shots` asked as the viewport observer answers the hero cameras' stills
+as `images` when Unreal answers, and nothing when it doesn't.
+
+Live's views of a game come from these observers (`renderer/live-views.ts` `liveViewsFor`), one per
+kind of view and one per `stills` observer, ordered: the Unreal project the game's engine link names first, then the game's root,
+then by view (the Unreal card, Genex's preview, a plugin's `stills`), then by folder. The first is the
+default. A folder with one view keeps the strip's Live tab; one with more (a web game and an Unreal
+project) gets a tab per view in Live's place (`panels/stage/stage-tabs.ts`): "Web game", "Unreal", or
+a `stills` observer's `label`; the default's tab keeps `data-stage-action="live"`, the others
+`live-<view>` (`live-unreal-card`), a `stills` view's with its observer key (`live-stills-<plugin>/<observer>`). The last one chosen is remembered per game
+(`studio.liveView.<game>`), and a web build put on the stage brings the Web game view forward. `unreal-card` is the Unreal card (where the project stands, and the
+newest viewport capture as its shot, else the newest save point's still); Genex draws it for any
+Unreal project fact, whatever the plugin list says (off, removed, older, not read yet). `preview` is
+the web preview, also for a game with no kind yet; no plugin's `stills` take it over. A plugin's
+`stills` count only while the plugin is on, never from an unlisted package. A folder no observer
+draws (Godot, Blender, files of its own) shows the newest capture's pictures of the run the stage
+shows, or of the newest earlier run that kept some (`data-live-view="stills"`), else a sentence.
+Run, Reload, Sound and Full screen show, and Live probes a page, only while the view is the preview.
+A `stills` observer's view shows its own newest capture the same way.
 
 ### Scope by facts
 
@@ -1303,15 +1507,17 @@ rule, and `mcp.toolsFor(project, {facts})` leaves out a server that does not rea
 names `tools` reaches only while one of them does. A skill that applies only below the root says
 where after its name: `[example/page] (for site/)`. A tool's `makes` (1–4 fact ids, agent tools
 only) says which facts it makes in the game's folder; the snapshot lists the reaching ones as
-`kinds` (`{plugin, name, tool, makes, asksReady?}`, `asksReady` when the tool declares `ready`). For a game with no kind yet, `plugins.tools {project}`
+`kinds` (`{plugin, name, tool, makes, asksReady?, scaffold?, label?}`, `asksReady` when the tool
+declares `ready`; one per reaching scaffold when the plugin declares [scaffolds](#scaffolds)). For a game with no kind yet, `plugins.tools {project}`
 asks each kind tool's `ready` harness tool (5 s at most, `main/core/kind-readiness.ts`) and adds
 its answer as `ready` (a boolean) and `note` (the words the engine card offers the kind with); an
-answer that is late, throws or is odd leaves both out. The card offers one kind per plugin: the
-one that answered, else one whose tool asks (`asksReady`), else the first; beside a plugin's note
-it names the tool as the session calls it. An agent never sees `facts`, `makes` or `ready`. The Unreal
+answer that is late, throws or is odd leaves both out. The card offers each scaffold by its label,
+and one kind for a plugin with none: the one that answered, else one whose tool asks
+(`asksReady`), else the first; beside a plugin's note it names the tool as the session calls it (a
+plugin's note words its first kind; a later scaffold is offered by its own tool). An agent never sees `facts`, `makes` or `ready`. The Unreal
 plugin's editor tools, skill and connector name `unreal-project`, so a web game's sessions get only
-`use-project`, `show-steps` and `new-game` (`use-project` and `new-game` declare `makes:
-["unreal-project"]`). Publish goes by the same facts: a game served as a web game at its root may be
+`use-project`, `show-steps`, `new-game` and `new-plugin` (`use-project` and `new-game` declare
+`makes: ["unreal-project"]`, `new-plugin` also `unreal-plugin`). Publish goes by the same facts: a game served as a web game at its root may be
 published, an Unreal project is refused as before, and any other kind is refused with its own code
 (`not-web-game`).
 
@@ -1332,22 +1538,38 @@ be resumed starts afresh from a brief for the new kind. A run's turn never conti
 
 ### Finding and suggesting a plugin
 
-The chat's own session is handed two of Genex's own tools on every game, beside `start_web_game`
+The chat's own session is handed Genex's plugin tools on every game, beside `start_web_game`
 (`main/core/project-tools.ts`); a local model has the same names as harness tools
 (`tools/plugin-finder.ts`, through `plugins.find` and `plugins.suggest`). Which ones a delegated
-session gets is its seat's (`ProjectToolSeat`): a run's lead (the director, the Unreal Loop's lead)
+session gets is its seat's (`ProjectToolSeat`): a run's lead (a web run's director, an open Loop's lead in place)
 gets both, and its card shows in the one chat its run was started in, as the host's records say,
 never a thread the harness names; a worker the host seated gets `plugins_find` only and reports
 what it found to its lead; any other session (a classic run's builder, a judge, a scout) gets
 neither. Only the chat's own session gets `start_web_game`. `plugins_find {fact?, text?}` is read-only, so it runs in Plan mode: it lists
 the installed plugins that match (on, then off or removed), then the entries of Genex's curated
 catalog not installed, and never anything from another source (`main/core/plugin-finder.ts`). A
-plugin matches when it detects, is scoped to or makes `fact`, and when every word of `text` is in
-its id, name or description: the agent's own search, not Genex deciding. Each found plugin carries
+plugin matches when it detects, is scoped to or makes `fact`, or when a word of `text` other than a
+generic one ("engine", "plugin", "editor"…) is a word, or starts a word, of its id, name, description
+or facts: the agent's own search, not Genex deciding. Each found plugin carries
 its `offer` (`turn-on`, `install`, or none when it is on) and its facts; the answer's `next` says
 `suggest`, `use` (only plugins already on match) or `write-plugin` (none: the agent may offer to
 write a local Genex plugin, or go on with its own tools on the person's word), and its note says
-that an engine's own plugins are project files, not Genex plugins. `plugins_suggest {plugin,
+that an engine's own plugins are project files, not Genex plugins. With `write-plugin` the note
+names the guide while Genex Tools is on (read `genex__skill {"name":"plugin-author"}`, write the
+plugin in the project, check it with `plugin_check`, tell the person how to load it) and otherwise
+says the guide comes with Genex Tools, to suggest with `plugins_suggest`. The `plugin-author` skill
+(Studio's own, not vendored: `STUDIO_SKILLS` in `scripts/refresh-genex-skills.ts`) teaches the
+manifest section by section with a complete example plugin for a made-up engine, its backend and
+its skill, written into `genex-plugins/<id>/` in the project. The example's backend starts no
+program (the scan marks `child_process` dangerous): it talks to the engine's editor on a local port
+under `network` and `network.hosts: ["127.0.0.1"]`, and leaves the engine's command-line program to
+the lead as a job, so `plugin_check`'s scan of it finds nothing but its skill file, not read. It says the agent cannot load or turn
+on a plugin and gives the person's steps (Plugins → Add → Load local plugin…; it starts off).
+`plugin_check {folder}` (`main/core/plugin-check.ts`) is the chat's own session's only and runs in
+Plan mode: `folder` must be a plain relative path whose real path is a folder inside the game, read
+in place by `inspectPackage` and the install-time scan; it answers `{ok, id, version, name, tools,
+skills, sections, scan: {verdict, findings}, next}` or `{ok: false, problem}` (no path outside the
+game is named) and never touches the registry, so nothing is installed, turned on or written. `plugins_suggest {plugin,
 reason}` takes only a plugin that is installed but off (or removed) or in the catalog and not
 installed, and only for a chat of its game: it appends `plugin_suggested` (`{pluginId, name,
 description, offer, reason, project}`) to that chat and tells the session to end its reply (a local
@@ -1391,10 +1613,51 @@ template only): a new project exactly as the panel makes it from the open game (
 `unreal/`, set up, linked), then opened in Unreal, with the setup card offered while a step is
 open; it refuses
 without an open game and creates nothing in Documents › Unreal Projects (Plan mode refuses all
-three). A chat build of a game still with no kind, with the plugin on, first asks the
+three). `unreal__new-plugin {name, template?}` makes an Unreal C++ plugin the way Epic's New Plugin
+wizard does (`plugin-scaffold.ts`): every check first (the name, at most 16 characters, against the
+engine's own modules and plugins and the Genex editor helper; the template, `window` (Epic's
+Advanced, the default), `toolbar-button` (Basic) or `blank`; a game with no `unreal/` yet), then
+New game's Blank project `unreal/<Name>Host.uproject` (set up), the host's own C++ module,
+and `unreal/Plugins/<Name>/` copied from the engine's template with `PLUGIN_NAME` replaced and its
+`.uplugin` written, enabled in the host's .uproject (`cpp-module.ts` `enableProjectPlugin`). The game
+is linked to the host only once all of it is written: a step that fails links nothing and removes the
+`unreal/` folder the call made (a real folder in the game, never through a link). It opens
+nothing. A build of the host lets UnrealBuildTool's sandbox write each project plugin's
+`Intermediate` and `Binaries`, nothing else of it (`ubt.ts` `projectPluginDirs`, `ubt-sandbox.ts`
+`pluginDirs`). A game with an `unreal-plugin` fact gets four more tools and the `unreal-plugin` skill
+that orders them (`plugin-ship.ts`; `plugin` names the folder under `Plugins/` when there are several).
+`unreal__plugin-build` needs the editor lock and asks first: the call saves the person's work through
+the Genex editor helper, quits Unreal and waits, then the host's editor target is built as the
+plugin's background job, which opens Unreal again after a good build and leaves it closed after a
+failed one. `unreal__plugin-test {filter?, stop?}` runs `UnrealEditor-Cmd` headless
+(`automation-tests.ts`: `Automation RunTests <filter>`, the plugin's name by default, no shell, a
+small environment, its own process group, 30 minutes) and keeps Epic's report and a `summary.md` in
+`unreal/Saved/Genex/Tests/<Plugin>/`. Like `open-editor`, it runs outside ProcessSandbox and
+UnrealBuildTool's Seatbelt profile: it loads the same host project and plugin binaries that the
+person's own editor loads after every `plugin-build` (so the plugin's code gains no access it lacks
+there), and the editor needs what that profile denies (its per-user engine folders, the derived data
+cache, its shader workers). Its last lines and failure messages reach an agent with the project's
+and engine's folders taken out and any other absolute path cut to its base name (`ubt.ts`
+`pathScrubber`). `unreal__plugin-package {stop?}` runs `RunUAT.sh BuildPlugin`
+(`uat.ts`) in UnrealBuildTool's sandbox, which may also write the package folder (`extraWrites`), with
+UAT's logs in the sandbox's scratch; the package goes to `unreal/Saved/Genex/Packages/<Plugin>/` and a
+note beside it (`<Plugin>.md`: path, version, files, platforms, or the errors; a new run removes the
+last one first; the note is written only in the packages folder as it is when the job ends, never
+through a link swapped in meanwhile, and the packaged descriptor is read only as a plain file within
+its cap). One job runs at a time per project, reserved before anything is touched, and each job is
+its plugin's own (a call naming another plugin never reads, answers for or stops it); a build
+reads as Genex's own restart from before Unreal is quit and is refused while Genex reopens Unreal or
+adds its C++ module; a call stopped before its job starts changes nothing (a build stopped once
+Unreal was quit opens it again); and the backend stopping (Genex quits, the plugin is turned off)
+ends every running job's process group. A headless editor that exits badly before Automation wrote
+its report is a failed run, its summary naming the exit code, the counts so far and its last lines.
+`unreal__plugin-status` answers each job's state and results and `proof`: the summary, the note and
+`unreal/Saved/Genex/Shots/<Plugin>-window.jpg` (kept by `app_look`'s `save`) that exist, the summary
+and note only for a run that finished, relative to the game, read from disk after a restart. A chat build of a game still with no kind, with the plugin on, first asks the
 user Web or Unreal Engine with `ask_user`, unless the message names one
-(`loop/unreal-prompts.ts` `engineChoiceRule`: one option per plugin among `plugins.tools`'s
-`kinds`, each in its plugin's readiness `note`, and the web answer calls `start_web_game`). The
+(`loop/unreal-prompts.ts` `engineChoiceRule`: one option per scaffold, else per plugin, among
+`plugins.tools`'s `kinds` (Unreal's are `Unreal game` and `Unreal plugin`), each in its plugin's
+readiness `note`, and the web answer calls `start_web_game`). The
 Unreal kind's `note` comes from `engine-status`, so with no Unreal installed the agent points to the
 Unreal button instead of `new-game`; any kind whose plugin says `ready: false` is never made: the
 person finishes its setup from that plugin's button first. A host that lists no kinds offers no
@@ -1470,7 +1733,9 @@ the confirmation over the action's arguments as JSON (nothing when there are non
 with Approve. Cancel is the default either way. Studio requires all images to load before
 continuing. Approval tickets are short-lived, single-use and bound to
 plugin/action/arguments/project. A panel never supplies its own approval ticket. Genex uses this
-for candidate/remesh review, allowance changes and credential operations. Account connection
+for candidate/remesh review, allowance changes and credential operations; a preview's review
+carries only the candidate its arguments name, captioned as the one being approved, and a
+remesh's carries every view. Account connection
 URLs must be HTTPS and open only after an approved connection action.
 
 ## Marketplace
@@ -1594,8 +1859,14 @@ Capabilities: … (new: …). Scan: …"*.
 ## Hot reload and debug logs
 
 **Watch folder** in a local plugin's detail-page More menu starts a recursive watcher on the folder it was loaded
-from, debounced at 500 ms, and re-installs through the normal lease path — so a reload waits for
-any session holding the plugin and lands as `reloaded` when it is free. Each reload scans the
+from, debounced at 500 ms, and re-installs through the normal lease path: the new backend is started
+once to prove it loads, then the new record waits for any session holding the plugin and lands as
+`reloaded` when it is free. A reload that changes MCP servers or network hosts, or the steps Genex
+runs without a card (hooks, observers, locks with their `personFirst` probes, `folders`, harness
+tools, `ready`), is refused before anything starts and the person loads the folder again through the
+trust dialog. Watch is refused for a folder agents write in (`PluginRegistry.agentWritable`: the
+games folder, any game's folder, the scratch of workers' copies), since an agent's edit would run
+on the next save with no card. Each reload scans the
 folder again, so the detail page's `Scan:` verdict describes the code that was just loaded. Only a
 `local` origin can be watched; disabling or removing the plugin clears the watcher, and a remove
 that was queued first wins: the reload re-checks inside the serialized queue and bails rather than
@@ -1668,11 +1939,45 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
+  in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
+  kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
+  plugin records whenever Genex reports the owner's pick, at a send or a status check, a shot kept
+  or not; `outranked`) and no publish runs, one quiet line offers Ask for a cover (`[data-genex-cover-ask]`,
+  `coverAsk` in `genex-publish-view.ts`): it closes the dialog and leaves "Make this game's Genex
+  cover." in that game's chat composer (`renderer/compose-in-chat.ts`), never sent. A Genex plugin
+  older than covers answers no record, and the line stays hidden. Genex-specific core UI, accepted
+  by the owner; a second plugin with a cover would need a declared host surface instead.
+- The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
+  thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
+  answer carried a picture (`chat-entries.ts`, the tool read with or without `genex__` and
+  `mcp__studio__`). Like a build's result card it goes up once that work has ended, after the turn's
+  reply (or a build's result card when the build's builder shot it), never mid-turn, and a newer
+  kept shot takes it down at once; earlier shots stay rows of the work. Its picture is the kept shot
+  read through `readProjectAsset`'s `genex-cover` scope (below), never a tool result's image, so a
+  shot that can no longer be read leaves no card. Under it, the caption Genex cover and a primary
+  Publish (`[data-genex-cover-publish]`) that dispatches the `studio:plugin-setup` window event with
+  `{id: "genex"}` (`renderer/plugin-setup.ts`), so the stage strip opens Studio's own Publish
+  dialog; that dialog's press is the consent, and for a live game it offers Publish update. Publish
+  is left out while Genex puts no Publish on the strip (off or removed), while publish-status
+  reports an attempt running, and once Genex has answered for the kept frame itself (`applied`,
+  `unchanged`, `outranked` or `kept_owner` for its hash: a publish re-shoots and sends it, so the
+  cover's next step is done; `failed` and `not_hosted` keep it) (`coverCardPublish`, read on mount,
+  on Genex's plugin events and on the dialog's cadence by `use-genex-publishing.ts`). The cover
+  guidance (inline `cover` skill, `genex-cover` preface) tells the builder to shoot the winner last
+  and then say one line, never how to publish. Genex-specific on purpose and with no manifest field:
+  when plugin pictures get a general home in the chat, the card moves onto it and keeps only
+  Publish.
 - `~/.genex` is on the protected and secret path lists every sandboxed engine and native job is
   denied, and the workspace content filters skip `.genex` folders.
 - Core reads Genex job folders under `engine-homes/genex/projects/*/jobs` for the Assets inventory
   and provenance, resolves `@genex/` retained-asset references, and serves one saved inspection
-  frame through the `genex-inspection` scope of `readProjectAsset`.
+  frame through the `genex-inspection` scope of `readProjectAsset`. Its `genex-cover` scope serves
+  the game's kept cover shot (`readGenexCoverShot` in `main/game-assets.ts`): the host builds
+  `engine-homes/genex/covers/<project>/` from the validated game name, never from a path the
+  renderer or the plugin names, refuses a link anywhere on the way, and reads only `shot.png` or
+  `shot.jpg` (no link, at most 8 MiB, bytes of the type its name says; the newer when both are
+  there); anything else answers null. `genex-cover-shot.test.ts` holds its hostile table.
 - A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`.
 - `tools[].host` (API 3, id `genex`, source `bundled`, else refused before any hook runs) names a
   program Studio runs for the tool through the registry's `hostTool` hook. `genex-cli` backs
@@ -1703,6 +2008,10 @@ Genex:
   image) are vendored behind Studio-written prefaces in
   `src/plugins/genex/skills` (`vendor.json` pins each source and hash; `npm run genex:skills`
   refreshes them; `genex-skills-vendor.test.ts` catches drift) and served as file skills.
+- The bundled CLI follows npm: every 6 hours `.github/workflows/genex-cli-follow.yml` compares
+  npm's `latest` `@genex-ai/cli-demo` with the pin. When npm is ahead, `scripts/follow-genex-cli.ts`
+  opens one bump PR against `dev` with the exact pin, refreshed skills, the plugin's next patch
+  version and the version mentions it lists.
 - Its backend and adapter import core substrate modules (session credentials, secrets, delivery,
   outcomes, atomic writes, snapshots), which `scripts/build-plugins.mjs` bundles from this repo.
 
@@ -1862,6 +2171,23 @@ unchanged. Verify installed, disabled and removed Genex in the packaged applicat
 assets remain ordinary files. A fixture `assets.deliver` must leave an `asset_delivered` event in
 the project's log and a card on the Assets tab; no paid generation is needed for either. Use
 fixture accounts and existing assets, with no additional paid generation.
+
+`genex-cover.test.ts` pins the Genex cover the same way, with a fake `observe` and the cover routes
+on the fixture API: `genex__cover` shoots only the `genex-cover` demo into the plugin's storage
+(the game folder locked, never read) and answers its preview; a publish sends the frame only after
+its upload is recorded (a draft's page check may still be running), sends nothing for unchanged
+bytes or over the owner's own cover (recorded as such with no shot kept, by a publish and by a
+status check), stays done with a warning when the commit is refused, limited,
+failed or silent or the shot cannot be kept, skips the shot without enough of its invocation left,
+never sends from a listed game's draft (listed from the dashboard too), sends the bytes it records
+however shots interleave, and is stopped by the next publish; `genex__cover-set` waits for consent
+and sends nothing without a hosted project; a bad project name reaches no host and writes nothing.
+The chat's cover card: `chat-transcript.test.ts` pins which shoot gets it (the latest that kept a
+shot, read by plugin, tool and operation) and when (its turn or build ended, the work one group),
+`genex-publish-view.test.ts` when it offers Publish,
+and `npm run test:ui -- chat-cover-card-ui` renders the production chat beside the stage strip:
+the kept shot at 16:9, Publish opening the dialog, Publish hidden while publishing, with Genex
+off or once Genex took the frame, and no card once the shot is gone.
 
 `plugin-marketplace.test.ts` drives `PluginMarketplace` with an injected `fetchImpl` and never
 touches the network: index validation, spec parsing, the 6 h cache with its stale-plus-error path,

@@ -4,7 +4,9 @@
  * says where it stands, with the one step it needs, as the Unreal button's panel offers it: get
  * Unreal, set up and open, open, a timer while it opens, Ready, or switch, restart or quit Unreal
  * (`unreal-stage-view.ts`). It asks the bundled Unreal plugin's `stage-status` every few seconds.
- * The latest play shot shows above the name once the Unreal Loop takes one.
+ * The latest play shot shows above the name once a run keeps one (`live-views.ts` `latestShot`). A
+ * folder holding an Unreal project Genex has no link to yet shows the game's name and the way to
+ * choose its project.
  */
 import type { JSX } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -27,7 +29,7 @@ import {
   unrealProjectOf,
 } from "../../unreal-game.ts";
 import { problemWords, UNREAL_WORDS } from "../../words.ts";
-import { PLUGIN_SETUP_EVENT } from "../PluginToolbar.tsx";
+import { openPluginSetup } from "../../plugin-setup.ts";
 import { StageAct, type StageView, stageView } from "./unreal-stage-view.ts";
 
 /** How often the card asks where the project stands; the panel asks as often. */
@@ -48,8 +50,7 @@ function elapsedText(ms: number): string {
 }
 
 /** Opens the Unreal button's panel (where Get Unreal and the project list are), else the Plugins page at Unreal. */
-const openUnrealPanel = () =>
-  window.dispatchEvent(new CustomEvent(PLUGIN_SETUP_EVENT, { detail: { id: UNREAL_PLUGIN_ID } }));
+const openUnrealPanel = () => openPluginSetup(UNREAL_PLUGIN_ID);
 
 /** A status as it arrived: the plugin's answer and when, so the opening timer runs on between asks. */
 type Received = { status: UnrealStageStatus | null; at: number };
@@ -190,10 +191,10 @@ export function UnrealStage({
   shot = null,
   onNotice,
 }: {
-  /** The game on the stage; a game with no Unreal project draws nothing. */
-  game: Pick<GameProject, "name" | "engine">;
+  /** The game on the stage, which Live shows as an Unreal project (`live-views.ts`). */
+  game: Pick<GameProject, "name" | "engine" | "title">;
   plugins: PluginInfo[];
-  /** The latest play shot's URL; none until the Unreal Loop takes one. */
+  /** The latest play shot's URL; none until a run keeps one. */
   shot?: string | null;
   onNotice: Notify;
 }): JSX.Element | null {
@@ -203,9 +204,8 @@ export function UnrealStage({
   const status = received.status;
   const timer = useOpeningTimer(received);
   const { busy, run } = usePress({ plugin, game: game.name, project, refresh, onNotice }, status);
-  if (!project) return null;
-  const name = projectName(project);
-  const view = stageView(status, name);
+  const name = project ? projectName(project) : game.title;
+  const view = stageView(status, name, { linked: project !== null });
   const button = view.button;
   return (
     <div

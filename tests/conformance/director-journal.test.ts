@@ -21,8 +21,6 @@ import { Side } from "../../src/harness-seed/loop/judge.ts";
 import { saveJournal as saveRunJournal } from "../../src/harness-seed/loop/run-events.ts";
 import { VerdictSource } from "../../src/harness-seed/loop/verdict.ts";
 import { directorTalk } from "../../src/harness-seed/loop/director.ts";
-import * as loopRunFunctions from "../../src/harness-seed/loop/director/loop-run.ts";
-import * as toolFunctions from "../../src/harness-seed/loop/director/tools.ts";
 import * as workerFunctions from "../../src/harness-seed/loop/director/workers.ts";
 import { timedWorkRemaining, wrapReserveMs } from "../../src/harness-seed/loop/director/budgets.ts";
 import {
@@ -46,33 +44,24 @@ import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.
 import { RunEvent } from "../../src/harness-seed/loop/run-events.ts";
 import { reopenNote } from "../../src/harness-seed/loop/director/reopen-prompts.ts";
 import { DirectorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
-import { runWakeLoop, type DirectorTalk, type WakeClock } from "../../src/harness-seed/loop/director/wake.ts";
+import { runWakeLoop, type WakeClock } from "../../src/harness-seed/loop/director/wake.ts";
 import { NoteKind, WAKE_WINDOW_MS, WRAP_UP_MARGIN_MS } from "../../src/harness-seed/loop/director/wake-schedule.ts";
 import { HOUR_MS, MINUTE_MS, minutes } from "../../src/harness-seed/loop/time.ts";
+import { CLOCK, type FakeHost, FORK, fakeClock, fakeHost, fakeLoopRun, lead, T0 } from "../helpers/director-run.ts";
 
-const T0 = Date.UTC(2026, 8, 26, 1, 0, 0);
 const iso = (ms: number): string => new Date(ms).toISOString();
 const utc = (ms: number): string => `${new Date(ms).toISOString().slice(11, 16)} UTC`;
 const SKY_ACCEPTED = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 const LAMPS_ACCEPTED = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
-const FORK = "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f";
 /** Where a finished build's integration branch stood, and the game folder's head when it is reopened. */
 const FINISHED = "c3d4e5f60718293a4b5c6d7e8f9012345678901a";
 const LIVE = "d4e5f60718293a4b5c6d7e8f90123456789012ab";
 const BRIEF = () => "You are the DIRECTOR of run run_j";
 
-/** What the fake host saw: every call, and each journal as it was written. */
-interface FakeHost {
-  calls: Array<{ method: string; params: Record<string, any> }>;
-  journals: Array<Record<string, any>>;
-}
-const fakeHost = (): FakeHost => ({ calls: [], journals: [] });
 /** How many times the run's journal was written. */
 const journalSaves = (host: FakeHost): number =>
   host.calls.filter((c) => c.method === HostMethod.ArtifactWrite && c.params.artifactId === "autopilot_run_j").length;
 
-/** The run's own clock in these rows: an hour, the wrap-up reserve at its end. */
-const CLOCK = { started: T0, softDeadline: T0 + HOUR_MS - wrapReserveMs(HOUR_MS), finalDeadline: T0 + HOUR_MS };
 /** A clock as the journal keeps it, having worked `workedMs`. */
 const keptClock = (workedMs: number) => ({
   started: iso(CLOCK.started),
@@ -131,120 +120,6 @@ const round = (iteration: number, won: boolean, reason = won ? "brighter" : "dar
   reason,
   verdictSource: VerdictSource.Checks,
 });
-
-/**
- * A run as prepareLoopRun leaves it — its data plain, its parts the real ones, bound to it the way
- * `bindLoopRun` binds them — on a host that records what it is asked. An answer may be a function of
- * the call's params.
- */
-function fakeLoopRun(host: FakeHost, over: Record<string, unknown> = {}, answers: Record<string, unknown> = {}) {
-  const run = {
-    runId: "run_j",
-    project: "plaza",
-    goal: "a dusk plaza",
-    engine: "codex",
-    reference: { name: "Dusk", shots: [] },
-    budgets: { wallClockMs: HOUR_MS },
-  };
-  const ctx = {
-    threadId: "t1",
-    cancelled: false,
-    workspace: "/nowhere",
-    setStatus: () => {},
-    notify: () => {},
-    call: async (method: string, params: Record<string, any>) => {
-      host.calls.push({ method, params });
-      if (method === HostMethod.ArtifactWrite) host.journals.push(structuredClone(params.value));
-      if (method === HostMethod.PreviewScreens) return [];
-      const answer = answers[method];
-      return typeof answer === "function" ? answer(params) : (answer ?? null);
-    },
-  };
-  const data = {
-    ctx,
-    threadId: "t1",
-    run,
-    resume: false,
-    inbox: {
-      steering: async () => [],
-      finishing: async () => false,
-      addressed: async () => [],
-      backlog: async () => [],
-    },
-    started: CLOCK.started,
-    softDeadline: CLOCK.softDeadline,
-    finalDeadline: CLOCK.finalDeadline,
-    clock: { ...CLOCK },
-    priorJournal: null,
-    report: { notes: [], workers: {}, iterations: [], verdicts: [] },
-    integrationWorktree: "/runs/run_j/integration",
-    integrationRef: "refs/studio/runs/run_j/integration",
-    baseCommit: FORK,
-    state: {
-      run,
-      workers: new Map(),
-      ledger: [] as Array<Record<string, unknown>>,
-      log: [] as Array<Record<string, unknown>>,
-      plan: null as Record<string, unknown> | null,
-      planReviewUntil: null as number | null,
-      planGo: false,
-      planSaidFrom: 0,
-      integrationHead: FORK,
-      integrationHealthy: null as boolean | null,
-      workerLimit: null as Record<string, unknown> | null,
-      limit: null,
-      lastJudge: null,
-      finish: null,
-      finished: false,
-      monitor: null as Promise<unknown> | null,
-      fromScratch: false,
-      healthByHead: new Map<string, boolean>(),
-      consoleByHead: new Map<string, string[]>(),
-      evidenceByHead: new Map(),
-      baseHeads: new Set<string>(),
-      facetSpecs: [],
-      softDeadline: CLOCK.softDeadline,
-      finalDeadline: CLOCK.finalDeadline,
-    },
-    journal: { runId: "run_j", run, director: { sessionId: null, workers: {}, notes: [] }, plan: {} },
-    logSeq: 0,
-    waitSeq: 0,
-    runLedger: [],
-    priorLedger: [],
-    ledgerWrites: Promise.resolve(),
-    ...over,
-  };
-  return loopRunFunctions.bindLoopRun(data as never, [loopRunFunctions, workerFunctions, toolFunctions]) as any;
-}
-
-/** The loop's clock, moved by its own sleeps; `onSleep` runs after each. */
-function fakeClock(start: number, onSleep: (now: number) => void = () => {}): WakeClock & { at: number } {
-  const clock = {
-    at: start,
-    now: () => clock.at,
-    sleep: async (ms: number) => {
-      clock.at += ms;
-      onSleep(clock.at);
-    },
-  };
-  return clock;
-}
-
-/** The lead's session: each turn answered by `script`, every prompt and timeout kept. */
-function lead(script: (turn: number) => Record<string, unknown>) {
-  const turns: Array<{ prompt: string; sid: string | null | undefined; timeoutMs: number }> = [];
-  const talk: DirectorTalk = {
-    sessionId: "lead-1",
-    keep: async (result) => {
-      if (result?.sessionId) talk.sessionId = result.sessionId;
-    },
-    session: async (prompt, sid, timeoutMs) => {
-      turns.push({ prompt, sid, timeoutMs });
-      return script(turns.length);
-    },
-  };
-  return { talk, turns };
-}
 
 /**
  * A resumed run on `priorJournal` whose lead starts workers: a host that lends windows, makes
@@ -1290,6 +1165,17 @@ describe("a finished build reopened (director/reopen.ts)", () => {
     );
   });
 
+  it("a finished build reopened starts the reviewer's no's over for the new ask, its round numbers going on", () => {
+    const finished = finishedJournal();
+    const tally = { round: 3, rejections: 3, checking: false, reasons: ["The plaza is grey."] };
+    Object.assign(finished.director, { finishTally: tally });
+    const reopened = reopenedJournal(finished, finished.run, MARK);
+    assert.deepEqual(reopened.director.finishTally, { round: 3, rejections: 0, checking: false, reasons: [] });
+    assert.equal(tally.rejections, 3, "the journal it read is left as it was");
+    const never = finishedJournal();
+    assert.equal(reopenedJournal(never, never.run, MARK).director.finishTally, undefined, "no check, no tally");
+  });
+
   it("K18. a finished build reopened gets a fresh clock of its new budget — the time the finished run worked is not taken back — while a paused one still goes on with what it had left", async (t) => {
     const finished = finishedJournal();
     const run = { ...finished.run, budgets: { wallClockMs: 2 * HOUR_MS } };
@@ -1522,5 +1408,51 @@ describe("a run reads its job ends on from its journal's cursor (journal.ts, wak
   it("a journal from before it kept a cursor reads the run's job ends from the start", async () => {
     const { reads } = await resumedLoopRun({ director: { workers: {}, ledger: [] } });
     assert.equal(reads[0]?.endedAfter, 0);
+  });
+});
+
+describe("a lead's claim inside the wake loop (wake.ts, director/finish-claim.ts)", () => {
+  it("a claim's close still landing after the lead's call wakes no lead again: the loop hands the run to the close", async () => {
+    const { latchClose } = await import("../../src/harness-seed/loop/director/close-latch.ts");
+    const loopRun = fakeLoopRun(fakeHost());
+    const { talk, turns } = lead(() => {
+      // The lead's finish was answered that the run is closing; its close goes on after the call.
+      loopRun.state.finish = { summary: "red", land: true, victory: true, at: T0 };
+      void latchClose(loopRun.state, () => new Promise(() => {}));
+      return { ok: true, sessionId: "lead-1" };
+    });
+    await runWakeLoop(loopRun, talk, BRIEF, fakeClock(T0));
+    assert.equal(turns.length, 1, turns.map((turn) => turn.prompt.slice(0, 80)).join("\n---\n"));
+  });
+
+  it("a claim late in the wrap-up turn is bounded by that turn and, it being the last, closes the run as no claim", async (t) => {
+    const { finish } = await import("../../src/harness-seed/loop/director/integrate.ts");
+    const { FINISH_REPORT } = await import("../../src/harness-seed/loop/finish-check.ts");
+    const { CLAIM_ANSWER } = await import("../../src/harness-seed/loop/director/finish-claim.ts");
+    // Less than a review's time before the wrap-up turn ends, though a review's time before the run does.
+    const late = CLOCK.finalDeadline - WRAP_UP_MARGIN_MS - 120_000;
+    t.mock.timers.enable({ apis: ["Date"], now: late });
+    const host = fakeHost();
+    const loopRun = fakeLoopRun(host);
+    const closes: Array<Record<string, unknown>> = [];
+    loopRun.closeTheLoopRun = async (options: Record<string, unknown>) => {
+      closes.push(options);
+      loopRun.state.finished = true;
+      return { ok: true, line: "verified" };
+    };
+    let said = "";
+    const { talk, turns } = lead(() => ({ ok: true, sessionId: "lead-1" }));
+    const session = talk.session;
+    talk.session = async (prompt, sid, timeoutMs) => {
+      said = String(await finish(loopRun, { summary: "the plaza is red", land: "yes", victory: "yes" }));
+      return session(prompt, sid, timeoutMs);
+    };
+    await runWakeLoop(loopRun, talk, BRIEF, fakeClock(late));
+    assert.equal(turns.length, 1, "the wrap-up is the only turn");
+    assert.equal(closes[0]?.because, FINISH_REPORT.tooLate, `the turn's own end bounded the review: ${said}`);
+    assert.ok(said.startsWith(CLAIM_ANSWER.tooLate), said);
+    assert.ok(!host.calls.some((call) => call.method === HostMethod.EngineDescribe), "no reviewer's seat was sought");
+    const records = host.calls.flatMap((call) => (call.method === HostMethod.EventsAppend ? call.params.batch : []));
+    assert.ok(!records.some((record: { event_type?: string }) => record.event_type === "finish_check"), "no round");
   });
 });

@@ -19,8 +19,10 @@ const seedRoot = path.resolve("src/harness-seed");
 /**
  * Where git command lines may be written. Flipped: the worker pool owns its one read-only command
  * (`changedSince`, its hash checked by `shell.ts`) and the game folder's fingerprint, written through
- * a throwaway index (`game-change.ts`), because a shipped `git.ts` may gain no key another module
- * reads: an in-app agent's kept older copy would lack it.
+ * a throwaway index (`game-change.ts`), and the director's close owns the status and staging that
+ * leave a claim's proof out of the build (`proof-git.ts`, its paths quoted by `shell.ts`), and the open
+ * Loop owns its reads of the game folder (`open/folder-git.ts`), because a shipped `git.ts` may gain no
+ * key another module reads: an in-app agent's kept older copy would lack it.
  */
 const OWNERS = new Set([
   "loop/git.ts",
@@ -28,6 +30,8 @@ const OWNERS = new Set([
   "loop/shell.ts",
   "loop/workers/pool-merge.ts",
   "loop/workers/game-change.ts",
+  "loop/director/proof-git.ts",
+  "loop/director/open/folder-git.ts",
 ]);
 /** A git subcommand (or the global options the harness puts before one). */
 const SUBCOMMAND = String.raw`(?:-c\s|--no-optional-locks\b|\$\{|(?:add|am|apply|bisect|blame|branch|cat-file|checkout|cherry-pick|clean|clone|commit|config|diff|fetch|for-each-ref|init|log|ls-files|ls-tree|merge|merge-base|merge-file|mv|pull|push|rebase|reset|restore|rev-list|rev-parse|revert|rm|show|show-ref|stash|status|switch|tag|update-index|update-ref|worktree|write-tree)\b)`;

@@ -23,6 +23,7 @@ import { durationCommission, goalCommission } from "./commission.ts";
 import { doNotRegressOf } from "../do-not-regress.ts";
 import { WorkerState } from "../outcomes.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
+import { tallyOf } from "../finish-check.ts";
 import { runRef } from "../repo.ts";
 import { clip } from "../text.ts";
 import { restoreVision } from "../vision.ts";
@@ -240,6 +241,8 @@ export function recordLoopRun(loopRun: LoopRun, now = Date.now()): void {
     plays: state.plays,
     // Where the run's job ends were read to: a restart reads on from here (wake.ts `watchJobs`).
     jobsCursor: state.jobsCursor ?? 0,
+    // Where the reviewer's no's stand, once the lead has claimed the goal: a resume goes on counting.
+    ...(state.finishTally ? { finishTally: state.finishTally } : {}),
     // The module contract and the last wave's head, only once there is one: a journal of a run
     // with neither reads exactly as it did.
     ...(state.contract ? { contract: state.contract } : {}),
@@ -460,6 +463,11 @@ function carryForward(loopRun: LoopRun): void {
 const passesSoFar = (value: unknown): number =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 0;
 
+/** The reviewer's count of no's as the journal kept it, once the lead had claimed the goal (`tallyOf`). */
+function restoreTally(state: LoopRunState, saved: unknown): void {
+  if (saved !== undefined) state.finishTally = tallyOf(saved);
+}
+
 /**
  * A resumed run reads its journal back: the defects nobody owns, the plan window, the last
  * health pass, the workers' engine limit, the log and how much of it the lead had heard, and the
@@ -497,6 +505,7 @@ export function restoreLoopRun(loopRun: LoopRun, now = Date.now()): void {
   state.judges = passesSoFar(saved.judges);
   state.plays = passesSoFar(saved.plays);
   state.jobsCursor = countOf(saved.jobsCursor);
+  restoreTally(state, saved.finishTally);
   loopRun.priorWorkers = priorWorkersOf(saved.workers, loopRun.run.runId);
   state.lastShip = restoredShip(saved.lastShip);
   if (saved.shipFinishRefused === true) state.shipFinishRefused = true;

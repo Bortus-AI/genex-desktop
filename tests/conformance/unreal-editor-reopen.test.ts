@@ -769,6 +769,23 @@ describe("at Genex's moments", () => {
     assert.equal((await open.reopened()).reopening.state, ReopenState.Done);
     assert.ok(open.events.includes(`open ${NAME}.uproject`), "the Unreal the restore closed was opened again");
 
+    // A restore that closed Unreal and never reached its after steps (stopped or blocked): the
+    // person's later Rewind, with Unreal closed, leaves it closed.
+    const left = await reopenWorld({
+      answering: true,
+      rows: (p) => [{ pid: 9200, exec: EDITOR_EXEC, args: `${EDITOR_EXEC} ${p.project}` }],
+    });
+    assert.deepEqual(await left.atMoment(LiveLoopToolName.EndEditor, before), {});
+    left.events.length = 0;
+    assert.deepEqual(await left.atMoment(LiveLoopToolName.EndEditor, before), {});
+    assert.deepEqual(await left.atMoment(LoopToolName.ReopenEditor, after), {});
+    assert.equal((await left.editorState()).reopening.state, ReopenState.Idle, "no reopen started");
+    assert.equal(
+      left.events.some((event) => event.startsWith("open ")),
+      false,
+      "the closed Unreal stays closed",
+    );
+
     const crashed = await reopenWorld();
     assert.deepEqual(await crashed.atMoment(LoopToolName.ReopenEditor, { on: HookEvent.Crash, runId: "run-7" }), {});
     await crashed.reopened();

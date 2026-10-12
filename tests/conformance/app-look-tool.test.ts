@@ -6,8 +6,11 @@
  * Real core, fake delegated engines, and the stub port: nothing looks at this Mac's screen.
  */
 import assert from "node:assert/strict";
-import { realpath } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, realpath, symlink } from "node:fs/promises";
+import path from "node:path";
 import { after, describe, it } from "node:test";
+import { runAppLook } from "../../src/main/core/app-look-tool.ts";
 import { APP_LOOK_TOOL } from "../../src/main/core/app-look-tool-prompts.ts";
 import { customRecord } from "../../src/shared/custom-events.ts";
 import type { LiveToolResult } from "../../src/shared/engine-requests.ts";
@@ -19,7 +22,9 @@ import {
   ScreenAccessState,
   stubAppLook,
 } from "../../src/substrate/app-look.ts";
+import { NeverTouchKind } from "../../src/substrate/engines/never-touch.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 import { CLAUDE, closeWorkerChats, LOCAL, RUN_ID, workerChat } from "../helpers/worker-chat.ts";
 
 /** A case that would hang on a regression fails within this instead. */
@@ -50,6 +55,15 @@ async function lookChat(access?: ScreenAccess) {
   return { ...chat, gameDir: await realpath(chat.project.dir) };
 }
 type Chat = Awaited<ReturnType<typeof lookChat>>;
+
+/** Every file under a folder, relative, sorted; the repository's insides left out. */
+async function filesUnder(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .map((entry) => path.relative(dir, path.join(entry.parentPath, entry.name)))
+    .filter((file) => !file.startsWith(".git"))
+    .sort();
+}
 
 /** The tools a session was handed, by name. */
 const toolsOf = (request: DelegateRequest | undefined) => (request?.liveTools ?? []).map((tool) => tool.name).sort();
@@ -192,10 +206,82 @@ describe("app_look", () => {
     );
   });
 
-  it("its spec takes only which window to look at", () => {
+  it("app_look saves its picture inside the session's folder when asked, and never elsewhere", {
+    timeout: CASE_TIMEOUT_MS,
+    skip: process.platform === "win32" && "links need privileges on Windows",
+  }, async () => {
+    const chat = await lookChat();
+    const outside = await realpath(await tmpDir("studio-look-outside-"));
+    await symlink(outside, path.join(chat.gameDir, "linked"));
+    const stub = (await stubAppLook().look({ id: 1 } as never)) as { image: { data: string } };
+    const picture = Buffer.from(stub.image.data, "base64");
+    const own = await looksIn(chat, await ownTurn(chat), [{ app: "Fixture App", save: "shots/w.jpg" }]);
+    assert.deepEqual(await readFile(path.join(chat.gameDir, "shots", "w.jpg")), picture, "kept in the game folder");
+    assert.match(textOf(own.answers[0]), /Saved the picture as shots\/w\.jpg/);
+    assert.equal(imagesOf(own.answers[0]).length, 1, "and the picture is still answered");
+    const worker = await looksIn(chat, chat.runWorker(), [{ app: "Fixture App", save: "w.jpg" }]);
+    assert.ok(existsSync(path.join(chat.worktree, "w.jpg")), "a worker keeps it in its own folder");
+    assert.ok(!existsSync(path.join(chat.gameDir, "w.jpg")), "never in the game folder it doesn't work in");
+    assert.match(textOf(worker.answers[0]), /Saved the picture as w\.jpg/);
+
+    const before = await filesUnder(chat.gameDir);
+    const outsideBefore = await filesUnder(outside);
+    const hostile = ["../w.jpg", path.join(outside, "abs.jpg"), "w.png", "linked/w.jpg", "a/../../w.jpg", ""];
+    const refused = await looksIn(
+      chat,
+      await ownTurn(chat),
+      hostile.map((save) => ({ app: "Fixture App", save })),
+    );
+    await chat.core.setPermissionMode(chat.threadId, PermissionMode.Plan);
+    const plan = await looksIn(chat, await ownTurn(chat), [{ app: "Fixture App", save: "plan.jpg" }]);
+    await chat.core.setPermissionMode(chat.threadId, PermissionMode.Auto);
+    const reader = await looksIn(chat, chat.runWorker("r1", chat.worktree, { readOnly: true }), [
+      { app: "Fixture App", save: "reader.jpg" },
+    ]);
+    const answers = [...refused.answers, ...plan.answers, ...reader.answers];
+    assert.equal(answers.length, hostile.length + 2);
+    for (const answer of answers) {
+      assert.match(textOf(answer), /The picture was not saved/);
+      assert.equal(imagesOf(answer).length, 1, "the picture is answered all the same");
+    }
+    assert.deepEqual(await filesUnder(chat.gameDir), before, "nothing was written in the game folder");
+    assert.deepEqual(await filesUnder(outside), outsideBefore, "nor outside it");
+    assert.ok(!existsSync(path.join(chat.worktree, "reader.jpg")), "a reader keeps nothing");
+    assert.ok(!existsSync(path.join(path.dirname(chat.gameDir), "w.jpg")));
+  });
+
+  it("a save into a folder it never touches is refused before any folder is made", async () => {
+    const folder = await realpath(await tmpDir("studio-look-never-"));
+    const other = path.join(folder, "other");
+    await mkdir(other);
+    const neverTouch = { roots: [{ path: other, kind: NeverTouchKind.OtherGame }], open: [] };
+    const caller = { project: "p", chatThreadId: null, save: { folder, neverTouch, planning: async () => false } };
+    const core = { screenAccess: null, appLook: stubAppLook() } as never;
+    for (const save of ["other/new/deeper/x.jpg", "other/x.jpg"]) {
+      const answer = await runAppLook(core, { app: "Fixture App", save }, caller);
+      assert.match(textOf(answer), /The picture was not saved/, save);
+    }
+    assert.deepEqual(await filesUnder(folder), ["other"], "no folder was made, nothing was written");
+  });
+
+  it("a save in a session's folder reached through a link is kept in its real folder", async () => {
+    const root = await realpath(await tmpDir("studio-look-linked-"));
+    const real = path.join(root, "games", "level-tools");
+    await mkdir(real, { recursive: true });
+    await symlink(path.join(root, "games"), path.join(root, "alias"));
+    const folder = path.join(root, "alias", "level-tools");
+    const neverTouch = { roots: [], open: [] };
+    const caller = { project: "p", chatThreadId: null, save: { folder, neverTouch, planning: async () => false } };
+    const core = { screenAccess: null, appLook: stubAppLook() } as never;
+    const answer = await runAppLook(core, { app: "Fixture App", save: "Saved/Shots/w.jpg" }, caller);
+    assert.doesNotMatch(textOf(answer), /The picture was not saved/);
+    assert.ok(existsSync(path.join(real, "Saved", "Shots", "w.jpg")), "kept in the folder the link names");
+  });
+
+  it("its spec takes which window to look at, and where to keep its picture", () => {
     assert.equal(APP_LOOK_TOOL.name, APP_LOOK_TOOL_NAME);
-    assert.deepEqual(Object.keys(APP_LOOK_TOOL.parameters.properties ?? {}).sort(), ["app", "window"]);
-    assert.deepEqual(APP_LOOK_TOOL.parameters.required ?? [], [], "both are optional");
+    assert.deepEqual(Object.keys(APP_LOOK_TOOL.parameters.properties ?? {}).sort(), ["app", "save", "window"]);
+    assert.deepEqual(APP_LOOK_TOOL.parameters.required ?? [], [], "all are optional");
     assert.match(APP_LOOK_TOOL.description, /cannot click or type/);
   });
 });

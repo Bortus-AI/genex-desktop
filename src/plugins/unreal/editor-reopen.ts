@@ -112,7 +112,7 @@ const FOLDER_ARGUMENT = /^([^\s"/]*)\/?(?=$|[\s"])/;
 const BEFORE_ARGUMENT = /[\s"]/;
 const MAC = "darwin";
 const PS = "/bin/ps";
-const PS_TIMEOUT_MS = 10 * SECOND_MS;
+export const PS_TIMEOUT_MS = 10 * SECOND_MS;
 const PS_MAX_BYTES = 16 * 1024 * 1024;
 const PS_LINE = /^\s*(\d+) (.*)$/;
 const IDLE: Reopening = { state: ReopenState.Idle };
@@ -279,6 +279,15 @@ async function updateOutdated(deps: ReopenDeps, target: ReopenTarget): Promise<v
 /** Where reopening stands for each project, by its .uproject. */
 type Jobs = Map<string, Reopening>;
 
+/** Whether Genex itself is restarting a project's Unreal now (adding its C++ module), by its .uproject. */
+type Restarting = (project: string) => boolean;
+
+/** The reopen a project's state says: Genex's own restart reads as reopening, so health waits for it. */
+function reopeningOf(jobs: Jobs, project: string | undefined, restarting: Restarting): Reopening {
+  if (!project) return IDLE;
+  return restarting(project) ? { state: ReopenState.Reopening } : (jobs.get(project) ?? IDLE);
+}
+
 /**
  * Starts reopening the game's Unreal unless it already answers or a job already reopens it; with
  * `helper`, an outdated Genex editor helper is updated while Unreal is closed.
@@ -287,11 +296,13 @@ async function startReopen(
   deps: ReopenDeps,
   jobs: Jobs,
   ask: { storage: string; game: string; helper: boolean },
+  restarting: Restarting,
 ): Promise<ReopenAnswer> {
   const { storage, game, helper } = ask;
   const project = await deps.project(storage, game);
   if (!project) throw new Error(MESSAGE.NoProject);
-  if (jobs.get(project)?.state === ReopenState.Reopening) return { started: true };
+  // Genex's own restart (adding the C++ module) opens Unreal again itself: no second editor, no second build.
+  if (jobs.get(project)?.state === ReopenState.Reopening || restarting(project)) return { started: true };
   if (await answering(deps, { storage, game }).catch(() => false)) return { answering: true };
   // Another call may have started the job while this one asked.
   if (jobs.get(project)?.state === ReopenState.Reopening) return { started: true };
@@ -322,9 +333,15 @@ async function ownEditorRuns(deps: ReopenDeps, project: string): Promise<boolean
 }
 
 /** `editor-state` for a game: whether its Unreal answers and its editor runs, its reopen job, and its project's helper. */
-async function editorState(deps: ReopenDeps, jobs: Jobs, storage: string, game: string): Promise<EditorStateAnswer> {
+async function editorState(
+  deps: ReopenDeps,
+  jobs: Jobs,
+  where: { storage: string; game: string },
+  restarting: Restarting,
+): Promise<EditorStateAnswer> {
+  const { storage, game } = where;
   const project = await deps.project(storage, game).catch(() => undefined);
-  const reopening = (project ? jobs.get(project) : undefined) ?? IDLE;
+  const reopening = reopeningOf(jobs, project, restarting);
   const answers = project ? await answering(deps, { storage, game }).catch(() => false) : false;
   const running = project ? await ownEditorRuns(deps, project) : null;
   const helper = project ? await helperOf(deps, project, storage) : null;
@@ -342,10 +359,16 @@ async function silent(deps: ReopenDeps, storage: string, game: string): Promise<
  * while a reopen job runs for it; answers how many processes it ended once the game's Unreal no
  * longer answers, and throws when it still does (an editor it couldn't find or end).
  */
-async function endEditor(deps: ReopenDeps, jobs: Jobs, storage: string, game: string): Promise<EndAnswer> {
+async function endEditor(
+  deps: ReopenDeps,
+  jobs: Jobs,
+  where: { storage: string; game: string },
+  restarting: Restarting,
+): Promise<EndAnswer> {
+  const { storage, game } = where;
   const project = await deps.project(storage, game);
   if (!project) throw new Error(MESSAGE.NoProjectToEnd);
-  if (jobs.get(project)?.state === ReopenState.Reopening) throw new Error(MESSAGE.Reopening);
+  if (reopeningOf(jobs, project, restarting).state === ReopenState.Reopening) throw new Error(MESSAGE.Reopening);
   const engine = await deps.engine();
   const ended = await endOwn(deps, { storage, game, project, engine }, MESSAGE.EditorNotEnded);
   if (!(await silent(deps, storage, game))) throw new Error(MESSAGE.StillAnswers);
@@ -354,18 +377,23 @@ async function endEditor(deps: ReopenDeps, jobs: Jobs, storage: string, game: st
 
 /**
  * The runner's `reopen-editor`, `editor-state` and `end-editor` over one set of reopen jobs, and
- * whether the game's editor process runs (null: can't tell, or no linked project).
+ * whether the game's editor process runs (null: can't tell, or no linked project). While Genex
+ * itself restarts a project's Unreal (`restarting`: adding its C++ module), it reads as reopening:
+ * health waits for it, a crash step starts nothing, and nothing ends it.
  */
-export function createReopenTools(deps: ReopenDeps) {
+export function createReopenTools(deps: ReopenDeps, restarting: Restarting = () => false) {
   const jobs: Jobs = new Map();
   return {
-    reopen: (storage: string, game: string, helper = false) => startReopen(deps, jobs, { storage, game, helper }),
-    state: (storage: string, game: string) => editorState(deps, jobs, storage, game),
-    end: (storage: string, game: string) => endEditor(deps, jobs, storage, game),
+    reopen: (storage: string, game: string, helper = false) =>
+      startReopen(deps, jobs, { storage, game, helper }, restarting),
+    state: (storage: string, game: string) => editorState(deps, jobs, { storage, game }, restarting),
+    end: (storage: string, game: string) => endEditor(deps, jobs, { storage, game }, restarting),
     running: async (storage: string, game: string) => {
       const project = await deps.project(storage, game).catch(() => undefined);
       return project ? ownEditorRuns(deps, project) : null;
     },
+    /** Whether a reopen job of its own runs for the project now, by its .uproject. */
+    reopening: (project: string) => jobs.get(project)?.state === ReopenState.Reopening,
   };
 }
 

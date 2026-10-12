@@ -52,6 +52,8 @@ export interface WorkerPool {
   call(name: string, args: AnyRecord): Promise<string>;
   /** The scope ended: running workers stop, a copy's work is kept, the records persist. */
   close(): Promise<void>;
+  /** Reads the chat's log for the workers' questions now: who waits on the person, who goes on. */
+  readQuestions(): Promise<void>;
 }
 
 /** Open a pool: the chat's earlier workers, the kinds the plugins on offer declare, and the log read from now. */
@@ -78,7 +80,12 @@ export async function openPool(scope: WorkerScope): Promise<WorkerPool> {
     await ended(state, record, WorkerState.Stopped, POOL_WORDS.turnEnded, null, scopeEnd(state));
   // One that scope's close stopped, whose session outlived the wait and never ended, ends as stopped.
   for (const record of unendedStops(state)) await ended(state, record, record.state, record.error);
-  return { state, call: (name, args) => callTool(state, name, args), close: () => closePool(state) };
+  return {
+    state,
+    call: (name, args) => callTool(state, name, args),
+    close: () => closePool(state),
+    readQuestions: () => readQuestions(state),
+  };
 }
 
 /** The workers a close stopped whose end was never recorded: no longer working, with no end time. */

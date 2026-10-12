@@ -261,6 +261,37 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     );
   });
 
+  it("a turn cut by its own cap goes on at once, never into the wrap-up as a failed turn", () => {
+    const idle = {
+      ok: true,
+      closed: false,
+      running: 0,
+      planWindowOpen: false,
+      workersLimitPending: false,
+      idleAsked: false,
+      workingTimeLeft: true,
+      finishRequested: false,
+    };
+    const capped = { ...idle, ok: false, capped: true };
+    assert.deepEqual(afterTurn(capped), { next: TurnEnd.Continue, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, ok: true, idleAsked: true }), { next: TurnEnd.Continue, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, running: 2 }), { next: TurnEnd.Continue, idleAsked: false });
+    // The run is over, or its working time is: the cap changes nothing then.
+    assert.deepEqual(afterTurn({ ...capped, closed: true }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, providerLost: true }), { next: TurnEnd.Close, idleAsked: false });
+    assert.deepEqual(afterTurn({ ...capped, workingTimeLeft: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: false,
+      wrapCause: WrapCause.Deadline,
+    });
+    // Without the cap, a failed turn wraps up as it always did.
+    assert.deepEqual(afterTurn({ ...capped, capped: false }), {
+      next: TurnEnd.WrapUp,
+      idleAsked: false,
+      wrapCause: WrapCause.Failed,
+    });
+  });
+
   it("W8. a lead that went to sleep busy is asked what next the moment nothing runs and nothing else is ahead", () => {
     // The lead stopped its last worker and ended its turn; the worker has settled since.
     const stopped = { at: T0, seq: 11, kind: NoteKind.WorkerStopped };

@@ -139,6 +139,8 @@ export function poolHost(
     append?: (params: Record<string, unknown>) => unknown;
     /** The host's writer in place (shared between hosts of one game), or `false` for a host without one. */
     locks?: FakeLocks | false;
+    /** How the host answers a shell command (`run.exec`): run in the folder (the default), or as the test says. */
+    exec?: (params: Record<string, unknown>, run: () => ReturnType<typeof shell>) => unknown;
   } = {},
 ) {
   const locks = options.locks === false ? null : (options.locks ?? fakeLocks());
@@ -165,7 +167,10 @@ export function poolHost(
         const index = log.findIndex((event) => (event as { id: string }).id === p.after);
         return log.slice(index + 1);
       },
-      [HostMethod.RunExec]: (p) => shell(String(p.command), typeof p.cwd === "string" ? p.cwd : repo),
+      [HostMethod.RunExec]: (p) => {
+        const run = () => shell(String(p.command), typeof p.cwd === "string" ? p.cwd : repo);
+        return options.exec ? options.exec(p, run) : run();
+      },
       [HostMethod.SnapshotCreate]: async () => ({
         snapshot_id: "snap-1",
         git: { game: (await shell("git rev-parse HEAD", repo)).stdout.trim() },

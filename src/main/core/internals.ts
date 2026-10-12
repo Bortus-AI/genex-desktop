@@ -28,6 +28,8 @@ import type { CutOffCall } from "./cut-off-calls.ts";
 import type { UnsavedFile } from "./unsaved-files.ts";
 import type { DelegationService } from "./delegation.ts";
 import type { StudioSettings } from "./settings.ts";
+import type { ObserverService } from "./observers.ts";
+import type { FinishReviews } from "./finish-review.ts";
 import type { HookService } from "./plugin-hooks.ts";
 import type { LockService } from "./plugin-locks.ts";
 import type { PluginToolService } from "./plugin-tools.ts";
@@ -57,6 +59,16 @@ export interface ActiveDelegation {
   steered?: boolean;
   /** Its engine call has returned: nothing more is handed in. */
   ended?: boolean;
+  /** A Loop's reviewer the host seated: the run it checks (`engine.abort` reaches it by that run alone). */
+  reviewer?: string;
+  /**
+   * A Loop's lead in place the host seated: its run. `engine.abort` with that run as `lead` reaches
+   * it alone, never another chat's session in the same folder; its run's unseated workers hold keys
+   * of their own beside it.
+   */
+  leadsInPlace?: string;
+  /** An unseated worker of this run in the game folder, on a key of its own beside the run's lead in place. */
+  besideLeadOf?: string;
   /**
    * A worker of a chat's lead, as the host honoured it: its id (Stop reaches an in-place one by
    * it) and the chat it answers to, whose Settings ceiling it counts against, reader or writer.
@@ -67,6 +79,10 @@ export interface ActiveDelegation {
    * id find it by this (`delegationAt`), seated or not.
    */
   askedWorker?: string;
+  /** The lock holder its calls pass as (`workerHolder`): a worker whose in-place holds the harness took. */
+  holder?: string;
+  /** Aborts once its engine has let go (the session's end), however it ended. */
+  settled?: AbortSignal;
 }
 
 /**
@@ -91,11 +107,12 @@ export interface WorkInFlight {
   readonly activeCompletions: Map<string, Set<AbortController>>;
   /**
    * Connector calls in flight, by the chat and game they were made for. A build's lead's call
-   * outlives the chat's turns (`outlivesTurn`): only its session's end or a Stop ends it.
+   * outlives the chat's turns (`outlivesTurn`): only its session's end or a Stop ends it. One the
+   * harness itself made (`mcp.invoke`, `byHarness`) ends with that harness, planned or not.
    */
   readonly activeConnectorCalls: Map<
     AbortController,
-    { project?: string | null; threadId?: string; outlivesTurn?: boolean }
+    { project?: string | null; threadId?: string; outlivesTurn?: boolean; byHarness?: boolean }
   >;
   /** Genex's moments the harness asked for, in flight, by the game and chat they answer to (`moment-stops.ts`). */
   readonly activeMoments: Map<AbortController, { project: string; threadId?: string }>;
@@ -285,6 +302,10 @@ export interface CoreServices {
   readonly locks: LockService;
   /** Genex's moments and the plugin steps they run (`plugin-hooks.ts`). */
   readonly hooks: HookService;
+  /** A game's observers run inside a run, their pictures kept with it (`observers.ts`). */
+  readonly observers: ObserverService;
+  /** A Loop's finish checks: the reviewer's verdict is the host's to read and record (`finish-review.ts`). */
+  readonly finishReviews: FinishReviews;
   readonly conversation: ConversationService;
   readonly assets: AssetService;
   readonly rewind: ChatRewindService;

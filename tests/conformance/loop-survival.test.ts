@@ -1,14 +1,16 @@
 /**
  * Goldens for what the Loop must keep while it is reshaped: which loop conducts a run, the exact
  * run tools each lead is offered and the kinds of its workers, and one canonical Unreal Loop as
- * Genex sees it (the editor calls at each moment, the events it writes, the graph and summary it
- * closes with, and the journal a resume reads). Every expected value is a literal, so a rename made
+ * Genex sees it, on the Unreal runner and on the one Loop (the editor calls at each moment, the
+ * events it writes, the graph and summary it closes with, and the journal a resume reads). Every expected value is a literal, so a rename made
  * on both sides at once still fails here; a change to any of them is a named flip.
  */
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { before, describe, it } from "node:test";
 import { DIRECTOR_TOOLS } from "../../src/harness-seed/loop/director/tool-specs.ts";
-import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
+import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { chooseRunner } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { RunMode } from "../../src/harness-seed/loop/run-events.ts";
 import { runUnrealLead } from "../../src/harness-seed/loop/unreal/lead.ts";
@@ -19,10 +21,14 @@ import {
   LeadTool,
 } from "../../src/harness-seed/loop/unreal/lead-contract.ts";
 import { LEAD_TOOLS } from "../../src/harness-seed/loop/unreal/lead-tools.ts";
-import { GraphNodeKind } from "../../src/renderer/run-graph.ts";
+import { buildRunGraph, GraphNodeKind } from "../../src/renderer/run-graph.ts";
 import { partRows, statusLine } from "../../src/renderer/run-steps.ts";
 import unrealManifest from "../../src/plugins/unreal/plugin.json" with { type: "json" };
 import { graphOf, type LeadHost, leadHost, RUN, type Turn } from "../helpers/unreal-lead-host.ts";
+import { gameRepo, type LoopHost, type LoopManifest, loopHost } from "../helpers/loop-host.ts";
+import { copyProject, Project } from "../helpers/project-fixtures.ts";
+import { tmpDir } from "../helpers/tmp.ts";
+import { summarizeRun } from "../../src/shared/run-summary.ts";
 
 const MINUTE = 60_000;
 
@@ -42,72 +48,103 @@ const shortRun = (minutes: number) => ({ ...RUN, budgets: { ...RUN.budgets, wall
 
 /**
  * The run's engine as `engine.describe` lists it: a delegated engine that says it keeps sessions,
- * says it doesn't, or doesn't say (its kind decides), and a direct engine that doesn't say.
+ * says it doesn't, or doesn't say (its kind decides), a direct engine that doesn't say, and a direct
+ * engine that keeps sessions (Bonsai, OpenRouter): the host seats it nowhere in place.
  */
 const SESSIONS = {
   yes: { id: "claude-code", kind: "delegated", supportsSessions: true },
   no: { id: "claude-code", kind: "delegated", supportsSessions: false },
   unsaid: { id: "claude-code", kind: "delegated" },
   unsaidDirect: { id: "claude-code", kind: "direct" },
+  directSessions: { id: "claude-code", kind: "direct", supportsSessions: true },
 } as const;
 
-/** Mode × the engine's session support × classic × the game's engine → the runner, as wire values. */
-const RUNNER_MATRIX: Array<[RunMode, keyof typeof SESSIONS, boolean, GameEngine, string]> = [
+/**
+ * Mode × the engine's session support × classic × the folder's Loop profile → the runner, as wire
+ * values. A Loop on a project that isn't a web game is led in place by the chat's own session, so it
+ * needs an agent engine the host seats there that keeps one; classic is a web game's internal only.
+ */
+const RUNNER_MATRIX: Array<[RunMode, keyof typeof SESSIONS, boolean, LoopProfile, string]> = [
   ["autopilot", "yes", false, "web", "director"],
-  ["autopilot", "yes", false, "unreal", "unreal"],
+  ["autopilot", "yes", false, "open", "director"],
   ["autopilot", "yes", true, "web", "autopilot"],
-  ["autopilot", "yes", true, "unreal", "unreal"],
+  ["autopilot", "yes", true, "open", "director"],
   ["autopilot", "no", false, "web", "autopilot"],
-  ["autopilot", "no", false, "unreal", "unreal"],
+  ["autopilot", "no", false, "open", "needs_session"],
   ["autopilot", "no", true, "web", "autopilot"],
-  ["autopilot", "no", true, "unreal", "unreal"],
+  ["autopilot", "no", true, "open", "needs_session"],
   ["autopilot", "unsaid", false, "web", "director"],
-  ["autopilot", "unsaid", false, "unreal", "unreal"],
+  ["autopilot", "unsaid", false, "open", "director"],
   ["autopilot", "unsaid", true, "web", "autopilot"],
-  ["autopilot", "unsaid", true, "unreal", "unreal"],
+  ["autopilot", "unsaid", true, "open", "director"],
   ["autopilot", "unsaidDirect", false, "web", "autopilot"],
-  ["autopilot", "unsaidDirect", false, "unreal", "unreal"],
+  ["autopilot", "unsaidDirect", false, "open", "needs_session"],
   ["autopilot", "unsaidDirect", true, "web", "autopilot"],
-  ["autopilot", "unsaidDirect", true, "unreal", "unreal"],
+  ["autopilot", "unsaidDirect", true, "open", "needs_session"],
+  ["autopilot", "directSessions", false, "web", "director"],
+  ["autopilot", "directSessions", false, "open", "needs_session"],
+  ["autopilot", "directSessions", true, "web", "autopilot"],
+  ["autopilot", "directSessions", true, "open", "needs_session"],
   ["director", "yes", false, "web", "gauntlet"],
-  ["director", "yes", false, "unreal", "gauntlet"],
+  ["director", "yes", false, "open", "web_only"],
   ["director", "yes", true, "web", "gauntlet"],
-  ["director", "yes", true, "unreal", "gauntlet"],
+  ["director", "yes", true, "open", "web_only"],
   ["director", "no", false, "web", "gauntlet"],
-  ["director", "no", false, "unreal", "gauntlet"],
+  ["director", "no", false, "open", "web_only"],
   ["director", "no", true, "web", "gauntlet"],
-  ["director", "no", true, "unreal", "gauntlet"],
+  ["director", "no", true, "open", "web_only"],
   ["director", "unsaid", false, "web", "gauntlet"],
-  ["director", "unsaid", false, "unreal", "gauntlet"],
+  ["director", "unsaid", false, "open", "web_only"],
   ["director", "unsaid", true, "web", "gauntlet"],
-  ["director", "unsaid", true, "unreal", "gauntlet"],
+  ["director", "unsaid", true, "open", "web_only"],
   ["director", "unsaidDirect", false, "web", "gauntlet"],
-  ["director", "unsaidDirect", false, "unreal", "gauntlet"],
+  ["director", "unsaidDirect", false, "open", "web_only"],
   ["director", "unsaidDirect", true, "web", "gauntlet"],
-  ["director", "unsaidDirect", true, "unreal", "gauntlet"],
+  ["director", "unsaidDirect", true, "open", "web_only"],
+  ["director", "directSessions", false, "web", "gauntlet"],
+  ["director", "directSessions", false, "open", "web_only"],
+  ["director", "directSessions", true, "web", "gauntlet"],
+  ["director", "directSessions", true, "open", "web_only"],
+];
+
+/** The internal switch on: an open Loop goes to the Unreal runner whatever its engine says. */
+const SWITCH_ROWS: Array<[keyof typeof SESSIONS, string]> = [
+  ["yes", "unreal"],
+  ["no", "unreal"],
+  ["unsaid", "unreal"],
+  ["unsaidDirect", "unreal"],
+  ["directSessions", "unreal"],
 ];
 
 describe("which loop conducts a run", () => {
-  it("picks the runner by mode, session support, classic and the game's engine", () => {
+  it("picks the runner by mode, session support, classic and the folder's profile", () => {
     assert.deepEqual(
       [...new Set(RUNNER_MATRIX.map(([mode]) => mode))].sort(),
       Object.values(RunMode).sort(),
       "every mode is a row",
     );
     assert.deepEqual(
-      [...new Set(RUNNER_MATRIX.map(([, , , engine]) => engine))].sort(),
-      Object.values(GameEngine).sort(),
-      "every game engine is a row",
+      [...new Set(RUNNER_MATRIX.map(([, , , profile]) => profile))].sort(),
+      Object.values(LoopProfile).sort(),
+      "every profile is a row",
     );
     const combinations =
-      Object.values(RunMode).length * Object.keys(SESSIONS).length * 2 * Object.values(GameEngine).length;
+      Object.values(RunMode).length * Object.keys(SESSIONS).length * 2 * Object.values(LoopProfile).length;
     const distinct = new Set(RUNNER_MATRIX.map((row) => row.slice(0, 4).join(" ")));
     assert.equal(distinct.size, combinations, "every combination once");
     assert.equal(RUNNER_MATRIX.length, combinations, "and no row twice");
-    for (const [mode, sessions, classic, gameEngine, expected] of RUNNER_MATRIX) {
+    for (const [mode, sessions, classic, profile, expected] of RUNNER_MATRIX) {
       const runRecord = { ...RUN, mode, classic };
-      const row = `${mode} · sessions ${sessions} · classic ${classic} · ${gameEngine}`;
-      assert.equal(chooseRunner(runRecord as never, [SESSIONS[sessions]] as never, gameEngine), expected, row);
+      const row = `${mode} · sessions ${sessions} · classic ${classic} · ${profile}`;
+      assert.equal(chooseRunner(runRecord as never, [SESSIONS[sessions]] as never, profile), expected, row);
+    }
+    assert.deepEqual(SWITCH_ROWS.map(([sessions]) => sessions).sort(), Object.keys(SESSIONS).sort());
+    for (const [sessions, expected] of SWITCH_ROWS) {
+      const runRecord = { ...RUN, mode: RunMode.Autopilot, classic: false };
+      const chosen = chooseRunner(runRecord as never, [SESSIONS[sessions]] as never, LoopProfile.Open, {
+        unrealRunner: true,
+      });
+      assert.equal(chosen, expected, `switch on · sessions ${sessions}`);
     }
   });
 });
@@ -136,6 +173,8 @@ describe("the run tools each lead is offered", () => {
   it("the Unreal lead offers exactly these tools, and its workers come in these kinds", () => {
     assert.deepEqual(LEAD_TOOLS.map((tool) => tool.name).sort(), [
       "critic",
+      // Flipped: the lead claims the goal through finish, which a reviewer checks.
+      "finish",
       "milestone",
       "note",
       "rebuild_unreal",
@@ -182,7 +221,8 @@ const CANONICAL_TURNS: Turn[] = [
 /** The editor's own polls, which the harness repeats as often as its watch looks. */
 const POLLS = new Set(["tool:unreal__editor-state", "tool:unreal__editor-activity"]);
 /** The host calls that mark Genex's moments beside the plugin's tools. */
-const MOMENTS = new Set(["snapshot.create", "snapshot.restore", "engine.delegate"]);
+// The finish check is Genex's: a claim's review and its settle are the host's calls, not a session the Loop starts.
+const MOMENTS = new Set(["snapshot.create", "snapshot.restore", "engine.delegate", "finish.review", "finish.settle"]);
 
 /** Each moment's handlers of the Unreal plugin, renamed: the runner must find them by its manifest. */
 const RENAMED: Record<string, string> = {
@@ -214,7 +254,7 @@ function renamedHost() {
 }
 
 /** The trail of plugin tools, snapshots and turns, with the editor's polls left out. */
-const momentTrail = (host: LeadHost) =>
+const momentTrail = (host: Pick<LeadHost, "trail">) =>
   host.trail().filter((call) => !POLLS.has(call) && (call.startsWith("tool:") || MOMENTS.has(call)));
 
 /**
@@ -349,7 +389,9 @@ describe("a canonical Unreal Loop, as Genex sees it", () => {
     assert.ok(graph);
     assert.deepEqual(
       graph.nodes.map((node) => node.kind),
-      ["run", "base", "facet", "iteration", "iteration", "iteration", "integration", "final"],
+      // Flipped: the Unreal lead claims through a finish check, so its run is a tree from its start (no
+      // relayout at its first claim): the lead after the start.
+      ["run", "base", "lead", "facet", "iteration", "iteration", "iteration", "integration", "final"],
     );
     const final = graph.nodes.find((node) => node.kind === GraphNodeKind.Final);
     assert.ok(final?.kind === GraphNodeKind.Final);
@@ -367,6 +409,147 @@ describe("a canonical Unreal Loop, as Genex sees it", () => {
     assert.deepEqual(Object.keys(journal).sort(), JOURNAL_KEYS);
     assert.deepEqual(
       journal.savePoints.map((point) => point.label),
+      ["One", "Autosave", "Two"],
+    );
+  });
+});
+
+/**
+ * The same three turns on the one Loop (save point "One"; rewind to "One"; save point "Two", then
+ * finish), on the Unreal plugin's real manifest. Its differences from the Unreal runner's canonical
+ * Loop above are the one Loop's: Genex's snapshot before the Loop opens the trail where the runner
+ * read the C++ status; the chat's own session leads (no `contractor_session` of a session of its
+ * own); its journal is a director journal with the open Loop's record (`director.open`); its save
+ * points draw on the lead's row (`director_worker`), with no milestone columns; it ends on a
+ * reviewer's yes (`finish_check`), whose turn and close checkpoint end the trail; and `worker_*`
+ * records appear only when a worker starts.
+ */
+const ONE_LOOP_TRAIL = [
+  "snapshot.create",
+  "tool:unreal__open-for-run",
+  "tool:unreal__log-errors",
+  "engine.delegate",
+  "tool:unreal__save-all",
+  "tool:unreal__log-errors",
+  "snapshot.create",
+  "tool:unreal__hero-shots",
+  "engine.delegate",
+  "tool:unreal__save-all",
+  "tool:unreal__log-errors",
+  "snapshot.create",
+  "tool:unreal__hero-shots",
+  "tool:unreal__save-all",
+  "tool:unreal__end-editor",
+  "snapshot.restore",
+  "tool:unreal__reopen-editor",
+  "engine.delegate",
+  "tool:unreal__save-all",
+  "tool:unreal__log-errors",
+  "snapshot.create",
+  "tool:unreal__hero-shots",
+  "finish.review",
+  "finish.settle",
+  "tool:unreal__save-all",
+  "tool:unreal__log-errors",
+  "snapshot.create",
+  "tool:unreal__hero-shots",
+];
+
+/** The fields of the open Loop's record in its journal, sorted. */
+const OPEN_JOURNAL_KEYS = ["between", "carried", "crashes", "lastReaderAt", "savePoints", "version"];
+
+describe("a canonical Unreal Loop on the one Loop, as Genex sees it", () => {
+  let host: LoopHost;
+  before(async () => {
+    const dir = await gameRepo(await copyProject(Project.UnrealGame, await tmpDir("loop-survival-")));
+    const work = (name: string) => writeFile(path.join(dir, `${name}.txt`), name);
+    host = loopHost({
+      dir,
+      facts: [{ id: "unreal-project", path: "." }],
+      manifest: unrealManifest as unknown as LoopManifest,
+      // Flipped: a goal Loop, whose claim may come at any time (a timed one claims only in its last turn).
+      run: { runId: "run-one-loop", budgets: { wallClockMs: 30 * MINUTE, completionPolicy: "goal" } },
+      turns: [
+        async ({ tool }) => {
+          await work("a");
+          await tool("save_point", { label: "One", summary: "first" });
+          return undefined;
+        },
+        async ({ tool }) => {
+          await work("b");
+          await tool("rewind", { label: "One" });
+          return undefined;
+        },
+        async ({ tool }) => {
+          await work("c");
+          await tool("save_point", { label: "Two", summary: "second" });
+          await tool("finish", { summary: "Built.", proof: "Lantern.uproject" });
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+  });
+
+  /** Every record the Loop appended, as the log keeps them. */
+  const logOf = () =>
+    host.rec
+      .paramsOf("events.append")
+      .flatMap((params, i) =>
+        (params.batch as Array<Record<string, unknown>>).map((data, j) => ({ id: `e${i}_${j}`, data })),
+      );
+
+  it("calls the editor at each moment in this order", () => {
+    assert.deepEqual(momentTrail(host), ONE_LOOP_TRAIL);
+  });
+
+  it("writes these events, in this order of first appearance", () => {
+    const types = logOf().map(({ data }) => String(data.event_type ?? data.type));
+    assert.deepEqual(
+      [...new Set(types)],
+      [
+        "run_started",
+        "autopilot_started",
+        "director_worker",
+        "facet_iteration",
+        "integration_merge",
+        "director_continued",
+        "finish_check",
+        "run_finished",
+      ],
+    );
+  });
+
+  it("draws this graph and closes with this summary", () => {
+    const events = logOf() as never;
+    const graph = buildRunGraph(events);
+    const summary = summarizeRun(events, String(host.run.project), host.run.runId);
+    assert.ok(graph);
+    assert.deepEqual(
+      graph.nodes.map((node) => node.kind),
+      ["run", "base", "lead", "facet", "iteration", "iteration", "iteration", "integration", "final", "finish_check"],
+    );
+    const final = graph.nodes.find((node) => node.kind === GraphNodeKind.Final);
+    assert.ok(final?.kind === GraphNodeKind.Final);
+    assert.equal(final.landed, true);
+    assert.equal(
+      final.summary,
+      "3 save points; the last, Two: second. Genex kept the last work in a checkpoint at the close.",
+    );
+    const line = statusLine(graph, summary, partRows(graph, summary));
+    // A Loop led in the project's own folder kept its work there: never promised as a build to play in Live.
+    assert.deepEqual([line.strong, line.rest], ["Kept in your project", "3 save points"]);
+  });
+
+  it("keeps a director journal with the open Loop's record", () => {
+    const journal = host.artifacts.get(`autopilot_${host.run.runId}`) as {
+      kind?: string;
+      director: { open: Record<string, unknown> & { savePoints: Array<{ label: string }> } };
+    };
+    assert.equal(journal.kind, undefined, "never the Unreal runner's journal");
+    assert.deepEqual(Object.keys(journal.director.open).sort(), OPEN_JOURNAL_KEYS);
+    assert.deepEqual(
+      journal.director.open.savePoints.map((point) => point.label),
       ["One", "Autosave", "Two"],
     );
   });

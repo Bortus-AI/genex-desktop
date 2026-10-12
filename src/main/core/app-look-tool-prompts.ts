@@ -6,12 +6,16 @@ import { APP_LOOK_TOOL_NAME, AppLookAccessKind } from "../../shared/jobs.ts";
 export const APP_LOOK_TOOL: LiveToolSpec = {
   name: APP_LOOK_TOOL_NAME,
   description:
-    "Look at an app window on this Mac: the running game, an editor, a tool. Without arguments it lists the windows on screen (app, title, id). With app or window it answers that window's screenshot and its accessibility tree (roles, titles, values). It only looks: you cannot click or type with it.",
+    "Look at an app window on this Mac: the running game, an editor, a tool. Without arguments it lists the windows on screen (app, title, id). With app or window it answers that window's screenshot and its accessibility tree (roles, titles, values). It only looks: you cannot click or type with it. With save it also keeps the screenshot as a .jpg in your folder.",
   parameters: {
     type: "object",
     properties: {
       app: { type: "string", description: "The app, by its name or bundle id, e.g. Godot." },
       window: { type: "string", description: "A window id from the list, or words of its title." },
+      save: {
+        type: "string",
+        description: "A .jpg path inside your project folder to keep the picture, for example as proof.",
+      },
     },
   },
 };
@@ -53,6 +57,13 @@ export const APP_LOOK_ANSWER = {
   refused: "Genex does not look at password managers.",
   unsupported: "app_look works on macOS only for now.",
   failed: (detail: string) => `Genex could not look at app windows: ${detail || "the command failed"}.`,
+  saved: (file: string) => `Saved the picture as ${file}.`,
+  notSaved: (why: string) => `The picture was not saved: ${why}.`,
+  saveNoPicture: "there was no picture to save",
+  saveNoWrite: "this session may not write files",
+  saveInPlan: "the chat is in Plan mode, where nothing is written",
+  saveBadPath: "save takes a relative path ending in .jpg, inside your folder, with no .. in it",
+  saveOutside: "that folder is not a plain folder inside your folder (a link, a file, or outside it)",
   missing: (missing: readonly AppLookAccessKind[]) =>
     `Genex cannot see app windows yet: the person must allow ${missing.map((kind) => ACCESS_WORDS[kind]).join(" and ")} for Genex in System Settings → Privacy & Security${missing.includes(AppLookAccessKind.Accessibility) ? " (and, if macOS asks, let Genex control System Events)" : ""}. Tell them; do not retry until they say it is on.`,
 } as const;

@@ -15,6 +15,7 @@ import type { Run } from "../../types/harness.d.ts";
 import type { LeadSeat } from "../director/lead-session.ts";
 import { MAX_WAIT_S } from "../director/budgets.ts";
 import { DirectorTool } from "../director/tool-specs.ts";
+import type { FinishTally } from "../finish-check.ts";
 import type { Side } from "../judge.ts";
 import type { WorkerMode, WorkerState } from "../outcomes.ts";
 import type { JournalPhase } from "../run-events.ts";
@@ -42,6 +43,8 @@ export const LeadTool = {
   Critic: "critic",
   RebuildUnreal: "rebuild_unreal",
   Note: DirectorTool.Note,
+  /** The lead's claim that the game meets the request, which a reviewer checks: the director's own name. */
+  Finish: DirectorTool.Finish,
 } as const;
 export type LeadTool = (typeof LeadTool)[keyof typeof LeadTool];
 
@@ -382,6 +385,12 @@ export const LeadEndReason = {
   Failed: "failed",
   /** The lead ended several turns in a row within minutes: it had nothing more to build. */
   Idle: "idle",
+  /** A reviewer accepted the lead's claim that the game meets the request. */
+  GoalReached: "goal-reached",
+  /** The reviewer turned the lead's claim down too many times in a row: the run stopped with what isn't done. */
+  NotDone: "not-done",
+  /** The lead claimed, and no engine here can hold a reviewer to check it: the run ended without a yes. */
+  NoReviewer: "no-reviewer",
 } as const;
 export type LeadEndReason = (typeof LeadEndReason)[keyof typeof LeadEndReason];
 
@@ -419,6 +428,8 @@ export type LeadJournal = {
   ends: LeadEnd[];
   /** The end number of the run's last job end the lead has had (`jobs.list`): a resume reads on from here. */
   jobsCursor: number;
+  /** Where the lead's finish checks stand (absent: it never claimed), so a resumed run goes on counting the no's. */
+  finishTally?: FinishTally;
   workedMs: number;
   savedAt: string;
 };
@@ -441,6 +452,8 @@ export type LeadStartedPayload = {
   director: true;
   maxParallel: number;
   facets: LeadPart[];
+  /** The lead claims through a finish check: the graph is a tree from the start, so nothing moves at its first claim. */
+  finishCheck: true;
 };
 
 /** `director_worker` for a milestone or a sub-agent: its part, title, mode and state, with why when it stopped. */

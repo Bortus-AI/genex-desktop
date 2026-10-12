@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { serialize } from "node:v8";
 import { createUnrealBackend } from "../../src/plugins/unreal/backend.ts";
 import {
   BlueprintTemplate,
@@ -986,6 +987,13 @@ describe("The Unreal plugin's create action", () => {
       [["GxCar", made.state.port]],
       "recorded like any setup, and chosen in the panel",
     );
+  });
+
+  it("the Create action's answer crosses the plugin process's wire, as advanced serialization sends it", async () => {
+    const b = await backendFixture();
+    const made = await b.backend.action?.("create", { template: BlueprintTemplate.Blank, name: "GxBlank" }, b.context);
+    assert.ok(made, "the action answers");
+    assert.doesNotThrow(() => serialize(made), "nothing in the answer is a function");
   });
 
   /** A host that makes Genex games under `games/` when asked, and records every call. */

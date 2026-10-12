@@ -46,6 +46,7 @@ import {
   hooksOn,
   READY_POLL_MS,
   READY_WAIT_MS,
+  pendingLine,
   READY_WORDS,
   turnHeldLine,
   waitReady,
@@ -409,8 +410,9 @@ async function waitUntilReady(ctx: HarnessCtx, options: DelegatedOptions, handof
     return ReadyWait.Ended;
   }
   if (!first.pending) return ReadyWait.Ready;
-  await sayInTurn(ctx, options.turnId, first.pending.reason);
-  ctx.setStatus?.(`waiting: ${first.pending.reason}`);
+  const notReady = pendingLine(first.pending);
+  await sayInTurn(ctx, options.turnId, notReady);
+  ctx.setStatus?.(`waiting: ${notReady}`);
   await clock.sleep(READY_POLL_MS);
   const ready = await waitReady(ctx, handoff.descriptor, scope, clock, until);
   if (ctx.cancelled) {

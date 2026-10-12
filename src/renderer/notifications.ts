@@ -25,6 +25,7 @@ import {
 import { DAY_MS, MINUTE_MS } from "../shared/duration.ts";
 import { EventKind } from "../shared/event-log.ts";
 import { ExecutionStatus, executionStep } from "../shared/run-state.ts";
+import { LoopProfile } from "../shared/project-facts.ts";
 import { contractorIdentity } from "./chat-labels.ts";
 import { StageView } from "./stage.ts";
 import { STORAGE_KEYS } from "./storage.ts";
@@ -125,7 +126,11 @@ export function buildNotice(
   }
   if (endedEarly(status, payload, because))
     return { tone: NoticeTone.Stopped, view: StageView.Builds, text: NOTICE_WORDS.buildStopped };
-  if (payload.landed === true) return { tone: NoticeTone.Done, view: StageView.Live, text: NOTICE_WORDS.buildLive };
+  if (payload.landed === true) {
+    // A Loop led in its project's own folder kept its work there: Live may only show it as stills.
+    const text = payload.profile === LoopProfile.Open ? NOTICE_WORDS.buildKept : NOTICE_WORDS.buildLive;
+    return { tone: NoticeTone.Done, view: StageView.Live, text };
+  }
   return { tone: NoticeTone.Stopped, view: StageView.Builds, text: NOTICE_WORDS.buildNothingNew };
 }
 

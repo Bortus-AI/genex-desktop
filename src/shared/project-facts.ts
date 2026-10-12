@@ -23,14 +23,18 @@ export const CoreFact = {
 } as const;
 export type CoreFact = (typeof CoreFact)[keyof typeof CoreFact];
 
-/** Where a fact came from, besides a plugin's `detect` (`pluginFactSource`). Wire values: never rename one. */
-export const FactSource = { Core: "core", Link: "link" } as const;
+/**
+ * Where a fact came from, besides a plugin's `detect` (`pluginFactSource`): the core table, an
+ * engine link, or the rules of the scaffold recorded in the game's studio.json (`ScaffoldRecord`).
+ * Wire values: never rename one.
+ */
+export const FactSource = { Core: "core", Link: "link", Scaffold: "scaffold" } as const;
 export type FactSource = (typeof FactSource)[keyof typeof FactSource];
 
 /** The prefix of a fact found by a plugin's `detect`: `plugin:<id>`. */
 const PLUGIN_SOURCE_PREFIX = "plugin:";
 
-/** Where a fact came from: the core table, an engine link, or the `detect` of the plugin named. */
+/** Where a fact came from: the core table, an engine link, a recorded scaffold, or the `detect` of the plugin named. */
 export type ProjectFactSource = FactSource | `plugin:${string}`;
 
 /** The source of a fact a plugin's `detect` found. */
@@ -319,6 +323,26 @@ export function servedFacts(game: GameKind): FactRef[] {
 export const servedAsWebGame = (game: GameKind): boolean => hasFact(servedFacts(game), CoreFact.WebGame, ROOT);
 
 /**
+ * How a Loop works on a project: the web method (an integration copy, builders, judges, landing) or
+ * in place. Persisted in `autopilot_started.profile`: never rename a value.
+ */
+export const LoopProfile = { Web: "web", Open: "open" } as const;
+export type LoopProfile = (typeof LoopProfile)[keyof typeof LoopProfile];
+
+/** The facts a web Loop's folder may hold beside its page. */
+export const WEB_LOOP_FACTS: ReadonlySet<string> = new Set<string>([CoreFact.WebGame, CoreFact.BlenderAssets]);
+
+/**
+ * The profile a Loop on a game takes: web when a web game is served at its root (one with no kind
+ * yet is) and every fact it is served by is one a web Loop's folder may hold; open otherwise (an
+ * engine's project or plugin anywhere, a plugin's kind, or no web game at the root).
+ */
+export function loopProfileOf(game: GameKind): LoopProfile {
+  const webOnly = servedFacts(game).every((fact) => WEB_LOOP_FACTS.has(fact.id));
+  return servedAsWebGame(game) && webOnly ? LoopProfile.Web : LoopProfile.Open;
+}
+
+/**
  * A game as a scope reads it: one given by its facts alone (`[]`: no kind yet), by its facts and
  * what its folder holds, or by an engine of the older vocabulary (its fact at the root).
  */
@@ -364,9 +388,11 @@ const PORTED_FROM = { MaxFacts: 32, MaxPathChars: 1024 } as const;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused.
 const CONTROL = /[\0-\x1f\x7f]/;
 
-/** Whether `value` is a fact source: core, link, or `plugin:<id>`. */
+const FACT_SOURCES: ReadonlySet<unknown> = new Set(Object.values(FactSource));
+
+/** Whether `value` is a fact source: core, link, scaffold, or `plugin:<id>`. */
 function isFactSource(value: unknown): value is ProjectFactSource {
-  if (value === FactSource.Core || value === FactSource.Link) return true;
+  if (FACT_SOURCES.has(value)) return true;
   if (typeof value !== "string" || !value.startsWith(PLUGIN_SOURCE_PREFIX)) return false;
   return PLUGIN_ID.test(value.slice(PLUGIN_SOURCE_PREFIX.length));
 }
@@ -396,4 +422,66 @@ export function parsePortedFrom(raw: unknown): ProjectFact[] {
     .slice(0, PORTED_FROM.MaxFacts)
     .map(parseFact)
     .filter((fact): fact is ProjectFact => fact !== undefined);
+}
+
+/** How much one rule may name: files to match, and folders whose files it skips. */
+export const FACT_RULE_LIMIT = { Files: 8, NotUnder: 8 } as const;
+
+/** A list of at most `max` (and at least `min`) strings, each passing `valid`, as a copy; else undefined. */
+function globList(value: unknown, min: number, max: number, valid: (glob: unknown) => boolean): string[] | undefined {
+  if (!Array.isArray(value) || value.length < min || value.length > max) return undefined;
+  return value.every(valid) ? [...(value as string[])] : undefined;
+}
+
+/**
+ * One fact rule by shape (`FactRule`, the `detect` grammar): a fact id, 1-8 file globs and at most 8
+ * folder globs to skip; null for anything else, a glob that names a parent or an absolute path
+ * included.
+ */
+export function parseFactRule(raw: unknown): FactRule | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const files = globList(record.files, 1, FACT_RULE_LIMIT.Files, isFileGlob);
+  if (!isFactId(record.fact) || !files) return null;
+  if (record.notUnder === undefined) return { fact: record.fact, files };
+  const notUnder = globList(record.notUnder, 0, FACT_RULE_LIMIT.NotUnder, isFolderGlob);
+  return notUnder ? { fact: record.fact, files, notUnder } : null;
+}
+
+/** A scaffold's limits: its label's length and how many rules it adds. */
+export const SCAFFOLD_LIMIT = { LabelChars: 40, Rules: 4 } as const;
+
+/**
+ * What studio.json records of the scaffold a plugin's tool made the game with (`scaffold`): the
+ * plugin, the scaffold's id and label, and the rules that add the facts its kind holds
+ * (`FactSource.Scaffold`); they keep finding them while the plugin is off.
+ */
+export interface ScaffoldRecord {
+  plugin: string;
+  id: string;
+  label: string;
+  facts: FactRule[];
+}
+
+/** Whether `value` is a scaffold label: text of 1-40 characters with no control character. */
+export const isScaffoldLabel = (value: unknown): value is string =>
+  typeof value === "string" &&
+  value.trim().length > 0 &&
+  value.length <= SCAFFOLD_LIMIT.LabelChars &&
+  !CONTROL.test(value);
+
+/**
+ * A studio.json's scaffold record by shape only: a plugin id, a fact id, a label and at most four
+ * well-formed rules, else null. A record that fails any check adds nothing: its rules are never
+ * followed in part.
+ */
+export function parseScaffoldRecord(raw: unknown): ScaffoldRecord | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const record = raw as Record<string, unknown>;
+  const plugin = typeof record.plugin === "string" && PLUGIN_ID.test(record.plugin) ? record.plugin : null;
+  if (!plugin || !isFactId(record.id) || !isScaffoldLabel(record.label)) return null;
+  if (!Array.isArray(record.facts) || record.facts.length > SCAFFOLD_LIMIT.Rules) return null;
+  const facts = record.facts.map(parseFactRule);
+  if (facts.some((rule) => rule === null)) return null;
+  return { plugin, id: record.id, label: record.label, facts: facts as FactRule[] };
 }

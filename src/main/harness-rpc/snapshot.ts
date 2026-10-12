@@ -87,6 +87,8 @@ export function snapshotRpc(core: StudioCore, x: CoreInternals) {
       return core.snapshotIndex.get(record.snapshot_id) ?? record;
     },
     [HostMethod.SnapshotRestore]: async (p) => {
+      // No boot is read here: nothing is awaited before the moment begins, so a harness ending
+      // after that ends the moment itself (`stopMoments`).
       const record = core.snapshotIndex.get(p.snapshotId);
       if (!record) throw new Error(MESSAGE.unknownSnapshot(p.snapshotId));
       const scope = p.scope ?? record.scope;

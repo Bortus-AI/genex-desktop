@@ -23,7 +23,7 @@ import { latestRun } from "../../shared/coordinator.ts";
 import { genexOutputFile, isGenexRef, parseGenexRef } from "../../shared/genex-ref.ts";
 import { createHash } from "node:crypto";
 import { lstat, realpath, writeFile } from "node:fs/promises";
-import { ensureDir, pathExists } from "../../substrate/fsx.ts";
+import { ensureDir, ensureDirBelow, pathExists, writeFileInDir } from "../../substrate/fsx.ts";
 import { describeUnknownImage, sniffImage } from "../../substrate/image-sniff.ts";
 import { git } from "../../substrate/snapshots.ts";
 import type { EventEnvelope } from "../../substrate/types.ts";
@@ -156,9 +156,13 @@ export class AssetService {
         `a run artifact must stay inside its run folder: ${JSON.stringify(`${runId}/${name}`).slice(0, 120)}`,
       );
     }
-    await ensureDir(dir);
-    await ensureDir(path.dirname(file));
-    await writeFile(file, data);
+    // The runs folder is one an agent's box writes: a link or a file on the way, or at the file's
+    // own name, is refused, never written through.
+    const parts = path.relative(path.resolve(this.#core.layout.runs), path.dirname(file)).split(path.sep);
+    const folder = await ensureDirBelow(this.#core.layout.runs, parts);
+    // Written by handle once it is known to be the file in that folder: a folder swapped for a link
+    // after the check above is refused, never written through.
+    await writeFileInDir(folder, path.basename(file), data);
     return file;
   }
 

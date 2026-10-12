@@ -1,7 +1,8 @@
 /**
  * Genex's own project tools (`ProjectTool`), handed by seat (`ProjectToolSeat`): `start_web_game`
  * writes the web starter into a game with no kind yet; `plugins_find` looks for a Genex plugin and
- * `plugins_suggest` shows the person a card to turn one on; `offer_dont_wait` shows the person the
+ * `plugins_suggest` shows the person a card to turn one on; `plugin_check` checks a plugin the agent
+ * wrote in the game, installing nothing (`plugin-check.ts`); `offer_dont_wait` shows the person the
  * "Don't wait for me" card (`dont-wait.ts`). They sit beside the cover tool in delegation
  * (`delegation.ts`); the harness's `game.start`, `plugins.find` and `plugins.suggest` do the same
  * for a local model.
@@ -9,7 +10,7 @@
 import type { LiveToolResult, LiveToolSpec } from "../../shared/engine-requests.ts";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
 import type { GameProject } from "../../shared/game-project.ts";
-import { PluginCallBlocker } from "../../shared/plugins.ts";
+import { PluginCallBlocker, PluginSourceKind } from "../../shared/plugins.ts";
 import { type GameKind, kindPending, ProjectStarter } from "../../shared/project-facts.ts";
 import {
   type PluginsFindAnswer,
@@ -22,8 +23,10 @@ import type { StudioCore } from "../studio-core.ts";
 import type { CoreInternals } from "./internals.ts";
 import { findPlugins, type PluginQuery, suggestable } from "./plugin-finder.ts";
 import { offerDontWait } from "./dont-wait.ts";
+import { checkPluginFolder } from "./plugin-check.ts";
 import {
   OFFER_DONT_WAIT_TOOL,
+  PLUGIN_CHECK_TOOL,
   PLUGINS_FIND_TOOL,
   PLUGINS_SUGGEST_ANSWER,
   PLUGINS_SUGGEST_TOOL,
@@ -44,16 +47,20 @@ const MESSAGE = {
 export interface ProjectToolCall {
   project: string;
   threadId?: string | undefined;
+  /** The calling session was handed `plugin_check`, so `plugins_find` may tell it to check a plugin. */
+  canCheck?: boolean;
 }
 
 /** Where a session sits, which says which of Genex's project tools it is handed (`projectTools`). */
 export const ProjectToolSeat = {
-  /** The chat's own session: every project tool. */
+  /** The chat's own session: every project tool, the plugin check included. */
   Chat: "chat",
   /** A run's lead: the plugin search, the plugin card and the "Don't wait for me" card, shown in the chat it answers. */
   Lead: "lead",
   /** A worker the host seated: the plugin search only; the card is the lead's to show. */
   Worker: "worker",
+  /** A Loop's reviewer (`HarnessDelegateParams.reviewer`): no project tool; it only reads and looks (`app_look`). */
+  Reviewer: "reviewer",
   /** Every other session (a builder of a classic run, a judge, a scout): none. */
   None: "none",
 } as const;
@@ -62,15 +69,15 @@ export type ProjectToolSeat = (typeof ProjectToolSeat)[keyof typeof ProjectToolS
 /**
  * The project tools a session is handed, by its seat: the chat's own gets the web starter while its
  * game has no kind yet (never for a folder of its own files of a kind Genex can't name), the plugin
- * search and card, and the "Don't wait for me" card on every game; a lead the search and both
- * cards; a worker the search; anyone else nothing.
+ * search, card and check, and the "Don't wait for me" card on every game; a lead the search and both
+ * cards; a worker the search; anyone else (a reviewer included) nothing.
  */
 export function projectTools(game: GameKind, seat: ProjectToolSeat): LiveToolSpec[] {
   if (seat === ProjectToolSeat.Worker) return [PLUGINS_FIND_TOOL];
   if (seat === ProjectToolSeat.Lead) return [PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, OFFER_DONT_WAIT_TOOL];
   if (seat !== ProjectToolSeat.Chat) return [];
   const start = kindPending(game) ? [START_WEB_GAME_TOOL] : [];
-  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, OFFER_DONT_WAIT_TOOL];
+  return [...start, PLUGINS_FIND_TOOL, PLUGINS_SUGGEST_TOOL, PLUGIN_CHECK_TOOL, OFFER_DONT_WAIT_TOOL];
 }
 
 /** One of Genex's project tools as a chat's session calls it, by name. */
@@ -81,8 +88,13 @@ export async function callProjectTool(
   args: Record<string, unknown>,
   call: ProjectToolCall,
 ): Promise<LiveToolResult> {
-  if (name === ProjectTool.PluginsFind) return JSON.stringify(await pluginsFind(core, args));
-  if (name === ProjectTool.PluginsSuggest) return (await pluginsSuggest(core, { ...args, ...call })).message;
+  if (name === ProjectTool.PluginsFind) return JSON.stringify(await pluginsFind(core, args, call.canCheck === true));
+  if (name === ProjectTool.PluginsSuggest) {
+    const { canCheck: _canCheck, ...card } = call;
+    return (await pluginsSuggest(core, { ...args, ...card })).message;
+  }
+  if (name === ProjectTool.PluginCheck)
+    return JSON.stringify(await checkPluginFolder(core.games.dirFor(call.project), args, localPluginOn(core)));
   if (name === ProjectTool.StartWebGame) return startWebGame(core, x, call.project, call.threadId);
   if (name === ProjectTool.OfferDontWait) return offerDontWait(core, call);
   throw new Error(MESSAGE.unknownTool(name));
@@ -92,12 +104,27 @@ export async function callProjectTool(
 const queryText = (value: unknown, cap: number): string | undefined =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, cap) : undefined;
 
-/** `plugins_find`: read-only, from the installed plugins and Genex's catalog only, so Plan mode lets it run. */
-export async function pluginsFind(core: StudioCore, args: Record<string, unknown>): Promise<PluginsFindAnswer> {
+/** Whether a plugin id names a plugin loaded from a folder that is installed and on: loading it again keeps it on. */
+const localPluginOn =
+  (core: StudioCore) =>
+  (id: string): boolean =>
+    core.plugins
+      .list()
+      .some((p) => p.manifest.id === id && p.source === PluginSourceKind.Local && p.enabled && !p.removed);
+
+/**
+ * `plugins_find`: read-only, from the installed plugins and Genex's catalog only, so Plan mode lets
+ * it run. Only a session handed `plugin_check` (`canCheck`) is told to check a plugin it writes.
+ */
+export async function pluginsFind(
+  core: StudioCore,
+  args: Record<string, unknown>,
+  canCheck = false,
+): Promise<PluginsFindAnswer> {
   const fact = queryText(args.fact, MAX_QUERY_CHARS);
   const text = queryText(args.text, MAX_QUERY_CHARS);
   const query: PluginQuery = { ...(fact ? { fact } : {}), ...(text ? { text } : {}) };
-  return findPlugins(core.plugins.list(), await core.plugins.catalog(), query);
+  return findPlugins(core.plugins.list(), await core.plugins.catalog(), query, canCheck);
 }
 
 /** Whether `threadId` is a chat of `project`, the only place its card may show. */

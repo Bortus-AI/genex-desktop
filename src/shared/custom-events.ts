@@ -20,6 +20,7 @@ import type { ConnectorToolEvent, ConnectorToolStartedEvent } from "./mcp.ts";
 import type { ToolPermissionEvent } from "./permissions.ts";
 import type { SteerDelivery } from "./message-queue.ts";
 import type { Usage } from "./event-log.ts";
+import type { LoopProfile } from "./project-facts.ts";
 import type { BuildObservation, ReadyResult, ReadyVia } from "./preview-contract.ts";
 import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload } from "./game-engine.ts";
 import type { RunSpec } from "./protocol.ts";
@@ -27,6 +28,8 @@ import type { PluginSuggestedPayload } from "./project-tools.ts";
 import type { DontWaitOfferPayload, DontWaitSetPayload } from "./dont-wait.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
 import type { WorkerFinishedPayload, WorkerStartedPayload } from "./workers.ts";
+import type { ObserverCapturePayload } from "./observers.ts";
+import type { FinishCheckPayload } from "./finish-check.ts";
 
 /**
  * Every custom event name in the studio's own code. A few are only read: names older versions
@@ -107,6 +110,10 @@ export const CustomEvent = {
   /** A worker a lead started, in a run or a chat turn, and its end or the lead's verdict; written by the harness. */
   WorkerStarted: "worker_started",
   WorkerFinished: "worker_finished",
+  /** An observer's pictures kept with a run (files only): the host's for a plugin's, the harness's for the preview and the lead's proof. */
+  ObserverCapture: "observer_capture",
+  /** One step of a Loop's finish check (checking, then the reviewer's yes, no or no answer); written by the harness. */
+  FinishCheck: "finish_check",
   // one part's rounds
   FacetBuildStarted: "facet_build_started",
   FacetCheckAdded: "facet_check_added",
@@ -314,9 +321,13 @@ export interface RunFinishedPayload extends RunScope {
   stopCode?: StopCode;
   reference?: string;
   stoppedBecause?: string;
+  /** What a Loop's reviewer found not done at its last no, one line each (a run that ended without its yes). */
+  notDone?: string[];
   executionStatus?: string;
   iterations?: unknown[];
   landed?: boolean;
+  /** How the Loop worked on its project: `open` for a Loop led in the project's own folder. */
+  profile?: LoopProfile;
   /** Why the run failed, when it did (the director's report). */
   failure?: { message?: string } | null;
   /** The provider failure that paused it, when one did (a director's run). */
@@ -593,6 +604,10 @@ export interface CustomEventMap {
     liveChat?: boolean;
     /** The run's lead's workers write `worker_started`/`worker_finished`: its graph is a tree from the start. */
     workerRecords?: boolean;
+    /** The run's lead claims through a finish check: its graph is a tree from the start, so nothing moves at its first claim. */
+    finishCheck?: boolean;
+    /** How the Loop works on its project: `open` for a Loop led in place, in the project's own folder. */
+    profile?: LoopProfile;
   };
   blender_asset: RunScope & {
     name?: string;
@@ -688,6 +703,8 @@ export interface CustomEventMap {
   app_look_access: Partial<AppLookAccessPayload>;
   worker_started: WorkerStartedPayload;
   worker_finished: WorkerFinishedPayload;
+  observer_capture: Partial<ObserverCapturePayload>;
+  finish_check: Partial<FinishCheckPayload>;
   rebuild_and_restart_studio: { ok?: boolean; reason?: string };
   run_auto_resumed: RunAutoResumedPayload;
   run_control: RunScope & { action?: string };

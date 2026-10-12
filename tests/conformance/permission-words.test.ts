@@ -8,6 +8,7 @@ import {
   alwaysWords,
   bypassPermissionsWords,
   permissionCommandWords,
+  permissionInsteadWords,
   permissionLineWords,
   permissionOutcomeWords,
   permissionRuleWords,
@@ -100,6 +101,14 @@ describe("permissionTitleWords", () => {
       "A worker wants to run a command",
       "a worker with no title is still not Claude",
     );
+  });
+
+  it("the card's own-words row tells the worker, not Claude, what to do instead", () => {
+    assert.equal(
+      permissionInsteadWords(ask({ tool: "Bash", worker: { id: "w1", title: "Scene builder" } })),
+      "Tell the worker what to do instead…",
+    );
+    assert.equal(permissionInsteadWords(ask({ tool: "Bash" })), "Tell Claude what to do instead…");
   });
 
   it("a job's card asks in plain words, naming the worker that wants it", () => {

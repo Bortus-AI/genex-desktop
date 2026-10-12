@@ -5,10 +5,11 @@
  * agent's words is the agent's search, not Genex deciding anything: only the person's click on the
  * card turns a plugin on.
  */
+import { GENEX_PLUGIN_AUTHOR_SKILL, GENEX_PLUGIN_ID } from "../../shared/genex.ts";
 import type { PluginCatalogEntry, PluginInfo, PluginManifest } from "../../shared/plugins.ts";
 import { skillScope } from "../../shared/plugins.ts";
 import { FindNext, PluginOffer, type PluginFound, type PluginsFindAnswer } from "../../shared/project-tools.ts";
-import { PLUGINS_FIND_NOTE } from "./project-tools-prompts.ts";
+import { PLUGINS_FIND_GUIDE_OFF, PLUGINS_FIND_NOTE, PLUGINS_FIND_WRITE_UNCHECKED } from "./project-tools-prompts.ts";
 
 /** An installed plugin as the registry lists it (`registry.list()`). */
 export type ListedPlugin = Pick<PluginInfo, "manifest" | "enabled" | "removed" | "unlisted">;
@@ -19,8 +20,24 @@ export interface PluginQuery {
   text?: string;
 }
 
+/**
+ * Words that name no plugin by themselves: "Unreal Engine plugin" is a search for Unreal, so a
+ * search skips them, and a search of only these lists every plugin.
+ */
+const GENERIC_WORDS: ReadonlySet<string> = new Set([
+  ...["a", "an", "and", "for", "in", "into", "of", "on", "or", "the", "to", "with"],
+  ...["build", "editor", "engine", "engines", "game", "games", "genex", "make", "plugin", "plugins", "port"],
+  ...["project", "projects", "support", "tool", "tools"],
+]);
+
+/** The shortest searched word that may find a longer word it starts ("blend" finds Blender). */
+const MIN_PREFIX_CHARS = 3;
+
 /** Words of a search, lowercased: letters and digits only. */
 const words = (text: string | undefined): string[] => (text ?? "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
+
+/** The words of a search that can name a plugin: every word but the generic ones. */
+const distinctiveWords = (text: string | undefined): string[] => words(text).filter((word) => !GENERIC_WORDS.has(word));
 
 /** Every fact a plugin detects, scopes its tools, skills and connectors to, or makes; sorted, each once. */
 export function pluginFacts(manifest: PluginManifest): string[] {
@@ -33,11 +50,21 @@ export function pluginFacts(manifest: PluginManifest): string[] {
   return [...new Set(facts)].sort();
 }
 
-/** Whether a plugin answers the query: it knows the fact, and every word is in its id, name or description. */
+/** Whether a searched word is a word of the plugin's, or starts one when it is long enough. */
+const findsWord = (own: readonly string[], word: string): boolean =>
+  own.some((ownWord) => ownWord === word || (word.length >= MIN_PREFIX_CHARS && ownWord.startsWith(word)));
+
+/**
+ * Whether a plugin answers the query: it knows the fact, or one of the search's distinctive words is
+ * in its id, name, description or facts. A query with neither lists every plugin.
+ */
 function matches(manifest: PluginManifest, query: PluginQuery): boolean {
-  if (query.fact && !pluginFacts(manifest).includes(query.fact)) return false;
-  const haystack = `${manifest.id} ${manifest.name} ${manifest.description}`.toLowerCase();
-  return words(query.text).every((word) => haystack.includes(word));
+  const asked = distinctiveWords(query.text);
+  if (!query.fact && !asked.length) return true;
+  const facts = pluginFacts(manifest);
+  if (query.fact && facts.includes(query.fact)) return true;
+  const own = words(`${manifest.id} ${manifest.name} ${manifest.description} ${facts.join(" ")}`);
+  return asked.some((word) => findsWord(own, word));
 }
 
 /** A plugin as found: what it is, and how the person can have it (none: it is on). */
@@ -83,11 +110,31 @@ function nextFor(plugins: readonly PluginFound[]): FindNext {
   return plugins.length ? FindNext.Use : FindNext.WritePlugin;
 }
 
-/** `plugins_find`: the installed plugins and Genex's catalog entries that answer the query, and what to do next. */
+/** Whether the guide to writing a plugin reaches sessions: Genex Tools is on and carries its plugin-author skill. */
+function guideOn(installed: readonly ListedPlugin[]): boolean {
+  const genex = installed.find((plugin) => plugin.manifest.id === GENEX_PLUGIN_ID && !plugin.unlisted);
+  return !!genex && isOn(genex) && genex.manifest.skills.some((skill) => skill.name === GENEX_PLUGIN_AUTHOR_SKILL);
+}
+
+/**
+ * The note for what to do next: with nothing found, it says where the guide to writing one is, and
+ * names `plugin_check` only to a session that has it (`canCheck`).
+ */
+function noteFor(next: FindNext, installed: readonly ListedPlugin[], canCheck: boolean): string {
+  if (next !== FindNext.WritePlugin) return PLUGINS_FIND_NOTE[next];
+  if (!guideOn(installed)) return PLUGINS_FIND_GUIDE_OFF;
+  return canCheck ? PLUGINS_FIND_NOTE[next] : PLUGINS_FIND_WRITE_UNCHECKED;
+}
+
+/**
+ * `plugins_find`: the installed plugins and Genex's catalog entries that answer the query, and what
+ * to do next, for a session that has `plugin_check` or not (`canCheck`).
+ */
 export function findPlugins(
   installed: readonly ListedPlugin[],
   catalog: readonly PluginCatalogEntry[],
   query: PluginQuery,
+  canCheck = false,
 ): PluginsFindAnswer {
   const manifests = new Map<string, PluginManifest>();
   for (const plugin of installed) manifests.set(plugin.manifest.id, plugin.manifest);
@@ -97,7 +144,7 @@ export function findPlugins(
     return manifest !== undefined && matches(manifest, query);
   });
   const next = nextFor(plugins);
-  return { plugins, next, note: PLUGINS_FIND_NOTE[next] };
+  return { plugins, next, note: noteFor(next, installed, canCheck) };
 }
 
 /**

@@ -111,6 +111,10 @@ export const MOMENT_WORDS = {
   NotOpened: (why: string) => `Unreal couldn't be reopened (${why}).`,
   OpenTimedOut: (minutes: number) => `Unreal didn't answer within ${minutes} minutes of reopening`,
   Stopped: "the run was stopped while Unreal reopened",
+  StoppedBeforeOpen: "The run was stopped before Unreal was opened.",
+  StoppedBeforeClose: "The run was stopped before Unreal was closed, so the Genex editor helper wasn't updated.",
+  StoppedAfterClose:
+    "The run was stopped once Unreal was closed, so the Genex editor helper wasn't updated; Unreal is being reopened.",
   // The log.
   LogErrors: (lines: readonly string[], since: string) => {
     const more = lines.length > NAMED_LOG_LINES ? ` (and ${lines.length - NAMED_LOG_LINES} more)` : "";
@@ -240,9 +244,9 @@ export type EditorActivity = { pie: boolean; dirty: number };
  * agent nor the plugin's own queue started) and how much is unsaved; `pie` and `dirty` stay for the
  * callers that read them. No editor running: nobody, nothing unsaved.
  */
-export function probeAnswer(activity: EditorActivity | null, agentPlay: boolean, queueBusy: boolean) {
+export function probeAnswer(activity: EditorActivity | null, agentPlay: boolean, queuePlays: boolean) {
   if (!activity) return { personActive: false, unsaved: 0, pie: false, dirty: 0 };
-  const personActive = activity.pie && !agentPlay && !queueBusy;
+  const personActive = activity.pie && !agentPlay && !queuePlays;
   return { personActive, unsaved: activity.dirty, pie: activity.pie, dirty: activity.dirty };
 }
 

@@ -30,6 +30,41 @@ const exists = (dir: string, file: string) =>
     () => false,
   );
 
+/** The repository index's time within the second its entries were read: at its start, and in its last 0.2 ms. */
+const RACY_INDEX_TIMES = [
+  { name: "at the start of that second", within: 0 },
+  { name: "in the last fraction of that second, which a millisecond time rounds up", within: 0.9998 },
+];
+
+for (const row of RACY_INDEX_TIMES)
+  test(`a same-size edit in the second the repository last read the file is in the checkpoint: the copied index stays racy (index written ${row.name})`, async (t) => {
+    const { dir, checkpoints } = await game(t);
+    // git compares file times to the second, and re-reads a file whose time is not older than its
+    // index's own: the repository's index, written that second, must not read as newer once copied.
+    await git(dir, ["config", "core.trustctime", "false"]);
+    const desk = path.join(dir, "desk.txt");
+    const second = Math.floor(Date.now() / 1000 - 100);
+    await fs.writeFile(desk, "birch\n");
+    await fs.utimes(desk, second, second);
+    await git(dir, ["add", "desk.txt"]);
+    await git(dir, ["commit", "-q", "-m", "a desk"]);
+    await fs.utimes(path.join(dir, ".git", "index"), second + row.within, second + row.within);
+    await fs.writeFile(desk, "green\n");
+    await fs.utimes(desk, second, second);
+    const seen = /desk\.txt/.test(await git(dir, ["--no-optional-locks", "status", "--porcelain"]));
+    // A git built to compare sub-second times (USE_NSEC) reads an index written later in that second
+    // as newer than the file, so the entry is clean to git itself: the row proves nothing there, and
+    // the whole-second row still guards the copied index.
+    if (!seen && row.within > 0) {
+      t.skip("this git compares sub-second file times, so it reads that index as newer than the edit");
+      return;
+    }
+    assert.ok(seen, "git itself sees it");
+
+    const commit = await checkpoints.take(dir, "thread-racy", "msg_racy");
+    assert.equal(await git(dir, ["show", `${commit}:desk.txt`]), "green\n");
+  });
+
 test("checkpoints disable repository fsmonitor, hooks and content filters", async (t) => {
   const { dir, checkpoints } = await game(t);
   const script = path.join(dir, "probe.sh");

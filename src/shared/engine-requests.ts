@@ -105,6 +105,11 @@ export interface DelegateDirectorGrant {
    * lead in its game's folder.
    */
   chatSession?: boolean;
+  /**
+   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
+   * this game started in this chat.
+   */
+  inPlace?: boolean;
 }
 
 /** A still that goes into the builder's prompt as an image block. */

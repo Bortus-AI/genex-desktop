@@ -200,9 +200,23 @@ async function consentWorld() {
       return { ok: true, engine: ENGINE, sessionId: "s", turns: 1, usage: {}, summary: "" };
     },
   } as never);
-  await core.plugins.installLocal(await connectorPackage(ENGINE_PLUGIN, [GAME_ENGINE]), "local", [GAME_ENGINE]);
-  await core.plugins.installLocal(await connectorPackage(RIVAL_PLUGIN, [GAME_ENGINE]), "local", [GAME_ENGINE]);
-  await core.plugins.installLocal(await connectorPackage(OTHER_PLUGIN, []), "local", []);
+  // From GitHub, so a run's own consent may cover their servers (a local plugin's server asks every call).
+  const fromGithub = (id: string) => ({ kind: "github" as const, repo: `studio-tests/${id}`, sha: "a".repeat(40) });
+  await core.plugins.installLocal(
+    await connectorPackage(ENGINE_PLUGIN, [GAME_ENGINE]),
+    "github",
+    [GAME_ENGINE],
+    fromGithub(ENGINE_PLUGIN),
+  );
+  await core.plugins.installLocal(
+    await connectorPackage(RIVAL_PLUGIN, [GAME_ENGINE]),
+    "github",
+    [GAME_ENGINE],
+    fromGithub(RIVAL_PLUGIN),
+  );
+  await core.plugins.installLocal(await connectorPackage(OTHER_PLUGIN, []), "github", [], fromGithub(OTHER_PLUGIN));
+  // Loaded from folders, they start off: the person turns them on.
+  for (const id of [ENGINE_PLUGIN, RIVAL_PLUGIN, OTHER_PLUGIN]) await core.plugins.setEnabled(id, true);
   const valley = await core.games.scaffold("valley");
   const plain = await core.games.scaffold("plain");
   const dirs: Record<Game, string> = { valley: valley.dir, plain: plain.dir };

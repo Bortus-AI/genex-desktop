@@ -1261,6 +1261,27 @@ test("a project call that names its own timeout fails once that passes, not at t
   assert.ok(Date.now() - started < 10_000, "it ended at its own timeout");
 });
 
+test("a project call that names its own timeout keeps its whole session within it: the helper's identity call and the session's end too", async () => {
+  const stand = editor();
+  // An editor whose game thread got busy: the helper never names its project, and ending the session hangs.
+  const busy: typeof fetch = async (input, init) => {
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (isIdentity(body) || init?.method === "DELETE") return never(init?.signal);
+    return stand.fetchImpl(input, init);
+  };
+  const call = { toolset: "genex_loop.tools.GenexLoopTools", tool: "save_all", args: {}, timeoutMs: 100 };
+  const started = Date.now();
+  const outcome = await Promise.race([
+    callProjectTool(DRIFT, call, busy).then(
+      () => "answered",
+      (error: unknown) => `refused: ${String(error)}`,
+    ),
+    sleep(5_000).then(() => "still waiting"),
+  ]);
+  assert.match(outcome, /^refused/, outcome);
+  assert.ok(Date.now() - started < 5_000, "it ended within its own limit, not the bridge's five minutes");
+});
+
 /** The Genex editor helper's Loop toolset, which only Genex's own editor queue calls. */
 const LOOP_TOOLSET = "genex_loop.tools.GenexLoopTools";
 

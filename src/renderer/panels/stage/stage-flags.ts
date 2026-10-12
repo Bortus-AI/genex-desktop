@@ -2,6 +2,7 @@
  * Which surface the stage shows, and why the running game is or is not on it: pure, so the rules
  * are tested without React (`PreviewPanel` reads them each render).
  */
+import { ObserverLive } from "../../../shared/observers.ts";
 import type { BesideTarget } from "../../open-beside.ts";
 import type { RunGraph as RunGraphModel } from "../../run-graph.ts";
 import { StageView } from "../../stage.ts";
@@ -30,9 +31,10 @@ export function resolveStageView(
 }
 
 /**
- * Which surface the stage shows, and why the running game is or is not on it. An Unreal game's
- * Live is its Unreal card: no web page loads, empties or waits there. A game with no kind yet
- * (`pending`) has no page: Live shows the first-idea state and waits for nothing.
+ * Which surface the stage shows, and why the running game is or is not on it. Live shows one view,
+ * picked by the folder's facts (`live-views.ts`): only the web preview loads, empties or waits for
+ * a page; the Unreal card and the latest pictures hold none. A game with no kind yet (`pending`)
+ * has no page: Live shows the first-idea state and waits for nothing.
  */
 export function stageFlags({
   view,
@@ -40,7 +42,7 @@ export function stageFlags({
   graph,
   planning,
   project,
-  unreal,
+  liveView,
   pending,
   live,
 }: {
@@ -49,7 +51,8 @@ export function stageFlags({
   graph: RunGraphModel | null;
   planning: boolean;
   project: string | null;
-  unreal: boolean;
+  /** The view Live shows for this game (`liveViewFor`). */
+  liveView: ObserverLive;
   pending: boolean;
   live: LiveFlagsInput;
 }) {
@@ -59,21 +62,26 @@ export function stageFlags({
     project: Boolean(project),
   });
   const onLive = Boolean(project) && stageView === StageView.Live;
-  const webLive = onLive && !unreal;
+  const previewOnStage = onLive && liveView === ObserverLive.Preview;
   const emptyScene = live.state?.phase === "empty" && live.state?.drawCalls === 0;
-  const showEmpty = webLive && (emptyScene || pending);
-  const liveLoading = webLive && live.liveLoad?.project === project && !showEmpty;
+  const showEmpty = previewOnStage && (emptyScene || pending);
+  const liveLoading = previewOnStage && live.liveLoad?.project === project && !showEmpty;
   return {
     stageView,
     /** The game has nothing in it yet, whichever view is open. */
     emptyScene: Boolean(project && (emptyScene || pending)),
     showEmpty,
     liveLoading,
-    engineCard: onLive && unreal,
+    /** Live shows the web preview: its page, its probe and its controls. */
+    previewOnStage,
+    /** Live shows the Unreal card: the game plays in the Unreal editor. */
+    cardOnStage: onLive && liveView === ObserverLive.UnrealCard,
+    /** Live shows the latest pictures of a folder no observer draws. */
+    stillsOnStage: onLive && liveView === ObserverLive.Stills,
     /** The person stopped the game: its view holds no page until Play. */
     stopped: live.stopped,
     /** …and Live says so, with no load of it under way. */
-    gameStopped: webLive && live.stopped && !liveLoading && !showEmpty,
+    gameStopped: previewOnStage && live.stopped && !liveLoading && !showEmpty,
     buildsOpen: stageView === StageView.Builds,
     /** Assets is a full-stage surface like Builds: the native game view has to give the rectangle back. */
     assetsOpen: stageView === StageView.Assets,

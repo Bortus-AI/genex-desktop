@@ -691,9 +691,14 @@ describe("engine fallback (M2)", () => {
 
   it("refuses a second contractor in the same project while one is building", async () => {
     const rig = await turnRig([]);
-    let release!: () => void;
+    let release = () => {};
     const gate = new Promise<void>((resolve) => {
       release = resolve;
+    });
+    // The first brief is in the engine, so it holds the folder's lock, before the second is sent.
+    let enter = () => {};
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve;
     });
     const vendor: Engine = {
       id: "vendor",
@@ -702,6 +707,7 @@ describe("engine fallback (M2)", () => {
       status: async () => ({ code: "ready", detail: "signed in" }),
       models: async () => [],
       delegate: async () => {
+        enter();
         await gate;
         return { ok: true, engine: "vendor", summary: "done", turns: 1, usage: { input_tokens: 0, output_tokens: 0 } };
       },
@@ -715,6 +721,8 @@ describe("engine fallback (M2)", () => {
       prompt: string;
     }) => Promise<unknown>;
     const first = delegate({ engine: "vendor", project: "pong", prompt: "build it" });
+    // A first brief refused before it reaches the engine fails here, never waits forever.
+    await Promise.race([entered, first]);
     await assert.rejects(
       () => delegate({ engine: "vendor", project: "pong", prompt: "build it again" }),
       /already building in "pong"/,

@@ -15,11 +15,17 @@ import { mkdir, readdir, readFile, realpath, rename, rm, symlink, writeFile } fr
 import path from "node:path";
 import { describe, it } from "node:test";
 import { CppAddState as SeedCppAddState, readCppStatus } from "../../src/harness-seed/loop/unreal/cpp.ts";
-import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
+import type { PluginContext, PluginHookContext } from "../../src/plugin-sdk/index.d.ts";
+import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { CppAddState, CppEditorTool, landPartCpp } from "../../src/plugins/unreal/cpp-tools.ts";
 import { PortBlockedError } from "../../src/plugins/unreal/editor-log.ts";
 import { LoopTool, type PartCode, PartRunState } from "../../src/plugins/unreal/editor-queue.ts";
-import { type AnyLoopTool, createLoopTools, LoopToolName } from "../../src/plugins/unreal/loop-tools.ts";
+import {
+  type AnyLoopTool,
+  createLoopTools,
+  LiveLoopToolName,
+  LoopToolName,
+} from "../../src/plugins/unreal/loop-tools.ts";
 import { CompileFailure, type CompileOptions, type CompileResult } from "../../src/plugins/unreal/ubt.ts";
 import { XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -281,6 +287,8 @@ type Options = {
   onQuit?: () => Promise<unknown>;
   /** The reopened Unreal couldn't listen on the game's port: the old run's sockets still held it. */
   portBlockedOnOpen?: boolean;
+  /** UBT's build goes on until this settles. */
+  building?: Promise<unknown>;
 };
 
 /** A Blueprint game (or one with its module) open in a stand-in Unreal, through the Loop's tools. */
@@ -329,6 +337,7 @@ async function cppWorld(options: Options = {}) {
       events.push("compile");
       compiles.push(compile);
       assert.equal(editor.running, false, "UBT builds the game's module only with Unreal closed");
+      await options.building;
       return options.compile ? options.compile(compile) : BUILT;
     },
     editorCall,
@@ -382,7 +391,10 @@ async function cppWorld(options: Options = {}) {
     await until(async () => (await status()).adding.state !== CppAddState.Adding);
     return (await status()).adding;
   };
-  return { root, game, unreal, projectFile, engineDir, events, compiles, clock, editor, status, add, added };
+  /** A tool called at one of Genex's moments. */
+  const atMoment = (name: string, hook: PluginHookContext) =>
+    tools.call(name as LoopToolName, {}, { ...context, hook }, storage);
+  return { root, game, unreal, projectFile, engineDir, events, compiles, clock, editor, status, add, added, atMoment };
 }
 
 describe("cpp-status", () => {
@@ -467,6 +479,30 @@ describe("add-cpp-module", () => {
       [[w.engineDir, w.projectFile, MODULE, XCODE_APP]],
     );
     assert.deepEqual(await w.add(), { module: MODULE, already: true }, "a second call finds it");
+  });
+
+  it("restarts Unreal as Genex's own: a health look meanwhile is no crash, and the crash steps start no second editor or build", async () => {
+    let built: (value?: unknown) => void = () => {};
+    const w = await cppWorld({ building: new Promise((resolve) => (built = resolve)) });
+    assert.deepEqual(await w.add(), { started: true });
+    await until(async () => w.events.includes("compile"));
+    assert.equal(w.editor.running, false, "Unreal is closed while the module builds");
+    const health = (await w.atMoment(LoopToolName.EditorState, { on: HookEvent.Health, runId: "run-7" })) as {
+      block?: string;
+      pending?: string;
+    };
+    assert.equal(health.block, undefined, `no crash: ${health.block}`);
+    assert.ok(health.pending, "it says Unreal is coming back");
+    await w.atMoment(LoopToolName.ReopenEditor, { on: HookEvent.Crash, runId: "run-7" });
+    // A rewind's restore steps meanwhile end nothing: Genex itself is restarting this Unreal.
+    const ended = await w.atMoment(LiveLoopToolName.EndEditor, { on: HookEvent.RestoreBefore, runId: "run-7" }).then(
+      (answer) => JSON.stringify(answer),
+      (err: Error) => `refused: ${err.message}`,
+    );
+    assert.match(ended, /reopening this game's Unreal/, ended);
+    built();
+    assert.equal((await w.added()).state, CppAddState.Done);
+    assert.deepEqual(w.events, [CppEditorTool.SaveAll, "quit Rush.uproject", "compile", "open Rush.uproject"]);
   });
 
   it("adds once when asked again while it is adding", async () => {

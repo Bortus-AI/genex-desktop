@@ -2,13 +2,14 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { PluginSourceKind, type PluginInfo, type PluginManifest } from "../../../shared/plugins.ts";
+import { installPluginUpdate } from "../../state/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/dropdown-menu.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { IconButton } from "../../ui/kit.tsx";
-import { PLUGINS_WORDS, SKILLS_WORDS } from "../../words.ts";
+import { PLUGINS_WORDS, SKILLS_WORDS, consentToolWords } from "../../words.ts";
 import { PluginPanelHost } from "../PluginPanelHost.tsx";
-import { capabilityLine, foldersLine, sourceWords } from "./labels.ts";
+import { capabilityLine, foldersLine, localAccessNote, sourceWords } from "./labels.ts";
 
 const PAGE = PLUGINS_WORDS.page;
 import type { OpenPanel, PluginsPage } from "./page.ts";
@@ -178,8 +179,26 @@ export function PluginSkills({
   );
 }
 
+/** A local plugin's tools the person always allowed, and the button that makes them ask again. */
+function AllowedTools({ detail, page }: { detail: PluginInfo; page: PluginsPage | undefined }): JSX.Element | null {
+  const tools = detail.allowedTools ?? [];
+  if (!page || !tools.length) return null;
+  return (
+    <span className="extension-description" data-always-allowed="">
+      {PAGE.alwaysAllowed(tools.map((tool) => consentToolWords(tool)).join(", "))}{" "}
+      <Button
+        variant="ghost"
+        disabled={page.busy}
+        onClick={() => void page.act(() => window.studio.pluginForgetAllowed(detail.manifest.id))}
+      >
+        {PAGE.askEveryTime}
+      </Button>
+    </span>
+  );
+}
+
 /** What the plugin is: who makes it, which version from where, what it can do, where outside your games it writes, and what the scan saw. */
-export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
+export function Information({ detail, page }: { detail: PluginInfo; page?: PluginsPage }): JSX.Element {
   const { manifest, scan } = detail;
   const bundled = detail.source === PluginSourceKind.Bundled;
   return (
@@ -207,7 +226,8 @@ export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
           </>
         )}
       </dl>
-      <p className="mt-6 text-xs text-ink-3">{PAGE.trusted}</p>
+      <p className="mt-6 text-xs text-ink-3">{localAccessNote(detail) ?? PAGE.trusted}</p>
+      <AllowedTools detail={detail} page={page} />
     </Section>
   );
 }
@@ -228,12 +248,13 @@ export function PluginNotes({ detail }: { detail: PluginInfo }): JSX.Element {
   );
 }
 
-/** Update to the catalog's newer release, when there is one and none is already waiting. */
+/** Update to the plugin's newer version, when there is one and none is already waiting. */
 export function UpdateButton({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element | null {
-  if (!detail.availableVersion || detail.pendingVersion) return null;
+  const update = page.updates.get(detail.manifest.id);
+  if (!update) return null;
   return (
-    <Button disabled={page.busy} onClick={() => void page.act(() => window.studio.pluginInstall(detail.manifest.id))}>
-      Update to {detail.availableVersion}
+    <Button disabled={page.busy} onClick={() => void page.act(() => installPluginUpdate(window.studio, update))}>
+      Update to {update.version}
     </Button>
   );
 }

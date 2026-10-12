@@ -23,6 +23,7 @@ import { GraphSelection } from "./selection.ts";
 import { Status } from "./tone.tsx";
 import type { InspectorProps } from "./types.ts";
 import { type Notify, notifyProblem, ToastTone } from "../../state/toasts.ts";
+import { webBuildShown } from "../../web-build-shown.ts";
 
 /** The most open problems the panel lists. */
 const STILL_OPEN_SHOWN = 5;
@@ -59,7 +60,7 @@ function BuildActions({
         onClick={() =>
           void window.studio
             .showBuild(build.project, build.head)
-            .then(() => undefined)
+            .then(() => webBuildShown(build.project))
             .catch(refuse)
         }
       >

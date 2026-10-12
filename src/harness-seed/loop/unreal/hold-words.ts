@@ -1,6 +1,7 @@
 /**
  * The person's words for what Genex itself held back in an Unreal run: the run's start, the close's
- * save, the lead's turns, a restore or restart between turns, and adding the game's C++ module.
+ * save, the lead's turns, a restore or restart between turns, a restart's reopen, a crash it didn't
+ * reopen (or whose way back it held) and adding the game's C++ module.
  * Each is worded from Genex's typed hold (Plan mode, the person using Unreal, Genex unable to tell
  * whether they were, something else at work there) and the lock's label, never from the hold's
  * reason, which is written for agents and speaks of "the person". A plugin's step's own block keeps
@@ -73,6 +74,48 @@ const CPP_HELD: HoldWords = {
     "C++ couldn't be added while the chat is in Plan mode, so this run builds everything in Blueprints.",
 };
 
+/** Why the run halts when Unreal crashed and Genex itself held its crash moment back: nothing reopened it. */
+const CRASH_HELD: HoldWords = {
+  [HookHold.PersonFirst]: (app) =>
+    `Unreal crashed, and Genex didn't reopen it: you were using ${app}. Resume the Loop once you're done there.`,
+  [HookHold.CantTell]: (app) =>
+    `Unreal crashed, and Genex didn't reopen it: it couldn't tell whether you were using ${app}. Resume the Loop to try again.`,
+  [HookHold.Busy]: (app) =>
+    `Unreal crashed, and Genex didn't reopen it: something else was working in ${app}. Resume the Loop to try again.`,
+  [HookHold.Plan]: () =>
+    "Unreal crashed, and Genex didn't reopen it: the chat is in Plan mode. Resume the Loop once the plan is approved.",
+};
+
+/**
+ * Why the run halts when Genex itself held back reopening Unreal after closing it for a restart:
+ * Resume reopens Unreal (building its C++), so the person never opens it themselves.
+ */
+const RESTART_HELD: HoldWords = {
+  [HookHold.PersonFirst]: (app) =>
+    `Unreal was closed for the restart, and Genex didn't reopen it: you were using ${app}. Resume the Loop once you're done there.`,
+  [HookHold.CantTell]: (app) =>
+    `Unreal was closed for the restart, and Genex didn't reopen it: it couldn't tell whether you were using ${app}. Resume the Loop to try again.`,
+  [HookHold.Busy]: (app) =>
+    `Unreal was closed for the restart, and Genex didn't reopen it: something else was working in ${app}. Resume the Loop to try again.`,
+  [HookHold.Plan]: () =>
+    "Unreal was closed for the restart, and Genex didn't reopen it: the chat is in Plan mode. Resume the Loop once the plan is approved.",
+};
+
+/**
+ * Why the run halts when Unreal crashed, didn't reopen, and Genex itself held back going back to
+ * the last save point: Resume reopens Unreal (building its C++), as after a crash Genex held.
+ */
+const CRASH_RESTORE_HELD: HoldWords = {
+  [HookHold.PersonFirst]: (app) =>
+    `Unreal crashed and didn't reopen, and Genex didn't go back to the last save point: you were using ${app}. Resume the Loop once you're done there.`,
+  [HookHold.CantTell]: (app) =>
+    `Unreal crashed and didn't reopen, and Genex didn't go back to the last save point: it couldn't tell whether you were using ${app}. Resume the Loop to try again.`,
+  [HookHold.Busy]: (app) =>
+    `Unreal crashed and didn't reopen, and Genex didn't go back to the last save point: something else was working in ${app}. Resume the Loop to try again.`,
+  [HookHold.Plan]: () =>
+    "Unreal crashed and didn't reopen, and Genex didn't go back to the last save point: the chat is in Plan mode. Resume the Loop once the plan is approved.",
+};
+
 /** The person's words for Genex's own hold, or null when a step held it back (its reason stands). */
 function heldFor(held: HookHeldBy, words: HoldWords): string | null {
   const hold = holdOf(held);
@@ -89,3 +132,9 @@ export const turnsHeldWords = (held: HookHeldBy): string | null => heldFor(held,
 export const betweenHeldWords = (held: HookHeldBy): string | null => heldFor(held, BETWEEN_HELD);
 /** Why the C++ module wasn't added, when Genex held the plugin's step: the person's words, or null otherwise. */
 export const cppHeldWords = (held: HookHeldBy): string | null => heldFor(held, CPP_HELD);
+/** Why the run halts when Genex held the crash moment: Unreal crashed and stays closed, in the person's words, or null otherwise. */
+export const crashHeldWords = (held: HookHeldBy): string | null => heldFor(held, CRASH_HELD);
+/** Why the run halts when Genex held back reopening Unreal after a restart closed it: the person's words, or null otherwise. */
+export const restartHeldWords = (held: HookHeldBy): string | null => heldFor(held, RESTART_HELD);
+/** Why the run halts when Unreal crashed, didn't reopen and Genex held the way back: the person's words, or null otherwise. */
+export const crashRestoreHeldWords = (held: HookHeldBy): string | null => heldFor(held, CRASH_RESTORE_HELD);

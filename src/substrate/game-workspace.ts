@@ -49,8 +49,10 @@ import {
   isProjectStarter,
   kindPending,
   parsePortedFrom,
+  parseScaffoldRecord,
   type ProjectFact,
   type ProjectStarter,
+  type ScaffoldRecord,
   type SourcedFactRule,
   settleFacts,
 } from "../shared/project-facts.ts";
@@ -365,6 +367,15 @@ async function readStudioMeta(dir: string): Promise<Record<string, unknown> | nu
   return readJsonIfExists<Record<string, unknown>>(path.join(dir, "studio.json")).catch(() => null);
 }
 
+/** The scaffold a game's studio.json records (`ScaffoldRecord`), or null when it records none that parses. */
+async function readScaffold(dir: string): Promise<ScaffoldRecord | null> {
+  return parseScaffoldRecord((await readStudioMeta(dir))?.scaffold);
+}
+
+/** A scaffold record's rules, each with the scaffold as the source of its facts. */
+const scaffoldRules = (scaffold: ScaffoldRecord | null): SourcedFactRule[] =>
+  (scaffold?.facts ?? []).map((rule) => ({ rule, source: FactSource.Scaffold }));
+
 /**
  * The engine link as a fact: `unreal-project` at the linked `.uproject`'s folder, relative to the
  * game (`.` for its root), or absolute when the project lies outside it.
@@ -653,18 +664,24 @@ export class GameWorkspaces {
 
   /**
    * Record in the game's studio.json what a port replaced (`portedFrom`), beside what an earlier
-   * port recorded, each fact once; every other key stays. The replaced kinds stay in the folder as
-   * the reference and no longer count as the game's kind.
+   * port recorded, each fact once, and the scaffold the call made the game with (`scaffold`, in
+   * place of an earlier one); every other key stays. The replaced kinds stay in the folder as the
+   * reference and no longer count as the game's kind.
    */
-  async recordPort(name: string, replaced: readonly ProjectFact[]): Promise<void> {
-    if (replaced.length === 0) return;
+  async recordPort(name: string, replaced: readonly ProjectFact[], scaffold?: ScaffoldRecord): Promise<void> {
+    if (replaced.length === 0 && !scaffold) return;
     const file = path.join(this.dirFor(name), "studio.json");
     const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
     const kept = parsePortedFrom(current.portedFrom);
     const added = replaced.filter((fact) => !hasFact(kept, fact.id, fact.path));
     const portedFrom = [...kept, ...added].map(({ id, path: where, source }) => ({ id, path: where, source }));
+    const next = {
+      ...current,
+      ...(replaced.length > 0 ? { portedFrom } : {}),
+      ...(scaffold ? { scaffold: { ...scaffold } } : {}),
+    };
     // The folder is the agent's: a link planted at studio.json is never written through.
-    await writeFileNoFollow(file, `${JSON.stringify({ ...current, portedFrom }, null, 2)}\n`);
+    await writeFileNoFollow(file, `${JSON.stringify(next, null, 2)}\n`);
   }
 
   /** The starter's contract version, added to a record that has none (a game made empty has none). */
@@ -952,11 +969,14 @@ export class GameWorkspaces {
 
   async #describe(name: string, dir: string): Promise<GameProject> {
     const meta = await readFile(path.join(dir, "studio.json"), "utf8").catch(() => null);
-    const parsed = meta ? (JSON.parse(meta) as { title?: string; createdAt?: string; portedFrom?: unknown }) : {};
+    const parsed = meta
+      ? (JSON.parse(meta) as { title?: string; createdAt?: string; portedFrom?: unknown; scaffold?: unknown })
+      : {};
     const shape = await readProjectShape(dir);
     const presentation = this.#presentation.get(await realpath(dir));
     const engine = await readEngineBinding(dir);
     const portedFrom = parsePortedFrom(parsed.portedFrom);
+    const scaffold = parseScaffoldRecord(parsed.scaffold);
     const record = { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp };
     // A folder that can't be read is still listed: it has no facts and is of no kind Genex can name.
     const { facts, holds } = await this.#kind(dir, record).catch(unreadableKind);
@@ -980,6 +1000,7 @@ export class GameWorkspaces {
       ...(holds ? { holds } : {}),
       ...(hookEvents.length > 0 ? { hookEvents: [...hookEvents] } : {}),
       ...(portedFrom.length > 0 ? { portedFrom } : {}),
+      ...(scaffold ? { scaffold: { plugin: scaffold.plugin, id: scaffold.id, label: scaffold.label } } : {}),
       web: hasFact(facts, CoreFact.WebGame, "."),
       ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
     };
@@ -1009,17 +1030,24 @@ export class GameWorkspaces {
 
   /**
    * Everything a game's folder holds before anything is left out: the facts its files give (the
-   * core table and the enabled plugins' `detect`) and its engine link. An untouched starter, an old
-   * engine record's web template and a port's reference all count here.
+   * core table, the enabled plugins' `detect` and its recorded scaffold's rules) and its engine
+   * link. An untouched starter, an old engine record's web template and a port's reference all
+   * count here. `scaffold` stands in for the recorded one: what a call that is about to record it
+   * made.
    */
-  async rawFactsOf(name: string): Promise<ProjectFact[]> {
+  async rawFactsOf(name: string, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
     await this.loadIndex();
     const dir = this.dirFor(name);
-    return this.#rawFacts(dir, await readEngineBinding(dir));
+    return this.#rawFacts(dir, await readEngineBinding(dir), scaffold);
   }
 
-  async #rawFacts(dir: string, engine: EngineBinding | undefined): Promise<ProjectFact[]> {
-    const detected = await detectFacts(dir, this.#factRules());
+  /**
+   * The facts the folder's files give (the core table, the enabled plugins' `detect`, and the rules
+   * of `scaffold`, else of the scaffold studio.json records) and its engine link.
+   */
+  async #rawFacts(dir: string, engine: EngineBinding | undefined, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
+    const recorded = scaffold ?? (await readScaffold(dir));
+    const detected = await detectFacts(dir, [...this.#factRules(), ...scaffoldRules(recorded)]);
     if (!engine) return detected;
     // The link stands for the game's Unreal project: a project file it holds besides (one the game
     // made before it was switched to another) is no second one, and its files are the link's own.
@@ -1446,7 +1474,7 @@ export class GameWorkspaces {
    * waste a whole gauntlet iteration: a missing entry point, and a game that abandoned the
    * contract (hard-coded `Math.random`, no `window.__studio`).
    */
-  async validate(name: string): Promise<Pick<GameValidation, "ok" | "problems" | "warnings" | "contract">> {
+  async validate(name: string): Promise<Pick<GameValidation, "ok" | "problems" | "missing" | "warnings" | "contract">> {
     return this.validateAt(this.dirFor(name));
   }
 

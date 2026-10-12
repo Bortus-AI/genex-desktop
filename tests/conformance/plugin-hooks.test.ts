@@ -15,6 +15,7 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { after, before, describe, it } from "node:test";
 import { ChatCheckpoints, CheckpointPhase } from "../../src/main/chat-checkpoints.ts";
 import { kindsWithReadiness, READY_ASK_MS } from "../../src/main/core/kind-readiness.ts";
+import { HOOK_CALL_MS } from "../../src/main/core/plugin-hooks.ts";
 import { PERSON_FIRST_FRESH_MS, workerHolder } from "../../src/main/core/plugin-locks.ts";
 import { PluginToolService } from "../../src/main/core/plugin-tools.ts";
 import { CustomEvent, customEventData } from "../../src/shared/custom-events.ts";
@@ -30,8 +31,10 @@ import {
   HookEvent,
   HookHold,
   hookAnswerOf,
+  LockScope,
 } from "../../src/shared/plugin-hooks.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
+import { UiEvent, type UiEvent as UiEventEnvelope } from "../../src/shared/ui-events.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import {
   DESK_LABEL,
@@ -39,10 +42,14 @@ import {
   type HookPackage,
   LIGHT_PLUGIN,
   OTHER_PLUGIN,
+  CARVE_LOCK_LABEL,
+  CARVE_PLUGIN,
+  carvePackage,
   hookPackage,
   lightPackage,
   otherPackage,
 } from "../helpers/hook-plugin.ts";
+import { personAllowsLocalTools } from "../helpers/plugins.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 /** A one-pixel PNG, as a handler hands one back. */
@@ -65,8 +72,8 @@ type Checkpoint = {
 /** What `hooks.fire` answers. */
 type Report = {
   blocked: { plugin: string; tool: string; reason: string; hold?: string; label?: string } | null;
-  pending: { plugin: string; reason: string } | null;
-  notes: Array<{ plugin: string; text: string }>;
+  pending: { plugin: string; reason: string; hold?: string; label?: string } | null;
+  notes: Array<{ plugin: string; text: string; hold?: string; label?: string }>;
   ran: string[];
 };
 
@@ -79,6 +86,10 @@ describe("Genex's moments in a real core", () => {
   let skew = 0;
   /** What the core logged. */
   const logged: string[] = [];
+  /** What the core told the window. */
+  const uiEvents: UiEventEnvelope[] = [];
+  /** Every shared limit a moment asked for, which the test may end at once; each also ends in its own time. */
+  const limits: Array<{ ms: number; end: () => void }> = [];
   const DESK = "desk-game";
   const POND = "pond";
 
@@ -100,6 +111,14 @@ describe("Genex's moments in a real core", () => {
       onLog: (line: string) => {
         logged.push(line);
       },
+      onUiEvent: (event: UiEventEnvelope) => uiEvents.push(event),
+      hooks: {
+        timeout: (ms: number) => {
+          const ended = new AbortController();
+          limits.push({ ms, end: () => ended.abort(new Error("the moment's time ran out")) });
+          return AbortSignal.any([ended.signal, AbortSignal.timeout(ms)]);
+        },
+      },
       locks: {
         now: () => Date.now() + skew,
         // A wait on the person moves the clock instead of taking real time.
@@ -115,6 +134,8 @@ describe("Genex's moments in a real core", () => {
     await core.plugins.setEnabled(HOOK_PLUGIN, true);
     await core.plugins.installLocal((await otherPackage()).dir, PluginSourceKind.Local, []);
     await core.plugins.setEnabled(OTHER_PLUGIN, true);
+    // Their agent tools would ask the person first; these cases are about moments, so the person allows them.
+    personAllowsLocalTools(core.plugins);
     deskDir = (await core.games.scaffold(DESK)).dir;
     await writeFile(path.join(deskDir, "Desk.hkproj"), "{}\n");
     await core.games.scaffold(POND);
@@ -302,6 +323,223 @@ describe("Genex's moments in a real core", () => {
     assert.deepEqual(await steps(), ["restore.before:save", "restore.after:ready"]);
   });
 
+  /**
+   * Waits until the hk plugin's log holds `entry`, a step `inside` runs (a restore, a moment, a Rewind):
+   * no clock, so a slow machine only waits longer. Should `inside` settle first, the step never came,
+   * and the wait fails with how it ended.
+   */
+  const untilStep = async (entry: string, inside: Promise<unknown>) => {
+    const ended: { how?: string } = {};
+    inside.then(
+      (value) => {
+        ended.how = `answered ${JSON.stringify(value)}`;
+      },
+      (error: Error) => {
+        ended.how = `failed: ${error.message}`;
+      },
+    );
+    for (;;) {
+      // Read before the log: a step logged just before its operation ended is still found.
+      const settled = ended.how;
+      if ((await hk.trail()).includes(entry)) return;
+      if (settled !== undefined) assert.fail(`${entry} never ran: the operation it runs in ${settled}`);
+      await nextTurn();
+    }
+  };
+
+  it("a Stop while a restore's after steps run lets them finish: the files stay restored and nothing is held", async () => {
+    const file = path.join(deskDir, "desk.txt");
+    await writeFile(file, "elm\n");
+    await hk.script({});
+    const saved = (await take()).snapshot;
+    assert.ok(saved);
+    await writeFile(file, "ash\n");
+    const gate = path.join(await tmpDir("hook-restore-gate-"), "go");
+    await hk.script({ "restore.after:ready": { until: gate, note: "Desk reopened after the Stop." } });
+    skew += PERSON_FIRST_FRESH_MS;
+    logged.length = 0;
+    const restore = call(HostMethod.SnapshotRestore, { snapshotId: saved.snapshot_id, project: DESK, threadId });
+    await untilStep("restore.after:ready", restore);
+    await call(HostMethod.EngineAbort, { project: DESK, threadId });
+    await writeFile(gate, "");
+    assert.equal(await restore, true, "the restore answers as restored");
+    assert.equal(await readFile(file, "utf8"), "elm\n", "the files stay restored");
+    assert.ok(
+      logged.some((line) => line.includes("Desk reopened after the Stop.")),
+      "the after step finished, its note logged",
+    );
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held");
+  });
+
+  it("a Stop while a restart's after steps run (hooks.fire restore.after) lets them finish", async () => {
+    const gate = path.join(await tmpDir("hook-restart-gate-"), "go");
+    await hk.script({ "restore.after:ready": { until: gate, note: "Desk reopened after the restart." } });
+    skew += PERSON_FIRST_FRESH_MS;
+    const firing = fire({ on: HookEvent.RestoreAfter }).then(
+      (report) => report,
+      (error: Error) => error,
+    );
+    await untilStep("restore.after:ready", firing);
+    await call(HostMethod.EngineAbort, { project: DESK, threadId });
+    await writeFile(gate, "");
+    const report = await firing;
+    assert.ok(!(report instanceof Error), `the moment was not stopped: ${String(report)}`);
+    assert.deepEqual(
+      report.notes.map((note) => note.text),
+      ["Desk reopened after the restart."],
+      "the after step finished",
+    );
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held");
+  });
+
+  /** The harness died (`onUnexpectedExit`): everything it asked for ends, never the host's own work. */
+  const harnessDies = () =>
+    lite.core.host.options.onUnexpectedExit?.({ at: Date.now(), code: 1, signal: null, harnessVersion: null });
+
+  it("the harness's death while a restore's after steps run lets them finish: the files stay restored", async () => {
+    const file = path.join(deskDir, "desk.txt");
+    await writeFile(file, "fir\n");
+    await hk.script({});
+    const saved = (await take()).snapshot;
+    assert.ok(saved);
+    await writeFile(file, "yew\n");
+    const gate = path.join(await tmpDir("hook-restore-death-gate-"), "go");
+    await hk.script({ "restore.after:ready": { until: gate, note: "Desk reopened after the harness ended." } });
+    skew += PERSON_FIRST_FRESH_MS;
+    logged.length = 0;
+    const restore = call(HostMethod.SnapshotRestore, { snapshotId: saved.snapshot_id, project: DESK, threadId });
+    await untilStep("restore.after:ready", restore);
+    await harnessDies();
+    await writeFile(gate, "");
+    assert.equal(await restore, true, "the restore answers as restored");
+    assert.equal(await readFile(file, "utf8"), "fir\n", "the files stay restored");
+    assert.ok(
+      logged.some((line) => line.includes("Desk reopened after the harness ended.")),
+      `the after step finished, its note logged: ${logged.join(" | ")}`,
+    );
+    assert.deepEqual(lite.core.locks.holders(), [], "nothing is held");
+  });
+
+  it("a restart's after steps a harness asked for as it died run none: what a Stop never cuts never starts for a harness that is gone", async () => {
+    await hk.script({ "restore.after:ready": { note: "Desk reopened." } });
+    skew += PERSON_FIRST_FRESH_MS;
+    const { kindOf } = lite.core.games;
+    let open = () => {};
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    // The handler is still reading the game when the harness dies.
+    lite.core.games.kindOf = (async (project: string) => {
+      await gate;
+      return kindOf.call(lite.core.games, project);
+    }) as typeof kindOf;
+    try {
+      const firing = fire({ on: HookEvent.RestoreAfter }).then(
+        (report) => report,
+        (error: Error) => error,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await harnessDies();
+      open();
+      const report = await firing;
+      assert.ok(report instanceof Error, `the moment ran stopped: ${JSON.stringify(report)}`);
+      assert.match(report.message, /Stopped/);
+      assert.deepEqual(await steps(), [], "no step ran for the harness that is gone");
+    } finally {
+      lite.core.games.kindOf = kindOf;
+    }
+  });
+
+  it("the harness's death cuts none of the person's Rewind: its before and after steps finish and the files go back", async () => {
+    const { core } = lite;
+    const file = path.join(deskDir, "desk.txt");
+    await writeFile(file, "birch\n");
+    await core.snapshot(SnapshotScope.Game, "before the rewound message", DESK);
+    const messageId = "hk-rewind-death";
+    await core.append(answered(messageId, "Paint the desk green.", "The desk is green now."), threadId);
+    const checkpoints = new ChatCheckpoints(await tmpDir("hook-rewind-death-"));
+    await checkpoints.take(deskDir, threadId, messageId, CheckpointPhase.Before);
+    await writeFile(file, "green\n");
+    const events = await core.store.listEvents(threadId);
+    const bubble = events.findLast(
+      (event) => event.data.type === EventKind.Messages && event.data.messages.some((m) => m.role === "user"),
+    );
+    assert.ok(bubble);
+    const gates = await tmpDir("hook-rewind-death-gates-");
+    const beforeGate = path.join(gates, "before");
+    const afterGate = path.join(gates, "after");
+    Object.defineProperty(core.host, "state", { configurable: true, get: () => "ready" });
+    try {
+      await hk.script({
+        "restore.before:save": { until: beforeGate },
+        "restore.after:ready": { until: afterGate },
+      });
+      const rewinding = core.rewindChat(threadId, bubble.id, messageId, { files: true });
+      await untilStep("restore.before:save", rewinding);
+      await harnessDies();
+      await writeFile(beforeGate, "");
+      await untilStep("restore.after:ready", rewinding);
+      await harnessDies();
+      await writeFile(afterGate, "");
+      const result = await rewinding;
+      assert.equal(result.files, 1, "the Rewind put the files back");
+      assert.equal(await readFile(file, "utf8"), "birch\n");
+      assert.deepEqual(await steps(), ["restore.before:save", "restore.after:ready"]);
+    } finally {
+      Reflect.deleteProperty(core.host, "state");
+    }
+  });
+
+  it("the Stop a harness sends as it shuts down (engine.abort for everything) cuts none of the person's Rewind", async () => {
+    const { core } = lite;
+    const file = path.join(deskDir, "desk.txt");
+    await writeFile(file, "maple\n");
+    await core.snapshot(SnapshotScope.Game, "before the rewound message", DESK);
+    const messageId = "hk-rewind-shutdown";
+    await core.append(answered(messageId, "Paint the desk blue.", "The desk is blue now."), threadId);
+    const checkpoints = new ChatCheckpoints(await tmpDir("hook-rewind-shutdown-"));
+    await checkpoints.take(deskDir, threadId, messageId, CheckpointPhase.Before);
+    await writeFile(file, "blue\n");
+    const events = await core.store.listEvents(threadId);
+    const bubble = events.findLast(
+      (event) => event.data.type === EventKind.Messages && event.data.messages.some((m) => m.role === "user"),
+    );
+    assert.ok(bubble);
+    const gate = path.join(await tmpDir("hook-rewind-shutdown-gate-"), "go");
+    Object.defineProperty(core.host, "state", { configurable: true, get: () => "ready" });
+    try {
+      await hk.script({ "restore.before:save": { until: gate } });
+      const rewinding = core.rewindChat(threadId, bubble.id, messageId, { files: true });
+      await untilStep("restore.before:save", rewinding);
+      await call(HostMethod.EngineAbort, {});
+      await writeFile(gate, "");
+      const result = await rewinding;
+      assert.equal(result.files, 1, "the Rewind put the files back");
+      assert.equal(await readFile(file, "utf8"), "maple\n");
+    } finally {
+      Reflect.deleteProperty(core.host, "state");
+    }
+  });
+
+  it("a Stop while a checkpoint's after steps run keeps its snapshot, and says the after steps were stopped", async () => {
+    const gate = path.join(await tmpDir("hook-checkpoint-gate-"), "go");
+    await hk.script({ "checkpoint.after:shot": { until: gate } });
+    skew += PERSON_FIRST_FRESH_MS;
+    const before = lite.core.snapshotIndex.all().length;
+    const taking = take();
+    await untilStep("checkpoint.after:shot", taking);
+    await call(HostMethod.EngineAbort, { project: DESK, threadId });
+    await writeFile(gate, "");
+    const done = await taking;
+    assert.ok(done.snapshot, JSON.stringify(done));
+    assert.equal(lite.core.snapshotIndex.all().length, before + 1, "the snapshot stands");
+    assert.ok(
+      done.notes?.some((note) => /after steps were stopped/.test(note.text)),
+      JSON.stringify(done.notes),
+    );
+    assert.deepEqual(lite.core.locks.holders(), []);
+  });
+
   it("only a restore of a game's own files runs the restore steps: a harness restore, a record with no game and a call with no game run none", async () => {
     const { core } = lite;
     const both = await core.snapshot(SnapshotScope.Both, "a won round", DESK);
@@ -420,6 +658,40 @@ describe("Genex's moments in a real core", () => {
     }
   });
 
+  it("the person's Rewind that another holder keeps from the game's app is refused in words for them, the files as they were", async () => {
+    const { core } = lite;
+    const file = path.join(deskDir, "desk.txt");
+    await writeFile(file, "cedar\n");
+    await core.snapshot(SnapshotScope.Game, "before the held message", DESK);
+    const messageId = "hk-rewind-held";
+    await core.append(answered(messageId, "Paint the desk grey.", "The desk is grey now."), threadId);
+    const checkpoints = new ChatCheckpoints(await tmpDir("hook-rewind-held-"));
+    await checkpoints.take(deskDir, threadId, messageId, CheckpointPhase.Before);
+    await writeFile(file, "grey\n");
+    const events = await core.store.listEvents(threadId);
+    const bubble = events.findLast(
+      (event) => event.data.type === EventKind.Messages && event.data.messages.some((m) => m.role === "user"),
+    );
+    assert.ok(bubble);
+    const binding = { project: DESK, directory: deskDir, threadId };
+    const desk = { plugin: HOOK_PLUGIN, lock: { id: "desk", label: DESK_LABEL, per: LockScope.Project } };
+    const release = await core.locks.hold([desk], { binding, waitMs: 0, holder: "another-call", forPerson: true });
+    Object.defineProperty(core.host, "state", { configurable: true, get: () => "ready" });
+    try {
+      await hk.script({});
+      await assert.rejects(core.rewindChat(threadId, bubble.id, messageId, { files: true }), (error: Error) => {
+        assert.match(error.message, /Something else is working in Desk/);
+        assert.doesNotMatch(error.message, /Another call|only one at a time/);
+        return true;
+      });
+      assert.equal(await readFile(file, "utf8"), "grey\n", "the files stay as they are");
+      assert.deepEqual(await steps(), [], "no restore step ran");
+    } finally {
+      release();
+      Reflect.deleteProperty(core.host, "state");
+    }
+  });
+
   it("a plugin's own tool runs its tool.before and tool.after; another plugin's never does", async () => {
     await hk.script({
       "tool.after:flush": { note: "Wiped the brush." },
@@ -438,6 +710,28 @@ describe("Genex's moments in a real core", () => {
     const refused = await invoke(`${HOOK_PLUGIN}__paint`, { color: "blue" });
     assert.deepEqual(refused, { blocked: "Not with that brush." });
     assert.deepEqual(await steps(), ["tool.before:save"], "a blocked call never reaches its tool");
+  });
+
+  it("a call its plugin's tool.before step blocks answers the block, and its record closes with the block's words alone", async () => {
+    await hk.script({ "tool.before:save": { block: "The desk is still wet." }, paint: { painted: true } });
+    skew += PERSON_FIRST_FRESH_MS;
+    const answer = await call(HostMethod.PluginsInvoke, {
+      project: DESK,
+      threadId,
+      name: `${HOOK_PLUGIN}__paint`,
+      args: {},
+    });
+    assert.deepEqual(answer, { blocked: "The desk is still wet." });
+    assert.deepEqual(await steps(), ["tool.before:save"], "the tool never ran");
+    const records = (await lite.core.store.listEvents(threadId)).flatMap((event) =>
+      event.data.type === EventKind.Custom && event.data.event_type === CustomEvent.PluginTool
+        ? [event.data.payload as { toolName?: string; ok?: boolean; error?: string }]
+        : [],
+    );
+    const closed = records.findLast((record) => record.toolName === `${HOOK_PLUGIN}__paint`);
+    assert.equal(closed?.ok, false, "the call shows as not run");
+    assert.equal(closed?.error, "The desk is still wet.", "in the block's words, never an error's class name");
+    await hk.script({});
   });
 
   it("a tool.after note joins any answer: after a text's words, beside a value, and beside Genex's own note", async () => {
@@ -466,6 +760,199 @@ describe("Genex's moments in a real core", () => {
     assert.equal(typeof made.genex?.note, "string", JSON.stringify(made));
     assert.ok(String(made.genex?.note).length > 0, "Genex's note of the kind it made is kept");
     assert.deepEqual(made.genex?.notes, ["Wiped the brush."]);
+  });
+
+  describe("a plugin's own tool moments around an agent's call", () => {
+    let carver: HookPackage;
+    before(async () => {
+      carver = await carvePackage();
+      await lite.core.plugins.installLocal(carver.dir, PluginSourceKind.Local, []);
+      await lite.core.plugins.setEnabled(CARVE_PLUGIN, true);
+    });
+    after(async () => {
+      await lite.core.plugins.setEnabled(CARVE_PLUGIN, false);
+    });
+    const carve = (args: Record<string, unknown> = {}) =>
+      call(HostMethod.PluginsInvoke, { project: DESK, threadId, name: `${CARVE_PLUGIN}__carve`, args });
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 20));
+    /** Waits (bounded, in real time) until the carver's log holds `entry`. */
+    const untilRan = async (entry: string) => {
+      for (let tries = 0; tries < 300 && !(await carver.trail()).includes(entry); tries++) await pause();
+      assert.ok((await carver.trail()).includes(entry), entry);
+    };
+    const consentCards = async () =>
+      (await lite.core.listAllEvents()).flatMap((event) =>
+        event.data.type === EventKind.Custom && event.data.event_type === CustomEvent.PluginConsent
+          ? [event.data.payload as { consentId: string; state: string }]
+          : [],
+      );
+    /** The next card a call asks (bounded, in real time), one not seen before. */
+    const nextCard = async (known: Set<string>) => {
+      let card: { consentId: string; state: string } | undefined;
+      for (let tries = 0; tries < 200 && !card; tries++) {
+        card = (await consentCards()).find((c) => c.state === "pending" && !known.has(c.consentId));
+        if (!card) await pause();
+      }
+      assert.ok(card, "the call asks its card");
+      return card.consentId;
+    };
+    /** Carve once, saying yes to its card. */
+    const carveApproved = async (args: Record<string, unknown>) => {
+      const known = new Set((await consentCards()).map((card) => card.consentId));
+      const pending = carve(args);
+      lite.core.resolveConsent(await nextCard(known), true);
+      return pending;
+    };
+
+    it("runs its before steps only once the call's arguments passed and its card was answered yes", async () => {
+      await carver.script({ carve: { carved: true } });
+      await assert.rejects(carve({ depth: "deep" }), /depth/, "arguments its tool refuses");
+      assert.deepEqual(await carver.trail(), [], "no before step ran for a call with bad arguments");
+
+      const known = new Set((await consentCards()).map((card) => card.consentId));
+      const declined = carve({ depth: 1 });
+      const card = await nextCard(known);
+      assert.deepEqual(await carver.trail(), [], "nothing ran while the card waits");
+      lite.core.resolveConsent(card, false);
+      assert.equal(((await declined) as { consent?: string }).consent, "declined");
+      assert.deepEqual(await carver.trail(), [], "a declined call runs no before step");
+
+      assert.equal(((await carveApproved({ depth: 2 })) as { carved?: boolean }).carved, true);
+      assert.deepEqual(await carver.trail(), ["tool.before:first", "tool.before:second", "carve", "tool.after:last"]);
+    });
+
+    it("its before steps share one limit: one that never answers is cut off with the rest, and the call answers why", async () => {
+      await carver.script({ "tool.before:first": { hangs: true }, carve: { carved: true } });
+      limits.length = 0;
+      const pending = carveApproved({ depth: 3 });
+      await untilRan("tool.before:first");
+      assert.deepEqual(
+        limits.map((limit) => limit.ms),
+        [HOOK_CALL_MS[HookEvent.ToolBefore]],
+        "one limit for the moment's steps together",
+      );
+      limits[0]?.end();
+      const answer = (await pending) as { blocked?: string };
+      assert.match(String(answer.blocked), /first step didn't answer in time/);
+      assert.deepEqual(await carver.trail(), ["tool.before:first"], "no later step and no call ran");
+    });
+
+    it("its after steps share one limit too: the call's own answer comes back with the step's note", async () => {
+      await carver.script({ "tool.after:last": { hangs: true }, carve: { carved: true } });
+      limits.length = 0;
+      const pending = carveApproved({ depth: 4 });
+      await untilRan("tool.after:last");
+      assert.deepEqual(
+        limits.map((limit) => limit.ms),
+        [HOOK_CALL_MS[HookEvent.ToolBefore], HOOK_CALL_MS[HookEvent.ToolAfter]],
+      );
+      limits[1]?.end();
+      const answer = (await pending) as { carved?: boolean; genex?: { notes?: string[] } };
+      assert.equal(answer.carved, true);
+      assert.deepEqual(answer.genex?.notes, ["Hook carver's last step didn't answer in time."]);
+    });
+
+    it("a card answered late leaves its before steps only what is left of the call's time; its after steps keep theirs", async () => {
+      await carver.script({ carve: { carved: true } });
+      limits.length = 0;
+      const known = new Set((await consentCards()).map((card) => card.consentId));
+      const pending = carve({ depth: 6 });
+      const card = await nextCard(known);
+      // The person reads the card for seven minutes and fifty seconds.
+      skew += 470_000;
+      lite.core.resolveConsent(card, true);
+      assert.equal(((await pending) as { carved?: boolean }).carved, true);
+      const [before, after] = limits.map((limit) => limit.ms);
+      assert.ok(
+        before !== undefined && before < HOOK_CALL_MS[HookEvent.ToolBefore] && before > 30_000,
+        `the before steps' limit was cut to what is left: ${before} ms`,
+      );
+      assert.equal(after, HOOK_CALL_MS[HookEvent.ToolAfter], "the after steps keep their own limit");
+    });
+
+    it("a card answered with too little of the call's time left runs no step and no call, and says it did not run", async () => {
+      await carver.script({ carve: { carved: true } });
+      const known = new Set((await consentCards()).map((card) => card.consentId));
+      const pending = carve({ depth: 7 });
+      const card = await nextCard(known);
+      skew += 540_000;
+      lite.core.resolveConsent(card, true);
+      const answer = (await pending) as { notRun?: boolean; message?: string };
+      assert.equal(answer.notRun, true, JSON.stringify(answer));
+      assert.match(String(answer.message), /did not run/);
+      assert.deepEqual(await carver.trail(), [], "no step and no call ran");
+    });
+
+    it("an after step whose lock another holder keeps is skipped, and the call's answer says it ran", async () => {
+      await carver.script({ carve: { carved: true } });
+      const binding = { project: DESK, directory: deskDir, threadId };
+      const bench = { plugin: CARVE_PLUGIN, lock: { id: "bench", label: CARVE_LOCK_LABEL, per: LockScope.Project } };
+      const release = await lite.core.locks.hold([bench], { binding, waitMs: 0, holder: "other" });
+      try {
+        const answer = (await carveApproved({ depth: 5 })) as { carved?: boolean; genex?: { notes?: string[] } };
+        assert.equal(answer.carved, true);
+        const notes = answer.genex?.notes ?? [];
+        assert.equal(notes.length, 1, JSON.stringify(notes));
+        assert.match(String(notes[0]), /ran/);
+        assert.match(String(notes[0]), new RegExp(CARVE_LOCK_LABEL));
+        assert.doesNotMatch(String(notes[0]), /try again|ask them/i, "never asks the agent to call again");
+        assert.deepEqual(await carver.trail(), ["tool.before:first", "tool.before:second", "carve"]);
+      } finally {
+        release();
+      }
+    });
+  });
+
+  it("the chat's own call never runs its tool's steps beside the chat's worker writing in place: they wait for it as the call does", async () => {
+    const writer = { project: DESK, threadId, holder: { id: "w2", title: "Sanding" } };
+    assert.deepEqual(await call(HostMethod.LocksHold, writer), { held: true, labels: [DESK_LABEL] });
+    try {
+      await hk.script({ paint: { painted: true } });
+      const answer = (await call(HostMethod.PluginsInvoke, {
+        project: DESK,
+        threadId,
+        name: `${HOOK_PLUGIN}__paint`,
+        args: {},
+      })) as { blocked?: string };
+      assert.match(String(answer.blocked), /"Sanding" is working in Desk/, "one refusal, naming the worker");
+      assert.deepEqual(await steps(), [], "no step of the tool ran while the worker held the desk, nor the tool");
+    } finally {
+      await call(HostMethod.LocksRelease, writer);
+    }
+  });
+
+  it("a run's tool step waiting for the person is told in the chat the run was started from", async () => {
+    const runId = "run-tool-told";
+    await lite.core.append([customEventData(CustomEvent.RunRegistered, { runId, project: DESK })], threadId);
+    await hk.script({ probe: { personActive: true }, paint: { painted: true } });
+    skew += PERSON_FIRST_FRESH_MS;
+    uiEvents.length = 0;
+    const service = new PluginToolService(lite.core, {
+      consent: null as never,
+      pluginCallAttribution: new WeakMap(),
+      mcpSecrets: null,
+      activeConnectorCalls: new Map(),
+      cutOffCalls: new Map(),
+      planning: async () => false,
+      bypassing: async () => true,
+      locks: lite.core.locks,
+      hooks: lite.core.hooks,
+    });
+    await service.invokePluginTool(
+      `${HOOK_PLUGIN}__paint`,
+      {},
+      { project: DESK, directory: deskDir, threadId: "run-tool-thread" },
+      undefined,
+      { engine: "claude-code", director: { runId } },
+    );
+    const told = uiEvents.filter((event) => event.type === UiEvent.PersonFirst).map((event) => event.payload);
+    assert.ok(told.length > 0, "the wait was told");
+    assert.deepEqual(
+      told.map((notice) => (notice as { threadId?: string }).threadId),
+      told.map(() => threadId),
+      JSON.stringify(told),
+    );
+    await hk.script({});
   });
 
   it("a worker writing in place calls its plugin's tool: the tool's steps pass the lock the worker holds", async () => {
@@ -633,6 +1120,33 @@ describe("Genex's moments in a real core", () => {
     }
   });
 
+  it("a planning chat's restore of a game folder no plugin hooks waits for the plan too; one that names no chat does not", async () => {
+    const pondDir = lite.core.games.dirFor(POND);
+    const pondThread = await lite.core.threadForGame(POND);
+    const file = path.join(pondDir, "pond.txt");
+    await writeFile(file, "lilies\n");
+    const saved = ((await call(HostMethod.CheckpointTake, { project: POND, label: "Lilies" })) as Checkpoint).snapshot;
+    assert.ok(saved);
+    await writeFile(file, "reeds\n");
+    await lite.core.setPermissionMode(pondThread, PermissionMode.Plan);
+    try {
+      await hk.script({});
+      const restore = { snapshotId: saved.snapshot_id, project: POND, threadId: pondThread };
+      await assert.rejects(call(HostMethod.SnapshotRestore, restore), (error: Error & { code?: string }) => {
+        assert.equal(error.code, HOOK_BLOCKED);
+        assert.match(error.message, /Plan mode/);
+        return true;
+      });
+      assert.equal(await readFile(file, "utf8"), "reeds\n", "the files stay as they are");
+      // A restore no chat or run answers for (a web run's own rollback) is no planning chat's.
+      await call(HostMethod.SnapshotRestore, { snapshotId: saved.snapshot_id, project: POND });
+      assert.equal(await readFile(file, "utf8"), "lilies\n");
+      assert.deepEqual(await hk.trail(), [], "no step ran");
+    } finally {
+      await lite.core.setPermissionMode(pondThread, PermissionMode.Manual);
+    }
+  });
+
   it("while the person uses what a moment's steps need, health is pending, a blocking moment is held and any other notes it, each typed", async () => {
     const person = { probe: { personActive: true } };
     const fresh = async () => {
@@ -643,6 +1157,8 @@ describe("Genex's moments in a real core", () => {
     const health = await fire({ on: HookEvent.Health });
     assert.equal(health.blocked, null, "the person at work is no crash");
     assert.match(String(health.pending?.reason), /Desk/);
+    assert.equal(health.pending?.hold, HookHold.PersonFirst, "health's pending carries Genex's hold");
+    assert.equal(health.pending?.label, DESK_LABEL);
     await fresh();
     const prepare = await fire({ on: HookEvent.RunPrepare });
     assert.equal(prepare.blocked?.hold, HookHold.PersonFirst);
@@ -652,6 +1168,8 @@ describe("Genex's moments in a real core", () => {
     const turnEnd = await fire({ on: HookEvent.TurnEnd, turn: "t1" });
     assert.equal(turnEnd.blocked, null, "a turn's end is never held");
     assert.match(String(turnEnd.notes[0]?.text), /Desk/);
+    assert.equal(turnEnd.notes[0]?.hold, HookHold.PersonFirst, "Genex's note carries its hold");
+    assert.equal(turnEnd.notes[0]?.label, DESK_LABEL);
     assert.deepEqual(await steps(), [], "no step that needs the desk ran");
 
     const file = path.join(deskDir, "desk.txt");

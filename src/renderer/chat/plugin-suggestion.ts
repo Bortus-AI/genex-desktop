@@ -3,7 +3,7 @@
  * `plugin_suggested`): which Genex plugin, why, and the one button the person may press. The
  * button is read from the live plugin list, not the record, so a plugin turned on since says On.
  */
-import type { PluginInfo } from "../../shared/plugins.ts";
+import { type PluginInfo, PluginSourceKind } from "../../shared/plugins.ts";
 import { PluginOffer, type PluginSuggestedPayload } from "../../shared/project-tools.ts";
 import { PLUGIN_SUGGESTION_WORDS } from "../words.ts";
 
@@ -52,6 +52,18 @@ export function suggestionFolders(list: readonly ListedPlugin[], pluginId: strin
   const plugin = list.find((p) => p.manifest.id === pluginId && !p.unlisted && !p.removed);
   const paths = (plugin?.manifest.folders ?? []).map((folder) => folder.path);
   return paths.length ? PLUGIN_SUGGESTION_WORDS.folders(paths.join(", ")) : "";
+}
+
+/**
+ * The card's line for an installed plugin loaded from a folder on this Mac: it runs with your access
+ * and its tools ask first; empty for any other source or a plugin not installed.
+ */
+export function suggestionLocalAccess(
+  list: readonly (ListedPlugin & Pick<PluginInfo, "source">)[],
+  pluginId: string,
+): string {
+  const plugin = list.find((p) => p.manifest.id === pluginId && !p.unlisted && !p.removed);
+  return plugin?.source === PluginSourceKind.Local ? PLUGIN_SUGGESTION_WORDS.localAccess : "";
 }
 
 const isText = (value: unknown): value is string => typeof value === "string";

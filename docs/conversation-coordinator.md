@@ -65,7 +65,9 @@ project, and graph: a request to wait for the remaining workers could start a se
   pause in its lead's first digest
   ([the full journal](agent/architecture.md#the-run-director-workers-and-judging)). Starting a
   second run while one owns the project is rejected independently of any model prompt or UI
-  state.
+  state. A run that has begun writing its own end (`ActiveRun.closing`, set just before its
+  `run_finished` or `autopilot_paused` is appended) no longer owns it: a Resume pressed as the
+  pause shows waits for that close, then starts.
 
 ## Controls and delivery
 
@@ -522,9 +524,11 @@ restated. A finished build no Loop can go on from — no lead seated (the long t
 director, the classic pipeline, a gauntlet, no journal), a coordinator on a model without sessions,
 or a kept older part (the own session's or the coordinator's) — is answered as with Loop off, and
 the chat says so once per finished build while the loop lives (`firstLoopUnused`,
-`MESSAGE.loopUnused`). A game built in Unreal is not one of these: a Loop message the person sends
-after its finished run goes to no run, as [before a run exists](#intake-approval-before-a-run-exists),
-and the session's launch starts the next Unreal Loop (`chat-dispatch.ts` `startsNextUnrealLoop`).
+`MESSAGE.loopUnused`). A Loop that worked in the game folder itself (any project that isn't a web
+game) is not one of these: a Loop message the person sends after its finished run goes to no run, as
+[before a run exists](#intake-approval-before-a-run-exists), and the session's launch starts the next
+Loop (`chat-dispatch.ts` `startsNextOpenLoop`). The finished run's own journal decides (`director.open`),
+whatever the folder reads as now; the folder's kind only when there is no journal.
 Mode still offers Loop after any finished build. Not solved, an owner
 decision: a chat whose finished build cannot be continued (the classic pipeline or a gauntlet, as
 on a local model without sessions) has no way to start another timed build there, since "Start a
@@ -572,7 +576,10 @@ through the queue and return to the composer with the message. The harness `rewi
 Before each processed message main saves the game folder: `events.append` starts the checkpoint
 and `turn.begin` waits for it (30 s at most; a late one is not kept), so the queue lock is never
 held, and the folder after each answer is saved too. `chat-checkpoints.ts` reads the folder
-through a private index with executable Git configuration disabled. It preserves raw file
+through a private index with executable Git configuration disabled, first copied from the
+repository's with its times (read before the copy, rounded down to the second, so the copy is
+never dated later than its content), so a same-size edit in the second Git last read the file is
+still seen (Git compares file times to the second). It preserves raw file
 bytes instead of running clean/smudge filters, including LFS. Chat links also read stored blobs
 without downloading or converting LFS pointers. It never captures `.env` or `.env.*`, packages, build output or nested repositories,
 and leaves out files over 50 MB and the largest ones past 1 GB of new content; each checkpoint

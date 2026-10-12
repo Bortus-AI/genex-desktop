@@ -18,8 +18,7 @@ import type { Dirent } from "node:fs";
 import { lstat, mkdir, readdir, realpath, rmdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { errorMessage } from "../../shared/errors.ts";
-import { atomicWriteText, isJsonObject, readRegularFile, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { atomicWriteText, readRegularFile, writeFileNoFollow } from "../../substrate/fsx.ts";
 import {
   type AddCppModuleOptions,
   type AddedCppModule,
@@ -28,14 +27,16 @@ import {
   isModuleName,
   projectModule,
 } from "./cpp-module.ts";
-import { type PartCode, pollUntil } from "./editor-queue.ts";
+import type { PartCode } from "./editor-queue.ts";
 import {
   buildErrors,
+  type CloseWords,
+  closeForBuild,
   type EditorRestart,
   type JobRecord,
   OPEN_WAIT_MS,
   openAndWait,
-  RESTART_POLL_MS,
+  QUIT_WAIT_MS,
   type RestartDeps,
   runJob,
 } from "./editor-restart.ts";
@@ -80,12 +81,8 @@ export type CppToolsDeps = RestartDeps & {
   compile?(options: CompileOptions): Promise<CompileResult>;
 };
 
-/** How long the job waits for Unreal to close. */
-const QUIT_WAIT_MS = 90 * SECOND_MS;
 /** A .uproject is a few kilobytes. */
 const UPROJECT_MAX_BYTES = 256 * 1024;
-/** The most unsaved packages named. */
-const MAX_UNSAVED_NAMED = 5;
 const SOURCE_FOLDER = "Source";
 const CPP_PARTS_FOLDER = "Parts";
 /** How the game's own part folder is named in a refusal (its project folder isn't always the game's `unreal/`). */
@@ -262,35 +259,23 @@ const moduleOptions = (engine: Engine): AddCppModuleOptions => ({
   engineVersion: engine.version,
 });
 
-/** Saves every unsaved level and asset in the game's editor; throws why it couldn't. */
-async function saveAll(deps: CppToolsDeps, target: AddTarget): Promise<void> {
-  const answer = await deps
-    .editorCall(target.storage, target.game, CppEditorTool.SaveAll, {})
-    .catch((failure: unknown) => ({ error: errorMessage(failure) }));
-  const reply = isJsonObject(answer) ? answer : {};
-  if (reply.error !== undefined) throw new Error(MESSAGE.NotSaved(String(reply.error)));
-  if (!Array.isArray(reply.dirty)) throw new Error(MESSAGE.NotSaved(MESSAGE.NoSaveAnswer));
-  const unsaved = reply.dirty.filter((name): name is string => typeof name === "string");
-  if (unsaved.length > 0) throw new Error(MESSAGE.Unsaved(unsaved.slice(0, MAX_UNSAVED_NAMED).join(", ")));
-}
+/** What closing Unreal to add the module says when it can't. */
+const CLOSE_WORDS: CloseWords = {
+  otherEditor: MESSAGE.OtherEditor,
+  notSaved: MESSAGE.NotSaved,
+  noSaveAnswer: MESSAGE.NoSaveAnswer,
+  unsaved: MESSAGE.Unsaved,
+  notClosed: MESSAGE.NotClosed,
+};
 
-/**
- * Closes Unreal for the build when this game's editor is open: saves its work, quits it the normal
- * way and waits until no editor runs. Answers whether it was open; refuses an editor that runs
- * without this game's project answering (its work can't be saved, and it may be another project's).
- */
-async function closeEditor(deps: CppToolsDeps, target: AddTarget): Promise<boolean> {
-  const answering = await deps.editorAnswers(target.storage, target.game).catch(() => false);
-  if (!answering) {
-    if ((await deps.restart.editors()) > 0) throw new Error(MESSAGE.OtherEditor);
-    return false;
-  }
-  await saveAll(deps, target);
-  await deps.restart.quit(target.storage, target.project);
-  const closed = await pollUntil(deps, async () => (await deps.restart.editors()) === 0, RESTART_POLL_MS, QUIT_WAIT_MS);
-  if (!closed) throw new Error(MESSAGE.NotClosed);
-  return true;
-}
+/** Closes Unreal for the build when this game's editor is open, saving its work first; answers whether it was open. */
+const closeEditor = (deps: CppToolsDeps, target: AddTarget) =>
+  closeForBuild(
+    deps,
+    target,
+    () => deps.editorCall(target.storage, target.game, CppEditorTool.SaveAll, {}),
+    CLOSE_WORDS,
+  );
 
 /** Takes an added module back out: the files it wrote, the folders it made once empty, and the .uproject as it was. */
 async function removeModule(projectFile: string, before: Buffer, added: AddedCppModule): Promise<void> {
@@ -395,11 +380,15 @@ async function cppStatus(deps: CppToolsDeps, jobs: Jobs, storage: string, game: 
   };
 }
 
-/** The runner's `cpp-status` and `add-cpp-module` over one set of add jobs. */
+/**
+ * `cpp-status` and `add-cpp-module` over one set of add jobs, and whether a project's job is adding
+ * now (`adding`, by its .uproject): Unreal is closed and reopened by Genex itself meanwhile.
+ */
 export function createCppTools(deps: CppToolsDeps) {
   const jobs: Jobs = new Map();
   return {
     status: (storage: string, game: string) => cppStatus(deps, jobs, storage, game),
     add: (storage: string, game: string) => startAdding(deps, jobs, storage, game),
+    adding: (project: string) => jobs.get(project)?.state === CppAddState.Adding,
   };
 }

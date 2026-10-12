@@ -7,7 +7,8 @@
  * the computer's processes and the clock are stand-ins; the marker is a real file.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { lstat, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -353,6 +354,62 @@ describe("the Unreal editor's lock asks the person first", () => {
     await rm(marker, { recursive: true, force: true });
     await writeFile(marker, fresh);
     assert.equal((await w.probe()).personActive, false, "a plain fresh mark is the agent's play");
+  });
+
+  it("a probe that sees no play forgets only a plain mark it could have seen: links, folders and pipes leave nothing else touched", async () => {
+    const w = await personWorld();
+    w.editor.editor.state.pie = false;
+    await w.editor.deps.sleep(60_000);
+    const now = w.editor.deps.now();
+    const folder = bridgeFolder(w);
+    const marker = path.join(folder, AGENT_PLAY_FILE);
+    const elsewhere = path.join(await realpath(await tmpDir("agent-play-forget-")), "fresh.json");
+    const fresh = JSON.stringify({ startedAt: now });
+    await writeFile(elsewhere, fresh);
+    /** The probe's answer, or "blocked" when it did not answer within a second. */
+    const probed = () =>
+      Promise.race([
+        w.probe().then((answer) => answer.pie),
+        new Promise<string>((resolve) => setTimeout(() => resolve("blocked"), 1_000).unref()),
+      ]);
+    const hostile: Array<[string, () => Promise<void>]> = [
+      ["a link to a fresh mark elsewhere", () => symlink(elsewhere, marker)],
+      ["a folder named as the mark", () => mkdir(marker)],
+      ["a mark over a kilobyte", () => writeFile(marker, JSON.stringify({ startedAt: now, pad: "x".repeat(2048) }))],
+    ];
+    if (process.platform !== "win32")
+      hostile.push([
+        "a pipe named as the mark",
+        async () => {
+          execFileSync("mkfifo", [marker]);
+        },
+      ]);
+    for (const [name, plant] of hostile) {
+      await rm(marker, { recursive: true, force: true });
+      await mkdir(folder, { recursive: true });
+      await plant();
+      assert.equal(await probed(), false, `${name}: the probe answers that nothing plays`);
+      assert.equal(await readFile(elsewhere, "utf8"), fresh, `${name}: the file a link pointed at is untouched`);
+    }
+    await rm(marker, { recursive: true, force: true });
+    await mkdir(marker);
+    await probed();
+    assert.ok((await lstat(marker)).isDirectory(), "a folder named as the mark survives");
+  });
+
+  it("a mark made after the probe asked the editor is kept, and the play it marks stays the agent's", async () => {
+    const w = await personWorld();
+    w.editor.editor.state.pie = false;
+    await w.editor.deps.sleep(60_000);
+    const later = w.editor.deps.now() + 30_000;
+    const folder = bridgeFolder(w);
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, AGENT_PLAY_FILE), JSON.stringify({ startedAt: later }));
+    assert.equal((await w.probe()).pie, false);
+    assert.deepEqual(await markers(w), [AGENT_PLAY_FILE], "a mark stamped after the read stays");
+    await w.editor.deps.sleep(60_000);
+    w.editor.editor.state.pie = true;
+    assert.equal((await w.probe()).personActive, false, "the play it marks is the agent's");
   });
 
   it("reads no mark for a game whose name isn't a plain folder name", () => {

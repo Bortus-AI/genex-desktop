@@ -54,6 +54,17 @@ export const FixtureName = {
    * with their workers' records.
    */
   ChatWorkers: "chat-workers",
+  /** The finish check on the Builds graph and in the chat: four Loops, one in each of its looks. */
+  FinishCheck: "finish-check",
+  /** Live's run pictures for a folder no observer draws, and the sentence for one with none yet. */
+  StillsGame: "stills-game",
+  /**
+   * Projects that aren't web games: a Godot-shaped game and its Loops in place (a worker's question,
+   * a close no reviewer checked), an Unreal plugin project's kind label and its Loop waiting on the
+   * editor, a plugin loaded from a folder, and the card that offers the Unreal plugin.
+   */
+  OpenProjects: "open-projects",
+  PluginUpdates: "plugin-updates",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 

@@ -8,6 +8,7 @@ import { SOUND_SHORTCUT } from "../../../shared/game-sound.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import type { FactRef } from "../../../shared/project-facts.ts";
 import { kindChip } from "../../../shared/shape-words.ts";
+import type { LiveView } from "../../live-views.ts";
 import type { BesideTarget } from "../../open-beside.ts";
 import type { LiveBehind, StageView } from "../../stage.ts";
 import type { GameProject } from "../../types.ts";
@@ -15,47 +16,19 @@ import { cn } from "../../ui/cn.ts";
 import { Icon } from "../../ui/icons.tsx";
 import { Shortcut } from "../../ui/Shortcut.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip.tsx";
-import { unrealProjectOf } from "../../unreal-game.ts";
 import { ViewSwitcher } from "../../ui/view-switcher.tsx";
 import { liveBehindLabel, liveBehindWords, STAGE_WORDS } from "../../words.ts";
-import { besideName } from "../FileViewer.tsx";
 import type { Notify } from "../../state/toasts.ts";
 import { PluginToolbar } from "../PluginToolbar.tsx";
 import { LiveRun } from "./live-run.ts";
+import { activeStageTab, type StageTab, type StageTabKey, stageTabs } from "./stage-tabs.ts";
 
-/** A tab name longer than this is shortened in the middle, keeping this much of its start and end. */
-const TAB_NAME_MAX = 26;
 /** The facts of a game whose descriptor isn't loaded yet: none, served as a web game. */
 const NO_FACTS: readonly FactRef[] = [];
-const TAB_NAME_HEAD = 14;
-const TAB_NAME_TAIL = 10;
 
-/** A tab keeps its width: a long file name is shortened in the middle, the full name is the viewer's title. */
-function shortName(name: string): string {
-  return name.length > TAB_NAME_MAX ? `${name.slice(0, TAB_NAME_HEAD)}…${name.slice(-TAB_NAME_TAIL)}` : name;
-}
-
-/** The view switcher's tabs: Live, Builds once there is a build to draw, Assets, and a file opened beside. */
-function viewItems(hasBuilds: boolean, buildsLive: boolean, beside: BesideTarget | null) {
-  const label = (key: StageView): string => {
-    if (key === "live") return "Live";
-    if (key === "assets") return "Assets";
-    return `Builds${buildsLive ? " ●" : ""}`;
-  };
-  const views: StageView[] = ["live", ...(hasBuilds ? ["builds" as const] : []), "assets"];
-  return [
-    ...views.map((key) => ({ key, label: label(key) })),
-    ...(beside
-      ? [
-          {
-            key: "file" as const,
-            label: shortName(besideName(beside)),
-            icon: <Icon name={beside.kind === "image" ? "image" : "file"} size={13} />,
-          },
-        ]
-      : []),
-  ];
-}
+/** The view switcher's items: the strip's tabs (`stage-tabs.ts`), a file's with its glyph. */
+const switcherItems = (tabs: readonly StageTab[]) =>
+  tabs.map(({ icon, ...tab }) => (icon ? { ...tab, icon: <Icon name={icon} size={13} /> } : tab));
 
 /**
  * Reload. While Live is behind — the game changed, a build is ready — it carries the accent dot
@@ -207,13 +180,15 @@ export function StageStrip({
   buildsLive,
   beside,
   stageView,
-  onView,
+  live,
+  onTab,
   behind,
   onReload,
   run,
   fullScreen,
   sound,
   emptyGame,
+  livePreview,
   plugins,
   onNotice,
   onToolbarOpen,
@@ -224,7 +199,9 @@ export function StageStrip({
   buildsLive: boolean;
   beside: BesideTarget | null;
   stageView: StageView;
-  onView: (view: StageView) => void;
+  /** Live's views of the folder (`liveViewsFor`) and the one shown: more than one gets a tab each. */
+  live: { views: readonly LiveView[]; shown: LiveView };
+  onTab: (key: StageTabKey) => void;
   /** What waits for Live's Reload, when anything does. */
   behind: LiveBehind | null;
   onReload: () => void;
@@ -236,11 +213,12 @@ export function StageStrip({
   sound: { on: boolean; toggle: () => void };
   /** The game has nothing in it yet: no plugin button's action is due. */
   emptyGame: boolean;
+  /** Live shows the game's web preview (`live-views.ts`): only then do Run, Reload, Sound and Full screen show. */
+  livePreview: boolean;
   plugins: PluginInfo[];
   onNotice: Notify;
   onToolbarOpen: (open: boolean) => void;
 }): JSX.Element {
-  const webGame = Boolean(project) && unrealProjectOf(loaded) === null;
   return (
     <div
       data-stage-strip=""
@@ -265,17 +243,17 @@ export function StageStrip({
           className="no-drag shrink-0"
           label="Game view"
           dataAttribute="data-stage-action"
-          items={viewItems(hasBuilds, buildsLive, beside)}
-          active={stageView}
-          onSelect={onView}
+          items={switcherItems(stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside }))}
+          active={activeStageTab(stageView, live.views, live.shown)}
+          onSelect={onTab}
         />
       ) : null}
       {/* Siblings, not a group: every gap between the strip's controls drags the window. */}
-      {webGame ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
-      {webGame ? <ReloadButton behind={behind} onReload={onReload} /> : null}
+      {livePreview ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
+      {livePreview ? <ReloadButton behind={behind} onReload={onReload} /> : null}
       <span className="min-w-0 flex-1 self-stretch" />
-      {webGame ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
-      {webGame ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
+      {livePreview ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
+      {livePreview ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
       <PluginToolbar
         plugins={plugins}
         project={project}

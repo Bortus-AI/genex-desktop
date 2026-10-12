@@ -19,6 +19,8 @@ import {
   hasFact,
   kindPending,
   kindUnknown,
+  LoopProfile,
+  loopProfileOf,
   servedAsWeb,
 } from "./folder-facts.ts";
 import {
@@ -330,7 +332,8 @@ const WORKSPACE_RULE =
  */
 interface GameBuild {
   gameEngine: GameEngine;
-  facts: FactRef[];
+  /** Each fact with its source when the caller said it (a plugin's detect, a scaffold's record). */
+  facts: SourcedFact[];
   /** With no facts, what the folder holds (`game.list`'s `holds`); null: not said, read as nothing. */
   holds: FolderHolds | null;
   engineProject: string | null;
@@ -347,9 +350,16 @@ interface FolderShape {
   contractMissing: boolean;
 }
 
+/** A fact as a brief reads it: what, where and, when the caller said it, where it came from. */
+type SourcedFact = FactRef & { source?: string };
+
+/** A fact's what, where and source, nothing else of it. */
+const sourcedFact = ({ id, path, source }: SourcedFact): SourcedFact =>
+  typeof source === "string" ? { id, path, source } : { id, path };
+
 /** The game as a brief reads it, from the facts when the caller has them and from its engine when not. */
 function gameBuild(
-  facts: readonly FactRef[] | null | undefined,
+  facts: readonly SourcedFact[] | null | undefined,
   {
     gameEngine,
     engineProject,
@@ -358,10 +368,20 @@ function gameBuild(
   }: { gameEngine: GameEngine; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
 ): GameBuild {
   const legacy = !Array.isArray(facts);
-  const known = legacy ? factsOfEngine(gameEngine) : facts.map(({ id, path }) => ({ id, path }));
+  const known: SourcedFact[] = legacy ? factsOfEngine(gameEngine) : facts.map(sourcedFact);
   const unreal = known.find((fact) => fact.id === CoreFact.UnrealProject);
   const unrealFound = legacy || engineProject ? undefined : unreal?.path;
   return { gameEngine, facts: known, holds, engineProject, unrealFound, pluginsOff, legacy };
+}
+
+/**
+ * The Loop the game gets, as the launch words name it: the engine whose goal words apply (an Unreal
+ * project's look first, by its fact) and the Loop's profile (the one Loop in place, unless it is a
+ * web game).
+ */
+function loopOfGame(game: GameBuild): [GameEngine, LoopProfile] {
+  const engine = hasFact(game.facts, CoreFact.UnrealProject) ? GameEngine.Unreal : game.gameEngine;
+  return [engine, loopProfileOf(game)];
 }
 
 /** The game is worked on in its Unreal project, through the Unreal tools: it holds one, is no web game at its root, and the plugin is on. */
@@ -369,7 +389,7 @@ const inUnreal = (game: GameBuild) =>
   !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
 
 /** The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a line for any other. */
-function rulesOfFact(engine: string | undefined, fact: FactRef, game: GameBuild, folder: FolderShape): string[] {
+function rulesOfFact(engine: string | undefined, fact: SourcedFact, game: GameBuild, folder: FolderShape): string[] {
   if (fact.id === CoreFact.WebGame)
     return folder.ownShape ? ownShapeRules(folder.shape, folder.contractMissing) : [TEMPLATE_RULE];
   if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact);
@@ -531,7 +551,7 @@ export function buildContractorBrief({
   unrealEngine?: unknown;
   compacted?: string | null;
   fresh?: boolean;
-  facts?: readonly FactRef[] | null;
+  facts?: readonly SourcedFact[] | null;
   kinds?: readonly PluginKindOffer[];
   pluginsOff?: boolean;
   holds?: FolderHolds | null;
@@ -541,7 +561,7 @@ export function buildContractorBrief({
   const identity = appIdentity({ folderLabel, facts: game.facts, holds: game.holds });
   const workHere = workHereLine(game, folderLabel);
   const stills = stillsBlock(extraReads);
-  const launchBlock = launch?.toolName ? launchRules(engine, launch, gameEngine) : [];
+  const launchBlock = launch?.toolName ? launchRules(engine, launch, ...loopOfGame(game)) : [];
   const workersLine = workers ? WORKERS_BRIEF_LINE : "";
 
   if (resume)

@@ -12,7 +12,13 @@
  */
 import { setTimeout as sleepFor } from "node:timers/promises";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
-import { LockScope, type PersonFirstAnswer, type PluginLock, personFirstOf } from "../../shared/plugin-hooks.ts";
+import {
+  HookHold,
+  LockScope,
+  type PersonFirstAnswer,
+  type PluginLock,
+  personFirstOf,
+} from "../../shared/plugin-hooks.ts";
 import type { PluginBinding } from "../../shared/plugins.ts";
 
 /**
@@ -25,6 +31,12 @@ export const AGENT_LOCK_WAIT_MS = 4 * MINUTE_MS;
 export const PERSON_FIRST_POLL_MS = 5 * SECOND_MS;
 /** How long a probe's "the person is not using it" stands for the next call on the same lock. */
 export const PERSON_FIRST_FRESH_MS = 3 * SECOND_MS;
+/**
+ * How long a hold with no wait left asks the person's probe, once for the whole hold however many
+ * locks it takes: one that may not wait at all (`health`), or one whose turn at the lock came only
+ * as its wait ran out. Also the longest a read of what is unsaved asks.
+ */
+export const PERSON_FIRST_ASK_MS = PERSON_FIRST_POLL_MS;
 
 /** The owner Genex's own locks are kept under: no plugin id can be spelled with `@`. */
 const GENEX_OWNER = "@genex";
@@ -41,6 +53,13 @@ export const IN_PLACE_LOCK: LockRef = {
  */
 export const LockRefusal = { PersonFirst: "person_first", CantTell: "cant_tell", Busy: "busy" } as const;
 export type LockRefusal = (typeof LockRefusal)[keyof typeof LockRefusal];
+
+/** Genex's hold (`HookHold`, the harness's own copy of it) for each lock refusal: what the person's words are chosen by. */
+export const HOLD_OF_REFUSAL = {
+  [LockRefusal.PersonFirst]: HookHold.PersonFirst,
+  [LockRefusal.CantTell]: HookHold.CantTell,
+  [LockRefusal.Busy]: HookHold.Busy,
+} as const satisfies Record<LockRefusal, HookHold>;
 
 /** Words an agent (or a lead) reads when a lock was not given, each naming the lock's label. */
 const MESSAGE = {
@@ -132,40 +151,76 @@ export interface LockHeld {
 interface Waiter {
   holder: string;
   title: string | null;
+  /** The holders it passes (`LockHoldOptions.passes`): it joins them once nothing else holds the lock. */
+  passes?: string;
+  /** Whether it is a whole-life hold the harness asked for (`LockHoldOptions.forHarness`). */
+  whole: boolean;
+  /** The owner it was handed, its hold already counted there: a lock never passes on while a granted hold is on its way. */
+  owner: Owner | null;
   settle(outcome: true | Error): void;
   /** What it was told, once told. */
   outcome: true | Error | null;
 }
 
-/** One holder of a lock: how many holds deep, and its title. */
+/** One hold's wait: when it runs out, and when the one short ask it may still make after that ends. */
+interface HoldWait {
+  deadline: number;
+  lateAskEnds: number | null;
+}
+
+/** One holder of a lock: how many holds deep, how many of them whole-life holds the harness asked for, and its title. */
 interface Hold {
   depth: number;
+  whole: number;
   title: string | null;
 }
 
 /**
- * One lock's state: who holds it (the holder it was granted to first, then any hold that passed
- * into it, each counted on its own), under which grant, and who waits, in order. The lock passes
- * on only once no holder has a hold left.
+ * Who holds a lock under one grant: the holder it was granted to first, then any hold that passed
+ * into it, each counted on its own. A new object for each grant, so a release of an earlier grant
+ * frees nothing of a later one.
+ */
+interface Owner {
+  holds: Map<string, Hold>;
+}
+
+/**
+ * One lock's state: who holds it, and who waits, in order. The lock passes on only once no holder
+ * has a hold left.
  */
 interface Slot {
   label: string;
-  owner: { holds: Map<string, Hold>; grant: object } | null;
+  owner: Owner | null;
   queue: Waiter[];
+  /**
+   * While a holder waits on the person, what the probe last said (null: it couldn't tell): a hold
+   * queued behind it whose wait runs out is refused for the person, not as busy.
+   */
+  person?: PersonFirstAnswer | null;
 }
 
-/** A lock's owner, granted to one holder that has not taken its hold yet. */
-const ownerOf = (holder: string, title: string | null): NonNullable<Slot["owner"]> => ({
-  holds: new Map([[holder, { depth: 0, title }]]),
-  grant: {},
-});
-
 /** The holder a lock is named by: the one that holds it longest. */
-const firstHold = (owner: NonNullable<Slot["owner"]>): [string, Hold] | undefined => owner.holds.entries().next().value;
+const firstHold = (owner: Owner): [string, Hold] | undefined => owner.holds.entries().next().value;
 
 /** How many holds a lock's holders have left, together. */
-const depthOf = (owner: NonNullable<Slot["owner"]>): number =>
-  [...owner.holds.values()].reduce((sum, hold) => sum + hold.depth, 0);
+const depthOf = (owner: Owner): number => [...owner.holds.values()].reduce((sum, hold) => sum + hold.depth, 0);
+
+/** One more hold of `holder`, counted the moment it is given. */
+function countHold(owner: Owner, holder: string, title: string | null, whole: boolean): void {
+  const hold = owner.holds.get(holder) ?? { depth: 0, whole: 0, title };
+  hold.depth += 1;
+  if (whole) hold.whole += 1;
+  owner.holds.set(holder, hold);
+}
+
+/** One hold of `holder` taken back; a holder with none left holds nothing. */
+function uncountHold(owner: Owner, holder: string, whole: boolean): void {
+  const hold = owner.holds.get(holder);
+  if (!hold) return;
+  hold.depth -= 1;
+  if (whole) hold.whole = Math.max(0, hold.whole - 1);
+  if (hold.depth <= 0) owner.holds.delete(holder);
+}
 
 /** A game's lock key, or an app's (`app` locks are shared by every game). */
 export function lockKey(plugin: string, lock: PluginLock, project: string): string {
@@ -183,10 +238,16 @@ export function workerHolder(worker: { threadId: string; runId: string | null | 
   return `${worker.runId ? runHolders(worker.runId) : chatHolders(worker.threadId)}${worker.id}`;
 }
 
-/** Whether a hold may take a lock its current holders hold: its own, or one held by a holder it passes. */
-function passesOwner(owner: NonNullable<Slot["owner"]>, options: LockHoldOptions): boolean {
-  const { passes } = options;
-  return [...owner.holds.keys()].some((held) => held === options.holder || (passes ? held.startsWith(passes) : false));
+/**
+ * Whether a hold may take a lock its current holders hold: only when every one of them is itself,
+ * or a holder it passes that holds this very lock for its whole life, as the harness asked
+ * (`Hold.whole`). So two moments still go one at a time beside a worker writing in place, and none
+ * walks into a worker's single call, on this lock or any other.
+ */
+function passesOwner(owner: Owner, options: Pick<LockHoldOptions, "holder" | "passes">): boolean {
+  const { passes, holder } = options;
+  const passed = (held: string, hold: Hold): boolean => (passes ? held.startsWith(passes) && hold.whole > 0 : false);
+  return [...owner.holds].every(([held, hold]) => held === holder || passed(held, hold));
 }
 
 /** Genex's lock table: every lock held now, who waits for it, and the person first. */
@@ -205,6 +266,8 @@ export class LockService {
   readonly #personWaits = new Map<string, number>();
   /** How long an agent's call waits for its locks. */
   readonly agentWaitMs: number;
+  /** The locks' clock: now, and a signal that aborts once `ms` passed on it (a call's deadline runs on it). */
+  readonly clock: { now(): number; timeout(ms: number): AbortSignal };
 
   constructor(options: LockServiceOptions) {
     this.#probe = options.probe;
@@ -213,6 +276,7 @@ export class LockService {
     this.#timeout = options.timeout ?? ((ms) => AbortSignal.timeout(ms));
     this.#onPersonFirst = options.onPersonFirst;
     this.agentWaitMs = options.agentWaitMs ?? AGENT_LOCK_WAIT_MS;
+    this.clock = { now: this.#now, timeout: this.#timeout };
   }
 
   /**
@@ -222,18 +286,21 @@ export class LockService {
    * past `waitMs`, and with the signal's reason when it ends the wait. Nothing is held after a refusal.
    */
   async hold(locks: readonly LockRef[], options: LockHoldOptions): Promise<() => void> {
-    const deadline = this.#now() + Math.max(0, options.waitMs);
+    const wait: HoldWait = { deadline: this.#now() + Math.max(0, options.waitMs), lateAskEnds: null };
     const releases: Array<() => void> = [];
     try {
       for (const ref of sortedRefs(locks, options.binding.project)) {
-        releases.push(await this.#take(ref, options, deadline));
-        if (asksPerson(options)) await this.#personFirst(ref, options, deadline);
+        // A hold whose wait was stopped (before it began, or as a lock was given) takes nothing.
+        options.signal?.throwIfAborted();
+        releases.push(await this.#take(ref, options, wait.deadline));
+        if (asksPerson(options)) await this.#personFirst(ref, options, wait);
       }
+      options.signal?.throwIfAborted();
     } catch (error) {
       for (const release of releases.reverse()) release();
       throw error;
     }
-    if (options.forHarness) this.#harnessHolders.add(options.holder);
+    if (options.forHarness) this.#wholeLifeHeld(options.holder);
     let released = false;
     return () => {
       if (released) return;
@@ -256,7 +323,21 @@ export class LockService {
     for (const [key, slot] of [...this.#slots]) {
       if (!slot.owner?.holds.delete(holder)) continue;
       if (depthOf(slot.owner) <= 0) this.#passOn(key, slot);
+      else this.#admit(slot);
     }
+  }
+
+  /**
+   * A whole-life hold the harness asked for is held: its end lets it go. The waiters that pass it
+   * (the run's own moments) joined it as each lock was given (`#grant`), never waiting out its life.
+   */
+  #wholeLifeHeld(holder: string): void {
+    this.#harnessHolders.add(holder);
+  }
+
+  /** The holders the harness asked locks for (its workers writing in place), which its end lets go. */
+  harnessHolders(): string[] {
+    return [...this.#harnessHolders];
   }
 
   /**
@@ -274,7 +355,8 @@ export class LockService {
   async unsaved(locks: readonly LockRef[], binding: PluginBinding, signal?: AbortSignal): Promise<number | null> {
     let total = 0;
     for (const ref of locks) {
-      const answer = ref.lock.personFirst ? await this.#ask(ref, binding, signal) : null;
+      const asked = { binding, ...(signal ? { signal } : {}) };
+      const answer = ref.lock.personFirst ? await this.#askWithin(ref, asked, PERSON_FIRST_ASK_MS) : null;
       if (answer?.unsaved === undefined) return null;
       total += answer.unsaved;
     }
@@ -285,30 +367,33 @@ export class LockService {
   async #take(ref: LockRef, options: LockHoldOptions, deadline: number): Promise<() => void> {
     const key = lockKey(ref.plugin, ref.lock, options.binding.project);
     const slot = this.#slotOf(key, ref.lock.label);
-    if (!slot.owner) slot.owner = ownerOf(options.holder, options.title ?? null);
-    else if (!passesOwner(slot.owner, options)) await this.#waitTurn(key, slot, options, deadline);
-    const owner = slot.owner as NonNullable<Slot["owner"]>;
     const { holder } = options;
-    const hold = owner.holds.get(holder) ?? { depth: 0, title: options.title ?? null };
-    hold.depth += 1;
-    owner.holds.set(holder, hold);
-    const { grant } = owner;
+    const whole = options.forHarness === true;
+    let owner: Owner;
+    if (slot.owner && !passesOwner(slot.owner, options)) owner = await this.#waitTurn(key, slot, options, deadline);
+    else {
+      slot.owner ??= { holds: new Map() };
+      owner = slot.owner;
+      countHold(owner, holder, options.title ?? null, whole);
+    }
+    // A hold given while its taker was on its way, then let go with its holder (`releaseHolder`), holds nothing.
+    if (this.#slots.get(key)?.owner !== owner || !owner.holds.has(holder)) throw refusalBehind(slot);
     return () => {
-      const current = this.#slots.get(key)?.owner;
-      if (current?.grant !== grant) return;
-      const mine = current.holds.get(holder);
-      if (mine) mine.depth -= 1;
-      if (mine && mine.depth <= 0) current.holds.delete(holder);
-      if (depthOf(current) <= 0) this.#passOn(key, this.#slots.get(key) as Slot);
+      const current = this.#slots.get(key);
+      if (current?.owner !== owner) return;
+      uncountHold(owner, holder, whole);
+      if (depthOf(owner) <= 0) this.#passOn(key, current);
+      else this.#admit(current);
     };
   }
 
-  /** Wait behind the lock's holder and the waiters before this one; refused when the wait runs out or is stopped. */
-  async #waitTurn(key: string, slot: Slot, options: LockHoldOptions, deadline: number): Promise<void> {
-    const title = slot.owner ? (firstHold(slot.owner)?.[1].title ?? null) : null;
-    const refusal = new LockRefused(LockRefusal.Busy, slot.label, MESSAGE.busy(slot.label, title));
+  /**
+   * Wait behind the lock's holder and the waiters before this one, answering the owner it was handed
+   * (its hold counted there); refused when the wait runs out or is stopped.
+   */
+  async #waitTurn(key: string, slot: Slot, options: LockHoldOptions, deadline: number): Promise<Owner> {
     const left = deadline - this.#now();
-    if (left <= 0) throw refusal;
+    if (left <= 0) throw refusalBehind(slot);
     let settle: (outcome: true | Error) => void = () => {};
     const told = new Promise<true | Error>((resolve) => {
       settle = resolve;
@@ -316,6 +401,9 @@ export class LockService {
     const waiter: Waiter = {
       holder: options.holder,
       title: options.title ?? null,
+      ...(options.passes ? { passes: options.passes } : {}),
+      whole: options.forHarness === true,
+      owner: null,
       outcome: null,
       settle: (outcome) => {
         waiter.outcome = outcome;
@@ -331,59 +419,133 @@ export class LockService {
     );
     const outcome = await Promise.race([told, timedOut]);
     timer.abort();
-    if (outcome === true) return;
+    if (outcome === true && waiter.owner) return waiter.owner;
     if (outcome instanceof Error) throw outcome;
     this.#leave(key, slot, waiter);
     options.signal?.throwIfAborted();
-    throw refusal;
-  }
-
-  /** A waiter that gave up leaves the queue; one handed the lock as it gave up hands it on. */
-  #leave(key: string, slot: Slot, waiter: Waiter): void {
-    const at = slot.queue.indexOf(waiter);
-    if (at >= 0) slot.queue.splice(at, 1);
-    else if (waiter.outcome === true && slot.owner && depthOf(slot.owner) === 0) this.#passOn(key, slot);
+    throw refusalBehind(slot);
   }
 
   /**
-   * Ask the person first, again every poll, until they are not using it; refused past the deadline.
-   * The chat hears of the wait only once a probe saw the person at it: a probe that can't tell (a busy
-   * app that doesn't answer) waits without saying the person is using it.
+   * A waiter that gave up leaves the queue, and the waiters behind it that may pass every holder
+   * join now; one handed the lock as it gave up takes back the hold it was given and hands it on.
    */
-  async #personFirst(ref: LockRef, options: LockHoldOptions, deadline: number): Promise<void> {
-    if (!ref.lock.personFirst) return;
-    const key = lockKey(ref.plugin, ref.lock, options.binding.project);
-    if ((this.#fresh.get(key) ?? 0) > this.#now()) return;
-    let waiting = false;
-    try {
-      for (;;) {
-        const answer = await this.#askWithin(ref, options, deadline);
-        if (answer?.personActive === false) {
-          this.#fresh.set(key, this.#now() + PERSON_FIRST_FRESH_MS);
-          return;
-        }
-        const left = deadline - this.#now();
-        if (left <= 0) throw personRefusal(ref.lock.label, answer);
-        if (!waiting && answer?.personActive === true) {
-          this.#notify(ref, options, true);
-          waiting = true;
-        }
-        await this.#sleep(Math.min(PERSON_FIRST_POLL_MS, left), options.signal);
-      }
-    } finally {
-      if (waiting) this.#notify(ref, options, false);
+  #leave(key: string, slot: Slot, waiter: Waiter): void {
+    const at = slot.queue.indexOf(waiter);
+    if (at >= 0) {
+      slot.queue.splice(at, 1);
+      if (slot.owner) this.#admit(slot);
+      return;
+    }
+    const { owner } = waiter;
+    if (!owner || this.#slots.get(key)?.owner !== owner) return;
+    uncountHold(owner, waiter.holder, waiter.whole);
+    if (depthOf(owner) <= 0) this.#passOn(key, slot);
+    else this.#admit(slot);
+  }
+
+  /**
+   * A holder let go while others still hold the lock: the next waiters in turn join them while
+   * they may pass every holder left (`passesOwner`), never ahead of one that may not.
+   */
+  #admit(slot: Slot): void {
+    for (let next = slot.queue[0]; next; next = slot.queue[0]) {
+      const { owner } = slot;
+      if (!owner || !passesOwner(owner, next)) return;
+      slot.queue.shift();
+      grant(owner, next);
     }
   }
 
   /**
-   * One probe's answer within what is left of the wait, or null (Genex can't tell) once the wait ran
-   * out with the probe still asking: its call is ended then, so a slow probe never holds a call past
-   * its wait, and never grants it a lock after. A hold that may not wait at all (`health`) asks once.
+   * Ask the person first, again every poll, until they are not using it; refused past the deadline,
+   * with what the last probe said: once the wait has run out the probe is never asked again. The
+   * chat hears of the wait only once a probe saw the person at it: a probe that can't tell (a busy
+   * app that doesn't answer) waits without saying the person is using it.
    */
-  async #askWithin(ref: LockRef, options: LockHoldOptions, deadline: number): Promise<PersonFirstAnswer | null> {
-    const left = deadline - this.#now();
-    if (left <= 0) return this.#ask(ref, options.binding, options.signal);
-    const waitEnds = this.#timeout(left);
+  async #personFirst(ref: LockRef, options: LockHoldOptions, wait: HoldWait): Promise<void> {
+    if (!ref.lock.personFirst) return;
+    const key = lockKey(ref.plugin, ref.lock, options.binding.project);
+    if ((this.#fresh.get(key) ?? 0) > this.#now()) return;
+    const slot = this.#slots.get(key);
+    const told = { waiting: false };
+    try {
+      await this.#untilFree(key, ref, options, wait, (answer) => {
+        if (slot) slot.person = answer;
+        if (told.waiting || answer?.personActive !== true) return;
+        this.#notify(ref, options, true);
+        told.waiting = true;
+      });
+    } finally {
+      if (slot) delete slot.person;
+      if (told.waiting) this.#notify(ref, options, false);
+    }
+  }
+
+  /**
+   * The probe asked until it says the person is not at it (that answer then stands a while), each
+   * other answer handed to `seen`; refused, in the last answer's words, once the wait runs out.
+   */
+  async #untilFree(
+    key: string,
+    ref: LockRef,
+    options: LockHoldOptions,
+    wait: HoldWait,
+    seen: (answer: PersonFirstAnswer | null) => void,
+  ): Promise<void> {
+    const { deadline } = wait;
+    let answer = await this.#probed(key, ref, options, this.#firstAskMs(wait));
+    for (;;) {
+      if (answer?.personActive === false) {
+        this.#fresh.set(key, this.#now() + PERSON_FIRST_FRESH_MS);
+        return;
+      }
+      if (deadline - this.#now() <= 0) throw personRefusal(ref.lock.label, answer);
+      seen(answer);
+      await this.#sleep(Math.min(PERSON_FIRST_POLL_MS, deadline - this.#now()), options.signal);
+      const remaining = deadline - this.#now();
+      if (remaining <= 0) throw personRefusal(ref.lock.label, answer);
+      answer = await this.#probed(key, ref, options, remaining);
+    }
+  }
+
+  /** One probe's answer (`#askWithin`); one that sees the person at it takes back any earlier "not at it". */
+  async #probed(
+    key: string,
+    ref: LockRef,
+    options: LockHoldOptions,
+    withinMs: number,
+  ): Promise<PersonFirstAnswer | null> {
+    const answer = await this.#askWithin(ref, options, withinMs);
+    if (answer?.personActive === true) this.#fresh.delete(key);
+    return answer;
+  }
+
+  /**
+   * How long a lock's first probe may take: what is left of the wait, and when that is less than one
+   * short ask (a hold that may not wait, or one whose turn came only as its wait ran out), that
+   * short ask, once for the whole hold: a later lock of it asks only within what is left of it.
+   */
+  #firstAskMs(wait: HoldWait): number {
+    const now = this.#now();
+    const left = wait.deadline - now;
+    if (left >= PERSON_FIRST_ASK_MS) return left;
+    wait.lateAskEnds ??= now + PERSON_FIRST_ASK_MS;
+    return wait.lateAskEnds - now;
+  }
+
+  /**
+   * One probe's answer within `withinMs`, or null (Genex can't tell) once that ran out with the probe
+   * still asking: its call is ended then, so a slow probe never holds a call past its wait, and
+   * never grants it a lock after.
+   */
+  async #askWithin(
+    ref: LockRef,
+    options: Pick<LockHoldOptions, "binding" | "signal">,
+    withinMs: number,
+  ): Promise<PersonFirstAnswer | null> {
+    if (withinMs <= 0) return null;
+    const waitEnds = this.#timeout(withinMs);
     const signal = options.signal ? AbortSignal.any([options.signal, waitEnds]) : waitEnds;
     const answer = await this.#ask(ref, options.binding, signal);
     return waitEnds.aborted ? null : answer;
@@ -427,16 +589,25 @@ export class LockService {
     return slot;
   }
 
-  /** The lock goes to the next waiter in turn, or is free. */
+  /** The lock goes to the next waiter in turn (and the waiters behind it that pass it), or is free. */
   #passOn(key: string, slot: Slot): void {
     const next = slot.queue.shift();
     if (!next) {
+      slot.owner = null;
       this.#slots.delete(key);
       return;
     }
-    slot.owner = ownerOf(next.holder, next.title);
-    next.settle(true);
+    slot.owner = { holds: new Map() };
+    grant(slot.owner, next);
+    this.#admit(slot);
   }
+}
+
+/** A waiter handed the lock: its hold counted in `owner` now, before it goes on. */
+function grant(owner: Owner, waiter: Waiter): void {
+  countHold(owner, waiter.holder, waiter.title, waiter.whole);
+  waiter.owner = owner;
+  waiter.settle(true);
 }
 
 /** Locks in one order for every caller, each once. */
@@ -447,6 +618,16 @@ function sortedRefs(locks: readonly LockRef[], project: string): LockRef[] {
 
 /** Whether a hold waits for the person. */
 const asksPerson = (options: LockHoldOptions): boolean => !options.forPerson && options.personFirst !== false;
+
+/**
+ * The refusal of a wait behind another holder: for the person when that holder waits on them (or
+ * on a probe that can't tell), else busy, naming the holder.
+ */
+function refusalBehind(slot: Slot): LockRefused {
+  if (slot.person !== undefined) return personRefusal(slot.label, slot.person);
+  const title = slot.owner ? (firstHold(slot.owner)?.[1].title ?? null) : null;
+  return new LockRefused(LockRefusal.Busy, slot.label, MESSAGE.busy(slot.label, title));
+}
 
 /** The refusal of a wait on the person: they kept using it, or Genex couldn't tell. */
 function personRefusal(label: string, answer: { personActive: boolean } | null): LockRefused {

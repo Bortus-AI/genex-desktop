@@ -6,11 +6,12 @@
  */
 import { GameEngine, engineOf, projectName } from "../shared/game-engine.ts";
 import type { GameProject } from "../shared/game-project.ts";
+import { UNREAL_PLUGIN_ID } from "../shared/observers.ts";
 import type { PluginInfo } from "../shared/plugins.ts";
 import { UNREAL_WORDS } from "./words.ts";
 
-/** The bundled Unreal plugin's id (`src/plugins/unreal/plugin.json`). */
-export const UNREAL_PLUGIN_ID = "unreal";
+/** The bundled Unreal plugin's id, re-exported for the renderer's readers (`shared/observers.ts`). */
+export { UNREAL_PLUGIN_ID };
 
 /** The Unreal plugin's actions the app presses itself, by their manifest names. */
 export const UnrealPluginAction = {

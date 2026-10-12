@@ -364,6 +364,98 @@ export const SEED_CALL_CHANGES: readonly SeedCallChange[] = [
   { file: "loop/host-methods.ts", marker: 'LocksRelease: "locks.release"' },
   { file: "loop/host-methods.ts", marker: 'CheckpointTake: "checkpoint.take"' },
   { file: "loop/host-methods.ts", marker: 'HooksFire: "hooks.fire"' },
+  // ...and the observers' capture, without which a reviewer sees none of a plugin's pictures.
+  { file: "loop/host-methods.ts", marker: 'ObserversCapture: "observers.capture"' },
+  // ...and the finish check's two, without which a reviewer's verdict is never asked or recorded:
+  // Genex alone writes it.
+  { file: "loop/host-methods.ts", marker: 'FinishReview: "finish.review"' },
+  { file: "loop/host-methods.ts", marker: 'FinishSettle: "finish.settle"' },
+  // A director's claim that the goal is reached is checked by a reviewer before the close: the
+  // finish checks it on the call's clock with the finish moment's notes, its spec names proof, the
+  // run and its journal keep the count of no's, and a later close names what isn't done.
+  { file: "loop/director/integrate.ts", marker: "checkClaim(" },
+  { file: "loop/director/tools.ts", marker: "finishCallOf(" },
+  { file: "loop/director/tool-specs.ts", marker: "that prove it" },
+  { file: "loop/director/loop-run.ts", marker: "finishTally" },
+  { file: "loop/director/journal.ts", marker: "finishTally" },
+  { file: "loop/director.ts", marker: "notDoneOf(" },
+  // A claim's close keeps the lead's call: its judge ends by the time the claim gives it, and a
+  // reopened Loop counts its reviewer's no's afresh.
+  { file: "loop/director/tools.ts", marker: "judgeBy ?? Number.POSITIVE_INFINITY" },
+  { file: "loop/director/reopen.ts", marker: "freshTally(" },
+  // A claim's review ends before the lead's turn, and the wake loop wakes no lead once a claim's
+  // close has started; a claim's close is latched against the clock's, and so is a crash's.
+  { file: "loop/director/wake.ts", marker: "noteTurnEnds(" },
+  { file: "loop/director/wake.ts", marker: "closeUnderWay(" },
+  { file: "loop/director/integrate.ts", marker: "latchClose(" },
+  { file: "loop/director.ts", marker: "latchClose(" },
+  // The files a claim names as proof that git does not track stay out of the build the close lands.
+  { file: "loop/director/integrate.ts", marker: "keepProofOut(" },
+  // A Loop on a project that isn't a web game is led in place (the open profile): the director's
+  // setup, session and teardown branch on it, the wake loop counts its pool's workers and jobs, and
+  // the run carries its record.
+  { file: "loop/director/setup.ts", marker: "prepareOpenLoopRun(" },
+  { file: "loop/director.ts", marker: "LoopProfile.Open" },
+  { file: "loop/director/wake.ts", marker: "activeWork(" },
+  { file: "loop/director/loop-run.ts", marker: "open?: OpenLoop" },
+  // An open Loop's worked time is on its own clock.
+  { file: "loop/director/loop-run.ts", marker: "open?.clock.now()" },
+  // An open Loop's turn has a cap it goes on from at once (judged when its session returned), its
+  // lead is idle only after a turn that kept and changed nothing, its workers' questions and its
+  // app's crashes wake it, and the wake loop runs its between-turns work and mid-turn news.
+  { file: "loop/director/wake-schedule.ts", marker: "TurnEnd.Continue" },
+  { file: "loop/director/wake-schedule.ts", marker: "turn.worked" },
+  { file: "loop/director/wake.ts", marker: "TurnEnd.Continue" },
+  { file: "loop/director/wake.ts", marker: "turnReturnedAt" },
+  // A run leads an open Loop only when every part it depends on says it serves one (run-dispatch.ts
+  // `OPEN_LOOP_PARTS`): a copy that has the calls above but not the flag still refuses every one.
+  { file: "loop/director.ts", marker: "SERVES_OPEN_LOOP" },
+  { file: "loop/director/setup.ts", marker: "SERVES_OPEN_LOOP" },
+  { file: "loop/director/wake.ts", marker: "SERVES_OPEN_LOOP" },
+  { file: "loop/director/wake-schedule.ts", marker: "SERVES_OPEN_LOOP" },
+  { file: "loop/studio-state.ts", marker: "SERVES_OPEN_LOOP" },
+  { file: "loop/run-dispatch.ts", marker: "SERVES_OPEN_LOOP" },
+  // A web page missing its files is refused by Genex's own gate (builtin-hooks.ts), from the typed
+  // list game.validate answers and only where a web game is served; SkillOpt learns nothing from a
+  // chat build of a project that isn't a web game.
+  { file: "loop/chat-dispatch.ts", marker: "readiness?.missing" },
+  { file: "loop/run-dispatch.ts", marker: "fireGates(" },
+  { file: "loop/skillopt.ts", marker: "loopProfileOf(" },
+  // One Loop leads every project: run dispatch picks the runner by the folder's profile, a finished
+  // Loop led in place is never reopened and a Loop message after it starts the next, the chat's
+  // launch words describe it, and the runner vocabulary names the refusals.
+  { file: "loop/run-dispatch.ts", marker: "loopProfileOf(" },
+  { file: "loop/chat-dispatch.ts", marker: "startsNextOpenLoop(" },
+  { file: "loop/reopen-run.ts", marker: "director?.open" },
+  { file: "loop/reopen-run.ts", marker: "OPEN_LOOP_REFUSAL.notReopenable" },
+  // A Loop in place is told its launch in its own words (refused there when kept parts can't lead
+  // it), a finished run's journal says what comes next, a resume goes on in its journal's kind, and
+  // after it the chat keeps its status alone (`inPlace`).
+  { file: "loop/chat-dispatch.ts", marker: "openLaunchPromise(" },
+  { file: "loop/chat-dispatch.ts", marker: "finishedInPlace(" },
+  { file: "loop/chat-dispatch.ts", marker: "openLoopServed(" },
+  { file: "loop/run-dispatch.ts", marker: "resumedProfile(" },
+  { file: "loop/after-loop-run.ts", marker: "inPlace" },
+  { file: "loop/after-loop-run-prompts.ts", marker: "inPlaceControls(" },
+  { file: "loop/launch-prompts.ts", marker: "openBuildWords(" },
+  { file: "loop/chat-session.ts", marker: "loopProfileOf(" },
+  { file: "loop/studio-state.ts", marker: "NeedsSession" },
+  // The launch tool the chat's own session calls names no method, and its ∞ answer follows the
+  // project's profile: a kept copy tells a project that isn't a web game of facets and critics.
+  { file: "tools/game-tools.ts", marker: "untilDoneWords(" },
+  // A Loop's hours are a soft cap (time-cap.ts): its clock gives a grace after them, a claim is
+  // checked whenever it comes, the lead hears the heads-up and the time's-up mid-turn and starts no
+  // worker from the cap on, and a close out of time says no reviewer read a claim.
+  { file: "loop/director/setup.ts", marker: "capClock(" },
+  { file: "loop/director/integrate.ts", marker: "finishWaitsForCap(" },
+  { file: "loop/director/wake.ts", marker: "withCapWatch(" },
+  { file: "loop/director/wake.ts", marker: "withCapWords(" },
+  { file: "loop/director/wake.ts", marker: "turnEndAtCap(" },
+  { file: "loop/director/tools.ts", marker: "capRefusesWorker(" },
+  { file: "loop/director.ts", marker: "ranOutUnchecked(" },
+  // ...and the web lead is told so: a claim may come as soon as the goal is reached.
+  { file: "loop/director/wake-prompts.ts", marker: "a reviewer's yes ends the build" },
+  { file: "loop/director/briefs.ts", marker: "a reviewer's yes ends the build" },
 ];
 
 interface SeedManifest {

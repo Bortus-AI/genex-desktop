@@ -13,7 +13,8 @@ import { REFERENCE_MIN_STILLS, ReferenceKind, RunMode } from "../loop/run-events
 import { MINUTE_MS } from "../loop/time.ts";
 import { TurnStop } from "../loop/turn-record.ts";
 import { isRecord } from "../loop/json.ts";
-import { ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
+import { LoopProfile, loopProfileOf, ProjectStarter, ProjectTool } from "../loop/folder-facts.ts";
+import { OPEN_LAUNCH_WORDS } from "../loop/open-loop-prompts.ts";
 import { scopeItems } from "../loop/scope.ts";
 
 /** How long `run_command` lets a command run when the call names no timeout. */
@@ -393,7 +394,7 @@ export const tools: HarnessTool[] = [
   {
     name: "start_autopilot",
     description:
-      "Launch a build — only when Loop is on and the ask is to build the game or change it substantially, never for research, a plan or a small change. Know first what the game is and how it should look; when nobody said, ask_user instead. The build decomposes into facets, builds each against a blind critic, and integrates; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
+      "Launch a build — only when Loop is on and the ask is to build the game or change it substantially, never for research, a plan or a small change. Know first what the game is and how it should look; when nobody said, ask_user instead. The build runs as the launch rules say for this project; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
     parameters: {
       type: "object",
       properties: {
@@ -453,7 +454,7 @@ export const tools: HarnessTool[] = [
         ...(autopilot.reviewPlan === true ? { reviewPlan: true } : {}),
         ...scopeArgs(args),
       };
-      const clock = capped ? `Building for up to ${hours} h` : `Building until the critics are satisfied`;
+      const clock = capped ? `Building for up to ${hours} h` : await untilDoneWords(ctx, ctx.project ?? project);
       return {
         ok: true,
         content: `${clock}${towardTheBar(kind, run.reference.name, frames.length)}`,
@@ -463,6 +464,18 @@ export const tools: HarnessTool[] = [
     },
   },
 ];
+
+/** How an ∞ build runs, as the launch tool answers: a web game's until its critics are satisfied, any other project's until a reviewer's yes. */
+async function untilDoneWords(ctx: ToolCtx, project: string): Promise<string> {
+  // A game list Genex can't read leaves the web words, as before.
+  const listed = await Promise.resolve()
+    .then(() => ctx.call(HostMethod.GameList, {}))
+    .catch(() => null);
+  const game = Array.isArray(listed) ? listed.find((one) => one?.name === project) : undefined;
+  return game && loopProfileOf(game) === LoopProfile.Open
+    ? OPEN_LAUNCH_WORDS.building
+    : "Building until the critics are satisfied";
+}
 
 /** The reference stills the composer attached, without empty slots. */
 function attachedFrames(frames: AnyRecord[] | null | undefined): AnyRecord[] {

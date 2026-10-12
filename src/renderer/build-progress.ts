@@ -416,6 +416,7 @@ function endedProgress(graph: RunGraph, { run, final, failedBase }: Landmarks): 
     paused: run?.paused ?? false,
     hasBuild: hasMergedBuild(final ?? null),
     landing: final ? (final.landing?.line ?? null) : null,
+    profile: final?.profile ?? null,
   });
   return { nodeId: GraphNodeKind.Final, title: loopRun.headline, health: loopRun.because, failedBase };
 }

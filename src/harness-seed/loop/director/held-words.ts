@@ -33,6 +33,18 @@ const START_HELD: HoldWords = {
   [HookHold.Plan]: () => "The chat is in Plan mode, so the run didn't start. Start it again once the plan is approved.",
 };
 
+/** Why a paused Loop didn't pick up when Genex itself held its resumed start back: it stays paused for a Resume. */
+const RESUME_HELD: HoldWords = {
+  [HookHold.PersonFirst]: (app) =>
+    `Genex waited for you to finish in ${app}, so the Loop didn't pick up. It stays paused: press Resume once you're done there.`,
+  [HookHold.CantTell]: (app) =>
+    `Genex couldn't tell whether you were using ${app}, so the Loop didn't pick up. It stays paused: press Resume once ${app} answers.`,
+  [HookHold.Busy]: (app) =>
+    `Something else was working in ${app}, so the Loop didn't pick up. It stays paused: press Resume to try again.`,
+  [HookHold.Plan]: () =>
+    "The chat is in Plan mode, so the Loop didn't pick up. It stays paused: press Resume once the plan is approved.",
+};
+
 /** Why the lead's turns stopped when Genex itself kept holding them back. */
 const TURNS_HELD: HoldWords = {
   [HookHold.PersonFirst]: (app) => `Genex waited for you to finish in ${app}, so the lead's next turn didn't start.`,
@@ -53,7 +65,28 @@ export function runHeldWords(held: HeldBack): string {
   return heldFor(held, START_HELD) ?? MESSAGE.RunHeld(held.reason);
 }
 
+/** Genex's own hold of a resumed Loop's start in the person's words (it stays paused for a Resume), or null for a plugin's block. */
+export function resumeHeldWords(held: HeldBack): string | null {
+  return heldFor(held, RESUME_HELD);
+}
+
 /** Why the lead's turns stopped after every ask was held, for the person, as {@link runHeldWords} words it. */
 export function turnsHeldWords(held: HeldBack): string {
   return heldFor(held, TURNS_HELD) ?? MESSAGE.TurnsHeld(held.reason);
+}
+
+/**
+ * A lead's turn Genex's moments kept holding back past every ask: a failed turn no session ran,
+ * carrying the person's words for why (`turnsHeldWords`).
+ */
+export type HeldTurn = { ok: false; turns: 0; errorText: string; heldBack: true };
+
+/** The failed turn a hold past every ask makes, with the person's words for it. */
+export const heldTurnResult = (words: string): HeldTurn => ({ ok: false, turns: 0, errorText: words, heldBack: true });
+
+/** Why the run ended when its last failed turn was one Genex's moments held back: the person's words, or null for any other turn. */
+export function heldTurnEnding(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  const turn = result as Partial<HeldTurn>;
+  return turn.heldBack === true && typeof turn.errorText === "string" ? turn.errorText : null;
 }

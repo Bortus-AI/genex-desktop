@@ -464,6 +464,7 @@ it("a plugin ships its own MCP server: started with it, fed on fd 3, and gone wh
         : real(id, method, args as never, binding as never)) as typeof services.call;
 
     await rig.core.plugins.installLocal(await pluginPackage());
+    await rig.core.plugins.setEnabled("mcpdemo", true);
     const view = async () => (await rig.core.mcp.list()).find((v) => v.connector.id === "mcpdemo-echo");
     const listed = await view();
     assert.ok(listed, "the plugin server is listed as a connector the plugin owns");

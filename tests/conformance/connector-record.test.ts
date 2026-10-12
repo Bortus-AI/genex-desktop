@@ -99,7 +99,14 @@ async function connectedGame(lite: Lite, project: string) {
   await lite.core.games.scaffold(project);
   const threadId = await lite.core.createGameThread(project);
   await lite.core.setPermissionMode(threadId, PermissionMode.Bypass);
-  await lite.core.plugins.installLocal(await recordPackage(), "local", []);
+  // From GitHub, so its server follows the chat's mode: a local plugin's server asks every call.
+  await lite.core.plugins.installLocal(await recordPackage(), "github", [], {
+    kind: "github",
+    repo: "studio-tests/record",
+    sha: "a".repeat(40),
+  });
+  // Loaded from a folder, it starts off: the person turns it on.
+  await lite.core.plugins.setEnabled("recorddemo", true);
   await lite.core.mcp.toolsFor(project);
   const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
   const invoke = (tool: string, args: Record<string, unknown>) =>

@@ -149,6 +149,23 @@ describe("finding a Genex plugin", () => {
     );
   });
 
+  it("an engine's name finds its plugin whatever words come with it, and words alone never name a plugin", () => {
+    const ids = (query: { fact?: string; text?: string }): Array<[string, string]> =>
+      findPlugins(list, catalog, query).plugins.map((p): [string, string] => [p.id, p.offer ?? "on"]);
+    const rows: Array<[{ fact?: string; text?: string }, Array<[string, string]>]> = [
+      [{ fact: "unreal-project", text: "Unreal Engine" }, [[UNREAL, PluginOffer.TurnOn]]],
+      [{ text: "Unreal Engine 5 plugin" }, [[UNREAL, PluginOffer.TurnOn]]],
+      [{ fact: "unreal-project", text: "port the scene" }, [[UNREAL, PluginOffer.TurnOn]]],
+      [{ text: "Godot engine" }, [["godot-tools", PluginOffer.Install]]],
+      [{ text: "the Godot editor" }, [["godot-tools", PluginOffer.Install]]],
+      [{ text: "blend files" }, [[BLENDER, "on"]]],
+      [{ fact: "made-up", text: "zzz" }, []],
+      [{ text: "game engine plugin" }, ids({})],
+    ];
+    for (const [query, expected] of rows) assert.deepEqual(ids(query), expected, JSON.stringify(query));
+    assert.equal(findPlugins(list, catalog, { text: "Unreal Engine" }).next, FindNext.Suggest);
+  });
+
   it("the card offers Turn on, Install… or says On, from the live plugin list", () => {
     assert.equal(suggestionState(list, UNREAL), SuggestionState.TurnOn);
     assert.equal(suggestionState(list, BLENDER), SuggestionState.On);
@@ -434,8 +451,17 @@ describe("plugin search by seat", () => {
     ];
     const offer: [string, Record<string, unknown>] = [ProjectTool.OfferDontWait, {}];
 
+    /** A search no plugin answers: its answer says how to write one. */
+    const nothingFits: [string, Record<string, unknown>] = [ProjectTool.PluginsFind, { fact: "nowhere-project" }];
+    /** The write-a-plugin note of the last answer: the guide, never a check the session can't call. */
+    const notesWithoutCheck = (who: string) => {
+      const note = String(answers.at(-1));
+      assert.match(note, /plugin-author/, `${who}: names the guide`);
+      assert.doesNotMatch(note, /plugin_check/, `${who}: never a tool it wasn't handed`);
+    };
+
     // The run's lead: the plugin search, the card and the offer, each shown in the chat the run was started in.
-    callsDuringTurn([suggest, offer]);
+    callsDuringTurn([suggest, offer, nothingFits]);
     await chat.delegate({
       threadId: runThread,
       cwd: integration,
@@ -449,6 +475,7 @@ describe("plugin search by seat", () => {
     assert.equal(await cardsIn(threadId, CustomEvent.DontWaitOffer), 1, "and so is the offer");
     assert.equal(await cardsIn(runThread, CustomEvent.PluginSuggested), 0, "never in the thread the harness named");
     assert.equal(await cardsIn(runThread, CustomEvent.DontWaitOffer), 0);
+    notesWithoutCheck("the lead");
 
     // A lead of a run nobody started in a chat shows nothing anywhere.
     const stray = await chat.copyOf("run_stray", "integration");
@@ -462,10 +489,11 @@ describe("plugin search by seat", () => {
     assert.equal(await cardsIn(threadId, CustomEvent.PluginSuggested), 1, "no second card");
 
     // The run's worker may look, never show.
-    callsDuringTurn([[ProjectTool.PluginsFind, { text: "unreal" }]]);
+    callsDuringTurn([[ProjectTool.PluginsFind, { text: "unreal" }], nothingFits]);
     await chat.delegate(chat.runWorker("w1", worktree));
     assert.deepEqual(projectToolsOf(2), [ProjectTool.PluginsFind]);
-    assert.match(String(answers.at(-1)), /"id":"unreal"/, "its search answers");
+    assert.match(String(answers.at(-2)), /"id":"unreal"/, "its search answers");
+    notesWithoutCheck("a worker");
     // A typed worker, offered only its type's plugin tools, may still look.
     callsDuringTurn([]);
     await chat.delegate(chat.runWorker("w1", worktree, { toolAllow: ["blender__"] }));
@@ -479,5 +507,11 @@ describe("plugin search by seat", () => {
     });
     assert.deepEqual(projectToolsOf(4), []);
     assert.equal(await cardsIn(threadId, CustomEvent.PluginSuggested), 1, "nothing else was shown");
+
+    // A reviewer of the run reads and looks only: no project tool, plugin_check among them.
+    callsDuringTurn([]);
+    await chat.delegate({ readOnly: true, reviewer: { runId: RUN_ID, reads: chat.project.dir }, toolAllow: [] });
+    assert.ok(seen[5]?.reviewer, "the reviewer was seated");
+    assert.deepEqual(projectToolsOf(5), [], "a reviewer");
   });
 });

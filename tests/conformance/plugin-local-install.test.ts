@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { installLocalPlugin, pluginOriginWords, reviewPluginInstall } from "../../src/main/plugin-local-install.ts";
 import type { PluginManifest, PluginSource } from "../../src/shared/plugins.ts";
-import { accountFixture, accountPackage, copyOfExample, pluginFixture } from "../helpers/plugins.ts";
+import { accountFixture, accountPackage, copyOfExample, installLocalOn, pluginFixture } from "../helpers/plugins.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 
 async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
@@ -33,6 +33,8 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
 test("local reinstall reviews the current manifest and scan, can be cancelled, and installs only reviewed bytes", async (t) => {
   const f = await fixture(t);
   await installLocalPlugin(f.registry, f.source, async () => true);
+  // Loaded from a folder, it starts off: the person turns it on.
+  await f.registry.setEnabled("example", true);
   await f.registry.setSetting("example", "greeting", "Saved greeting");
   await f.registry.remove("example");
   f.manifest.version = "2.0.0";
@@ -65,8 +67,9 @@ test("local reinstall reviews the current manifest and scan, can be cancelled, a
   assert.equal(reviews, 2);
   const installed = f.registry.list()[0]!;
   assert.equal(installed.manifest.version, "2.0.0");
-  assert.equal(installed.enabled, true);
+  assert.equal(installed.enabled, false, "loaded again after removal, it starts off");
   assert.equal(installed.scan?.verdict, "caution");
+  await f.registry.setEnabled("example", true);
   assert.equal((await f.registry.settings("example")).greeting, "Saved greeting");
   assert.deepEqual(await f.registry.action("example", "hello", {}), {
     text: "The isolated plugin backend is working.",
@@ -124,7 +127,7 @@ test("the install review names a replacement, refuses a connector id and never c
       b = await accountPackage(f.base, "b", "Publisher B");
     const localA: PluginSource = { kind: "local", directory: a.dir };
     assert.deepEqual(reviewPluginInstall(f.registry, a.manifest, localA, []), {});
-    await f.registry.installLocal(a.dir, "local", a.manifest.capabilities);
+    await installLocalOn(f.registry, a.dir, a.manifest.capabilities);
     assert.deepEqual(
       reviewPluginInstall(f.registry, a.manifest, localA, []),
       {},

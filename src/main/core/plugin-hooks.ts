@@ -28,6 +28,7 @@ import {
   type HookReport,
   type HookStep,
   hookAnswerOf,
+  STOP_OUTLIVING_HOOK_EVENTS,
   WRITING_HOOK_EVENTS,
 } from "../../shared/plugin-hooks.ts";
 import { type PluginBinding, PluginToolAudience } from "../../shared/plugins.ts";
@@ -35,7 +36,14 @@ import { shortId } from "../../substrate/ids.ts";
 import { PLUGIN_CALL_TIMEOUT_MS } from "../../substrate/plugins/registry.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { consentAudience } from "./consent-audience.ts";
-import { chatHolders, isLockRefused, type LockRef, LockRefusal, type LockRefused, runHolders } from "./plugin-locks.ts";
+import {
+  chatHolders,
+  HOLD_OF_REFUSAL,
+  isLockRefused,
+  type LockRef,
+  type LockRefused,
+  runHolders,
+} from "./plugin-locks.ts";
 
 /** The longest a moment waits for its steps' locks: a checkpoint a minute, a restore two, health not at all. */
 export const HOOK_LOCK_WAIT_MS = {
@@ -59,11 +67,13 @@ export const HOOK_LOCK_WAIT_MS = {
 
 /**
  * The longest one step runs: the host's ceiling for a plugin call, and longer where a step opens an
- * app or, before a restore, waits for a busy app to answer so it can save its work.
+ * app or, before a restore, waits for a busy app to answer so it can save its work. Around an
+ * agent's call (`TOOL_MOMENTS`) it is the longest the moment's steps run together.
  */
 export const HOOK_CALL_MS = {
-  // A run's start may wait for a busy editor, update its helper and open it twice (Unreal's `OPEN_FOR_RUN_MAX_MS`).
-  [HookEvent.RunPrepare]: 30 * MINUTE_MS,
+  // A run's start may wait for a busy editor, update its helper and open it twice, each ask of the
+  // editor counted with its session and process listing (Unreal's `OPEN_FOR_RUN_MAX_MS`, about 31 minutes).
+  [HookEvent.RunPrepare]: 33 * MINUTE_MS,
   [HookEvent.RunEnd]: PLUGIN_CALL_TIMEOUT_MS,
   [HookEvent.TurnStart]: PLUGIN_CALL_TIMEOUT_MS,
   [HookEvent.TurnEnd]: PLUGIN_CALL_TIMEOUT_MS,
@@ -81,6 +91,13 @@ export const HOOK_CALL_MS = {
   [HookEvent.Finish]: PLUGIN_CALL_TIMEOUT_MS,
 } as const satisfies Record<HookEvent, number>;
 
+/**
+ * The moments around an agent's call of a plugin's own tool. Their steps share one limit
+ * (`HOOK_CALL_MS`), however many a plugin hooks there: the call waits on them, so they end within
+ * the engine bridge's deadline for one call. They pass no worker's lock: the call itself doesn't.
+ */
+const TOOL_MOMENTS: ReadonlySet<HookEvent> = new Set([HookEvent.ToolBefore, HookEvent.ToolAfter]);
+
 /** Genex itself, as the one that held a moment back (Plan mode, a lock): no plugin id is spelled with `@`. */
 const GENEX = "@genex";
 
@@ -89,12 +106,16 @@ const MESSAGE = {
   planning: "the chat is in Plan mode, so nothing changes until the plan is approved.",
   planHeld: "The chat is in Plan mode, so this waits until the plan is approved.",
   failed: (plugin: string, tool: string, why: string) => `${plugin}'s ${tool} step failed: ${why}`,
+  outOfTime: (plugin: string, tool: string) => `${plugin}'s ${tool} step didn't answer in time.`,
   checkpointReason: (label: string) => `checkpoint: ${label}`,
   noProbe: "Genex couldn't tell whether anything was unsaved, so no checkpoint was taken.",
   nothingUnsaved: (labels: string) => `Nothing was unsaved in ${labels}, so no checkpoint was taken.`,
   cantTell: (labels: string) => `Genex couldn't tell whether ${labels} held unsaved work, so no checkpoint was taken.`,
   noSnapshot: (why: string) => `No snapshot was taken: ${why}`,
   taken: (id: string) => `Took snapshot ${id} of the game folder.`,
+  afterStopped: "The checkpoint was taken, and its after steps were stopped.",
+  afterSkipped: (label: string) =>
+    `The call ran; its plugin's steps after it were skipped, since ${label} was not free.`,
   blocked: (reason: string) => `Nothing was saved and no snapshot was taken: ${reason}`,
   logBlocked: (on: HookEvent, project: string, by: string, reason: string) =>
     `[core] ${on} in ${project} stopped by ${by}: ${reason}`,
@@ -123,6 +144,8 @@ export interface HookScope {
 export interface HookFireOptions {
   signal?: AbortSignal;
   waitMs?: number;
+  /** For a moment around an agent's call (`tool.*`): its steps' shared limit, when what is left of the call's time is less. */
+  limitMs?: number;
   /** The caller's lock holder (`workerHolder`): a worker writing in place passes the locks it holds. */
   holder?: string;
 }
@@ -164,13 +187,6 @@ export class HookBlockedError extends Error {
   }
 }
 
-/** Genex's hold for each lock refusal. */
-const HOLD_OF_REFUSAL = {
-  [LockRefusal.PersonFirst]: HookHold.PersonFirst,
-  [LockRefusal.CantTell]: HookHold.CantTell,
-  [LockRefusal.Busy]: HookHold.Busy,
-} as const satisfies Record<LockRefusal, HookHold>;
-
 /** A lock refusal as Genex's hold: why, and which app's lock. */
 const heldBy = (refused: LockRefused): HookHeld => ({ hold: HOLD_OF_REFUSAL[refused.code], label: refused.label });
 
@@ -207,14 +223,26 @@ function hookContextOf(on: HookEvent, scope: HookScope): HookContext {
   };
 }
 
+/** What a hook bus is built with: the clock a moment's shared limit runs on (a test seam). */
+export interface HookServiceOptions {
+  /** A signal that aborts once `ms` passed (`AbortSignal.timeout`). */
+  timeout?: (ms: number) => AbortSignal;
+}
+
 /** Genex's moments, and the plugin steps each runs for a game. */
 export class HookService {
   readonly #core: StudioCore;
-  readonly #x: Pick<CoreInternals, "locks" | "planning">;
+  readonly #x: Pick<CoreInternals, "locks" | "planning" | "observers">;
+  readonly #timeout: (ms: number) => AbortSignal;
 
-  constructor(core: StudioCore, x: Pick<CoreInternals, "locks" | "planning">) {
+  constructor(
+    core: StudioCore,
+    x: Pick<CoreInternals, "locks" | "planning" | "observers">,
+    options: HookServiceOptions = {},
+  ) {
     this.#core = core;
     this.#x = x;
+    this.#timeout = options.timeout ?? ((ms) => AbortSignal.timeout(ms));
   }
 
   /**
@@ -232,18 +260,28 @@ export class HookService {
     let release = NO_RELEASE;
     try {
       const waitMs = options.waitMs ?? HOOK_LOCK_WAIT_MS[on];
-      release = await this.#hold(steps, binding, scope, options.signal, waitMs, options.holder);
+      release = await this.#hold(on, steps, binding, scope, options.signal, waitMs, options.holder);
     } catch (error) {
       if (!isLockRefused(error)) throw error;
       return this.#refusedReport(on, scope, error);
     }
     try {
-      const report = await this.#run(on, steps, scope, binding, options.signal);
+      // A moment stopped before its steps began (its harness ended as it asked) runs none of them,
+      // not even the after steps of a restore, which a later Stop never cuts.
+      options.signal?.throwIfAborted();
+      // Once its locks are held, a restore's after steps (a restart's) reopen what was closed: no Stop cuts them.
+      const signal = STOP_OUTLIVING_HOOK_EVENTS.has(on) ? undefined : options.signal;
+      const report = await this.#run(on, steps, scope, binding, signal, options.limitMs);
       this.#logNotes(on, scope, report);
       return report;
     } finally {
       release();
     }
+  }
+
+  /** Whether any enabled plugin has steps at `on` for the game (only the called tool's plugin, for `tool.*`). */
+  async hasSteps(on: HookEvent, scope: Pick<HookScope, "project" | "tool">): Promise<boolean> {
+    return (await this.#plan(on, scope)).length > 0;
   }
 
   /**
@@ -265,7 +303,7 @@ export class HookService {
     let release = NO_RELEASE;
     try {
       const waitMs = HOOK_LOCK_WAIT_MS[HookEvent.CheckpointBefore];
-      release = await this.#hold([...before, ...after], binding, scope, ask.signal, waitMs);
+      release = await this.#hold(HookEvent.CheckpointBefore, [...before, ...after], binding, scope, ask.signal, waitMs);
     } catch (error) {
       if (!isLockRefused(error)) throw error;
       return { blocked: error.message, ...heldBy(error) };
@@ -279,22 +317,33 @@ export class HookService {
 
   /**
    * Restore a game folder (`run`) between its `restore.before` and `restore.after` steps, under
-   * their locks. A block before (or Plan mode, or a lock not given) throws `HookBlockedError` and
-   * nothing is restored; the after steps run however the restore ended, their notes logged. The
-   * person's own Rewind (`forPerson`) never waits for the person or the plan.
+   * their locks. Plan mode holds a run's or a chat's restore even when no plugin has steps there. A
+   * block before (or Plan mode, or a lock not given) throws `HookBlockedError` and
+   * nothing is restored, and a Stop then ends it too: no after step runs. Once the restore itself
+   * began, the after steps run however it ended, their notes logged, and a Stop cuts none of them
+   * (`STOP_OUTLIVING_HOOK_EVENTS`). The person's own Rewind (`forPerson`) never waits for the person
+   * or the plan.
    */
   async restoreWithHooks<T>(project: string, run: () => Promise<T>, options: RestoreOptions = {}): Promise<T> {
     const scope: HookScope = { project, ...restoreScope(options) };
+    // A run's or a chat's restore waits for the plan whether or not a plugin has steps around it.
+    const held = await this.#planHeld(HookEvent.RestoreBefore, scope);
+    if (held) throw new HookBlockedError(held, PLAN_HELD);
     const before = await this.#plan(HookEvent.RestoreBefore, scope);
     const after = await this.#plan(HookEvent.RestoreAfter, scope);
     if (!before.length && !after.length) return run();
-    const held = await this.#planHeld(HookEvent.RestoreBefore, scope);
-    if (held) throw new HookBlockedError(held, PLAN_HELD);
     const binding = await this.#binding(scope);
     let release = NO_RELEASE;
     try {
       const waitMs = HOOK_LOCK_WAIT_MS[HookEvent.RestoreBefore];
-      release = await this.#hold([...before, ...after], binding, scope, options.signal, waitMs);
+      release = await this.#hold(
+        HookEvent.RestoreBefore,
+        [...before, ...after],
+        binding,
+        scope,
+        options.signal,
+        waitMs,
+      );
     } catch (error) {
       if (isLockRefused(error)) throw new HookBlockedError(error.message, heldBy(error));
       throw error;
@@ -306,7 +355,7 @@ export class HookService {
       try {
         return await run();
       } finally {
-        // Once the files may have changed, the after steps run however it ended: Stop ends no one of them.
+        // Once the files may have changed, the after steps run however it ended: no Stop cuts them.
         await this.#closeRestore(after, scope, binding);
       }
     } finally {
@@ -330,8 +379,46 @@ export class HookService {
     } catch (error) {
       return { blocked: MESSAGE.noSnapshot(sentence(error)) };
     }
-    const closed = await this.#run(HookEvent.CheckpointAfter, after, scope, binding, ask.signal);
+    const closed = await this.#afterSnapshot(after, scope, binding, ask.signal);
     return { snapshot, notes: [...opened.notes, ...closed.notes], images: [...opened.images, ...closed.images] };
+  }
+
+  /**
+   * The checkpoint's after steps, once its snapshot stands: a Stop ends them, never the snapshot, and
+   * says so. A run's checkpoint keeps the pictures of a step that is an observer's tool as that
+   * observer's capture; the answer stays as the steps gave it.
+   */
+  async #afterSnapshot(
+    after: HookStep[],
+    scope: HookScope,
+    binding: PluginBinding,
+    signal: AbortSignal | undefined,
+  ): Promise<HookReport> {
+    const answered: Array<{ step: HookStep; answer: HookAnswer }> = [];
+    let report: HookReport;
+    try {
+      report = await this.#run(HookEvent.CheckpointAfter, after, scope, binding, signal, undefined, (step, answer) =>
+        answered.push({ step, answer }),
+      );
+    } catch (error) {
+      this.#log(MESSAGE.logNote(HookEvent.CheckpointAfter, scope.project, GENEX, errorMessage(error)));
+      return { ...EMPTY_HOOK_REPORT, notes: [{ plugin: GENEX, text: MESSAGE.afterStopped }] };
+    }
+    if (scope.runId) await this.#keepCaptures({ ...scope, runId: scope.runId }, answered);
+    return report;
+  }
+
+  /** The pictures a run's checkpoint steps answered, kept as their observers' captures; a failure is logged, never thrown. */
+  async #keepCaptures(
+    scope: HookScope & { runId: string },
+    answered: ReadonlyArray<{ step: HookStep; answer: HookAnswer }>,
+  ): Promise<void> {
+    for (const { step, answer } of answered) {
+      const pictures = { project: scope.project, runId: scope.runId, plugin: step.plugin, tool: step.tool, answer };
+      await this.#x.observers
+        .keepCheckpoint({ ...pictures, ...(scope.label ? { label: scope.label } : {}) })
+        .catch((error: unknown) => this.#x.observers.logNotKept(scope.project, error));
+    }
   }
 
   /** The restore's after steps: their notes, and a step that failed, logged; never thrown over the restore's own outcome. */
@@ -348,7 +435,7 @@ export class HookService {
   }
 
   /** The steps a moment runs for the game: none for a folder that can't be read. `tool.*` runs only the called tool's plugin's. */
-  async #plan(on: HookEvent, scope: HookScope): Promise<HookStep[]> {
+  async #plan(on: HookEvent, scope: Pick<HookScope, "project" | "tool">): Promise<HookStep[]> {
     const own = scope.tool ? pluginOf(scope.tool) : undefined;
     if (!this.#anyHook(on, own)) return [];
     const game = await this.#core.games.kindOf(scope.project).catch(() => null);
@@ -385,9 +472,12 @@ export class HookService {
    * The union of the steps' locks, held for the whole moment, the person first unless they act. A
    * run's moment passes the locks the run's own workers hold, and a chat's the chat's own (a worker
    * writing in place holds the game's for its whole life): Genex's checkpoints, restores and crash
-   * recovery for the run or the chat never wait on it. The person's own action passes none.
+   * recovery for the run or the chat never wait on it. The person's own action passes none, nor a
+   * plugin's steps around an agent's call (`tool.*`): they wait for the worker as the call does. A
+   * wait on the person is told to the chat a run was started from.
    */
   async #hold(
+    on: HookEvent,
     steps: readonly HookStep[],
     binding: PluginBinding,
     scope: HookScope,
@@ -397,13 +487,16 @@ export class HookService {
   ): Promise<() => void> {
     const refs = this.#locksOf(steps);
     if (!refs.length) return NO_RELEASE;
+    const threadId = scope.runId && binding.threadId ? await consentAudience(this.#core, binding, scope.runId) : null;
+    const passes = holder || TOOL_MOMENTS.has(on) ? {} : passesOf(scope);
     return this.#x.locks.hold(refs, {
       binding,
+      ...(threadId ? { threadId } : {}),
       ...(signal ? { signal } : {}),
       ...(scope.forPerson ? { forPerson: true } : {}),
       waitMs,
       holder: holder ?? shortId("moment"),
-      ...(holder ? {} : passesOf(scope)),
+      ...passes,
     });
   }
 
@@ -435,7 +528,8 @@ export class HookService {
 
   /**
    * A lock not given in time: a blocking or writing moment is held back with Genex's typed hold (as
-   * Plan mode holds a writing one), health is pending, any other moment notes it.
+   * Plan mode holds a writing one), health is pending, any other moment notes it (after an agent's
+   * call that ran, saying it ran).
    */
   #refusedReport(on: HookEvent, scope: HookScope, refused: LockRefused): HookReport {
     const reason = refused.message;
@@ -443,52 +537,71 @@ export class HookService {
       this.#log(MESSAGE.logBlocked(on, scope.project, GENEX, reason));
       return heldReport(reason, heldBy(refused));
     }
-    if (on === HookEvent.Health) return { ...EMPTY_HOOK_REPORT, pending: { plugin: GENEX, reason } };
-    const noted: HookReport = { ...EMPTY_HOOK_REPORT, notes: [{ plugin: GENEX, text: reason }] };
+    const held = heldBy(refused);
+    if (on === HookEvent.Health) return { ...EMPTY_HOOK_REPORT, pending: { plugin: GENEX, reason, ...held } };
+    // The call itself ran: its answer never asks the agent to call it again.
+    const text = on === HookEvent.ToolAfter ? MESSAGE.afterSkipped(refused.label) : reason;
+    const noted: HookReport = { ...EMPTY_HOOK_REPORT, notes: [{ plugin: GENEX, text, ...held }] };
     this.#logNotes(on, scope, noted);
     return noted;
   }
 
-  /** Each step in turn, read for its answer; a stopping block ends the moment. */
+  /**
+   * Each step in turn, read for its answer; a stopping block ends the moment. Around an agent's call
+   * the steps share one limit: once it runs out, the step running fails and no later step runs.
+   */
   async #run(
     on: HookEvent,
     steps: readonly HookStep[],
     scope: HookScope,
     binding: PluginBinding,
     signal: AbortSignal | undefined,
+    limitMs: number = HOOK_CALL_MS[on],
+    onAnswer?: (step: HookStep, answer: HookAnswer) => void,
   ): Promise<HookReport> {
     const report: HookReport = { blocked: null, pending: null, notes: [], images: [], ran: [] };
     const told: PluginBinding = { ...binding, hook: hookContextOf(on, scope) };
+    const shared = Math.min(limitMs, HOOK_CALL_MS[on]);
+    const limit = TOOL_MOMENTS.has(on) && steps.length ? this.#timeout(shared) : undefined;
     for (const step of steps) {
       const name = `${step.plugin}__${step.tool}`;
       report.ran.push(name);
-      const answer = await this.#ask(on, step, name, told, signal);
-      if (this.#read(report, on, scope, step, answer)) break;
+      const answer = await this.#ask(on, step, name, told, signal, limit);
+      onAnswer?.(step, answer);
+      if (this.#read(report, on, scope, step, answer) || limit?.aborted) break;
     }
     return report;
   }
 
-  /** One step's answer; a step that fails answers by the moment (fail closed where it blocks, pending at health). */
+  /**
+   * One step's answer; a step that fails, or runs out of the moment's limit, answers by the moment
+   * (fail closed where it blocks, pending at health). Only the caller's Stop is thrown.
+   */
   async #ask(
     on: HookEvent,
     step: HookStep,
     name: string,
     binding: PluginBinding,
     signal: AbortSignal | undefined,
+    limit: AbortSignal | undefined,
   ): Promise<HookAnswer> {
+    const stepSignal = limit && signal ? AbortSignal.any([signal, limit]) : (limit ?? signal);
     try {
       const raw = await this.#core.plugins.tool(
         name,
         {},
         binding,
-        signal,
+        stepSignal,
         PluginToolAudience.Harness,
         HOOK_CALL_MS[on],
       );
       return hookAnswerOf(raw);
     } catch (error) {
       if (signal?.aborted) throw error;
-      const words = MESSAGE.failed(this.#pluginName(step.plugin), step.tool, sentence(error));
+      const plugin = this.#pluginName(step.plugin);
+      const words = limit?.aborted
+        ? MESSAGE.outOfTime(plugin, step.tool)
+        : MESSAGE.failed(plugin, step.tool, sentence(error));
       if (BLOCKING_HOOK_EVENTS.has(on)) return { block: words };
       if (on === HookEvent.Health) return { pending: words };
       return { note: words };

@@ -345,6 +345,20 @@ chat-workers (a chat message's two workers on Builds and as chat lines, after an
 more games, written after the start so their Loops read as going: Fixture Loop with three workers,
 the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
 runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
+finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
+the Builds history, Not yet after one no, and the newest Checking),
+stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
+renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
+Mountain pass, a Blender game with no run, whose Live says where pictures come from),
+open-projects (projects that aren't web games: Moon base, a Godot folder whose earlier timed Loop
+closed not checked by a reviewer and whose Loop in place, written after the start, has a worker's
+question waiting; Level tools, an Unreal plugin project with the sidebar's kind label, its Loop sent
+back once and, about four seconds after launch, waiting for you to finish in Unreal; Lantern racer,
+a web game beside an Unreal project, with Live's Web game and Unreal tabs; Paper plane, a web game
+ported to Unreal, its chat holding the port's turn and the line asking for the access `app_look`
+needs (Open Screen Recording and Accessibility settings); Moon tools, a plugin
+loaded from a folder with one tool that runs without asking; and the web game's chat offering the
+Unreal plugin, which is off),
 first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is not
 installed, and sign-in, links and downloads are refused as in every fixture) and notifications
 (six games; about four seconds after launch a question, a plan, a plugin permission, a sign-out
@@ -352,9 +366,11 @@ and delivered, failed and stopped builds arrive as news; macOS notifications are
 sandbox-setup (the window opens on "Set up the protected workspace" for a Linux machine missing
 bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
 update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
-itself is refused as native) and unreal-game (the game linked to a stand-in Unreal project inside
-its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card, and the
-steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
+itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
+rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
+native) and unreal-game (the game linked to a stand-in Unreal project inside
+its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
+stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
 and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
 connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery).
 Use `--reuse` explicitly for a stopped existing profile with the same fixture/provider mode.
@@ -393,7 +409,11 @@ game view trailed its slot right after each change and before the next ([perform
 `fixture.graph` takes `other-project-frames` or `append-round`
 only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
-Scoped DOM inspection resolves one visible enabled non-occluded target. CDP dispatches actual
+Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
+that has just opened takes pointer input one render later, so an input sent at once can be
+refused `target-not-visible` with nothing dispatched: send it with `requestWhenReachable`
+(`scripts/studio-dev/client.ts`), which tries again until the target is reachable, rather
+than sleeping. CDP dispatches actual
 pointer-down/up, keyboard and Unicode insertText to the desktop without system focus/pointer
 movement. The native macOS select did not accept background keys on pinned Electron. The select
 operation reports unsupported-surface if keys do not apply. Open an earlier build with its chat
@@ -440,6 +460,12 @@ Watch with `runs` and `status`; no new record for a long while, or a `lastFailur
 read `logs`. A run paused by an engine limit or a loop crash continues from
 `[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
 owner is using it; leave the profile running at the end.
+
+Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
+`STUDIO_DIRECTOR_LOOP=turn` picks the long turn for a run that names no loop, and
+`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
+runner wrote, to the Unreal runner from before the one Loop. Neither is a run record field or shown
+in the UI; set it on start and restart.
 
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket
@@ -504,6 +530,17 @@ navigation; component fixtures do not prove account access or native game layeri
 Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's own account card
 and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.
+`run-publish-cover-ask-ui.mjs` renders the production Publish dialog beside the production
+ChatPanel of the same game with a fake `window.studio`: the cover ask shows only while the plugin
+reports no shot to send and no owner's cover, and its press closes the dialog and leaves the ask
+in that game's composer once however often it is pressed, focused and unsent (screenshots in `.studio-dev/evidence/`). A fixture
+profile cannot show this dialog's body, since its Genex account is never connected.
+`run-chat-cover-card-ui.mjs` renders the production ChatPanel beside the production stage strip:
+the thread's latest kept `genex__cover` shot is one Genex cover card once its turn has ended (none
+mid-turn, the turn's work one group), read through the `genex-cover` scope, whose Publish opens
+the Publish dialog through the strip; Publish is gone while a publish runs, with Genex off or once
+Genex took the frame, the card is gone with its shot, light and dark are captured (screenshots in
+`.studio-dev/evidence/`).
 `planning-capabilities.test.ts` and the host cases in
 `promptbar-redesign.test.ts` check current planning context and the tool-free boundary.
 

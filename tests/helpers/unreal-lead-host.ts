@@ -36,6 +36,7 @@ import { summarizeRun } from "../../src/shared/run-summary.ts";
 import { WorkerIsolation, type WorkerType } from "../../src/shared/workers.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 import { type CtxRecorder, ctxRecorder } from "./ctx-recorder.ts";
+import { fakeFinishReview, reviewerAnswer } from "./reviewer.ts";
 import { type BusHost, checkpoint, fire, restore } from "./unreal-moment-bus.ts";
 
 const MINUTE = 60_000;
@@ -217,8 +218,13 @@ export type LeadHost = {
    * `snapshot.restore` where they happen (the bus's own methods are not on it).
    */
   trail: () => string[];
-  /** The lead turns' prompts, in order. */
+  /** The lead turns' prompts, in order (a reviewer's are not the lead's). */
   prompts: () => string[];
+  /** The reviewer's answers to the lead's claims, in order; with none left it says yes. */
+  /** The reviewers' answers in order: each a session result, or a function that answers one (it may wait). */
+  reviews: Array<Record<string, unknown> | (() => Promise<Record<string, unknown>>)>;
+  /** What each reviewer was asked, in order. */
+  reviewed: () => Array<Record<string, unknown>>;
   /** The steered texts, in order, and the snapshots' reasons (a checkpoint's by its label). */
   steered: () => string[];
   snapshotReasons: () => string[];
@@ -234,7 +240,28 @@ type Internals = LeadHost & {
   restoreClosed: boolean;
   /** The recorder's own call, which leaves the trail alone (a stand-in's read of the game folder). */
   plainCall: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+  /** The host's finish checks over this fake: the reviewers it started, with their params. */
+  review: ReturnType<typeof fakeFinishReview>;
 };
+
+/**
+ * The host's finish checks, its reviewer answering from the test's script (a yes when none is left);
+ * its records are appended as the log keeps every other, off the trail.
+ */
+function finishReview(host: Internals) {
+  return fakeFinishReview({
+    delegate: () => {
+      const next = host.reviews.shift() ?? reviewerAnswer("yes");
+      return typeof next === "function" ? next() : next;
+    },
+    append: (payload) =>
+      host.plainCall("events.append", {
+        threadId: "t1",
+        batch: [{ type: "custom", event_type: "finish_check", payload }],
+      }),
+    records: () => host.appended("finish_check"),
+  });
+}
 
 /** `editor-state`: a stall misses the answer once (its process runs on), else whether Unreal answers and runs. */
 function editorState(host: LeadHost) {
@@ -509,6 +536,7 @@ function handlers(host: Internals) {
   let crops = 0;
   const bus = busOf(host);
   return {
+    ...host.review.handlers,
     "events.append": () => ({ ids: [] }),
     "events.messages": () => [],
     "game.list": () => [{ ...GAME, facts: GAME_KIND.facts, hookEvents: hookEventsFor(host) }],
@@ -530,6 +558,8 @@ function handlers(host: Internals) {
       return true;
     },
     "artifact.read": (params: Record<string, unknown>) => host.artifacts.get(String(params.artifactId)) ?? null,
+    "observers.capture": () => [],
+    "jobs.list": () => ({ jobs: [], seq: 0 }),
     "run.artifact": (params: Record<string, unknown>) => `/runs/${String(params.runId)}/${String(params.name)}`,
     "preview.crop": (params: Record<string, unknown>) => {
       crops += 1;
@@ -600,6 +630,7 @@ export function leadHost(
     takesSteers: true,
     turnMs: 10 * MINUTE,
     turns: [...(options.turns ?? [])],
+    reviews: [],
     workerTypes: options.workerTypes ?? BUNDLED_WORKER_TYPES,
     snapshots: new Map(),
     plays: 0,
@@ -621,6 +652,7 @@ export function leadHost(
     for (let i = 0; i < maxTicks && !done(); i++) await tick();
     return done();
   };
+  host.review = finishReview(host);
   host.rec = ctxRecorder({ threadId: "t1", handlers: handlers(host) });
   // One ordered trail: each call as it is made, and the bus's steps, snapshots and restores where they happen.
   const plain = host.rec.ctx.call.bind(host.rec.ctx);
@@ -639,6 +671,7 @@ export function leadHost(
   host.tools = () => host.log.filter((entry) => entry.startsWith("tool:")).map((entry) => entry.slice("tool:".length));
   host.trail = () => [...host.log];
   host.prompts = () => host.rec.paramsOf("engine.delegate").map((p) => String(p.prompt));
+  host.reviewed = () => [...host.review.asked];
   host.steered = () =>
     host.rec.paramsOf("engine.steer").flatMap((p) => (p.messages as Array<{ text: string }>).map((m) => m.text));
   host.snapshotReasons = () => [...host.reasons];

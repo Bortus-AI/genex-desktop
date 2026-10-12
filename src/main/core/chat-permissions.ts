@@ -567,6 +567,38 @@ export class ChatPermissionService {
   }
 
   /**
+   * How a Loop's lead in place asks on an engine that does not ask about every call, or null for
+   * any thread but this game's open chat: the chat's mode as that engine honours it (Plan starts it
+   * elsewhere or read-only, as the chat's own session on it), its questions routed as a lead's
+   * (`#leadAsk`) and the picker's switches reaching it as they reach the chat's own session. The
+   * caller has already checked the seat (this game's lead of this chat's run, in place).
+   */
+  async forPlacedLead(ask: LeadSessionAsk): Promise<PersonSession | null> {
+    const { project, threadId } = ask;
+    const meta = await this.#threadMeta(threadId);
+    if (!isOpenGameChat(meta, project)) return null;
+    const chat = await this.#modeOf(threadId, meta);
+    const mode = engineMode(ask.engine, chat);
+    const lead: LeadState = {
+      engine: ask.engine,
+      model: ask.model,
+      steered: true,
+      running: leadModeFor(chat),
+      switching: Promise.resolve(),
+      askedFirst: new Set(),
+    };
+    const session: ChatSession = { engine: ask.engine, model: ask.model, steered: true };
+    const holder: LiveHolder = { live: null };
+    const request: DelegatePermissions = {
+      mode,
+      ...(await this.#standing(project, threadId, [ask.cwd, ...(ask.leads ? [ask.leads] : [])])),
+      ask: (question, asked) => this.#leadAsk(ask, lead, question, AbortSignal.any([asked, ask.signal])),
+      onControl: (control) => this.#onControl(threadId, mode, session, holder, control),
+    };
+    return { request, end: () => this.#onControl(threadId, mode, session, holder, null) };
+  }
+
+  /**
    * A worker's place in its lead's chat, or null when that is not this game's open chat (it then
    * runs unattended). The caller has already found the seat (a running run started in this chat, or
    * the turn its own session answers). Its mode is fixed for its session; while the chat is in a

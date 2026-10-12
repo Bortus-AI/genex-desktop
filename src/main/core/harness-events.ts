@@ -5,7 +5,7 @@ import type { EventData } from "../../substrate/types.ts";
 
 const MESSAGE = {
   hostOnly:
-    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access and automatic resume rows are written by the studio only",
+    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume and finish check rows are written by the studio only",
 } as const;
 const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ToolPermission,
@@ -31,6 +31,9 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.AppLookAccess,
   // The count of a run's automatic resumes bounds them (`core/auto-resume.ts`): only the host writes one.
   CustomEvent.RunAutoResumed,
+  // The reviewer's verdict is the app's, from the session it seated (`core/finish-review.ts`): the
+  // harness asks for a check and settles it, but a yes it wrote itself would read as Done.
+  CustomEvent.FinishCheck,
 ]);
 
 /** Refuse the entire batch before writing any row or updating the recovery index. */

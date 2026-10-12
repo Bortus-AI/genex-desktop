@@ -9,28 +9,25 @@ only shown). Empty chat is blank. Only the prompt bar writes and sends; a pasted
 adds the picture, not its file name.
 
 Chat work shows a short status and elapsed time; waiting is static. A running build is one card
-(time used, what happens now, Builds) with nothing under it. No duplicate Stop or narration.
+(time used, what happens now, Builds) with nothing under it.
 
 Neighboring tools group under **Worked on N steps** (or **Worked in Unreal**);
 failures stay visible. Play views and assets sit under the work
 that made them. Build updates use a short status and See it;
 a finished build is that card with Play, opening Builds; checks stay in Builds and Studio.
-A build that taught nothing adds no learned line. An Unreal turn saves and snapshots unsaved editor
-work, saying so. A port snapshots first, keeps web files as reference; the chat goes on in the
-new kind (Unreal's once it answers).
+A build that taught nothing adds no learned line.
 The [design specification](../agent/design.md#chat-reading-and-activity) owns exact values.
 
 ## Questions and plans
 
 Replies get current plugin, account, MCP and template facts; asking about plugins
 never resumes a build. A reply may start workers in the chat's mode (Plan holds writers), stopping
-with it; each is one line opening its work on Builds. Agents may look at app windows, never
-clicking, in any mode; background work is one line with Stop, until Genex quits.
+with it; each is one line opening its work on Builds. Background work is one line with Stop, until Genex
+quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any mode.
 
 - An `ask_user` question opens the question panel: options and a typed-answer row; Send answer
   confirms a choice. Chat about this puts it aside for the composer; any reply settles it.
-  Progress is never a question; an unsaid game, look or engine before a build is: a game with no
-  kind asks which engine (its plugin on) until picked.
+  Progress is never a question; an unsaid game, look or engine before a build is.
 - Permission requests need an explicit answer, pinned above the composer; a worker's plugin
   questions appear in its run's conversation, cancelled with it. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
@@ -57,8 +54,7 @@ That message and later ones leave chat and model context (the log keeps them); a
 answers next; it returns to the composer with pictures and follow-ups. **Restore game
 files** returns the folder to before it, off at first if files changed outside the chat (else one
 line says why only the conversation rewinds). Files too large to save stay, named in dialog and chat.
-Outside Unreal projects' changes stay. In an Unreal game, Unreal is saved and closed for it, then
-reopened; if it can't be, files stay and the chat says why.
+Outside Unreal projects' changes stay ([Unreal](projects-engines.md#unreal)).
 
 History is paged; reading older messages stops following output.
 
@@ -67,5 +63,4 @@ History is paged; reading older messages stops following output.
 [ChatPanel](../../src/renderer/panels/ChatPanel.tsx) feeds the transcript,
 [chat components](../../src/renderer/chat) draw it and
 [PromptBar](../../src/renderer/ui/PromptBar.tsx) owns writing.
-Queue and session internals: [conversation coordinator](../conversation-coordinator.md); workers
-and build results: [Builds and Live](builds-live.md).
+Queue and session internals: [conversation coordinator](../conversation-coordinator.md).

@@ -19,6 +19,7 @@ import { loopRunClock } from "../director/journal.ts";
 import { openLeadLine } from "../director/lead-line.ts";
 import { type LeadSeat, leadSeat } from "../director/lead-session.ts";
 import { directors } from "../director/tool-specs.ts";
+import { FINISH_REPORT, notDoneOf } from "../finish-check.ts";
 import { factsOfGame } from "../folder-facts.ts";
 import { engineOfGame, GameEngine } from "../game-engine.ts";
 import { fireHooks, HookEvent, notesText, runScope } from "../hooks.ts";
@@ -255,8 +256,9 @@ async function endsNow(lead: LeadRun): Promise<RunEnd | null> {
   if (lead.ctx.cancelled) return RUN_ENDS.stopped();
   if (lead.halted) return RUN_ENDS.halted(lead.halted);
   if (await finishAsked(lead)) return RUN_ENDS.finished();
-  const timeLeft = lead.softDeadline - lead.clock.now() >= MIN_TURN_MS;
-  return timeLeft ? null : { status: ExecutionStatus.Completed, reason: LeadEndReason.TimeUp, why: MESSAGE.TimeUp };
+  if (lead.softDeadline - lead.clock.now() >= MIN_TURN_MS) return null;
+  // A time-up after the reviewer's no says what it found not done, in the report's `notDone`.
+  return { status: ExecutionStatus.Completed, reason: LeadEndReason.TimeUp, why: MESSAGE.TimeUp };
 }
 
 /** Whether the lead asked for a rewind or a rebuild that its turn's end never ran (the run paused first). */
@@ -384,7 +386,18 @@ function reportOf(lead: LeadRun, end: RunEnd): AnyRecord {
     executionStatus: end.status,
     endReason: end.reason,
     ...(end.why ? { stoppedBecause: end.why } : {}),
+    ...notDoneOfEnd(lead, end),
   };
+}
+
+/**
+ * What the reviewer's last no found not done, for a run that ended on the no's or on the time after
+ * one: in the report's own field, and as the summary the person reads on the run's card.
+ */
+function notDoneOfEnd(lead: LeadRun, end: RunEnd): { notDone?: string[]; summary?: string } {
+  const named = end.reason === LeadEndReason.NotDone || end.reason === LeadEndReason.TimeUp;
+  const notDone = named ? notDoneOf(lead.journal.finishTally) : [];
+  return notDone.length ? { notDone, summary: FINISH_REPORT.summaryNotDone(notDone) } : {};
 }
 
 /** The close: the work saved, Genex's run end, the sub-agents settled (their deliveries kept), the report and the journal. */

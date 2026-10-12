@@ -144,6 +144,20 @@ test("malformed params for a path-bearing method are refused with a clear error 
         { project: "pong", prompt: "go", worker: { id: "w1", title: "x", runId: 3 } },
         "worker.runId",
       ],
+      // A reviewer's run and the folder it reads are paths the host places: refused whole when malformed.
+      ["engine.delegate", { project: "pong", prompt: "go", reviewer: "run" }, "reviewer"],
+      [
+        "engine.delegate",
+        { project: "pong", prompt: "go", reviewer: { runId: "../x", reads: "/g" } },
+        "reviewer.runId",
+      ],
+      ["engine.delegate", { project: "pong", prompt: "go", reviewer: { runId: "a/b", reads: "/g" } }, "reviewer.runId"],
+      [
+        "engine.delegate",
+        { project: "pong", prompt: "go", reviewer: { runId: "r", reads: "x".repeat(1025) } },
+        "reviewer.reads",
+      ],
+      ["engine.delegate", { project: "pong", prompt: "go", reviewer: { runId: "r" } }, "reviewer.reads"],
       ["plugins.workerTypes", { project: 7 }, "project"],
       ["plugins.workerTypes", {}, "project"],
       ["jobs.list", { project: ["/"] }, "project"],

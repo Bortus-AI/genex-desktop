@@ -706,11 +706,13 @@ describe("a project's own shape", () => {
     await writeFile(path.join(dir, "dist", "bundle.js"), "Math.random()");
     const ok = await games.validateAt(dir);
     assert.deepEqual(ok.problems, []);
+    assert.deepEqual(ok.missing, [], "a healthy folder misses nothing");
     assert.equal(ok.contract, "loaded", "the page reaches installStudio, so a judge can score it");
     assert.ok(!ok.warnings.some((w) => w.includes("dist/")), "build output is not judged as source");
     await rm(path.join(dir, "src", "main.ts"));
     const missing = await games.validateAt(dir);
     assert.ok(missing.problems.includes("src/main.ts is missing"), missing.problems.join("; "));
+    assert.deepEqual(missing.missing, ["src/main.ts"], "the typed list a run's refusal reads");
   });
 
   it("names the real entry in the ownership rule — both copies of it agree", () => {
@@ -1798,13 +1800,23 @@ describe("the Open Game sheet", () => {
     assert.match(refusal!, /scenes and scripts/);
     assert.equal(kindChip(project.shape.kind), "engine export", "the stage header says the same thing");
 
-    // A page that cannot load still refuses, naming what is missing; a missing contract does not
-    // — installing it is the base builder's first job.
+    // A page that cannot load still refuses, naming what is missing (by the typed list
+    // `game.validate` answers); a missing contract does not — installing it is the base builder's
+    // first job.
     const own = await games.adopt(
       await viteFolder(path.join(base, "run-vite")).then(() => path.join(base, "run-vite")),
     );
-    assert.equal(loopRunRefusal(own, [NO_CONTRACT_PROBLEM]), null);
-    assert.match(loopRunRefusal(own, ["src/main.ts is missing"])!, /is not ready for a run: src\/main\.ts is missing/);
+    // The validator's own answers, handed on as a launch hands them: no contract is never missing.
+    await writeFile(path.join(own.dir, "src", "main.ts"), `const scene = {};\nexport { scene };\n`);
+    const noContract = await games.validateAt(own.dir);
+    assert.ok(noContract.problems.includes(NO_CONTRACT_PROBLEM), noContract.problems.join("; "));
+    assert.equal(loopRunRefusal(own, noContract.problems, noContract.missing), null);
+    await rm(path.join(own.dir, "src", "main.ts"));
+    const broken = await games.validateAt(own.dir);
+    assert.match(
+      loopRunRefusal(own, broken.problems, broken.missing)!,
+      /is not ready for a run: src\/main\.ts is missing/,
+    );
     assert.match(openedWords(own.title, own.shape), /keeps it as it is/);
   });
 });

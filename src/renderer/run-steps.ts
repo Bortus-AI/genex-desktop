@@ -19,6 +19,7 @@ import { GameEngine } from "../shared/game-engine.ts";
 import { comparedWithNothing, ExecutionStatus, type RunWorked, VerdictPass, workedMs } from "../shared/run-state.ts";
 import { type RunSummary, UNKNOWN_EXECUTION } from "../shared/run-summary.ts";
 import { plural } from "../shared/skill-words.ts";
+import { LoopProfile } from "../shared/project-facts.ts";
 import { WorkerEnd, WorkerVerdict } from "../shared/workers.ts";
 import {
   boundsOf,
@@ -40,6 +41,7 @@ import {
 import type { WorkerInfo } from "./run-graph-workers.ts";
 import {
   GAME_ENGINE_WORDS,
+  IN_PLACE_WORDS,
   MINUTES_PER_HOUR,
   ranToItsEnd,
   savedByLead,
@@ -719,6 +721,8 @@ function turnResultStatus(graph: RunGraph): ResultStatus {
 /** What the result node and its card both say about the build you would play. */
 export function resultStatus(graph: RunGraph, summary: RunSummary | null): ResultStatus {
   if (graph.turn) return turnResultStatus(graph);
+  if (summary?.landed === true && summary.profile === LoopProfile.Open)
+    return { word: IN_PLACE_WORDS.kept, tone: Tone.Green, state: StepState.InBuild };
   if (summary?.landed === true) return { word: "Live in your game", tone: Tone.Green, state: StepState.InBuild };
   if (graph.active) return runningResultStatus(graph, summary);
   if (hasNewBuild(graph, summary)) return { word: "Not live yet", tone: Tone.Orange, state: StepState.Kept };
@@ -972,7 +976,7 @@ function finishedLine(summary: RunSummary | null, rows: PartRow[], facts: LineFa
       .join(" · ");
     return {
       tone: clean ? Tone.Green : Tone.Orange,
-      strong: timed("Live in your game", facts.worked),
+      strong: timed(summary.profile === LoopProfile.Open ? IN_PLACE_WORDS.kept : "Live in your game", facts.worked),
       rest: rest || "finished",
     };
   }

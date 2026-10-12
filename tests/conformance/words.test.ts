@@ -12,6 +12,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import { MAX_FINISH_REJECTIONS } from "../../src/shared/finish-check.ts";
 import {
   autopilotStartWords,
   backgroundCount,
@@ -188,6 +189,31 @@ describe("the lead, its workers and the finish check on the graph", () => {
   });
 });
 
+describe("the finish check's words", () => {
+  it("the finish check words take the shared cap and say reviewer", () => {
+    const cap = String(MAX_FINISH_REJECTIONS);
+    assert.equal(FINISH_CHECK_WORDS.stoppedWord, `${cap} no's in a row`);
+    assert.equal(FINISH_CHECK_WORDS.roundWord(2, 1), `2 reasons · round 1 of ${cap}`);
+    assert.equal(FINISH_CHECK_WORDS.roundWord(1, 2), `1 reason · round 2 of ${cap}`);
+    assert.equal(
+      FINISH_CHECK_WORDS.chat.rejected(1, "No finish line."),
+      `The reviewer sent the work back (1 of ${cap}): No finish line.`,
+    );
+    assert.match(FINISH_CHECK_WORDS.moreNos(1), /^Two more no's in a row/);
+    assert.match(FINISH_CHECK_WORDS.moreNos(MAX_FINISH_REJECTIONS - 1), /^One more no in a row/);
+    for (const text of [
+      FINISH_CHECK_WORDS.doneWord,
+      FINISH_CHECK_WORDS.unanswered,
+      FINISH_CHECK_WORDS.chat.checking,
+      FINISH_CHECK_WORDS.chat.accepted,
+      FINISH_CHECK_WORDS.chat.unanswered("its session ended"),
+      FINISH_CHECK_WORDS.chat.stopped("No timer."),
+    ])
+      assert.match(text, /\breviewer\b/i, text);
+    assert.doesNotMatch(FINISH_CHECK_WORDS.chat.stopped("No timer."), /\b3\b/, "no literal count in the stop line");
+  });
+});
+
 describe("the lead's card", () => {
   it("in a tree, the lead at work never says nothing works, and names workers; a graph that is no tree keeps its words", () => {
     const inTree = leadAbout(LeadFace.Working, true);
@@ -219,6 +245,14 @@ describe("statusWords", () => {
     assert.deepEqual(statusWords(`${run} · director finishing`), {
       line: "The lead is finishing the build",
       short: "Finishing",
+    }); // A Loop led in place has no workers to watch by default: its lead builds in the project itself.
+    assert.deepEqual(statusWords(`${run} · lead in place`), {
+      line: "The lead is building in your project",
+      short: "The lead",
+    });
+    assert.deepEqual(statusWords(`${run} · lead in place finishing`), {
+      line: "A reviewer is checking the lead's finish",
+      short: "Checking",
     });
   });
 
@@ -346,6 +380,19 @@ describe("how a run reads when it is over", () => {
       loopRunWords({ rounds: 2, landed: false, stoppedBecause: "the director failed on run_fixture123456" }).because,
       RUN_ID,
     );
+  });
+
+  it("a reason that is already a sentence ends with one full stop", () => {
+    const reason = "The finish line triggers, but the lap timer still resets when the car respawns.";
+    for (const words of [
+      loopRunWords({ rounds: 0, landed: false, hasBuild: false, stoppedBecause: reason }),
+      loopRunWords({ rounds: 0, landed: false, hasBuild: true, stoppedBecause: reason }),
+      loopRunWords({ rounds: 0, landed: null, stoppedBecause: reason }),
+    ]) {
+      assert.match(words.because, /respawns\.$/);
+      assert.doesNotMatch(words.because, /\.\.$/);
+    }
+    assert.match(loopRunWords({ rounds: 0, landed: null, stoppedBecause: "Is it done?" }).because, /done\?$/);
   });
 
   it("promises a playable build only when there is one", () => {
@@ -492,6 +539,18 @@ describe("the morning card", () => {
     const older = loopRun({ landed: true, hasBuild: false, stoppedBecause: "the director finished the run" });
     // Flipped: no time-of-day words in the app's copy.
     assert.equal(older.because, "This build is your game now — open Live to play it.");
+  });
+
+  it("a finished Loop that kept its work in place never says open Live", () => {
+    for (const over of [
+      { landed: true },
+      { landed: true, landingLine: "made live, a judge preferred it" },
+      { landed: true, stoppedBecause: "stopped by the user" },
+    ]) {
+      const words = loopRun({ hasBuild: false, ...over, profile: "open" });
+      assert.doesNotMatch(`${words.headline} ${words.because}`, /open Live/, JSON.stringify(over));
+      assert.match(`${words.headline} ${words.because}`, /kept in your project/i, JSON.stringify(over));
+    }
   });
 
   it("offers the build itself when the run merged one but did not make it live", () => {

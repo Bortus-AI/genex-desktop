@@ -23,6 +23,7 @@ import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { gitFile } from "../helpers/git.ts";
+import { personAllowsLocalTools } from "../helpers/plugins.ts";
 
 const PLUGIN = "porter";
 const KIND = "garden-project";
@@ -97,6 +98,8 @@ async function porterCore(): Promise<{
   const calls = path.join(await mkdtemp(path.join(os.tmpdir(), "studio-porter-calls-")), "calls.log");
   await lite.core.plugins.installLocal(await porterPackage(calls), PluginSourceKind.Local, []);
   await lite.core.plugins.setEnabled(PLUGIN, true);
+  // The person allows its tools: these cases are about the kind change, not the card.
+  personAllowsLocalTools(lite.core.plugins);
   const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
   const invoke = async (project: string, name = MAKE) => {
     const threadId = await lite.core.createGameThread(project);

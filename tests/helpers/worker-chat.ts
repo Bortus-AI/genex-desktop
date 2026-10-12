@@ -34,6 +34,8 @@ export const POLL_TRIES = 200;
 
 /** What a fake engine does while its turn runs. */
 export type During = (request: DelegateRequest) => Promise<void>;
+/** What a fake engine answers a request with, when the test scripts it; undefined for the plain answer. */
+export type Reply = (request: DelegateRequest) => DelegateResult | undefined;
 /** The substrate table the harness calls, by method name. */
 export type Api = Record<string, (params: unknown) => Promise<unknown>>;
 /** What a seat's asks are, as a session asks through them. */
@@ -77,6 +79,7 @@ function fakeEngine(
   seen: DelegateRequest[],
   saw: Changes,
   during: () => During,
+  reply: () => Reply,
 ) {
   return {
     ...engine,
@@ -90,7 +93,8 @@ function fakeEngine(
       seen.push(request);
       saw.notify();
       await during()(request);
-      return { ok: true, engine: engine.id, sessionId: `s${seen.length}`, turns: 1, usage: {}, summary: "" };
+      const plain = { ok: true, engine: engine.id, sessionId: `s${seen.length}`, turns: 1, usage: {}, summary: "" };
+      return reply()(request) ?? plain;
     },
   } as never;
 }
@@ -148,13 +152,22 @@ export async function workerChat(
   const seen: DelegateRequest[] = [];
   const saw = new Changes();
   let during: During = async () => {};
-  core.engines.register(
-    fakeEngine({ id: CLAUDE, kind: "delegated", permissionPrompts: true }, seen, saw, () => during),
-  );
-  core.engines.register(
-    fakeEngine({ id: CODEX, kind: "delegated", permissionPrompts: false }, seen, saw, () => during),
-  );
-  core.engines.register(fakeEngine({ id: LOCAL, kind: "direct", permissionPrompts: false }, seen, saw, () => during));
+  let reply: Reply = () => undefined;
+  const engines = [
+    { id: CLAUDE, kind: "delegated", permissionPrompts: true },
+    { id: CODEX, kind: "delegated", permissionPrompts: false },
+    { id: LOCAL, kind: "direct", permissionPrompts: false },
+  ] as const;
+  for (const engine of engines)
+    core.engines.register(
+      fakeEngine(
+        engine,
+        seen,
+        saw,
+        () => during,
+        () => reply,
+      ),
+    );
   const project = await core.games.scaffold("worker-seats");
   const other = await core.games.scaffold("worker-seats-other");
   const game = project.name;
@@ -270,6 +283,10 @@ export async function workerChat(
     nextCard,
     whileRunning: (does: During) => {
       during = does;
+    },
+    /** What the engines answer from now on (a reviewer's verdict, say); undefined keeps the plain answer. */
+    answerWith: (answers: Reply) => {
+      reply = answers;
     },
   };
 }

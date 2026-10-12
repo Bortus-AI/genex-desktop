@@ -14,10 +14,10 @@
  * included, wait for "the person" until the lock's wait runs out; and the person's edits outside
  * play are not seen at all.
  */
-import { lstat, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { atomicWriteJson, isJsonObject } from "../../substrate/fsx.ts";
+import { atomicWriteJson, isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
 
 /** The marker's name in the connector's folder. */
 export const AGENT_PLAY_FILE = "agent-play.json";
@@ -70,18 +70,27 @@ function parsed(text: string): unknown {
 }
 
 /**
+ * When the marker says the agent's play started, or null when it says nothing Genex believes: read
+ * only as a plain small file, never through a link and never blocking on a pipe.
+ */
+async function markerStamp(file: string): Promise<number | null> {
+  const marker = await readRegularFile(file, MAX_MARKER_BYTES).then(
+    (bytes) => parsed(bytes.toString("utf8")),
+    () => null,
+  );
+  const startedAt = isJsonObject(marker) ? marker.startedAt : undefined;
+  return typeof startedAt === "number" && Number.isFinite(startedAt) ? startedAt : null;
+}
+
+/**
  * Whether a play the agent started runs for `game` now: its connector's marker is a plain file,
  * started at most {@link AGENT_PLAY_MAX_MS} before `now` and not after it.
  */
 export async function agentPlaying(storage: string, game: string, now: number): Promise<boolean> {
   const folder = agentPlayFolder(storage, game);
   if (!folder) return false;
-  const file = path.join(folder, AGENT_PLAY_FILE);
-  const info = await lstat(file).catch(() => null);
-  if (!info?.isFile() || info.size > MAX_MARKER_BYTES) return false;
-  const marker = await readFile(file, "utf8").then(parsed, () => null);
-  const startedAt = isJsonObject(marker) ? marker.startedAt : undefined;
-  if (typeof startedAt !== "number" || !Number.isFinite(startedAt)) return false;
+  const startedAt = await markerStamp(path.join(folder, AGENT_PLAY_FILE));
+  if (startedAt === null) return false;
   const age = now - startedAt;
   return age >= 0 && age <= AGENT_PLAY_MAX_MS;
 }
@@ -95,8 +104,8 @@ export async function forgetAgentPlay(storage: string, game: string, seenAt: num
   const folder = agentPlayFolder(storage, game);
   if (!folder) return;
   const file = path.join(folder, AGENT_PLAY_FILE);
-  const marker = await readFile(file, "utf8").then(parsed, () => null);
-  const startedAt = isJsonObject(marker) ? marker.startedAt : undefined;
-  const madeLater = typeof startedAt === "number" && startedAt > seenAt;
+  const startedAt = await markerStamp(file);
+  const madeLater = startedAt !== null && startedAt > seenAt;
+  // `rm` without `recursive` removes a link itself, never what it points at, and no folder.
   if (!madeLater) await rm(file, { force: true }).catch(() => undefined);
 }

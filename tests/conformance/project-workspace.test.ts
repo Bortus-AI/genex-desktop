@@ -198,7 +198,6 @@ describe("the registry's sections", () => {
 
 /** Today's folders, which every game keeps. */
 const DEFAULTS: AssetFolder[] = [{ folder: "assets" }, { folder: "public/assets" }];
-const UNREAL = ["uasset", "umap"];
 const BLENDER = [...new Set(["blend", ...MEDIA_FORMATS])];
 const toy: PluginWorkspace = {
   pluginId: TOY_PLUGIN_ID,
@@ -225,10 +224,10 @@ const ASSET_FOLDER_CASES: Array<[string, FactRef[], PluginWorkspace[], AssetFold
     [...DEFAULTS, { folder: "props", formats: BLENDER }],
   ],
   [
-    "an Unreal project and its own plugin share one Content folder",
+    "an Unreal project's own files never fill Assets: only the folders agents bring media into",
     [fact(CoreFact.UnrealProject, ROOT), fact(CoreFact.UnrealPlugin, ROOT)],
     [],
-    [...DEFAULTS, { folder: "Content", formats: UNREAL }],
+    DEFAULTS,
   ],
   [
     "a Unity project in game/",
@@ -272,8 +271,8 @@ describe("where a project's assets live", () => {
       ["assets/a.png", true],
       ["assets/notes.txt", true],
       ["public/assets/x.glb", true],
-      ["Content/Hero.uasset", true],
-      ["Content/Maps/Main.umap", true],
+      ["Content/Hero.uasset", false],
+      ["Content/Maps/Main.umap", false],
       ["Content/notes.txt", false],
       ["Saved/x.uasset", false],
       ["props/crate.blend", true],

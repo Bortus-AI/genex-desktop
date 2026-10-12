@@ -34,32 +34,40 @@ function offerRank(kind: PluginKindOffer): number {
   return kind.asksReady === true ? 1 : 0;
 }
 
+/** The card's name for a kind: its scaffold's label, else its plugin's name. */
+const kindName = (kind: PluginKindOffer): string =>
+  typeof kind.label === "string" && kind.label.trim() ? kind.label.trim() : kind.name;
+
 /**
- * The kinds the question card offers, one per plugin: the one whose plugin answered its readiness
- * or, when the answer was late, whose tool asks it (its new-game tool), else the plugin's first.
+ * The kinds the question card offers: one per scaffold the host lists (each its own kind), and for a
+ * plugin with no scaffolds one only: the one whose plugin answered its readiness or, when the answer
+ * was late, whose tool asks it (its new-game tool), else the plugin's first.
  */
 function offeredKinds(kinds: readonly PluginKindOffer[]): PluginKindOffer[] {
-  const byPlugin = new Map<string, PluginKindOffer>();
+  const byKind = new Map<string, PluginKindOffer>();
   for (const kind of kinds) {
-    const known = byPlugin.get(kind.plugin);
-    if (!known || offerRank(kind) > offerRank(known)) byPlugin.set(kind.plugin, kind);
+    const key = typeof kind.scaffold === "string" ? `${kind.plugin}/${kind.scaffold}` : kind.plugin;
+    const known = byKind.get(key);
+    if (!known || offerRank(kind) > offerRank(known)) byKind.set(key, kind);
   }
-  return [...byPlugin.values()];
+  return [...byKind.values()];
 }
 
 /**
  * How the card offers one kind: by its plugin's own words when it gave a readiness note, else by
  * its kind tool; a kind its plugin says isn't ready yet is never made: the person finishes its setup
- * from the plugin's button first (one rule for every plugin).
+ * from the plugin's button first (one rule for every plugin). A plugin's readiness words describe
+ * its first kind, so a later kind of the same plugin (`laterKind`) is offered by its own tool.
  */
-function kindLine(engine: string | undefined, kind: PluginKindOffer): string {
+function kindLine(engine: string | undefined, kind: PluginKindOffer, laterKind = false): string {
   const tool = toolCall(engine, kind.tool);
-  const made = `When the answer (or the request) is ${kind.name}, call ${tool}: it makes the game's ${kind.name} project in this folder; then build it with that plugin's tools.`;
-  const note = typeof kind.note === "string" && kind.note.trim() ? kind.note.trim() : null;
+  const name = kindName(kind);
+  const made = `When the answer (or the request) is ${name}, call ${tool}: it makes the game's ${name} project in this folder; then build it with that plugin's tools.`;
+  const note = !laterKind && typeof kind.note === "string" && kind.note.trim() ? kind.note.trim() : null;
   if (kind.ready === false)
     return [
       note,
-      `If the user picks ${kind.name}, don't call ${tool}: tell them to finish its setup from the ${kind.name} button above the game and send a message once it's done.`,
+      `If the user picks ${name}, don't call ${tool}: tell them to finish its setup from the ${kind.name} button above the game and send a message once it's done.`,
     ]
       .filter(Boolean)
       .join(" ");
@@ -70,7 +78,8 @@ function kindLine(engine: string | undefined, kind: PluginKindOffer): string {
 
 /**
  * The first rule of a new game's brief while engine plugins offer kinds: which kind it builds is the
- * user's one question before the first build, unless the ask already names it. The web answer starts
+ * user's one question before the first build, unless the ask already names it; each kind is named
+ * by its scaffold's label when its plugin declares scaffolds ("Unreal game", "Unreal plugin"). The web answer starts
  * Genex's web starter (`start_web_game`); each kind on offer (`kinds`, from the host, each with its
  * plugin's readiness) through its own kind tool, as its line says. No kind on offer: no question
  * (an empty rule). `_unreal` is read no more: kept so an older caller's call still fits.
@@ -83,11 +92,12 @@ export function engineChoiceRule(
   const offered = offeredKinds(kinds ?? []);
   if (offered.length === 0) return "";
   const ask = toolCall(engine, askUser.name);
-  const names = offered.map((kind) => `"${kind.name}"`);
+  const names = offered.map((kind) => `"${kindName(kind)}"`);
   const web = `When it is the web, call ${toolCall(engine, ProjectTool.StartWebGame)} first, then build it here on its starter as the rules below say.`;
+  const later = (kind: PluginKindOffer, at: number) => offered.findIndex((first) => first.plugin === kind.plugin) < at;
   return [
     `FIRST, THE ENGINE: the user has engine plugins on, so this new game can be built for the web, here, or with ${names.join(" or ")}. Unless the request already names one, ask the user that one question with ${ask} before you build anything, with the options "Web: plays right here in Genex" and ${names.join(", ")} (each worded as its line below says), and end your reply.`,
-    ...offered.map((kind) => kindLine(engine, kind)),
+    ...offered.map((kind, at) => kindLine(engine, kind, later(kind, at))),
     web,
   ].join(" ");
 }

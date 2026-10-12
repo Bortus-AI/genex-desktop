@@ -16,15 +16,23 @@ const TREE_ID = /^[0-9a-f]{40,64}$/;
 let fingerprints = 0;
 
 /**
- * The command line only the pool runs. The throwaway index starts as a copy of the game's own, so
- * only files changed since are read again; it is removed whatever happens.
+ * How old, in minutes, a throwaway index (or its lock) is once no fingerprint can still be writing
+ * it: past the longest fingerprint's time limit (`GIT_TIMEOUT_MS.slow`).
+ */
+export const LEFTOVER_MINUTES = 3;
+
+/**
+ * The command line only the pool runs. A fingerprint cut off by its time limit is killed with its
+ * shell and leaves its index behind: what earlier ones left is cleared first, never an index young
+ * enough that another fingerprint may still write it. The throwaway index starts as a copy of the
+ * game's own, so only files changed since are read again; it is removed whatever happens.
  */
 const CHANGE_GIT = {
   workingTree: (index: string): string =>
-    `idx="$(git rev-parse --git-path ${index})" && rm -f "$idx" && { cp "$(git rev-parse --git-path index)" "$idx" 2>/dev/null; GIT_INDEX_FILE="$idx" git add -A && GIT_INDEX_FILE="$idx" git write-tree; }; code=$?; rm -f "$idx"; exit $code`,
+    `dir="$(git rev-parse --git-dir)" && find "$dir" -maxdepth 1 -name 'genex-fingerprint-*' -mmin +${LEFTOVER_MINUTES} -exec rm -f {} + 2>/dev/null; idx="$(git rev-parse --git-path ${index})" && rm -f "$idx" && { cp "$(git rev-parse --git-path index)" "$idx" 2>/dev/null; GIT_INDEX_FILE="$idx" git add -A && GIT_INDEX_FILE="$idx" git write-tree; }; code=$?; rm -f "$idx"; exit $code`,
 } as const;
 
-/** The game folder's working tree as one id, or null when git couldn't say. */
+/** The game folder's working tree as one id, or null when git couldn't say (or not within its time limit). */
 export async function gameFingerprint(ctx: HarnessCtx, project: string): Promise<string | null> {
   fingerprints += 1;
   const index = `genex-fingerprint-${process.pid}-${fingerprints}.index`;

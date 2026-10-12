@@ -1,5 +1,7 @@
 /** What Genex's own project tools say to a model: their descriptions and their answers. Model-facing text. */
 import type { LiveToolSpec } from "../../shared/engine-requests.ts";
+import { GENEX_PLUGIN_AUTHOR_SKILL, GENEX_PLUGIN_ID } from "../../shared/genex.ts";
+import { PLUGIN_SKILL_TOOL } from "../../shared/plugins.ts";
 import { FindNext, ProjectTool } from "../../shared/project-tools.ts";
 
 /** `start_web_game`: the web starter, written into a folder with no kind yet. Takes no parameters. */
@@ -53,12 +55,53 @@ export const PLUGINS_SUGGEST_TOOL: LiveToolSpec = {
   },
 };
 
-/** The note `plugins_find` answers with, by what it says to do next. */
+/** What `plugins_find` says when nothing fits, before it says where the guide to writing one is. */
+const NONE_FITS = `${GENEX_PLUGINS} None fits. You may offer to write one (a local Genex plugin the person loads and turns on in Plugins), or go on with your own tools (the project's files and the shell) once the person says so.`;
+
+/** The note `plugins_find` answers with, by what it says to do next (with nothing found, while Genex Tools is on). */
 export const PLUGINS_FIND_NOTE = {
   [FindNext.Suggest]: `${GENEX_PLUGINS} To offer one that is off or not installed, call plugins_suggest with its id and why it helps, then end your reply: only the person turns a plugin on.`,
   [FindNext.Use]: `${GENEX_PLUGINS} The ones found are on already: use their tools; those for another kind of project arrive once the project is that kind.`,
-  [FindNext.WritePlugin]: `${GENEX_PLUGINS} None fits. You may offer to write one (a local Genex plugin the person loads and turns on in Plugins), or go on with your own tools (the project's files and the shell) once the person says so.`,
+  [FindNext.WritePlugin]: `${NONE_FITS} To write one, read ${GENEX_PLUGIN_ID}__${PLUGIN_SKILL_TOOL} ${JSON.stringify({ name: GENEX_PLUGIN_AUTHOR_SKILL })}, write the plugin in this project, check it with ${ProjectTool.PluginCheck}, and tell the person how to load it.`,
 } as const satisfies Record<FindNext, string>;
+
+/** `plugins_find`'s write-a-plugin note for a session with no `plugin_check` (a Loop's lead or worker, the local model): the chat checks it. */
+export const PLUGINS_FIND_WRITE_UNCHECKED = `${NONE_FITS} To write one, read ${GENEX_PLUGIN_ID}__${PLUGIN_SKILL_TOOL} ${JSON.stringify({ name: GENEX_PLUGIN_AUTHOR_SKILL })} and write the plugin in this project. You can't check it yourself: tell the person it is ready, and that the chat checks it before they load it.`;
+
+/** `plugins_find`'s note with nothing found while Genex Tools, which carries the guide, is off. */
+export const PLUGINS_FIND_GUIDE_OFF = `${NONE_FITS} The guide to writing one comes with Genex Tools, which is off: to write one, first suggest turning it on with plugins_suggest ${JSON.stringify({ plugin: GENEX_PLUGIN_ID })}.`;
+
+/** `plugin_check`: reads a folder in the project and installs nothing, so it runs in Plan mode too. */
+export const PLUGIN_CHECK_TOOL: LiveToolSpec = {
+  name: ProjectTool.PluginCheck,
+  description:
+    "Check a Genex plugin you wrote in this project before the person loads it: Genex reads its plugin.json, its files and its code as an install would, and installs nothing. It answers the plugin's id, tools, skills and sections and what the install-time scan reads in its code, or the first problem to fix. Only the person loads a plugin and turns it on.",
+  parameters: {
+    type: "object",
+    properties: {
+      folder: {
+        type: "string",
+        description: "The plugin's folder, relative to the project, e.g. genex-plugins/sketch.",
+      },
+    },
+    required: ["folder"],
+  },
+};
+
+/** What `plugin_check` answers: the next step once a folder checks out, and each problem. */
+export const PLUGIN_CHECK_ANSWER = {
+  next: (folder: string) =>
+    `It checks out. Tell the person, and end your reply there: "Plugins → Add → Load local plugin…, choose ${folder}. It starts off; turn it on there. It runs with your access; each of its tools asks before an agent runs it, and its own steps at Genex's moments don't ask."`,
+  /** The next step for a folder of a local plugin the person has on: loading it again keeps it on. */
+  nextWhileOn: (folder: string) =>
+    `It checks out. Tell the person, and end your reply there: "Plugins → Add → Load local plugin…, choose ${folder}. It is on, so it stays on and its new code runs at once. It runs with your access; each of its tools asks again before an agent runs it, and its own steps at Genex's moments don't ask."`,
+  badFolder:
+    "Give folder as a path inside this project, relative to it (e.g. genex-plugins/sketch): no leading /, no .. and no backslash.",
+  outside: (folder: string) => `${folder} is not a folder inside this project.`,
+  notFolder: (folder: string) => `${folder} is not a folder.`,
+  noManifest: (folder: string) => `${folder} has no plugin.json at its top.`,
+  notJson: (folder: string) => `${folder}/plugin.json is not valid JSON.`,
+} as const;
 
 /** What `plugins_suggest` answers. */
 export const PLUGINS_SUGGEST_ANSWER = {

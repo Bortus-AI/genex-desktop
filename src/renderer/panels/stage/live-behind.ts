@@ -21,6 +21,7 @@ import {
 } from "../../stage.ts";
 import { type Notify, ToastTone } from "../../state/toasts.ts";
 import { problemWords, TOAST_WORDS } from "../../words.ts";
+import { webBuildShown } from "../../web-build-shown.ts";
 
 /** The run's build Live shows, as main says it (`live.behind` `shows`). */
 type ShownBuild = { head: string };
@@ -121,7 +122,9 @@ export function useLiveBehind(input: LiveBehindInput): {
       intoLive(
         () => window.studio.showBuild(project ?? "", head),
         () => {
-          if (asked) onView(StageView.Live);
+          if (!asked || !project) return;
+          webBuildShown(project);
+          onView(StageView.Live);
         },
         (err) => {
           failedHead.current = head;
@@ -176,13 +179,21 @@ export function useLiveBehind(input: LiveBehindInput): {
   behindRef.current = behind;
   const reload = useCallback(() => void apply(behindRef.current), [apply]);
 
-  const stage: StageWatch = { view: input.view, visible: input.visible, showEmpty: input.showEmpty };
+  const stage = stageWatchOf(input);
   useUnseenChanges(appliesUnseen(behind, stage) && !input.stopped ? behind : null, apply);
   useFirstBuild(firstBuildShows(offer, stage) ? (offer?.head ?? null) : null, failedHead, showMergedBuild);
 
   const showBuild = useCallback((head: string): Promise<void> => showMergedBuild(head, true), [showMergedBuild]);
   return { shownBuild, behind, showBuild, reload };
 }
+
+/** What of the input says whether someone watches the web game in Live. */
+const stageWatchOf = ({ view, visible, showEmpty, preview }: StageWatch): StageWatch => ({
+  view,
+  visible,
+  showEmpty,
+  preview,
+});
 
 /** Nobody is watching a game in Live: what waits goes in now, so Live is current when they come back. */
 function useUnseenChanges(unseen: LiveBehind | null, apply: (what: LiveBehind) => Promise<void>): void {

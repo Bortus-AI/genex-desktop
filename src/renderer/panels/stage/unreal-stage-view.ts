@@ -125,9 +125,14 @@ function runningView(status: UnrealStageStatus, name: string): StageView {
 
 /**
  * The card for the game's project `name` at `status`; before the plugin answers (or when it can't),
- * Open in Unreal as before, which the plugin refuses with its own reason when that is wrong.
+ * Open in Unreal as before, which the plugin refuses with its own reason when that is wrong. A game
+ * with no link to its Unreal project yet (`linked: false`) is told to choose it, not that it moved.
  */
-export function stageView(status: UnrealStageStatus | null, name: string): StageView {
+export function stageView(
+  status: UnrealStageStatus | null,
+  name: string,
+  { linked }: { linked: boolean } = { linked: true },
+): StageView {
   if (!status) return offers(UNREAL_WORDS.stageStatus, UNREAL_WORDS.open, StageAct.Open);
   const busy = busyView(status, name);
   if (busy) return busy;
@@ -135,7 +140,7 @@ export function stageView(status: UnrealStageStatus | null, name: string): Stage
     case UnrealStageStep.GetUnreal:
       return offers(WORDS.getUnreal, WORDS.getUnrealButton, StageAct.GetUnreal);
     case UnrealStageStep.Choose:
-      return offers(WORDS.choose(name), WORDS.panel, StageAct.Panel);
+      return offers(linked ? WORDS.choose(name) : WORDS.chooseFirst, WORDS.panel, StageAct.Panel);
     case UnrealStageStep.SetUp:
       return setUpView(status, name);
     case UnrealStageStep.Open:

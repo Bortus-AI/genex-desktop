@@ -26,7 +26,7 @@ import { durationCommission, goalCommission } from "./commission.ts";
 import { isResumeFailure } from "../chat-session.ts";
 import { fireHooks, HookEvent, type HookScope, runScope as runMoment } from "../hooks.ts";
 import { HOOK_PROMPTS } from "../hooks-prompts.ts";
-import { type HeldBack, turnsHeldWords } from "./held-words.ts";
+import { type HeldBack, heldTurnEnding, heldTurnResult, turnsHeldWords } from "./held-words.ts";
 import { whileTurnHeld } from "./turn-hold.ts";
 import { HostMethod } from "../host-methods.ts";
 import { jobEndLine } from "../jobs/prompts.ts";
@@ -61,6 +61,15 @@ import { resumeClosing, resumedHeading } from "./journal-prompts.ts";
 import { isReopened } from "./reopen.ts";
 import { reopenClosing, reopenedHeading } from "./reopen-prompts.ts";
 import { folderBusy } from "./lead-session.ts";
+import { noteTurnEnds, noteTurnOver } from "./turn-ends.ts";
+import { closeUnderWay } from "./close-latch.ts";
+import { activeWork, leadsOpenLoop, workAtHand } from "./open/active-work.ts";
+import { OPEN_TURN_MS } from "./open/contract.ts";
+import { openClosingOf, openDigestOf } from "./open/digest.ts";
+import { healthWatch } from "./open/health.ts";
+import { heardMidTurn, noteWorkerQuestions, watchOpenTurn } from "./open/news.ts";
+import { openTurnBegins } from "./open/between.ts";
+import { openWakeRules } from "./open/prompts.ts";
 import {
   carryOn,
   FRESH_LOG_LINES,
@@ -89,11 +98,12 @@ import {
   WrapCause,
 } from "./wake-schedule.ts";
 import { cutShortWake, midTurnUserSays } from "./live-prompts.ts";
+import { turnEndAtCap, keepRunClock, withCapWatch, withCapWords } from "./cap-lines.ts";
 import { artDirectionBlock, ART_SKIPPED, shipLookBlock } from "./art-direction-prompts.ts";
 import { workingGoal } from "../goal-prompts.ts";
 import { runScope } from "../scope.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
-import type { AnyRecord } from "../../types/harness.d.ts";
+import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
 import type { DelegateResult } from "../../types/host-api.d.ts";
 import type { ArtDirection, LastShip } from "./art-direction.ts";
 import type { RestoredWake } from "./journal.ts";
@@ -116,6 +126,9 @@ import type { TurnFacts, TurnVerdict, Wake, WakeReason, WakeView } from "./wake-
  */
 export const SERVES_LEAD = true;
 
+/** This part wakes an open Loop's lead too (a project that isn't a web game): a run reads it by namespace. */
+export const SERVES_OPEN_LOOP = true;
+
 /** A session limit is waited out at most this often a run. */
 export const MAX_LIMIT_WAITS = 2;
 /** …and only when it resets at least this long before the turn's deadline. */
@@ -128,7 +141,9 @@ export const WAKE_POLL_MS = SECOND_MS;
 export const MAX_FRESH_SESSIONS = 3;
 /**
  * A turn the host refused because another session holds the lead's lock (the paused run's last
- * turn, still settling under a Resume) is asked again after this wait, at most this many times.
+ * turn, still settling under a Resume) is asked again after this wait, at most this many times;
+ * an open Loop's lead, whose lock is the game folder the person's other chats share, waits within
+ * its working time instead (`waitsForFolder`).
  */
 export const BUSY_RETRY_MS = 15 * SECOND_MS;
 export const MAX_BUSY_RETRIES = 4;
@@ -145,6 +160,12 @@ const USER_WAKES: ReadonlySet<WakeReason> = new Set<WakeReason>([
   WakeCause.FinishRequested,
   NoteKind.UserToWorker,
 ]);
+
+/**
+ * An open Loop's lead going straight on with its own work (its turn's cap, a turn that worked): the
+ * hourly cap never holds that back, so a wake that carries it is never counted in the cap either.
+ */
+const SELF_CONTINUED: ReadonlySet<WakeReason> = new Set<WakeReason>([WakeCause.CarryOn, WakeCause.TurnCap]);
 
 /** The director's session as the run talks to it: one turn at a time, and the session id it resumes. */
 export interface DirectorTalk {
@@ -225,6 +246,10 @@ export interface WakeState {
   failed: Partial<DelegateResult> | null;
   /** When the run's job ends were last asked for (null: not yet), so the host is asked at most every `JOB_POLL_MS`. */
   jobsPolledAt: number | null;
+  /** When the turn under way reaches its own cap (an open Loop's), or null for a turn with none. */
+  turnCapAt?: number | null;
+  /** When the turn's session last returned, before anything ran between turns: its cap is judged by it. */
+  turnReturnedAt?: number | null;
 }
 
 /** How the loop ended: the last turn's answer, why the wrap-up started, and the turn that failed. */
@@ -286,9 +311,18 @@ function newWakeState(restored: RestoredWake = { idleAsked: false, wakesAt: [] }
   };
 }
 
-/** The run is over for the lead: it finished, the user stopped it, or it failed on its own. */
+/**
+ * The run is over for the lead: it finished, the user stopped it, or it failed on its own; or its
+ * close has started (a claim's close may outlast the lead's call), which the harness's own close joins;
+ * or, an open Loop, it pauses because the project's app couldn't be brought back.
+ */
 const loopRunOver = (loopRun: LoopRun): boolean =>
-  loopRun.state.finished || loopRun.ctx.cancelled === true || Boolean(loopRun.report.failure);
+  loopRun.state.finished ||
+  loopRun.ctx.cancelled === true ||
+  Boolean(loopRun.report.failure) ||
+  Boolean(loopRun.state.finish) ||
+  closeUnderWay(loopRun.state) ||
+  Boolean(loopRun.open?.halted);
 
 /** Is the user's window to read the plan still open? */
 const planWindowOpen = (state: LoopRunState, now: number): boolean =>
@@ -368,7 +402,9 @@ async function takeUntold(loopRun: LoopRun, wake: WakeState): Promise<string[]> 
  */
 async function firstPrompt(loopRun: LoopRun, wake: WakeState, brief: () => string, now: number): Promise<string> {
   const said = await tellUser(loopRun, wake);
-  const opening = [brief(), wakeRules({ heartbeatMinutes: minutes(HEARTBEAT_MS) })];
+  // An open Loop's lead has its own rules: it builds in place and may wait on a worker within a turn.
+  const rules = leadsOpenLoop(loopRun) ? openWakeRules : wakeRules;
+  const opening = [brief(), rules({ heartbeatMinutes: minutes(HEARTBEAT_MS) })];
   if (resumedFromJournal(loopRun)) return [...opening, resumedDigest(loopRun, wake, said, now)].join("\n\n");
   const closing = wake.wrapping ? closingFor(loopRun, wake, [], now) : "";
   return [...opening, said.length ? userSaysBlock(said) : "", closing].filter(Boolean).join("\n\n");
@@ -381,6 +417,10 @@ async function firstPrompt(loopRun: LoopRun, wake: WakeState, brief: () => strin
  */
 function resumedDigest(loopRun: LoopRun, wake: WakeState, userSays: string[], now: number): string {
   const happened = readUnread(loopRun);
+  if (leadsOpenLoop(loopRun)) {
+    const closing = closingFor(loopRun, wake, [], now);
+    return openDigestOf(loopRun, { now, reasons: [], userSays, happened, closing, resumed: true });
+  }
   const said = { now, reasons: [], userSays, finishNew: false, happened, closing: resumedClosing(loopRun, wake, now) };
   // The one digest that gives the workers from before the pause their full lines.
   const facts = digestFacts(loopRun, wake, said, { priorInFull: true });
@@ -412,14 +452,33 @@ async function turnFacts(
     ok: result?.ok === true,
     closed: loopRunOver(loopRun) || wake.wrapping,
     providerLost: Boolean(state.limit) || (await pauseOnLostSignIn(loopRun, now)),
-    running: runningWorkers().length,
+    // An open Loop's lead is busy while its pool's workers or the run's jobs run.
+    running: leadsOpenLoop(loopRun) ? await activeWork(loopRun, now) : runningWorkers().length,
     planWindowOpen: planWindowOpen(state, now),
     workersLimitPending: workersLimitPending(state, now),
     idleAsked: wake.idleAsked,
     workingTimeLeft: now < loopRun.softDeadline && !finishRequested,
     finishRequested,
     artDirectionOwed: artDirectionOwed(loopRun, wake),
+    capped: cutByItsCap(wake, result),
+    // An open Loop's lead builds by itself: a turn that did something is never idle.
+    worked: leadsOpenLoop(loopRun) && loopRun.open?.turnWorked === true,
+    // An ∞ open Loop ends on a reviewer's yes or its hours, never because its lead went quiet.
+    untilFinish: leadsOpenLoop(loopRun) && loopRun.run.budgets?.untilSatisfied === true,
   };
+}
+
+/**
+ * Whether the turn ended because it reached its own cap (an open Loop's turn): its session failed on
+ * its deadline, or returned once its cap's moment had passed (read when it returned, never after the
+ * work between turns). A turn the lead ended itself is never capped, nor one a plugin held back,
+ * which never ran.
+ */
+function cutByItsCap(wake: WakeState, result: Partial<DelegateResult>): boolean {
+  const cap = wake.turnCapAt ?? null;
+  if (cap === null || result?.ok === true || heldTurnEnding(result) !== null) return false;
+  const returnedAt = wake.turnReturnedAt ?? Number.NEGATIVE_INFINITY;
+  return returnedAt >= cap || result?.stopReason === StopReason.Deadline;
 }
 
 /** A goal build the art director has not looked at yet, on a run that has the art director. */
@@ -434,7 +493,8 @@ function artDirectionOwed(loopRun: LoopRun, wake: WakeState): boolean {
  * said, or once the wrap-up is due (the mark gives way to it) — or on a run without the art director.
  */
 function finishMarkView(loopRun: LoopRun, wake: WakeState, now: number): number | null {
-  if (wake.finishMarkSaid || !WakeCause.FinishMark) return null;
+  // An open Loop has no art director: no mark wakes its lead.
+  if (wake.finishMarkSaid || !WakeCause.FinishMark || leadsOpenLoop(loopRun)) return null;
   if (now >= loopRun.softDeadline) return null;
   if (wake.finishMarkDue) return now;
   const at = typeof loopRun.finishMarkAt === "function" ? loopRun.finishMarkAt() : null;
@@ -447,7 +507,7 @@ function finishMarkView(loopRun: LoopRun, wake: WakeState, now: number): number 
  * or never: in the wrap-up, or on a run without the art director's regular look.
  */
 function shipLookView(loopRun: LoopRun, wake: WakeState, now: number): number | null {
-  if (wake.wrapping || typeof loopRun.shipLookAt !== "function") return null;
+  if (wake.wrapping || typeof loopRun.shipLookAt !== "function" || leadsOpenLoop(loopRun)) return null;
   const finishMarkAt = finishMarkView(loopRun, wake, now);
   return loopRun.shipLookAt({ nextAtWorkedMs: wake.nextShipLookWorkedMs, now, finishMarkAt });
 }
@@ -512,11 +572,19 @@ async function collect(loopRun: LoopRun, wake: WakeState, now: number): Promise<
   noteShipLooks(loopRun, wake, now);
   await reviewProgress(loopRun, now);
   await watchJobs(loopRun, wake, now);
+  if (leadsOpenLoop(loopRun)) await collectOpen(loopRun, now);
   const untold = await inbox.steering(undefined, false, { onlyNew: true }).catch(() => []);
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
   wake.finishNew = !wake.finishSaid && (await inbox.finishing().catch(() => false));
   // Before the first worker there is no monitor to hand a worker's steer over.
   if (!state.monitor) await routeUserSteers().catch(() => {});
+}
+
+/** An open Loop's own reads while its lead rests: its work at hand, its workers' questions and its app's health. */
+async function collectOpen(loopRun: LoopRun, now: number): Promise<void> {
+  await activeWork(loopRun, now);
+  await noteWorkerQuestions(loopRun, now);
+  healthWatch(loopRun);
 }
 
 /** The plan window's closing, while it is open and no wake has said it. */
@@ -530,13 +598,15 @@ function wakeView(loopRun: LoopRun, wake: WakeState, now: number): WakeView {
   const { state } = loopRun;
   return {
     now,
-    // A worker the lead rejected wakes it no more (`worker_mark rejected`).
-    unread: loopRun.notesSince(loopRun.waitSeq).filter((entry) => !rejectedNews(loopRun, entry.text)),
+    // A worker the lead rejected wakes it no more (`worker_mark rejected`), nor news a turn already took.
+    unread: loopRun
+      .notesSince(loopRun.waitSeq)
+      .filter((entry) => !rejectedNews(loopRun, entry.text) && !heardMidTurn(loopRun, entry.seq)),
     asleepFromSeq: wake.asleepFromSeq,
     asleepSince: wake.asleepSince ?? now,
     userWaiting: wake.userWaiting,
     finishNew: wake.finishNew,
-    running: loopRun.runningWorkers().length,
+    running: leadsOpenLoop(loopRun) ? workAtHand(loopRun) : loopRun.runningWorkers().length,
     planWindowEndsAt: planWindowUnsaid(state, wake),
     // The wake that says it lifted clears it (`markSaid`), so it is said once.
     workersLimitLiftsAt: workersLimitLifts(state),
@@ -587,7 +657,10 @@ function readUnread(loopRun: LoopRun): string[] {
   const unread = loopRun.notesSince(loopRun.waitSeq);
   const last = unread.at(-1);
   if (last) loopRun.waitSeq = Math.max(loopRun.waitSeq, last.seq);
-  return unread.map((entry) => entry.text).filter((text) => !rejectedNews(loopRun, text));
+  return unread
+    .filter((entry) => !heardMidTurn(loopRun, entry.seq))
+    .map((entry) => entry.text)
+    .filter((text) => !rejectedNews(loopRun, text));
 }
 
 /** Record the wake: the cap's window, and every timer and request it says, so none is said twice. */
@@ -595,8 +668,9 @@ function markSaid(loopRun: LoopRun, wake: WakeState, reasons: readonly WakeReaso
   const { state } = loopRun;
   wake.wakes += 1;
   wake.lastWakeAt = now;
-  // The cap holds the run's news back, never the user: a wake that is theirs alone is not counted.
-  const capped = reasons.some((reason) => !USER_WAKES.has(reason));
+  // The cap holds the run's news back, never the user nor the lead's own work: a wake that is theirs alone is not counted.
+  const selfContinued = reasons.some((reason) => SELF_CONTINUED.has(reason));
+  const capped = !selfContinued && reasons.some((reason) => !USER_WAKES.has(reason));
   wake.wakesAt = [...wake.wakesAt.filter((at) => at > now - WAKE_WINDOW_MS), ...(capped ? [now] : [])];
   wake.idleDue = false;
   // Asked once: a run that went idle under a resting lead is asked here, not by `afterTurn`.
@@ -621,6 +695,9 @@ const isDirection = (loopRun: LoopRun): boolean => durationCommission(loopRun.ru
 
 /** How this wake's message ends: the wrap-up, the idle question, or carry on. */
 function closingFor(loopRun: LoopRun, wake: WakeState, reasons: readonly WakeReason[], now: number): string {
+  // An open Loop's lead has no integration head to land: its own wrap-up and question.
+  if (leadsOpenLoop(loopRun))
+    return openClosingOf(loopRun, { wrapping: wake.wrapping, wrapCause: wake.wrapCause ?? null, reasons, now });
   const { finalDeadline, run, state } = loopRun;
   if (wake.wrapping) {
     const wrapUp = wrapUpPrompt({
@@ -798,6 +875,7 @@ function userFirst(due: Wake): Wake {
 
 /** The message that wakes the lead: the user's words, the news, the run, the card and the closing. */
 async function wakePrompt(loopRun: LoopRun, wake: WakeState, woken: Wake, clock: WakeClock): Promise<string> {
+  if (leadsOpenLoop(loopRun)) return openWakePrompt(loopRun, wake, woken, clock);
   const due = userFirst(woken);
   // The art director looks before anything is read, so where its defects went is this wake's news.
   const art = await artFor(loopRun, wake, due.reasons, clock);
@@ -833,6 +911,30 @@ async function wakePrompt(loopRun: LoopRun, wake: WakeState, woken: Wake, clock:
     excludes: "user messages, attachments and provider-managed prior context",
   };
   // What the lead has now been told is heard: a restart during its turn does not tell it again.
+  await keepWake(loopRun, wake, now);
+  return prompt;
+}
+
+/**
+ * An open Loop's wake message (open/digest.ts): the person's words, the news no turn took, what Genex
+ * carried, its save points and the closing; the wake is recorded and journaled as the director's is.
+ */
+async function openWakePrompt(loopRun: LoopRun, wake: WakeState, due: Wake, clock: WakeClock): Promise<string> {
+  const now = clock.now();
+  // The person asked to finish while the lead rested: this message opens its last turn, in their words.
+  if (due.reasons.includes(WakeCause.FinishRequested) && !wake.wrapping) {
+    startWrapUp(loopRun, wake, WrapCause.Finish, now);
+    wake.wrapping = true;
+  }
+  const userSays = await tellUser(loopRun, wake);
+  const happened = readUnread(loopRun);
+  markSaid(loopRun, wake, due.reasons, now);
+  await loopRun.appendRun(RunEvent.DirectorContinued, {
+    minutesLeft: minutes(loopRun.softDeadline - now),
+    reasons: due.reasons,
+  });
+  const closing = closingFor(loopRun, wake, due.reasons, now);
+  const prompt = openDigestOf(loopRun, { now, reasons: due.reasons, userSays, happened, closing });
   await keepWake(loopRun, wake, now);
   return prompt;
 }
@@ -968,7 +1070,7 @@ async function pauseOnLostSignIn(loopRun: LoopRun, now: number): Promise<boolean
 
 /**
  * Did the lead's turn come back failed on the provider's outage (a 529, a dropped gateway) rather
- * than throw it? It is asked again on the outage ladder like a thrown one (`patientSession`).
+ * than throw it? It is asked again on the outage ladder like a thrown one (`patientAsk`).
  */
 function endedOnOutage(result: Partial<DelegateResult>): boolean {
   const failed = result?.ok === false && result.stopReason !== StopReason.Stopped;
@@ -1003,10 +1105,14 @@ function openFresh(
   turn: TurnAsk,
   { why, card }: { why: string; card: string },
 ): Promise<Partial<DelegateResult>> {
+  // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session.
+  const refused = openSessionRefused(loopRun);
+  if (refused) return Promise.resolve(refused);
+  const rules = leadsOpenLoop(loopRun) ? openWakeRules : wakeRules;
   const text = freshStart({
     why,
     brief: kit.brief(),
-    rules: wakeRules({ heartbeatMinutes: minutes(HEARTBEAT_MS) }),
+    rules: rules({ heartbeatMinutes: minutes(HEARTBEAT_MS) }),
     ...freshContext(loopRun),
     digest: turn.prompt,
     card,
@@ -1027,6 +1133,8 @@ async function freshSession(
   why: string,
 ): Promise<Partial<DelegateResult>> {
   const { talk, clock } = kit;
+  const refused = openSessionRefused(loopRun);
+  if (refused) return refused;
   if (wake.freshSessions >= MAX_FRESH_SESSIONS)
     return { ok: false, stopReason: StopReason.Error, errorText: `the lead's session was lost too often (${why})` };
   wake.freshSessions += 1;
@@ -1041,18 +1149,48 @@ async function freshSession(
 }
 
 /**
- * The lead's session asked this turn's message — and asked again, after a wait on the loop's clock,
- * while the host refuses it because another session holds its lock (`folderBusy`): that passes.
+ * Whether an open Loop's lead, refused because another chat's turn holds the game folder it leads
+ * in (`folderBusy`), waits once more: within its working time (the run's end for its wrap-up), never
+ * under a Stop or a pause Genex made. Its turn has not begun, so its cap starts again from when it may.
+ */
+async function waitsForFolder(loopRun: LoopRun, wake: WakeState, kit: TurnKit, turn: TurnAsk): Promise<boolean> {
+  const { clock } = kit;
+  const until = wake.wrapping ? loopRun.finalDeadline - WRAP_UP_MARGIN_MS : loopRun.softDeadline;
+  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open?.halted);
+  if (stopped() || clock.now() + BUSY_RETRY_MS >= until) return false;
+  await clock.sleep(BUSY_RETRY_MS);
+  // A Stop or a pause during the wait: the run's Stop freed the folder, and the next ask would be seated.
+  if (stopped()) return false;
+  turn.deadline = turnDeadline(loopRun, wake, clock.now());
+  noteTurnEnds(loopRun.state, turn.deadline, lastTurn(loopRun, wake, turn.deadline));
+  return true;
+}
+
+/** Whether a lead the host refused because another session holds its lock (not an open Loop's) asks again: `MAX_BUSY_RETRIES` times. */
+async function asksAgainWhenFree(loopRun: LoopRun, kit: TurnKit, tries: number): Promise<boolean> {
+  if (tries >= MAX_BUSY_RETRIES || loopRun.ctx.cancelled) return false;
+  await kit.clock.sleep(BUSY_RETRY_MS);
+  return true;
+}
+
+/**
+ * The lead's session asked this turn's message — and, but for an open Loop's lead, asked again after
+ * a wait on the loop's clock while the host refuses it because another session holds its lock
+ * (`folderBusy`): that passes. An open Loop's lead waits for its folder outside the outage ladder
+ * (`patientSession`).
  */
 async function askSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
   const { talk, clock } = kit;
   for (let tries = 0; ; tries += 1) {
+    // An open Loop Genex paused (its app couldn't be brought back), or one the person stopped, opens no new session: a retry included.
+    const refused = openSessionRefused(loopRun);
+    if (refused) return refused;
     let result: Partial<DelegateResult>;
     try {
       result = await talk.session(turn.prompt, talk.sessionId, turn.deadline - clock.now());
     } catch (err: any) {
-      if (!folderBusy(err) || tries >= MAX_BUSY_RETRIES || loopRun.ctx.cancelled) throw err;
-      await clock.sleep(BUSY_RETRY_MS);
+      const retries = folderBusy(err) && !leadsOpenLoop(loopRun);
+      if (!retries || !(await asksAgainWhenFree(loopRun, kit, tries))) throw err;
       continue;
     }
     if (!endedOnOutage(result)) return result;
@@ -1061,21 +1199,69 @@ async function askSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promis
 }
 
 /**
- * The lead's session asked, with a provider outage waited out on the run's outage ladder within
- * the turn's deadline: an overloaded gateway on one wake used to end the whole run —
- * workers stopped, head landed, run reported done. What the ladder cannot outlast still fails.
+ * The run's ctx as the outage ladder reads it: an open Loop's wait also ends once Genex pauses the
+ * Loop (`open.halted`, its app couldn't be brought back), never after the rest of that wait. A web
+ * Loop's ladder reads the run's ctx as it always did.
  */
-function patientSession(loopRun: LoopRun, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
-  return withProviderPatience(loopRun.ctx, () => askSession(loopRun, kit, turn), {
-    deadline: turn.deadline,
+function patienceCtx(loopRun: LoopRun): HarnessCtx {
+  const open = loopRun.open;
+  if (!open || !leadsOpenLoop(loopRun)) return loopRun.ctx;
+  const ctx = loopRun.ctx;
+  return Object.create(ctx, {
+    cancelled: { get: () => ctx.cancelled === true || Boolean(open.halted) },
+  }) as HarnessCtx;
+}
+
+/**
+ * The lead's session asked, with a provider outage waited out on the run's outage ladder within
+ * the turn's deadline (an open Loop's within its working time, on its clock, asked again with a fresh
+ * cap): an overloaded gateway on one wake used to end the whole run — workers stopped, head landed,
+ * run reported done. What the ladder cannot outlast still fails.
+ */
+function patientAsk(loopRun: LoopRun, wake: WakeState, kit: TurnKit, turn: TurnAsk): Promise<Partial<DelegateResult>> {
+  const open = leadsOpenLoop(loopRun);
+  let waited = false;
+  // An open Loop's session asked again after an outage wait has a fresh cap: its first may be spent.
+  const attempt = () => {
+    if (waited && open) turn.deadline = retryDeadline(loopRun, wake, kit, turn);
+    return askSession(loopRun, kit, turn);
+  };
+  return withProviderPatience(patienceCtx(loopRun), attempt, {
+    // An open Loop's turn has a cap of its own, but its patience is judged by its working time.
+    deadline: open ? Math.max(turn.deadline, loopRun.softDeadline) : turn.deadline,
+    // An open Loop's ladder runs on the Loop's own clock; the web director's keeps the wall clock it always had.
+    clock: open ? kit.clock : null,
     delays: outageDelays(loopRun.run),
     label: "the lead's provider",
-    onWait: ({ wait, error }) =>
-      loopRun.decision(
+    onWait: ({ wait, error }) => {
+      waited = true;
+      return loopRun.decision(
         `the lead's provider failed (${error}); asking it again in ${Math.ceil(wait / SECOND_MS)} s`,
         "the lead's provider is briefly down, so the studio waits and asks again; the builders keep working",
-      ),
+      );
+    },
   });
+}
+
+/**
+ * `patientAsk`, and for an open Loop's lead refused because another chat's turn holds the game
+ * folder, asked again each time it may wait for it (`waitsForFolder`): each wait moves the turn's
+ * deadline, which the next outage ladder is held to.
+ */
+async function patientSession(
+  loopRun: LoopRun,
+  wake: WakeState,
+  kit: TurnKit,
+  turn: TurnAsk,
+): Promise<Partial<DelegateResult>> {
+  for (;;) {
+    try {
+      return await patientAsk(loopRun, wake, kit, turn);
+    } catch (err) {
+      const waits = folderBusy(err) && leadsOpenLoop(loopRun);
+      if (!waits || !(await waitsForFolder(loopRun, wake, kit, turn))) throw err;
+    }
+  }
 }
 
 /**
@@ -1102,7 +1288,7 @@ async function sessionOrFresh(
     );
   let result: Partial<DelegateResult>;
   try {
-    result = await patientSession(loopRun, kit, turn);
+    result = await patientSession(loopRun, wake, kit, turn);
   } catch (err: any) {
     const why = lostSessionWhy(talk, err);
     if (!why) return failed(err);
@@ -1112,24 +1298,52 @@ async function sessionOrFresh(
   return freshSession(loopRun, wake, kit, turn, SESSION_LOST_WHY.contextOverflowed).catch(failed);
 }
 
-/** Is the lead's own session limit one to wait out: a rate limit that resets well before this turn's deadline? */
-function limitToWait(loopRun: LoopRun, wake: WakeState, deadline: number, now: number): boolean {
+/** A turn Genex ended because the open Loop paused: it never opened a session. */
+const haltedTurn = (why: string): Partial<DelegateResult> => ({
+  ok: false,
+  stopReason: StopReason.Stopped,
+  errorText: why,
+});
+
+/** Why the person stopped a turn that never opened a session. */
+const STOPPED_BY_THE_USER = "stopped by the user";
+
+/**
+ * The turn an open Loop's lead gets in place of a new session: Genex paused the Loop (its app couldn't
+ * be brought back), or the person pressed Stop (a session in the folder has Edit and Bash and would work
+ * on under it); null while it may open one. A web Loop's sessions are left as they always were.
+ */
+function openSessionRefused(loopRun: LoopRun): Partial<DelegateResult> | null {
+  if (loopRun.open?.halted) return haltedTurn(loopRun.open.halted);
+  if (leadsOpenLoop(loopRun) && loopRun.ctx.cancelled === true) return haltedTurn(STOPPED_BY_THE_USER);
+  return null;
+}
+
+/**
+ * Is the lead's own session limit one to wait out: a rate limit that resets well before this turn's
+ * deadline? An open Loop's turn has a cap of its own, but its wait is judged by its working time, as
+ * the web director's is; one Genex paused waits for nothing.
+ */
+function limitToWait(loopRun: LoopRun, wake: WakeState, turnEnds: number, now: number): boolean {
   const { ctx, state } = loopRun;
   const limit = state.limit;
   if (!limit || limit.kind !== EngineFailure.RateLimit || state.finished || ctx.cancelled) return false;
+  if (loopRun.open?.halted) return false;
+  const deadline = leadsOpenLoop(loopRun) ? Math.max(turnEnds, loopRun.softDeadline) : turnEnds;
   const waitMs = limit.retryAfterMs ?? 0;
   const resetsInTime = now + waitMs + LIMIT_WAIT_MARGIN_MS <= deadline;
   return waitMs > 0 && wake.limitWaits < MAX_LIMIT_WAITS && resetsInTime;
 }
 
-/** Wait `ms` on the loop's clock, reading the inbox as the lead would; false when the user stopped the run. */
+/** Wait `ms` on the loop's clock, reading the inbox as the lead would; false when the user stopped the run (or Genex paused an open Loop). */
 async function sleepThrough(loopRun: LoopRun, wake: WakeState, ms: number, clock: WakeClock): Promise<boolean> {
   const until = clock.now() + ms;
-  while (clock.now() < until && !loopRun.ctx.cancelled) {
+  const stopped = () => loopRun.ctx.cancelled === true || Boolean(loopRun.open?.halted);
+  while (clock.now() < until && !stopped()) {
     await collect(loopRun, wake, clock.now());
     await clock.sleep(Math.min(WAKE_POLL_MS, until - clock.now()));
   }
-  return !loopRun.ctx.cancelled;
+  return !stopped();
 }
 
 /**
@@ -1169,9 +1383,20 @@ async function waitOutLimit(
     if (!(await sleepThrough(loopRun, wake, waitMs, kit.clock))) return result;
     loopRun.state.limit = null;
     const prompt = await retryPrompt(loopRun, wake, kit, turn, waitMs);
-    result = await watchedSession(loopRun, wake, kit, { prompt, deadline: turn.deadline });
+    result = await watchedSession(loopRun, wake, kit, { prompt, deadline: retryDeadline(loopRun, wake, kit, turn) });
   }
   return result;
+}
+
+/**
+ * When the session asked again after a limit wait must be over: the turn's own deadline, or an open
+ * Loop's fresh cap from now (its cap may have passed while the limit was waited out).
+ */
+function retryDeadline(loopRun: LoopRun, wake: WakeState, kit: TurnKit, turn: TurnAsk): number {
+  if (!leadsOpenLoop(loopRun)) return turn.deadline;
+  const deadline = turnDeadline(loopRun, wake, kit.clock.now());
+  noteTurnEnds(loopRun.state, deadline, lastTurn(loopRun, wake, deadline));
+  return deadline;
 }
 
 /**
@@ -1185,12 +1410,35 @@ async function oneTurn(
   prompt: string,
 ): Promise<Partial<DelegateResult>> {
   wake.turns += 1;
-  const deadline = wake.wrapping ? loopRun.finalDeadline - WRAP_UP_MARGIN_MS : loopRun.softDeadline;
+  const deadline = turnDeadline(loopRun, wake, kit.clock.now());
+  // A claim made in this turn ends its review before the turn does; the wrap-up is the last turn (finish-claim.ts).
+  noteTurnEnds(loopRun.state, deadline, lastTurn(loopRun, wake, deadline));
   const turn = { prompt, deadline };
   const result = await waitOutLimit(loopRun, wake, kit, turn, await watchedSession(loopRun, wake, kit, turn));
+  // An open Loop's session call stamped its own return (`watchedSession`).
+  if (!leadsOpenLoop(loopRun)) wake.turnReturnedAt = kit.clock.now();
+  noteTurnOver(loopRun.state);
   await settleTold(wake, result);
   await kit.talk.keep(result);
   return result;
+}
+
+/** Whether no turn follows one that must be over by `deadline`: the wrap-up, or a turn that ends with the run. */
+const lastTurn = (loopRun: LoopRun, wake: WakeState, deadline: number): boolean =>
+  wake.wrapping || deadline >= loopRun.finalDeadline - WRAP_UP_MARGIN_MS;
+
+/**
+ * When a turn must be over: the run's end for the wrap-up, else the working deadline — for a turn
+ * that reaches the Loop's cap, the end of its grace, the time's-up said or cut into it mid-turn
+ * (cap-lines.ts `turnEndAtCap`); an open Loop's turn also at its own cap, `OPEN_TURN_MS` from now
+ * (kept as `wake.turnCapAt` while it comes first).
+ */
+function turnDeadline(loopRun: LoopRun, wake: WakeState, now: number): number {
+  wake.turnCapAt = null;
+  if (wake.wrapping) return loopRun.finalDeadline - WRAP_UP_MARGIN_MS;
+  if (!leadsOpenLoop(loopRun) || now + OPEN_TURN_MS >= loopRun.softDeadline) return turnEndAtCap(loopRun);
+  wake.turnCapAt = now + OPEN_TURN_MS;
+  return wake.turnCapAt;
 }
 
 /**
@@ -1223,13 +1471,19 @@ async function takeTurn(
   kit: TurnKit,
   prompt: string,
 ): Promise<Partial<DelegateResult>> {
+  // A turn has no cap until its session starts: a held one never reads an earlier turn's.
+  wake.turnCapAt = null;
+  wake.turnReturnedAt = null;
   // One turn to the game's plugins, its resumptions included: its start and its end name it alike.
   const moment = turnScope(loopRun, wake);
   const held = await heldTurn(loopRun, wake, kit, prompt, moment);
   if (held) return held;
+  // An open Loop's lead: the folder and who else may write in it, as its turn begins.
+  if (leadsOpenLoop(loopRun)) await openTurnBegins(loopRun);
   const first = wake.heldFirst;
   wake.heldFirst = undefined;
-  let asked = first ? `${first}\n\n${prompt}` : prompt;
+  // What the lead has not heard of its cap opens the message: the time's-up a wrap-up turn begins with.
+  let asked = withCapWords(loopRun, first ? `${first}\n\n${prompt}` : prompt, kit.clock.now());
   let result = await oneTurn(loopRun, wake, kit, asked);
   while (wake.cut && !loopRunOver(loopRun)) {
     wake.cut = false;
@@ -1278,7 +1532,7 @@ async function heldTurn(
   wake.promptWords = [];
   loopRun.note(HOOK_PROMPTS.turnHeld(reason));
   // The failed turn's words reach the person: Genex's own hold in theirs, never the agents'.
-  return { ok: false, turns: 0, errorText: turnsHeldWords(held ?? { reason }) };
+  return heldTurnResult(turnsHeldWords(held ?? { reason }));
 }
 
 /** A turn cut before it read its message is asked it again — its words and all — with the user's newer words after it. */
@@ -1362,8 +1616,39 @@ function watchTurn(loopRun: LoopRun, wake: WakeState, kit: TurnKit, line: LeadLi
   return { handed, stop };
 }
 
-/** One session call, watched for the user's words while it runs; what it read is heard, what it did not is owed. */
+/**
+ * One session call, watched while it runs: for the user's words (live chat) and, an open Loop, for the
+ * news a resting lead would be woken by (open/news.ts).
+ */
 async function watchedSession(
+  loopRun: LoopRun,
+  wake: WakeState,
+  kit: TurnKit,
+  turn: TurnAsk,
+): Promise<Partial<DelegateResult>> {
+  // A web lead's turn hears its cap's lines from a watch of its own; an open Loop's from its news.
+  if (!leadsOpenLoop(loopRun))
+    return withCapWatch(
+      loopRun,
+      () => kit.clock.now(),
+      () => lineWatchedSession(loopRun, wake, kit, turn),
+    );
+  const pollJobs = () => watchJobs(loopRun, wake, kit.clock.now());
+  const news = watchOpenTurn(loopRun, { clock: kit.clock, turn: wake.turns, pollJobs });
+  let result: Partial<DelegateResult> | undefined;
+  try {
+    result = await lineWatchedSession(loopRun, wake, kit, turn);
+    return result;
+  } finally {
+    // Its cap is judged from when its session returned, never from when its watch has settled.
+    wake.turnReturnedAt = kit.clock.now();
+    await news.stop();
+    news.settle(result);
+  }
+}
+
+/** One session call, watched for the user's words while it runs; what it read is heard, what it did not is owed. */
+async function lineWatchedSession(
   loopRun: LoopRun,
   wake: WakeState,
   kit: TurnKit,
@@ -1405,6 +1690,42 @@ async function rest(loopRun: LoopRun, wake: WakeState, now: number): Promise<voi
   await keepWake(loopRun, wake, now);
 }
 
+/** One turn of the lead's, then what waits for its end before the next (an open Loop's `afterTurn`). */
+async function turnThenBetween(
+  loopRun: LoopRun,
+  wake: WakeState,
+  kit: TurnKit,
+  prompt: string,
+): Promise<Partial<DelegateResult>> {
+  const result = await takeTurn(loopRun, wake, kit, prompt);
+  if (typeof loopRun.afterTurn === "function" && !loopRunOver(loopRun)) await loopRun.afterTurn();
+  return result;
+}
+
+/**
+ * When the lead is woken next: at once for a turn its own cap cut short, or an open Loop's lead's
+ * turn that worked (it is never rested then), else once something is due while it rests (null: the
+ * run ended under it).
+ */
+async function dueAfter(loopRun: LoopRun, wake: WakeState, kit: TurnKit, verdict: TurnVerdict): Promise<Wake | null> {
+  if (verdict.next === TurnEnd.Continue) return { at: kit.clock.now(), reasons: [WakeCause.TurnCap] };
+  if (verdict.next === TurnEnd.CarryOn) return carryOnWake(loopRun, wake, kit);
+  await rest(loopRun, wake, kit.clock.now());
+  const due = await sleepUntilDue(loopRun, wake, kit);
+  loopRun.resting = false;
+  return due;
+}
+
+/** An open Loop's lead whose turn worked goes on at once, told whatever else is due now. */
+async function carryOnWake(loopRun: LoopRun, wake: WakeState, kit: TurnKit): Promise<Wake> {
+  const now = kit.clock.now();
+  await collect(loopRun, wake, now);
+  const due = nextWake(wakeView(loopRun, wake, now));
+  // Never the question of what next: a lead whose turn worked is not asked it.
+  const also = due && due.at <= now ? due.reasons.filter((reason) => reason !== WakeCause.IdleAsk) : [];
+  return { at: now, reasons: [...new Set([...also, WakeCause.CarryOn])] };
+}
+
 /**
  * The run as a series of the lead's turns. The first opens with the brief and the rules; each
  * later one is a wake with a digest; the wrap-up is the last. Returns when the run is over for
@@ -1418,6 +1739,8 @@ export async function runWakeLoop(
   clock: WakeClock = SYSTEM_CLOCK,
   line: LeadLine | null = null,
 ): Promise<WakeOutcome> {
+  // The run's tools read its time on this clock (a worker refused from the cap on).
+  keepRunClock(loopRun, () => clock.now());
   // A resumed run takes back what its journal kept of the loop: the idle question, the wake cap.
   const restored = resumedFromJournal(loopRun)
     ? restoredWake(loopRun.priorJournal?.director?.wake, clock.now())
@@ -1441,20 +1764,18 @@ export async function runWakeLoop(
   const first = await firstPrompt(loopRun, wake, brief, clock.now());
   // The wrap-up takes no more of the chat: what is sent from now on waits for the run to close.
   if (wake.wrapping) line?.shut();
-  let result = await takeTurn(loopRun, wake, kit, first);
+  let result = await turnThenBetween(loopRun, wake, kit, first);
   for (;;) {
     const verdict = afterTurn(await turnFacts(loopRun, wake, result, clock.now()));
     if (verdict.next === TurnEnd.Close) break;
     settleTurn(loopRun, wake, verdict, result, clock.now());
-    await rest(loopRun, wake, clock.now());
-    const due = await sleepUntilDue(loopRun, wake, kit);
-    loopRun.resting = false;
+    const due = await dueAfter(loopRun, wake, kit, verdict);
     if (!due) break;
     // A sign-in a worker or a judge lost while the lead slept pauses the run before it is woken.
     if (await pauseOnLostSignIn(loopRun, clock.now())) break;
     const prompt = await wakePrompt(loopRun, wake, due, clock);
     if (wake.wrapping) line?.shut();
-    result = await takeTurn(loopRun, wake, kit, prompt);
+    result = await turnThenBetween(loopRun, wake, kit, prompt);
   }
   journalWake(loopRun, wake);
   return { result, wrapCause: wake.wrapCause, failed: wake.failed };
@@ -1468,6 +1789,6 @@ export async function runWakeLoop(
 export function journalWake(loopRun: LoopRun, wake: WakeState): void {
   const director = loopRun.journal?.director;
   if (!director) return;
-  recordLoopRun(loopRun);
+  recordLoopRun(loopRun, loopRun.open?.clock.now());
   director.wake = wakeRecord(wake);
 }

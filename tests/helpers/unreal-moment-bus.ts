@@ -58,7 +58,7 @@ export type BusHost = {
   /** Appends one entry to the host's trail, and notes it when a turn is under way. */
   log: (entry: string, during?: string) => void;
   /** Takes the checkpoint's snapshot; its record. */
-  snapshot: (label: string) => Record<string, unknown>;
+  snapshot: (label: string) => Record<string, unknown> | Promise<Record<string, unknown>>;
 };
 
 /** Why Genex itself held a moment back: its words, and its typed hold. */
@@ -220,30 +220,32 @@ export async function checkpoint(bus: BusHost, params: Record<string, unknown>) 
   const opened = await run(bus, HookEvent.CheckpointBefore, before, contextOf(HookEvent.CheckpointBefore, params));
   if (opened.blocked) return { blocked: opened.blocked.reason };
   bus.log("snapshot.create", "snapshot.create");
-  const snapshot = bus.snapshot(String(params.label));
+  const snapshot = await bus.snapshot(String(params.label));
   const closed = await run(bus, HookEvent.CheckpointAfter, after, contextOf(HookEvent.CheckpointAfter, params));
   return { snapshot, notes: [...opened.notes, ...closed.notes], images: [...opened.images, ...closed.images] };
 }
 
 /** `snapshot.restore` of a game folder: the restore steps around `restore`, which a block before never reaches. */
-export async function restore(bus: BusHost, params: Record<string, unknown>, restoreFiles: () => void) {
+export async function restore(bus: BusHost, params: Record<string, unknown>, restoreFiles: () => void | Promise<void>) {
   const before = planOf(bus, HookEvent.RestoreBefore);
   const after = planOf(bus, HookEvent.RestoreAfter);
-  const restoring = () => {
+  const restoring = async () => {
     bus.log("snapshot.restore", "snapshot.restore");
-    restoreFiles();
+    await restoreFiles();
   };
+  // A run's or a chat's restore waits for the plan whether or not a plugin has steps around it.
+  const answersTo = Boolean(params.threadId || params.runId) && params.forPerson !== true;
+  if (answersTo && bus.planning()) throw blockedError(BUS_WORDS.planHeld, PLAN_HELD);
   if (!before.length && !after.length) {
-    restoring();
+    await restoring();
     return true;
   }
-  if (bus.planning()) throw blockedError(BUS_WORDS.planHeld, PLAN_HELD);
   const refused = await hold(bus, [...before, ...after], HOOK_LOCK_WAIT_MS[HookEvent.RestoreBefore]);
   if (refused) throw blockedError(refused.reason, refused.held);
   const opened = await run(bus, HookEvent.RestoreBefore, before, contextOf(HookEvent.RestoreBefore, params));
   if (opened.blocked) throw blockedError(opened.blocked.reason);
   try {
-    restoring();
+    await restoring();
   } finally {
     await run(bus, HookEvent.RestoreAfter, after, contextOf(HookEvent.RestoreAfter, params));
   }

@@ -131,6 +131,7 @@ export async function leadStarted(lead: Lead): Promise<void> {
     director: true,
     maxParallel: 1 + MAX_RUNNING_AGENTS,
     facets: leadParts(lead.journal),
+    finishCheck: true,
   };
   await append(lead, RunEvent.AutopilotStarted, payload);
   const current = currentColumn(lead.journal);

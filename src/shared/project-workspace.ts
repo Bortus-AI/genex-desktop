@@ -66,12 +66,14 @@ export const CORE_WORKSPACE = {
       "Plugins/*/Binaries/",
     ],
     copySkip: [],
-    assets: [{ folder: "Content", formats: ["uasset", "umap"] }],
+    // Unreal's own packages (.uasset, .umap) have no preview in Genex: Assets shows the media agents
+    // bring into the game's asset folders instead.
+    assets: [],
   },
   [CoreFact.UnrealPlugin]: {
     ignore: ["Intermediate/", "Binaries/"],
     copySkip: [],
-    assets: [{ folder: "Content", formats: ["uasset", "umap"] }],
+    assets: [],
   },
   // Godot's `*.import` files stay in history: the project needs them to open.
   [CoreFact.GodotProject]: { ignore: [".godot/"], copySkip: [], assets: [{ folder: ROOT, formats: MEDIA_FORMATS }] },

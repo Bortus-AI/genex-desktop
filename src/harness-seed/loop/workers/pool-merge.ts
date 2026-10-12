@@ -106,10 +106,14 @@ type Marked = { text: string; settled: boolean; merged?: boolean };
 
 /**
  * Merge a copy worker's commit into the lead's folder: merged, or why not, with the files. The look
- * at the lead's files and the merge are one git write, after the lead's own.
+ * at the lead's files and the merge are one git write, after the lead's own; one its scope refuses
+ * once its turn comes (`mergeRefused`) merges nothing and keeps the copy.
  */
 function mergeWork(state: PoolState, record: WorkerRecord, commit: string): Promise<Marked> {
-  return gameGitWrite(state, () => mergeNow(state, record, commit));
+  return gameGitWrite(state, () => {
+    const refused = state.scope.mergeRefused?.() ?? null;
+    return refused ? Promise.resolve({ text: refused, settled: false }) : mergeNow(state, record, commit);
+  });
 }
 
 /**
@@ -164,11 +168,12 @@ async function markCopy(state: PoolState, record: WorkerRecord, verdict: WorkerV
 }
 
 /**
- * A writer in place that finished and changed the game folder: its work is in the game already,
- * whatever the lead says of it. One that changed nothing (or whose change git couldn't tell) may be rejected.
+ * A writer in place that finished and may have changed the game folder (it did, or git couldn't
+ * tell): its work may be in the game already, whatever the lead says of it. Only one that changed
+ * nothing may be rejected.
  */
 const wroteInGame = (record: WorkerRecord): boolean =>
-  record.isolation === WorkerIsolation.Lock && record.state === WorkerState.Done && record.changedGame === true;
+  record.isolation === WorkerIsolation.Lock && record.state === WorkerState.Done && record.changedGame !== false;
 
 /**
  * `worker_mark`: the lead's word on what a worker delivered. A merge that failed leaves no verdict;

@@ -121,7 +121,8 @@ async function buildBlender(root, resources, sdk) {
 async function buildUnreal(root, resources, sdk) {
   const unreal = path.join(resources, "plugins/unreal");
   await mkdir(unreal, { recursive: true });
-  await cp(path.join(root, "src/plugins/unreal/plugin.json"), path.join(unreal, "plugin.json"));
+  for (const file of ["plugin.json", "icon.svg"])
+    await cp(path.join(root, "src/plugins/unreal", file), path.join(unreal, file));
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
   const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/unreal/panel.html"), "utf8"), sdk);
   await writeFile(

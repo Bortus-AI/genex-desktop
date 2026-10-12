@@ -54,6 +54,8 @@ import {
 } from "../chat-checkpoints.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { noteUnsaved } from "./unsaved-files.ts";
+import { HookBlockedError } from "./plugin-hooks.ts";
+import { HookHold } from "../../shared/plugin-hooks.ts";
 
 /** How long a message's answer waits for the game checkpoint before going ahead without it. */
 const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
@@ -74,6 +76,24 @@ const MESSAGE_ID = /^[\w-]{1,80}$/;
 const REFERENCE_FILE = /^references\/[^/]+$/;
 /** The artifacts a run coordinator keeps its session in, one per run. */
 const COORDINATOR_ARTIFACT_PREFIX = "coordinator_";
+
+/**
+ * What the person reads when Genex itself kept their Rewind from the game's app (its lock), by the
+ * hold and the app's label: never the words written for agents. Their own action never waits for
+ * them or the plan, so another holder at work there is what holds it in practice.
+ */
+const REWIND_HELD = {
+  [HookHold.Busy]: (app: string) =>
+    `Something else is working in ${app} now, so nothing was rewound. Rewind again once it's done.`,
+  [HookHold.PersonFirst]: (app: string) =>
+    `You were using ${app}, so nothing was rewound. Rewind again once you're done there.`,
+  [HookHold.CantTell]: (app: string) =>
+    `Genex couldn't tell whether ${app} was free, so nothing was rewound. Rewind again in a moment.`,
+  [HookHold.Plan]: () => "The chat is in Plan mode, so nothing was rewound.",
+} as const satisfies Record<HookHold, (app: string) => string>;
+
+/** The app a hold names when its lock gave no label. */
+const THE_APP = "the game's app";
 
 const MESSAGE = {
   WaitForRewind: "Wait for the rewind to finish, then try again.",
@@ -725,10 +745,19 @@ export class ChatRewindService {
   async #apply(request: RewindRequest): Promise<AppliedRewind> {
     const project = request.meta?.project;
     if (!(request.files && request.dir && project)) return this.#applyFiles(request);
-    return this.#x.hooks.restoreWithHooks(project, () => this.#applyFiles(request), {
-      forPerson: true,
-      threadId: request.threadId,
-    });
+    try {
+      return await this.#x.hooks.restoreWithHooks(project, () => this.#applyFiles(request), {
+        forPerson: true,
+        threadId: request.threadId,
+      });
+    } catch (error) {
+      // Genex's own hold is worded from its type and label; a step's own block keeps its reason.
+      if (error instanceof HookBlockedError && error.hold) {
+        const held = { hold: error.hold, ...(error.label ? { label: error.label } : {}) };
+        throw new HookBlockedError(REWIND_HELD[error.hold](error.label ?? THE_APP), held);
+      }
+      throw error;
+    }
   }
 
   async #applyFiles(request: RewindRequest): Promise<AppliedRewind> {

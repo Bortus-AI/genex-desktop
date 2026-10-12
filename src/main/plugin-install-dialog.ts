@@ -13,7 +13,7 @@ import {
 import type { PluginMarketplace } from "../substrate/plugins/marketplace.ts";
 import { assertNativeActionAllowed } from "./dev/native-policy.ts";
 import { reviewPluginInstall } from "./plugin-local-install.ts";
-import { installDetail } from "./plugin-install-words.ts";
+import { installDetail, installUpdateFacts } from "./plugin-install-words.ts";
 import type { StudioCore } from "./studio-core.ts";
 
 /** Ask the user whether to install (or replace with) this package; true when they agreed. */
@@ -50,21 +50,15 @@ export function confirmPluginInstall(
     assertNativeActionAllowed(fixtureNativePolicy, "studio:plugins.install");
     // Refused before anything is asked: a bundled id from elsewhere, or an id a connector answers for.
     const { replaces } = reviewPluginInstall(core().plugins, manifest, origin, core().mcp.ids());
-    // A replacement is a new plugin, not an update of the one it erases: every capability and server is new.
-    const before = replaces ? undefined : previous;
-    // The installed version's scan, so a scanned update can say which skills' bytes changed.
-    const previousScan = before
-      ? core()
-          .plugins.list()
-          .find((p) => p.manifest.id === manifest.id)?.scan
-      : undefined;
+    const facts = installUpdateFacts(core().plugins.list(), manifest, origin, previous, Boolean(replaces));
+    const { before, previousScan, staysOn } = facts;
     const choice = await dialog.showMessageBox({
       type: "warning",
       title: replaces ? MESSAGE.replaceTitle : MESSAGE.installTitle,
       message: replaces
         ? `Replace ${replaces.name} with ${manifest.name} ${manifest.version}?`
         : `Install ${manifest.name} ${manifest.version}?`,
-      detail: installDetail({ manifest, origin, scan, before, previousScan, replaces, note }),
+      detail: installDetail({ manifest, origin, scan, before, previousScan, replaces, note, staysOn }),
       buttons: [MESSAGE.cancel, replaces ? MESSAGE.replace : MESSAGE.install],
       defaultId: 0,
       cancelId: 0,

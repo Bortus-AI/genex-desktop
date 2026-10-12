@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { busyLabel } from "../../src/renderer/chat/chat-work-state.ts";
+import { busyLabel, chatWorkState, runCaption } from "../../src/renderer/chat/chat-work-state.ts";
 import { initialThreads, personFirstLabel, personFirstReported } from "../../src/renderer/state/threads.ts";
 import { PERSON_FIRST_WORDS } from "../../src/renderer/words.ts";
 
@@ -57,4 +57,42 @@ it("the working line says the work waits for the person, unless something nearer
     "Waiting for you to finish in Unreal",
     "the wait on the person comes before a plan being revised",
   );
+});
+
+it("a chat waiting on the person in two apps keeps saying so until both waits end, whichever ends first", () => {
+  const wait = (state: ReturnType<typeof initialThreads>, label: string, waiting: boolean) =>
+    personFirstReported(state, { project: "valley", threadId: "t1", label, waiting });
+  const both = wait(wait(initialThreads(), "Unreal", true), "Desk", true);
+  assert.equal(personFirstLabel(both, "t1"), "Unreal", "the first wait is named");
+  const deskEnded = wait(both, "Desk", false);
+  assert.equal(personFirstLabel(deskEnded, "t1"), "Unreal", "the Unreal wait goes on");
+  assert.equal(personFirstLabel(wait(deskEnded, "Unreal", false), "t1"), null);
+  const unrealEnded = wait(both, "Unreal", false);
+  assert.equal(personFirstLabel(unrealEnded, "t1"), "Desk", "the Desk wait goes on and is named");
+  assert.equal(personFirstLabel(wait(unrealEnded, "Desk", false), "t1"), null);
+  const start = initialThreads();
+  assert.equal(wait(start, "Desk", false), start, "the end of a wait never told changes nothing");
+});
+
+it("while a build runs in the chat, its one line says the work waits for the person", () => {
+  const state = chatWorkState({
+    status: "",
+    run: null,
+    activeRunId: "run-1",
+    busy: false,
+    sending: false,
+    answering: false,
+    working: true,
+    planWorking: false,
+    revisingPlan: false,
+    stopping: false,
+    questionsWaiting: false,
+    readingEntries: [],
+    streamingReply: false,
+  });
+  assert.equal(state.chatWorking, false, "a running build shows its card, not the chat's busy line");
+  const caption = "Building the track";
+  assert.equal(runCaption({ running: true, caption, personFirst: "Unreal" }), "Waiting for you to finish in Unreal");
+  assert.equal(runCaption({ running: true, caption, personFirst: null }), caption);
+  assert.equal(runCaption({ running: false, caption, personFirst: "Unreal" }), "", "no build, no build line");
 });

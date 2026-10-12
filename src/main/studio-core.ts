@@ -20,6 +20,7 @@ import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { ignoreLine } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
+import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/backdrop-shader.ts";
 import type { GameLocation, GameName, GameNameRequest } from "../shared/game-project.ts";
 import type { GameSoundRequest } from "../shared/game-sound.ts";
 import { latestRun } from "../shared/coordinator.ts";
@@ -33,8 +34,16 @@ import { EventKind, ThreadKind, SnapshotScope } from "../shared/event-log.ts";
 import { assetKind, isAudioFile, type AssetDeliveredPayload } from "../shared/game-assets.ts";
 import { coverFromBrief, replaceableCover, type GameUpdate } from "../shared/game-library.ts";
 import type { HarnessHostHandlers, HarnessParams, HarnessResult, HostMethod } from "../shared/harness-api.ts";
-import { type ExportReview, type PluginBinding, PluginCapability, PluginToolAudience } from "../shared/plugins.ts";
+import {
+  type ExportReview,
+  type PluginBinding,
+  PluginCapability,
+  type PluginStillAnswer,
+  type PluginStillOrder,
+  PluginToolAudience,
+} from "../shared/plugins.ts";
 import type { EngineLinkUndo } from "../shared/game-engine.ts";
+import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
@@ -49,7 +58,7 @@ import {
   HarnessState,
 } from "../shared/protocol.ts";
 import { EngineId } from "../shared/providers.ts";
-import { ExecutionStatus, JournalPhase, RunState } from "../shared/run-state.ts";
+import { ExecutionStatus, isExecutionEvent, JournalPhase, RunState } from "../shared/run-state.ts";
 import { credentialEnvValues, redactTokens, secretRedactor } from "../shared/redact.ts";
 import { ActivityIndex, feedsActivity, type StudioActivityItem } from "../shared/studio-activity.ts";
 import {
@@ -71,7 +80,9 @@ import { OllamaEngine, OllamaSidecar } from "../substrate/engines/ollama.ts";
 import { OpenCodeEngine } from "../substrate/engines/opencode.ts";
 import { LOCK_RECOVERY_DIR } from "../substrate/engines/ownership-locks.ts";
 import { OpenRouterEngine } from "../substrate/engines/openrouter.ts";
-import { OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
+import { LocalServerEngine } from "../substrate/engines/local-server.ts";
+import { serverSettings } from "../substrate/local-server/settings.ts";
+import { LOCAL_SERVER_KEY_SECRET, OPENROUTER_KEY_SECRET, secretKeyStore } from "../substrate/provider-keys.ts";
 import { EngineRegistry } from "../substrate/engines/registry.ts";
 import type { Engine, LiveToolResult } from "../substrate/engines/types.ts";
 import { EventStore } from "../substrate/event-store.ts";
@@ -105,6 +116,7 @@ import { SnapshotEngine, SnapshotIndex, HARNESS_WORKSPACE } from "../substrate/s
 import { claudeFolderDenyWrites, ProcessSandbox } from "../substrate/spawn.ts";
 import { type JobProbe, JobService, type JobSpawn } from "../substrate/jobs.ts";
 import { type AppLookPort, type ScreenAccess, unsupportedAppLook } from "../substrate/app-look.ts";
+import { checkLinuxIsolation } from "../substrate/linux-isolation.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { TurnFactory } from "../substrate/turns.ts";
 import type { EventData, EventEnvelope } from "../substrate/types.ts";
@@ -117,6 +129,7 @@ import { ConversationService } from "./core/conversation.ts";
 import { DelegationService } from "./core/delegation.ts";
 import { GameFileService } from "./core/game-files.ts";
 import { nameFromIdea, nameGame } from "./core/game-naming.ts";
+import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
@@ -132,7 +145,9 @@ import { layoutFor, type StudioLayout } from "./core/layout.ts";
 import { createPlanReviews } from "./core/plan-drafts.ts";
 import { CONSENT_TIMEOUT_MS, PluginToolService } from "./core/plugin-tools.ts";
 import { LockService, type LockServiceOptions } from "./core/plugin-locks.ts";
-import { HookService } from "./core/plugin-hooks.ts";
+import { HookService, type HookServiceOptions } from "./core/plugin-hooks.ts";
+import { ObserverService, type ObserverServiceOptions } from "./core/observers.ts";
+import { FinishReviews, finishHistory } from "./core/finish-review.ts";
 import { PreviewService } from "./core/previews.ts";
 import { AutoResumeService, type AutoResumeDeps } from "./core/auto-resume.ts";
 import { availableMemory } from "../substrate/hardware.ts";
@@ -162,6 +177,8 @@ import { previewRpc } from "./harness-rpc/preview.ts";
 import { runsRpc } from "./harness-rpc/runs.ts";
 import { snapshotRpc } from "./harness-rpc/snapshot.ts";
 import { hooksRpc } from "./harness-rpc/hooks.ts";
+import { observersRpc } from "./harness-rpc/observers.ts";
+import { finishRpc } from "./harness-rpc/finish.ts";
 import { studioRpc } from "./harness-rpc/studio.ts";
 import type { PlanReviewController } from "./plan-review.ts";
 import { PluginConsent } from "./plugin-consent.ts";
@@ -339,8 +356,12 @@ export interface StudioCoreOptions {
   consentTimeoutMs?: number;
   /** How long a build's lead's permission card waits for the person (default 5 minutes); a test seam. */
   leadAskTimeoutMs?: number;
-  /** The locks' clock, their wait and an agent's call's wait (default ten minutes); a test seam. */
-  locks?: Pick<LockServiceOptions, "agentWaitMs" | "now" | "sleep">;
+  /** The locks' clock and its timers, and an agent's call's wait (default four minutes); a test seam. */
+  locks?: Pick<LockServiceOptions, "agentWaitMs" | "now" | "sleep" | "timeout">;
+  /** The clock a moment's shared limit runs on (`HookServiceOptions`); a test seam. */
+  hooks?: HookServiceOptions;
+  /** The clock captures run on (the locks' by default) and how they shrink pictures (`ObserverServiceOptions`); a test seam. */
+  observers?: ObserverServiceOptions;
   /**
    * Other Genex profiles' data, given by the app at start (the normal profile's folder, the
    * repository's development profiles): on every worker's never-touch list beside this profile's own.
@@ -375,6 +396,8 @@ export interface StudioCoreOptions {
   screenAccess?: ScreenAccess;
   /** The clock, timers and memory reading host auto-resume uses (`core/auto-resume.ts`); a test seam. */
   autoResume?: Partial<Pick<AutoResumeDeps, "now" | "setTimer" | "clearTimer" | "freeMb">>;
+  /** A plugin still's budget (default one minute) and the clock it runs on (`core/view-still.ts`); a test seam. */
+  pluginStill?: ViewStillOptions;
   /** A planned automatic resume started (true) or stopped (false) waiting; main holds the Mac awake meanwhile. */
   onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
@@ -452,6 +475,9 @@ export class StudioCore {
   readonly locks: LockService;
   /** Genex's moments: checkpoints, restores and the rest, and the plugin steps each runs. */
   readonly hooks: HookService;
+  /** A game's observers inside a run, and the pictures they keep with it. */
+  readonly #observers: ObserverService;
+  readonly #finishReviews: FinishReviews;
   /** Claude Code permissions in game chats: modes, the Allow / Deny cards, saved grants. */
   readonly #permissions: ChatPermissionService;
   /** The same port the registry reads, kept so a plugin server's `secret:<name>` can be resolved. */
@@ -535,9 +561,15 @@ export class StudioCore {
     this.improvements = new ImprovementJournal(path.join(options.paths.userData, "improvements"));
     this.#connections = new ConnectionService(this, (threadId) => this.#threadBusy(threadId));
     this.#x = this.#createInternals();
-    this.hooks = new HookService(this, this.#x);
+    this.hooks = new HookService(this, this.#x, options.hooks ?? {});
+    this.#observers = new ObserverService(this, this.#x, {
+      ...(options.locks?.now ? { now: options.locks.now } : {}),
+      ...(options.locks?.timeout ? { timeout: options.locks.timeout } : {}),
+      ...options.observers,
+    });
     this.#previews = new PreviewService(this, this.#x);
     this.#delegation = new DelegationService(this, this.#x);
+    this.#finishReviews = this.#createFinishReviews();
     this.#recovery = new RecoveryService(this, this.#x);
     this.#autoResume = this.#createAutoResume();
     this.#selfImprovement = new SelfImprovementService(this, this.#x);
@@ -563,6 +595,16 @@ export class StudioCore {
       probe: (plugin, lock, binding, signal) =>
         this.plugins.tool(`${plugin}__${lock.personFirst}`, {}, binding, signal, PluginToolAudience.Harness),
       onPersonFirst: (notice) => this.emit(UiEvent.PersonFirst, notice),
+    });
+  }
+
+  /** A Loop's finish checks: the host seats the reviewer and writes the verdict (`core/finish-review.ts`). */
+  #createFinishReviews(): FinishReviews {
+    return new FinishReviews({
+      runningChat: (project, runId) => this.#delegation.chatOfRunningGameRun(project, runId),
+      history: async (threadId, runId) => finishHistory(await this.store.listEvents(threadId), runId),
+      append: (threadId, payload) => this.append([customEventData(CustomEvent.FinishCheck, { ...payload })], threadId),
+      delegate: (params) => this.#delegation.delegate(params),
     });
   }
 
@@ -651,6 +693,12 @@ export class StudioCore {
       get hooks() {
         return core.hooks;
       },
+      get observers() {
+        return core.#observers;
+      },
+      get finishReviews() {
+        return core.#finishReviews;
+      },
       get conversation() {
         return core.#conversation;
       },
@@ -699,6 +747,12 @@ export class StudioCore {
       this.#createSandbox(listed).finally(() => mark("sandbox")),
       this.#wirePluginServices().finally(() => mark("plugins")),
     ]);
+    // Linux: a sandbox that cannot start a process (AppArmor's user-namespace restriction) is a
+    // setup problem the window shows, not a harness that never boots.
+    await checkLinuxIsolation(sandbox).catch(async (error: unknown) => {
+      await sandbox.dispose();
+      throw error;
+    });
     this.sandbox = sandbox;
     await this.#openJobs();
     mark("jobs");
@@ -904,7 +958,7 @@ export class StudioCore {
     this.pluginServices = new PluginServices(
       path.join(this.layout.engineHomes, "plugins", "data"),
       { genex: path.join(this.layout.engineHomes, "genex") },
-      (binding, files) => this.#observeAssets(binding, files),
+      (binding, files, still) => (still ? this.#observeStill(binding, still) : this.#observeAssets(binding, files)),
     );
     this.pluginServices.onEvent = (id, event, binding) =>
       this.emit(UiEvent.PluginEvent, { id, event, project: binding?.project, threadId: binding?.threadId });
@@ -961,7 +1015,9 @@ export class StudioCore {
       this.emit(UiEvent.PluginsChanged, c);
       this.#connections.changed();
     };
-    this.plugins.consent = (id, tool, args, binding, signal) => this.requestConsent(id, tool, args, binding, signal);
+    this.plugins.consent = (id, tool, args, binding, signal, options) =>
+      this.requestConsent(id, tool, args, binding, signal, undefined, options);
+    this.plugins.agentWritable = (directory) => this.#agentWritable(directory);
     // A Finder-launched app has a bare PATH: Genex's publish found no git-lfs from Homebrew there.
     this.plugins.toolPath = async () => (await toolchain()).path;
     this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
@@ -1034,6 +1090,14 @@ export class StudioCore {
     } finally {
       await session.release();
     }
+  }
+
+  /**
+   * A plugin's still of one named view (`observe` with `still`): on a hidden window of its own at
+   * the asked size, never Live, given back however it ends (`core/view-still.ts`).
+   */
+  #observeStill(binding: PluginBinding, still: PluginStillOrder): Promise<PluginStillAnswer> {
+    return viewStill(this.#previews, binding, still, this.options.pluginStill);
   }
 
   /**
@@ -1132,6 +1196,7 @@ export class StudioCore {
     this.engines.setPreferredOrder([
       EngineId.Bonsai,
       EngineId.Ollama,
+      EngineId.LocalServer,
       ...SUBSCRIPTION_ENGINES,
       EngineId.OpenCode,
       EngineId.OpenRouter,
@@ -1147,6 +1212,17 @@ export class StudioCore {
         toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
       }),
       new OllamaEngine({ ...(this.options.ollamaHost ? { host: this.options.ollamaHost } : {}) }),
+      // The person's own model server (LM Studio, llama.cpp, TabbyAPI, …), once connected in Settings.
+      new LocalServerEngine({
+        root: path.join(this.layout.engineHomes, EngineId.LocalServer),
+        scratchRoot: path.join(this.layout.scratch, EngineId.LocalServer),
+        protectedPaths: this.#protectedPaths(),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
+        settings: serverSettings(path.join(this.layout.engineHomes, EngineId.LocalServer, "server.json")),
+        keys: secretKeyStore(path.join(this.layout.secrets, "providers"), LOCAL_SERVER_KEY_SECRET),
+        ...(this.options.ollamaHost ? { ollamaHost: this.options.ollamaHost } : {}),
+        onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.LocalServer }),
+      }),
       new ClaudeCodeEngine({
         onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.ClaudeCode }),
         engineHome: path.join(this.layout.engineHomes, EngineId.ClaudeCode),
@@ -1403,6 +1479,9 @@ export class StudioCore {
       const runId =
         event.data.type === EventKind.Custom ? (event.data.payload as { runId?: string })?.runId : undefined;
       if (runId) changedRuns.add(runId);
+      // A run that starts, pauses or closes ends any finish check it had under way.
+      if (runId && event.data.type === EventKind.Custom && isExecutionEvent(event.data))
+        this.#finishReviews.drop(runId);
       const leaseTurn =
         event.data.type === EventKind.TurnStarted && this.plugins && !this.#x.pluginTurnLeases.has(threadId);
       if (leaseTurn) this.#x.pluginTurnLeases.set(threadId, this.plugins.lease());
@@ -1681,6 +1760,11 @@ export class StudioCore {
     return nameGame({ engines: this.engines, budget: this.budget }, request);
   }
 
+  /** A live background for home from a description (`core/backdrop-generation.ts`). */
+  makeBackdrop(request: BackdropShaderRequest): Promise<BackdropShaderResult> {
+    return makeBackdropShader({ engines: this.engines, budget: this.budget }, request);
+  }
+
   /** Games being named from an idea now: a second message while the first names it waits its turn. */
   #namingFromIdea = new Set<string>();
 
@@ -1955,6 +2039,8 @@ export class StudioCore {
       ...optimizationRpc(this, this.#x),
       ...snapshotRpc(this, this.#x),
       ...hooksRpc(this, this.#x),
+      ...observersRpc(this, this.#x),
+      ...finishRpc(this, this.#x),
       ...pluginsRpc(this, this.#x),
       ...runsRpc(this, this.#x),
       ...jobsRpc(this, this.#x),
@@ -2013,6 +2099,16 @@ export class StudioCore {
       !!this.#x.activeCompletions.get(threadId)?.size ||
       [...this.#x.activeDelegations.values()].some((d) => d.threadId === threadId)
     );
+  }
+
+  /** Whether agents write in `directory`: the games folder, a game's own folder or the scratch where workers' copies live. */
+  async #agentWritable(directory: string): Promise<boolean> {
+    const real = async (dir: string) => realpath(dir).catch(() => path.resolve(dir));
+    const target = await real(directory);
+    const games = await this.games.list().catch(() => []);
+    const roots = [this.games.root, this.layout.scratch, ...games.map((game) => game.dir)];
+    for (const root of roots) if (isInside(await real(root), target)) return true;
+    return false;
   }
 
   /** Trusted UI project binding; agent inputs do not select an output root. */

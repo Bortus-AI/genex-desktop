@@ -1,7 +1,10 @@
 import { validateDetect } from "./detect-manifest.ts";
 import { validateAssets, validateWorkspace } from "./workspace-manifest.ts";
 import { validateFolders, validateWorkerTypes } from "./worker-manifest.ts";
+import { validateScaffolds } from "./scaffold-manifest.ts";
 import { validateMomentSections } from "./hook-manifest.ts";
+import { validateObservers } from "./observer-manifest.ts";
+import { RESERVED_TOOLBAR_LABELS } from "./reserved-labels.ts";
 import { applyToolScope, serverFacts, skillScopeFields } from "./scope-manifest.ts";
 import { validateNativeDeclarations } from "./native-manifest.ts";
 import { assertRelativePath, containedReal } from "../paths.ts";
@@ -71,19 +74,6 @@ const SENSITIVE_ACTIONS = new Set([
   "configure-paid",
   "publish-draft",
   "publish-gallery",
-]);
-/** Labels Studio's own stage-strip buttons use; the build smoke finds them by exact text. */
-export const RESERVED_TOOLBAR_LABELS: ReadonlySet<string> = new Set([
-  "Retry",
-  "Ready",
-  "Live",
-  "Builds",
-  "Assets",
-  "Export",
-  "Plugins",
-  "Reload",
-  "State",
-  "Close plugins",
 ]);
 const reservedLower = new Set([...RESERVED_TOOLBAR_LABELS].map((l) => l.toLowerCase()));
 const SUPPORTED_API_VERSIONS = [1, 2, 3];
@@ -572,8 +562,9 @@ function validateReachSections(m: PluginManifest, canonical: PluginManifest): vo
 
 /**
  * The account flow (API 2), and the API 3 delivery limits, native declarations, project detection,
- * what a project's history leaves out and where its assets live, the plugin's worker types and
- * the folders its engine programs write to, and its locks and the handlers of Genex's moments.
+ * what a project's history leaves out and where its assets live, the plugin's worker types, its
+ * scaffolds and the folders its engine programs write to, its locks and the handlers of Genex's moments, and its
+ * observers.
  */
 function validateHostSections(m: PluginManifest, canonical: PluginManifest): void {
   if (m.account !== undefined) canonical.account = validateAccount(m, canonical.actions);
@@ -582,8 +573,10 @@ function validateHostSections(m: PluginManifest, canonical: PluginManifest): voi
   if (m.assets !== undefined) canonical.assets = validateAssets(m);
   if (m.assetLimits !== undefined) canonical.assetLimits = validateAssetLimits(m);
   if (m.workerTypes !== undefined) canonical.workerTypes = validateWorkerTypes({ ...m, tools: canonical.tools });
+  if (m.scaffolds !== undefined) canonical.scaffolds = validateScaffolds({ ...m, tools: canonical.tools });
   if (m.folders !== undefined) canonical.folders = validateFolders(m);
   validateMomentSections(m, canonical);
+  if (m.observers !== undefined) canonical.observers = validateObservers(m, canonical);
   if (m.nativeRuntimes !== undefined || m.nativeJobs !== undefined) {
     if (m.apiVersion !== 3 || !hasCapability(m, PluginCapability.NativeRuntime))
       throw new Error(MESSAGE.NativeNeedsApi3);

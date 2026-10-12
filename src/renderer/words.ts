@@ -29,10 +29,12 @@ import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
+import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView } from "../shared/run-summary.ts";
+import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
 import {
   GrantKind,
   isPlanRequest,
@@ -52,6 +54,7 @@ import type { LeadFace } from "./run-tree.ts";
 import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
+import { MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
 import {
   APP_LOOK_TOOL_NAME,
   AppLookAccessKind,
@@ -152,6 +155,9 @@ const PHRASES: Array<[RegExp, (match: RegExpMatchArray) => StatusWords]> = [
   [/^director playtesting (.+)$/i, (m) => ({ line: `The lead is playing ${m[1]}`, short: `Playing ${m[1]}` })],
   [/^director finishing$/i, () => ({ line: "The lead is finishing the build", short: "Finishing" })],
   [/^director$/i, () => ({ line: "The lead is watching the workers", short: "The lead" })],
+  // A Loop led in place: its lead builds in the project itself, often with no workers at all.
+  [/^lead in place$/i, () => ({ line: "The lead is building in your project", short: "The lead" })],
+  [/^lead in place finishing$/i, () => ({ line: "A reviewer is checking the lead's finish", short: "Checking" })],
   [/^iteration (\d+) — building$/i, (m) => ({ line: `Round ${m[1]} · building`, short: `Round ${m[1]}` })],
   [/^iteration (\d+) — judging blind$/i, (m) => ({ line: `Round ${m[1]} · reviewing`, short: `Round ${m[1]}` })],
   [
@@ -599,8 +605,10 @@ function cancelledTitle(variant: OutcomeVariant, available: string): string {
   return variant === "card" ? `Build stopped${available}` : "Build cancelled";
 }
 
-function finishedTitle({ delivered, verification }: OutcomeView, variant: OutcomeVariant): string {
+function finishedTitle({ delivered, verification, inPlace }: OutcomeView, variant: OutcomeVariant): string {
   const full = variant === "full";
+  // A Loop led in the project's own folder kept its work there: no build is promised to play.
+  if (inPlace) return full ? IN_PLACE_WORDS.finishedFull : IN_PLACE_WORDS.finished;
   if (delivered === "superseded")
     return full ? "Run finished · Newer integrated build not delivered" : "Newer integrated build not delivered";
   if (delivered !== "delivered") return full ? "Run finished · No build delivered" : "No new build";
@@ -609,6 +617,18 @@ function finishedTitle({ delivered, verification }: OutcomeView, variant: Outcom
   if (attention) return "Changes are live · Checks need attention";
   return variant === "card" ? "Changes are live · Checks incomplete" : "Changes are live";
 }
+
+/** How a Loop led in its project's own folder ends, wherever its run reads: its work is kept there, never promised as a build to play in Live. */
+export const IN_PLACE_WORDS = {
+  finished: "Changes are kept in your project",
+  finishedFull: "Loop finished · Changes kept in your project",
+  /** The result node's word and the run's line. */
+  kept: "Kept in your project",
+  headline: (after: string) => `Finished${after} · kept in your project`,
+  because: "The Loop's work is kept in your project.",
+  stoppedHeadline: (after: string) => `Stopped${after} · kept in your project`,
+  stoppedBecause: "Stopped. What it built is kept in your project.",
+} as const;
 
 /** The morning's two sentences: what the run amounts to, and what became of the build. */
 export interface LoopRunWords {
@@ -644,6 +664,8 @@ export function loopRunWords(loopRun: {
    * checked the build that is now their game — so it replaces the flat promise when it is there.
    */
   landing?: string | null;
+  /** How the Loop worked on its project (`run_finished.profile`): `open` kept its work in the project's own folder. */
+  profile?: string | null;
 }): LoopRunWords {
   const rounds = Math.max(0, Math.trunc(loopRun.rounds || 0));
   const after = rounds ? ` after ${plural(rounds, "round")}` : "";
@@ -652,7 +674,11 @@ export function loopRunWords(loopRun: {
   const why = stoppedWords(loopRun.stoppedBecause);
   if (loopRun.paused)
     return pausedLoopRunWords(after, wasCancelled(loopRun.stoppedBecause), pausedWhy(loopRun.pausedOn, why));
-  if (wasCancelled(loopRun.stoppedBecause)) return stoppedLoopRunWords(after, loopRun.landed === true, hasBuild);
+  const inPlace = loopRun.profile === LoopProfile.Open;
+  if (wasCancelled(loopRun.stoppedBecause))
+    return stoppedLoopRunWords(after, loopRun.landed === true, hasBuild, inPlace);
+  if (loopRun.landed === true && inPlace)
+    return { headline: IN_PLACE_WORDS.headline(after), because: IN_PLACE_WORDS.because };
   if (loopRun.landed === true) {
     return {
       headline: `Finished${after} · live in your game`,
@@ -664,10 +690,18 @@ export function loopRunWords(loopRun: {
   if (loopRun.landed === false) {
     // Nothing merged: the old copy promised "kept and playable" over a card with no button at all.
     return hasBuild
-      ? { headline: `Finished${after} · not made live yet`, because: `The build is kept and playable — ${why}.` }
-      : { headline: `Finished${after} · nothing new`, because: `Your game is as you left it — ${why}.` };
+      ? {
+          headline: `Finished${after} · not made live yet`,
+          because: `The build is kept and playable — ${fullStop(why)}`,
+        }
+      : { headline: `Finished${after} · nothing new`, because: `Your game is as you left it — ${fullStop(why)}` };
   }
-  return { headline: `Finished${after}`, because: `${capitalise(why)}.` };
+  return { headline: `Finished${after}`, because: fullStop(capitalise(why)) };
+}
+
+/** Text that ends a sentence: a full stop added only when it has no end of its own (a close's reason may). */
+function fullStop(text: string): string {
+  return /[.!?…]$/.test(text) ? text : `${text}.`;
 }
 
 /**
@@ -702,7 +736,9 @@ function pausedLoopRunWords(after: string, stopped: boolean, why: string): LoopR
 }
 
 /** A run the owner stopped: what reached the game, what is kept, or that nothing changed. */
-function stoppedLoopRunWords(after: string, landed: boolean, hasBuild: boolean): LoopRunWords {
+function stoppedLoopRunWords(after: string, landed: boolean, hasBuild: boolean, inPlace: boolean): LoopRunWords {
+  if (landed && inPlace)
+    return { headline: IN_PLACE_WORDS.stoppedHeadline(after), because: IN_PLACE_WORDS.stoppedBecause };
   if (landed)
     return { headline: `Stopped${after} · live in your game`, because: "Stopped. What it built is in your game now." };
   if (hasBuild)
@@ -1427,13 +1463,23 @@ export function liveBehindLabel(reason: LiveBehindReason, note: string | null): 
   return note ? `${words}: ${note}` : words;
 }
 
-/** The stage strip's Play/Stop and full screen, as their tooltips and accessible names say them. */
+/** The stage strip's tabs, Play/Stop and full screen, as their tooltips and accessible names say them. */
 export const STAGE_WORDS = {
   stop: "Stop game",
   stopping: "Stopping game",
   play: "Play game",
   starting: "Starting game",
   fullScreen: "Full screen",
+  /** The view switcher's tabs; a folder with more than one Live view names each by what it shows. */
+  tabs: { live: "Live", builds: "Builds", assets: "Assets", webGame: "Web game", unreal: "Unreal" },
+} as const;
+
+/** Live for a folder with no view of its own (Godot, Blender, files of its own): the latest pictures its runs kept. */
+export const STILLS_WORDS = {
+  /** Under the game's name while no run has kept a picture: one line, as the empty state's subtitle is. */
+  none: "Pictures show here once a Loop takes them.",
+  /** A picture's alt text: the capture's label and the picture's name. */
+  picture: (label: string, name: string) => (name ? `${label}: ${name}` : label),
 } as const;
 
 // ── an agent at its screen ────────────────────────────────────────────────────────────────
@@ -1573,6 +1619,9 @@ export const PLUGIN_SUGGESTION_WORDS = {
   on: "On",
   onlyYou: "Only you turn a Genex plugin on. It runs with your access to this Mac.",
   folders: (paths: string) => `Turning it on lets its programs write in: ${paths}`,
+  /** A plugin loaded from a folder on this Mac: its code isn't sandboxed, and its tools ask first. */
+  localAccess:
+    "Loaded from a folder on this Mac. It runs with your access, and each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",
 } as const;
 
 /**
@@ -1593,6 +1642,15 @@ export const DONT_WAIT_WORDS = {
 
 /** Each game engine as the chat names it. */
 export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal" } as const satisfies Record<GameEngine, string>;
+
+/**
+ * What the sidebar shows beside a project that isn't a game, by the core fact it holds; a fact
+ * missing here is a game's (or one no word names) and shows nothing.
+ */
+export const PROJECT_KIND_WORDS = {
+  [CoreFact.UnrealPlugin]: "Unreal plugin",
+  [CoreFact.BlenderAssets]: "Blender assets",
+} as const satisfies Partial<Record<CoreFact, string>>;
 
 // ── the chat transcript ───────────────────────────────────────────────────────────────────
 
@@ -1786,7 +1844,12 @@ export const JOBS_WORDS = {
   byLead: "Started by the lead",
 } as const;
 
-/** The finish check's node and card. */
+/** Small counts spelled out, for sentences that read better with a word than a digit. */
+const SPELLED_COUNTS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"] as const;
+/** A small count as a word ("two"), a larger or odd one as its digits. */
+const spelledCount = (count: number): string => SPELLED_COUNTS[count] ?? String(count);
+
+/** The finish check's node, card and chat lines; every count of no's comes from the shared cap. */
 export const FINISH_CHECK_WORDS = {
   name: "Finish check",
   state: {
@@ -1797,6 +1860,48 @@ export const FINISH_CHECK_WORDS = {
   } satisfies Record<FinishCheckState, string>,
   placeholder: "Runs at the end",
   about: "When the lead says the Loop is done, a reviewer that did none of the work checks the proof first.",
+  /** The node's line while the reviewer looks. */
+  checking: "Checking the proof",
+  /** The node's line after a no: how many reasons, and which no in a row it was (the card numbers each claim instead). */
+  roundWord: (reasons: number, rejections: number) =>
+    `${plural(reasons, "reason")} · round ${rejections} of ${MAX_FINISH_REJECTIONS}`,
+  doneWord: "Reviewer said yes",
+  stoppedWord: `${MAX_FINISH_REJECTIONS} no's in a row`,
+  unanswered: "The reviewer couldn't answer",
+  /** The card's section headings, as the design names them. */
+  heading: {
+    reviewer: "The reviewer",
+    whyNotYet: "Why not yet",
+    whyYes: "Why yes",
+    notDone: "What isn't done",
+  },
+  /** A heading with the lead's claim it answers, when the card lists more than one (the node's "round" counts no's in a row). */
+  roundHeading: (heading: string, claim: number) => `${heading} · claim ${claim}`,
+  reviewerIs: "A second agent that did none of the work.",
+  yourRequest: "Your request",
+  claimLabel: "The lead said",
+  saidYes: "The reviewer said yes.",
+  /** After a no, while the Loop goes on: how many more no's in a row stop it (fewer than the cap stand). */
+  moreNos: (rejections: number) => {
+    const left = MAX_FINISH_REJECTIONS - rejections;
+    const nos = left === 1 ? "no" : "no's";
+    return `${capitalise(spelledCount(left))} more ${nos} in a row and the Loop stops with a report.`;
+  },
+  /** After a no, once the Loop has ended some other way. */
+  endedAfterNo: "The Loop ended before another check.",
+  reportInChat: "The report is in the chat.",
+  /** One chat line per round, rewritten by its verdict. */
+  chat: {
+    checking: "A reviewer is checking whether the goal is reached.",
+    accepted: "The reviewer agreed the goal is reached.",
+    rejected: (rejections: number, reason: string) =>
+      reason
+        ? `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}): ${reason}`
+        : `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}).`,
+    stopped: (notDone: string) =>
+      `The reviewer said no ${spelledCount(MAX_FINISH_REJECTIONS)} times in a row, so the Loop stopped.${notDone ? ` Not done: ${notDone}` : ""}`,
+    unanswered: (why: string) => (why ? `The reviewer couldn't answer: ${why}` : "The reviewer couldn't answer."),
+  },
 } as const;
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
@@ -1969,6 +2074,7 @@ export const MODEL_PICKER_WORDS = {
   cannotSeeImages: "This model cannot see images, so it cannot review screenshots",
   subscription: "subscription",
   signIn: "sign in",
+  free: "Free",
 } as const;
 
 /** Settings → Model Providers: the metered rows, OpenCode and OpenRouter (`panels/MeteredProviders.tsx`). */
@@ -2023,6 +2129,68 @@ export const METERED_PROVIDER_WORDS = {
   },
 } as const;
 
+/** Settings → Model Providers: the person's own model server (`panels/LocalServerRow.tsx`). */
+export const LOCAL_SERVER_WORDS = {
+  name: "Local server",
+  notConnectedLine: "Use a model you run in LM Studio, llama.cpp, TabbyAPI, vLLM or KoboldCpp.",
+  addressLabel: "Server address",
+  addressPlaceholder: "http://127.0.0.1:5000/v1",
+  keyLabel: "API key",
+  keyPlaceholder: "API key (optional)",
+  connect: "Connect",
+  connecting: "Connecting…",
+  saveKey: "Save key",
+  cancel: "Cancel",
+  found: "Running on this computer",
+  use: "Use",
+  foundModels: (count: number) => `${count} ${count === 1 ? "model" : "models"}`,
+  foundNeedsKey: "asks for a key",
+  connected: "Connected",
+  notRunning: "Not running",
+  needsKey: "Needs a key",
+  noModels: "No models",
+  /** "TabbyAPI at 127.0.0.1:5000", or the address alone for a server Genex can't name. */
+  serverAt: (name: string | null, host: string) => (name ? `${name} at ${host}` : host),
+  notRunningLine: (host: string) => `Nothing answers at ${host}. Start the server, then check again.`,
+  needsKeyLine: (server: string) => `${server} asks for an API key.`,
+  noModelsLine: (name: string) => `Load a model in ${name}, then check again.`,
+  theServer: "the server",
+  menu: "Server",
+  menuName: "Local server options",
+  change: "Change address…",
+  changeLine: "Connect another server or port",
+  disconnect: "Disconnect",
+  models: "Models on this server",
+  context: (size: string) => `${size} context`,
+  seesImages: "sees images",
+  cannotCallTools: "can't call tools, so it can't build",
+  /** Where TabbyAPI keeps the key it asks for: it writes one on its first start. */
+  tabbyKeyHint: "TabbyAPI writes its key to api_tokens.yml in its folder on first start.",
+  otherServer: "Running another server?",
+  connectIt: "Connect it in Model Providers",
+  onboardingLine: "Already running LM Studio, llama.cpp or TabbyAPI?",
+  connectServer: "Connect your server",
+  problem: {
+    [LocalServerProblem.Empty]: "Enter the server's address, like 127.0.0.1:5000.",
+    [LocalServerProblem.Malformed]: "That isn't a server address. Enter one like http://127.0.0.1:5000/v1.",
+    [LocalServerProblem.Scheme]: "Use an address that starts with http:// or https://.",
+    [LocalServerProblem.Credentials]: "Leave the user name and password out of the address. Put a key under API key.",
+    [LocalServerProblem.NotLocal]:
+      "Genex connects to servers on this computer or your local network. For a hosted API, use OpenRouter or OpenCode.",
+    [LocalServerProblem.NotFound]:
+      "Couldn't find that computer on your network. Check the name, or use its IP address.",
+    [LocalServerProblem.NotAnswering]: "Nothing answers at that address. Start the server and check the port.",
+    [LocalServerProblem.NotOpenAi]:
+      "Something answers there, but not as a model server. Check the port, and that the address ends in /v1.",
+    [LocalServerProblem.NeedsKey]: "This server asks for an API key. Paste it under API key.",
+    [LocalServerProblem.KeyRefused]: "The server didn't accept that key. Check it and paste it again.",
+    [LocalServerProblem.BadKey]: "That doesn't look like a key. Paste the whole key, with no spaces.",
+    [LocalServerProblem.OwnOllama]: "That's the Ollama on this computer. Its models are already under Local models.",
+    [LocalServerProblem.StoreLocked]:
+      "This computer's secure storage is locked or unavailable, so the key can't be saved.",
+  } satisfies Record<LocalServerProblem, string>,
+} as const;
+
 /** Settings → Model Providers: which models the picker lists (`panels/PickerModels.tsx`). */
 export const PICKER_MODELS_WORDS = {
   title: "Show in the model picker",
@@ -2048,6 +2216,8 @@ export const NOTICE_WORDS = {
   buildFailed: "Build failed.",
   buildStopped: "Build stopped. Everything built so far is kept.",
   buildLive: "Build finished. Changes are live.",
+  /** A Loop that worked in its project's own folder: its work is there, which Live may only show as stills. */
+  buildKept: "Build finished. Changes are kept in your project.",
   buildNothingNew: "Build finished without a new version.",
   newGame: "New game",
   harness: "Harness",
@@ -2116,6 +2286,21 @@ export const UPDATE_WORDS = {
   /** Linux: a newer release to download and install over this one. */
   download: (version: string | null) => (version ? `Download Genex ${version}` : "Download the new Genex"),
   downloadHint: "Opens the release page",
+} as const;
+
+/** How many waiting releases the Update plugins tooltip names before it counts them instead. */
+const PLUGIN_RELEASES_NAMED = 3;
+const RELEASE_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
+
+/** The sidebar's Update plugins, while installed plugins have newer versions waiting (`state/plugins.ts`). */
+export const PLUGIN_UPDATE_WORDS = {
+  update: (count: number) => (count === 1 ? "Update plugin" : `Update ${count} plugins`),
+  updating: "Updating plugins…",
+  /** The button's tooltip: the releases it installs ("Local Blender 1.2.0"), each after its own approval. */
+  hint: (releases: readonly string[]) =>
+    releases.length > PLUGIN_RELEASES_NAMED
+      ? `Installs ${releases.length} plugin updates`
+      : `Installs ${RELEASE_LIST.format(releases)}`,
 } as const;
 
 /** Send feedback, from the bug button at the top of the sidebar (`panels/FeedbackDialog.tsx`). */
@@ -2453,6 +2638,11 @@ function webHost(address: string): string {
   } catch {
     return address;
   }
+}
+
+/** The placeholder of a permission card's own-words row: what the person tells the one who asked to do instead. */
+export function permissionInsteadWords(event: Partial<ToolPermissionEvent>): string {
+  return event.worker ? "Tell the worker what to do instead…" : "Tell Claude what to do instead…";
 }
 
 /** Who asks: a worker of the chat's lead by its title, else Claude. */
@@ -2851,8 +3041,13 @@ export const SANDBOX_SETUP_WORDS = {
     "not-provisioned": "Windows needs a one-time setup of the protected workspace, approved by an administrator.",
     "git-missing":
       "Agents run their commands in Git Bash, which comes with Git for Windows. Install it from git-scm.com, then retry.",
+    "isolation-blocked": "This system is blocking the isolation the protected workspace uses to keep agents apart.",
   } satisfies Record<SandboxProblemCode, string>,
   installThenRetry: "Install them in a terminal, then retry:",
+  /** Isolation blocked by AppArmor: the profile only applies to a Studio started after it. */
+  allowThenReopen: "Allow it for Studio in a terminal, then quit and reopen Studio:",
+  /** Who the allow command is for. */
+  allowFor: "Ubuntu 24.04 and later (AppArmor)",
   /** Who each install command is for, by `PackageManager`. */
   system: { apt: "Ubuntu, Debian", dnf: "Fedora" } satisfies Record<PackageManager, string>,
   copy: "Copy",
@@ -2939,6 +3134,9 @@ export const PLUGINS_WORDS = {
     folder: (path: string, why: string) => `${path} — ${why}`,
     scan: "Code scan",
     trusted: "This plugin runs trusted code on your Mac.",
+    /** A plugin loaded from a folder, in place of `trusted`. */
+    localAccess:
+      "Loaded from a folder on this Mac. It runs with your access: its code isn't sandboxed. Each of its tools asks you before an agent runs it; its own steps at Genex's moments don't ask.",
   },
   /** What a plugin may do, in words, by `PluginCapability`; joined in this order on its page. */
   can: {
@@ -3197,6 +3395,16 @@ export const GENEX_WORDS = {
     filesLoading: "Listing files…",
     filesLabel: "Files Publish uploads",
     filesLeftOut: (count: number) => `${count} left out`,
+    /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
+    coverNone: "No cover yet. Genex shows a real frame of your game.",
+    coverAsk: "Ask for a cover",
+    coverAskLabel: "Ask for a cover in this game's chat",
+    /** What that press leaves in the game's composer, for the person to send. */
+    coverPrompt: "Make this game's Genex cover.",
+    /** The chat's card for the cover a builder kept: its caption, its picture's name, and Publish, which opens this dialog. */
+    coverCard: "Genex cover",
+    coverCardAlt: "This game's Genex cover",
+    coverCardPublishLabel: "Publish this game",
     failedTitle: "It didn't go online this time",
     failedText: "Your game is safe and nothing changed. Check your internet connection and try again.",
     failedKept: "Your game is safe, and players still get the version they had. Try again in a moment.",
@@ -3255,6 +3463,8 @@ export const GENEX_WORDS = {
   review: {
     title: "Waiting for your review",
     button: (candidate: number | null) => (candidate === null ? "Review remesh" : `Review candidate ${candidate}`),
+    /** A candidate's picture above its Review button. */
+    picture: (candidate: number) => `Candidate ${candidate}`,
   },
   /** A generation's state, by `JobState`. */
   state: {
@@ -3388,6 +3598,8 @@ export const UNREAL_WORDS = {
     openAfter: (project: string) => `Open ${project} after it ends.`,
     leaveOpen: "Genex leaves it open until the Loop ends.",
     choose: (project: string) => `${project} isn’t where it was. Choose it again in the Unreal panel.`,
+    /** A folder holding an Unreal project Genex has no link to yet. */
+    chooseFirst: "Choose this game’s Unreal project in the Unreal panel.",
     panel: "Open the Unreal panel",
   },
   /** The plugin page's name and line for the Unreal plugin's editor connection. */

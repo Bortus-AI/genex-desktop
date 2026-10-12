@@ -1098,6 +1098,16 @@ async function restoreSettings(project: Project, record: SetupRecord, env: Setup
 }
 
 /**
+ * Forgets setup's record of the project at `file` (its port, its copies of what setup replaced)
+ * without touching the project: for a project Genex made and is about to remove. Nothing when the
+ * project isn't there.
+ */
+export async function forgetSetup(file: string, storage: string): Promise<void> {
+  const project = await resolveProject(file).catch(() => null);
+  if (project) await rm(recordFolder(storage, project), { recursive: true, force: true });
+}
+
+/**
  * Takes back what setup added and nothing else: the user's own later changes stay. `kept` names
  * the helper files left in place because the user changed them.
  */

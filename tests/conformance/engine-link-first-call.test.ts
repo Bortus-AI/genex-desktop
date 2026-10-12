@@ -16,6 +16,8 @@ import { coreLite } from "../helpers/core-lite.ts";
 
 const SERVER = path.resolve("tests/fixtures/mcp/plugin-server.mjs");
 const TOOL = "enginedemo-editor__echo";
+/** Where the test plugin came from: GitHub, so it starts on and its server follows the chat's mode. */
+const FROM_GITHUB = { kind: "github", repo: "studio-tests/enginedemo", sha: "a".repeat(40) } as const;
 
 /** A local plugin with `game-engine`, an MCP server per game, and a `link-default` action that would link `project`. */
 async function enginePackage(project: string): Promise<string> {
@@ -73,7 +75,9 @@ it("a game's first call to a game-engine plugin's server never links it", async 
     const threadId = await lite.core.createGameThread(project);
     await lite.core.setPermissionMode(threadId, PermissionMode.Bypass);
     const file = await uproject();
-    await lite.core.plugins.installLocal(await enginePackage(file), "local", ["game-engine"]);
+    // From GitHub, so its server follows the chat's Bypass: a local plugin's server asks every call.
+    await lite.core.plugins.installLocal(await enginePackage(file), "github", ["game-engine"], FROM_GITHUB);
+    await lite.core.plugins.setEnabled("enginedemo", true);
     await lite.core.mcp.toolsFor(project);
     const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
     const linked = async () =>
@@ -107,7 +111,8 @@ it("a connector call never links a game when its plugin lacks game-engine", asyn
     const manifest = JSON.parse(await readFile(manifestFile, "utf8"));
     manifest.capabilities = [];
     await writeFile(manifestFile, JSON.stringify(manifest));
-    await lite.core.plugins.installLocal(dir, "local", []);
+    await lite.core.plugins.installLocal(dir, "github", [], FROM_GITHUB);
+    await lite.core.plugins.setEnabled("enginedemo", true);
     await lite.core.mcp.toolsFor(project);
     const api = lite.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
     assert.equal(await api["mcp.invoke"]!({ project, threadId, name: TOOL, args: { text: "one" } }), "one");

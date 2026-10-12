@@ -16,13 +16,19 @@ import {
   fireHooks,
   HookEvent,
   HookHold,
+  notesText,
+  pendingLine,
   takeCheckpoint,
   turnHeldLine,
+  waitReady,
 } from "../../src/harness-seed/loop/hooks.ts";
 import {
   betweenHeldWords,
   closeHeldWords,
   cppHeldWords,
+  crashHeldWords,
+  crashRestoreHeldWords,
+  restartHeldWords,
   startHeldWords,
   turnsHeldWords as unrealTurnsHeld,
 } from "../../src/harness-seed/loop/unreal/hold-words.ts";
@@ -225,6 +231,48 @@ describe("Genex's moments, as the seed fires them", { timeout: TEST_TIMEOUT_MS }
     assert.equal(health.blocked, null, "a moment that never blocks stays quiet");
   });
 
+  it("a moment or a checkpoint a Stop ended answers as stopped, never as a failure of the game's plugins", async () => {
+    const stopped = () => {
+      const recorder = ctxRecorder({
+        handlers: {
+          "hooks.fire": () => {
+            throw new Error("Stopped.");
+          },
+          "checkpoint.take": () => {
+            throw new Error("Stopped.");
+          },
+        },
+      });
+      recorder.cancel();
+      return recorder.ctx as never;
+    };
+    const game = { hookEvents: [HookEvent.TurnStart, HookEvent.WorkerStart] };
+    for (const on of [HookEvent.TurnStart, HookEvent.WorkerStart]) {
+      const report = await fireHooks(stopped(), game, on, { project: NAME });
+      assert.equal(report.blocked?.reason, "Stopped.", on);
+      assert.doesNotMatch(String(report.blocked?.reason), /couldn't ask/);
+    }
+    const checkpoint = await takeCheckpoint(stopped(), { project: NAME, threadId: "t1", label: "Halfway" });
+    assert.deepEqual(checkpoint, { blocked: "Stopped." });
+    // The chat's line for a turn its Stop ended at turn.start blames no plugin.
+    assert.doesNotMatch(turnHeldLine({ reason: "Stopped." }), /couldn't ask|plugins/);
+  });
+
+  it("a wait for the game's apps a Stop cut short is never read as ready, even when no health step ran", async () => {
+    // The Stop came while health was asked: the host answers as if no step ran.
+    const recorder = ctxRecorder({
+      handlers: {
+        "hooks.fire": () => ({ blocked: null, pending: null, notes: [], images: [], ran: [] }),
+      },
+    });
+    recorder.cancel();
+    const clock = { now: () => 0, sleep: async () => {} };
+    const game = { hookEvents: [HookEvent.Health] };
+    const outcome = await waitReady(recorder.ctx as never, game, { project: NAME }, clock, 60_000);
+    assert.equal(outcome.ok, false, "never ready");
+    assert.ok(!outcome.ok && !outcome.timedOut && /stopped/i.test(outcome.reason), JSON.stringify(outcome));
+  });
+
   it("a worker refused after its start was announced has its end announced too", async () => {
     const repo = await gameRepo();
     const locks = fakeLocks();
@@ -390,8 +438,16 @@ describe("Genex's own holds, in the person's words on every surface", () => {
     ["the Unreal lead's turns held", (hold) => unrealTurnsHeld(held(hold))],
     ["a restore or restart between turns", (hold) => betweenHeldWords(held(hold))],
     ["adding C++", (hold) => cppHeldWords(held(hold))],
+    ["a crash Genex didn't reopen", (hold) => crashHeldWords(held(hold))],
+    ["a restart whose reopen Genex held", (hold) => restartHeldWords(held(hold))],
+    ["a crash whose way back Genex held", (hold) => crashRestoreHeldWords(held(hold))],
     ["a director run's start", (hold) => runHeldWords(held(hold))],
     ["a director run's lead turns held", (hold) => directorTurnsHeld(held(hold))],
+    ["a chat's wait for the game's apps", (hold) => pendingLine(held(hold))],
+    [
+      "a note Genex added at a moment",
+      (hold) => notesText({ notes: [{ plugin: "@genex", text: held(hold).reason, hold, label: APP }] })[0] ?? null,
+    ],
   ];
 
   for (const [surface, words] of SURFACES) {
@@ -413,10 +469,21 @@ describe("Genex's own holds, in the person's words on every surface", () => {
   it("a step's own block keeps its reason: no surface words it as Genex's hold", () => {
     // A step's block: its reason, and no hold of Genex's.
     const step = { reason: "The crane is being serviced.", hold: undefined };
-    for (const words of [startHeldWords, closeHeldWords, unrealTurnsHeld, betweenHeldWords, cppHeldWords])
+    for (const words of [
+      startHeldWords,
+      closeHeldWords,
+      unrealTurnsHeld,
+      betweenHeldWords,
+      cppHeldWords,
+      crashHeldWords,
+      restartHeldWords,
+      crashRestoreHeldWords,
+    ])
       assert.equal(words(step), null);
     assert.match(runHeldWords(step), /a plugin of this game held it back: The crane is being serviced\./);
     assert.match(directorTurnsHeld(step), /The crane is being serviced\./);
     assert.match(turnHeldLine(step), /The crane is being serviced\./);
+    assert.equal(pendingLine(step), "The crane is being serviced.");
+    assert.deepEqual(notesText({ notes: [{ plugin: "crane", text: step.reason }] }), [step.reason]);
   });
 });

@@ -13,6 +13,7 @@ import { shortSha } from "../git.ts";
 import { isRunning } from "../outcomes.ts";
 import { KIND_NAMES } from "../kinds.ts";
 import { minutes } from "../time.ts";
+import { CLAIM_BEFORE_END_MINUTES } from "../finish-check.ts";
 import { LEAD_BRIEF, LEAD_RESUMED_MEMORY } from "./lead-session-prompts.ts";
 import { MAX_DIRECTOR_MEMORY } from "./memory.ts";
 import { DIRECTOR_TOOLS } from "./tool-specs.ts";
@@ -257,13 +258,15 @@ function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): strin
 }
 
 /**
- * When the run is done, as the TIME line says it: a timed build spends its duration; any other
+ * When the run is done, as the TIME line says it: a timed build's hours are a cap it may finish
+ * under with a claim (a finish that claims nothing waits for the wrap-up); any other
  * finishes once verified and skips optional polish — and a goal commission, whose first finish the
  * art director turns back with its defects (art-direction.ts `shipFinishGate`), hears that those
  * defects are not that polish.
  */
 function completionWords(run: Run): string {
-  if (durationCommission(run)) return "The selected duration is working time; finish in wrap-up.";
+  if (durationCommission(run))
+    return "The hours are a cap: call finish with victory=yes as soon as the goal is reached, and a reviewer's yes ends the build; a finish that claims nothing waits for the wrap-up, unless the user asks.";
   const words =
     "Finish once required outcomes are verified; time is a ceiling. Report blockers instead of optional polish.";
   return goalCommission(run) ? `${words} ${SHIP_DEFECTS_NOT_POLISH}` : words;
@@ -308,7 +311,7 @@ export function directorBrief({
     shapeLine(ownShape, shape),
     requestedStateLine(run.setup),
     ``,
-    `TIME: ${minutes(finalDeadline - Date.now())} minutes in all. Your session ends at ${new Date(softDeadline).toISOString().slice(11, 16)} UTC (${minutes(softDeadline - Date.now())} minutes from now); the last ${minutes(finalDeadline - softDeadline)} minutes are reserved for wrapping up. ${completionWords(run)}`,
+    `TIME: ${minutes(finalDeadline - Date.now())} minutes in all. Your working time ends at ${new Date(softDeadline).toISOString().slice(11, 16)} UTC (${minutes(softDeadline - Date.now())} minutes from now); then ${minutes(finalDeadline - softDeadline)} more minutes for wrapping up. ${completionWords(run)}`,
     whereLine({ gameFolder: lead?.gameFolder ?? null, integrationWorktree, baseCommit }),
     `CAPACITY: ${pool}. ${CAPACITY_RULE}`,
     nestedLine(nestedRepos, leads),
@@ -401,6 +404,7 @@ export function wrapUpPrompt({
       : "",
     `Integration branch: ${head}${lastHealthWords(integrationHealthy)}.`,
     `Call finish now with land=yes if the integrated build loads and ${fromScratch ? "does what the goal asked (this run started from an empty project — the user had no game at all, so anything that runs and plays is this run's build)" : "is better than what the user had"}, otherwise land=no, and an honest summary. Then stop.`,
+    `A claim that the goal is reached (victory=yes) needs at least ${CLAIM_BEFORE_END_MINUTES} minutes before the end for a reviewer to check it; a later one closes the run without a yes.`,
   ]
     .filter(Boolean)
     .join("\n");

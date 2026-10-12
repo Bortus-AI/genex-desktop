@@ -8,11 +8,20 @@
  * Pure: no DOM, no window. `panels/run-graph/use-builds-model.ts` and the tests share it.
  */
 import { MINUTE_MS } from "../shared/duration.ts";
+import { FinishCheckStep, MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
 import { JobState } from "../shared/jobs.ts";
 import { ExecutionStatus } from "../shared/run-state.ts";
 import type { RunSummary } from "../shared/run-summary.ts";
 import { GraphSelection } from "./panels/inspector/selection.ts";
-import { GraphNodeKind, type LeadNode, type RunGraph, runIdOf } from "./run-graph.ts";
+import {
+  type FinishCheckNode,
+  FinishCheckState,
+  type FinishRound,
+  GraphNodeKind,
+  type LeadNode,
+  type RunGraph,
+  runIdOf,
+} from "./run-graph.ts";
 import type { JobInfo } from "./run-graph-workers.ts";
 import {
   isWorkerAtWork,
@@ -24,7 +33,7 @@ import {
   type StepsLayout,
   Tone,
 } from "./run-steps.ts";
-import { backgroundCount, jobStatusWords, LEAD_WORDS } from "./words.ts";
+import { backgroundCount, FINISH_CHECK_WORDS, jobStatusWords, LEAD_WORDS } from "./words.ts";
 
 /** What the lead's node says it is doing: working itself, waiting for its workers, paused, done or stopped. */
 export const LeadFace = {
@@ -177,3 +186,114 @@ export function readingOrder(rows: PartRow[], nodes: ReadingNodes): string[] {
 /** Whether the Builds tab may draw a graph: a run's waits for its recorded outcome; a chat turn has none to wait for. */
 export const graphLoaded = (graph: RunGraph, summary: RunSummary | null): boolean =>
   summary !== null || runIdOf(graph) === null;
+
+/** The finish check node's words: its state, then what the newest round says. */
+export interface FinishCheckFace {
+  name: string;
+  word: string;
+}
+
+/** The newest round of the run's current ask, or undefined before its first claim. */
+const currentRound = (node: FinishCheckNode): FinishRound | undefined =>
+  node.rounds.find((round) => round.round === node.round);
+
+/**
+ * The line under the finish check's state: the reviewer at work, a no's reasons and count, no
+ * answer, a yes, a stop. It reads the run's current ask only (`node.round`, null before its first
+ * claim): a reopened run's earlier rounds are listed, never its line.
+ */
+function finishCheckLine(node: FinishCheckNode): string {
+  if (node.state === FinishCheckState.Checking) return FINISH_CHECK_WORDS.checking;
+  if (node.state === FinishCheckState.Done) return FINISH_CHECK_WORDS.doneWord;
+  if (node.state === FinishCheckState.Stopped) return FINISH_CHECK_WORDS.stoppedWord;
+  const newest = currentRound(node);
+  if (!newest) return FINISH_CHECK_WORDS.placeholder;
+  if (newest.step === FinishCheckStep.Unanswered) return FINISH_CHECK_WORDS.unanswered;
+  return FINISH_CHECK_WORDS.roundWord(node.reasons.length, node.rejections);
+}
+
+/** What the finish check's node says, in the owner's four states (Not yet, Checking, Done, Stopped). */
+export const finishCheckFace = (node: FinishCheckNode): FinishCheckFace => ({
+  name: FINISH_CHECK_WORDS.state[node.state],
+  word: finishCheckLine(node),
+});
+
+/**
+ * The finish check's five looks: a ghost until the current ask's first claim, then the owner's
+ * four states (not yet after a no or no answer, checking, done, stopped).
+ */
+export const FinishLook = {
+  Placeholder: "placeholder",
+  NotYet: "not_yet",
+  Checking: "checking",
+  Done: "done",
+  Stopped: "stopped",
+} as const;
+export type FinishLook = (typeof FinishLook)[keyof typeof FinishLook];
+
+/** How the finish check's node and card are coloured: the state's ink, and the edge and fill tokens (null for none). */
+export interface FinishCheckLook {
+  look: FinishLook;
+  tone: Tone;
+  edge: string | null;
+  fill: string | null;
+}
+
+/** Each look's ink, edge and fill, in the design's tokens: only the finish check wears these. */
+const FINISH_LOOKS: Record<FinishLook, FinishCheckLook> = {
+  [FinishLook.Placeholder]: { look: FinishLook.Placeholder, tone: Tone.Muted, edge: null, fill: null },
+  [FinishLook.NotYet]: { look: FinishLook.NotYet, tone: Tone.Orange, edge: "var(--orange)", fill: null },
+  [FinishLook.Checking]: {
+    look: FinishLook.Checking,
+    tone: Tone.Accent,
+    edge: "var(--accent)",
+    fill: "var(--accent-tint)",
+  },
+  [FinishLook.Done]: { look: FinishLook.Done, tone: Tone.Green, edge: "var(--green)", fill: "var(--green-tint)" },
+  [FinishLook.Stopped]: { look: FinishLook.Stopped, tone: Tone.Red, edge: "var(--red)", fill: "var(--red-tint)" },
+};
+
+/** Which look a finish check wears: not yet is a ghost until the current ask has a round, as its line says. */
+function lookOf(node: FinishCheckNode): FinishLook {
+  if (node.state === FinishCheckState.Checking) return FinishLook.Checking;
+  if (node.state === FinishCheckState.Done) return FinishLook.Done;
+  if (node.state === FinishCheckState.Stopped) return FinishLook.Stopped;
+  return currentRound(node) ? FinishLook.NotYet : FinishLook.Placeholder;
+}
+
+/** The finish check node's colours (`FINISH_LOOKS`). */
+export const finishCheckLook = (node: FinishCheckNode): FinishCheckLook => FINISH_LOOKS[lookOf(node)];
+
+/** The tone of the finish check card's status: the node's ink. */
+export const finishPanelTone = (node: FinishCheckNode): Tone => FINISH_LOOKS[lookOf(node)].tone;
+
+/** The ink of a round's reason numbers on the card: amber for why not yet, red for what isn't done, green for why yes. */
+export function reasonTone(round: FinishRound): Tone {
+  if (round.step === FinishCheckStep.Accepted) return Tone.Green;
+  if (round.step !== FinishCheckStep.Rejected) return Tone.Muted;
+  return round.stopped ? Tone.Red : Tone.Orange;
+}
+
+/** The line under one round on the finish check's card, and whether it reads quietly. */
+export interface RoundNote {
+  text: string;
+  quiet: boolean;
+}
+
+/**
+ * The line under a round's reasons on the card: why a round had no answer, a yes with no reasons,
+ * a stop's pointer to the report, or, for the current ask's newest no, what follows (more no's stop
+ * the Loop while it runs; once it is over, that it ended before another check). Null for none.
+ */
+export function roundNoteOf(round: FinishRound, node: FinishCheckNode): RoundNote | null {
+  if (round.step === FinishCheckStep.Unanswered) return round.why ? { text: round.why, quiet: false } : null;
+  if (round.step === FinishCheckStep.Accepted)
+    return round.reasons.length === 0 ? { text: FINISH_CHECK_WORDS.saidYes, quiet: false } : null;
+  if (round.step !== FinishCheckStep.Rejected) return null;
+  if (round.stopped) return { text: FINISH_CHECK_WORDS.reportInChat, quiet: true };
+  if (round.round !== node.round) return null;
+  if (node.over) return { text: FINISH_CHECK_WORDS.endedAfterNo, quiet: true };
+  return node.rejections < MAX_FINISH_REJECTIONS
+    ? { text: FINISH_CHECK_WORDS.moreNos(node.rejections), quiet: true }
+    : null;
+}

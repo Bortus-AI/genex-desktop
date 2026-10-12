@@ -1,4 +1,5 @@
 import { fork, type ChildProcess } from "node:child_process";
+import { outlivesHarness } from "../../shared/plugin-hooks.ts";
 import { CallCutOff, type PluginBinding } from "../../shared/plugins.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -51,6 +52,13 @@ export class PluginCallCutOff extends Error {
   constructor(reason: CallCutOff, message: string = CUT_OFF_MESSAGE[reason]) {
     super(message);
     this.reason = reason;
+  }
+}
+
+/** A call stopped before it was sent to its plugin: it never ran. */
+export class PluginCallNotSent extends Error {
+  constructor() {
+    super(STOPPED_BEFORE);
   }
 }
 
@@ -229,9 +237,9 @@ export class PluginProcess {
     signal?: AbortSignal,
     timeoutMs = DEFAULT_CALL_TIMEOUT_MS,
   ): Promise<any> {
-    if (signal?.aborted) throw new Error(STOPPED_BEFORE);
+    if (signal?.aborted) throw new PluginCallNotSent();
     const child = await this.#started();
-    if (signal?.aborted) throw new Error(STOPPED_BEFORE);
+    if (signal?.aborted) throw new PluginCallNotSent();
     const id = ++this.#sequence,
       controller = new AbortController();
     return new Promise((resolve, reject) => {
@@ -276,15 +284,23 @@ export class PluginProcess {
     for (const [id, p] of this.#pending) {
       if (binding.project && p.context?.project !== binding.project) continue;
       if (binding.threadId && p.context?.threadId !== binding.threadId) continue;
+      // A restore's after steps outlive a Stop (they reopen what its before steps closed), and so
+      // does the person's own Rewind: a harness shutting down sends a Stop for everything.
+      if (outlivesHarness(p.context?.hook)) continue;
       this.#endPending(id, new Error("Stopped local plugin work; accepted remote jobs may continue."));
     }
   }
   /**
-   * End every call in flight as cut off, for `reason`: each is told to stop, and its caller learns
-   * that whether it took effect is unknown. The backend keeps running for the calls that follow.
+   * End every call in flight as cut off, for `reason` (the harness that made them ended): each is
+   * told to stop, and its caller learns that whether it took effect is unknown. The host's own work
+   * goes on (`outlivesHarness`: a restore's after steps, the person's Rewind). The backend keeps
+   * running for the calls that follow.
    */
   cutOff(reason: CallCutOff) {
-    for (const id of [...this.#pending.keys()]) this.#endPending(id, new PluginCallCutOff(reason));
+    for (const [id, p] of [...this.#pending]) {
+      if (outlivesHarness(p.context?.hook)) continue;
+      this.#endPending(id, new PluginCallCutOff(reason));
+    }
   }
   /** Tell the backend to stop one call and answer its caller with `error`. */
   #endPending(id: number, error: Error) {

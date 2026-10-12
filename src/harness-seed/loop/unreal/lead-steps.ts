@@ -9,6 +9,7 @@
  * edited, and the runner's parts import these names from here.
  */
 import type { AnyRecord } from "../../types/harness.d.ts";
+import { HookHold } from "../hooks.ts";
 import { HostMethod } from "../host-methods.ts";
 import { isPlainRecord } from "../json.ts";
 import type { Lead } from "./lead-journal.ts";
@@ -65,13 +66,13 @@ export async function unrealWrite(lead: StepLead, name: string, args: AnyRecord 
     args,
     ...CHECKPOINT_STEP,
   });
-  if (isPlainRecord(answer) && answer.blocker === PluginCallBlocker.PlanMode)
-    throw Object.assign(new Error(MESSAGE.InPlan), { blocker: PluginCallBlocker.PlanMode });
   // A write that never ran is no write: whatever it was part of is not done. The error carries
-  // Genex's hold (the lock refusal's code) and the lock's label, so the person's line is worded
-  // from them, never from the message, which is written for agents.
+  // Genex's hold (Plan mode's, or the lock's typed `hold`) and the lock's label, so the person's
+  // line is worded from them, never from the message, which is written for agents.
+  if (isPlainRecord(answer) && answer.blocker === PluginCallBlocker.PlanMode)
+    throw Object.assign(new Error(MESSAGE.InPlan), { blocker: PluginCallBlocker.PlanMode, hold: HookHold.Plan });
   if (isPlainRecord(answer) && answer.blocker === PluginCallBlocker.Lock) {
-    const held = { blocker: PluginCallBlocker.Lock, hold: answer.reason, label: answer.lock };
+    const held = { blocker: PluginCallBlocker.Lock, hold: answer.hold, label: answer.lock };
     throw Object.assign(new Error(String(answer.message ?? "")), held);
   }
   return answer;

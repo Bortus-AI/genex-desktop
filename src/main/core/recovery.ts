@@ -8,6 +8,7 @@ import { PluginCallCutOff } from "../../substrate/plugins/process.ts";
 import { ToolPermissionBy, type ToolPermissionEvent, ToolPermissionState } from "../../shared/permissions.ts";
 import type { OptimizationCheckpointV1, OptimizationResultV1 } from "../../shared/optimization.ts";
 import path from "node:path";
+import { once } from "node:events";
 import { interruptedReplyNotice } from "../../shared/message-queue.ts";
 import { cp, readdir, rm } from "node:fs/promises";
 import { shortId } from "../../substrate/ids.ts";
@@ -35,10 +36,11 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { CustomEvent, customEventData, customRecord } from "../../shared/custom-events.ts";
 import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
-import { BootReason, DispatchActionType } from "../../shared/protocol.ts";
+import { type BootNotice, BootReason, DispatchActionType } from "../../shared/protocol.ts";
 import { RUN_START_EVENTS } from "../../shared/run-state.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
+import { stopMoments } from "./moment-stops.ts";
 import { RetainedState } from "../../substrate/game-candidate.ts";
 
 /** Words the recovery writes into the logs the user reads, and the errors it throws at them. */
@@ -70,6 +72,11 @@ const MIGRATION_LOG_MAX_LINES = 10;
 const MIGRATION_TYPE_ERRORS_LIMIT = { maxLines: 20, maxChars: 2_000 } as const;
 /** How long a queued self-restart waits, so the turn that asked for it can finish. */
 const SELF_RESTART_GRACE_MS = 1.5 * SECOND_MS;
+/**
+ * How long the harness's end waits for its workers writing in place to let go once told to stop,
+ * before their holds go anyway: past the engines' own grace before they kill a child (a few seconds).
+ */
+export const WRITERS_LET_GO_MS = 10 * SECOND_MS;
 
 /**
  * The memory key of the note the layout migration leaves when the agent's migrated files have type
@@ -584,9 +591,9 @@ export class RecoveryService {
     this.#core.plugins?.abortCalls(CallCutOff.HarnessEnded);
     for (const controller of this.#x.activeConnectorCalls.keys())
       controller.abort(new PluginCallCutOff(CallCutOff.HarnessEnded));
-    // Its workers writing in place let go below (`releaseHarnessLeases`); its calls waiting for a
-    // lock leave the line as their aborts reach them. The host's own holds (a restore, the
-    // person's Rewind) end with their own work, which goes on in main.
+    // Its workers writing in place let go below (`releaseHarnessLeases`), and the moments it asked
+    // for end there too; its calls waiting for a lock leave the line as their aborts reach them. The
+    // host's own holds (a restore, the person's Rewind) end with their own work, which goes on in main.
     this.#x.consent.cancel({}, "stop");
     this.#x.permissions.cancel({}, ToolPermissionBy.Stop);
     for (const release of this.#x.pluginTurnLeases.values()) await release();
@@ -610,16 +617,70 @@ export class RecoveryService {
   }
 
   /**
-   * Give back every preview window the ending harness boot borrowed over RPC, and the locks it held
-   * for its workers writing in place — its own `finally` blocks will never run. Windows the host
+   * Give back every preview window the ending harness boot borrowed over RPC, the locks it held
+   * for its workers writing in place and the moments it asked for — its own `finally` blocks will
+   * never run. Windows the host
    * holds for a delegation or a build carry no owner and are left to their own release.
    */
   async releaseHarnessLeases(): Promise<void> {
-    // Its workers writing in place are gone with it, a planned restart's as much as a crash's.
+    // From here on, a call of that harness still on its way (its handler awaiting) holds nothing.
+    const boot = this.#x.harnessBoot++;
+    // The moments it asked for (`hooks.fire`, `checkpoint.take`, a game restore) end with it: none
+    // runs its steps later for a harness that is gone. A restore whose files were put back still
+    // runs its after steps. Its own connector calls (`mcp.invoke`) are cut off with it too.
+    stopMoments(this.#x, {});
+    for (const [controller, call] of this.#x.activeConnectorCalls)
+      if (call.byHarness) controller.abort(new PluginCallCutOff(CallCutOff.HarnessEnded));
+    // Its workers and leads writing in place are gone with it, a planned restart's as much as a crash's: their
+    // sessions are told to stop, and their holds go once each has let go (or after a bounded wait),
+    // so no second writer works in the folder beside them.
+    await this.#stopWritersInPlace();
     this.#x.locks.releaseHarnessHolds();
-    const owner = `harness:${this.#x.harnessBoot++}`;
+    const owner = `harness:${boot}`;
     const released = (await this.#x.previewPool?.releaseOwnedBy(owner).catch(() => [] as string[])) ?? [];
     for (const handle of released) this.#x.profileSources.delete(handle);
+  }
+
+  /**
+   * Tell the harness's sessions writing in place to stop (its workers there, and its runs' leads in
+   * place, which write in the game folder as well), and wait (bounded) until their engines let go.
+   */
+  async #stopWritersInPlace(): Promise<void> {
+    const writers = new Set(this.#x.locks.harnessHolders());
+    const stopping = [...this.#x.activeDelegations.values()].filter(
+      (delegation) =>
+        (delegation.holder !== undefined && writers.has(delegation.holder)) || delegation.leadsInPlace !== undefined,
+    );
+    for (const delegation of stopping) delegation.abort.abort();
+    const letGo = (signal: AbortSignal | undefined) =>
+      !signal || signal.aborted ? Promise.resolve() : once(signal, "abort").then(() => undefined);
+    // On the locks' clock, so the bound is a test's to move.
+    const gaveUp = letGo(this.#x.locks.clock.timeout(WRITERS_LET_GO_MS));
+    await Promise.race([Promise.all(stopping.map((delegation) => letGo(delegation.settled))), gaveUp]);
+  }
+
+  /**
+   * A planned restart's first half (a self-update, an architect change or undo, the person's
+   * rollback): once any boot already under way has finished, the old harness stops, and only then
+   * is what it held let go, so it never hears its moments stopped and calls nothing after the sweep.
+   */
+  async endHarnessForRestart(): Promise<void> {
+    await this.#core.host.stopAfterRestarts();
+    await this.releaseHarnessLeases();
+  }
+
+  /**
+   * A planned restart's second half: boot the harness with `notice`, which also carries the runs an
+   * earlier crash left open (`openRuns`), so a crash restart this one stood in for is told nothing less.
+   */
+  async bootPlanned(notice: Omit<BootNotice, "openRuns">, options: { callerRecovers?: boolean } = {}): Promise<void> {
+    const openRuns = [...this.#x.runsOrphanedByCrash];
+    await this.#core.host.restart(
+      { type: DispatchActionType.BootNotice, notice: { ...notice, ...(openRuns.length ? { openRuns } : {}) } },
+      options,
+    );
+    // Told once is enough: the booted loop has the ids, and closing a run is idempotent.
+    for (const runId of openRuns) this.#x.runsOrphanedByCrash.delete(runId);
   }
 
   // ── recovery (watchdog) ──────────────────────────────────────────────────────────────────
@@ -633,6 +694,9 @@ export class RecoveryService {
     let openRuns: string[] = [];
     let target: SnapshotRecord | undefined;
     try {
+      // The old process stops first: a wedged or unhealthy self may still be alive, and a call it
+      // makes after the sweep below would be served for the next boot.
+      await this.#core.host.stop().catch(() => {});
       // A rewind is the end of the loop that was supervising this run's work, whether it died on
       // its own or is being restarted under it. Same duty as a crash, so: same call.
       ({ openRuns } = await this.onHarnessDied());
@@ -764,11 +828,8 @@ export class RecoveryService {
         ...(rescue ? { rescue_snapshot_id: rescue.snapshot_id } : {}),
       },
     ]);
-    await this.releaseHarnessLeases();
-    await this.#core.host.restart({
-      type: DispatchActionType.BootNotice,
-      notice: { reason: BootReason.WatchdogRestore, snapshotId, detail: MESSAGE.rolledBackByUser },
-    });
+    await this.endHarnessForRestart();
+    await this.bootPlanned({ reason: BootReason.WatchdogRestore, snapshotId, detail: MESSAGE.rolledBackByUser });
   }
 
   /**
@@ -1024,12 +1085,9 @@ export class RecoveryService {
 
   async applySelfRestart(updateId: string, reason: string, snapshotId: string): Promise<void> {
     try {
-      await this.releaseHarnessLeases();
+      await this.endHarnessForRestart();
       // A self that does not boot is rewound by the catch below, not raced by a crash restart.
-      await this.#core.host.restart(
-        { type: DispatchActionType.BootNotice, notice: { reason: BootReason.SelfUpdate, updateId, detail: reason } },
-        { callerRecovers: true },
-      );
+      await this.bootPlanned({ reason: BootReason.SelfUpdate, updateId, detail: reason }, { callerRecovers: true });
       const ok = await this.#core.host.healthcheck();
       await this.#core.journal.complete(
         updateId,

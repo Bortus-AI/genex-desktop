@@ -329,6 +329,19 @@ describe("codex engine", () => {
     assert.doesNotMatch(call.prompt, /The build you are testing/);
   });
 
+  it("tells a Loop's reviewer the build it tests is the folder it reads, never its own empty home", async () => {
+    const { fn, seen } = fakeExec(successRun);
+    const { engine, root } = await signedInEngine(fn);
+    const home = path.join(root, "scratch", "reviewers", "abc", "codex", "call");
+    const reads = path.join(root, "game");
+    await mkdir(home, { recursive: true });
+    await mkdir(reads, { recursive: true });
+    await engine.delegate({ prompt: "review the claim", cwd: home, readOnly: true, reviewer: { reads } });
+    const call = seen[0]!;
+    assert.ok(call.prompt.includes(`The build you are testing is at ${reads}.`), call.prompt);
+    assert.ok(!call.prompt.includes(`is at ${home}`), "never its home");
+  });
+
   it("follows the chat's permission mode: Plan reads from a folder of its own, Bypass drops the sandbox, and a mode it cannot ask in runs in Auto's sandbox", async () => {
     const { fn, seen } = fakeExec(successRun);
     const { engine, root } = await signedInEngine(fn);

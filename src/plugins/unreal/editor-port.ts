@@ -47,6 +47,11 @@ export function inProjectBlock(port: unknown): port is number {
  * while the editor is in front, and in about 400 ms while it is behind another app.
  */
 const ANSWER_TIMEOUT_MS = 0.8 * SECOND_MS;
+/**
+ * The longest an answering check takes ({@link editorServes}): its four requests (`initialize`, the
+ * notification, the helper's `project_file` and the session's end), each within {@link ANSWER_TIMEOUT_MS}.
+ */
+export const ANSWER_CHECK_MS = 4 * ANSWER_TIMEOUT_MS;
 /** How long a project's last good answer stands while its editor is asked again ({@link rememberAnswers}). */
 const ANSWER_KEEP_MS = 10 * SECOND_MS;
 /** A free local port refuses a connection at once; one that hangs this long counts as held. */

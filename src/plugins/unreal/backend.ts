@@ -16,6 +16,7 @@ import type {
 import {
   askDocuments,
   assertCreatable,
+  BlueprintTemplate,
   assertTemplateAndName,
   canCreateWith,
   type CreateRequest,
@@ -43,7 +44,15 @@ import {
   type Starting,
   systemLaunchEnv,
 } from "./editor-launch.ts";
-import { projectModule } from "./cpp-module.ts";
+import { addCppModule, enableProjectPlugin, projectModule } from "./cpp-module.ts";
+import {
+  assertPluginName,
+  planPlugin,
+  PluginTemplate,
+  type PluginTemplateFiles,
+  readPluginTemplate,
+  writePlugin,
+} from "./plugin-scaffold.ts";
 import { editorLogPath, startCrashCheck } from "./editor-log.ts";
 import {
   chosenProject,
@@ -55,10 +64,17 @@ import {
 } from "./editor-port.ts";
 import { callProjectTool } from "./editor-mcp.ts";
 import { type ProcessEnv, systemProcesses } from "./editor-reopen.ts";
-import { type AnyLoopTool, createLoopTools, TOOLSET_OF } from "./loop-tools.ts";
+import { type AnyLoopTool, createLoopTools, type LoopToolsDeps, TOOLSET_OF } from "./loop-tools.ts";
 import { type UnrealSteps, unrealSteps, XcodeStep } from "./engine-steps.ts";
-import { assertGameFolderFree, GAME_PROJECT_FOLDER, ignoreUnrealScratch } from "./game-folder.ts";
-import { isProjectPath } from "./project-file.ts";
+import {
+  assertGameFolderFree,
+  GAME_PROJECT_FOLDER,
+  ignoreUnrealScratch,
+  placeTaken,
+  readGameIgnore,
+  undoGameProjectFolder,
+} from "./game-folder.ts";
+import { isProjectPath, UPROJECT_EXTENSION } from "./project-file.ts";
 import { xcodeDownloadsLaunch } from "./xcode.ts";
 import { EditorWait, engineReadiness, waitForEditor } from "./editor-wait.ts";
 import { readinessAnswer } from "./hook-answers.ts";
@@ -103,6 +119,7 @@ import {
   setUpProject,
   systemSetupEnv,
   undoSetup,
+  forgetSetup,
 } from "./setup.ts";
 
 /**
@@ -149,6 +166,7 @@ const UnrealTool = {
   UseProject: "use-project",
   ShowSteps: "show-steps",
   NewGame: "new-game",
+  NewPlugin: "new-plugin",
   WaitEditor: "wait-editor",
   EngineStatus: "engine-status",
 } as const;
@@ -187,6 +205,8 @@ const UNREAL_INSTALL_BYTES = 45 * GIB;
 const FIRST_START_SKEW_MS = SECOND_MS;
 /** Epic's minimum memory for the editor. */
 const LOW_MEMORY_BYTES = 16 * GIB;
+/** What a plugin's host project is named after it: `<Name>Host`. */
+const HOST_SUFFIX = "Host";
 
 const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Unreal action: ${name}`,
@@ -206,6 +226,8 @@ const MESSAGE = {
     `Made this game's Unreal project, ${file}, set it up for Genex and linked this game to it. Unreal is opening it now; a first start can take several minutes while it prepares shaders. Don't wait for it and don't promise to check back later: end your reply now by telling the user what you will build first. Genex continues this chat by itself as soon as Unreal is ready, and from then on the Unreal tools reach this project.`,
   NewGameNotOpened: (file: string, why: string) =>
     `Made this game's Unreal project, ${file}, set it up for Genex and linked this game to it, but Unreal didn't open it: ${why.replace(/\.?$/, ".")} Tell the user to open it from the Unreal button.`,
+  NewPlugin: (name: string, host: string) =>
+    `Made ${name} in unreal/Plugins/${name}/, inside the host project ${host}. Build it with plugin-build, then write tests and package it.`,
   StepsDone: "Every recommended step is done; there is no card to show.",
   StepsNoChat: "There is no chat to show the Unreal setup card in.",
   NoLinkedProject: "This game isn't linked to an Unreal project yet.",
@@ -246,6 +268,10 @@ export type UnrealBackendDeps = {
   documents?: DocumentsQuery;
   launch: LaunchEnv;
   processes?: ProcessEnv;
+  /** Aborts once the backend stops: its running jobs (a plugin's build, tests and package) end with it. */
+  stopped?: AbortSignal;
+  /** The programs a plugin's build, tests and package run; UBT, the headless editor and UAT unless a test stands in. */
+  programs?: Pick<LoopToolsDeps, "compile" | "runProgram" | "runCommand" | "prepareSandbox">;
 };
 
 type ProjectError = { code: SetupErrorCode | null; message: string };
@@ -800,9 +826,9 @@ function loopTools(deps: UnrealBackendDeps) {
     engine: async () => (await findEngines(deps.env)).find((e) => e.supported),
     project: (storage, game) => linkedProject(storage, game),
     xcode: (engineDir) => deps.env.xcode(engineDir),
-    editorCall: async (storage, game, tool: AnyLoopTool, args, timeoutMs) => {
+    editorCall: async (storage, game, tool: AnyLoopTool, args, timeoutMs, signal) => {
       const call = { toolset: TOOLSET_OF[tool], tool, args, ...(timeoutMs === undefined ? {} : { timeoutMs }) };
-      return parsedAnswer(await callProjectTool(await gameEditor(storage, game), call));
+      return parsedAnswer(await callProjectTool(await gameEditor(storage, game), call, undefined, signal));
     },
     // An editor whose log says Epic's server couldn't listen on the game's port throws, ending the wait.
     editorAnswers: async (storage, game) => {
@@ -822,6 +848,8 @@ function loopTools(deps: UnrealBackendDeps) {
       return editor ? editorStart(deps.env, storage, editor, deps.launch.now()) : null;
     },
     ...(deps.processes ? { processes: deps.processes } : {}),
+    ...(deps.stopped ? { stopped: deps.stopped } : {}),
+    ...deps.programs,
     now: deps.launch.now,
     sleep: (ms, signal) => sleep(ms, undefined, signal ? { signal } : undefined),
   });
@@ -1001,6 +1029,16 @@ async function projectHome(
   return { game: made?.directory, made: made ?? null };
 }
 
+/** The engine New game makes projects with: the newest verified one, else why there is none. */
+async function creatingEngine(deps: UnrealBackendDeps): Promise<Engine> {
+  const engines = await findEngines(deps.env);
+  const engine = engines.find(canCreateWith);
+  const newest = engines.find((e) => e.supported);
+  if (!newest) throw noEngineError();
+  if (!engine) throw unverifiedEngineError(newest.version);
+  return engine;
+}
+
 /**
  * Makes a new game from a template (and variant) and sets it up at once, recorded like any setup
  * so Undo works. It goes in a Genex game's folder as `unreal/` (the game's ignore file gains
@@ -1009,11 +1047,29 @@ async function projectHome(
  * No confirmation: nothing else that exists changes. It becomes the panel's chosen project.
  */
 async function create(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
-  const engines = await findEngines(deps.env);
-  const engine = engines.find(canCreateWith);
-  const newest = engines.find((e) => e.supported);
-  if (!newest) throw noEngineError();
-  if (!engine) throw unverifiedEngineError(newest.version);
+  const made = await makeProject(deps, args, context);
+  await adoptNewProject(context, made);
+  return { project: made.file, state: made.state, game: made.made ? { project: made.made.project } : null };
+}
+
+/** A project {@link makeProject} made and set up, not yet the panel's choice nor any game's. */
+type MadeProject = {
+  file: string;
+  state: ProjectState;
+  /** Its real `.uproject`. */
+  project: string;
+  storage: string;
+  /** The Genex game the host made for it, when none was open. */
+  made: MadeGame | null;
+};
+
+/** {@link create} up to its project made and set up; the caller adopts it. */
+async function makeProject(
+  deps: UnrealBackendDeps,
+  args: Record<string, unknown>,
+  context: PluginContext,
+): Promise<MadeProject> {
+  const engine = await creatingEngine(deps);
   const asked = newProjectRequest(deps, engine, args);
   const { game, made } = await projectHome(deps, context, asked);
   const request: CreateRequest = {
@@ -1030,12 +1086,23 @@ async function create(deps: UnrealBackendDeps, args: Record<string, unknown>, co
   const file = await createProject(request);
   const options = await setupOptions(deps, context);
   const state = await setUpProject(file, options, { newProject: true });
-  const project = realProjectFile(state);
-  await rememberChoice(options.storage, project);
+  return { file, state, project: realProjectFile(state), storage: options.storage, made };
+}
+
+/**
+ * Makes a new project its game's project (the open game's, or the one the host made for it), then
+ * the panel's choice: a link that is refused leaves the person's earlier choice as it was.
+ */
+async function adoptNewProject(context: PluginContext, made: MadeProject) {
+  await linkNewProject(context, made);
+  await rememberChoice(made.storage, made.project);
+}
+
+/** Makes a new project its game's project (the open game's, or the one the host made for it); a refused link links nothing. */
+async function linkNewProject(context: PluginContext, { project, made }: MadeProject) {
   // A new project made for a Genex game is that game's project from now on.
   if (context.project) await context.host(HostService.EngineLink, { project });
   else if (made) await context.host(HostService.EngineLink, { project, game: made.project });
-  return { project: file, state, game: made ? { project: made.project } : null };
 }
 
 /** A path by its real path, or as it is when it can't be resolved. */
@@ -1090,6 +1157,82 @@ async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, c
   return opened === undefined ? MESSAGE.NewGame(project) : MESSAGE.NewGameNotOpened(project, opened);
 }
 
+/**
+ * The agent's `new-plugin`: an Unreal plugin with its host project, in an open game with no Unreal
+ * project yet. Every check comes first (the plugin's name against the engine's own modules and
+ * plugins, the template, the game's folder); then New game's Blank project named `<Name>Host` (set
+ * up with the Genex editor helper), the host's own C++ module, the plugin in `unreal/Plugins/<Name>/`
+ * from Epic's template, enabled in the host's .uproject, and last the host linked to the game. It
+ * opens nothing: the plugin is built first.
+ */
+async function newPlugin(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
+  const game = gameFolderOf(context);
+  if (!game) throw new Error(MESSAGE.NoGame);
+  const engine = await creatingEngine(deps);
+  const name = await assertPluginName(textArg(args, "name"), engine.directory);
+  const template = await readPluginTemplate(engine.directory, args.template ?? PluginTemplate.Window);
+  await assertGameFolderFree(game);
+  const host = `${name}${HOST_SUFFIX}`;
+  const state = await makePluginHost(deps, context, { game, engine, name, host, template });
+  // The setup card in the chat while a step (Xcode, which builds the plugin) is still open.
+  if ((await stepsFor(deps.env, state)).open) await context.host(HostService.EngineSteps);
+  return MESSAGE.NewPlugin(name, host);
+}
+
+/** What {@link makePluginHost} makes: the plugin `name` from `template` in a host project `host` in `game`. */
+type PluginHostRequest = {
+  game: string;
+  engine: Engine;
+  name: string;
+  host: string;
+  template: PluginTemplateFiles;
+};
+
+/**
+ * The host project, its C++ module and the plugin, then the link: the game takes the host as its
+ * project only once all of it is written, and the link is the last step a failure undoes. A step
+ * that fails (the link included: the host takes its own records back) removes the game's `unreal`
+ * folder (free when the call began, so whatever is there is this call's, unless a refusal says the
+ * place was taken), setup's record of the host and the lines the game's ignore file gained. Once
+ * linked, the host stays: a panel choice that can't be saved leaves the earlier one.
+ */
+async function makePluginHost(deps: UnrealBackendDeps, context: PluginContext, request: PluginHostRequest) {
+  const { game, engine, name, host, template } = request;
+  const ignore = await readGameIgnore(game);
+  let made: MadeProject;
+  try {
+    made = await makeProject(deps, { template: BlueprintTemplate.Blank, name: host }, context);
+    await addCppModule(made.project, { engineDir: engine.directory, engineVersion: engine.version });
+    await writePlugin(await planPlugin(path.dirname(made.project), name, template));
+    await enableProjectPlugin(made.project, name);
+    // A turn stopped while the host was written links nothing: the host goes with the rest.
+    context.signal.throwIfAborted();
+    await linkNewProject(context, made);
+  } catch (error) {
+    await undoPluginHost(deps, context, { game, host, ignore }, error);
+    throw error;
+  }
+  await rememberChoice(made.storage, made.project).catch(() => undefined);
+  return made.state;
+}
+
+/**
+ * Undoes a {@link makePluginHost} that failed with `error` before its link held: setup's record of
+ * the host, the game's `unreal` folder and its ignore file's new lines. Nothing when the refusal
+ * says the place was taken: what is there is the person's.
+ */
+async function undoPluginHost(
+  deps: UnrealBackendDeps,
+  context: PluginContext,
+  { game, host, ignore }: { game: string; host: string; ignore: string | null },
+  error: unknown,
+) {
+  if (placeTaken(error)) return;
+  const file = path.join(game, GAME_PROJECT_FOLDER, `${host}${UPROJECT_EXTENSION}`);
+  await forgetSetup(file, (await setupOptions(deps, context)).storage).catch(() => undefined);
+  await undoGameProjectFolder(game, error, ignore);
+}
+
 /** Undoes setup; `note` says how many helper files the user changed were left in place. */
 async function undo(file: string, options: SetupOptions) {
   const state = await undoSetup(file, options);
@@ -1140,6 +1283,7 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     },
     [UnrealTool.ShowSteps]: (_args, context) => showSteps(deps, context),
     [UnrealTool.NewGame]: (args, context) => newGame(deps, args, context),
+    [UnrealTool.NewPlugin]: (args, context) => newPlugin(deps, args, context),
     [UnrealTool.WaitEditor]: (args, context) => waitEditor(deps, args, context),
     [UnrealTool.EngineStatus]: async () => readinessAnswer(engineReadiness(await findEngines(deps.env))),
   };
@@ -1165,6 +1309,22 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
   };
 }
 
+/**
+ * Aborts when Genex stops this backend's process (it quits, or the plugin is turned off): every
+ * running job ends its process group on that abort. A SIGTERM then ends the process as it would
+ * have with no listener, so Genex never waits out its grace for it.
+ */
+export function backendStopped(): AbortSignal {
+  const stopped = new AbortController();
+  const stop = () => stopped.abort();
+  process.once("SIGTERM", () => {
+    stop();
+    process.kill(process.pid, "SIGTERM");
+  });
+  process.once("disconnect", stop);
+  return stopped.signal;
+}
+
 export const activate: Activate = () => {
   const env = systemSetupEnv();
   return createUnrealBackend({
@@ -1172,5 +1332,6 @@ export const activate: Activate = () => {
     helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FOLDER),
     launch: systemLaunchEnv(),
     processes: systemProcesses(env.home),
+    stopped: backendStopped(),
   });
 };

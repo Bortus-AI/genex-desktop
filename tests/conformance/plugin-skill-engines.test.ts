@@ -162,8 +162,25 @@ async function bundledRegistry(seeds: string) {
 }
 
 /** The Unreal plugin's tools for a game that holds an Unreal project only. */
-const UNREAL_EDITOR_TOOLS = ["unreal__blueprint-guide", "unreal__find-nodes", "unreal__check-part"];
+const UNREAL_EDITOR_TOOLS = [
+  "unreal__blueprint-guide",
+  "unreal__find-nodes",
+  "unreal__check-part",
+  "unreal__cpp-status",
+  "unreal__add-cpp-module",
+];
 const UNREAL_SKILL = "unreal/unreal-editor";
+/** The Unreal plugin's tools and skill for a game that holds an Unreal plugin only. */
+const UNREAL_PLUGIN_TOOLS = [
+  "unreal__plugin-build",
+  "unreal__plugin-test",
+  "unreal__plugin-package",
+  "unreal__plugin-status",
+];
+const UNREAL_PLUGIN_SKILL = "unreal/unreal-plugin";
+/** What a web game no longer gets from the Unreal plugin: its editor's and its plugin projects' tools and skills. */
+const UNREAL_ONLY_TOOLS = [...UNREAL_EDITOR_TOOLS, ...UNREAL_PLUGIN_TOOLS];
+const UNREAL_ONLY_SKILLS = [UNREAL_SKILL, UNREAL_PLUGIN_SKILL];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */
 function unscoped(manifest: PluginManifest): void {
@@ -179,6 +196,8 @@ function unscoped(manifest: PluginManifest): void {
     delete tool.ready;
   }
   for (const server of manifest.mcpServers ?? []) delete server.facts;
+  // A scaffold names a tool that makes a kind, which came with facts too.
+  delete manifest.scaffolds;
 }
 
 test("the bundled plugins' web guidance is what it was before skills named engines, but the Unreal editor's skill and tools; an Unreal game's drops the web-only skills", async () => {
@@ -201,16 +220,18 @@ test("the bundled plugins' web guidance is what it was before skills named engin
     // A web game no longer gets the Unreal editor's skill and tools: they reach an Unreal project only.
     assert.deepEqual(
       web.tools,
-      was.tools.filter((tool) => !UNREAL_EDITOR_TOOLS.includes(tool.name)),
+      was.tools.filter((tool) => !UNREAL_ONLY_TOOLS.includes(tool.name)),
       "a web game's tools",
     );
     assert.deepEqual(
       web.applied,
-      { ...was.applied, skills: was.applied.skills.filter((skill) => skill !== UNREAL_SKILL) },
+      { ...was.applied, skills: was.applied.skills.filter((skill) => !UNREAL_ONLY_SKILLS.includes(skill)) },
       "a web game's plugins and skills",
     );
-    const unrealBlock = was.guidance.split("\n\n").filter((part) => !part.startsWith(`[${UNREAL_SKILL}]`));
-    assert.equal(web.guidance, unrealBlock.join("\n\n"), "a web game's guidance, byte for byte but the Unreal skill");
+    const unrealBlock = was.guidance
+      .split("\n\n")
+      .filter((part) => !UNREAL_ONLY_SKILLS.some((skill) => part.startsWith(`[${skill}]`)));
+    assert.equal(web.guidance, unrealBlock.join("\n\n"), "a web game's guidance, byte for byte but the Unreal skills");
     const unreal = now.snapshot(GameEngine.Unreal);
     for (const skill of WEB_ONLY) assert.ok(!unreal.applied.skills.includes(skill), `${skill} is the web's only`);
     for (const skill of WEB_ONLY) assert.ok(web.applied.skills.includes(skill), skill);

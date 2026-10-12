@@ -16,6 +16,7 @@ import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { AssetResults } from "./AssetResults.tsx";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
 import { CommandRun } from "./CommandRun.tsx";
+import { GenexCoverCard } from "./GenexCoverCard.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
 import { EngineLinkLine } from "./EngineLinkLine.tsx";
 import { JobLine } from "./JobLine.tsx";
@@ -77,6 +78,8 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <WorkLog items={entry.items} deliveries={entry.deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.Assets:
       return <AssetResults deliveries={deliveries} onOpenAssets={context.onShowAssets} />;
+    case EntryKind.GenexCover:
+      return <GenexCoverCard entry={entry} project={context.project} />;
     case EntryKind.User:
       return <UserEntry key={entry.id} entry={entry} context={context} />;
     case EntryKind.Assistant:
@@ -111,6 +114,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
           kept={entry.kept}
           undone={entry.undone}
           landed={entry.landed}
+          profile={entry.profile}
           // A run the plan limit cut off is paused, not finished: the card says so and
           // offers Resume itself, instead of leaving it to a grey line underneath.
           paused={!entry.superseded && resumable(entry.runId, context)}

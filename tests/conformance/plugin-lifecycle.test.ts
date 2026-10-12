@@ -12,7 +12,13 @@ import type { PluginChange } from "../../src/shared/plugins.ts";
 import { PluginRegistry, type PluginMcpLaunch } from "../../src/substrate/plugins/registry.ts";
 import { pluginBackendEnv } from "../../src/substrate/plugins/process.ts";
 import { scanPackage } from "../../src/substrate/plugins/scan.ts";
-import { EXAMPLE_PLUGIN, copyOfExample, type PluginFixture, pluginFixture } from "../helpers/plugins.ts";
+import {
+  EXAMPLE_PLUGIN,
+  copyOfExample,
+  installLocalOn,
+  type PluginFixture,
+  pluginFixture,
+} from "../helpers/plugins.ts";
 
 test("a plugin backend starts with the basics and nothing else of Studio's environment, on Windows too", () => {
   const parent = {
@@ -62,7 +68,7 @@ async function installPathProbe(f: PluginFixture): Promise<void> {
     path.join(probe, "backend.mjs"),
     "export async function activate() { return { async action() { return { path: process.env.PATH }; } }; }\n",
   );
-  await f.registry.installLocal(probe);
+  await installLocalOn(f.registry, probe);
 }
 
 test("a plugin backend finds the user's tools on the login PATH, not the Finder's bare one", async () => {
@@ -224,7 +230,7 @@ test("a hot reload that changes what a plugin's MCP servers run is refused until
       m.name = "Watched";
       m.mcpServers = [server];
     });
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const watch = manualWatch(f.registry);
     await f.registry.watch("watched", true);
 
@@ -270,7 +276,7 @@ test("a hot reload that edits, adds or removes skills says which, by name, and t
     });
     await mkdir(path.join(dir, "skills"));
     await writeFile(path.join(dir, "skills", "card.md"), "# Card\n");
-    await f.registry.installLocal(dir);
+    await installLocalOn(f.registry, dir);
     const watch = manualWatch(f.registry);
     await f.registry.watch("skilled", true);
     const reload = async () => {
@@ -398,7 +404,7 @@ test("a node MCP server's credential is the bare token, and only after an explic
     );
     try {
       await registry.init();
-      await registry.installLocal(dir);
+      await installLocalOn(registry, dir);
       let launch: PluginMcpLaunch | undefined;
       registry.mcpHost = {
         register: (_id, _servers, l) => {
@@ -447,7 +453,7 @@ test("the tokens plugin accounts hold this session are known to the log redactor
     );
     try {
       await registry.init();
-      await registry.installLocal(dir);
+      await installLocalOn(registry, dir);
       assert.deepEqual(registry.heldCredentials(), [], "nothing is read from the saved account to answer this");
       await registry.action("acct", "unlock", {});
       assert.deepEqual(registry.heldCredentials(), ["held-plugin-FAKE-token"]);

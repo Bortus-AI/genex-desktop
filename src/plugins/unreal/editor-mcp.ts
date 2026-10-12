@@ -95,6 +95,9 @@ const RECONNECTION = {
   maxRetries: 0,
 } as const;
 
+/** The longest ending a session waits for the editor to answer: an editor busy on its game thread may not. */
+const SESSION_END_MS = 5 * SECOND_MS;
+
 /** How long a closing bridge waits to give the user's throttle setting back. */
 const GIVE_BACK_ON_CLOSE_MS = 3 * SECOND_MS;
 
@@ -124,6 +127,7 @@ export const EditorTool = {
 export type EditorTool = (typeof EditorTool)[keyof typeof EditorTool];
 
 const MESSAGE = {
+  CallTimedOut: (ms: number) => `The editor call timed out: it didn't end within ${ms / SECOND_MS} seconds.`,
   UnexpectedEndpoint: "Unreal MCP requested an unexpected endpoint.",
   Redirected: "Unreal MCP redirected the connection.",
   NotUnreal: "the server there is not Unreal's MCP server",
@@ -324,6 +328,12 @@ export function logCrashWatcher(
   };
 }
 
+/** Settles once `signal` aborts (at once when it already has); never rejects. */
+function ended(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
+}
+
 /** Opens a session with Epic's server at the endpoint; throws when nothing, or something else, answers. */
 async function openSession(endpoint: URL, fetchImpl: typeof fetch, signal: AbortSignal): Promise<EditorSession> {
   const client = new Client({ name: "genex-studio", version: BRIDGE_VERSION });
@@ -334,7 +344,12 @@ async function openSession(endpoint: URL, fetchImpl: typeof fetch, signal: Abort
   // Closing the client aborts the requests still open and fails the calls waiting on them.
   const abandon = () => client.close().catch(() => {});
   const end = async () => {
-    await transport.terminateSession().catch(() => {});
+    // Within its own while, and never past the caller's signal.
+    await Promise.race([
+      transport.terminateSession().catch(() => {}),
+      sleep(SESSION_END_MS, undefined, { ref: false }),
+      ended(signal),
+    ]);
     await abandon();
   };
   try {
@@ -521,13 +536,25 @@ export async function callProjectTool(
   fetchImpl: typeof fetch = fetch,
   signal: AbortSignal = new AbortController().signal,
 ): Promise<unknown> {
-  const session = await openProjectSession(project, fetchImpl, signal);
+  // A call with a limit of its own keeps its whole session within it: the connect, the helper's
+  // identity call, the call itself and the session's end.
+  const limit = new AbortController();
+  const ms = call.timeoutMs;
+  const timer = ms === undefined ? null : setTimeout(() => limit.abort(new Error(MESSAGE.CallTimedOut(ms))), ms);
+  const limited = AbortSignal.any([signal, limit.signal]);
   try {
-    const result = await session.call(toolsetCall(call.toolset, call.tool, call.args), call.timeoutMs);
-    if (result.isError) throw new Error(answerText(result) || MESSAGE.NotUnreal);
-    return returnValue(result);
+    const session = await openProjectSession(project, fetchImpl, limited);
+    try {
+      const result = await session.call(toolsetCall(call.toolset, call.tool, call.args), call.timeoutMs);
+      if (result.isError) throw new Error(answerText(result) || MESSAGE.NotUnreal);
+      return returnValue(result);
+    } finally {
+      await session.end();
+    }
+  } catch (error) {
+    throw limit.signal.aborted ? limit.signal.reason : error;
   } finally {
-    await session.end();
+    if (timer) clearTimeout(timer);
   }
 }
 

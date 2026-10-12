@@ -61,21 +61,22 @@ export function useLiveLoad(project: string | null) {
 
 /**
  * Load the stage's game into Live once it takes a kind (`gameStartedSince`): while it had none Live
- * loaded nothing. An Unreal game has no page, so it loads nothing either way. Answers whether the
+ * loaded nothing. A game Live doesn't show as the web preview (`noPage`: the Unreal card, the
+ * latest pictures) has no page, so it loads nothing either way. Answers whether the
  * game has no kind yet (`pending`), as given.
  */
 export function useLoadOnceStarted(
-  game: StageGameKind & { unreal: boolean },
+  game: StageGameKind & { noPage: boolean },
   loadLive: ReturnType<typeof useLiveLoad>["loadLive"],
 ): boolean {
-  const { project, pending, unreal } = game;
+  const { project, pending, noPage } = game;
   const seen = useRef<StageGameKind>({ project, pending });
   useEffect(() => {
     const before = seen.current;
     seen.current = { project, pending };
-    if (unreal || !project || !gameStartedSince(before, { project, pending })) return;
+    if (noPage || !project || !gameStartedSince(before, { project, pending })) return;
     void loadLive(project, () => window.studio.loadPreview(project)).catch(() => {});
-  }, [project, pending, unreal, loadLive]);
+  }, [project, pending, noPage, loadLive]);
   return pending;
 }
 

@@ -6,7 +6,7 @@
  * chat it came from (the game's own chat for a link made in the panel) gets one line with Undo, and
  * a refused link changes nothing on disk.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { CustomEvent, type CustomEventRecord, customEventData } from "../../shared/custom-events.ts";
 import { type EngineBinding, GameEngine, parseEngineBinding, projectName } from "../../shared/game-engine.ts";
@@ -136,14 +136,33 @@ export function createEngineLinks(deps: EngineLinkDeps) {
     const same = previous?.project === project ? await holding(previous) : undefined;
     if (same) return asLink(same);
     const title = await gameTitle(deps.gameDir(game));
-    const { binding: linked } = await writeEngineBinding(deps.gameDir(game), project, deps.now);
-    await writeRecord(deps.root(pluginId), game, { link: linked, ...(previous ? { previous } : {}) });
-    await deps.append(
-      linkedRecord(pluginId, game, linked, { ...(title ? { title } : {}), ...(previous ? { previous } : {}), auto }),
-      binding?.threadId ?? (await deps.gameThread(game)),
-    );
+    const before = await record(pluginId, game);
+    const written = await writeEngineBinding(deps.gameDir(game), project, deps.now);
+    const linked = written.binding;
+    try {
+      await writeRecord(deps.root(pluginId), game, { link: linked, ...(previous ? { previous } : {}) });
+      await deps.append(
+        linkedRecord(pluginId, game, linked, { ...(title ? { title } : {}), ...(previous ? { previous } : {}), auto }),
+        binding?.threadId ?? (await deps.gameThread(game)),
+      );
+    } catch (error) {
+      // A link the chat never heard of is no link: both records go back to what they were.
+      await takeBack(pluginId, game, { binding: written.previous, record: before }).catch(() => undefined);
+      throw error;
+    }
     deps.changed(game);
     return asLink(linked);
+  }
+
+  /** Puts a game's studio.json binding and its link record back as they were before a link that failed part-way. */
+  async function takeBack(
+    pluginId: string,
+    game: string,
+    was: { binding: EngineBinding | undefined; record: LinkRecord | undefined },
+  ): Promise<void> {
+    await restoreEngineBinding(deps.gameDir(game), was.binding);
+    if (was.record) await writeRecord(deps.root(pluginId), game, was.record);
+    else await rm(linkFile(deps.root(pluginId), game), { force: true });
   }
 
   async function read(pluginId: string, binding: PluginBinding | undefined): Promise<EngineLink | null> {
