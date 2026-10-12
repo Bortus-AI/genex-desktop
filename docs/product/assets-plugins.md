@@ -11,13 +11,12 @@ An opened file has only Reveal in Finder and Close: images (click: full size), a
 models with clips, textures or bounded text; unsupported formats and decoder failures say why.
 
 Chat shows game-folder files with Open in Assets. Builds shows a Loop's workspace assets as
-thumbnails until landing (visuals in two columns, sounds in rows). Job completion or “seen in game”
-never proves integration or passing checks.
+thumbnails until landing. Job completion or “seen in game” never proves integration or passing checks.
 
 ## Tools and setup
 
-The prompt bar's Add menu holds reference attachments, plugin and MCP switches, Connect and
-Manage. Enabled, connected, signed in and permitted differ.
+The prompt bar's Add menu holds attachments, plugin and MCP switches, Connect and Manage.
+Enabled, connected, signed in and permitted differ.
 
 The Plugins page (Plugins/Skills, search, rows, details) lists installed plugins, your servers, the
 Marketplace (Coming soon until it lists more) and the plugin guide, with
@@ -25,8 +24,7 @@ Marketplace (Coming soon until it lists more) and the plugin guide, with
 (else the newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
-Game spend is in the usage panel. Enabled Genex suggests assets in planning; workers use it once the
-account is ready.
+Game spend is in the usage panel. Enabled Genex suggests assets in planning.
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
@@ -35,8 +33,7 @@ dialog) tests the draft, goes public and sends the `genex-cover` demo frame as t
 the sidebar sphere ([rules](../plugins.md#first-party-privileges)); lacking one, Ask for a cover
 drafts the request in chat. Agents check `genex__cover` before each publish; consented
 `genex__cover-set` sends it. Chat shows the kept shot with Publish. Agents read Genex’s guide and
-cards via `genex__skill`, never from game files. Plugin MCPs connect on first use; the composer
-shows actionable failures only.
+cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists
 Genex and Local Blender as official; its installs require native-code trust
@@ -49,13 +46,14 @@ install, enable or approve plugins, only
 [suggest or write one](projects-engines.md#plugins-on-or-off). Process isolation does not sandbox
 native code.
 
-Connector tools ask before each call unless Settings holds an exact tool grant; server hints grant
-nothing. Plugin uploads show every included/excluded file for a second approval. Revoking stops
-future calls, not remote effects. Removal keeps data, credentials and jobs; updates (a newer
-compatible release) also keep settings: rows offer **Update to x**, the sidebar **Update plugins**
-(all, each approved). Reusing a plugin's id from another source needs **Replace and erase data**
-(never a bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed
-secrets never enter composer text.
+Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
+tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every
+included/excluded file for a second approval. Revoking stops future calls, not remote effects.
+Removal keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
+rows offer **Update to x**, the sidebar **Update plugins** (all). Built-in plugins install and update
+without asking. Reusing a plugin's id from another source needs **Replace and erase data** (never a
+bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed secrets
+never enter composer text.
 
 Skills lists Studio’s own (local chat, planner, director), the game’s, providers’ global and plugin
 skills. Codex says whether workers load its catalog; Claude’s global entries stay excluded. Plugin

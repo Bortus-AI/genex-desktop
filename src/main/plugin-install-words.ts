@@ -1,13 +1,13 @@
 /**
  * What the plugin trust dialog says, built from the package alone (the folders turning it on lets it
- * write in among it), and what an action's approval
- * shows under its question: pure, so the words are tested without Electron.
+ * write in among it), and what an action's approval shows under its question: pure, so the words
+ * are tested without Electron.
  * `plugin-install-dialog.ts` and the plugins IPC show them.
  */
 import {
-  isFileSkill,
-  type PluginInfo,
+  PluginCapability,
   PluginHostTool,
+  type PluginInfo,
   type PluginManifest,
   type PluginManifestTool,
   type PluginMcpServer,
@@ -27,26 +27,95 @@ const SCAN_FINDINGS_NAMED = 6;
 
 const plural = (count: number, word: string): string => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-const pluginScanWords = (scan?: PluginScan): string => {
-  if (!scan) return "Scan: bundled — not scanned.";
-  const named = scan.findings
-    .slice(0, SCAN_FINDINGS_NAMED)
-    .map((f) => `${f.rule} ${f.file}:${f.line}`)
-    .join(", ");
-  return `Scan: ${scan.verdict} — ${plural(scan.findings.length, "finding")}${named ? `: ${named}` : ""}.`;
-};
+/** The dialog's words; the names, versions and lists in them come from the package. */
+const MESSAGE = {
+  install: (name: string, version: string) => `Install ${name} ${version}?`,
+  update: (name: string, version: string) => `Update ${name} to ${version}?`,
+  replace: (old: string, name: string, version: string) => `Replace ${old} with ${name} ${version}?`,
+  installButton: "Install",
+  updateButton: "Update",
+  replaceButton: "Replace and erase data",
+  replaces: (name: string, publisher: string, origin: string) =>
+    `This replaces ${name} by ${publisher} (from ${origin}). Its saved account, settings and data will be erased.`,
+  source: (origin: string, publisher: string) => `From ${origin}\nPublisher: ${publisher}`,
+  unsandboxed: "Its code runs on your computer like an app you install. It isn't sandboxed.",
+  asks: "It asks to:",
+  servers: (count: number) => `Starts ${plural(count, "program")} for agents:`,
+  hostTools: (count: number) => `Genex runs ${plural(count, "tool")} for it:`,
+  skills: (count: number, named: string) => `Adds ${plural(count, "skill")} for agents: ${named}.`,
+  noSkills: "Adds no skills for agents.",
+  removedSkills: (named: string) => ` Removes: ${named}.`,
+  notScanned: "Not scanned.",
+  scan: (verdict: string, found: string) => `Scan: ${verdict}, ${found}.`,
+  noFindings: "no findings",
+  finding: (rule: string, file: string, line: number) => `${rule} in ${file}:${line}`,
+  genexCli: "the Genex CLI",
+  given: (program: string, env: string) => `${program}, given ${env}`,
+  withConsent: (does: string) => `${does}, asks you each time`,
+  new: "new",
+  changed: "changed",
+  folders: (count: number) => `Turning it on lets its programs write in ${plural(count, "folder")} outside your games:`,
+  startsOff: "It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
+  staysOn:
+    "It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs.",
+  steps: (when: string, steps: string) => `${when} at Genex's moments: ${steps}; those steps don't ask you first.`,
+  runs: "It runs",
+  runsOnceOn: "Once on, it runs",
+} as const;
+
+/** What each capability lets a plugin do, as a line under "It asks to:". */
+const CAPABILITY_WORDS: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    [PluginCapability.Settings]: "keep its own settings",
+    [PluginCapability.ProjectRead]: "read files in your games",
+    [PluginCapability.ProjectWrite]: "change files in your games",
+    [PluginCapability.Jobs]: "run long jobs and report their progress",
+    [PluginCapability.Observe]: "load and capture your games as they run",
+    [PluginCapability.Credentials]: "save a sign-in for its own account",
+    [PluginCapability.ExternalAuth]: "open sign-in pages in your browser",
+    [PluginCapability.Network]: "reach the internet",
+    [PluginCapability.Export]: "export your games",
+    [PluginCapability.NativeRuntime]: "install and run the apps it names, such as Blender",
+    [PluginCapability.GameEngine]: "make games of its engine's kind and link them to its projects",
+  } satisfies Record<PluginCapability, string>),
+);
+
+/** What each tool Genex runs itself does, as the dialog names it. */
+const HOST_TOOL_WORDS = {
+  [PluginHostTool.GenexCli]: "runs the Genex CLI",
+  [PluginHostTool.GenexCliPaid]: "runs the Genex CLI",
+  [PluginHostTool.GenexPackage]: "installs Genex packages in the game",
+} as const satisfies Record<PluginHostTool, string>;
+
+const bulleted = (heading: string, lines: string[]): string =>
+  [heading, ...lines.map((line) => `• ${line}`)].join("\n");
+
+/** A name with its marks in brackets, or the bare name when it has none. */
+const marked = (name: string, marks: readonly string[]): string =>
+  marks.length ? `${name} (${marks.join(", ")})` : name;
+
+/** What it asks to do, each capability new since the installed version marked. */
+function capabilityBlock(manifest: PluginManifest, before: PluginManifest | undefined): string | undefined {
+  if (!manifest.capabilities.length) return undefined;
+  const had = before ? new Set(before.capabilities) : null;
+  const lines = manifest.capabilities.map((c) =>
+    marked(CAPABILITY_WORDS.get(c) ?? c, had && !had.has(c) ? [MESSAGE.new] : []),
+  );
+  return bulleted(MESSAGE.asks, lines);
+}
+
 /**
  * A plugin's MCP servers are trusted by this dialog and by nothing else — there is no second
  * connector trust prompt for a server the host owns on the plugin's behalf. So the dialog has to
- * say that installing also means letting Studio start those programs, and name what each is given.
+ * say that installing also means letting Genex start those programs, and name what each is given.
  */
-const pluginMcpWords = (manifest: PluginManifest, previous?: PluginManifest): string => {
+function serverBlock(manifest: PluginManifest, previous: PluginManifest | undefined): string | undefined {
   const servers = manifest.mcpServers ?? [];
-  if (!servers.length) return "";
+  if (!servers.length) return undefined;
   const before = previous ? new Map((previous.mcpServers ?? []).map((s) => [s.id, JSON.stringify(s)])) : null;
-  const named = servers.map((s) => `${s.id}${serverChange(before, s)} (${serverLaunch(s).join(", ")})`).join("; ");
-  return ` Starts ${plural(servers.length, "MCP server")} on your Mac, as trusted native code with the environment it declares: ${named}.`;
-};
+  const lines = servers.map((s) => `${marked(s.id, serverChange(before, s))} — ${serverLaunch(s)}`);
+  return bulleted(MESSAGE.servers(servers.length), lines);
+}
 
 /**
  * A server that is new, or that now runs something else, somewhere else, or on a different
@@ -54,66 +123,65 @@ const pluginMcpWords = (manifest: PluginManifest, previous?: PluginManifest): st
  * same way rather than arriving inside a dialog that reads like the last one. A first install
  * (no `before`) marks nothing.
  */
-function serverChange(before: ReadonlyMap<string, string> | null, server: PluginMcpServer): string {
-  if (!before) return "";
+function serverChange(before: ReadonlyMap<string, string> | null, server: PluginMcpServer): string[] {
+  if (!before) return [];
   const was = before.get(server.id);
-  if (was === undefined) return " (new)";
-  return was !== JSON.stringify(server) ? " (changed)" : "";
+  if (was === undefined) return [MESSAGE.new];
+  return was !== JSON.stringify(server) ? [MESSAGE.changed] : [];
 }
 
 /** What a server runs, then the names of the environment it is given. */
-function serverLaunch(server: PluginMcpServer): string[] {
-  const program = server.command === "host-cli" ? "Studio's own Genex CLI" : (server.args[0] ?? "node");
-  return [program, ...Object.keys(server.env ?? {})];
+function serverLaunch(server: PluginMcpServer): string {
+  const program = server.command === "host-cli" ? MESSAGE.genexCli : (server.args[0] ?? "node");
+  const env = Object.keys(server.env ?? {});
+  return env.length ? MESSAGE.given(program, env.join(", ")) : program;
 }
 
-/** What each tool Studio runs itself does, as the dialog names it. */
-const HOST_TOOL_WORDS = {
-  [PluginHostTool.GenexCli]: "runs Studio's Genex CLI",
-  [PluginHostTool.GenexCliPaid]: "runs Studio's Genex CLI",
-  [PluginHostTool.GenexPackage]: "installs Genex packages in the game",
-} as const satisfies Record<PluginHostTool, string>;
-const READ_ON_DEMAND = "read on demand";
-const WITH_CONSENT = "with your consent each time";
-
-/**
- * Skills reach every agent's brief, so they are disclosed like the servers are: by name, a file
- * skill as read on demand, and on an update each new or changed one marked and each withdrawn one
- * named. A skill is changed when its manifest entry differs or, when both versions were scanned, the
- * bytes of its files do.
- */
-function pluginSkillWords(facts: PluginInstallFacts): string {
-  const { manifest, before } = facts;
-  const change = before
-    ? pluginSkillChange({ manifest: before, scan: facts.previousScan }, { manifest, scan: facts.scan })
-    : undefined;
-  const removed = change?.removed.length ? `; removed: ${change.removed.join(", ")}` : "";
-  if (!manifest.skills.length) return removed ? ` Gives agents no skills${removed}.` : "";
-  const named = manifest.skills.map((s) => `${s.name}${skillMarks(s, change)}`).join(", ");
-  return ` Gives agents ${plural(manifest.skills.length, "skill")}: ${named}${removed}.`;
-}
-
-function skillMarks(skill: PluginSkill, change: PluginSkillChange | undefined): string {
-  const marks = [
-    ...(change?.added.includes(skill.name) ? ["new"] : []),
-    ...(change?.changed.includes(skill.name) ? ["changed"] : []),
-    ...(isFileSkill(skill) ? [READ_ON_DEMAND] : []),
-  ];
-  return marks.length ? ` (${marks.join(", ")})` : "";
-}
-
-/** Tools Studio runs itself rather than the plugin's code, named with what each does. */
-function hostToolWords(manifest: PluginManifest, before: PluginManifest | undefined): string {
+/** Tools Genex runs itself rather than the plugin's code, named with what each does. */
+function hostToolBlock(manifest: PluginManifest, before: PluginManifest | undefined): string | undefined {
   const tools = manifest.tools.filter((t) => t.host);
-  if (!tools.length) return "";
+  if (!tools.length) return undefined;
   const had = before ? new Set(before.tools.filter((t) => t.host).map((t) => t.name)) : null;
-  const named = tools.map((t) => `${t.name}${had && !had.has(t.name) ? " (new)" : ""} (${hostToolUse(t)})`).join("; ");
-  return ` Studio runs ${plural(tools.length, "tool")} for it: ${named}.`;
+  const lines = tools.map((t) => `${marked(t.name, had && !had.has(t.name) ? [MESSAGE.new] : [])} — ${hostToolUse(t)}`);
+  return bulleted(MESSAGE.hostTools(tools.length), lines);
 }
 
 function hostToolUse(tool: PluginManifestTool): string {
   const does = tool.host ? HOST_TOOL_WORDS[tool.host] : "";
-  return tool.confirmation ? `${does}, ${WITH_CONSENT}` : does;
+  return tool.confirmation ? MESSAGE.withConsent(does) : does;
+}
+
+/**
+ * Skills reach every agent's brief, so they are disclosed like the servers are: by name, and on an
+ * update each new or changed one marked and each withdrawn one named. A skill is changed when its
+ * manifest entry differs or, when both versions were scanned, the bytes of its files do.
+ */
+function skillBlock(facts: PluginInstallFacts): string | undefined {
+  const { manifest, before } = facts;
+  const change = before
+    ? pluginSkillChange({ manifest: before, scan: facts.previousScan }, { manifest, scan: facts.scan })
+    : undefined;
+  const removed = change?.removed.length ? MESSAGE.removedSkills(change.removed.join(", ")) : "";
+  if (!manifest.skills.length) return removed ? `${MESSAGE.noSkills}${removed}` : undefined;
+  const named = manifest.skills.map((s) => marked(s.name, skillMarks(s, change))).join(", ");
+  return `${MESSAGE.skills(manifest.skills.length, named)}${removed}`;
+}
+
+function skillMarks(skill: PluginSkill, change: PluginSkillChange | undefined): string[] {
+  return [
+    ...(change?.added.includes(skill.name) ? [MESSAGE.new] : []),
+    ...(change?.changed.includes(skill.name) ? [MESSAGE.changed] : []),
+  ];
+}
+
+function scanBlock(scan: PluginScan | undefined): string {
+  if (!scan) return MESSAGE.notScanned;
+  const named = scan.findings
+    .slice(0, SCAN_FINDINGS_NAMED)
+    .map((f) => MESSAGE.finding(f.rule, f.file, f.line))
+    .join(", ");
+  const found = scan.findings.length ? `${plural(scan.findings.length, "finding")}: ${named}` : MESSAGE.noFindings;
+  return MESSAGE.scan(scan.verdict, found);
 }
 
 /**
@@ -121,12 +189,12 @@ function hostToolUse(tool: PluginManifestTool): string {
  * run them) may write outside the games, and installing turns it on: so the dialog names each with
  * why, an update marking the new ones.
  */
-function pluginFolderWords(manifest: PluginManifest, before: PluginManifest | undefined): string {
+function folderBlock(manifest: PluginManifest, before: PluginManifest | undefined): string | undefined {
   const folders = manifest.folders ?? [];
-  if (!folders.length) return "";
+  if (!folders.length) return undefined;
   const had = before ? new Set((before.folders ?? []).map((f) => f.path)) : null;
-  const named = folders.map((f) => `${f.path}${had && !had.has(f.path) ? " (new)" : ""} (${f.why})`).join("; ");
-  return ` Turning it on lets its programs write in ${plural(folders.length, "folder")} outside your games: ${named}.`;
+  const lines = folders.map((f) => `${marked(f.path, had && !had.has(f.path) ? [MESSAGE.new] : [])} — ${f.why}`);
+  return bulleted(MESSAGE.folders(folders.length), lines);
 }
 
 /** Each of Genex's moments as the trust dialog names it. */
@@ -168,22 +236,21 @@ function ownSteps(manifest: PluginManifest): string[] {
 }
 
 /**
- * A plugin from a local folder runs with the person's access and starts off, each of its tools
- * asking before an agent runs it; every step Genex runs on its own (hooks, observers, person-first
- * probes, readiness checks) is named, and runs without asking once it is on. Loading again one that
- * is on keeps it on (`staysOn`): its new code runs at once, and its tools ask again.
+ * A plugin from a local folder starts off, each of its tools asking before an agent runs it; every
+ * step Genex runs on its own (hooks, observers, person-first probes, readiness checks) is named,
+ * and runs without asking once it is on. Loading again one that is on keeps it on (`staysOn`): its
+ * new code runs at once, and its tools ask again.
  */
-function localAccessWords(manifest: PluginManifest, origin: PluginSource | undefined, staysOn: boolean): string {
-  if (origin?.kind !== PluginSourceKind.Local) return "";
+function localAccessBlock(
+  manifest: PluginManifest,
+  origin: PluginSource | undefined,
+  staysOn: boolean,
+): string | undefined {
+  if (origin?.kind !== PluginSourceKind.Local) return undefined;
   const steps = ownSteps(manifest);
-  const when = staysOn ? "It runs" : "Once on, it runs";
-  const hooks = steps.length
-    ? ` ${when} at Genex's moments: ${steps.join(", ")}; those steps don't ask you first.`
-    : "";
-  const state = staysOn
-    ? "It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs."
-    : "It starts off: turn it on in Plugins; each of its tools asks you before it runs.";
-  return ` It runs with your access: Genex doesn't sandbox its code. ${state}${hooks}`;
+  const state = staysOn ? MESSAGE.staysOn : MESSAGE.startsOff;
+  if (!steps.length) return state;
+  return `${state} ${MESSAGE.steps(staysOn ? MESSAGE.runs : MESSAGE.runsOnceOn, steps.join(", "))}`;
 }
 
 /**
@@ -207,9 +274,9 @@ export function installUpdateFacts(
 }
 
 /** What the dialog says about the id a replacement erases, or nothing for a plain install. */
-function replacementWords(replaces: PluginInstallReview["replaces"]): string {
-  if (!replaces) return "";
-  return `It replaces ${replaces.name} by ${replaces.publisher} (${pluginOriginWords(replaces.origin)}), which has the same id: that plugin's saved account, settings and data will be erased. `;
+function replacementBlock(replaces: PluginInstallReview["replaces"]): string | undefined {
+  if (!replaces) return undefined;
+  return MESSAGE.replaces(replaces.name, replaces.publisher, pluginOriginWords(replaces.origin));
 }
 
 /** What the trust dialog is built from. */
@@ -229,12 +296,51 @@ export interface PluginInstallFacts {
   note?: string;
 }
 
-/** The trust dialog's body: where the code came from, what it may do, and what the scan saw. */
+/**
+ * The trust dialog's body, one block per fact with a blank line between: what a replacement erases,
+ * where the code came from, that it is not sandboxed (and, from a local folder, whether it is on and
+ * the steps it runs unasked), what it asks to do, what it starts, where it may write, which skills
+ * it adds, what the scan saw, and the note. A block with nothing to say is left out.
+ */
 export function installDetail(facts: PluginInstallFacts): string {
   const { manifest, origin, scan, before, replaces, note, staysOn = false } = facts;
-  const added = manifest.capabilities.filter((c) => !(before?.capabilities ?? []).includes(c));
-  const capabilities = `${manifest.capabilities.join(", ") || "none"}${added.length ? ` (new: ${added.join(", ")})` : ""}`;
-  return `${replacementWords(replaces)}${manifest.name} ${manifest.version} from ${pluginOriginWords(origin)} runs as trusted native code in a crash-isolated child process — not an OS sandbox. Publisher: ${manifest.publisher}. Capabilities: ${capabilities}.${localAccessWords(manifest, origin, staysOn)}${pluginMcpWords(manifest, before)}${pluginFolderWords(manifest, before)}${hostToolWords(manifest, before)}${pluginSkillWords(facts)} ${pluginScanWords(scan)}${note ? ` ${note}` : ""}`;
+  return [
+    replacementBlock(replaces),
+    MESSAGE.source(pluginOriginWords(origin), manifest.publisher),
+    MESSAGE.unsandboxed,
+    localAccessBlock(manifest, origin, staysOn),
+    capabilityBlock(manifest, before),
+    serverBlock(manifest, before),
+    folderBlock(manifest, before),
+    hostToolBlock(manifest, before),
+    skillBlock(facts),
+    scanBlock(scan),
+    note,
+  ]
+    .filter((block): block is string => Boolean(block))
+    .join("\n\n");
+}
+
+/** The trust dialog: its question, its body and the button that agrees. */
+export interface InstallPrompt {
+  message: string;
+  detail: string;
+  confirm: string;
+}
+
+/** Install, update (another version of the installed plugin) or replace (another plugin's id). */
+export function installPrompt(facts: PluginInstallFacts): InstallPrompt {
+  const { manifest, before, replaces } = facts;
+  const detail = installDetail(facts);
+  if (replaces)
+    return {
+      message: MESSAGE.replace(replaces.name, manifest.name, manifest.version),
+      detail,
+      confirm: MESSAGE.replaceButton,
+    };
+  if (before && before.version !== manifest.version)
+    return { message: MESSAGE.update(manifest.name, manifest.version), detail, confirm: MESSAGE.updateButton };
+  return { message: MESSAGE.install(manifest.name, manifest.version), detail, confirm: MESSAGE.installButton };
 }
 
 /** The arguments an approved action runs with, under its question; none, and nothing shows (never `{}`). */
