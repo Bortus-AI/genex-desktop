@@ -4,15 +4,13 @@
 
 Assets groups media in `assets/`, `public/assets/` and the project kind's asset folders (Unreal `Content`,
 Unity `Assets`, Blender files, a plugin's) by source and generation, engine files by name;
-deliveries and outside changes refresh it. Cards hide metadata; a job being made, by Genex or
-any [declaring](../plugins.md#assets-being-made) tool, keeps its asset's spot, chat included;
-animation-only GLBs fold into models.
+deliveries and outside changes refresh it. Cards hide metadata; [jobs being made](../plugins.md#assets-being-made)
+(any plugin's, any MCP tool's) keep their spot, chat included; animation-only GLBs fold into models.
 
 An opened file has only Reveal in Finder and Close: images (click: full size), audio/video, 3D
 models with clips, textures or bounded text; unsupported formats and decoder failures say why.
 
-Chat shows game-folder files with Open in Assets. Builds shows a Loop's workspace assets as
-thumbnails until landing. Job completion or “seen in game” never proves integration or passing checks.
+Chat shows game-folder files with Open in Assets; Builds, a Loop's workspace assets until landing. Job completion or “seen in game” never proves integration or passing checks.
 
 ## Tools and setup
 
