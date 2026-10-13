@@ -518,7 +518,9 @@ A judge that plays (`role: "judge"`) is blind as well as read-only (`DelegateReq
 the engine can enforce it: Claude Code is offered no built-in but tool search and disallows every file, shell, edit and question tool, OpenCode
 denies every file tool, and a local session gets no file tool. Codex reads the whole disk, so a Codex
 judge is only told to judge by playing. Every engine starts in the empty `scratch/blind-judge`
-folder and is not told the build's path.
+folder and is not told the build's path. Writing nothing and reading no file, it takes a folder
+lock of its own (`judgeLockKey`), so the chat's `judge_play` judge plays the game folder its own
+session holds; every other session there is still refused ([computer use](computer-use.md)).
 
 A plan on an engine that ends its turn with it (`plansByTurn`: Bonsai, Codex) is approved by the
 host ([`plan-approval.ts`](../src/main/core/plan-approval.ts) `withPlanApproval`): a Plan reply

@@ -6,8 +6,8 @@ import { ExecutionStatus } from "../../shared/run-state.ts";
 import { summaryCounts, summaryOutcome, type RunSummary } from "../../shared/run-summary.ts";
 import { plural } from "../../shared/skill-words.ts";
 import { CHECK_WORDS, outcomeTitle } from "../words.ts";
-import { Icon, type IconName } from "../ui/icons.tsx";
-import { checkGroups, checkMeta, checkNote, checkTitle } from "../outcome-checks.ts";
+import { Icon } from "../ui/icons.tsx";
+import { CHECK_MARKS, checkGroups, checkMeta, checkNote, checkTitle } from "../outcome-checks.ts";
 import { FileText } from "../ui/FileText.tsx";
 import { openBuildGraph } from "../open-build.ts";
 import { workedShortWords } from "../run-steps.ts";
@@ -151,14 +151,6 @@ export function coverageWords(summary: RunSummary): string {
   return `${passed} structural check${passed === 1 ? "" : "s"} passed.${visual} ${interactionWords(summary, current)}`;
 }
 
-/** Each check state's mark: an icon in its state colour, beside the state's word in the row's line. */
-const STATUS_MARK: Record<Evidence["status"], { icon: IconName; tone: string }> = {
-  passed: { icon: "check", tone: "text-green" },
-  failed: { icon: "close", tone: "text-red" },
-  incomplete: { icon: "minus", tone: "text-ink-3" },
-  unknown: { icon: "minus", tone: "text-ink-3" },
-};
-
 /**
  * A check's title, clamped to three lines; Show all appears only when the clamp actually hides
  * words (a judge's whole question), measured on the rendered text, never guessed from its length.
@@ -196,7 +188,7 @@ function CheckTitle({ text }: { text: string }): JSX.Element {
  */
 function EvidenceRow({ e, onCapture }: { e: Evidence; onCapture: (image: string | null) => void }): JSX.Element {
   const capture = e.capture;
-  const mark = STATUS_MARK[e.status];
+  const mark = CHECK_MARKS[e.status];
   const note = checkNote(e);
   return (
     <div data-check-status={e.status} className="grid grid-cols-[14px_minmax(0,1fr)] gap-x-2.5">

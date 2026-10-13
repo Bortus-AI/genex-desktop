@@ -7,7 +7,7 @@ import { takeVerified } from "./verified-traces.ts";
 
 const MESSAGE = {
   hostOnly:
-    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume and finish check rows are written by the studio only",
+    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume, finish check and chat judge rows are written by the studio only",
 } as const;
 const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ToolPermission,
@@ -27,6 +27,9 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.JobEnded,
   // What macOS access `app_look` still needs is the app's own finding.
   CustomEvent.AppLookAccess,
+  // A chat's judge reads "verified by the studio" only where the host saw the goal reached
+  // (`judge-play-tool.ts`): the harness, which plays it, may not write the line itself.
+  CustomEvent.ChatJudgeResult,
   // The count of a run's automatic resumes bounds them (`core/auto-resume.ts`): only the host writes one.
   CustomEvent.RunAutoResumed,
   // The reviewer's verdict is the app's, from the session it seated (`core/finish-review.ts`): the

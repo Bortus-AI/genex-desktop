@@ -732,6 +732,23 @@ export interface HarnessHostApi {
     params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
     result: { tool: LiveToolSpec } | { answer: LiveToolResult } | { unavailable: string };
   };
+  /**
+   * `judge_play`, run by the host for an engine whose tool loop is the harness's own (Ollama), as
+   * session engines are handed it (`core/judge-play-tool.ts`): a blind judge plays the game, the
+   * chat's model playing, and the outcome is one line in `threadId`. `unavailable` says why not
+   * (no chat to record in, a game the studio does not play in a window).
+   */
+  "judge.play": {
+    params: {
+      project: string;
+      threadId?: string;
+      args?: Record<string, unknown>;
+      engine?: string;
+      model?: string;
+      effort?: string;
+    };
+    result: { answer: LiveToolResult } | { unavailable: string };
+  };
   "preview.input": {
     params: { actions?: PreviewInputAction[]; handle?: string };
     result: { ok: boolean; applied: number; width: number; height: number };
@@ -932,6 +949,7 @@ export const HostMethod = {
   PreviewInput: "preview.input",
   PreviewComputer: "preview.computer",
   DesktopComputer: "desktop.computer",
+  JudgePlay: "judge.play",
   PreviewConsole: "preview.console",
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",
@@ -1085,6 +1103,7 @@ export const HARNESS_PARAM_SCHEMAS = {
   }),
   "preview.computer": z.object({ project, root: text, handle: text, runId: optionalText, facetId: optionalText }),
   "desktop.computer": z.object({ project }),
+  "judge.play": z.object({ project }),
   "game.setCover": z.object({ project }),
   "game.setCoverShader": z.object({ project }),
   "game.contentStamp": z.object({ project }),

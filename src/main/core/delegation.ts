@@ -6,6 +6,7 @@
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { DesktopTools } from "./desktop-tools.ts";
 import { desktopSessionTools } from "./desktop-session.ts";
+import { type JudgePlayCaller, judgePlayFor, runJudgePlay, studioJudgeHost } from "./judge-play-tool.ts";
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
 import { COVER_TOOL } from "../../shared/cover-recipe.ts";
@@ -48,7 +49,7 @@ import {
 } from "../../substrate/engines/types.ts";
 import { credentialHomes } from "../../substrate/credential-homes.ts";
 import { baseDenyRead } from "../../substrate/spawn.ts";
-import { WorkerTool, type WorkerType, workerLockKey } from "../../shared/workers.ts";
+import { judgeLockKey, WorkerTool, type WorkerType, workerLockKey } from "../../shared/workers.ts";
 import { neverTouchList } from "./never-touch-list.ts";
 import { EngineKind } from "../../shared/engine-descriptor.ts";
 import { writableRoots } from "../../substrate/engines/never-touch.ts";
@@ -403,6 +404,10 @@ interface SessionTools {
   director: DirectorTools | null;
   /** The person's computer, behind their consent: only the chat's own session holds it. */
   desktop: DesktopTools | null;
+  /** `judge_play` (`judge-play-tool.ts`): the chat's own session's, on a game the studio plays in a window. */
+  judge: LiveToolSpec[];
+  /** Whom a judge's play answers to; null for a session without `judge_play`. */
+  judgeCaller: JudgePlayCaller | null;
 }
 
 /**
@@ -1263,7 +1268,7 @@ export class DelegationService {
     const p = worker || namesWorker(asked) ? workerBrief(asked) : asked;
     const seat = await this.#seatOf(p, target);
     const beside = worker ? null : await this.#unseatedRunWorker(asked, target);
-    const lock = this.#lockOf(target, worker, seat, beside);
+    const lock = this.#lockOf(p, target, worker, seat, beside);
     this.#assertWorkerRoom(worker);
     this.#assertFolderFree(lock, p);
     this.#assertNoRunWorkerBeside(lock, p, seat, beside);
@@ -1968,12 +1973,15 @@ export class DelegationService {
    * there holds the folder's key. Synchronous: nothing awaits between it and the lock.
    */
   #lockOf(
+    p: DelegateParams,
     target: DelegationTarget,
     worker: WorkerFinding | null,
     seat: DelegationSeat,
     beside: UnseatedRunWorker | null,
   ): string {
     if (worker?.inPlace) return workerLockKey(target.cwd, worker.id);
+    const judge = blindJudgeWindow(p, target.cwd);
+    if (judge !== null) return judgeLockKey(target.cwd, judge);
     const folder = seat.leads ?? target.cwd;
     return beside !== null && this.#inPlaceRuns.has(beside.runId) ? workerLockKey(target.cwd, beside.id) : folder;
   }
@@ -2291,7 +2299,19 @@ export class DelegationService {
     if (session.hostTools) await this.#offerConnectors(p, session, tools);
     if (session.hostTools) await this.#applyPlugins(p, session, engineId, tools);
     await this.#prepareWindowTools(p, cwd, grants, windows, tools);
-    if (session.hostTools && isChatsOwnSession(p)) tools.desktop = await this.#desktopTools(p, target, session);
+    if (session.hostTools && isChatsOwnSession(p)) await this.#offerChatScreens(p, target, grants, session, tools);
+  }
+
+  /** The chat's own session's screen tools: the person's computer, behind consent, and a judge that plays. */
+  async #offerChatScreens(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    tools: SessionTools,
+  ): Promise<void> {
+    tools.desktop = await this.#desktopTools(p, target, session);
+    this.#offerJudge(p, target, grants, session, tools);
   }
 
   /** The person's computer for the chat's own session (`desktop-session.ts`), behind their consent. */
@@ -2302,6 +2322,34 @@ export class DelegationService {
       threadId: session.threadId,
       signal: session.abort.signal,
     });
+  }
+
+  /**
+   * `judge_play` for the chat's own session, on a game the studio plays in a window of its own (a
+   * web game: `selfCapture`), where the harness serves it. A plugin tool of the same name is refused.
+   */
+  #offerJudge(
+    p: DelegateParams,
+    target: DelegationTarget,
+    grants: DelegationGrants,
+    session: DelegationSession,
+    tools: SessionTools,
+  ): void {
+    const window = grants.selfCapture;
+    const capable = this.#core.host.hasCapability(HarnessCapability.ChatJudge);
+    const offered = judgePlayFor(Boolean(window), capable).filter((tool) => offers(session, tool.name));
+    if (!window || !offered.length) return;
+    const taken = tools.plugins.find((plugin) => offered.some((tool) => tool.name === plugin.name));
+    if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
+    tools.judge = offered;
+    tools.judgeCaller = {
+      project: p.project,
+      root: path.resolve(window.root),
+      threadId: session.threadId,
+      engine: target.engineId,
+      model: p.model,
+      effort: p.effort,
+    };
   }
 
   /**
@@ -2596,7 +2644,7 @@ export class DelegationService {
   ): Partial<DelegateRequest> {
     const windowTools = tools.director ?? tools.builder;
     const controls = session.runControls ? runControlsFor(session.runControls) : [];
-    const desktop = tools.desktop?.liveTools ?? [];
+    const desktop = [...(tools.desktop?.liveTools ?? []), ...tools.judge];
     return {
       liveTools: [
         ...(windowTools?.liveTools ?? []),
@@ -2704,6 +2752,9 @@ export class DelegationService {
     tools: SessionTools,
   ): Promise<LiveToolResult> | null {
     if (tools.desktop && name === DESKTOP_TOOL_NAME) return tools.desktop.onLiveTool(name, args);
+    const judge = tools.judgeCaller;
+    if (judge && tools.judge.some((tool) => tool.name === name))
+      return runJudgePlay(studioJudgeHost(this.#core), args, judge);
     if (tools.workers.some((tool) => tool.name === name)) return this.#forwardWorkerTool(session, name, args);
     const looker = tools.lookCaller;
     if (looker && tools.look.some((tool) => tool.name === name)) return runAppLook(this.#core, args, looker);
@@ -2857,6 +2908,8 @@ function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance" | "appl
     playtest: null,
     director: null,
     desktop: null,
+    judge: [],
+    judgeCaller: null,
   };
 }
 
@@ -3001,6 +3054,18 @@ function runToolsOnly(
   };
   // No computer was started for it, so there is nothing of its own to stop.
   return { liveTools: forwarded, onLiveTool, release: async () => {} };
+}
+
+/**
+ * The window a blind judge plays in, or null for any other session. A judge is blind only read-only,
+ * on a grant for the folder it runs in (`#grants` drops any other): it writes nothing and reads no
+ * file, so it takes a lock of its own (`judgeLockKey`) and plays a folder another session holds.
+ */
+function blindJudgeWindow(p: DelegateParams, cwd: string): string | null {
+  const grant = p.playtest;
+  const judge = p.readOnly === true && grant?.role === ScreenRole.Judge && path.resolve(grant.root) === cwd;
+  if (!judge) return null;
+  return grant.handle ?? `${grant.facetId ?? "judge"}:${grant.iteration ?? 0}`;
 }
 
 /**

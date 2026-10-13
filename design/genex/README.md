@@ -142,6 +142,11 @@ new plan and explicit approval. Failed plan generation uses a recovery card with
 and plan APIs; they do not add the web app's question protocol. Permission cards/docks scroll when available height is short; option lists have no separate
 scroll box. The plan body scrolls independently so all three footer actions remain reachable.
 
+A judge the chat asked to play (`judge_play`, `chat/JudgeLine.tsx`) is one quiet disclosure line,
+never a card: the checks list's state mark and its exact words ("Passed · Judge who played it ·
+verified by the studio", or "The judge didn't play" when nobody played); open, "Asked: …" in ink-2
+and the judge's note, or why it didn't play, in ink-3.
+
 An engine link is one quiet line in ink-3, not a card: "Lantern Run now builds in Unreal ·
 Lantern" with a secondary **Undo** while it is the game's newest link, flowing after the line's last
 word like text (a space, not a margin, so a wrapped Undo starts flush); after Undo the line keeps

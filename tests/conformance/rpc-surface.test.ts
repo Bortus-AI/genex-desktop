@@ -22,6 +22,7 @@ const API_KEYS = [
   "context.policy",
   "coordinator.tool",
   "desktop.computer",
+  "judge.play",
   "engine.abort",
   "engine.complete",
   "engine.delegate",

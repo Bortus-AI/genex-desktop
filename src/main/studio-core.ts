@@ -174,6 +174,7 @@ import { optimizationRpc } from "./harness-rpc/optimization.ts";
 import { pluginsRpc } from "./harness-rpc/plugins.ts";
 import { previewRpc } from "./harness-rpc/preview.ts";
 import { desktopRpc } from "./harness-rpc/desktop.ts";
+import { judgeRpc } from "./harness-rpc/judge.ts";
 import { runsRpc } from "./harness-rpc/runs.ts";
 import { snapshotRpc } from "./harness-rpc/snapshot.ts";
 import { hooksRpc } from "./harness-rpc/hooks.ts";
@@ -2050,6 +2051,7 @@ export class StudioCore {
       ...studioRpc(this, this.#x),
       ...previewRpc(this, this.#x),
       ...desktopRpc(this, this.#x),
+      ...judgeRpc(this),
     };
     return table;
   }

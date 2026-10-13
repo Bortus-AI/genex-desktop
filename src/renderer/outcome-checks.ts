@@ -4,8 +4,21 @@
  * each saying its state in words, who checked and what it rests on. Category and revision stay out
  * of the row: the group says which build, and Technical details keeps the revision above.
  */
+import type { ChatJudgeResultPayload } from "../shared/chat-judge.ts";
 import { InteractionSource, type RunEvidence } from "../shared/run-summary.ts";
-import { CHECK_WORDS, OBJECTIVE_WORDS, PLAYED_SOURCE_WORDS } from "./words.ts";
+import type { IconName } from "./ui/icons.tsx";
+import { CHAT_JUDGE_WORDS, CHECK_WORDS, OBJECTIVE_WORDS, PLAYED_SOURCE_WORDS } from "./words.ts";
+
+/**
+ * Each check state's mark: an icon in its state colour, beside the state's word in the row's line —
+ * the build's checks list and a chat's judge line alike.
+ */
+export const CHECK_MARKS: Record<RunEvidence["status"], { icon: IconName; tone: string }> = {
+  passed: { icon: "check", tone: "text-green" },
+  failed: { icon: "close", tone: "text-red" },
+  incomplete: { icon: "minus", tone: "text-ink-3" },
+  unknown: { icon: "minus", tone: "text-ink-3" },
+};
 
 /** The order a check's state is read in: what needs attention first. */
 const STATUS_ORDER: Record<RunEvidence["status"], number> = { failed: 0, incomplete: 1, unknown: 2, passed: 3 };
@@ -63,4 +76,22 @@ export function checkTitle(row: RunEvidence): string {
 export function checkNote(row: RunEvidence): string | null {
   const held = playedSource(row) === InteractionSource.RouteReplay && row.status === "passed";
   return held ? CHECK_WORDS.routeHeld : row.note;
+}
+
+/**
+ * A chat's judge line, in the checks list's words ("Passed · Judge who played it · verified by the
+ * studio"); one where nothing was played says so, its reason inside.
+ */
+export function judgeLineLabel(judge: ChatJudgeResultPayload): string {
+  if (judge.refusal) return CHAT_JUDGE_WORDS.notPlayed;
+  return checkMeta({
+    id: "",
+    head: null,
+    category: "interaction",
+    label: judge.ask,
+    status: judge.status,
+    note: judge.note,
+    source: InteractionSource.HandsOnJudge,
+    objective: judge.objective,
+  });
 }

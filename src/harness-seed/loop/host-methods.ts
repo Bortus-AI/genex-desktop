@@ -94,6 +94,7 @@ export const HostMethod = {
   PreviewInput: "preview.input",
   PreviewComputer: "preview.computer",
   DesktopComputer: "desktop.computer",
+  JudgePlay: "judge.play",
   PreviewConsole: "preview.console",
   PreviewGpuErrors: "preview.gpuErrors",
   PreviewStatus: "preview.status",

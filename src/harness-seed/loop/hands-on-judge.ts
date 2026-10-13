@@ -63,6 +63,12 @@ const MESSAGE = {
   answered: (answer: string, note: string) => `judge answered ${answer}${note ? `: ${note}` : ""}`,
 } as const;
 
+/**
+ * This copy plays a chat's check, which has no run (`chat-judge.ts`): an agent-edited copy kept from
+ * before lacks it, and main.ts then never claims the chat's judge.
+ */
+export const SERVES_CHAT_JUDGE = true;
+
 /** What a judge that plays is handed. */
 export interface HandsOnOptions {
   run: Run;
@@ -258,7 +264,8 @@ function judgeGrant(options: HandsOnOptions, handle: string, maxActions: number)
     project: run.project,
     root,
     handle,
-    runId: run.runId,
+    // A chat's check has no run (`chat-judge.ts`): its frames are filed ad hoc.
+    ...(run.runId ? { runId: run.runId } : {}),
     facetId: facetId ?? FacetRole.Integration,
     iteration: iteration ?? 0,
     ...(entry ? { entry } : {}),

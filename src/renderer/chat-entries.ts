@@ -4,6 +4,7 @@ import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
 import { parseSuggestion } from "./chat/plugin-suggestion.ts";
 import { type JobHandle, type JobStart, jobEndLine, jobStart, missingPanes } from "./chat/job-lines.ts";
 import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
+import { type ChatJudgeResultPayload, readChatJudgeResult } from "../shared/chat-judge.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
 import { isWorkerOfGraph, workerKeyOf } from "../shared/run-graph-events.ts";
 import { WorkerEnd } from "../shared/workers.ts";
@@ -135,6 +136,8 @@ export const EntryAction = {
   Worker: "worker",
   /** Genex can't see app windows yet (`app_look_access`): one line, with Open Privacy settings per pane. */
   AppAccess: "app-access",
+  /** A blind judge played the game for the chat's own session (`chat_judge_result`): one line, the question inside. */
+  Judge: "judge",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -214,6 +217,8 @@ export type Entry =
       workerDone?: boolean;
       /** action "app-access": the Privacy & Security panes still to allow. */
       appAccess?: AppLookAccessKind[];
+      /** action "judge": what the judge established, in the words of a build's checks list. */
+      judge?: ChatJudgeResultPayload;
     }
   /**
    * The morning: what the run amounts to, in one card. It replaces the line that read
@@ -1318,6 +1323,21 @@ function narrateAppAccess(chat: ChatDraft, event: EventEnvelope): void {
   });
 }
 
+/** A blind judge's play for the chat's own session: one line; an old or partial record draws nothing. */
+function narrateChatJudge(chat: ChatDraft, event: EventEnvelope): void {
+  const judge = readChatJudgeResult(customPayload(event.data, CustomEvent.ChatJudgeResult));
+  if (!judge) return;
+  closeGroup(chat);
+  chat.entries.push({
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Ask,
+    action: EntryAction.Judge,
+    text: judge.ask,
+    judge,
+  });
+}
+
 /** A session's turn-it-on card for a Genex plugin; an old or partial record draws nothing. */
 function narratePluginSuggested(chat: ChatDraft, event: EventEnvelope): void {
   const suggested = customPayload(event.data, CustomEvent.PluginSuggested);
@@ -1950,6 +1970,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateFinishCheck,
   narrateRunFinishSettled,
   narrateAppAccess,
+  narrateChatJudge,
   narratePluginSuggested,
   narrateImprovement,
   narrateSkillAccepted,

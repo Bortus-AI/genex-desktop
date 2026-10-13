@@ -125,6 +125,8 @@ export const RPC_CLASSES = {
   "preview.computer": RpcClass.PageLoad,
   // The person may take minutes to answer the consent card; the card's own timeout bounds it.
   "desktop.computer": RpcClass.Work,
+  // A judge plays for minutes; the host's own dispatch timeout (`judge-play-tool.ts`) bounds it.
+  "judge.play": RpcClass.Work,
   "preview.console": RpcClass.Page,
   "preview.gpuErrors": RpcClass.Page,
   "preview.status": RpcClass.Page,

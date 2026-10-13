@@ -2296,6 +2296,23 @@ export interface HarnessHostApi {
     params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
     result: { tool: LiveToolSpec } | { answer: LiveToolResult } | { unavailable: string };
   };
+  /**
+   * `judge_play`, run by the host for an engine whose tool loop is the harness's own (Ollama), as
+   * session engines are handed it (`core/judge-play-tool.ts`): a blind judge plays the game, the
+   * chat's model playing, and the outcome is one line in `threadId`. `unavailable` says why not
+   * (no chat to record in, a game the studio does not play in a window).
+   */
+  "judge.play": {
+    params: {
+      project: string;
+      threadId?: string;
+      args?: Record<string, unknown>;
+      engine?: string;
+      model?: string;
+      effort?: string;
+    };
+    result: { answer: LiveToolResult } | { unavailable: string };
+  };
   "preview.input": {
     params: { actions?: PreviewInputAction[]; handle?: string };
     result: { ok: boolean; applied: number; width: number; height: number };
@@ -2588,6 +2605,22 @@ export type DispatchAction =
    * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
    */
   | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
+  /**
+   * A judge that plays (`judge_play`), asked for by the chat's own session after a change: one blind
+   * judge plays the game in `root` (the game folder, as the host resolved it) on a hidden window and
+   * answers `ask`, held to `goalState` when given. Answers with the judge's outcome, never throws.
+   */
+  | {
+      type: "chat_judge";
+      threadId: string;
+      project: string;
+      root: string;
+      engine: string;
+      model?: string;
+      effort?: string;
+      ask: string;
+      goalState?: string;
+    }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 // ↑ src/shared/protocol.ts

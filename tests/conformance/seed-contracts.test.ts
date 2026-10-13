@@ -113,7 +113,15 @@ import { applyEdits, SKILL_EDIT_OPS } from "../../src/shared/skill-edits.ts";
 import * as studioStateShape from "../../src/shared/studio-state-shape.ts";
 import { CONTRACT_LESSONS_FILE, LESSONS_SKILL, StagedTarget } from "../../src/shared/self-change-files.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
-import { DIRECTOR_LOOP_ENV, harnessRunEnv, UNREAL_RUNNER_ENV, UnrealRunnerChoice } from "../../src/shared/protocol.ts";
+import {
+  DIRECTOR_LOOP_ENV,
+  HarnessCapability,
+  harnessRunEnv,
+  UNREAL_RUNNER_ENV,
+  UnrealRunnerChoice,
+} from "../../src/shared/protocol.ts";
+import { CHAT_JUDGE_CAPABILITY } from "../../src/harness-seed/loop/chat-judge.ts";
+import { LOCAL_ROLES_CAPABILITY } from "../../src/harness-seed/loop/local-roles-served.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
 import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
 import { EngineKind } from "../../src/shared/engine-descriptor.ts";
@@ -750,6 +758,11 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);
+  });
+
+  it("the capabilities the seed claims when its parts serve them are the app's", () => {
+    assert.equal(CHAT_JUDGE_CAPABILITY, HarnessCapability.ChatJudge);
+    assert.equal(LOCAL_ROLES_CAPABILITY, HarnessCapability.LocalRoles);
   });
 });
 

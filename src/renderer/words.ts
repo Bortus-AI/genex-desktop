@@ -57,6 +57,7 @@ import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
 import { MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
+import { JUDGE_PLAY_TOOL_NAME } from "../shared/chat-judge.ts";
 import {
   APP_LOOK_TOOL_NAME,
   AppLookAccessKind,
@@ -2470,6 +2471,7 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   [JobTool.Tail]: { icon: "read", label: "read background work's output" },
   [JobTool.Stop]: { icon: "run", label: "stopped background work" },
   [APP_LOOK_TOOL_NAME]: { icon: "see", label: "looked at an app window", active: "Looking at an app window" },
+  [JUDGE_PLAY_TOOL_NAME]: { icon: "game", label: "had a judge play the game", active: "A judge is playing the game" },
   wait: { icon: "think", label: "waited", active: "Waiting" },
   judge: { icon: "see", label: "reviewed a build", active: "Reviewing a build" },
   playtest: { icon: "game", label: "had a build playtested", active: "Playtesting a build" },
@@ -3574,6 +3576,13 @@ export const OBJECTIVE_WORDS: Record<InteractionObjective, string> = {
   [InteractionObjective.StudioVerified]: "verified by the studio",
   [InteractionObjective.ModelSaid]: "the player's word",
 };
+
+/** A chat's judge line (`JudgeLine.tsx`): what leads the question inside it. */
+export const CHAT_JUDGE_WORDS = {
+  asked: "Asked:",
+  /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
+  notPlayed: "The judge didn't play",
+} as const;
 
 /** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
 export const CHECK_WORDS = {

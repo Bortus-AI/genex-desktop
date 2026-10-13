@@ -13225,7 +13225,7 @@ describe("computer use: the judge that plays, escalation and routes", () => {
   // Live (Star Dash, 2026-10-14): the lead wrote a part's done scenarios in worker_start's
   // {what, check} shape, the plan kept each as "[object Object]", and the blind judge was asked to
   // "verify every required scenario through actual interaction: [object Object]; [object Object]".
-  it("CU11. a plan's done scenarios written as {what, check} keep their sentences, so the judge is asked them", async () => {
+  it("CU17. a plan's done scenarios written as {what, check} keep their sentences, so the judge is asked them", async () => {
     const { compilePlan } = await import("../../src/harness-seed/loop/director/rules.ts");
     const { createGoals } = await import("../../src/harness-seed/loop/director/goals.ts");
     const compiled = compilePlan({
@@ -13252,7 +13252,7 @@ describe("computer use: the judge that plays, escalation and routes", () => {
 
   // Live (Star Dash): the blind judge's note reached the build card cut inside a word ("The second
   // red block patro"). A play answer's note is cut at a word, with the mark, like every other note.
-  it("CU12. a long play answer's note is cut at a word, never inside one", async () => {
+  it("CU18. a long play answer's note is cut at a word, never inside one", async () => {
     const { playResults } = await import("../../src/harness-seed/loop/playtester.ts");
     const note = `I reached the win screen. ${"The second red block patrols left and right near the star. ".repeat(8)}`;
     const [result] = playResults([{ id: "q", kind: "play", ask: "Can you win?", expect: "yes" } as never], {
@@ -13263,6 +13263,126 @@ describe("computer use: the judge that plays, escalation and routes", () => {
     assert.ok(kept.endsWith("…"), kept.slice(-40));
     const lastWord = kept.slice(0, -1).split(/\s+/).at(-1)!;
     assert.ok(note.split(/\s+/).includes(lastWord), `"${lastWord}" is a whole word`);
+  });
+
+  /** A chat's call for a judge (`chat_judge`), as the host forwards it. */
+  const chatAsk = {
+    type: "chat_judge",
+    threadId: "thread-1",
+    project: "marsh",
+    root: "/fake/marsh",
+    engine: "claude-code",
+    model: "opus",
+    ask: "Could you open the gate?",
+    goalState: '{"path":"gate.open","truthy":true}',
+  } as const;
+  /** A judge's host with one hidden window to lend: describes, leases, delegates, releases. */
+  function chatJudgeCtx(
+    answer: unknown,
+    trace: unknown,
+    extra: Record<string, (p: Record<string, unknown>) => unknown> = {},
+  ) {
+    return judgeCtx(answer, trace, {
+      "preview.capacity": () => ({ headless: true, free: 1 }),
+      "preview.acquire": () => ({ handle: "pool-7" }),
+      "preview.release": () => true,
+      "preview.statsOf": () => ({ stats: { litFraction: 0.4, meanLuma: 90 }, width: 960, height: 600 }),
+      ...extra,
+    });
+  }
+
+  // A chat's own session made a change and had no way to have it checked by anyone but itself: the
+  // blind judge played only inside a Loop's build. It is the same judge, called from the chat.
+  it("CU19. a chat's judge plays the game folder on a leased hidden window, blind and stepped, and is studio-verified only on the trace that reached the goal", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    const { trace } = await sessionFolder();
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const recorder = chatJudgeCtx({ answers: { "chat-judge": { answer: "yes", frames: ["s3_screen"] } } }, reached);
+    const out = await judgeFromChat(recorder.ctx as never, chatAsk, { retriesMs: [] });
+    assert.deepEqual([out.status, out.answer, out.objective, out.trace], ["passed", "yes", "studio-verified", trace]);
+    const sent = recorder.paramsOf("engine.delegate")[0]!;
+    const grant = sent.playtest as Record<string, unknown>;
+    assert.deepEqual(
+      [grant.role, grant.pacing, grant.root, grant.handle, grant.runId, sent.readOnly],
+      ["judge", "stepped", "/fake/marsh", "pool-7", undefined, true],
+      "the same blind judge a build uses, on a window of its own, filed under no run",
+    );
+    assert.deepEqual(grant.quest, { id: "could-you-open-the-gate", until: { path: "gate.open", truthy: true } });
+    assert.deepEqual(recorder.paramsOf("preview.release"), [{ handle: "pool-7" }], "the window goes back");
+    assert.equal(recorder.paramsOf("events.append").length, 0, "the host records the outcome, never the harness");
+
+    const said = chatJudgeCtx(
+      { answers: { "chat-judge": { answer: "yes" } } },
+      { path: trace, steps: 4, deterministic: true, reachedAt: null },
+    );
+    const unverified = await judgeFromChat(said.ctx as never, chatAsk, { retriesMs: [] });
+    assert.notEqual(unverified.objective, "studio-verified", "a yes the studio did not see reached is not verified");
+  });
+
+  it("CU20. a chat's call for a judge with a goal state that is not a plain path, or with no question, is refused before anything is leased or played", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    for (const bad of [
+      { ...chatAsk, goalState: '{"path":"__proto__.x","truthy":true}' },
+      { ...chatAsk, goalState: "{path: gate" },
+      { ...chatAsk, ask: "   " },
+    ]) {
+      const recorder = chatJudgeCtx({}, null);
+      const out = await judgeFromChat(recorder.ctx as never, bad, { retriesMs: [] });
+      assert.equal(out.status, "incomplete");
+      assert.ok(out.refusal, JSON.stringify(out));
+      assert.deepEqual(
+        [recorder.paramsOf("preview.acquire").length, recorder.paramsOf("engine.delegate").length],
+        [0, 0],
+      );
+    }
+  });
+
+  it("CU22. a kept older judge that cannot play a chat's check leaves the chat's judge unclaimed, so the host never offers it", async () => {
+    const { servesChatJudge } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    assert.equal(servesChatJudge(), true, "the shipped judge serves it");
+    assert.equal(
+      servesChatJudge([{ runHandsOnJudge: () => null }]),
+      false,
+      "an agent-edited copy from before does not",
+    );
+  });
+
+  it("CU23. a direct engine's chat (Ollama) has the same judge_play, run by the host with this chat's model", async () => {
+    const { tools } = await import("../../src/harness-seed/tools/judge-tools.ts");
+    const [tool] = tools;
+    assert.equal(tool?.name, "judge_play");
+    const recorder = ctxRecorder({
+      handlers: { "judge.play": () => ({ answer: "Passed. The judge answered yes, verified by the studio." }) },
+    });
+    const ctx = { ...recorder.ctx, project: "marsh", engine: "ollama", model: "qwen3.5:4b" };
+    const said = await tool!.execute({ ask: "Could you open the gate?" }, ctx as never);
+    assert.match(String(said), /verified by the studio/);
+    assert.deepEqual(recorder.paramsOf("judge.play"), [
+      {
+        project: "marsh",
+        threadId: "thread-1",
+        engine: "ollama",
+        model: "qwen3.5:4b",
+        args: { ask: "Could you open the gate?" },
+      },
+    ]);
+    const refused = ctxRecorder({ handlers: { "judge.play": () => ({ unavailable: "no window to play in" }) } });
+    assert.equal(
+      await tool!.execute({ ask: "x" }, { ...refused.ctx, project: "marsh" } as never),
+      "no window to play in",
+    );
+  });
+
+  it("CU21. with every hidden window leased, a chat's judge says so and plays nothing", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    const recorder = chatJudgeCtx({}, null, {
+      "preview.acquire": () => ({ handle: null }),
+      "preview.capacity": () => ({ headless: true, free: 0, leased: 2 }),
+    });
+    const out = await judgeFromChat(recorder.ctx as never, chatAsk, { retriesMs: [] });
+    assert.equal(out.status, "incomplete");
+    assert.ok(out.refusal, "the session hears why nothing was played");
+    assert.equal(recorder.paramsOf("engine.delegate").length, 0);
   });
 
   const bench = { id: "bench", kind: "play", ask: "Could you sit on the bench?", expect: "yes", weight: "normal" };
