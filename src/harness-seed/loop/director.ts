@@ -938,7 +938,8 @@ async function sessionParts(ctx: HarnessCtx, loopRun: LoopRun, loop: DirectorLoo
   const open = leadsOpenLoop(loopRun);
   const skill = open ? "" : await directorSkill(ctx, loopRun);
   const types = loopRun.open?.pool?.state.types ?? [];
-  const tools = open ? openTools(types, { restart: restartsApp(loopRun.game) }) : runTools(loop, loopRun);
+  const workers = loopRun.open?.pool?.state.allowed;
+  const tools = open ? openTools(types, { restart: restartsApp(loopRun.game), workers }) : runTools(loop, loopRun);
   const talk = directorTalk(loopRun, referenceImages(run), tools);
   directors.set(run.runId, open ? openHandler(loopRun) : loopRun.handler);
   // Between an open Loop's turns, Genex keeps what its lead left and runs the rewind or restart it asked for.

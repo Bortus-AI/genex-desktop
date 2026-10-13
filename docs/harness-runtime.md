@@ -507,6 +507,13 @@ person's word (`loop/finish-log.ts`: a steer the lead took from their message, o
 that message's), the rest as relayed by the chat's agent, labels `run.goal` as the launch wrote it,
 and counts the pictures attached. A proof file is read by handle, never through a link or a FIFO, and
 only while its name still leads to it inside the folder.
+The lead's `remaining` (what it says is not done yet, one item a line, `remainingOf`: at most
+`REMAINING_MAX` items of `REMAINING_ITEM_CHARS`) comes before its claim and is never clipped with it,
+and the brief asks the reviewer to open pictures of its own choosing in the folder and to judge how
+a thing looks only from a close front or side picture.
+In a Loop in place, a claim that names what remains while more than `GAPS_FIRST_MIN_MS` (20 min) of
+working time is left reaches no reviewer: the lead is told to work on what remains first
+(`open/finish.ts` `gapsFirst`), and nothing is recorded.
 It answers `{"verdict":"yes"|"no","reasons":[…],"notDone":[…]}`: yes ends the Loop, no goes back to
 the lead with its reasons, and `MAX_FINISH_REJECTIONS` (3) no's in a row stop it; an answer that
 says neither, a failed session or a Stop neither counts nor breaks the row. Every step is a
@@ -626,10 +633,13 @@ session of this attempt worked keeps nothing and spends none of its hours. No fi
 if the goal is reached. Its wake messages are
 `openDigest` (`open/digest.ts`: the person's words first, news no turn took, the lines Genex carried,
 its latest save points with the rest counted, a fresh-look reminder after `FRESH_EYES_MS` with no read-only worker, its own
-wrap-up and idle question). `save_point {label, summary}` is Genex's checkpoint on the git-write
+wrap-up and idle question). `save_point {label, summary, shows?}` is Genex's checkpoint on the git-write
 queue (the plugins' steps around the snapshot; their notes in the answer, their pictures the round's
 thumbnails on the "lead" part, `facet_iteration` and `integration_merge`; the host keeps them as the
-observer's capture); a block or Genex's hold keeps nothing and says why. `rewind {label}` and
+observer's capture); a block or Genex's hold keeps nothing and says why. `shows` names the picture in
+the folder that shows the change (a PNG or JPEG really inside it, read before the snapshot): it is
+the round's `shown` picture, apart from the thumbnails; a save point without one is answered with a
+reminder, and one naming no readable picture says why. `rewind {label}` and
 `restart` (offered only when a plugin hooks `restore.*`) only note what the turn's end runs (a rewind
 keeps the snapshot its label named when asked; a Stop leaves it unrun, and the resumed brief says so):
 `LoopRun.afterTurn` (`open/between.ts`, which the wake loop awaits; a look at the app the turn started
@@ -843,8 +853,13 @@ A refused resume (`facet_session_reset`) and a context overflow start a fresh se
 prompt.
 
 A worker's copy of the game (`snapshot.worktree`, `harness-rpc/snapshot.ts`) holds every file the
-commit tracks; of what it receives outside history, the files of the game's nested repositories, it
-leaves out the game's ignore and `copySkip` rules (only the ignore rules when the copy versions those
+commit tracks. Each regular file the game folder still holds as committed is cloned from there
+(`worktreeAt`, `substrate/snapshots.ts`: `cp -c` on macOS, an APFS clone that shares the blocks, a
+reflink on Linux) and git writes the rest; git then records every file's stat and writes again any
+clone that does not read as committed, so the copy is exactly the commit's. A large project's
+content (an Unreal `Content/`) costs a copy neither the time of writing it again nor its disk;
+Windows checks every file out. Of what it receives outside history, the files of the game's nested
+repositories, it leaves out the game's ignore and `copySkip` rules (only the ignore rules when the copy versions those
 repositories). A copy larger than `WRITER_COPY_MAX_BYTES` (2 GB, `substrate/snapshots.ts`) is
 refused before anything is made (`SnapshotRefusal.CopyTooLarge`), with its size and largest
 folders; every caller gets that answer, the director's integration and play copies included, in
@@ -860,9 +875,10 @@ host hands those tools only to the chat's own session answering that turn, only 
 tools, and never to a worker (depth one). Each call is forwarded as the `worker_tool` dispatch to
 the pool of that turn; a call for any other turn starts nothing.
 
-The pool (`loop/workers/pool.ts`, `pool-start.ts`, `pool-merge.ts`) runs up to
-`MAX_WORKERS_AT_ONCE` (8) at once, under the Settings ceiling the host keeps per chat on its
-workers, readers and writers alike. A chat turn on a local model's engine opens no pool: only a
+The pool (`loop/workers/pool.ts`, `pool-start.ts`, `pool-merge.ts`) runs as many workers at once
+as the person's Settings allow (`preview.capacity` `workers`, the ceiling the host keeps per chat on
+its workers, readers and writers alike), at most `MAX_WORKERS_AT_ONCE` (8): `worker_start`'s
+description says the number, and a start past it is refused in its own answer, before anything is made. A chat turn on a local model's engine opens no pool: only a
 delegated engine carries a worker's seat.
 
 - `worker_start {title, task, isolation, type?, research?, inputs?}`: a reader (`read`) works in the
@@ -879,13 +895,21 @@ delegated engine carries a worker's seat.
   host honours by seating it in the chat's permission mode.
 - `worker_status` and `worker_wait` (at most `MAX_WORKER_WAIT_S`) read each worker's line. A worker
   whose question waits in the chat (a pending `tool_permission` row naming it) shows as waiting for
-  the person, and `worker_wait` wakes for it.
+  the person, and `worker_wait` wakes for it. An ended worker keeps its own last words
+  (`WorkerRecord.report`, up to `WORKER_REPORT_CHARS`) and a copy the files its work changes
+  (`changed`): `worker_status <id>` answers them in full, `worker_wait` answers them for each worker
+  that ended while it waited, and the list of every worker names each by its report's first sentence.
+- A worker's brief says its turn is its whole job: never ended to wait, never waiting by sleep or a
+  background command. A worker's Claude Code session that a background task woke after its input
+  ended (no tool call can be answered then) ends not ok, saying so, with its last words kept
+  (`claude-code.ts` `wokeAfterEnd`); a lead's or the chat's session keeps its last result's verdict.
 - `worker_steer` interrupts that worker alone (`engine.interrupt {cwd, worker}`) and resumes its
   session with the words in front; `worker_stop` aborts it alone (`engine.abort {cwd, worker}`),
   sent again while the host finds no session to stop (one still being seated), and a stopped
   worker takes no further leg.
 - `worker_mark used` merges a copy's commit into the game folder with the director's merge
-  (`mergeNoFf`, conflicts listed and the merge aborted). Conflicts, and the lead's uncommitted
+  (`mergeNoFf`, conflicts listed and the merge aborted); a clean merge names the pictures the work
+  changed, for the lead to look at before building on them. Conflicts, and the lead's uncommitted
   files the work also changes, go back to the lead with their names; `rejected` drops the copy.
   A verdict stands once given, and a writer in place that finished and changed the game folder is
   in the game already (`WorkerRecord.changedGame`, from a fingerprint of the folder's working tree

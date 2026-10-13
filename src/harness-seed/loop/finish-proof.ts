@@ -22,7 +22,7 @@ import { clipMarked } from "./text.ts";
 import { minutes } from "./time.ts";
 
 /** How many names of the lead's proof are read; the rest are refused in one line. */
-export const MAX_PROOF_FILES = 8;
+export const MAX_PROOF_FILES = 16;
 /** The largest proof file read. */
 export const PROOF_FILE_MAX_BYTES = 8 * 1024 * 1024;
 /** How much of one text file the reviewer reads. */

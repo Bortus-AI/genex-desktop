@@ -19,6 +19,7 @@ import { OpenTool, restartsApp } from "./contract.ts";
 import { openFinish } from "./finish.ts";
 import { OPEN_WORDS } from "./prompts.ts";
 import { restartTool, rewindTool, savePointTool } from "./save-point.ts";
+import { turnRoomNote, waitWithinTurn } from "./turn-room.ts";
 
 /** The longest note Genex keeps, and its plain sentence. */
 const NOTE_CHARS = 2_000;
@@ -91,10 +92,18 @@ export async function openStatus(loopRun: LoopRun): Promise<AnyRecord> {
   };
 }
 
-/** A worker tool's answer from the run's pool; a reader started now is the lead's fresh look. */
+/**
+ * A worker tool's answer from the run's pool; a reader started now is the lead's fresh look, and a
+ * wait returns before the lead's turn must end (`turn-room.ts`).
+ */
 async function workerAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<unknown> {
   const open = loopRun.open;
   if (!open?.pool) return OPEN_WORDS.unknownTool(name);
+  if (name === WorkerTool.Wait) {
+    const fitted = waitWithinTurn(loopRun, args, open.clock.now());
+    const waited = await open.pool.call(name, fitted.args);
+    return fitted.endsBy === null ? waited : `${waited}\n\n${turnRoomNote(fitted.endsBy, open.clock.now())}`;
+  }
   const answered = await open.pool.call(name, args);
   if (name === WorkerTool.Start && args.isolation === WorkerIsolation.Read)
     open.journal.lastReaderAt = open.clock.now();

@@ -10,6 +10,7 @@ import { resumeHeldWords, runHeldWords } from "../held-words.ts";
 import { FACT_ROOT, type FactRef, type FolderHolds } from "../../folder-facts.ts";
 import { CLAIM_BEFORE_END_MINUTES } from "../../finish-check.ts";
 import { MAX_FINISH_REJECTIONS } from "../../finish-contract.ts";
+import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
 import { appIdentity } from "../../project-prompts.ts";
 import { MINUTE_MS, minutes } from "../../time.ts";
 import { JobTool } from "../../jobs/contract.ts";
@@ -150,7 +151,7 @@ export function openBrief(facts: OpenBriefFacts): string {
     workerWords(facts.workerTypes),
     savePointWords(facts),
     "JOBS AND LOOKS: run a long command as a job and keep working while it runs; look at any window of the project's app with app_look, when the chat offers them.",
-    `FINISH: when the goal is reached, call finish with a summary and proof: the files in the folder that show it (a test report, a picture, a log). A reviewer who did none of the work checks it; ${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`,
+    `FINISH: when the goal is reached, call finish with a summary, what remains (everything you know is not done or not right yet) and proof: the files in the folder that show it (a test report, a close-up picture, a log). A reviewer who did none of the work checks it; ${MAX_FINISH_REJECTIONS} no's in a row stop the Loop. While something remains and more than ${minutes(GAPS_FIRST_MIN_MS)} minutes are left, no reviewer reads the claim: you work on what remains first.`,
     ...(facts.appSaved ? [] : ["SAVING: Genex's save points keep the files on disk only: save inside the app first."]),
     ...(facts.skills.length ? [["SKILLS FOR THIS PROJECT:", ...facts.skills].join("\n\n")] : []),
   ].join("\n\n");
@@ -214,10 +215,11 @@ export const OPEN_WORDS = {
   /** A save point or a finish while Genex brings the project's app back: nothing is kept or checked. */
   recovering:
     "Genex is bringing the project's app back; nothing was kept or checked. Try again once it says the app is back.",
-  saved: (label: string, notes: readonly string[], minutesLeft: number) =>
+  saved: (label: string, notes: readonly string[], minutesLeft: number, shows: string | null = null) =>
     [
       `Saved save point "${label}".`,
       ...(notes.length ? [`The project's plugins said: ${notes.join(" ")}`] : []),
+      ...(shows ? [shows] : []),
       `About ${minutesLeft} minutes of working time left.`,
     ].join(" "),
   notSaved: (why: string) => `No save point was made, and nothing was kept: ${clause(why)}.`,

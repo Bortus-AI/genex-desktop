@@ -12935,3 +12935,301 @@ describe("workers the run's pause stopped, and their kept work", () => {
 });
 
 const racingRunForSteer = { runId: "run_racing", project: "racing", goal: "a night street race", model: "sonnet" };
+
+/** The smallest PNG: one transparent pixel. */
+const ONE_PIXEL_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+describe("a lead hears what its workers found", () => {
+  /** A reader's written report, its finding far past its first sentence. */
+  const REPORT = [
+    "Reviewed the scene from four cameras.",
+    "",
+    "1. The roofs and the dock read well from the overview camera.",
+    "2. The fog is a little thin at the far shore; raise its density.",
+    "3. The hero's left arm sticks out about 40 degrees from the body in idle, and a strip of cloth stretches to the floor in the walk.",
+  ].join("\n");
+  const FINDING = /left arm sticks out about 40 degrees/;
+
+  it("LH1. a reader's written report never reached the lead: worker_status names it in full, and a reopened pool still does", async () => {
+    const { chatPool, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Fresh eyes", task: "Review the scene.", isolation: "read" });
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: REPORT });
+    assert.match(await pool.call(WorkerTool.Status, { id }), FINDING);
+    assert.match(await pool.call(WorkerTool.Wait, { id }), FINDING);
+    await pool.close();
+    const reopened = await chatPool(host, repo);
+    assert.match(await reopened.call(WorkerTool.Status, { id }), FINDING, "the report outlives the turn");
+  });
+
+  it("LH2. a lead waiting on any worker reads the report of the one that ended, while the list of all stays one line each", async () => {
+    const { chatPool, gameRepo, poolHost, settle, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Fresh eyes", task: "Review the scene.", isolation: "read" });
+    const waited = pool.call(WorkerTool.Wait, { seconds: 60 });
+    await settle();
+    host.sessionOf(id).end({ ok: true, sessionId: "s1", summary: REPORT });
+    assert.match(await waited, FINDING);
+    const all = await pool.call(WorkerTool.Status, {});
+    assert.match(all, /Reviewed the scene from four cameras\./, "the list names it by its first sentence");
+    assert.doesNotMatch(all, FINDING);
+  });
+
+  it("LH4. a worker ended its turn to wait on a long job in the background, and its later calls were refused: its brief says its turn is its whole job", async () => {
+    const { workerBrief } = await import("../../src/harness-seed/loop/workers/prompts.ts");
+    const brief = workerBrief({
+      identity: { folderLabel: "AI Games/garden", facts: [{ id: "web-game", path: "." }] },
+      task: "Make the three townsfolk with Genex.",
+      isolation: "copy",
+      research: false,
+      typeDescription: null,
+      inputs: [],
+    } as never);
+    assert.match(brief, /Your turn is your whole job/);
+    assert.match(brief, /never wait with sleep or a background command/i);
+    assert.match(brief, /call its wait again with the same id/);
+  });
+
+  it("LH5. save points were kept on wide shots that never showed the change: a save point names the picture that shows it, and that picture leads its round on the graph", async () => {
+    const { gameRepo, loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await tmpDir("save-shows-");
+    await mkdir(path.join(dir, "shots"), { recursive: true });
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    await writeFile(path.join(dir, "shots/hero-closeup.png"), Buffer.from(ONE_PIXEL_PNG, "base64"));
+    await gameRepo(dir);
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          const shows = "shots/hero-closeup.png";
+          answers.push(await tool("save_point", { label: "Hero", summary: "the hero's arms at his sides", shows }));
+          await writeFile(path.join(dir, "b.txt"), "b");
+          answers.push(await tool("save_point", { label: "Dock", summary: "the dock" }));
+          await writeFile(path.join(dir, "c.txt"), "c");
+          answers.push(await tool("save_point", { label: "Boat", summary: "the boat", shows: "../outside.png" }));
+          await tool("finish", { summary: "Built.", proof: "a.txt" });
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    const [hero, dock, boat] = host.appended("facet_iteration");
+    assert.match(String((hero?.shown as { path?: string } | undefined)?.path), /save-1\/shows/);
+    assert.equal(dock?.shown, undefined);
+    assert.equal(boat?.shown, undefined, "a path outside the folder is never read");
+    assert.doesNotMatch(String(answers[0]), /name the picture/);
+    assert.match(String(answers[1]), /name the picture that shows what changed/);
+    assert.match(String(answers[2]), /not a picture in the project's folder/);
+  });
+
+  it("a save point's picture is read only from inside the folder, as a plain PNG or JPEG", async () => {
+    const { shownPicture } = await import("../../src/harness-seed/loop/director/open/shown-picture.ts");
+    const { symlink } = await import("node:fs/promises");
+    const root = await tmpDir("save-shows-hostile-");
+    const dir = path.join(root, "game");
+    await mkdir(path.join(dir, "shots"), { recursive: true });
+    await mkdir(path.join(dir, ".hidden"), { recursive: true });
+    const picture = Buffer.from(ONE_PIXEL_PNG, "base64");
+    await writeFile(path.join(root, "outside.png"), picture);
+    await writeFile(path.join(dir, ".hidden/a.png"), picture);
+    await writeFile(path.join(dir, "shots/notes.txt"), "not a picture\n");
+    await writeFile(path.join(dir, "shots/huge.png"), Buffer.concat([picture, Buffer.alloc(9 * 1024 * 1024)]));
+    await writeFile(path.join(dir, "shots/ok.png"), picture);
+    await symlink(path.join(root, "outside.png"), path.join(dir, "shots/link.png"));
+    await promisify(execFile)("mkfifo", [path.join(dir, "shots/pipe.png")]);
+    const hostile = [
+      "../outside.png",
+      path.join(root, "outside.png"),
+      "shots/link.png",
+      ".hidden/a.png",
+      "shots/pipe.png",
+      "shots/huge.png",
+      "shots/notes.txt",
+      "shots/missing.png",
+      "shots/../../outside.png",
+    ];
+    for (const rel of hostile) {
+      const shown = await shownPicture(dir, rel);
+      assert.ok("problem" in shown, `${rel} is refused`);
+    }
+    const ok = await shownPicture(dir, "shots/ok.png");
+    assert.ok("image" in ok && ok.image.data === picture.toString("base64"));
+  });
+
+  it("LH6. a worker's work was marked used seconds after it ended, before anyone looked: the merge hands back the pictures it made, to look at", async () => {
+    const { chatPool, delegation, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Model the annex", task: "Model the annex.", isolation: "copy" });
+    const copy = String(delegation(host, id).cwd);
+    await mkdir(path.join(copy, "assets/annex"), { recursive: true });
+    await writeFile(path.join(copy, "assets/annex/annex.glb"), "glb");
+    await writeFile(path.join(copy, "assets/annex/render.png"), Buffer.from(ONE_PIXEL_PNG, "base64"));
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: "Modelled the annex." });
+    const merged = await pool.call(WorkerTool.Mark, { id, verdict: "used" });
+    assert.match(merged, /Merged w1/);
+    assert.match(merged, /Look at[^.]*assets\/annex\/render\.png/);
+    assert.doesNotMatch(merged, /annex\.glb/, "only its pictures");
+  });
+
+  it("LH3. a copy worker's status names the files its work changes", async () => {
+    const { chatPool, delegation, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Add a boat", task: "Add boat.js.", isolation: "copy" });
+    const copy = String(delegation(host, id).cwd);
+    await mkdir(path.join(copy, "src"), { recursive: true });
+    await writeFile(path.join(copy, "src/boat.js"), "export const boat = 1;\n");
+    await writeFile(path.join(copy, "a.txt"), "changed\n");
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: "Added the boat." });
+    const status = await pool.call(WorkerTool.Status, { id });
+    assert.match(status, /a\.txt/);
+    assert.match(status, /src\/boat\.js/);
+  });
+});
+
+describe("a finish claim with known gaps", () => {
+  /** A game folder with one commit, for a Loop in place. */
+  const folder = async (prefix: string) => {
+    const { gameRepo } = await import("../helpers/loop-host.ts");
+    const dir = await tmpDir(prefix);
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    return gameRepo(dir);
+  };
+  const GAPS = "the player has no walk animation\nthe hero's left arm sticks out from the body";
+
+  it("LF1. the lead's closing line of known gaps was cut off with its claim at its length limit: what remains is a field of its own, read first and whole", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-remaining-");
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 15 * MINUTE_MS, completionPolicy: "goal" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          await tool("finish", {
+            summary: `${"The scene holds the town. ".repeat(160)}`,
+            remaining: GAPS,
+            proof: "a.txt",
+          });
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    const prompt = String(host.reviewed()[0]?.prompt ?? "");
+    assert.match(prompt, /the hero's left arm sticks out from the body/);
+    assert.ok(
+      prompt.indexOf("the player has no walk animation") < prompt.indexOf("## The lead's claim"),
+      "what remains comes before the claim",
+    );
+  });
+
+  it("LF2. a reviewer's yes ended a three-hour Loop early while the lead named gaps: a claim naming gaps with time left reaches no reviewer, and the lead works on them first", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-gaps-early-");
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 3 * HOUR_MS, completionPolicy: "timed" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          answers.push(await tool("finish", { summary: "The scene is built.", remaining: GAPS, proof: "a.txt" }));
+          return undefined;
+        },
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "b.txt"), "b");
+          await tool("save_point", { label: "Walk", summary: "the walk and the arms" });
+          answers.push(
+            await tool("finish", { summary: "The scene is built and the gaps are closed.", proof: "b.txt" }),
+          );
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    assert.match(String(answers[0]), /^Not checked: .*work on it first/);
+    assert.match(String(answers[0]), /walk animation/);
+    assert.equal(host.reviewed().length, 1, "only the claim with nothing remaining reached a reviewer");
+    assert.match(String(answers[1]), /^Accepted/);
+  });
+
+  it("LF3. with gaps named but the Loop's time nearly spent, a reviewer's yes still closes it", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-gaps-late-");
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 15 * MINUTE_MS, completionPolicy: "timed" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          answers.push(await tool("finish", { summary: "The scene is built.", remaining: GAPS, proof: "a.txt" }));
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    assert.match(String(answers[0]), /^Accepted/);
+  });
+});
+
+describe("the most workers at once", () => {
+  it("LW1. a lead was told 'up to eight at once' while the person's Settings allowed four, and the fifth was answered 'Started' before the host refused it: the pool says the live cap and refuses at once", async () => {
+    const { chatPool, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const { workerTools } = await import("../../src/harness-seed/loop/workers/specs.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo, { workersAllowed: 4 });
+    const pool = await chatPool(host, repo);
+    for (const n of [1, 2, 3, 4]) await start(pool, { title: `Read ${n}`, task: "Look around.", isolation: "read" });
+    const fifth = await pool.call(WorkerTool.Start, { title: "Read 5", task: "Look around.", isolation: "read" });
+    assert.match(fifth, /^Not started: 4 workers are running, and at most 4 run at once/);
+    assert.equal(host.sessions.length, 4, "nothing was asked of the host for the fifth");
+    const start5 = workerTools([], pool.state.allowed).find((tool) => tool.name === WorkerTool.Start);
+    assert.match(String(start5?.description), /Up to 4 at once/);
+  });
+});
+
+describe("a worker wait inside the lead's capped turn", () => {
+  it("LT1. the turn's cap cut a four-minute worker_wait short and the turn's continuation re-sent its guidance: a wait ends before the turn must, saying so", async () => {
+    const { turnRoomNote, waitWithinTurn } = await import("../../src/harness-seed/loop/director/open/turn-room.ts");
+    const { noteTurnEnds } = await import("../../src/harness-seed/loop/director/turn-ends.ts");
+    const state = {};
+    const now = 1_000_000;
+    noteTurnEnds(state, now + 4 * MINUTE_MS);
+    const near = waitWithinTurn({ state } as never, { seconds: "240" }, now);
+    assert.equal(near.args.seconds, 150, "the wait returns 90 s before the turn must end");
+    assert.equal(near.endsBy, now + 4 * MINUTE_MS);
+    // Told as the wait returns, not as it began.
+    assert.match(turnRoomNote(Number(near.endsBy), now + 150 * SECOND_MS), /turn ends in about 2 minutes/);
+    const far = waitWithinTurn({ state } as never, { seconds: "60" }, now);
+    assert.deepEqual(far, { args: { seconds: "60" }, endsBy: null }, "a wait that fits is left alone");
+    // The pool lets no wait run past 240 s: a longer ask that fits once capped is left alone too.
+    noteTurnEnds(state, now + 10 * MINUTE_MS);
+    assert.equal(waitWithinTurn({ state } as never, { seconds: "600" }, now).endsBy, null);
+    const none = waitWithinTurn({ state: {} } as never, { seconds: "240" }, now);
+    assert.equal(none.endsBy, null, "a turn with no end noted waits as asked");
+  });
+});
