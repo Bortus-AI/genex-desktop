@@ -609,6 +609,8 @@ export interface WorkerSpecInput {
   forkedFrom?: string | null;
   /** "finish" for a worker that finishes what exists (facet/stage.ts); absent or anything else, the build stage. */
   stage?: string | null;
+  /** This part draws the HUD (spec.ts `withHarnessChecks`): its coverage and overlap are its own; absent, it does. */
+  drawsHud?: boolean;
 }
 
 /**
@@ -625,13 +627,22 @@ function withDeclaredGame<S extends FacetSpec>(
     ownsMain,
     screen,
     keepsFrontEnd,
-  }: { kind: string | null; traits: string[]; ownsMain: boolean; screen: boolean; keepsFrontEnd: boolean },
+    drawsHud,
+  }: {
+    kind: string | null;
+    traits: string[];
+    ownsMain: boolean;
+    screen: boolean;
+    keepsFrontEnd: boolean;
+    drawsHud: boolean;
+  },
 ): S {
   const kindName = isGameKind(kind) ? kind : null;
   if (!kindName && !traits.length) return spec;
   const declared: AnyRecord = { ...(kindName ? { kind: kindName } : {}) };
   for (const trait of Object.values(GameTrait)) if (traits.includes(trait)) declared[trait] = true;
-  return withHarnessChecks(spec, { ownsMain, game: normalizeGameTraits(declared), screen, keepsFrontEnd });
+  const game = normalizeGameTraits(declared);
+  return withHarnessChecks(spec, { ownsMain, game, screen, keepsFrontEnd, drawsHud });
 }
 
 /**
@@ -689,6 +700,7 @@ export function compileWorkerSpec(
     index = 0,
     forkedFrom = null,
     stage = null,
+    drawsHud = true,
   }: WorkerSpecInput,
   base: AnyRecord | null = null,
   { rarelyMeasurable: rarely = [] }: { rarelyMeasurable?: Array<{ id: string; rounds: number }> } = {},
@@ -700,7 +712,7 @@ export function compileWorkerSpec(
     { id, title: title || id, intent: brief, owns, identity, cameras, checks, done, milestones: rungs, budgetShare: 0 },
     index,
   );
-  spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen, keepsFrontEnd: setup?.begin === false });
+  spec = withDeclaredGame(spec, { kind, traits, ownsMain, screen, keepsFrontEnd: setup?.begin === false, drawsHud });
   const expr = setupVerifyExpr(setup?.verify);
   if (expr) spec = withRequestedStateCheck(spec, { expr, note: setup?.note ?? "" });
   // Before validation: a screen part's board may be mostly vision (spec.ts visionHeavy).

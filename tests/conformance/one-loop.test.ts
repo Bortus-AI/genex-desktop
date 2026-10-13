@@ -99,6 +99,7 @@ const OPEN_TOOLS = [
   "worker_steer",
   "worker_stop",
   "worker_wait",
+  "wrap_up",
 ];
 
 /** A picture a plugin's step answers with. */

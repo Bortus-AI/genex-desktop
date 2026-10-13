@@ -19,7 +19,7 @@ import { fireHooks, HookEvent, runScope } from "../hooks.ts";
 import { HostMethod } from "../host-methods.ts";
 import { jobEndLine } from "../jobs/prompts.ts";
 import { type JobEnd, jobEnds } from "../jobs/watch.ts";
-import { modelOn, RoleKey, roleEffort, roleEngine } from "../model-roles.ts";
+import { modelOn, plannerModel, RoleKey, roleEngine } from "../model-roles.ts";
 import { EngineFailure, engineLimitOf, isEngineLimit, StopReason } from "../outage.ts";
 import { ExecutionStatus } from "../run-events.ts";
 import { CLIP_DETAIL, clip } from "../text.ts";
@@ -120,10 +120,21 @@ const TURN_ENDS: ReadonlySet<string> = new Set([
   StopReason.Aborted,
 ]);
 
-/** The lead's engine, model and effort: the builders' role, at high effort unless the person chose one. */
+/**
+ * The lead's engine, model and effort: the builders' role, at high effort unless the person chose
+ * one. On the main agent's own model it thinks as they set the main agent, never at a worker's
+ * ceiling; on another model at the builders' level, since a level one model takes may not be
+ * another's.
+ */
 export function leadEngine(lead: Pick<Lead, "run">) {
-  const engine = roleEngine(lead.run, RoleKey.Builder);
-  return { engine, model: modelOn(lead.run, engine), effort: roleEffort(lead.run, RoleKey.Builder) ?? LEAD_EFFORT };
+  const { run } = lead;
+  const engine = roleEngine(run, RoleKey.Builder);
+  const model = modelOn(run, engine);
+  const mainsModel = roleEngine(run, RoleKey.Planner) === engine && plannerModel(run) === model;
+  const chosen = mainsModel
+    ? (run.roles?.efforts?.[RoleKey.Planner] ?? run.effort)
+    : run.roles?.efforts?.[RoleKey.Builder];
+  return { engine, model, effort: chosen ?? LEAD_EFFORT };
 }
 
 /** The delegation of one turn: the lead's session in the game folder, with the run tools and no window. */
