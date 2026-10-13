@@ -64,7 +64,8 @@ keyboard selection, focus, pointer cursors and reduced motion, and writes screen
 ## Contrast and customization
 
 The selected theme drives semantic roles; primary/destructive fills choose black or white
-labels. Hover shifts the fill away from its label luminance, preserving readable contrast. Text roles are measured against
+labels. A dark theme's destructive fill is its red (OKLCH chroma at most 0.15) deepened under a
+white label as the accent fill is, so Delete pairs with the accent button; red text keeps the red. Hover shifts the fill away from its label luminance, preserving readable contrast. Text roles are measured against
 canvas, card, sidebar, menu, field and hover backgrounds. Preset acceptance and real computed
 contrast checks live in `appearance.test.ts` and `run-appearance-ui.mjs`. User overrides remain
 editable and portable; derived text adjustments preserve readability. Contradictory surface
@@ -603,7 +604,12 @@ trash button, **Stop allowing** (focus moves to the rule taking its place); with
 line says Always allow in a chat adds one. Each chat's mode stays in its composer.
 Opening Settings preserves the workspace and draft, traps focus and occludes the native game.
 Games comes first: the games folder as a mono path with **Change…** (a native folder picker).
-Every tab (Games, Appearance, Model Providers, Local Models, Harness and Permissions) uses the same
+Storage follows Games: a Free up space card (what stays, one primary **Free up N GB** whose tooltip
+says what goes and what stays, Nothing to free up when there is none) above one list row per kind
+(Build copies, Build pictures, Rewind copies) with its size in mono or None. Freeing asks first and
+then says what it freed under the cards. The chat header offers the same per game as a labelled
+**Free N GB** header control once a game's space reaches 1 GB.
+Every tab (Games, Storage, Appearance, Model Providers, Local Models, Harness and Permissions) uses the same
 viewport-capped 860px width and 720px content height; changing tabs
 must not resize or reposition the dialog.
 Escape/Close restores its entry point; arrow keys and Home/End navigate sections.
