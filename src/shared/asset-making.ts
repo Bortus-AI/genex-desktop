@@ -248,16 +248,23 @@ const ENDED_UNMADE: ReadonlySet<string> = new Set([
   GenexJobStatus.Stopped,
 ]);
 
+/** Whether a Genex job ended without making its asset: failed, canceled or stopped. */
+export const genexEndedUnmade = (status: string | null | undefined): boolean => ENDED_UNMADE.has(status ?? "");
+
+/**
+ * A Genex request that ended before Genex started a generation for it (no `generationId`), such as
+ * one it could not quote: nothing was ever on its way, and the call that asked already said why.
+ */
+export const genexRefused = (job: { status?: string | null; generationId?: string | null }): boolean =>
+  !job.generationId && genexEndedUnmade(job.status);
+
 /**
  * A Genex job that gets a card: not an approved review (its run goes on in a new job), not a call
- * that makes nothing, and not a request that ended before Genex started a generation for it (no
- * `generationId`): nothing was ever on its way, and the call that asked already said why. A record
- * that names no operation is still shown, as an asset.
+ * that makes nothing, and not a request Genex refused (`genexRefused`). A record that names no
+ * operation is still shown, as an asset.
  */
 export function genexJobShown(job: { operation?: string; status?: string; generationId?: string }): boolean {
-  if (job.status === GenexJobStatus.Approved) return false;
-  const neverStarted = !job.generationId && ENDED_UNMADE.has(job.status ?? "");
-  if (neverStarted) return false;
+  if (job.status === GenexJobStatus.Approved || genexRefused(job)) return false;
   return !job.operation || genexMaking(job.operation) !== null;
 }
 

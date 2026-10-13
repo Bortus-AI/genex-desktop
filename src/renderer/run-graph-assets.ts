@@ -2,7 +2,7 @@
  * The asset cards of the Builds graph (`run-graph.ts`): Blender's own assets, and every plugin
  * job the run asked for, joined across the records one asset leaves in the log.
  */
-import { GENEX_LOOKUPS } from "../shared/asset-making.ts";
+import { GENEX_LOOKUPS, genexEndedUnmade, genexRefused, isGenexSource } from "../shared/asset-making.ts";
 import { digestOperation } from "../shared/game-assets.ts";
 import { GenexOperation } from "../shared/genex.ts";
 import type { AssetInfo, AssetState } from "./run-graph.ts";
@@ -286,11 +286,30 @@ function indexJob(
   if (unclaimed) ledger.byJob.set(jobId, job);
 }
 
-/** What the returned call made of its card: failed, delivered, still generating, or nothing at all. */
+/**
+ * How a Genex call's reply ended its job, when it did. Genex answers a request it refused before
+ * starting a generation, and a generation that failed, with a job that failed rather than an error.
+ */
+function genexEnding(job: AssetInfo, payload: Payload): { refused: boolean; error: string | null } | null {
+  if (!isGenexSource(job.source)) return null;
+  const reply = parseJson(payload.result);
+  const status = strOrNull(reply?.status);
+  if (!genexEndedUnmade(status)) return null;
+  const generationId = job.generationId ?? strOrNull(reply?.generationId);
+  return { refused: genexRefused({ status, generationId }), error: strOrNull(reply?.error)?.trim() || null };
+}
+
+/**
+ * What the returned call made of its card: failed, delivered, still generating, or nothing at all.
+ * A request Genex refused made nothing either: the agent already read why, and asked again.
+ */
 function settleCall(ledger: AssetLedger, job: AssetInfo, payload: Payload): void {
-  if (payload.ok === false) {
+  const ending = job.state === AssetCardState.Delivered ? null : genexEnding(job, payload);
+  if (ending?.refused) {
+    ledger.dropped.add(job);
+  } else if (payload.ok === false || ending) {
     job.state = AssetCardState.Failed;
-    job.error = strOrNull(payload.error);
+    job.error = strOrNull(payload.error) ?? ending?.error ?? null;
   } else if (job.files.length) {
     job.state = AssetCardState.Delivered;
     job.file = job.files[0] ?? job.file;

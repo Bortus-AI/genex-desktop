@@ -857,6 +857,36 @@ describe("the plugins' asset jobs in the run graph", () => {
     assert.equal(node.jobs[0]!.iteration, 2);
   });
 
+  it("drops a Genex request refused before a generation started, and fails a generation that did", () => {
+    counter = 0;
+    // Genex answers a refused request as a job that failed with no generation, not as an error.
+    const refused = (callId: string, error: string) =>
+      finished(callId, {
+        jobId: `job-${callId}`,
+        result: JSON.stringify({ id: `job-${callId}`, operation: "character", status: "failed", files: [], error }),
+      });
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm" }),
+      started("call-1"),
+      refused("call-1", "✗ Error: Cannot quote this generation (HTTP 400). No generation was sent."),
+      started("call-2"),
+      refused("call-2", '{"kind":"character","status":"selection_required","selector":"Casual Walk"}'),
+      started("call-3"),
+      finished("call-3", {
+        jobId: "job-3",
+        generationId: "gen-3",
+        result: JSON.stringify({ id: "job-3", generationId: "gen-3", status: "failed", error: "The rig failed." }),
+      }),
+    ])!;
+    const node = graph.nodes.find((n) => n.kind === "assets");
+    assert.ok(node && node.kind === "assets");
+    assert.deepEqual(
+      node.jobs.map((job) => [job.callId, job.state, job.error]),
+      [["call-3", "failed", "The rig failed."]],
+      "only the generation that started and failed is listed, in Genex's words",
+    );
+  });
+
   it("joins a call that names no job to the delivery of the same files", () => {
     counter = 0;
     const graph = buildRunGraph([

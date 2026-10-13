@@ -191,7 +191,8 @@ line. A job that waits on the person wears the 1.5px accent ring, its candidate'
 1 2 3 tabs and Approve; one that queued, failed or left the game is grey and still and says so. The
 drawing rests with the window. Any plugin's or MCP server's call that says what it makes gets the
 same card, and the chat shows each card its work is making, at the canvas's size, under the work's
-line until the job lands. A request Genex refused before it started gets no card, and a job that
+line until the job lands. A request Genex refused before it started gets no card (nor a row in a
+build's Assets panel, where a generation that failed says why), and a job that
 still says it is being made two hours on reads Not confirmed; a generation's data (a clip's
 trajectory, its pose check) and its provider's source copies are never cards of their own.
 The viewer is the file on the page's own colour
