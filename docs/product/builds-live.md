@@ -9,7 +9,7 @@ projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours a
 reviewer's yes ends it early; 15 minutes' grace follows.
 Acceptance persists across workers and restarts. External blockers pause the run at its
 checkpoint. ∞ ends on verified outcomes with no blocker. Asked in chat to finish, the lead lets
-running rounds end, then lands. Finish overrides the clock, never the final judge
+rounds end, then lands. Finish overrides the clock, never the final judge
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
 
 An active run opens Builds once; a build shown from the chat, or Builds with nothing to draw, opens

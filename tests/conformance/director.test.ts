@@ -3597,6 +3597,9 @@ describe("a director's run through the real core and harness", () => {
         "genex__asset",
         "genex__cli",
         "genex__cli-paid",
+        // Genex's cover tools (`genex-cover`), which a lead checks before it publishes.
+        "genex__cover",
+        "genex__cover-set",
         "genex__package",
         "genex__publish",
         "genex__publish-status",
