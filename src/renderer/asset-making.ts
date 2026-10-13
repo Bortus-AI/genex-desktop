@@ -90,6 +90,9 @@ const STOPPED_TITLE: Partial<Record<MakingPhase, string>> = {
   [MakingPhase.NotInGame]: MAKING_WORDS.notInGame,
 };
 
+/** What a job that stopped short is called (Didn’t finish, Not confirmed…), or null for one still on its way. */
+export const stoppedTitle = (phase: MakingPhase): string | null => STOPPED_TITLE[phase] ?? null;
+
 /** What a screen reader hears: the kind, where it is and with which tool, then the prompt. */
 function spoken(phase: MakingPhase, kindName: string, title: string, tool: string, prompt: string | null): string {
   const words = MAKING_WORDS.spoken;

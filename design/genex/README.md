@@ -193,7 +193,7 @@ drawing rests with the window. Any plugin's or MCP server's call that says what 
 same card, and the chat shows each card its work is making, at the canvas's size, under the work's
 line until the job lands. A request Genex refused before it started gets no card (nor a row in a
 build's Assets panel, where a generation that failed says why), and a job that
-still says it is being made two hours on reads Not confirmed; a generation's data (a clip's
+still says it is being made two hours on reads Not confirmed (in that panel too, grey and still); a generation's data (a clip's
 trajectory, its pose check) and its provider's source copies are never cards of their own.
 The viewer is the file on the page's own colour
 (88%, blurred), with only Reveal in Finder and Close in the top corner and no title; a click on a

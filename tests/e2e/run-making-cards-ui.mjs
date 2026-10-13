@@ -3,7 +3,7 @@
  * Electron with a fake Genex and another plugin: every kind's drawing and tool, the clock, the queued and stopped
  * states, a cut prompt shown whole beside the card on hover, choosing and approving a character's candidate in place,
  * the chat's cards of what its work is making, zoom, resting motion, Reduce Motion and both
- * themes. No accounts or paid tools.
+ * themes; and a build's Assets panel reading its jobs as the inventory does. No accounts or paid tools.
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -23,6 +23,9 @@ const LONG_PROMPT =
 // The page's side: the fake Genex and the readings the checks make, so each check is one plain call.
 const source = `
 import {createRoot} from 'react-dom/client';
+import {useState} from 'react';
+import {AssetsPanel} from './src/renderer/panels/inspector/AssetsPanel.tsx';
+import {buildRunGraph,buildsView} from './src/renderer/run-graph.ts';
 import {fakeStudioApi} from './tests/helpers/fake-studio-api.ts';
 import {AssetsCanvas} from './src/renderer/panels/AssetsCanvas.tsx';
 import {studio} from './src/renderer/state/studio.ts';
@@ -119,7 +122,21 @@ window.mk={
 };
 // The chat's work: a step whose job is the knight, one whose call is the forge's, one the remesh, and one that landed long ago.
 const CALLS=[{ids:['call-1','character'],running:false},{ids:['forge-call'],running:true},{ids:['call-3','remesh'],running:false},{ids:['call-4','landed-gen'],running:false}];
-function Fixture(){return <main className="flex gap-4 p-4 font-sans"><div className="relative h-[640px] w-[1080px]"><AssetsCanvas project="fixture" onNotice={text=>notices.push(text)}/></div><div className="w-[26rem]"><MakingTiles project="fixture" calls={CALLS} onNotice={text=>notices.push(text)}/></div></main>;}
+// A build's log: a creature Genex took on and still says it is making two hours on, one it is making, and one it refused.
+let seq=0;
+const ev=(type,payload)=>({id:'e'+String(++seq).padStart(4,'0'),thread_id:'t',session_id:null,turn_id:null,created_at:new Date(Date.UTC(2026,9,13,10,seq)).toISOString(),data:{type:'custom',event_type:type,payload:{runId:'run_x',...payload}}});
+const genexCall=(callId,prompt,reply)=>{const call={callId,pluginId:'genex',pluginName:'Genex Tools',tool:'asset',args:'operation=creature prompt='+prompt};return [ev('plugin_tool_started',call),ev('plugin_tool',{...call,ok:true,...reply})];};
+const RUN=buildRunGraph([ev('run_started',{goal:'a keep',project:'fixture'}),
+  ...genexCall('c-stale','A soldier in chainmail',{jobId:'j-stale',generationId:'gen-stale',result:'{"status":"accepted"}'}),
+  ...genexCall('c-live','A guard captain',{jobId:'j-live',generationId:'gen-live',result:'{"status":"accepted"}'}),
+  ...genexCall('c-refused','A refused guard',{jobId:'j-refused',result:'{"status":"failed","error":"Cannot quote this generation"}'})]);
+const BUILDS=buildsView(RUN,null,{project:'fixture',assets:[],jobs:[{source:'genex',jobId:'gen-stale',phase:'unsure'},{source:'genex',jobId:'gen-live',phase:'making'}],truncated:false,skipped:[]});
+const noop=()=>{};
+function BuildsPanel(){return <div className="relative h-[640px] w-[600px]"><AssetsPanel graph={BUILDS} assets={BUILDS.nodes.find(n=>n.kind==='assets')} blender={null} project="fixture" onPrev={noop} onNext={noop} onClose={noop} onLight={noop} onOpenJob={noop}/></div>;}
+window.mk.showBuilds=()=>{window.showBuilds();return true;};
+window.mk.buildsText=()=>document.querySelector('[data-graph-panel=assets]')?.textContent??'';
+window.mk.buildsShimmers=()=>document.querySelectorAll('[data-graph-panel=assets] .graph-shimmer').length;
+function Fixture(){const [builds,setBuilds]=useState(false);window.showBuilds=()=>setBuilds(true);if(builds)return <main className="p-4 font-sans"><BuildsPanel/></main>;return <main className="flex gap-4 p-4 font-sans"><div className="relative h-[640px] w-[1080px]"><AssetsCanvas project="fixture" onNotice={text=>notices.push(text)}/></div><div className="w-[26rem]"><MakingTiles project="fixture" calls={CALLS} onNotice={text=>notices.push(text)}/></div></main>;}
 createRoot(document.getElementById('root')).render(<Fixture/>);
 `;
 await build({
@@ -239,6 +256,9 @@ wc.debugger.attach('1.3');await wc.debugger.sendCommand('Emulation.setEmulatedMe
 check('Reduce Motion stills the drawings, the spinner and the shimmer',!(await moves('character'))&&(await mk('stillAnimations')));
 // Painted pixels include the strokes' width and the glow's blur around the geometry (making-art.test.ts bounds that).
 for(const kind of KINDS){const p=await mk('painted',kind);check(kind+' is about half the card: '+Math.round(p.w)+'×'+Math.round(p.h),p.w<=80&&p.h<=68);}
+await mk('showBuilds');
+check('a build\'s Assets panel lists a job Genex still says it is making two hours on as Not confirmed, still, and no request it refused',await until(async()=>{const t=await mk('buildsText');return t.includes('Making · 1')&&t.includes('Not confirmed · 1')&&t.includes('A soldier in chainmail')&&!t.includes('A refused guard')&&!t.includes('Failed');})&&(await mk('buildsShimmers'))===1);
+await capture('builds-assets-panel');
 check('no unexpected renderer errors',errors.length===0);
 }catch(error){report.error=error.stack;console.error(error);await capture('failure').catch(()=>{});}finally{report.result=report.error?'fail':'pass';fs.writeFileSync(out+'/report.json',JSON.stringify(report,null,2));win.destroy();app.exit(report.error?1:0);}});
 `,

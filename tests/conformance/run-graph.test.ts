@@ -9,6 +9,7 @@ import { newBuildOffer } from "../../src/renderer/stage.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 import {
   buildRunGraph,
+  buildsView,
   hasMergedBuild,
   nextStep,
   passedFraction,
@@ -484,7 +485,9 @@ import {
   runStillPath,
   thumbShot,
 } from "../../src/renderer/run-graph.ts";
-import { layoutSteps, partRows, STEPS } from "../../src/renderer/run-steps.ts";
+import { layoutSteps, partRows, STEPS, Tone } from "../../src/renderer/run-steps.ts";
+import { assetsStatus, isMaking, stoppedShort } from "../../src/renderer/panels/inspector/asset-jobs.ts";
+import { MakingPhase } from "../../src/shared/asset-making.ts";
 
 describe("notes and plain words", () => {
   it("pins a user note to the round it named and records the first later verdict of that part", () => {
@@ -885,6 +888,42 @@ describe("the plugins' asset jobs in the run graph", () => {
       [["call-3", "failed", "The rig failed."]],
       "only the generation that started and failed is listed, in Genex's words",
     );
+  });
+
+  it("reads a job the log leaves on its way as the game's inventory does, so a stale one stops making", () => {
+    counter = 0;
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm" }),
+      started("call-1"),
+      finished("call-1", { jobId: "job-1", generationId: "gen-1", result: '{"id":"job-1","status":"accepted"}' }),
+    ])!;
+    // The inventory lists a Genex job by its generation, and has read its record two hours on.
+    const inventory = (phase: MakingPhase) => ({
+      project: "farm",
+      assets: [],
+      jobs: [{ source: "genex", jobId: "gen-1", phase }],
+      truncated: false,
+      skipped: [],
+    });
+    const jobOf = (phase: MakingPhase) => {
+      const node = buildsView(graph, null, inventory(phase)).nodes.find((n) => n.kind === "assets");
+      assert.ok(node && node.kind === "assets");
+      return node.jobs;
+    };
+    const stale = jobOf(MakingPhase.Unsure);
+    assert.deepEqual(
+      [isMaking(stale[0]!), stoppedShort(stale[0]!), assetsStatus(stale)],
+      [false, MakingPhase.Unsure, { text: "1 not confirmed", tone: Tone.Orange }],
+      "a job Genex still says it is making two hours on is Not confirmed, not Making",
+    );
+    const making = jobOf(MakingPhase.Making);
+    assert.deepEqual(
+      [isMaking(making[0]!), stoppedShort(making[0]!), assetsStatus(making)],
+      [true, null, { text: "Making 1", tone: Tone.Accent }],
+    );
+    const unlisted = buildsView(graph, null, null).nodes.find((n) => n.kind === "assets");
+    assert.ok(unlisted && unlisted.kind === "assets");
+    assert.equal(isMaking(unlisted.jobs[0]!), true, "with no inventory read, the log's word stands");
   });
 
   it("joins a call that names no job to the delivery of the same files", () => {
