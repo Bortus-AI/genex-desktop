@@ -183,6 +183,8 @@ const MAX_QUOTED_SURFACE_CHARS = 40;
 const MAX_CAPTION_TEXT_CHARS = 40;
 /** The longest web element ref the tool reads. */
 const MAX_REF_CHARS = 64;
+/** A web element ref inside whatever a model wrote for it (`[p3:12] link "Home"` → `p3:12`). */
+const WEB_REF = /[a-z]+\d+:\d+/i;
 
 /** Nothing given: absent, null or an empty string. */
 function isBlank(value: unknown): boolean {
@@ -350,7 +352,9 @@ function readOtherFields(request: ComputerRequest, raw: Record<string, unknown>)
 
 /** A web element ref (`p3:12`) and whether a typed text is submitted, as either transport delivers them. */
 function readWebFields(request: ComputerRequest, raw: Record<string, unknown>): void {
-  const ref = raw.ref === undefined || raw.ref === null ? "" : String(raw.ref).trim();
+  const written = raw.ref === undefined || raw.ref === null ? "" : String(raw.ref).trim();
+  // A model may copy the page's whole line for an element: its ref is the token inside it.
+  const ref = WEB_REF.exec(written)?.[0] ?? written;
   if (ref) request.ref = ref.slice(0, MAX_REF_CHARS);
   const submit = raw.submit;
   if (submit === true || submit === "true") request.submit = true;

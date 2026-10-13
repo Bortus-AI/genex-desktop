@@ -6,6 +6,8 @@
  *   consent. The studio's own app and the apps it never drives stay refused.
  * - Only http and https addresses are opened: never a file, a script or data URL.
  * - An element is acted on only by a ref the page itself listed, read again when it is not known.
+ *   Each reading renumbers the refs, so a ref from an earlier reading stands for the one element
+ *   on the page now with its role and name; with none or several, it is refused.
  * - Nothing is typed into a field that asks for a secret: a password input by the page's DOM, or a
  *   password, PIN or card number by its name.
  *
@@ -59,6 +61,8 @@ function appName(app: DesktopApp): string {
 /** The driver's web pages behind the studio's guards, as the target's web verbs. */
 export function guardedWeb(site: DesktopWeb, guard: WebGuard): TargetWeb {
   const known = new Map<string, WebElement>();
+  /** Every element a reading listed, by its ref then: what an earlier ref stood for. */
+  const listed = new Map<string, WebElement>();
   const allowed = async (): Promise<void> => {
     const app = await site.browser();
     if (guard.neverDriven(app)) throw new Error(MESSAGE.neverDriven(appName(app)));
@@ -66,15 +70,26 @@ export function guardedWeb(site: DesktopWeb, guard: WebGuard): TargetWeb {
   };
   const page = (snapshot: WebSnapshot): TargetWebPage => {
     known.clear();
-    for (const element of snapshot.elements) known.set(element.ref, element);
+    for (const element of snapshot.elements) {
+      known.set(element.ref, element);
+      listed.set(element.ref, element);
+    }
     return { title: snapshot.title, url: snapshot.url, text: snapshot.text, shot: snapshot.shot };
   };
   const read = async (picture: boolean, query?: string) =>
     page(await site.snapshot({ picture, ...(query ? { query } : {}) }));
-  /** The element a ref names, from the last reading or a fresh one; refused when the page lists no such ref. */
+  /** The one element on the page now with an earlier element's role and name, if exactly one has them. */
+  const sameNow = (before: WebElement | undefined): WebElement | undefined => {
+    if (!before) return undefined;
+    const matches = [...known.values()].filter((e) => e.role === before.role && e.name === before.name);
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  /** The element a ref names on the page now, read again when it is not known; refused when none is. */
   const element = async (ref: string): Promise<WebElement> => {
-    if (!known.has(ref)) await read(false);
-    const found = known.get(ref);
+    const current = known.get(ref) ?? sameNow(listed.get(ref));
+    if (current) return current;
+    await read(false);
+    const found = known.get(ref) ?? sameNow(listed.get(ref));
     if (!found) throw new Error(MESSAGE.unknownRef(ref));
     return found;
   };
@@ -96,14 +111,14 @@ export function guardedWeb(site: DesktopWeb, guard: WebGuard): TargetWeb {
     click: async (ref, { picture }) => {
       await opened();
       const target = await element(ref);
-      await site.click(ref, target.role);
+      await site.click(target.ref, target.role);
       return read(picture);
     },
     type: async (ref, text, { submit, picture }) => {
       await opened();
       const field = await element(ref);
       if (field.secret || asksForSecret(field)) throw new Error(MESSAGE.secret(field.name || ref));
-      await site.type(ref, text, submit);
+      await site.type(field.ref, text, submit);
       return read(picture);
     },
   };

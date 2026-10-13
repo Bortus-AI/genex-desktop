@@ -9,7 +9,7 @@ import { asksForSecret, guardedWeb, openableUrl } from "../../src/main/core/desk
 import { computerActionsFor, parseComputerArgs } from "../../src/substrate/computer-tool.ts";
 import { BROWSER_CAPABILITIES, DESKTOP_CAPABILITIES } from "../../src/shared/computer-target.ts";
 import { cuaWeb, pageText } from "../../src/substrate/cua-web.ts";
-import type { DesktopApp, DesktopWeb, WebSnapshot } from "../../src/substrate/desktop-driver.ts";
+import type { DesktopApp, DesktopWeb, WebElement, WebSnapshot } from "../../src/substrate/desktop-driver.ts";
 
 const CHROME: DesktopApp = { name: "Google Chrome", bundleId: "com.google.Chrome", pid: 82634 };
 
@@ -360,6 +360,64 @@ describe("the studio's guards on web pages", () => {
     assert.equal(openableUrl("ftp://example.com"), false);
     assert.equal(asksForSecret({ role: "textbox", name: "Search" }), false);
     assert.equal(asksForSecret({ role: "textbox", name: "Confirm password" }), true);
+  });
+});
+
+/** A site whose every reading renumbers its refs, as cua's snapshots do (p1:… then p2:…). */
+function renumberingSite(elements: Array<Pick<WebElement, "role" | "name" | "editable">>) {
+  const reached: string[] = [];
+  let reading = 0;
+  const site: DesktopWeb = {
+    opened: () => true,
+    browser: async () => CHROME,
+    navigate: async () => {},
+    snapshot: async () => {
+      reading += 1;
+      const listed = elements.map((e, i) => ({ ...e, ref: `p${reading}:${i}`, secret: false }));
+      return { title: "Search", url: "https://example.com/", text: "", elements: listed, shot: null };
+    },
+    click: async (ref) => {
+      reached.push(`click ${ref}`);
+    },
+    type: async (ref, text) => {
+      reached.push(`type ${ref} ${text}`);
+    },
+  };
+  return { site, reached };
+}
+
+describe("refs as a model writes them", () => {
+  const guard = { allowApp: async () => true, neverDriven: () => false };
+
+  it("takes a ref from an earlier reading for the same element on the page now, when only one is", async () => {
+    const { site, reached } = renumberingSite([
+      { role: "searchbox", name: "Search Wikipedia", editable: true },
+      { role: "link", name: "English", editable: false },
+    ]);
+    const web = guardedWeb(site, guard);
+    await web.read({ picture: false });
+    await web.read({ picture: false });
+    await web.type("p1:0", "Godot", { submit: true, picture: false });
+    assert.deepEqual(reached, ["type p2:0 Godot"], "the searchbox as the page lists it now");
+  });
+
+  it("refuses an earlier ref when two elements on the page now share its role and name", async () => {
+    const { site, reached } = renumberingSite([
+      { role: "link", name: "Edit", editable: false },
+      { role: "link", name: "Edit", editable: false },
+    ]);
+    const web = guardedWeb(site, guard);
+    await web.read({ picture: false });
+    await web.read({ picture: false });
+    await assert.rejects(web.click("p1:0", { picture: false }), /not on the page now/);
+    assert.deepEqual(reached, []);
+  });
+
+  it("reads the ref out of the page's whole line, as a small model copies it", () => {
+    for (const written of ['[p123:0] searchbox "Search Wikipedia"', "[p123:0]", "p123:0", " p123:0 "]) {
+      const parsed = parseComputerArgs({ action: "web_click", ref: written });
+      assert.equal(parsed.ok && parsed.request.ref, "p123:0", written);
+    }
   });
 });
 
