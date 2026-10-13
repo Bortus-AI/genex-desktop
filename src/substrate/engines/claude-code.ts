@@ -299,6 +299,8 @@ const MESSAGE = {
   JudgeFailed: "Claude Code judge failed",
   JudgeEmpty: "the Claude Code judge gave no reply",
   NotCompacted: "Claude Code did not compact the session",
+  WokeAfterEnd:
+    "the session went on after its turn ended (a background task woke it), when Genex could no longer answer its tool calls; what it did then is not finished work",
 } as const;
 
 /**
@@ -1312,7 +1314,11 @@ export class ClaudeCodeEngine implements Engine {
     run.feed?.answered();
     // A string brief's input closes at the first result, a steered session's once it has answered
     // everything it read: a mode picked after that reaches nothing, and is for the next message.
-    if (!run.feed || run.feed.ended) run.control.release();
+    if (!run.feed || run.feed.ended) {
+      run.inputClosed = true;
+      run.closedSummary ??= run.summary;
+      run.control.release();
+    }
   }
 
   /** An assistant or user message: one more turn, the interview's calls, the activity line. */
@@ -1325,6 +1331,9 @@ export class ClaudeCodeEngine implements Engine {
     this.#observeTelemetry(stream, request.onEvent, run.sessionId);
     // A subagent's request is its own context, not the one the session's next turn starts from.
     if (message.parent_tool_use_id) return;
+    // A reply after the input ended: a background task woke the CLI, and no tool call it makes now
+    // can be answered (the host's permission answers go over the input).
+    if (run.inputClosed) run.wokeAfterEnd = true;
     run.contextTokens = requestTokens(message) ?? run.contextTokens;
     // Whether the main thread's last word was the CLI's own API error: a later reply clears it.
     run.apiError = apiErrorOf(message);
@@ -1430,6 +1439,7 @@ export class ClaudeCodeEngine implements Engine {
     }
     if (run.ok) this.#authFailure = null;
     this.#throwIfLimited(run);
+    failWokenWorker(run, request);
     const model = request.model ?? this.#model;
     const result: DelegateResult = {
       ok: run.ok,
@@ -1679,6 +1689,12 @@ interface RunState {
   compactError: string | null;
   /** The CLI's code on the main thread's last reply, when that reply was an API error (`SdkApiError`). */
   apiError: string | null;
+  /** The session's input has ended at a result: it takes nothing more, an answer to its tool calls included. */
+  inputClosed: boolean;
+  /** The session replied again after its input ended (a background task woke it). */
+  wokeAfterEnd: boolean;
+  /** What the session said at the result that closed its input, before anything woke it. */
+  closedSummary: string | null;
 }
 
 /** A delegation that has not heard anything from its contractor yet. */
@@ -1704,6 +1720,9 @@ function newRunState(usage: Usage, cliInstallation: ClaudeInstallation): RunStat
     compactSummary: null,
     compactError: null,
     apiError: null,
+    inputClosed: false,
+    wokeAfterEnd: false,
+    closedSummary: null,
   };
 }
 
@@ -1773,6 +1792,19 @@ function readInit(message: Record<string, unknown>, run: RunState): void {
   run.modelUsed = String(message.model ?? "") || undefined;
   run.cliVersion = typeof message.claude_code_version === "string" ? message.claude_code_version : run.cliVersion;
   run.sessionId = String(message.session_id ?? "") || undefined;
+}
+
+/**
+ * A worker's turn is its whole job: what its session did after a background task woke it, past its
+ * input's end, is not its delivery, and the turn ends not ok, handing back what it said as its turn
+ * ended. A lead or the chat is resumed by its own loop, and keeps its last result's verdict.
+ */
+function failWokenWorker(run: RunState, request: DelegateRequest): void {
+  if (!run.wokeAfterEnd || !request.worker) return;
+  run.summary = run.closedSummary ?? run.summary;
+  run.ok = false;
+  run.errorSubtype = StopReason.Error;
+  run.errorText = MESSAGE.WokeAfterEnd;
 }
 
 /** The session's result message: how the build ended, what it said, what it cost. */

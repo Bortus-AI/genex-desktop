@@ -284,6 +284,8 @@ async function capacity(core: StudioCore, x: CoreInternals) {
   // Memory rides along: six windows of a big game is not a number the pool
   // knows; whoever starts workers reads the free memory beside the free slots.
   const memory = await availableMemory();
+  // The Settings ceiling the host holds every chat's workers to (`delegation.ts` `#assertWorkerRoom`).
+  const workers = core.settings.buildersMax;
   try {
     const pool = x.previews.pool();
     return {
@@ -293,8 +295,9 @@ async function capacity(core: StudioCore, x: CoreInternals) {
       live: Boolean(core.options.preview),
       headless: Boolean(core.options.createHeadlessPreview),
       memory,
+      workers,
     };
   } catch {
-    return { max: 0, inUse: 0, free: 0, live: false, headless: false, memory };
+    return { max: 0, inUse: 0, free: 0, live: false, headless: false, memory, workers };
   }
 }
