@@ -6,6 +6,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { GAME_RUNTIMES, TargetRuntime } from "../shared/computer-target.ts";
 import type { GameCandidate, PlayCommand, ProjectKind, ProjectShape } from "../shared/game-project.ts";
+import { pageLoadsGenexSdk } from "../shared/genex-page.ts";
 import { CoreFact, FolderHolds, hasFact } from "../shared/project-facts.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
 import { isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
@@ -156,6 +157,16 @@ async function outputDir(dir: string): Promise<string> {
  */
 function isGenexGame(pkg: PackageManifest | null): boolean {
   return Boolean(pkg?.dependencies?.["@genex-ai/embed-sdk"] ?? pkg?.devDependencies?.["@genex-ai/embed-sdk"]);
+}
+
+/**
+ * Whether a template game's page loads the Genex SDK through Studio's copy. The SDK keeps a preview
+ * from sending anyone to genex.games to sign in only in its local test mode, which only a loopback
+ * origin gets: the preview serves such a game there, as it does a built one.
+ */
+export async function templateLoadsGenexSdk(dir: string): Promise<boolean> {
+  const html = await readFile(path.join(dir, TEMPLATE_SHAPE.entry), "utf8").catch(() => null);
+  return html !== null && pageLoadsGenexSdk(html);
 }
 
 /**

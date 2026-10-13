@@ -1955,6 +1955,15 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
+  host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
+  responder only into one, and the marker never goes ahead of the doctype. A game whose
+  package.json names no Genex package is connected by Studio (`plugins/genex/entry-page.ts`): once
+  Genex names the project (a first publish creates it), the plugin copies its build of the pinned
+  embed SDK (`embed-sdk/` beside its backend: the entry and the modules it reaches) and a connect
+  module naming the slug into the copy's `vendor/genex/`, loads that module after the page's last
+  import map, names the SDK in the copy's package.json so the CLI sends `embedSdkVersion`, and
+  marks the copy again. A game that brings its own SDK connects itself; Studio never adds a second.
 - That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
   in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
   kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
@@ -1994,7 +2003,9 @@ Genex:
   renderer or the plugin names, refuses a link anywhere on the way, and reads only `shot.png` or
   `shot.jpg` (no link, at most 8 MiB, bytes of the type its name says; the newer when both are
   there); anything else answers null. `genex-cover-shot.test.ts` holds its hostile table.
-- A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`.
+- A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`. A template game whose
+  page loads Studio's copy (`/vendor/genex/`, `pageLoadsGenexSdk` in `shared/genex-page.ts`) is
+  previewed on its loopback origin, where the SDK runs in local test mode without the query.
 - `tools[].host` (API 3, id `genex`, source `bundled`, else refused before any hook runs) names a
   program Studio runs for the tool through the registry's `hostTool` hook. `genex-cli` backs
   `genex__cli` and `genex-cli-paid` backs `genex__cli-paid`: Studio's pinned CLI runs in
@@ -2012,8 +2023,11 @@ Genex:
   command sees only `{id, slug}` from the publish workspace. `genex-package` backs
   `genex__package`: it adds `@genex-ai/multiplayer` or `@genex-ai/embed-sdk` at the exact pin in
   `GENEX_GAME_PACKAGES` (`shared/genex.ts`) with the game's package manager, only in the bound
-  game or a git worktree of it under Studio's scratch (by realpath), never in a template game
-  with no `package.json`. The paid tool and the package tool need consent; fixture profiles refuse
+  game or a git worktree of it under Studio's scratch (by realpath). A template game has no
+  `package.json`: for `@genex-ai/embed-sdk` the tool maps Studio's copy in its page's import map
+  (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
+  loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
+  regular file, never a link. Multiplayer is refused there. The paid tool and the package tool need consent; fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and

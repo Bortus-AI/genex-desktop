@@ -37,6 +37,18 @@ export const GENEX_GAME_PACKAGES = {
 } as const;
 /** A Genex SDK package a game may add. */
 export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
+
+/**
+ * Where Studio's copy of `@genex-ai/embed-sdk` sits under a vendor folder (the app's, served as
+ * `/vendor/`, and a published copy's `vendor/`), and the module beside it that connects a page to
+ * Genex: a template game imports the SDK through its import map from there, and a published game
+ * that brings no SDK of its own is connected by that module.
+ */
+export const GENEX_EMBED_VENDOR = {
+  Sdk: "genex/embed-sdk",
+  Entry: "genex/embed-sdk/index.js",
+  Connect: "genex/connect.js",
+} as const;
 /** Whether a name is one of those packages: an own key, never an inherited one. */
 export function isGenexGamePackage(name: unknown): name is GenexGamePackage {
   return typeof name === "string" && Object.hasOwn(GENEX_GAME_PACKAGES, name);
