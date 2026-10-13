@@ -13222,6 +13222,49 @@ describe("computer use: the judge that plays, escalation and routes", () => {
     });
   });
 
+  // Live (Star Dash, 2026-10-14): the lead wrote a part's done scenarios in worker_start's
+  // {what, check} shape, the plan kept each as "[object Object]", and the blind judge was asked to
+  // "verify every required scenario through actual interaction: [object Object]; [object Object]".
+  it("CU11. a plan's done scenarios written as {what, check} keep their sentences, so the judge is asked them", async () => {
+    const { compilePlan } = await import("../../src/harness-seed/loop/director/rules.ts");
+    const { createGoals } = await import("../../src/harness-seed/loop/director/goals.ts");
+    const compiled = compilePlan({
+      summary: "A second enemy",
+      workers: JSON.stringify([
+        {
+          id: "enemy2",
+          done: [
+            { what: "A second red block patrols left and right near the star", check: { kind: "play" } },
+            "The game is still winnable",
+            { check: { kind: "play" } },
+          ],
+        },
+      ]),
+    });
+    assert.ok(compiled.plan);
+    assert.deepEqual(compiled.plan.workers[0]!.done, [
+      "A second red block patrols left and right near the star",
+      "The game is still winnable",
+    ]);
+    const acceptance = createGoals(compiled.plan.workers).entries[0]!.acceptance;
+    assert.ok(!acceptance.join(" ").includes("[object Object]"), acceptance.join("; "));
+  });
+
+  // Live (Star Dash): the blind judge's note reached the build card cut inside a word ("The second
+  // red block patro"). A play answer's note is cut at a word, with the mark, like every other note.
+  it("CU12. a long play answer's note is cut at a word, never inside one", async () => {
+    const { playResults } = await import("../../src/harness-seed/loop/playtester.ts");
+    const note = `I reached the win screen. ${"The second red block patrols left and right near the star. ".repeat(8)}`;
+    const [result] = playResults([{ id: "q", kind: "play", ask: "Can you win?", expect: "yes" } as never], {
+      answers: { q: { answer: "yes", note } },
+    });
+    const kept = String(result!.note);
+    assert.ok(kept.length < note.length, "a long note is still cut");
+    assert.ok(kept.endsWith("…"), kept.slice(-40));
+    const lastWord = kept.slice(0, -1).split(/\s+/).at(-1)!;
+    assert.ok(note.split(/\s+/).includes(lastWord), `"${lastWord}" is a whole word`);
+  });
+
   const bench = { id: "bench", kind: "play", ask: "Could you sit on the bench?", expect: "yes", weight: "normal" };
   const lit = () => ({ stats: { litFraction: 0.4, meanLuma: 90 }, width: 960, height: 600 });
   const blank = () => ({ stats: { litFraction: 0, meanLuma: 0 }, width: 960, height: 600 });

@@ -34,6 +34,7 @@ import { HostMethod } from "./host-methods.ts";
 import { PageMethod } from "./page-contract.ts";
 import { MINUTE_MS, SECOND_MS, sleep } from "./time.ts";
 import { CLIP_DETAIL, CLIP_REASON } from "./text.ts";
+import { clipWords } from "./word-clip.ts";
 import type { CheckResult } from "./checks.ts";
 import { describeComputer, PlayRole, playWithComputer, type ComputerGrant } from "./computer-loop.ts";
 import { COMPUTER_ONLY_LINE } from "./hands-on-prompts.ts";
@@ -147,7 +148,7 @@ function playResult(check: Check, entry: AnyRecord | undefined): CheckResult {
       ? ""
       : `playtester answered ${answer}${entry?.note ? `: ${String(entry.note).slice(0, CLIP_DETAIL)}` : ""}`,
     answer,
-    note: typeof entry?.note === "string" ? entry.note.slice(0, CLIP_REASON) : "",
+    note: typeof entry?.note === "string" ? clipWords(entry.note, CLIP_REASON) : "",
   };
 }
 
