@@ -136,3 +136,32 @@ window's tree). A refusal ends the plan and its reason is the answer.
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
   front. A judge's "studio-verified" is never claimed on it.
+- **Web pages** (`dom` capability, [`desktop-web.ts`](../src/main/core/desktop-web.ts),
+  [`cua-web.ts`](../src/substrate/cua-web.ts)). `web_open`, `web_read`, `web_click` and `web_type` drive
+  pages by their structure:
+  - **The browser.** A separate, clean Chromium that cua-driver launches on first use
+    (`browser_prepare` `isolated_new`): no cookies, no logins, none of the person's tabs. It closes with
+    the driver connection.
+  - **Reading.** The page reads in document order, each control (link, button, field) with its ref inline.
+  - **Consent.** Per app, as for any app: one card for the browser covers every site.
+  - **Refused:**
+    - addresses other than http and https;
+    - refs the page does not list;
+    - typing into a field that asks for a secret. A password input is found in the page's DOM
+      (`dom_refs_v1`, read before each snapshot) and matched to its field by aria-label or
+      placeholder; a password, PIN or card-number name counts too. When the page has a password
+      input no name places, every field no name places is refused as well (the username on most
+      login pages). The page text marks these fields.
+  - **A closed browser.** When the person closes it, the next verb says so and `web_open`
+    launches a fresh one.
+  - **From cua-driver 0.34 on a real Mac:**
+    - every connection carries its own `session` label, and each snapshot supersedes the refs of
+      the one before;
+    - `semantic_v2` gives a password input as a plain `textbox`, so its type comes from the DOM read;
+    - a launched browser can show a transient second window that cannot be bound, so each window
+      is tried;
+    - links are followed through the DOM (`dom_event`), because a trusted click can land without
+      following;
+    - other controls are clicked in the foreground;
+    - `effect: refused` and `status: refused` are errors even without `isError`; the refusal
+      code travels with the error.

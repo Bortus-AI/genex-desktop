@@ -272,3 +272,61 @@ it("end to end: a chat's click goes through consent, the cua client and a real M
     await lite.close();
   }
 });
+
+it("end to end: a chat opens a web page, reads it and types into it by ref, through consent and a real MCP driver", async () => {
+  const fake = fileURLToPath(new URL("../fixtures/fake-cua-driver.mjs", import.meta.url));
+  const log = path.join(await tmpDir("desktop-web-e2e-"), "calls.jsonl");
+  const desktop = desktopControl({
+    findDriver: async () => process.execPath,
+    connect: (binary) => connectCuaDriver({ command: binary, args: [fake, "--log", log] }, { local: false }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.games.scaffold("desk-web");
+    const threadId = await core.createGameThread("desk-web");
+    const said: string[] = [];
+    core.engines.register({
+      id: "fixture-delegate",
+      label: "Fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "Fixture" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        said.push(text(await request.onLiveTool!("desktop", { action: "web_open", text: "javascript:alert(1)" })));
+        said.push(text(await request.onLiveTool!("desktop", { action: "web_open", text: "https://example.com/" })));
+        said.push(
+          text(await request.onLiveTool!("desktop", { action: "web_type", ref: "p1:0", text: "Godot", submit: true })),
+        );
+        return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
+      },
+    } as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project: "desk-web", threadId, prompt: "web" });
+    assert.match(said[0]!, /web_open did not happen: only http/);
+    assert.match(said[1]!, /Search — https:\/\/example\.com\//);
+    assert.match(said[1]!, /\[p1:0\] searchbox "Search"/, "the page comes back with its controls' refs");
+    const calls = (await readFile(log, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { name: string; args: Record<string, unknown> });
+    const prepared = calls.find((call) => call.name === "browser_prepare");
+    assert.deepEqual(prepared?.args.profile, { mode: "isolated_new" });
+    const typed = calls.find((call) => call.name === "browser_type");
+    assert.deepEqual([typed?.args.ref, typed?.args.text, typed?.args.mode], ["p1:0", "Godot\n", "keystrokes"]);
+    const sessions = new Set(calls.filter((call) => call.name.startsWith("browser_")).map((call) => call.args.session));
+    assert.equal(sessions.size, 1, "one session label for the whole connection");
+  } finally {
+    await lite.close();
+  }
+});

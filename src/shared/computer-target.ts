@@ -73,6 +73,8 @@ export const InputRoute = {
   OsBackground: "os-background",
   /** Real OS events with the target in front, the user's pointer taken. */
   OsForeground: "os-foreground",
+  /** Events dispatched into a web page through its browser's DevTools protocol (a separate, clean browser). */
+  Page: "page",
 } as const;
 export type InputRoute = (typeof InputRoute)[keyof typeof InputRoute];
 
@@ -105,6 +107,11 @@ export interface TargetCapabilities {
   surfaces: boolean;
   /** Whether the target accepts named game actions ("jump", "attack"). */
   actions: boolean;
+  /**
+   * Whether the target reads and drives web pages by their structure — the page as text, each link,
+   * button and field by ref — in a separate, clean browser (`web_open`, `web_read`, `web_click`, `web_type`).
+   */
+  dom: boolean;
 }
 
 /** The studio's own browser window: everything, step-locked, seeded through the page shim. */
@@ -120,6 +127,7 @@ export const BROWSER_CAPABILITIES: TargetCapabilities = {
   zoom: true,
   surfaces: true,
   actions: false,
+  dom: false,
 };
 
 /**
@@ -138,6 +146,7 @@ export const DESKTOP_CAPABILITIES: TargetCapabilities = {
   zoom: false,
   surfaces: false,
   actions: false,
+  dom: true,
 };
 
 /** A VM's screen: the desktop's abilities, reached inside the machine. */

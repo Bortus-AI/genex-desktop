@@ -20,7 +20,13 @@ import {
   setupVerifyExpr,
   unsupportedAction,
 } from "../../src/substrate/computer-tool.ts";
-import { BROWSER_CAPABILITIES, ClockLevel, PointerLevel, TargetRuntime } from "../../src/shared/computer-target.ts";
+import {
+  BROWSER_CAPABILITIES,
+  DESKTOP_CAPABILITIES,
+  ClockLevel,
+  PointerLevel,
+  TargetRuntime,
+} from "../../src/shared/computer-target.ts";
 import { clickModifiers, parseCombo, pointInView, capActions } from "../../src/substrate/preview-input.ts";
 
 describe("computer tool — parsing either transport", () => {
@@ -51,9 +57,13 @@ describe("computer tool — parsing either transport", () => {
     assert.equal(hold.ok && hold.request.duration, 1);
     const wait = parseComputerArgs({ action: "wait", duration: "900" });
     assert.equal(wait.ok && wait.request.duration, 300, "waits are capped at five minutes");
+    // The web verbs are described where a target reads pages (the desktop), every other verb on a game's window.
+    const described =
+      computerToolDefinition().description +
+      computerToolDefinition({ role: "operator", capabilities: DESKTOP_CAPABILITIES }).description;
     for (const action of COMPUTER_ACTIONS)
       assert.ok(
-        computerToolDefinition().description.includes(action.replace(/_/g, "_")) ||
+        described.includes(action) ||
           ["cursor_position", "left_mouse_down", "left_mouse_up", "middle_click"].includes(action),
         `${action} is described`,
       );
@@ -295,7 +305,8 @@ describe("computer tool — built from what the target can do", () => {
   it("offers a browser game every verb but named game actions, which only a Play Protocol game declares", () => {
     assert.deepEqual(
       computerActionsFor(BROWSER_CAPABILITIES),
-      COMPUTER_ACTIONS.filter((action) => action !== "act"),
+      // Flipped on purpose (web pages): the web verbs are the desktop's, never a game window's.
+      COMPUTER_ACTIONS.filter((action) => action !== "act" && !action.startsWith("web_")),
     );
     const browser = computerToolDefinition({ role: "builder", capabilities: BROWSER_CAPABILITIES });
     assert.deepEqual(browser, computerToolDefinition({ role: "builder" }));

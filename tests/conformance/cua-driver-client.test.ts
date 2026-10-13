@@ -161,6 +161,35 @@ describe("cua-driver as the desktop driver", () => {
     assert.equal(parseAppInfo('"LSDisplayName"="x"\n"pid"=abc'), null);
   });
 
+  it("takes a refusal the driver answers without an error flag for what it is", async () => {
+    const fake = fakeConnection({
+      browser_prepare: json({ prepared_pid: 4242 }),
+      get_browser_state: json({ target_id: "bt-1", tabs: [{ active: true, tab_id: "tab-1" }] }),
+      browser_click: json({
+        effect: "refused",
+        error: { code: "browser_input_trust_unavailable", hint: "use delivery_mode foreground" },
+      }),
+    });
+    const driver = cuaDriver(fake.connection);
+    await assert.rejects(driver.web!.click("p1:0", "button"), /browser_input_trust_unavailable/);
+  });
+
+  it("takes a browser call the driver refuses by status for a refusal, carrying the driver's code", async () => {
+    const fake = fakeConnection({
+      browser_prepare: json({
+        status: "refused",
+        refusal: { code: "browser_requires_setup", message: "no owned DevTools endpoint" },
+      }),
+    });
+    const driver = cuaDriver(fake.connection);
+    const failure = await driver.web!.browser().then(
+      () => null,
+      (error: unknown) => error as Error & { code?: unknown },
+    );
+    assert.match(String(failure?.message), /browser_requires_setup: no owned DevTools endpoint/);
+    assert.equal(failure?.code, "browser_requires_setup");
+  });
+
   it("says why a call failed, with the driver's own words", async () => {
     const fake = fakeConnection({
       click: { isError: true, content: [{ type: "text", text: "background_unavailable" }] },

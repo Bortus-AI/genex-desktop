@@ -22,6 +22,8 @@ import { SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 import type { DesktopApp, DesktopDriver, DesktopFocus, DesktopShot } from "./desktop-driver.ts";
 import { type MacApps, macApps } from "./mac-apps.ts";
+import { cuaWeb, refusalError } from "./cua-web.ts";
+import { randomUUID } from "node:crypto";
 
 /** The longest side of a desktop picture the model is shown: the driver's own default on macOS. */
 const MAX_IMAGE_DIMENSION = 1366;
@@ -296,7 +298,12 @@ export function cuaDriver(
   const call: CuaCall = async (tool, args) => {
     const answer = await connection.call(tool, args);
     if (answer.isError) throw new Error(MESSAGE.failed(tool, textOf(answer) || "an error"));
-    return answer;
+    // A refusal can come back as an answer that is not an error: its own words are the reason, and
+    // its code travels with the error for the caller to act on.
+    const body = structured(answer);
+    if (!isRefusal(body)) return answer;
+    const { code, why } = refusalOf(body);
+    throw refusalError(MESSAGE.failed(tool, why || textOf(answer)), code);
   };
   const act = (tool: string, args: Record<string, unknown>) =>
     call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
@@ -358,6 +365,15 @@ export function cuaDriver(
       if (!key) return Promise.resolve();
       return act("press_key", { key, ...(keys.length > 1 ? { modifiers: keys.slice(0, -1) } : {}) });
     },
+    // Targets, tabs and refs belong to one session label, ended for good when this connection
+    // closes: each connection names its own.
+    web: cuaWeb(
+      async (tool, args) => {
+        const answer = await call(tool, args);
+        return { body: structured(answer), image: imageOf(answer) };
+      },
+      { session: `genex-${randomUUID().slice(0, 12)}`, appOf: appOfPid },
+    ),
     accessibility: async () => {
       const app = await frontApp();
       const tree = await frontTree(app);
@@ -365,6 +381,30 @@ export function cuaDriver(
     },
     close: () => connection.close(),
   };
+}
+
+/** Whether an answer refuses: an action's `effect`, or a browser call's `status` (cua-driver 0.34). */
+function isRefusal(body: Record<string, unknown>): boolean {
+  return body.effect === "refused" || body.status === "refused";
+}
+
+/**
+ * The reason a refused call gives: its code, and the code with its hint or message — an action
+ * answers `error: {code, hint}`, a browser call `refusal: {code, message}` — or its summary.
+ */
+function refusalOf(body: Record<string, unknown>): { code: string; why: string } {
+  const detail = [body.error, body.refusal].find((value) => value && typeof value === "object");
+  const fields = (detail ?? {}) as Record<string, unknown>;
+  const code = typeof fields.code === "string" ? fields.code : "";
+  const words = [fields.hint, fields.message].find((value) => typeof value === "string");
+  const why = [code, words].filter(Boolean).join(": ");
+  return { code, why: why || (typeof body.summary === "string" ? body.summary : "") };
+}
+
+/** The first picture an answer carries, as bytes. */
+function imageOf(answer: CuaAnswer): Buffer | null {
+  const image = (answer.content ?? []).find((item) => item.type === "image" && item.data);
+  return image?.data ? Buffer.from(image.data, "base64") : null;
 }
 
 /** A PNG's width from its header, or null for anything else. */

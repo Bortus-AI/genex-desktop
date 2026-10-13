@@ -13,7 +13,7 @@ import { appendFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
-import { ComputerPacing, canPause, type InputRoute, type TargetCapabilities } from "../../shared/computer-target.ts";
+import { ComputerPacing, canPause, InputRoute, type TargetCapabilities } from "../../shared/computer-target.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { CaptureSurface, type PreviewSetup, StillMimeType } from "../../shared/preview-contract.ts";
@@ -29,9 +29,17 @@ import {
   parseComputerArgs,
   setupReached,
   unsupportedAction,
+  WebVerb,
 } from "../../substrate/computer-tool.ts";
 import { COMPUTER_ARG_PROBLEM } from "../../substrate/computer-tool-prompts.ts";
-import type { ComputerTarget, TargetClock, TargetLoad, TargetShot } from "../../substrate/computer-target.ts";
+import type {
+  ComputerTarget,
+  TargetClock,
+  TargetLoad,
+  TargetShot,
+  TargetWeb,
+  TargetWebPage,
+} from "../../substrate/computer-target.ts";
 import { plannedInputs, steppedPlan } from "../../substrate/computer-steps.ts";
 import { MAX_INPUT_ACTIONS, type PreviewInputAction } from "../../substrate/preview-input.ts";
 import { TRACE_FILE, type TraceRow, type TraceSummary, traceArgs, traceLine } from "../../substrate/computer-trace.ts";
@@ -46,6 +54,8 @@ const INPUT_SETTLE_MS = 120;
 const STATE_CHARS = { afterAction: 600, default: 1_200, asked: 4_000 } as const;
 /** How many of the latest console errors an answer lists. */
 const CONSOLE_ERRORS_SHOWN = 12;
+/** Characters of a web page's text in one answer; a longer page is read again with a query. */
+const WEB_PAGE_CHARS = 8_000;
 /** Characters of an action's name kept in a frame's file name. */
 const FRAME_NAME_CHARS = 40;
 /** One simulation tick of a named action held for a duration: a 60 Hz frame. */
@@ -315,6 +325,57 @@ async function batch(ctx: ActionContext): Promise<LiveToolResult> {
   return observed(ctx, `${head} ${await ctx.helpers.afterMove(ctx)}${ctx.noteLine}`, true);
 }
 
+/** The web verbs that change the page (and count as moves); reading it is free. */
+const WEB_MOVES: ReadonlySet<string> = new Set([WebVerb.Open, WebVerb.Click, WebVerb.Type]);
+
+/** One web verb on the target's web pages: the page as it is afterwards. */
+function webPage(site: TargetWeb, request: ComputerRequest, picture: boolean): Promise<TargetWebPage> {
+  switch (request.action) {
+    case WebVerb.Open:
+      return site.open(String(request.text ?? "").trim(), { picture });
+    case WebVerb.Click:
+      return site.click(String(request.ref), { picture });
+    case WebVerb.Type:
+      return site.type(String(request.ref), String(request.text ?? ""), { submit: request.submit === true, picture });
+    default:
+      return site.read({ ...(request.text?.trim() ? { query: request.text.trim() } : {}), picture });
+  }
+}
+
+/** The page as the model reads it: where it is, its text up to a bound, and the frame it was seen in. */
+function pageText(page: TargetWebPage, file: string | null): string {
+  const cut = page.text.length > WEB_PAGE_CHARS;
+  const text = cut ? `${page.text.slice(0, WEB_PAGE_CHARS)}\n${COMPUTER_ARG_PROBLEM.webPageCut}` : page.text;
+  return `${page.title || "(untitled)"} — ${page.url}\n${text}${file ? `\n${file}` : ""}`;
+}
+
+/**
+ * A web verb: the page opened, read, clicked or typed into by its structure, answered as text with
+ * every element's ref, and — after a move, unless told otherwise — the tab's picture.
+ */
+async function web(ctx: ActionContext): Promise<LiveToolResult> {
+  const { request, target, helpers } = ctx;
+  if (!target.web) return COMPUTER_ARG_PROBLEM.unsupported(request.action, "");
+  const moved = WEB_MOVES.has(request.action);
+  const fallback = moved && helpers.observeByDefault ? ComputerObserve.Screenshot : ComputerObserve.None;
+  const picture = (request.observe ?? fallback) !== ComputerObserve.None;
+  const page = await webPage(target.web, request, picture).catch((err: unknown) => errorMessage(err));
+  if (typeof page === "string") {
+    ctx.record.failed = page;
+    return COMPUTER_ARG_PROBLEM.webCouldNot(request.action, page);
+  }
+  if (moved) {
+    ctx.record.route = InputRoute.Page;
+    tally(ctx.record, { simMs: null, taken: 1, planned: 1, route: InputRoute.Page });
+  }
+  const file = page.shot ? await helpers.saveFrame(page.shot, request.action, StillMimeType.Png) : null;
+  ctx.record.frame = file;
+  if (page.shot) await helpers.frame(target, page.shot, ctx.caption, ctx.act);
+  const text = `${ctx.surfaceLine}${pageText(page, file)}${ctx.noteLine}`;
+  if (!page.shot) return text;
+  return { text, images: [{ mimeType: StillMimeType.Png, data: page.shot.toString("base64"), label: ctx.caption }] };
+}
+
 /** The game's own named action: pressed once, or held for its duration of game time, then time let pass. */
 async function act(ctx: ActionContext): Promise<LiveToolResult> {
   const { request, target, helpers } = ctx;
@@ -349,6 +410,10 @@ const HOST_ACTIONS: Record<ComputerHostAction, HostActionHandler> = {
   },
   batch,
   act,
+  web_open: web,
+  web_read: web,
+  web_click: web,
+  web_type: web,
 };
 
 function isHostAction(action: string): action is ComputerHostAction {
@@ -404,7 +469,8 @@ function centre(size: { width: number; height: number }): { x: number; y: number
 /** How many moves an action makes against the budget: looking and reading are free. */
 function movesOf(request: ComputerRequest): number {
   if (request.action === ComputerVerb.Batch) return request.steps?.length ?? 0;
-  const moving = request.action === ComputerVerb.Wait || request.action === ComputerVerb.Act;
+  const moving =
+    request.action === ComputerVerb.Wait || request.action === ComputerVerb.Act || WEB_MOVES.has(request.action);
   return isHostAction(request.action) && !moving ? 0 : 1;
 }
 

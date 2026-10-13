@@ -58,6 +58,27 @@ export interface TargetGameAction {
   ticks?: number;
 }
 
+/** A web page as the model reads it: where it is, its text with element refs, and its picture. */
+export interface TargetWebPage {
+  title: string;
+  url: string;
+  /** The page as text: each link, button and field as `[ref] role "name"`, the words between them. */
+  text: string;
+  /** The tab's picture, when one was taken. */
+  shot: Buffer | null;
+}
+
+/**
+ * Web pages read and driven by their structure, in a separate, clean browser the target opens on
+ * first use. Every method answers the page as it is afterwards, or throws why it could not.
+ */
+export interface TargetWeb {
+  open(url: string, options: { picture: boolean }): Promise<TargetWebPage>;
+  read(options: { query?: string; picture: boolean }): Promise<TargetWebPage>;
+  click(ref: string, options: { picture: boolean }): Promise<TargetWebPage>;
+  type(ref: string, text: string, options: { submit: boolean; picture: boolean }): Promise<TargetWebPage>;
+}
+
 /** A target the computer tool can drive. Optional members are abilities its capabilities declare. */
 export interface ComputerTarget {
   readonly caps: TargetCapabilities;
@@ -83,6 +104,8 @@ export interface ComputerTarget {
   refusals?(): Array<{ op: string; code: string; message: string }>;
   /** Named game actions ("jump"), where the target declares `actions`. */
   act?(actions: TargetGameAction[]): Promise<{ applied: number; route: InputRoute }>;
+  /** Web pages by their structure, where the target declares `dom`. */
+  web?: TargetWeb;
 }
 
 /** A target's load: the target, what went wrong, and what is worth saying about the setup. */

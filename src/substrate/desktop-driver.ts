@@ -38,6 +38,42 @@ export type DesktopButton = "left" | "right" | "middle";
 /** Keys as the driver spells them: `cmd`, `shift`, `return`, `a`. */
 export type DesktopKeys = string[];
 
+/** One element of a web page the model may act on: its ref, what it is, and what it is called. */
+export interface WebElement {
+  ref: string;
+  role: string;
+  name: string;
+  /** Whether text can be typed into it. */
+  editable: boolean;
+  /** Whether it asks for a secret by what the page's DOM says of it (a password input), whatever its name. */
+  secret: boolean;
+}
+
+/** A web page as read: where it is, its text with element refs, the elements, and its picture. */
+export interface WebSnapshot {
+  title: string;
+  url: string;
+  text: string;
+  elements: WebElement[];
+  shot: Buffer | null;
+}
+
+/**
+ * Web pages by their structure, in a separate, clean browser the driver launches on first use and
+ * closes with its connection — never the person's own browser or profile.
+ */
+export interface DesktopWeb {
+  /** Whether the browser has been opened yet. */
+  opened(): boolean;
+  /** Open the browser if it is not yet, and say which app it runs as. */
+  browser(): Promise<DesktopApp>;
+  navigate(url: string): Promise<void>;
+  snapshot(options: { query?: string; picture: boolean }): Promise<WebSnapshot>;
+  /** Click an element; its role decides how (a link is followed, a control pressed). */
+  click(ref: string, role: string): Promise<void>;
+  type(ref: string, text: string, submit: boolean): Promise<void>;
+}
+
 /** The driver: one connection, held for a session and closed when it ends. */
 export interface DesktopDriver {
   screenshot(): Promise<DesktopShot>;
@@ -54,6 +90,8 @@ export interface DesktopDriver {
   press(keys: DesktopKeys): Promise<void>;
   /** Keys held down or let go, where the driver can (a game on the desktop that reads held keys). */
   keys?(keys: DesktopKeys, down: boolean): Promise<void>;
+  /** Web pages by their structure, where the driver can. */
+  web?: DesktopWeb;
   /** The accessibility tree of the app in front, as the driver reports it. */
   accessibility(): Promise<unknown>;
   close(): Promise<void>;

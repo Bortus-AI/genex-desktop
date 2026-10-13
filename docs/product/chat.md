@@ -9,9 +9,8 @@ names that exists is a link: game Markdown and images open beside the chat, othe
 adds the picture, not its file name.
 
 The chat's own work shows a short truthful status and its elapsed time; waiting for an answer is
-static. A running build is not the chat working: it is one card
-(time used of its hours, what happens now, Builds), nothing under it. No duplicate Stop
-controls or narration.
+static. A running build is one card (time used of its hours, what happens now, Builds),
+nothing under it. No duplicate Stop controls or narration.
 
 Neighboring tools fold under a muted **Worked on N steps**; failures stay visible. Delivered assets are previews opening on click (Open in Assets on hover). Build updates use a short status and See it;
 a finished build is that card with Play; it opens Builds; checks stay in Builds and Studio.
@@ -31,7 +30,8 @@ never resumes a build.
   cancelled with their worker. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
   into a mode. Stop, the turn's end or a restart withdraws one.
-- With cua-driver, the agent uses the Mac after Approve per session and app; ⌃⌥⌘Esc stops it
+- With cua-driver, the agent uses the Mac (web pages in a clean Chrome) after Approve per
+  session and app; ⌃⌥⌘Esc stops it
   ([computer use](../computer-use.md#the-persons-computer)).
 - A game reply's one-line `bash` block offers **Run** and **Copy**; output shows below and
   reaches the agent unseen, reopening no build.

@@ -173,6 +173,7 @@ export const PLAY_PROTOCOL_CAPABILITIES: TargetCapabilities = {
   zoom: false,
   surfaces: false,
   actions: true,
+  dom: false,
 };
 
 /** Is this a non-null, non-array object whose fields can be read? */

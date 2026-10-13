@@ -943,7 +943,7 @@ export interface CompleteResponse {
 }
 // ↑ src/shared/engine-requests.ts
 
-export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground';
+export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page';
 // ↑ src/shared/computer-target.ts
 
 /** What a finished computer session's trace adds up to, as a delegation's result carries it. */
@@ -1289,7 +1289,7 @@ export interface ProfileBegin {
 export type ProfileRequest = ProfileBegin | { action: "read" | "end" | "start"; sessionId: string };
 // ↑ src/shared/optimization.ts
 
-export type CaptureSurface = 'canvas' | 'page' | 'auto';
+export type CaptureSurface = 'page' | 'canvas' | 'auto';
 // ↑ src/shared/preview-contract.ts
 
 export interface PixelStats {

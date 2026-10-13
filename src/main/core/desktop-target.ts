@@ -23,6 +23,7 @@ import {
 } from "../../shared/computer-target.ts";
 import { StillMimeType } from "../../shared/preview-contract.ts";
 import type { ComputerTarget, TargetShot } from "../../substrate/computer-target.ts";
+import { guardedWeb } from "./desktop-web.ts";
 import type {
   DesktopApp,
   DesktopButton,
@@ -394,5 +395,6 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
       return { app: focus.app ? appName(focus.app) : null, tree: await driver.accessibility() };
     },
     refusals: () => state.refused.splice(0),
+    ...(driver.web ? { web: guardedWeb(driver.web, { allowApp: options.allowApp, neverDriven }) } : {}),
   };
 }

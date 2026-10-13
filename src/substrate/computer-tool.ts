@@ -84,10 +84,18 @@ export const COMPUTER_HOST_ACTIONS = [
   "console",
   "batch",
   "act",
+  "web_open",
+  "web_read",
+  "web_click",
+  "web_type",
 ] as const;
 
 /** The actions the session itself treats specially, by name: a wait, a batch and a reload. */
 export const ComputerVerb = { Wait: "wait", Batch: "batch", Reload: "reload", Act: "act", Look: "look" } as const;
+
+/** The web page verbs: a page read and driven by its structure, in a separate, clean browser. */
+export const WebVerb = { Open: "web_open", Read: "web_read", Click: "web_click", Type: "web_type" } as const;
+export type WebVerb = (typeof WebVerb)[keyof typeof WebVerb];
 export type ComputerVerb = (typeof ComputerVerb)[keyof typeof ComputerVerb];
 
 export type ComputerInputAction = (typeof COMPUTER_INPUT_ACTIONS)[number];
@@ -150,6 +158,10 @@ export interface ComputerRequest {
   /** Mouse-look: how far the view turns, in view pixels of motion. */
   dx?: number;
   dy?: number;
+  /** A web page element, as `web_read` names it (`p3:12`). */
+  ref?: string;
+  /** web_type: press Enter after the text. */
+  submit?: boolean;
 }
 
 export type ParsedComputer = { ok: true; request: ComputerRequest } | { ok: false; error: string };
@@ -169,6 +181,8 @@ const MAX_LISTED_CAMERAS = 12;
 const MAX_QUOTED_SURFACE_CHARS = 40;
 /** How much of typed text a caption quotes. */
 const MAX_CAPTION_TEXT_CHARS = 40;
+/** The longest web element ref the tool reads. */
+const MAX_REF_CHARS = 64;
 
 /** Nothing given: absent, null or an empty string. */
 function isBlank(value: unknown): boolean {
@@ -313,6 +327,7 @@ function readPointerFields(request: ComputerRequest, raw: Record<string, unknown
 /** The rest: text, repeat, duration, scroll and surface, each clamped to what the port allows. */
 function readOtherFields(request: ComputerRequest, raw: Record<string, unknown>): void {
   if (raw.text !== undefined && raw.text !== null) request.text = String(raw.text);
+  readWebFields(request, raw);
   const repeat = num(raw.repeat);
   if (repeat !== null) request.repeat = clampRepeat(repeat);
   const duration = num(raw.duration);
@@ -331,6 +346,14 @@ function readOtherFields(request: ComputerRequest, raw: Record<string, unknown>)
   if (surface.surface) request.surface = surface.surface;
   if (surface.note) request.surfaceNote = surface.note;
   readObserve(request, raw.observe);
+}
+
+/** A web element ref (`p3:12`) and whether a typed text is submitted, as either transport delivers them. */
+function readWebFields(request: ComputerRequest, raw: Record<string, unknown>): void {
+  const ref = raw.ref === undefined || raw.ref === null ? "" : String(raw.ref).trim();
+  if (ref) request.ref = ref.slice(0, MAX_REF_CHARS);
+  const submit = raw.submit;
+  if (submit === true || submit === "true") request.submit = true;
 }
 
 /** The observe word, as either transport delivers it; an unknown word is a note, never a refusal. */
@@ -388,6 +411,9 @@ const ACTION_NEEDS: Partial<Record<ComputerAction, (request: ComputerRequest) =>
   camera: (r) => (r.text ? null : COMPUTER_ARG_PROBLEM.cameraNeedsName),
   look: (r) => (r.dx !== undefined || r.dy !== undefined ? null : COMPUTER_ARG_PROBLEM.lookNeedsDelta),
   act: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.actNeedsName),
+  web_open: (r) => (r.text?.trim() ? null : COMPUTER_ARG_PROBLEM.webOpenNeedsUrl),
+  web_click: (r) => (r.ref ? null : COMPUTER_ARG_PROBLEM.webNeedsRef(r.action)),
+  web_type: (r) => (r.ref && r.text !== undefined ? null : COMPUTER_ARG_PROBLEM.webTypeNeedsRefAndText),
 };
 
 /** The amounts an action falls back to when it names none. */
@@ -538,6 +564,10 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   state: (caps) => hasState(caps),
   console: (caps) => caps.console,
   reload: (caps) => caps.reload,
+  web_open: (caps) => caps.dom,
+  web_read: (caps) => caps.dom,
+  web_click: (caps) => caps.dom,
+  web_type: (caps) => caps.dom,
 };
 
 /** Can this target carry out this action? */
@@ -610,6 +640,9 @@ export function computerToolDefinition(
         scroll_amount: { type: "number", description: text.scroll_amount },
         dx: { type: "number", description: text.dx },
         dy: { type: "number", description: text.dy },
+        ...(capabilities.dom
+          ? { ref: { type: "string", description: text.ref }, submit: { type: "boolean", description: text.submit } }
+          : {}),
         ...(capabilities.surfaces ? { surface: { type: "string", description: text.surface } } : {}),
         observe: { type: "string", description: text.observe },
         actions: { type: "string", description: text.actions },
@@ -646,6 +679,10 @@ const ACTION_DEED: Record<ComputerAction, ScreenDeed> = {
   batch: ScreenDeed.Press,
   look: ScreenDeed.Move,
   act: ScreenDeed.Press,
+  web_open: ScreenDeed.Load,
+  web_read: ScreenDeed.Look,
+  web_click: ScreenDeed.Click,
+  web_type: ScreenDeed.Type,
 };
 
 /** A computer action as the agent's screen shows it: its deed, and the keys of a press. */
@@ -705,6 +742,23 @@ function describeStudioAction(request: ComputerRequest): string {
       return `look ${Math.round(request.dx ?? 0)},${Math.round(request.dy ?? 0)}`;
     case "act":
       return `act ${request.text}${request.duration ? ` ${request.duration}s` : ""}`;
+    default:
+      return describeWebAction(request);
+  }
+}
+
+/** The web verbs in a caption's words. */
+function describeWebAction(request: ComputerRequest): string {
+  const quoted = String(request.text ?? "").slice(0, MAX_CAPTION_TEXT_CHARS);
+  switch (request.action) {
+    case "web_open":
+      return `open ${quoted}`;
+    case "web_read":
+      return quoted ? `read the page for "${quoted}"` : "read the page";
+    case "web_click":
+      return `click ${request.ref}`;
+    case "web_type":
+      return `type "${quoted}" into ${request.ref}${request.submit ? " and press Enter" : ""}`;
     default:
       return request.action;
   }

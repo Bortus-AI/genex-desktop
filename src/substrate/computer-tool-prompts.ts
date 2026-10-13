@@ -72,6 +72,12 @@ const POINTER_LINES =
   "left_click | right_click | middle_click | double_click | triple_click coordinate=x,y (text=shift|ctrl+alt holds modifiers). " +
   "left_click_drag start_coordinate=x,y coordinate=x,y. mouse_move coordinate=x,y. left_mouse_down / left_mouse_up. ";
 
+/** The web page sentences, for a target that drives pages by their structure. */
+const WEB_LINES =
+  "Web pages — prefer these to pixels for anything on the web: web_open text=<https:// address> opens it in a separate, clean Chrome (no logins, none of the person's tabs). " +
+  "web_read [text=<what you look for>]: the page as text, every link, button and field with its [ref]. " +
+  "web_click ref=<ref>. web_type ref=<ref> text=<text> [submit=true presses Enter]. Refs change whenever the page does: read again after a click. ";
+
 /** The batch sentence: several moves in one call. */
 const BATCH_LINE =
   'batch actions=[{"action":"key","text":"w"},{"action":"wait","duration":0.5}]: up to 8 input actions and waits in one call, run in order, stopping at the first that fails. ';
@@ -132,6 +138,7 @@ export function computerToolDescription(options: {
     (caps.actions
       ? "act text=<action> [duration=<seconds>]: the game's own named action (jump, attack), pressed once or held. "
       : "") +
+    (caps.dom ? WEB_LINES : "") +
     BATCH_LINE +
     observeLine(options.observeByDefault ?? false) +
     studioVerbLines(caps, options.cameras) +
@@ -175,6 +182,8 @@ export const COMPUTER_PARAMETER_TEXT = {
   dy: "look only: how far to turn the view up or down, in view pixels of mouse motion",
   observe: "screenshot, canvas or none: what an input action, wait or batch brings back with its answer",
   actions: 'batch only: a JSON list of steps, e.g. [{"action":"key","text":"w"},{"action":"wait","duration":0.5}]',
+  ref: "web_click and web_type: the element ref web_read listed, e.g. p3:12",
+  submit: "web_type only: true presses Enter after the text (submits a search or a form)",
 } as const;
 
 /** What the model is told instead of an action, when its arguments cannot run. */
@@ -191,6 +200,11 @@ export const COMPUTER_ARG_PROBLEM = {
   unknownSurface: (raw: string) => `surface "${raw}" is not screen or canvas — the studio picked the surface itself`,
   lookNeedsDelta: "look needs dx=<pixels> and/or dy=<pixels> of mouse motion",
   actNeedsName: "act needs text=<the game's action name, e.g. jump>",
+  webOpenNeedsUrl: "web_open needs text=<an https:// address>",
+  webCouldNot: (action: string, why: string) => `${action} did not happen: ${why}`,
+  webPageCut: "(the page goes on: web_read text=<what you look for> reads the part you need)",
+  webNeedsRef: (action: string) => `${action} needs ref=<an element ref web_read listed, e.g. p3:12>`,
+  webTypeNeedsRefAndText: "web_type needs ref=<the field's ref from web_read> and text=<what to type>",
   unsupported: (action: string, actions: string) =>
     `${action} is not available on this game — it cannot do that from here. Use one of ${actions}`,
   unknownObserve: (raw: string) => `observe "${raw}" is not screenshot, canvas or none — the studio decided itself`,

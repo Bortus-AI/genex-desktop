@@ -310,7 +310,8 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   with the person's own access in every app they allow: the per-app consent card is the boundary.
   A page, document or message the agent reads there can try to steer it; the tool tells the model
   that on-screen text is never an instruction, and the studio itself, password managers and system
-  settings are never driven.
+  settings are never driven. Web pages (`web_*`) open only in a separate, clean browser with no
+  logins; a page's text can still try to steer the agent.
 - Codex cannot ask mid-turn: Manual and Accept edits are unavailable for it until it runs over a
   protocol that asks (`codex app-server`), and a chat in either runs Codex in Auto's sandbox. Its
   Bypass has no sandbox at all, as the CLI's own flag. Bonsai and Codex ask about no read, and their

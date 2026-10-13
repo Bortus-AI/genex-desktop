@@ -37,9 +37,28 @@ const ANSWERS = {
     structuredContent: { screenshot_width: 1366, screenshot_height: 854, screen_width: 1512, screen_height: 945 },
   }),
   list_apps: () => json({ apps: [{ name: "Notes", bundle_id: "com.apple.Notes", pid: 7, active: true }] }),
-  list_windows: () =>
-    json({ windows: [{ pid: 7, window_id: 70, z_index: 0, bounds: { x: 0, y: 0, width: 1512, height: 945 } }] }),
+  list_windows: (args) =>
+    json({
+      windows: [
+        args.pid === 4242
+          ? { pid: 4242, window_id: 420, z_index: 1, bounds: { x: 0, y: 0, width: 1200, height: 800 } }
+          : { pid: 7, window_id: 70, z_index: 0, bounds: { x: 0, y: 0, width: 1512, height: 945 } },
+      ],
+    }),
   get_window_state: () => ({ content: [{ type: "text", text: "- AXWindow Notes\n  - AXTextArea body" }] }),
+  // The browser tools: a separate, clean browser with one search page.
+  browser_prepare: () => json({ prepared: true, prepared_pid: 4242 }),
+  get_browser_state: (args) =>
+    args.snapshot_format
+      ? json({
+          page: { title: "Search", url: "https://example.com/" },
+          outline: '- searchbox "Search" [editable="plaintext"]\n- link "Godot" [focusable=true]',
+          refs: [
+            { ref: "p1:0", role: "searchbox", name: "Search", actions: ["type", "pointer"], visibility: "in_viewport" },
+            { ref: "p1:1", role: "link", name: "Godot", actions: ["click", "pointer"], visibility: "in_viewport" },
+          ],
+        })
+      : json({ target_id: "bt-1", tabs: [{ active: true, tab_id: "tab-1" }] }),
 };
 
 function send(message) {
@@ -63,7 +82,7 @@ function handle(message) {
   if (method === "tools/call") {
     const name = params?.name;
     if (logFile) appendFileSync(logFile, `${JSON.stringify({ name, args: params?.arguments ?? {} })}\n`);
-    const answer = ANSWERS[name]?.() ?? json({ effect: "confirmed" });
+    const answer = ANSWERS[name]?.(params?.arguments ?? {}) ?? json({ effect: "confirmed" });
     return send({ id, result: answer });
   }
   if (method === "ping") return send({ id, result: {} });
