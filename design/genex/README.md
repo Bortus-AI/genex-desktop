@@ -288,7 +288,13 @@ the count up; a like taken back at once (signed out) stops them. A guest without
 sees, once the game plays, a strip in Play's blue secondary with 8px corners wipe in from the left,
 14px after the facts: the Genex G alone (16px, in ink, no tile), "Save your progress with the Genex
 plugin" and **Install plugin** (24px, 6px corners, solid blue); its × sits just outside the strip.
-It stays until that × or the game closes. The
+It stays until that × or the game closes. A game in voice chat gets, 14px after the facts, the mic
+switch joined to a 22px chevron (4px inner corners): icon-only, a crossed-out mic while off, Play's
+blue secondary while on (the glyph at 60% until the microphone is live). While the game waits for
+it, the off switch says "Turn on mic"; a microphone note is worn the same way ("No microphone",
+"Allow the mic in Settings"). The chevron opens the system's own menu of microphones (System
+default first, the chosen one checked), since the game's view covers anything drawn under the
+header. The
 header's empty space drags the window. Holding Esc in the game puts the keyboard on Like; Esc gives
 it back to the game; a tap stays the game's. Until the game loads, the space under the header shows
 the cover coming up out of black as a dimmed colour 8×8 Bayer ordered dither (four steps a channel)

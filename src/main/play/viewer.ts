@@ -4,8 +4,9 @@
  * Share, Invite a friend, Remix and Exit. Main keeps what the header shows and acts on what it asks
  * (`studio:play.control`). Holding Esc in the game moves the keyboard to the header (a tap still
  * reaches the game: pause menus, mouse lock); Esc there gives it back. A guest with no Genex account
- * is offered the Genex plugin in the header for a while. Electron-free: the game's view, the window,
- * the clipboard and the clock come in as deps.
+ * is offered the Genex plugin in the header until its ×. A game in voice chat gets the header's mic
+ * switch and its menu (`mic.ts`). Electron-free: the game's view, the window, the clipboard, the
+ * microphone and the clock come in as deps.
  */
 import { ESC_HOLD_MS, type FullScreenKey, type Rect } from "../game-full-screen.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -16,11 +17,16 @@ import {
   type PlayBarState,
   PlayControl,
   PlayNote,
+  type PlayPoint,
   playPageUrl,
   type PlayViewerEvent,
   PlayViewerPhase,
 } from "../../shared/play.ts";
+import type { PlayMicReport } from "../../shared/play-mic.ts";
 import { mintedTicket, type PlayGallery, type PlayWorld, SignInNeeded, TicketStatus } from "./gallery.ts";
+import { chooseMic, freshMic, heardMic, type MicSession, type PlayMicDeps, toggleMic } from "./mic.ts";
+
+export type { PlayMicDeps } from "./mic.ts";
 
 /** The longest the cover waits for the game's page to finish loading before the game is shown anyway. */
 export const SHOW_GAME_AFTER_MS = 8 * SECOND_MS;
@@ -49,6 +55,8 @@ export interface PlayViewerDeps {
   remix(world: PlayWorld): Promise<string>;
   emit(event: PlayViewerEvent): void;
   clock: { setTimeout(run: () => void, ms: number): unknown; clearTimeout(handle: unknown): void };
+  /** The game's voice chat: the system, the page's microphone, the menu and what is remembered. */
+  mic: PlayMicDeps;
 }
 
 interface Session {
@@ -62,6 +70,7 @@ interface Session {
   liking: boolean;
   /** No Genex account was unlocked when the game opened: it plays as a guest who may install Genex. */
   signedOut: boolean;
+  mic: MicSession;
 }
 
 const IDLE_STATE: PlayBarState = {
@@ -72,6 +81,7 @@ const IDLE_STATE: PlayBarState = {
   busy: false,
   guestCard: false,
   facts: null,
+  mic: null,
 };
 
 type Clock = PlayViewerDeps["clock"];
@@ -241,8 +251,8 @@ function focusBarByKeyboard(ctx: ViewerContext): void {
   ctx.deps.emit({ slug: s.slug, openId: s.epoch, phase: s.phase, focusBar: true });
 }
 
-/** What each of the header's controls does. */
-function barActions(ctx: ViewerContext): Record<PlayControl, () => void> {
+/** What each of the header's controls does; a menu opens at `at`. */
+function barActions(ctx: ViewerContext): Record<PlayControl, (at?: PlayPoint) => void> {
   return {
     [PlayControl.Back]: () => ctx.close(),
     [PlayControl.Exit]: () => ctx.close(),
@@ -266,11 +276,13 @@ function barActions(ctx: ViewerContext): Record<PlayControl, () => void> {
     [PlayControl.Resume]: () => {
       if (ctx.session()?.phase === PlayViewerPhase.Playing) ctx.deps.game.focus();
     },
+    [PlayControl.Mic]: () => void toggleMic(ctx),
+    [PlayControl.MicDevices]: (at) => chooseMic(ctx, at),
   };
 }
 
-/** A game just opened: loading, nothing read about it yet. */
-const freshSession = (slug: string, epoch: number): Session => ({
+/** A game just opened: loading, nothing read about it yet, its mic switch as it was left. */
+const freshSession = (slug: string, epoch: number, micOn: boolean): Session => ({
   slug,
   epoch,
   phase: PlayViewerPhase.Loading,
@@ -278,6 +290,7 @@ const freshSession = (slug: string, epoch: number): Session => ({
   state: { ...IDLE_STATE },
   liking: false,
   signedOut: false,
+  mic: freshMic(micOn),
 });
 
 /** The viewer over `deps`. */
@@ -331,7 +344,7 @@ export function playViewer(deps: PlayViewerDeps) {
     if (session) close();
     epoch += 1;
     const opened = epoch;
-    session = freshSession(slug, opened);
+    session = freshSession(slug, opened, deps.mic.store.on(slug));
     // The first news of the opening: loading, with the header as it starts.
     ctx.draw();
     void loadGame(ctx, opened, () => {
@@ -359,10 +372,12 @@ export function playViewer(deps: PlayViewerDeps) {
       showTimer = stop(clock, showTimer);
       setPhase(PlayViewerPhase.Failed);
     },
-    /** A control the header asked for. */
-    control: (value: unknown): void => {
-      if (session && isPlayControl(value)) actions[value]();
+    /** A control the header asked for; a menu opens at `at`. */
+    control: (value: unknown, at?: PlayPoint): void => {
+      if (session && isPlayControl(value)) actions[value](at);
     },
+    /** The game's page said how its microphone is. */
+    mic: (report: PlayMicReport): void => heardMic(ctx, report),
     /** A key pressed in the game's view: a held Esc moves the keyboard to the header. */
     key: (input: FullScreenKey): void => {
       if (session) heldEsc.key(input);

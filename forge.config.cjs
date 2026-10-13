@@ -114,6 +114,9 @@ module.exports = {
       NSDesktopFolderUsageDescription: folderAccess("your Desktop"),
       NSDownloadsFolderUsageDescription: folderAccess("your Downloads folder"),
       NSRemovableVolumesUsageDescription: folderAccess("folders on an external drive"),
+      // Voice chat in a Play game, only while the person turns its mic on in the game's header.
+      NSMicrophoneUsageDescription:
+        "Genex uses your microphone for voice chat in Play games, while you turn the mic on.",
     },
     // The Windows executable's version resource: what Explorer, Task Manager and UAC show.
     win32metadata: {

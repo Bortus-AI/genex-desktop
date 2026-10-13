@@ -294,6 +294,9 @@ const NOTE_PLACE = {
   [PlayNote.LikeFailed]: { control: PlayControl.Like, look: NoteLook.Said },
   [PlayNote.Remixing]: { control: PlayControl.Remix, look: NoteLook.Busy },
   [PlayNote.RemixFailed]: { control: PlayControl.Remix, look: NoteLook.Said },
+  [PlayNote.MicBlocked]: { control: PlayControl.Mic, look: NoteLook.Said },
+  [PlayNote.MicMissing]: { control: PlayControl.Mic, look: NoteLook.Said },
+  [PlayNote.MicFailed]: { control: PlayControl.Mic, look: NoteLook.Said },
 } as const satisfies Record<PlayNote, { control: PlayControl; look: NoteLook }>;
 
 /** The note `control`'s button says now in place of its label, if the header's note is about it. */

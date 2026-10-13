@@ -396,7 +396,16 @@ describe("Play's viewer cover", () => {
   });
 
   it("keeps the header as main last drew it, and counts each ask to give it the keyboard", () => {
-    const bar = { liked: false, likes: 3, remixable: true, note: null, busy: false, guestCard: false, facts: null };
+    const bar = {
+      liked: false,
+      likes: 3,
+      remixable: true,
+      note: null,
+      busy: false,
+      guestCard: false,
+      facts: null,
+      mic: null,
+    };
     const drawn = viewerAfter(fresh, { slug: "a", openId: 2, phase: PlayViewerPhase.Loading, bar });
     assert.deepEqual(drawn?.bar, bar);
     const liked = { ...bar, liked: true, likes: 4 };
@@ -489,8 +498,17 @@ describe("Play's loader and header", () => {
     assert.equal(BAYER_8.length, 64);
   });
 
-  it("speaks a header note on the button it is about, and marks only a copied link as done", () => {
-    const bar = { liked: false, likes: 3, remixable: true, note: null, busy: false, guestCard: false, facts: null };
+  it("speaks a header note on the button it is about (a microphone's on the mic switch), and marks only a copied link as done", () => {
+    const bar = {
+      liked: false,
+      likes: 3,
+      remixable: true,
+      note: null,
+      busy: false,
+      guestCard: false,
+      facts: null,
+      mic: null,
+    };
     assert.equal(noteOn(undefined, PlayControl.Share), null);
     assert.equal(noteOn(bar, PlayControl.Share), null);
     assert.deepEqual(noteOn({ ...bar, note: PlayNote.Copied }, PlayControl.Share), {
@@ -503,10 +521,23 @@ describe("Play's loader and header", () => {
     assert.equal(noteOn({ ...bar, note: PlayNote.LikeFailed }, PlayControl.Like)?.look, NoteLook.Said);
     assert.equal(noteOn({ ...bar, note: PlayNote.Remixing }, PlayControl.Remix)?.look, NoteLook.Busy);
     assert.equal(noteOn({ ...bar, note: PlayNote.RemixFailed }, PlayControl.Remix)?.look, NoteLook.Said);
+    for (const note of [PlayNote.MicBlocked, PlayNote.MicMissing, PlayNote.MicFailed]) {
+      assert.deepEqual(noteOn({ ...bar, note }, PlayControl.Mic), { note, look: NoteLook.Said }, note);
+      assert.equal(noteOn({ ...bar, note }, PlayControl.MicDevices), null, "worn by the switch, not its menu");
+    }
   });
 
   it("celebrates a like only when the player's own like turns it on, not when a game opens liked", () => {
-    const bar = { liked: false, likes: 3, remixable: true, note: null, busy: false, guestCard: false, facts: null };
+    const bar = {
+      liked: false,
+      likes: 3,
+      remixable: true,
+      note: null,
+      busy: false,
+      guestCard: false,
+      facts: null,
+      mic: null,
+    };
     const liked = { ...bar, liked: true, likes: 4 };
     assert.equal(justLiked(bar, liked), true);
     assert.equal(justLiked(undefined, liked), false, "the first header drawn is how the game opened");

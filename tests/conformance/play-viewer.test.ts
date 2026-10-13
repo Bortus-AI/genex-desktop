@@ -112,6 +112,14 @@ function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewe
     remix: overrides.remix ?? (async () => "lost-cathedral-remix"),
     emit: (event) => events.push(event),
     clock,
+    // Voice chat has its own suite (play-mic.test.ts); these games never ask for a microphone.
+    mic: {
+      access: async () => true,
+      command: () => {},
+      menu: () => {},
+      openSettings: () => {},
+      store: { on: () => false, setOn: () => {}, device: () => null, setDevice: () => {} },
+    },
   };
   const viewer = playViewer(deps);
   /** The header as last drawn. */
@@ -128,7 +136,16 @@ describe("Play viewer", () => {
       slug: "lost-cathedral",
       openId: 1,
       phase: PlayViewerPhase.Loading,
-      bar: { liked: false, likes: 0, remixable: false, note: null, busy: false, guestCard: false, facts: null },
+      bar: {
+        liked: false,
+        likes: 0,
+        remixable: false,
+        note: null,
+        busy: false,
+        guestCard: false,
+        facts: null,
+        mic: null,
+      },
     });
     assert.deepEqual(opened, ["game:lost-cathedral:T1"]);
     assert.deepEqual(bar(), {
@@ -139,6 +156,7 @@ describe("Play viewer", () => {
       busy: false,
       guestCard: false,
       facts: { author: "Simeon M", plays: 5300, online: 8 },
+      mic: null,
     });
     assert.equal(viewer.showing(), "lost-cathedral");
   });

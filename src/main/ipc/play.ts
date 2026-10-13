@@ -1,5 +1,5 @@
 /** Play: genex.games' catalog for the dashboard, and the full-screen viewer a game opens in. */
-import { isPlayShelf, isPlaySlug, PlayShelf } from "../../shared/play.ts";
+import { isPlayShelf, isPlaySlug, PlayShelf, readPlayPoint } from "../../shared/play.ts";
 import type { PlayGallery, PlayWorld } from "../play/gallery.ts";
 import type { PlayViewer } from "../play/viewer.ts";
 import type { IpcHandle } from "./registrar.ts";
@@ -36,6 +36,6 @@ export function registerPlayIpc(handle: IpcHandle, { gallery, remix, viewer }: P
     shown.open(payload.slug);
   });
   handle("studio:play.close", async () => viewer()?.close());
-  // The header names a control; the viewer acts only on one it knows.
-  handle("studio:play.control", async (payload) => viewer()?.control(payload?.control));
+  // The header names a control (and where it is, for a menu); the viewer acts only on one it knows.
+  handle("studio:play.control", async (payload) => viewer()?.control(payload?.control, readPlayPoint(payload?.at)));
 }

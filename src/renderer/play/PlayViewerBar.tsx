@@ -6,11 +6,12 @@
  * drops it; a like of the player's own bursts. Main keeps what it shows (`PlayViewerEvent.bar`) and
  * acts on what it asks (`studio:play.control`). An Esc held in the game puts the keyboard here (Esc
  * gives it back: `PlayViewerLayer.tsx`). A signed-out guest is offered the Genex plugin here until its ×.
+ * A game in voice chat gets the mic switch beside its name, with a menu of microphones.
  * Offline, the facts say so in place of the players, and Like and Remix wait for the connection.
  */
 import type { CSSProperties, JSX, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
-import { type PlayBarState, PlayControl } from "../../shared/play.ts";
+import { type PlayBarState, type PlayMicBar, PlayControl, type PlayPoint } from "../../shared/play.ts";
 import { studio } from "../state/studio.ts";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { useOnline } from "../ui/use-online.ts";
@@ -94,6 +95,66 @@ function GuestOffer(): JSX.Element {
         onClick={() => send(PlayControl.DismissCard)}
       >
         <Icon name="close" size={13} />
+      </button>
+    </div>
+  );
+}
+
+/** Where a menu opens for `button`: under its left edge, on the window's page. */
+function under(button: HTMLElement): PlayPoint {
+  const rect = button.getBoundingClientRect();
+  return { x: rect.left, y: rect.bottom + 4 };
+}
+
+/** What the mic says in place of nothing: a note about it, else that the game waits for it. */
+function micSays(bar: PlayBarState, mic: PlayMicBar): string | null {
+  const worn = noteOn(bar, PlayControl.Mic);
+  if (worn) return WORDS.notes[worn.note];
+  return mic.waiting ? WORDS.micWaiting : null;
+}
+
+/**
+ * The game's voice chat, once it is in it: the mic switch (the person's microphone feeds the game,
+ * or not) and, joined to it, the menu of microphones (a native menu: the game's view covers anything
+ * drawn under the header). While the game waits for the switch the switch says so, and a note about
+ * the microphone ("No microphone") is worn the same way.
+ */
+function MicControl({ bar, mic }: { bar: PlayBarState; mic: PlayMicBar }): JSX.Element {
+  const says = micSays(bar, mic);
+  const said = useLastNote(says);
+  return (
+    <div
+      className="play-viewer-bar-mic"
+      data-play-mic
+      data-on={mic.on ? true : undefined}
+      data-live={mic.live ? true : undefined}
+      data-waiting={mic.waiting ? true : undefined}
+    >
+      <button
+        type="button"
+        className="play-viewer-bar-pill play-mic-switch"
+        aria-pressed={mic.on}
+        aria-label={says ?? (mic.on ? WORDS.micOn : WORDS.micOff)}
+        data-play-bar={PlayControl.Mic}
+        data-note={noteOn(bar, PlayControl.Mic)?.look}
+        onClick={() => send(PlayControl.Mic)}
+      >
+        <span className="play-bar-icon">
+          <Icon name={mic.on ? "mic" : "mic-off"} size={16} />
+        </span>
+        <span className="play-bar-label" data-shown={says ? true : undefined} aria-hidden={!says}>
+          <span>{said}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="play-viewer-bar-pill play-mic-menu"
+        aria-label={WORDS.micDevices}
+        aria-haspopup="menu"
+        data-play-bar={PlayControl.MicDevices}
+        onClick={(event) => void studio().api.playControl(PlayControl.MicDevices, under(event.currentTarget))}
+      >
+        <Icon name="chevron-down" size={12} strokeWidth={2} />
       </button>
     </div>
   );
@@ -275,6 +336,7 @@ export function PlayViewerBar({ viewer }: { viewer: ViewerShown }): JSX.Element 
         <span className="play-viewer-bar-title">{viewer.title}</span>
         <Facts bar={bar} online={online} />
       </div>
+      {bar?.mic && <MicControl bar={bar} mic={bar.mic} />}
       {bar?.guestCard && <GuestOffer />}
       <span className="play-viewer-bar-gap" />
       {/* The note is worn by its button; this says it to a screen reader. */}

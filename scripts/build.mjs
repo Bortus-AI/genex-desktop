@@ -15,6 +15,7 @@ import { vendorTsc } from "./vendor-tsc.ts";
  *
  *   dist/main/main.mjs        substrate + app shell (ESM, Electron 43 supports ESM main)
  *   dist/preload/preload.cjs  renderer bridge (sandboxed preloads must be CommonJS)
+ *   dist/preload/play-mic.cjs Play game view's microphone (the app's mic in a published game's page)
  *   dist/renderer/*           React UI
  *   dist/resources/*          read-only app resources: the harness seed, the bootstrap, the game
  *                             template, vendored three.js, and the TypeScript 7 compiler the
@@ -109,6 +110,12 @@ async function nodeContexts() {
       ...shared,
       entryPoints: [path.join(root, "src/preload/index.ts")],
       outfile: path.join(dist, "preload/preload.cjs"),
+      format: "cjs",
+    }),
+    await esbuild.context({
+      ...shared,
+      entryPoints: [path.join(root, "src/preload/play-mic.ts")],
+      outfile: path.join(dist, "preload/play-mic.cjs"),
       format: "cjs",
     }),
   ];

@@ -51,7 +51,7 @@ undo a remote action or recall data already sent.
 | Blender assets | Blender on this Mac, or one click downloads a pinned release from download.blender.org |
 | Plugin catalog | Anonymous downloads from `plugins.genex.games` and GitHub |
 | Genex asset generation, credits and hosted publishing | A Genex account (paid credits); publishing also needs `git-lfs` |
-| Play | Nothing to browse and play; likes, signed-in play and invite links need a Genex account; Remix needs `git` |
+| Play | Nothing to browse and play; likes, signed-in play and invite links need a Genex account; Remix needs `git`; voice chat needs microphone access (macOS asks once) |
 
 Studio finds Claude Code and Codex through a manual override, your login-shell `PATH`, then
 standard locations, and never installs or updates them unless you choose that in Settings.
@@ -75,7 +75,10 @@ cdn.genex.technology, assets.genex.games, assets.genex.technology, api.genex.gam
 Playing a game loads it from its own `https://<name>.genex.technology/` address, and genex.games
 counts the play. The game runs in Play's own storage, apart from your games and the rest of the
 app, where it keeps its saves; it may use only pointer lock, full screen and clipboard writes, and
-links that leave Genex games open in your browser. With a connected Genex account, the app sends
+links that leave Genex games open in your browser. A game in voice chat gets a microphone the app
+controls: your microphone feeds it only while you turn on the mic in the game's header (off for
+every game until you do), and a game never gets a camera. Which games you left the mic on for,
+and the microphone you chose, stay in the app profile. With a connected Genex account, the app sends
 the account's token to the Genex API to get a single-use sign-in ticket for that game (without
 one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite

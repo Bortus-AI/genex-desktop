@@ -163,6 +163,10 @@ export const PlayControl = {
   DismissCard: "dismiss-card",
   /** Esc in the header: the keyboard goes back to the game. */
   Resume: "resume",
+  /** The mic switch: the person's microphone feeds the game's voice chat, or not. */
+  Mic: "mic",
+  /** The mic's menu: which microphone. */
+  MicDevices: "mic-devices",
 } as const;
 export type PlayControl = (typeof PlayControl)[keyof typeof PlayControl];
 
@@ -178,6 +182,10 @@ export const PlayNote = {
   LikeFailed: "like-failed",
   Remixing: "remixing",
   RemixFailed: "remix-failed",
+  /** The system refuses the microphone: it is allowed in its settings. */
+  MicBlocked: "mic-blocked",
+  MicMissing: "mic-missing",
+  MicFailed: "mic-failed",
 } as const;
 export type PlayNote = (typeof PlayNote)[keyof typeof PlayNote];
 
@@ -187,6 +195,30 @@ export interface PlayFacts {
   plays: number;
   /** Players in it now; null for a single-player game or an unknown count. */
   online: number | null;
+}
+
+/** The header's mic, once the game is in voice chat. */
+export interface PlayMicBar {
+  /** The person's switch for this game. */
+  on: boolean;
+  /** Their microphone is open, feeding the game. */
+  live: boolean;
+  /** The game is in voice chat while the switch is off: nobody hears the person yet. */
+  waiting: boolean;
+}
+
+/** Where on the window's page a header control is, for a menu to open under it. */
+export interface PlayPoint {
+  x: number;
+  y: number;
+}
+
+/** A point the renderer sent, as main accepts it: two finite numbers on the window, else undefined. */
+export function readPlayPoint(value: unknown): PlayPoint | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { x, y } = value as Record<string, unknown>;
+  const onWindow = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n < 100_000;
+  return onWindow(x) && onWindow(y) ? { x: Math.round(x), y: Math.round(y) } : undefined;
 }
 
 /** What the viewer's header draws. */
@@ -202,6 +234,8 @@ export interface PlayBarState {
   guestCard: boolean;
   /** Null until the game's page facts are read. */
   facts: PlayFacts | null;
+  /** Null until the game asks for a microphone: then the header has a mic switch and its menu. */
+  mic: PlayMicBar | null;
 }
 
 /** What main tells the renderer about the viewer (`UiEvent.PlayViewer`). */

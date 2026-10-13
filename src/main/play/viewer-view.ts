@@ -3,18 +3,37 @@
  * sandboxed view per game in Play's own session, under the app's own header (drawn by the renderer
  * above it). The game's page may move between Genex games' addresses and Genex's sign-in hop; any
  * other link opens in the browser. Play's session grants only mouse lock, full screen and clipboard
- * writes.
+ * writes, and the microphone to a game's own page just after the viewer told it to open it (the
+ * header's mic switch, `mic.ts`). Its one preload (`preload/play-mic.ts`) gives the page the app's
+ * microphone and carries the mic's word between the page and main; the menu of microphones is a
+ * native one, since the game's view covers anything the renderer draws under the header.
  */
-import { type BrowserWindow, clipboard, type Session, session, type WebContents, WebContentsView } from "electron";
-import { PLAY_BAR_HEIGHT, type PlayViewerEvent } from "../../shared/play.ts";
+import {
+  type BrowserWindow,
+  clipboard,
+  Menu,
+  type MenuItemConstructorOptions,
+  type Session,
+  session,
+  shell,
+  systemPreferences,
+  type WebContents,
+  WebContentsView,
+} from "electron";
+import { PLAY_BAR_HEIGHT, type PlayPoint, type PlayViewerEvent } from "../../shared/play.ts";
+import { type PlayMicCommand, PlayMicChannel, type PlayMicReport, readMicReport } from "../../shared/play-mic.ts";
 import type { FullScreenKey, Rect } from "../game-full-screen.ts";
 import { GAME_DISABLED_BLINK_FEATURES } from "../game-view.ts";
 import { linkGate, playAddress, playNavigationAllowed } from "./game-address.ts";
 import type { PlayGallery, PlayWorld } from "./gallery.ts";
+import { type MicGate, micGate } from "./mic.ts";
+import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer } from "./viewer.ts";
 
 /** Sessions already given Play's rules: a window made again shares the session and its handlers. */
 const prepared = new WeakSet<Session>();
+/** Each game view's microphone gate: the session's handlers find a view's by its contents. */
+const micGates = new WeakMap<WebContents, MicGate>();
 /** Play's own storage: games keep their saves across launches, apart from the studio's. */
 export const PLAY_PARTITION = "persist:genex-play";
 /** The permissions a game in Play may have; everything else (camera, microphone, location…) is refused. */
@@ -32,6 +51,17 @@ const SERVER_ERROR = 500;
  * plugin instead. A user-origin rule, so not even the popover's inline `!important` styles win.
  */
 const HIDE_GUEST_POPOVER = "[data-genex-guest-popover]{display:none !important}";
+/** Where each system keeps its microphone privacy switch for apps. */
+const MIC_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
+  darwin: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+  win32: "ms-settings:privacy-microphone",
+};
+/** The mic menu's words. */
+const MESSAGE = {
+  micMenu: "Microphone",
+  systemDefault: "System default",
+  noNames: "Your microphones are listed once the mic is on",
+} as const;
 
 /** The studio window and what the viewer reaches through it. */
 export interface PlayViewDeps {
@@ -43,31 +73,88 @@ export interface PlayViewDeps {
   openExternal(url: string): void;
   /** Fixture launches: a local stand-in page instead of the network. */
   offline: { gamePage(slug: string): string } | null;
+  /** The game view's preload (`dist/preload/play-mic.cjs`). */
+  micPreload: string;
+  /** The games whose mic is on and the chosen microphone. */
+  micStore: PlayMicStore;
 }
 
 /**
  * Play's session, granting only what Play allows and only to a game's own page (never to a frame
- * inside it), and refusing every download.
+ * inside it), and refusing every download. The microphone is its view's gate's to grant: once, just
+ * after the viewer told the page to open it; a camera never.
  */
 function playSession(): Session {
   const play = session.fromPartition(PLAY_PARTITION);
   if (prepared.has(play)) return play;
   prepared.add(play);
-  play.setPermissionRequestHandler((_contents, permission, callback, details) =>
-    callback(GRANTED.has(permission) && details.isMainFrame),
-  );
-  play.setPermissionCheckHandler(
-    (_contents, permission, _origin, details) => GRANTED.has(permission) && details.isMainFrame,
-  );
+  play.setPermissionRequestHandler((contents, permission, callback, details) => {
+    if (permission !== "media") return callback(GRANTED.has(permission) && details.isMainFrame);
+    const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
+    callback(micGates.get(contents)?.take({ mediaTypes, isMainFrame: details.isMainFrame }, Date.now()) === true);
+  });
+  play.setPermissionCheckHandler((contents, permission, _origin, details) => {
+    if (permission !== "media") return GRANTED.has(permission) && details.isMainFrame;
+    const gate = contents ? micGates.get(contents) : undefined;
+    return gate?.names(details.mediaType, details.isMainFrame) === true;
+  });
   play.on("will-download", (event) => event.preventDefault());
   return play;
 }
 
-/** What the game's view reports to the viewer: its keys, and how its page loads. */
+/** What the game's view reports to the viewer: its keys, how its page loads, and its microphone. */
 interface ViewerEvents {
   key(input: FullScreenKey): void;
   loaded(): void;
   failed(): void;
+  mic(report: PlayMicReport): void;
+}
+
+/**
+ * Whether the person's microphone may be used. macOS asks the person the first time (the app's
+ * own prompt, once); Windows answers its privacy switch; elsewhere the browser's own rules apply.
+ */
+async function microphoneAccess(): Promise<boolean> {
+  const { platform } = process;
+  if (platform !== "darwin" && platform !== "win32") return true;
+  const status = systemPreferences.getMediaAccessStatus("microphone");
+  if (status === "granted") return true;
+  if (platform === "darwin") return status === "not-determined" && systemPreferences.askForMediaAccess("microphone");
+  return status !== "denied";
+}
+
+/** Open the system's microphone privacy settings, where the app is allowed the microphone. */
+function openMicSettings(): void {
+  const where = MIC_SETTINGS[process.platform];
+  if (where) void shell.openExternal(where).catch(() => {});
+}
+
+/**
+ * The menu of microphones at `at` under the mic switch: the system's first, then each by name, the
+ * chosen one checked (kept in the list while it is not plugged in).
+ */
+function showMicMenu(
+  win: BrowserWindow,
+  devices: readonly string[],
+  chosen: string | null,
+  at: PlayPoint | undefined,
+  choose: (device: string | null) => void,
+): void {
+  if (win.isDestroyed()) return;
+  const names = chosen && !devices.includes(chosen) ? [...devices, chosen] : devices;
+  const item = (label: string, device: string | null): MenuItemConstructorOptions => ({
+    label,
+    type: "radio",
+    checked: device === chosen,
+    click: () => choose(device),
+  });
+  const template: MenuItemConstructorOptions[] = [
+    { label: MESSAGE.micMenu, enabled: false },
+    item(MESSAGE.systemDefault, null),
+    ...names.map((name) => item(name, name)),
+  ];
+  if (devices.length === 0) template.push({ type: "separator" }, { label: MESSAGE.noNames, enabled: false });
+  Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }
 
 /**
@@ -92,9 +179,19 @@ function guardNavigation(contents: WebContents, offline: boolean, openExternal: 
   });
 }
 
+/** The page's word on its microphone, from its own top frame only, as main accepts it. */
+function hearMic(contents: WebContents, mine: () => boolean, hear: (report: PlayMicReport) => void): void {
+  contents.ipc.on(PlayMicChannel.Report, (event, raw: unknown) => {
+    if (!mine() || event.senderFrame?.parent !== null) return;
+    const report = readMicReport(raw);
+    if (report) hear(report);
+  });
+}
+
 /**
  * The game's view: a fresh one per game in Play's session, under the app's header, reporting how its
- * page loads, with the embed SDK's guest popover hidden on every page it shows.
+ * page loads and how its microphone is, with the embed SDK's guest popover hidden on every page it
+ * shows.
  */
 function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents) {
   const play = playSession();
@@ -120,6 +217,7 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents) 
         webSecurity: true,
         autoplayPolicy: "no-user-gesture-required",
         disableBlinkFeatures: GAME_DISABLED_BLINK_FEATURES.join(","),
+        preload: deps.micPreload,
       },
     });
     view.setBackgroundColor(GAME_BACKGROUND);
@@ -131,6 +229,8 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents) 
     current = view;
     const contents = view.webContents;
     const mine = () => current === view;
+    micGates.set(contents, micGate());
+    hearMic(contents, mine, events.mic);
     guardNavigation(contents, deps.offline !== null, deps.openExternal);
     contents.on("did-finish-load", () => mine() && events.loaded());
     contents.on("did-fail-load", (_event, code, _description, _url, isMainFrame) => {
@@ -155,6 +255,13 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents) 
     hide: (): void => current?.setVisible(false),
     focus: (): void => current?.webContents.focus(),
     close,
+    /** Tell the game's page to open the microphone or close it; an opening is what the gate lets through. */
+    mic: (command: PlayMicCommand): void => {
+      const contents = current?.webContents;
+      if (!contents || contents.isDestroyed()) return;
+      if (command.open) micGates.get(contents)?.allow(Date.now());
+      contents.send(PlayMicChannel.Command, command);
+    },
   };
 }
 
@@ -167,6 +274,7 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
     key: (input) => viewer?.key(input),
     loaded: () => viewer?.loaded(),
     failed: () => viewer?.failed(),
+    mic: (report) => viewer?.mic(report),
   };
   const game = gameView(win, deps, events);
   const made = playViewer({
@@ -190,6 +298,16 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
     clock: {
       setTimeout: (run, ms) => setTimeout(run, ms),
       clearTimeout: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    },
+    // A fixture launch never asks the system or opens its settings: its stand-in page holds no microphone.
+    mic: {
+      access: () => (offline ? Promise.resolve(true) : microphoneAccess()),
+      command: (command) => game.mic(command),
+      menu: (devices, chosen, at, choose) => showMicMenu(win, devices, chosen, at, choose),
+      openSettings: () => {
+        if (!offline) openMicSettings();
+      },
+      store: deps.micStore,
     },
   });
   viewer = made;

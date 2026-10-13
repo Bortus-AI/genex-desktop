@@ -1,4 +1,12 @@
-import type { PlayControl, PlayFeedPage, PlayFeedRequest, PlayGame, PlayShelf, PlayShelves } from "./play.ts";
+import type {
+  PlayControl,
+  PlayFeedPage,
+  PlayFeedRequest,
+  PlayGame,
+  PlayPoint,
+  PlayShelf,
+  PlayShelves,
+} from "./play.ts";
 import type { PerformanceMark } from "./performance.ts";
 import type { ComposerSendOptions } from "./composer.ts";
 import type {
@@ -387,7 +395,7 @@ export interface StudioApi {
   /** Play: close the viewer. */
   playClose(): Promise<void>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
-  playControl(control: PlayControl): Promise<void>;
+  playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */
   notify(note: { id?: string; title: string; subtitle?: string; body: string }): Promise<boolean>;
   /** The Dock badge: how much work waits on the person. Zero clears it. */

@@ -20,12 +20,12 @@ unfocused, macOS notifications and the Dock badge carry them.
 ## Play
 
 **Play** lists genex.games' shelves (**Games**, **Tools**, **Assets**) above **Recent** in the
-sidebar, each with tabs and search. A game plays full window, signed in or as a guest, under a
-header (held Esc) with Like, Share, Invite a friend, Remix and Exit.
+sidebar, with tabs and search. Games play full window, signed in or as guests, under a
+header (held Esc) with Like, Share, Invite a friend, Remix, Exit and, in voice chat, a mic
+switch.
 **Remix** (cards too) copies public source into a new game
-([what Play sends](../../PRIVACY.md#play)). A dismissible sidebar
-card, and a guest's game, offer Genex until connected. Offline, Play says so and reloads
-once back online.
+([what Play sends](../../PRIVACY.md#play)). A sidebar card and
+guests' games offer Genex until connected. Offline, Play says so and reloads when online.
 
 ## First launch
 

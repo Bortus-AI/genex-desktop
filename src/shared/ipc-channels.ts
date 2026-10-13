@@ -16,7 +16,7 @@
  */
 import type { StudioApi } from "./studio-api.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
-import type { PlayControl, PlayShelf } from "./play.ts";
+import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
 
@@ -339,7 +339,7 @@ export interface StudioInvokePayloads {
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string };
   "studio:play.close": undefined;
-  "studio:play.control": { control: PlayControl };
+  "studio:play.control": { control: PlayControl; at?: PlayPoint };
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };

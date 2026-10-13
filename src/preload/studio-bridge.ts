@@ -219,7 +219,7 @@ function studioCalls(bridge: BridgeCalls) {
     playOnline: (slugs) => invoke("studio:play.online", { slugs }),
     playOpen: (slug) => invoke("studio:play.open", { slug }),
     playClose: () => invoke("studio:play.close"),
-    playControl: (control) => invoke("studio:play.control", { control }),
+    playControl: (control, at) => invoke("studio:play.control", { control, at }),
     notify: (note) => invoke("studio:notify", note),
     setBadge: (count) => invoke("studio:badge", { count }),
   } satisfies Partial<StudioApi>;

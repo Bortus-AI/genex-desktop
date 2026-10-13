@@ -112,6 +112,7 @@ import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
 import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
 import type { PlayViewer } from "./play/viewer.ts";
+import { playMicStore } from "./play/mic-store.ts";
 import { wirePlayViewer } from "./play/viewer-view.ts";
 import { GENEX_PLUGIN_ID } from "../shared/genex.ts";
 import { PLAY_ORIGIN } from "../shared/play.ts";
@@ -852,6 +853,8 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
     },
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
+    micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
+    micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
   });
 }
 
