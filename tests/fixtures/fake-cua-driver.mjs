@@ -48,17 +48,20 @@ const ANSWERS = {
   get_window_state: () => ({ content: [{ type: "text", text: "- AXWindow Notes\n  - AXTextArea body" }] }),
   // The browser tools: a separate, clean browser with one search page.
   browser_prepare: () => json({ prepared: true, prepared_pid: 4242 }),
-  get_browser_state: (args) =>
-    args.snapshot_format
-      ? json({
-          page: { title: "Search", url: "https://example.com/" },
-          outline: '- searchbox "Search" [editable="plaintext"]\n- link "Godot" [focusable=true]',
-          refs: [
-            { ref: "p1:0", role: "searchbox", name: "Search", actions: ["type", "pointer"], visibility: "in_viewport" },
-            { ref: "p1:1", role: "link", name: "Godot", actions: ["click", "pointer"], visibility: "in_viewport" },
-          ],
-        })
-      : json({ target_id: "bt-1", tabs: [{ active: true, tab_id: "tab-1" }] }),
+  get_browser_state: (args) => {
+    if (!args.snapshot_format) return json({ target_id: "bt-1", tabs: [{ active: true, tab_id: "tab-1" }] });
+    const page = json({
+      page: { title: "Search", url: "https://example.com/" },
+      outline: '- searchbox "Search" [editable="plaintext"]\n- link "Godot" [focusable=true]',
+      refs: [
+        { ref: "p1:0", role: "searchbox", name: "Search", actions: ["type", "pointer"], visibility: "in_viewport" },
+        { ref: "p1:1", role: "link", name: "Godot", actions: ["click", "pointer"], visibility: "in_viewport" },
+      ],
+    });
+    // The tab's picture rides the answer when asked for, as cua-driver sends it.
+    if (args.include_screenshot) page.content.push({ type: "image", data: PIXEL, mimeType: "image/png" });
+    return page;
+  },
 };
 
 function send(message) {

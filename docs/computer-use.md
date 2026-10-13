@@ -143,6 +143,9 @@ window's tree). A refusal ends the plan and its reason is the answer.
     (`browser_prepare` `isolated_new`): no cookies, no logins, none of the person's tabs. It closes with
     the driver connection.
   - **Reading.** The page reads in document order, each control (link, button, field) with its ref inline.
+    The answer is that text; the tab's picture goes to the model only with `observe=screenshot` (a
+    picture each move overflowed a small local model's context), while the agent's screen and the
+    trace still get it.
   - **Consent.** Per app, as for any app: one card for the browser covers every site.
   - **Refused:**
     - addresses other than http and https;

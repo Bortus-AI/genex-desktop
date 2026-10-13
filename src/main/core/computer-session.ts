@@ -351,7 +351,9 @@ function pageText(page: TargetWebPage, file: string | null): string {
 
 /**
  * A web verb: the page opened, read, clicked or typed into by its structure, answered as text with
- * every element's ref, and — after a move, unless told otherwise — the tab's picture.
+ * every element's ref. After a move the tab's picture is taken for the agent's screen and the trace,
+ * unless told otherwise; the model is shown it only when the call asks (`observe=screenshot`): the
+ * text already says what is on the page, and a picture each move overflows a small model's context.
  */
 async function web(ctx: ActionContext): Promise<LiveToolResult> {
   const { request, target, helpers } = ctx;
@@ -372,7 +374,7 @@ async function web(ctx: ActionContext): Promise<LiveToolResult> {
   ctx.record.frame = file;
   if (page.shot) await helpers.frame(target, page.shot, ctx.caption, ctx.act);
   const text = `${ctx.surfaceLine}${pageText(page, file)}${ctx.noteLine}`;
-  if (!page.shot) return text;
+  if (!page.shot || request.observe !== ComputerObserve.Screenshot) return text;
   return { text, images: [{ mimeType: StillMimeType.Png, data: page.shot.toString("base64"), label: ctx.caption }] };
 }
 

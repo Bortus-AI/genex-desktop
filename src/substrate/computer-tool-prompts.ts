@@ -76,7 +76,7 @@ const POINTER_LINES =
 const WEB_LINES =
   "Web pages — prefer these to pixels for anything on the web: web_open text=<https:// address> opens it in a separate, clean Chrome (no logins, none of the person's tabs). " +
   "web_read [text=<what you look for>]: the page as text, every link, button and field with its [ref]. " +
-  "web_click ref=<ref>. web_type ref=<ref> text=<text> [submit=true presses Enter]. Refs change whenever the page does: read again after a click. ";
+  "web_click ref=<ref>. web_type ref=<ref> text=<text> [submit=true presses Enter]. Refs change whenever the page does: read again after a click. Web verbs answer in text; add observe=screenshot to see the tab too. ";
 
 /** The batch sentence: several moves in one call. */
 const BATCH_LINE =

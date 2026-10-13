@@ -296,6 +296,7 @@ it("end to end: a chat opens a web page, reads it and types into it by ref, thro
     await core.games.scaffold("desk-web");
     const threadId = await core.createGameThread("desk-web");
     const said: string[] = [];
+    const pictures: number[] = [];
     core.engines.register({
       id: "fixture-delegate",
       label: "Fixture",
@@ -303,8 +304,12 @@ it("end to end: a chat opens a web page, reads it and types into it by ref, thro
       status: async () => ({ code: "ready", detail: "Fixture" }),
       models: async () => [],
       delegate: async (request: DelegateRequest) => {
+        const seen = (result: LiveToolResult) => (typeof result === "string" ? 0 : (result.images?.length ?? 0));
         said.push(text(await request.onLiveTool!("desktop", { action: "web_open", text: "javascript:alert(1)" })));
-        said.push(text(await request.onLiveTool!("desktop", { action: "web_open", text: "https://example.com/" })));
+        const opened = await request.onLiveTool!("desktop", { action: "web_open", text: "https://example.com/" });
+        said.push(text(opened));
+        pictures.push(seen(opened));
+        pictures.push(seen(await request.onLiveTool!("desktop", { action: "web_read", observe: "screenshot" })));
         said.push(
           text(await request.onLiveTool!("desktop", { action: "web_type", ref: "p1:0", text: "Godot", submit: true })),
         );
@@ -316,6 +321,9 @@ it("end to end: a chat opens a web page, reads it and types into it by ref, thro
     assert.match(said[0]!, /web_open did not happen: only http/);
     assert.match(said[1]!, /Search — https:\/\/example\.com\//);
     assert.match(said[1]!, /\[p1:0\] searchbox "Search"/, "the page comes back with its controls' refs");
+    // The page's text is what a web verb answers with; its picture costs a small model's context, so
+    // it rides the answer only when the call asks for it.
+    assert.deepEqual(pictures, [0, 1]);
     const calls = (await readFile(log, "utf8"))
       .trim()
       .split("\n")
