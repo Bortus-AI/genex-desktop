@@ -21,7 +21,11 @@ describe("a published page's head", () => {
     const table: Array<[string, string, string]> = [
       ["template page", "<!doctype html>\n<meta charset=utf-8>", "<!doctype html><head></head>\n<meta charset=utf-8>"],
       ["upper-case doctype", "<!DOCTYPE html><title>x</title>", "<!DOCTYPE html><head></head><title>x</title>"],
-      ["byte-order mark", "\uFEFF<!doctype html><title>x</title>", "\uFEFF<!doctype html><head></head><title>x</title>"],
+      [
+        "byte-order mark",
+        "\uFEFF<!doctype html><title>x</title>",
+        "\uFEFF<!doctype html><head></head><title>x</title>",
+      ],
       [
         "html tag",
         '<!doctype html><html lang="en"><title>x</title>',
