@@ -169,6 +169,11 @@ export interface GameName {
   title: string;
   /** The message named no game (a greeting, a test) or the model gave no name: the title waits for an idea. */
   provisional?: boolean;
+  /**
+   * The engine the person picked is out of usage until a reset (a weekly or monthly cap), in its
+   * own words: its first turn cannot run, so no game is made from this message.
+   */
+  limited?: string;
 }
 
 export interface GameLocation {

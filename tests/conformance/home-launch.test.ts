@@ -204,6 +204,23 @@ describe("launching a game from home", () => {
     assert.deepEqual(fake.callsOf("createGame"), [["Untitled game", { provisional: true }]]);
   });
 
+  it("a picked model that is out of usage makes no game: home keeps the words and says why", async () => {
+    const weekly = "You've hit your weekly limit · resets 6pm";
+    const { app, fake } = launched({
+      nameGame: async () => ({ title: "A cozy fishing game", provisional: true, limited: weekly }),
+    });
+    await tick();
+    await app.launchGame({ text: REQUEST, modelKey: "claude-code::opus", effort: "high" });
+    assert.deepEqual(fake.callsOf("createGame"), [], "no game waits empty for a turn that cannot run");
+    assert.equal(roomOf(app.threads.getState()), Room.Home);
+    assert.equal(app.launch.getState().launch, null);
+    assert.equal(app.launch.getState().returned?.text, REQUEST, "the words go back to home");
+    const [toast] = app.toasts.getState().items;
+    assert.equal(toast?.tone, "err");
+    assert.match(toast?.text ?? "", /weekly limit/);
+    assert.deepEqual(fake.callsOf("send"), []);
+  });
+
   it("a refused game leaves home as it was, says why, and gives the words back", async () => {
     const { app, fake } = launched({
       createGame: async () => {
