@@ -121,7 +121,7 @@ export function GenexCoverCard({ entry, project }: { entry: GenexCoverEntry; pro
           type="button"
           title={WORDS.coverCardAlt}
           onClick={() => void openShot(game, src)}
-          className="asset-tile relative block aspect-video w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] bg-inset"
+          className="asset-tile relative block h-52 w-full min-w-0 cursor-pointer overflow-hidden rounded-[10px] bg-inset"
         >
           <img
             src={src}
@@ -132,7 +132,7 @@ export function GenexCoverCard({ entry, project }: { entry: GenexCoverEntry; pro
           />
         </button>
       ) : (
-        <span aria-hidden className="block aspect-video w-full rounded-[10px] bg-inset" />
+        <span aria-hidden className="block h-52 w-full rounded-[10px] bg-inset" />
       )}
       <div className="flex min-h-8 min-w-0 items-center gap-3 ps-2">
         <p className="m-0 min-w-0 flex-1 truncate text-chat text-ink">{WORDS.coverCard}</p>

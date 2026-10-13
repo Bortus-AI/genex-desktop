@@ -209,6 +209,7 @@ const ConversationContent = memo(function ConversationContent({
             items={view.visibleEntries}
             scroller={follow.scroller}
             follow={follow.atBottom}
+            hold={follow.holding}
             entrance={(entry, appended) => rowEntrance(entry, appended, view)}
             still={loading}
             renderItem={renderItem}

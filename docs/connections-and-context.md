@@ -334,7 +334,7 @@ Resetting policy also refreshes the displayed threshold to its effective inherit
 
 ### Compact now
 
-Compact now is the context panel's button, or `/compact` typed as the whole message: "/" opens the
+Compact now is the context panel's Compact button (on the reading's line), or `/compact` typed as the whole message: "/" opens the
 composer's command list (`ui/ComposerCommandMenu.tsx`), which runs it instead of sending the text,
 and lists it as waiting while a turn or a build runs (`loop/session-compact.ts`).
 

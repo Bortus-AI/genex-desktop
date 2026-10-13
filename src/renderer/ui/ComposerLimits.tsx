@@ -1,6 +1,6 @@
 import { type JSX, useEffect, useRef, useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover.tsx";
-import { ComposerTip, PickerCaption } from "./PickerPanel.tsx";
+import { ComposerTip } from "./PickerPanel.tsx";
 import { Icon } from "./icons.tsx";
 import { contextLabel, type ModelChoice, type RoleKey } from "./ModelMenu.tsx";
 import { contextReading, limitLevel, PLAN_PROVIDERS, planWords, resetWords } from "./usage-words.ts";
@@ -99,7 +99,11 @@ function PlanLimits({
         ) : (
           <span className="truncate">{title}</span>
         )}
-        {showRoles && <span className="usage-plan-roles">{rolesWords(roles, allRoles)}</span>}
+        {showRoles && (
+          <span className="usage-plan-roles" data-in-use={roles.length > 0 || undefined}>
+            {rolesWords(roles, allRoles)}
+          </span>
+        )}
       </div>
       {usage?.windows.map((window) => (
         <LimitWindow key={window.id} window={window} />
@@ -210,6 +214,8 @@ export function ComposerLimits({
     contexts,
     modelWindow: selected?.contextWindow,
   });
+  // The line names how full the context is only once it was measured; the meter's text says when not.
+  const reading = percent == null ? COMPACT_WORDS.automatic : `${summary} · ${COMPACT_WORDS.automatic}`;
   const compact = selectedCompact(models, modelKey, { compacting: Boolean(compacting), busy: Boolean(compactBusy) });
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -240,7 +246,7 @@ export function ComposerLimits({
         side="top"
         align="end"
         sideOffset={8}
-        className="picker-panel w-[340px] max-w-(--available-width) max-h-(--available-height) overflow-y-auto p-1.5"
+        className="picker-panel w-[360px] max-w-(--available-width) max-h-(--available-height) overflow-y-auto p-1.5"
         aria-label="Context and usage"
       >
         <section className="px-2.5 pt-1.5 pb-2">
@@ -264,16 +270,24 @@ export function ComposerLimits({
           >
             <i style={{ width: `${percent ?? 0}%` }} data-full={(percent ?? 0) >= CONTEXT_FULL || undefined} />
           </div>
-          <p className="mt-2 text-[12px] leading-4 text-ink-3">{summary} · Compacts automatically</p>
-        </section>
-        {compact.shown && onCompact && (
-          <div className="flex items-center gap-2 pr-1">
-            <PickerCaption>{COMPACT_WORDS.caption}</PickerCaption>
-            <button type="button" className="picker-action ml-auto" disabled={compact.disabled} onClick={onCompact}>
-              {compacting ? COMPACT_WORDS.running : COMPACT_WORDS.action}
-            </button>
+          <div className="mt-2 flex min-h-6 items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-[12px] leading-4 text-ink-3" title={reading}>
+              {reading}
+            </p>
+            {compact.shown && onCompact && (
+              <button
+                type="button"
+                className="picker-action usage-compact"
+                title={COMPACT_WORDS.caption}
+                disabled={compact.disabled}
+                onClick={onCompact}
+              >
+                <Icon name="compact" size={14} />
+                {compacting ? COMPACT_WORDS.running : COMPACT_WORDS.action}
+              </button>
+            )}
           </div>
-        )}
+        </section>
         <PlanUsage reports={reports} failed={failed} usedBy={usedBy} />
         <GenexCredits project={project} open={open} />
       </PopoverContent>
