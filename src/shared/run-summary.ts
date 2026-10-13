@@ -1,5 +1,6 @@
 /** Reporting projection only. No decisions here may control execution or acceptance. */
 import { compareIds } from "./compare-ids.ts";
+import { LoopProfile } from "./project-facts.ts";
 import { CustomEvent } from "./custom-events.ts";
 import { EventKind, type EventEnvelope } from "./event-log.ts";
 import {
@@ -84,6 +85,8 @@ export interface RunSummary {
   execution: string;
   reason: string | null;
   landed: boolean | null;
+  /** A Loop led in its project's own folder (`open`): what it kept is in the project, with no build to play in Live. */
+  profile?: LoopProfile;
   deliveredHead: string | null;
   deliveredSourceHead: string | null;
   head: string | null;
@@ -475,6 +478,8 @@ const readRunFinished: RecordReader = (run, { payload }) => {
   }
   result.reason = failureMessage(record(payload.failure).message) ?? string(payload.stoppedBecause);
   result.landed = typeof payload.landed === "boolean" ? payload.landed : null;
+  if (payload.profile === LoopProfile.Open) result.profile = LoopProfile.Open;
+  else delete result.profile;
   result.head = string(payload.integrationHead) ?? result.head;
   if (result.landed === true) {
     result.deliveredSourceHead = result.head;
@@ -656,6 +661,20 @@ export interface OutcomeView {
   delivered: "delivered" | "superseded" | "available" | "none";
   /** The checks recorded on the current build: one failed, or they are incomplete. */
   verification: "attention" | "incomplete";
+  /** What was delivered was kept in the project's own folder by a Loop led there: nothing to play in Live. */
+  inPlace?: true;
+}
+
+/** The outcome states of a run that ended: it finished, was cancelled or failed. */
+const ENDED_STATES: ReadonlySet<OutcomeView["state"]> = new Set([
+  "finished",
+  ExecutionStatus.Cancelled,
+  ExecutionStatus.Failed,
+]);
+
+/** Whether a run has ended; a running, paused or unknown run has not. */
+export function outcomeEnded(outcome: OutcomeView): boolean {
+  return ENDED_STATES.has(outcome.state);
 }
 
 /** Is this execution one the outcome shows as it is (anything else closed as finished)? */
@@ -674,6 +693,7 @@ export function summaryOutcome(s: RunSummary): OutcomeView {
   if (state === UNKNOWN_EXECUTION) return { state, delivered: "none", verification };
   if (state !== "finished") return { state, delivered: integrated ? "available" : "none", verification };
   if (s.landed !== true) return { state, delivered: "none", verification };
+  if (s.profile === LoopProfile.Open) return { state, delivered: "delivered", verification, inPlace: true };
   return { state, delivered: s.deliveredSourceHead !== s.head ? "superseded" : "delivered", verification };
 }
 

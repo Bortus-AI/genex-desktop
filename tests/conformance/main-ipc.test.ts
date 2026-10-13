@@ -13,6 +13,8 @@ import { registerLoginIpc, type LoginIpcDeps } from "../../src/main/ipc/login.ts
 import { badgeText, registerNotificationsIpc } from "../../src/main/ipc/notifications.ts";
 import { registerModelsIpc, type ModelsIpcDeps } from "../../src/main/ipc/models.ts";
 import { registerUpdateIpc } from "../../src/main/ipc/update.ts";
+import { registerGameHistoryIpc } from "../../src/main/ipc/game-history.ts";
+import { registerJobsIpc } from "../../src/main/ipc/jobs.ts";
 import { createLoginControllers, type SubscriptionEngine } from "../../src/main/login-controllers.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
@@ -650,6 +652,75 @@ it("model refresh validates provider identities before invoking discovery", asyn
   }
   assert.deepEqual(await invoke("studio:models.refresh", { provider: "codex" }), { ok: true, value: true });
   assert.equal(calls, 1);
+});
+
+it("a game's history is read and cleared only for a game named as one", async () => {
+  const calls: string[] = [];
+  const space = { totalBytes: 2, clearableBytes: 1, recentBytes: 0, rewindTracks: 1, finishedRunTracks: 0 };
+  const core = {
+    gameHistory: async (project: string) => {
+      calls.push(`space ${project}`);
+      return space;
+    },
+    clearGameHistory: async (project: string) => {
+      calls.push(`clear ${project}`);
+      return { removedTracks: 1, freedBytes: 1 };
+    },
+  };
+  const { handle, invoke } = registrar();
+  registerGameHistoryIpc(handle, { core });
+  for (const payload of [undefined, null, {}, { project: 1 }, { project: "../x" }, { project: "" }, { project: "A b" }])
+    for (const channel of ["studio:game.history", "studio:game.history.clear"])
+      assert.equal((await invoke(channel, payload)).ok, false, `${channel} ${JSON.stringify(payload)}`);
+  assert.deepEqual(calls, [], "nothing was asked of the core");
+  assert.deepEqual(await invoke("studio:game.history", { project: "pond" }), { ok: true, value: space });
+  assert.deepEqual(await invoke("studio:game.history.clear", { project: "pond" }), {
+    ok: true,
+    value: { removedTracks: 1, freedBytes: 1 },
+  });
+  assert.deepEqual(calls, ["space pond", "clear pond"]);
+});
+
+/** The jobs registrar over a core that records each Stop and an `openExternal` that records each URL. */
+function jobsRig() {
+  const stops: string[] = [];
+  const opened: string[] = [];
+  const core = {
+    stopJob: async (project: string, jobId: string) => {
+      stops.push(`${project} ${jobId}`);
+      return null;
+    },
+  };
+  const { handle, invoke } = registrar();
+  registerJobsIpc(handle, {
+    core,
+    openExternal: async (url: string) => {
+      opened.push(url);
+    },
+  });
+  return { stops, opened, invoke };
+}
+
+it("opening Privacy settings opens only the two panes it knows", async () => {
+  const { opened, invoke } = jobsRig();
+  for (const payload of [undefined, null, {}, { pane: "x" }, { pane: "" }, { pane: "screen?evil" }, { pane: {} }])
+    assert.equal((await invoke("studio:app-look.open-settings", payload)).ok, false, JSON.stringify(payload));
+  assert.deepEqual(opened, [], "nothing was opened");
+  assert.deepEqual(await invoke("studio:app-look.open-settings", { pane: "screen" }), { ok: true, value: true });
+  assert.deepEqual(await invoke("studio:app-look.open-settings", { pane: "accessibility" }), { ok: true, value: true });
+  assert.deepEqual(opened, [
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  ]);
+});
+
+it("a job's Stop reaches the core only with a game and a job named as text", async () => {
+  const { stops, invoke } = jobsRig();
+  for (const payload of [undefined, null, {}, { project: "pond" }, { jobId: "j" }, { project: 1, jobId: "j" }])
+    assert.equal((await invoke("studio:jobs.stop", payload)).ok, false, JSON.stringify(payload));
+  assert.deepEqual(stops, [], "nothing was asked of the core");
+  assert.deepEqual(await invoke("studio:jobs.stop", { project: "pond", jobId: "j" }), { ok: true, value: null });
+  assert.deepEqual(stops, ["pond j"]);
 });
 
 it("model refresh and recheck reach OpenCode and OpenRouter, which have no subscription sign-in", async () => {

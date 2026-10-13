@@ -170,6 +170,13 @@ const glyphs = {
     </g>
   ),
   stop: <rect className="a-pulse" x="6.5" y="6.5" width="11" height="11" rx="2.5" />,
+  // Paused: two bars, the stop's size and corners.
+  pause: (
+    <g className="a-pulse">
+      <rect x="7" y="6.5" width="3.5" height="11" rx="1.2" />
+      <rect x="13.5" y="6.5" width="3.5" height="11" rx="1.2" />
+    </g>
+  ),
   // Full screen: the four corners pushed out to the edges.
   expand: (
     <path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" />
@@ -287,6 +294,13 @@ const glyphs = {
       <path className="a-l1" pathLength={1} d="M8.5 8.5h7" />
       <path className="a-l2" pathLength={1} d="M8.5 12h7" />
       <path className="a-l3" pathLength={1} d="M8.5 15.5h4" />
+    </>
+  ),
+  // A four-point sparkle and a small one: something a model makes (home's Make your own background).
+  sparkle: (
+    <>
+      <path d="M11 3.5c.7 4.4 2.3 6 6.75 6.75-4.45.75-6.05 2.35-6.75 6.75-.7-4.4-2.3-6-6.75-6.75C8.7 9.5 10.3 7.9 11 3.5z" />
+      <path d="M18.5 15.5v4.5M16.25 17.75h4.5" />
     </>
   ),
   // A lightbulb: Add's Plan mode, a plan before anything is built (its row and the bulb that shows it).
@@ -421,6 +435,8 @@ const glyphs = {
     </>
   ),
   circle: <circle className="a-pulse" cx="12" cy="12" r="7" />,
+  // Compact: two corners drawn in toward the middle, the context folding smaller.
+  compact: <path d="M4.5 14h5.5v5.5M19.5 10H14V4.5M14 10l6-6M4 20l6-6" />,
   // A model chip: the die and its pins, for models that run on this Mac.
   chip: (
     <>

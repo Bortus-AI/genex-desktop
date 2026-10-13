@@ -1,6 +1,7 @@
 /** The build turn — interrupted by a steer or wound down by the clock, retried after a provider outage — and a turn that was stopped on purpose. */
 import { roleEffort, RoleKey } from "../../model-roles.ts";
 import { buildTurn } from "../../build-turn.ts";
+import { type RoomClock, withWorkerRoom } from "../../workers/room.ts";
 import { isResumeFailure } from "../../chat-session.ts";
 import { EngineFailure, isTransientProviderError, outageDelays, StopReason } from "../../outage.ts";
 import { isCommit } from "../../shell.ts";
@@ -13,6 +14,7 @@ import { STUDIO_CONTRACT, type FacetLoop, type FacetRound } from "../state.ts";
 import { RoundFlow, stoppedByUser } from "../flow.ts";
 import { steerPrompt, WIND_DOWN_ASK } from "../prompt.ts";
 import { OutagePhase, roundFields } from "../record.ts";
+import { steerThatArrived } from "../follow-up.ts";
 import { facetPromptFor } from "./brief.ts";
 import { blockClock, minutesToBlockEnd, nextBlockStretch, withinBlock } from "../build-block.ts";
 import { blockBench, blockContinueAsk } from "../build-block-prompts.ts";
@@ -115,19 +117,42 @@ async function delegateTurn(
   }: { text: string; resume: string | null | undefined; timeoutMs: number; images: AnyRecord[] | null },
 ) {
   const { ctx, deadline, worktree } = loop;
-  return buildTurn(ctx, {
-    ...round.turnOf(text),
-    delegated: true,
-    cwd: worktree,
-    resume,
-    timeoutMs: Math.min(timeoutMs ?? Infinity, deadline - Date.now()),
-    delegation: {
-      ...(round.extraReads.length ? { extraReads: round.extraReads } : {}),
-      // The modeller (AG-930): a Blender grant for this worktree when the run has Blender.
-      ...(worktree ? { selfCapture: selfCapture(loop, round, worktree), ownership: ownership(loop) } : {}),
-      ...(images?.length ? { images } : {}),
-    },
-  });
+  // A builder the chat's Settings ceiling has no room for yet waits for room (`withWorkerRoom`).
+  return withWorkerRoom(
+    () =>
+      buildTurn(ctx, {
+        ...round.turnOf(text),
+        delegated: true,
+        cwd: worktree,
+        resume,
+        timeoutMs: Math.min(timeoutMs ?? Infinity, deadline - Date.now()),
+        delegation: {
+          ...(round.extraReads.length ? { extraReads: round.extraReads } : {}),
+          // The modeller (AG-930): a Blender grant for this worktree when the run has Blender.
+          ...(worktree ? { selfCapture: selfCapture(loop, round, worktree), ownership: ownership(loop) } : {}),
+          ...(images?.length ? { images } : {}),
+          // A director's builder is a worker of its run (`worker: {`): the host seats it in the mode of
+          // the chat the run was started in. A classic Autopilot's builders carry none and stay unattended.
+          ...(loop.options?.worker ? { worker: loop.options.worker } : {}),
+        },
+      }),
+    deadline,
+    roomClock(loop),
+  );
+}
+
+/**
+ * The facet's wait for room: the loop's own sleep, ended by a Stop of the run or by the loop's
+ * finish check (the director stopping this worker), so a stopped builder never takes its turn.
+ */
+function roomClock(loop: FacetLoop): RoomClock {
+  const { ctx } = loop;
+  return {
+    now: () => Date.now(),
+    wait: (ms) => loop.sleepFor(ms),
+    stopped: async () =>
+      Boolean(ctx.cancelled) || Boolean(await loop.finishRequested(loop.iterationsThisRound).catch(() => false)),
+  };
 }
 
 /** What the builder's own capture tool photographs: this worktree, in the facet's setup, through the facet's own cameras. */
@@ -276,28 +301,6 @@ async function delegateResuming(
     const fresh = facetPromptFor(loop, round, { resumed: false });
     return round.delegate(fresh, null, turnBudget, round.promptImages);
   }
-}
-
-/**
- * Steering that could not wait: somebody interrupted this turn to hand the builder an
- * instruction. Nobody has asked it to stop, so this is not the end of the round — the steer goes
- * in front of everything and the same session carries on. Null when this was no steer.
- */
-async function steerThatArrived(loop: FacetLoop, round: FacetRound, delegation: AnyRecord): Promise<unknown[] | null> {
-  const { appendRun, ctx, finishRequested, steering } = loop;
-  if (delegation.stopReason !== StopReason.Stopped) return null;
-  if (await finishRequested(loop.iterationsThisRound).catch(() => false)) return null;
-  const arrived = (await steering()).filter(Boolean);
-  // The stop may have landed while that was in flight: a user's stop aborts the turn
-  // the same way a steer does, and it must never be answered with another one.
-  if (!arrived.length || ctx.cancelled) return null;
-  round.userSteering.push(...arrived);
-  await appendRun(RunEvent.FacetSteered, {
-    ...roundFields(loop, round.iteration),
-    texts: arrived.map((t: unknown) => String(t).slice(0, CLIP_REASON)),
-    delivered: "mid-round",
-  });
-  return arrived;
 }
 
 /** The clock cut the turn, and there is still time for the builder to end it tidily before the verdict needs the rest. */

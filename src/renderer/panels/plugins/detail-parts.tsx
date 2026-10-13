@@ -7,9 +7,9 @@ import { Button } from "../../ui/Button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/dropdown-menu.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { IconButton } from "../../ui/kit.tsx";
-import { PLUGINS_WORDS, SKILLS_WORDS } from "../../words.ts";
+import { PLUGINS_WORDS, SKILLS_WORDS, consentToolWords } from "../../words.ts";
 import { PluginPanelHost } from "../PluginPanelHost.tsx";
-import { capabilityLine, sourceWords } from "./labels.ts";
+import { capabilityLine, foldersLine, localAccessNote, sourceWords } from "./labels.ts";
 
 const PAGE = PLUGINS_WORDS.page;
 import type { OpenPanel, PluginsPage } from "./page.ts";
@@ -179,8 +179,26 @@ export function PluginSkills({
   );
 }
 
-/** What the plugin is: who makes it, which version from where, what it can do, and what the scan saw. */
-export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
+/** A local plugin's tools the person always allowed, and the button that makes them ask again. */
+function AllowedTools({ detail, page }: { detail: PluginInfo; page: PluginsPage | undefined }): JSX.Element | null {
+  const tools = detail.allowedTools ?? [];
+  if (!page || !tools.length) return null;
+  return (
+    <span className="extension-description" data-always-allowed="">
+      {PAGE.alwaysAllowed(tools.map((tool) => consentToolWords(tool)).join(", "))}{" "}
+      <Button
+        variant="ghost"
+        disabled={page.busy}
+        onClick={() => void page.act(() => window.studio.pluginForgetAllowed(detail.manifest.id))}
+      >
+        {PAGE.askEveryTime}
+      </Button>
+    </span>
+  );
+}
+
+/** What the plugin is: who makes it, which version from where, what it can do, where outside your games it writes, and what the scan saw. */
+export function Information({ detail, page }: { detail: PluginInfo; page?: PluginsPage }): JSX.Element {
   const { manifest, scan } = detail;
   const bundled = detail.source === PluginSourceKind.Bundled;
   return (
@@ -192,6 +210,12 @@ export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
         <dd>{bundled ? PAGE.bundled(manifest.version) : PAGE.from(manifest.version, sourceWords(detail))}</dd>
         <dt>{PAGE.can}</dt>
         <dd>{capabilityLine(manifest)}</dd>
+        {manifest.folders?.length ? (
+          <>
+            <dt>{PAGE.folders}</dt>
+            <dd>{foldersLine(manifest)}</dd>
+          </>
+        ) : null}
         {scan && !bundled && (
           <>
             <dt>{PAGE.scan}</dt>
@@ -202,7 +226,8 @@ export function Information({ detail }: { detail: PluginInfo }): JSX.Element {
           </>
         )}
       </dl>
-      <p className="mt-6 text-xs text-ink-3">{PAGE.trusted}</p>
+      <p className="mt-6 text-xs text-ink-3">{localAccessNote(detail) ?? PAGE.trusted}</p>
+      <AllowedTools detail={detail} page={page} />
     </Section>
   );
 }

@@ -205,11 +205,14 @@ function AnimationRow({
   );
 }
 
-/** One tile alone keeps a modest width; several share a two-column grid. */
+/**
+ * One tile alone keeps a modest width; several share a two-column grid. Tiles keep a fixed height
+ * (the picture crops to fit) so narrowing the chat does not change how tall they stand.
+ */
 function TileGroup({ tiles, render }: { tiles: ProjectAsset[]; render: (asset: ProjectAsset) => JSX.Element }) {
   const [only] = tiles;
-  if (tiles.length === 1 && only) return <div className="max-w-80">{render(only)}</div>;
-  if (tiles.length > 1) return <div className="grid grid-cols-2 gap-2">{tiles.map(render)}</div>;
+  if (tiles.length === 1 && only) return <div className="h-50 max-w-80">{render(only)}</div>;
+  if (tiles.length > 1) return <div className="grid auto-rows-[8rem] grid-cols-2 gap-2">{tiles.map(render)}</div>;
   return null;
 }
 
@@ -267,7 +270,7 @@ export const AssetResults = memo(function AssetResults({
   const page = ordered.slice(0, limit);
   const rows = page.filter((asset) => !isVisual(asset));
   const tile = (asset: ProjectAsset) => (
-    <div key={asset.file} className="aspect-[16/10] min-w-0">
+    <div key={asset.file} className="h-full min-w-0">
       <AssetTile
         project={project}
         asset={asset}

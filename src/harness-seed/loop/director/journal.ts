@@ -23,6 +23,7 @@ import { durationCommission, goalCommission } from "./commission.ts";
 import { doNotRegressOf } from "../do-not-regress.ts";
 import { WorkerState } from "../outcomes.ts";
 import { FacetStage, isFinishing } from "../facet/stage.ts";
+import { tallyOf } from "../finish-check.ts";
 import { runRef } from "../repo.ts";
 import { clip } from "../text.ts";
 import { restoreVision } from "../vision.ts";
@@ -85,6 +86,10 @@ export interface PriorWorker {
   accepted: number;
   /** Its last commit — its last accepted round's while it built. */
   lastCommit: string | null;
+  /** The unjudged work of a round the run stopped, committed beyond `lastCommit` (kept-work.ts). */
+  kept?: string | null;
+  /** That kept work is on the record as in the build. */
+  keptInBuild?: boolean;
   ref: string;
   /** It was finishing (`stage=finish`): a lead that starts it again starts it in that stage. */
   stage?: FacetStage;
@@ -178,6 +183,8 @@ function workerRecord(worker: Worker, runId: string): AnyRecord {
     accepted: rounds.filter((round) => round.won).length,
     lastRound: lastRoundOf(rounds),
     lastCommit: worker.lastCommit ?? worker.lastAccepted ?? null,
+    ...(worker.keptCommit ? { kept: worker.keptCommit } : {}),
+    ...(worker.keptInBuild ? { keptInBuild: true } : {}),
     ref: runRef(runId, "workers", worker.id),
     ...(worker.spec && isFinishing(worker.spec) ? { stage: FacetStage.Finish } : {}),
   };
@@ -239,6 +246,10 @@ export function recordLoopRun(loopRun: LoopRun, now = Date.now()): void {
     // A resumed or reopened run numbers its judge and playtest folders on from here (`restoreLoopRun`).
     judges: state.judges,
     plays: state.plays,
+    // Where the run's job ends were read to: a restart reads on from here (wake.ts `watchJobs`).
+    jobsCursor: state.jobsCursor ?? 0,
+    // Where the reviewer's no's stand, once the lead has claimed the goal: a resume goes on counting.
+    ...(state.finishTally ? { finishTally: state.finishTally } : {}),
     // The module contract and the last wave's head, only once there is one: a journal of a run
     // with neither reads exactly as it did.
     ...(state.contract ? { contract: state.contract } : {}),
@@ -422,6 +433,11 @@ function restoreLog(loopRun: LoopRun, saved: AnyRecord): void {
   loopRun.waitSeq = Math.min(countOf(saved.heardSeq), loopRun.logSeq);
 }
 
+/** What a journal's worker kept beyond its last accepted commit, and whether the build holds it. */
+function priorKept(record: AnyRecord | undefined): Pick<PriorWorker, "kept" | "keptInBuild"> {
+  return { kept: typeof record?.kept === "string" ? record.kept : null, keptInBuild: record?.keptInBuild === true };
+}
+
 /** The workers the journal named, as a resumed run knows them: from before the pause. */
 function priorWorkersOf(saved: unknown, runId: string): PriorWorker[] {
   return Object.entries((saved ?? {}) as Record<string, AnyRecord>).map(([key, record]) => {
@@ -438,6 +454,7 @@ function priorWorkersOf(saved: unknown, runId: string): PriorWorker[] {
       rounds: countOf(record?.rounds),
       accepted: countOf(record?.accepted),
       lastCommit: typeof record?.lastCommit === "string" ? record.lastCommit : null,
+      ...priorKept(record),
       ref: String(record?.ref ?? runRef(runId, "workers", id)),
       ...(record?.stage === FacetStage.Finish ? { stage: FacetStage.Finish } : {}),
     };
@@ -460,6 +477,11 @@ function carryForward(loopRun: LoopRun): void {
 /** A count of passes a journal kept, or none. */
 const passesSoFar = (value: unknown): number =>
   typeof value === "number" && Number.isInteger(value) && value > 0 ? value : 0;
+
+/** The reviewer's count of no's as the journal kept it, once the lead had claimed the goal (`tallyOf`). */
+function restoreTally(state: LoopRunState, saved: unknown): void {
+  if (saved !== undefined) state.finishTally = tallyOf(saved);
+}
 
 /**
  * A resumed run reads its journal back: the defects nobody owns, the plan window, the last
@@ -497,6 +519,8 @@ export function restoreLoopRun(loopRun: LoopRun, now = Date.now()): void {
   // Its judge_N and play_N folders go on from the earlier sessions', never over them.
   state.judges = passesSoFar(saved.judges);
   state.plays = passesSoFar(saved.plays);
+  state.jobsCursor = countOf(saved.jobsCursor);
+  restoreTally(state, saved.finishTally);
   loopRun.priorWorkers = priorWorkersOf(saved.workers, loopRun.run.runId);
   state.lastShip = restoredShip(saved.lastShip);
   if (saved.shipFinishRefused === true) state.shipFinishRefused = true;

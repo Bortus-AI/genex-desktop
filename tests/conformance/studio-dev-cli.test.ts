@@ -16,15 +16,21 @@ import { makeResources } from "../helpers/resources.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 test("fixtures lists the one exported fixture list without a profile or app", async () => {
-  // Flipped (plugin-updates): seventeen named fixtures.
-  assert.equal(FIXTURE_NAMES.length, 17);
+  // Flipped from 24: paused-build joined the list (from 23: plugin-updates, 22: open-projects, 21: stills-game).
+  assert.equal(FIXTURE_NAMES.length, 25);
   for (const added of [
     "first-launch",
     "notifications",
     "build-graph",
+    "lead-graph",
     "sandbox-setup",
     "update-ready",
+    "chat-workers",
+    "finish-check",
+    "stills-game",
+    "open-projects",
     "plugin-updates",
+    "paused-build",
   ])
     assert.ok((FIXTURE_NAMES as readonly string[]).includes(added), added);
   assert.deepEqual(await main(["fixtures"]), { fixtures: [...FIXTURE_NAMES] });
@@ -43,7 +49,7 @@ test("the plugin-updates fixture leaves every bundled plugin one version behind 
     fs.readdirSync(seeds).map((name) => fs.readFileSync(path.join(seeds, name, "plugin.json"), "utf8"));
   const shipped = shippedManifests();
   const versions = new Map(shipped.map((text) => [JSON.parse(text).id as string, JSON.parse(text).version as string]));
-  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex"]);
+  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex", "unreal"]);
   /** What the app's own registry says of the profile's plugins, as the core starts it. */
   const installed = async () => {
     const registry = new PluginRegistry(

@@ -113,6 +113,11 @@ export interface DelegateDirectorGrant {
    * lead in its game's folder.
    */
   chatSession?: boolean;
+  /**
+   * A Loop's lead that works in the game folder itself (an open Loop); honoured only for a run of
+   * this game started in this chat.
+   */
+  inPlace?: boolean;
 }
 
 /** A still that goes into the builder's prompt as an image block. */
@@ -166,11 +171,14 @@ export type StopReason = (typeof StopReason)[keyof typeof StopReason];
 
 /**
  * Why the host refused a delegation before any engine ran (the error's `code`). Wire values: the
- * harness's copy is `DelegationRefusal` in `loop/director/lead-session.ts`; never rename one.
+ * harness's copies are `DelegationRefusal` in `loop/director/lead-session.ts` (`FolderBusy`) and
+ * `WorkerRefusal` in `loop/workers/contract.ts` (`TooManyWorkers`); never rename one.
  */
 export const DelegationRefusal = {
   /** Another session is already working under the same lock (`delegation.ts` `#assertFolderFree`). */
   FolderBusy: "folder_busy",
+  /** The chat already runs as many workers as the person's Settings allow. */
+  TooManyWorkers: "too_many_workers",
 } as const;
 export type DelegationRefusal = (typeof DelegationRefusal)[keyof typeof DelegationRefusal];
 

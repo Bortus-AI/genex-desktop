@@ -3,11 +3,13 @@ import assert from "node:assert/strict";
 import {
   coverAsk,
   coverCardPublish,
+  isGenexPublish,
   offeredTitle,
   PublishGate,
   publishGate,
   publishSteps,
   publishView,
+  stripEntries,
   studioPublishButton,
 } from "../../src/renderer/panels/plugins/genex/genex-publish-view.ts";
 import {
@@ -22,6 +24,7 @@ import {
 } from "../../src/shared/genex.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import { CaptureSource, StillMimeType } from "../../src/shared/preview-contract.ts";
+import { CoreFact, type FactRef, FolderHolds } from "../../src/shared/project-facts.ts";
 
 const state = (over: Partial<GenexPublishState> = {}): GenexPublishState => ({
   version: 1,
@@ -104,12 +107,85 @@ const genex = (over: Partial<PluginInfo> = {}): PluginInfo => ({
   ...over,
 });
 
-test("every open game has Publish on its stage strip, whether Genex is on, off, removed or missing", () => {
-  assert.equal(studioPublishButton([genex()], "game"), false, "Genex's own button is the one shown");
-  assert.equal(studioPublishButton([genex({ enabled: false, state: "disabled" })], "game"), true);
-  assert.equal(studioPublishButton([genex({ enabled: false, removed: true, state: "disabled" })], "game"), true);
-  assert.equal(studioPublishButton([], "game"), true);
-  assert.equal(studioPublishButton([], null), false, "with no game open there is nothing to publish");
+test("every open web game has Publish on its stage strip, whether Genex is on, off, removed or missing", () => {
+  const web: FactRef[] = [{ id: CoreFact.WebGame, path: "." }];
+  assert.equal(studioPublishButton([genex()], "game", web), false, "Genex's own button is the one shown");
+  assert.equal(studioPublishButton([genex({ enabled: false, state: "disabled" })], "game", web), true);
+  assert.equal(studioPublishButton([genex({ enabled: false, removed: true, state: "disabled" })], "game", web), true);
+  assert.equal(studioPublishButton([], "game", web), true);
+  assert.equal(studioPublishButton([], null, web), false, "with no game open there is nothing to publish");
+});
+
+/** Another plugin's stage-strip button, which no engine takes away. */
+const other = (): PluginInfo => {
+  const base = genex();
+  return {
+    ...base,
+    manifest: {
+      ...base.manifest,
+      id: "demo",
+      panels: [{ id: "demo", title: "Demo", file: "demo.html", placement: "project" }],
+      toolbar: [{ id: "demo", label: "Demo", ariaLabel: "Demo panel", target: { kind: "panel", id: "demo" } }],
+    },
+  };
+};
+
+test("an Unreal game has no Publish on its strip: its folder holds an Unreal project, not a web build", () => {
+  const unreal: FactRef[] = [{ id: CoreFact.UnrealProject, path: "unreal" }];
+  const strip = (plugins: PluginInfo[], facts: FactRef[]) => ({
+    genex: stripEntries(plugins, "game", facts).some(isGenexPublish),
+    studio: studioPublishButton(plugins, "game", facts),
+    others: stripEntries(plugins, "game", facts)
+      .filter((entry) => !isGenexPublish(entry))
+      .map((entry) => entry.key),
+  });
+  const genexStates: Array<[string, PluginInfo[]]> = [
+    ["Genex on", [genex(), other()]],
+    ["Genex off", [genex({ enabled: false, state: "disabled" }), other()]],
+    ["Genex removed", [genex({ enabled: false, removed: true, state: "disabled" }), other()]],
+    ["Genex missing", [other()]],
+  ];
+  for (const [name, plugins] of genexStates)
+    assert.deepEqual(
+      strip(plugins, unreal),
+      { genex: false, studio: false, others: ["demo:demo"] },
+      `${name}: no Publish, every other button stays`,
+    );
+
+  assert.deepEqual(strip([genex(), other()], []), {
+    genex: true,
+    studio: false,
+    others: ["demo:demo"],
+  });
+  assert.deepEqual(strip([other()], [{ id: CoreFact.WebGame, path: "." }]), {
+    genex: false,
+    studio: true,
+    others: ["demo:demo"],
+  });
+});
+
+test("Publish sits on the strip only while the game is served as a web game at its root", () => {
+  const strip = (facts: FactRef[], holds?: FolderHolds) => ({
+    genex: stripEntries([genex(), other()], "game", facts, holds).some(isGenexPublish),
+    studio: studioPublishButton([other()], "game", facts, holds),
+  });
+  const rows: Array<[string, FactRef[], FolderHolds | undefined, boolean]> = [
+    ["a web game at the root", [{ id: CoreFact.WebGame, path: "." }], undefined, true],
+    ["no kind yet, served as a web game", [], undefined, true],
+    ["an empty folder, served as a web game", [], FolderHolds.Nothing, true],
+    ["a folder of notes, served as a web game", [], FolderHolds.Notes, true],
+    ["a folder of its own files of a kind no rule knows", [], FolderHolds.OwnFiles, false],
+    ["a folder that can't be read", [], FolderHolds.Unreadable, false],
+    ["a Godot project", [{ id: CoreFact.GodotProject, path: "." }], undefined, false],
+    ["a web game only below the root", [{ id: CoreFact.WebGame, path: "site" }], undefined, false],
+    ["a linked Unreal project", [{ id: CoreFact.UnrealProject, path: "unreal" }], undefined, false],
+  ];
+  for (const [name, facts, holds, shown] of rows)
+    assert.deepEqual(
+      strip(facts, holds),
+      { genex: shown, studio: shown },
+      `${name}: Publish ${shown ? "shown" : "hidden"}`,
+    );
 });
 
 test("the chat's Genex cover card offers Publish while Genex's own Publish is on the strip and nothing publishes", () => {

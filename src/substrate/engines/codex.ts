@@ -57,6 +57,7 @@ import {
   type CodexAuthStatus,
 } from "./codex-cli.ts";
 import { credentialHomes } from "../credential-homes.ts";
+import { neverTouchWhole, writableRoots } from "./never-touch.ts";
 import { normalizeCodexUsage, type ProviderUsage } from "../../shared/provider-usage.ts";
 import {
   type LockRecord,
@@ -270,6 +271,11 @@ const SPAWN_FAILURE_PATTERN = /\bspawn\b.*\b(ENOTDIR|ENOENT)\b|\b(ENOTDIR|ENOENT
 /** A server error or a dropped connection: the service is unavailable, not the build broken. */
 const UNAVAILABLE_PATTERN = /\b5\d\d\b|stream disconnected|connection (reset|closed)|timed? out/i;
 
+/** Codex's `web_search` setting, as the CLI spells it: a worker's search is live or off. */
+const CodexWebSearch = {
+  Live: "live",
+  Disabled: "disabled",
+} as const;
 /** The kind of one change in a `file_change` item that creates a file (the rest edit one). */
 const FILE_CHANGE_ADD = "add";
 
@@ -944,6 +950,9 @@ export class CodexEngine implements Engine {
       ...this.#protectedPaths,
       ...credentialHomes(login.source === LoginSource.Isolated ? [] : [login.home]),
       ...(request.denyReads ?? []),
+      // A worker's never-touch list: its box keeps it from writing there; its reads are the brief's.
+      // Only the roots no folder it works in sits inside: its own copy under Genex's data is its own.
+      ...(request.worker ? neverTouchWhole(request.worker.neverTouch) : []),
     ];
     // The rule is said whenever there is a seam to say, not only when a file happened to be
     // locked: a worktree whose unowned files were already read-only (or a game whose only
@@ -961,7 +970,12 @@ export class CodexEngine implements Engine {
       ownershipNote,
       planScratch
         ? planModeNote(ctx.cwd, planScratch)
-        : readOnlyNote(ctx.cwd, ctx.scratch, request.director ? path.resolve(request.director.root) : null),
+        : readOnlyNote(
+            // A reviewer's cwd is its own empty home: the build it tests is the folder it reads.
+            request.reviewer?.reads ?? ctx.cwd,
+            ctx.scratch,
+            request.director ? path.resolve(request.director.root) : null,
+          ),
       offLimitsNote(offLimits),
     ]
       .filter((part) => part?.trim())
@@ -980,7 +994,7 @@ export class CodexEngine implements Engine {
       ...(request.resume ? ["resume", request.resume] : []),
       ...CODEX_EXEC_FLAGS,
       ...(model ? ["-m", model] : []),
-      ...(chatMode(request) === PermissionMode.Bypass ? BYPASS_ARGS : sandboxArgs(runDir)),
+      ...sessionBox(request, runDir),
       ...effortArgs(request.effort),
       ...(await this.preferenceArgs(request.model, request.preferences)),
       ...imageArgs(imagePaths),
@@ -1183,8 +1197,9 @@ export class CodexEngine implements Engine {
     const argv = [
       ...invocation.argv.slice(0, -1),
       ...(await hostSkillArgs(this.#suppressedSkillsDir)),
-      ...(await this.#ownedFeatureArgs(installation, env)),
       ...(await codexProfileArgs(home)),
+      // The features every session turns off follow the auth overrides, right before the prompt.
+      ...(await this.#ownedFeatureArgs(installation, env)),
       invocation.argv.at(-1) ?? "-",
     ];
     if (this.#execFn) return this.#execFn({ ...invocation, argv, env });
@@ -1990,7 +2005,41 @@ function chatMode(request: DelegateRequest): PermissionMode | null {
  */
 function startsElsewhere(request: DelegateRequest): boolean {
   const readOnly = Boolean(request.readOnly) && !request.coordinator;
-  return readOnly || chatMode(request) === PermissionMode.Plan;
+  return readOnly || chatMode(request) === PermissionMode.Plan || request.worker?.mode === PermissionMode.Plan;
+}
+
+/** The session's box: the bypass flag only for the chat's own session in Bypass; a worker's own box; else one root. */
+function sessionBox(request: DelegateRequest, runDir: string): string[] {
+  if (request.worker) return [...workerBox(request, runDir), ...workerWebSearch(request)];
+  return chatMode(request) === PermissionMode.Bypass ? BYPASS_ARGS : sandboxArgs(runDir);
+}
+
+/**
+ * A worker's web search, as a Claude Code worker's (`researches`): live when its lead asked it to
+ * research or it writes, and off for a reader or a worker in Plan that was not asked to.
+ */
+function workerWebSearch(request: DelegateRequest): string[] {
+  const research = Boolean(request.worker?.research) || !startsElsewhere(request);
+  return ["-c", `web_search="${research ? CodexWebSearch.Live : CodexWebSearch.Disabled}"`];
+}
+
+/**
+ * A worker's box. Codex has no hook Genex sets and is not spawned through ProcessSandbox, and its
+ * bypass flag drops every fence, so a worker is always boxed, whatever the chat's mode: it never
+ * asks (`approval_policy=never`), writes only its write roots, and reaches the network only in a
+ * Bypass chat. Its box never stops reads, so the never-touch list holds for its writes (and is
+ * named in its brief). Plan and a reader start elsewhere and write only the studio's bridge.
+ */
+function workerBox(request: DelegateRequest, runDir: string): string[] {
+  const seat = request.worker;
+  if (!seat || startsElsewhere(request)) return sandboxArgs(runDir);
+  // Its box cannot deny inside a writable folder: none that is, holds or sits in a never-touch root.
+  const writes = writableRoots(
+    seat.writeRoots.map((dir) => path.resolve(dir)),
+    seat.neverTouch,
+  );
+  const roots = [...new Set([path.resolve(runDir), ...writes])];
+  return sandboxArgs(runDir, roots, seat.mode === PermissionMode.Bypass);
 }
 
 /**
@@ -2017,24 +2066,25 @@ const APP_SERVER_ISOLATION_ARGS = ["-c", "mcp_servers={}"];
  * `approval_policy=never` is what makes it non-interactive: there is nobody to ask, so a command
  * the sandbox refuses fails honestly instead of hanging on a prompt nobody will see.
  */
-function sandboxArgs(runDir: string): string[] {
+function sandboxArgs(runDir: string, roots: string[] = [runDir], network = false): string[] {
   return [
     "-c",
     'sandbox_mode="workspace-write"',
     "-c",
     'approval_policy="never"',
-    // Exactly one writable place. For a builder that is the workspace it was hired for; for a
+    // One writable place (a worker's write roots: `workerBox`). For a builder that is the workspace it was hired for; for a
     // session that may look but never touch (the playtester) it is a scratch folder holding
     // nothing but the studio's own bridge, which leaves the build under test read-only at the
     // OS boundary rather than by request. Read stays wide: stills the user named and the run's
     // own capture output have to be openable, and Codex grants disk reads either way.
     "-c",
-    `sandbox_workspace_write.writable_roots=${JSON.stringify([runDir])}`,
+    `sandbox_workspace_write.writable_roots=${JSON.stringify(roots)}`,
     // The game is built from vendored files; a contractor that wants the network has to say so
-    // to a human first. (A Claude session's shell is confined the same way; its web research
-    // goes through WebSearch/WebFetch, never the shell.)
+    // to a human first; a worker reaches it only in a chat the person set to Bypass. (A Claude
+    // session's shell is confined the same way; its web research goes through WebSearch/WebFetch,
+    // never the shell.)
     "-c",
-    "sandbox_workspace_write.network_access=false",
+    `sandbox_workspace_write.network_access=${network}`,
   ];
 }
 
@@ -2060,16 +2110,20 @@ const HOST_SKILLS_DIR = path.join(".agents", "skills");
 /** The file that makes a host-skills subfolder a skill. */
 const HOST_SKILL_FILE = "SKILL.md";
 /**
- * The Codex features every lane turns off: Codex's own computer use and browsers would drive the
- * person's real screen past the studio's consent, and the studio's `computer` tool is the only
- * hands an agent has (evals plan Appendix B; computer-use epic).
+ * Codex's screen and browser hands, off in every session: they would drive the person's real
+ * screen past the studio's consent, and the studio's `computer` tool is the only hands an agent
+ * has (evals plan Appendix B; computer-use epic). Codex turns them on by default.
  */
-export const HOST_SKILL_DISABLED_FEATURES = [
-  "computer_use",
-  "in_app_browser",
-  "browser_use",
-  "browser_use_external",
-] as const;
+export const CODEX_SCREEN_FEATURES = ["computer_use", "in_app_browser", "browser_use", "browser_use_external"] as const;
+/**
+ * Codex's own sub-agents, off in every session: Genex runs the workers, under the person's
+ * ceiling and the chat's mode, and Codex turns them on by default.
+ */
+export const CODEX_SUBAGENT_FEATURES = ["multi_agent", "multi_agent_v2"] as const;
+/** The Codex features every session runs without, once each: the studio owns them instead. */
+export const HOST_SKILL_DISABLED_FEATURES: readonly string[] = [
+  ...new Set([...CODEX_SCREEN_FEATURES, ...CODEX_SUBAGENT_FEATURES]),
+];
 
 /**
  * `-c skills.config=[…]` disabling each of these SKILL.md files by path. Each path is a TOML

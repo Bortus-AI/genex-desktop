@@ -1,4 +1,6 @@
-import { ReferenceKind } from "../../src/harness-seed/loop/run-events.ts";
+import { ReferenceKind, RunEvent } from "../../src/harness-seed/loop/run-events.ts";
+import { RoundFlow } from "../../src/harness-seed/loop/facet/flow.ts";
+import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { gitFile } from "../helpers/git.ts";
@@ -53,6 +55,7 @@ import {
   tasteVeto,
 } from "../../src/harness-seed/loop/judge.ts";
 import { EngineId } from "../../src/shared/providers.ts";
+import { GameEngine } from "../../src/shared/game-engine.ts";
 import { LEAD_WINDOWS, MAX_BUILDERS } from "../../src/shared/builders.ts";
 import { unionMergeMain, verifyWiringMerge } from "../../src/harness-seed/loop/merge.ts";
 import {
@@ -73,7 +76,7 @@ import {
   parseSpikeVerdict,
   replanCheck,
 } from "../../src/harness-seed/loop/replan.ts";
-import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
+import { isTransientProviderError, StopReason, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import {
   HARNESS_CHECKS,
@@ -109,7 +112,9 @@ import { setAsideStrays } from "../../src/harness-seed/loop/director/lead-sessio
 import { landIntegration } from "../../src/harness-seed/loop/director/integrate.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { chatWaitsFor, leadDoor, passCtx, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
-import { openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
+import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
+import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
+import { leadLineOf, openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
 import { setImmediate as nextTurn, setTimeout as setTimeoutPromise } from "node:timers/promises";
@@ -152,7 +157,7 @@ it("AUDIT-STOP-RACE: cancellation is visible before a delayed queue-pause write"
   }
 });
 
-import { timedWorkRemaining, wrapReserveMs } from "../../src/harness-seed/loop/director/budgets.ts";
+import { timedWorkRemaining } from "../../src/harness-seed/loop/director/budgets.ts";
 import { restoreLoopRun } from "../../src/harness-seed/loop/director/journal.ts";
 import { reopenedJournal } from "../../src/harness-seed/loop/director/reopen.ts";
 import { applySeed } from "../../src/substrate/seed-upgrade.ts";
@@ -182,7 +187,7 @@ import { CompletionPolicy } from "../../src/harness-seed/loop/completion-policy.
 import { turnBriefing } from "../../src/harness-seed/loop/turn-prompts.ts";
 import { LandingHow } from "../../src/harness-seed/loop/director/rules.ts";
 import { NoteKind } from "../../src/harness-seed/loop/director/wake-schedule.ts";
-import { HOUR_MS, MINUTE_MS } from "../../src/harness-seed/loop/time.ts";
+import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../../src/harness-seed/loop/time.ts";
 import { computePixelStats, labPalette } from "../../src/substrate/pixel-stats.ts";
 import { describeUnknownImage, sniffImage } from "../../src/substrate/image-sniff.ts";
 import {
@@ -3685,7 +3690,8 @@ describe("a run the loop died in, resumed (the full journal)", () => {
     // The resumed run's clock was set between the Resume and its lead's first turn, to the
     // working time the budget had left: never a fresh budget, and the pause did not count.
     const soft = Date.parse(after.clock.softDeadline);
-    const workingLeft = BUDGET_MS - wrapReserveMs(BUDGET_MS) - worked;
+    // Flipped: the hours are the working time, a grace after them (time-cap.ts), so no reserve comes off them.
+    const workingLeft = BUDGET_MS - worked;
     assert.ok(soft >= resumeAsked + workingLeft, `${iso(soft)} is before ${iso(resumeAsked + workingLeft)}`);
     assert.ok(soft <= resumedTurnAt + workingLeft, `${iso(soft)} is after ${iso(resumedTurnAt + workingLeft)}`);
     assert.match(stands, new RegExp(`wrap-up at ${utc(soft)}`), "the wrap-up when the working time it had left ends");
@@ -5107,6 +5113,21 @@ describe("live chat during a build, reviewed", () => {
     assert.deepEqual(chat.answered, ["does it look like this?"]);
   });
 
+  it("LC11. a picture the chat saved in the game's references reaches the lead, its file named in the words the lead reads", async () => {
+    const chat = liveChat();
+    chat.loopRun();
+    const saved = { ...picture, references: ["references/skydome-warning-1a2b3c4d.png"] };
+    await chat.say("i got this msg", saved);
+    await chat.say("does it look like this?", picture);
+    assert.deepEqual(standing(chat), {
+      "i got this msg": `delivered ${chat.RUN}`,
+      "does it look like this?": "queued",
+    });
+    const heard = chat.log.find((e) => e.data.event_type === "run_steering")?.data.payload.text;
+    assert.match(String(heard), /^i got this msg/);
+    assert.match(String(heard), /references\/skydome-warning-1a2b3c4d\.png/, "the lead is told where to look");
+  });
+
   it("LC9. a run that crashed before its lead's loop began gives every message it was handed back to the chat", async () => {
     const back: string[][] = [];
     const line = openLeadLine("run_crash", "t_crash", () => true);
@@ -5732,7 +5753,8 @@ describe("a run started again after a close of its own", () => {
    * `closeFailedRun` took the earlier session's `run_finished` for this session's and wrote none,
    * so the log kept the new `run_registered` unmatched and the run read as running for good.
    */
-  it("a resumed run whose journal cannot be read fails, instead of starting over with a full budget", async () => {
+  // Flipped: refused with words at the run's start and kept paused (Resume tries again), never failed for good.
+  it("a resumed run whose journal cannot be read stays paused, instead of starting over with a full budget", async () => {
     const log = closedLog();
     await startAgain(
       log,
@@ -5744,11 +5766,12 @@ describe("a run started again after a close of its own", () => {
         },
       },
     );
-    const errors = log.filter((entry) => entry.data.type === "error").map((entry) => String(entry.data.message));
-    assert.ok(
-      errors.some((message) => /journal read failed/.test(message)),
-      `the run stops on the unreadable journal, not somewhere after it: ${JSON.stringify(errors)}`,
-    );
+    const closes = log
+      .map((entry) => entry.data)
+      .filter((data) => data.event_type === "run_finished" && data.payload?.runId === runId);
+    const own = closes.at(-1)?.payload;
+    assert.equal(own?.stoppedBecause, OPEN_LOOP_REFUSAL.journalUnreadable, JSON.stringify(closes));
+    assert.equal(own?.executionStatus, "paused", "the run stays paused for a Resume");
   });
 
   it("a resumed or reopened run that throws before its own close still closes: an earlier session's close is not this one's", async () => {
@@ -6050,7 +6073,8 @@ describe("a Loop message after a finished build the run's coordinator answers fo
    * A chat whose build finished under a lead of its own, on a host that keeps the log and the journal.
    * The coordinator, when asked, continues the build as the host's continue_build records it; any
    * other session is a builder. Once the chat's turn has ended no game has the build's name, so a
-   * run started again throws before it builds and closes.
+   * run started again throws before it builds and closes — unless a `game` is given, which the
+   * host lists throughout.
    */
   function coordinatedChat(
     continues: boolean,
@@ -6059,8 +6083,16 @@ describe("a Loop message after a finished build the run's coordinator answers fo
       recorded = [],
       since = [],
       artifacts = {},
+      game = null,
       contained = false,
-    }: { chatSession?: boolean; recorded?: Json[]; since?: Json[]; artifacts?: Json; contained?: boolean } = {},
+    }: {
+      chatSession?: boolean;
+      recorded?: Json[];
+      since?: Json[];
+      artifacts?: Json;
+      game?: Json | null;
+      contained?: boolean;
+    } = {},
   ) {
     const log: Array<{ id: string; data: Json }> = [
       { id: "e1", data: { type: "custom", event_type: "run_registered", payload: { ...run, resumed: false } } },
@@ -6096,7 +6128,10 @@ describe("a Loop message after a finished build the run's coordinator answers fo
         store.turnOver = true;
       },
       [HostMethod.EventsMessages]: () => [],
-      [HostMethod.GameList]: () => (store.turnOver ? [] : [{ name: "plaza", title: "Plaza" }]),
+      [HostMethod.GameList]: () => {
+        if (game) return [game];
+        return store.turnOver ? [] : [{ name: "plaza", title: "Plaza" }];
+      },
       [HostMethod.EngineDelegate]: (params) => {
         if (!params.coordinator) {
           asked.builders.push(params);
@@ -6116,9 +6151,12 @@ describe("a Loop message after a finished build the run's coordinator answers fo
         return { ok: true, engine: "codex", turns: 1, usage: {}, sessionId: "coord-1", summary: "The build goes on." };
       },
     };
+    const notified: Array<{ event: string; payload: Json }> = [];
     const host = {
       workspace: "/nonexistent",
-      notify: () => {},
+      notify: (event: string, payload: Json) => {
+        notified.push({ event, payload });
+      },
       call: async (method: string, params: Json): Promise<unknown> => answers[method]?.(params) ?? null,
     };
     const studio: Json = {
@@ -6146,7 +6184,7 @@ describe("a Loop message after a finished build the run's coordinator answers fo
       for (let n = 0; n < 400 && studio.activeRuns.size + studio.startingRuns.size > 0; n++) await nextTurn();
       return of().map((entry) => entry.data.payload);
     };
-    return { studio, log, store, asked, registered };
+    return { studio, log, store, asked, registered, notified };
   }
   const message = {
     type: "user_message",
@@ -6317,6 +6355,63 @@ describe("a Loop message after a finished build the run's coordinator answers fo
     assert.equal("autopilot" in local, false, "its Loop is dropped");
     assert.equal(chat.asked.said.filter((words) => /Loop can't continue this build/.test(words)).length, 1);
     assert.equal((await chat.registered()).length, 1, "nothing reopened");
+  });
+
+  /**
+   * A game linked to Unreal whose finished run was an Unreal Loop, which seats no lead and keeps no
+   * journal: a new ask with Mode on a Loop starts another Unreal Loop, never "Loop can't continue
+   * this build here" and one builder turn from the coordinator's continue_build. The host lists the
+   * game here linked to the project inside its folder.
+   */
+  const unrealGame = {
+    name: "plaza",
+    title: "Plaza",
+    dir: "/games/plaza",
+    engine: { kind: GameEngine.Unreal, project: "/games/plaza/unreal/Plaza.uproject" },
+  };
+  const dirtBike = { goal: "A dirt-bike track game.", direction: "Dirt track" };
+  const loopUnusedSaid = (said: readonly string[]) =>
+    said.filter((words) => /Loop can't continue this build/.test(words));
+
+  it("a Loop message after the game's finished Unreal Loop was answered with Loop off: it starts a new Loop", async () => {
+    const chat = coordinatedChat(true, { game: unrealGame, recorded: [{ name: "start_autopilot", args: dirtBike }] });
+    chat.store.journal = null;
+    const loopOn = {
+      ...message,
+      text: "Make it a dirt-bike track game.",
+      autopilot: { hours: 1 },
+    };
+    await handleUserMessage(chat.studio as never, loopOn as never);
+
+    assert.deepEqual(loopOn.autopilot, { hours: 1 }, "the message keeps its Loop");
+    assert.deepEqual(loopUnusedSaid(chat.asked.said), [], "nothing is said of a Loop that cannot continue");
+    assert.equal(chat.asked.coordinator.length, 0, "no coordinator turn hands the ask to one builder");
+    assert.equal(chat.asked.builders.length, 1);
+    assert.deepEqual(
+      chat.asked.builders[0]?.interviewTools?.map((tool: Json) => tool.name),
+      ["start_autopilot", "ask_user"],
+      "the chat's own session is handed the Loop's launch",
+    );
+    assert.match(String(chat.asked.builders[0]?.prompt), /the lead builds the whole project itself in this folder/);
+    const runs = await chat.registered();
+    assert.equal(runs.length, 2, JSON.stringify(chat.log.map((entry) => entry.data.event_type ?? entry.data.type)));
+    assert.notEqual(runs[1]?.runId, RUN, "a new run, never the finished one reopened");
+    assert.equal(runs[1]?.resumed, false);
+    assert.equal(runs[1]?.goal, dirtBike.goal, "the ask is its goal");
+    assert.equal(runs[1]?.budgets?.wallClockMs, HOUR_MS, "with the Loop's hours");
+    const finished = chat.notified.find((note) => note.event === "run.finished")?.payload;
+    assert.equal(finished?.profile, "open", "conducted by the one Loop, in place");
+  });
+
+  it("with Loop off, a message after the game's finished Unreal Loop is still answered as a chat: one builder turn, no run", async () => {
+    const chat = coordinatedChat(true, { game: unrealGame });
+    chat.store.journal = null;
+    await handleUserMessage(chat.studio as never, { ...message } as never);
+    assert.equal(chat.asked.coordinator.length, 1);
+    assert.equal(chat.asked.builders.length, 1, "one builder turn");
+    assert.equal(chat.asked.builders[0]?.interviewTools, undefined, "with no launch tool");
+    assert.deepEqual(loopUnusedSaid(chat.asked.said), []);
+    assert.equal((await chat.registered()).length, 1, "no run started");
   });
 });
 
@@ -9140,6 +9235,570 @@ describe("a worker of its own for the UI and HUD", () => {
 });
 
 /**
+ * A game linked to an Unreal project is built in the user's Unreal Editor, so its chat builds are
+ * never checked as a web page: no preview load of its notes folder, no "fix the black screen" over a
+ * black canvas, and no failed `build_observation` for SkillOpt to learn from. A game linked to an
+ * Unreal project takes no web health pass.
+ */
+describe("an Unreal game is never checked as a web page", () => {
+  const GAME = "tower-game";
+
+  /** A rig whose game is linked to a real `.uproject`, whose preview would show a black canvas, and whose contractor edits game sources. */
+  async function unrealGameRig(
+    reply: Record<string, unknown> = {},
+  ): Promise<{ rig: Rig; prompts: string[]; requests: DelegateRequest[] }> {
+    const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const { tmpDir } = await import("../helpers/tmp.ts");
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    const game = await rig.core.games.scaffold(GAME, { title: "Tower Game" });
+    const uproject = path.join(await tmpDir("unreal-project-"), "Tower.uproject");
+    await writeFile(uproject, "{}\n");
+    await writeEngineBinding(game.dir, uproject);
+    rig.preview.pixelStatsNext = { ...rig.preview.pixelStatsNext, meanLuma: 0.4, litFraction: 0 };
+    const prompts: string[] = [];
+    const requests: DelegateRequest[] = [];
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        prompts.push(request.prompt);
+        requests.push(request);
+        await writeFile(path.join(request.cwd, "src/lighthouse.js"), "export const lighthouse = 1;\n");
+        return {
+          ok: true,
+          engine: "vendor",
+          sessionId: "session-1",
+          turns: 2,
+          usage: {},
+          summary: "Added it.",
+          ...reply,
+        };
+      },
+    });
+    return { rig, prompts, requests };
+  }
+
+  /** The turn's log once it ended, and every chat message's text. */
+  async function afterTurn(rig: Rig) {
+    const events = await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn");
+    const messages = (await rig.core.store.listMessages(rig.core.mainThread)).map((m) => m.content ?? "");
+    return { events, said: messages.join("\n") };
+  }
+
+  it("an Unreal game's chat build gets the Unreal brief and no web health pass: no black-screen line, no failed build_observation", async () => {
+    const { rig, prompts } = await unrealGameRig();
+    await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME });
+    const { events, said } = await afterTurn(rig);
+    assert.equal(prompts.length, 1);
+    // The Unreal plugin is off in this rig: the build is briefed for an Unreal project without its tools.
+    assert.match(prompts[0]!, /it holds an Unreal Engine project/, "the build is briefed for Unreal");
+    assert.match(prompts[0]!, /no Unreal tools/, "with the plugin off, without its tools");
+    assert.doesNotMatch(prompts[0]!, /window\.__studio/, "and not as a web page");
+    assert.equal(customEvents(events, "build_observation").length, 0, "no web observation of an Unreal game");
+    assert.doesNotMatch(said, /black screen|loads clean|console error/, "no web verdict in the chat");
+    assert.match(said, /Added it\./, "the contractor's report still reaches the chat");
+  });
+
+  it("an Unreal game's builder is told no web-only plugin skills and is handed no web capture tool or checkpoint line", async () => {
+    const { rig, requests } = await unrealGameRig();
+    await rig.core.plugins.setEnabled("genex", true);
+    await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME });
+    await afterTurn(rig);
+    const [request] = requests;
+    assert.ok(request, "the build reached the builder");
+    const web = rig.core.plugins.snapshot(GameEngine.Web).applied.skills;
+    const told = rig.core.plugins.snapshot(GameEngine.Unreal).applied.skills;
+    const webOnly = web.filter((skill) => !told.includes(skill));
+    assert.ok(webOnly.includes("genex/genex-threejs-multiplayer"), "the web has skills an Unreal game does not");
+    for (const skill of webOnly) assert.ok(!request.prompt.includes(`[${skill}]`), `${skill} stays out of its brief`);
+    assert.equal(request.onCapture, undefined, "no capture of a folder that holds notes");
+    assert.doesNotMatch(request.prompt, /lights the user's Reload/, "no web preview Reload to light");
+  });
+
+  it("a Loop question after an edit to an Unreal game takes no web health pass either", async () => {
+    const { rig } = await unrealGameRig({
+      studioToolCalls: [{ name: "ask_user", args: { question: "A second lighthouse?" } }],
+    });
+    await rig.core.sendUserMessage("Add a lighthouse", { engine: "vendor", project: GAME, autopilot: { hours: 1 } });
+    const { events, said } = await afterTurn(rig);
+    assert.equal(customEvents(events, "interview_question").length, 1, "the question is still asked");
+    assert.equal(customEvents(events, "build_observation").length, 0);
+    assert.doesNotMatch(said, /black screen|loads clean|console error/);
+  });
+});
+
+import { LeadTool } from "../../src/harness-seed/loop/unreal/lead-contract.ts";
+import { runUnrealLead } from "../../src/harness-seed/loop/unreal/lead.ts";
+import { UnrealLoopTool } from "../../src/harness-seed/loop/unreal/live-contract.ts";
+import { PROJECT_FACTS_FILE } from "../../src/harness-seed/loop/unreal/project-facts.ts";
+import { LoopTool, PartRunState } from "../../src/plugins/unreal/editor-queue.ts";
+import { checkPython, PythonProblemCode } from "../../src/plugins/unreal/python-check.ts";
+import { coreLite } from "../helpers/core-lite.ts";
+import * as editorStandIn from "../helpers/unreal-editor-stand-in.ts";
+import * as leadLoop from "../helpers/unreal-lead-host.ts";
+
+/** One Unreal lead run on a fake host (`unreal-lead-host.ts`), on its clock, of `minutes` working minutes. */
+function runLead(host: leadLoop.LeadHost, options: { minutes?: number; resume?: boolean } = {}) {
+  const run = options.minutes
+    ? { ...leadLoop.RUN, budgets: { ...leadLoop.RUN.budgets, wallClockMs: options.minutes * MINUTE_MS } }
+    : leadLoop.RUN;
+  return runUnrealLead(host.rec.ctx as never, {
+    threadId: "t1",
+    run: run as never,
+    resume: options.resume === true,
+    now: host.now,
+    sleep: host.sleep,
+  });
+}
+
+/** The lead's turns on a lead host, as they were delegated. */
+const leadTurns = (host: leadLoop.LeadHost) => host.rec.paramsOf("engine.delegate");
+
+/**
+ * A Loop on a racing game from Epic's Vehicle template: the lead's brief carries the template's
+ * input and pawn, each save point lands, builders and the chat never hold the runner-only tools, an
+ * invented Python method fails the gate, the play test runs unthrottled, and the Builds graph calls
+ * the parts that landed what they are. The part runner and the step machine after it are retired
+ * for one lead (`loop/unreal/lead.ts`); these rows hold it to the same rules.
+ */
+describe("a Loop on a vehicle template", () => {
+  it("UL7. nobody told the lead or the builders which pawn the template's game mode spawns: the lead's brief carries the template's facts from export_project's file, which the editor writes when the game has none yet", async () => {
+    const host = leadLoop.leadHost();
+    let exported = false;
+    host.rec.handle("run.exec", (params) => {
+      const command = String(params.command);
+      if (command.includes(PROJECT_FACTS_FILE))
+        return { code: 0, stdout: exported ? JSON.stringify(leadLoop.TEMPLATE) : "", stderr: "" };
+      return { code: 0, stdout: "", stderr: "" };
+    });
+    host.answers.set(UnrealLoopTool.ExportReference, () => {
+      exported = true;
+      return { engine: "5.8", nodes: 1, stored: true };
+    });
+    await runLead(host, { minutes: 20 });
+    const facts = /THE TEMPLATE:[\s\S]*BP_ThirdPersonGameMode spawns BP_ThirdPersonCharacter[\s\S]*FollowCamera/;
+    assert.match(host.prompts()[0] ?? "", facts, "the lead's brief knows the template");
+    assert.match(host.prompts()[0] ?? "", /third-person character/, "and that template's own facts, no other's");
+  });
+
+  it("UL8. every part read 'Left out' and the result 'No new build': each save point is merged into the game and the run says it landed", async () => {
+    const host = leadLoop.leadHost();
+    const report = await runLead(host, { minutes: 40 });
+    const saves = host.snapshotReasons().length;
+    assert.ok(saves >= 2, `${saves} save points`);
+    assert.equal(host.appended("integration_merge").length, saves, "each save point is an integration_merge");
+    assert.equal(report.landed, true);
+    assert.equal(host.appended("run_finished").at(-1)?.landed, true);
+  });
+
+  it("builders and the chat are never handed the runner-only Loop tools (run-part, rollback-part, ...): a chat's and a builder's Unreal tools leave out every harness-only one", async (t) => {
+    const { core, close } = await coreLite();
+    // The plugin's backend and its editor bridge stop here; a core that was only initialized stops nothing of its own.
+    t.after(async () => {
+      core.plugins.cancel();
+      await core.mcp.close().catch(() => {});
+      await close();
+    });
+    await core.plugins.setEnabled("unreal", true);
+    const project = "racer";
+    const game = await core.games.scaffold(project);
+    // The builder's gate and lookups reach a game that holds an Unreal project.
+    await writeFile(path.join(game.dir, "Racer.uproject"), "{}");
+    const threadId = await core.createGameThread(project);
+    const handed: string[][] = [];
+    core.engines.register({
+      id: EngineId.ClaudeCode,
+      label: "fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "fixture" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        handed.push((request.liveTools ?? []).map((tool) => tool.name).filter((name) => name.startsWith("unreal__")));
+        return { ok: true, engine: EngineId.ClaudeCode, summary: "fixture", turns: 1, usage: {} };
+      },
+    } as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    const delegate = (extra: Record<string, unknown>) =>
+      api["engine.delegate"]?.({ engine: EngineId.ClaudeCode, project, threadId, ...extra });
+    await delegate({ prompt: "Make the bike first-person" });
+    const worktree = path.join(core.layout.scratch, "worktrees", `${project}-RiderView-1`);
+    await mkdir(worktree, { recursive: true });
+    await delegate({ prompt: "Build the part RiderView", cwd: worktree });
+    const runnerOnly = [
+      UnrealLoopTool.RunPart,
+      UnrealLoopTool.PartResult,
+      UnrealLoopTool.RollbackPart,
+      UnrealLoopTool.ReloadLevel,
+      UnrealLoopTool.ExportReference,
+    ];
+    assert.equal(handed.length, 2);
+    for (const [who, tools = []] of [
+      ["the chat", handed[0]],
+      ["a builder", handed[1]],
+    ] as const) {
+      for (const name of runnerOnly) assert.ok(!tools.includes(name), `${who} is not handed ${name}`);
+      assert.ok(tools.includes(UnrealLoopTool.CheckPart), `${who} still has the builder's gate`);
+      // The C++ module's tools are any Unreal project's agents' own: the one Loop's lead calls them.
+      for (const name of [UnrealLoopTool.CppStatus, UnrealLoopTool.AddCppModule])
+        assert.ok(tools.includes(name), `${who} is handed ${name}`);
+    }
+  });
+
+  it("the play test ran with Unreal's background throttle on: the editor queue turns the throttle off before StartPIE and gives it back after stop_play", async () => {
+    const editor = editorStandIn.standIn();
+    const run = await editorStandIn.runLantern(editor.port);
+    assert.equal(run.state, PartRunState.Done);
+    assert.equal(editor.state.throttleAtPlay, false, "the test played unthrottled");
+    assert.equal(editor.state.throttle, true, "the editor has its setting back");
+    assert.deepEqual(editorStandIn.written(editor.calls), [false, true]);
+    const tools = editorStandIn.sequence(editor.calls);
+    assert.ok(tools.indexOf(LoopTool.SetProperties) < tools.indexOf(LoopTool.StartPlay), "lifted before play");
+    assert.ok(tools.lastIndexOf(LoopTool.SetProperties) > tools.indexOf(LoopTool.StopPlay), "given back after it");
+  });
+
+  it("an apply.py called an invented method (set_generate_overlap_events) and passed the gate: the check names an unknown method on an object of a known class", async (t) => {
+    const python = await promisify(execFile)("python3", ["-c", "import ast"]).then(
+      () => "python3",
+      () => "",
+    );
+    if (!python || process.platform === "win32") {
+      t.skip("needs python3 (the product uses Unreal's own)");
+      return;
+    }
+    const names = path.join(await tmpDir("python-names-"), "python-names.json");
+    await writeFile(
+      names,
+      JSON.stringify({
+        Actor: ["get_component_by_class"],
+        StaticMeshComponent: ["set_editor_property"],
+        PrimitiveComponent: ["generate_overlap_events", "set_editor_property"],
+      }),
+    );
+    const source = [
+      "import unreal",
+      "box = actor.get_component_by_class(unreal.StaticMeshComponent)",
+      "box.set_generate_overlap_events(True)",
+    ].join("\n");
+    const problems = await checkPython({ python, names }, source);
+    assert.deepEqual(
+      problems.map((p) => [p.code, p.line]),
+      [[PythonProblemCode.UnknownName, 3]],
+    );
+    assert.match(problems[0]?.message ?? "", /set_generate_overlap_events \(a StaticMeshComponent\)/);
+    assert.match(problems[0]?.message ?? "", /set_editor_property\("generate_overlap_events"/, "and what to call");
+  });
+});
+
+/**
+ * A step machine on an Unreal game threw work away: every try started in a fresh copy and lost the
+ * one before it, and a crash or a refusal restored the last kept step, so whole steps of visible
+ * work went. The lead builds in one session in the game folder; only its own rewind takes the game
+ * back, to the save point it names.
+ */
+describe("an Unreal Loop that threw its work away", () => {
+  it("UL0. every try started in a fresh copy and lost the work before it: the lead's turns go on in one session in the game folder, and only its own rewind takes the game back, to the save point it names", async () => {
+    const rewinds: leadLoop.Turn = async ({ tool, host }) => {
+      host.work("a bridge that reads badly");
+      await tool(LeadTool.Rewind, { label: "Turn 2" });
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [leadLoop.buildsAndSaves, leadLoop.buildsAndSaves, rewinds] });
+    await runLead(host, { minutes: 50 });
+    assert.deepEqual(host.rec.paramsOf("snapshot.worktree"), [], "no copy of the game");
+    const resumes = leadTurns(host).map((t) => t.resume ?? null);
+    assert.deepEqual(resumes.slice(0, 4), [null, "session-1", "session-1", "session-1"], "one session throughout");
+    assert.deepEqual(
+      host.rec.paramsOf("snapshot.restore").map((p) => p.snapshotId),
+      ["snap-2"],
+      "back to the save point it named, not the run's start",
+    );
+  });
+});
+
+/** How the engine question opens in a brief, whatever words each kind's plugin offers it with. */
+const ENGINE_QUESTION = "FIRST, THE ENGINE:";
+
+/**
+ * New game makes the game before the chat's first ask, as an empty folder with no kind; with the
+ * Unreal plugin on, the delegated turn finds a project that already exists. A folder with no kind
+ * yet (the host's facts) is asked with the question card, exactly as a game the turn makes itself,
+ * and not again in the session that asked: the answer comes back to it.
+ */
+describe("a game New game made is asked its engine on its chat's first ask", () => {
+  it("with the Unreal plugin on, a game New game made is empty, its chat's first build asks web or Unreal with the question card, and its next does not", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    await rig.core.plugins.setEnabled("unreal", true);
+    const requests: DelegateRequest[] = [];
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        requests.push(request);
+        return { ok: true, engine: "vendor", sessionId: "session-1", turns: 1, usage: {}, summary: "Web or Unreal?" };
+      },
+    });
+    const game = await rig.core.createGame("Arcade Racer");
+    assert.deepEqual(
+      (await rig.core.games.list()).find((listed) => listed.name === game.name)?.facts,
+      [],
+      "the made game has no kind yet",
+    );
+    const thread = await rig.core.threadForGame(game.name);
+    const turnsEnded = (count: number) =>
+      waitForLog(
+        rig.core,
+        (log) => log.filter((e) => e.thread_id === thread && e.data.type === "turn_ended").length >= count,
+        30_000,
+        `turn ${count}`,
+      );
+    await rig.core.sendUserMessage("Make me a small arcade racing game with a neon city track.", {
+      engine: "vendor",
+      thread,
+    });
+    await turnsEnded(1);
+    await rig.core.sendUserMessage("Web, please", { engine: "vendor", thread });
+    await turnsEnded(2);
+    const [first, next] = requests;
+    assert.ok(first && next, "both messages reached the builder");
+    const asks = (prompt: string) => prompt.split("\n").some((line) => line.startsWith(ENGINE_QUESTION));
+    assert.ok(asks(first.prompt), "the first build asks the engine first");
+    assert.deepEqual(
+      first.interviewTools?.map((tool) => tool.name),
+      ["ask_user"],
+      "with the question card bridged in",
+    );
+    assert.ok(!asks(next.prompt), "a later message is never asked again");
+    assert.equal(next.interviewTools, undefined);
+  });
+});
+
+/**
+ * A game linked to Unreal during its turn (the user answered the engine question and the builder
+ * made the game's Unreal project in that same turn): the turn's end reads the game's engine again,
+ * so it never loads the web preview, judges a black canvas or records a failed `build_observation`.
+ */
+describe("a game linked to Unreal during its turn", () => {
+  it("a game linked to Unreal during its turn got the web health pass and a black-screen line: no preview load, no build_observation, the builder's report alone", async () => {
+    const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    const game = await rig.core.games.scaffold("city-circuit", { title: "City Circuit" });
+    // The folder the web preview would load shows a black canvas.
+    rig.preview.pixelStatsNext = { ...rig.preview.pixelStatsNext, meanLuma: 0, litFraction: 0 };
+    const report = "Made the Unreal project from the vehicle template. Unreal is opening it for the first time.";
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        // What `unreal__new-game` did mid-turn: the project inside the game's folder, the game linked to it.
+        const uproject = path.join(game.dir, "unreal", "CityCircuit.uproject");
+        await mkdir(path.dirname(uproject), { recursive: true });
+        await writeFile(uproject, "{}\n");
+        await writeEngineBinding(game.dir, uproject);
+        await writeFile(path.join(request.cwd, "NOTES.md"), "# City Circuit\n");
+        return { ok: true, engine: "vendor", sessionId: "cc-1", turns: 9, usage: {}, summary: report };
+      },
+    });
+    await rig.core.sendUserMessage("Unreal Engine", { engine: "vendor", project: game.name });
+    const events = await waitForLog(rig.core, (log) => log.some((e) => e.data.type === "turn_ended"), 30_000, "turn");
+    const said = (await rig.core.store.listMessages(rig.core.mainThread)).map((m) => m.content ?? "").join("\n");
+    assert.equal((await rig.core.games.list()).find((g) => g.name === game.name)?.engine?.kind, GameEngine.Unreal);
+    assert.deepEqual(rig.preview.loads, [], "the web preview never loads the Unreal game's folder");
+    assert.equal(customEvents(events, "build_observation").length, 0, "no web observation for SkillOpt to learn from");
+    assert.doesNotMatch(said, /black screen|loads clean|console error/, "no web verdict in the chat");
+    assert.ok(said.includes(report), "the builder's report reaches the chat");
+  });
+});
+
+/**
+ * The single lead in a long Unreal run, and the harness's answers: a crash reopens the editor in
+ * place instead of undoing a whole step; a turn's unsaved editor work is saved and snapshotted
+ * between turns; the lead is steered to save after a stretch of unsaved work; the owner's words are
+ * steered into the turn at once; the run's end gets a final save; and a Resume of a run the older
+ * step machine made closes cleanly.
+ */
+describe("the Unreal lead's saves, crashes, owner words and end", () => {
+  it("UL1. Unreal crashed mid-turn and the harness restored the last kept step, throwing away the work since: Unreal is reopened in place, nothing restored, and the lead told what may be lost", async () => {
+    const crashes: leadLoop.Turn = async ({ host }) => {
+      host.work("the second stair");
+      host.editor.answering = false;
+      await host.until(() => host.steered().some((said) => /crashed/.test(said)));
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [leadLoop.buildsAndSaves, crashes] });
+    await runLead(host, { minutes: 40 });
+    assert.ok(host.tools().includes(UnrealLoopTool.ReopenEditor), "reopened");
+    assert.deepEqual(host.rec.paramsOf("snapshot.restore"), [], "nothing restored");
+    const said = host.steered().find((text) => /crashed/.test(text)) ?? "";
+    assert.match(said, /Unreal crashed at \d\d:\d\d and was reopened/);
+    assert.match(said, /since save point 'Turn 1' may be lost: check the level and continue/);
+  });
+
+  it("UL12. a long script kept the editor's game thread busy, the crash watch missed its answers, and Unreal was ended mid-turn with its work unsaved: an editor whose process runs is busy, never crashed", async () => {
+    const scripts: leadLoop.Turn = async ({ host }) => {
+      host.work("the tower's ribs");
+      // run_script holds the game thread: no answers for a while, the editor process runs on.
+      host.editor.answering = false;
+      host.editor.running = true;
+      const since = host.clock.now;
+      await host.until(() => host.clock.now - since >= 45 * SECOND_MS);
+      host.editor.answering = true;
+      host.editor.running = undefined;
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [scripts] });
+    await runLead(host, { minutes: 20 });
+    assert.ok(host.tools().filter((name) => name === UnrealLoopTool.EditorState).length >= 3, "the watch looked");
+    assert.ok(!host.tools().includes("unreal__end-editor"), "never ended");
+    assert.ok(!host.tools().includes(UnrealLoopTool.ReopenEditor), "never reopened");
+    assert.doesNotMatch(host.steered().join("\n"), /crashed/);
+    assert.equal(host.snapshotReasons()[0], "Autosave", "its work was saved once it answered again");
+  });
+
+  it("UL16. the person's Stop while Unreal opened for the run ended it paused, blaming the game's plugins: a Stop is always the person's stop", async () => {
+    const host = leadLoop.leadHost();
+    host.rec.handle("hooks.fire", (params) => {
+      if (params.on !== "run.prepare") return { blocked: null, pending: null, notes: [], images: [], ran: [] };
+      host.rec.cancel();
+      throw new Error("Stopped.");
+    });
+    const report = await runLead(host, { minutes: 20 });
+    assert.equal(report.executionStatus, "cancelled");
+    assert.doesNotMatch(String(report.stoppedBecause), /couldn't ask the game's plugins/);
+  });
+
+  it("UL17. a crash Genex held back for another holder rolled the game back to its last save point, losing the work since: nothing is restored, and the run halts saying why", async () => {
+    const crashes: leadLoop.Turn = async ({ host }) => {
+      host.work("the second stair");
+      host.editor.answering = false;
+      await host.until(() => host.rec.paramsOf("hooks.fire").some((p) => p.on === "crash"));
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [leadLoop.buildsAndSaves, crashes] });
+    const passOn = host.rec.ctx.call;
+    const busy = {
+      plugin: "@genex",
+      tool: "",
+      reason: "Another holder is working in Unreal now.",
+      hold: "busy",
+      label: "Unreal",
+    };
+    host.rec.ctx.call = (method: string, params?: Record<string, unknown>) =>
+      method === "hooks.fire" && params?.on === "crash"
+        ? Promise.resolve({ blocked: busy, pending: null, notes: [], images: [], ran: [] })
+        : passOn(method, params);
+    const report = await runLead(host, { minutes: 40 });
+    assert.deepEqual(host.rec.paramsOf("snapshot.restore"), [], "the work since the save point stays");
+    assert.equal(report.executionStatus, "paused");
+  });
+
+  it("UL2. an hour of editor work went by without a save point: after 15 minutes of unsaved work the lead is steered to look, then save", async () => {
+    const works: leadLoop.Turn = async ({ host }) => {
+      host.work("the shaft");
+      host.clock.now += 6 * MINUTE_MS;
+      await host.until(() => host.steered().some((said) => /save_point/.test(said)));
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [works] });
+    await runLead(host, { minutes: 90 });
+    const said = host.steered().find((text) => /save_point/.test(text)) ?? "";
+    assert.match(said, /About 1[5-9] minutes of work since your last save point\. Look at it now/);
+    assert.match(said, /mcp__studio__save_point/);
+  });
+
+  it("UL14. a lead that saved every few minutes ended three short turns in a row, and the run stopped as idle with a quarter of its time left: a turn that made a save point is never idle", async () => {
+    const host = leadLoop.leadHost({ turns: [leadLoop.buildsAndSaves] });
+    host.turnMs = 30_000;
+    const report = await runLead(host, { minutes: 20 });
+    assert.notEqual(report.endReason, "idle");
+    assert.ok(host.appended("facet_iteration").length > 3, "it went on saving past the third short turn");
+  });
+
+  it("UL3. a turn ended with unsaved editor work and no snapshot: the harness saves and snapshots it between turns, and the lead hears so", async () => {
+    const host = leadLoop.leadHost({ turns: [leadLoop.buildsOnly] });
+    await runLead(host, { minutes: 40 });
+    assert.equal(host.snapshotReasons()[0], "Autosave");
+    const trail = host.trail();
+    const first = trail.indexOf("engine.delegate");
+    const saved = trail.indexOf("tool:unreal__save-all", first);
+    const snapshot = trail.indexOf("snapshot.create", saved);
+    const next = trail.indexOf("engine.delegate", first + 1);
+    assert.ok(saved > first && snapshot > saved, "saved all, then snapshotted");
+    assert.ok(snapshot < next, "between the turns");
+    assert.match(host.prompts()[1] ?? "", /Your turn ended with unsaved work, so Genex saved it as 'Autosave'/);
+  });
+
+  it("UL4. a Resume of a run the older Unreal Loop made found no journal it could read: the run closes cleanly with a plain line, and its journal is done", async () => {
+    const host = leadLoop.leadHost();
+    const older = { kind: "unreal-live", phase: "paused", run: leadLoop.RUN, seat: {}, features: [], helpers: [] };
+    host.artifacts.set(`autopilot_${leadLoop.RUN.runId}`, older);
+    const report = await runLead(host, { resume: true });
+    assert.match(String(report.stoppedBecause), /made by an older Unreal Loop[^\n]*start a new run/);
+    assert.equal(report.executionStatus, "completed");
+    assert.equal(leadTurns(host).length, 0, "no turn");
+    assert.deepEqual(host.tools(), [], "Unreal is never asked anything");
+    assert.equal((host.artifacts.get(`autopilot_${leadLoop.RUN.runId}`) as { phase?: string }).phase, "done");
+    assert.equal(host.appended("run_finished").length, 1);
+  });
+
+  it("UL5. the owner's words are steered into the turn at once, to be acted on now, never parked for later", async () => {
+    let handed = false;
+    const hears: leadLoop.Turn = async ({ host }) => {
+      handed = true;
+      leadLineOf(leadLoop.RUN.runId)?.hear(
+        { threadId: "t1", messageId: "m1", text: "use Blender for the stairs" },
+        async () => {},
+      );
+      await host.until(() => host.steered().some((said) => /Blender/.test(said)));
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [hears] });
+    let given = false;
+    const steering = async () => {
+      if (!handed || given) return [];
+      given = true;
+      return ["use Blender for the stairs"];
+    };
+    Object.assign(host.rec.ctx, { runInbox: { finishing: async () => false, steering } });
+    await runLead(host, { minutes: 90 });
+    const said = host.steered().find((text) => /Blender/.test(text)) ?? "";
+    assert.match(
+      said,
+      /The owner says:\nuse Blender for the stairs\nAct on this now unless it conflicts with the edit you are in the middle of; then do it right after\./,
+    );
+    assert.doesNotMatch(said, /when it fits/);
+  });
+
+  it("UL6. the run's last minutes went by with no final save and no notes: near its end the lead is steered to wrap up and save 'Final'", async () => {
+    const works: leadLoop.Turn = async ({ host }) => {
+      host.work("the last landing");
+      host.clock.now += 35 * MINUTE_MS;
+      await host.until(() => host.steered().some((said) => /wrap up/.test(said)));
+      return undefined;
+    };
+    const host = leadLoop.leadHost({ turns: [works] });
+    await runLead(host, { minutes: 60 });
+    const said = host.steered().find((text) => /wrap up/.test(text)) ?? "";
+    assert.match(said, /About \d+ minutes are left: wrap up/);
+    assert.match(said, /save_point with label "Final"[\s\S]*NOTES\.md[\s\S]*did not test/);
+  });
+});
+
+/**
  * A facet worker keeps one provider session from round to round, however large its context grows:
  * Claude Code and Codex compact it themselves at their own point. The studio's
  * own handover past 500k was removed with that decision; a session is dropped
@@ -9393,6 +10052,165 @@ describe("a Hello in a brand-new game", () => {
     assert.match(brief, /nothing has been built/i);
     const talk = brief.search(/greeting/i);
     assert.ok(talk >= 0 && talk < brief.search(/CLAUDE\.md/), "how to answer a greeting comes before how to build");
+  });
+});
+
+import { settleAgents, startAgent } from "../../src/harness-seed/loop/unreal/agents.ts";
+import { askCritic, CAPTURES_FOLDER } from "../../src/harness-seed/loop/unreal/critic.ts";
+import { type Lead as UnrealLead, newLeadJournal } from "../../src/harness-seed/loop/unreal/lead-journal.ts";
+
+/**
+ * The Unreal Loop's helpers: a model and a texture helper each finished their work in a copy of
+ * the game, nothing landed it, and the run's close deleted both copies, the paid work with
+ * them. They had been offered the user's editor connector, Genex publishing and the paid CLI, and
+ * their Blender jobs carried no run, so no card reached the Builds graph. And a judge's verdict
+ * undid visible progress the lead had made. Now a sub-agent's delivery lands when its turn ends and
+ * is kept at the close; it is offered only its kind's tools, attributed to its own part; and the
+ * critic advises without changing anything.
+ */
+describe("the Unreal lead's sub-agents and critic", () => {
+  const MODEL = "assets/agents/blender_model-1/model.glb";
+  const MANIFEST = "assets/agents/blender_model-1/manifest.json";
+
+  /** The host's git and shell answers for a delivery of one model with its manifest. */
+  function deliveryExec(params: Record<string, unknown>) {
+    const command = String(params.command);
+    const entries = [`100644 blob ${"1".repeat(40)} 2048\t${MODEL}`, `100644 blob ${"2".repeat(40)} 90\t${MANIFEST}`];
+    if (command.includes("ls-tree")) return { code: 0, stdout: entries.map((e) => `${e}\0`).join(""), stderr: "" };
+    if (command.startsWith("git show"))
+      return { code: 0, stdout: JSON.stringify({ files: [{ path: MODEL, role: "mesh", meshes: 1 }] }), stderr: "" };
+    if (command.includes("manifest.json")) return { code: 0, stdout: "yes\n", stderr: "" };
+    return { code: 0, stdout: command.includes("rev-parse") ? "c0ffee12\n" : "", stderr: "" };
+  }
+
+  /** A lead on a fake host whose sub-agent turns deliver one model with its manifest (or hold until the close). */
+  async function subAgentLead(turn: "delivers" | "holds" = "delivers") {
+    const dir = await tmpDir("incident-agents-");
+    const aborted = new Set<string>();
+    const recorder = ctxRecorder({
+      handlers: {
+        "events.append": () => "e",
+        "artifact.write": () => 1,
+        "engine.abort": (params) => {
+          aborted.add(String(params.cwd));
+          return { aborted: 1 };
+        },
+        "engine.delegate": async (params) => {
+          for (let i = 0; turn === "holds" && !aborted.has(String(params.cwd)) && i < 100; i++) await nextTurn();
+          return { ok: turn === "delivers", engine: "claude-code", summary: "made it", usage: {}, turns: 1 };
+        },
+        "run.exec": deliveryExec,
+      },
+    });
+    const run = { runId: "run-ul", goal: "g", project: "tower", engine: "claude-code", budgets: {} };
+    const seat = { folder: dir, chatSession: false, sessionId: null, bookmarked: null, engine: undefined, model: null };
+    const lead = {
+      ctx: recorder.ctx,
+      run,
+      threadId: "t1",
+      clock: { now: () => 1_000, sleep: async () => {} },
+      game: { dir, title: "Tower" },
+      journal: newLeadJournal(run as never, seat),
+      started: 0,
+      cpp: { available: false, why: "none" },
+      offers: { blender: true, genex: true },
+      addModule: false,
+      agentRuns: new Map(),
+    } as unknown as UnrealLead;
+    return { lead, recorder, dir };
+  }
+
+  it("UL9. a helper's finished work was deleted unused at the close: a sub-agent's delivery lands in the game folder when its turn ends, and the close keeps every delivered file", async () => {
+    const { lead, recorder } = await subAgentLead();
+    await startAgent(lead, { kind: "blender_model", title: "Katana", brief: "A katana." });
+    await Promise.all(lead.agentRuns.values());
+    await settleAgents(lead);
+    const landed = recorder
+      .paramsOf("run.exec")
+      .filter((p) => p.project && String(p.command).includes("checkout"))
+      .map((p) => String(p.command));
+    assert.equal(landed.length, 1, "landed once, when its turn ended");
+    assert.match(landed[0] ?? "", /model\.glb/);
+    const removed = recorder.paramsOf("run.exec").filter((p) => /\b(rm|clean|reset)\b/.test(String(p.command)));
+    assert.deepEqual(removed, [], "nothing in the game folder is removed at the close");
+    assert.deepEqual(lead.journal.agents[0]?.landed.sort(), [MANIFEST, MODEL].sort());
+  });
+
+  it("UL10. helpers were offered the user's editor, publishing and the paid CLI, and their cards reached no node: a sub-agent is offered only its kind's tools and attributed to its own part", async () => {
+    const { lead, recorder } = await subAgentLead("holds");
+    await startAgent(lead, { kind: "blender_model", title: "Katana", brief: "A katana." });
+    for (let i = 0; i < 5; i++) await nextTurn();
+    const [delegation] = recorder.paramsOf("engine.delegate");
+    assert.deepEqual(delegation?.toolAllow, ["blender__"]);
+    assert.deepEqual(delegation?.attribution, { runId: "run-ul", agentId: "agent-blender_model-1" });
+    await settleAgents(lead);
+  });
+
+  it("UL11. a judge's verdict undid progress the lead could see: the critic's answer is advice on the round, and changes nothing", async () => {
+    const { lead, recorder, dir } = await subAgentLead();
+    await mkdir(path.join(dir, CAPTURES_FOLDER), { recursive: true });
+    await writeFile(path.join(dir, CAPTURES_FOLDER, "vista.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0]));
+    recorder.handle("game.references", () => ({ frames: [], skipped: [] }));
+    recorder.handle("engine.complete", () => ({
+      message: {
+        content: JSON.stringify({ defects: [{ defect: "flat light", fix: "one key light" }], boldMove: "fog" }),
+      },
+    }));
+    const answer = await askCritic(lead, { shots: "vista.png" });
+    assert.match(answer, /It advises; you decide/);
+    const changed = recorder.calls
+      .map((c) => c.method)
+      .filter((m) => /^(snapshot|game\.write|plugins\.invoke|engine\.delegate|run\.exec)/.test(m));
+    assert.deepEqual(changed, [], "no snapshot, restore, write, tool or turn");
+    const [advice] = recorder
+      .paramsOf("events.append")
+      .flatMap((p) => p.batch as Array<{ event_type: string; payload: Record<string, unknown> }>);
+    assert.equal(advice?.payload.advice, true, "recorded as advice");
+    assert.ok(!("decision" in (advice?.payload ?? {})), "never as a verdict");
+  });
+
+  it("UL13. a Meshy sub-agent ended its turn to wait for its jobs in the background and delivered nothing: a sub-agent whose turn ends with no manifest goes on in its own session until it delivers", async () => {
+    const { lead, recorder } = await subAgentLead();
+    const turns: Array<Record<string, unknown>> = [];
+    recorder.handle("engine.delegate", (params) => {
+      turns.push(params);
+      return {
+        ok: true,
+        engine: "claude-code",
+        summary: "waiting for the jobs",
+        usage: {},
+        turns: 1,
+        sessionId: "s-cast",
+      };
+    });
+    recorder.handle("run.exec", (params) => {
+      const command = String(params.command);
+      // The manifest is written only in the turn that went on.
+      if (command.includes("manifest.json") && !command.startsWith("git"))
+        return { code: 0, stdout: turns.length > 1 ? "yes\n" : "", stderr: "" };
+      return deliveryExec(params);
+    });
+    await startAgent(lead, { kind: "blender_model", title: "Katana", brief: "A katana." });
+    await Promise.all(lead.agentRuns.values());
+    assert.equal(turns.length, 2, "one more turn, not a failure");
+    assert.equal(turns[1]?.resume, "s-cast", "in the same session");
+    assert.match(String(turns[1]?.prompt), /wait/i, "told to wait for its jobs inside the turn");
+    assert.equal(lead.journal.agents[0]?.state, "done");
+    await settleAgents(lead);
+  });
+
+  it("UL15. a sub-agent's part names its kind once, as the lead wrote the rest, never 'meshy: Goblin and Troll (Meshy)'", async () => {
+    const { lead, recorder } = await subAgentLead();
+    await startAgent(lead, { kind: "genex_cast", title: "Goblin and Troll (Meshy)", brief: "Two characters." });
+    await Promise.all(lead.agentRuns.values());
+    const titles = recorder
+      .paramsOf("events.append")
+      .flatMap((p) => p.batch as Array<{ event_type: string; payload: { title?: string } }>)
+      .filter((e) => e.event_type === "director_worker")
+      .map((e) => e.payload.title);
+    assert.ok(titles.length > 0, "the part is on the graph");
+    assert.deepEqual([...new Set(titles)], ["Meshy: Goblin and Troll"]);
+    await settleAgents(lead);
   });
 });
 
@@ -10645,9 +11463,19 @@ describe("MAP-5. scope inflated without the user", () => {
 
     await rig.core.stopThread(thread).catch(() => {});
     await waitForLog(rig.core, paused(1), 60_000, "the run to pause");
-    // The resumed run goes on until it is stopped; the Resume is the user's click, not awaited.
+    // The Resume is the user's click, sent as soon as the pause shows, while the paused run may still be
+    // closing: it waits for that close, never refused. Not awaited: the resumed run goes on until it is
+    // stopped, and its dispatch's own wait is not this test's.
     void rig.core.resumeAutopilot(runId).catch(() => {});
-    const second = await waitForLog(rig.core, leading(2), 60_000, "the resumed run's lead at work");
+    const refused = (log: Log) => customEvents(log, "run_start_blocked").length > 0;
+    const second = await waitForLog(
+      rig.core,
+      (log) => leading(2)(log) || refused(log),
+      60_000,
+      "the resumed run's lead at work",
+    );
+    // Flipped (was swallowed): a Resume while the paused run closes is never refused as a second run.
+    assert.deepEqual(customEvents(second, "run_start_blocked"), [], "the Resume is not refused");
     const resumed = (customEvents(second, "run_registered") as Array<Record<string, any>>)[1];
     assert.equal(resumed?.resumed, true);
     assert.deepEqual(resumed?.scope, launched.scope, "a Resume restores the same scope");
@@ -11253,6 +12081,125 @@ describe("MAP-5. scope inflated without the user", () => {
       1,
       "the log is read once per start of the loop, not once per card",
     );
+  });
+});
+
+/**
+ * A Resume pressed as soon as the pause shows reaches the harness while the paused run still writes
+ * its close (its report, its tear-down): it waits for that close and then starts, and is never
+ * refused as a second run of the same chat. The paused run's report is held until the harness has
+ * read the Resume's journal and answered one more message, so the Resume has met the closing run.
+ */
+describe("a Resume pressed as the pause shows", () => {
+  it("the web director's Resume waits for the paused run's close, then starts: never refused as a second run", async () => {
+    const rig = await startRig({ replies: [] });
+    rigs.push(rig);
+    let calls = 0;
+    rig.core.engines.register({
+      id: "vendor",
+      label: "Vendor",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "signed in" }),
+      models: async () => [],
+      defaultModel: async () => "vendor-model",
+      delegate: async (request: DelegateRequest) => {
+        calls++;
+        // Only the chat's launch matters here; each run's lead thinks until it is stopped.
+        if (calls > 1)
+          return new Promise((resolve) =>
+            request.signal?.addEventListener("abort", () =>
+              resolve({ ok: false, stopReason: "stopped", summary: "" } as never),
+            ),
+          );
+        return {
+          ok: true,
+          engine: "vendor",
+          summary: "Starting the garden now.",
+          turns: 1,
+          usage: { input_tokens: 10, output_tokens: 5, cache_read_tokens: 0, cost_usd: 0 },
+          studioToolCalls: [{ name: "start_autopilot", args: { goal: "A small walled garden to explore" } }],
+        };
+      },
+    });
+    await rig.core.games.scaffold("garden", { title: "garden" });
+    const thread = await rig.core.threadForGame("garden");
+    type Log = Awaited<ReturnType<typeof rig.core.listAllEvents>>;
+    const leading = (n: number) => (log: Log) => customEvents(log, "run_registered").length >= n && calls > n;
+    const paused = (n: number) => (log: Log) =>
+      customEvents(log, "autopilot_paused").length + customEvents(log, "run_finished").length >= n;
+
+    await rig.core.sendUserMessage("Make a small walled garden to explore", {
+      thread,
+      engine: "vendor",
+      autopilot: { hours: 1 },
+    });
+    const first = await waitForLog(rig.core, leading(1), 60_000, "the run's lead at work");
+    const runId = String((customEvents(first, "run_registered")[0] as Record<string, unknown>).runId);
+
+    // The host calls the harness makes, as the host serves them: the paused run's report is held.
+    type Serve = (params: Record<string, unknown>) => Promise<unknown>;
+    const api = rig.core.host.options.api as unknown as Record<string, Serve>;
+    const serve = {
+      report: api[HostMethod.RunArtifact]!,
+      read: api[HostMethod.ArtifactRead]!,
+      list: api[HostMethod.GameList]!,
+    };
+    let reportHeld = () => {};
+    const held = new Promise<void>((resolve) => {
+      reportHeld = resolve;
+    });
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let resumeRead = () => {};
+    const read = new Promise<void>((resolve) => {
+      resumeRead = resolve;
+    });
+    let resumeSent = false;
+    let listsWhileHeld = 0;
+    api[HostMethod.RunArtifact] = async (params) => {
+      if (params.runId === runId && params.name === "report.json") {
+        reportHeld();
+        await released;
+      }
+      return serve.report(params);
+    };
+    api[HostMethod.ArtifactRead] = async (params) => {
+      const value = await serve.read(params);
+      // Answered first; the next turn is after the answer went to the harness.
+      if (resumeSent && params.artifactId === `autopilot_${runId}`) setImmediate(resumeRead);
+      return value;
+    };
+    api[HostMethod.GameList] = async (params) => {
+      if (resumeSent) listsWhileHeld += 1;
+      return serve.list(params);
+    };
+
+    await rig.core.stopThread(thread).catch(() => {});
+    await held;
+    assert.equal(customEvents(await rig.core.listAllEvents(), "autopilot_paused").length, 1, "the pause shows");
+    resumeSent = true;
+    void rig.core.resumeAutopilot(runId).catch(() => {});
+    await read;
+    // The harness answers in order: once it answers this, it has run the Resume's start past the
+    // journal it read, up to where that start waits (or would be refused, or would begin).
+    assert.equal(await rig.core.host.healthcheck(), true);
+    const startsWhileHeld = listsWhileHeld;
+    release();
+
+    const second = await waitForLog(
+      rig.core,
+      (log) => leading(2)(log) || customEvents(log, "run_start_blocked").length > 0,
+      60_000,
+      "the resumed run's lead at work",
+    );
+    assert.deepEqual(customEvents(second, "run_start_blocked"), [], "the Resume is not refused");
+    assert.equal(startsWhileHeld, 0, "while the paused run closed, the Resume only waited: it read no game list");
+    const resumed = (customEvents(second, "run_registered") as Array<Record<string, unknown>>)[1];
+    assert.equal(resumed?.resumed, true, "the Resume started once the paused run had closed");
+    await rig.core.stopThread(thread).catch(() => {});
+    await waitForLog(rig.core, paused(2), 60_000, "the resumed run to pause").catch(() => {});
   });
 });
 
@@ -12571,3 +13518,336 @@ describe("computer use: the judge that plays, escalation and routes", () => {
     assert.equal(ruledYes.results[0]?.pass, null, "a 'yes' without the goal is incomplete");
   });
 });
+describe("a Loop chat whose turn made the game's project (an Unreal game)", () => {
+  it("LL1. the session that goes on is told to launch the build with its launch tool, never to build the game itself", () => {
+    const unreal = [{ id: "unreal-project", path: "unreal" }];
+    const loopOn = factsReadyPrompt(unreal, "mcp__studio__start_autopilot");
+    assert.match(loopOn, /mcp__studio__start_autopilot/);
+    assert.match(loopOn, /do not build it yourself/);
+    assert.doesNotMatch(loopOn, /Go on with what you said you would build first/);
+    assert.match(
+      factsReadyPrompt(unreal),
+      /Go on with what you said you would build first/,
+      "without Loop it builds on",
+    );
+  });
+});
+
+describe("a chat whose saved session is gone (another account, or never saved)", () => {
+  it("LS1. the engine's answer that it has no such session starts a fresh one, never 'the build stopped early'", async () => {
+    const calls: Array<string | null> = [];
+    const result = await steeredCall({ cancelled: false }, undefined, {
+      prompt: "PROMPT",
+      resume: "aa932c8a-f6c0-463c-8fa0-87a9ae52895c",
+      fresh: () => "FRESH",
+      call: async (_prompt, resume) => {
+        calls.push(resume);
+        if (resume)
+          return {
+            ok: false,
+            summary: "",
+            turns: 0,
+            usage: {},
+            engine: "claude-code",
+            errorText: `No conversation found with session ID: ${resume}`,
+          };
+        return { ok: true, summary: "built", turns: 1, usage: {}, engine: "claude-code", sessionId: "fresh-1" };
+      },
+    });
+    assert.deepEqual(calls, ["aa932c8a-f6c0-463c-8fa0-87a9ae52895c", null]);
+    assert.equal(result.ok, true);
+  });
+});
+
+describe("a racing build's workers: their bench pages and a steer during the review's fix", () => {
+  const lookSpec = { id: "look", title: "Look", owns: ["src/look/", "bench/look.html"], checks: [] };
+
+  it("RB1. the look at a worker sees each file of a new folder: its own bench page is never another part's file", async () => {
+    const { monitorFindings } = await import("../../src/harness-seed/loop/director.ts");
+    const { GIT } = await import("../../src/harness-seed/loop/git.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/look/index.js": "export const look = 0;\n" });
+    await mkdir(path.join(repo.dir, "bench"), { recursive: true });
+    await writeFile(path.join(repo.dir, "bench/look.html"), "<!doctype html>\n");
+    const statusNow = async () => (await repo.exec(GIT.statusReadOnly(64_000))).stdout;
+    const own = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(own.violations, [], "the bench page the brief asked for is the worker's own");
+    assert.deepEqual(own.files, ["bench/look.html"]);
+    // Another part's page in that same new folder is still a violation, named by its file.
+    await writeFile(path.join(repo.dir, "bench/world.html"), "<!doctype html>\n");
+    const both = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(both.violations, ["edited a file outside this facet's ownership (bench/world.html)"]);
+  });
+
+  it("RB2. a bench page's script may time itself and roll dice: the game never loads it", () => {
+    const diff = [
+      "+++ b/bench/look.js",
+      "@@ -1,0 +1,2 @@",
+      "+const wallStart = performance.now();",
+      "+const pick = Math.random();",
+      "+++ b/src/look/fx.js",
+      "@@ -1,0 +1,1 @@",
+      "+const t = performance.now();",
+      "",
+    ].join("\n");
+    const found = mechanicalReview(diff, lookSpec as never, { ownsMain: false });
+    assert.deepEqual(
+      found.map((v) => `${v.file}:${v.category}`),
+      ["src/look/fx.js:wall-clock"],
+      "only the game's own code keeps the template's rules",
+    );
+  });
+
+  it("RS1. a steer that interrupts the review's fix turn is handed to the builder, never read as the round's stop", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    // The build's own work and one file of another part: the review finds that one.
+    await writeFile(path.join(repo.dir, "src/look/index.js"), "export const look = 1;\n");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const steer = "move your bench pages into src/look/";
+    const steers = [steer];
+    const asked: Array<{ prompt: string; resume: string | null }> = [];
+    const stops: unknown[] = [];
+    const records: string[] = [];
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async (type: string) => {
+        records.push(type);
+      },
+      finishRequested: async () => false,
+      steering: async () => steers.splice(0),
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async (prompt: string, resume: string | null) => {
+        asked.push({ prompt, resume });
+        // The lead's steer lands while the first fix turn runs: the engine reports it stopped.
+        if (asked.length === 1) return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+        return { ok: true, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, undefined, "the round goes on to its evidence and verdict");
+    assert.deepEqual(
+      stops.filter((args) => (args as unknown[])[1] === true),
+      [],
+      "no stop is recorded for the steered fix turn",
+    );
+    assert.equal(asked.length, 2, "the fix turn runs again with the steer");
+    assert.match(asked[1].prompt, /move your bench pages into src\/look\//);
+    assert.equal(asked[1].resume, "builder-1", "in the builder's own session");
+    assert.deepEqual(round.userSteering, [steer], "the steer stays in the round's brief");
+    assert.ok(records.includes(RunEvent.FacetSteered), JSON.stringify(records));
+  });
+
+  it("RS2. a fix turn stopped with no steer waiting still ends the round where it stands", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const stops: unknown[][] = [];
+    let turns = 0;
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async () => {},
+      finishRequested: async () => false,
+      steering: async () => [],
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async () => {
+        turns += 1;
+        return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, RoundFlow.Stop);
+    assert.equal(turns, 1);
+    assert.deepEqual(stops, [[1, true]]);
+  });
+});
+
+describe("the art director's look at a run whose judges think at max effort", () => {
+  it("RA1. the look thinks at most hard enough to end in its four minutes; a lighter judge keeps its own effort", async () => {
+    const { shipReview } = await import("../../src/harness-seed/loop/ship-review.ts");
+    const effortAsked = async (judge: string | undefined) => {
+      const recorder = ctxRecorder({
+        handlers: {
+          "engine.complete": () => ({
+            message: { content: JSON.stringify({ ship: true, defects: [], reason: "ok" }) },
+          }),
+        },
+      });
+      const roles = judge ? { judge: "sonnet", efforts: { judge } } : undefined;
+      await shipReview(recorder.ctx as never, {
+        run: {
+          runId: "run_racing",
+          goal: "a night street race",
+          reference: null,
+          ...(roles ? { roles } : {}),
+        } as never,
+        evidence: { shots: [{ camera: "default", base64: "AAAA", path: "/shots/default.jpg" }] } as never,
+        parts: [{ id: "look", title: "Look" }] as never,
+      });
+      return (recorder.paramsOf("engine.complete")[0] as Record<string, unknown>).effort;
+    };
+    assert.equal(await effortAsked("max"), "high", "a max-effort look outlasts its four minutes");
+    assert.equal(await effortAsked("xhigh"), "high");
+    assert.equal(await effortAsked("medium"), "medium");
+    assert.equal(await effortAsked(undefined), undefined, "no judge effort set: the engine's own");
+  });
+});
+
+describe("workers the run's pause stopped, and their kept work", () => {
+  it("RK1. a round the run's own close stopped says so in its records' code, apart from the lead's stop", async () => {
+    const { finishStoppedRound } = await import("../../src/harness-seed/loop/facet/stop.ts");
+    const { stopsThisRound } = await import("../../src/harness-seed/loop/facet-loop.ts");
+    const { WorkerStopCode } = await import("../../src/harness-seed/loop/workers/contract.ts");
+    const recordsOf = async (code: string) => {
+      const records: Array<[string, Record<string, unknown>]> = [];
+      const loop = {
+        appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+        publishIteration: async (payload: Record<string, unknown>) =>
+          void records.push([RunEvent.FacetIteration, payload]),
+        ctx: { cancelled: false },
+        facet: { id: "world", title: "Track and night city" },
+        facetThreadId: "t-world",
+        gitOptions: {},
+        gitWhere: {},
+        result: {},
+        run: { runId: "run_racing", project: "racing" },
+        worktree: null,
+        biggestGap: "",
+        currentMove: null,
+      };
+      const asked = { by: "director", reason: "stopped by the director: the build is over", code };
+      const stop = stopsThisRound(asked, { aborted: true });
+      assert.ok(stop);
+      await finishStoppedRound(loop as never, 1, stop);
+      return records.map(([type, payload]) => [type, payload.stopCode]);
+    };
+    assert.deepEqual(await recordsOf(WorkerStopCode.RunEnded), [
+      [RunEvent.FacetStopped, WorkerStopCode.RunEnded],
+      [RunEvent.FacetIteration, WorkerStopCode.RunEnded],
+    ]);
+    assert.deepEqual((await recordsOf(WorkerStopCode.StoppedByLead))[0], [
+      RunEvent.FacetStopped,
+      WorkerStopCode.StoppedByLead,
+    ]);
+  });
+
+  it("RK2. a paused worker's kept work the lead merges by hand goes on the record as its part's, once", async () => {
+    const { noteKeptWork } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const start = await repo.git("rev-parse", "HEAD");
+    const kept = await commitOnBranch(repo, "world-stopped", { "src/world/track.js": "export const track = 1;\n" });
+    const records: Array<[string, Record<string, unknown>]> = [];
+    const merges = () =>
+      records.map(([type, payload]) => [type, payload.facetId, payload.commit, payload.head, payload.conflict]);
+    let saves = 0;
+    const journal = { director: { workers: { world: { id: "world", kept } as Record<string, unknown> } } };
+    const loopRun = {
+      ctx: repo.ctx,
+      integrationWorktree: repo.dir,
+      run: { runId: "run_racing" },
+      state: { workers: new Map() },
+      priorWorkers: [{ id: "world", title: "Track and night city", kept, keptInBuild: false }],
+      journal,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+      saveJournal: async () => {
+        saves += 1;
+      },
+    };
+    await noteKeptWork(loopRun as never, start);
+    assert.deepEqual(merges(), [], "the build does not hold it yet");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", kept);
+    const head = await repo.git("rev-parse", "HEAD");
+    await noteKeptWork(loopRun as never, head);
+    await noteKeptWork(loopRun as never, head);
+    assert.deepEqual(merges(), [[RunEvent.IntegrationMerge, "world", kept, head, false]]);
+    assert.equal(journal.director.workers.world.keptInBuild, true, "a second pause does not record it again");
+    assert.equal(saves, 1);
+  });
+
+  it("RK3. the resumed lead hears what a paused worker kept, never that it left no commit", async () => {
+    const { keptWorkOf } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const { priorCommitWords } = await import("../../src/harness-seed/loop/director/journal-prompts.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const from = await repo.git("rev-parse", "HEAD");
+    // The stopped round's commit, on the worker's worktree beyond what was accepted (its fork point).
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    await repo.git("commit", "-qam", "facet world iteration 1: stopped");
+    const stoppedCommit = await repo.git("rev-parse", "HEAD");
+    const worker = { id: "world", worktree: repo.dir, lastCommit: from, from };
+    const kept = await keptWorkOf({ ctx: repo.ctx } as never, worker as never);
+    assert.equal(kept, stoppedCommit);
+    assert.equal(await keptWorkOf({ ctx: repo.ctx } as never, { ...worker, lastCommit: stoppedCommit } as never), null);
+    const ref = "refs/studio/runs/run_racing/workers/world";
+    const words = priorCommitWords({ lastCommit: from, from, ref, kept });
+    assert.doesNotMatch(words, /left no commit/);
+    assert.match(words, new RegExp(`worker_start from=${stoppedCommit}`));
+    assert.match(words, new RegExp(`git merge ${stoppedCommit}`));
+  });
+});
+
+const racingRunForSteer = { runId: "run_racing", project: "racing", goal: "a night street race", model: "sonnet" };

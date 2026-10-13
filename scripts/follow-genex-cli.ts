@@ -38,7 +38,6 @@ export const VERSION_MENTIONS: readonly VersionMention[] = [
   { file: "THIRD-PARTY-NOTICES.md", pattern: "`@genex-ai/cli-demo` {v} `templates/skills`", of: "cli" },
   { file: "THIRD-PARTY-NOTICES.md", pattern: "https://genex.games/SKILL.md (v{v})", of: "cli" },
   { file: "tests/conformance/genex-plugin-cli.test.ts", pattern: '.version, "{v}")', of: "cli" },
-  { file: "tests/conformance/plugin-install-words.test.ts", pattern: '"Genex Tools {v} from bundled', of: "plugin" },
 ];
 
 function parts(version: string): [number, number, number] {

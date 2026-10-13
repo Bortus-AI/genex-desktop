@@ -123,11 +123,13 @@ describe("the director's tool schemas stay small", () => {
     // rendered check grammar and the clamped memory. Goal-directed generation then spent 1,491
     // bytes (16,995 to 18,486) on required outcomes the lead cannot mark passed itself —
     // goal_update, a worker's and a playtest's goal, a playtest's scenario, and a plan's
-    // scope_instruction and multiplayer outcomes — and that spend is kept deliberately. The
+    // scope_instruction and multiplayer outcomes — and that spend is kept deliberately. Computer
+    // use then spent 219 bytes (18,498 to 18,717) on playtest's goal_state, the state a blind judge
+    // plays to and the studio verifies, also deliberately. The
     // 15,000-byte target is NOT met; what is left is the fourteen tool descriptions themselves,
     // and cutting those is its own change.
     const size = JSON.stringify(DIRECTOR_TOOLS).length;
-    assert.ok(size <= 18_500, `DIRECTOR_TOOLS serialises to ${size} bytes, over the ratchet`);
+    assert.ok(size <= 18_720, `DIRECTOR_TOOLS serialises to ${size} bytes, over the ratchet`);
 
     // What the worker_start checks description is meant to become: the same grammar, one line
     // per kind, with no helper enumeration a tool schema cannot afford.

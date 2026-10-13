@@ -168,6 +168,11 @@ export type DispatchAction =
    * Unlike every other dispatch this one answers with a value — the tool's result.
    */
   | { type: "director_tool"; runId: string; name: string; args: Record<string, unknown> }
+  /**
+   * A worker tool (`WorkerTool`) the chat's own session called during the chat turn `turn` (its
+   * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
+   */
+  | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 
@@ -185,6 +190,7 @@ export const DispatchActionType = {
   RunStop: "run_stop",
   AutopilotResume: "autopilot_resume",
   DirectorTool: "director_tool",
+  WorkerTool: "worker_tool",
   SkilloptStart: "skillopt_start",
   BootNotice: "boot_notice",
 } as const satisfies Record<string, DispatchAction["type"]>;
@@ -214,6 +220,8 @@ export const HarnessCapability = {
   Rewind: "rewind",
   /** A message sent while the chat's own turn works joins that turn (`engine.steer`). */
   Steer: "steer",
+  /** The chat's own session may run workers: the harness answers `worker_tool` for its turn. */
+  Workers: "workers",
   /** A build whose jobs cross to or from a completion-only local engine (`crossesCompletionEngine`). */
   LocalRoles: "local-roles",
 } as const;
@@ -282,8 +290,19 @@ export interface RunReference {
  */
 export const DIRECTOR_LOOP_ENV = "STUDIO_DIRECTOR_LOOP";
 
+/**
+ * The studio's environment variable that sends a Loop on an Unreal game to the Unreal runner it had
+ * before the one Loop, for developers until a live Unreal Loop passes on the one Loop. Never a run
+ * record field, never shown. The seed's copy is loop/loop-switch.ts.
+ */
+export const UNREAL_RUNNER_ENV = "STUDIO_UNREAL_RUNNER";
+
+/** What `UNREAL_RUNNER_ENV` may name: the Unreal runner (`lead`). Never rename a value. */
+export const UnrealRunnerChoice = { Lead: "lead" } as const;
+export type UnrealRunnerChoice = (typeof UnrealRunnerChoice)[keyof typeof UnrealRunnerChoice];
+
 /** The studio's own variables a run's harness reads; nothing else of its environment is handed on. */
-const HARNESS_RUN_ENV = [DIRECTOR_LOOP_ENV] as const;
+const HARNESS_RUN_ENV = [DIRECTOR_LOOP_ENV, UNREAL_RUNNER_ENV] as const;
 
 /**
  * What of the studio's own environment the harness it spawns is handed: the run overrides it
@@ -329,6 +348,8 @@ export interface RunSpec {
     wallClockMs: number;
     /** The composer's ∞: run until the judge is satisfied; `wallClockMs` is then only the safety ceiling. */
     untilSatisfied?: boolean;
+    /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
+    creditCap?: number;
     /** Explicit intent; absent records retain legacy untilSatisfied semantics. */
     completionPolicy?: "goal" | "duration";
     maxIterations?: number;

@@ -9,10 +9,12 @@ import type {
   PluginIndexView,
   PluginPanelDocument,
 } from "./plugins.ts";
+import type { PluginFileRequest } from "./plugin-file-request.ts";
 import type { McpConnectorView, McpTestResult, McpToolSummary } from "./mcp.ts";
 import type { McpConnectorDraft } from "./mcp-import.ts";
 import type { ConversationRecord, EventEnvelope, SnapshotRecord } from "./event-log.ts";
 import type { EngineDescriptor } from "./engine-descriptor.ts";
+import type { BackdropShaderRequest, BackdropShaderResult } from "./backdrop-shader.ts";
 import type { FolderInspection, GameLocation, GameName, GameNameRequest, GameProject } from "./game-project.ts";
 import type { BuildProblem, InstallResult } from "./build-problem.ts";
 import type { LoopRunReview } from "./run-review.ts";
@@ -159,6 +161,8 @@ export interface StudioApi {
     project?: string,
   ): Promise<{ images?: Array<{ label: string; dataUrl: string }>; message?: string; ticket?: string }>;
   pluginAction(id: string, name: string, args: unknown, project?: string, ticket?: string): Promise<unknown>;
+  /** A plugin panel's Choose file: Studio's native file picker; the chosen file's real path, or null when cancelled. */
+  pluginChooseFile(id: string, request: PluginFileRequest): Promise<string | null>;
   /** The files Publish would put online for a game, for Studio's Publish dialog to show. Uploads nothing. */
   genexPublishReview(project: string): Promise<ExportReview>;
   /**
@@ -174,8 +178,11 @@ export interface StudioApi {
   pluginGithubVersions(repo: string): Promise<GithubVersion[]>;
   pluginUpdate(id: string): Promise<void>;
   pluginWatch(id: string, enabled: boolean): Promise<void>;
+  /** The person's Ask every time: a local plugin's tools they always allowed ask again before they run. */
+  pluginForgetAllowed(id: string): Promise<void>;
   /** The user's answer to a `plugin_consent` card; `resolved` is false once the question is no longer waiting. */
-  pluginConsent(consentId: string, approved: boolean): Promise<{ resolved: boolean }>;
+  /** The person's answer to a consent card; `always` (a connector's card) also allows that tool from now on. */
+  pluginConsent(consentId: string, approved: boolean, always?: boolean): Promise<{ resolved: boolean }>;
 
   /**
    * Claude Code permissions for game chats. Studio UI only (main-frame guarded); the harness has
@@ -208,6 +215,8 @@ export interface StudioApi {
   mcpCancelAuthorization(id: string): Promise<void>;
   mcpDisconnectAccount(id: string): Promise<void>;
   mcpTools(id: string): Promise<McpToolSummary[]>;
+  /** A plugin's connector asks again before every call: its "Always allow" answers are forgotten. */
+  mcpForgetAlwaysAllowed(id: string): Promise<void>;
 
   /** The platform and where startup stands (`shared/boot.ts`); the renderer asks before anything else. */
   bootState(): Promise<BootState>;
@@ -266,6 +275,16 @@ export interface StudioApi {
   renameThread(threadId: string, title: string): Promise<ConversationRecord>;
   compactThread(threadId: string, options?: { engine?: string; model?: string }): Promise<boolean>;
   archiveGame(project: string): Promise<boolean>;
+  /** How much space a game's version history takes, and how much clearing Rewind history frees. */
+  gameHistory(project: string): Promise<import("./game-history.ts").GameHistorySpace>;
+  /** Clear a game's Rewind history and finished builds' side tracks; refused while the game works. */
+  clearGameHistory(project: string): Promise<import("./game-history.ts").GameHistoryCleared>;
+  /** Takes back a game's engine link from its chat line; refused once the link has changed since. */
+  undoEngineLink(request: import("./game-engine.ts").EngineLinkUndo): Promise<boolean>;
+  /** The person's Stop on a job's chat line: the job's record, or null for a job the game never had. */
+  stopJob(project: string, jobId: string): Promise<import("./jobs.ts").JobRecord | null>;
+  /** Opens macOS System Settings at the Privacy & Security pane that grants what app_look needs. */
+  openPrivacySettings(pane: import("./jobs.ts").AppLookAccessKind): Promise<boolean>;
   engines(): Promise<EngineDescriptor[]>;
   /** Plan limits of each signed-in subscription; reading them never starts a turn. */
   providerUsage(): Promise<ProviderUsageReport[]>;
@@ -276,6 +295,8 @@ export interface StudioApi {
   createGame(title: string, options?: { parent?: string; provisional?: boolean }): Promise<GameProject>;
   /** A name for a game started from its first request, by the model picked for it; never fails for want of a model. */
   nameGame(request: GameNameRequest): Promise<GameName>;
+  /** A live background for home from a description, by the model picked on home (`core/backdrop-generation.ts`). */
+  makeBackdrop(request: BackdropShaderRequest): Promise<BackdropShaderResult>;
   /**
    * Create game's location: the native folder dialog, answered with the folder checked as
    * creating there will be. Resolves to null when cancelled; a refused folder rejects with why.

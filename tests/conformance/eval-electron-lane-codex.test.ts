@@ -1,7 +1,8 @@
 /**
  * The Genex Codex lane's host-skill suppression (evals plan §5.3, lane D): an eval-only engine
- * option that disables every `~/.agents/skills/<name>/SKILL.md` by path and turns off Codex's
- * computer-use and browser features, so no operator context reaches the lane. The CLI is
+ * option that disables every `~/.agents/skills/<name>/SKILL.md` by path, so no operator context
+ * reaches the lane; Codex's computer-use, browser and sub-agent features are off in every session,
+ * the lane's included. The CLI is
  * injected; what is asserted is the argv the engine hands it, and that reading the skills folder
  * never writes to it.
  */
@@ -12,7 +13,8 @@ import { describe, it } from "node:test";
 import {
   CodexEngine,
   type CodexExec,
-  HOST_SKILL_DISABLED_FEATURES,
+  CODEX_SCREEN_FEATURES,
+  CODEX_SUBAGENT_FEATURES,
   HostSkills,
   hostSkillSuppressionArgs,
 } from "../../src/substrate/engines/codex.ts";
@@ -55,8 +57,14 @@ async function engineWith(options: {
   return { engine, root, argvs: exec.argvs };
 }
 
-/** The `--disable` flags the lane passes, in order. */
-const DISABLE_FLAGS = HOST_SKILL_DISABLED_FEATURES.flatMap((feature) => ["--disable", feature]);
+/**
+ * The `--disable` flags, in order. Flipped: every session passes them now (`#exec`), not the
+ * lane's suppression alone, which adds only the skill paths. Same flags, new source.
+ */
+const DISABLE_FLAGS = [...CODEX_SCREEN_FEATURES, ...CODEX_SUBAGENT_FEATURES].flatMap((feature) => [
+  "--disable",
+  feature,
+]);
 
 describe("codex host-skill suppression", () => {
   it("keeps a normal launch's skills, and still turns Codex's own computer use and browsers off", async () => {

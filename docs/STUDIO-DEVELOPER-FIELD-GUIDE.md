@@ -101,6 +101,7 @@ warnings); the UI clears its per-render timing measures each minute there. `npm 
 | Profile `workspaces/harness/` | Active editable game-building harness; upgrades preserve self-edits |
 | Profile `engine-homes/`, `runs/`, `exoharness/` | Provider/plugin/runtime state, run artifacts and persisted events |
 | Profile `scratch/`, `exports/` | App-managed build workspaces and export destinations |
+| Profile `jobs/<game>/<id>/` | Agent jobs' records (`job.json`) and logs (`output.log`); the last 50 ended jobs per game are kept |
 | Profile `opened-files/` | Read-only copies of build-only files a chat link opened in their app |
 | Profile `Crashpad/` | Local crash dumps, never uploaded. Dumps hold process memory; review before sharing |
 | Profile `run-sharing/` | Share build metrics' state, install identity and unsent rows (owner-only files) |
@@ -338,16 +339,43 @@ transport credentials from reports. No permanent monitor or performance threshol
 into `.studio-dev/builds/<build-id>`, creates fresh owned fixture state and returns actual
 readiness/identity JSON. `npm run studio:dev -- fixtures` lists the named fixtures. Among them:
 build-graph (two sword-in-ice runs: folded tries, an undone step, a lead-merged unjudged round),
-first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is
-missing), notifications (six games; about four seconds after launch a question, a plan, a plugin
-permission, a sign-out and delivered, failed and stopped builds arrive as news; macOS
-notifications are refused), sandbox-setup (the window opens on "Set up the protected workspace"
-for a Linux machine missing bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]`
-opens the studio), update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex
-0.2.0; the restart is refused as native) and plugin-updates (Genex and Blender installed one
-version back: their rows and pages offer `Update to <version>` and the sidebar
-`[data-plugins-update]`, each refused as native).
-Use `--reuse` for a stopped profile with the same fixture/provider mode.
+lead-graph (two Unreal lead runs: milestone columns, save points, sub-agents with their cards, the
+critic's advice on a round),
+chat-workers (a chat message's two workers on Builds and as chat lines, after an earlier Loop; three
+more games, written after the start so their Loops read as going: Fixture Loop with three workers,
+the lead's background work and the finish check not run yet; Fixture web Loop with build-graph's
+runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
+finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
+the Builds history, Not yet after one no, and the newest Checking),
+paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
+Paused, one Added after the resume, one Left out by the lead's stop),
+stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
+renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
+Mountain pass, a Blender game with no run, whose Live says where pictures come from),
+open-projects (projects that aren't web games: Moon base, a Godot folder whose earlier timed Loop
+closed not checked by a reviewer and whose Loop in place, written after the start, has a worker's
+question waiting; Level tools, an Unreal plugin project with the sidebar's kind label, its Loop sent
+back once and, about four seconds after launch, waiting for you to finish in Unreal; Lantern racer,
+a web game beside an Unreal project, with Live's Web game and Unreal tabs; Paper plane, a web game
+ported to Unreal, its chat holding the port's turn and the line asking for the access `app_look`
+needs (Open Screen Recording and Accessibility settings); Moon tools, a plugin
+loaded from a folder with one tool that runs without asking; and the web game's chat offering the
+Unreal plugin, which is off),
+first-launch (an empty library and the welcome; Claude Code needs a sign-in, Codex is not
+installed, and sign-in, links and downloads are refused as in every fixture) and notifications
+(six games; about four seconds after launch a question, a plan, a plugin permission, a sign-out
+and delivered, failed and stopped builds arrive as news; macOS notifications are refused) and
+sandbox-setup (the window opens on "Set up the protected workspace" for a Linux machine missing
+bubblewrap and socat, `[data-sandbox-setup]`; `[data-sandbox-retry]` opens the studio) and
+update-ready (the sidebar offers `[data-update-restart]` for a stand-in Genex 0.2.0; the restart
+itself is refused as native) and plugin-updates (Genex and Blender installed one version back: their
+rows and pages offer `Update to <version>` and the sidebar `[data-plugins-update]`, each refused as
+native) and unreal-game (the game linked to a stand-in Unreal project inside
+its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
+stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
+and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
+connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery).
+Use `--reuse` explicitly for a stopped existing profile with the same fixture/provider mode.
 `--providers live` is explicit, retained, and uses existing ambient account semantics; no auth
 or account copying is performed. Fixtures park background improvement but keep the real core,
 event log, harness and ProcessSandbox. Native/external actions are refused in fixture sessions.
@@ -434,6 +462,12 @@ Watch with `runs` and `status`; no new record for a long while, or a `lastFailur
 read `logs`. A run paused by an engine limit or a loop crash continues from
 `[data-run-resume="<runId>"]` once the limit resets. Never restart or drive the window while the
 owner is using it; leave the profile running at the end.
+
+Run overrides reach the harness from the studio's environment only by name (`harnessRunEnv`):
+`STUDIO_DIRECTOR_LOOP=turn` picks the long turn for a run that names no loop, and
+`STUDIO_UNREAL_RUNNER=lead` sends a new Loop on an Unreal project, and the resume of a run that
+runner wrote, to the Unreal runner from before the one Loop. Neither is a run record field or shown
+in the UI; set it on start and restart.
 
 Transport descriptors are private local capabilities under the owned profile; never copy them
 into task records. Unix sockets live in a short 0700 temporary directory, with owner-only socket

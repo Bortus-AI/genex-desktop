@@ -11,14 +11,19 @@ import { Icon } from "../ui/icons.tsx";
 import { Markdown } from "../ui/Markdown.tsx";
 import { ResultButton } from "../ui/ResultButton.tsx";
 import { ToolRow } from "../ui/ToolChips.tsx";
-import { compactedWords, consentRequestedWords } from "../words.ts";
+import { compactedWords, consentLineWords } from "../words.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { AssetResults } from "./AssetResults.tsx";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
 import { CommandRun } from "./CommandRun.tsx";
 import { GenexCoverCard } from "./GenexCoverCard.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
+import { EngineLinkLine } from "./EngineLinkLine.tsx";
+import { JobLine } from "./JobLine.tsx";
+import { WorkerLine } from "./WorkerLine.tsx";
+import { AppAccessLine } from "./AppAccessLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
+import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
 import { WorkLog } from "./WorkLog.tsx";
@@ -69,7 +74,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
   const deliveries = useMemo(() => (entry.kind === EntryKind.Assets ? [entry.delivery] : []), [entry]);
   switch (entry.kind) {
     case WORK_KIND:
-      return <WorkLog items={entry.items} />;
+      return <WorkLog items={entry.items} deliveries={entry.deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.Assets:
       return <AssetResults deliveries={deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.GenexCover:
@@ -108,6 +113,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
           kept={entry.kept}
           undone={entry.undone}
           landed={entry.landed}
+          profile={entry.profile}
           // A run the plan limit cut off is paused, not finished: the card says so and
           // offers Resume itself, instead of leaving it to a grey line underneath.
           paused={!entry.superseded && resumable(entry.runId, context)}
@@ -128,6 +134,8 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <ActionEntry entry={entry} context={context} resume={resume} />;
     case EntryKind.Compaction:
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
+    case EntryKind.PluginSuggestion:
+      return <PluginSuggestionCard entry={entry} onNotice={onNotice} />;
     default:
       return null;
   }
@@ -214,28 +222,38 @@ function SystemEntry({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind
   return (
     <div className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
       {showsHeading && <span className="text-[12px] font-medium text-ink-3">{systemHeading(tag)}</span>}
-      <span>{stopped ? "Stopped" : <FileText text={entry.text} />}</span>
+      <span className="[overflow-wrap:anywhere]">{stopped ? "Stopped" : <FileText text={entry.text} />}</span>
     </div>
   );
 }
 
+/** A plugin's or connector's question once answered: one line, as Claude's own are, the request inside. */
 function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryKind.Action }> }): JSX.Element {
   return (
-    <div className="text-chat text-ink-2">
-      <p>{entry.consentPrompt || consentRequestedWords(entry.consentSource)}</p>
+    <ChatDisclosure
+      data-consent-outcome
+      lead={<Icon name="shield" size={14} className="shrink-0" />}
+      label={consentLineWords(entry.outcome ?? "", entry.consentSource)}
+    >
       {entry.consentExport && <ExportReview review={entry.consentExport} />}
-      <p className="mt-1 text-chat-sub text-ink-3">{entry.outcome}</p>
-      <details className="group/request mt-1">
-        <summary className="chat-disclosure">
-          Request details
-          <Icon name="chevron-right" size={14} className="chat-chevron group-open/request:rotate-90" />
-        </summary>
-        <p className="mt-1 text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
-          <FileText text={entry.text} />
-        </p>
-      </details>
-    </div>
+      <p className="text-chat-sub text-ink-3 [overflow-wrap:anywhere]">
+        <FileText text={entry.text} />
+      </p>
+    </ChatDisclosure>
   );
+}
+
+/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission. */
+function quietLine(
+  entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
+  context: TranscriptContext,
+): JSX.Element | null {
+  if (entry.action === EntryAction.EngineLink)
+    return <EngineLinkLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
+  if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
+  return null;
 }
 
 function ActionEntry({
@@ -275,6 +293,8 @@ function ActionEntry({
       </ChatDisclosure>
     );
   }
+  const line = quietLine(entry, context);
+  if (line) return line;
   if (entry.action === EntryAction.Live) {
     return (
       <div data-build-updated className="flex min-w-0 items-center gap-3 text-chat text-ink-3">
@@ -304,7 +324,7 @@ function ActionEntry({
   return (
     <div key={entry.id} className="flex min-w-0 flex-col gap-1 text-chat-sub leading-relaxed text-ink-2">
       <span className="text-[12px] font-medium text-ink-3">{entry.tag}</span>
-      <span className="min-w-0">
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         <FileText text={entry.text} />
         {entry.action === EntryAction.Rewind && snapshotId ? (
           <ResultButton

@@ -357,7 +357,7 @@ Resetting policy also refreshes the displayed threshold to its effective inherit
 
 ### Compact now
 
-Compact now is the context panel's button, or `/compact` typed as the whole message: "/" opens the
+Compact now is the context panel's Compact button (on the reading's line), or `/compact` typed as the whole message: "/" opens the
 composer's command list (`ui/ComposerCommandMenu.tsx`), which runs it instead of sending the text,
 and lists it as waiting while a turn or a build runs (`loop/session-compact.ts`).
 
@@ -394,7 +394,10 @@ opens to the summary in one framed box when there is one.
 The person may switch a game chat's model at any message, and the chat stays one conversation
 (`loop/chat-continuity.ts`). A session goes on only while it is the chat's latest (`goesOn`): a
 model switched back to after another one answered starts a fresh session, since its own missed
-those turns, and Compact now works on that latest session only. A fresh session mid-conversation
+those turns, and Compact now works on that latest session only. A session the engine cannot
+resume — it throws, or answers that it has no such conversation (another account's, one never
+saved) — is replaced by a fresh one in the same turn (`loop/chat-steer.ts`), so the chat never
+stays stuck on it. A fresh session mid-conversation
 is briefed with the original request, the latest instruction, the last messages verbatim
 (`loop/brief-window.ts`: 20 messages, at most 18,000 characters) and the latest written summary
 (`compactedSummary`, which reads past a Codex compaction's sealed one). When that brief cannot
@@ -531,8 +534,8 @@ flow installs this added server with launch-change review and preserves the save
 
 ### Genex skills, CLI and packages
 
-Genex 1.5.0 reaches existing installations through the standard Update flow, whose trust dialog
-lists its skills and the tools Studio runs for it. Builder briefs index Genex's guide and its
+Genex 1.5.0 reaches existing installations through the standard Update flow, which installs a
+bundled plugin's newer version without a trust dialog. Builder briefs index Genex's guide and its
 platform cards (multiplayer, player identity, LLM in games, monetization, publishing, cover, updates);
 agents read a card with `genex__skill` before that work, and the host serves it from the plugin,
 never from or into the game folder.

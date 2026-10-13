@@ -576,6 +576,46 @@ describe("the chat's own session after a lead's run", () => {
     assert.equal(await readFile(path.join(project.dir, "src", "sky.js"), "utf8"), "export const sky = 'pink';\n");
   });
 
+  it("after a Loop that worked in place it offers run_status alone, and answers no show_build or land_build", async () => {
+    const { core, api, project, threadId } = await gameChat({ withPreview: true });
+    await closedLoopRun(core, project, "run_after");
+    const head = await git(project.dir, ["rev-parse", "HEAD"]);
+    const seen: DelegateRequest[] = [];
+    const answers: Record<string, string> = {};
+    const engine = {
+      ...sessionEngine(() => ({ sessionId: "after", ending: ANSWERED })),
+      id: "codex",
+      delegate: async (request: DelegateRequest): Promise<DelegateResult> => {
+        seen.push(request);
+        // Asked by name whether offered or not, as a session may call a tool it guessed.
+        for (const name of ["run_status", "show_build", "land_build"]) {
+          const call = request.onLiveTool;
+          if (!call) continue;
+          answers[name] = await Promise.resolve(call(name, {})).then(
+            (answer) => (answer === undefined ? "unanswered" : typeof answer === "string" ? answer : answer.text),
+            (err: Error) => `refused: ${err.message}`,
+          );
+        }
+        return { ok: true, engine: "codex", sessionId: "after", turns: 1, usage: {}, summary: "" };
+      },
+    };
+    core.engines.register(engine as never);
+    await api["engine.delegate"]!({
+      engine: "codex",
+      prompt: "go",
+      project: project.name,
+      threadId,
+      runControls: { runId: "run_after", messageId: "m1", inPlace: true },
+    });
+    const names = (seen.at(-1)!.liveTools ?? []).map((tool) => tool.name);
+    const controls = names.filter((name) => ["run_status", "show_build", "land_build"].includes(name));
+    assert.deepEqual(controls, ["run_status"], names.join(", "));
+    assert.equal((JSON.parse(answers.run_status!) as { run: { state: string } }).run.state, "finished");
+    for (const name of ["show_build", "land_build"])
+      assert.doesNotMatch(String(answers[name]), /Landed|showing|Showing/, `${name}: ${answers[name]}`);
+    assert.equal(await git(project.dir, ["rev-parse", "HEAD"]), head, "nothing landed in the game folder");
+  });
+
   it("gives them to nothing but the chat's own session, and a control never reaches another run", async () => {
     const { core, api, project, threadId } = await gameChat();
     const worktree = await runWorktree(core, project, "run_other");
