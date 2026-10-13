@@ -24,7 +24,7 @@ import { WorkerStopCode } from "../shared/workers.ts";
 import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
 import { sizeWords } from "../shared/byte-size.ts";
-import type { GameHistoryCleared, GameHistorySpace } from "../shared/game-history.ts";
+import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
@@ -2809,45 +2809,62 @@ export function toolActivityWords(icon: ToolIcon): string {
 
 // ── The chat panel ─────────────────────────────────────────────────────────────────────────
 
-/** The chat ⋯ menu's history item and its confirmation. */
-export const HISTORY_WORDS = {
-  menu: "Clear Rewind history…",
-  title: "Clear Rewind history?",
+/** Freeing space: Settings → Storage, the chat header's button and their confirmation. */
+export const STORAGE_WORDS = {
+  tab: "Storage",
+  title: "Free up space",
+  keeps: "Your games, save points, paused builds and each game’s latest build stay.",
+  measuring: "Measuring…",
+  freeing: "Freeing…",
+  nothing: "Nothing to free up",
+  none: "None",
   keep: "Keep",
-  clear: "Clear",
-  cleared: "Cleared Rewind history.",
-  nothingCleared: "There was nothing to clear.",
+  freedNothing: "There was nothing to free.",
 } as const;
 
-/** The confirmation's body: how much space history takes, what clearing frees now and later, and what stays. */
-export function historySpaceWords(space: GameHistorySpace): string {
-  const total = `Version history takes ${sizeWords(space.totalBytes)}.`;
-  const recent = sizeWords(space.recentBytes);
-  const later = space.recentBytes > 0 ? ` About ${recent} from the last hour stays until a later clear.` : "";
-  if (space.rewindTracks + space.finishedRunTracks === 0) {
-    if (space.clearableBytes > 0)
-      return `${total} Copies cleared earlier still take about ${sizeWords(space.clearableBytes)} of it. Clearing frees that space.${later}`;
-    if (space.recentBytes > 0)
-      return `${total} Nothing beside it to clear now; about ${recent} from the last hour goes at a later clear.`;
-    return `${total} Nothing beside it to clear.`;
-  }
-  return (
-    `${total} Rewind’s saved copies and finished builds’ side tracks hold about ` +
-    `${sizeWords(space.clearableBytes)} of it. Clearing them frees that space.${later} Your save points, the ` +
-    "game’s own history and paused builds stay; older messages can still rewind the chat, but not " +
-    "its files, and builds you didn’t make live can no longer be opened."
-  );
+/** Each kind of space freeing deletes: its name and what it is. */
+export const STORAGE_KIND_WORDS = {
+  [StorageKind.Copies]: { label: "Build copies", about: "Folders Genex made to run and show builds." },
+  [StorageKind.Pictures]: { label: "Build pictures", about: "Screenshots and recordings of finished builds." },
+  [StorageKind.History]: { label: "Rewind copies", about: "Versions of your games saved for Rewind and builds." },
+} as const satisfies Record<StorageKind, { label: string; about: string }>;
+
+/** A size in running text, kept on one line ("1.2 GB" never breaks before its unit). */
+function unbrokenSize(bytes: number): string {
+  return sizeWords(bytes).replace(" ", "\u00a0");
 }
 
-/** The menu item's size beside its label: what clearing frees, once it is known. */
-export function historyMenuSize(space: GameHistorySpace | null): string | null {
-  return space ? sizeWords(space.clearableBytes) : null;
+/** The button that frees `space`: how much it frees, or that there is nothing to. */
+export function freeUpWords(space: StorageSpace): string {
+  const bytes = freeableBytes(space);
+  return bytes > 0 ? `Free up ${sizeWords(bytes)}` : STORAGE_WORDS.nothing;
 }
 
-/** The notice after clearing a game's Rewind history. */
-export function historyClearedWords(cleared: GameHistoryCleared): string {
-  if (cleared.freedBytes > 0) return `Cleared ${sizeWords(cleared.freedBytes)}.`;
-  return cleared.removedTracks > 0 ? HISTORY_WORDS.cleared : HISTORY_WORDS.nothingCleared;
+/** The chat header's button: how much freeing this game frees. */
+export function freeGameWords(space: StorageSpace): string {
+  return `Free ${sizeWords(freeableBytes(space))}`;
+}
+
+/** The confirmation's title. */
+export function freeConfirmTitle(space: StorageSpace): string {
+  return `Free up ${unbrokenSize(freeableBytes(space))}?`;
+}
+
+/** What freeing deletes and what stays: the tooltip and the confirmation's body, for one game or all. */
+export function freeSpaceWords(space: StorageSpace, game?: string): string {
+  const of = game ? ` of ${game}` : "";
+  const holds = `Older builds${of} and Rewind copies take ${unbrokenSize(freeableBytes(space))}.`;
+  const stays = game ? "The game, its save points, paused builds and latest build stay." : STORAGE_WORDS.keeps;
+  return `${holds} ${stays} Older messages can still rewind the chat, but not its files.`;
+}
+
+/** The notice after freeing space: how much, and which working games it left alone. */
+export function freedWords(freed: StorageFreed, titleOf: (game: string) => string = (game) => game): string {
+  const done = freed.freedBytes > 0 ? `Freed ${sizeWords(freed.freedBytes)}.` : STORAGE_WORDS.freedNothing;
+  const [only, ...more] = freed.skipped;
+  if (only === undefined) return done;
+  if (more.length === 0) return `${done} Left ${titleOf(only)} alone while it works.`;
+  return `${done} Left ${plural(freed.skipped.length, "game")} alone while they work.`;
 }
 
 /** How many included files an export notice names before it says "and N more". */

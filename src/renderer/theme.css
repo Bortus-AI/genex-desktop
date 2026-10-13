@@ -123,9 +123,9 @@
   --dur-2: var(--duration-fast);
   --ease: var(--ease-smooth-out);
   --sidebar: #0b0b0d;
-  --danger-fill: #f08287;
-  --danger-foreground: #000000;
-  --danger-hover: color-mix(in oklab, #f08287 92%, #ffffff);
+  --danger-fill: #b54e55;
+  --danger-foreground: #ffffff;
+  --danger-hover: #bd565c;
   --success-foreground: #000000;
   --image-outline: #ffffff1a;
   --error-foreground: #000000;
@@ -1410,6 +1410,14 @@ button.chat-header-title:hover {
   transition:
     background-color var(--duration-quick),
     color var(--duration-quick);
+}
+/* A header control that says something beside its icon: the Free button. */
+.header-control[data-label] {
+  display: flex;
+  gap: 6px;
+  width: auto;
+  padding-inline: 8px;
+  font: 12px / 1 var(--font-family-code);
 }
 .header-control:hover,
 .header-control[aria-expanded="true"] {
