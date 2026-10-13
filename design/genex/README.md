@@ -442,6 +442,11 @@ In chat the outcome is the build card above: delivery, capture and Play; the car
 Counts and revision identifiers live under **Technical details** in the Builds result card. Checks and
 play/history actions remain separate, and a summary embedded in a completion card adds no
 second card surface. Do not hide adverse evidence merely to make a result look cleaner.
+Its checks list this build's first and an earlier build's under **Earlier builds**, failures first. A row
+is a 14px state mark (green check, red cross, ink-3 dash) beside the title, which clamps to three lines with
+**Show all** only when it hides words; one 12px line under it says the state in words, who checked and, for
+a check that played, what it rests on ("Passed · Judge who played it · verified by the studio"), red when
+it failed; then the checker's note. No category or revision on a row (`outcome-checks.ts`).
 The Builds graph stays a node graph: every node is one size (208×130), its picture filling it, a
 name and one status on a dark fade at its bottom, and a count in a chip at the top right; a ring
 outside it, never a border, so no state changes its size. Colour means state only (no per-part

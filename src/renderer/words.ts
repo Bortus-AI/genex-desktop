@@ -34,7 +34,7 @@ import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
-import type { OutcomeView } from "../shared/run-summary.ts";
+import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
 import {
   GrantKind,
@@ -3526,6 +3526,24 @@ export const OBJECTIVE_WORDS: Record<InteractionObjective, string> = {
   [InteractionObjective.StudioVerified]: "verified by the studio",
   [InteractionObjective.ModelSaid]: "the player's word",
 };
+
+/** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
+export const CHECK_WORDS = {
+  status: {
+    passed: "Passed",
+    failed: "Failed",
+    unknown: "Not measured",
+    incomplete: "Incomplete",
+  } satisfies Record<RunEvidence["status"], string>,
+  thisBuild: "This build",
+  earlierBuilds: "Earlier builds",
+  reviewer: "Reviewer",
+  recorded: "Recorded check",
+  routeTitle: "Replayed the judge's route",
+  routeHeld: "The judge's moves were replayed on this build, and the goal held.",
+  showAll: "Show all",
+  showLess: "Show less",
+} as const;
 /** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
 export const PLUGIN_TOOLBAR_WORDS = {
   update: {
