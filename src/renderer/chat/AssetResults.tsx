@@ -1,3 +1,4 @@
+import { withoutGenexSources } from "../../shared/genex.ts";
 import type { JSX } from "react";
 import { memo, useMemo, useState } from "react";
 import type { AssetDeliveredPayload, ProjectAsset } from "../../shared/game-assets.ts";
@@ -258,7 +259,7 @@ export const AssetResults = memo(function AssetResults({
   const delivered = useDelivered(project, assets, revision);
   if (!delivered) return null;
   const { available, folded, owner } = delivered;
-  const shown = available.filter((asset) => !folded.motions.has(asset.file));
+  const shown = withoutGenexSources(available.filter((asset) => !folded.motions.has(asset.file)));
   const loose = available.filter((asset) => folded.loose.includes(asset.file));
   const clipsOf = (asset: ProjectAsset) =>
     available.filter((clip) => folded.clipsOf.get(asset.file)?.includes(clip.file));

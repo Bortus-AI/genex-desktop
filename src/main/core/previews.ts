@@ -22,6 +22,8 @@ import {
   type GameProject,
 } from "../../substrate/game-workspace.ts";
 import type { HarnessParams, HarnessResult } from "../../shared/harness-api.ts";
+import type { ProjectShape } from "../../shared/game-project.ts";
+import { templateLoadsGenexSdk } from "../../substrate/project-shape.ts";
 import { genexOutputFile, isGenexRef } from "../../shared/genex-ref.ts";
 import { type ProjectAssetRead, ProjectAssetScope } from "../../shared/game-assets.ts";
 import { resetToolchain } from "../../substrate/toolchain.ts";
@@ -460,6 +462,19 @@ function invalidStillSize(maxPx: number | undefined): boolean {
   return maxPx !== undefined && (!Number.isInteger(maxPx) || maxPx < 1 || maxPx > STILL_MAX_PX);
 }
 
+/**
+ * Whether the preview serves a game on its loopback origin: one built from its own sources, or a
+ * template game that loads the Genex SDK, whose local test mode only a loopback origin gets.
+ */
+async function servedOnLoopback(
+  descriptor: GameProject | undefined,
+  shape: ProjectShape,
+  dir: string,
+): Promise<boolean> {
+  if (descriptor?.built === true) return true;
+  return !shape.own && (await templateLoadsGenexSdk(dir));
+}
+
 export class PreviewService {
   readonly #core: StudioCore;
   readonly #x: CoreInternals;
@@ -605,8 +620,8 @@ export class PreviewService {
   ): Promise<{ entry: string; root: string | undefined; loopback: boolean; stale: string | null } | null> {
     const descriptor = (await this.#core.games.list().catch(() => [] as GameProject[])).find((g) => g.name === project);
     const shape = descriptor?.shape ?? TEMPLATE_SHAPE;
-    const loopback = descriptor?.built === true;
     const base = root ?? this.#core.games.dirFor(project);
+    const loopback = await servedOnLoopback(descriptor, shape, base);
     const outcome = await this.#core.builds.ensure({ project, dir: base, shape });
     const note = outcome.problem ? buildFailureNote(outcome.problem) : null;
     if (note) port.note?.("error", note, { loadError: true });
