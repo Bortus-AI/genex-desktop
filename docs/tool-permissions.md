@@ -515,7 +515,7 @@ knows (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`): the studio's `comput
 only hands an agent has ([computer use](computer-use.md)).
 
 A judge that plays (`role: "judge"`) is blind as well as read-only (`DelegateRequest.blind`) where
-the engine can enforce it: Claude Code disallows every file, shell, edit and question tool, OpenCode
+the engine can enforce it: Claude Code is offered no built-in but tool search and disallows every file, shell, edit and question tool, OpenCode
 denies every file tool, and a local session gets no file tool. Codex reads the whole disk, so a Codex
 judge is only told to judge by playing. Every engine starts in the empty `scratch/blind-judge`
 folder and is not told the build's path.

@@ -1188,6 +1188,7 @@ export class ClaudeCodeEngine implements Engine {
       strictMcpConfig: true,
       allowedTools: allowedToolsFor(request, interviewTools),
       disallowedTools: disallowedToolsFor(request),
+      ...blindBuiltIns(request),
       // No sandbox key at all for a session that asks: Claude Code's default, which a game's own
       // project settings may still turn on. Every command it runs was asked about first. A worker
       // is boxed in every mode, Bypass included (`workerSandbox`).
@@ -2062,6 +2063,18 @@ function disallowedToolsFor(request: DelegateRequest): string[] {
     ...(request.optimization ? WEB_TOOLS : []),
     ...(asksOf(request) ? ASKING_TOOLS : []),
   ];
+}
+
+/** The only built-in a blind judge may load: tool search, which brings in its deferred live tools. */
+const BLIND_BUILT_INS = ["ToolSearch"];
+
+/**
+ * A blind judge's built-ins, as an allowlist on top of its block list: a built-in Claude Code adds
+ * later (Skill, Workflow's sub-agents with their file tools) would otherwise reach it unasked.
+ * Every other session keeps Claude Code's own set.
+ */
+function blindBuiltIns(request: DelegateRequest): { tools?: string[] } {
+  return request.blind ? { tools: [...BLIND_BUILT_INS] } : {};
 }
 
 /**

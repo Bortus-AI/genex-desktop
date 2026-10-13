@@ -74,8 +74,9 @@ Builders (unless `computer: false`), the director, playtesters and scouts hold `
 pooled window of their own, never Live. A **judge** (`DelegatePlaytestGrant.role: "judge"`) holds
 `computer` alone, is never offered the game's `state` or `console` and reads no state in its
 answers (the builder wrote both), plays on a stepped clock, and meets the game at its first screen.
-It is blind (`DelegateRequest.blind`), enforced where the engine can enforce it: Claude Code
-disallows every file, shell, edit and question tool; OpenCode denies every file tool; local
+It is blind (`DelegateRequest.blind`), enforced where the engine can enforce it: Claude Code is
+offered no built-in but tool search (`tools`, an allowlist, so a built-in it adds later never
+arrives) and disallows every file, shell, edit and question tool; OpenCode denies every file tool; local
 sessions get no file tool. Codex reads the whole disk, so a Codex judge is only told to judge by
 playing (`BLIND_JUDGE_NOTE`) — the studio's goal check does not rest on that, but its other
 answers do. Every engine starts in the empty `scratch/blind-judge` folder and is never told the

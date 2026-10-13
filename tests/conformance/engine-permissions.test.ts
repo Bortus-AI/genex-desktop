@@ -293,6 +293,10 @@ describe("a chat's own Claude session asks the person", () => {
     const options = seen[0]!;
     for (const tool of ["Read", "Grep", "Glob", "Bash", "Edit", "Write", "WebFetch", "AskUserQuestion"])
       assert.ok((options.disallowedTools as string[]).includes(tool), `${tool} is not a blind judge's`);
+    // Its built-ins are an allowlist, not only a block list: a live judge was offered Skill,
+    // Workflow (sub-agents with file tools), ScheduleWakeup and ReportFindings, which Claude Code
+    // added after the block list was written. Tool search stays: it loads the deferred live tools.
+    assert.deepEqual(options.tools, ["ToolSearch"], "no built-in but tool search");
   });
 
   /**
