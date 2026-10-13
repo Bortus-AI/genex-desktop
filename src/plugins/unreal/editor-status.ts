@@ -1,7 +1,7 @@
 /**
- * Where the user's Unreal stands for Genex, in one word for the Unreal toolbar button's dot and the
- * panel: Set up, Not open, Starting or Ready, Add for an open game that isn't made in Unreal, and
- * Not installed while no Unreal Genex works with is installed.
+ * Where the user's Unreal stands for Genex, in one word for the Unreal toolbar button's dot and
+ * the panel: Set up, Not open, Starting or Ready, Add for an open game that isn't made in Unreal,
+ * and Not installed while no Unreal Genex works with is installed.
  * Ready needs both the project's own port answering as Epic's server and an editor process
  * running. The toolbar asks every so often, so its status is cheap: the plugin's own records, one
  * check that the editor process runs, and one MCP handshake on the project's own port; no folder
@@ -258,10 +258,10 @@ async function gameSubject(storage: string, game: string): Promise<Subject> {
 }
 
 /**
- * The Unreal toolbar button's status: Not installed while no Unreal Genex works with is installed. Otherwise,
- * with a game open it is that game's: Add while the game has
- * no Unreal project, else its own project's state, named. With no game open it is the project
- * chosen in the panel (else the first set-up one). Only a port from Genex's own setup records is
+ * The Unreal toolbar button's status: Not installed while no Unreal Genex works with is installed.
+ * Otherwise, with a game open it is that game's: Add while the game has no Unreal project, else its
+ * own project's state, named. With no game open it is the project chosen in the panel (else the
+ * first set-up one). Only a port from Genex's own setup records is
  * ever asked. The one write is removing this project's own Starting record once it answers.
  */
 export async function toolbarStatus(
