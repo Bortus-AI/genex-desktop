@@ -20,6 +20,7 @@ import type { EventEnvelope } from "../../substrate/types.ts";
 import { workerLockKey } from "../../shared/workers.ts";
 import type { PlanReviewController } from "../plan-review.ts";
 import type { PluginConsent } from "../plugin-consent.ts";
+import type { AssetCall } from "./asset-calls.ts";
 import type { AssetService } from "./assets.ts";
 import type { ChatPermissionService } from "./chat-permissions.ts";
 import type { SteerDoor } from "./chat-steer.ts";
@@ -115,6 +116,8 @@ export interface WorkInFlight {
     AbortController,
     { project?: string | null; threadId?: string; outlivesTurn?: boolean; byHarness?: boolean }
   >;
+  /** Calls making an asset, in flight, by call id: the games' waiting jobs while they run (`asset-calls.ts`). */
+  readonly assetCalls: Map<string, AssetCall>;
   /** Genex's moments the harness asked for, in flight, by the game and chat they answer to (`moment-stops.ts`). */
   readonly activeMoments: Map<AbortController, { project: string; threadId?: string }>;
   /**
@@ -335,6 +338,7 @@ export function idleWork(): WorkInFlight {
   return {
     activeCompletions: new Map(),
     activeConnectorCalls: new Map(),
+    assetCalls: new Map(),
     activeMoments: new Map(),
     cutOffCalls: new Map(),
     unsavedFiles: new Map(),
