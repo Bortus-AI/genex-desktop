@@ -1,0 +1,158 @@
+/**
+ * A fake Mac for the Godot plugin: Godot apps where the test puts them (each binary an empty file
+ * whose version the fake answers), a runner that records every Godot job and answers it with
+ * Godot's recorded words (`tests/fixtures/godot-cli/`), and the plugin's backend over both in an
+ * open Genex game, with the host calls it makes recorded. Nothing here starts Godot.
+ */
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import path from "node:path";
+import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
+import { createGodotBackend } from "../../src/plugins/godot/backend.ts";
+import type { EditorEnv, Launch } from "../../src/plugins/godot/editor.ts";
+import type { GodotEnv } from "../../src/plugins/godot/find-godot.ts";
+import { type GodotCall, GodotJob, type GodotResult, type GodotRunner } from "../../src/plugins/godot/godot-run.ts";
+import { tmpDir } from "./tmp.ts";
+
+/** The shipped scripts and templates, read where the source keeps them. */
+export const SCRIPTS = path.resolve("src/plugins/godot/scripts");
+export const TEMPLATES = path.resolve("src/plugins/godot/templates");
+/** Godot 4.6.1's own version line. */
+export const GODOT_461 = "4.6.1.stable.official.14d19694e";
+/** A one-pixel PNG, as a capture saves it. */
+export const PNG_BYTES = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+/** Godot's recorded words, by fixture name. */
+export const godotOutput = (name: string) => readFile(path.resolve("tests/fixtures/godot-cli", name), "utf8");
+
+/** One Godot job as the runner was asked for it: the binary and the call. */
+export type RanJob = { binary: string; call: GodotCall };
+
+/** How the fake answers a job: its words, or its words and the stills it saves; else a quiet success. */
+export type JobAnswers = Partial<Record<GodotJob, string | ((call: GodotCall) => Promise<string>)>>;
+
+/** The capture's answer: a PNG for each camera named, saved where the call says, and Godot's line for each. */
+export function capturing(cameras: readonly string[]) {
+  return async (call: GodotCall) => {
+    const prefix = call.args[call.args.indexOf("--") + 2] ?? "";
+    const lines: string[] = [];
+    for (const [index, camera] of cameras.entries()) {
+      const file = `${prefix}-${index}.png`;
+      await writeFile(file, PNG_BYTES);
+      lines.push(`GENEX_SHOT ${camera} ${file}`);
+    }
+    return lines.join("\n");
+  };
+}
+
+/** A runner that records each job and answers from `answers`; `ended` marks every answer timed out. */
+export function recordingRunner(answers: JobAnswers = {}, ended: Partial<GodotResult> = {}) {
+  const jobs: RanJob[] = [];
+  const run: GodotRunner = async (binary, call) => {
+    jobs.push({ binary, call });
+    const answer = answers[call.job];
+    const output = typeof answer === "function" ? await answer(call) : (answer ?? "");
+    return { output, timedOut: false, cancelled: false, ...ended };
+  };
+  return { run, jobs };
+}
+
+/** A Godot app on the fake Mac: its folder, its binary (an empty file) and the version it answers. */
+async function placeApp(folder: string, name: string) {
+  const binary = path.join(folder, name, "Contents", "MacOS", "Godot");
+  await mkdir(path.dirname(binary), { recursive: true });
+  await writeFile(binary, "");
+  return realpath(binary);
+}
+
+/** Apps to place: where (`applications`, `home-applications`, `downloads`) and the version each answers. */
+export type FakeApp = {
+  where: "applications" | "home-applications" | "downloads";
+  name: string;
+  version: string | null;
+};
+
+/** A fake Mac with the apps named; `pathDirs` and `binaries` the test may add to. */
+export async function fakeMac(
+  apps: readonly FakeApp[] = [{ where: "applications", name: "Godot.app", version: GODOT_461 }],
+) {
+  const root = await realpath(await tmpDir("studio-godot-"));
+  const home = path.join(root, "home");
+  const applications = path.join(root, "Applications");
+  const folders = {
+    applications,
+    "home-applications": path.join(home, "Applications"),
+    downloads: path.join(home, "Downloads"),
+  };
+  const versions = new Map<string, string | null>();
+  for (const app of apps) versions.set(await placeApp(folders[app.where], app.name), app.version);
+  const env: GodotEnv = {
+    platform: "darwin",
+    home,
+    pathDirs: [],
+    applications,
+    binaries: [],
+    version: async (binary) => versions.get(binary) ?? null,
+  };
+  return { root, home, env, versions };
+}
+
+/** An editor that records what it opens and answers the process list it is given. */
+export function recordingEditor(lines: string[] = []) {
+  const opened: Launch[] = [];
+  const editor: EditorEnv = {
+    open: async (launch) => {
+      opened.push(launch);
+    },
+    commandLines: async () => lines,
+  };
+  return { editor, opened, lines };
+}
+
+/** A host call made by the backend: its method and arguments. */
+export type HostCall = { method: string; args: unknown };
+
+/**
+ * The backend on a fake Mac in an open game (`valley`, its folder `game/`), or outside any game
+ * with `game: null`; the host keeps storage in `storage/` and makes a game `made/` when asked.
+ */
+export async function godotBackendFixture(
+  options: { apps?: FakeApp[]; answers?: JobAnswers; game?: string | null; editorLines?: string[] } = {},
+) {
+  const mac = await fakeMac(options.apps);
+  const storage = path.join(mac.root, "storage");
+  const gameDir = path.join(mac.root, "game");
+  const made = path.join(mac.root, "made");
+  await mkdir(storage, { recursive: true });
+  await mkdir(gameDir, { recursive: true });
+  const runner = recordingRunner(options.answers);
+  const recorded = recordingEditor(options.editorLines);
+  const backend = createGodotBackend({
+    env: mac.env,
+    editor: recorded.editor,
+    run: runner.run,
+    scripts: SCRIPTS,
+    templates: TEMPLATES,
+  });
+  const hostCalls: HostCall[] = [];
+  const host = (async (method: string, args?: unknown) => {
+    hostCalls.push({ method, args });
+    if (method === "storage.root") return storage;
+    if (method === "game.create") {
+      await mkdir(made, { recursive: true });
+      return { project: "made-game", directory: made };
+    }
+    throw new Error(`unexpected host call ${method}`);
+  }) as PluginContext["host"];
+  const inGame = options.game !== null;
+  const context = (more: Partial<PluginContext> = {}): PluginContext => ({
+    ...(inGame ? { project: options.game ?? "valley", directory: gameDir } : {}),
+    signal: new AbortController().signal,
+    callId: 1,
+    host,
+    ...more,
+  });
+  return { ...mac, storage, gameDir, made, backend, runner, jobs: runner.jobs, editor: recorded, hostCalls, context };
+}

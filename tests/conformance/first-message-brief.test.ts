@@ -57,6 +57,7 @@ function game(facts: unknown[], extra: Record<string, unknown> = {}) {
 const NEW_GAME_TOOL = { name: UNREAL_NEW_GAME_TOOL, description: "Make the game's Unreal project.", parameters: {} };
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Engine", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
 const TOY_KIND = { plugin: "toy", name: "Toy Engine", tool: "toy__new-toy", makes: ["toy-project"] };
+const GODOT_KIND = { plugin: "godot", name: "Godot", tool: "godot__new-game", makes: ["godot-project"] };
 const UNREAL_ON = { tools: [NEW_GAME_TOOL], kinds: [UNREAL_KIND] };
 const NONE_ON = { tools: [], kinds: [] };
 
@@ -216,6 +217,15 @@ describe("the rules each kind gets", () => {
     // A plugin's own kind has its plugin on already: nothing to look for.
     const toy = await firstMessage(game([fact("toy-project", ".", "plugin:toy-engine")]), NONE_ON);
     assert.ok(!toy.prompt.includes(PLUGINS_SUGGEST), "a plugin's kind");
+  });
+
+  it("one of Genex's own kinds that a plugin on makes has that plugin already: nothing to look for", async () => {
+    const godot = game([fact(CoreFact.GodotProject, "godot")], { built: true, shape: { own: true } });
+    const on = await firstMessage(godot, { tools: [], kinds: [GODOT_KIND] });
+    assert.ok(!on.prompt.includes(PLUGINS_FIND), "its plugin is on");
+    assert.match(on.prompt, /a Godot project/);
+    const off = await firstMessage(godot, { tools: [], kinds: [TOY_KIND] });
+    assert.ok(off.prompt.includes(PLUGINS_FIND), "another plugin's kind covers nothing here");
   });
 
   it("each kind gets its own rules, named by path when there are two", () => {

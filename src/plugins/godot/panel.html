@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><!-- STUDIO_PANEL_FONTS --><style>
+:root{--bg:#0e0d0f;--fg:#dee0e2;--accent:#3c44c4;--accent-fill:var(--accent);--accent-text:#fff;--accent-hover:color-mix(in srgb,var(--accent) 88%,#fff);--ok:#7cd194;--warn:#efbe72;--err:#f08287;--outline:rgb(255 255 255/.1);color-scheme:dark;
+  --quiet:color-mix(in srgb,var(--fg) 64%,var(--bg));--line:color-mix(in srgb,var(--fg) 9%,var(--bg));--hover:color-mix(in srgb,var(--fg) 10%,var(--bg));--field:color-mix(in srgb,var(--fg) 7%,var(--bg));
+  /* Genex's type: words in Zalando Sans SemiExpanded, actions and machine text in Geist Mono (inlinePanelFonts). */
+  --sans:"Zalando Sans SemiExpanded",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  /* The arrow of a button that opens another app or page. */
+  --arrow:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17L17 7M9 7h8v8'/%3E%3C/svg%3E")}
+/* Chosen for at least 4.5:1 on every light theme's background. */
+:root[data-scheme="light"]{--ok:#1d7f46;--warn:#95570b;--err:#b3303d;--outline:rgb(0 0 0/.1);color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 28px;font:14px/20px var(--sans);color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+@media (max-width:480px){body{padding:20px 16px}}
+main{max-width:640px;display:grid;gap:20px}
+section,form{display:grid;gap:14px;min-width:0}
+h2{margin:0;font-size:20px;line-height:28px;font-weight:500}
+p{margin:0;text-wrap:pretty}
+.quiet{color:var(--quiet)}
+.mono{font-family:var(--mono);font-size:12px;line-height:18px;letter-spacing:-.02em;overflow-wrap:anywhere}
+.actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+/* Genex's buttons: 32px, a rounded fill and no border, the label in Geist Mono. */
+button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:32px;padding:0 14px;font:inherit;font-family:var(--mono);letter-spacing:-.02em;white-space:nowrap;color:inherit;background:var(--field);border:0;border-radius:11px;cursor:pointer;transition-property:scale,background-color;transition-duration:150ms;transition-timing-function:cubic-bezier(.22,1,.36,1)}
+button:hover{background:var(--hover)}
+button:active:not(:disabled){scale:.96}
+button.primary{background:var(--accent-fill);color:var(--accent-text)}
+button.primary:hover{background:var(--accent-hover)}
+button.external{padding-inline-end:12px}
+button.external::after{content:"";width:14px;height:14px;flex:none;background:currentColor;-webkit-mask:var(--arrow) center/contain no-repeat;mask:var(--arrow) center/contain no-repeat}
+button:disabled{opacity:.5;cursor:not-allowed;scale:none}
+button.primary:disabled:hover{background:var(--accent-fill)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Where the game's project stands, in the toolbar's own words and its tone's colour. */
+.state{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;line-height:18px;letter-spacing:-.02em;color:var(--quiet)}
+.state::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.state[data-tone="ok"]{color:var(--ok)}
+/* The two templates: a choice of two, each its name and one line. */
+.templates{border:0;padding:0;margin:0;min-width:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px}
+.template{position:relative;display:grid;align-content:start;gap:2px;padding:10px 12px;border-radius:10px;background:var(--field);color:var(--quiet);cursor:pointer}
+.template:hover{background:var(--hover)}
+.template:has(input:checked){color:var(--fg);box-shadow:inset 0 0 0 2px var(--accent)}
+.template:has(input:focus-visible){outline:2px solid var(--fg);outline-offset:2px}
+.template input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.template strong{font-weight:500;color:var(--fg)}
+fieldset:disabled .template{opacity:.5;cursor:default}
+.field{display:grid;gap:6px}
+input[type="text"]{width:100%;max-width:300px;min-height:36px;padding:0 12px;font:15px/22px var(--sans);color:inherit;background:var(--field);border:0;border-radius:10px}
+input[type="text"]:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+input[aria-invalid="true"]{box-shadow:inset 0 0 0 1px var(--err)}
+.facts{padding-top:14px;border-top:1px solid var(--line);color:var(--quiet)}
+.error{color:var(--err);white-space:pre-wrap;overflow-wrap:anywhere}
+.error:empty,.facts:empty{display:none}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:none}}
+/* Last, so it wins over every class that sets a display. */
+[hidden]{display:none}
+</style></head><body>
+<main id="app" aria-busy="true">
+  <p id="checking" class="quiet" role="status">Looking for Godot…</p>
+  <section id="get" hidden aria-labelledby="get-title">
+    <h2 id="get-title">Get Godot</h2>
+    <p id="get-why">Genex builds Godot games with Godot 4.3 or newer. It's free and open source: download it, then put Godot in Applications. Genex finds it there.</p>
+    <div class="actions"><button id="get-godot" class="primary external" type="button">Get Godot</button><button id="recheck" type="button">Check again</button></div>
+  </section>
+  <section id="project" hidden aria-labelledby="project-title">
+    <h2 id="project-title">This game's Godot project</h2>
+    <p id="project-state" class="state" role="status"></p>
+    <p id="project-path" class="mono quiet"></p>
+    <div class="actions"><button id="open" class="primary external" type="button">Open in Godot</button></div>
+  </section>
+  <form id="new" hidden aria-labelledby="new-title" novalidate>
+    <h2 id="new-title">New Godot game</h2>
+    <p id="new-where" class="quiet"></p>
+    <fieldset id="new-fields" class="templates">
+      <legend class="sr-only">Template</legend>
+      <label class="template"><input type="radio" name="template" value="3d" checked><strong>3D</strong><span>A player that walks and jumps on a floor, under a sky.</span></label>
+      <label class="template"><input type="radio" name="template" value="2d"><strong>2D</strong><span>A player that moves around the screen.</span></label>
+    </fieldset>
+    <div class="field"><label for="name">Name</label><input id="name" type="text" autocomplete="off" maxlength="40" spellcheck="false" aria-describedby="name-error"></div>
+    <div class="actions"><button id="create" class="primary" type="submit">Create</button></div>
+  </form>
+  <p id="error" class="error" role="alert"></p>
+  <p id="facts" class="facts mono"></p>
+</main>
+<!-- STUDIO_PANEL_SDK -->
+<script>
+const api = window.studioPlugin;
+const $ = (id) => document.getElementById(id);
+/** How often the panel asks again while it is shown: Godot may have been installed, or opened, since. */
+const REFRESH_MS = 4000;
+/** A slow import of a new project is still quick next to this. */
+const CREATE_TIMEOUT_MS = 6 * 60 * 1000;
+const QUIET_SHARE_MIN = 64;
+const TEXT_CONTRAST_MIN = 4.5;
+const HOVER_SHARE = 88;
+const WHITE = "#ffffff";
+const BLACK = "#000000";
+const GAME_NAME = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,39}$/;
+const READY = "ready";
+const WORDS = {
+  getWhy: "Genex builds Godot games with Godot 4.3 or newer. It's free and open source: download it, then put Godot in Applications. Genex finds it there.",
+  older: (v) => `This Mac has Godot ${v}. Genex builds with Godot 4.3 or newer in the 4 line: download a current Godot 4 and put it in Applications beside yours.`,
+  open: "Open in Godot now",
+  closed: "Not open in Godot",
+  inGame: "Its project goes in this game's godot folder.",
+  newGame: "Genex makes a new game for it.",
+  badName: "Use 1 to 40 letters, digits, spaces, dashes or underscores, starting with a letter or digit.",
+  creating: "Creating…",
+  create: "Create",
+  facts: (s) => `Godot ${s.godot.version}${s.godot.mono ? " .NET" : ""} · ${s.godot.binary}`,
+};
+
+let closed = false;
+let refreshing = false;
+let creating = false;
+
+const setText = (node, text) => {
+  if (node.textContent !== text) node.textContent = text;
+};
+
+/** Which view the status asks for: get Godot, the game's project, or a new game. */
+function render(s) {
+  $("app").setAttribute("aria-busy", "false");
+  $("checking").hidden = true;
+  const ready = s.readiness === READY;
+  $("get").hidden = ready;
+  $("project").hidden = !ready || !s.project;
+  $("new").hidden = !ready || Boolean(s.project);
+  setText($("get-why"), s.version && !ready ? WORDS.older(s.version) : WORDS.getWhy);
+  setText($("facts"), s.godot ? WORDS.facts(s) : "");
+  if (s.project) {
+    setText($("project-path"), s.project === "." ? "project.godot" : `${s.project}/project.godot`);
+    setText($("project-state"), s.editorOpen ? WORDS.open : WORDS.closed);
+    $("project-state").dataset.tone = s.editorOpen ? "ok" : "";
+  }
+  setText($("new-where"), s.game ? WORDS.inGame : WORDS.newGame);
+}
+
+async function refresh() {
+  if (refreshing || closed || creating) return;
+  refreshing = true;
+  try {
+    const s = await api.call("action", "status", {});
+    if (!closed) render(s);
+  } catch (e) {
+    if (!closed) setText($("error"), String(e?.message ?? e));
+  } finally {
+    refreshing = false;
+  }
+}
+
+/** Runs a button's action with the button waiting, and says what went wrong. */
+async function act(button, name, args, options) {
+  setText($("error"), "");
+  button.disabled = true;
+  try {
+    return await api.call("action", name, args, options);
+  } catch (e) {
+    setText($("error"), String(e?.message ?? e));
+    return null;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("get-godot").onclick = () => void act($("get-godot"), "get-godot", {});
+$("recheck").onclick = () => void refresh();
+$("open").onclick = async () => {
+  await act($("open"), "open-editor", {});
+  void refresh();
+};
+$("new").onsubmit = async (event) => {
+  event.preventDefault();
+  const name = $("name").value.trim();
+  const valid = GAME_NAME.test(name);
+  $("name").setAttribute("aria-invalid", valid ? "false" : "true");
+  if (!valid) {
+    setText($("error"), WORDS.badName);
+    $("name").focus();
+    return;
+  }
+  const template = new FormData($("new")).get("template");
+  creating = true;
+  $("new-fields").disabled = true;
+  $("name").disabled = true;
+  setText($("create"), WORDS.creating);
+  const made = await act($("create"), "create", { template, name }, { timeoutMs: CREATE_TIMEOUT_MS });
+  creating = false;
+  $("new-fields").disabled = false;
+  $("name").disabled = false;
+  setText($("create"), WORDS.create);
+  if (made) {
+    $("name").value = "";
+    void refresh();
+  }
+};
+
+/** A CSS colour as sRGB channels 0–255, read through a canvas so any CSS spelling works; black if unreadable. */
+function channels(colour) {
+  const probe = document.createElement("canvas").getContext("2d");
+  probe.fillStyle = colour;
+  const hex = /^#(..)(..)(..)$/.exec(probe.fillStyle);
+  return hex ? hex.slice(1).map((x) => Number.parseInt(x, 16)) : [0, 0, 0];
+}
+
+/** WCAG relative luminance of sRGB channels 0–255. */
+function luminance(rgb) {
+  const [r, g, b] = rgb.map((c) => {
+    const v = c / 255;
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG contrast ratio between two sRGB colours. */
+function contrast(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+const hexOf = (rgb) => `#${rgb.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+const mix = (fg, bg, share) => fg.map((c, i) => Math.round((c * share) / 100 + (bg[i] * (100 - share)) / 100));
+
+/** The quiet text colour: the least share of the text colour, from 64%, that still reads at 4.5:1 on the background. */
+function quietColour(fg, bg) {
+  for (let share = QUIET_SHARE_MIN; share < 100; share++) {
+    const quiet = mix(fg, bg, share);
+    if (contrast(quiet, bg) >= TEXT_CONTRAST_MIN) return hexOf(quiet);
+  }
+  return hexOf(fg);
+}
+
+/** The primary button's colours: the host's when it sends them, else its accent with whichever of white or black reads better. */
+function accentButton(theme) {
+  if (theme.accentFill && theme.accentForeground && theme.accentHover)
+    return { fill: theme.accentFill, text: theme.accentForeground, hover: theme.accentHover };
+  const accent = channels(theme.accent);
+  const white = contrast(accent, channels(WHITE)) >= contrast(accent, channels(BLACK));
+  const away = channels(white ? BLACK : WHITE);
+  return { fill: theme.accent, text: white ? WHITE : BLACK, hover: hexOf(mix(accent, away, HOVER_SHARE)) };
+}
+
+/** The host's theme colours; the quiet text follows its background. */
+function applyTheme(c) {
+  const root = document.documentElement;
+  root.style.setProperty("--bg", c.theme.background);
+  root.style.setProperty("--fg", c.theme.foreground);
+  root.style.setProperty("--accent", c.theme.accent);
+  const button = accentButton(c.theme);
+  root.style.setProperty("--accent-fill", button.fill);
+  root.style.setProperty("--accent-text", button.text);
+  root.style.setProperty("--accent-hover", button.hover);
+  const bg = channels(c.theme.background);
+  root.style.setProperty("--quiet", quietColour(channels(c.theme.foreground), bg));
+  const [r, g, b] = bg.map((x) => x / 255);
+  root.dataset.scheme = 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? "light" : "dark";
+}
+
+const readContext = () =>
+  api
+    .call("context")
+    .then(applyTheme)
+    .catch(() => {});
+void readContext();
+api.onContextChanged?.(() => {
+  void readContext();
+  void refresh();
+});
+void refresh();
+const timer = setInterval(() => {
+  if (document.visibilityState === "visible") void refresh();
+}, REFRESH_MS);
+window.addEventListener("pagehide", () => {
+  closed = true;
+  clearInterval(timer);
+});
+</script></body></html>

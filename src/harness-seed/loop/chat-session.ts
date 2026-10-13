@@ -388,11 +388,20 @@ function loopOfGame(game: GameBuild): [GameEngine, LoopProfile] {
 const inUnreal = (game: GameBuild) =>
   !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
 
-/** The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a line for any other. */
-function rulesOfFact(engine: string | undefined, fact: SourcedFact, game: GameBuild, folder: FolderShape): string[] {
+/**
+ * The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a
+ * line for any other, which a plugin that is on and makes that kind (`made`) already covers.
+ */
+function rulesOfFact(
+  engine: string | undefined,
+  fact: SourcedFact,
+  game: GameBuild,
+  folder: FolderShape,
+  made: ReadonlySet<string>,
+): string[] {
   if (fact.id === CoreFact.WebGame)
     return folder.ownShape ? ownShapeRules(folder.shape, folder.contractMissing) : [TEMPLATE_RULE];
-  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact);
+  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact, made.has(fact.id));
   if (game.pluginsOff) return unrealWithoutPlugin(engine);
   const found = game.unrealFound;
   return unrealRules(engine, game.engineProject, { found, ownFiles: found !== undefined });
@@ -413,8 +422,10 @@ function factRules(
   if (kindUnknown(game)) return unknownKindRules(engine, game.holds);
   if (kindPending(game)) return [...pendingKindRule(engine, offered, null, game.holds, asked), TEMPLATE_RULE];
   const several = game.facts.length > 1;
+  // The kinds the plugins that are on make: their plugin is on already, nothing to look for.
+  const made = new Set(offered.flatMap((kind) => (Array.isArray(kind.makes) ? kind.makes : [])));
   return game.facts.flatMap((fact) => {
-    const rules = rulesOfFact(engine, fact, game, folder);
+    const rules = rulesOfFact(engine, fact, game, folder, made);
     const prefix = several ? factPrefix(fact) : "";
     return rules.map((rule) => `${prefix}${rule}`);
   });

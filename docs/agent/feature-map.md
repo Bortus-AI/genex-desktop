@@ -202,16 +202,16 @@ Bonsai and Ollama extend the model menu’s worker/judge choices to local + subs
 ### Plugins and Skills page
 
 Sidebar Plugins and the composer's Manage action open `[data-plugins-page]` in the workspace.
-The sidebar remains usable; the mounted conversation and stage retain draft, thread and build
-selection, while the native game bounds are zero. Back to workspace, a sidebar game/Studio,
+The sidebar stays usable; the mounted conversation and stage keep draft, thread and build
+selection; the native game bounds are zero. Back to workspace, a sidebar game/Studio,
 or Command-1/2 returns to the conversation. Plugins/Skills switch local page views.
-Search filters existing plugin/connector or skill records. Rows wear the plugin's own picture
+Search filters plugins, connectors or skills. Rows wear the plugin's own picture
 (`img.extension-icon` from `iconUrl`, else its initial), a one-line description and one account
 step: `button[aria-label="Connect <name>"]` (a locked or never-connected account),
 `Reconnect <name>`, the browser step with Cancel, or the balance. Plugin rows open a detail page
 with a setup card, panels, settings, enable/remove/watch actions, `[data-plugin-connections]`
 (`[data-plugin-connection="<server>"][data-state]`), Skills behind Show all, and Information
-(capabilities in words, scan). The list ends with Make your own plugin (the plugin guide).
+(capabilities in words, scan). The list ends with Make your own plugin.
 Genex's detail page is host-drawn (`panels/plugins/genex/`): `[data-genex-account="<state>"]`
 (balance for all games, no per-game numbers), `[data-genex-review]` while the open game has
 a review waiting (`[data-genex-candidate="<n>"]`: picture over `Review candidate <n>`; `Review remesh`), and `[data-genex-tools]` (`[data-genex-tool="<id>"]`); it reads the plugin's
@@ -220,14 +220,13 @@ a review waiting (`[data-genex-candidate="<n>"]`: picture over `Review candidate
 The post-welcome promo is `aside[data-genex-promo="<phase>"]` (`panels/GenexPromo.tsx`,
 `genex-promo.ts`, storage `studio.genexPromo`; `[data-at-home]` bottom-left over home); see the
 first-launch fixture. No-model composers show `button[data-connect-model]` (`[data-nudge]` lit).
-MCP rows (servers you added) reveal Test/Edit/Remove and account/recovery controls; a plugin's
+MCP rows (your servers) reveal Test/Edit/Remove and account/recovery controls; a plugin's
 own server appears only in search, as `[data-plugin-server="<id>"]` "Part of <plugin>", linking
 to its page. Add exposes GitHub installation, MCP add/import, Create a plugin ↗ and local loading.
-Local install/reinstall reviews the current staged package through `main/plugin-local-install.ts`;
-cancellation leaves the installed or removed state intact. Skills lists Studio/plugin instructions
-and read-only provider inventories (see Studio skill inventory below); editing and activation
-remain outside this page. Composer Setup opens the matching plugin detail and settings
-panel directly.
+Local install/reinstall reviews the staged package (`main/plugin-local-install.ts`); a cancel
+changes nothing. Skills lists Studio/plugin instructions
+and read-only provider inventories (Studio skill inventory below); editing and activation happen
+elsewhere. Composer Setup opens the plugin's detail and settings panel.
 
 ### Focused connection and context controls
 

@@ -37,7 +37,7 @@ Genex is early: expect rough edges, and tell us about them in
 → Make 3D assets locally with the Blender plugin\
 → Meshy, Tripo, ElevenLabs and more through the Genex tools router\
 → Export anywhere, or publish to the web\
-→ Unity and Unreal plugins soon\
+→ Build in Unreal or Godot on your Mac with their plugins\
 → Native C++ games soon
 
 > [!TIP]

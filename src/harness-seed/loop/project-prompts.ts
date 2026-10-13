@@ -167,10 +167,12 @@ const detectedByPlugin = (fact: FactRef & { source?: string }) =>
 /**
  * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, or a plugin's
  * kind its plugin's `detect` didn't find (held by a scaffold's record), a plugin is looked for first
- * (`pluginFirstRule`); one an enabled plugin detected has that plugin on already.
+ * (`pluginFirstRule`); one an enabled plugin detected, or one a plugin that is on makes (`made`: a
+ * kind on offer names it, as the bundled Godot plugin does Genex's own Godot project), has that
+ * plugin on already.
  */
-export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }): string[] {
-  if (!isCoreFact(fact.id) && detectedByPlugin(fact)) return [factLine(fact)];
+export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }, made = false): string[] {
+  if (made || (!isCoreFact(fact.id) && detectedByPlugin(fact))) return [factLine(fact)];
   return [pluginFirstRule(engine, `the fact "${fact.id}"`), factLine(fact)];
 }
 

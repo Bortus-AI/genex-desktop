@@ -1007,8 +1007,8 @@ export class StudioCore {
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };
-    // The Unreal Editor bridge is an early integration: bundled, and off until the user turns it on.
-    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false };
+    // The Unreal Editor bridge and Godot are early integrations: bundled, and off until the user turns them on.
+    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, godot: false };
     this.plugins.onChange = (c) => {
       this.emit(UiEvent.PluginsChanged, c);
       this.#connections.changed();

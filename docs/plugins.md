@@ -1524,7 +1524,7 @@ newest viewport capture as its shot, else the newest save point's still); Genex 
 Unreal project fact, whatever the plugin list says (off, removed, older, not read yet). `preview` is
 the web preview, also for a game with no kind yet; no plugin's `stills` take it over. A plugin's
 `stills` count only while the plugin is on, never from an unlisted package. A folder no observer
-draws (Godot, Blender, files of its own) shows the newest capture's pictures of the run the stage
+draws (Godot with its plugin off, Blender, files of its own) shows the newest capture's pictures of the run the stage
 shows, or of the newest earlier run that kept some (`data-live-view="stills"`), else a sentence.
 Run, Reload, Sound and Full screen show, and Live probes a page, only while the view is the preview.
 A `stills` observer's view shows its own newest capture the same way.
@@ -2144,6 +2144,13 @@ Raw host output roots and process logs should stay in the trusted setup UI, not 
 files must match the saved result byte-for-byte; changed files and symlinks fail without being
 overwritten. Missing files can be restored, and only new bytes count against the remaining
 project allowance. Retrieving a native result never reruns its generation recipe.
+
+The bundled Godot plugin (`src/plugins/godot`) starts Godot from its backend through the same
+sandbox (`runNativeProcess` in `godot-run.ts`) rather than `native.run`, because a check, a run or a
+still needs the whole project, not staged inputs: each job reads Genex's shipped GDScript, writes
+only the project (Godot's `.godot/` cache) and the job's own folder, gets a private home (a game's
+`user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
+(`gpu`). Its observer is `stills` and its manifest has no lock: it never drives the person's editor.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted
 executable code, as disclosed at installation. The isolated custom panel has no Node or IPC.

@@ -455,7 +455,8 @@ describe("plugins_find, the harness's", () => {
     });
     try {
       assert.equal(lite.core.plugins.enabled(GENEX_PLUGIN_ID), true, "Genex Tools is on");
-      const answer = await lite.api()[HostMethod.PluginsFind]({ fact: "godot-project" });
+      // A kind no bundled plugin knows (Godot's now has one).
+      const answer = await lite.api()[HostMethod.PluginsFind]({ fact: "unity-project" });
       assert.equal(answer.next, FindNext.WritePlugin);
       assert.match(answer.note, /plugin-author/, "it learns where the guide is");
       assert.doesNotMatch(answer.note, /plugin_check/, "and is never told to call a tool it doesn't have");
