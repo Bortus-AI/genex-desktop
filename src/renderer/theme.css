@@ -3284,6 +3284,13 @@ button.chat-header-title:hover {
 .chat-conversation-stack > [data-chat-transcript] {
   margin-block-end: -16px;
 }
+/* The live status belongs to the reply above it: half the stack's gap, so the reply sits closer
+   while the status keeps its place above the composer. */
+.chat-conversation-stack > .presence.chat-work {
+  /* Opening and closing collapse the half gap it keeps, not the stack's whole gap. */
+  --presence-gap: 0.5rem;
+  margin-block-start: -8px;
+}
 .chat-user-content[data-collapsed] {
   max-height: 154px;
   overflow: hidden;
@@ -5126,6 +5133,12 @@ a:focus-visible {
 .chat-waiting-card:not([hidden]) {
   animation: chat-fade-in 200ms ease-out;
 }
+/* Above the composer the dock's own inset (14px) is the disclosure's overhang: without the pull its
+   hover fill starts where it does in the transcript and its words line up with the chat's, and the
+   card's height animation, which clips, never cuts it. */
+.chat-waiting-card [data-question-reopen] {
+  margin-inline: 0;
+}
 .chat-jump {
   animation: chat-fade-in var(--duration-quick) ease-out;
 }
@@ -5864,8 +5877,9 @@ a:focus-visible {
 .usage-credits {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 12px;
-  padding-block: 4px 8px;
+  align-items: center;
+  gap: 8px 12px;
+  padding-block: 2px 8px;
   font-size: 13px;
 }
 .usage-credits dd {
@@ -5873,14 +5887,32 @@ a:focus-visible {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: end;
+  color: var(--ink);
 }
-.usage-plan,
+.usage-credits-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 24px;
+  font-weight: 500;
+  color: var(--ink);
+}
+/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. */
+.usage-plan {
+  margin: 6px 4px 0;
+  padding: 6px 12px 4px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 12px;
+}
+.usage-plan:last-child {
+  margin-bottom: 4px;
+}
 .usage-divider {
   position: relative;
   margin-top: 4px;
   padding: 10px 10px 2px;
 }
-.usage-plan::before,
 .usage-divider::before {
   content: "";
   position: absolute;
@@ -5893,13 +5925,12 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 24px;
+  min-height: 28px;
   font-family: var(--font-family-content);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--ink);
 }
 .usage-plan-link {
   display: inline-flex;
@@ -5920,16 +5951,41 @@ a:focus-visible {
   color: var(--ink-2);
 }
 .usage-plan-roles {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   margin-inline-start: auto;
   overflow: hidden;
+  color: var(--ink-3);
+  font-size: 12px;
   text-overflow: ellipsis;
   font-weight: 400;
   letter-spacing: 0;
   white-space: nowrap;
 }
+/* Whether a plan is in use, as a dot before its words: filled green in use, an empty ring not. */
+.usage-plan-roles::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+.usage-plan-roles[data-in-use]::before {
+  background: var(--green);
+  box-shadow: none;
+}
 .usage-limit {
   padding: 6px 0 4px;
+}
+/* Compact sits on the reading's line, a size under the panel's other actions. */
+.picker-action.usage-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 8px 10px;
 }
 .usage-limit-head {
   display: flex;

@@ -170,6 +170,13 @@ const glyphs = {
     </g>
   ),
   stop: <rect className="a-pulse" x="6.5" y="6.5" width="11" height="11" rx="2.5" />,
+  // Paused: two bars, the stop's size and corners.
+  pause: (
+    <g className="a-pulse">
+      <rect x="7" y="6.5" width="3.5" height="11" rx="1.2" />
+      <rect x="13.5" y="6.5" width="3.5" height="11" rx="1.2" />
+    </g>
+  ),
   // Full screen: the four corners pushed out to the edges.
   expand: (
     <path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" />
@@ -428,6 +435,8 @@ const glyphs = {
     </>
   ),
   circle: <circle className="a-pulse" cx="12" cy="12" r="7" />,
+  // Compact: two corners drawn in toward the middle, the context folding smaller.
+  compact: <path d="M4.5 14h5.5v5.5M19.5 10H14V4.5M14 10l6-6M4 20l6-6" />,
   // A model chip: the die and its pins, for models that run on this Mac.
   chip: (
     <>

@@ -30,9 +30,9 @@ preview reaches only public library CDNs; Open Game names other hosts. Other fol
 
 **Builds** is a graph: You asked, a row per part, Your build, then the lead while no part
 works. Tries at one step fold into one node; what reached the build forms the line, the rest
-hangs below. An eye marks nodes the reviewers looked at. A new build is “Checking it starts…” until
+hangs below. Tries a pause cut off show Paused until added. An eye marks nodes the reviewers looked at. A new build is “Checking it starts…” until
 it has run. A working node shows its agent's screen. A selected
-node opens as a card; an eye opens the reviewers' notes. **Follow up in chat** turns the next message into a note to that node's build.
+node opens as a card; an eye opens the reviewers' notes. **Follow up in chat** notes the next message to that node's build.
 Earlier builds open from chat cards. A Loop in place draws the lead's save points on one row
 (no eye). A Loop's lead (from the start), workers, jobs or a claim make a tree: the lead (jobs
 below), a row per worker, then the finish check, tinted by state: Checking, Not yet (reasons, round of 3),

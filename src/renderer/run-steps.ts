@@ -20,7 +20,7 @@ import { comparedWithNothing, ExecutionStatus, type RunWorked, VerdictPass, work
 import { type RunSummary, UNKNOWN_EXECUTION } from "../shared/run-summary.ts";
 import { plural } from "../shared/skill-words.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
-import { WorkerEnd, WorkerVerdict } from "../shared/workers.ts";
+import { WorkerEnd, WorkerStopCode, WorkerVerdict } from "../shared/workers.ts";
 import {
   boundsOf,
   type FacetNode,
@@ -34,6 +34,7 @@ import {
   plainDefect,
   type Rect,
   type RunGraph,
+  type RunNode,
   truncate,
   type VerdictRecord,
   WorkerState,
@@ -60,8 +61,9 @@ import {
  * `in-build`: merged into the build. `kept`: the judges kept it and the lead has not merged it
  * (yet). `delivered`: a sub-agent's files are in the game folder and wait for the lead to use
  * them. `undone`: the judges threw every try away. `building`/`judging`: in hand now.
- * `not-in-build`: it ended unjudged and unmerged — stopped, or the run ended first. `waiting`:
- * a part that has not started.
+ * `not-in-build`: it ended unjudged and unmerged — stopped, or the run ended first. `paused`: the
+ * run's close stopped it unjudged while the run can still add its kept work (a pause, or the run
+ * resumed and has not added it yet). `waiting`: a part that has not started.
  */
 export const StepState = {
   InBuild: "in-build",
@@ -74,6 +76,8 @@ export const StepState = {
   /** A single session that failed: it delivered nothing to leave out. */
   NotDelivered: "not-delivered",
   Waiting: "waiting",
+  /** The run's own close stopped it unjudged (a pause), its work kept, and the run can still add it. */
+  Paused: "paused",
 } as const;
 export type StepState = (typeof StepState)[keyof typeof StepState];
 
@@ -205,8 +209,19 @@ function roundsMergedBy(rounds: IterationNode[], merge: MergeInfo): IterationNod
 const keptBy = (node: IterationNode): CheckedBy =>
   savedByLead(node.verdictSource) ? CheckedBy.Lead : CheckedBy.Judges;
 
-/** Where a folded step stands, and who let it in: the build first, the judges second. */
-function stepStanding(tries: IterationNode[], merged: Set<IterationNode>): Pick<Step, "state" | "checkedBy"> {
+/** A try the run's own close stopped before anyone judged it: a pause, or the run's end. */
+const stoppedByRunClose = (node: IterationNode | undefined): boolean =>
+  node?.status === IterationStatus.Stopped && node.stopCode === WorkerStopCode.RunEnded;
+
+/**
+ * Where a folded step stands, and who let it in: the build first, the judges second. A try the
+ * run's close stopped is paused while the run can still add its kept work (`mayStillAdd`).
+ */
+function stepStanding(
+  tries: IterationNode[],
+  merged: Set<IterationNode>,
+  mayStillAdd: boolean,
+): Pick<Step, "state" | "checkedBy"> {
   const kept = tries.find(isKept);
   if (kept) return { state: merged.has(kept) ? StepState.InBuild : StepState.Kept, checkedBy: keptBy(kept) };
   const latest = tries.at(-1);
@@ -214,6 +229,7 @@ function stepStanding(tries: IterationNode[], merged: Set<IterationNode>): Pick<
     return { state: latest.liveness ? StepState.Judging : StepState.Building, checkedBy: null };
   if (tries.some((node) => merged.has(node))) return { state: StepState.InBuild, checkedBy: CheckedBy.Lead };
   if (tries.some(isJudgedTry)) return { state: StepState.Undone, checkedBy: null };
+  if (mayStillAdd && stoppedByRunClose(latest)) return { state: StepState.Paused, checkedBy: null };
   return { state: StepState.NotInBuild, checkedBy: null };
 }
 
@@ -231,11 +247,15 @@ function shownTry(tries: IterationNode[], merged: Set<IterationNode>, latest: It
   return [...tries].reverse().find((node) => node.shots.length > 0) ?? latest;
 }
 
-function roundStep(tries: IterationNode[], merged: Set<IterationNode>, active: boolean): Step {
+function roundStep(
+  tries: IterationNode[],
+  merged: Set<IterationNode>,
+  { active, mayStillAdd }: { active: boolean; mayStillAdd: boolean },
+): Step {
   const first = tries[0];
   const latest = tries.at(-1);
   if (!first || !latest) throw new Error("a step folds at least one try");
-  const standing = stepStanding(tries, merged);
+  const standing = stepStanding(tries, merged, mayStillAdd);
   return {
     id: `step:${first.facetId}:${first.iteration}`,
     facetId: first.facetId,
@@ -275,11 +295,19 @@ function partRow(graph: RunGraph, facet: FacetNode, merges: MergeInfo[], summary
     rounds.some((round) => round.status === IterationStatus.Building);
   const working = graph.active && busy;
   const merged = mergedRounds(rounds, partMerges);
+  const run = { active: graph.active, mayStillAdd: runMayStillAdd(graph) };
   const steps = rounds.length
-    ? foldTries(rounds).map((tries) => roundStep(tries, merged, graph.active))
+    ? foldTries(rounds).map((tries) => roundStep(tries, merged, run))
     : [sessionStep(graph, facet, task, { integrated, working })];
   const inBuild = steps.filter((step) => step.state === StepState.InBuild).length;
   return { facet, steps, inBuild, integrated, working };
+}
+
+/** Whether the run can still add work kept from a stopped try: it goes on, or it is paused. */
+function runMayStillAdd(graph: RunGraph): boolean {
+  if (graph.active) return true;
+  const run = graph.nodes.find((node): node is RunNode => node.kind === GraphNodeKind.Run);
+  return run?.paused === true;
 }
 
 /** A part built in one session: one node for the whole part. */
@@ -371,6 +399,7 @@ export function rowMeta(row: PartRow, active: boolean): string {
   const total = row.steps.length;
   if (row.inBuild === total) return total === 1 ? "added" : `all ${total} added`;
   if (active && row.working) return row.inBuild ? `${row.inBuild} added so far` : "working";
+  if (!row.inBuild && row.steps.some((step) => step.state === StepState.Paused)) return "paused";
   if (!row.inBuild) return "nothing added";
   return `${row.inBuild} of ${total} added`;
 }
@@ -407,6 +436,7 @@ export const STATE_TONE: Record<StepState, Tone> = {
   [StepState.NotInBuild]: Tone.Muted,
   [StepState.NotDelivered]: Tone.Muted,
   [StepState.Waiting]: Tone.Muted,
+  [StepState.Paused]: Tone.Muted,
 };
 
 /** How many tries a folded node stands for, or nothing for one. */
@@ -427,6 +457,7 @@ const STEP_WORD: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.Waiting]: "Waiting to start",
   [StepState.NotInBuild]: "Left out",
   [StepState.NotDelivered]: "Didn't deliver",
+  [StepState.Paused]: "Paused",
 };
 
 /**
@@ -495,6 +526,7 @@ const STEP_PILL: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.Undone]: "Rejected by reviewers",
   [StepState.NotInBuild]: "Left out of your build",
   [StepState.NotDelivered]: "Didn't deliver",
+  [StepState.Paused]: "Paused, its work is kept for the lead",
 };
 
 /** The status at the top of a step's card: who decided it, or where it stands against the build you play. */
@@ -557,6 +589,8 @@ function standingSentence(step: Step, active: boolean, anyStopped: boolean): str
         : "The lead didn't merge it, so it isn't in your build.";
     case StepState.NotInBuild:
       return anyStopped ? "Its work is saved, not merged." : "The run ended before the reviewers saw it.";
+    case StepState.Paused:
+      return "The build paused before the reviewers saw it. Its work is kept, and the lead can still add it.";
     case StepState.Building:
       return tries > 1 ? `The worker is on try ${tries}.` : "A worker is building it.";
     case StepState.Judging:
@@ -574,7 +608,8 @@ export function stepSentence(step: Step, active: boolean): string {
   if (step.session) return sessionSentence(step.state);
   const all = step.tries;
   const undone = all.filter((node) => node.status === IterationStatus.Rolled).length;
-  const stopped = all.filter((node) => node.status === IterationStatus.Stopped);
+  // The lead's stops: the run's own close (a pause, the end) is nobody's decision about the work.
+  const stopped = all.filter((node) => node.status === IterationStatus.Stopped && !stoppedByRunClose(node));
   const keptAt = all.findIndex(isKept) + 1;
   const savedAt = all.find(isKept);
   const parts = [

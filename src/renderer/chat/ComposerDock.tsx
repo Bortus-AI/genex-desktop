@@ -210,7 +210,7 @@ function WaitingCards({ cards, still }: { cards: DockCard[]; still: boolean }): 
           </div>
         ))}
         {cards.length > 1 && (
-          <p role="status" data-waiting-count className="mt-1.5 px-1 text-chat-sub text-ink-3">
+          <p role="status" data-waiting-count className="mt-1.5 px-1.5 text-chat-sub text-ink-3">
             {CHAT_WORDS.moreWaiting(cards.length - 1)}
           </p>
         )}

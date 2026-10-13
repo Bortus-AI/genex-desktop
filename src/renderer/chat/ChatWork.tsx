@@ -60,7 +60,11 @@ const WorkKind = {
 export function ChatWork(props: ChatWorkProps): JSX.Element {
   const { activeRunId, project } = props;
   const leadFrame = useAgentScreens((s) => (activeRunId ? leadFrameOf(s, project, activeRunId) : undefined));
-  return <Presence still={props.still}>{workLine(props, leadFrame)}</Presence>;
+  return (
+    <Presence still={props.still} className="chat-work">
+      {workLine(props, leadFrame)}
+    </Presence>
+  );
 }
 
 const NO_NOTICE: Notify = () => {};

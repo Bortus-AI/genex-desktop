@@ -58,6 +58,7 @@ import type { NoteKind } from "./wake-schedule.ts";
 import type * as artDirectionFunctions from "./art-direction.ts";
 import type { LastShip } from "./art-direction.ts";
 import type { FinishTally } from "../finish-check.ts";
+import { noteKeptWork } from "./kept-work.ts";
 import type * as integrateFunctions from "./integrate.ts";
 import type * as loopRunFunctions from "./loop-run.ts";
 import type * as setupFunctions from "./setup.ts";
@@ -102,6 +103,10 @@ export interface Worker {
   /** The lead's `worker_stop` asked its stop, not the run's close (its end record says so). */
   stoppedByLead?: boolean;
   stopWhy: string | null;
+  /** What it kept beyond its last accepted commit when it ended: its stopped round's commit (kept-work.ts). */
+  keptCommit?: string | null;
+  /** That kept work is on the record as in the build (kept-work.ts `noteKeptWork`). */
+  keptInBuild?: boolean;
   iterationsCap: number | undefined;
   steering: string[];
   iterations: RoundRecord[];
@@ -648,6 +653,8 @@ export async function syncHead(loopRun: LoopRun) {
   await protectHead(head);
   await saveJournal();
   await appendRun(RunEvent.DirectorProgress, { head });
+  // A worker's kept work the lead merged by hand is in the build now: it goes on the record.
+  await noteKeptWork(loopRun, head);
   note(`you committed ${shortSha(head)} — it is now the integration head`);
   return head;
 }
