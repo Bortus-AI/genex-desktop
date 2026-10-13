@@ -1743,6 +1743,10 @@ export const WORKER_WORDS = {
   added: "Added to your game",
   done: "Done",
   didntFinish: "Didn't finish",
+  /** the host refused its session: it never ran */
+  notStarted: "Not started",
+  /** it finished, changed nothing and delivered nothing */
+  nothingMade: "Nothing made",
   stopped: "Stopped",
   notUsed: "Not used",
   /** the quotes on a worker's card */
@@ -2932,6 +2936,12 @@ export const ASSET_WORDS = {
   animations: "Animations",
   speed: "Speed",
   playFailed: "This sound could not be played",
+} as const;
+
+/** The Builds graph's assets tile and card: jobs still open when the run ended. */
+export const ASSET_JOB_WORDS = {
+  notFinished: (count: number) => `${count} not finished`,
+  notFinishedGroup: "Not finished",
 } as const;
 
 /** "1 animation", "3 animations". */

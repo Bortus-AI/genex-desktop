@@ -704,6 +704,8 @@ describe("why a worker stopped short, on its card", () => {
     verdict: null,
     note: null,
     merged: false,
+    startedSeq: null,
+    settledSeq: null,
   });
   it("says the end record's code in the app's words, and nothing without one: the record's own reason is the lead's", () => {
     const cases: Array<[string, WorkerInfo, string | null]> = [

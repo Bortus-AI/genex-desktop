@@ -36,7 +36,7 @@ import {
 } from "../shared/run-state.ts";
 import type { RunSummary } from "../shared/run-summary.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
-import { isWorkerStopCode, type WorkerStopCode } from "../shared/workers.ts";
+import { isWorkerStopCode, poolWorkerId, type WorkerStopCode } from "../shared/workers.ts";
 import {
   type AssetLedger,
   type AssetPlace,
@@ -46,6 +46,7 @@ import {
   blenderAsset,
   keptAssetJobs,
   newAssetLedger,
+  settleAssetJobs,
 } from "./run-graph-assets.ts";
 import {
   bool,
@@ -60,6 +61,7 @@ import {
   parseMove,
   parseScoreboard,
   parseAdvice,
+  parseShot,
   parseShots,
   parseVerdict,
   record,
@@ -418,6 +420,8 @@ export interface IterationNode {
   routedIn: number;
   outage: OutageInfo | null;
   shots: Shot[];
+  /** The picture the lead named as showing what a save point changed: its own proof, apart from `shots`. */
+  shown: Shot | null;
   diffs: DiffInfo[];
   merge: MergeInfo | null;
   /** when the verdict landed */
@@ -480,9 +484,10 @@ export interface FinalNode {
 /**
  * Where an asked-for asset is, from the log's point of view. `requested` is the call going out,
  * `generating` is a job the plugin accepted and has not delivered yet, and the two end states
- * are the only ones that say what happened. A call that delivers nothing never becomes a card.
+ * are the only ones that say what happened; `unfinished` is a job still open when its run or chat
+ * turn ended, which nothing will deliver now. A call that delivers nothing never becomes a card.
  */
-export type AssetState = "requested" | "generating" | "delivered" | "failed";
+export type AssetState = "requested" | "generating" | "delivered" | "failed" | "unfinished";
 
 /**
  * One asset the run asked for: a `blender_asset` event, or a plugin tool call joined to its
@@ -535,6 +540,8 @@ export interface AssetInfo {
   derived?: Array<{
     pluginName: string | null;
     name: string;
+    /** the part whose call did this work, when one did */
+    facetId: string | null;
     files: string[];
     size: number[] | null;
     triangles: number | null;
@@ -1027,6 +1034,7 @@ function iteration(graph: GraphDraft, facetId: string, n: number, title?: string
     routedIn: 0,
     outage: owner.outages.get(n) ?? null,
     shots: [],
+    shown: null,
     diffs: [],
     merge: null,
     judgedAt: null,
@@ -1354,7 +1362,7 @@ function onDirectorWorker(graph: GraphDraft, payload: Payload): void {
 function onWorkerRecord(graph: GraphDraft, entry: RunEntry, started: boolean): void {
   const row = (workerId: string, title: string | undefined) => facet(graph, restartOf(graph, workerId).id, title).node;
   const fold = started ? onWorkerStarted : onWorkerFinished;
-  if (!fold(graph.workers, row, entry.payload) || !graph.turn) return;
+  if (!fold(graph.workers, row, entry.payload, graph.seq) || !graph.turn) return;
   graph.run.startedAt ??= entry.event.created_at;
   if (started && !graph.run.goal) graph.run.goal = str(entry.payload.ask, "").trim();
 }
@@ -1508,6 +1516,7 @@ function recordVerdict(node: IterationNode, payload: Payload): void {
   node.unmeasured = strings(payload.unmeasured);
   node.scoreboard = parseScoreboard(payload.scoreboard);
   node.shots = parseShots(payload.shots);
+  node.shown = parseShot(payload.shown);
   node.diffs = parseDiffs(payload.diffs);
 }
 
@@ -1783,12 +1792,37 @@ function settleRound(node: IterationNode, draft: FacetDraft, runActive: boolean)
   });
 }
 
+/**
+ * The part an asset record names, as the graph draws it: a pool worker's plugin calls name it by
+ * its bare id (`w4`) where its own records name it `pool.w4`, so a bare id with no part of its own
+ * is that worker's.
+ */
+function partOfAsset(graph: GraphDraft, facetId: string | null): string | null {
+  if (facetId === null || graph.facets.has(facetId)) return facetId;
+  const worker = poolWorkerId(facetId);
+  return graph.facets.has(worker) ? worker : facetId;
+}
+
+/**
+ * Every asset card on the part that asked for it, a retried failure folded into its success, and
+ * nothing still "making" once the run or chat turn is over (a paused run may yet deliver).
+ */
+function settleAssets(graph: GraphDraft): AssetInfo[] {
+  const cards = [...graph.assets.jobs, ...(graph.blender?.assets ?? [])];
+  for (const card of cards) {
+    card.facetId = partOfAsset(graph, card.facetId);
+    for (const step of card.derived ?? []) step.facetId = partOfAsset(graph, step.facetId);
+  }
+  settleAssetJobs(graph.assets, !graph.run.active && !graph.run.paused);
+  return keptAssetJobs(graph.assets);
+}
+
 /** The integration, the optimisation when there was one, the final card, and the modeller and asset nodes. */
 function drawClose(graph: GraphDraft, nodes: GraphNode[], edges: GraphEdge[]): void {
   const { optimization, blender } = graph;
   nodes.push(graph.integration, ...(optimization ? [optimization] : []), graph.final);
   if (blender) nodes.push(blender);
-  const jobs = keptAssetJobs(graph.assets);
+  const jobs = settleAssets(graph);
   if (jobs.length) nodes.push({ kind: GraphNodeKind.Assets, id: GraphNodeKind.Assets, jobs });
   if (!optimization) {
     edges.push(flowEdge(GraphNodeKind.Integration, GraphNodeKind.Final));
@@ -2052,8 +2086,28 @@ function joinJob(job: AssetInfo, inventory: ProjectAssets | null): AssetInfo {
     if (job.jobId && a.jobId === job.jobId) return true;
     return Boolean(job.generationId) && a.generationId === job.generationId;
   };
-  const asset = inventory?.assets.find(ofJob) ?? inventory?.assets.find((a) => job.files.includes(a.file));
+  const records = inventory?.assets.filter(ofJob) ?? [];
+  const asset = previewRecord(records) ?? inventory?.assets.find((a) => job.files.includes(a.file));
   return { ...job, preview: asset, inGame: asset ? inGameCopy(asset) : undefined };
+}
+
+/** The kinds of file a job's thumbnail can be drawn from. */
+const DRAWN_KINDS: ReadonlySet<ProjectAsset["kind"]> = new Set(["model", "image"]);
+
+/** Whether a record is the file its plugin prefers for the job (by its game path or its name). */
+const isPreferred = (a: ProjectAsset): boolean =>
+  Boolean(a.preferredFile) && (a.file === a.preferredFile || a.file.endsWith(`/${a.preferredFile}`));
+
+/**
+ * The record a job's thumbnail is drawn from: the file its plugin prefers, else its biggest model
+ * or picture (a character's motion-only clips are kilobytes beside the megabytes of its mesh, and
+ * draw an empty stage), else its first.
+ */
+function previewRecord(records: ProjectAsset[]): ProjectAsset | undefined {
+  const preferred = records.find(isPreferred);
+  if (preferred) return preferred;
+  const drawn = records.filter((a) => DRAWN_KINDS.has(a.kind)).sort((a, b) => b.bytes - a.bytes);
+  return drawn[0] ?? records[0];
 }
 
 /** A delivered asset is in the game when a present copy is the project's; a walked file with no delivery record is. */

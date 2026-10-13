@@ -6,7 +6,8 @@ Auto edits directly; Loop delegates workers (four by default) while the chat
 leads. Parts grow boldly within the ask; an art director reviews the whole game and returns defects
 for polish, never a veto. Other
 projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap: a
-reviewer's yes ends it early; 15 minutes' grace follows.
+reviewer's yes ends it early (in place, the lead first works on the gaps it names while time is
+left); 15 minutes' grace follows.
 Acceptance persists across workers and restarts. External blockers pause the run at its
 checkpoint. User Finish overrides the clock, never the final judge
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
@@ -33,11 +34,11 @@ works. Tries at one step fold into one node; what reached the build forms the li
 hangs below. Tries a pause cut off show Paused until added. An eye marks nodes the reviewers looked at. A new build is “Checking it starts…” until
 it has run. A working node shows its agent's screen. A selected
 node opens as a card; an eye opens the reviewers' notes. **Follow up in chat** notes the next message to that node's build.
-Earlier builds open from chat cards. A Loop in place draws the lead's save points on one row
-(no eye). A Loop's lead (from the start), workers, jobs or a claim make a tree: the lead (jobs
-below), a row per worker, then the finish check, tinted by state: Checking, Not yet (reasons, round of 3),
-Done or Stopped; a chat line each round. Finished workers stand on the line, others are
-ghosts. A chat message's workers get a graph, shown while newest.
+Chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
+below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
+line each round. In place, save points form one line, each showing what changed; workers hang off
+it, pictured, solid under the save point that took their work, else ghosts. A chat message's
+workers get a graph while newest.
 
 Agents test in hidden windows, never in Live; chat frames never certify a build. A finished
 worker, passing checks, integration and Live's revision are distinct facts; Builds and Studio

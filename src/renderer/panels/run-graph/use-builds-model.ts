@@ -102,7 +102,10 @@ export function useBuildsModel(suppliedGraph: RunGraphModel, project: string | n
   );
   const roundById = useMemo(() => new Map(rounds.map((node) => [node.id, node] as const)), [rounds]);
   /** Every node Previous and Next step through, in the graph's reading order. */
-  const selectable = useMemo(() => readingOrder(rows, readingNodes(graph, rows, outcome)), [rows, graph, outcome]);
+  const selectable = useMemo(
+    () => readingOrder(rows, readingNodes(graph, rows, outcome), layout.order),
+    [rows, graph, outcome, layout],
+  );
   return useMemo(
     () => ({
       outcome,

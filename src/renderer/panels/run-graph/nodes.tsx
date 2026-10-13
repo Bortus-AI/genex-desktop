@@ -21,9 +21,9 @@ import type {
   Rect,
   RunNode,
 } from "../../run-graph.ts";
-import { runIdOf, thumbShot } from "../../run-graph.ts";
+import { runIdOf } from "../../run-graph.ts";
 import type { JobInfo } from "../../run-graph-workers.ts";
-import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
+import { AssetCardState, assetCounts, BLENDER_SOURCE } from "../../run-graph-assets.ts";
 import {
   askedRest,
   isLiveStep,
@@ -44,14 +44,18 @@ import { GraphSelection } from "../inspector/selection.ts";
 import { NodeCursor, ScreenWords, useFrameSrc, usePartFrame } from "../inspector/screen.tsx";
 import { StateGlyph, TONE } from "../inspector/tone.tsx";
 import { sameStepNode, type StepNodeProps } from "./step-props.ts";
-import { useRoundStill } from "../run-stills.ts";
-import { FINISH_CHECK_WORDS, JOBS_EYEBROW, LEAD_WORDS } from "../../words.ts";
+import { useRoundStill, useSavePointShot, useWorkerStill } from "../run-stills.ts";
+import { AssetThumbnail } from "../AssetThumbnail.tsx";
+import { ASSET_JOB_WORDS, FINISH_CHECK_WORDS, JOBS_EYEBROW, LEAD_WORDS } from "../../words.ts";
 import { useNow } from "./use-builds-model.ts";
 import type { ReferenceFrame } from "../../../shared/protocol.ts";
+import type { ProjectAsset } from "../../../shared/game-assets.ts";
 import { imageSrc, useMessageImages } from "../../chat/MessageImages.tsx";
 
 /** How many asset pictures the assets tile shows before it counts the rest. */
 const ASSETS_SHOWN = 3;
+/** The largest side of the lead's picture. */
+const LEAD_PICTURE_PX = 640;
 
 /** How a node's frame looks: settled, a ghost of what is not there yet, at work right now, or your build. */
 const Variant = {
@@ -197,6 +201,7 @@ function FarGlyph({ glyph }: { glyph: ReactNode }): JSX.Element | null {
  */
 function NodeFace({
   src,
+  picture = null,
   look = Look.Plain,
   fill = Fill.Hatch,
   tint = null,
@@ -211,6 +216,8 @@ function NodeFace({
   asked = null,
 }: {
   src: string | null;
+  /** Drawn in the picture's place when there is no still: a model as the Assets stage draws it. */
+  picture?: ReactNode;
   look?: Look;
   fill?: Fill;
   /** A state's tint (a token) laid over the fill: only the finish check has one. */
@@ -228,7 +235,7 @@ function NodeFace({
   glyph: ReactNode;
   asked?: string | null;
 }): JSX.Element {
-  const pictured = Boolean(src);
+  const pictured = Boolean(src) || Boolean(picture);
   return (
     <>
       {src ? (
@@ -241,7 +248,9 @@ function NodeFace({
           style={LOOK_STYLE[look]}
         />
       ) : (
-        <span aria-hidden="true" className={`absolute inset-0 ${FILL_CLASS[fill]}`} />
+        <span aria-hidden="true" className={`absolute inset-0 ${FILL_CLASS[fill]}`} style={LOOK_STYLE[look]}>
+          {picture}
+        </span>
       )}
       {tint ? <span aria-hidden="true" className="absolute inset-0" style={{ background: tint }} /> : null}
       {over}
@@ -337,13 +346,17 @@ export const StepNode = memo(function StepNode({
 }: StepNodeProps): JSX.Element | null {
   const working = isLiveStep(step);
   const shown = step.shown;
-  const shot = shown ? thumbShot(shown) : null;
+  const shot = useSavePointShot(shown, step.earlier);
   const src = useRoundStill({ runId }, step.facetId, shown?.iteration ?? 1, shot?.path ?? null, working && active);
   const frame = usePartFrame(project, runIdOf({ runId }), step.facetId, working && active);
   const screen = useFrameSrc(frame);
+  const worker = useWorkerStill(project, step.picture);
   const word = stepWord(step, active);
   const tries = step.tries.length;
   if (!rect) return null;
+  const still = screen ?? src ?? worker.src;
+  // With no picture of its own, a worker's step shows the asset it made.
+  const asset = still ? null : worker.asset;
   return (
     <PerformanceBoundary id={PerformanceComponent.StepNode}>
       <NodeFrame
@@ -356,8 +369,9 @@ export const StepNode = memo(function StepNode({
         onSelect={() => onSelect(step.id)}
       >
         <NodeFace
-          src={screen ?? src}
-          look={ghost ? Look.Dim : Look.Plain}
+          src={still}
+          picture={project && asset ? <WorkerAsset project={project} asset={asset} /> : null}
+          look={stepLook(ghost, worker.borrowed && still === worker.src)}
           fill={working ? Fill.Shimmer : Fill.Hatch}
           over={frame ? <NodeCursor frame={frame} box={rect} /> : null}
           chip={triesChip(tries, working)}
@@ -371,6 +385,17 @@ export const StepNode = memo(function StepNode({
     </PerformanceBoundary>
   );
 }, sameStepNode);
+
+/** A step's picture: dim when it is not in the build, soft when it is a reader's borrowed save point. */
+function stepLook(ghost: boolean, borrowed: boolean): Look {
+  if (ghost) return Look.Dim;
+  return borrowed ? Look.Soft : Look.Plain;
+}
+
+/** A worker's delivered model or image, as the Assets stage draws its thumbnail. */
+function WorkerAsset({ project, asset }: { project: string; asset: ProjectAsset }): JSX.Element {
+  return <AssetThumbnail project={project} asset={asset} companions={[]} fallback={null} quiet />;
+}
 
 /** A step being checked says so before its checker's action; a step being built says only the action. */
 const checkingWord = (step: Step, word: string): string | null => (step.state === StepState.Judging ? word : null);
@@ -579,16 +604,13 @@ export function StartNode({
 
 /** Where the run's assets have got to, in one line: failures first, then work in hand, then the game. */
 export function assetsStatus(jobs: AssetInfo[]): { text: string; tone: Tone } {
-  const made = jobs.filter((job) => job.state === AssetCardState.Delivered);
-  const failed = jobs.filter((job) => job.state === AssetCardState.Failed).length;
-  const making = jobs.length - made.length - failed;
-  const inGame = made.filter((job) => job.inGame).length;
-  const known = made.filter((job) => job.inGame !== undefined).length;
+  const { made, failed, making, unfinished, inGame, known } = assetCounts(jobs);
   if (failed) return { text: `${failed} failed`, tone: Tone.Red };
   if (making) return { text: `Making ${making}`, tone: Tone.Accent };
-  if (!known) return { text: `${made.length} delivered`, tone: Tone.Muted };
-  if (inGame === made.length) return { text: `${inGame} in game`, tone: Tone.Green };
-  if (inGame) return { text: `${inGame} of ${made.length} in game`, tone: Tone.Orange };
+  if (unfinished && !made) return { text: ASSET_JOB_WORDS.notFinished(unfinished), tone: Tone.Muted };
+  if (!known) return { text: `${made} delivered`, tone: Tone.Muted };
+  if (inGame === made) return { text: `${inGame} in game`, tone: Tone.Green };
+  if (inGame) return { text: `${inGame} of ${made} in game`, tone: Tone.Orange };
   return { text: "Not in game yet", tone: Tone.Orange };
 }
 
@@ -767,6 +789,9 @@ const LEAD_LOOK: Record<LeadFace, { variant: Variant; fill: Fill; glyph: StepSta
 
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
+/** The lead's faces that wear the run's last save point: its work is where that save point left it. */
+const SHOWS_LAST_SAVE: ReadonlySet<LeadFace> = new Set([LeadFace.Done, LeadFace.Paused]);
+
 /**
  * The lead: while it works itself, its own screen when it has shown one. In a tree it stands for
  * the whole run and says what it is doing: waiting for a worker, paused, done or stopped.
@@ -775,18 +800,25 @@ export function LeadNode({
   rect,
   frame,
   face = LeadFace.Working,
+  lastSave = null,
   selected,
   onSelect,
 }: {
   rect: Rect;
   frame: AgentScreenFrame | null;
   face?: LeadFace;
+  /** The run's last save point: its picture is the lead's once the lead is done or paused. */
+  lastSave?: Step | null;
   selected: boolean;
   onSelect: () => void;
 }): JSX.Element {
   // Only the lead at work shows its screen; waiting, it is the workers' screens that move.
   const shown = face === LeadFace.Working ? frame : null;
-  const src = useFrameSrc(shown);
+  const saved = useSavePointShot(lastSave?.shown ?? null, lastSave?.earlier);
+  const settled = SHOWS_LAST_SAVE.has(face) && saved ? { run: saved.path, maxPx: LEAD_PICTURE_PX } : null;
+  const screen = useFrameSrc(shown);
+  const savedSrc = useStill(settled);
+  const src = screen ?? savedSrc;
   const look = LEAD_LOOK[face];
   const word = LEAD_WORDS.face[face];
   return (
