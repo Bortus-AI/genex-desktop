@@ -50,6 +50,23 @@ const CONTROL_ROLES: ReadonlySet<string> = new Set([
   "listbox",
   "treeitem",
 ]);
+/**
+ * The control roles that are pressed, never typed into: cua offers `type` on some of them (a submit
+ * input), and a button is no field.
+ */
+const PRESSED_ROLES: ReadonlySet<string> = new Set([
+  "link",
+  "button",
+  "checkbox",
+  "radio",
+  "switch",
+  "tab",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "option",
+  "treeitem",
+]);
 /** A link is followed through the page itself: a trusted click on macOS can land without following it. */
 const FOLLOWED_ROLES: ReadonlySet<string> = new Set(["link"]);
 /** The page's roles that carry no words of their own. */
@@ -131,7 +148,7 @@ function elementOf(row: CuaRef, secrets: SecretFields): WebElement | null {
   const ref = str(row.ref);
   if (!ref || !isControl(row)) return null;
   const actions = Array.isArray(row.actions) ? row.actions : [];
-  const editable = actions.includes("type");
+  const editable = actions.includes("type") && !PRESSED_ROLES.has(str(row.role));
   return { ref, role: str(row.role), name: str(row.name), editable, secret: editable && isSecret(row, secrets) };
 }
 

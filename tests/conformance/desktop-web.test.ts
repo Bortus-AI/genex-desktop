@@ -206,6 +206,8 @@ describe("cua-driver's browser tools as the studio's web pages", () => {
       { ref: "p2:1", role: "textbox", name: "enter it", actions: ["type", "pointer"] },
       { ref: "p2:2", role: "textbox", name: "Secret thing", actions: ["type", "pointer"] },
       { ref: "p2:3", role: "button", name: "Go", actions: ["click", "pointer"] },
+      // A submit input, which cua lists as typable too (GitHub's Sign in): pressed, never a field.
+      { ref: "p2:5", role: "button", name: "Sign in", actions: ["type", "click", "pointer"] },
       // A field's inner editor, as cua lists it beside the field: no control of its own.
       { ref: "p2:4", role: "generic", name: null, actions: ["type"], visibility: "unknown" },
     ];
@@ -219,6 +221,7 @@ describe("cua-driver's browser tools as the studio's web pages", () => {
         // The page has a password input labelled only by its <label>: a field no label places is taken for it.
         ["p2:2", true],
         ["p2:3", false],
+        ["p2:5", false],
       ],
     );
     assert.match(page.text, /\[p2:1\] textbox "enter it" \(asks for a secret: never typed into\)/);
