@@ -32,6 +32,7 @@ import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
+import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
@@ -2951,6 +2952,50 @@ export const ASSET_WORDS = {
   playFailed: "This sound could not be played",
 } as const;
 
+/** What an asset card says while its asset is being made (`asset-making.ts`). */
+export const MAKING_WORDS = {
+  /** What a job makes (`MakingKind`), and an asset of a kind the plugin did not say. */
+  kind: {
+    [MakingKind.Character]: "Character",
+    [MakingKind.Creature]: "Creature",
+    [MakingKind.Model]: "3D model",
+    [MakingKind.RiggedModel]: "Rigged model",
+    [MakingKind.Animation]: "Animation",
+    [MakingKind.Image]: "Image",
+    [MakingKind.Texture]: "Texture",
+    [MakingKind.Video]: "Video",
+    [MakingKind.SoundEffect]: "Sound effect",
+    [MakingKind.Music]: "Music",
+    [MakingKind.Voice]: "Voice",
+    asset: "Asset",
+  } satisfies Record<MakingKind | "asset", string>,
+  queued: "Queued",
+  failed: "Didn’t finish",
+  stopped: "Stopped",
+  unsure: "Not confirmed",
+  notFetched: "Not downloaded",
+  notInGame: "Not in your game",
+  /** A clock that ran past the hours it spells out. */
+  overHours: (hours: number) => `${hours}+ h`,
+  approve: "Approve",
+  approving: "Approving…",
+  /** The Approve button's full name: which candidate, or the remesh. */
+  approveLabel: (candidate: number | null) =>
+    candidate === null ? "Approve the remesh" : `Approve candidate ${candidate}`,
+  /** A candidate's tab, and its picture. */
+  candidate: (n: number) => `Candidate ${n}`,
+  candidates: "Candidates",
+  /** The chat's cards of the assets a piece of work is still making. */
+  inChat: "Assets being made",
+  spoken: {
+    making: (kind: string, tool: string) => `${kind} being made with ${tool}`,
+    queued: (kind: string, tool: string) => `${kind} queued for ${tool}`,
+    review: (kind: string, tool: string) => `${kind} from ${tool} waits for your choice`,
+    ended: (kind: string, tool: string, title: string) => `${kind} from ${tool}: ${title}`,
+    withPrompt: (said: string, prompt: string) => `${said}. ${prompt}`,
+  },
+} as const;
+
 /** "1 animation", "3 animations". */
 export function animationCountWords(count: number): string {
   return count === 1 ? "1 animation" : `${count} animations`;
@@ -3334,17 +3379,17 @@ export const GENEX_WORDS = {
     toolsTitle: "Tools it routes",
     toolsIntro:
       "Ask in any game chat. Genex picks the tool, runs it on your balance and saves the file in your game. No accounts or keys of your own.",
-    /** Each routed tool's name and what it does, by `RoutedTool`. */
+    /** Each routed tool's name and what it does, by `GenexTool`. */
     tools: {
-      tripo: { name: "Tripo", line: "3D · rig · animate" },
-      meshy: { name: "Meshy", line: "3D · characters" },
-      uthana: { name: "Uthana", line: "Rigging · animation" },
-      "gpt-image": { name: "GPT Image 2.5", line: "Images · sprites" },
-      "nano-banana": { name: "Nano Banana 2", line: "Textures" },
-      minimax: { name: "MiniMax H3 Max Turbo", line: "Video" },
-      blender: { name: "Blender", line: "Scenes · blockouts" },
-      elevenlabs: { name: "ElevenLabs", line: "SFX · music · voice" },
-      publishing: { name: "Genex", line: "Publishing" },
+      tripo: { name: "Tripo", short: "Tripo", line: "3D · rig · animate" },
+      meshy: { name: "Meshy", short: "Meshy", line: "3D · characters" },
+      uthana: { name: "Uthana", short: "Uthana", line: "Rigging · animation" },
+      "gpt-image": { name: "GPT Image 2.5", short: "GPT Image", line: "Images · sprites" },
+      "nano-banana": { name: "Nano Banana 2", short: "Nano Banana", line: "Textures" },
+      minimax: { name: "MiniMax H3 Max Turbo", short: "MiniMax", line: "Video" },
+      blender: { name: "Blender", short: "Blender", line: "Scenes · blockouts" },
+      elevenlabs: { name: "ElevenLabs", short: "ElevenLabs", line: "SFX · music · voice" },
+      publishing: { name: "Genex", short: "Genex", line: "Publishing" },
     },
   },
   /** The Publish dialog on the game's stage, drawn by Studio. */
@@ -3459,20 +3504,6 @@ export const GENEX_WORDS = {
     stopped: "Stopped",
     unsure: "Not confirmed",
   } satisfies Record<JobState, string>,
-  kind: {
-    model: "3D model",
-    character: "Character",
-    animation: "Animation",
-    rig: "Rigged model",
-    creature: "Creature",
-    image: "Image",
-    texture: "Texture",
-    video: "Video",
-    sfx: "Sound effect",
-    music: "Music",
-    voice: "Voice",
-    asset: "Asset",
-  },
   credits: (count: number) => plural(count, "credit"),
   refunded: "Refunded",
 } as const;
