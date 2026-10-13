@@ -23,7 +23,7 @@ import type {
 } from "../../run-graph.ts";
 import { runIdOf } from "../../run-graph.ts";
 import type { JobInfo } from "../../run-graph-workers.ts";
-import { AssetCardState, assetCounts, BLENDER_SOURCE } from "../../run-graph-assets.ts";
+import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
 import {
   askedRest,
   isLiveStep,
@@ -37,7 +37,7 @@ import {
 import { FinishLook, finishCheckFace, finishCheckLook, jobsTileStatus, LeadFace } from "../../run-tree.ts";
 import { useStill } from "../../stills.ts";
 import { Icon } from "../../ui/icons.tsx";
-import { ASSET_THUMB_PX, blenderRender, firstImage, isMaking } from "../inspector/asset-jobs.ts";
+import { ASSET_THUMB_PX, assetsStatus, blenderRender, firstImage, isMaking } from "../inspector/asset-jobs.ts";
 import { optimizationStatus } from "../inspector/OptimizationPanel.tsx";
 import { IMAGE_OUTLINE } from "../inspector/pictures.tsx";
 import { GraphSelection } from "../inspector/selection.ts";
@@ -46,7 +46,7 @@ import { StateGlyph, TONE } from "../inspector/tone.tsx";
 import { sameStepNode, type StepNodeProps } from "./step-props.ts";
 import { useRoundStill, useSavePointShot, useWorkerStill } from "../run-stills.ts";
 import { AssetThumbnail } from "../AssetThumbnail.tsx";
-import { ASSET_JOB_WORDS, FINISH_CHECK_WORDS, JOBS_EYEBROW, LEAD_WORDS } from "../../words.ts";
+import { FINISH_CHECK_WORDS, JOBS_EYEBROW, LEAD_WORDS } from "../../words.ts";
 import { useNow } from "./use-builds-model.ts";
 import type { ReferenceFrame } from "../../../shared/protocol.ts";
 import type { ProjectAsset } from "../../../shared/game-assets.ts";
@@ -600,18 +600,6 @@ export function StartNode({
       {clamped || open ? <ShowAll open={open} onToggle={() => setOpen((value) => !value)} /> : null}
     </div>
   );
-}
-
-/** Where the run's assets have got to, in one line: failures first, then work in hand, then the game. */
-export function assetsStatus(jobs: AssetInfo[]): { text: string; tone: Tone } {
-  const { made, failed, making, unfinished, inGame, known } = assetCounts(jobs);
-  if (failed) return { text: `${failed} failed`, tone: Tone.Red };
-  if (making) return { text: `Making ${making}`, tone: Tone.Accent };
-  if (unfinished && !made) return { text: ASSET_JOB_WORDS.notFinished(unfinished), tone: Tone.Muted };
-  if (!known) return { text: `${made} delivered`, tone: Tone.Muted };
-  if (inGame === made) return { text: `${inGame} in game`, tone: Tone.Green };
-  if (inGame) return { text: `${inGame} of ${made} in game`, tone: Tone.Orange };
-  return { text: "Not in game yet", tone: Tone.Orange };
 }
 
 /** The glyph the assets tile wears for each tone of its status; the other tones wear none. */

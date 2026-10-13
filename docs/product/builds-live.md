@@ -6,8 +6,7 @@ Auto edits directly; Loop delegates workers (four by default) while the chat
 leads. Parts grow boldly within the ask; an art director reviews the whole game and returns defects
 for polish, never a veto. Other
 projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap: a
-reviewer's yes ends it early (in place, the lead first works on the gaps it names while time is
-left); 15 minutes' grace follows.
+reviewer's yes ends it early (in place, gaps it names come first); 15 minutes' grace follows.
 Acceptance persists across workers and restarts. External blockers pause the run at its
 checkpoint. User Finish overrides the clock, never the final judge
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
@@ -37,7 +36,7 @@ node opens as a card; an eye opens the reviewers' notes. **Follow up in chat** n
 Chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
 below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
 line each round. In place, save points form one line, each showing what changed; workers hang off
-it, pictured, solid under the save point that took their work, else ghosts. A chat message's
+it, solid under the save point that took their work, else ghosts. A chat message's
 workers get a graph while newest.
 
 Agents test in hidden windows, never in Live; chat frames never certify a build. A finished

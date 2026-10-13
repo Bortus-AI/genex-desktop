@@ -63,14 +63,12 @@ const worker = (n: number): string => `session:${poolWorkerId(`w${n}`)}`;
 const save = (n: number): string => `step:lead:${n}`;
 
 describe("the assets card once a lead's Loop is over", () => {
-  it("nothing is still making, the plugin's own failures are failures, and a delivery that landed no file is no card", () => {
+  it("nothing is still making, a request the service refused is no card, and a delivery that landed no file is no card", () => {
     const jobs = assetJobs(fold().graph);
     const count = (state: string) => jobs.filter((job) => job.state === state).length;
     assert.equal(count(AssetCardState.Requested) + count(AssetCardState.Generating), 0, "no Making after the end");
     assert.equal(count(AssetCardState.Unfinished), 1, "the one generation nobody waited for");
-    assert.equal(count(AssetCardState.Failed), 11, "the generations the plugin refused, each under its own prompt");
-    for (const job of jobs.filter((each) => each.state === AssetCardState.Failed))
-      assert.ok(job.error, `a failure says why: ${job.name}`);
+    assert.equal(count(AssetCardState.Failed), 0, "the requests refused before any generation started made nothing");
     for (const job of jobs.filter((each) => each.state === AssetCardState.Delivered))
       assert.ok(job.files.length > 0, `a delivered card holds files: ${job.name}`);
   });
@@ -79,7 +77,7 @@ describe("the assets card once a lead's Loop is over", () => {
     const counts = assetCounts(assetJobs(fold().graph));
     assert.equal(counts.making, 0);
     assert.equal(counts.unfinished, 1);
-    assert.equal(counts.failed, 11);
+    assert.equal(counts.failed, 0);
     assert.equal(counts.made + counts.failed + counts.unfinished, assetJobs(fold().graph).length);
   });
 
@@ -355,13 +353,15 @@ describe("an asset job's end", () => {
   const states = (events: EventEnvelope[]) =>
     assetJobs(buildRunGraph(events) as RunGraph).map((job) => [job.facetId, job.state, job.error]);
 
-  it("a call that came back ok with the plugin's own failed status is a failure, with its error", () => {
+  it("a generation the call came back ok on but that failed is a failure, with its error; a request refused before one is no card", () => {
     seq = 0;
+    const generationFailed = { status: "failed", generationId: "g1", error: "The generation failed." };
     const events = [
       ...opened(),
-      ...call("c1", "w1", "operation=model prompt=a crate", { status: "failed", error: "Refused by the service." }),
+      ...call("c1", "w1", "operation=model prompt=a crate", generationFailed),
+      ...call("c2", "w2", "operation=model prompt=a barrel", { status: "failed", error: "Cannot quote this." }),
     ];
-    assert.deepEqual(states(events), [[poolWorkerId("w1"), AssetCardState.Failed, "Refused by the service."]]);
+    assert.deepEqual(states(events), [[poolWorkerId("w1"), AssetCardState.Failed, "The generation failed."]]);
   });
 
   it("a job still being made is making while the run goes on or is paused, and not finished once it ended", () => {
@@ -382,16 +382,16 @@ describe("an asset job's end", () => {
 
   it("a failure folds only into the same worker's later success under the same name", () => {
     seq = 0;
-    const failed = { status: "failed", error: "Refused." };
+    const failed = (generationId: string) => ({ status: "failed", generationId, error: "Failed." });
     const made = { status: "downloaded" };
     const events = [
       ...opened(),
-      ...call("c1", "w1", "operation=model prompt=a crate", failed),
+      ...call("c1", "w1", "operation=model prompt=a crate", failed("g1")),
       ...call("c2", "w1", "operation=model prompt=a crate", made, {
         jobId: "j2",
         files: ["assets/genex/j2/crate.glb"],
       }),
-      ...call("c3", "w1", "operation=model prompt=a barrel", failed),
+      ...call("c3", "w1", "operation=model prompt=a barrel", failed("g3")),
       ...call("c4", "w2", "operation=model prompt=a barrel", made, {
         jobId: "j4",
         files: ["assets/genex/j4/barrel.glb"],
@@ -399,7 +399,7 @@ describe("an asset job's end", () => {
     ];
     assert.deepEqual(states(events), [
       [poolWorkerId("w1"), AssetCardState.Delivered, null],
-      [poolWorkerId("w1"), AssetCardState.Failed, "Refused."],
+      [poolWorkerId("w1"), AssetCardState.Failed, "Failed."],
       [poolWorkerId("w2"), AssetCardState.Delivered, null],
     ]);
   });
