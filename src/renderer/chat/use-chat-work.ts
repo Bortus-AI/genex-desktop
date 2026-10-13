@@ -4,7 +4,7 @@ import { useRunSummary } from "../use-run-summary.ts";
 import { statusWords } from "../words.ts";
 import type { ChatPanelProps } from "./chat-panel-props.ts";
 import { useChatStop } from "./chat-stop.ts";
-import { busyLabel, chatWorkState } from "./chat-work-state.ts";
+import { busyLabel, chatWorkState, runCaption } from "./chat-work-state.ts";
 import type { ChatWorkProps } from "./ChatWork.tsx";
 import { buildCaption, currentWorkLabel } from "./current-work.ts";
 import { currentWorkItems, finishingRun, runBudgetMs, runStartedAt } from "./transcript.ts";
@@ -61,20 +61,28 @@ export function useChatWork(props: ChatPanelProps, chat: ChatThread, busy: boole
   const words = useWorkWords(chat, {
     activity,
     outcome,
-    details: currentDetails?.items ?? NO_ITEMS,
+    details: state.workItems.length ? state.workItems : NO_ITEMS,
     plan: plan.review,
   });
   const showsWork = state.chatWorking || running;
   const current = showsWork ? words.current : "";
   const waitsOnUser = questionsWaiting || plan.revising;
   const sending = chat.sends.sending;
+  const personFirst = props.personFirst ?? null;
   const line: ChatWorkProps = {
     chatWorking: state.chatWorking,
     learning: state.learning,
     activeRunId,
     workKey: plan.working ? plan.review?.id : (activeRunId ?? threadId),
-    label: busyLabel({ stopping: stop.stopping, sending, questionsWaiting, revisingPlan: plan.revising, current }),
-    caption: running ? words.caption : "",
+    label: busyLabel({
+      stopping: stop.stopping,
+      sending,
+      questionsWaiting,
+      revisingPlan: plan.revising,
+      current,
+      personFirst,
+    }),
+    caption: runCaption({ running, caption: words.caption, personFirst }),
     waiting: waitsOnUser || (!plan.working && activity.phase === ChatActivityPhase.Waiting),
     busySince: props.busySince,
     details: currentDetails?.items ?? null,

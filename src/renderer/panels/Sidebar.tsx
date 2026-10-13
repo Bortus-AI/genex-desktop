@@ -9,6 +9,7 @@ import { Dot, IconButton } from "../ui/kit.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { GenexLogo } from "../ui/GenexLogo.tsx";
 import { GameAvatar } from "../ui/GameAvatar.tsx";
+import { projectKindLabel } from "../project-kind.ts";
 import { Shortcut } from "../ui/Shortcut.tsx";
 import { Tooltip, TooltipTrigger, TooltipContent } from "../ui/tooltip.tsx";
 import {
@@ -502,6 +503,8 @@ function GameRow({
   onCover: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // A project that isn't a game says what it is beside its name.
+  const kind = projectKindLabel(game);
   // The row's end is one slot: the working dot, else the pin — and ⋯ in their place on hover.
   return (
     <div className="sidebar-game" data-game={game.name} data-active={active} data-busy={busy} data-menu-open={open}>
@@ -510,12 +513,15 @@ function GameRow({
         data-project={game.name}
         data-thread={threadId}
         aria-current={active ? "page" : undefined}
-        title={game.pathLabel}
+        title={kind ? `${game.pathLabel} · ${kind}` : game.pathLabel}
         className="sidebar-game-select"
         onClick={onSelect}
       >
         <GameAvatar cover={game.cover} active={active} gameKey={game.name} />
-        <span className="min-w-0 flex-1 truncate">{game.title}</span>
+        {/* The kind label keeps its words: the name shortens first, down to its first letters, and only a
+            row narrower than that shortens the label too. */}
+        <span className="min-w-8 flex-1 truncate">{game.title}</span>
+        {kind && <span className="ms-1.5 min-w-0 truncate text-ink-3">{kind}</span>}
         {busy && <span className="sr-only">Working</span>}
       </button>
       <GameRowEnd busy={busy} pinned={game.pinned} />

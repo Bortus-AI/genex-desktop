@@ -18,6 +18,7 @@ import {
   type Rect,
 } from "../../src/renderer/run-graph.ts";
 import { checkCounts } from "../../src/renderer/words.ts";
+import { answeredRecords } from "../../src/shared/run-graph-events.ts";
 
 let counter = 0;
 function event(eventType: string, payload: Record<string, unknown>): EventEnvelope {
@@ -169,6 +170,53 @@ describe("buildRunGraph", () => {
     assert.equal(buildProgress(graph).title, "Building the starting point");
     const finished = buildRunGraph([...events, event("autopilot_base", { ok: true, empty: true })])!;
     assert.equal(buildProgress(finished).title, "The starting point is ready");
+  });
+
+  it("keeps the pictures the person sent with the message the run answers, for the start node", () => {
+    /** A queue record of the chat's, which names no run. */
+    const queue = (eventType: string, payload: Record<string, unknown>): EventEnvelope => {
+      const record = event(eventType, {});
+      return { ...record, thread_id: "chat", data: { type: "custom", event_type: eventType, payload } };
+    };
+    const pictures = { text: "Recreate this area", attachmentsArtifact: "message_attachments_m1", imageCount: 2 };
+    const asked = buildRunGraph([
+      queue("coordinator_message_queued", { messageId: "m0", action: { text: "hi" } }),
+      queue("coordinator_message_processing", { messageId: "m0" }),
+      queue("coordinator_message_queued", { messageId: "m1", action: pictures }),
+      queue("coordinator_message_processing", { messageId: "m1" }),
+      event("run_registered", { goal: "Recreate this area" }),
+      event("run_started", { goal: "Recreate this area" }),
+      // A later message steered into the run never becomes what it was asked with.
+      queue("coordinator_message_queued", { messageId: "m2", action: { ...pictures, attachmentsArtifact: "x" } }),
+      queue("coordinator_message_processing", { messageId: "m2" }),
+      event("run_started", { goal: "Recreate this area", resumed: true }),
+    ]);
+    const askedOf = (graph: ReturnType<typeof buildRunGraph>) => {
+      const run = graph?.nodes.find((node) => node.kind === "run");
+      return run?.kind === "run" ? run.asked : undefined;
+    };
+    assert.deepEqual(askedOf(asked), { threadId: "chat", messageId: "m1", count: 2 });
+    const plain = buildRunGraph([
+      queue("coordinator_message_queued", { messageId: "m3", action: { text: "Make a game" } }),
+      queue("coordinator_message_processing", { messageId: "m3" }),
+      event("run_registered", { goal: "Make a game" }),
+    ]);
+    assert.equal(askedOf(plain), null, "a message without pictures leaves the start to its words");
+    // The run's summary hands the graph its own records only, and the message it answers.
+    const log = [
+      queue("coordinator_message_queued", { messageId: "m0", action: { text: "hi" } }),
+      queue("coordinator_message_processing", { messageId: "m0" }),
+      queue("coordinator_message_queued", { messageId: "m1", action: pictures }),
+      queue("coordinator_message_queued", { messageId: "m9", action: { text: "queued behind" } }),
+      queue("coordinator_message_processing", { messageId: "m1" }),
+      event("run_registered", { goal: "Recreate this area" }),
+      queue("coordinator_message_processing", { messageId: "m9" }),
+    ];
+    assert.deepEqual(
+      answeredRecords(log, "run_x").map((record) => record.id),
+      [log[2]!.id, log[4]!.id],
+    );
+    assert.deepEqual(answeredRecords(log, "run_other"), [], "a run with no record of its own answers nothing");
   });
 
   it("returns null for a thread with no run", () => {

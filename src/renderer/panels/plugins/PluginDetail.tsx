@@ -134,7 +134,7 @@ function GenericDetail({
       {blender && <BlenderDoes />}
       <PluginConnections plugin={detail} page={page} />
       <PluginSkills detail={detail} onSkill={onSkill} />
-      <Information detail={detail} />
+      <Information detail={detail} page={page} />
     </>
   );
 }

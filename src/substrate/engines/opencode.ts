@@ -434,7 +434,12 @@ export class OpenCodeEngine implements Engine {
       hasSeam && request.ownership ? ownershipBriefing(request.ownership) : "",
       plan
         ? planModeNote(ctx.cwd, ctx.scratch ?? "")
-        : readOnlyNote(ctx.cwd, ctx.scratch, request.director ? path.resolve(request.director.root) : null),
+        : readOnlyNote(
+            // A reviewer's cwd is its own empty home: the build it tests is the folder it reads.
+            request.reviewer?.reads ?? ctx.cwd,
+            ctx.scratch,
+            request.director ? path.resolve(request.director.root) : null,
+          ),
       offLimitsNote([...this.#protectedPaths, ...credentialHomes(), ...(request.denyReads ?? [])]),
     ]
       .filter((part) => part.trim())

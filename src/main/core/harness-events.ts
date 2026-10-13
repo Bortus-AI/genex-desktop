@@ -4,7 +4,8 @@ import { EventKind } from "../../shared/event-log.ts";
 import type { EventData } from "../../substrate/types.ts";
 
 const MESSAGE = {
-  hostOnly: "permission, consent, recovery and self-change rows are written by the studio only",
+  hostOnly:
+    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume and finish check rows are written by the studio only",
 } as const;
 const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ToolPermission,
@@ -15,8 +16,20 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.SelfEdit,
   CustomEvent.SkillEdited,
   CustomEvent.ToolInstalled,
+  // A turn-it-on card is shown by `plugins_suggest` only, after its checks: its button turns a plugin on.
+  CustomEvent.PluginSuggested,
+  // Files too large to save are reported by the host that took the checkpoint or the rewind.
+  CustomEvent.CheckpointSkipped,
+  // A job's start and end are recorded by the app that owns the job (`substrate/jobs.ts`).
+  CustomEvent.JobStarted,
+  CustomEvent.JobEnded,
+  // What macOS access `app_look` still needs is the app's own finding.
+  CustomEvent.AppLookAccess,
   // The count of a run's automatic resumes bounds them (`core/auto-resume.ts`): only the host writes one.
   CustomEvent.RunAutoResumed,
+  // The reviewer's verdict is the app's, from the session it seated (`core/finish-review.ts`): the
+  // harness asks for a check and settles it, but a yes it wrote itself would read as Done.
+  CustomEvent.FinishCheck,
 ]);
 
 /** Refuse the entire batch before writing any row or updating the recovery index. */

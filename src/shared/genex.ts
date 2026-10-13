@@ -3,6 +3,8 @@ import { type CaptureSource, type StillExposure, StillMimeType } from "./preview
 
 /** The bundled Genex plugin's id: the host's own Genex surfaces (its page, the promo) look it up by this. */
 export const GENEX_PLUGIN_ID = "genex";
+/** The Genex Tools skill that teaches an agent to write a Genex plugin (`plugins_find` names it). */
+export const GENEX_PLUGIN_AUTHOR_SKILL = "plugin-author";
 
 /**
  * The user actions the Genex plugin.json declares, as its panels, the Plugins page, the promo and

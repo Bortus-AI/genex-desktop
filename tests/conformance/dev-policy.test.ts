@@ -174,6 +174,8 @@ test("fixture native guard covers all account, external, picker, export and down
   for (const channel of [
     "studio:plugins.index",
     "studio:plugins.watch",
+    // Forgetting a local plugin's Always allow writes its install record and opens nothing.
+    "studio:plugins.forget-allowed",
     // Listing, editing and removing connectors stay open: they write a file inside the profile and
     // open no dialog. Only the trust step is native.
     "studio:mcp.list",

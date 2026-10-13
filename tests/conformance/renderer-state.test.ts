@@ -27,6 +27,7 @@ import {
   gameRemovedFromThreads,
   harnessDown,
   initialThreads,
+  personFirstLabel,
   projectOf,
   railThreadIds,
   returnTarget,
@@ -156,6 +157,7 @@ const gameProject = (name: string, extra: Partial<GameProject> = {}): GameProjec
     serve: ".",
   },
   built: false,
+  facts: [{ id: "web-game", path: ".", source: "core" }],
   ...extra,
 });
 const studioThread = thread("studio", { kind: "studio" });
@@ -779,6 +781,29 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     await app.bootstrap();
     assert.equal(app.session.getState().status, "ready");
     assert.equal(app.session.getState().error, null);
+  });
+
+  it("the chat a wait on the person is for reads it as it comes and goes; another chat never does", async () => {
+    const { fake, app } = started();
+    await tick();
+    app.selectThread("rift-chat");
+    const label = () => personFirstLabel(app.threads.getState(), app.threads.getState().activeThreadId);
+    assert.equal(label(), null);
+    fake.emit({
+      type: "lock.person-first",
+      payload: { project: "rift", threadId: "rift-chat", label: "Unreal", waiting: true },
+    });
+    assert.equal(label(), "Unreal");
+    fake.emit({
+      type: "lock.person-first",
+      payload: { project: "pond", threadId: "pond-chat", label: "Desk", waiting: true },
+    });
+    assert.equal(label(), "Unreal", "another chat's wait leaves this one's");
+    fake.emit({
+      type: "lock.person-first",
+      payload: { project: "rift", threadId: "rift-chat", label: "Unreal", waiting: false },
+    });
+    assert.equal(label(), null);
   });
 
   it("feeds events from its one subscription and polls the log", async () => {
