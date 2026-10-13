@@ -4,6 +4,8 @@
   Hardened-runtime entitlements for the app and every helper (scripts/package-signing.cjs).
   allow-jit: V8 needs it in main, the renderers and the ELECTRON_RUN_AS_NODE children (harness,
   plugin backends, MCP servers, the self-edit gate).
+  automation.apple-events: an agent's app_look reads a window's accessibility tree through System
+  Events (osascript run by main); the hardened runtime refuses Apple events without it.
   audio-input: voice chat in Play, the microphone a published game's page gets only while the person
   turns on the mic in its header (main/play/viewer-view.ts); games in Create are still denied every
   media permission (main/preview.ts).
@@ -14,6 +16,8 @@
 <plist version="1.0">
   <dict>
     <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.automation.apple-events</key>
     <true/>
     <key>com.apple.security.device.audio-input</key>
     <true/>

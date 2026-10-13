@@ -27,6 +27,10 @@ export const STORAGE_KEYS = {
   appearance: "studio.appearance.v1",
   /** Home's background picture and effect (`home-backdrop/settings.ts` owns the format). */
   homeBackdrop: "studio.homeBackdrop.v1",
+  /** Live backgrounds a model made for home (`home-backdrop/made-shaders.ts` owns the format). */
+  homeBackdropShaders: "studio.homeBackdropShaders.v1",
+  /** Set ("1") once home's Background panel has been opened: its button stops glinting. */
+  homeBackdropFound: "studio.homeBackdropFound",
   /** The notifications feed (`notifications.ts` owns the format). */
   notifications: "studio.notifications",
   /** Set once the first-launch welcome is finished or skipped on this profile. */
@@ -59,6 +63,10 @@ export const storageKeyFor = {
   threadLoop: (threadId: string): string => `studio.loop.${threadId}`,
   /** A game chat's own effort; the per-model effort only seeds fresh chats. */
   threadEffort: (threadId: string): string => `studio.threadEffort.${threadId}`,
+  /** The engine steps offer a game's Not now hid, by its record id (`chat/EngineStepsCard.tsx`). */
+  engineStepsDismissed: (project: string): string => `studio.engineSteps.dismissed.${project}`,
+  /** The Live view last chosen for a game whose folder has more than one, as its observer key (`live-views.ts`). */
+  liveView: (project: string): string => `studio.liveView.${project}`,
 } as const;
 
 /** The IndexedDB database of cover sphere stills (`ui/cover-stills.ts` owns the format). */

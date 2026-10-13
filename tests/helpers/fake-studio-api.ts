@@ -5,6 +5,7 @@
  * counterparts, so a component under test hears pushes exactly as it would from the preload.
  */
 import type { StudioApi } from "../../src/shared/studio-api.ts";
+import { ShaderFailure } from "../../src/shared/backdrop-shader.ts";
 import { CliInstallPhase } from "../../src/shared/cli-install.ts";
 
 export type StudioMethod = keyof StudioApi;
@@ -32,6 +33,7 @@ const METHODS = [
   "pluginSetSetting",
   "pluginReview",
   "pluginAction",
+  "pluginChooseFile",
   "genexPublishReview",
   "genexPublish",
   "pluginsIndex",
@@ -40,6 +42,7 @@ const METHODS = [
   "pluginGithubVersions",
   "pluginUpdate",
   "pluginWatch",
+  "pluginForgetAllowed",
   "pluginConsent",
   "permissions",
   "setPermissionMode",
@@ -54,6 +57,7 @@ const METHODS = [
   "mcpCancelAuthorization",
   "mcpDisconnectAccount",
   "mcpTools",
+  "mcpForgetAlwaysAllowed",
   "bootState",
   "retrySandboxSetup",
   "setUpSandbox",
@@ -78,12 +82,18 @@ const METHODS = [
   "renameThread",
   "compactThread",
   "archiveGame",
+  "gameHistory",
+  "clearGameHistory",
+  "undoEngineLink",
+  "stopJob",
+  "openPrivacySettings",
   "engines",
   "providerUsage",
   "hardware",
   "games",
   "createGame",
   "nameGame",
+  "makeBackdrop",
   "pickGameLocation",
   "updateGame",
   "removeGame",
@@ -108,6 +118,12 @@ const METHODS = [
   "openCodeSignIn",
   "openRouterKeySave",
   "openRouterKeyClear",
+  "openRouterSignIn",
+  "openRouterSignInReopen",
+  "openRouterSignInCancel",
+  "localServerConnect",
+  "localServerForget",
+  "localServerFind",
   "terminalList",
   "terminalAccessibility",
   "terminalOpen",
@@ -298,6 +314,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     previewState: () => null,
     pickProject: () => null,
     pickGameLocation: () => null,
+    pluginChooseFile: () => null,
     nameGame: () => ({ title: "Untitled game" }),
     playFeed: () => ({ games: [], nextCursor: null }),
     playShelves: () => ({
@@ -306,6 +323,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     }),
     playOnline: () => ({}),
     playSearch: () => [],
+    makeBackdrop: () => ({ ok: false, failure: ShaderFailure.NoModel }),
   };
 }
 

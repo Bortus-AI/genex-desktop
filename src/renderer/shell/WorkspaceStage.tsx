@@ -16,6 +16,7 @@ import { notifyProblem } from "../state/toasts.ts";
 import { useCoveredByHome } from "./HomeScreen.tsx";
 import { StagePreview } from "./store-leaves.tsx";
 import type { WorkspaceProps } from "./use-shell.ts";
+import { webBuildShown } from "../web-build-shown.ts";
 
 /** The stage beside the chat: a game's preview, or Studio's review when the Studio chat is open. */
 export const WorkspaceStage = memo(function WorkspaceStage({
@@ -72,6 +73,7 @@ export const WorkspaceStage = memo(function WorkspaceStage({
               void window.studio
                 .showBuild(name, commit)
                 .then(() => {
+                  webBuildShown(name);
                   navigation.selectGame(name);
                   views.showLive();
                 })

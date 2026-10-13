@@ -415,7 +415,8 @@ describe("reopening the finished build once the reply has ended", () => {
 
     assert.deepEqual(
       calls.map((c) => c.method),
-      ["artifact.read", "events.list", "artifact.write", "events.append", "events.append"],
+      // The game's kind is read before anything is promised: a web Loop's build goes on only where the folder reads as one.
+      ["artifact.read", "game.list", "events.list", "artifact.write", "events.append", "events.append"],
     );
     const journal = store.journal as Json;
     assert.equal(journal.phase, "done", "the run rewrites its phase when it starts");

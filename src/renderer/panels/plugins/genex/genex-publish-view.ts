@@ -1,9 +1,10 @@
 /**
  * The Publish dialog's view of Genex's publish record: where the game is (not online, draft only,
- * public), the running attempt's steps, how the last one ended, and the one press the next step needs. What Publish asks
- * for first (Genex installed and on, then an account), whether to ask the game's chat for a Genex
- * cover, whether Studio puts Publish on the strip itself and whether the chat's cover card offers
- * Publish are decided here too. Pure, so the dialog only draws it.
+ * public), the running attempt's steps, how the last one ended, and the one press the next step
+ * needs. What Publish asks for first (Genex installed and on, then an account), whether to ask the
+ * game's chat for a Genex cover, whether Studio puts Publish on the strip itself, which games get
+ * none (an Unreal game) and whether the chat's cover card offers Publish are decided here too.
+ * Pure, so the dialog only draws it.
  */
 import {
   cleanGenexTitle,
@@ -24,6 +25,7 @@ import {
 } from "../../../../shared/genex.ts";
 import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin-toolbar.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
+import { type FactRef, type FolderHolds, servedAsWebGame } from "../../../../shared/project-facts.ts";
 import { relativeTime } from "../../../chat-labels.ts";
 import { GENEX_WORDS } from "../../../words.ts";
 
@@ -277,9 +279,40 @@ export const isGenexPublish = (entry: PluginToolbarEntry): boolean =>
   entry.item.target.kind === "panel" &&
   entry.item.target.id === GENEX_PUBLISH_PANEL;
 
-/** Whether Studio puts Publish on the strip itself: a game is open and Genex, off or gone, adds none. */
-export function studioPublishButton(plugins: readonly PluginInfo[], project: string | null): boolean {
-  return Boolean(project) && !toolbarItems(plugins, project).some(isGenexPublish);
+/**
+ * Whether Publish can put a game holding these facts (and, with none, `holds`) on Genex. Publish uploads the game folder as a
+ * web game, so only a game served as one at its root has Publish; an Unreal game's folder holds an
+ * Unreal project and no web build, and any other kind of project none either. The host refuses the
+ * same games (`main/core/genex-publish.ts`).
+ */
+const publishable = (facts: readonly FactRef[], holds: FolderHolds | undefined): boolean =>
+  servedAsWebGame({ facts, holds });
+
+/**
+ * The plugin buttons on the open game's stage strip: every enabled plugin's, less Genex's Publish
+ * for a game Publish can't put online (`publishable`).
+ */
+export function stripEntries(
+  plugins: readonly PluginInfo[],
+  project: string | null,
+  facts: readonly FactRef[],
+  holds?: FolderHolds,
+): PluginToolbarEntry[] {
+  const entries = toolbarItems(plugins, project);
+  return publishable(facts, holds) ? entries : entries.filter((entry) => !isGenexPublish(entry));
+}
+
+/**
+ * Whether Studio puts Publish on the strip itself: a web game is open and Genex, off or gone, adds
+ * none.
+ */
+export function studioPublishButton(
+  plugins: readonly PluginInfo[],
+  project: string | null,
+  facts: readonly FactRef[],
+  holds?: FolderHolds,
+): boolean {
+  return Boolean(project) && publishable(facts, holds) && !toolbarItems(plugins, project).some(isGenexPublish);
 }
 
 /**

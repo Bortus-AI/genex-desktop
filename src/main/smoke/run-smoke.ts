@@ -1056,13 +1056,15 @@ async function checkLocalPluginToolbar(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, threadId, waitFor } = buildSmoke;
   const { core, resources } = buildSmoke.ctx;
   const exampleDir = path.join(resources, "examples/example");
-  await core.plugins.installLocal(
+  const example = await core.plugins.installLocal(
     exampleDir,
     "local",
     undefined,
     { kind: PluginSourceKind.Local, directory: exampleDir },
     await scanPackage(exampleDir, await inspectPackage(exampleDir)),
   );
+  // Loaded from a folder, it starts off: the person turns it on.
+  await core.plugins.setEnabled(example.id, true);
   await wc.executeJavaScript(`document.querySelector('nav [data-thread="${threadId}"]').click()`);
   // The top bar learns about the new plugin from plugins.changed alone: the page is closed,
   // so nothing else is polling the list.
@@ -3179,7 +3181,7 @@ async function directLoopRun(
     ),
   );
   for (let i = 0; i < 30; i++) {
-    dir.waited = JSON.parse(asText(await call("wait", { seconds: "3", worker: "sign" })));
+    dir.waited = JSON.parse(asText(await call("worker_wait", { seconds: "3", worker: "sign" })));
     if (dir.waited.status?.workers?.[0]?.state !== "running") break;
   }
   dir.lookWorker = await call("look", { target: "sign" });

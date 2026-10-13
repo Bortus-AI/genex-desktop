@@ -288,7 +288,14 @@ export async function startRig(
   core: Partial<
     Pick<
       StudioCoreOptions,
-      "previewPoolMax" | "createHeadlessPreview" | "sandbox" | "consentTimeoutMs" | "rewindBuildStop"
+      | "previewPoolMax"
+      | "createHeadlessPreview"
+      | "sandbox"
+      | "consentTimeoutMs"
+      | "rewindBuildStop"
+      | "jobSpawn"
+      | "jobProbe"
+      | "locks"
     >
   > = {},
 ): Promise<Rig> {

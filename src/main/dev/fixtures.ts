@@ -12,7 +12,10 @@ import { EventKind, SnapshotScope } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { seedLargeBuildGraph } from "./fixture-large-graph.ts";
+import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
+import { seedChatWorkers, seedChatWorkersLoop } from "./fixture-chat-workers.ts";
+import { seedFinishCheck } from "./fixture-finish-check.ts";
 import { activateLiveChat, activatePlanReviews, seedChatFeedback, seedChatHistory } from "./fixture-chat.ts";
 import { hasLandedLoopRun, seedFirstLoopRun, seedLandedLoopRun } from "./fixture-history.ts";
 import {
@@ -25,6 +28,10 @@ import {
   isFixtureName,
 } from "./fixture-kit.ts";
 import { NOTIFICATIONS_START_MS, notificationArrivals, seedNotificationGames } from "./fixture-notifications.ts";
+import { announceOpenLoopWait, seedOpenLoops, seedOpenProjects } from "./fixture-open-projects.ts";
+import { seedStillsGame } from "./fixture-stills.ts";
+import { seedUnrealGame } from "./fixture-unreal.ts";
+import { seedUnrealChat } from "./fixture-unreal-chat.ts";
 import { setTimeout as sleep } from "node:timers/promises";
 import { StopReason } from "../../shared/engine-requests.ts";
 
@@ -129,6 +136,8 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   const { core, id, existing, threadId } = game;
   if (id === FixtureName.BuildGraph) return seedGraphOnce(game);
   if (id === FixtureName.LargeBuildGraph) return seedLargeBuildGraph(core, game.project.name, threadId);
+  if (id === FixtureName.LeadGraph) return seedLeadGraph(core, game.project.name, threadId);
+  if (id === FixtureName.ChatWorkers) return seedChatWorkers(core, game.project.name, threadId);
   if (id === FixtureName.Sidebar) return seedSidebar(core, game.project.name);
   // The rest seed a fresh profile only; a reused one keeps what it has.
   if (existing) return;
@@ -136,6 +145,10 @@ async function seedForFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.Notifications) return seedNotificationGames(core);
   if (isChatFixture(id)) return seedChatHistory(core, game.project, threadId);
   if (id === FixtureName.ChatFeedback) return seedChatFeedback(core, game.project.name, threadId);
+  if (id === FixtureName.UnrealGame) return seedUnrealGame(core, game.project, threadId);
+  if (id === FixtureName.StillsGame) return seedStillsGame(core);
+  if (id === FixtureName.OpenProjects) return seedOpenProjects(core, game.project.name, threadId);
+  if (id === FixtureName.UnrealChat) return seedUnrealChat(core, game.project, threadId);
 }
 
 async function seedGraphOnce(game: FixtureGame): Promise<void> {
@@ -284,6 +297,23 @@ export async function activateChatFixture(
   }
   if (fixture.fixture === FixtureName.ChatFeedback) {
     await activatePlanReviews(core);
+    return;
+  }
+  if (fixture.fixture === FixtureName.ChatWorkers) {
+    await seedChatWorkersLoop(core);
+    return;
+  }
+  if (fixture.fixture === FixtureName.OpenProjects) {
+    await seedOpenLoops(core);
+    // After the window has read its first feed, so the wait reaches it as news.
+    setTimeout(
+      () => void announceOpenLoopWait(core).catch((error) => console.error("Open-projects fixture failed", error)),
+      NOTIFICATIONS_START_MS,
+    );
+    return;
+  }
+  if (fixture.fixture === FixtureName.FinishCheck) {
+    await seedFinishCheck(core, fixture.project, fixture.threadId);
     return;
   }
   if (isChatFixture(fixture.fixture)) await activateLiveChat(core, fixture);

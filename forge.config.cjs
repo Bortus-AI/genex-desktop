@@ -114,6 +114,9 @@ module.exports = {
       NSDesktopFolderUsageDescription: folderAccess("your Desktop"),
       NSDownloadsFolderUsageDescription: folderAccess("your Downloads folder"),
       NSRemovableVolumesUsageDescription: folderAccess("folders on an external drive"),
+      // app_look reads an app window's accessibility tree through System Events (Automation).
+      NSAppleEventsUsageDescription:
+        "Genex reads the accessibility tree of an app window when an agent looks at it. It never clicks or types.",
       // Voice chat in a Play game, only while the person turns its mic on in the game's header.
       NSMicrophoneUsageDescription:
         "Genex uses your microphone for voice chat in Play games, while you turn the mic on.",

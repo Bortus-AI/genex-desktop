@@ -1248,3 +1248,94 @@ describe("a build paused before the contract gate shipped, resumed (review)", ()
     assert.match(String(refused), /2 parts that loop, and no module contract yet/);
   });
 });
+
+describe("a claim's close inside the lead's call (integrate.ts, director/tools.ts)", () => {
+  /** A close over a real repository whose head the run built, its landing a stand-in. */
+  async function builtClose() {
+    const { repo, head } = await integrationRepo();
+    const stub = stubLoopRun(repo, head, null);
+    const built = await commitFiles(repo, { "src/car.js": "export {};\n" }, "the run's build");
+    const judged: Array<[string | null, number | undefined]> = [];
+    const landings: unknown[] = [];
+    Object.assign(stub.loopRun, {
+      baseCommit: head,
+      report: {},
+      syncHead: async () => {
+        stub.loopRun.state.integrationHead = await fixtureGit(repo, ["rev-parse", "HEAD"]);
+        return stub.loopRun.state.integrationHead;
+      },
+      runningWorkers: () => [],
+      settleWorkers: async () => {},
+      stopWorker: async () => {},
+      closeRun: async () => {},
+      // A judge that ignores the time it is given (a kept older tools.ts) and never answers.
+      judgeTheLanding: (at: string | null, judgeBy?: number) => {
+        judged.push([at, judgeBy]);
+        return new Promise(() => {});
+      },
+      landIntegration: async (land: boolean) => {
+        landings.push(land);
+        return { ok: true, line: "it loaded at the close" };
+      },
+    });
+    stub.loopRun.state.integrationHead = built;
+    return { ...stub, built, judged, landings };
+  }
+
+  it("a judge that runs past the lead's call is left behind: the close lands by its own look, on the call's clock", {
+    timeout: 10_000,
+  }, async () => {
+    const { loopRun, built, judged, landings, notes } = await builtClose();
+    const waits: Array<() => void> = [];
+    const wait = () => new Promise<void>((done) => void waits.push(done));
+    const judgeBy = Date.now() + 60_000;
+    const closing = closeTheLoopRun(loopRun as never, { land: true, settleMs: 0, judgeBy, wait });
+    while (!waits.length) await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.deepEqual(judged, [[built, judgeBy]], "the judge was told when to be done");
+    assert.deepEqual(landings, [], "nothing lands while the judge still has its time");
+    // The judge's time runs out on the test's clock, never on a real timer.
+    for (const done of waits) done();
+    const landed = await closing;
+    assert.equal(landed.ok, true, JSON.stringify(landed));
+    assert.deepEqual(landings, [true], "landed by the close's own look");
+    assert.ok(
+      notes.some((note) => /ran past the lead's call: the close lands by its own look/.test(note)),
+      notes.join("\n"),
+    );
+  });
+
+  it("the close's judge is done by the claim's time when that is sooner than its own", async () => {
+    const { landingJudgeUntil } = await import("../../src/harness-seed/loop/director/tools.ts");
+    const { FINAL_JUDGE_MS } = await import("../../src/harness-seed/loop/director/finish-claim.ts");
+    const now = 1_000_000;
+    assert.equal(landingJudgeUntil(now, now + 60_000), now + 60_000, "the claim's sooner time");
+    assert.equal(landingJudgeUntil(now, now + FINAL_JUDGE_MS + 1), now + FINAL_JUDGE_MS, "its own time at most");
+    assert.equal(landingJudgeUntil(now), now + FINAL_JUDGE_MS, "outside a claim, its own time");
+  });
+
+  it("a close that lands another head than the one its reviewer said yes to is no victory", async () => {
+    const { FINISH_REPORT } = await import("../../src/harness-seed/loop/finish-check.ts");
+    const { loopRun, built } = await builtClose();
+    loopRun.judgeTheLanding = async () => {};
+    const landed = await closeTheLoopRun(loopRun as never, {
+      land: true,
+      settleMs: 0,
+      victory: true,
+      because: "the director finished the run",
+      reviewed: "f".repeat(40),
+    });
+    assert.equal(landed.ok, true);
+    assert.equal(loopRun.state.integrationHead, built);
+    assert.equal(loopRun.report.victory, false, "the reviewer never read the head that landed");
+    assert.equal(loopRun.report.stoppedBecause, FINISH_REPORT.movedAfterYes);
+  });
+
+  it("once a close has started, integrate merges nothing more into the build", async () => {
+    const { repo, head } = await integrationRepo();
+    const stub = stubLoopRun(repo, head, null);
+    stub.loopRun.state.finish = { summary: "red", land: true, victory: true, at: 0 };
+    const answer = await integrate(stub.loopRun as never, { worker: "sky" });
+    assert.match(String(answer), /closing: nothing more is integrated/);
+    assert.equal(await fixtureGit(repo, ["rev-parse", "HEAD"]), head);
+  });
+});

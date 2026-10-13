@@ -48,11 +48,17 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:thread.rename": "renameThread",
   "studio:compact": "compactThread",
   "studio:game.archive": "archiveGame",
+  "studio:game.history": "gameHistory",
+  "studio:game.history.clear": "clearGameHistory",
+  "studio:game.engine.undo": "undoEngineLink",
+  "studio:jobs.stop": "stopJob",
+  "studio:app-look.open-settings": "openPrivacySettings",
   "studio:engines": "engines",
   "studio:provider-usage": "providerUsage",
   "studio:hardware": "hardware",
   "studio:game.create": "createGame",
   "studio:game.name": "nameGame",
+  "studio:backdrop.make": "makeBackdrop",
   "studio:game.location.pick": "pickGameLocation",
   "studio:games-root.choose": "chooseGamesRoot",
   "studio:game.update": "updateGame",
@@ -87,6 +93,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.setting": "pluginSetSetting",
   "studio:plugins.review": "pluginReview",
   "studio:plugins.action": "pluginAction",
+  "studio:plugins.choose-file": "pluginChooseFile",
   "studio:plugins.genex-publish-review": "genexPublishReview",
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.index": "pluginsIndex",
@@ -95,6 +102,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.github-versions": "pluginGithubVersions",
   "studio:plugins.update": "pluginUpdate",
   "studio:plugins.watch": "pluginWatch",
+  "studio:plugins.forget-allowed": "pluginForgetAllowed",
   "studio:plugins.consent": "pluginConsent",
   "studio:permissions.get": "permissions",
   "studio:permissions.mode": "setPermissionMode",
@@ -111,6 +119,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:mcp.cancel-authorization": "mcpCancelAuthorization",
   "studio:mcp.disconnect-account": "mcpDisconnectAccount",
   "studio:mcp.tools": "mcpTools",
+  "studio:mcp.forget-always": "mcpForgetAlwaysAllowed",
   "studio:engines.recheck": "recheckEngines",
   "studio:models.refresh": "refreshModels",
   "studio:cli.update": "cliUpdate",
@@ -123,6 +132,12 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:opencode.signin": "openCodeSignIn",
   "studio:openrouter.key.save": "openRouterKeySave",
   "studio:openrouter.key.clear": "openRouterKeyClear",
+  "studio:openrouter.signin": "openRouterSignIn",
+  "studio:openrouter.signin.reopen": "openRouterSignInReopen",
+  "studio:openrouter.signin.cancel": "openRouterSignInCancel",
+  "studio:local-server.connect": "localServerConnect",
+  "studio:local-server.forget": "localServerForget",
+  "studio:local-server.find": "localServerFind",
   "studio:terminal.list": "terminalList",
   "studio:terminal.accessibility": "terminalAccessibility",
   "studio:terminal.open": "terminalOpen",
@@ -239,11 +254,17 @@ export interface StudioInvokePayloads {
   "studio:thread.rename": { threadId: string; title: string };
   "studio:compact": { threadId: string } & NonNullable<Arg<"compactThread", 1>>;
   "studio:game.archive": { project: string };
+  "studio:game.history": { project: string };
+  "studio:game.history.clear": { project: string };
+  "studio:game.engine.undo": Arg<"undoEngineLink", 0>;
+  "studio:jobs.stop": { project: string; jobId: string };
+  "studio:app-look.open-settings": { pane: Arg<"openPrivacySettings", 0> };
   "studio:engines": undefined;
   "studio:provider-usage": undefined;
   "studio:hardware": undefined;
   "studio:game.create": { title: string } & NonNullable<Arg<"createGame", 1>>;
   "studio:game.name": Arg<"nameGame", 0>;
+  "studio:backdrop.make": Arg<"makeBackdrop", 0>;
   "studio:game.location.pick": undefined;
   "studio:games-root.choose": undefined;
   "studio:game.update": { project: string; patch: Arg<"updateGame", 1> };
@@ -278,6 +299,7 @@ export interface StudioInvokePayloads {
   "studio:plugins.setting": { id: string; key: string; value: unknown };
   "studio:plugins.review": { id: string; name: string; args: unknown; project?: string };
   "studio:plugins.action": { id: string; name: string; args: unknown; project?: string; ticket?: string };
+  "studio:plugins.choose-file": { id: string; request: Arg<"pluginChooseFile", 1> };
   "studio:plugins.genex-publish-review": { project: string };
   "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string };
   "studio:plugins.index": { refresh?: boolean };
@@ -286,7 +308,8 @@ export interface StudioInvokePayloads {
   "studio:plugins.github-versions": { repo: string };
   "studio:plugins.update": { id: string };
   "studio:plugins.watch": { id: string; enabled: boolean };
-  "studio:plugins.consent": { consentId: string; approved: boolean };
+  "studio:plugins.forget-allowed": { id: string };
+  "studio:plugins.consent": { consentId: string; approved: boolean; always?: boolean };
   "studio:permissions.get": undefined;
   "studio:permissions.mode": { threadId: string | null; mode: Arg<"setPermissionMode", 1> };
   "studio:permissions.answer": { requestId: string; answer: Arg<"answerPermission", 1> };
@@ -303,6 +326,7 @@ export interface StudioInvokePayloads {
   "studio:mcp.cancel-authorization": { id: string };
   "studio:mcp.disconnect-account": { id: string };
   "studio:mcp.tools": { id: string };
+  "studio:mcp.forget-always": { id: string };
   "studio:engines.recheck": { engine?: string };
   "studio:models.refresh": { provider: string };
   "studio:cli.update": { provider: string };
@@ -315,6 +339,12 @@ export interface StudioInvokePayloads {
   "studio:opencode.signin": undefined;
   "studio:openrouter.key.save": { key: string };
   "studio:openrouter.key.clear": undefined;
+  "studio:openrouter.signin": undefined;
+  "studio:openrouter.signin.reopen": undefined;
+  "studio:openrouter.signin.cancel": undefined;
+  "studio:local-server.connect": { url: string; key?: string };
+  "studio:local-server.forget": undefined;
+  "studio:local-server.find": undefined;
   "studio:terminal.list": undefined;
   "studio:terminal.accessibility": undefined;
   "studio:terminal.open": { project: string };

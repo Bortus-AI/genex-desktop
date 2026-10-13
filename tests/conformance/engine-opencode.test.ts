@@ -302,6 +302,19 @@ describe("OpenCode sessions", () => {
     assert.deepEqual(invocation?.sandbox.writableRoots.slice(0, 1), [invocation?.cwd]);
   });
 
+  it("tells a Loop's reviewer the build it tests is the folder it reads, never its own empty home", async () => {
+    const { engine, seen, root } = await engineWith(async function* () {
+      yield* replay([]);
+    });
+    const home = path.join(root, "reviewers", "abc", "opencode", "call");
+    await mkdir(home, { recursive: true });
+    const reads = await game();
+    await engine.delegate({ cwd: home, prompt: "review the claim", readOnly: true, reviewer: { reads } });
+    const prompt = seen[0]?.prompt ?? "";
+    assert.ok(prompt.includes(`The build you are testing is at ${reads}.`), prompt);
+    assert.ok(!prompt.includes(`is at ${home}`) && !prompt.includes(`is at ${seen[0]?.cwd}.`), "never its home");
+  });
+
   it("plans in Plan: read-only, from a folder of its own", async () => {
     const { engine, seen } = await engineWith(() => replay([]));
     const cwd = await game();

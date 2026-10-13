@@ -1,13 +1,13 @@
 # Genex: product overview
 
-Genex (formerly AI Game Studio) is a macOS Electron application for making local browser games
-with AI. A person describes a game or a change, answers questions when needed, and reviews
-the running game and build results. The game is a real local project that can be opened,
-edited and exported. Unity is retired.
+Genex (formerly AI Game Studio) is a macOS Electron application for making games with AI:
+local browser games, and Unreal or other engines' projects. A person describes a game or a
+change, answers questions when needed, and reviews the running game and build results. The game
+is a real local project to open, edit and export.
 
 ## What the app contains
 
-The sidebar's **Play** side plays published games; **Create** opens games, Plugins, Studio and
+The sidebar's **Play** runs published games; **Create** opens games, Plugins, Studio and
 Settings. Each game has one main conversation
 on the left and a stage on the right. The stage switches between **Live** (the playable
 game), **Builds** (work and results) and **Assets** (files and generated media).
@@ -15,31 +15,30 @@ game), **Builds** (work and results) and **Assets** (files and generated media).
 The prompt bar chooses the model, permissions, Auto or Loop mode, planning, references and
 tools. Chat shows replies, questions, compact status and results; details expand on demand.
 
-Studio is a separate assistant and Activity feed for reviewing runs and instruction
-improvements. Plugins add tools, assets and integrations. Settings owns
+Studio pairs an assistant with Activity to review runs and instruction improvements. Plugins add tools, assets and integrations. Settings owns
 the games folder, appearance, provider/model setup and saved permissions. Accounts, local projects and installed harness edits
 must survive application changes.
 
 ## Read the part you are changing
 
-| Part | Current UI, behavior and implementation entry points |
+| Part | What it covers |
 | --- | --- |
 | [Workspace and games](../product/workspace.md) | Navigation, Play, library, new/open games, settings and export |
 | [Chat and questions](../product/chat.md) | Messages, streaming, statuses, plans, questions and long history |
 | [Builds and Live](../product/builds-live.md) | Auto/Loop, workers, progress, playback, checks and outcomes |
 | [Models and context](../product/models-context.md) | Models, permissions, saved preferences, accounts and context |
-| [Assets and plugins](../product/assets-plugins.md) | Media, asset previews, tools, plugin setup and permissions |
+| [Assets and plugins](../product/assets-plugins.md) | Media, previews, tools, plugin setup and permissions |
+| [Projects and engines](../product/projects-engines.md) | Project kinds, engines, plugins on or off, ports |
 | [Studio and learning](../product/studio-learning.md) | Studio chat, Activity, instruction proposals and rollback |
 
-Read only the relevant page and the technical links the task needs. Product pages
-describe visible behavior, references mechanisms; code and tests resolve discrepancies.
+Read only the relevant page. Product pages describe visible behavior, references mechanisms;
+code and tests resolve discrepancies.
 
 ## For the developer
 
-[AGENTS.md](../../AGENTS.md) supplies development rules, documentation upkeep and PR policy.
-The [design workflow](design.md) owns visual conventions and
-skill selection. Use [verification](verification.md#choose-the-verification-scope) to choose
-checks and the [field guide](../STUDIO-DEVELOPER-FIELD-GUIDE.md) to run the app.
+[AGENTS.md](../../AGENTS.md) owns development rules and PR policy, the
+[design workflow](design.md) visual conventions, [verification](verification.md#choose-the-verification-scope)
+the checks and the [field guide](../STUDIO-DEVELOPER-FIELD-GUIDE.md) running the app.
 
-`npm run verify:context` checks this handbook's size; the in-app harness keeps its own history
-and learning.
+Update the affected page in the same PR, replacing outdated text;
+`npm run verify:context` checks its size.

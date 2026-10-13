@@ -106,9 +106,15 @@ function gameCalls(bridge: BridgeCalls) {
   const { invoke } = bridge;
   return {
     archiveGame: (project) => invoke("studio:game.archive", { project }),
+    gameHistory: (project) => invoke("studio:game.history", { project }),
+    clearGameHistory: (project) => invoke("studio:game.history.clear", { project }),
+    undoEngineLink: (request) => invoke("studio:game.engine.undo", request),
+    stopJob: (project, jobId) => invoke("studio:jobs.stop", { project, jobId }),
+    openPrivacySettings: (pane) => invoke("studio:app-look.open-settings", { pane }),
     createGame: (title, options) =>
       invoke("studio:game.create", { title, ...(options?.parent === undefined ? {} : { parent: options.parent }) }),
     nameGame: (request) => invoke("studio:game.name", request),
+    makeBackdrop: (request) => invoke("studio:backdrop.make", request),
     pickGameLocation: () => invoke("studio:game.location.pick"),
     chooseGamesRoot: () => invoke("studio:games-root.choose"),
     updateGame: (project, patch) => invoke("studio:game.update", { project, patch }),
@@ -240,6 +246,7 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginReview: (id, name, args, project) => invoke("studio:plugins.review", { id, name, args, project }),
     pluginAction: (id, name, args, project, ticket) =>
       invoke("studio:plugins.action", { id, name, args, project, ticket }),
+    pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
     genexPublish: (project, review, title) => invoke("studio:plugins.genex-publish", { project, review, title }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
@@ -248,7 +255,9 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginGithubVersions: (repo) => invoke("studio:plugins.github-versions", { repo }),
     pluginUpdate: (id) => invoke("studio:plugins.update", { id }),
     pluginWatch: (id, enabled) => invoke("studio:plugins.watch", { id, enabled }),
-    pluginConsent: (consentId, approved) => invoke("studio:plugins.consent", { consentId, approved }),
+    pluginForgetAllowed: (id) => invoke("studio:plugins.forget-allowed", { id }),
+    pluginConsent: (consentId, approved, always) =>
+      invoke("studio:plugins.consent", { consentId, approved, ...(always ? { always } : {}) }),
     permissions: () => invoke("studio:permissions.get"),
     setPermissionMode: (threadId, mode) => invoke("studio:permissions.mode", { threadId, mode }),
     answerPermission: (requestId, answer) => invoke("studio:permissions.answer", { requestId, answer }),
@@ -262,6 +271,7 @@ function pluginCalls(bridge: BridgeCalls) {
     mcpCancelAuthorization: (id) => invoke("studio:mcp.cancel-authorization", { id }),
     mcpDisconnectAccount: (id) => invoke("studio:mcp.disconnect-account", { id }),
     mcpTools: (id) => invoke("studio:mcp.tools", { id }),
+    mcpForgetAlwaysAllowed: (id) => invoke("studio:mcp.forget-always", { id }),
   } satisfies Partial<StudioApi>;
 }
 
@@ -281,6 +291,12 @@ function accountCalls(bridge: BridgeCalls) {
     openCodeSignIn: () => invoke("studio:opencode.signin"),
     openRouterKeySave: (key) => invoke("studio:openrouter.key.save", { key }),
     openRouterKeyClear: () => invoke("studio:openrouter.key.clear"),
+    openRouterSignIn: () => invoke("studio:openrouter.signin"),
+    openRouterSignInReopen: () => invoke("studio:openrouter.signin.reopen"),
+    openRouterSignInCancel: () => invoke("studio:openrouter.signin.cancel"),
+    localServerConnect: (url, key) => invoke("studio:local-server.connect", key ? { url, key } : { url }),
+    localServerForget: () => invoke("studio:local-server.forget"),
+    localServerFind: () => invoke("studio:local-server.find"),
     onClaudeLogin: (listener) => subscribe("studio:claude-login", listener),
     codexLoginState: () => invoke("studio:codex-login.state"),
     codexLoginCancel: () => invoke("studio:codex-login.cancel"),

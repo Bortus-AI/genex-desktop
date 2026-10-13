@@ -84,6 +84,7 @@ import {
   projectOf,
   stageProjectSet,
   statusBootstrapped,
+  personFirstReported,
   statusReported,
   threadAdded,
   threadReplaced,
@@ -368,6 +369,9 @@ function applyUiEvent({ agentScreens, threads, layout, library, update, play }: 
       if (all) threads.setState((state) => statusReported(state, all), true);
       break;
     }
+    case UiEvent.PersonFirst:
+      threads.setState((state) => personFirstReported(state, event.payload), true);
+      break;
     case UiEvent.StageShow:
       // The chat put a build on screen for the game on the stage: that is Live, so Live shows.
       if (event.payload.project === projectOf(threads.getState()))

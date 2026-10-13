@@ -32,6 +32,8 @@ const METHODS = [
   "buildProblem",
   "changeQueuedMessage",
   "chatFileTarget",
+  // A game's history space, and clearing Rewind history (studio:game.history, studio:game.history.clear).
+  "clearGameHistory",
   "compactThread",
   "connectionSnapshot",
   "createGame",
@@ -44,6 +46,7 @@ const METHODS = [
   "forgetPermission",
   // Create game's location, checked before anything is written (studio:game.location.pick).
   "gameLocation",
+  "gameHistory",
   "init",
   "inspectFolder",
   "installPackages",
@@ -52,6 +55,8 @@ const METHODS = [
   "listAllEvents",
   "liveState",
   "loadPreview",
+  // Home's Make your own writes a live background on the model the user picked (backdrop-generation.ts).
+  "makeBackdrop",
   "messageImages",
   // A game started from its first request is named before its folder is made (studio:game.name).
   "nameGame",
@@ -109,10 +114,12 @@ const METHODS = [
   "snapshot",
   "start",
   "stop",
+  "stopJob",
   "stopLive",
   "stopRun",
   "stopThread",
   "threadForGame",
+  "undoEngineLink",
   "undoSelfChange",
   "updateGame",
   "updateSettings",
@@ -123,16 +130,21 @@ const METHODS = [
 const ACCESSORS = ["assetCheckpoints", "autoResumeAt", "pendingUpdateId", "planReviews", "settings"];
 /** Own enumerable fields after `init()` (true `#private` state is not visible and not listed). */
 const FIELDS = [
+  "appLook",
   "budget",
   "builds",
   "candidates",
   "contextPreferences",
+  "engineLinks",
   "engines",
   "games",
+  "hooks",
   "host",
   "improvements",
+  "jobs",
   "journal",
   "layout",
+  "locks",
   "mainThread",
   "mcp",
   "ollamaSidecar",
@@ -140,6 +152,7 @@ const FIELDS = [
   "pluginServices",
   "plugins",
   "sandbox",
+  "screenAccess",
   "snapshotIndex",
   "snapshots",
   "store",
