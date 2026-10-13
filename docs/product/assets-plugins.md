@@ -4,24 +4,23 @@
 
 Assets groups media in `assets/`, `public/assets/` and the project kind's asset folders (Unreal `Content`,
 Unity `Assets`, Blender files, a plugin's) by source and generation, engine files by name;
-deliveries and outside changes refresh it. Cards hide metadata; animation-only GLBs fold into their
-model.
+deliveries and outside changes refresh it. Cards hide metadata; [jobs being made](../plugins.md#assets-being-made)
+(any plugin's, any MCP tool's) keep their spot, chat included; animation-only GLBs fold into models.
 
 An opened file has only Reveal in Finder and Close: images (click: full size), audio/video, 3D
 models with clips, textures, bounded text; unsupported formats and decoder failures say why.
 
-Chat shows game-folder files with Open in Assets. Builds shows a Loop's workspace assets as
-thumbnails until landing. Job completion or “seen in game” never proves integration or checks.
+Chat shows game-folder files with Open in Assets; Builds, a Loop's workspace assets until landing. Job completion or “seen in game” never proves integration or passing checks.
 
 ## Tools and setup
 
 The Add menu holds attachments, plugin and MCP switches, Connect and Manage.
 Enabled, connected, signed in and permitted differ.
 
-The Plugins page (Plugins/Skills, search, rows, details) lists installed plugins, your servers, the
-Marketplace (Coming soon until it lists more) and the plugin guide, with
-[icons](../plugins.md#icons) or initials. Install from GitHub pins a pasted link's latest release
-(else the newest commit). Games build, preview and export without plugins. The host draws Genex's
+The Plugins page (Plugins/Skills, search, details) lists installed plugins, your servers, the
+Marketplace (Coming soon) and the plugin guide, with
+[icons](../plugins.md#icons). Install from GitHub pins a pasted link's latest release
+(else newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
 Game spend is in the usage panel. Enabled Genex suggests assets in planning.

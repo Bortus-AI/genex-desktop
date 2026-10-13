@@ -37,7 +37,7 @@ Done or Stopped; a chat line each round. Finished workers stand on the line, oth
 Agents test in hidden windows, never Live; judges play blind when screenshots cannot decide.
 Chat frames never certify a build. Finished workers, passing checks, integration and Live's
 revision are distinct facts; Builds and Studio report missing checks, coverage, revisions and
-which played checks the studio verified; chat shows the delivery's capture, failures included.
+studio-verified played checks; chat shows the delivery's capture, failures included.
 
 ## Continuation and interruption
 

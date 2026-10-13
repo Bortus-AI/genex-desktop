@@ -8,10 +8,11 @@ import { ModelProvidersSection, type ModelSettingsProps } from "./ModelsSection.
 import { LocalModelsSection } from "./LocalModelsSection.tsx";
 import { HarnessSection } from "./HarnessSection.tsx";
 import { GamesSection } from "./GamesSection.tsx";
+import { StorageSection } from "./StorageSection.tsx";
 import { PermissionsSection } from "./PermissionsSection.tsx";
 import { PrivacySection } from "./PrivacySection.tsx";
 import { AboutSection } from "./AboutSection.tsx";
-import { ABOUT_WORDS, PRIVACY_WORDS } from "../words.ts";
+import { ABOUT_WORDS, PRIVACY_WORDS, STORAGE_WORDS } from "../words.ts";
 
 interface SectionTab {
   id: SettingsSection;
@@ -24,6 +25,7 @@ const SECTIONS: readonly SectionTab[] = [
   { id: SettingsSection.Local, label: "Local Models", icon: "box" },
   { id: SettingsSection.Appearance, label: "Appearance", icon: "palette" },
   { id: SettingsSection.Games, label: "Games", icon: "folder" },
+  { id: SettingsSection.Storage, label: STORAGE_WORDS.tab, icon: "drive" },
   { id: SettingsSection.Harness, label: "Harness", icon: "harness" },
   { id: SettingsSection.Permissions, label: "Permissions", icon: "shield" },
   { id: SettingsSection.Privacy, label: PRIVACY_WORDS.tab, icon: "eye" },
@@ -57,6 +59,7 @@ function SectionBody({
   onGamesRoot: (label: string) => void;
 }): JSX.Element {
   if (section === SettingsSection.Games) return <GamesSection rootLabel={gamesRootLabel} onRoot={onGamesRoot} />;
+  if (section === SettingsSection.Storage) return <StorageSection />;
   if (section === SettingsSection.Appearance) return <AppearanceSection />;
   if (section === SettingsSection.Providers)
     return <ModelProvidersSection engines={engines} onEnginesRefresh={onEnginesRefresh} />;
