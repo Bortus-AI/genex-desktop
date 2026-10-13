@@ -28,10 +28,10 @@ Game spend is in the usage panel. Enabled Genex suggests assets in planning.
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
-`genex__package` (multiplayer or player-identity packages) after consent. Publish (a host-drawn
-dialog) tests the draft, goes public and sends the `genex-cover` demo frame as the Genex cover, not
-the sidebar sphere ([rules](../plugins.md#first-party-privileges)); lacking one, Ask for a cover
-drafts the request in chat. Agents check `genex__cover` before each publish; consented
+`genex__package` (multiplayer, player identity) after consent. Publish (a host-drawn dialog)
+connects SDK-less games for sign-in, tests the draft, goes public and sends the `genex-cover` demo
+frame as the Genex cover, not the sidebar sphere ([rules](../plugins.md#first-party-privileges));
+else Ask for a cover drafts it in chat. Agents check `genex__cover` before publishing; consented
 `genex__cover-set` sends it. Chat shows the kept shot with Publish. Agents read Genex’s guide and
 cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 

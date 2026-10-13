@@ -1,6 +1,6 @@
 import { rendererBuildOptions, rendererBundleReport } from "./renderer-build.mjs";
 import { mainStartupReport } from "./main-build.mjs";
-import { buildPlugins } from "./build-plugins.mjs";
+import { buildPlugins, vendorEmbedSdk } from "./build-plugins.mjs";
 import { assertThreeLibsListed, stylesheetPackages, writeBundledNotices } from "./third-party-notices.mjs";
 import { patchSandboxRuntime } from "./patch-sandbox-runtime.mjs";
 await patchSandboxRuntime();
@@ -343,6 +343,8 @@ async function copyResources() {
     recursive: true,
   });
   await cp(path.join(root, "node_modules/three/LICENSE"), path.join(vendor, "three-LICENSE"));
+  // Genex's embed SDK, which a template game imports through its import map for player identity.
+  await vendorEmbedSdk(root, vendor);
   await cp(path.join(root, "THIRD-PARTY-NOTICES.md"), path.join(vendor, "THIRD-PARTY-NOTICES.md"));
   await writeFile(
     path.join(vendor, "VERSION.json"),

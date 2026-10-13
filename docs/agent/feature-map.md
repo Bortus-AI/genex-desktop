@@ -255,10 +255,10 @@ A modal dialog or overlapping floating panel yields native bounds until clear. S
   director integration preflight. A modified delivered file requires resolution rather than deletion.
 - Blender transforms: bundled `transform` and `compose` native recipes; declared inputs, read as
   `ASSET_INPUTS[...]`, stay unchanged; output plus renders capped at 100 MiB.
-- Publish upload/readiness: `plugins/genex/deployment.ts`, adapter and publish panel. A publish
-  tests its draft (revision, files, recorded sign-in support) before promoting it, then sends the
-  Genex cover (`cover.ts`); the copy's package.json carries the game's Genex SDK versions, so the
-  CLI sends `embedSdkVersion`.
+- Publish upload/readiness: `plugins/genex/deployment.ts`, `entry-page.ts`, adapter and publish
+  panel. A publish connects an SDK-less game, tests its draft (revision, files, recorded sign-in
+  support) before promoting it, then sends the Genex cover (`cover.ts`); the copy's package.json
+  names its SDK, so the CLI sends `embedSdkVersion`.
 - Build status, panel and live view: `RunGraph`, `RunInspector`, `run-steps.ts`.
   Total time uses persisted run boundaries. A live run keeps its newest work in view without
   opening anything; panning or zooming stops that and offers Jump to now.
