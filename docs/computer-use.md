@@ -157,7 +157,7 @@ window's tree). A refusal ends the plan and its reason is the answer.
       login pages). The page text marks these fields.
   - **A closed browser.** When the person closes it, the next verb says so and `web_open`
     launches a fresh one.
-  - **From cua-driver 0.34 on a real Mac:**
+  - **From cua-driver 0.34 on a real Mac** (unchanged on 0.35.2):
     - every connection carries its own `session` label, and each snapshot supersedes the refs of
       the one before;
     - `semantic_v2` gives a password input as a plain `textbox`, so its type comes from the DOM read;
