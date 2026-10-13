@@ -73,6 +73,8 @@ import {
 import { planHeldWords, planSetWords, WAKE_START_NEXT } from "./wake-prompts.ts";
 import { NoteKind } from "./wake-schedule.ts";
 import { runIdentity } from "../workers/identity.ts";
+import { WorkerStopCode } from "../workers/contract.ts";
+import { keptWorkOf } from "./kept-work.ts";
 import { stoppableRoomClock, withWorkerRoom } from "../workers/room.ts";
 import { briefOf, recordBuilderEnded, recordBuilderStarted } from "../workers/director-pool.ts";
 import type { LoopRun, StartingWorker, Worker } from "./loop-run.ts";
@@ -1647,8 +1649,14 @@ async function runLoopWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
     // stops its own workers, and a run that stops five to fix a shader must not tell
     // the owner they asked for it.
     finishRequested: async () => {
-      if (worker.stopRequested) return { by: "director", reason: worker.stopWhy ?? "stopped by the director" };
-      if (state.finish) return { by: "director", reason: "stopped by the director: the build is wrapping up" };
+      if (worker.stopRequested)
+        return { by: "director", reason: worker.stopWhy ?? "stopped by the director", code: roundStopCode(worker) };
+      if (state.finish)
+        return {
+          by: "director",
+          reason: "stopped by the director: the build is wrapping up",
+          code: WorkerStopCode.RunEnded,
+        };
       return false;
     },
     // Once a wave has closed, a worker takes the integration branch once per wave (integrate.ts).
@@ -1675,8 +1683,14 @@ async function runLoopWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
   });
   if (result.limit) noteWorkerLimit(worker, result.limit);
   worker.lastCommit = result.lastCommit ?? (await headOf(ctx, worker.worktree).catch(() => null));
+  // A stopped round's work is committed on its worktree beyond what was accepted: the lead can still add it.
+  worker.keptCommit = await keptWorkOf(loopRun, worker);
   setWorkerState(worker, worker.stopRequested ? WorkerState.Stopped : WorkerState.Done);
 }
+
+/** Why a round was stopped, in the app's code: the lead's `worker_stop`, else the run's own close (a pause, the end). */
+const roundStopCode = (worker: Worker): WorkerStopCode =>
+  worker.stoppedByLead ? WorkerStopCode.StoppedByLead : WorkerStopCode.RunEnded;
 
 /**
  * A single session's ownership. A single-session worker had no ownership at all: the hook never

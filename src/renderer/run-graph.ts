@@ -36,6 +36,7 @@ import {
 } from "../shared/run-state.ts";
 import type { RunSummary } from "../shared/run-summary.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
+import { isWorkerStopCode, type WorkerStopCode } from "../shared/workers.ts";
 import {
   type AssetLedger,
   type AssetPlace,
@@ -431,6 +432,8 @@ export interface IterationNode {
   verdict: VerdictRecord | null;
   /** The critic's advice on this round, when the lead asked for it: never a verdict. */
   advice: AdviceInfo | null;
+  /** Why a stopped round stopped, in the app's code: the run's own close, or the lead. */
+  stopCode: WorkerStopCode | null;
 }
 
 export interface IntegrationNode {
@@ -1033,6 +1036,7 @@ function iteration(graph: GraphDraft, facetId: string, n: number, title?: string
     notes: [],
     verdict: null,
     advice: null,
+    stopCode: null,
   };
   owner.iterations.set(n, node);
   return node;
@@ -1497,6 +1501,7 @@ function recordVerdict(node: IterationNode, payload: Payload): void {
   node.verdictSource = source;
   node.verdictLabel = verdictLabel(winner, satisfied, source);
   node.reason = str(payload.reason, "");
+  node.stopCode = isWorkerStopCode(payload.stopCode) ? payload.stopCode : null;
   // A stopped round was never judged: the gap it carries is the builder's brief, not a finding.
   node.biggestGap = node.status === IterationStatus.Stopped ? "" : str(payload.biggest_gap, "");
   node.defects = strings(payload.defects);

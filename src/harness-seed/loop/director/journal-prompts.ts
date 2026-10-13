@@ -65,16 +65,22 @@ export function priorCommitWords({
   lastCommit,
   from,
   ref,
+  kept = null,
   lead = false,
 }: {
   lastCommit: string | null;
   from: string | null;
   ref: string;
+  kept?: string | null;
   lead?: boolean;
 }): string {
+  const bringIn = (commit: string) =>
+    lead ? LEAD_PRIOR_BRINGS_IN : `\`git merge ${commit}\` in your worktree brings it in`;
+  // A round the run stopped left its work committed beyond what was accepted: unjudged, and kept.
+  if (kept && kept !== lastCommit)
+    return `the run stopped its round before a verdict; that work is kept as ${shortSha(kept)} on ${ref} — worker_start from=${kept} builds on it, ${bringIn(kept)}`;
   if (!lastCommit || lastCommit === from) return "it left no commit of its own";
-  const bringIn = lead ? LEAD_PRIOR_BRINGS_IN : `\`git merge ${lastCommit}\` in your worktree brings it in`;
-  return `its last commit ${shortSha(lastCommit)} is kept on ${ref} — worker_start from=${lastCommit} builds on it, ${bringIn}`;
+  return `its last commit ${shortSha(lastCommit)} is kept on ${ref} — worker_start from=${lastCommit} builds on it, ${bringIn(lastCommit)}`;
 }
 
 /** What a worker from before the pause left, and how to go on from it (`lead`: see `priorCommitWords`). */
@@ -82,6 +88,7 @@ export function priorWorkerLeft(worker: {
   lastCommit: string | null;
   from: string | null;
   ref: string;
+  kept?: string | null;
   owns: readonly string[];
   brief: string;
   lead?: boolean;

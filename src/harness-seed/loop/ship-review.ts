@@ -25,6 +25,7 @@ import { scopeLines } from "./scope-prompts.ts";
 import { visionJudgeLines } from "./vision-prompts.ts";
 import { clip, CLIP_REASON } from "./text.ts";
 import { doNotRegressOf } from "./do-not-regress.ts";
+import { roleEffort, RoleKey } from "./model-roles.ts";
 import {
   BUILD_OUTPUT,
   framesLine,
@@ -51,6 +52,13 @@ const WARNING_CHARS = 1_200;
 const ERROR_LINES = 6;
 /** The frame of the page as the user sees it: the art director judges the game's own frames. */
 const USER_VIEW = "user:view";
+/**
+ * How hard the art director thinks at most: its look must end inside its few minutes
+ * (director/art-direction.ts `ART_DIRECTION_JUDGE_MS`), which the deepest efforts outlast.
+ */
+const SHIP_REVIEW_EFFORT = "high";
+/** The composer's efforts past the art director's (shared/model-preferences.ts `ReasoningEffort`). */
+const PAST_SHIP_REVIEW_EFFORT: ReadonlySet<string> = new Set(["xhigh", "max", "ultra"]);
 
 /** How much a defect stands in the way of shipping. Persisted in verdicts and the journal: never rename a value. */
 export const DefectSeverity = { Blocker: "blocker", Visible: "visible", Nit: "nit" } as const;
@@ -102,8 +110,14 @@ export interface ShipAsk {
 /** The judge plumbing's ask and answer, as judge.ts `askJudgeFor` takes and gives them. */
 type AskJudgeFor = (
   ctx: HarnessCtx,
-  ask: { run: Run; systemPrompt: string; userContent: string; images?: MessageImage[] },
+  ask: { run: Run; systemPrompt: string; userContent: string; images?: MessageImage[]; effort?: string },
 ) => Promise<{ raw: AnyRecord; judged: AnyRecord }>;
+
+/** The effort the art director is asked at: the run's judge effort, brought down to the look's own. */
+export function shipReviewEffort(run: Run): string | undefined {
+  const effort = roleEffort(run, RoleKey.Judge);
+  return effort && PAST_SHIP_REVIEW_EFFORT.has(effort) ? SHIP_REVIEW_EFFORT : effort;
+}
 
 /** One frame as an image block for the judge. */
 const imageOf = (base64: string, label: string): MessageImage => ({ mimeType: "image/jpeg", data: base64, label });
@@ -274,7 +288,7 @@ export async function shipReview(ctx: HarnessCtx, ask: ShipAsk): Promise<ShipRev
     ask,
     images.map((image) => image.label ?? ""),
   );
-  const answer = await askJudgeFor(ctx, { run, systemPrompt, userContent, images });
+  const answer = await askJudgeFor(ctx, { run, systemPrompt, userContent, images, effort: shipReviewEffort(run) });
   const review = readShipReview(answer.raw, parts, shownCameras(evidence));
   return {
     ...review,

@@ -69,6 +69,7 @@ import {
 } from "./finish-claim.ts";
 import { GIT_WITHOUT_PROOF } from "./proof-git.ts";
 import type { LastJudge, LoopRun, Worker } from "./loop-run.ts";
+import { noteKeptWork } from "./kept-work.ts";
 import type { LastShip } from "./art-direction.ts";
 import type { Evidence } from "../evidence.ts";
 import type { AnyRecord, HarnessCtx } from "../../types/harness.d.ts";
@@ -384,6 +385,8 @@ async function mergeWorker(
     union: merge.union,
     stage: MergeStage.Director,
   });
+  // A worker started from another's kept work brings that work in too.
+  await noteKeptWork(loopRun, state.integrationHead);
   return { ok: true, union: merge.union };
 }
 

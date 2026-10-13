@@ -1,4 +1,5 @@
-import { ReferenceKind } from "../../src/harness-seed/loop/run-events.ts";
+import { ReferenceKind, RunEvent } from "../../src/harness-seed/loop/run-events.ts";
+import { RoundFlow } from "../../src/harness-seed/loop/facet/flow.ts";
 import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -75,7 +76,7 @@ import {
   parseSpikeVerdict,
   replanCheck,
 } from "../../src/harness-seed/loop/replan.ts";
-import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
+import { isTransientProviderError, StopReason, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import {
   HARNESS_CHECKS,
@@ -12641,3 +12642,296 @@ describe("a chat whose saved session is gone (another account, or never saved)",
     assert.equal(result.ok, true);
   });
 });
+
+describe("a racing build's workers: their bench pages and a steer during the review's fix", () => {
+  const lookSpec = { id: "look", title: "Look", owns: ["src/look/", "bench/look.html"], checks: [] };
+
+  it("RB1. the look at a worker sees each file of a new folder: its own bench page is never another part's file", async () => {
+    const { monitorFindings } = await import("../../src/harness-seed/loop/director.ts");
+    const { GIT } = await import("../../src/harness-seed/loop/git.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/look/index.js": "export const look = 0;\n" });
+    await mkdir(path.join(repo.dir, "bench"), { recursive: true });
+    await writeFile(path.join(repo.dir, "bench/look.html"), "<!doctype html>\n");
+    const statusNow = async () => (await repo.exec(GIT.statusReadOnly(64_000))).stdout;
+    const own = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(own.violations, [], "the bench page the brief asked for is the worker's own");
+    assert.deepEqual(own.files, ["bench/look.html"]);
+    // Another part's page in that same new folder is still a violation, named by its file.
+    await writeFile(path.join(repo.dir, "bench/world.html"), "<!doctype html>\n");
+    const both = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(both.violations, ["edited a file outside this facet's ownership (bench/world.html)"]);
+  });
+
+  it("RB2. a bench page's script may time itself and roll dice: the game never loads it", () => {
+    const diff = [
+      "+++ b/bench/look.js",
+      "@@ -1,0 +1,2 @@",
+      "+const wallStart = performance.now();",
+      "+const pick = Math.random();",
+      "+++ b/src/look/fx.js",
+      "@@ -1,0 +1,1 @@",
+      "+const t = performance.now();",
+      "",
+    ].join("\n");
+    const found = mechanicalReview(diff, lookSpec as never, { ownsMain: false });
+    assert.deepEqual(
+      found.map((v) => `${v.file}:${v.category}`),
+      ["src/look/fx.js:wall-clock"],
+      "only the game's own code keeps the template's rules",
+    );
+  });
+
+  it("RS1. a steer that interrupts the review's fix turn is handed to the builder, never read as the round's stop", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    // The build's own work and one file of another part: the review finds that one.
+    await writeFile(path.join(repo.dir, "src/look/index.js"), "export const look = 1;\n");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const steer = "move your bench pages into src/look/";
+    const steers = [steer];
+    const asked: Array<{ prompt: string; resume: string | null }> = [];
+    const stops: unknown[] = [];
+    const records: string[] = [];
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async (type: string) => {
+        records.push(type);
+      },
+      finishRequested: async () => false,
+      steering: async () => steers.splice(0),
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async (prompt: string, resume: string | null) => {
+        asked.push({ prompt, resume });
+        // The lead's steer lands while the first fix turn runs: the engine reports it stopped.
+        if (asked.length === 1) return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+        return { ok: true, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, undefined, "the round goes on to its evidence and verdict");
+    assert.deepEqual(
+      stops.filter((args) => (args as unknown[])[1] === true),
+      [],
+      "no stop is recorded for the steered fix turn",
+    );
+    assert.equal(asked.length, 2, "the fix turn runs again with the steer");
+    assert.match(asked[1].prompt, /move your bench pages into src\/look\//);
+    assert.equal(asked[1].resume, "builder-1", "in the builder's own session");
+    assert.deepEqual(round.userSteering, [steer], "the steer stays in the round's brief");
+    assert.ok(records.includes(RunEvent.FacetSteered), JSON.stringify(records));
+  });
+
+  it("RS2. a fix turn stopped with no steer waiting still ends the round where it stands", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const stops: unknown[][] = [];
+    let turns = 0;
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async () => {},
+      finishRequested: async () => false,
+      steering: async () => [],
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async () => {
+        turns += 1;
+        return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, RoundFlow.Stop);
+    assert.equal(turns, 1);
+    assert.deepEqual(stops, [[1, true]]);
+  });
+});
+
+describe("the art director's look at a run whose judges think at max effort", () => {
+  it("RA1. the look thinks at most hard enough to end in its four minutes; a lighter judge keeps its own effort", async () => {
+    const { shipReview } = await import("../../src/harness-seed/loop/ship-review.ts");
+    const effortAsked = async (judge: string | undefined) => {
+      const recorder = ctxRecorder({
+        handlers: {
+          "engine.complete": () => ({
+            message: { content: JSON.stringify({ ship: true, defects: [], reason: "ok" }) },
+          }),
+        },
+      });
+      const roles = judge ? { judge: "sonnet", efforts: { judge } } : undefined;
+      await shipReview(recorder.ctx as never, {
+        run: {
+          runId: "run_racing",
+          goal: "a night street race",
+          reference: null,
+          ...(roles ? { roles } : {}),
+        } as never,
+        evidence: { shots: [{ camera: "default", base64: "AAAA", path: "/shots/default.jpg" }] } as never,
+        parts: [{ id: "look", title: "Look" }] as never,
+      });
+      return (recorder.paramsOf("engine.complete")[0] as Record<string, unknown>).effort;
+    };
+    assert.equal(await effortAsked("max"), "high", "a max-effort look outlasts its four minutes");
+    assert.equal(await effortAsked("xhigh"), "high");
+    assert.equal(await effortAsked("medium"), "medium");
+    assert.equal(await effortAsked(undefined), undefined, "no judge effort set: the engine's own");
+  });
+});
+
+describe("workers the run's pause stopped, and their kept work", () => {
+  it("RK1. a round the run's own close stopped says so in its records' code, apart from the lead's stop", async () => {
+    const { finishStoppedRound } = await import("../../src/harness-seed/loop/facet/stop.ts");
+    const { stopsThisRound } = await import("../../src/harness-seed/loop/facet-loop.ts");
+    const { WorkerStopCode } = await import("../../src/harness-seed/loop/workers/contract.ts");
+    const recordsOf = async (code: string) => {
+      const records: Array<[string, Record<string, unknown>]> = [];
+      const loop = {
+        appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+        publishIteration: async (payload: Record<string, unknown>) =>
+          void records.push([RunEvent.FacetIteration, payload]),
+        ctx: { cancelled: false },
+        facet: { id: "world", title: "Track and night city" },
+        facetThreadId: "t-world",
+        gitOptions: {},
+        gitWhere: {},
+        result: {},
+        run: { runId: "run_racing", project: "racing" },
+        worktree: null,
+        biggestGap: "",
+        currentMove: null,
+      };
+      const asked = { by: "director", reason: "stopped by the director: the build is over", code };
+      const stop = stopsThisRound(asked, { aborted: true });
+      assert.ok(stop);
+      await finishStoppedRound(loop as never, 1, stop);
+      return records.map(([type, payload]) => [type, payload.stopCode]);
+    };
+    assert.deepEqual(await recordsOf(WorkerStopCode.RunEnded), [
+      [RunEvent.FacetStopped, WorkerStopCode.RunEnded],
+      [RunEvent.FacetIteration, WorkerStopCode.RunEnded],
+    ]);
+    assert.deepEqual((await recordsOf(WorkerStopCode.StoppedByLead))[0], [
+      RunEvent.FacetStopped,
+      WorkerStopCode.StoppedByLead,
+    ]);
+  });
+
+  it("RK2. a paused worker's kept work the lead merges by hand goes on the record as its part's, once", async () => {
+    const { noteKeptWork } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const start = await repo.git("rev-parse", "HEAD");
+    const kept = await commitOnBranch(repo, "world-stopped", { "src/world/track.js": "export const track = 1;\n" });
+    const records: Array<[string, Record<string, unknown>]> = [];
+    const merges = () =>
+      records.map(([type, payload]) => [type, payload.facetId, payload.commit, payload.head, payload.conflict]);
+    let saves = 0;
+    const journal = { director: { workers: { world: { id: "world", kept } as Record<string, unknown> } } };
+    const loopRun = {
+      ctx: repo.ctx,
+      integrationWorktree: repo.dir,
+      run: { runId: "run_racing" },
+      state: { workers: new Map() },
+      priorWorkers: [{ id: "world", title: "Track and night city", kept, keptInBuild: false }],
+      journal,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+      saveJournal: async () => {
+        saves += 1;
+      },
+    };
+    await noteKeptWork(loopRun as never, start);
+    assert.deepEqual(merges(), [], "the build does not hold it yet");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", kept);
+    const head = await repo.git("rev-parse", "HEAD");
+    await noteKeptWork(loopRun as never, head);
+    await noteKeptWork(loopRun as never, head);
+    assert.deepEqual(merges(), [[RunEvent.IntegrationMerge, "world", kept, head, false]]);
+    assert.equal(journal.director.workers.world.keptInBuild, true, "a second pause does not record it again");
+    assert.equal(saves, 1);
+  });
+
+  it("RK3. the resumed lead hears what a paused worker kept, never that it left no commit", async () => {
+    const { keptWorkOf } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const { priorCommitWords } = await import("../../src/harness-seed/loop/director/journal-prompts.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const from = await repo.git("rev-parse", "HEAD");
+    // The stopped round's commit, on the worker's worktree beyond what was accepted (its fork point).
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    await repo.git("commit", "-qam", "facet world iteration 1: stopped");
+    const stoppedCommit = await repo.git("rev-parse", "HEAD");
+    const worker = { id: "world", worktree: repo.dir, lastCommit: from, from };
+    const kept = await keptWorkOf({ ctx: repo.ctx } as never, worker as never);
+    assert.equal(kept, stoppedCommit);
+    assert.equal(await keptWorkOf({ ctx: repo.ctx } as never, { ...worker, lastCommit: stoppedCommit } as never), null);
+    const ref = "refs/studio/runs/run_racing/workers/world";
+    const words = priorCommitWords({ lastCommit: from, from, ref, kept });
+    assert.doesNotMatch(words, /left no commit/);
+    assert.match(words, new RegExp(`worker_start from=${stoppedCommit}`));
+    assert.match(words, new RegExp(`git merge ${stoppedCommit}`));
+  });
+});
+
+const racingRunForSteer = { runId: "run_racing", project: "racing", goal: "a night street race", model: "sonnet" };

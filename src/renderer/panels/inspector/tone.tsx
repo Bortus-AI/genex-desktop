@@ -26,6 +26,7 @@ const STATE_ICON: Partial<Record<StepState, { name: IconName; strokeWidth: numbe
   [StepState.Undone]: { name: "undo", strokeWidth: 2.4 },
   [StepState.NotInBuild]: { name: "stop", strokeWidth: 2.4 },
   [StepState.NotDelivered]: { name: "stop", strokeWidth: 2.4 },
+  [StepState.Paused]: { name: "pause", strokeWidth: 2.4 },
 };
 
 /** A step's state as one small glyph in its tone. */

@@ -714,6 +714,17 @@ template entry's wiring) tells its builder, in the brief's Integration section, 
 lead's changes to keep; the lead's brief and `skills/director.md` send a fix in a running worker's
 files to that worker (`worker_steer now=yes`).
 
+The studio's look at a running worker (`director/workers.ts` `lookAtWorker`) reads `git status`
+with every untracked file named, so a part's bench page in a new `bench/` folder (`loop/bench.ts`)
+is its own file; the template's rules for game code (one seed, the step clock, tags) skip bench
+files, which the game never loads. A steer that interrupts a worker's review fix or regression
+revert is handed over in the same session and the turn goes on (`loop/facet/follow-up.ts`); only a
+stop with no steer waiting ends the round. A round the run's own close stops (a pause, the end)
+keeps its work on its `…-stopped` ref with `stopCode: run_ended` on its records; the resumed lead
+hears that commit (`journal-prompts.ts`), and once the build holds it, however the lead brought it
+in, the studio records an `integration_merge` for its part (`director/kept-work.ts`): Builds shows
+it Paused until then, Added after, Left out only if the run ends without it.
+
 A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
 module contract before its loop workers start: `plan contract=` names each module's file, owner
 part, API, and the shared files one part owns (`director/module-contract.ts`); a convention or API
@@ -1152,7 +1163,8 @@ The art director is the one absolute judge (`loop/ship-review.ts`, rubric `judge
 one build, every frame the evidence pass took of a registered camera, the player's eyes and each
 demo's end, then the first, middle and last motion frames and the reference (at most 14), captured
 at 1600×900 on that lease only (`SHIP_VIEW`), asked "would you ship this as the user's demo
-today?" with the user's scope beside the goal. Each defect names a plan part (kept only when it is
+today?" with the user's scope beside the goal, at no more than high effort (deeper ones outlast
+its few minutes). Each defect names a plan part (kept only when it is
 one of the plan's ids), a camera (kept only when the review was shown it, else the default) and a
 severity (`blocker`, `visible`, `nit`); an unreadable answer is no verdict, never a "no". The lead
 asks for it with `judge ship=yes`, alone (no blind comparison; an `against` other than `none` is

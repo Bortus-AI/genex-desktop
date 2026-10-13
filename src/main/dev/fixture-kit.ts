@@ -65,6 +65,8 @@ export const FixtureName = {
    */
   OpenProjects: "open-projects",
   PluginUpdates: "plugin-updates",
+  /** A Loop a usage limit paused and resumed: a worker's try Paused, one Added after, one Left out. */
+  PausedBuild: "paused-build",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 
