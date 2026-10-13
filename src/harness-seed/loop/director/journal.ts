@@ -85,6 +85,10 @@ export interface PriorWorker {
   accepted: number;
   /** Its last commit — its last accepted round's while it built. */
   lastCommit: string | null;
+  /** The unjudged work of a round the run stopped, committed beyond `lastCommit` (kept-work.ts). */
+  kept?: string | null;
+  /** That kept work is on the record as in the build. */
+  keptInBuild?: boolean;
   ref: string;
   /** It was finishing (`stage=finish`): a lead that starts it again starts it in that stage. */
   stage?: FacetStage;
@@ -178,6 +182,8 @@ function workerRecord(worker: Worker, runId: string): AnyRecord {
     accepted: rounds.filter((round) => round.won).length,
     lastRound: lastRoundOf(rounds),
     lastCommit: worker.lastCommit ?? worker.lastAccepted ?? null,
+    ...(worker.keptCommit ? { kept: worker.keptCommit } : {}),
+    ...(worker.keptInBuild ? { keptInBuild: true } : {}),
     ref: runRef(runId, "workers", worker.id),
     ...(worker.spec && isFinishing(worker.spec) ? { stage: FacetStage.Finish } : {}),
   };
@@ -424,6 +430,11 @@ function restoreLog(loopRun: LoopRun, saved: AnyRecord): void {
   loopRun.waitSeq = Math.min(countOf(saved.heardSeq), loopRun.logSeq);
 }
 
+/** What a journal's worker kept beyond its last accepted commit, and whether the build holds it. */
+function priorKept(record: AnyRecord | undefined): Pick<PriorWorker, "kept" | "keptInBuild"> {
+  return { kept: typeof record?.kept === "string" ? record.kept : null, keptInBuild: record?.keptInBuild === true };
+}
+
 /** The workers the journal named, as a resumed run knows them: from before the pause. */
 function priorWorkersOf(saved: unknown, runId: string): PriorWorker[] {
   return Object.entries((saved ?? {}) as Record<string, AnyRecord>).map(([key, record]) => {
@@ -440,6 +451,7 @@ function priorWorkersOf(saved: unknown, runId: string): PriorWorker[] {
       rounds: countOf(record?.rounds),
       accepted: countOf(record?.accepted),
       lastCommit: typeof record?.lastCommit === "string" ? record.lastCommit : null,
+      ...priorKept(record),
       ref: String(record?.ref ?? runRef(runId, "workers", id)),
       ...(record?.stage === FacetStage.Finish ? { stage: FacetStage.Finish } : {}),
     };

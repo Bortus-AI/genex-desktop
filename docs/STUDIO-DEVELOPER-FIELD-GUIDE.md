@@ -347,6 +347,8 @@ the lead's background work and the finish check not run yet; Fixture web Loop wi
 runs and Fixture Unreal Loop with lead-graph's, each with its workers' records, drawn as trees),
 finish-check (four Loops written after the start, one per finish check look: Done and Stopped in
 the Builds history, Not yet after one no, and the newest Checking),
+paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
+Paused, one Added after the resume, one Left out by the lead's stop),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
 Mountain pass, a Blender game with no run, whose Live says where pictures come from),
