@@ -68,6 +68,7 @@ import {
 } from "./editor-moments.ts";
 import { createReopenTools, type ProcessEnv } from "./editor-reopen.ts";
 import type { RunProgram } from "./automation-tests.ts";
+import { createMotionTools, MotionToolName } from "./motion-tools.ts";
 import { createShipTools, type ShipToolName } from "./plugin-ship.ts";
 import type { EditorRestart } from "./editor-restart.ts";
 import { EditorStart } from "./editor-status.ts";
@@ -641,11 +642,14 @@ export function createLoopTools(deps: LoopToolsDeps) {
 
   const compiles = createCompileJobs(deps.now);
   const cpp = createCppTools(deps);
+  const motion = createMotionTools(deps);
+  // Adding the C++ module or the sample's content restarts Unreal: one restart of a project at a time.
+  const restartsForJob = (project: string) => cpp.adding(project) || motion.adding(project);
   // No plugin build while Genex restarts the project's Unreal for another job: one build and one reopen at a time.
-  const ship = createShipTools(deps, (project) => cpp.adding(project) || reopen.reopening(project));
+  const ship = createShipTools(deps, (project) => restartsForJob(project) || reopen.reopening(project));
   const set: SetDeps = { ...deps, setup: deps.setup ?? systemSetup() };
-  // Adding the C++ module and building a plugin restart Unreal: the reopen tools read them as Genex's own reopen.
-  const reopen = createReopenTools(set, (project) => cpp.adding(project) || ship.restarting(project));
+  // Those jobs and building a plugin restart Unreal: the reopen tools read them as Genex's own reopen.
+  const reopen = createReopenTools(set, (project) => restartsForJob(project) || ship.restarting(project));
   const moments = momentTools(set, queueFor, reopen);
 
   const handlers: Record<LoopToolName, Handler> = {
@@ -707,6 +711,8 @@ export function createLoopTools(deps: LoopToolsDeps) {
     ...leadHandlers(set, moments),
     ...ship.handlers,
     [MomentToolName.OpenForRun]: async (_args, context, storage) => openForRun(moments.ops(context, storage)),
+    [MotionToolName.Status]: (_args, context, storage) => motion.status(storage, game(context)),
+    [MotionToolName.Add]: (_args, context, storage) => motion.add(storage, game(context), context.directory),
   };
   return {
     has: (name: string): name is AnyLoopToolName => Object.hasOwn(every, name),
@@ -716,7 +722,13 @@ export function createLoopTools(deps: LoopToolsDeps) {
 }
 
 /** Any of the Loop's tools: the part tools, the harness's, the lead's and the moments' own. */
-export type AnyLoopToolName = LoopToolName | LiveLoopToolName | LeadLoopToolName | MomentToolName | ShipToolName;
+export type AnyLoopToolName =
+  | LoopToolName
+  | LiveLoopToolName
+  | LeadLoopToolName
+  | MomentToolName
+  | ShipToolName
+  | MotionToolName;
 
 /** The tools' dependencies with setup's chosen: a test's, or this computer's. */
 type SetDeps = LoopToolsDeps & { setup(storage: string): SetupOptions };
