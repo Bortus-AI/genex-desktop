@@ -1,11 +1,13 @@
 /**
- * What the plugin trust dialog says, built from the package alone, and what an action's approval
- * shows under its question: pure, so the words are tested without Electron.
+ * What the plugin trust dialog says, built from the package alone (the folders turning it on lets it
+ * write in among it), and what an action's approval shows under its question: pure, so the words
+ * are tested without Electron.
  * `plugin-install-dialog.ts` and the plugins IPC show them.
  */
 import {
   PluginCapability,
   PluginHostTool,
+  type PluginInfo,
   type PluginManifest,
   type PluginManifestTool,
   type PluginMcpServer,
@@ -13,8 +15,11 @@ import {
   type PluginSkill,
   type PluginSkillChange,
   type PluginSource,
+  PluginSourceKind,
   pluginSkillChange,
 } from "../shared/plugins.ts";
+import { HookEvent } from "../shared/plugin-hooks.ts";
+import { startsEnabled } from "../substrate/plugins/registry.ts";
 import { type PluginInstallReview, pluginOriginWords } from "./plugin-local-install.ts";
 
 /** How many scan findings the dialog names. */
@@ -49,6 +54,14 @@ const MESSAGE = {
   withConsent: (does: string) => `${does}, asks you each time`,
   new: "new",
   changed: "changed",
+  folders: (count: number) => `Turning it on lets its programs write in ${plural(count, "folder")} outside your games:`,
+  localAccess: "It runs with your access: Genex doesn't sandbox its code.",
+  startsOff: "It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
+  staysOn:
+    "It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs.",
+  steps: (when: string, steps: string) => `${when} at Genex's moments: ${steps}; those steps don't ask you first.`,
+  runs: "It runs",
+  runsOnceOn: "Once on, it runs",
 } as const;
 
 /** What each capability lets a plugin do, as a line under "It asks to:". */
@@ -64,6 +77,7 @@ const CAPABILITY_WORDS: ReadonlyMap<string, string> = new Map(
     [PluginCapability.Network]: "reach the internet",
     [PluginCapability.Export]: "export your games",
     [PluginCapability.NativeRuntime]: "install and run the apps it names, such as Blender",
+    [PluginCapability.GameEngine]: "make games of its engine's kind and link them to its projects",
   } satisfies Record<PluginCapability, string>),
 );
 
@@ -171,6 +185,96 @@ function scanBlock(scan: PluginScan | undefined): string {
   return MESSAGE.scan(scan.verdict, found);
 }
 
+/**
+ * Turning a plugin on approves its `folders` as places its programs (and the workers and jobs that
+ * run them) may write outside the games, and installing turns it on: so the dialog names each with
+ * why, an update marking the new ones.
+ */
+function folderBlock(manifest: PluginManifest, before: PluginManifest | undefined): string | undefined {
+  const folders = manifest.folders ?? [];
+  if (!folders.length) return undefined;
+  const had = before ? new Set((before.folders ?? []).map((f) => f.path)) : null;
+  const lines = folders.map((f) => `${marked(f.path, had && !had.has(f.path) ? [MESSAGE.new] : [])} — ${f.why}`);
+  return bulleted(MESSAGE.folders(folders.length), lines);
+}
+
+/** Each of Genex's moments as the trust dialog names it. */
+const MOMENT_WORDS: Record<HookEvent, string> = {
+  [HookEvent.RunPrepare]: "before a Loop starts",
+  [HookEvent.RunEnd]: "when a Loop ends",
+  [HookEvent.TurnStart]: "when a turn starts",
+  [HookEvent.TurnEnd]: "when a turn ends",
+  [HookEvent.CheckpointBefore]: "before a save point",
+  [HookEvent.CheckpointAfter]: "after a save point",
+  [HookEvent.RestoreBefore]: "before a restore",
+  [HookEvent.RestoreAfter]: "after a restore",
+  [HookEvent.WorkerStart]: "when a worker starts",
+  [HookEvent.WorkerEnd]: "when a worker ends",
+  [HookEvent.ToolBefore]: "before its tools run",
+  [HookEvent.ToolAfter]: "after its tools run",
+  [HookEvent.Health]: "on health checks",
+  [HookEvent.Crash]: "after a crash",
+  [HookEvent.Finish]: "when a Loop finishes",
+};
+
+/** The steps of a plugin Genex runs on its own besides its hooks, each named when the manifest declares it. */
+const OWN_STEP_WORDS = {
+  observers: "when a reviewer checks a finish",
+  personFirst: "while it holds a lock, to see whether you are using it",
+  ready: "before a project of its kind is made",
+} as const;
+
+/** Every step of the plugin Genex runs without a card: its hooks' moments, its observers, its person-first probes and its readiness checks. */
+function ownSteps(manifest: PluginManifest): string[] {
+  const moments = [...new Set((manifest.hooks ?? []).map((hook) => MOMENT_WORDS[hook.on]))];
+  const declared = {
+    observers: (manifest.observers ?? []).length > 0,
+    personFirst: (manifest.locks ?? []).some((lock) => lock.personFirst !== undefined),
+    ready: manifest.tools.some((tool) => tool.ready !== undefined),
+  };
+  const others = (Object.keys(OWN_STEP_WORDS) as Array<keyof typeof OWN_STEP_WORDS>).filter((step) => declared[step]);
+  return [...moments, ...others.map((step) => OWN_STEP_WORDS[step])];
+}
+
+/**
+ * A plugin from a local folder runs with the person's access and starts off, each of its tools
+ * asking before an agent runs it; every
+ * step Genex runs on its own (hooks, observers, person-first probes, readiness checks) is named,
+ * and runs without asking once it is on. Loading again one that is on keeps it on (`staysOn`): its
+ * new code runs at once, and its tools ask again.
+ */
+function localAccessBlock(
+  manifest: PluginManifest,
+  origin: PluginSource | undefined,
+  staysOn: boolean,
+): string | undefined {
+  if (origin?.kind !== PluginSourceKind.Local) return undefined;
+  const steps = ownSteps(manifest);
+  const state = `${MESSAGE.localAccess} ${staysOn ? MESSAGE.staysOn : MESSAGE.startsOff}`;
+  if (!steps.length) return state;
+  return `${state} ${MESSAGE.steps(staysOn ? MESSAGE.runs : MESSAGE.runsOnceOn, steps.join(", "))}`;
+}
+
+/**
+ * What the trust dialog says of the installed version a package updates: a replacement is a new
+ * plugin, not an update of the one it erases (every capability and server is new); an update
+ * brings the installed scan (so a scanned update can say which skills' bytes changed); `staysOn` is
+ * whether it will be on once loaded, by the registry's own rule (`startsEnabled`).
+ */
+export function installUpdateFacts(
+  list: readonly PluginInfo[],
+  manifest: PluginManifest,
+  origin: PluginSource | undefined,
+  previous: PluginManifest | undefined,
+  replacing: boolean,
+) {
+  const before = replacing ? undefined : previous;
+  const installed = list.find((p) => p.manifest.id === manifest.id);
+  const source = origin?.kind ?? PluginSourceKind.Bundled;
+  const staysOn = startsEnabled(source, installed, replacing);
+  return { before, previousScan: before ? installed?.scan : undefined, staysOn };
+}
+
 /** What the dialog says about the id a replacement erases, or nothing for a plain install. */
 function replacementBlock(replaces: PluginInstallReview["replaces"]): string | undefined {
   if (!replaces) return undefined;
@@ -185,6 +289,8 @@ export interface PluginInstallFacts {
   scan?: PluginScan;
   /** The installed version this package updates; absent on a first install or a replacement. */
   before?: PluginManifest;
+  /** The update keeps an installed plugin that is on: it stays on, its new code running at once. */
+  staysOn?: boolean;
   /** The installed version's scan, which a scanned update's skill digests are compared with. */
   previousScan?: PluginScan;
   replaces?: PluginInstallReview["replaces"];
@@ -194,17 +300,20 @@ export interface PluginInstallFacts {
 
 /**
  * The trust dialog's body, one block per fact with a blank line between: what a replacement erases,
- * where the code came from, that it is not sandboxed, what it asks to do, what it starts, which
- * skills it adds, what the scan saw, and the note. A block with nothing to say is left out.
+ * where the code came from, that it is not sandboxed (and, from a local folder, whether it is on and
+ * the steps it runs unasked), what it asks to do, what it starts, where it may write, which skills
+ * it adds, what the scan saw, and the note. A block with nothing to say is left out.
  */
 export function installDetail(facts: PluginInstallFacts): string {
-  const { manifest, origin, scan, before, replaces, note } = facts;
+  const { manifest, origin, scan, before, replaces, note, staysOn = false } = facts;
   return [
     replacementBlock(replaces),
     MESSAGE.source(pluginOriginWords(origin), manifest.publisher),
     MESSAGE.unsandboxed,
+    localAccessBlock(manifest, origin, staysOn),
     capabilityBlock(manifest, before),
     serverBlock(manifest, before),
+    folderBlock(manifest, before),
     hostToolBlock(manifest, before),
     skillBlock(facts),
     scanBlock(scan),
@@ -240,4 +349,38 @@ export function installPrompt(facts: PluginInstallFacts): InstallPrompt {
 export function actionApprovalDetail(args: unknown): string | undefined {
   const empty = args === undefined || args === null || (typeof args === "object" && Object.keys(args).length === 0);
   return empty ? undefined : JSON.stringify(args, null, 2);
+}
+
+/** The confirm button of an action no review described. */
+const APPROVE = "Approve";
+const CANCEL = "Cancel";
+
+/** What a confirmed action's native dialog shows; `buttons` is always Cancel, then the confirm button. */
+export interface ActionApprovalDialog {
+  title: string;
+  message: string;
+  detail?: string;
+  buttons: [cancel: string, confirm: string];
+}
+
+/**
+ * A confirmed action's native dialog. When the plugin's review asked its own question, the dialog
+ * asks that, shows the review's own words under it (never the arguments as JSON) and confirms with
+ * the action's name; otherwise it asks the manifest's confirmation over the arguments, with Approve.
+ */
+export function actionApprovalDialog(input: {
+  plugin: string;
+  action: { label: string; confirmation?: string };
+  review: { message?: string; detail?: string };
+  args: unknown;
+}): ActionApprovalDialog {
+  const { plugin, action, review, args } = input;
+  const title = `${plugin}: ${action.label}`;
+  if (review.message) {
+    const detail = review.detail ? { detail: review.detail } : {};
+    return { title, message: review.message, ...detail, buttons: [CANCEL, action.label] };
+  }
+  const detail = actionApprovalDetail(args);
+  const message = action.confirmation ?? action.label;
+  return { title, message, ...(detail ? { detail } : {}), buttons: [CANCEL, APPROVE] };
 }

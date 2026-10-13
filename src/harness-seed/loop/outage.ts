@@ -126,10 +126,34 @@ export function outageDelays(
  * How long to wait before the next attempt after `err`, or null when patience is over: the error
  * is not a provider hiccup, the run was stopped, or the schedule or the deadline ran out.
  */
-function nextWait(ctx: HarnessCtx, err: unknown, wait: number | undefined, deadline: number): number | null {
+function nextWait(
+  ctx: HarnessCtx,
+  err: unknown,
+  wait: number | undefined,
+  { deadline, now }: { deadline: number; now: number },
+): number | null {
   if (!isTransientProviderError(err) || ctx?.cancelled) return null;
-  if (wait === undefined || Date.now() + wait > deadline) return null;
+  if (wait === undefined || now + wait > deadline) return null;
   return wait;
+}
+
+/** The clock a caller's patience may run on (its own, so a test moves it); the wall clock otherwise. */
+export interface PatienceClock {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+}
+
+/** The time on the caller's clock, or the wall clock's. */
+const nowOn = (clock: PatienceClock | null): number => (clock ? clock.now() : Date.now());
+
+/** A wait on a caller's clock is taken in steps this long, so a Stop ends it soon. */
+const PATIENCE_STEP_MS = 5 * SECOND_MS;
+
+/** Waits `ms` on the caller's clock, or the wall clock; a Stop ends it at its next step. */
+async function patienceWait(ctx: HarnessCtx, ms: number, clock: PatienceClock | null): Promise<void> {
+  if (!clock) return sleepUnlessCancelled(ctx, ms);
+  const until = clock.now() + ms;
+  while (!ctx?.cancelled && clock.now() < until) await clock.sleep(Math.min(PATIENCE_STEP_MS, until - clock.now()));
 }
 
 /**
@@ -146,11 +170,14 @@ export async function withProviderPatience<T>(
     delays = OUTAGE_DELAYS,
     onWait = null,
     label = "provider",
+    clock = null,
   }: {
     deadline?: number;
     delays?: number[];
     onWait?: ((wait: { wait: number; attempt: number; error: string }) => unknown) | null;
     label?: string;
+    /** The caller's own clock, which both the deadline and the waits are read on. */
+    clock?: PatienceClock | null;
   } = {},
 ): Promise<T> {
   let index = 0;
@@ -158,7 +185,7 @@ export async function withProviderPatience<T>(
     try {
       return await attempt();
     } catch (err: any) {
-      const wait = nextWait(ctx, err, delays[index], deadline);
+      const wait = nextWait(ctx, err, delays[index], { deadline, now: nowOn(clock) });
       if (wait === null) throw err;
       index += 1;
       const said = String(err?.message ?? err);
@@ -166,7 +193,7 @@ export async function withProviderPatience<T>(
         `${label} is overloaded — waiting ${Math.round(wait / SECOND_MS)}s before retrying (${said.slice(0, STATUS_ERROR_CHARS)})`,
       );
       if (typeof onWait === "function") await onWait({ wait, attempt: index, error: said.slice(0, CLIP_REASON) });
-      await sleepUnlessCancelled(ctx, wait);
+      await patienceWait(ctx, wait, clock);
       if (ctx?.cancelled) throw err;
     }
   }

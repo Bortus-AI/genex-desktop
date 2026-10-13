@@ -106,6 +106,11 @@ function gameCalls(bridge: BridgeCalls) {
   const { invoke } = bridge;
   return {
     archiveGame: (project) => invoke("studio:game.archive", { project }),
+    gameHistory: (project) => invoke("studio:game.history", { project }),
+    clearGameHistory: (project) => invoke("studio:game.history.clear", { project }),
+    undoEngineLink: (request) => invoke("studio:game.engine.undo", request),
+    stopJob: (project, jobId) => invoke("studio:jobs.stop", { project, jobId }),
+    openPrivacySettings: (pane) => invoke("studio:app-look.open-settings", { pane }),
     createGame: (title, options) =>
       invoke("studio:game.create", { title, ...(options?.parent === undefined ? {} : { parent: options.parent }) }),
     nameGame: (request) => invoke("studio:game.name", request),
@@ -233,6 +238,7 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginReview: (id, name, args, project) => invoke("studio:plugins.review", { id, name, args, project }),
     pluginAction: (id, name, args, project, ticket) =>
       invoke("studio:plugins.action", { id, name, args, project, ticket }),
+    pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
     genexPublish: (project, review, title) => invoke("studio:plugins.genex-publish", { project, review, title }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
@@ -241,7 +247,9 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginGithubVersions: (repo) => invoke("studio:plugins.github-versions", { repo }),
     pluginUpdate: (id) => invoke("studio:plugins.update", { id }),
     pluginWatch: (id, enabled) => invoke("studio:plugins.watch", { id, enabled }),
-    pluginConsent: (consentId, approved) => invoke("studio:plugins.consent", { consentId, approved }),
+    pluginForgetAllowed: (id) => invoke("studio:plugins.forget-allowed", { id }),
+    pluginConsent: (consentId, approved, always) =>
+      invoke("studio:plugins.consent", { consentId, approved, ...(always ? { always } : {}) }),
     permissions: () => invoke("studio:permissions.get"),
     setPermissionMode: (threadId, mode) => invoke("studio:permissions.mode", { threadId, mode }),
     answerPermission: (requestId, answer) => invoke("studio:permissions.answer", { requestId, answer }),
@@ -255,6 +263,7 @@ function pluginCalls(bridge: BridgeCalls) {
     mcpCancelAuthorization: (id) => invoke("studio:mcp.cancel-authorization", { id }),
     mcpDisconnectAccount: (id) => invoke("studio:mcp.disconnect-account", { id }),
     mcpTools: (id) => invoke("studio:mcp.tools", { id }),
+    mcpForgetAlwaysAllowed: (id) => invoke("studio:mcp.forget-always", { id }),
   } satisfies Partial<StudioApi>;
 }
 

@@ -16,6 +16,8 @@ const NATIVE_CHANNELS = [
   "studio:plugins.lookup-github",
   "studio:plugins.github-versions",
   "studio:plugins.update",
+  // A plugin panel's Choose file opens Studio's native file picker; a fixture profile answers unsupported.
+  "studio:plugins.choose-file",
   // Publish from Studio's dialog uploads the game to Genex with the user's real account.
   "studio:plugins.genex-publish",
   "studio:subscription.signin",
@@ -79,6 +81,8 @@ const NATIVE_CHANNELS = [
   "studio:update.restart",
   // Download opens the waiting release's page in the person's real browser.
   "studio:update.download",
+  // Open Privacy settings opens macOS System Settings.
+  "studio:app-look.open-settings",
 ] as const satisfies readonly StudioInvokeChannel[];
 /**
  * Native steps inside a handler, asserted by name with `assertNativeActionAllowed`; no channel of
@@ -87,6 +91,10 @@ const NATIVE_CHANNELS = [
 const NATIVE_STEPS = [
   // `studio:plugins.action` asserts it before the native dialog that approves a confirmed action.
   "studio:plugins.approval",
+  // `studio:plugins.action` asserts it before an action its manifest marks `native`: one that starts,
+  // quits or opens a desktop app or the browser, or writes outside the plugin's storage. A fixture
+  // profile refuses it before the backend runs.
+  "studio:plugins.native-action",
   // Names left from Genex's own channels, from before Genex became a plugin. Kept native, so a
   // channel that brings one back starts out refused in fixtures.
   "studio:genex.connect",
@@ -156,6 +164,12 @@ const FIXTURE_SAFE = [
   "studio:snapshots",
   "studio:rollback",
   "studio:game.archive",
+  // A game's history space and clearing its side tracks: git in the game's own folder.
+  "studio:game.history",
+  "studio:game.history.clear",
+  "studio:game.engine.undo",
+  // Stops a process this profile's own agent started; nothing outside the profile changes.
+  "studio:jobs.stop",
   "studio:game.create",
   // Naming a new game is one completion on the picked engine, like a chat message (`studio:send`).
   "studio:game.name",
@@ -226,7 +240,8 @@ const FIXTURE_SAFE = [
   "studio:skills.project",
   "studio:plugins.skill",
   // Reading the index and watching a local folder open no dialog and, offline, no socket either.
-  // Actions reach native steps only through the `plugins.approval`/`open-url` checks inside them.
+  // Actions reach native steps only through the `plugins.approval`, `plugins.native-action` and
+  // `open-url` checks inside them.
   "studio:plugins.consent",
   // A chat's mode, its cards' answers and the saved rules: the profile's own files, no dialog or socket.
   "studio:permissions.get",
@@ -246,6 +261,8 @@ const FIXTURE_SAFE = [
   "studio:plugins.genex-publish-review",
   "studio:plugins.index",
   "studio:plugins.watch",
+  // A local plugin's grants live in the profile's install record; no dialog, no socket.
+  "studio:plugins.forget-allowed",
   // Connectors write a file inside the profile; only the trust step is native.
   "studio:mcp.list",
   "studio:mcp.save",
@@ -255,6 +272,7 @@ const FIXTURE_SAFE = [
   "studio:mcp.cancel-authorization",
   "studio:mcp.disconnect-account",
   "studio:mcp.tools",
+  "studio:mcp.forget-always",
   "studio:connections",
   "studio:claude-login.state",
   "studio:claude-login.code",

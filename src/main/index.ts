@@ -89,6 +89,7 @@ import {
 import { RELEASE_CHECK_INTERVAL_MS, latestRelease } from "./release-check.ts";
 import { UpdateAction } from "../shared/app-update.ts";
 import { gatedHostTool } from "./core/genex-cli.ts";
+import { normalGamesElsewhere, normalGamesFolder } from "./core/never-touch-list.ts";
 import { diagnosticsText, gatherDiagnostics } from "./diagnostics.ts";
 import { type FeedbackSources, sendFeedback } from "./feedback.ts";
 import { renderGameCover } from "./game-cover-renderer.ts";
@@ -96,6 +97,8 @@ import { createIpcHandle, pushToRenderer } from "./ipc-handle.ts";
 import { registerBootIpc } from "./ipc/boot.ts";
 import { registerUpdateIpc } from "./ipc/update.ts";
 import { registerGamesIpc } from "./ipc/games.ts";
+import { registerGameHistoryIpc } from "./ipc/game-history.ts";
+import { registerJobsIpc } from "./ipc/jobs.ts";
 import { registerLearningIpc } from "./ipc/learning.ts";
 import { registerLoginIpc } from "./ipc/login.ts";
 import { registerCliInstallIpc } from "./ipc/cli-install.ts";
@@ -120,6 +123,7 @@ import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
+import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
 import { HttpStatus, textResponse } from "./page-serve.ts";
 import { GamePreview, registerGameScheme } from "./preview.ts";
 import { RunSummaryReader } from "./run-summary-reader.ts";
@@ -129,7 +133,10 @@ import { readFinishedFacts } from "./run-sharing-facts.ts";
 import { fieldPlatform } from "../shared/run-sharing.ts";
 import type { SmokeReadGates } from "./smoke/read-gates.ts";
 import type { EvalCoreOptions, EvalLaunch } from "./smoke/eval-lane.ts";
-import { StudioCore } from "./studio-core.ts";
+import { StudioCore, type StudioCoreOptions } from "./studio-core.ts";
+import { appLookAccess } from "./app-look-access.ts";
+import { layoutFor } from "./core/layout.ts";
+import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
 import { TITLEBAR_HEIGHT, windowChrome } from "./window-chrome.ts";
 import { appUserModelId, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
@@ -181,10 +188,6 @@ const FIXTURE_OPEN_POLL_MS = 50;
 const HYDRATED = "nav [data-thread], [data-sandbox-setup]";
 /** The model the local Bonsai acceptance runs when none is named. */
 const DEFAULT_BONSAI_MODEL = "bonsai-2:27b-pq2_0";
-/** A plugin panel is inert HTML: inline script and style only, no network, no navigation. */
-const PLUGIN_PANEL_CSP =
-  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'";
-
 /** A plugin's picture is an image: an SVG among them draws, but runs and fetches nothing. */
 const PLUGIN_ICON_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
 
@@ -262,6 +265,8 @@ if (developerBuildUnlaunched || developerLaunchUnbacked) {
   console.error(MESSAGE.devLaunchRefused);
   app.exit(1);
 }
+/** The normal profile's data folder, read before a developer or test launch moves userData. */
+const normalProfileData = app.getPath("userData");
 const dev =
   devLaunchConfig !== undefined && __STUDIO_DEV_BUILD__
     ? (await import("./dev/launch-context.ts")).initializeLaunch(__STUDIO_DEV_BUILD__, devLaunchConfig)
@@ -602,15 +607,42 @@ function launchCoreOptions(): Partial<ConstructorParameters<typeof StudioCore>[0
       executionPolicy: { runBackgroundImprovement: false },
     };
   // Games live in a plain visible folder, not buried in Library — Finder should show them.
-  return { gamesRoot: path.join(app.getPath("home"), "AI Games") };
+  return { gamesRoot: normalGamesFolder(app.getPath("home")) };
+}
+
+/**
+ * Other Genex profiles' data no worker of this launch reaches: the normal profile's, and a developer
+ * build's checkout's development profiles, each unless it is this launch's own.
+ */
+function otherProfiles(userData: string): string[] {
+  const devProfiles = __STUDIO_DEV_BUILD__ ? [path.join(__STUDIO_DEV_BUILD__.checkout, ".studio-dev", "profiles")] : [];
+  return [normalProfileData, ...devProfiles].filter((dir) => path.resolve(dir) !== path.resolve(userData));
+}
+
+/**
+ * How agents look at app windows (`app_look`) and the macOS access it needs: a fixture profile
+ * looks at the stub (nothing on this Mac), macOS the real windows, other systems answer that it is
+ * macOS only for now.
+ */
+function appLookOptions(userData: string): Pick<StudioCoreOptions, "appLook" | "screenAccess"> {
+  if (fixtureNativePolicy) return { appLook: stubAppLook() };
+  if (process.platform !== "darwin") return { appLook: unsupportedAppLook() };
+  const { scratch, engineHomes } = layoutFor(userData);
+  const access = appLookAccess(engineHomes);
+  return { appLook: macAppLook({ run: appLookRun, scratchDir: scratch, access: access.status }), screenAccess: access };
 }
 
 async function createCore(userData: string): Promise<StudioCore> {
+  // Smoke runs keep everything under their throwaway userData.
+  const launch = launchCoreOptions();
   const studio = new StudioCore({
     renderGameCover,
     paths: { userData, resources },
-    // Smoke runs keep everything under their throwaway userData.
-    ...launchCoreOptions(),
+    ...appLookOptions(userData),
+    neverTouch: otherProfiles(userData),
+    // The normal profile keeps its games outside its data: another launch's workers never reach them.
+    neverTouchGames: normalGamesElsewhere(launch.gamesRoot, app.getPath("home")),
+    ...launch,
     ...(ollamaHost ? { ollamaHost } : {}),
     // Electron's binary doubles as node for the harness child process.
     execPath: process.execPath,
@@ -1069,6 +1101,30 @@ function feedbackSources(studio: StudioCore): FeedbackSources {
   };
 }
 
+/** The coding-CLI installs Settings offers: busy while a sign-in, a run or a turn is under way. */
+function cliInstalls(studio: StudioCore) {
+  return createCliInstalls({
+    // Electron's fetch, so the installer download goes through the system proxy.
+    install: (provider) => installCodingCli(provider, { fetch: net.fetch }),
+    busy: () => {
+      const signingIn = isClaudeLoginActive(claudeLogin.snapshot()) || isCodexLoginActive(codexLogin.snapshot());
+      return keepAwake.held || studio.budget.userInFlight > 0 || signingIn;
+    },
+    update: async (provider) => {
+      const engine = studio.engines.get(provider);
+      const selected = await engine.account?.();
+      return studio.engines.maintain(provider, () => updateCodingCli(provider, selected?.cli.path));
+    },
+    found: async (provider) => {
+      await subscription(provider)?.recheckLogin();
+      await studio.engines.get(provider).refreshModels?.(true);
+      return (await resolveCodingCli(provider, undefined, undefined, true)).status.state === CodingCliState.Ready;
+    },
+    pushUiEvent,
+    log: (line) => studioLog.write("main", line),
+  });
+}
+
 /** Every IPC channel, registered once per launch by its domain's registrar in `./ipc/`. */
 function registerIpc(studio: StudioCore): void {
   const handle = createIpcHandle(ipcMain, {
@@ -1098,6 +1154,8 @@ function registerIpc(studio: StudioCore): void {
     developer: !app.isPackaged,
   });
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
+  registerGameHistoryIpc(handle, { core: studio });
+  registerJobsIpc(handle, { core: studio, openExternal: (url) => shell.openExternal(url) });
   registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin });
   registerPreviewIpc(handle, {
     core: studio,
@@ -1118,7 +1176,13 @@ function registerIpc(studio: StudioCore): void {
     licenses: () => readLicenseTexts(resources),
   });
   registerRunSharingIpc(handle, { sharing: runSharing });
-  registerPluginsIpc(handle, { core: studio, marketplace: () => marketplace, confirmInstall, fixtureNativePolicy });
+  registerPluginsIpc(handle, {
+    core: studio,
+    marketplace: () => marketplace,
+    confirmInstall,
+    fixtureNativePolicy,
+    window: () => window,
+  });
   registerPermissionsIpc(handle, { core: studio });
   registerSkillsIpc(handle, { core: studio, subscription, home: () => app.getPath("home") });
   registerMcpIpc(handle, { core: studio, fixtureNativePolicy });
@@ -1130,29 +1194,7 @@ function registerIpc(studio: StudioCore): void {
     pushUiEvent,
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
   });
-  registerCliInstallIpc(
-    handle,
-    createCliInstalls({
-      // Electron's fetch, so the installer download goes through the system proxy.
-      install: (provider) => installCodingCli(provider, { fetch: net.fetch }),
-      busy: () => {
-        const signingIn = isClaudeLoginActive(claudeLogin.snapshot()) || isCodexLoginActive(codexLogin.snapshot());
-        return keepAwake.held || studio.budget.userInFlight > 0 || signingIn;
-      },
-      update: async (provider) => {
-        const engine = studio.engines.get(provider);
-        const selected = await engine.account?.();
-        return studio.engines.maintain(provider, () => updateCodingCli(provider, selected?.cli.path));
-      },
-      found: async (provider) => {
-        await subscription(provider)?.recheckLogin();
-        await studio.engines.get(provider).refreshModels?.(true);
-        return (await resolveCodingCli(provider, undefined, undefined, true)).status.state === CodingCliState.Ready;
-      },
-      pushUiEvent,
-      log: (line) => studioLog.write("main", line),
-    }),
-  );
+  registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },

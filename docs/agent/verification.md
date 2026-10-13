@@ -65,7 +65,7 @@ This is a command catalog. The scope table above determines which layers apply.
 
 | Layer | Available checks |
 | --- | --- |
-| L0 | `npm run check:static`: typecheck, architecture, context, changed-script syntax, changed-file lint, test style and vocabulary. |
+| L0 | `npm run check:static`: typecheck, architecture, context, changed-script syntax, changed-file lint, test style, vocabulary and bundled plugin versions. |
 | L1 | `npm run check`: L0 plus affected non-rig tests; named tests for red/green iteration. |
 | L2 | `npm run test:area -- <id>` for an area's non-rig tests; `npm run verify:harness` for harness/template behavior. `test:fast` covers all non-rig tests when that breadth is needed. |
 | L3 | `node scripts/affected-tests.mjs --tier L3 --run` for affected rig suites. `npm run test:rig` covers all rigs at broad checkpoints; full `npm test` covers all Node tests. |

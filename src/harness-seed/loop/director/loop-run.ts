@@ -27,6 +27,8 @@ import {
   saveJournal as saveRunJournal,
   writeRunArtifact,
 } from "../run-events.ts";
+import type { FactRef, LoopProfile } from "../folder-facts.ts";
+import type { HookedGame } from "../hooks.ts";
 import { isCommit } from "../shell.ts";
 import { isTruncatedState, statePathsNamedByChecks } from "../state-shape.ts";
 import { verdictRecord } from "../verdict.ts";
@@ -50,10 +52,12 @@ import type { LoopRunClock, PriorWorker } from "./journal.ts";
 import type { ConflictMerge } from "./conflict-worker.ts";
 import type { LoopRunContract } from "./contract-gate.ts";
 import type { LeadSeat } from "./lead-session.ts";
+import type { OpenLoop } from "./open/contract.ts";
 import type { ShelvedDefect } from "./rules.ts";
 import type { NoteKind } from "./wake-schedule.ts";
 import type * as artDirectionFunctions from "./art-direction.ts";
 import type { LastShip } from "./art-direction.ts";
+import type { FinishTally } from "../finish-check.ts";
 import type * as integrateFunctions from "./integrate.ts";
 import type * as loopRunFunctions from "./loop-run.ts";
 import type * as setupFunctions from "./setup.ts";
@@ -95,6 +99,8 @@ export interface Worker {
   deadline: number;
   state: WorkerState;
   stopRequested: boolean;
+  /** The lead's `worker_stop` asked its stop, not the run's close (its end record says so). */
+  stoppedByLead?: boolean;
   stopWhy: string | null;
   iterationsCap: number | undefined;
   steering: string[];
@@ -241,6 +247,16 @@ export interface LoopRunState {
   plays: number;
   softDeadline: number;
   finalDeadline: number;
+  /**
+   * The end number of the run's last job end the lead has had (`jobs.list`, loop/jobs/watch.ts):
+   * the journal keeps it, so a restart reads on from there. Absent: none read yet.
+   */
+  jobsCursor?: number;
+  /**
+   * Where the lead's finish checks stand (finish-claim.ts): the journal keeps it, so a resumed run
+   * goes on counting the reviewer's no's. Absent until the lead claims the goal.
+   */
+  finishTally?: FinishTally;
   /** The art director's last word on the integration branch (art-direction.ts); absent until it looks. */
   lastShip?: LastShip | null;
   /** A goal build's finish was turned back once for the art director's defects: never again. */
@@ -273,6 +289,13 @@ export interface LoopRunData {
   memoryRestored: boolean;
   ownShape: boolean;
   shape: LoopRunShape;
+  /** What the game's folder holds once it is ready (`game.list`'s `facts`); absent on a run a kept older setup.ts made. */
+  gameFacts?: FactRef[];
+  /**
+   * The game as far as Genex's moments go (`game.list`'s `hookEvents`): the run announces a moment
+   * only when the game's plugins hook it. Absent on a run a kept older setup.ts made: it announces none.
+   */
+  game?: HookedGame;
   capacity: HarnessResult<"preview.capacity"> | null;
   contractMissing: boolean;
   gameKind: string;
@@ -326,6 +349,18 @@ export interface LoopRunData {
   journaledSeq?: number;
   /** The journal as its last save wrote it (journal.ts `journalText`): a save that would write the same again is not made. */
   journalSaved?: string | null;
+  /**
+   * How the Loop works on its project (folder-facts.ts `loopProfileOf`): the web method, or in place
+   * (`open`). Absent on a web run a kept older setup.ts made.
+   */
+  profile?: LoopProfile;
+  /** An open Loop's own record (open/contract.ts): its facts, journal, git-write queue, clock and pool. Absent on a web run. */
+  open?: OpenLoop;
+  /**
+   * What waits for the end of each of the lead's turns before the next (an open Loop's autosave, and
+   * the rewind or restart its lead asked for); the wake loop awaits it. A web run sets none.
+   */
+  afterTurn?: () => Promise<void>;
 }
 
 /** A function of the run as the run carries it: bound, so the run itself is already given. */
@@ -477,7 +512,8 @@ export async function keepMemory(loopRun: LoopRun) {
  */
 export async function saveJournal(loopRun: LoopRun): Promise<number | void> {
   const { ctx, journal, run, threadId } = loopRun;
-  recordLoopRun(loopRun);
+  // An open Loop's worked time is on its own clock (a test's, or the wall clock).
+  recordLoopRun(loopRun, loopRun.open?.clock.now());
   const seq = loopRun.logSeq;
   const text = journalText(journal);
   // Saves overlap (a round's, a wake's): the log a slower one holds is never taken for a newer one's.

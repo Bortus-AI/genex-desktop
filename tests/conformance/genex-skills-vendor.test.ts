@@ -135,6 +135,12 @@ test("a manifest and a vendored set disagree exactly where a file is on one side
     ],
     ["a vendored reference not declared", card(), ["card/SKILL.md", "card/references/b.md"], [/vendored but no skill/]],
     ["an inline skill only", { skills: [{ name: "inline", text: "Hi." }] }, [], []],
+    [
+      "a skill Studio writes itself",
+      { skills: [{ name: "plugin-author", summary: "Studio's.", file: "skills/plugin-author/SKILL.md" }] },
+      [],
+      [],
+    ],
   ];
   for (const [name, manifest, vendored, expected] of rows) {
     const problems = manifestDisagreements(manifest, vendored);

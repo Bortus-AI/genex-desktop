@@ -13,7 +13,7 @@ import {
 import type { PluginMarketplace } from "../substrate/plugins/marketplace.ts";
 import { assertNativeActionAllowed } from "./dev/native-policy.ts";
 import { asksBeforeInstall, reviewPluginInstall } from "./plugin-local-install.ts";
-import { installPrompt } from "./plugin-install-words.ts";
+import { installPrompt, installUpdateFacts } from "./plugin-install-words.ts";
 import type { StudioCore } from "./studio-core.ts";
 
 /** Ask the user whether to install (or replace with) this package; true when they agreed. */
@@ -51,15 +51,9 @@ export function confirmPluginInstall(
     const review = reviewPluginInstall(core().plugins, manifest, origin, core().mcp.ids());
     if (!asksBeforeInstall(origin, review)) return true;
     const { replaces } = review;
-    // A replacement is a new plugin, not an update of the one it erases: every capability and server is new.
-    const before = replaces ? undefined : previous;
-    // The installed version's scan, so a scanned update can say which skills' bytes changed.
-    const previousScan = before
-      ? core()
-          .plugins.list()
-          .find((p) => p.manifest.id === manifest.id)?.scan
-      : undefined;
-    const prompt = installPrompt({ manifest, origin, scan, before, previousScan, replaces, note });
+    const facts = installUpdateFacts(core().plugins.list(), manifest, origin, previous, Boolean(replaces));
+    const { before, previousScan, staysOn } = facts;
+    const prompt = installPrompt({ manifest, origin, scan, before, previousScan, replaces, note, staysOn });
     const choice = await dialog.showMessageBox({
       type: "warning",
       title: replaces ? MESSAGE.replaceTitle : MESSAGE.installTitle,

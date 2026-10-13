@@ -10,7 +10,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { type PluginManifest, type PluginScan, type PluginSource, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
-import { actionApprovalDetail, installDetail, installPrompt } from "../../src/main/plugin-install-words.ts";
+import {
+  actionApprovalDetail,
+  actionApprovalDialog,
+  installDetail,
+  installPrompt,
+} from "../../src/main/plugin-install-words.ts";
 
 const bundled = async (id: string): Promise<PluginManifest> =>
   validateManifest(JSON.parse(await readFile(path.resolve("src/plugins", id, "plugin.json"), "utf8")));
@@ -56,7 +61,7 @@ test("characterization: a first install from the catalog gives one block each, i
       "• cli-paid — runs the Genex CLI, asks you each time",
       "• package — installs Genex packages in the game, asks you each time",
     ].join("\n"),
-    "Adds 13 skills for agents: creator-mcp, asset-preference, publishing, cover, genex, genex-threejs-multiplayer, genex-threejs-embed-auth, genex-llm-in-games, genex-tool-llm, genex-monetization, genex-tool-publish, genex-cover, genex-updates.",
+    "Adds 19 skills for agents: creator-mcp, asset-preference, publishing, cover, genex, genex-threejs-multiplayer, genex-threejs-embed-auth, genex-llm-in-games, genex-tool-llm, genex-monetization, genex-tool-publish, genex-cover, genex-tool-model, genex-tool-character, genex-tool-texture, genex-tool-audio, genex-tool-image, genex-updates, plugin-author.",
     "Scan: caution, 1 finding: child-process in backend.mjs:12.",
   ]);
 });
@@ -94,6 +99,7 @@ test("characterization: a scanned replacement from a local folder leads with wha
       "This replaces Old Example by Someone (from a local folder). Its saved account, settings and data will be erased.",
       "From the folder /Users/me/plugins/example\nPublisher: Studio development",
       "Its code runs on your computer like an app you install. It isn't sandboxed.",
+      "It runs with your access: Genex doesn't sandbox its code. It starts off: turn it on in Plugins; each of its tools asks you before it runs.",
       "It asks to:\n• keep its own settings",
       "Adds 1 skill for agents: greeting.",
       "Scan: caution, 1 finding: child-process in backend.mjs:12.",
@@ -192,4 +198,64 @@ test("an action's approval shows the arguments it was given, and nothing when th
   for (const none of [undefined, null, {}]) assert.equal(actionApprovalDetail(none), undefined, JSON.stringify(none));
   assert.equal(actionApprovalDetail({ jobId: "job-1" }), '{\n  "jobId": "job-1"\n}');
   assert.equal(actionApprovalDetail(["a"]), '[\n  "a"\n]');
+});
+
+test("a reviewed action asks the plugin's own question, in its own words, under the action's own name", () => {
+  const action = { label: "Set up", confirmation: "Set up this Unreal project for Genex?" };
+  const args = { project: "/Users/me/Lyra/Lyra.uproject" };
+  const reviewed = actionApprovalDialog({
+    plugin: "Unreal",
+    action,
+    review: {
+      message: "Set up Lyra for Genex?",
+      detail: "• Turns on Epic's MCP plugins\n• Adds the Genex editor helper",
+    },
+    args,
+  });
+  assert.deepEqual(reviewed, {
+    title: "Unreal: Set up",
+    message: "Set up Lyra for Genex?",
+    detail: "• Turns on Epic's MCP plugins\n• Adds the Genex editor helper",
+    buttons: ["Cancel", "Set up"],
+  });
+  const questionOnly = actionApprovalDialog({ plugin: "Unreal", action, review: { message: "Set up Lyra?" }, args });
+  assert.equal(questionOnly.detail, undefined, "a reviewed action never falls back to its arguments as JSON");
+  assert.deepEqual(questionOnly.buttons, ["Cancel", "Set up"]);
+  for (const review of [{}, { detail: "• words without a question" }, { message: "" }]) {
+    const unreviewed = actionApprovalDialog({ plugin: "Unreal", action, review, args });
+    assert.equal(unreviewed.message, action.confirmation, JSON.stringify(review));
+    assert.equal(unreviewed.detail, actionApprovalDetail(args), JSON.stringify(review));
+    assert.deepEqual(unreviewed.buttons, ["Cancel", "Approve"], JSON.stringify(review));
+  }
+});
+
+test("names the folders outside the games a plugin's programs will write in, each with why, marking new ones on an update", () => {
+  const log = { path: "~/Library/Application Support/Toy/Logs", why: "The toy engine writes its log here" };
+  const cache = { path: "/private/tmp/toy-cache", why: "Shaders it compiles" };
+  const manifest: PluginManifest = { ...example, apiVersion: 3, folders: [log, cache] };
+  const first = installDetail({ manifest });
+  for (const part of [log.path, log.why, cache.path, cache.why]) assert.ok(first.includes(part), part);
+  assert.match(first, /write in 2 folders outside your games/);
+  assert.doesNotMatch(first, /\(new\)/, "a first install marks nothing");
+
+  const update = installDetail({ manifest, before: { ...manifest, folders: [log] } });
+  assert.ok(update.includes(`${cache.path} (new)`), update);
+  assert.ok(!update.includes(`${log.path} (new)`), update);
+
+  assert.doesNotMatch(installDetail({ manifest: example }), /folders outside/, "nothing for a plugin without folders");
+});
+
+test("loading again a local plugin that is on says it stays on and its new code runs at once", () => {
+  const origin = { kind: PluginSourceKind.Local, directory: "/Users/someone/genex-plugins/example" } as const;
+  const update = installDetail({ manifest: example, origin, before: example, staysOn: true });
+  assert.match(update, /It runs with your access: Genex doesn't sandbox its code\./);
+  assert.match(
+    update,
+    /It is on and stays on: its new code runs as soon as it loads, and each of its tools asks you again before it runs\./,
+  );
+  assert.doesNotMatch(update, /starts off/);
+  const first = installDetail({ manifest: example, origin });
+  assert.match(first, /It starts off: turn it on in Plugins; each of its tools asks you before it runs\./);
+  const whileOff = installDetail({ manifest: example, origin, before: example, staysOn: false });
+  assert.match(whileOff, /It starts off/, "an update of a plugin that is off stays off");
 });

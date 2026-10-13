@@ -2,7 +2,9 @@
 
 This is the working guide for a person — or a coding agent — building a plugin. It is a
 walkthrough plus the checks to run. The normative reference is [docs/plugins.md](plugins.md);
-where the two disagree, that document wins.
+where the two disagree, that document wins. An agent in a Genex chat gets the short form as Genex
+Tools' `plugin-author` skill: it writes the plugin into `genex-plugins/<id>/` in the game, checks it
+with `plugin_check`, and leaves loading and turning it on to you.
 
 A plugin is a **prebuilt directory**. Studio installs the files as they are: no `npm install`, no
 build hook, no archive extraction. Build your JavaScript before you hand the folder over.
@@ -64,6 +66,11 @@ export async function activate(host) {
 - `tool` is what an agent can call, named `<plugin>__<tool>` in every engine. Parameters are
   declared scalars (string, number, boolean) or structured objects. A declared object may
   opt into `acceptJsonString` for legacy bridge input; the host normalizes it before dispatch.
+- A tool only Genex's own harness loop calls, never an agent, declares `"audience": "harness"`
+  (API 3): no chat, builder or plan is handed it or told of it, and the harness still calls it
+  by name as its own step, through the same consent; an agent naming it is refused and nothing
+  runs. Studio records no call pair for it: it is a step of the harness's loop, and it runs in Plan
+  mode unless the harness marks it a write (`checkpoint: true`: a save, a shot, a play or an editor change). `"agents"` is the default; any other value is refused.
 - `action` is never an agent tool. It is what a button or a panel invokes.
 - `ctx` carries `project`, `directory`, `threadId`, an `AbortSignal`, a `callId` and `host`. **Do
   not store it**: concurrent calls can belong to different games and different workers, and host
@@ -103,6 +110,11 @@ undeclared method is a compile error.
 | `runtime.detect` / `runtime.installation` | `native-runtime`, API 3 | Read declared native runtime readiness and durable installation progress |
 | `runtime.install` / `runtime.cancelInstall` | `native-runtime`, API 3 | Fixed pinned installation through a real declared user action; installation requires its confirmation |
 | `native.run` / `native.jobs` / `native.result` | `native-runtime`, API 3 | Project-bound fixed job recipes, cancellation and durable results; no automatic replay |
+| `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an Unreal project file (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
+| `game.engine.steps` | `game-engine` | Show your steps card (your `steps` action's answer, read live) in the calling chat |
+| `game.snapshot` | `game-engine` | `{reason}` → `{snapshotId}`: a game snapshot of the bound game, listed in Rewind under `reason` (one plain line, at most 200 characters), before you change files there |
+| `game.engine.runs` | `game-engine` | `{game, title, project}[]`: the games whose run (a Loop) is going now that your plugin linked to a project, with that project file; needs no bound game. Read it before you offer to quit an editor a run may be using |
+| `game.create` | `game-engine` | `{title}` → `{project, directory}`: a new Genex game (title one plain line, at most 80 characters) for an engine project made with no game open; link it with `game.engine.link {project, game}`, which accepts only a game your plugin made, from outside any game |
 | `credentials.read` / `write` / `clear` | `credentials` | Plugin-scoped protected storage; only the reserved `unlock` / `connect` / `disconnect` actions authorize these |
 
 Declare `network` if the backend talks to a host, and list the hosts in `network.hosts`. That is
@@ -141,25 +153,115 @@ inline and put a long guide in a file:
   16 references per skill, 128 KiB per file and 1 MiB of skill files in all. `plugin:doctor`
   checks them with the real validator. API 1 and 2 manifests keep their old leniency: a repeated
   skill name is dropped, empty text is allowed and other skill keys are ignored.
+- A skill for one kind of project names its facts (API 3): `"facts": ["toy-project"]` keeps it out
+  of every other game's brief, and `"tools": ["build"]` keeps it only while one of your tools it
+  explains reaches the session. A tool may name `facts` the same way, and so may an MCP server
+  (never started for another game); a tool that makes a project of your kind says
+  `"makes": ["toy-project"]`: it is refused while a run of the game is going, Genex snapshots the
+  game before it runs, records the web game it replaced as the game's `portedFrom`, and tells the
+  session to end its reply, which then goes on with your tools. A game with no kind yet is served as
+  a web game (`web-game`); a folder of a kind Genex can't name is served by no fact. The
+  older `"engines": ["web"]` / `["unreal"]` still works and reads as `web-game` / `unreal-project`;
+  anything that names neither reaches every game.
 - The trust dialog lists your skills, and an update marks each new or changed one and names each
   removed one. A hot reload that edits a skill reports the change on the plugin's page instead of
   applying it silently.
 
+### Knowing your kind of project
+
+A plugin for an engine says how to recognise its projects (API 3), so Genex can tell what a folder
+holds: `"detect": [{ "fact": "toy-project", "files": ["**/*.toyproj"], "notUnder": ["**/vendor/"] }]`.
+While the plugin is on, a game whose files match holds the fact `toy-project` at the folder of the
+match (`.` for the game's root); a match inside a `notUnder` folder, or below a folder that already
+has the fact, counts for nothing. A glob is plain characters, `*` within one folder name and an
+optional leading `**/` for any depth; a `notUnder` glob ends with `/`. At most 8 rules, each with
+1–8 `files` and up to 8 `notUnder`; a fact id is lowercase letters, digits and dashes. Genex knows
+web, Unreal, Godot, Unity and Blender folders itself ([Project facts](plugins.md#project-facts)).
+
+What your engine generates while it runs stays out of the game's history when you say so:
+`"workspace": { "ignore": ["Cache/"], "copySkip": ["Cache/"] }` puts `/Cache/` (or `sub/Cache/` for
+a project in `sub`) in the game's `.gitignore` before its first commit and every snapshot after; `copySkip` names what
+workers' copies leave out besides, of the files they receive outside history (tracked files are always copied). `"assets": { "folders": ["scenes"], "formats": ["toyscene"] }`
+adds your project's `scenes/*.toyscene` files to the Assets tab (formats Genex can't show appear by name). Both reach the facts your `detect` declares, or those their
+own `facts` list names; patterns use the same globs, at most 16 per list, never only `*` and never
+Genex's own files (`studio.json`, `.gitignore`, `.git`, `.studio`, `references`). See
+[Workspace rules](plugins.md#workspace-rules).
+
+The kinds of worker a lead may start with your tools are yours to declare:
+`"workerTypes": [{ "id": "scene", "description": "Edits one scene", "tools": ["build"], "isolation": "copy" }]`.
+`tools` names your own agent tools, or another plugin's by prefix (`"blender__"`) or agent name
+(`"genex__asset"`); `isolation` is `read` (in place, writes nothing), `copy` (its own copy, handed
+back for the lead to merge) or `lock` (in place, one at a time per game). A kind is offered only
+while one of its tools reaches the game. Folders outside the game your engine's programs write to
+go in `"folders": [{ "path": "~/Library/Application Support/ToyEngine", "why": "The toy engine's settings" }]`:
+turning your plugin on approves them as workers' write roots. A folder is one folder from `~/` or
+`/`, never a glob, a whole personal folder (`~/Documents`, `~/Library`, …), a login or Genex's own
+data. See [Worker types](plugins.md#worker-types) and [Folders](plugins.md#folders). Your plugin's
+page and its suggestion card in the chat name these folders before anyone turns it on.
+
+An editor one holder at a time may use is a lock:
+`"locks": [{ "id": "toy-editor", "label": "Toy editor", "per": "project", "personFirst": "editor-state" }]`,
+and a tool or connector that uses it says `"needs": ["toy-editor"]`. `personFirst` names one of
+your harness tools answering `{ "personActive": false, "unsaved": 0 }`: while the person uses the
+editor, the agents' work in it waits. Hooks run your harness tools at Genex's moments, such as
+`"hooks": [{ "on": "checkpoint.before", "tool": "save-scenes" }]`; your handler reads
+`context.hook` (`{ on, runId?, worker?, … }`, absent when called directly) and answers `{ block?,
+note?, pending?, images? }`. A handler that throws blocks a moment that can be blocked, so answer
+`note` for trouble that should not stop the work. It never changes another call's arguments, and
+git stays Genex's. An agent tool that `makes` a kind
+may name a harness tool in `ready` that answers `{ ready, note }`. See
+[Hooks](plugins.md#hooks-genexs-moments) and [Locks](plugins.md#locks-the-person-comes-first).
+
+A plugin whose tools make more than one kind of project names each with a label:
+`"scaffolds": [{ "id": "plugin", "label": "Toy plugin", "tool": "new-toy-plugin", "facts": [{ "fact": "toy-plugin", "files": ["**/*.toyplug"] }] }]`.
+Each scaffold whose `tool` (an agent tool that `makes` a kind) reaches a game is a kind of its own
+on the first message's question, named by its label; `"game": false` keeps one that makes no game
+(a plugin or tool project) off that question, made only when the request asks for it. Once that tool made its kind, Genex records
+the scaffold in the game's `studio.json`, and its `facts` rules (at most 4, each of a fact the tool
+makes) keep finding facts your `detect` skips, even while your plugin is off. See
+[Scaffolds](plugins.md#scaffolds).
+
+An observer is what Genex can capture of a project of your kind, for the reviewer who checks a
+Loop's finish: `"observers": [{ "id": "viewport", "facts": ["toy-project"], "tool": "capture" }]`
+names one of your harness tools that asks nothing and answers pictures. Add `"live": "stills"` to
+have Live show its latest pictures for such a project (`unreal-card` is the bundled Unreal
+plugin's own view; `preview` and `proof` are Genex's ids). Add `"label": "Board"` to name that
+view's tab when a folder has more than one view (1–24 characters, not a name the stage strip
+already shows); without it the tab takes your plugin's name. Your observer captures only while your
+plugin is on, inside a run: the tool is called with `context.observe` set (`{observer, runId, why}`)
+under its `needs` locks, and answers `{ images, recording?, note? }`, where `recording` is a short
+play recording as at most 8 frames in order; a `block` or `pending` answer is reported as why
+nothing was captured. See [Observers](plugins.md#observers).
+
+Together these give your kind of project a Loop with no code in Genex. While your plugin is on, a
+Loop on a folder your `detect` recognises is led in place by the chat's own session: your hooks run
+at its start, its save points, rewinds, restarts, health checks and its end, its lead starts your
+worker types, and your observers feed the reviewer who checks its finish. The toy engine plugin in
+Genex's tests (`tests/fixtures/toy-engine-plugin/`) runs such a Loop, and so does a copy of it with
+every tool renamed. See [the open Loop](harness-runtime.md).
+
 ## 3. Panels
 
 A panel is served into an opaque-origin sandboxed frame with
-`default-src 'none'; script-src 'unsafe-inline'; img-src data:; connect-src 'none'`. There is no
+`default-src 'none'; script-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'`. There is no
 `window.studio`, no `require`, no `process` and no direct IPC.
 
 - Inline your JavaScript and CSS. `<script src="…">` **will not load**. Put
   `<!-- STUDIO_PANEL_SDK -->` where the bridge goes and run
   `node src/plugin-sdk/inline-panel-sdk.mjs panel.html` (the scaffold already did): it pastes the
   current `panel.js` and `ui.js` in, so the bridge matches `index.d.ts`.
-- No `fetch`, no forms, no external images, no external fonts. Images must be `data:` URLs, and
+- No `fetch`, no forms, no external images, no external fonts. Images and fonts must be `data:` URLs
+  (`inlinePanelFonts` in the same script pastes Genex's own type in at `<!-- STUDIO_PANEL_FONTS -->`), and
   `project.read` is utf8-only, so a panel cannot display a PNG read from the game folder.
-- The only bridge is `window.studioPlugin.call(method, name?, args?)`:
-  `call('context')` → `{project, apiVersion, theme}`, `call('settings')` → your standard settings,
-  `call('action', name, args)` → a declared action. Nothing else crosses.
+- The whole bridge is `window.studioPlugin`: `call(method, name?, args?)` with
+  `call('context')` → `{project, apiVersion, theme}` (`theme` carries `background`, `foreground`,
+  `accent` and the readable button colours `accentFill`, `accentForeground`, `accentHover`),
+  `call('settings')` → your standard settings
+  and `call('action', name, args)` → a declared action, plus
+  `chooseFile({ title, extensions })` → the chosen file's real path or `null` (1–4 extensions, each
+  `[a-z0-9]{1,10}`; native, so a fixture profile answers `unsupported-in-fixture`; see
+  [Panels](plugins.md#panels-and-trusted-approval)). Nothing else crosses. A call the person
+  cancelled in Studio's confirmation rejects with `code: "cancelled"`; stay quiet then.
 
 `plugin:doctor` warns about both of these mistakes, naming the file.
 
@@ -173,7 +275,11 @@ Two different things, both asked by the host and never by the plugin or the agen
   (`{consent:'declined', by, message}`), never as an error — say in your skill text that a declined
   request must not be repeated.
 - **`actions[].confirmation`** — a user-invoked action behind a Studio-owned review and a native
-  dialog. Your optional `review` returns `{message, images:[{label, dataUrl}]}`; Studio requires
+  dialog. Your optional `review` returns `{message, detail, images:[{label, dataUrl}]}`: `message`
+  (at most 2,000 characters) is the dialog's question instead of the manifest's `confirmation`, and
+  `detail` (plain text, at most 4,000 characters, used only with a `message`) appears under it. With
+  a `message` the dialog's buttons are Cancel and the action's label, otherwise Cancel and Approve
+  over the arguments. Studio requires
   every image to load before it will continue. Approval tickets are short-lived, single-use and
   bound to plugin/action/arguments/project; a panel can never supply its own.
 
@@ -263,7 +369,8 @@ What Studio will and will not do with it:
   the server waits until the user has explicitly run your `unlock` action; until then it is listed,
   switched off, with the reason on it. `settings` names settings that must be filled in.
 - **`toolPolicy`** and **`maxTools`** keep an enthusiastic server out of every prompt's tool list;
-  Studio caps a connector at 64 tools regardless. `callTimeoutMs` is at most 1 800 000 (30 minutes).
+  Studio caps a connector at 64 tools regardless. **`reads`** (API 3) names the tools that only
+  read (list or describe what the server offers): they run with no card in any mode. `callTimeoutMs` is at most 1 800 000 (30 minutes).
 - At most **4 servers**, ids lowercase with no `_` (the `__` in a tool name must stay unambiguous),
   and the whole section needs `apiVersion: 2`.
 - Changing what a server runs, where it runs or what it is handed is a **permission expansion**:
@@ -297,12 +404,19 @@ and panel CSP problems as warnings:
 ## 8. Load it, then edit with hot reload
 
 In Studio: **Plugins → Add → Load local plugin…**, choose the folder, read the trust dialog (it names the
-publisher, the capabilities and the scan verdict), and install. Then choose **Watch folder** in
-the plugin's page's More (…) menu: every save re-installs the package through the normal lease path, so an edit lands as soon
-as no session is holding the plugin. Hot reload is best-effort — recursive file watching coalesces
+publisher, the capabilities and the scan verdict), and install. A plugin loaded from a folder starts
+off: turn it on on its page; each of its tools then asks you before an agent runs it until you answer
+Always allow for it, and new code asks again; its own steps at Genex's moments (hooks, observers,
+person-first probes, readiness checks) run without asking. Then choose **Watch folder** in
+the plugin's page's More (…) menu: every save re-installs the package (its new backend starts at once
+to prove it loads), and the new version takes the old one's place as soon as no session is holding
+the plugin. Hot reload is best-effort — recursive file watching coalesces
 events on macOS — so if a change does not appear, press Reinstall. A reload that changes
-`mcpServers` or `network.hosts` is refused (`MCP servers changed; load the folder again to review`):
-load the folder again so the user sees the dialog. Old package copies are deleted as each reload
+`mcpServers` or `network.hosts` is refused (`MCP servers changed; load the folder again to review`),
+and so is one that changes the steps Genex runs without asking (hooks, observers, locks, folders,
+harness tools or `ready`): load the folder again so the user sees the dialog. Watch folder is refused
+for a folder agents write in (a game's folder, the games folder, workers' copies), so a plugin an
+agent wrote in a game is loaded again by hand after each change. Old package copies are deleted as each reload
 lands, and stored settings keep only keys your current manifest declares, with the declared type.
 
 If you are working inside this repository, `npm run watch` now rebuilds plugin packages into
@@ -414,7 +528,10 @@ The bundled Local Blender plugin demonstrates a transform recipe: the tool accep
 The Python script imports `ASSET_INPUTS["model"]`; absolute project or temporary paths are
 not sandbox inputs. The result includes `derivedFrom`, and the source is preserved. Output
 size is a resource boundary of 100 MiB per native job including renders, not a Genex model
-acceptance rule. Invalid lowercase asset names and missing inputs fail before Blender starts.
+acceptance rule. A snake_case or capitalised `name` becomes a lowercase slug with dashes; other
+invalid names, and missing inputs, fail before Blender starts. Extra game files the script reads go
+in `inputs` (the `compose` recipe: fixed `input1..9` slots, unused ones carrying the script, the
+`inputs` value naming the real ones); `rig` also exports armatures and their actions.
 
 Native results include `inputs[name] = { file, sha256 }` for the actual staged bytes.
 The host inventory uses this identity to retain derivative provenance after source renames;
