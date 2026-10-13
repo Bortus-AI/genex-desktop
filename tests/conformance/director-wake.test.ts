@@ -238,7 +238,7 @@ describe("when the lead is woken (wake-schedule.ts)", () => {
     });
   });
 
-  it("W7c. asked to finish, the lead rests while its workers end the rounds they are in, and the wrap-up starts once none runs", () => {
+  it("W7c. asked to finish, the lead rests while its workers end the rounds they are in, and the wrap-up starts once no loop worker runs", () => {
     const asked = {
       ok: true,
       closed: false,
@@ -515,7 +515,7 @@ describe("what the message that wakes the lead says (wake-prompts.ts)", () => {
     const finishing = wakeDigest(facts({ userSays: [], finishNew: true, finishRequested: true }));
     assert.match(
       finishing,
-      /THE USER ASKED TO FINISH: no new workers or rounds\. Each running worker ends the round it is in/,
+      /THE USER ASKED TO FINISH: no new workers or rounds\. Each running loop worker ends the round it is in/,
     );
     assert.doesNotMatch(finishing, /THE USER SAYS/, "no section for nobody's words");
     const nothing = wakeDigest(facts({ userSays: [], happened: [], card: { ...facts().card, plan: null } }));

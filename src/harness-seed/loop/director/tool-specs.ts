@@ -30,7 +30,7 @@ export const DirectorTool = {
   Integrate: "integrate",
   Show: "show",
   Note: "note",
-  /** The user asked to finish: no worker or round starts after it, and the run wraps up once none runs (wrap-up.ts). */
+  /** The user asked to finish: no worker or round starts after it, and the run wraps up once no loop worker runs (wrap-up.ts). */
   WrapUp: "wrap_up",
   Finish: "finish",
   /** Not a director tool: the studio asking where a target lives (it is in no schema below). */

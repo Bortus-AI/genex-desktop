@@ -585,7 +585,8 @@ async function collect(loopRun: LoopRun, wake: WakeState, now: number): Promise<
   wake.userWaiting = wake.owed.length > 0 || unheard(wake, untold).length > 0;
   const finishing = await inbox.finishing().catch(() => false);
   // An ask the lead recorded itself (`wrap_up`) is said already: no news to it. An open Loop's wrap-up starts on its wake.
-  if (finishing && state.finishAsk && !leadsOpenLoop(loopRun)) wake.finishSaid = true;
+  const ownAsk = finishing && Boolean(state.finishAsk) && !leadsOpenLoop(loopRun);
+  if (ownAsk) wake.finishSaid = true;
   wake.finishNew = !wake.finishSaid && finishing;
   // Before the first worker there is no monitor to hand a worker's steer over.
   if (!state.monitor) await routeUserSteers().catch(() => {});

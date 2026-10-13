@@ -733,7 +733,7 @@ and tells the lead if it went in with no judge: Builds shows it Paused until the
 out only if the run ends without it. A judge's look at a part that does not own the entry, like its
 own rounds' looks, reads cameras that all show one frame as a warning (`facet/camera-wiring.ts`), and
 only the part that draws the HUD (critic=screen, a restart of it, or the entry's owner while no
-screen owner runs: `director/hud-owner.ts`) is held to the HUD's coverage and overlap.
+part of the run owns the screen: `director/hud-owner.ts`) is held to the HUD's coverage and overlap.
 
 A plan whose parts loop two or more (a part marked `"mode":"single"` does not count) needs a
 module contract before its loop workers start: `plan contract=` names each module's file, owner
@@ -751,7 +751,8 @@ it always did until its lead commits a contract. `integrate
 worker=a,b` merges a wave in order with one health pass. Running loop workers take the newest
 integration head at each round, the lead's own commits too (`director/workers.ts` `freshBase`), so a
 merge never lands behind the lead's commits; while a worker's merge waits for its health pass they
-keep the head before it (`headBeforeMerge`, held after a wave a conflict stopped until a pass looks),
+keep the head before it (`director/merge-hold.ts`; after a wave a conflict stopped, until a look sees
+the head load or the lead calls `wave=close`),
 and a head a health pass saw fail gives way to the one the last healthy wave closed on (a healthy
 integrate, or `wave=close`). A merge's health pass runs
 the demos workers' checks name (and at most one more); the close runs every demo. A round, or a
@@ -938,7 +939,7 @@ its own worktree; `read` starts a reader from the run's shared pool (`loop/worke
 `director-pool.ts`) in the game folder, which never integrates, and may research the web; `lock` is
 refused, because the web method never writes in the game folder itself. A web run takes no plugin
 worker types. A loop worker's `minutes` are fitted to whole rounds of the game once a round has been
-measured (`budgets.ts` `wholeRoundsBudget`: the nearest number of rounds `tooLateToStart` will start,
+measured (`whole-rounds.ts` `wholeRoundsBudget`: the nearest number of rounds `tooLateToStart` will start,
 at least one, within the run's time; the answer's `rounds` says how many), so no part-round at the end
 goes unused. `worker_mark used` integrates the builder as
 `integrate` does; `rejected` stops its news in every digest and `worker_wait`, and is refused for a

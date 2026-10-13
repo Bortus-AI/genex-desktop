@@ -189,7 +189,7 @@ export const REASON_WORDS = {
 
 /** The one line a finish request adds to the user's part of a digest. */
 const FINISH_ASKED =
-  "THE USER ASKED TO FINISH: no new workers or rounds. Each running worker ends the round it is in: integrate what it keeps as it lands. Once none runs the wrap-up starts: look at the integrated build and call finish.";
+  "THE USER ASKED TO FINISH: no new workers or rounds. Each running loop worker ends the round it is in: integrate what it keeps as it lands. Once no loop worker runs the wrap-up starts (its finish stops a single session): look at the integrated build and call finish.";
 
 /** The rules every build card carries, the same on every wake: the rule of its seat goes between them. */
 const CARD_RULES = [
@@ -257,7 +257,7 @@ function timeLine(facts: DigestFacts): string {
   if (wrapping)
     return `- time: wrapping up — ${minutes(finalDeadline - now)} minutes left, until ${utc(finalDeadline)}`;
   if (facts.finishRequested)
-    return `- time: finishing at the user's request — the wrap-up starts once no worker runs; ${minutes(finalDeadline - now)} minutes in all`;
+    return `- time: finishing at the user's request — the wrap-up starts once no loop worker runs; ${minutes(finalDeadline - now)} minutes in all`;
   return `- time: ${minutes(softDeadline - now)} working minutes, ${finishMarkWords(facts)}wrap-up at ${utc(softDeadline)}, ${minutes(finalDeadline - now)} minutes in all`;
 }
 

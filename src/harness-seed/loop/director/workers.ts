@@ -34,6 +34,7 @@ import { isCommit } from "../shell.ts";
 import { addToScope, restoreScope, runScope, type RunScope } from "../scope.ts";
 import { linkScreenOwner, runningScreenOwner, SCREEN_CRITIC } from "../screen-owner.ts";
 import { drawsTheHud } from "./hud-owner.ts";
+import { headLooked } from "./merge-hold.ts";
 import { CheckWeight, MAX_DONE, MAX_MILESTONES } from "../spec.ts";
 import { CLIP_BRIEF, CLIP_DETAIL, CLIP_QUOTE, CLIP_REASON, clip } from "../text.ts";
 import { MINUTE_MS, minutes, SECOND_MS, sleep } from "../time.ts";
@@ -1085,6 +1086,7 @@ async function forkGate(loopRun: LoopRun, worker: OpenedWorker, from: string): P
     inheritedConsole: consoleInheritedBy(),
   });
   state.healthByHead.set(commit, gate.ok === true);
+  headLooked(state, commit, gate.ok === true);
   worker.baseConsole = errorsLogged(gate);
   state.consoleByHead.set(commit, worker.baseConsole);
   rememberEvidence(commit, gate);
@@ -1206,10 +1208,7 @@ function compileContract(loopRun: LoopRun, worker: Worker, parsed: WorkerArgs, a
       index: state.workers.size,
       forkedFrom: worker.from,
       stage: String(args.stage ?? "").trim() || null,
-      drawsHud: drawsTheHud(
-        { critic, ownsMain: worker.ownsMain, replaces: worker.replaces },
-        { running: loopRun.runningWorkers().filter((other) => other.id !== worker.id), specs: state.facetSpecs },
-      ),
+      drawsHud: drawsTheHud({ critic, ownsMain: worker.ownsMain, replaces: worker.replaces }, state.facetSpecs),
     },
     state.evidenceByHead.get(worker.from) ?? null,
     { rarelyMeasurable: neverMeasured() },
@@ -1358,7 +1357,7 @@ function startAnswer(
     worktree: worker.worktree,
     forkedFrom: shortSha(worker.from ?? ""),
     minutes: minutes(budgetMs),
-    // Its minutes, fitted to whole rounds of this game (budgets.ts `wholeRoundsBudget`).
+    // Its minutes, fitted to whole rounds of this game (whole-rounds.ts `wholeRoundsBudget`).
     ...(typeof rounds === "number" ? { rounds } : {}),
     ...(roundWarning ? { roundWarning } : {}),
     ...(Object.keys(policySpec.overrides).length ? { policy: policySpec.overrides } : {}),
@@ -1702,7 +1701,7 @@ async function runLoopWorker(loopRun: LoopRun, worker: Worker): Promise<void> {
       return own;
     },
     finishRequested: () => workerStopAsk(loopRun, worker),
-    // Once a wave has closed, a worker takes the integration branch once per wave (integrate.ts).
+    // Each round takes the newest integration head once it is seen to load (`freshBase`).
     integration: loopIntegration(loopRun),
     projectDir,
     onIteration: (record: AnyRecord) => recordRound(loopRun, worker, record),

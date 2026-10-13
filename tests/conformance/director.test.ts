@@ -1978,7 +1978,8 @@ describe("the loop the director can see, and the thresholds it may set", () => {
   it("syncs the head on every declared tool, and only spares the studio's own resolve_root", () => {
     for (const tool of DIRECTOR_TOOLS)
       assert.equal(headSynced(tool.name), true, `${tool.name} starts at the real head`);
-    assert.equal(DIRECTOR_TOOLS.length, 15, "fifteen tools, all of them synced");
+    // Flipped from 15: `wrap_up`, the user's ask to finish, is a declared tool too.
+    assert.equal(DIRECTOR_TOOLS.length, 16, "sixteen tools, all of them synced");
     // `resolve_root` is the studio asking where a target lives, not a director's decision: it
     // must not touch git. plan, worker_status, worker_steer, worker_stop and note used to be
     // outside the set, and note/worker_status are exactly what a director calls right after

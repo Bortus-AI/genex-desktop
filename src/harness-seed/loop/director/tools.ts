@@ -25,6 +25,7 @@ import { FacetStage, isFinishing, stageArg } from "../facet/stage.ts";
 import { playtestStepWords } from "../facet/beyond.ts";
 import { withOpenRung } from "../facet/growth.ts";
 import { ownsCameraWiring } from "../facet/camera-wiring.ts";
+import { headLooked } from "./merge-hold.ts";
 import { FacetRole } from "../facet/state.ts";
 import {
   STEER_BACK_TO_BUILD,
@@ -279,7 +280,8 @@ async function judgedHead(loopRun: LoopRun, target: JudgeAsk["target"]): Promise
   if (target.root === integrationWorktree) return headOf(ctx, integrationWorktree).catch(() => state.integrationHead);
   // An ended worker's worktree stands on its stopped round when it kept one: that is what is judged.
   const worker = target.worker;
-  if (worker && !isRunning(worker) && isCommit(worker.keptCommit)) return String(worker.keptCommit);
+  const kept = worker && !isRunning(worker) ? worker.keptCommit : null;
+  if (isCommit(kept)) return String(kept);
   return worker?.lastCommit ?? (target.root === projectDir ? baseCommit : null);
 }
 
@@ -304,6 +306,7 @@ function rememberJudgedHead(loopRun: LoopRun, head: string | null, evidence: Evi
   const { errorsLogged, rememberEvidence, state } = loopRun;
   if (!head) return;
   if (evidence.ok === true) state.healthByHead.set(head, true);
+  headLooked(state, head, evidence.ok === true);
   state.consoleByHead.set(head, errorsLogged(evidence));
   rememberEvidence(head, evidence);
 }
@@ -449,6 +452,7 @@ async function otherBuild(
     cameras: cameras.length ? cameras : null,
     setup: against.worker?.setup ?? run.setup ?? null,
     inheritedConsole: consoleInheritedBy(against.worker),
+    camerasOwned: judgedOwnsCameras(against.worker),
   }).catch(() => null);
   return { other, worker: against.worker ?? null };
 }

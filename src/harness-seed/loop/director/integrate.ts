@@ -70,7 +70,8 @@ import {
   proofKeptOut,
 } from "./finish-claim.ts";
 import { GIT_WITHOUT_PROOF } from "./proof-git.ts";
-import type { LastJudge, LoopRun, LoopRunState, Worker } from "./loop-run.ts";
+import type { LastJudge, LoopRun, Worker } from "./loop-run.ts";
+import { holdBaseForMerge, releaseMergeHold, unlookedAfterMerge } from "./merge-hold.ts";
 import { noteKeptWork } from "./kept-work.ts";
 import { keptLeftOut, keptToMerge } from "./kept-judge.ts";
 import { userQuoted } from "./wrap-up.ts";
@@ -432,7 +433,7 @@ async function healthPass(
   }
   state.integrationHealthy = health.ok === true;
   // The head has its answer: running loop workers read it from here (workers.ts `freshBase`).
-  state.headBeforeMerge = null;
+  releaseMergeHold(state);
   // Kept with the setup it was taken under: the next merge compares state paths only with a look
   // like its own (lostByMerge).
   rememberEvidence(head, health, { setup: setupKey(loopRun.run.setup) });
@@ -581,32 +582,12 @@ function closeWaveIfHealthy(loopRun: LoopRun, health: Evidence): void {
   if (health.ok === true) state.waveHead = state.integrationHead;
 }
 
-/**
- * Hold running loop workers on the head before a merge until its health pass answers
- * (`headBeforeMerge`); answers whether this merge holds it — a wave stopped by a conflict before it
- * looked keeps an earlier hold.
- */
-function holdBaseForMerge(state: LoopRunState, previousHead: string | null): boolean {
-  if (state.headBeforeMerge) return false;
-  state.headBeforeMerge = previousHead;
-  return true;
-}
-
-/**
- * A merge that stopped before its health pass (a conflict, or nothing to merge). What merged before
- * it is on the branch and nobody has looked at it: its health is unknown, and running workers stay
- * on the head before it until a pass looks. With nothing merged, this merge's hold is let go.
- */
-function unlookedAfterMerge(state: LoopRunState, held: boolean, mergedAny: boolean): void {
-  if (mergedAny) state.integrationHealthy = null;
-  else if (held) state.headBeforeMerge = null;
-}
-
 /** `integrate wave=close`: running loop workers take the integration head as it stands now. */
 async function closeWave(loopRun: LoopRun): Promise<string> {
   const { note, saveJournal, state } = loopRun;
   const head = state.integrationHead;
   state.waveHead = head;
+  releaseMergeHold(state);
   await saveJournal();
   if (head) note(WAVE_WORDS.closed(head));
   return JSON.stringify({
@@ -712,9 +693,10 @@ async function integrateOne(loopRun: LoopRun, args: AnyRecord): Promise<string> 
 
 /**
  * `integrate`: one worker's accepted commit, or a wave of them (`worker=a,b,c`), merged into the
- * integration branch with one health pass. A healthy integrate closes the wave — running loop
- * workers take the integration branch once per wave, not after every commit — and `wave=close`
- * closes it by hand, after the lead's own commits (with or without workers to merge first).
+ * integration branch with one health pass. Running loop workers take the newest head at each round
+ * once its merge is seen to load (workers.ts `freshBase`); a healthy integrate closes the wave — the
+ * head they fall back to while a newer one does not load — and `wave=close` closes it by hand, after
+ * the lead's own commits (with or without workers to merge first), letting go any hold on the head.
  */
 export async function integrate(loopRun: LoopRun, args: AnyRecord) {
   // A run whose close has started lands the head its reviewer read: nothing more is merged into it.

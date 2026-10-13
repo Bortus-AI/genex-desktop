@@ -18,6 +18,9 @@ export interface BuildCardToggle {
   label: string;
 }
 
+/** The disclosure's chevron, turned up while what it opens is open. */
+const chevronClass = (expanded: boolean): string => (expanded ? "chat-chevron rotate-180" : "chat-chevron");
+
 /**
  * The card's title: a button stretched over the whole card (opening Builds, or the card's own list),
  * else plain. One button either way, so a card that gains its list keeps the focus it had.
@@ -53,7 +56,7 @@ function CardTitle({
         name={toggle ? "chevron-down" : "chevron-right"}
         size={12}
         strokeWidth={2}
-        {...(toggle ? { className: `chat-chevron ${toggle.expanded ? "rotate-180" : ""}` } : {})}
+        {...(toggle ? { className: chevronClass(toggle.expanded) } : {})}
       />
     </button>
   );

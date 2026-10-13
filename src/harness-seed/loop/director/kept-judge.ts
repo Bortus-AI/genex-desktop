@@ -11,8 +11,8 @@ import type { Worker } from "./loop-run.ts";
 
 /** An ended worker's stopped round not in the build yet: its kept commit, or null. */
 function keptOutside(worker: Pick<Worker, "state" | "keptCommit" | "keptInBuild">): string | null {
-  if (isRunning(worker as Worker) || !isCommit(worker.keptCommit) || worker.keptInBuild) return null;
-  return String(worker.keptCommit);
+  const outside = !isRunning(worker as Worker) && isCommit(worker.keptCommit) && !worker.keptInBuild;
+  return outside ? String(worker.keptCommit) : null;
 }
 
 /** The stopped round `integrate` takes for `worker`: its kept commit, once a judge preferred it to the integration branch. */
@@ -41,6 +41,8 @@ export function noteKeptJudged(
   head: string | null,
   preferredToIntegration: boolean | null,
 ): void {
-  if (!head || head !== worker.keptCommit || preferredToIntegration === null) return;
+  // A look that reached no verdict says nothing either way.
+  if (preferredToIntegration === null) return;
+  if (!head || head !== worker.keptCommit) return;
   worker.keptJudged = preferredToIntegration ? head : null;
 }

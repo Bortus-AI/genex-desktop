@@ -2042,15 +2042,17 @@ function weighBlackness(look: Look, statBearing: Shot[]): void {
 /** When every camera returned the same frame: an overlay, a dead camera contract, a stale picture, or one viewpoint. */
 function sameFrameEverywhere(look: Look): void {
   const { canvasSourced, declaredViewpoints, problems, uiEntries, uiPrimary, warnings } = look;
+  // Several viewpoints drawn on the canvas, all one picture: the camera wiring switches nothing.
+  const wiringDead = declaredViewpoints.length > 1 && canvasSourced;
   if (uiPrimary) {
     warnings.push(
       `a full-screen overlay covers the game (${uiEntries.slice(0, MAX_UI_ENTRIES).join(", ") || "the page"}) — every camera frame is the same picture behind it; judge user:view`,
     );
-  } else if (declaredViewpoints.length > 1 && canvasSourced && look.camerasOwned === false) {
+  } else if (wiringDead && look.camerasOwned === false) {
     warnings.push(
       "every camera returned the same frame — the camera wiring is the entry owner's, not this part's: judge it on its other evidence",
     );
-  } else if (declaredViewpoints.length > 1 && canvasSourced) {
+  } else if (wiringDead) {
     problems.push("every camera returned the same frame — debugCamera switches nothing, the cameras contract is dead");
   } else if (declaredViewpoints.length > 1) {
     warnings.push(

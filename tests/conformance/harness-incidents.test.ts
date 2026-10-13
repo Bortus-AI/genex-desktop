@@ -6783,9 +6783,9 @@ describe("the final judge when the user is in a hurry", () => {
     typeof answer === "string" ? answer : String((answer as { text?: string } | null)?.text ?? "");
 
   /**
-   * One lead turn in a hurry: the user asks to finish at once, and the lead has its one builder
-   * paint the sky, integrates it and finishes with land=yes — never calling `judge` itself. A run
-   * `fromScratch` starts on the empty scaffold (nothing drawn) until the builder paints.
+   * One lead turn in a hurry: the lead has its one builder paint the sky, the user asks to finish
+   * while it paints, and the lead integrates it and finishes with land=yes — never calling `judge`
+   * itself. A run `fromScratch` starts on the empty scaffold (nothing drawn) until the builder paints.
    */
   async function hurriedLoopRun(
     name: string,
@@ -6834,12 +6834,14 @@ describe("the final judge when the user is in a hurry", () => {
       delegate: async (request: DelegateRequest) => {
         if (request.director) {
           const call = (tool: string, args: Record<string, unknown>) => request.onLiveTool!(tool, args);
+          await call("plan", plan);
+          results.started = leadText(await call("worker_start", start));
+          // Flipped: the user asked to finish before the builder started; once they ask, no worker
+          // starts, so they ask while it works.
           await rig.core.append(
             [{ type: "custom", event_type: "run_control", payload: { runId, action: "finish" } }],
             thread,
           );
-          await call("plan", plan);
-          results.started = leadText(await call("worker_start", start));
           for (let i = 0; i < 30; i++) {
             const waited = JSON.parse(leadText(await call("wait", { seconds: "5", worker: "sky" })));
             if (waited.status.workers[0]?.state !== "running") break;
@@ -13064,6 +13066,14 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
     assert.doesNotMatch(asked, /victory=yes/, asked);
     assert.match(asked, /claims nothing/);
     assert.match(wrapUpPrompt(brief as never), /victory=yes/, "the clock's wrap-up still may claim the goal");
+
+    // The open Loop: a finish after the person's ask closes at once, with no reviewer.
+    const { openClosing } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
+    const open = (wrapCause: string) =>
+      openClosing({ wrapping: true, wrapCause, idleAsk: false, minutesLeft: 20 } as never);
+    assert.doesNotMatch(open("finish"), /reviewer needs/, open("finish"));
+    assert.match(open("finish"), /no reviewer/);
+    assert.match(open("deadline"), /a reviewer needs that long to check your claim/);
   });
 
   it("FA5. a single session holds no wrap-up: it has no round to end, so the wrap-up starts once no loop worker runs, and finish stops it", async () => {
@@ -13087,6 +13097,7 @@ describe("the user's ask to finish a running build (director/wrap-up.ts)", () =>
       if (turn === 1) {
         const answer = String(await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" }));
         assert.match(answer, /survey \(one session: finish stops it\)/, answer);
+        assert.match(answer, /when this turn ends the studio starts the wrap-up/, "no round to wait for");
       }
       if (turn === 2) loopRun.state.finished = true;
       return { ok: true, sessionId: "lead-1" };
@@ -13138,6 +13149,8 @@ describe("a run whose every role was set to think at max effort", () => {
     const lower = { ...one, roles: { ...one.roles, efforts: { planner: "low", builder: "low", judge: "low" } } };
     assert.equal(leadEngine({ run: lower } as never).effort, "low");
     assert.equal(leadEngine({ run: { engine: "claude-code" } } as never).effort, "high", "none chosen: high");
+    const buildersOnly = { engine: "claude-code", roles: { efforts: { builder: "medium" } } };
+    assert.equal(leadEngine({ run: buildersOnly } as never).effort, "medium", "no main agent's choice: the builders'");
   });
 });
 
@@ -13442,25 +13455,48 @@ describe("defects a part could not have made", () => {
     assert.ok(ids(true).includes("hud-coverage") && ids(true).includes("hud-overlap"));
   });
 
-  it("FD4. a restart of the part that draws the HUD draws it too, started with critic=screen or not; another part does not while an owner runs", async () => {
+  it("FD4. a restart of the part that draws the HUD draws it too, started with critic=screen or not; the entry's owner does only while no part of the run owns the screen", async () => {
     const { drawsTheHud } = await import("../../src/harness-seed/loop/director/hud-owner.ts");
-    const hud = { id: "hud", spec: { id: "hud", ownsScreen: true } };
-    const world = { id: "world", spec: { id: "world" } };
-    const specs = [hud.spec, world.spec];
+    const hud = { id: "hud", ownsScreen: true };
+    const world = { id: "world" };
     const part = (over: Record<string, unknown>) => ({ critic: null, ownsMain: false, replaces: null, ...over });
+    assert.equal(drawsTheHud(part({ replaces: "hud" }) as never, [hud, world]), true, "the owner's restart");
+    assert.equal(drawsTheHud(part({ critic: "screen" }) as never, [hud, world]), true);
     assert.equal(
-      drawsTheHud(part({ replaces: "hud" }) as never, { running: [world], specs }),
-      true,
-      "the owner's restart",
-    );
-    assert.equal(drawsTheHud(part({ critic: "screen" }) as never, { running: [hud], specs }), true);
-    assert.equal(
-      drawsTheHud(part({ ownsMain: true }) as never, { running: [hud], specs }),
+      drawsTheHud(part({ ownsMain: true }) as never, [hud, world]),
       false,
-      "the screen is hud's",
+      "the screen is hud's, finished or not",
     );
-    assert.equal(drawsTheHud(part({ ownsMain: true }) as never, { running: [world], specs }), true, "no owner runs");
-    assert.equal(drawsTheHud(part({ replaces: "world" }) as never, { running: [], specs }), false);
+    assert.equal(drawsTheHud(part({ ownsMain: true }) as never, [world]), true, "no part owns the screen");
+    assert.equal(drawsTheHud(part({ replaces: "world" }) as never, [hud, world]), false);
+  });
+
+  it("FD5. the lead's judge reads a part that does not own the entry as its own rounds do, on either side of a comparison; the integration answers for its cameras", async () => {
+    const { fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
+    const loopRun = fakeLoopRun(fakeHost());
+    const parts = new Map([
+      ["sound", { id: "sound", title: "Sound", ownsMain: false, state: "done", worktree: "/w/sound" }],
+      ["world", { id: "world", title: "World", ownsMain: false, state: "done", worktree: "/w/world" }],
+      ["shell", { id: "shell", title: "Shell", ownsMain: true, state: "done", worktree: "/w/shell" }],
+    ]);
+    loopRun.resolveRoot = (key: string) =>
+      key === "integration"
+        ? { root: loopRun.integrationWorktree, label: "integration" }
+        : { root: `/w/${key}`, label: key, worker: parts.get(key) };
+    loopRun.withLease = async (_lease: string, fn: (handle: string | null) => unknown) => fn(null);
+    const asked = new Map<string, unknown>();
+    loopRun.evidenceOf = async (root: string, options: Record<string, unknown>) => {
+      asked.set(root, options.camerasOwned);
+      return { ok: true, problems: [], warnings: [], consoleErrors: [], shots: [], motion: [] };
+    };
+    await loopRun.judge({ target: "sound", against: "world" });
+    await loopRun.judge({ target: "shell", against: "integration" });
+    assert.deepEqual(Object.fromEntries(asked), {
+      "/w/sound": false,
+      "/w/world": false,
+      "/w/shell": true,
+      [loopRun.integrationWorktree]: true,
+    });
   });
 
   it("FD3. a part that does not own the entry is not failed for the camera wiring: only the entry's owner and the integration own it", async () => {
