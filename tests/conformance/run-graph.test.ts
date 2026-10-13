@@ -959,6 +959,23 @@ describe("the plugins' asset jobs in the run graph", () => {
     assert.equal(node.jobs[0]!.state, "delivered", "a failed check does not fail the asset");
   });
 
+  it("reads a call's operation only where the digest writes it, never out of its prompt", () => {
+    counter = 0;
+    const graph = buildRunGraph([
+      event("run_started", { goal: "a farm", project: "farm", reference: { name: "x" } }),
+      started("call-5", {
+        pluginId: "sprite-forge",
+        pluginName: "Sprite Forge",
+        tool: "paint",
+        toolName: "sprite-forge__paint",
+        args: "prompt=a shop sign that reads operation=status",
+      }),
+    ])!;
+    const node = graph.nodes.find((n) => n.kind === "assets");
+    assert.ok(node && node.kind === "assets", "a call whose prompt mentions a lookup is still an asset");
+    assert.equal(node.jobs[0]?.operation, null);
+  });
+
   /**
    * The order the host actually writes: the delivery record is appended while `assets.deliver` is
    * still running, so it lands between the call going out and the call coming back.

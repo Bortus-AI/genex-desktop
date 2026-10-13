@@ -574,7 +574,7 @@ export class StudioCore {
     this.#selfEditGate = new SelfEditGateService(this, this.#x);
     this.#pluginTools = new PluginToolService(this, this.#x);
     this.#conversation = new ConversationService(this, this.#x);
-    this.#assets = new AssetService(this, undefined, options.assetFolders?.now);
+    this.#assets = new AssetService(this, undefined, options.assetFolders?.now, this.#x.assetCalls);
     this.#threads = new GameThreadService(this);
     this.#gameFiles = new GameFileService(this);
     this.#rewind = new ChatRewindService(this, this.#x);
