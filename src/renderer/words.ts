@@ -2037,7 +2037,10 @@ export function judgeRoundLine(round: CustomPayload<typeof CustomEvent.RunIterat
 /** The context panel's Compact now (`ui/ComposerLimits.tsx`). */
 export const COMPACT_WORDS = {
   caption: "Summarize the chat to free up context.",
-  action: "Compact now",
+  /** After the context reading: Auto is the only policy. */
+  automatic: "Compacts automatically",
+  /** The context panel's button, beside the reading; its tooltip is `caption`. */
+  action: "Compact",
   running: "Compacting…",
   /** `/compact` while a turn or a build runs: it waits for it, so it is offered but not taken. */
   waits: "After the current work finishes",
@@ -3416,11 +3419,10 @@ export const GENEX_WORDS = {
       live: "Go live",
     },
   },
-  /** The usage panel's Genex block: this game's spend, and the balance every game shares. */
+  /** The usage panel's Genex block: the balance every game shares, and this game's spend under it. */
   usage: {
     title: "Genex credits",
-    thisGame: "Used by this game",
-    left: "Left for all games",
+    thisGame: "Used in this game",
     unlimited: "Unlimited",
   },
   /** The open game's generations that wait for the person's review. */
