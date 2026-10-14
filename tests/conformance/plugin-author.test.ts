@@ -1,5 +1,5 @@
 /**
- * Writing a Genex plugin for an engine Genex lacks: Genex Tools carries the plugin-author skill, whose
+ * Writing a Genex plugin for an engine Genex lacks: the Genex plugin carries the plugin-author skill, whose
  * example is a complete plugin the agent writes into the project; `plugin_check` checks such a folder
  * in place and installs nothing; `plugins_find`'s write-a-plugin answer names the guide. Only the
  * person loads a plugin and turns it on: the agent is never given a way to.
@@ -36,7 +36,7 @@ import { closeBeforeCleanup, tmpDir } from "../helpers/tmp.ts";
 
 /** The fixture engine every delegation here runs on. */
 const ENGINE = "claude-code";
-/** Genex Tools as it ships. */
+/** The Genex plugin as it ships. */
 const GENEX_MANIFEST = validateManifest(
   JSON.parse(readFileSync(new URL("../../src/plugins/genex/plugin.json", import.meta.url), "utf8")),
 );
@@ -102,7 +102,7 @@ async function writeEditorPort(dir: string, port: number): Promise<void> {
   await writeFile(path.join(dir, ".sketch", "editor.json"), JSON.stringify({ port }));
 }
 
-/** A registry over the bundled plugins as a build ships them (Genex Tools on), in a temp folder. */
+/** A registry over the bundled plugins as a build ships them (the Genex plugin on), in a temp folder. */
 async function bundledRegistry(): Promise<PluginRegistry> {
   const resources = await sharedResources();
   const root = await tmpDir("studio-plugin-author-");
@@ -202,7 +202,7 @@ describe("the plugin-author skill", () => {
     registry = await bundledRegistry();
   });
 
-  it("Genex Tools gives every project the plugin-author skill", async () => {
+  it("the Genex plugin gives every project the plugin-author skill", async () => {
     const skill = GENEX_MANIFEST.skills.find((s) => s.name === PLUGIN_AUTHOR.skill);
     assert.ok(skill && isFileSkill(skill), "a skill read on demand");
     assert.deepEqual(skill.references, [...PLUGIN_AUTHOR.references]);
@@ -454,7 +454,7 @@ describe("plugins_find, the harness's", () => {
       executionPolicy: { allowedProjectRoot: root, runBackgroundImprovement: false },
     });
     try {
-      assert.equal(lite.core.plugins.enabled(GENEX_PLUGIN_ID), true, "Genex Tools is on");
+      assert.equal(lite.core.plugins.enabled(GENEX_PLUGIN_ID), true, "the Genex plugin is on");
       // A kind no bundled plugin knows (Godot's now has one).
       const answer = await lite.api()[HostMethod.PluginsFind]({ fact: "unity-project" });
       assert.equal(answer.next, FindNext.WritePlugin);
@@ -470,7 +470,7 @@ describe("plugins_find, the harness's", () => {
 describe("plugins_find, when nothing fits", () => {
   const listed = (enabled: boolean, removed = false) => [{ manifest: GENEX_MANIFEST, enabled, removed }];
 
-  it("plugins_find's write-a-plugin answer names the guide, and says how to get it when Genex Tools is off", () => {
+  it("plugins_find's write-a-plugin answer names the guide, and says how to get it when the Genex plugin is off", () => {
     const on = findPlugins(listed(true), [], { fact: "godot-project" }, true);
     assert.equal(on.next, FindNext.WritePlugin);
     assert.match(on.note, /genex__skill/);
@@ -489,7 +489,7 @@ describe("plugins_find, when nothing fits", () => {
     ] as const) {
       const off = findPlugins(installed, [], { fact: "godot-project" });
       assert.equal(off.next, FindNext.WritePlugin, label);
-      assert.match(off.note, /comes with Genex Tools, which is off/, label);
+      assert.match(off.note, /comes with the Genex plugin, which is off/, label);
       assert.match(off.note, new RegExp(`plugins_suggest[^.]*${GENEX_PLUGIN_ID}`), label);
       assert.doesNotMatch(off.note, /genex__skill/, `${label}: no reader it can't call`);
     }

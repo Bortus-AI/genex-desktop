@@ -1,6 +1,7 @@
 /** The parts every plugin's page shares: its More menu, settings form, open panel, skills and what it is. */
 import type { JSX } from "react";
 import { useState } from "react";
+import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
 import { PluginSourceKind, type PluginInfo, type PluginManifest } from "../../../shared/plugins.ts";
 import { installPluginUpdate } from "../../state/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
@@ -9,7 +10,7 @@ import { Icon } from "../../ui/icons.tsx";
 import { IconButton } from "../../ui/kit.tsx";
 import { PLUGINS_WORDS, SKILLS_WORDS, consentToolWords } from "../../words.ts";
 import { PluginPanelHost } from "../PluginPanelHost.tsx";
-import { capabilityLine, foldersLine, localAccessNote, sourceWords } from "./labels.ts";
+import { capabilityLine, foldersLine, localAccessNote, shownName, sourceWords } from "./labels.ts";
 
 const PAGE = PLUGINS_WORDS.page;
 import type { OpenPanel, PluginsPage } from "./page.ts";
@@ -30,10 +31,16 @@ function settingValue(setting: Setting, input: HTMLInputElement): boolean | numb
   return input.value;
 }
 
-/** The More menu beside a plugin's title: watch a local plugin's folder, or remove the plugin. */
-export function MoreActions({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element {
+/**
+ * The More menu beside a plugin's title: watch a local plugin's folder, or remove the plugin. Genex
+ * holds the app's account, so it is turned off, never removed (the registry refuses): it has none.
+ */
+export function MoreActions({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element | null {
   const { manifest } = detail;
   const watchWords = detail.watching ? "Stop watching folder" : "Watch folder";
+  const watchable = detail.enabled && detail.origin?.kind === PluginSourceKind.Local;
+  const removable = manifest.id !== GENEX_PLUGIN_ID;
+  if (!watchable && !removable) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -42,7 +49,7 @@ export function MoreActions({ detail, page }: { detail: PluginInfo; page: Plugin
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {detail.enabled && detail.origin?.kind === PluginSourceKind.Local && (
+        {watchable && (
           <DropdownMenuItem
             aria-label={`${watchWords} for ${manifest.name}`}
             onSelect={() => void page.act(() => window.studio.pluginWatch(manifest.id, !detail.watching))}
@@ -50,16 +57,18 @@ export function MoreActions({ detail, page }: { detail: PluginInfo; page: Plugin
             {watchWords}
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem
-          onSelect={() =>
-            void page.act(async () => {
-              page.setSelected(null);
-              await window.studio.pluginRemove(manifest.id);
-            })
-          }
-        >
-          Remove plugin
-        </DropdownMenuItem>
+        {removable && (
+          <DropdownMenuItem
+            onSelect={() =>
+              void page.act(async () => {
+                page.setSelected(null);
+                await window.studio.pluginRemove(manifest.id);
+              })
+            }
+          >
+            Remove plugin
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -153,7 +162,7 @@ export function PluginSkills({
         </p>
       )}
       <div className="extension-skills-line">
-        <p>{PAGE.skillsLine(manifest.name)}</p>
+        <p>{PAGE.skillsLine(shownName(detail))}</p>
         <Button variant="ghost" aria-expanded={open} onClick={() => setOpen((shown) => !shown)}>
           {open ? PAGE.showFewer : PAGE.showAll}
           <Icon name="chevron-down" size={14} className={open ? "rotate-180" : ""} />

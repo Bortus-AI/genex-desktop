@@ -8,7 +8,7 @@ import type { DesktopApp, DesktopDriver } from "../../substrate/desktop-driver.t
 import { type DesktopQuestion, type DesktopTools, type DesktopToolsDeps, desktopTools } from "./desktop-tools.ts";
 
 /** What the model reads when no driver is installed. */
-const MESSAGE = { noDriver: "no desktop driver (cua-driver) is installed" } as const;
+const MESSAGE = { noDriver: "no cua-driver is bundled or installed" } as const;
 
 /** How computer control is reached on this machine. */
 export interface DesktopControlOptions {
@@ -22,6 +22,8 @@ export interface DesktopControlOptions {
   vm?: boolean;
   /** Told how many sessions hold the computer, whenever it changes: the stop shortcut lives while any do. */
   onActive?: (count: number) => void;
+  /** Stop what runs the driver once no session holds it: the app's own embedded daemon. */
+  shutdown?: () => Promise<void>;
 }
 
 /** One session's desktop: where its frames go, how its person is asked, and what its screen shows. */
@@ -76,6 +78,7 @@ export function desktopControl(options: DesktopControlOptions) {
       running.clear();
       options.onActive?.(0);
       await Promise.all(all.map((tools) => tools.release().catch(() => {})));
+      await options.shutdown?.().catch(() => {});
     },
     /** Look for the driver again (after the person installs it). */
     rescan: (): void => {

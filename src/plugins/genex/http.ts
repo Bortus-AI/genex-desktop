@@ -55,6 +55,21 @@ export function tagGenexLink(value: string): string {
   return url.href;
 }
 
+/**
+ * An address the app may open in the person's browser for Genex (a sign-in to finish, the terms, a
+ * game's page): https only, tagged as `tagGenexLink` tags it; anything else throws, so nothing opens.
+ */
+export function browserGenexLink(address: string): string {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    throw new Error(`Not an address the browser may open for Genex: ${address}`);
+  }
+  if (url.protocol !== "https:") throw new Error(`Not an address the browser may open for Genex: ${address}`);
+  return tagGenexLink(url.href);
+}
+
 /** A file Studio may download: https on one of Genex's asset hosts. */
 export const isGenexAssetUrl = (url: URL) => url.protocol === "https:" && ASSET_HOSTS.has(url.hostname);
 

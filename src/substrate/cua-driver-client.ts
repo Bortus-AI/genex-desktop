@@ -1,8 +1,9 @@
 /**
  * cua-driver (trycua/cua, MIT) as the studio's desktop driver. The driver speaks MCP over stdio
- * (`cua-driver mcp`); on this Mac it relays to the CuaDriver.app daemon, which holds the
- * Accessibility and Screen Recording grants. A VM is reached the same way, over SSH into the guest
- * (`ssh -T lume@<ip> cua-driver mcp`), so one client drives both.
+ * (`cua-driver mcp`). On this Mac the studio runs its own embedded daemon (`cua-embedded.ts`), so
+ * the Accessibility and Screen Recording grants are the studio's. A VM is reached over SSH into the
+ * guest (`ssh -T lume@<ip> cua-driver mcp`), where the guest's CuaDriver.app holds them; one client
+ * drives both.
  *
  * Every action targets the whole display (`{kind: "desktop"}`) in the foreground: the real pointer
  * and keyboard, the way a person would, because background clicks into a canvas are rerouted and
@@ -47,7 +48,7 @@ const MAX_ELEMENTS = 250;
  * subrole, so a text field labelled as a password is taken for one.
  */
 const PASSWORD_FIELD = /AX(?:Secure)?TextField[^\n]*(?:password|passcode|passwort|mot de passe|contraseña|пароль)/i;
-/** Where the driver's installer puts its command, and where a package manager might. */
+/** Where the driver's installer puts its command, and where a package manager might: a development build's driver. */
 const DRIVER_PLACES = [".local/bin/cua-driver", "/opt/homebrew/bin/cua-driver", "/usr/local/bin/cua-driver"] as const;
 /** A VM's SSH address: a user and a host, nothing a shell or ssh could read as an option. */
 const VM_ADDRESS = /^[a-z_][a-z0-9_-]{0,31}@[A-Za-z0-9.-]{1,253}$/;
@@ -63,8 +64,11 @@ const DESKTOP = { kind: "desktop", display_id: "primary" } as const;
 
 /** What the person reads when the driver cannot be used. */
 const MESSAGE = {
-  permissions:
-    "cua-driver needs Accessibility and Screen Recording: allow CuaDriver in System Settings → Privacy & Security, then try again",
+  permissions: {
+    host: "Genex needs Accessibility and Screen Recording to use this computer: turn Genex on in System Settings → Privacy & Security → Accessibility and → Screen & System Audio Recording, then try again",
+    driver:
+      "cua-driver needs Accessibility and Screen Recording: allow CuaDriver in System Settings → Privacy & Security, then try again",
+  },
   noPicture: "cua-driver answered without a picture of the screen",
   failed: (tool: string, why: string) => `cua-driver ${tool} failed: ${why}`,
 } as const;
@@ -90,16 +94,16 @@ export interface CuaConnection {
   close(): Promise<void>;
 }
 
-/** The command line that starts a driver: this Mac's, or a VM's over SSH. */
+/** The command line that starts a driver: this Mac's, or a VM's over SSH, and what it adds to the environment. */
 export interface CuaCommand {
   command: string;
   args: string[];
+  env?: Record<string, string>;
 }
 
-/** The local driver's command, once found. */
-export function localDriverCommand(binary: string): CuaCommand {
-  return { command: binary, args: ["mcp"] };
-}
+/** Who holds the grants a driver needs: the studio itself (embedded), or the driver's own app (a VM's). */
+export const GrantHolder = { Host: "host", Driver: "driver" } as const;
+export type GrantHolder = (typeof GrantHolder)[keyof typeof GrantHolder];
 
 /** A VM's driver over SSH, when its address is a plain `user@host`; null otherwise. */
 export function vmDriverCommand(address: string): CuaCommand | null {
@@ -107,9 +111,14 @@ export function vmDriverCommand(address: string): CuaCommand | null {
   return { command: "ssh", args: ["-T", "-o", "BatchMode=yes", "--", address, VM_DRIVER_PATH, "mcp"] };
 }
 
-/** The installed driver: the installer's wrapper, or one on a usual path; null when there is none. */
-export async function findCuaDriver(home: string = os.homedir()): Promise<string | null> {
-  for (const place of DRIVER_PLACES) {
+/**
+ * The driver to run: the one bundled with the app, else an installed one (the installer's wrapper,
+ * or one on a usual path); null when there is none.
+ */
+export async function findCuaDriver(options: { bundled?: string; home?: string } = {}): Promise<string | null> {
+  const home = options.home ?? os.homedir();
+  const places = [...(options.bundled ? [options.bundled] : []), ...DRIVER_PLACES];
+  for (const place of places) {
     const full = path.isAbsolute(place) ? place : path.join(home, place);
     const runnable = await access(full, constants.X_OK).then(
       () => true,
@@ -418,7 +427,7 @@ function pngHeight(bytes: Buffer): number | null {
 }
 
 /** The driver's environment: enough to run, nothing of the studio's own (no API key reaches it). */
-function driverEnv(): Record<string, string> {
+export function driverEnv(): Record<string, string> {
   const env: Record<string, string> = {};
   for (const name of ["PATH", "HOME", "TMPDIR", "LANG", "USER", "LOGNAME"]) {
     const value = process.env[name];
@@ -452,7 +461,12 @@ async function openConnection(command: CuaCommand): Promise<CuaConnection> {
     }) => { stderr: NodeJS.ReadableStream | null };
   };
   const client = new Client({ name: "genex-studio", version: "1" });
-  const transport = new StdioClientTransport({ ...command, env: driverEnv(), stderr: "pipe" });
+  const transport = new StdioClientTransport({
+    command: command.command,
+    args: command.args,
+    env: { ...driverEnv(), ...command.env },
+    stderr: "pipe",
+  });
   // The driver says why it could not start on stderr (its daemon never came up, a grant is missing).
   let said = "";
   transport.stderr?.on("data", (chunk: Buffer) => {
@@ -468,8 +482,9 @@ async function openConnection(command: CuaCommand): Promise<CuaConnection> {
 }
 
 /**
- * Whether the driver holds what it needs to see and move: both grants. Never asks macOS to prompt:
- * the standalone daemon refuses a prompt from an untrusted host; the person grants CuaDriver itself.
+ * Whether the driver holds what it needs to see and move: both grants. Never asks the driver to
+ * prompt: an embedded driver never does (the studio asks macOS itself), and a VM's standalone
+ * daemon refuses a prompt from an untrusted host.
  */
 async function permitted(connection: CuaConnection): Promise<Grants> {
   const answer = await connection.call("check_permissions", { prompt: false });
@@ -500,16 +515,24 @@ export async function secureInputActive(): Promise<boolean> {
 }
 
 /**
- * Connect to a driver and check it can see and move. `cua-driver mcp` starts its own daemon and
- * waits for it; when it cannot, its own words are the error. Throws with the sentence the person
- * reads when it cannot be used. On this Mac, a focused password field is also read from macOS.
+ * Connect to a driver and check it can see and move. `command` is read again after a restart, since
+ * a restarted embedded daemon listens on a new socket. A driver that started before the grants were
+ * given keeps macOS's old answer, so one without them is restarted once; still without them,
+ * `askForGrants` asks macOS for them (the studio's own prompt or System Settings) and the sentence
+ * the person reads is the error. On this Mac, a focused password field is also read from macOS.
  */
 export async function connectCuaDriver(
-  command: CuaCommand,
-  options: { local: boolean; restart?: () => Promise<void> },
+  command: CuaCommand | (() => Promise<CuaCommand>),
+  options: {
+    local: boolean;
+    holder?: GrantHolder;
+    restart?: () => Promise<void>;
+    askForGrants?: () => Promise<void>;
+  },
 ): Promise<DesktopDriver> {
+  const commandNow = typeof command === "function" ? command : async () => command;
   const attempt = async (): Promise<{ connection: CuaConnection; grants: Grants }> => {
-    const connection = await openConnection(command);
+    const connection = await openConnection(await commandNow());
     const grants = await permitted(connection).catch(async (error: unknown) => {
       await connection.close();
       throw error;
@@ -518,18 +541,13 @@ export async function connectCuaDriver(
     return { connection, grants };
   };
   let opened = await attempt();
-  // Granted after its daemon started: the daemon is restarted once (`cua-driver mcp` starts a fresh one).
-  if (opened.grants === Grants.Pending && options.restart) {
+  if (opened.grants !== Grants.Held && options.restart) {
     await options.restart().catch(() => {});
     opened = await attempt();
   }
-  if (opened.grants !== Grants.Held) throw new Error(MESSAGE.permissions);
+  if (opened.grants !== Grants.Held) {
+    await options.askForGrants?.().catch(() => {});
+    throw new Error(MESSAGE.permissions[options.holder ?? GrantHolder.Driver]);
+  }
   return cuaDriver(opened.connection, options.local ? { secureInput: secureInputActive, mac: macApps() } : {});
-}
-
-/** Stop this Mac's driver daemon, so the next `cua-driver mcp` starts one that sees the person's grants. */
-export function restartLocalDriver(binary: string): () => Promise<void> {
-  return async () => {
-    await promisify(execFile)(binary, ["stop"], { timeout: CONNECT_TIMEOUT_MS });
-  };
 }

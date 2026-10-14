@@ -145,7 +145,6 @@ import {
   PUBLISH_ERROR_TAIL_CHARS,
   PublishLinkTarget,
   shareLink,
-  signInRecorded,
   stagingLink,
   stoppedBeforePromotion,
   uploadMissing,
@@ -881,9 +880,8 @@ export class GenexTools {
     return null;
   }
   /**
-   * Test the draft an upload just put online: Genex serves this upload's revision, every exported
-   * file, and records the sign-in support it shipped. Tried again with backoff until the test time
-   * is up; a pass is recorded as the ready draft.
+   * Test the draft an upload just put online: Genex serves this upload's revision and every exported
+   * file. Tried again with backoff until the test time is up; a pass is recorded as the ready draft.
    */
   async #draftPasses(run: PublishRun, out: string): Promise<boolean> {
     const { job } = run;
@@ -1020,8 +1018,9 @@ export class GenexTools {
     await this.#savePublishState(project, state);
   }
   /**
-   * Genex serves this upload's revision and every exported file, and does not report sign-in
-   * support other than the build shipped: the draft passes. Returns it as the ready draft, unstamped.
+   * Genex serves this upload's revision and every exported file: the draft passes. Returns it as the
+   * ready draft, unstamped. Its sign-in support is not read back: Genex keeps a draft's with the draft
+   * and records it on the project only when that build goes public, so the project's is the public build's.
    */
   async #confirmDraft(slug: unknown, job: GenexPublishJob): Promise<Omit<ReadyDraft, "verifiedAt">> {
     const { stagingUrl, deployment, expectedStagingRevision } = job;
@@ -1029,8 +1028,6 @@ export class GenexTools {
     const remote = await this.#fetch(GenexRoute.projectBySlug(typeof slug === "string" ? slug : ""));
     const revision = remote?.project?.stagingCommitSha ?? remote?.project?.stagingCommit;
     if (revision !== expectedStagingRevision) throw new Error(PUBLISH_MESSAGE.RevisionMismatch);
-    const signIn = signInRecorded(job.embedSdkVersion, remote?.project);
-    if (!signIn.ok) throw new Error(PUBLISH_MESSAGE.SignInNotRecorded(job.embedSdkVersion ?? "none", signIn.reported));
     await verifyDeployment(stagingUrl, deployment);
     return { revision, url: stagingUrl, digest: deployment.digest };
   }

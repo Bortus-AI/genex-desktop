@@ -136,6 +136,7 @@ import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
+import { GENEX_ACCOUNT_ACTIONS } from "../shared/genex.ts";
 import { GameThreadService } from "./core/game-threads.ts";
 import {
   type CoreInternals,
@@ -1026,6 +1027,8 @@ export class StudioCore {
     };
     // The Unreal Editor bridge and Godot are early integrations: bundled, and off until the user turns them on.
     this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, godot: false };
+    // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
+    this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {
       this.emit(UiEvent.PluginsChanged, c);
       this.#connections.changed();

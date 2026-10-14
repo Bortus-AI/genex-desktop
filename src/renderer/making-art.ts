@@ -5,6 +5,8 @@
  * fully built and has no beam. Pure: `makingFrame` works out the frame, `paintMaking` draws it.
  */
 import {
+  accountMark,
+  multiplayerMark,
   bodyScan,
   cobbles,
   imageMark,
@@ -24,6 +26,10 @@ export const MakingDrawing = {
   Texture: "texture",
   Video: "video",
   Sound: "sound",
+  /** Not an asset: the Genex account's card, where Settings and Publish ask the person to sign in. */
+  Account: "account",
+  /** Not an asset: a room with two players, where Multiplayer asks for the Genex plugin. */
+  Multiplayer: "multiplayer",
 } as const;
 export type MakingDrawing = (typeof MakingDrawing)[keyof typeof MakingDrawing];
 
@@ -72,6 +78,8 @@ const scan = once(bodyScan);
 const pot = once(teapot);
 const image = once(imageMark);
 const video = once(videoMark);
+const account = once(accountMark);
+const multiplayer = once(multiplayerMark);
 
 const SUBJECTS: Record<MakingDrawing, Subject> = {
   [MakingDrawing.Character]: { solid: scan, span: [0, 6], px: 54, pivot: 3, sway: [0.22, 0.32], pitch: 0.16 },
@@ -80,6 +88,8 @@ const SUBJECTS: Record<MakingDrawing, Subject> = {
   [MakingDrawing.Image]: { mark: image, nudge: 0 },
   [MakingDrawing.Video]: { mark: video, nudge: 0 },
   [MakingDrawing.Sound]: { mark: soundMark, nudge: 0.6 },
+  [MakingDrawing.Account]: { mark: account, nudge: 0 },
+  [MakingDrawing.Multiplayer]: { mark: multiplayer, nudge: 0 },
 };
 
 interface Camera {

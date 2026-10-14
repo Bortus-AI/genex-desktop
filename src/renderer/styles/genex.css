@@ -797,6 +797,57 @@
   color: var(--ink);
   font-size: 14px;
 }
+/* Multiplayer's setup: what Genex brings, as small chips in one row under the drawing. */
+.genex-setup-points {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+.genex-setup-points li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.genex-setup-points .gi {
+  color: var(--ink-3);
+}
+/* Publish with no account: the account card, why, and Sign in in browser, as Settings shows them. */
+.genex-publish-sign-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-block: 4px 6px;
+  text-align: center;
+}
+.genex-publish-sign-in > p {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: balance;
+}
+.genex-publish-sign-in-art {
+  width: 200px;
+  height: 140px;
+  max-width: 100%;
+}
+.genex-publish-sign-in-button {
+  height: 36px;
+  padding-inline: 18px;
+}
 /* An account step: its line or sign-in code, then any quiet press under it. */
 .genex-publish-step {
   display: grid;
@@ -888,4 +939,186 @@
   .genex-publish-bar span[data-state="current"] {
     background: var(--ink-3);
   }
+}
+
+/* ── The Genex plugin page's tabs: Tools and Credits, in the Play / Create switch's colours (play.css) ── */
+.genex-tabs {
+  display: flex;
+  width: fit-content;
+  margin-block: 20px 4px;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+}
+.genex-tab {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding-inline: 13px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 13px / 1 var(--font-family-mono);
+  cursor: pointer;
+}
+.genex-tab:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: 1px;
+}
+
+/* ── The Credits tab: the balance band, what credits pay for, recent spending ── */
+.credits-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  margin-top: 16px;
+}
+.credits-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, var(--credits-card), transparent);
+  box-shadow: inset 0 0 0 1px var(--credits-card-edge);
+}
+.credits-band-copy {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.credits-band-amount {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.credits-band-number {
+  color: var(--ink);
+  font: 500 34px / 1 var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+/* "Unlimited credits" is words, not a balance: it reads at a heading's size. */
+.credits-band-number[data-unlimited] {
+  font-size: 22px;
+}
+.credits-band-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+.credits-band-actions > .people-button {
+  height: 34px;
+  padding-inline: 14px;
+}
+.credits-invite-bonus {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.credits-note {
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+}
+/* Two columns on one set of rows (subgrid): a heading, a line under it, then the list, so both lists
+   start level however long either line is. */
+.credits-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 6px 30px;
+  min-width: 0;
+}
+@media (max-width: 860px) {
+  .credits-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .credits-column + .credits-column {
+    margin-top: 24px;
+  }
+}
+.credits-column {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  min-width: 0;
+}
+.credits-heading {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+.credits-subtitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+}
+.credits-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.credits-rows {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.credits-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.credits-row-mark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--play-blue) 10%, transparent);
+  color: var(--stats-line);
+}
+.credits-row-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+.credits-row-sub {
+  overflow: hidden;
+  color: var(--ink-3);
+  font: 11px / 14px var(--font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.credits-row-amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-3);
+  font: 12px / 1 var(--font-family-mono);
+}
+.credits-row-amount b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+}
+.credits-row-amount[data-refund] b {
+  color: var(--stats-up);
+}
+.credits-cent {
+  margin-top: 10px;
 }

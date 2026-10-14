@@ -263,6 +263,42 @@ const FIXTURE_SAFE = [
   "studio:plugins.watch",
   // A local plugin's grants live in the profile's install record; no dialog, no socket.
   "studio:plugins.forget-allowed",
+  // Play: a fixture launch answers the catalog from its own fixture data and plays a local stand-in
+  // page (`dev/fixture-play.ts`), so no socket opens; Remix inside the viewer is not a channel.
+  "studio:play.feed",
+  "studio:play.shelves",
+  "studio:play.search",
+  // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
+  // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
+  "studio:play.remix",
+  "studio:play.online",
+  "studio:play.open",
+  "studio:play.close",
+  // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
+  "studio:play.control",
+  // Play's people: a fixture launch answers from its own people (`dev/fixture-play.ts`), signed out
+  // unless the launch asks for its fixture account, and an avatar "upload" stays in memory.
+  "studio:play.me",
+  "studio:play.rename",
+  "studio:play.avatar",
+  "studio:play.profile",
+  "studio:play.friends",
+  "studio:play.friend",
+  "studio:play.people",
+  "studio:play.visibility",
+  "studio:play.avatarStyle",
+  "studio:play.avatarVariant",
+  // A creator's stats, Top creators and the Credits tab: a fixture launch answers from its own
+  // made-up numbers, signed out unless it asks for its fixture account.
+  "studio:play.stats",
+  "studio:play.creators",
+  "studio:play.credits",
+  // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
+  // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
+  "studio:genex-account.read",
+  "studio:genex-account.sign-in",
+  "studio:genex-account.cancel",
+  "studio:genex-account.sign-out",
   // Connectors write a file inside the profile; only the trust step is native.
   "studio:mcp.list",
   "studio:mcp.save",

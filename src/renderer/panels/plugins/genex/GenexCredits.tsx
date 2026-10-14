@@ -7,6 +7,7 @@ import type { JSX } from "react";
 import { useState } from "react";
 import { GENEX_PLUGIN_ID, GenexAction, type GenexStatus } from "../../../../shared/genex.ts";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
+import { CreditsShard } from "../../../play/CreditsShard.tsx";
 import { GenexMark } from "../../../ui/GenexLogo.tsx";
 import { GENEX_WORDS } from "../../../words.ts";
 import { CreditsKind, creditsOf, isGenexStatus, spentOf } from "./genex-view.ts";
@@ -53,11 +54,17 @@ export function GenexCredits({
           <GenexMark />
           <span className="truncate">{WORDS.title}</span>
         </dt>
-        <dd>{balance}</dd>
+        <dd>
+          {left !== null && <CreditsShard size={12} />}
+          {balance}
+        </dd>
         {spent !== null && (
           <>
             <dt className="text-ink-3">{WORDS.thisGame}</dt>
-            <dd>{NUMBER.format(spent)}</dd>
+            <dd>
+              <CreditsShard size={12} />
+              {NUMBER.format(spent)}
+            </dd>
           </>
         )}
       </dl>

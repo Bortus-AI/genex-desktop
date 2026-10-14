@@ -7,6 +7,7 @@
 import type { StudioApi } from "../../src/shared/studio-api.ts";
 import { ShaderFailure } from "../../src/shared/backdrop-shader.ts";
 import { CliInstallPhase } from "../../src/shared/cli-install.ts";
+import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 
 export type StudioMethod = keyof StudioApi;
 export interface StudioCall<M extends StudioMethod = StudioMethod> {
@@ -145,6 +146,31 @@ const METHODS = [
   "onCodexLogin",
   "subscriptionForgetStudioLogin",
   "openUrl",
+  "playFeed",
+  "playShelves",
+  "playSearch",
+  "playRemix",
+  "playOnline",
+  "playOpen",
+  "playClose",
+  "playControl",
+  "playMe",
+  "playRename",
+  "playAvatar",
+  "playProfile",
+  "playFriends",
+  "playFriend",
+  "playPeople",
+  "playVisibility",
+  "playAvatarStyle",
+  "playAvatarVariant",
+  "playStats",
+  "playCreators",
+  "playCredits",
+  "genexAccount",
+  "genexSignIn",
+  "genexCancelSignIn",
+  "genexSignOut",
   "notify",
   "setBadge",
   "rollback",
@@ -308,6 +334,21 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pickGameLocation: () => null,
     pluginChooseFile: () => null,
     nameGame: () => ({ title: "Untitled game" }),
+    playFeed: () => ({ games: [], nextCursor: null }),
+    playShelves: () => ({
+      counts: { games: null, tools: null, assets: null },
+      categories: ["featured", "tools", "assets"],
+    }),
+    playOnline: () => ({}),
+    playSearch: () => [],
+    playMe: () => null,
+    genexAccount: () => ({ status: GenexAccountStatus.SignedOut }),
+    genexSignIn: () => ({ status: GenexAccountStatus.SigningIn }),
+    genexCancelSignIn: () => ({ status: GenexAccountStatus.SignedOut }),
+    genexSignOut: () => ({ status: GenexAccountStatus.SignedOut }),
+    playPeople: () => ({ people: [], unavailable: false }),
+    playStats: () => null,
+    playCreators: () => null,
     makeBackdrop: () => ({ ok: false, failure: ShaderFailure.NoModel }),
   };
 }

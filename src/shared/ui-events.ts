@@ -16,6 +16,7 @@ import type { McpChange } from "./mcp.ts";
 import type { CliInstallJob } from "./cli-install.ts";
 import type { ModelInstallJob } from "./model-install.ts";
 import type { ToolPermissionState } from "./permissions.ts";
+import type { PlayViewerEvent } from "./play.ts";
 import type { PluginChange, PluginConsentEvent } from "./plugins.ts";
 import type { BootNotice, HarnessState } from "./protocol.ts";
 import type { RunSummary } from "./run-summary.ts";
@@ -156,6 +157,10 @@ export interface UiEventMap {
   /** ⌥⌘M pressed while the Live game had the keyboard: the renderer owns the switch and flips it. */
   "preview.sound.toggle": { at: number };
 
+  // — play —
+  /** Play's game viewer loaded, played, failed or closed (`main/play/viewer.ts`). */
+  "play.viewer": PlayViewerEvent;
+
   // — plugins and connectors —
   "plugins.changed": PluginChange;
   /** Something a plugin reported about itself; `event` is the plugin's own value, unchecked. */
@@ -279,6 +284,7 @@ export const UiEvent = {
   PreviewFrame: "preview.frame",
   LiveBehind: "live.behind",
   PreviewSoundToggle: "preview.sound.toggle",
+  PlayViewer: "play.viewer",
   PluginsChanged: "plugins.changed",
   PluginEvent: "plugin.event",
   PluginConsent: "plugin.consent",

@@ -650,7 +650,7 @@ describe("the computer tool's host", () => {
     const project = await rig.core.games.scaffold("play-smoke", { title: "play" });
     const api = rig.core.api() as unknown as Record<string, (p: unknown) => Promise<unknown>>;
     const names: string[][] = [];
-    let readOnly: boolean[] = [];
+    const readOnly: boolean[] = [];
     fakeEngine(rig, "codex", async (request) => {
       names.push((request.liveTools ?? []).map((t) => t.name));
       readOnly.push(request.readOnly === true);

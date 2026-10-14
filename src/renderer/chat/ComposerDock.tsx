@@ -12,7 +12,7 @@ import { AnimateHeight } from "../ui/animate-height.tsx";
 import { Presence } from "../ui/Presence.tsx";
 import { SignInCard } from "../ui/SignInCard.tsx";
 import { CHAT_WORDS, CONSENT_CHOICE_WORDS, consentNeededWords } from "../words.ts";
-import { EntryKind } from "../chat-entries.ts";
+import type { EntryKind } from "../chat-entries.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
 import { type ChatChoice, ChatQuestion } from "./ChatQuestion.tsx";
 import { ExportReview } from "./ExportReview.tsx";
