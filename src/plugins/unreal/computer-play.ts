@@ -96,6 +96,7 @@ const MESSAGE = {
   busy: "Unreal is playing a build for the Loop right now; try again once it has finished.",
   noEditor: "This game's Unreal Editor is not open or does not answer; open it (the Unreal button) and try again.",
   notPlaying: "No play is running in Unreal (it ended, or the person stopped it); look again to start one.",
+  personPlaying: "The person is playing in Unreal; a fresh play waits until they stop.",
   unknownKey: (keys: string[]) => `Unreal has no key for ${keys.join(", ")}.`,
 } as const;
 
@@ -116,6 +117,10 @@ const numberArg = (value: unknown): number => (typeof value === "number" && Numb
 
 /** The game's folder name the call is for, as the queue names a game. */
 type GameOf = (context: PluginContext) => string;
+
+/** Why a fresh play could not start over the one running. */
+const RestartRefusal = { PersonPlaying: "person-playing" } as const;
+type RestartRefusal = (typeof RestartRefusal)[keyof typeof RestartRefusal];
 
 /** What a session owes when it ends: the throttle back, and whether to stop the play it started. */
 interface PlaySession {
@@ -142,11 +147,14 @@ export function createComputerPlay(deps: {
     return { game, queueDeps, port: queueDeps.editor(game) };
   };
 
-  const open = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
+  const open = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
     const { game, queueDeps, port } = portOf(storage, context);
     if (deps.queue(storage).busy(game)) return refused(EnginePlayRefusal.Busy, MESSAGE.busy);
     if (!(await port.answering())) return refused(EnginePlayRefusal.NoEditor, MESSAGE.noEditor);
     const key = keyOf(storage, game);
+    const restarted = args.fresh === true ? await endForFresh(storage, game, queueDeps, port) : null;
+    if (restarted === RestartRefusal.PersonPlaying)
+      return refused(EnginePlayRefusal.PersonPlaying, MESSAGE.personPlaying);
     const joined = await playing(port);
     // A session that is already open keeps what it owes; only a new one lifts the throttle.
     const known = sessions.get(key);
@@ -163,6 +171,24 @@ export function createComputerPlay(deps: {
     sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined || agents });
     const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
     return opened;
+  };
+
+  /**
+   * Ends a play left running so a fresh one can start: an agent's (the session's own, or one its mark
+   * claims) is stopped; the person's is never touched. Null when nothing ran or it was stopped.
+   */
+  const endForFresh = async (
+    storage: string,
+    game: string,
+    queueDeps: QueueDeps,
+    port: ReturnType<QueueDeps["editor"]>,
+  ): Promise<RestartRefusal | null> => {
+    if (!(await playing(port))) return null;
+    const ours = sessions.get(keyOf(storage, game))?.started || (await agentPlaying(storage, game, queueDeps.now()));
+    if (!ours) return RestartRefusal.PersonPlaying;
+    await stopPlay(queueDeps, port);
+    await markerOf(storage, game, queueDeps).stopped();
+    return null;
   };
 
   const input = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {

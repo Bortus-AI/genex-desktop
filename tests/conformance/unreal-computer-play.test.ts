@@ -109,6 +109,34 @@ describe("the Unreal plugin's play tools for the computer", () => {
     assert.deepEqual([joined.editor.state.pie, joined.editor.state.paused], [true, false], "the person's play runs on");
   });
 
+  // Live, 2026-10-15: two blind judges began in the guard hall, joining the lead's play mid-level.
+  it("starts a fresh play for a judge: an agent's play left running is ended and started over", async () => {
+    const storage = await tmpDir("computer-play-");
+    const lead = playTools({ storage });
+    await lead.call(EnginePlayTool.Open);
+    const starts = () => lead.tools().filter((tool) => tool === LoopTool.StartPlay).length;
+    // The judge's own tools, with nothing of the lead's session in memory.
+    const judge = createComputerPlay({
+      queueDeps: () => lead.deps,
+      queue: () => createEditorQueue(lead.deps),
+      game: () => GAME,
+    });
+    const opened = await judge.handlers[EnginePlayTool.Open]({ fresh: true }, CONTEXT, storage);
+    assert.deepEqual(opened, { ...ENGINE_PLAY_VIEW, joined: false }, "a new play, not the lead's");
+    assert.equal(starts(), 2, "play started over");
+    assert.ok(lead.tools().includes(LoopTool.StopPlay), "the lead's play ended first");
+    assert.equal(await agentPlaying(storage, GAME, lead.deps.now()), true, "the new play is the agent's");
+  });
+
+  it("never restarts the person's own play for a fresh look: it refuses and leaves it running", async () => {
+    const { call, editor, tools } = playTools({ storage: await tmpDir("computer-play-") });
+    editor.state.pie = true;
+    const answer = (await call(EnginePlayTool.Open, { fresh: true })) as { refused: string };
+    assert.equal(answer.refused, EnginePlayRefusal.PersonPlaying);
+    assert.equal(editor.state.pie, true);
+    assert.ok(!tools().includes(LoopTool.StopPlay) && !tools().includes(LoopTool.StartPlay));
+  });
+
   it("joins a play the person started, and leaves it running when it closes", async () => {
     const { call, editor, tools } = playTools();
     editor.state.pie = true;

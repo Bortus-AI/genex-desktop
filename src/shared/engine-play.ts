@@ -12,7 +12,7 @@
 
 /** The play tools, by their names after `<plugin>__`. Wire values: never rename. */
 export const EnginePlayTool = {
-  /** Start play (or join the play already running): answers the view's size. */
+  /** Start play (or join the play already running; `fresh`: start it over, as a judge needs): answers the view's size. */
   Open: "play-open",
   /** Hold keys together for a time on the game's own clock, then let go: answers once that time has passed. */
   Input: "play-input",
@@ -107,6 +107,8 @@ export const EnginePlayRefusal = {
   NotPlaying: "not-playing",
   /** A key the engine has no name for. */
   UnknownKey: "unknown-key",
+  /** A fresh play was asked for while the person plays: their game is never started over. */
+  PersonPlaying: "person-playing",
 } as const;
 export type EnginePlayRefusal = (typeof EnginePlayRefusal)[keyof typeof EnginePlayRefusal];
 

@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -433,7 +433,15 @@
       "audience": "harness",
       "needs": ["editor"],
       "description": "For Genex's computer tool only: start play in this game's editor (Play In Editor), or join the play already running. Answers {width, height, joined}, or {refused, message} (busy while the Loop plays a build, no-editor when Unreal is not open).",
-      "parameters": { "type": "object", "properties": {} }
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fresh": {
+            "type": "boolean",
+            "description": "True: start the play over from the game's start (a play an agent left running is ended first; the person's is never touched)."
+          }
+        }
+      }
     },
     {
       "name": "play-input",

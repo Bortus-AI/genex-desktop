@@ -109,6 +109,21 @@ describe("the computer on a game played in its engine's editor", () => {
     );
   });
 
+  it("asks for a fresh play when its session judges the game, and joins one otherwise", async () => {
+    for (const fresh of [true, false]) {
+      const calls: Array<Record<string, unknown>> = [];
+      const source = editorPlaySource({
+        call: async (tool, args) => {
+          if (tool === EnginePlayTool.Open) calls.push(args);
+          return tool === EnginePlayTool.Open ? { ...ENGINE_PLAY_VIEW, joined: false } : {};
+        },
+        fresh,
+      });
+      await source.load("/game", false);
+      assert.deepEqual(calls, [fresh ? { fresh: true } : {}], String(fresh));
+    }
+  });
+
   it("carries each key verb as holds on the game's own time", async () => {
     const { source, inputs } = standInEngine();
     const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });

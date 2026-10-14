@@ -325,6 +325,8 @@ const TARGET_SOURCES: Record<ToolsRuntime, (deps: SourceDeps, build: ToolsBuilde
     if (!editor) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
     const source = editorPlaySource({
       ...editor,
+      // A judge or a playtester judges the game from its start, never from where another play left it.
+      fresh: PACED_ROLES.has(deps.role),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);

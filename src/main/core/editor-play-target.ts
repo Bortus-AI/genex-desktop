@@ -192,17 +192,19 @@ export interface EditorPlaySource extends TargetSource<EditorPlayTarget> {
 
 /**
  * The editor target's source. `call` reaches the plugin's play tools (each under the editor lock);
- * `frame` puts a picture on the agent's screen.
+ * `frame` puts a picture on the agent's screen; `fresh` asks for a play started over, never one
+ * joined mid-level (a judge's or a playtester's, who judge the game from its start).
  */
 export function editorPlaySource(options: {
   call: EnginePlayCall;
   frame?: (target: EditorPlayTarget, jpeg: Buffer | null, caption: string, act: ScreenAct) => Promise<void>;
+  fresh?: boolean;
 }): EditorPlaySource {
   let open: EditorPlayTarget | null = null;
   const load = async (_root: string, force: boolean): Promise<TargetLoad<EditorPlayTarget> & { fresh: boolean }> => {
     if (open && !force) return { target: open, problem: null, note: null, fresh: false };
     try {
-      const opened = await answered(options.call, EnginePlayTool.Open);
+      const opened = await answered(options.call, EnginePlayTool.Open, options.fresh ? { fresh: true } : {});
       const view = { width: sizeOf(opened, "width"), height: sizeOf(opened, "height") };
       open = editorPlayTarget(options.call, view);
       return { target: open, problem: null, note: null, fresh: true };
