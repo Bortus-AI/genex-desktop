@@ -19,9 +19,12 @@ unchanged. Where it disagrees with this preface, this preface wins.
 - Studio installs the version it pins, which satisfies the card's `^0.16.0`. Never run
   `npm i` for these packages yourself.
 - A game made from Studio's template has no `package.json`: it loads three.js through an import
-  map, and the same `genex__package` call maps Studio's built-in copies of both SDKs into that map,
-  with nothing downloaded. Import them exactly as the card shows, in plain JavaScript (the template
-  has no TypeScript build, so leave out the card's type annotations). Its settings go in
+  map, and the same `genex__package` call maps Studio's copies of both SDKs into that map and loads
+  Studio's connect module after it, with nothing downloaded. Studio connects the game: never call
+  `initEmbed()`, skip the card's Bootstrap step, `genex.config.ts` and "Config without `genex init`"
+  below, and never write a slug. Import the rest exactly as the card shows (`waitForPlayer`,
+  `getColyseusAuth` and `getColyseusUrls` from `"@genex-ai/embed-sdk"`), in plain JavaScript: the
+  template has no TypeScript build, so leave out the card's type annotations. Its settings go in
   `genex.json` at the game's root (`{"matchmaking": {...}}`) wherever the card says package.json's
   `genex` field. Never copy the SDK into the game by hand.
 - A game with its own build but no `package.json` needs one first: give it one, then call

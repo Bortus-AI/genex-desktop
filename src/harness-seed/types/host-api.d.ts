@@ -310,8 +310,15 @@ export interface DelegatePlaytestGrant {
   handle?: string;
   entry?: string;
   setup?: PreviewSetup | null;
-  role?: "playtester" | "scout";
+  /** A `judge` plays blind (no files, no shell) on a stepped clock, with only the `computer` tool. */
+  role?: "playtester" | "scout" | "judge";
   label?: string;
+  /** A goal the studio checks after every move; the first time it holds is studio-verified. */
+  quest?: { id: string; until: NonNullable<PreviewSetup["verify"]> };
+  /** The most moves (input actions, waits, batch steps) the session may make, counted by the host. */
+  maxActions?: number;
+  /** How the build's clock is held between moves: wall-time pacing, or seeded exact steps. */
+  pacing?: "paced" | "stepped";
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -539,22 +546,44 @@ export interface ProjectAsset {
 }
 // ↑ src/shared/game-assets.ts
 
+export type MakingKind = 'character' | 'creature' | 'model' | 'rigged-model' | 'animation' | 'image' | 'texture' | 'video' | 'sound-effect' | 'music' | 'voice';
+// ↑ src/shared/asset-making.ts
+
+export type MakingPhase = 'queued' | 'making' | 'review' | 'not-fetched' | 'not-in-game' | 'failed' | 'stopped' | 'unsure';
+// ↑ src/shared/asset-making.ts
+
+/**
+ * One job still on its way, as the Assets inventory lists it and every surface reads it. `source` is
+ * the plugin id (or `genex`), or a connector's id for a server no plugin ships; `sourceName` how the
+ * person knows it. `tool` is the outside service doing the work, when known (a `GenexTool`, or a
+ * plugin's own word). `kind` absent: an asset of a kind the plugin did not say. A call making an
+ * asset is its own job while it runs: its `jobId` is the call's id.
+ */
+export interface MakingJob {
+  source: string;
+  sourceName?: string;
+  jobId: string;
+  at?: string;
+  kind?: MakingKind;
+  phase: MakingPhase;
+  tool?: string;
+  prompt?: string;
+  /** The plugin's own word for the job and its own name for what was asked: kept for its own page. */
+  pluginStatus?: string;
+  operation?: string;
+  /** It delivered files earlier that the game no longer holds. */
+  delivered?: boolean;
+}
+// ↑ src/shared/asset-making.ts
+
 export interface ProjectAssets {
   project: string;
   assets: ProjectAsset[];
   /**
-   * Jobs with no file in the game yet: the plugin's own word for each (`pluginStatus`), and
-   * `delivered` when the job did deliver files earlier that the game no longer holds.
+   * Jobs with no file in the game yet, any plugin's, in the shared words (`shared/asset-making.ts`):
+   * what each makes, where it is and who makes it.
    */
-  jobs?: Array<{
-    source: string;
-    jobId: string;
-    at?: string;
-    operation?: string;
-    prompt?: string;
-    pluginStatus?: string;
-    delivered?: boolean;
-  }>;
+  jobs?: MakingJob[];
   /** The walk hit its entry or depth cap: some files under `assets/` are not listed. */
   truncated: boolean;
   skipped: Array<{ file: string; why: string }>;
@@ -1162,6 +1191,23 @@ export interface CompleteResponse {
 }
 // ↑ src/shared/engine-requests.ts
 
+export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page';
+// ↑ src/shared/computer-target.ts
+
+/** What a finished computer session's trace adds up to, as a delegation's result carries it. */
+export interface ComputerTraceSummary {
+  /** Where the trace was written; null before the first action. */
+  path: string | null;
+  steps: number;
+  /** True when every move ran on a stepped clock: the same seed and inputs replay the same run. */
+  deterministic: boolean;
+  /** The index of the action after which the studio verified the goal was reached, or null. */
+  reachedAt: number | null;
+  /** Every route the session's input took: evidence is as strong as the weakest of them. */
+  routes?: InputRoute[];
+}
+// ↑ src/shared/computer-target.ts
+
 export interface DelegateResult {
   requestedModel?: string;
   cliVersion?: string;
@@ -1193,6 +1239,8 @@ export interface DelegateResult {
   contextTokens?: number;
   /** A `compact` delegation compacted the session, which goes on under the same id. */
   compacted?: boolean;
+  /** A playtest's or judge's computer trace: where it was written, and whether its goal was verified. */
+  trace?: ComputerTraceSummary;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1319,6 +1367,20 @@ export type ProjectKind =
   | "own-script";
 // ↑ src/shared/game-project.ts
 
+/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+export type GameRuntime = 'browser' | 'bridge';
+// ↑ src/shared/computer-target.ts
+
+/**
+ * The command that starts a Play Protocol game, as studio.json declares it: a plain path inside
+ * the project (resolved by real path before it runs) and its arguments, each passed as one word.
+ */
+export interface PlayCommand {
+  command: string;
+  args: string[];
+}
+// ↑ src/shared/game-project.ts
+
 /**
  * How a project runs. The studio's own template needs no build: `index.html` loads `src/main.js`
  * as a native ES module. A folder the user brings — Vite, TypeScript, any bundler — keeps its
@@ -1355,6 +1417,13 @@ export interface ProjectShape {
    * and then the studio waits its own default.
    */
   bootMs?: number;
+  /**
+   * How the studio runs and reaches the game: its own browser window (the default, when absent)
+   * or a process speaking the Genex Play Protocol (`docs/play-protocol.md`).
+   */
+  runtime?: GameRuntime;
+  /** How a `bridge` game is started; absent for a browser game or when studio.json's is unusable. */
+  play?: PlayCommand;
 }
 // ↑ src/shared/game-project.ts
 
@@ -1543,7 +1612,7 @@ export interface ProfileBegin {
 export type ProfileRequest = ProfileBegin | { action: "read" | "end" | "start"; sessionId: string };
 // ↑ src/shared/optimization.ts
 
-export type CaptureSurface = 'canvas' | 'page' | 'auto';
+export type CaptureSurface = 'page' | 'canvas' | 'auto';
 // ↑ src/shared/preview-contract.ts
 
 export interface PixelStats {
@@ -1667,7 +1736,7 @@ export interface PreviewPortStatus {
 export type ReadyVia = 'shim' | 'contract' | 'none';
 // ↑ src/shared/preview-contract.ts
 
-export type ReadyPhase = 'ready' | 'boot' | 'failed' | 'unknown';
+export type ReadyPhase = 'failed' | 'ready' | 'boot' | 'unknown';
 // ↑ src/shared/preview-contract.ts
 
 /** What the studio waited for, and what it got. `preview.ready` answers with exactly this. */
@@ -1702,13 +1771,7 @@ export interface BuildObservation {
 }
 // ↑ src/shared/preview-contract.ts
 
-/**
- * An agent's screen — the hidden preview window one worker is driving with the computer
- * tool, as the studio window shows it: the last frame, where the cursor is, what the agent
- * just did. Main emits `preview.screen` (opened/closed) and `preview.frame` (a new picture);
- * the Builds graph shows each on the node of the part it works on, the lead's on the lead's.
- */
-export type AgentScreenRole = "builder" | "playtester" | "scout" | "judge" | "director";
+export type AgentScreenRole = 'judge' | 'playtester' | 'builder' | 'scout' | 'director' | 'operator';
 // ↑ src/shared/agent-screen.ts
 
 export interface AgentScreen {
@@ -1751,7 +1814,7 @@ export interface AgentScreenFrame extends AgentScreen {
 export type JobRole = 'lead' | 'chat' | 'worker';
 // ↑ src/shared/jobs.ts
 
-export type JobState = 'failed' | 'running' | 'succeeded' | 'stopped' | 'timed_out' | 'interrupted';
+export type JobState = 'failed' | 'stopped' | 'running' | 'succeeded' | 'timed_out' | 'interrupted';
 // ↑ src/shared/jobs.ts
 
 export type JobStopper = 'agent' | 'person' | 'scope_ended' | 'quit';
@@ -2208,6 +2271,48 @@ export interface HarnessHostApi {
     params: { runId: string; a: string; b: string; label?: string; handle?: string };
     result: (PixelDiff & { heatmapPath: string | null }) | null;
   };
+  /**
+   * The `computer` tool, run by the host on a window the harness leased: the same tool every
+   * session engine holds, for an engine whose tool loop is the harness's own (Ollama). `describe`
+   * answers the tool's schema instead of running an action; otherwise `args` is one call.
+   */
+  "preview.computer": {
+    params: DelegatePlaytestGrant & {
+      handle: string;
+      args?: Record<string, unknown>;
+      describe?: boolean;
+      /** Start a new session on this window even when one for the same build and round exists: reloaded, reseeded, its own trace. */
+      fresh?: boolean;
+    };
+    result: { tool: LiveToolSpec } | { answer: LiveToolResult; trace: ComputerTraceSummary };
+  };
+  /**
+   * The `desktop` tool, run by the host for an engine whose tool loop is the harness's own
+   * (Ollama): the person's computer, behind the consent asked on a card in `threadId`. `describe`
+   * answers the tool's schema and starts the chat's session afresh; `unavailable` says why there is
+   * none (no desktop driver, no chat to ask in).
+   */
+  "desktop.computer": {
+    params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
+    result: { tool: LiveToolSpec } | { answer: LiveToolResult } | { unavailable: string };
+  };
+  /**
+   * `judge_play`, run by the host for an engine whose tool loop is the harness's own (Ollama), as
+   * session engines are handed it (`core/judge-play-tool.ts`): a blind judge plays the game, the
+   * chat's model playing, and the outcome is one line in `threadId`. `unavailable` says why not
+   * (no chat to record in, a game the studio does not play in a window).
+   */
+  "judge.play": {
+    params: {
+      project: string;
+      threadId?: string;
+      args?: Record<string, unknown>;
+      engine?: string;
+      model?: string;
+      effort?: string;
+    };
+    result: { answer: LiveToolResult } | { unavailable: string };
+  };
   "preview.input": {
     params: { actions?: PreviewInputAction[]; handle?: string };
     result: { ok: boolean; applied: number; width: number; height: number };
@@ -2261,6 +2366,8 @@ export interface HarnessHostApi {
       live: boolean;
       headless: boolean;
       memory: { freeMb: number; totalMb: number };
+      /** The most workers the person's Settings let one chat run at once. */
+      workers: number;
     };
   };
 
@@ -2391,7 +2498,7 @@ export interface RunSpec {
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
     wallClockMs: number;
-    /** The composer's ∞: run until the judge is satisfied; `wallClockMs` is then only the safety ceiling. */
+    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
     untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;
@@ -2500,6 +2607,22 @@ export type DispatchAction =
    * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
    */
   | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
+  /**
+   * A judge that plays (`judge_play`), asked for by the chat's own session after a change: one blind
+   * judge plays the game in `root` (the game folder, as the host resolved it) on a hidden window and
+   * answers `ask`, held to `goalState` when given. Answers with the judge's outcome, never throws.
+   */
+  | {
+      type: "chat_judge";
+      threadId: string;
+      project: string;
+      root: string;
+      engine: string;
+      model?: string;
+      effort?: string;
+      ask: string;
+      goalState?: string;
+    }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 // ↑ src/shared/protocol.ts

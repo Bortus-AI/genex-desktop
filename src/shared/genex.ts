@@ -59,24 +59,39 @@ export const GENEX_GAME_PACKAGES = {
 export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
 
 /**
- * Studio's own copy of each Genex SDK, built at the versions pinned above and served under the
- * vendor root. A game made from Studio's template has no package manager: it turns sign-in or
- * multiplayer on by mapping these in its import map, and that mapping is how Studio knows it uses
- * them (preview, publish). The keys are the specifiers the game imports.
+ * Where Studio's copy of `@genex-ai/embed-sdk` sits under a vendor folder (the app's, served as
+ * `/vendor/`, and a published copy's `vendor/`), and the module beside it that connects a page to
+ * Genex: a template game imports the SDK through its import map from there, and a published game
+ * that brings no SDK of its own is connected by that module.
  */
-export const GENEX_VENDORED_SDK = {
-  "@genex-ai/multiplayer": "/vendor/genex/multiplayer.js",
-  "@genex-ai/multiplayer/schema": "/vendor/genex/multiplayer-schema.js",
-  "@genex-ai/embed-sdk": "/vendor/genex/embed-sdk.js",
+export const GENEX_EMBED_VENDOR = {
+  Sdk: "genex/embed-sdk",
+  Entry: "genex/embed-sdk/index.js",
+  Connect: "genex/connect.js",
 } as const;
-/** A specifier Studio's vendored Genex SDKs answer. */
-export type GenexVendoredSpecifier = keyof typeof GENEX_VENDORED_SDK;
 
-/** The specifiers each package brings into a template game's import map. */
-const VENDORED_SPECIFIERS = {
-  "@genex-ai/multiplayer": ["@genex-ai/multiplayer", "@genex-ai/multiplayer/schema"],
-  "@genex-ai/embed-sdk": ["@genex-ai/embed-sdk"],
-} as const satisfies Record<GenexGamePackage, readonly GenexVendoredSpecifier[]>;
+/**
+ * Where Studio's copy of `@genex-ai/multiplayer` sits under the vendor folder: its entry and its
+ * schema entry, built together so both share one copy of Colyseus's schema (a state class defined
+ * with one is unknown to the other). A template game maps both in its import map.
+ */
+export const GENEX_MULTIPLAYER_VENDOR = {
+  Dir: "genex/multiplayer",
+  Entry: "genex/multiplayer/index.js",
+  Schema: "genex/multiplayer/schema.js",
+} as const;
+
+/**
+ * What a template game's import map maps for each package, at `/vendor`: the specifiers it imports
+ * and Studio's copy of each. Multiplayer always brings player identity (`genexPackageSet`).
+ */
+export const GENEX_STUDIO_IMPORTS = {
+  "@genex-ai/embed-sdk": { "@genex-ai/embed-sdk": `/vendor/${GENEX_EMBED_VENDOR.Entry}` },
+  "@genex-ai/multiplayer": {
+    "@genex-ai/multiplayer": `/vendor/${GENEX_MULTIPLAYER_VENDOR.Entry}`,
+    "@genex-ai/multiplayer/schema": `/vendor/${GENEX_MULTIPLAYER_VENDOR.Schema}`,
+  },
+} as const satisfies Record<GenexGamePackage, Readonly<Record<string, string>>>;
 
 /** The packages a request installs: multiplayer always brings its player-identity dependency. */
 export function genexPackageSet(name: GenexGamePackage): GenexGamePackage[] {
@@ -84,22 +99,19 @@ export function genexPackageSet(name: GenexGamePackage): GenexGamePackage[] {
 }
 
 /** The import-map entries a template game needs for `name`, its dependency included. */
-export function vendoredSdkEntries(name: GenexGamePackage): Array<[GenexVendoredSpecifier, string]> {
-  return genexPackageSet(name).flatMap((pkg) =>
-    VENDORED_SPECIFIERS[pkg].map((specifier): [GenexVendoredSpecifier, string] => [
-      specifier,
-      GENEX_VENDORED_SDK[specifier],
-    ]),
-  );
+export function studioSdkImports(name: GenexGamePackage): Record<string, string> {
+  return Object.assign({}, ...genexPackageSet(name).map((pkg) => GENEX_STUDIO_IMPORTS[pkg]));
 }
 
 /**
- * The packages an import map turns on: each whose main specifier maps to Studio's own copy, and
- * nothing that maps a Genex name somewhere else (a CDN, the game's own file).
+ * The packages an import map takes from Studio's copies: each whose specifiers all map exactly to
+ * Studio's files. A Genex name mapped anywhere else (a CDN, the game's own file) turns nothing on.
  */
-export function vendoredSdkPackages(imports: Readonly<Record<string, string>>): GenexGamePackage[] {
-  return (Object.keys(GENEX_GAME_PACKAGES) as GenexGamePackage[]).filter(
-    (pkg) => Object.hasOwn(imports, pkg) && imports[pkg] === GENEX_VENDORED_SDK[pkg],
+export function studioSdkPackages(imports: Readonly<Record<string, unknown>>): GenexGamePackage[] {
+  return (Object.keys(GENEX_STUDIO_IMPORTS) as GenexGamePackage[]).filter((pkg) =>
+    Object.entries(GENEX_STUDIO_IMPORTS[pkg]).every(
+      ([specifier, url]) => Object.hasOwn(imports, specifier) && imports[specifier] === url,
+    ),
   );
 }
 /** Whether a name is one of those packages: an own key, never an inherited one. */
@@ -365,6 +377,44 @@ export type GenexCoverOutcome = (typeof GenexCoverOutcome)[keyof typeof GenexCov
 
 /** The cover tool plugin.json declares (`genex__cover`): its kept shot is the card the chat shows. */
 export const GENEX_COVER_TOOL = "cover";
+
+/** The tool plugin.json declares for every generation (`genex__asset`): its `operation` says what it makes. */
+export const GENEX_ASSET_TOOL = "asset";
+
+/** How many characters of a generation's id Genex puts in the names of its output files. */
+const GENERATION_IN_NAME = 8;
+
+/**
+ * Whether a Genex output file is the provider's unprocessed source of another. Genex names each
+ * output after its generation and its role code (`…-cmv6qk2b-walk-animation-a1-source-glb.glb`),
+ * and a role with a `source` part is the copy from before Genex rigged or retargeted it.
+ */
+export function isGenexSourceOutput(file: string, generationId: string | null | undefined): boolean {
+  if (!generationId) return false;
+  const name = file.split("/").pop() ?? "";
+  const marker = `-${generationId.slice(0, GENERATION_IN_NAME)}-`;
+  const at = name.indexOf(marker);
+  if (at < 0) return false;
+  const role = name.slice(at + marker.length).replace(/\.[^.]+$/, "");
+  return role.split("-").includes("source");
+}
+
+/** A delivered file as far as folding sources needs it. */
+type Output = { file: string; kind: string; source?: string; generationId?: string };
+
+/**
+ * The files to show, less each Genex source copy whose generation also delivered a finished model:
+ * the copy is still in the game, it is just never a second card of the same thing. A source that
+ * came alone is shown.
+ */
+export function withoutGenexSources<T extends Output>(files: readonly T[]): T[] {
+  const isSource = (file: T) =>
+    file.source === GENEX_PLUGIN_ID && file.kind === "model" && isGenexSourceOutput(file.file, file.generationId);
+  const finished = new Set(
+    files.filter((file) => file.kind === "model" && file.generationId && !isSource(file)).map((f) => f.generationId),
+  );
+  return files.filter((file) => !(isSource(file) && finished.has(file.generationId)));
+}
 
 /** What genex__cover does: photograph the genex-cover demo and keep it, or report the cover's state. */
 export const GenexCoverOperation = { Shoot: "shoot", Status: "status" } as const;

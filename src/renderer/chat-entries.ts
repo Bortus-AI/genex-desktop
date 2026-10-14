@@ -4,9 +4,9 @@ import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
 import { parseSuggestion } from "./chat/plugin-suggestion.ts";
 import { type JobHandle, type JobStart, jobEndLine, jobStart, missingPanes } from "./chat/job-lines.ts";
 import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
+import { type ChatJudgeResultPayload, readChatJudgeResult } from "../shared/chat-judge.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
-import { isWorkerOfGraph, workerKeyOf } from "../shared/run-graph-events.ts";
-import { WorkerEnd } from "../shared/workers.ts";
+import { workerKeyOf } from "../shared/run-graph-events.ts";
 import { type FinishRecord, FinishCheckStep, finishRecordOf } from "../shared/finish-check.ts";
 /**
  * The chat transcript as entries: the thread's event log read once, oldest first, into the
@@ -135,6 +135,8 @@ export const EntryAction = {
   Worker: "worker",
   /** Genex can't see app windows yet (`app_look_access`): one line, with Open Privacy settings per pane. */
   AppAccess: "app-access",
+  /** A blind judge played the game for the chat's own session (`chat_judge_result`): one line, the question inside. */
+  Judge: "judge",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -214,6 +216,8 @@ export type Entry =
       workerDone?: boolean;
       /** action "app-access": the Privacy & Security panes still to allow. */
       appAccess?: AppLookAccessKind[];
+      /** action "judge": what the judge established, in the words of a build's checks list. */
+      judge?: ChatJudgeResultPayload;
     }
   /**
    * The morning: what the run amounts to, in one card. It replaces the line that read
@@ -919,6 +923,8 @@ function settleDelegatedTools(chat: ChatDraft, scope: string, payload: Delegated
 }
 
 function readDelegatedTurn(chat: ChatDraft, eventId: string, scope: string, payload: DelegatedRecord): void {
+  // A provider's own error text (a limit, a lost sign-in) is never a reply: the run says it in its words.
+  if (payload.data?.apiError) return;
   for (const [i, part] of (payload.data?.parts ?? []).entries()) {
     const key = `${eventId}-${i}`;
     if (readDelegatedWords(chat, key, part, payload)) continue;
@@ -1169,13 +1175,19 @@ function narrateJobEnded(chat: ChatDraft, event: EventEnvelope): void {
 }
 
 /**
- * A worker's line: "Port the car…". A start for a worker still working on the page (a resume)
- * changes nothing; one after its end (a builder started again under its id) is a new attempt, a
- * line of its own that carries nothing of the old end.
+ * A run's worker is a row of its Building card's list (chat/build-checklist.ts), added or working
+ * there: never a line of the transcript. A chat turn's worker, which has no card, keeps its line.
+ */
+const ofRun = (payload: { runId?: unknown }): boolean => typeof payload.runId === "string" && payload.runId !== "";
+
+/**
+ * A chat turn's worker's line: "Port the car…". A start for a worker still working on the page (a
+ * resume) changes nothing; one after its end (a builder started again under its id) is a new
+ * attempt, a line of its own that carries nothing of the old end.
  */
 function narrateWorkerStarted(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.WorkerStarted);
-  const key = payload ? workerKeyOf(payload) : null;
+  const key = payload && !ofRun(payload) ? workerKeyOf(payload) : null;
   if (!payload || !key) return;
   const known = chat.workerLines.get(key)?.line;
   if (known && !workerLineEnded(known)) return;
@@ -1189,7 +1201,7 @@ function narrateWorkerStarted(chat: ChatDraft, event: EventEnvelope): void {
  */
 function narrateWorkerFinished(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.WorkerFinished);
-  const key = payload ? workerKeyOf(payload) : null;
+  const key = payload && !ofRun(payload) ? workerKeyOf(payload) : null;
   if (!payload || !key) return;
   const known = chat.workerLines.get(key);
   const line = workerEndLine(payload, known?.line);
@@ -1206,34 +1218,6 @@ function rewriteWorkerLine(known: { entry: ActionEntry; line: WorkerLine }, line
   known.line = line;
   known.entry.text = line.text;
   known.entry.workerDone = line.done;
-}
-
-/**
- * A run's lead merged a worker's work cleanly into its build (the director's `integrate`): the
- * worker's line says it is in the game, as its row on the run's graph does. A conflict adds nothing.
- */
-function narrateWorkerIntegrated(chat: ChatDraft, event: EventEnvelope): void {
-  const merge = customRecord(event.data);
-  if (merge?.event_type !== CustomEvent.IntegrationMerge || merge.payload.conflict === true) return;
-  const key = workerKeyOf({ runId: merge.payload.runId, workerId: merge.payload.facetId });
-  const known = key ? chat.workerLines.get(key) : undefined;
-  const line = known ? workerEndLine({ merged: true }, known.line) : null;
-  if (known && line) rewriteWorkerLine(known, line);
-}
-
-/**
- * A run finished: a worker of it whose line still works (no end reached the log, as when the app
- * closed the run at its start) stopped with it, as its row on the run's graph says; one whose work
- * is in the game reads added.
- */
-function narrateRunWorkersStopped(chat: ChatDraft, event: EventEnvelope): void {
-  const runId = customPayload(event.data, CustomEvent.RunFinished)?.runId;
-  if (!runId) return;
-  for (const [key, known] of chat.workerLines) {
-    if (!isWorkerOfGraph(key, runId) || known.line.ended || known.line.done) continue;
-    const line = workerEndLine({ state: WorkerEnd.Stopped }, known.line);
-    if (line) rewriteWorkerLine(known, line);
-  }
 }
 
 /** A worker's own line, remembered by its key: never routine, so it never folds into activity. */
@@ -1315,6 +1299,21 @@ function narrateAppAccess(chat: ChatDraft, event: EventEnvelope): void {
     action: EntryAction.AppAccess,
     text: appAccessMissing(missing),
     appAccess: missing,
+  });
+}
+
+/** A blind judge's play for the chat's own session: one line; an old or partial record draws nothing. */
+function narrateChatJudge(chat: ChatDraft, event: EventEnvelope): void {
+  const judge = readChatJudgeResult(customPayload(event.data, CustomEvent.ChatJudgeResult));
+  if (!judge) return;
+  closeGroup(chat);
+  chat.entries.push({
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Ask,
+    action: EntryAction.Judge,
+    text: judge.ask,
+    judge,
   });
 }
 
@@ -1468,10 +1467,16 @@ function narratePluginCall(chat: ChatDraft, event: EventEnvelope): void {
   row.state = pluginCallState(closing, payload.ok);
   row.failed = row.state === ToolState.Failed;
   row.detail = [{ text }, ...(raw.result ? [{ text: String(raw.result) }] : [])];
+  if (payload.making) row.making = { ids: makingIds(payload) };
   if (row.state === ToolState.Succeeded && keptGenexCover(payload)) holdCoverCard(chat, event, payload);
 }
 
 type PluginCallPayload = CustomPayload<typeof CustomEvent.PluginTool | typeof CustomEvent.PluginToolStarted>;
+
+/** The ids a call's job may go by in the game's inventory: the call's own while it runs, then the job it answered with. */
+function makingIds(payload: { callId?: string; jobId?: string; generationId?: string }): string[] {
+  return [payload.callId, payload.jobId, payload.generationId].filter((id): id is string => Boolean(id));
+}
 
 /**
  * A finished `genex__cover` shoot that kept a new shot: Genex's own tool asked to shoot, and its
@@ -1575,6 +1580,7 @@ function narrateConnector(chat: ChatDraft, event: EventEnvelope): void {
   if (call.pluginId || call.connectorName) row.source = { id: call.pluginId ?? call.connectorId ?? "", name: where };
   row.state = pluginCallState(closing, call.ok !== false);
   row.failed = row.state === ToolState.Failed;
+  if (call.making && call.callId) row.making = { ids: [call.callId] };
   if (closing) settleConnectorRow(chat, row, call, step);
 }
 
@@ -1938,11 +1944,10 @@ const NARRATORS: readonly Narrator[] = [
   narrateJobEnded,
   narrateWorkerStarted,
   narrateWorkerFinished,
-  narrateWorkerIntegrated,
-  narrateRunWorkersStopped,
   narrateFinishCheck,
   narrateRunFinishSettled,
   narrateAppAccess,
+  narrateChatJudge,
   narratePluginSuggested,
   narrateImprovement,
   narrateSkillAccepted,

@@ -26,6 +26,7 @@ import type { EngineLinkedPayload, EngineLinkUndonePayload, EngineStepsPayload }
 import type { RunSpec } from "./protocol.ts";
 import type { PluginSuggestedPayload } from "./project-tools.ts";
 import type { AppLookAccessPayload, JobEndedPayload, JobStartedPayload } from "./jobs.ts";
+import type { ChatJudgeResultPayload } from "./chat-judge.ts";
 import type { WorkerFinishedPayload, WorkerStartedPayload } from "./workers.ts";
 import type { ObserverCapturePayload } from "./observers.ts";
 import type { FinishCheckPayload } from "./finish-check.ts";
@@ -62,6 +63,8 @@ export const CustomEvent = {
   JobEnded: "job_ended",
   /** Genex cannot see app windows yet: the macOS access the person must allow (shared/jobs.ts); written by the host only. */
   AppLookAccess: "app_look_access",
+  /** A blind judge played the game for the chat's own session (shared/chat-judge.ts); written by the host only. */
+  ChatJudgeResult: "chat_judge_result",
   // the unattended run and its lead
   AutopilotBase: "autopilot_base",
   AutopilotBaseStarted: "autopilot_base_started",
@@ -397,6 +400,8 @@ export interface DelegatedData {
   tool_name?: string | null;
   decision_reason?: string | null;
   message?: string | null;
+  /** The CLI's own API error code: the message is its error text, never the model's words. */
+  apiError?: string;
   parts?: Array<{
     type: string;
     name?: string;
@@ -694,6 +699,7 @@ export interface CustomEventMap {
   job_started: Partial<JobStartedPayload>;
   job_ended: Partial<JobEndedPayload>;
   app_look_access: Partial<AppLookAccessPayload>;
+  chat_judge_result: Partial<ChatJudgeResultPayload>;
   worker_started: WorkerStartedPayload;
   worker_finished: WorkerFinishedPayload;
   observer_capture: Partial<ObserverCapturePayload>;

@@ -150,6 +150,13 @@ const glyphs = {
       <ellipse className="a-meridian" cx="12" cy="12" rx="3.7" ry="8.5" />
     </>
   ),
+  // Unreal's U in its ring, as the Unreal plugin's own picture draws it, in line.
+  unreal: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M9 7.75v5a3 3 0 0 0 6 0v-5" />
+    </>
+  ),
   reload: (
     <g className="a-spin">
       <path d="M20 12a8 8 0 1 1-8-8c2.2 0 4.2.9 5.7 2.3L20 8.5" />
@@ -172,6 +179,13 @@ const glyphs = {
     </g>
   ),
   stop: <rect className="a-pulse" x="6.5" y="6.5" width="11" height="11" rx="2.5" />,
+  // Paused: two bars, the stop's size and corners.
+  pause: (
+    <g className="a-pulse">
+      <rect x="7" y="6.5" width="3.5" height="11" rx="1.2" />
+      <rect x="13.5" y="6.5" width="3.5" height="11" rx="1.2" />
+    </g>
+  ),
   // Full screen: the four corners pushed out to the edges.
   expand: (
     <path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" />
@@ -514,6 +528,16 @@ const glyphs = {
     </>
   ),
   circle: <circle className="a-pulse" cx="12" cy="12" r="7" />,
+  // Compact: two corners drawn in toward the middle, the context folding smaller.
+  compact: <path d="M4.5 14h5.5v5.5M19.5 10H14V4.5M14 10l6-6M4 20l6-6" />,
+  // A drive: where Genex keeps what it makes on this Mac.
+  drive: (
+    <>
+      <path d="M3.5 13l2.6-6.1A2.2 2.2 0 0 1 8.1 5.5h7.8a2.2 2.2 0 0 1 2 1.4l2.6 6.1V17a2.5 2.5 0 0 1-2.5 2.5H6A2.5 2.5 0 0 1 3.5 17z" />
+      <path d="M3.5 13h17" />
+      <circle cx="7.5" cy="16.25" r="1" {...DOT} />
+    </>
+  ),
   // A model chip: the die and its pins, for models that run on this Mac.
   chip: (
     <>

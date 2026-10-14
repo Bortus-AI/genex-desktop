@@ -1,3 +1,4 @@
+import type { PluginToolAsset } from "./asset-making.ts";
 import type { GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
 import type { ObserveContext, PluginObserver } from "./observers.ts";
@@ -190,6 +191,11 @@ export interface PluginManifestTool extends PluginTool {
   needs?: string[];
   /** API 3, agent tools with `makes` only: the harness tool that answers whether what it makes is ready to make. */
   ready?: string;
+  /**
+   * API 3, agent tools only: the kind of asset a call makes. While a call runs it is a card on the
+   * Assets canvas and in the chat, in the spot its files will land.
+   */
+  asset?: PluginToolAsset;
 }
 /** Whether agents are handed a manifest tool: every one but those only the harness calls. */
 export const isAgentTool = (tool: Pick<PluginManifestTool, "audience">): boolean =>
@@ -351,7 +357,7 @@ export type PluginToolbarTarget =
   | { kind: "action"; name: string; args?: Record<string, PluginScalar> }
   | { kind: "panel"; id: string };
 /** Host icons a toolbar item may name instead of drawing its own glyph. */
-export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes"] as const;
+export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes", "unreal"] as const;
 export type ToolbarIconName = (typeof TOOLBAR_ICON_NAMES)[number];
 export const isToolbarIconName = (value: unknown): value is ToolbarIconName =>
   (TOOLBAR_ICON_NAMES as readonly unknown[]).includes(value);
@@ -373,6 +379,8 @@ export interface PluginToolbarStatus {
   tone?: "ok" | "warn" | "err" | "info";
   /** The button's action is due now (a game with something to publish): drawn in the accent fill. */
   attention?: boolean;
+  /** The badge drawn as a dot in its tone (ok green, warn amber, err red, info grey), its word said in the tooltip. */
+  dot?: boolean;
 }
 /**
  * Where one environment variable of a plugin's MCP server gets its value. The manifest names a
@@ -806,6 +814,18 @@ export type GithubLookup =
   | ({ kind: typeof GithubLookupKind.Plugin } & GithubPluginFound)
   | { kind: typeof GithubLookupKind.Choose; repo: string; version: GithubVersion; plugins: GithubPluginFound[] }
   | { kind: typeof GithubLookupKind.Problem; problem: GithubLookupProblem; detail?: string };
+
+/**
+ * Consent cards the studio itself asks with, not a plugin: their source id, and the name the card
+ * shows for it. Persisted in every log: never rename an id.
+ */
+export const StudioConsentSource = { Desktop: "studio-desktop" } as const;
+export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof StudioConsentSource];
+
+/** The name a studio consent card shows. */
+export const STUDIO_CONSENT_NAMES: Readonly<Record<StudioConsentSource, string>> = {
+  [StudioConsentSource.Desktop]: "Computer control",
+};
 
 export interface PluginBinding {
   project: string;

@@ -85,7 +85,7 @@ export async function closeChatWorkers(threadId: string, turn: string): Promise<
 export function chatWorkersGrant(threadId: string, turn: string | undefined): AnyRecord {
   const open = pools.get(threadId);
   if (!open || !turn || open.turn !== turn) return {};
-  return { workers: { tools: workerTools(open.pool.state.types) } };
+  return { workers: { tools: workerTools(open.pool.state.types, open.pool.state.allowed) } };
 }
 
 /** The host forwarded a worker tool call of a chat turn: the pool of that turn answers, never another's. */

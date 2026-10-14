@@ -16,6 +16,7 @@
 import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { ignoreLine } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
@@ -152,8 +153,8 @@ import { AutoResumeService, type AutoResumeDeps } from "./core/auto-resume.ts";
 import { availableMemory } from "../substrate/hardware.ts";
 import { RecoveryService } from "./core/recovery.ts";
 import { ChatRewindService } from "./core/rewind.ts";
-import { HistorySpaceService } from "./core/history-space.ts";
-import type { GameHistoryCleared, GameHistorySpace } from "../shared/game-history.ts";
+import { StorageSpaceService } from "./core/storage-space.ts";
+import type { StorageFreed, StorageSpace } from "../shared/storage-space.ts";
 import { SelfEditGateService } from "./core/self-edit-gate.ts";
 import { SelfImprovementService } from "./core/self-improvement.ts";
 import { serial } from "./core/serial.ts";
@@ -173,6 +174,8 @@ import { jobsRpc } from "./harness-rpc/jobs.ts";
 import { optimizationRpc } from "./harness-rpc/optimization.ts";
 import { pluginsRpc } from "./harness-rpc/plugins.ts";
 import { previewRpc } from "./harness-rpc/preview.ts";
+import { desktopRpc } from "./harness-rpc/desktop.ts";
+import { judgeRpc } from "./harness-rpc/judge.ts";
 import { runsRpc } from "./harness-rpc/runs.ts";
 import { snapshotRpc } from "./harness-rpc/snapshot.ts";
 import { hooksRpc } from "./harness-rpc/hooks.ts";
@@ -313,6 +316,8 @@ export interface StudioPaths {
 
 export interface StudioCoreOptions {
   renderGameCover?: (surface: string, seed: number) => Promise<string>;
+  /** Computer control (`desktop-control.ts`): absent where no desktop driver can be reached, and in tests. */
+  desktop?: DesktopControl;
   /** Notes each boot step as it finishes (`main/performance.ts`); a launch without diagnostics passes nothing. */
   markBoot?: (step: string) => void;
   engines?: Engine[];
@@ -467,7 +472,7 @@ export class StudioCore {
   readonly #threads: GameThreadService;
   readonly #gameFiles: GameFileService;
   readonly #rewind: ChatRewindService;
-  readonly #history: HistorySpaceService;
+  readonly #storage: StorageSpaceService;
   /** Questions an agent's plugin tool is waiting on the user for (`plugin_consent` cards in the chat). */
   readonly #consent: PluginConsent;
   /** The locks plugin tools and connectors wait their turn for, the person first. */
@@ -575,11 +580,11 @@ export class StudioCore {
     this.#selfEditGate = new SelfEditGateService(this, this.#x);
     this.#pluginTools = new PluginToolService(this, this.#x);
     this.#conversation = new ConversationService(this, this.#x);
-    this.#assets = new AssetService(this, undefined, options.assetFolders?.now);
+    this.#assets = new AssetService(this, undefined, options.assetFolders?.now, this.#x.assetCalls);
     this.#threads = new GameThreadService(this);
     this.#gameFiles = new GameFileService(this);
     this.#rewind = new ChatRewindService(this, this.#x);
-    this.#history = new HistorySpaceService(this, this.#x);
+    this.#storage = new StorageSpaceService(this, this.#x);
     this.#permissions = new ChatPermissionService(this);
   }
 
@@ -2048,6 +2053,8 @@ export class StudioCore {
       ...engineRpc(this, this.#x),
       ...studioRpc(this, this.#x),
       ...previewRpc(this, this.#x),
+      ...desktopRpc(this, this.#x),
+      ...judgeRpc(this),
     };
     return table;
   }
@@ -2407,6 +2414,11 @@ export class StudioCore {
     return this.#delegation._computerToolsFor(...args);
   }
 
+  /** Whether the host's own records say this run is this game's (`preview.computer`'s run check). */
+  _runOfGame(project: string, runId: string): Promise<boolean> {
+    return this.#delegation.runOfGame(project, runId);
+  }
+
   _directorToolsFor(
     ...args: Parameters<DelegationService["_directorToolsFor"]>
   ): ReturnType<DelegationService["_directorToolsFor"]> {
@@ -2518,14 +2530,14 @@ export class StudioCore {
     return this.#rewind.rewind(...args);
   }
 
-  /** How much space a game's version history takes, and how much clearing frees (`core/history-space.ts`). */
-  gameHistory(project: string): Promise<GameHistorySpace> {
-    return this.#history.space(project);
+  /** What freeing space deletes now, in `project` or in every game (`core/storage-space.ts`). */
+  storageSpace(project?: string): Promise<StorageSpace> {
+    return this.#storage.space(project);
   }
 
-  /** Clear a game's Rewind history and finished runs' side tracks (`core/history-space.ts`). */
-  clearGameHistory(project: string): Promise<GameHistoryCleared> {
-    return this.#history.clear(project);
+  /** Free space in `project`, refused while it works, or in every game not working (`core/storage-space.ts`). */
+  freeStorage(project?: string): Promise<StorageFreed> {
+    return this.#storage.free(project);
   }
 
   /**

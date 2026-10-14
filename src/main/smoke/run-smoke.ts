@@ -2,6 +2,7 @@
  * The build smoke (`--studio-smoke`): loaded by main with a dynamic import only when that flag is
  * set, so no smoke code runs, or is even evaluated, in a normal launch.
  */
+import { InteractionSource } from "../../shared/run-summary.ts";
 import { type BrowserWindow, app, type WebContents, type WebFrameMain } from "electron";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -2138,7 +2139,7 @@ async function seedOutcomeRun(buildSmoke: BuildSmoke): Promise<OutcomeRun> {
     head: "head-6",
     label: "Dialogue walkthrough",
     status: "incomplete",
-    source: "independent-playtester",
+    source: InteractionSource.IndependentPlaytester,
   });
   return { outcomeRun, outcomeEvent };
 }
@@ -2732,16 +2733,43 @@ async function openComputerSmoke(smoke: Smoke): Promise<ComputerSmoke> {
     ],
     smokeThread,
   );
-  await wc.executeJavaScript(`localStorage.setItem("studio.activeThread", ${JSON.stringify(smokeThread)})`);
-  await wc.executeJavaScript(`localStorage.setItem("studio.previewView", "builds")`);
   wc.reload();
-  await waitUntil(() => wc.executeJavaScript(`!!document.querySelector('nav [data-thread]')`).catch(() => false), {
-    timeoutMs: BUILD_WAIT_MS,
-    intervalMs: WINDOW_POLL_MS,
-  });
   const waitFor = (expression: string, ms = COMPUTER_WAIT_MS) =>
     waitUntil(() => wc.executeJavaScript(expression).catch(() => false), { timeoutMs: ms, intervalMs: WINDOW_POLL_MS });
+  // Every launch starts at home: open the game from the sidebar, as a person does, then Builds.
+  await openOnBuilds(wc, waitFor, smokeThread);
   return { ...smoke, project, runId, waitFor, callHost: hostCaller(core) };
+}
+
+/**
+ * Open a game's chat from the sidebar and its stage on Builds. Every launch starts at home, so a
+ * chat is opened the way a person opens it, never restored from storage.
+ */
+async function openOnBuilds(
+  wc: Smoke["wc"],
+  waitFor: (expression: string, ms?: number) => Promise<boolean>,
+  threadId: string,
+): Promise<void> {
+  const row = `nav [data-thread="${threadId}"]`;
+  await waitFor(`!!document.querySelector('${row}')`, BUILD_WAIT_MS);
+  await wc.executeJavaScript(`document.querySelector('${row}')?.click()`);
+  await waitFor(`!!document.querySelector('[data-stage-action="builds"]')`);
+  await wc.executeJavaScript(`document.querySelector('[data-stage-action="builds"]')?.click()`);
+}
+
+/**
+ * What the page shows of an agent's screen, for a check that did not see it: the stage, each graph
+ * node with whether it carries a screen and a picture, and the chat's build row.
+ */
+const AGENT_SCREEN_REPORT = `JSON.stringify({
+  stage: document.querySelector('[data-stage-view]')?.getAttribute('data-stage-view') ?? null,
+  nodes: [...document.querySelectorAll('[data-graph-node]')].map((n) => [n.getAttribute('data-graph-node'), n.getAttribute('data-agent-screen'), n.querySelectorAll('img').length]),
+  buildRow: document.querySelector('[data-build-status]') ? document.querySelectorAll('[data-build-status] img').length : null,
+})`;
+
+/** The page's report of agent screens, or why it could not be read. */
+async function agentScreenReport(wc: Smoke["wc"]): Promise<string> {
+  return wc.executeJavaScript(AGENT_SCREEN_REPORT).catch((error: Error) => `unreadable: ${error.message}`);
 }
 
 /** The game state a `computer state` call printed, parsed; the raw text when it would not parse. */
@@ -2861,6 +2889,7 @@ async function driveComputer(computerSmoke: ComputerSmoke, request: DelegateRequ
   results.tools = (request.liveTools ?? []).map((t) => t.name);
   results.shot = await computer({ action: "screenshot" });
   results.uiNode = await waitFor(`!!document.querySelector('[data-graph-node][data-agent-screen] img')`);
+  if (results.uiNode !== true) results.uiNodeReport = await agentScreenReport(computerSmoke.wc);
   results.state0 = stateOf(await computer({ action: "state" }));
   results.key = await computer({ action: "key", text: "i" });
   results.state1 = stateOf(await computer({ action: "state" }));
@@ -2918,7 +2947,11 @@ function checkComputerTool({ check }: ComputerSmoke, results: Seen): void {
     images(results.shot) === 1 && /s1_screen\.jpg/.test(asText(results.shot)),
     asText(results.shot).slice(0, 160),
   );
-  check("the agent's screen appears on its part's node in Builds while the session runs", results.uiNode === true);
+  check(
+    "the agent's screen appears on its part's node in Builds while the session runs",
+    results.uiNode === true,
+    String(results.uiNodeReport ?? ""),
+  );
   const s0 = results.state0 as Record<string, unknown>;
   check(
     "the fixture boots on the street map",
@@ -3112,9 +3145,8 @@ async function checkScriptedDirector(computerSmoke: ComputerSmoke): Promise<void
   const dirProject = await core.games.scaffold("director-smoke", { title: "Director smoke" });
   await fs.writeFile(path.join(dirProject.dir, "src", "main.js"), COMPUTER_SMOKE_GAME);
   const dirThread = await core.threadForGame(dirProject.name);
-  await wc.executeJavaScript(`localStorage.setItem("studio.activeThread", ${JSON.stringify(dirThread)})`);
   wc.reload();
-  await waitFor(`!!document.querySelector('nav [data-thread]')`, 15_000);
+  await openOnBuilds(wc, waitFor, dirThread);
   const dir: DirectorSeen = {};
   core.engines.register(
     scriptedCodex(
@@ -3156,9 +3188,11 @@ async function directLoopRun(
   dir.look = await call("look", { target: "integration" });
   dir.state = stateOf(await call("computer", { action: "state" }));
   dir.chatFrame = await waitFor(`!!document.querySelector('[data-build-status] img')?.naturalWidth`);
+  if (dir.chatFrame !== true) dir.chatFrameReport = await agentScreenReport(wc);
   // No part works yet, so the lead has the run: its node in Builds is its own screen.
   await wc.executeJavaScript(`document.querySelector('[data-stage-action="builds"]')?.click()`);
   dir.uiCard = await waitFor(`!!document.querySelector('[data-graph-node="lead"][data-agent-screen] img')`);
+  if (dir.uiCard !== true) dir.uiCardReport = await agentScreenReport(wc);
   // The run says what it is for before a builder starts (M3.8): worker_start refuses until plan has been called.
   await call("plan", {
     summary: "This run: a sign on the street.",
@@ -3203,8 +3237,16 @@ function checkDirectorLoopRun({ check }: ComputerSmoke, dir: DirectorSeen): void
       (dir.state?.maps as { activeId?: string })?.activeId === "street",
     `${asText(dir.look).slice(0, 120)} | ${JSON.stringify(dir.state).slice(0, 160)}`,
   );
-  check("the director's screen is the lead's node in Builds while it works", dir.uiCard === true);
-  check("the director's current view is the build row's picture in chat", dir.chatFrame === true);
+  check(
+    "the director's screen is the lead's node in Builds while it works",
+    dir.uiCard === true,
+    dir.uiCardReport ?? "",
+  );
+  check(
+    "the director's current view is the build row's picture in chat",
+    dir.chatFrame === true,
+    dir.chatFrameReport ?? "",
+  );
   check(
     "the worker built in a worktree of its own, with hands",
     dir.started?.mode === "single" &&

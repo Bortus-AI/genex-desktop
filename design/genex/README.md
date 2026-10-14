@@ -66,7 +66,8 @@ keyboard selection, focus, pointer cursors and reduced motion, and writes screen
 ## Contrast and customization
 
 The selected theme drives semantic roles; primary/destructive fills choose black or white
-labels. Hover shifts the fill away from its label luminance, preserving readable contrast. Text roles are measured against
+labels. A dark theme's destructive fill is its red (OKLCH chroma at most 0.15) deepened under a
+white label as the accent fill is, so Delete pairs with the accent button; red text keeps the red. Hover shifts the fill away from its label luminance, preserving readable contrast. Text roles are measured against
 canvas, card, sidebar, menu, field and hover backgrounds. Preset acceptance and real computed
 contrast checks live in `appearance.test.ts` and `run-appearance-ui.mjs`. User overrides remain
 editable and portable; derived text adjustments preserve readability. Contradictory surface
@@ -143,6 +144,11 @@ new plan and explicit approval. Failed plan generation uses a recovery card with
 and plan APIs; they do not add the web app's question protocol. Permission cards/docks scroll when available height is short; option lists have no separate
 scroll box. The plan body scrolls independently so all three footer actions remain reachable.
 
+A judge the chat asked to play (`judge_play`, `chat/JudgeLine.tsx`) is one quiet disclosure line,
+never a card: the checks list's state mark and its exact words ("Passed · Judge who played it ·
+verified by the studio", or "The judge didn't play" when nobody played); open, "Asked: …" in ink-2
+and the judge's note, or why it didn't play, in ink-3.
+
 An engine link is one quiet line in ink-3, not a card: "Lantern Run now builds in Unreal ·
 Lantern" with a secondary **Undo** while it is the game's newest link, flowing after the line's last
 word like text (a space, not a margin, so a wrapped Undo starts flush); after Undo the line keeps
@@ -183,7 +189,21 @@ length, which gives way to Open in Assets on hover; the row is the player, with 
 colour is the theme's, so models, pictures and sounds sit alike in light and dark; the Assets tab's
 sound tile draws its waveform live the same way. Only files present in the game folder appear;
 Loop-run files wait for the landed build result. Large deliveries reveal six previews at a time.
-Asset grids omit per-file metadata and job headers. The viewer is the file on the page's own colour
+Asset grids omit per-file metadata and job headers. A job still on its way is a card in the spot
+its asset will land: its kind drawn about half the card's size (a body scan, the Utah teapot, flat
+image/video/sound marks with depth, cobblestones on a plane) with a beam sweeping up and down it,
+built below and faint above; the tool's mark (Genex's routed tool, else the plugin's own icon) and
+short name at top left; a spinner and the run's clock at top right; the kind (shimmering) over the
+prompt in one line, a cut prompt shown whole in a tooltip to the card's right, its arrow on the
+line. A job that waits on the person wears the 1.5px accent ring, its candidate's picture with
+1 2 3 tabs and Approve; one that queued, failed or left the game is grey and still and says so. The
+drawing rests with the window. Any plugin's or MCP server's call that says what it makes gets the
+same card, and the chat shows each card its work is making, at the canvas's size, under the work's
+line until the job lands. A request Genex refused before it started gets no card (nor a row in a
+build's Assets panel, where a generation that failed says why), and a job that
+still says it is being made two hours on reads Not confirmed (in that panel too, grey and still); a generation's data (a clip's
+trajectory, its pose check) and its provider's source copies are never cards of their own.
+The viewer is the file on the page's own colour
 (88%, blurred), with only Reveal in Finder and Close in the top corner and no title; a click on a
 picture shows it at full size around the point clicked; a model opens playing its first clip, with
 play, the clips and speed in one floating bar and "Drag to turn · Scroll to zoom · Double-click to
@@ -417,10 +437,12 @@ full screen a studio-drawn dark glass pill sits 14px from the top-right corner, 
 full screen” beside the exit glyph; after 2.6s the words fold into the icon, which rests at 45%
 until the pointer is on it. Plugin buttons wear the prompt bar's model-pill fill (`pill-quiet`);
 one whose status says its action is due (`attention`: Publish with something to publish) takes
-the accent. Publish shows no badge: two looks, nothing else. A status badge (Unreal's Get, Add, Set
-up, Not open, Starting, Ready) is micro text after the label in its tone's colour, the quiet info
-word in ink-2 (4.5:1 on the pill in every theme), and a screen reader hears it after the button's
-name ("Unreal Editor, Ready"). An Unreal game's Live is one centred card (at most 560px) on the
+the accent. Publish shows no badge: two looks, nothing else. A status badge is micro text after the
+label in its tone's colour, the quiet info word in ink-2 (4.5:1 on the pill in every theme), or,
+when the status asks for a dot, a 6px dot in green, amber, red or ink-3 grey. Unreal's button leads
+with the Unreal glyph and wears a dot: green Ready, amber Starting, grey Not open, Not set up or Not
+installed. A button's title opens in the strip's tooltip beside it, a dot's word on its first line;
+a screen reader hears the badge after the button's name ("Unreal Editor, Ready"). An Unreal game's Live is one centred card (at most 560px) on the
 stage's hatch: the latest play shot when there is one, the project's name, one line of where it
 stands (a timer while it opens; "Ready in Unreal" once it answers) and at most one button, the same
 step the Unreal panel offers (Get Unreal Engine, Open the Unreal panel, Set up and open, Open in
@@ -523,6 +545,11 @@ In chat the outcome is the build card above: delivery, capture and Play; the car
 Counts and revision identifiers live under **Technical details** in the Builds result card. Checks and
 play/history actions remain separate, and a summary embedded in a completion card adds no
 second card surface. Do not hide adverse evidence merely to make a result look cleaner.
+Its checks list this build's first and an earlier build's under **Earlier builds**, failures first. A row
+is a 14px state mark (green check, red cross, ink-3 dash) beside the title, which clamps to three lines with
+**Show all** only when it hides words; one 12px line under it says the state in words, who checked and, for
+a check that played, what it rests on ("Passed · Judge who played it · verified by the studio"), red when
+it failed; then the checker's note. No category or revision on a row (`outcome-checks.ts`).
 The Builds graph stays a node graph: every node is one size (208×130), its picture filling it, a
 name and one status on a dark fade at its bottom, and a count in a chip at the top right; a ring
 outside it, never a border, so no state changes its size. Colour means state only (no per-part
@@ -588,7 +615,9 @@ upright plate; theme colours, 30 fps only while visible, a still under Reduce Mo
 title-only state (Game stopped) keeps no subtitle room: its title sits 6px under the art and its
 button 15px under the title. Idea → building turns the computer to face you, boots its screen and
 hands off to the rising crane; any other change of
-scene cross-fades the art while the words rise out and in. Reuse it for new empty states.
+scene cross-fades the art while the words rise out and in. Reuse it for new empty states; any
+new drawing (a loading, empty or being-made state, an icon with depth) follows the
+[wire-art skill](../../.agents/skills/wire-art/SKILL.md).
 With no runs, Activity shows only that empty state, centred: **A self-improving harness**, “Runs and
 improvements will show up here.” and **Start building** (the last game chat, composer focused), or
 **New game** when the library is empty.
@@ -685,7 +714,12 @@ trash button, **Stop allowing** (focus moves to the rule taking its place); with
 line says Always allow in a chat adds one. Each chat's mode stays in its composer.
 Opening Settings preserves the workspace and draft, traps focus and occludes the native game.
 Games comes first: the games folder as a mono path with **Change…** (a native folder picker).
-Every tab (Games, Appearance, Model Providers, Local Models, Harness and Permissions) uses the same
+Storage follows Games: a Free up space card (what stays, one primary **Free up N GB** whose tooltip
+says what goes and what stays, Nothing to free up when there is none) above one list row per kind
+(Build copies, Build pictures, Rewind copies) with its size in mono or None. Freeing asks first and
+then says what it freed under the cards. The chat header offers the same per game as a labelled
+**Free N GB** header control once a game's space reaches 1 GB.
+Every tab (Games, Storage, Appearance, Model Providers, Local Models, Harness and Permissions) uses the same
 viewport-capped 860px width and 720px content height; changing tabs
 must not resize or reposition the dialog.
 Escape/Close restores its entry point; arrow keys and Home/End navigate sections.

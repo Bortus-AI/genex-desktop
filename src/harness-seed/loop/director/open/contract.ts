@@ -53,6 +53,8 @@ export interface OpenSavePoint {
   auto: boolean;
   at: number;
   notes: string[];
+  /** The picture in the project's folder the lead named as showing what changed; absent when it named none. */
+  shows?: string | null;
 }
 
 /** A rewind the lead asked for: the save point's label, and the snapshot that label named when it asked. */

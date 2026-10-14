@@ -15,6 +15,8 @@ licenses and terms of included third-party software.
   `@modelcontextprotocol/sdk`, `@xterm/*`, `zod` and their dependencies) keep their license
   files in the packaged `node_modules`.
 - Electron supplies its own license and Chromium notices.
+- On macOS, cua-driver (MIT) keeps its license and cua's notices under `dist/resources/cua-driver`
+  ([Vendored Cua Driver](#vendored-cua-driver-cua-driver)).
 - The TypeScript 7 compiler (Apache-2.0), `@types/node` and `undici-types` (MIT) that the
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
@@ -57,6 +59,24 @@ authors); its license ships as `dist/resources/vendor/three-LICENSE`. The copied
 tree includes third-party libraries under their own terms, listed with their licenses in
 [three.js add-on libraries](#threejs-add-on-libraries); the Assets viewer also copies the Draco and
 Basis Universal decoders to `dist/renderer/decoders`.
+
+## Vendored Cua Driver (cua-driver)
+
+On macOS, computer control runs cua-driver 0.35.2 from [trycua/cua](https://github.com/trycua/cua)
+(MIT, Copyright (c) 2025 Cua AI, Inc.), bundled as `dist/resources/cua-driver/cua-driver`: the
+executable from cua's release, thinned to the app's architecture and signed with the app's identity
+(`scripts/vendor-cua-driver.ts`). Its license and cua's third-party notices for that release
+(code derived from trope-cua, Interface-Agent, yabai, QuickJS-ng, rquickjs and T3 Code, all MIT)
+ship beside it as `LICENSE.md` and `THIRD_PARTY_NOTICES.md`, copied from `build/cua-driver/`. The
+bundled copy runs with cua's telemetry and update check turned off.
+
+## Vendored Genex embed SDK (@genex-ai/embed-sdk)
+
+Template games and published games that bring no SDK of their own use Genex's player-identity SDK,
+`@genex-ai/embed-sdk` 0.30.0 (MIT, as its package.json declares; the package ships no license
+file). Its browser modules are copied unchanged to `dist/resources/vendor/genex/embed-sdk` and to
+`dist/resources/plugins/genex/embed-sdk`, and from there into a published game's
+`vendor/genex/embed-sdk`.
 
 ## Cover orb shaders from orbkit
 

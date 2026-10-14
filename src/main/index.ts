@@ -2,6 +2,8 @@ import { isClaudeLoginActive } from "../shared/claude-login.ts";
 import { isCodexLoginActive } from "../shared/codex-login.ts";
 import { updateCodingCli } from "../substrate/cli-update.ts";
 import { HarnessLogBatch } from "./harness-log-batch.ts";
+import { createDesktopControl } from "./desktop-control-host.ts";
+import type { DesktopControl } from "./core/desktop-control.ts";
 import { showAfterPaint } from "./window-ready.ts";
 import { PerformanceRecorder, watchEventLoop } from "./performance.ts";
 import { registerPerformanceIpc } from "./ipc/performance.ts";
@@ -97,7 +99,7 @@ import { createIpcHandle, pushToRenderer } from "./ipc-handle.ts";
 import { registerBootIpc } from "./ipc/boot.ts";
 import { registerUpdateIpc } from "./ipc/update.ts";
 import { registerGamesIpc } from "./ipc/games.ts";
-import { registerGameHistoryIpc } from "./ipc/game-history.ts";
+import { registerStorageIpc } from "./ipc/storage.ts";
 import { registerJobsIpc } from "./ipc/jobs.ts";
 import { registerLearningIpc } from "./ipc/learning.ts";
 import { registerLoginIpc } from "./ipc/login.ts";
@@ -659,11 +661,16 @@ function appLookOptions(userData: string): Pick<StudioCoreOptions, "appLook" | "
   return { appLook: macAppLook({ run: appLookRun, scratchDir: scratch, access: access.status }), screenAccess: access };
 }
 
+/** Computer control (cua-driver), made with the first core: one registry, stopped on quit. */
+let desktop: DesktopControl | undefined;
+
 async function createCore(userData: string): Promise<StudioCore> {
+  desktop ??= createDesktopControl({ automated: isSmoke || isSelfTest, resources });
   // Smoke runs keep everything under their throwaway userData.
   const launch = launchCoreOptions();
   const studio = new StudioCore({
     renderGameCover,
+    ...(desktop ? { desktop } : {}),
     paths: { userData, resources },
     ...appLookOptions(userData),
     neverTouch: otherProfiles(userData),
@@ -1250,7 +1257,7 @@ function registerIpc(studio: StudioCore): void {
     developer: !app.isPackaged,
   });
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
-  registerGameHistoryIpc(handle, { core: studio });
+  registerStorageIpc(handle, { core: studio });
   registerJobsIpc(handle, { core: studio, openExternal: (url) => shell.openExternal(url) });
   registerModelsIpc(handle, { core: studio, subscription, pushUiEvent, openRouterLogin });
   registerPreviewIpc(handle, {
@@ -1789,6 +1796,11 @@ let shutdownInProgress = false;
 function quitSteps(): ShutdownStep[] {
   return shutdownSteps({ keepAwake, codexLogin, claudeLogin, terminals, core });
 }
+
+// Nothing drives the person's computer once the studio is going away.
+app.on("will-quit", () => {
+  void desktop?.stopAll();
+});
 
 app.on("before-quit", async (event) => {
   harnessLogBatch.flush();

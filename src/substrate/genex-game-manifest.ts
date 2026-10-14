@@ -4,18 +4,14 @@
  * so without this the CLI never told Genex the game uses sign-in and players saw "this game didn't
  * finish starting". Only the Genex SDK versions and the `genex` settings leave the game folder.
  *
- * A game made from Studio's template has no package.json: the SDKs its import map takes from
- * Studio's own copies (`GENEX_VENDORED_SDK`) are its dependencies, at the versions Studio serves,
- * and its `genex.json` holds the settings a package.json's `genex` field would.
+ * A game made from Studio's template has no package.json: multiplayer is its dependency when its
+ * import map takes Studio's copy (`GENEX_STUDIO_IMPORTS`), at the version Studio serves, and its
+ * `genex.json` holds the settings a package.json's `genex` field would. Its player identity is not:
+ * Studio connects a template game itself and names the SDK it ships then (`workspaceManifest`).
  */
 import { readFile, stat } from "node:fs/promises";
-import {
-  GENEX_GAME_PACKAGES,
-  type GenexGameManifest,
-  type GenexGamePackage,
-  vendoredSdkPackages,
-} from "../shared/genex.ts";
-import { importMapImports } from "./game-page.ts";
+import { GENEX_GAME_PACKAGES, type GenexGameManifest, type GenexGamePackage } from "../shared/genex.ts";
+import { pageStudioSdkPackages } from "../shared/genex-page.ts";
 import { containedReal } from "./paths.ts";
 
 /** A package.json, genex.json or template page larger than this is not read. */
@@ -65,13 +61,17 @@ export function genexGameManifest(pkg: unknown): GenexGameManifest | undefined {
   return genex ? { dependencies, genex } : { dependencies };
 }
 
+/** The package Studio connects a template game with, and names itself when it publishes one. */
+const STUDIO_CONNECTED: GenexGamePackage = "@genex-ai/embed-sdk";
+
 /**
  * A template game's Genex manifest from its page's import map and its `genex.json` (both parsed
- * already); undefined when it turns on no Genex package and sets nothing.
+ * already); undefined when it turns on no Genex package of its own and sets nothing.
  */
 export function templateGenexManifest(html: string, settings: unknown): GenexGameManifest | undefined {
   const dependencies: GenexGameManifest["dependencies"] = {};
-  for (const name of vendoredSdkPackages(importMapImports(html))) dependencies[name] = GENEX_GAME_PACKAGES[name];
+  for (const name of pageStudioSdkPackages(html))
+    if (name !== STUDIO_CONNECTED) dependencies[name] = GENEX_GAME_PACKAGES[name];
   const genex = genexSettings({ genex: settings });
   if (Object.keys(dependencies).length === 0 && !genex) return undefined;
   return genex ? { dependencies, genex } : { dependencies };

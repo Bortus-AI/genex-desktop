@@ -54,16 +54,21 @@ async function thumbnailOf(
   return typeof path === "string" ? { camera: image.name, path } : null;
 }
 
+/** The camera name of the picture the lead named as showing a save point's change. */
+const SHOWN_CAMERA = "shows";
+
 /**
  * A save point on the graph: the lead's row at work at the first one, a kept round of the lead's part
- * with its label, summary, snapshot and thumbnails, and its merge into the game folder (the live
- * project), which names its snapshot and no build of its own.
+ * with its label, summary, snapshot and thumbnails (the picture the lead named as showing the change
+ * apart, as `shown`: the graph's picture of the save point), and its merge into the game folder (the
+ * live project), which names its snapshot and no build of its own.
  */
 export async function savePointRound(
   loopRun: LoopRun,
   point: OpenSavePoint,
   round: number,
   images: readonly HookImage[],
+  shownImage: HookImage | null = null,
 ) {
   if (round === 1) await leadRow(loopRun, WorkerState.Running);
   const shots = [];
@@ -71,6 +76,7 @@ export async function savePointRound(
     const shot = await thumbnailOf(loopRun, round, image);
     if (shot) shots.push(shot);
   }
+  const shown = shownImage ? await thumbnailOf(loopRun, round, { ...shownImage, name: SHOWN_CAMERA }) : null;
   const iteration = {
     facetId: OPEN_LEAD_PART,
     facetTitle: WORDS.lead,
@@ -83,6 +89,7 @@ export async function savePointRound(
     label: point.label,
     snapshot: point.snapshotId,
     shots,
+    ...(shown ? { shown } : {}),
     auto: point.auto,
     move: { what: point.summary ? `${point.label}: ${point.summary}` : point.label, delivered: true },
   };

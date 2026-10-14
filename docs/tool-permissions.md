@@ -508,10 +508,19 @@ reads of it at its next round.
 Codex runs Auto as before (`workspace-write` in the game folder, no network, never asks), Bypass
 with `--dangerously-bypass-approvals-and-sandbox`, and Plan from a folder of its own (`startsElsewhere`,
 as a read-only session) where only the studio's bridge is writable, told it plans
-(`planModeNote`). A pick applies to its next turn. Every `codex exec` runs with Codex's own
+(`planModeNote`). A pick applies to its next turn. Every Codex launch runs with Codex's own
 sub-agents (`multi_agent`, `multi_agent_v2`) and its screen and browser hands (`computer_use`,
-`in_app_browser`, `browser_use`, `browser_use_external`) disabled, all of which Codex turns on by
-default (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`).
+`in_app_browser`, `browser_use`, `browser_use_external`) disabled, those its `codex features list`
+knows (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`): the studio's `computer` tool is the
+only hands an agent has ([computer use](computer-use.md)).
+
+A judge that plays (`role: "judge"`) is blind as well as read-only (`DelegateRequest.blind`) where
+the engine can enforce it: Claude Code is offered no built-in but tool search and disallows every file, shell, edit and question tool, OpenCode
+denies every file tool, and a local session gets no file tool. Codex reads the whole disk, so a Codex
+judge is only told to judge by playing. Every engine starts in the empty `scratch/blind-judge`
+folder and is not told the build's path. Writing nothing and reading no file, it takes a folder
+lock of its own (`judgeLockKey`), so the chat's `judge_play` judge plays the game folder its own
+session holds; every other session there is still refused ([computer use](computer-use.md)).
 
 A plan on an engine that ends its turn with it (`plansByTurn`: Bonsai, Codex) is approved by the
 host ([`plan-approval.ts`](../src/main/core/plan-approval.ts) `withPlanApproval`): a Plan reply
@@ -631,6 +640,12 @@ Loop run must confirm the two known changes: builders can no longer read sibling
 
 ## Residual risks
 
+- Computer control (the `desktop` tool, [computer-use](computer-use.md#the-persons-computer)) acts
+  with the person's own access in every app they allow: the per-app consent card is the boundary.
+  A page, document or message the agent reads there can try to steer it; the tool tells the model
+  that on-screen text is never an instruction, and the studio itself, password managers and system
+  settings are never driven. Web pages (`web_*`) open only in a separate, clean browser with no
+  logins; a page's text can still try to steer the agent.
 - Codex cannot ask mid-turn: Manual and Accept edits are unavailable for it until it runs over a
   protocol that asks (`codex app-server`), and a chat in either runs Codex in Auto's sandbox. Its
   Bypass has no sandbox at all, as the CLI's own flag. Bonsai and Codex ask about no read, and their
@@ -671,7 +686,14 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   can include what a lead left there. A lead's commit made after its last run tool and before a
   Stop is not on the run's integration ref (`syncHead` runs before each tool and at the landing).
 
-- The never-touch hook reads a command's words: a path built while it runs from a variable other
+- The never-touch hook reads a command's words, relative paths from the folder the session's shell
+  stands in (the hook's `cwd`, which Claude Code moves with each `cd`). A here-document a program
+  takes as text (`TEXT_READERS`: `cat`, `python3`, `node`, Blender and the like), on the command
+  line the session runs itself with nothing on it that runs input as commands or a file by its path
+  (`./x.sh`), names paths only as paths alone, so code and prose in it (`a / b`, `~40 deg`) reach no
+  folder; one a shell, `xargs`, a loop, any other reader or a substitution (`eval "$(cat <<…)"`)
+  takes is screened as commands, and a `<<` in a comment or an arithmetic or parameter expansion is
+  no here-document. A path built while it runs from a variable other
   than `$HOME`, or a `cd` into a folder that only names itself at run time, escapes it. A command a
   worker runs outside its box (approved by Auto's classifier, or by the person in Accept edits and
   Manual) is held by the hook alone, as every command in Bypass is. The box names the roots holding

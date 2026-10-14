@@ -1,4 +1,5 @@
-import { ReferenceKind } from "../../src/harness-seed/loop/run-events.ts";
+import { ReferenceKind, RunEvent } from "../../src/harness-seed/loop/run-events.ts";
+import { RoundFlow } from "../../src/harness-seed/loop/facet/flow.ts";
 import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -12,7 +13,7 @@ import { gitFile } from "../helpers/git.ts";
  */
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, it } from "node:test";
 import {
@@ -75,7 +76,7 @@ import {
   parseSpikeVerdict,
   replanCheck,
 } from "../../src/harness-seed/loop/replan.ts";
-import { isTransientProviderError, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
+import { isTransientProviderError, StopReason, withProviderPatience } from "../../src/harness-seed/loop/outage.ts";
 import { forgetProviderLosses, noteProviderLoss, providerLossFor } from "../../src/harness-seed/loop/provider-loss.ts";
 import {
   HARNESS_CHECKS,
@@ -6782,9 +6783,9 @@ describe("the final judge when the user is in a hurry", () => {
     typeof answer === "string" ? answer : String((answer as { text?: string } | null)?.text ?? "");
 
   /**
-   * One lead turn in a hurry: the user asks to finish at once, and the lead has its one builder
-   * paint the sky, integrates it and finishes with land=yes — never calling `judge` itself. A run
-   * `fromScratch` starts on the empty scaffold (nothing drawn) until the builder paints.
+   * One lead turn in a hurry: the lead has its one builder paint the sky, the user asks to finish
+   * while it paints, and the lead integrates it and finishes with land=yes — never calling `judge`
+   * itself. A run `fromScratch` starts on the empty scaffold (nothing drawn) until the builder paints.
    */
   async function hurriedLoopRun(
     name: string,
@@ -6833,12 +6834,14 @@ describe("the final judge when the user is in a hurry", () => {
       delegate: async (request: DelegateRequest) => {
         if (request.director) {
           const call = (tool: string, args: Record<string, unknown>) => request.onLiveTool!(tool, args);
+          await call("plan", plan);
+          results.started = leadText(await call("worker_start", start));
+          // Flipped: the user asked to finish before the builder started; once they ask, no worker
+          // starts, so they ask while it works.
           await rig.core.append(
             [{ type: "custom", event_type: "run_control", payload: { runId, action: "finish" } }],
             thread,
           );
-          await call("plan", plan);
-          results.started = leadText(await call("worker_start", start));
           for (let i = 0; i < 30; i++) {
             const waited = JSON.parse(leadText(await call("wait", { seconds: "5", worker: "sky" })));
             if (waited.status.workers[0]?.state !== "running") break;
@@ -10762,8 +10765,12 @@ describe("facet rounds: the build block, kept fixes and the lead's merged fixes"
   it("FR-2. the head a builder merged may be newer than the wave head its loop merges from: the review walks from the lead's latest head", async () => {
     const { loopIntegration } = await import("../../src/harness-seed/loop/director/workers.ts");
     const fixture = await leadFixRepo();
-    const hook = loopIntegration({ state: { waveHead: fixture.carIn, integrationHead: fixture.head } } as never);
-    assert.equal(await hook.head(), fixture.carIn, "running workers still merge once per wave");
+    // A head a health pass saw fail to load: the worker merges the last healthy wave's.
+    const healthByHead = new Map([[fixture.head, false]]);
+    const hook = loopIntegration({
+      state: { waveHead: fixture.carIn, integrationHead: fixture.head, healthByHead },
+    } as never);
+    assert.equal(await hook.head(), fixture.carIn, "the wave head stands in for a head that does not load");
     const review = await reviewRound(fixture, hook);
     assert.deepEqual(
       review.violations.map((v) => v.file),
@@ -12601,6 +12608,1085 @@ describe("the scout under a local main agent (issue #47)", () => {
   });
 });
 
+/**
+ * Computer use, the judge that plays. A playtester's or a picture judge's "yes" was the model's
+ * word: nothing checked it reached what it said it saw, a screenshot question nobody could answer
+ * stayed unanswered, and a regression a picture cannot show (the key that no longer opens the menu)
+ * reached the user. A judge now plays blind on the computer tool, the studio checks its goal in the
+ * game's own state, and a route it played to a verified goal is replayed on every later build.
+ */
+describe("computer use: the judge that plays, escalation and routes", () => {
+  const engines = [
+    {
+      id: "ollama",
+      label: "Ollama",
+      kind: "direct",
+      status: { code: "ready", detail: "" },
+      defaultModel: "vl",
+      models: [{ id: "vl", label: "vl", contextWindow: 32_000, supportsTools: true, supportsVision: true }],
+    },
+    {
+      id: "claude-code",
+      label: "Claude Code",
+      kind: "delegated",
+      supportsSessions: true,
+      status: { code: "ready", detail: "" },
+      defaultModel: null,
+      models: [{ id: "opus", label: "Opus", contextWindow: 200_000, supportsTools: true, supportsVision: true }],
+    },
+  ];
+  const delegatedRun = { runId: "run_cu", project: "marsh", engine: "claude-code", model: "opus", goal: "a marsh" };
+  const question = { id: "gate", kind: "play", ask: "Could you open the gate?", expect: "yes", weight: "normal" };
+  const quest = { id: "gate-open", until: { path: "gate.open", truthy: true } };
+  /** The payload of the first record a recorder appended to the run's log. */
+  function firstRecord(recorder: { paramsOf(method: string): Array<Record<string, unknown>> }) {
+    const batch = (recorder.paramsOf("events.append")[0]?.batch ?? []) as Array<{ payload: Record<string, unknown> }>;
+    return batch[0]?.payload;
+  }
+  /** A session's folder: a trace whose third move reached the goal, and its frames on disk. */
+  async function sessionFolder(): Promise<{ dir: string; trace: string; frame: string }> {
+    const dir = await tmpDir("cu-session-");
+    const frame = path.join(dir, "s3_screen.jpg");
+    await writeFile(frame, Buffer.from("not really a jpeg"));
+    const rows = [
+      {
+        i: 1,
+        atMs: 0,
+        action: "screenshot",
+        caption: "",
+        args: { action: "screenshot" },
+        route: null,
+        frame: path.join(dir, "s1_screen.jpg"),
+        cursor: null,
+        simMs: null,
+      },
+      {
+        i: 2,
+        atMs: 1,
+        action: "key",
+        caption: "",
+        args: { action: "key", text: "e", repeat: 1 },
+        route: "browser",
+        frame: path.join(dir, "s2_screen.jpg"),
+        cursor: { x: 1, y: 1 },
+        simMs: 48,
+      },
+      {
+        i: 3,
+        atMs: 2,
+        action: "left_click",
+        caption: "",
+        args: { action: "left_click", coordinate: [400, 300] },
+        route: "browser",
+        frame,
+        cursor: { x: 400, y: 300 },
+        simMs: 48,
+        reached: true,
+      },
+      {
+        i: 4,
+        atMs: 3,
+        action: "key",
+        caption: "",
+        args: { action: "key", text: "q" },
+        route: "browser",
+        frame: null,
+        cursor: null,
+        simMs: 48,
+      },
+    ];
+    const trace = path.join(dir, "trace.jsonl");
+    await writeFile(trace, rows.map((row) => `${JSON.stringify(row)}\n`).join(""));
+    return { dir, trace, frame };
+  }
+  /** A delegated judge that answers `answer` with the given trace summary. */
+  function judgeCtx(
+    answer: unknown,
+    trace: unknown,
+    extra: Record<string, (p: Record<string, unknown>) => unknown> = {},
+  ) {
+    return ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.delegate": () => ({ summary: JSON.stringify(answer), turns: 6, trace }),
+        "run.artifact": () => "ok",
+        "events.append": () => "e1",
+        ...extra,
+      },
+    });
+  }
+
+  it("CU1. a judge that plays with no window measures nothing and fails nothing", async () => {
+    const { runHandsOnJudge } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const recorder = judgeCtx({}, null);
+    const out = await runHandsOnJudge(recorder.ctx as never, {
+      run: delegatedRun as never,
+      root: "/fake/marsh",
+      handle: null,
+      questions: [question] as never,
+      quest,
+    });
+    assert.deepEqual(
+      out.results.map((r) => [r.id, r.pass, r.state]),
+      [["gate", null, "unmeasured"]],
+    );
+    assert.equal(out.objective, "model-said");
+    assert.deepEqual(recorder.sequence("engine."), [], "no session without a window");
+  });
+
+  it("CU2. a judge's yes without the studio seeing the goal is incomplete; with it and a lit frame it is studio-verified", async () => {
+    const { runHandsOnJudge } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const { trace } = await sessionFolder();
+    const said = {
+      answers: { gate: { answer: "yes", note: "it swung open", frames: ["s3_screen"] } },
+      report: "opened",
+    };
+    const options = {
+      run: delegatedRun as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      questions: [question] as never,
+      quest,
+      labelPrefix: "director/play_1",
+    };
+    const unseen = judgeCtx(said, { path: trace, steps: 4, deterministic: true, reachedAt: null });
+    const claimed = await runHandsOnJudge(unseen.ctx as never, options);
+    assert.equal(claimed.results[0]?.pass, null, "a yes the studio never saw is not a pass");
+    assert.equal(claimed.results[0]?.state, "unmeasured");
+    assert.equal(claimed.objective, "model-said");
+    const grant = unseen.paramsOf("engine.delegate")[0]?.playtest as Record<string, unknown>;
+    assert.equal(grant.role, "judge");
+    assert.equal(grant.pacing, "stepped");
+    assert.deepEqual(grant.quest, quest);
+    assert.equal(grant.maxActions, 12);
+    assert.deepEqual(grant.setup, { begin: false }, "the judge reaches the state by playing, from the first screen");
+
+    const lit = () => ({ stats: { litFraction: 0.4, meanLuma: 90 }, width: 960, height: 600 });
+    const blank = () => ({ stats: { litFraction: 0, meanLuma: 0 }, width: 960, height: 600 });
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const verified = judgeCtx(said, reached, { "preview.statsOf": lit });
+    const held = await runHandsOnJudge(verified.ctx as never, options);
+    assert.equal(held.results[0]?.pass, true);
+    assert.equal(held.objective, "studio-verified");
+    assert.match(
+      String(verified.paramsOf("preview.statsOf")[0]?.path),
+      /s3_screen\.jpg$/,
+      "the frame it cited is read",
+    );
+    assert.match(String(held.frames.gate?.[0]), /s3_screen\.jpg$/);
+    const dark = judgeCtx(said, reached, { "preview.statsOf": blank });
+    const blackout = await runHandsOnJudge(dark.ctx as never, options);
+    assert.equal(blackout.results[0]?.pass, null, "a yes resting on a blank frame is incomplete");
+    assert.equal(blackout.objective, "model-said");
+  });
+
+  it("CU3. an unmeasured screenshot answer is put to one judge that plays, once, and resolved", async () => {
+    const { escalateVision } = await import("../../src/harness-seed/loop/vision-escalation.ts");
+    const asks = ["lamp", "door", "bench"].map((id) => ({
+      check: { id, kind: "vision", camera: "default", ask: `Is the ${id} visible?`, expect: "yes", weight: "normal" },
+      crop: null,
+    }));
+    const unmeasuredAnswer = (id: string) => ({
+      id,
+      kind: "vision",
+      weight: "normal",
+      pass: null,
+      state: "unmeasured",
+      reason: "camera default was not captured",
+    });
+    const said = {
+      answers: { lamp: { answer: "yes", note: "lit by the door" }, door: { answer: "no" }, bench: { answer: "yes" } },
+    };
+    const recorder = judgeCtx(said, { path: null, steps: 3, deterministic: true, reachedAt: null });
+    const run = { ...delegatedRun };
+    const out = await escalateVision(recorder.ctx as never, {
+      run: run as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: asks as never,
+      answers: asks.map((ask) => unmeasuredAnswer(ask.check.id)) as never,
+    });
+    assert.equal(recorder.paramsOf("engine.delegate").length, 1, "one probe for the build");
+    assert.deepEqual(
+      out.map((r) => [r.id, r.pass, r.kind]),
+      [
+        ["lamp", true, "vision"],
+        ["door", false, "vision"],
+        ["bench", null, "vision"],
+      ],
+      "the probe answers at most two questions; the third stays the picture judge's",
+    );
+    const noWindow = judgeCtx(said, null);
+    const left = await escalateVision(noWindow.ctx as never, {
+      run: run as never,
+      root: "/fake/marsh",
+      handle: null,
+      asks: asks as never,
+      answers: asks.map((ask) => unmeasuredAnswer(ask.check.id)) as never,
+    });
+    assert.deepEqual(noWindow.sequence("engine."), [], "no leased window, no probe");
+    assert.ok(left.every((r) => r.pass === null));
+    const off = judgeCtx(said, null);
+    await escalateVision(off.ctx as never, {
+      run: { ...delegatedRun, handsOnJudges: false } as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: asks as never,
+      answers: asks.map((ask) => unmeasuredAnswer(ask.check.id)) as never,
+    });
+    assert.deepEqual(off.sequence("engine."), [], "a run that turned judges that play off never probes");
+  });
+
+  it("CU4. a probe never overturns a confident screenshot no, and a flip stands only when a second look agrees", async () => {
+    const { escalateVision } = await import("../../src/harness-seed/loop/vision-escalation.ts");
+    const { trace } = await sessionFolder();
+    const ask = {
+      check: {
+        id: "lamp",
+        kind: "vision",
+        camera: "default",
+        ask: "Is the lamp lit?",
+        expect: "yes",
+        weight: "normal",
+      },
+      crop: { base64: "AAAA" },
+    };
+    const sure = {
+      id: "lamp",
+      kind: "vision",
+      weight: "normal",
+      pass: false,
+      answer: "no",
+      confidence: 0.9,
+      reason: "dark",
+    };
+    const said = { answers: { lamp: { answer: "yes", frames: ["s3_screen"] } } };
+    const traced = { path: trace, steps: 4, deterministic: true, reachedAt: null };
+    const confident = judgeCtx(said, traced);
+    const kept = await escalateVision(confident.ctx as never, {
+      run: { ...delegatedRun } as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: [ask] as never,
+      answers: [sure] as never,
+    });
+    assert.deepEqual(kept, [sure], "a confident no stands");
+    assert.deepEqual(confident.sequence("engine."), [], "and is not even escalated");
+
+    const hedged = { ...sure, confidence: 0.3 };
+    const secondLook = (answer: string) => () => ({
+      message: { role: "assistant", content: JSON.stringify({ answer, confidence: 0.8, note: "" }) },
+    });
+    const disagree = judgeCtx(said, traced, { "engine.complete": secondLook("no") });
+    const [stood] = await escalateVision(disagree.ctx as never, {
+      run: { ...delegatedRun } as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: [ask] as never,
+      answers: [hedged] as never,
+    });
+    assert.equal(disagree.paramsOf("engine.delegate").length, 1, "a hedged no is probed");
+    assert.equal(disagree.paramsOf("engine.complete").length, 1, "and the flip is looked at again");
+    assert.equal(stood?.pass, false, "the second look did not agree: the picture's answer stands");
+    const agree = judgeCtx(said, traced, { "engine.complete": secondLook("yes") });
+    const [flipped] = await escalateVision(agree.ctx as never, {
+      run: { ...delegatedRun } as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: [ask] as never,
+      answers: [hedged] as never,
+    });
+    assert.equal(flipped?.pass, true, "a flip the second look agrees with stands");
+    assert.equal(flipped?.probed, true);
+  });
+
+  it("CU5. a direct playtest on an older host without preview.computer falls back to the shorthands; on a newer one it holds only the computer", async () => {
+    const { runPlaytest } = await import("../../src/harness-seed/loop/playtester.ts");
+    const answer = JSON.stringify({ answers: { gate: { answer: "yes" } }, report: "ok" });
+    const local = { runId: "run_cu", project: "marsh", engine: "ollama", model: "vl", goal: "a marsh" };
+    const options = {
+      run: local as never,
+      checks: [question] as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      maxActions: 2,
+    };
+    const older = ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.complete": () => ({ message: { role: "assistant", content: answer } }),
+        "preview.load": () => ({ ok: true }),
+        "preview.call": () => null,
+      },
+    });
+    const played = await runPlaytest(older.ctx as never, options);
+    assert.equal(played?.results[0]?.pass, true);
+    const tools = ((older.paramsOf("engine.complete")[0]?.tools ?? []) as Array<{ name: string }>).map((t) => t.name);
+    assert.deepEqual(tools.sort(), ["click", "game_state", "look", "press_keys", "screenshot"]);
+    assert.ok(older.sequence().includes("preview.load"), "the shorthands load the build as before");
+
+    let moves = 0;
+    const newer = ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.complete": () =>
+          moves++ === 0
+            ? {
+                message: {
+                  role: "assistant",
+                  content: "",
+                  tool_calls: [{ id: "c1", name: "computer", arguments: { action: "key", text: "e" } }],
+                },
+              }
+            : { message: { role: "assistant", content: answer } },
+        "preview.computer": (p) =>
+          p.describe
+            ? {
+                tool: { name: "computer", description: "the computer", parameters: { type: "object", properties: {} } },
+              }
+            : {
+                answer: {
+                  text: "s1_key.jpg, litFraction 0.40",
+                  images: [{ mimeType: "image/jpeg", data: "AAAA", label: "s1" }],
+                },
+                trace: { path: null, steps: 1, deterministic: false, reachedAt: null },
+              },
+      },
+    });
+    const computed = await runPlaytest(newer.ctx as never, options);
+    assert.equal(computed?.results[0]?.pass, true);
+    const held = ((newer.paramsOf("engine.complete")[0]?.tools ?? []) as Array<{ name: string }>).map((t) => t.name);
+    assert.deepEqual(held, ["computer"]);
+    const call = newer.paramsOf("preview.computer")[1] as Record<string, unknown>;
+    assert.deepEqual(call.args, { action: "key", text: "e" });
+    assert.equal(call.handle, "pool-1");
+    assert.equal(call.role, "playtester");
+    assert.ok(!newer.sequence().includes("preview.load"), "the computer loads the build itself");
+    const shown = ((newer.paramsOf("engine.complete")[1]?.messages ?? []) as Array<{ images?: unknown[] }>).find(
+      (m) => m.images,
+    );
+    assert.equal(shown?.images?.length, 1, "the picture the move took goes back to the model");
+  });
+
+  it("CU6. a kept older playtester.ts without playResults still loads the judge that plays, which reads answers itself", async () => {
+    const root = await tmpDir("cu-kept-");
+    const seed = fileURLToPath(new URL("../../src/harness-seed", import.meta.url));
+    await cp(seed, root, { recursive: true });
+    await writeFile(
+      path.join(root, "loop", "playtester.ts"),
+      "export async function runPlaytest() { return null; }\nexport function playBrief() { return ''; }\nexport const SERVES_LOCAL_ROLES = true;\n// the agent's own playtester\n",
+    );
+    const kept = await import(pathToFileURL(path.join(root, "loop", "hands-on-judge.ts")).href);
+    const results = kept.handsOnResults([question], { answers: { gate: { answer: "no", note: "locked" } } });
+    assert.deepEqual(
+      results.map((r: { id: string; pass: boolean | null }) => [r.id, r.pass]),
+      [["gate", false]],
+    );
+    const evidence = await import(pathToFileURL(path.join(root, "loop", "evidence.ts")).href);
+    assert.equal(typeof evidence.gatherEvidence, "function", "the evidence pass still loads beside it");
+  });
+
+  it("CU7. a route is distilled from a verified session: the computer calls up to the goal, as they ran, no looks", async () => {
+    const { distillRoute, readTraceRows } = await import("../../src/harness-seed/loop/routes.ts");
+    const { trace } = await sessionFolder();
+    const rows = await readTraceRows(trace);
+    const route = distillRoute(rows, quest, { deterministic: true });
+    assert.deepEqual(
+      route?.steps.map((step) => [step.args, step.frame]),
+      [
+        [{ action: "key", text: "e", repeat: 1 }, "s2_screen.jpg"],
+        [{ action: "left_click", coordinate: [400, 300] }, "s3_screen.jpg"],
+      ],
+    );
+    assert.equal(
+      distillRoute(
+        rows.map(({ reached: _reached, ...row }) => row),
+        quest,
+      ),
+      null,
+      "never reached, nothing kept",
+    );
+    const batched = [
+      {
+        i: 1,
+        action: "batch",
+        args: {
+          action: "batch",
+          steps: [
+            { action: "key", text: "e" },
+            { action: "wait", duration: 0.5 },
+          ],
+        },
+        frame: null,
+        simMs: 548,
+        reached: true as const,
+      },
+    ];
+    assert.deepEqual(
+      distillRoute(batched, quest)?.steps.map((step) => step.args),
+      [
+        {
+          action: "batch",
+          actions: [
+            { action: "key", text: "e" },
+            { action: "wait", duration: 0.5 },
+          ],
+        },
+      ],
+      "a batch is kept whole, as the call that ran it: its steps keep their timing",
+    );
+  });
+
+  /** A run that keeps one three-call route to an open gate. */
+  function routedRun(deterministic: boolean) {
+    const steps = [
+      { args: { action: "key", text: "e" }, frame: "s2_key.jpg" },
+      { args: { action: "wait", duration: 0.5 }, frame: "s3_wait.jpg" },
+      { args: { action: "left_click", coordinate: [400, 300] }, frame: "s4_click.jpg" },
+    ];
+    return {
+      ...delegatedRun,
+      keptRoutes: [{ id: "gate-open", quest, steps, deterministic, divergences: 0, retired: false }],
+    };
+  }
+  /**
+   * A host whose computer session plays the replay: one trace row per call, written to a trace file,
+   * the goal reached on call `reachAt`, calls from `refuseFrom` on refused, `deterministic` as the
+   * session's clock says.
+   */
+  async function replayHost({
+    reachAt = Number.POSITIVE_INFINITY,
+    refuseFrom = Number.POSITIVE_INFINITY,
+    deterministic = true,
+  } = {}) {
+    const dir = await tmpDir("cu-replay-");
+    const file = path.join(dir, "trace-2.jsonl");
+    let calls = 0;
+    let reachedAt: number | null = null;
+    const rows: string[] = [];
+    const recorder = ctxRecorder({
+      handlers: {
+        "preview.computer": async (p) => {
+          calls++;
+          const refused = calls >= refuseFrom;
+          if (!refused && calls >= reachAt && reachedAt === null) reachedAt = calls;
+          const args = p.args as Record<string, unknown>;
+          rows.push(
+            JSON.stringify({
+              i: calls,
+              action: args.action,
+              args,
+              frame: path.join(dir, `s${calls + 10}_replay.jpg`),
+              simMs: 48,
+              ...(refused ? { refused: true } : {}),
+            }),
+          );
+          await writeFile(file, `${rows.join("\n")}\n`);
+          return { answer: "moved", trace: { path: file, steps: calls, deterministic, reachedAt } };
+        },
+        "events.append": () => "e1",
+      },
+    });
+    return { recorder, file };
+  }
+
+  it("CU8. a route is replayed through the host's own computer session; a deterministic one that no longer reaches its goal fails a check naming the step and the replay's trace", async () => {
+    const { replayRoutes } = await import("../../src/harness-seed/loop/routes.ts");
+    const run = routedRun(true);
+    const options = { run: run as never, root: "/fake/marsh", handle: "pool-1", labelPrefix: "director/judge_2" };
+    const { recorder, file } = await replayHost();
+    const out = await replayRoutes(recorder.ctx as never, options);
+    const calls = recorder.paramsOf("preview.computer");
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      run.keptRoutes[0]?.steps.map((step) => step.args),
+      "each kept call replayed as it ran, one call at a time",
+    );
+    assert.deepEqual(
+      calls.map((call) => call.fresh ?? false),
+      [true, false, false],
+      "a fresh session: reloaded, reseeded, its own trace",
+    );
+    const grant = calls[0] as Record<string, unknown>;
+    assert.deepEqual(
+      [grant.role, grant.pacing, grant.handle, grant.root],
+      ["judge", "stepped", "pool-1", "/fake/marsh"],
+    );
+    assert.deepEqual(grant.quest, quest, "the kept goal, checked by the host after every move");
+    assert.deepEqual(
+      recorder.sequence().filter((method) => method.startsWith("preview.") && method !== "preview.computer"),
+      [],
+      "no input of the harness's own around the session",
+    );
+    assert.equal(out?.replays[0]?.divergedAt, 3);
+    assert.equal(out?.results[0]?.pass, false);
+    assert.match(String(out?.results[0]?.reason), /diverged at step 3 of 3/);
+    assert.ok(String(out?.results[0]?.reason).includes(file), "the replay's trace is named");
+    const record = firstRecord(recorder);
+    assert.equal(record?.source, "route-replay");
+    assert.equal(record?.status, "failed");
+    assert.equal(record?.trace, file);
+
+    const refused = await replayHost({ refuseFrom: 2 });
+    const stopped = await replayRoutes(refused.recorder.ctx as never, { ...options, run: routedRun(true) as never });
+    assert.equal(stopped?.replays[0]?.divergedAt, 2, "a call the session refused names its step");
+
+    for (let i = 0; i < 2; i++) await replayRoutes((await replayHost()).recorder.ctx as never, options);
+    assert.equal(run.keptRoutes[0]?.retired, true, "three divergences retire the route");
+    assert.equal(await replayRoutes((await replayHost()).recorder.ctx as never, options), null);
+
+    const open = await replayHost({ reachAt: 2 });
+    const held = await replayRoutes(open.recorder.ctx as never, { ...options, run: routedRun(true) as never });
+    assert.deepEqual(held?.results, []);
+    assert.equal(open.recorder.paramsOf("preview.computer").length, 2, "the replay stops once the host saw the goal");
+    const verified = firstRecord(open.recorder);
+    assert.equal(verified?.objective, "studio-verified");
+    assert.equal(verified?.trace, open.file, "the host vouches for the trace it saw reach the goal");
+  });
+
+  it("CU9. a route whose original or replayed session was not deterministic never fails a check: it is reported", async () => {
+    const { replayRoutes } = await import("../../src/harness-seed/loop/routes.ts");
+    const options = { root: "/fake/marsh", handle: "pool-1", labelPrefix: "x" };
+    const kept = await replayHost();
+    const out = await replayRoutes(kept.recorder.ctx as never, { ...options, run: routedRun(false) as never });
+    assert.deepEqual(out?.results, [], "no failed check");
+    assert.match(String(out?.notes[0]), /diverged at step 3 of 3.*reported, never failed/);
+    assert.equal(firstRecord(kept.recorder)?.status, "incomplete");
+    const loose = await replayHost({ deterministic: false });
+    const replayed = await replayRoutes(loose.recorder.ctx as never, { ...options, run: routedRun(true) as never });
+    assert.deepEqual(replayed?.results, [], "a replay the host could not step exactly is reported, never failed");
+  });
+
+  it("CU9b. on a host without the computer session a route is not replayed: reported, never failed, never counted", async () => {
+    const { replayRoutes } = await import("../../src/harness-seed/loop/routes.ts");
+    const run = routedRun(true);
+    const older = ctxRecorder({ handlers: { "events.append": () => "e1" } });
+    const out = await replayRoutes(older.ctx as never, {
+      run: run as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      labelPrefix: "x",
+    });
+    assert.deepEqual(out?.results, []);
+    assert.match(String(out?.notes[0]), /route gate-open not replayed/);
+    assert.equal(run.keptRoutes[0]?.divergences, 0);
+    const preInput = {
+      ...delegatedRun,
+      keptRoutes: [
+        {
+          id: "gate-open",
+          quest,
+          steps: [{ input: { type: "press", combo: "e", repeat: 1 }, stepMs: 48, frame: null }],
+          deterministic: true,
+          divergences: 0,
+          retired: false,
+        },
+      ],
+    };
+    const host = await replayHost();
+    assert.equal(
+      await replayRoutes(host.recorder.ctx as never, {
+        run: preInput as never,
+        root: "/fake/marsh",
+        handle: "pool-1",
+        labelPrefix: "x",
+      }),
+      null,
+      "a route kept as preview inputs by an older seed is not replayed",
+    );
+  });
+
+  it("CU10. a director's goal_state is read strictly: anything that is not a plain path and a primitive is refused", async () => {
+    const { parseGoalState } = await import("../../src/harness-seed/loop/quest.ts");
+    const refused: Array<[string, unknown]> = [
+      ["not JSON", "{path: flow.phase"],
+      ["a list", "[1,2]"],
+      ["a number", "42"],
+      ["a string", '"flow.phase"'],
+      ["no path", '{"equals":"playing"}'],
+      ["a path with spaces", '{"path":"flow phase","equals":"playing"}'],
+      ["a path with brackets", '{"path":"enemies[0].hp","equals":0}'],
+      ["a path into the prototype", '{"path":"__proto__.polluted","truthy":true}'],
+      ["a path into a constructor", '{"path":"flow.constructor","truthy":true}'],
+      ["an object to equal", '{"path":"flow.phase","equals":{"a":1}}'],
+      ["no test at all", '{"path":"flow.phase"}'],
+      ["truthy that is not true", '{"path":"flow.phase","truthy":"yes"}'],
+      ["a path too long", JSON.stringify({ path: "a.".repeat(80) + "b", truthy: true })],
+    ];
+    for (const [why, text] of refused) {
+      const read = parseGoalState(text);
+      assert.ok(read && "error" in read, `${why} is refused: ${JSON.stringify(read)}`);
+    }
+    assert.equal(({} as Record<string, unknown>).polluted, undefined, "nothing reached the prototype");
+    assert.equal(parseGoalState(""), null);
+    assert.equal(parseGoalState(undefined), null);
+    assert.deepEqual(parseGoalState('{"path":"flow.phase","equals":"playing"}'), {
+      until: { path: "flow.phase", equals: "playing" },
+    });
+    assert.deepEqual(parseGoalState('{"path":"level.cleared","truthy":true}'), {
+      until: { path: "level.cleared", truthy: true },
+    });
+  });
+
+  // Live (Star Dash, 2026-10-14): the lead wrote a part's done scenarios in worker_start's
+  // {what, check} shape, the plan kept each as "[object Object]", and the blind judge was asked to
+  // "verify every required scenario through actual interaction: [object Object]; [object Object]".
+  it("CU17. a plan's done scenarios written as {what, check} keep their sentences, so the judge is asked them", async () => {
+    const { compilePlan } = await import("../../src/harness-seed/loop/director/rules.ts");
+    const { createGoals } = await import("../../src/harness-seed/loop/director/goals.ts");
+    const compiled = compilePlan({
+      summary: "A second enemy",
+      workers: JSON.stringify([
+        {
+          id: "enemy2",
+          done: [
+            { what: "A second red block patrols left and right near the star", check: { kind: "play" } },
+            "The game is still winnable",
+            { check: { kind: "play" } },
+          ],
+        },
+      ]),
+    });
+    assert.ok(compiled.plan);
+    assert.deepEqual(compiled.plan.workers[0]!.done, [
+      "A second red block patrols left and right near the star",
+      "The game is still winnable",
+    ]);
+    const acceptance = createGoals(compiled.plan.workers).entries[0]!.acceptance;
+    assert.ok(!acceptance.join(" ").includes("[object Object]"), acceptance.join("; "));
+  });
+
+  // Live (Star Dash): the blind judge's note reached the build card cut inside a word ("The second
+  // red block patro"). A play answer's note is cut at a word, with the mark, like every other note.
+  it("CU18. a long play answer's note is cut at a word, never inside one", async () => {
+    const { playResults } = await import("../../src/harness-seed/loop/playtester.ts");
+    const note = `I reached the win screen. ${"The second red block patrols left and right near the star. ".repeat(8)}`;
+    const [result] = playResults([{ id: "q", kind: "play", ask: "Can you win?", expect: "yes" } as never], {
+      answers: { q: { answer: "yes", note } },
+    });
+    const kept = String(result!.note);
+    assert.ok(kept.length < note.length, "a long note is still cut");
+    assert.ok(kept.endsWith("…"), kept.slice(-40));
+    const lastWord = kept.slice(0, -1).split(/\s+/).at(-1)!;
+    assert.ok(note.split(/\s+/).includes(lastWord), `"${lastWord}" is a whole word`);
+  });
+
+  /** A chat's call for a judge (`chat_judge`), as the host forwards it. */
+  const chatAsk = {
+    type: "chat_judge",
+    threadId: "thread-1",
+    project: "marsh",
+    root: "/fake/marsh",
+    engine: "claude-code",
+    model: "opus",
+    ask: "Could you open the gate?",
+    goalState: '{"path":"gate.open","truthy":true}',
+  } as const;
+  /** A judge's host with one hidden window to lend: describes, leases, delegates, releases. */
+  function chatJudgeCtx(
+    answer: unknown,
+    trace: unknown,
+    extra: Record<string, (p: Record<string, unknown>) => unknown> = {},
+  ) {
+    return judgeCtx(answer, trace, {
+      "preview.capacity": () => ({ headless: true, free: 1 }),
+      "preview.acquire": () => ({ handle: "pool-7" }),
+      "preview.release": () => true,
+      "preview.statsOf": () => ({ stats: { litFraction: 0.4, meanLuma: 90 }, width: 960, height: 600 }),
+      ...extra,
+    });
+  }
+
+  // A chat's own session made a change and had no way to have it checked by anyone but itself: the
+  // blind judge played only inside a Loop's build. It is the same judge, called from the chat.
+  it("CU19. a chat's judge plays the game folder on a leased hidden window, blind and stepped, and is studio-verified only on the trace that reached the goal", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    const { trace } = await sessionFolder();
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const recorder = chatJudgeCtx({ answers: { "chat-judge": { answer: "yes", frames: ["s3_screen"] } } }, reached);
+    const out = await judgeFromChat(recorder.ctx as never, chatAsk, { retriesMs: [] });
+    assert.deepEqual([out.status, out.answer, out.objective, out.trace], ["passed", "yes", "studio-verified", trace]);
+    const sent = recorder.paramsOf("engine.delegate")[0]!;
+    const grant = sent.playtest as Record<string, unknown>;
+    assert.deepEqual(
+      [grant.role, grant.pacing, grant.root, grant.handle, grant.runId, sent.readOnly],
+      ["judge", "stepped", "/fake/marsh", "pool-7", undefined, true],
+      "the same blind judge a build uses, on a window of its own, filed under no run",
+    );
+    assert.deepEqual(grant.quest, { id: "could-you-open-the-gate", until: { path: "gate.open", truthy: true } });
+    assert.deepEqual(recorder.paramsOf("preview.release"), [{ handle: "pool-7" }], "the window goes back");
+    assert.equal(recorder.paramsOf("events.append").length, 0, "the host records the outcome, never the harness");
+
+    const said = chatJudgeCtx(
+      { answers: { "chat-judge": { answer: "yes" } } },
+      { path: trace, steps: 4, deterministic: true, reachedAt: null },
+    );
+    const unverified = await judgeFromChat(said.ctx as never, chatAsk, { retriesMs: [] });
+    assert.notEqual(unverified.objective, "studio-verified", "a yes the studio did not see reached is not verified");
+  });
+
+  it("CU20. a chat's call for a judge with a goal state that is not a plain path, or with no question, is refused before anything is leased or played", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    for (const bad of [
+      { ...chatAsk, goalState: '{"path":"__proto__.x","truthy":true}' },
+      { ...chatAsk, goalState: "{path: gate" },
+      { ...chatAsk, ask: "   " },
+    ]) {
+      const recorder = chatJudgeCtx({}, null);
+      const out = await judgeFromChat(recorder.ctx as never, bad, { retriesMs: [] });
+      assert.equal(out.status, "incomplete");
+      assert.ok(out.refusal, JSON.stringify(out));
+      assert.deepEqual(
+        [recorder.paramsOf("preview.acquire").length, recorder.paramsOf("engine.delegate").length],
+        [0, 0],
+      );
+    }
+  });
+
+  it("CU22. a kept older judge that cannot play a chat's check leaves the chat's judge unclaimed, so the host never offers it", async () => {
+    const { servesChatJudge } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    assert.equal(servesChatJudge(), true, "the shipped judge serves it");
+    assert.equal(
+      servesChatJudge([{ runHandsOnJudge: () => null }]),
+      false,
+      "an agent-edited copy from before does not",
+    );
+  });
+
+  it("CU23. a direct engine's chat (Ollama) has the same judge_play, run by the host with this chat's model", async () => {
+    const { tools } = await import("../../src/harness-seed/tools/judge-tools.ts");
+    const [tool] = tools;
+    assert.equal(tool?.name, "judge_play");
+    const recorder = ctxRecorder({
+      handlers: { "judge.play": () => ({ answer: "Passed. The judge answered yes, verified by the studio." }) },
+    });
+    const ctx = { ...recorder.ctx, project: "marsh", engine: "ollama", model: "qwen3.5:4b" };
+    const said = await tool!.execute({ ask: "Could you open the gate?" }, ctx as never);
+    assert.match(String(said), /verified by the studio/);
+    assert.deepEqual(recorder.paramsOf("judge.play"), [
+      {
+        project: "marsh",
+        threadId: "thread-1",
+        engine: "ollama",
+        model: "qwen3.5:4b",
+        args: { ask: "Could you open the gate?" },
+      },
+    ]);
+    const refused = ctxRecorder({ handlers: { "judge.play": () => ({ unavailable: "no window to play in" }) } });
+    assert.equal(
+      await tool!.execute({ ask: "x" }, { ...refused.ctx, project: "marsh" } as never),
+      "no window to play in",
+    );
+  });
+
+  it("CU21. with every hidden window leased, a chat's judge says so and plays nothing", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    const recorder = chatJudgeCtx({}, null, {
+      "preview.acquire": () => ({ handle: null }),
+      "preview.capacity": () => ({ headless: true, free: 0, leased: 2 }),
+    });
+    const out = await judgeFromChat(recorder.ctx as never, chatAsk, { retriesMs: [] });
+    assert.equal(out.status, "incomplete");
+    assert.ok(out.refusal, "the session hears why nothing was played");
+    assert.equal(recorder.paramsOf("engine.delegate").length, 0);
+  });
+
+  const bench = { id: "bench", kind: "play", ask: "Could you sit on the bench?", expect: "yes", weight: "normal" };
+  const lit = () => ({ stats: { litFraction: 0.4, meanLuma: 90 }, width: 960, height: 600 });
+  const blank = () => ({ stats: { litFraction: 0, meanLuma: 0 }, width: 960, height: 600 });
+  /** Every interaction record a recorder appended, as [label, source, objective]. */
+  function records(recorder: { paramsOf(method: string): Array<Record<string, unknown>> }) {
+    return recorder
+      .paramsOf("events.append")
+      .flatMap((p) => (p.batch ?? []) as Array<{ payload: Record<string, unknown> }>)
+      .map(({ payload }) => [payload.label, payload.source, payload.objective]);
+  }
+
+  it("CU11. a reached goal verified every yes the judge gave: only the question it was set for is studio-verified, every other yes stays the model's word", async () => {
+    const { runHandsOnJudge, recordHandsOn } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const { trace } = await sessionFolder();
+    const said = {
+      answers: { gate: { answer: "yes", frames: ["s3_screen"] }, bench: { answer: "yes", note: "sat" } },
+    };
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const options = { run: delegatedRun as never, root: "/fake/marsh", handle: "pool-1", questions: [question, bench] };
+    const tied = judgeCtx(said, reached, { "preview.statsOf": lit });
+    const out = await runHandsOnJudge(tied.ctx as never, {
+      ...options,
+      questions: options.questions as never,
+      quest: { ...quest, checkId: "gate" },
+    });
+    assert.deepEqual(
+      out.results.map((r) => [r.id, r.pass]),
+      [
+        ["gate", true],
+        ["bench", true],
+      ],
+    );
+    assert.deepEqual(out.objectives, { gate: "studio-verified", bench: "model-said" });
+    assert.equal(out.objective, "studio-verified", "the question the goal was set for");
+    const grant = tied.paramsOf("engine.delegate")[0]?.playtest as Record<string, unknown>;
+    assert.deepEqual(grant.quest, quest, "the host is handed the goal alone");
+    await recordHandsOn(tied.ctx as never, delegatedRun as never, out, [question, bench] as never);
+    assert.deepEqual(records(tied), [
+      ["Could you open the gate?", "hands-on-judge", "studio-verified"],
+      ["Could you sit on the bench?", "hands-on-judge", "model-said"],
+    ]);
+
+    const loose = judgeCtx(said, reached, { "preview.statsOf": lit });
+    const untied = await runHandsOnJudge(loose.ctx as never, {
+      ...options,
+      questions: options.questions as never,
+      quest,
+    });
+    assert.equal(untied.objective, "model-said", "a goal for two questions that names neither verifies neither");
+    assert.deepEqual(
+      untied.results.map((r) => r.pass),
+      [true, true],
+      "each yes stands as the model gave it, on the normal rubric",
+    );
+    assert.deepEqual(untied.objectives, { gate: "model-said", bench: "model-said" });
+  });
+
+  it("CU12. the integration's play went to a judge sent to the run's requested state, which then passed every play check: only a check tied to that state is put to it; otherwise the playtester plays as before", async () => {
+    const { scoreEvidence } = await import("../../src/harness-seed/loop/facet/scoring.ts");
+    const { normalizeCheck } = await import("../../src/harness-seed/loop/spec.ts");
+    const run = { ...delegatedRun, setup: { begin: false, verify: { path: "gate.open", truthy: true } } };
+    const roam = normalizeCheck({ id: "integration-play", kind: "play", ask: "Could you move through the world?" });
+    const reach = normalizeCheck({ id: "reach-gate", kind: "play", ask: "Could you open the gate?", reaches: "setup" });
+    assert.equal(reach?.reaches, "setup", "the tie survives the planner's normalisation");
+    assert.equal(roam?.reaches, undefined);
+    const input = (checks: unknown[]) => ({
+      run,
+      spec: { id: "integration", title: "Integration", checks },
+      evidence: { shots: [] },
+      diffs: {},
+      handle: "pool-1",
+      role: "integration",
+      worktree: "/fake/marsh",
+      deadline: Date.now() + 3_600_000,
+      iteration: 1,
+      iterationId: "001",
+      facetId: "integration",
+    });
+    const said = {
+      answers: { "integration-play": { answer: "yes" }, "reach-gate": { answer: "yes", frames: ["s3_screen"] } },
+    };
+    const plain = judgeCtx(said, null);
+    await scoreEvidence(plain.ctx as never, input([roam]));
+    const played = plain.paramsOf("engine.delegate")[0]?.playtest as Record<string, unknown> | undefined;
+    assert.notEqual(played?.role, "judge", "no check tied to the requested state: the playtester plays");
+    assert.equal(played?.quest, undefined);
+    assert.deepEqual(records(plain), [], "and records nothing a judge that plays established");
+
+    const { trace } = await sessionFolder();
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const tied = judgeCtx(said, reached, { "preview.statsOf": lit });
+    const scored = await scoreEvidence(tied.ctx as never, input([roam, reach]));
+    const judged = tied.paramsOf("engine.delegate")[0]?.playtest as Record<string, unknown> | undefined;
+    assert.equal(judged?.role, "judge");
+    assert.deepEqual(judged?.quest, { id: "requested-state", until: { path: "gate.open", truthy: true } });
+    assert.deepEqual(
+      scored.results.map((r) => [r.id, r.pass]),
+      [
+        ["integration-play", true],
+        ["reach-gate", true],
+      ],
+    );
+    assert.deepEqual(records(tied), [
+      ["Could you move through the world?", "hands-on-judge", "model-said"],
+      ["Could you open the gate?", "hands-on-judge", "studio-verified"],
+    ]);
+  });
+
+  it("CU13. whether the frame a yes rests on is lit was read from the words of a tool answer: it is read from the frame file, and the frame must be taken at or after the goal", async () => {
+    const { runHandsOnJudge } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const { trace, dir } = await sessionFolder();
+    const reached = { path: trace, steps: 4, deterministic: true, reachedAt: 3 };
+    const options = {
+      run: delegatedRun as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      questions: [question] as never,
+      quest,
+    };
+    const early = { answers: { gate: { answer: "yes", frames: ["s2_screen"] } } };
+    const before = judgeCtx(early, reached, { "preview.statsOf": lit });
+    const cited = await runHandsOnJudge(before.ctx as never, options);
+    assert.equal(cited.results[0]?.pass, null, "a frame from before the goal shows nothing the goal proves");
+    assert.equal(cited.objective, "model-said");
+
+    const png = path.join(dir, "trace-png.jsonl");
+    const pngRows = (await readFile(trace, "utf8")).replaceAll("s3_screen.jpg", "s3_screen.png");
+    await writeFile(png, pngRows);
+    const pictured = judgeCtx(
+      { answers: { gate: { answer: "yes", frames: ["s3_screen.png"] } } },
+      { ...reached, path: png },
+      {
+        "preview.statsOf": lit,
+      },
+    );
+    const fromPng = await runHandsOnJudge(pictured.ctx as never, options);
+    assert.equal(fromPng.objective, "studio-verified");
+    assert.match(String(pictured.paramsOf("preview.statsOf")[0]?.path), /s3_screen\.png$/);
+
+    const local = { runId: "run_cu", project: "marsh", engine: "ollama", model: "vl", goal: "a marsh" };
+    let turns = 0;
+    const final = JSON.stringify({ answers: { gate: { answer: "yes", frames: ["s3_screen"] } } });
+    const direct = ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.complete": () =>
+          turns++ === 0
+            ? {
+                message: {
+                  role: "assistant",
+                  content: "",
+                  tool_calls: [
+                    { id: "c1", name: "computer", arguments: { action: "left_click", coordinate: [400, 300] } },
+                  ],
+                },
+              }
+            : { message: { role: "assistant", content: final } },
+        "preview.computer": (p) =>
+          p.describe
+            ? {
+                tool: { name: "computer", description: "the computer", parameters: { type: "object", properties: {} } },
+              }
+            : {
+                answer: `${path.join(dir, "s3_screen.jpg")} — 960×600, cursor at 400,300, litFraction 0.90, meanLuma 120`,
+                trace: reached,
+              },
+        "preview.statsOf": blank,
+        "events.append": () => "e1",
+      },
+    });
+    const said = await runHandsOnJudge(direct.ctx as never, { ...options, run: local as never });
+    assert.equal(said.results[0]?.pass, null, "the answer's words say lit; the frame is blank");
+    assert.equal(said.objective, "model-said");
+    assert.equal(direct.paramsOf("preview.statsOf").length, 1);
+  });
+
+  it("CU14. a probe without a goal resolved an unmeasured picture as if measured, and its budget was forgotten on a restart: its answer is the model's word, below the confidence that counts, and the count rides in the journal", async () => {
+    const { escalateVision, ESCALATE_BELOW_CONFIDENCE, MAX_PROBES_PER_RUN } = await import(
+      "../../src/harness-seed/loop/vision-escalation.ts"
+    );
+    const { recordLoopRun } = await import("../../src/harness-seed/loop/director/journal.ts");
+    const ask = {
+      check: {
+        id: "lamp",
+        kind: "vision",
+        camera: "default",
+        ask: "Is the lamp lit?",
+        expect: "yes",
+        weight: "normal",
+      },
+      crop: null,
+    };
+    const unmeasuredLamp = {
+      id: "lamp",
+      kind: "vision",
+      weight: "normal",
+      pass: null,
+      state: "unmeasured",
+      reason: "camera default was not captured",
+    };
+    const said = { answers: { lamp: { answer: "yes", note: "it glows" } } };
+    const probe = judgeCtx(said, { path: null, steps: 3, deterministic: true, reachedAt: null });
+    const run = { ...delegatedRun };
+    const [resolved] = await escalateVision(probe.ctx as never, {
+      run: run as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: [ask] as never,
+      answers: [unmeasuredLamp] as never,
+    });
+    assert.equal(resolved?.pass, true);
+    assert.ok(Number(resolved?.confidence) < ESCALATE_BELOW_CONFIDENCE, "never a measured-confident answer");
+    assert.equal(resolved?.objective, "model-said");
+    assert.deepEqual(records(probe), [["Is the lamp lit?", "hands-on-judge", "model-said"]]);
+
+    const now = Date.now();
+    const spent = { ...delegatedRun, handsOnProbes: MAX_PROBES_PER_RUN };
+    const loopRun = {
+      run: spent,
+      started: now,
+      softDeadline: now,
+      finalDeadline: now,
+      state: { judges: 0, plays: 0, ledger: [], workers: new Map(), log: [], planReviewUntil: 0 },
+      journal: { run: { ...delegatedRun } as Record<string, unknown>, director: {} as Record<string, unknown> },
+    };
+    recordLoopRun(loopRun as never, now);
+    assert.equal(loopRun.journal.run.handsOnProbes, MAX_PROBES_PER_RUN);
+    const resumed = judgeCtx(said, null);
+    await escalateVision(resumed.ctx as never, {
+      run: loopRun.journal.run as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      asks: [ask] as never,
+      answers: [unmeasuredLamp] as never,
+    });
+    assert.deepEqual(
+      resumed.sequence("engine."),
+      [],
+      "a run resumed from its journal spends no probe it already spent",
+    );
+  });
+
+  it("CU15. a direct engine's computer loop kept every move's screenshots in its conversation: only the latest turn's pictures go back", async () => {
+    const { runPlaytest } = await import("../../src/harness-seed/loop/playtester.ts");
+    const answer = JSON.stringify({ answers: { gate: { answer: "yes" } }, report: "ok" });
+    let moves = 0;
+    const recorder = ctxRecorder({
+      handlers: {
+        "engine.describe": () => engines,
+        "engine.complete": () =>
+          moves++ < 3
+            ? {
+                message: {
+                  role: "assistant",
+                  content: "",
+                  tool_calls: [{ id: `c${moves}`, name: "computer", arguments: { action: "key", text: "e" } }],
+                },
+              }
+            : { message: { role: "assistant", content: answer } },
+        "preview.computer": (p) =>
+          p.describe
+            ? {
+                tool: { name: "computer", description: "the computer", parameters: { type: "object", properties: {} } },
+              }
+            : {
+                answer: { text: "moved", images: [{ mimeType: "image/jpeg", data: "AAAA", label: "shot" }] },
+                trace: { path: null, steps: 1, deterministic: false, reachedAt: null },
+              },
+      },
+    });
+    const local = { runId: "run_cu", project: "marsh", engine: "ollama", model: "vl", goal: "a marsh" };
+    await runPlaytest(recorder.ctx as never, {
+      run: local as never,
+      checks: [question] as never,
+      root: "/fake/marsh",
+      handle: "pool-1",
+      maxActions: 6,
+    });
+    const last = recorder.paramsOf("engine.complete").at(-1)?.messages as Array<{ images?: unknown[] }>;
+    const pictured = last.filter((message) => message.images?.length);
+    assert.equal(pictured.length, 1, "only the latest turn's pictures ride along");
+  });
+
+  it("CU16. the pass rule read a quest's 'yes' from the check's pass: a 'no' that a check expects was ruled incomplete for lacking the goal", async () => {
+    const { questRuled } = await import("../../src/harness-seed/loop/hands-on-judge.ts");
+    const quest = { id: "gate", until: { path: "gate.open", equals: true }, checkId: "closed" };
+    const proof = { reachedAt: null, frameLit: null, frameAt: null };
+    const no = { id: "closed", kind: "play", weight: "normal", pass: true, reason: "", answer: "no", note: "" };
+    const ruledNo = questRuled([no] as never, quest as never, proof);
+    assert.equal(ruledNo.results[0]?.pass, true, "a 'no' stands either way");
+    assert.equal(ruledNo.objective, "model-said");
+    const yes = { ...no, pass: false, answer: "yes", reason: "judge answered yes" };
+    const ruledYes = questRuled([yes] as never, quest as never, proof);
+    assert.equal(ruledYes.results[0]?.pass, null, "a 'yes' without the goal is incomplete");
+  });
+});
 describe("a Loop chat whose turn made the game's project (an Unreal game)", () => {
   it("LL1. the session that goes on is told to launch the build with its launch tool, never to build the game itself", () => {
     const unreal = [{ id: "unreal-project", path: "unreal" }];
@@ -12639,5 +13725,1214 @@ describe("a chat whose saved session is gone (another account, or never saved)",
     });
     assert.deepEqual(calls, ["aa932c8a-f6c0-463c-8fa0-87a9ae52895c", null]);
     assert.equal(result.ok, true);
+  });
+});
+
+describe("a racing build's workers: their bench pages and a steer during the review's fix", () => {
+  const lookSpec = { id: "look", title: "Look", owns: ["src/look/", "bench/look.html"], checks: [] };
+
+  it("RB1. the look at a worker sees each file of a new folder: its own bench page is never another part's file", async () => {
+    const { monitorFindings } = await import("../../src/harness-seed/loop/director.ts");
+    const { GIT } = await import("../../src/harness-seed/loop/git.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/look/index.js": "export const look = 0;\n" });
+    await mkdir(path.join(repo.dir, "bench"), { recursive: true });
+    await writeFile(path.join(repo.dir, "bench/look.html"), "<!doctype html>\n");
+    const statusNow = async () => (await repo.exec(GIT.statusReadOnly(64_000))).stdout;
+    const own = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(own.violations, [], "the bench page the brief asked for is the worker's own");
+    assert.deepEqual(own.files, ["bench/look.html"]);
+    // Another part's page in that same new folder is still a violation, named by its file.
+    await writeFile(path.join(repo.dir, "bench/world.html"), "<!doctype html>\n");
+    const both = monitorFindings({ status: await statusNow(), diff: "", spec: lookSpec, ownsMain: false });
+    assert.deepEqual(both.violations, ["edited a file outside this facet's ownership (bench/world.html)"]);
+  });
+
+  it("RB2. a bench page's script may time itself and roll dice: the game never loads it", () => {
+    const diff = [
+      "+++ b/bench/look.js",
+      "@@ -1,0 +1,2 @@",
+      "+const wallStart = performance.now();",
+      "+const pick = Math.random();",
+      "+++ b/src/look/fx.js",
+      "@@ -1,0 +1,1 @@",
+      "+const t = performance.now();",
+      "",
+    ].join("\n");
+    const found = mechanicalReview(diff, lookSpec as never, { ownsMain: false });
+    assert.deepEqual(
+      found.map((v) => `${v.file}:${v.category}`),
+      ["src/look/fx.js:wall-clock"],
+      "only the game's own code keeps the template's rules",
+    );
+  });
+
+  it("RS1. a steer that interrupts the review's fix turn is handed to the builder, never read as the round's stop", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    // The build's own work and one file of another part: the review finds that one.
+    await writeFile(path.join(repo.dir, "src/look/index.js"), "export const look = 1;\n");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const steer = "move your bench pages into src/look/";
+    const steers = [steer];
+    const asked: Array<{ prompt: string; resume: string | null }> = [];
+    const stops: unknown[] = [];
+    const records: string[] = [];
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async (type: string) => {
+        records.push(type);
+      },
+      finishRequested: async () => false,
+      steering: async () => steers.splice(0),
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async (prompt: string, resume: string | null) => {
+        asked.push({ prompt, resume });
+        // The lead's steer lands while the first fix turn runs: the engine reports it stopped.
+        if (asked.length === 1) return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+        return { ok: true, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, undefined, "the round goes on to its evidence and verdict");
+    assert.deepEqual(
+      stops.filter((args) => (args as unknown[])[1] === true),
+      [],
+      "no stop is recorded for the steered fix turn",
+    );
+    assert.equal(asked.length, 2, "the fix turn runs again with the steer");
+    assert.match(asked[1].prompt, /move your bench pages into src\/look\//);
+    assert.equal(asked[1].resume, "builder-1", "in the builder's own session");
+    assert.deepEqual(round.userSteering, [steer], "the steer stays in the round's brief");
+    assert.ok(records.includes(RunEvent.FacetSteered), JSON.stringify(records));
+  });
+
+  it("RS2. a fix turn stopped with no steer waiting still ends the round where it stands", async () => {
+    const { reviewCode } = await import("../../src/harness-seed/loop/facet/phases/review.ts");
+    const repo = await mergeRepo({
+      "src/main.js": "// main\n",
+      "src/look/index.js": "export const look = 0;\n",
+      "src/world/track.js": "export const track = 0;\n",
+    });
+    const incumbent = await repo.git("rev-parse", "HEAD");
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    const stops: unknown[][] = [];
+    let turns = 0;
+    const loop = {
+      ctx: { ...repo.ctx, setStatus() {} },
+      git: repo.sh,
+      worktree: repo.dir,
+      projectDir: null,
+      legacy: false,
+      reviewEnabled: true,
+      modelReview: false,
+      delegated: true,
+      sessionId: "builder-1",
+      hasTime: () => true,
+      spec: { id: "look", title: "Look", owns: ["src/look/"], checks: [] },
+      facet: { id: "look", title: "Look" },
+      run: racingRunForSteer,
+      ownShape: false,
+      ownsMain: false,
+      shape: null,
+      integration: null,
+      mergedIntegration: null,
+      incumbentCommit: incumbent,
+      iterationsThisRound: 1,
+      appendRun: async () => {},
+      finishRequested: async () => false,
+      steering: async () => [],
+      stoppedHere: async (...args: unknown[]) => {
+        stops.push(args);
+        return args[1] === true;
+      },
+    };
+    const round: Record<string, any> = {
+      iteration: 1,
+      iterationId: "001",
+      buildFailed: null,
+      userSteering: [],
+      delegate: async () => {
+        turns += 1;
+        return { ok: false, stopReason: StopReason.Stopped, sessionId: "builder-1" };
+      },
+    };
+    const flow = await reviewCode(loop as never, round as never);
+    assert.equal(flow, RoundFlow.Stop);
+    assert.equal(turns, 1);
+    assert.deepEqual(stops, [[1, true]]);
+  });
+});
+
+describe("the art director's look at a run whose judges think at max effort", () => {
+  it("RA1. the look thinks at most hard enough to end in its four minutes; a lighter judge keeps its own effort", async () => {
+    const { shipReview } = await import("../../src/harness-seed/loop/ship-review.ts");
+    const effortAsked = async (judge: string | undefined) => {
+      const recorder = ctxRecorder({
+        handlers: {
+          "engine.complete": () => ({
+            message: { content: JSON.stringify({ ship: true, defects: [], reason: "ok" }) },
+          }),
+        },
+      });
+      const roles = judge ? { judge: "sonnet", efforts: { judge } } : undefined;
+      await shipReview(recorder.ctx as never, {
+        run: {
+          runId: "run_racing",
+          goal: "a night street race",
+          reference: null,
+          ...(roles ? { roles } : {}),
+        } as never,
+        evidence: { shots: [{ camera: "default", base64: "AAAA", path: "/shots/default.jpg" }] } as never,
+        parts: [{ id: "look", title: "Look" }] as never,
+      });
+      return (recorder.paramsOf("engine.complete")[0] as Record<string, unknown>).effort;
+    };
+    assert.equal(await effortAsked("max"), "high", "a max-effort look outlasts its four minutes");
+    assert.equal(await effortAsked("xhigh"), "high");
+    assert.equal(await effortAsked("medium"), "medium");
+    assert.equal(await effortAsked(undefined), undefined, "no judge effort set: the engine's own");
+  });
+});
+
+describe("workers the run's pause stopped, and their kept work", () => {
+  it("RK1. a round the run's own close stopped says so in its records' code, apart from the lead's stop", async () => {
+    const { finishStoppedRound } = await import("../../src/harness-seed/loop/facet/stop.ts");
+    const { stopsThisRound } = await import("../../src/harness-seed/loop/facet-loop.ts");
+    const { WorkerStopCode } = await import("../../src/harness-seed/loop/workers/contract.ts");
+    const recordsOf = async (code: string) => {
+      const records: Array<[string, Record<string, unknown>]> = [];
+      const loop = {
+        appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+        publishIteration: async (payload: Record<string, unknown>) =>
+          void records.push([RunEvent.FacetIteration, payload]),
+        ctx: { cancelled: false },
+        facet: { id: "world", title: "Track and night city" },
+        facetThreadId: "t-world",
+        gitOptions: {},
+        gitWhere: {},
+        result: {},
+        run: { runId: "run_racing", project: "racing" },
+        worktree: null,
+        biggestGap: "",
+        currentMove: null,
+      };
+      const asked = { by: "director", reason: "stopped by the director: the build is over", code };
+      const stop = stopsThisRound(asked, { aborted: true });
+      assert.ok(stop);
+      await finishStoppedRound(loop as never, 1, stop);
+      return records.map(([type, payload]) => [type, payload.stopCode]);
+    };
+    assert.deepEqual(await recordsOf(WorkerStopCode.RunEnded), [
+      [RunEvent.FacetStopped, WorkerStopCode.RunEnded],
+      [RunEvent.FacetIteration, WorkerStopCode.RunEnded],
+    ]);
+    assert.deepEqual((await recordsOf(WorkerStopCode.StoppedByLead))[0], [
+      RunEvent.FacetStopped,
+      WorkerStopCode.StoppedByLead,
+    ]);
+  });
+
+  it("RK2. a paused worker's kept work the lead merges by hand goes on the record as its part's, once", async () => {
+    const { noteKeptWork } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const start = await repo.git("rev-parse", "HEAD");
+    const kept = await commitOnBranch(repo, "world-stopped", { "src/world/track.js": "export const track = 1;\n" });
+    const records: Array<[string, Record<string, unknown>]> = [];
+    const merges = () =>
+      records.map(([type, payload]) => [type, payload.facetId, payload.commit, payload.head, payload.conflict]);
+    let saves = 0;
+    const journal = { director: { workers: { world: { id: "world", kept } as Record<string, unknown> } } };
+    const loopRun = {
+      ctx: repo.ctx,
+      integrationWorktree: repo.dir,
+      run: { runId: "run_racing" },
+      state: { workers: new Map() },
+      priorWorkers: [{ id: "world", title: "Track and night city", kept, keptInBuild: false }],
+      journal,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+      saveJournal: async () => {
+        saves += 1;
+      },
+    };
+    await noteKeptWork(loopRun as never, start);
+    assert.deepEqual(merges(), [], "the build does not hold it yet");
+    await repo.git("merge", "-q", "--no-ff", "--no-edit", kept);
+    const head = await repo.git("rev-parse", "HEAD");
+    await noteKeptWork(loopRun as never, head);
+    await noteKeptWork(loopRun as never, head);
+    assert.deepEqual(merges(), [[RunEvent.IntegrationMerge, "world", kept, head, false]]);
+    assert.equal(journal.director.workers.world.keptInBuild, true, "a second pause does not record it again");
+    assert.equal(saves, 1);
+  });
+
+  it("RK3. the resumed lead hears what a paused worker kept, never that it left no commit", async () => {
+    const { keptWorkOf } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const { priorCommitWords } = await import("../../src/harness-seed/loop/director/journal-prompts.ts");
+    const repo = await mergeRepo({ "src/main.js": "// main\n", "src/world/track.js": "export const track = 0;\n" });
+    const from = await repo.git("rev-parse", "HEAD");
+    // The stopped round's commit, on the worker's worktree beyond what was accepted (its fork point).
+    await writeFile(path.join(repo.dir, "src/world/track.js"), "export const track = 1;\n");
+    await repo.git("commit", "-qam", "facet world iteration 1: stopped");
+    const stoppedCommit = await repo.git("rev-parse", "HEAD");
+    const worker = { id: "world", worktree: repo.dir, lastCommit: from, from };
+    const kept = await keptWorkOf({ ctx: repo.ctx } as never, worker as never);
+    assert.equal(kept, stoppedCommit);
+    assert.equal(await keptWorkOf({ ctx: repo.ctx } as never, { ...worker, lastCommit: stoppedCommit } as never), null);
+    const ref = "refs/studio/runs/run_racing/workers/world";
+    const words = priorCommitWords({ lastCommit: from, from, ref, kept });
+    assert.doesNotMatch(words, /left no commit/);
+    assert.match(words, new RegExp(`worker_start from=${stoppedCommit}`));
+    // Flipped: it told a director with its own hands to merge the unjudged round by hand.
+    assert.doesNotMatch(words, new RegExp(`git merge ${stoppedCommit}`));
+    assert.match(words, /judge that worker against=integration before you integrate it/);
+  });
+});
+
+const racingRunForSteer = { runId: "run_racing", project: "racing", goal: "a night street race", model: "sonnet" };
+
+/** The smallest PNG: one transparent pixel. */
+const ONE_PIXEL_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+describe("a lead hears what its workers found", () => {
+  /** A reader's written report, its finding far past its first sentence. */
+  const REPORT = [
+    "Reviewed the scene from four cameras.",
+    "",
+    "1. The roofs and the dock read well from the overview camera.",
+    "2. The fog is a little thin at the far shore; raise its density.",
+    "3. The hero's left arm sticks out about 40 degrees from the body in idle, and a strip of cloth stretches to the floor in the walk.",
+  ].join("\n");
+  const FINDING = /left arm sticks out about 40 degrees/;
+
+  it("LH1. a reader's written report never reached the lead: worker_status names it in full, and a reopened pool still does", async () => {
+    const { chatPool, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Fresh eyes", task: "Review the scene.", isolation: "read" });
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: REPORT });
+    assert.match(await pool.call(WorkerTool.Status, { id }), FINDING);
+    assert.match(await pool.call(WorkerTool.Wait, { id }), FINDING);
+    await pool.close();
+    const reopened = await chatPool(host, repo);
+    assert.match(await reopened.call(WorkerTool.Status, { id }), FINDING, "the report outlives the turn");
+  });
+
+  it("LH2. a lead waiting on any worker reads the report of the one that ended, while the list of all stays one line each", async () => {
+    const { chatPool, gameRepo, poolHost, settle, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Fresh eyes", task: "Review the scene.", isolation: "read" });
+    const waited = pool.call(WorkerTool.Wait, { seconds: 60 });
+    await settle();
+    host.sessionOf(id).end({ ok: true, sessionId: "s1", summary: REPORT });
+    assert.match(await waited, FINDING);
+    const all = await pool.call(WorkerTool.Status, {});
+    assert.match(all, /Reviewed the scene from four cameras\./, "the list names it by its first sentence");
+    assert.doesNotMatch(all, FINDING);
+  });
+
+  it("LH4. a worker ended its turn to wait on a long job in the background, and its later calls were refused: its brief says its turn is its whole job", async () => {
+    const { workerBrief } = await import("../../src/harness-seed/loop/workers/prompts.ts");
+    const brief = workerBrief({
+      identity: { folderLabel: "AI Games/garden", facts: [{ id: "web-game", path: "." }] },
+      task: "Make the three townsfolk with Genex.",
+      isolation: "copy",
+      research: false,
+      typeDescription: null,
+      inputs: [],
+    } as never);
+    assert.match(brief, /Your turn is your whole job/);
+    assert.match(brief, /never wait with sleep or a background command/i);
+    assert.match(brief, /call its wait again with the same id/);
+  });
+
+  it("LH5. save points were kept on wide shots that never showed the change: a save point names the picture that shows it, and that picture leads its round on the graph", async () => {
+    const { gameRepo, loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await tmpDir("save-shows-");
+    await mkdir(path.join(dir, "shots"), { recursive: true });
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    await writeFile(path.join(dir, "shots/hero-closeup.png"), Buffer.from(ONE_PIXEL_PNG, "base64"));
+    await gameRepo(dir);
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          const shows = "shots/hero-closeup.png";
+          answers.push(await tool("save_point", { label: "Hero", summary: "the hero's arms at his sides", shows }));
+          await writeFile(path.join(dir, "b.txt"), "b");
+          answers.push(await tool("save_point", { label: "Dock", summary: "the dock" }));
+          await writeFile(path.join(dir, "c.txt"), "c");
+          answers.push(await tool("save_point", { label: "Boat", summary: "the boat", shows: "../outside.png" }));
+          await tool("finish", { summary: "Built.", proof: "a.txt" });
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    const [hero, dock, boat] = host.appended("facet_iteration");
+    assert.match(String((hero?.shown as { path?: string } | undefined)?.path), /save-1\/shows/);
+    assert.equal(dock?.shown, undefined);
+    assert.equal(boat?.shown, undefined, "a path outside the folder is never read");
+    assert.doesNotMatch(String(answers[0]), /name the picture/);
+    assert.match(String(answers[1]), /name the picture that shows what changed/);
+    assert.match(String(answers[2]), /not a picture in the project's folder/);
+  });
+
+  it("a save point's picture is read only from inside the folder, as a plain PNG or JPEG", async () => {
+    const { shownPicture } = await import("../../src/harness-seed/loop/director/open/shown-picture.ts");
+    const { symlink } = await import("node:fs/promises");
+    const root = await tmpDir("save-shows-hostile-");
+    const dir = path.join(root, "game");
+    await mkdir(path.join(dir, "shots"), { recursive: true });
+    await mkdir(path.join(dir, ".hidden"), { recursive: true });
+    const picture = Buffer.from(ONE_PIXEL_PNG, "base64");
+    await writeFile(path.join(root, "outside.png"), picture);
+    await writeFile(path.join(dir, ".hidden/a.png"), picture);
+    await writeFile(path.join(dir, "shots/notes.txt"), "not a picture\n");
+    await writeFile(path.join(dir, "shots/huge.png"), Buffer.concat([picture, Buffer.alloc(9 * 1024 * 1024)]));
+    await writeFile(path.join(dir, "shots/ok.png"), picture);
+    await symlink(path.join(root, "outside.png"), path.join(dir, "shots/link.png"));
+    await promisify(execFile)("mkfifo", [path.join(dir, "shots/pipe.png")]);
+    const hostile = [
+      "../outside.png",
+      path.join(root, "outside.png"),
+      "shots/link.png",
+      ".hidden/a.png",
+      "shots/pipe.png",
+      "shots/huge.png",
+      "shots/notes.txt",
+      "shots/missing.png",
+      "shots/../../outside.png",
+    ];
+    for (const rel of hostile) {
+      const shown = await shownPicture(dir, rel);
+      assert.ok("problem" in shown, `${rel} is refused`);
+    }
+    const ok = await shownPicture(dir, "shots/ok.png");
+    assert.ok("image" in ok && ok.image.data === picture.toString("base64"));
+  });
+
+  it("LH6. a worker's work was marked used seconds after it ended, before anyone looked: the merge hands back the pictures it made, to look at", async () => {
+    const { chatPool, delegation, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Model the annex", task: "Model the annex.", isolation: "copy" });
+    const copy = String(delegation(host, id).cwd);
+    await mkdir(path.join(copy, "assets/annex"), { recursive: true });
+    await writeFile(path.join(copy, "assets/annex/annex.glb"), "glb");
+    await writeFile(path.join(copy, "assets/annex/render.png"), Buffer.from(ONE_PIXEL_PNG, "base64"));
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: "Modelled the annex." });
+    const merged = await pool.call(WorkerTool.Mark, { id, verdict: "used" });
+    assert.match(merged, /Merged w1/);
+    assert.match(merged, /Look at[^.]*assets\/annex\/render\.png/);
+    assert.doesNotMatch(merged, /annex\.glb/, "only its pictures");
+  });
+
+  it("LH3. a copy worker's status names the files its work changes", async () => {
+    const { chatPool, delegation, finish, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const pool = await chatPool(host, repo);
+    const id = await start(pool, { title: "Add a boat", task: "Add boat.js.", isolation: "copy" });
+    const copy = String(delegation(host, id).cwd);
+    await mkdir(path.join(copy, "src"), { recursive: true });
+    await writeFile(path.join(copy, "src/boat.js"), "export const boat = 1;\n");
+    await writeFile(path.join(copy, "a.txt"), "changed\n");
+    await finish(host, pool, id, { ok: true, sessionId: "s1", summary: "Added the boat." });
+    const status = await pool.call(WorkerTool.Status, { id });
+    assert.match(status, /a\.txt/);
+    assert.match(status, /src\/boat\.js/);
+  });
+});
+
+describe("a finish claim with known gaps", () => {
+  /** A game folder with one commit, for a Loop in place. */
+  const folder = async (prefix: string) => {
+    const { gameRepo } = await import("../helpers/loop-host.ts");
+    const dir = await tmpDir(prefix);
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    return gameRepo(dir);
+  };
+  const GAPS = "the player has no walk animation\nthe hero's left arm sticks out from the body";
+
+  it("LF1. the lead's closing line of known gaps was cut off with its claim at its length limit: what remains is a field of its own, read first and whole", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-remaining-");
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 15 * MINUTE_MS, completionPolicy: "goal" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          await tool("finish", {
+            summary: `${"The scene holds the town. ".repeat(160)}`,
+            remaining: GAPS,
+            proof: "a.txt",
+          });
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    const prompt = String(host.reviewed()[0]?.prompt ?? "");
+    assert.match(prompt, /the hero's left arm sticks out from the body/);
+    assert.ok(
+      prompt.indexOf("the player has no walk animation") < prompt.indexOf("## The lead's claim"),
+      "what remains comes before the claim",
+    );
+  });
+
+  it("LF2. a reviewer's yes ended a three-hour Loop early while the lead named gaps: a claim naming gaps with time left reaches no reviewer, and the lead works on them first", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-gaps-early-");
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 3 * HOUR_MS, completionPolicy: "timed" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          answers.push(await tool("finish", { summary: "The scene is built.", remaining: GAPS, proof: "a.txt" }));
+          return undefined;
+        },
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "b.txt"), "b");
+          await tool("save_point", { label: "Walk", summary: "the walk and the arms" });
+          answers.push(
+            await tool("finish", { summary: "The scene is built and the gaps are closed.", proof: "b.txt" }),
+          );
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    assert.match(String(answers[0]), /^Not checked: .*work on it first/);
+    assert.match(String(answers[0]), /walk animation/);
+    assert.equal(host.reviewed().length, 1, "only the claim with nothing remaining reached a reviewer");
+    assert.match(String(answers[1]), /^Accepted/);
+  });
+
+  it("LF3. with gaps named but the Loop's time nearly spent, a reviewer's yes still closes it", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const dir = await folder("finish-gaps-late-");
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 15 * MINUTE_MS, completionPolicy: "timed" } },
+      turns: [
+        async ({ tool }) => {
+          await writeFile(path.join(dir, "a.txt"), "a");
+          await tool("save_point", { label: "Scene", summary: "the scene" });
+          answers.push(await tool("finish", { summary: "The scene is built.", remaining: GAPS, proof: "a.txt" }));
+          return undefined;
+        },
+      ],
+    });
+    await host.start();
+    assert.match(String(answers[0]), /^Accepted/);
+  });
+});
+
+describe("the most workers at once", () => {
+  it("LW1. a lead was told 'up to eight at once' while the person's Settings allowed four, and the fifth was answered 'Started' before the host refused it: the pool says the live cap and refuses at once", async () => {
+    const { chatPool, gameRepo, poolHost, start } = await import("../helpers/worker-pool-host.ts");
+    const { WorkerTool } = await import("../../src/shared/workers.ts");
+    const { workerTools } = await import("../../src/harness-seed/loop/workers/specs.ts");
+    const repo = await gameRepo();
+    const host = poolHost(repo, { workersAllowed: 4 });
+    const pool = await chatPool(host, repo);
+    for (const n of [1, 2, 3, 4]) await start(pool, { title: `Read ${n}`, task: "Look around.", isolation: "read" });
+    const fifth = await pool.call(WorkerTool.Start, { title: "Read 5", task: "Look around.", isolation: "read" });
+    assert.match(fifth, /^Not started: 4 workers are running, and at most 4 run at once/);
+    assert.equal(host.sessions.length, 4, "nothing was asked of the host for the fifth");
+    const start5 = workerTools([], pool.state.allowed).find((tool) => tool.name === WorkerTool.Start);
+    assert.match(String(start5?.description), /Up to 4 at once/);
+  });
+});
+
+describe("a worker wait inside the lead's capped turn", () => {
+  it("LT1. the turn's cap cut a four-minute worker_wait short and the turn's continuation re-sent its guidance: a wait ends before the turn must, saying so", async () => {
+    const { turnRoomNote, waitWithinTurn } = await import("../../src/harness-seed/loop/director/open/turn-room.ts");
+    const { noteTurnEnds } = await import("../../src/harness-seed/loop/director/turn-ends.ts");
+    const state = {};
+    const now = 1_000_000;
+    noteTurnEnds(state, now + 4 * MINUTE_MS);
+    const near = waitWithinTurn({ state } as never, { seconds: "240" }, now);
+    assert.equal(near.args.seconds, 150, "the wait returns 90 s before the turn must end");
+    assert.equal(near.endsBy, now + 4 * MINUTE_MS);
+    // Told as the wait returns, not as it began.
+    assert.match(turnRoomNote(Number(near.endsBy), now + 150 * SECOND_MS), /turn ends in about 2 minutes/);
+    const far = waitWithinTurn({ state } as never, { seconds: "60" }, now);
+    assert.deepEqual(far, { args: { seconds: "60" }, endsBy: null }, "a wait that fits is left alone");
+    // The pool lets no wait run past 240 s: a longer ask that fits once capped is left alone too.
+    noteTurnEnds(state, now + 10 * MINUTE_MS);
+    assert.equal(waitWithinTurn({ state } as never, { seconds: "600" }, now).endsBy, null);
+    const none = waitWithinTurn({ state: {} } as never, { seconds: "240" }, now);
+    assert.equal(none.endsBy, null, "a turn with no end noted waits as asked");
+  });
+});
+
+describe("the user's ask to finish a running build (director/wrap-up.ts)", () => {
+  const FINISH_ASK = "time to move toward completion: wait for the last workers and put everything together";
+
+  /** The run's finish asks its host recorded, oldest first. */
+  const finishAsks = (host: { calls: Array<{ method: string; params: Record<string, any> }> }) =>
+    host.calls
+      .filter((call) => call.method === HostMethod.EventsAppend)
+      .flatMap((call) => call.params.batch as Array<Record<string, any>>)
+      .filter((event) => event.event_type === RunEvent.RunControl)
+      .map((event) => event.payload as Record<string, unknown>);
+
+  /** A director's run whose inbox reads the user's words and the finish asks recorded on its host. */
+  async function askedRun(said: string[], over: Record<string, unknown> = {}) {
+    const { fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
+    const host = fakeHost();
+    const inbox = {
+      // The lead has heard what they said: nothing is new to it.
+      steering: async (_facet?: string, _consume?: boolean, read: { onlyNew?: boolean } = {}) =>
+        read.onlyNew ? [] : said,
+      finishing: async () => finishAsks(host).some((ask) => ask.action === "finish"),
+      addressed: async () => [],
+      backlog: async () => [],
+    };
+    return { host, loopRun: fakeLoopRun(host, { inbox, ...over }) };
+  }
+
+  it("FA1. an ask to finish is the lead's wrap_up: it records the run's finish quoting the user, once, and no worker starts after it", async () => {
+    const { host, loopRun } = await askedRun([FINISH_ASK]);
+    loopRun.state.plan = { summary: "A night race.", workers: [{ id: "lights", title: "Street lights" }] };
+
+    const invented = String(await loopRun.handler("wrap_up", { user_asked: "please finish the build now" }));
+    assert.match(invented, /quot/i, invented);
+    assert.deepEqual(finishAsks(host), [], "words the user never wrote record nothing");
+
+    const answer = String(await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" }));
+    assert.deepEqual(
+      finishAsks(host).map((ask) => [ask.runId, ask.action]),
+      [["run_j", "finish"]],
+      answer,
+    );
+    await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" });
+    assert.equal(finishAsks(host).length, 1, "a second call records nothing more");
+
+    const start = String(await loopRun.handler("worker_start", { id: "lights", task: "Add street lights" }));
+    assert.match(start, /asked to finish/, start);
+    assert.equal(loopRun.state.workers.size, 0, "no worker started");
+  });
+
+  it("FA2. a running worker ends the round it is in once the user asks to finish; only the lead's stop or the run's close ends it mid-round", async () => {
+    const { workerStopAsk } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const { stopSignal, stopsThisRound } = await import("../../src/harness-seed/loop/facet/rules.ts");
+    const { host, loopRun } = await askedRun([FINISH_ASK]);
+    const worker = { id: "track", title: "Track", stopRequested: false, stopWhy: null };
+    assert.equal(await workerStopAsk(loopRun, worker), false, "nobody asked");
+
+    await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" });
+    assert.equal(finishAsks(host).length, 1);
+    const asked = await workerStopAsk(loopRun, worker);
+    assert.equal(stopsThisRound(asked), null, "the round it is in goes on to its verdict");
+    assert.equal(stopSignal(asked)?.by, "user", "and the next one is not started, at the user's request");
+
+    worker.stopRequested = true;
+    assert.equal(stopsThisRound(await workerStopAsk(loopRun, worker))?.by, "director", "the lead's stop ends it now");
+  });
+
+  it("FA3. after the lead's wrap_up the run rests until its running workers end, then wraps up for the user's ask — never asked what next, never told the ask it made", async () => {
+    const { NoteKind } = await import("../../src/harness-seed/loop/director/wake-schedule.ts");
+    const { fakeClock, lead, T0 } = await import("../helpers/director-run.ts");
+    const { MINUTE_MS } = await import("../../src/harness-seed/loop/time.ts");
+    const { loopRun } = await askedRun([FINISH_ASK]);
+    const track = {
+      id: "track",
+      title: "Track",
+      mode: "loop",
+      state: "running",
+      stopRequested: false,
+      deadline: T0 + 50 * MINUTE_MS,
+      startedAt: T0,
+      iterations: [],
+      roundMs: [],
+      steering: [],
+      owns: [],
+    };
+    loopRun.state.workers.set("track", track);
+    const roundEnds = T0 + 20 * MINUTE_MS;
+    const clock = fakeClock(T0 + MINUTE_MS, (now) => {
+      if (track.state !== "running" || now < roundEnds) return;
+      track.state = "done";
+      // On the loop's clock: `note` stamps the wall clock's.
+      loopRun.logSeq += 1;
+      loopRun.state.log.push({ at: now, seq: loopRun.logSeq, text: "worker track ended", kind: NoteKind.WorkerEnded });
+    });
+    const { talk, turns } = lead(async (turn) => {
+      if (turn === 1) await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" });
+      if (turn === 3) loopRun.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    await runWakeLoop(loopRun, talk, () => "You are the DIRECTOR of run run_j", clock);
+
+    const prompts = turns.map((turn) => turn.prompt);
+    assert.equal(prompts.length, 3, prompts.map((prompt) => prompt.slice(0, 200)).join("\n---\n"));
+    assert.match(prompts[1]!, /a worker ended/, "woken by the worker's end");
+    assert.doesNotMatch(prompts[1]!, /^WOKEN AT [^\n]*the user asked to finish/, "its own ask is not news to it");
+    assert.match(prompts[2]!, /The user asked to finish, so the studio starts the wrap-up now/);
+    assert.doesNotMatch(prompts[2]!, /victory=yes/, "the finish after the user's ask claims nothing");
+    assert.ok(loopRun.softDeadline >= roundEnds, "the working time ended when the last round did, not at the ask");
+  });
+
+  it("FA4. the wrap-up after the user's ask never invites a claim: their finish closes the run with no reviewer, so no win is claimed", async () => {
+    const { wrapUpPrompt } = await import("../../src/harness-seed/loop/director/briefs.ts");
+    const now = Date.now();
+    const brief = {
+      run: { runId: "run_f", project: "racer", goal: "a racer" },
+      finalDeadline: now + 30 * 60_000,
+      integrationHead: "a".repeat(40),
+      integrationHealthy: true,
+      workers: [],
+    };
+    const asked = wrapUpPrompt({ ...brief, userAsked: true } as never);
+    assert.doesNotMatch(asked, /victory=yes/, asked);
+    assert.match(asked, /claims nothing/);
+    assert.match(wrapUpPrompt(brief as never), /victory=yes/, "the clock's wrap-up still may claim the goal");
+
+    // The open Loop: a finish after the person's ask closes at once, with no reviewer.
+    const { openClosing } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
+    const open = (wrapCause: string) =>
+      openClosing({ wrapping: true, wrapCause, idleAsk: false, minutesLeft: 20 } as never);
+    assert.doesNotMatch(open("finish"), /reviewer needs/, open("finish"));
+    assert.match(open("finish"), /no reviewer/);
+    assert.match(open("deadline"), /a reviewer needs that long to check your claim/);
+  });
+
+  it("FA5. a single session holds no wrap-up: it has no round to end, so the wrap-up starts once no loop worker runs, and finish stops it", async () => {
+    const { fakeClock, lead, T0 } = await import("../helpers/director-run.ts");
+    const { MINUTE_MS } = await import("../../src/harness-seed/loop/time.ts");
+    const { loopRun } = await askedRun([FINISH_ASK]);
+    loopRun.state.workers.set("survey", {
+      id: "survey",
+      title: "Survey",
+      mode: "single",
+      state: "running",
+      stopRequested: false,
+      deadline: T0 + 50 * MINUTE_MS,
+      startedAt: T0,
+      iterations: [],
+      roundMs: [],
+      steering: [],
+      owns: [],
+    });
+    const { talk, turns } = lead(async (turn) => {
+      if (turn === 1) {
+        const answer = String(await loopRun.handler("wrap_up", { user_asked: "wait for the last workers" }));
+        assert.match(answer, /survey \(one session: finish stops it\)/, answer);
+        assert.match(answer, /when this turn ends the studio starts the wrap-up/, "no round to wait for");
+      }
+      if (turn === 2) loopRun.state.finished = true;
+      return { ok: true, sessionId: "lead-1" };
+    });
+    await runWakeLoop(loopRun, talk, () => "You are the DIRECTOR of run run_j", fakeClock(T0 + MINUTE_MS));
+    const prompts = turns.map((turn) => turn.prompt);
+    assert.equal(prompts.length, 2, prompts.map((prompt) => prompt.slice(0, 200)).join("\n---\n"));
+    assert.match(prompts[1]!, /The user asked to finish, so the studio starts the wrap-up now/);
+    assert.match(prompts[1]!, /Workers still running: survey/);
+  });
+
+  it("FA6. an open Loop starts no worker once anybody asked it to finish — the app's own Finish too, not only the lead's wrap_up", async () => {
+    const { openHandler } = await import("../../src/harness-seed/loop/director/open/tools.ts");
+    const { WRAP_UP_WORDS } = await import("../../src/harness-seed/loop/director/wrap-up-prompts.ts");
+    const loopRun = {
+      ctx: { cancelled: false },
+      toolCalls: 0,
+      open: { halted: false },
+      state: { finished: false, finish: null, finishAsk: null },
+      inbox: { finishing: async () => true },
+    };
+    const answer = await openHandler(loopRun as never)("worker_start", { title: "Lights", task: "Add street lights" });
+    assert.equal(answer, WRAP_UP_WORDS.openNoWorkers);
+  });
+});
+
+describe("a run whose every role was set to think at max effort", () => {
+  it("EF1. its workers and reviewers think at most hard, its lead as set; a lower setting is every role's, fixed efforts too", async () => {
+    const { roleEffort } = await import("../../src/harness-seed/loop/model-roles.ts");
+    const { boundedEffort } = await import("../../src/harness-seed/loop/effort-cap.ts");
+    const set = (effort: string) => ({ roles: { efforts: { planner: effort, builder: effort, judge: effort } } });
+    const each = (run: object) => ["planner", "builder", "judge"].map((role) => roleEffort(run, role));
+    assert.deepEqual(each(set("max")), ["max", "high", "high"], "a worker's and a reviewer's thinking is held to high");
+    assert.deepEqual(each(set("medium")), ["medium", "medium", "medium"]);
+    assert.deepEqual(each({ effort: "max" }), ["max", undefined, undefined], "the composer's dial is the lead's");
+    assert.equal(boundedEffort("high", roleEffort(set("low"), "judge")), "low", "a critic's own effort gives way");
+    assert.equal(boundedEffort("high", roleEffort(set("max"), "judge")), "high");
+    assert.equal(boundedEffort("high", undefined), "high");
+  });
+
+  it("EF2. the Unreal lead thinks as the user set the main agent when it runs the main agent's model; on another model, at the workers' level", async () => {
+    const { leadEngine } = await import("../../src/harness-seed/loop/unreal/lead-turn.ts");
+    // What the composer sends for a slider at max: the lead's as set, the workers' held to high.
+    const efforts = { planner: "max", builder: "high", judge: "high" };
+    const one = { engine: "claude-code", model: "claude-opus-5-5", roles: { planner: "claude-opus-5-5", efforts } };
+    assert.equal(leadEngine({ run: one } as never).effort, "max", "the lead's own effort, never a worker's ceiling");
+    const split = { ...one, builderEngine: "codex", model: "gpt-6.1-sol" };
+    assert.equal(leadEngine({ run: split } as never).effort, "high", "a level one model takes may not be another's");
+    const lower = { ...one, roles: { ...one.roles, efforts: { planner: "low", builder: "low", judge: "low" } } };
+    assert.equal(leadEngine({ run: lower } as never).effort, "low");
+    assert.equal(leadEngine({ run: { engine: "claude-code" } } as never).effort, "high", "none chosen: high");
+    const buildersOnly = { engine: "claude-code", roles: { efforts: { builder: "medium" } } };
+    assert.equal(leadEngine({ run: buildersOnly } as never).effort, "medium", "no main agent's choice: the builders'");
+  });
+});
+
+describe("the art director's defects: only a blocker is work", () => {
+  /** A loop worker building its part, with a board and steering of its own. */
+  const building = (id: string) => ({
+    id,
+    title: id,
+    mode: "loop",
+    state: "running",
+    spec: { checks: [] as Array<Record<string, unknown>> },
+    steering: [] as string[],
+  });
+  const REVIEW = {
+    ship: false,
+    defects: [
+      { what: "the car falls through the road at the bridge", camera: "chase", part: "track", severity: "blocker" },
+      { what: "the road texture swims as the car moves", camera: "chase", part: "track", severity: "visible" },
+      { what: "the lap counter sits a hair too high", camera: "default", part: "hud", severity: "nit" },
+      { what: "the skyline is a flat colour", camera: "top", part: "city", severity: "visible" },
+    ],
+    doNotRegress: [],
+  };
+
+  it("BL1. a blocker reaches its owner's board; a visible flaw or a nit starts no round and steers nobody — it is the report's", async () => {
+    const { routeShipDefects } = await import("../../src/harness-seed/loop/director/art-direction.ts");
+    const track = building("track");
+    const hud = building("hud");
+    const notes: string[] = [];
+    const loopRun = {
+      note: (text: string) => void notes.push(text),
+      journal: { director: {} },
+      state: {
+        workers: new Map<string, unknown>([
+          ["track", track],
+          ["hud", hud],
+        ]),
+        ledger: [],
+        plan: null,
+      },
+    };
+    const routes = routeShipDefects(loopRun as never, REVIEW as never);
+    assert.deepEqual(
+      routes.map((route) => [route.part, route.defect.severity]),
+      [["track", "blocker"]],
+    );
+    assert.deepEqual(
+      track.spec.checks.map((check) => check.defect),
+      ["the car falls through the road at the bridge"],
+    );
+    assert.equal(track.steering.length, 1, "its owner is told about the blocker");
+    assert.deepEqual([hud.spec.checks, hud.steering], [[], []], "a nit is nobody's round");
+    assert.deepEqual(loopRun.state.ledger, [], "a visible flaw no worker builds is not shelved as work");
+  });
+
+  it("BL2. the lead hears that the visible flaws and nits are for its report, and to finish once nothing blocks", async () => {
+    const { shipNext, FINISH_MARK_RULE } = await import(
+      "../../src/harness-seed/loop/director/art-direction-prompts.ts"
+    );
+    const noBlocker = { ship: true, defects: REVIEW.defects.filter((d) => d.severity !== "blocker") } as never;
+    const next = shipNext(noBlocker);
+    assert.notEqual(next, FINISH_MARK_RULE, "no finish round for a flaw that blocks nothing");
+    assert.match(next, /report/);
+    assert.doesNotMatch(next, /stage=finish/);
+    assert.equal(shipNext(REVIEW as never), FINISH_MARK_RULE, "a blocker is still finished by its owner");
+    const stillNo = shipNext({ ...(noBlocker as object), ship: false } as never);
+    assert.notEqual(stillNo, FINISH_MARK_RULE, "a no with no blocker named starts nothing either");
+  });
+});
+
+describe("a worker whose model provider went away", () => {
+  const PT0 = Date.UTC(2026, 9, 1, 12, 0, 0);
+  const MIN = 60_000;
+
+  /** A facet loop waiting on its provider: its clock on Node's mock timers, its records kept. */
+  function waitingLoop(t: { mock: { timers: { tick: (ms: number) => void } } }, over: Record<string, unknown> = {}) {
+    const records: Array<[string, Record<string, unknown>]> = [];
+    const moved: number[] = [];
+    return {
+      records,
+      moved,
+      loop: {
+        ctx: { cancelled: false, setStatus: () => {} },
+        facet: { id: "world", title: "World" },
+        run: { runId: "run_p", budgets: {} },
+        facetThreadId: "t-world",
+        worktree: null,
+        result: {} as Record<string, unknown>,
+        currentMove: null,
+        biggestGap: "",
+        appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+        publishIteration: async () => {},
+        onProviderLost: null,
+        stoppedHere: async () => false,
+        finishRequested: async () => false,
+        iterationsThisRound: 1,
+        deadline: PT0 + 5 * MIN,
+        deadlineCeiling: () => PT0 + 2 * 60 * MIN,
+        onDeadline: (deadline: number) => void moved.push(deadline),
+        sleepFor: async (ms: number) => t.mock.timers.tick(ms),
+        ...over,
+      },
+    };
+  }
+
+  it("PC1. its clock stands still while it waits: a limit that lifts after its own deadline no longer ends the round, and the clock never passes the run's working deadline", async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: PT0 });
+    const { waitForProvider } = await import("../../src/harness-seed/loop/facet/provider.ts");
+    const lost = { kind: "rate_limit", engine: "claude-code", message: "session limit", until: PT0 + 27 * MIN };
+    const waiting = waitingLoop(t);
+    const flow = await waitForProvider(waiting.loop as never, { iteration: 3 } as never, lost, "build" as never);
+    assert.equal(flow, null, "the provider is back and the round goes on");
+    assert.equal(waiting.loop.deadline, PT0 + 32 * MIN, "the 27 minutes it waited are given back");
+    assert.equal(waiting.moved.at(-1), PT0 + 32 * MIN, "and the run's record of the worker follows");
+
+    t.mock.timers.setTime(PT0);
+    const capped = waitingLoop(t, { deadlineCeiling: () => PT0 + 10 * MIN });
+    const forever = { ...lost, until: null };
+    const ended = await waitForProvider(capped.loop as never, { iteration: 3 } as never, forever, "build" as never);
+    assert.equal(ended, "stop");
+    assert.equal(capped.loop.deadline, PT0 + 10 * MIN, "no further than the run's working deadline");
+    assert.equal(capped.loop.result.lostToProvider, "rate_limit", "the provider ended it, on the record");
+  });
+
+  it("PC2. a worker the provider ended before any round was judged gives its goal attempt back; a judged one does not", async () => {
+    const { refundProviderAttempt } = await import("../../src/harness-seed/loop/director/attempt-refund.ts");
+    const goals = { entries: [{ id: "world", required: true, attempts: 2, status: "unverified" }] };
+    let saves = 0;
+    const loopRun = { state: { goals }, saveJournal: async () => void (saves += 1) };
+    const unjudged = { id: "world-2", goal: "world", iterations: [{ stopped: true }] };
+    await refundProviderAttempt(loopRun as never, unjudged as never, { lostToProvider: "rate_limit" });
+    assert.equal(goals.entries[0]!.attempts, 1, "its attempt is given back");
+    assert.equal(saves, 1);
+    await refundProviderAttempt(loopRun as never, { ...unjudged, iterations: [{ stopped: false }] } as never, {
+      limit: { kind: "usage_limit" },
+    });
+    assert.equal(goals.entries[0]!.attempts, 1, "a judged round was an attempt");
+    await refundProviderAttempt(loopRun as never, unjudged as never, {});
+    assert.equal(goals.entries[0]!.attempts, 1, "a worker the provider did not end keeps its count");
+  });
+});
+
+describe("a worker's budget, in rounds of this game", () => {
+  it("WR1. a budget is fitted to the nearest whole number of rounds the loop will start, within the run's time; unmeasured, it stands as asked", async () => {
+    const { wholeRoundsBudget } = await import("../../src/harness-seed/loop/director/whole-rounds.ts");
+    const { tooLateToStart } = await import("../../src/harness-seed/loop/facet/rules.ts");
+    const MIN = 60_000;
+    const round = 40 * MIN;
+    // A hundred and ten minutes for forty-minute rounds: two rounds and thirty minutes nobody used.
+    const fitted = wholeRoundsBudget(110 * MIN, round, 600 * MIN);
+    assert.deepEqual(fitted, { budgetMs: 130 * MIN, rounds: 3 });
+    // Every round it counts on is one the loop starts: each begins with what the gate asks.
+    for (let k = 0; k < fitted.rounds!; k++)
+      assert.equal(tooLateToStart({ leftMs: fitted.budgetMs - k * round, runMs: round }), null, `round ${k + 1}`);
+    assert.deepEqual(
+      wholeRoundsBudget(45 * MIN, round, 600 * MIN),
+      { budgetMs: 50 * MIN, rounds: 1 },
+      "never under one",
+    );
+    assert.deepEqual(
+      wholeRoundsBudget(110 * MIN, round, 95 * MIN),
+      { budgetMs: 90 * MIN, rounds: 2 },
+      "within the run",
+    );
+    assert.deepEqual(wholeRoundsBudget(30 * MIN, round, 30 * MIN), { budgetMs: 30 * MIN, rounds: null }, "none fits");
+    assert.deepEqual(wholeRoundsBudget(110 * MIN, null, 600 * MIN), { budgetMs: 110 * MIN, rounds: null });
+  });
+});
+
+describe("a worker's stopped round, kept without a verdict", () => {
+  const ACCEPTED = "a".repeat(40);
+  const KEPT = "b".repeat(40);
+  const FROM = "c".repeat(40);
+  const ended = (over: Record<string, unknown> = {}) => ({
+    id: "world",
+    state: "done",
+    from: FROM,
+    lastCommit: ACCEPTED,
+    keptCommit: KEPT,
+    keptInBuild: false,
+    ...over,
+  });
+
+  it("KJ1. integrate takes a stopped round only once a judge preferred it to the integration branch; until then its accepted round, and it says what is left out", async () => {
+    const { keptToMerge, keptLeftOut, noteKeptJudged } = await import(
+      "../../src/harness-seed/loop/director/kept-judge.ts"
+    );
+    const worker = ended();
+    assert.equal(keptToMerge(worker as never), null, "unjudged: integrate takes the accepted round");
+    assert.match(String(keptLeftOut(worker as never)), /judge target=world against=integration/);
+
+    noteKeptJudged(worker as never, KEPT, false);
+    assert.equal(keptToMerge(worker as never), null, "a judge that kept the build, or judged another, keeps it out");
+    noteKeptJudged(worker as never, "d".repeat(40), true);
+    assert.equal(keptToMerge(worker as never), null, "a verdict on another head says nothing of it");
+    noteKeptJudged(worker as never, KEPT, true);
+    assert.equal(keptToMerge(worker as never), KEPT, "preferred to the integration branch: it may go in");
+    assert.equal(keptLeftOut(worker as never), null);
+    assert.equal(keptToMerge(ended({ state: "running" }) as never), null, "a running worker's round is its own");
+  });
+
+  it("KJ2. the lead is never told to merge a stopped round by hand: it is judged first, through a worker started from it", async () => {
+    const { priorCommitWords } = await import("../../src/harness-seed/loop/director/journal-prompts.ts");
+    const ref = "refs/studio/runs/run_k/workers/world";
+    for (const lead of [false, true]) {
+      const words = priorCommitWords({ lastCommit: ACCEPTED, from: FROM, ref, kept: KEPT, lead });
+      assert.doesNotMatch(words, new RegExp(`git merge ${KEPT}`), "no hand merge of unjudged work");
+      assert.match(words, new RegExp(`worker_start from=${KEPT}`));
+      assert.match(words, /against=integration/, "judged against the build before it goes in");
+    }
+    const accepted = priorCommitWords({ lastCommit: ACCEPTED, from: FROM, ref });
+    assert.match(accepted, new RegExp(`git merge ${ACCEPTED}`), "a judged round still merges as before");
+  });
+
+  it("KJ3. a stopped round that reaches the build inside a judged worker's merge is not called unjudged; one merged by hand is, and a look with no verdict changes nothing", async () => {
+    const { noteKeptWork } = await import("../../src/harness-seed/loop/director/kept-work.ts");
+    const { noteKeptJudged, keptToMerge } = await import("../../src/harness-seed/loop/director/kept-judge.ts");
+    const HEAD = "e".repeat(40);
+    const keptRun = () => {
+      const notes: string[] = [];
+      const events: string[] = [];
+      const loopRun = {
+        ctx: { call: async () => ({ code: 0, stdout: "yes\n" }) },
+        run: { runId: "run_k" },
+        integrationWorktree: "/runs/run_k/integration",
+        note: (text: string) => void notes.push(text),
+        appendRun: async (type: string) => void events.push(type),
+        saveJournal: async () => {},
+        state: { workers: new Map() },
+        journal: { director: { workers: {} } },
+        priorWorkers: [{ id: "world", kept: KEPT, keptInBuild: false }],
+      };
+      return { loopRun, notes, events };
+    };
+    // worker_start from=<kept>, judged, then integrated: the merge brings the stopped round in.
+    const merged = keptRun();
+    await noteKeptWork(merged.loopRun as never, HEAD, true);
+    assert.deepEqual(merged.events, ["integration_merge"], "its part is on the record as added");
+    assert.deepEqual(merged.notes, [], "never said to be in the build without a judge");
+    const byHand = keptRun();
+    await noteKeptWork(byHand.loopRun as never, HEAD);
+    assert.match(byHand.notes.join("\n"), /in the build without a judge/);
+
+    const worker = ended();
+    noteKeptJudged(worker as never, KEPT, true);
+    noteKeptJudged(worker as never, KEPT, null);
+    assert.equal(keptToMerge(worker as never), KEPT, "a judge that could not look keeps the verdict standing");
+    noteKeptJudged(worker as never, KEPT, false);
+    assert.equal(keptToMerge(worker as never), null, "a judge that kept the build takes it back");
+  });
+});
+
+describe("the base a running worker builds on", () => {
+  it("FB1. each round takes the newest integration head — the lead's own commits too — unless a health pass saw that head fail to load", async () => {
+    const { loopIntegration } = await import("../../src/harness-seed/loop/director/workers.ts");
+    const WAVE = "1".repeat(40);
+    const LEAD_FIX = "2".repeat(40);
+    const state = { waveHead: WAVE, integrationHead: LEAD_FIX, healthByHead: new Map<string, boolean>() };
+    const hook = loopIntegration({ state } as never);
+    assert.equal(await hook.head(), LEAD_FIX, "a merge never lands behind the lead's own commits");
+    state.healthByHead.set(LEAD_FIX, false);
+    assert.equal(await hook.head(), WAVE, "a head that does not load waits for the next healthy one");
+    state.healthByHead.set(LEAD_FIX, true);
+    assert.equal(await hook.head(), LEAD_FIX);
+    assert.equal(await hook.latest(), LEAD_FIX);
+  });
+});
+
+describe("defects a part could not have made", () => {
+  it("FD1. a HUD drawn in the page shows on user:view alone, a moment later: the judge never reads that difference as a duplicate overlay", async () => {
+    const { blindCompare } = await import("../../src/harness-seed/loop/judge.ts");
+    const recorder = ctxRecorder({
+      handlers: { "engine.complete": () => ({ message: { content: '{"pick":"A"}' } }) },
+    });
+    const run = { runId: "overlay", project: "racer", goal: "a racer", reference: { name: "r", shots: [] } };
+    const shots = [
+      { camera: "default", base64: "AAAA" },
+      { camera: "user:view", base64: "BBBB", surface: "page" },
+    ];
+    await blindCompare(recorder.ctx as never, {
+      run: run as never,
+      challenger: { shots } as never,
+      incumbentEvidence: { shots } as never,
+    });
+    const call = recorder.paramsOf("engine.complete")[0] as Record<string, any>;
+    const asked = JSON.stringify(call.messages);
+    assert.doesNotMatch(asked, /Anything on user:view that default lacks[^"]*a defect/);
+    assert.match(asked, /a HUD drawn in the page shows on user:view only/);
+    assert.doesNotMatch(String(call.systemPrompt), /UI the canvas frame lacks/);
+  });
+
+  it("FD2. only the part that draws the HUD is held to its coverage and overlap; every part still keeps to one HUD", async () => {
+    const { withHarnessChecks } = await import("../../src/harness-seed/loop/spec.ts");
+    const game = { kind: "racing", hud: true };
+    const ids = (drawsHud: boolean) =>
+      withHarnessChecks({ id: "world", checks: [] as Check[] }, { game, drawsHud }).checks.map((check) => check.id);
+    assert.deepEqual(
+      ids(false).filter((id) => id.startsWith("hud") || id === "single-hud" || id === "no-dom-ui"),
+      ["no-dom-ui", "single-hud"],
+      "a part that draws no HUD is never failed for the HUD's size",
+    );
+    assert.ok(ids(true).includes("hud-coverage") && ids(true).includes("hud-overlap"));
+  });
+
+  it("FD4. a restart of the part that draws the HUD draws it too, started with critic=screen or not; the entry's owner does only while no part of the run owns the screen", async () => {
+    const { drawsTheHud } = await import("../../src/harness-seed/loop/director/hud-owner.ts");
+    const hud = { id: "hud", ownsScreen: true };
+    const world = { id: "world" };
+    const part = (over: Record<string, unknown>) => ({ critic: null, ownsMain: false, replaces: null, ...over });
+    assert.equal(drawsTheHud(part({ replaces: "hud" }) as never, [hud, world]), true, "the owner's restart");
+    assert.equal(drawsTheHud(part({ critic: "screen" }) as never, [hud, world]), true);
+    assert.equal(
+      drawsTheHud(part({ ownsMain: true }) as never, [hud, world]),
+      false,
+      "the screen is hud's, finished or not",
+    );
+    assert.equal(drawsTheHud(part({ ownsMain: true }) as never, [world]), true, "no part owns the screen");
+    assert.equal(drawsTheHud(part({ replaces: "world" }) as never, [hud, world]), false);
+  });
+
+  it("FD5. the lead's judge reads a part that does not own the entry as its own rounds do, on either side of a comparison; the integration answers for its cameras", async () => {
+    const { fakeHost, fakeLoopRun } = await import("../helpers/director-run.ts");
+    const loopRun = fakeLoopRun(fakeHost());
+    const parts = new Map([
+      ["sound", { id: "sound", title: "Sound", ownsMain: false, state: "done", worktree: "/w/sound" }],
+      ["world", { id: "world", title: "World", ownsMain: false, state: "done", worktree: "/w/world" }],
+      ["shell", { id: "shell", title: "Shell", ownsMain: true, state: "done", worktree: "/w/shell" }],
+    ]);
+    loopRun.resolveRoot = (key: string) =>
+      key === "integration"
+        ? { root: loopRun.integrationWorktree, label: "integration" }
+        : { root: `/w/${key}`, label: key, worker: parts.get(key) };
+    loopRun.withLease = async (_lease: string, fn: (handle: string | null) => unknown) => fn(null);
+    const asked = new Map<string, unknown>();
+    loopRun.evidenceOf = async (root: string, options: Record<string, unknown>) => {
+      asked.set(root, options.camerasOwned);
+      return { ok: true, problems: [], warnings: [], consoleErrors: [], shots: [], motion: [] };
+    };
+    await loopRun.judge({ target: "sound", against: "world" });
+    await loopRun.judge({ target: "shell", against: "integration" });
+    assert.deepEqual(Object.fromEntries(asked), {
+      "/w/sound": false,
+      "/w/world": false,
+      "/w/shell": true,
+      [loopRun.integrationWorktree]: true,
+    });
+  });
+
+  it("FD3. a part that does not own the entry is not failed for the camera wiring: only the entry's owner and the integration own it", async () => {
+    const { ownsCameraWiring } = await import("../../src/harness-seed/loop/facet/camera-wiring.ts");
+    assert.equal(ownsCameraWiring({ ownsMain: false, role: "facet" }), false, "a sound part cannot rewire the cameras");
+    assert.equal(ownsCameraWiring({ ownsMain: true, role: "facet" }), true);
+    assert.equal(ownsCameraWiring({ ownsMain: false, role: "integration" }), true);
+  });
+});
+
+describe("the lead's words in the user's chat", () => {
+  it("QC1. a wake that brings the user nothing is answered with no text, and the user's ask to finish is wrap_up, said in the card every wake", async () => {
+    const { buildCard } = await import("../../src/harness-seed/loop/director/wake-prompts.ts");
+    const now = Date.UTC(2026, 9, 1, 12, 0, 0);
+    const card = buildCard({
+      now,
+      softDeadline: now + 3_600_000,
+      finalDeadline: now + 4_000_000,
+      card: { runId: "run_q", project: "racer", goal: "a racer", direction: false, plan: null },
+    } as never);
+    assert.match(card, /ends with no text at all — never "waiting" or "nothing new"/);
+    assert.match(card, /An ask to finish, wrap up or stop adding — asked again as a question too — is wrap_up first/);
+  });
+});
+
+describe("a worker waiting on its provider when the user asks to finish", () => {
+  it("PC3. the wait ends at the user's ask: its round is kept as stopped, never left holding the wrap-up", async (t) => {
+    const PT0 = Date.UTC(2026, 9, 1, 12, 0, 0);
+    t.mock.timers.enable({ apis: ["Date"], now: PT0 });
+    const { waitForProvider } = await import("../../src/harness-seed/loop/facet/provider.ts");
+    const records: Array<[string, Record<string, unknown>]> = [];
+    let asked = false;
+    const loop = {
+      ctx: { cancelled: false, setStatus: () => {} },
+      facet: { id: "world", title: "World" },
+      run: { runId: "run_p", budgets: {} },
+      facetThreadId: "t-world",
+      worktree: null,
+      result: {} as Record<string, unknown>,
+      currentMove: null,
+      biggestGap: "",
+      iterationsThisRound: 1,
+      appendRun: async (type: string, payload: Record<string, unknown>) => void records.push([type, payload]),
+      publishIteration: async () => {},
+      onProviderLost: null,
+      stoppedHere: async () => false,
+      finishRequested: async () => asked,
+      deadline: PT0 + 60 * 60_000,
+      deadlineCeiling: () => PT0 + 24 * 60 * 60_000,
+      onDeadline: () => {},
+      sleepFor: async (ms: number) => {
+        t.mock.timers.tick(ms);
+        asked = true;
+      },
+    };
+    const lost = { kind: "rate_limit", engine: "claude-code", message: "session limit", until: null };
+    const flow = await waitForProvider(loop as never, { iteration: 2 } as never, lost, "build" as never);
+    assert.equal(flow, "stop", "the round stops at the ask, not at the run's end");
+    const stopped = records.find(([type]) => type === RunEvent.FacetStopped)?.[1];
+    assert.equal(stopped?.by, "user");
   });
 });

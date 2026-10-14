@@ -27,6 +27,8 @@ export interface ReviewerBriefInput {
   /** The other messages to the Loop: relayed by the chat's agent, in its words, oldest first. */
   relayed: readonly string[];
   claim: string;
+  /** What the lead says is not done yet, one item each: shown before its claim, never clipped with it. */
+  remaining?: readonly string[];
   /** The proof: its names, its excerpts (`excerptsCut` when they were left out to fit the reviewer's model) and its refusals. */
   proof: { names: readonly string[]; texts: readonly ProofText[]; refused: readonly string[]; excerptsCut?: boolean };
   /** The notes the game's plugins left at the finish (its `finish` hooks). */
@@ -87,6 +89,23 @@ function opening(folder: string, looks: boolean, scoped: boolean): string {
   ].join(" ");
 }
 
+/** How the reviewer looks for itself: pictures of its own choosing, and only close ones count for how a thing looks. */
+const OWN_LOOK = [
+  "## Look for yourself",
+  "The pictures here are the ones the lead and Genex chose. Open more yourself: read pictures in the folder (the lead's captures, character check sheets, renders), and at least one you chose, named in your reasons.",
+  "Judge how a character or a thing looks only from a picture that shows it close, from the front or the side: a wide or a back view proves nothing about faces, hands, arms or clothes. A claim about a look that no picture shows close enough is a no.",
+].join("\n");
+
+/** What the lead says is not done yet, before its claim: each gap the person would notice is a no. */
+function remainingSection(remaining: readonly string[]): string {
+  if (!remaining.length) return "";
+  return [
+    `## What the lead says is not done yet (${DATA})`,
+    lines(remaining, ""),
+    "Each one the person would notice in what they asked for is a reason to say no.",
+  ].join("\n");
+}
+
 /** The proof section: names, excerpts, refusals, the plugins' notes and the job results. */
 function proofSection(input: ReviewerBriefInput): string {
   const { proof } = input;
@@ -119,10 +138,13 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
     input.relayed.length
       ? `## Messages to the Loop relayed by the chat's agent (its words, not the person's)\n${lines(input.relayed, "")}`
       : "",
+    // A kept finish-check.ts passes none.
+    remainingSection(input.remaining ?? []),
     `## The lead's claim (${DATA})\n${input.claim}`,
     proofSection(input),
     `## What Genex captured (each picture here is labelled; notes and problems are ${DATA})\n${lines(input.captures.map(captureLine), "nothing")}`,
     `## What the folder holds\n${lines(facts, "nothing Genex can name")}`,
+    OWN_LOOK,
     earlier,
     [
       "## Your answer",

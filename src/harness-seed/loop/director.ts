@@ -90,6 +90,7 @@ import { reopenMarkOf } from "./director/reopen.ts";
 import { reopenNote } from "./director/reopen-prompts.ts";
 import { timedWorkRemaining } from "./director/budgets.ts";
 import { continuationPrompt, directorBrief, limitResumePrompt, resumeNote, wrapUpPrompt } from "./director/briefs.ts";
+import { finishAsked } from "./director/wrap-up.ts";
 import { DIRECTOR_TOOLS, directors } from "./director/tool-specs.ts";
 import {
   LIMIT_WAIT_MARGIN_MS,
@@ -568,6 +569,7 @@ async function wrapUp(loopRun: LoopRun, talk: DirectorTalk, result: Partial<Dele
         integrationHealthy: state.integrationHealthy,
         workers: [...state.workers.values()],
         fromScratch: state.fromScratch,
+        userAsked: await finishAsked(loopRun),
       }),
       talk.sessionId,
       left - WRAP_UP_MARGIN_MS,
@@ -938,7 +940,8 @@ async function sessionParts(ctx: HarnessCtx, loopRun: LoopRun, loop: DirectorLoo
   const open = leadsOpenLoop(loopRun);
   const skill = open ? "" : await directorSkill(ctx, loopRun);
   const types = loopRun.open?.pool?.state.types ?? [];
-  const tools = open ? openTools(types, { restart: restartsApp(loopRun.game) }) : runTools(loop, loopRun);
+  const workers = loopRun.open?.pool?.state.allowed;
+  const tools = open ? openTools(types, { restart: restartsApp(loopRun.game), workers }) : runTools(loop, loopRun);
   const talk = directorTalk(loopRun, referenceImages(run), tools);
   directors.set(run.runId, open ? openHandler(loopRun) : loopRun.handler);
   // Between an open Loop's turns, Genex keeps what its lead left and runs the rewind or restart it asked for.

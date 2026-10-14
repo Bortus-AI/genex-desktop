@@ -44,6 +44,7 @@ export function toolbarStatusFrom(value: unknown): PluginToolbarStatus | null {
   if (title !== undefined) status.title = title;
   if (raw.disabled !== undefined) status.disabled = Boolean(raw.disabled);
   if (raw.attention !== undefined) status.attention = Boolean(raw.attention);
+  if (raw.dot !== undefined) status.dot = Boolean(raw.dot);
   if (typeof raw.tone === "string" && TONES.has(raw.tone)) status.tone = raw.tone as PluginToolbarStatus["tone"];
   return status;
 }
@@ -84,6 +85,25 @@ export type MultiplayerPress = (typeof MultiplayerPress)[keyof typeof Multiplaye
 export function multiplayerPress(genex: PluginInfo | undefined): MultiplayerPress {
   if (!genex) return MultiplayerPress.SetUp;
   return updateDue(genex) ? MultiplayerPress.Update : MultiplayerPress.Ask;
+}
+
+/**
+ * What a button shows: its plugin's own status, or while an update is offered the Update badge
+ * over it, as a word in the quiet tone whatever look the plugin's own badge had.
+ */
+export function shownToolbarStatus(
+  own: PluginToolbarStatus | undefined,
+  update: PluginToolbarStatus | null,
+): PluginToolbarStatus | undefined {
+  if (!update) return own;
+  const { badge: _badge, tone: _tone, dot: _dot, ...rest } = own ?? {};
+  return { ...rest, ...update };
+}
+
+/** A button's tooltip lines: a dot's word first, since the dot alone doesn't say it, then the plugin's title. */
+export function toolbarTip(status: PluginToolbarStatus | undefined): string[] {
+  const word = status?.dot ? status.badge : undefined;
+  return [word, status?.title].filter((line): line is string => Boolean(line));
 }
 
 /**

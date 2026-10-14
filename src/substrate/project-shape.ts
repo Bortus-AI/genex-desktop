@@ -4,11 +4,13 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { GameCandidate, ProjectKind, ProjectShape } from "../shared/game-project.ts";
-import { vendoredSdkPackages } from "../shared/genex.ts";
+import { GAME_RUNTIMES, TargetRuntime } from "../shared/computer-target.ts";
+import type { GameCandidate, PlayCommand, ProjectKind, ProjectShape } from "../shared/game-project.ts";
+import { pageLoadsGenexSdk } from "../shared/genex-page.ts";
 import { CoreFact, FolderHolds, hasFact } from "../shared/project-facts.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
-import { importMapImports, isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
+import { isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
+import { containedReal } from "./paths.ts";
 import { detectFacts } from "./project-facts.ts";
 import { declaredBootMs } from "./preview-ready.ts";
 import { isInstallCommand, packageCommands } from "./toolchain.ts";
@@ -66,14 +68,6 @@ const STUDIO_IMPORT_MAP = "/vendor/three.module.js";
 
 /** The query a Genex game reads to skip its authorization redirect in a local test run. */
 const GENEX_LOCAL_TEST_QUERY = "?genex_local_test=1";
-
-/**
- * Whether a shape's entry asks for a Genex local test run. The embed SDK honours it only on a
- * plain-http loopback origin, so the preview serves such a game there rather than on `game:`.
- */
-export function isGenexLocalTest(shape: Pick<ProjectShape, "entry">): boolean {
-  return shape.entry.endsWith(GENEX_LOCAL_TEST_QUERY);
-}
 
 /** Where a bundler writes the built page when its config says nothing else. */
 const DEFAULT_OUTPUT_DIR = "dist";
@@ -166,6 +160,16 @@ function isGenexGame(pkg: PackageManifest | null): boolean {
 }
 
 /**
+ * Whether a template game's page loads the Genex SDK through Studio's copy. The SDK keeps a preview
+ * from sending anyone to genex.games to sign in only in its local test mode, which only a loopback
+ * origin gets: the preview serves such a game there, as it does a built one.
+ */
+export async function templateLoadsGenexSdk(dir: string): Promise<boolean> {
+  const html = await readFile(path.join(dir, TEMPLATE_SHAPE.entry), "utf8").catch(() => null);
+  return html !== null && pageLoadsGenexSdk(html);
+}
+
+/**
  * Read a folder's own shape from the evidence in it: every script the page loads, the package's
  * build script and dependencies, the bundler's output folder, the engine's runtime files.
  * `null` means the studio's own template — recognised only by the two things the studio itself
@@ -225,6 +229,52 @@ function serveDirOf(entry: string): string {
   return dir === "" ? "." : dir;
 }
 
+/** The most arguments a declared play command may carry. */
+const MAX_PLAY_ARGS = 32;
+/** The longest single argument of a declared play command. */
+const MAX_PLAY_ARG_CHARS = 1024;
+
+/** One argument of a play command: a string of bounded length with no NUL, which no shell word can carry. */
+function usablePlayArg(arg: unknown): arg is string {
+  return typeof arg === "string" && arg.length <= MAX_PLAY_ARG_CHARS && !arg.includes("\0");
+}
+
+/**
+ * A play command as studio.json declares it, or null when any part is unusable: the command a
+ * plain path inside the folder (never absolute, never `..`, never a shell character or an
+ * option), the arguments a short list of strings. Nothing is resolved here — the command's real
+ * path is checked by {@link resolvePlayCommand} right before it runs.
+ */
+function declaredPlay(raw: unknown): PlayCommand | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const { command, args } = raw as { command?: unknown; args?: unknown };
+  if (typeof command !== "string" || !plainRelativePath(command)) return null;
+  if (args === undefined) return { command, args: [] };
+  if (!Array.isArray(args) || args.length > MAX_PLAY_ARGS || !args.every(usablePlayArg)) return null;
+  return { command, args: [...args] };
+}
+
+/**
+ * The runtime studio.json declares, and a bridge game's play command; nothing for an unknown
+ * runtime — or for the desktop or a VM, which a game's folder never grants itself.
+ */
+function declaredRuntime(meta: ShapeMeta | null): Pick<ProjectShape, "runtime" | "play"> {
+  const runtime = GAME_RUNTIMES.find((known) => known === meta?.runtime);
+  if (!runtime) return {};
+  const play = runtime === TargetRuntime.Bridge ? declaredPlay(meta?.play) : null;
+  return play ? { runtime, play } : { runtime };
+}
+
+/**
+ * The real path of a bridge game's play command: inside the project once every link is
+ * followed, or a throw. Checked right before the command runs, because studio.json and the
+ * folder it names are both writable by any contractor between a read and a launch.
+ */
+export async function resolvePlayCommand(dir: string, play: PlayCommand): Promise<string> {
+  if (!plainRelativePath(play.command)) throw new Error(`not a plain path inside the project: ${play.command}`);
+  return containedReal(dir, play.command);
+}
+
 /** studio.json as `readProjectShape` reads it: every field unchecked until it is used. */
 interface ShapeMeta {
   entry?: unknown;
@@ -235,6 +285,8 @@ interface ShapeMeta {
   kind?: unknown;
   serve?: unknown;
   bootMs?: unknown;
+  runtime?: unknown;
+  play?: unknown;
 }
 
 /** A non-blank string field, trimmed; null for anything else. */
@@ -290,27 +342,16 @@ async function recordedShape(dir: string, meta: ShapeMeta): Promise<ProjectShape
  * function so that everything asking "how does this folder run" — describe, validate, the
  * inspector — gets the same answer.
  */
-/**
- * The studio's own shape for a template game, entered with the local-test query once its page maps
- * Studio's own copy of the Genex embed SDK (`GENEX_VENDORED_SDK`): that mapping is the game turning
- * sign-in or multiplayer on.
- */
-async function templateShape(dir: string): Promise<ProjectShape> {
-  const html = await readFile(path.join(dir, "index.html"), "utf8").catch(() => "");
-  const genex = vendoredSdkPackages(importMapImports(html)).includes("@genex-ai/embed-sdk");
-  return genex ? { ...TEMPLATE_SHAPE, entry: `${TEMPLATE_SHAPE.entry}${GENEX_LOCAL_TEST_QUERY}` } : TEMPLATE_SHAPE;
-}
-
 export async function readProjectShape(dir: string): Promise<ProjectShape> {
   const meta = await readJsonIfExists<ShapeMeta>(path.join(dir, "studio.json")).catch(() => null);
   // A folder may declare only how long it takes to boot, so the number is read before the
   // shape's own early return — and attached with a spread, never a mutation: TEMPLATE_SHAPE is
   // shared, and an undefined-valued key would break every shape a test compares whole.
   const bootMs = declaredBootMs(meta?.bootMs);
-  const declaredBoot = bootMs === null ? {} : { bootMs };
+  const declaredBoot = { ...(bootMs === null ? {} : { bootMs }), ...declaredRuntime(meta) };
   if (!meta || !recordsShape(meta)) {
-    const detected = (await detectProjectShape(dir)) ?? (await templateShape(dir));
-    return bootMs === null ? detected : { ...detected, ...declaredBoot };
+    const detected = (await detectProjectShape(dir)) ?? TEMPLATE_SHAPE;
+    return { ...detected, ...declaredBoot };
   }
   return { ...(await recordedShape(dir, meta)), ...declaredBoot };
 }

@@ -103,7 +103,6 @@ describe("Local Blender model calls", () => {
       ["Wall_Panel_4x4", "wall-panel-4x4", "assets/src/Wall_Panel_4x4.py"],
       ["crate_a", "crate-a", "assets/src/crate-a.py"],
       ["panel", "panel", "assets/src/panel.py"],
-      ["dirtbike__front_56", "dirtbike-front-56", "assets/src/dirtbike__front_56.py"],
     ];
     for (const [name, slug, script] of rows) {
       const { calls, run } = await callModel(dir, { name });
@@ -112,6 +111,10 @@ describe("Local Blender model calls", () => {
       assert.equal(nativeRun(calls).inputs.script, script, name);
       assert.equal(result.name, slug, `${name}: the result names the asset as it was made`);
     }
+    // Neither file exists: the refusal names the script by the name as written, before anything runs.
+    const missing = await callModel(dir, { name: "dirtbike__front_56" });
+    await assert.rejects(missing.run, /No script at assets\/src\/dirtbike__front_56\.py/);
+    assert.deepEqual(missing.calls, []);
   });
 
   it("still refuses a name that cannot become an asset name, before anything runs", async () => {
@@ -236,6 +239,38 @@ describe("Local Blender model calls", () => {
     for (const [label, inputs] of rows) {
       const { calls, run } = await callModel(dir, { name: "panel", inputs });
       await assert.rejects(run, /input/i, label);
+      assert.deepEqual(calls, [], `${label}: nothing ran and nothing was read through the host`);
+    }
+    assert.deepEqual(await listing(dir), before, "the game folder is as it was");
+  });
+
+  it("refuses a script that is code or no file of the game, saying what script takes, with no side effect", async () => {
+    const dir = await game();
+    const outside = await tmpDir("blender-backend-script-outside-");
+    await writeFile(path.join(outside, "house.py"), "import bpy\n");
+    await symlink(path.join(outside, "house.py"), path.join(dir, "assets", "src", "linked.py"));
+    const before = await listing(dir);
+    const rows: Array<[string, Record<string, PluginScalar>]> = [
+      ["code on several lines", { name: "house", script: "import bpy\nbpy.ops.mesh.primitive_cube_add()" }],
+      ["code that runs a file", { name: "house", script: "exec(open('assets/src/house.py').read())" }],
+      ["an absolute path", { name: "house", script: path.join(outside, "house.py") }],
+      ["a parent folder", { name: "house", script: "../house.py" }],
+      ["a backslash", { name: "house", script: "assets\\src\\panel.py" }],
+      ["a folder", { name: "house", script: "assets/src" }],
+      ["a link out of the game", { name: "house", script: "assets/src/linked.py" }],
+      ["a file not written yet", { name: "house", script: "assets/src/house.py" }],
+      ["no script and none at its name", { name: "house" }],
+    ];
+    for (const [label, args] of rows) {
+      const { calls, run } = await callModel(dir, args);
+      const error = await run.then(
+        () => null,
+        (e: Error) => e,
+      );
+      assert.ok(error, `${label}: refused`);
+      assert.match(error.message, /assets\/src\/[a-z-]+\.py/, `${label}: names where a script goes: ${error.message}`);
+      assert.match(error.message, /write/i, `${label}: says to write the file first: ${error.message}`);
+      assert.doesNotMatch(error.message, /Invalid plugin path/, label);
       assert.deepEqual(calls, [], `${label}: nothing ran and nothing was read through the host`);
     }
     assert.deepEqual(await listing(dir), before, "the game folder is as it was");

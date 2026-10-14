@@ -105,10 +105,11 @@ export const GIT = Object.freeze({
   status: "git status --porcelain",
   /**
    * A look that never writes (`--no-optional-locks`, no `git add`), capped: the monitor reads a
-   * running worker's worktree without taking the index lock its own commit needs.
+   * running worker's worktree without taking the index lock its own commit needs. Every untracked
+   * file is named: a new folder read as one entry (`bench/`) is nobody's own file.
    */
   statusReadOnly: (maxBytes: number): string =>
-    `git --no-optional-locks status --porcelain | head -c ${Number(maxBytes)}`,
+    `git --no-optional-locks status --porcelain --untracked-files=all | head -c ${Number(maxBytes)}`,
   diffReadOnly: (maxBytes: number): string => `git --no-optional-locks diff -U0 | head -c ${Number(maxBytes)}`,
   addAll: "git add -A",
   /** Intent-to-add: a new file shows in `git diff` without anything being staged for real. */

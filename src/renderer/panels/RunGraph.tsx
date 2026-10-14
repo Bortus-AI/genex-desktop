@@ -6,7 +6,8 @@ import { markPerformance, PerformanceBoundary } from "../performance.tsx";
  * asked → one row per part, its steps on a line → your build. What reached the build is the line;
  * what did not hangs below it. The judges are an eye on the edge into every node they looked at.
  * A run or a chat turn whose lead started workers or background work is a tree: what you asked →
- * the lead (its background work under it) → a row per worker → your build → the finish check.
+ * the lead (its background work under it) → a row per worker → your build → the finish check; in place
+ * the lead's save points are one line and each worker hangs off it (`run-graph-comb.ts`).
  *
  * `run-steps.ts` folds the log into steps and lays them out; this file owns the canvas (pan, zoom,
  * keeping live work in view, bringing a selected node to the middle), the selection and the keyboard.
@@ -23,6 +24,7 @@ import {
   Gate,
   type GatePoint,
   isJudgedTry,
+  lastSavePoint,
   resultStatus,
   rowMeta,
   START_WORDS,
@@ -54,7 +56,7 @@ import { StageLoading } from "./stage/LiveLoaderArt.tsx";
 import { webBuildShown } from "../web-build-shown.ts";
 
 export { gateWords } from "./run-graph/gates.tsx";
-export { assetsStatus } from "./run-graph/nodes.tsx";
+export { assetsStatus } from "./inspector/asset-jobs.ts";
 
 interface Props {
   graph: RunGraphModel;
@@ -624,6 +626,7 @@ const GraphNodes = memo(function GraphNodes({
   onSelect: (id: string) => void;
 }): JSX.Element {
   const { graph, layout, optimization, leadNode, finishCheck } = model;
+  const lastSave = useMemo(() => lastSavePoint(model.rows), [model.rows]);
   const jobsRect = layout.rects[GraphSelection.Jobs];
   const finishRect = layout.rects[GraphSelection.FinishCheck];
   return (
@@ -683,6 +686,7 @@ const GraphNodes = memo(function GraphNodes({
           rect={layout.rects.lead}
           frame={leadFrame}
           face={model.face ?? undefined}
+          lastSave={lastSave}
           selected={selected === GraphSelection.Lead}
           onSelect={() => onSelect(GraphSelection.Lead)}
         />

@@ -169,6 +169,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
+| `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
 
 ### Icons
@@ -261,7 +262,8 @@ tools (`delegation-prompts.ts`).
 - `id` unique within the plugin; `label` 1–24 characters, not one of Studio's reserved labels
   (`Retry`, `Ready`, `Live`, `Builds`, `Assets`, `Export`, `Plugins`, `Reload`, `State`,
   `Close plugins`, compared case-insensitively); `ariaLabel` 1–60 characters, unique, not reserved;
-  `icon` at most 4 characters.
+  `icon` a glyph of at most 4 characters or a host icon (`globe`, `export`, `play`, `image`, `box`,
+  `boxes`, `unreal`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
@@ -277,13 +279,16 @@ arguments (and the current project binding) when the toolbar mounts, on every `p
 debounced to once per second, whenever the open game's own record changes (`game.changed` without a
 file, as a link to an engine project does), and every 30 s while a project is open; switching games
 clears the old game's words at once. It returns a
-`PluginToolbarStatus` — `{badge?, disabled?, title?, tone?: ok | warn | err | info, attention?}` —
-sanitized by `toolbarStatusFrom` (badge ≤ 16 characters, title ≤ 120, unknown tones dropped,
-`attention` a boolean). A button is drawn in the prompt bar's quiet pill fill, or in the accent while
-its status sets `attention` (the action is due) and the game is not empty; Genex's Publish uses
-only `title` and `attention`. A backend can also push a status without being asked through
-`events.emit` with `{kind: "toolbar", item, badge, tone, title, attention}`; the renderer applies it
-to that item, or re-asks the status action when the item is not named.
+`PluginToolbarStatus` — `{badge?, disabled?, title?, tone?: ok | warn | err | info, attention?, dot?}`
+— sanitized by `toolbarStatusFrom` (badge ≤ 16 characters, title ≤ 120, unknown tones dropped,
+`attention` and `dot` booleans). The badge is a word in its tone, or with `dot` a 6 px dot in it
+(green, amber, red, grey) whose word leads the tooltip. The title shows in the strip's own tooltip.
+A button is drawn in the prompt bar's quiet pill fill, or in the accent while its status sets
+`attention` (the action is due) and the game is not empty; Genex's Publish uses only `title` and
+`attention`. An offered update's Update badge is always a word in the quiet tone. A backend can also
+push a status without being asked through `events.emit` with
+`{kind: "toolbar", item, badge, tone, title, attention, dot}`; the renderer applies it to that item,
+or re-asks the status action when the item is not named.
 
 ### MCP servers
 
@@ -468,26 +473,94 @@ hands and eyes in the editor. `run_script {file, args_json}` runs a plain `.py` 
 `unreal/build/` (found by real path, no link on the way, at most 256 KB) with the full `unreal`
 module and the `gx` library, in one undo step with a 240 s timeout, and answers its output, result
 and the scopes it changed, or the file and line it failed at (a run that changed a level with
-navigation bounds rebuilds its nav mesh, so no AI stands on a stale one); `gx.scope` makes a script idempotent,
+navigation bounds rebuilds its nav mesh, so no AI stands on a stale one). A material Unreal fails to
+compile while the script runs, which Unreal only warns about in its log and draws with the default
+material, fails the run with `materials` (each one's `/Game/` path, base and reasons) when the run
+changed it (unsaved, or saved since it began; others compiling meanwhile are only named, as
+`otherMaterials`), read from what the editor log gained meanwhile (`genex_loop/editor_log.py`, `genex_build/compile_log.py`); `gx.scope` makes a script idempotent,
 and `gx` places instanced meshes, bevelled Nanite kit pieces, world-aligned materials, an
 atmosphere preset (`megastructure`, `daylight`), lights and hero cameras (`GX_Shot_<name>`).
 `import_model {file, dest, name, collision, nanite}` combines a model file of the game's assets into
 one static mesh in `<dest>/<name>/`; `import_character`, `import_animation` (with its `skeleton`),
-`import_sound`, `retarget`, `attach_to_socket` and `audit` do what their names say, and no import
+`import_sound`, `attach_to_socket` and `audit` do what their names say, and no import
 opens the Content Browser. Imports and retargets refuse during play, where Unreal makes only part of
-an asset (a Skeleton with no mesh) and says so only in its log; a skeleton scaled at its root (the
-root joint's own scale counted) comes back with `scaleWarning`, fixed by Local Blender's `rig`
-export, which applies an armature's scale to its bones and clips. The eyes: `capture_shot {camera, width, height, delay_s}` (a still from a
+an asset (a Skeleton with no mesh) and says so only in its log. A `.glb` character or clip whose
+skeleton hangs under a scaled root (a centimetre Armature at 0.01, the root joint's own scale
+counted; a clip file with no skin by the shallowest node it animates) is imported from a copy with
+that scale baked in (`genex_build/rig_math.py`: bones and their clip keys rescaled, inverse bind
+matrices premultiplied, so every bone and skinned vertex stays put), written under the project's
+`Saved/Genex/imports/`, and answers `skeletonScale`; a file the bake can't take exactly (a scale that
+differs by axis, a rigid mesh under the scaled node, keys outside the file's own buffer) is imported
+as it is with `scaleWarning`. Importing again into a folder that already holds an import doesn't
+import over it (Unreal's importer then imports nothing): the same file, unchanged, answers the
+first import's answer again (`reused`), so a build script that imports can run again, and any other
+file is refused, naming the folder and a new name to use (`Saved/Genex/imports/records.json` keeps
+which file each folder holds). `retarget` sets an auto-rigged character up on 5.8 so its arms point as
+the mannequin's do: an IK Rig per mesh by auto-characterisation and auto
+full-body IK, its Spine chain started at the lowest spine bone (the template an auto-rig matches maps
+only the top one); an IK Retargeter with the default op stack alone (Run IK Rig does the deprecated
+IK chains op's work; a Copy Base Pose op adds nothing on such a rig), every op on the target's
+rig, chains mapped by exact name and then by fuzzy name, FK chains One to One on the arms and legs,
+IK off on the arms; the retarget pose reset and auto-aligned chain to chain (mesh to mesh leaves
+the arms further off), each target upper arm and forearm turned to the direction of the source's (bent bind
+elbows otherwise stay 25° or more off), and the finger chains aligned again; then
+`run_batch_retarget`. It answers `fbik`, `spineFrom`, `oneToOne`, `ikOff`, `armFixDeg` and, as Unreal
+made the first new clip, `limbErrorDeg` (each limb against its source clip's, a warning past 20°). `character_check {mesh,
+idle, walk, driver, pictures}` measures a rigged character (a mesh path or a level actor's label)
+standing and walking, from its clips by Unreal's AnimPose evaluation with no play session: each
+upper arm's angle out from the body, each hand's distance from its thigh, width against height,
+feet against the ground, the most any mesh edge at least 5 cm long posed stretches against the bind
+pose (Geometry Script's copy of the mesh, skinned in Python; a fold at a joint stays shorter), finger bones and their motion and, with a `driver`, each
+limb's angle from the driver's at the same frame. The thresholds are named constants in
+`genex_build/character_math.py`; the answer is `passed` with its `reasons` and `warnings`. With
+`pictures`, a temporary copy of the character at the level's PlayerStart is shot from the front,
+side and back in idle and from the side through the walk, then removed; the bridge shows the shots
+as one sheet. The eyes: `capture_shot {camera, width, height, delay_s}` (a still from a
 hero camera, no play needed), `capture_play` (the player's 3D view during play, through the player's
 console `HighResShot`, which leaves out on-screen UI), `motion_strip` (frames scheduled by the game clock, one at a time, each with
 the pawn's and view's position) and `shot_cameras` (the hero cameras' labels). The bridge waits for
 a capture's file and hands the agent the picture itself, with its tone numbers (black point,
 contrast, near against far contrast, saturation; a nearly black frame is called out as a render to
-doubt) and the frame rate (`editor-captures.ts`, `tone.ts`); a strip comes back as one contact sheet. `attach_mesh` puts a static mesh on a
+doubt) and the frame rate (`editor-captures.ts`, `tone.ts`); a strip and a character sheet come back as one contact sheet. `attach_mesh` puts a static mesh on a
 Blueprint's component, and `set_route` (the route the play checks drive), `track_terrain` along it
 and `dirt_material` serve racing games. The plugin's skill (`unreal-editor`) tells every agent to
 look with these eyes, never `CaptureEditorImage` (the whole editor window) or `CaptureViewport` (the
-editor camera), and the lead's brief says the same.
+editor camera), and the lead's brief says the same. It also asks for a review of every character,
+up close and moving (`character_check` and its sheet, then a look in play), before it goes into the
+game or a save point claims one: a whole body, five-fingered hands, arms at its sides, nothing
+tearing between the legs, textures in play. What is wrong is fixed where it is (Blender for the rig,
+finger bones and weights, Unreal for materials and the retarget), and a character is regenerated only
+as a last resort. The character sub-agent's brief says the same. It also asks for foliage and props
+that match the reference's biome.
+
+**Motion Matching** (plugin 0.11.0). Epic's Game Animation Sample can't ship with Genex (Fab content
+for Unreal projects, not Genex's to hand on): the person gets it once, and `motion-status` finds it
+among their Unreal projects (`~/Documents/Unreal Projects/*/Content/Blueprints/SandboxCharacter_CMC`
+beside a showcase character no game gets) and says whether the game holds its content.
+`add-motion-matching` (asks the person first, holds the `editor` lock, one job per project,
+`motion-tools.ts`) refuses a game with a file where the sample's go, a link where its folders go, a
+config it can't read, a first custom trace channel that is another's (the sample's traversal traces
+on it as `Traversable`), or without the disk; then saves and quits Unreal, looks again, clones the sample's
+`Blueprints`, `Characters/UEFN_Mannequin` and `UE5_Mannequins`, `Input`, `Audio`, `Widgets`, `Misc`
+and `Levels/LevelPrototyping` into the game's Content (`cp -c` on a Mac: a clone shares the
+sample's blocks; its showcase characters left out), merges the settings the game lacks
+(`motion-config.ts`: the channel, data-driven and plain console variables, gameplay tags, network
+prediction), turns on the sample's plugins and opens Unreal again. Before the copy, the game's
+`.gitignore` gets what the copy adds (each folder it makes, or a file it puts in a folder the game
+already has), so the sample's gigabytes stay out of checkpoints and worker copies while the game's
+own folders stay in; the sample's own files, `ABP_GenericRetarget`'s map included, are not in
+checkpoints. A step that fails takes the copy back out and puts the config files, the `.uproject`
+and the `.gitignore` back as they were. The helper's `motion_character {mesh, name}` (`genex_build/motion.py`)
+then moves a character the sample's way: a retargeter from the sample's UEFN mannequin set up as
+`retarget` sets one, its entry (tag: the retargeter's name) in `ABP_GenericRetarget`'s
+`IKRetargeter_Map`, and `BP_<name>`, a child of `SandboxCharacter_CMC` whose mannequin mesh is hidden
+but still poses and whose `Body` mesh shows the character with that ABP and tag. No clip is copied.
+
+The helper offers no tool that derives normal and roughness maps from a base-colour texture's
+luminance: Unreal's Python has no image library, so it would hold the editor for many seconds per
+texture, and relief guessed from brightness is often wrong (dark paint reads as a dent). Such maps
+belong to the asset's own pipeline (PBR sets from Genex, or a bake in Blender); a map imported
+with the wrong colour space now fails the `run_script` that uses it, with Unreal's reason.
 
 The helper's second toolset, `genex_loop.tools.GenexLoopTools`, is Genex's own (agents are
 refused it): the part tools of the earlier Unreal Loop and the editor queue the harness's tools
@@ -629,7 +702,7 @@ level without hero cameras has none.
 **The editor lock and Genex's moments** (plugin 0.7.0). The plugin declares one lock, `editor`
 (label "Unreal", per game, probe `editor-activity`), which its editor connector and its harness
 tools that work in the open editor need (`open-for-run`, `save-all`, `end-editor`, `reopen-editor`,
-`update-helper`, `add-cpp-module`, `export-reference`, `hero-shots`, `play-check`, `run-part`,
+`update-helper`, `add-cpp-module`, `add-motion-matching`, `export-reference`, `hero-shots`, `play-check`, `run-part`,
 `rollback-part`, `reload-level`); lookups, the gate, the probe and the readers need none. While the
 person plays in the game's editor, the agents' and Genex's calls there wait. A play the agent
 started is not the person's: the connector marks the agent's `StartPIE` with `agent-play.json` in
@@ -979,17 +1052,18 @@ https://www.unrealengine.com/download. Windows console tools (`tasklist`, `taskk
 run by full path under `SystemRoot` with no window. These four actions are `native`, so a fixture
 profile refuses them.
 
-**Toolbar.** The item `editor` ("Unreal", aria-label "Unreal Editor", `requiresProject: false`)
-opens the setup panel and stays while the plugin is on, also before any game exists and for a web
-game. Its `toolbar-status` is per game. While no Unreal 5.8 or newer is installed (Epic's launcher
-list, read on every ask) the badge is Get, whatever the game. With a game open and no link (`links/<game>.json` missing,
+**Toolbar.** The item `editor` ("Unreal" after the host's `unreal` glyph, aria-label "Unreal
+Editor", `requiresProject: false`) opens the setup panel and stays while the plugin is on, also
+before any game exists and for a web game. Its `toolbar-status` is per game. While no Unreal 5.8 or
+newer is installed (Epic's launcher list, read on every ask) the badge is Not installed, whatever
+the game. With a game open and no link (`links/<game>.json` missing,
 undone or not trusted: a symlink, not JSON, another engine, a `.uproject` that is gone or not a
 plain file) there is no badge, only the title "Make this game in Unreal"; linked, it is that game's
 own project's state, named in the title: Not set up, Not open, Starting or Ready. Closing the panel
 asks again at once. With no game open it reports the
-project chosen in the panel. Every badge uses the `info` tone, which the toolbar draws in the second
-ink (4.5:1 on the pill in every theme), never amber or green; a screen reader hears it after the
-button's name (`aria-describedby`). The plugin page's Editor connection, once the plugin is on,
+project chosen in the panel. Every badge is a `dot`: Ready `ok` (green), Starting `warn` (amber),
+every other state `info` (grey). Its word leads the tooltip, above the title, and a screen reader
+hears it after the button's name (`aria-describedby`). The plugin page's Editor connection, once the plugin is on,
 shows the same word in place of the bridge's own Ready (`PluginConnections.tsx`). The state comes from Genex's records, one process check and the
 project's identity check on its port (remembered like the panel's), plus the project's own log only
 while Unreal runs unanswered. It scans no folders, and the only thing it writes is removing its own
@@ -1041,6 +1115,31 @@ session reads a notice first, once, naming each call and saying to look at what 
 before repeating it (`delegation-prompts.ts` `cutOffNotice`). When the harness dies, plugins are
 not stopped: their backends, unlocked accounts and connectors stay up, and only the calls in flight
 end (`PluginRegistry.abortCalls`, `recovery.ts` `onHarnessDied`); quitting the app stops them all.
+
+## Assets being made
+
+While a call that makes an asset runs, the Assets canvas and the chat show it as one card in the
+spot its files will land: the kind's drawing, the tool's name and picture, a clock and the prompt
+(`shared/asset-making.ts`, `renderer/asset-making.ts`). A tool says what its calls make with
+`tools[].asset`: `kind` one of `character`, `creature`, `model`, `rigged-model`, `animation`,
+`image`, `texture`, `video`, `sound-effect`, `music`, `voice`; `prompt` the parameter that says what
+to make (default `prompt`); `tool` the outside service doing the work (else the plugin's name, with
+its icon). An MCP server, a plugin's or one the person added, says the same per tool in its
+`tools/list` entry: `_meta: {"genex/asset": {kind, prompt?, tool?}}` (`MCP_ASSET_META`); a
+malformed one says nothing. Either changes how a call is shown, never what it may do.
+
+The host stamps the declaration on the call's own record (`making` on `plugin_tool_started` and
+`connector_tool_started`, the prompt cut to 1000 characters) and lists the call in the game's
+inventory (`ProjectAssets.jobs`, `jobId` the call's id) from the moment it goes out until it
+answers, announcing each change (`asset.jobs`). The list is memory only (`main/core/asset-calls.ts`):
+a call the app did not see end never shows as still being made. Genex's jobs come from its own job
+records instead, with their kind, routed tool and phase (queued, making, waiting for a choice, not
+downloaded, not in the game, failed, stopped, not confirmed): a request refused before Genex
+started a generation has none, and one still making past `GENEX_MAKING_MAX_MS` is not confirmed.
+Only media is an asset: a generation's data files are not, and a provider's `source` copy folds
+into the finished model of its generation (`withoutGenexSources`). The chat's work shows the same cards
+for its steps, read from the inventory by the call's, job's or generation's id, so a card ends
+with its job; Bundled Blender declares `model`.
 
 ## The tool consent model
 
@@ -1955,6 +2054,15 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
+  host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
+  responder only into one, and the marker never goes ahead of the doctype. A game whose
+  package.json names no Genex package is connected by Studio (`plugins/genex/entry-page.ts`): once
+  Genex names the project (a first publish creates it), the plugin copies its build of the pinned
+  embed SDK (`embed-sdk/` beside its backend: the entry and the modules it reaches) and a connect
+  module naming the slug into the copy's `vendor/genex/`, loads that module after the page's last
+  import map, names the SDK in the copy's package.json so the CLI sends `embedSdkVersion`, and
+  marks the copy again. A game that brings its own SDK connects itself; Studio never adds a second.
 - That dialog also reads the cover record publish-status answers (`GenexPublishState.cover`, typed
   in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
   kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
@@ -1994,7 +2102,9 @@ Genex:
   renderer or the plugin names, refuses a link anywhere on the way, and reads only `shot.png` or
   `shot.jpg` (no link, at most 8 MiB, bytes of the type its name says; the newer when both are
   there); anything else answers null. `genex-cover-shot.test.ts` holds its hostile table.
-- A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`.
+- A game using `@genex-ai/embed-sdk` is previewed with `?genex_local_test=1`. A template game whose
+  page loads Studio's copy (`/vendor/genex/`, `pageLoadsGenexSdk` in `shared/genex-page.ts`) is
+  previewed on its loopback origin, where the SDK runs in local test mode without the query.
 - `tools[].host` (API 3, id `genex`, source `bundled`, else refused before any hook runs) names a
   program Studio runs for the tool through the registry's `hostTool` hook. `genex-cli` backs
   `genex__cli` and `genex-cli-paid` backs `genex__cli-paid`: Studio's pinned CLI runs in
@@ -2012,8 +2122,11 @@ Genex:
   command sees only `{id, slug}` from the publish workspace. `genex-package` backs
   `genex__package`: it adds `@genex-ai/multiplayer` or `@genex-ai/embed-sdk` at the exact pin in
   `GENEX_GAME_PACKAGES` (`shared/genex.ts`) with the game's package manager, only in the bound
-  game or a git worktree of it under Studio's scratch (by realpath), never in a template game
-  with no `package.json`. The paid tool and the package tool need consent; fixture profiles refuse
+  game or a git worktree of it under Studio's scratch (by realpath). A template game has no
+  `package.json`: for `@genex-ai/embed-sdk` the tool maps Studio's copy in its page's import map
+  (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
+  loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
+  regular file, never a link. Multiplayer is refused there. The paid tool and the package tool need consent; fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
@@ -2041,7 +2154,14 @@ Local Blender:
   several meshes or an armature was left out (`rig` exports armatures and their actions, each
   armature's scale applied to its bones and clips, so a rig made at 0.01 comes out in metres). Its renders
   show each material's colour: the wrapper copies a shader's Base Color to the viewport colour
-  Workbench draws.
+  Workbench draws. Its stats give each mesh's material slots with their faces and triangles
+  (`slots`), so a slot that draws nothing or the wrong part shows without opening Blender.
+- `blender__model`'s `script` is the path of a `.py` in the game (`assets/src/<name>.py` when left
+  out). Code passed as the script, a path the host would refuse, and a path that is no regular file
+  of the game are refused before anything runs, in words that say to write the file first.
+- Run Blender through the tool: in a worker's sandbox Blender started from a shell cannot reach the
+  GPU (Metal) and crashes while it picks its GPU backend at startup, even with `-b`. The tool's jobs
+  run in the native-job sandbox, which allows the GPU.
 
 Both: their ids are bundled seeds, so no GitHub, index or local package may take them over, the
 scaffold refuses them (with `example` and `studio`), and the app's catalog policy reserves them as

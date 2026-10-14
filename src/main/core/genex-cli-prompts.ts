@@ -38,12 +38,17 @@ export const GENEX_CLI_PROMPT = {
   UnknownPackage: (name: string, allowed: readonly string[]) =>
     `${name} is not a package genex__package adds. It adds: ${allowed.join(", ")}.`,
   NoPackageJson:
-    "This game has its own page but no package.json, so there is nothing to install Genex packages into. Give it one with a build (npm init, then a bundler such as Vite), then call genex__package again.",
-  NoImportMap:
-    'This game\'s index.html has no import map to add Genex to. Add one (<script type="importmap">{"imports":{}}</script> before the first module script), then call genex__package again.',
-  Mapped: (specifier: string, url: string) => `Mapped ${specifier} to Studio's built-in copy, ${url}, in index.html.`,
-  MappedNext:
-    "Nothing was downloaded. Import these exactly as the card shows. From now on Studio previews this game in Genex local test mode, so connect() and matchmake() still fail there: test multiplayer on a published draft.",
+    "This game has its own page but no package.json, and is not made from Studio's template, so there is nothing to add Genex packages to. Give it one with a build (npm init, then a bundler such as Vite), then call genex__package again.",
+  TemplatePageUnreadable:
+    "This game's index.html has no import map Studio can read, so nothing was added. Restore the template's import map (three from /vendor/) and try again.",
+  TemplateSdkMapped: [
+    "index.html now maps @genex-ai/embed-sdk to Studio's copy (/vendor/genex/embed-sdk/index.js) and loads Studio's connect module (/vendor/genex/connect.js) right after its import map. Keep both.",
+    'Studio connects the game: in the preview in local test mode, and on Genex to the game\'s project when it is published. Import what you need from "@genex-ai/embed-sdk" (waitForPlayer, loadPlayerState, savePlayerState, submitScore, getLeaderboard) and never call initEmbed() yourself.',
+  ],
+  TemplateMultiplayerMapped: [
+    "index.html now maps @genex-ai/multiplayer and @genex-ai/multiplayer/schema to Studio's copies (/vendor/genex/multiplayer/), @genex-ai/embed-sdk to Studio's copy (/vendor/genex/embed-sdk/index.js), and loads Studio's connect module (/vendor/genex/connect.js) right after its import map. Keep all of them. Nothing was downloaded.",
+    'Studio connects the game: never call initEmbed() yourself. Import the rest exactly as the card shows, in plain JavaScript: waitForPlayer, getColyseusAuth and getColyseusUrls from "@genex-ai/embed-sdk", connect() from "@genex-ai/multiplayer". The preview runs in Genex local test mode, where connect() and matchmake() fail: test multiplayer on a published draft.',
+  ],
   ForeignFolder:
     "This call is not bound to the game's own folder or one of its Studio worktrees; nothing was installed.",
 } as const;

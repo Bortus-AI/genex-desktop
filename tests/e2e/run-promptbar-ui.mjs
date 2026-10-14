@@ -145,7 +145,7 @@ app.whenReady().then(async()=>{
 
  await click('[data-promptbar] [aria-label="Context and usage"]');
  const usagePanel='[data-slot="popover-content"][aria-label="Context and usage"]';
- check('context comes first with its window and automatic compaction',await element(usagePanel,'e.textContent.startsWith("Context window") && e.textContent.includes("Not measured yet") && e.textContent.includes("Compacts automatically")'));
+ check('context comes first with its window and automatic compaction',await element(usagePanel,'e.textContent.startsWith("Context window") && !e.textContent.includes("Not measured yet") && e.textContent.includes("Compacts automatically") && e.querySelector("[aria-label=\\"Context used\\"]").getAttribute("aria-valuetext")==="Not measured yet"'));
  await wait(300);
  check('each signed-in subscription shows its plan limits',await element(usagePanel,'e.querySelectorAll("[role=progressbar]").length===5 && e.textContent.includes("Claude Max plan") && e.textContent.includes("ChatGPT Pro plan") && e.textContent.includes("Weekly · Fable") && e.textContent.includes("Resets in 3 h 54 m")'));
  check('split roles name who draws on each plan, orchestrator\'s plan first',await js('[...document.querySelectorAll("[data-usage-engine]")].map(e=>e.dataset.usageEngine+":"+e.querySelector(".usage-plan-roles").textContent).join("|")==="codex:Main agent · Reviewers|claude-code:Workers"'));

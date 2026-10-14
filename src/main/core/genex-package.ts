@@ -2,27 +2,19 @@
  * `genex__package`: the bundled Genex plugin's consented install of one of its two SDK packages
  * into the game a call is bound to. The agent names the package; the version comes from
  * `GENEX_GAME_PACKAGES` and the command from the game's lockfile (`GameBuilds.addPackages`), and
- * the folder must be, by real path, the game's own or a Studio worktree git registers for it.
- *
- * A game made from Studio's template has no package manager: there the call maps Studio's own
- * copies (`GENEX_VENDORED_SDK`, built at the same pins) into its page's import map instead, and
- * nothing is downloaded.
+ * the folder must be, by real path, the game's own or a Studio worktree git registers for it. A
+ * game made from Studio's template has no package manager: its page maps Studio's copies instead
+ * (`GENEX_STUDIO_IMPORTS`, built at the same pins), as it maps three.js, and nothing is downloaded.
  */
-import { readFile, realpath, stat } from "node:fs/promises";
+import { lstat, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { InstallResult } from "../../shared/build-problem.ts";
-import {
-  GENEX_GAME_PACKAGES,
-  type GenexGamePackage,
-  genexPackageSet,
-  isGenexGamePackage,
-  vendoredSdkEntries,
-} from "../../shared/genex.ts";
+import { GENEX_GAME_PACKAGES, type GenexGamePackage, genexPackageSet, isGenexGamePackage } from "../../shared/genex.ts";
+import { withGenexSdkImport } from "../../shared/genex-page.ts";
 import type { PluginBinding } from "../../shared/plugins.ts";
 import { atomicWriteText } from "../../substrate/fsx.ts";
-import { withImportMapEntries } from "../../substrate/game-page.ts";
-import { containedReal, isBelow } from "../../substrate/paths.ts";
-import { detectProjectShape } from "../../substrate/project-shape.ts";
+import { isBelow } from "../../substrate/paths.ts";
+import { detectProjectShape, TEMPLATE_SHAPE } from "../../substrate/project-shape.ts";
 import { git } from "../../substrate/snapshots.ts";
 import { GENEX_CLI_PROMPT } from "./genex-cli-prompts.ts";
 
@@ -46,25 +38,40 @@ export interface GenexPackageAnswer {
   lines: string[];
 }
 
-/** Where a call's packages go: the game's own package manager, or a template page's import map. */
-export const PackageTarget = { Manager: "manager", ImportMap: "import-map" } as const;
-export type PackageTarget = (typeof PackageTarget)[keyof typeof PackageTarget];
-
-/** The folder a call is bound to, and how its packages get there. */
-export interface PackageFolder {
-  dir: string;
-  target: PackageTarget;
-}
-
-/** The page a template game's import map lives in. */
-const TEMPLATE_PAGE = "index.html";
-
 /** The package a call names, checked against Studio's pins; anything else is refused. */
 function genexPackageOf(args: Record<string, unknown>): GenexGamePackage {
   const name = args.package;
   if (isGenexGamePackage(name)) return name;
   throw new Error(GENEX_CLI_PROMPT.UnknownPackage(String(name), Object.keys(GENEX_GAME_PACKAGES)));
 }
+
+/**
+ * A template game's page: a regular file (never a link) in a folder the template's own marks name.
+ * Null for any other folder.
+ */
+async function templatePageOf(dir: string): Promise<string | null> {
+  const page = path.join(dir, TEMPLATE_SHAPE.entry);
+  const file = await lstat(page).catch(() => null);
+  if (!file?.isFile()) return null;
+  return (await detectProjectShape(dir)) === null ? page : null;
+}
+
+/**
+ * Map Studio's copies of `name` (and what it needs) in a template game's page and load the connect
+ * module; a page already doing all of it is left alone.
+ */
+async function mapStudioSdk(page: string, name: GenexGamePackage): Promise<void> {
+  const html = await readFile(page, "utf8");
+  const next = withGenexSdkImport(html, name);
+  if (next === null) throw new Error(GENEX_CLI_PROMPT.TemplatePageUnreadable);
+  if (next !== html) await atomicWriteText(page, next);
+}
+
+/** What the agent reads after Studio's copies were mapped in a template game's page. */
+const MAPPED_LINES: Record<GenexGamePackage, readonly string[]> = {
+  "@genex-ai/embed-sdk": GENEX_CLI_PROMPT.TemplateSdkMapped,
+  "@genex-ai/multiplayer": GENEX_CLI_PROMPT.TemplateMultiplayerMapped,
+};
 
 /** What the consent card shows for a `genex__package` call: the package and the version Studio pins. */
 export function genexPackageConsentArgs(args: Record<string, unknown>): { package: string; version: string } {
@@ -77,23 +84,10 @@ export function genexPackageConsentArgs(args: Record<string, unknown>): { packag
   };
 }
 
-/**
- * Whether a folder is Studio's own template: a page of its own that shape detection recognises by
- * what only Studio writes (its contract stamp and the vendored-three import map).
- */
-async function isTemplateGame(dir: string): Promise<boolean> {
-  const page = await stat(path.join(dir, TEMPLATE_PAGE)).catch(() => null);
-  return page?.isFile() === true && (await detectProjectShape(dir)) === null;
-}
-
-/**
- * Where Genex packages go in a game folder: its package.json's manager, a template page's import
- * map, or nowhere yet (a game with its own page and no package.json).
- */
-export async function genexPackageTarget(dir: string): Promise<PackageTarget | null> {
+/** Whether Genex packages can go into a game folder: it has a package.json, or it is a template game. */
+export async function takesGenexPackages(dir: string): Promise<boolean> {
   const manifest = await stat(path.join(dir, "package.json")).catch(() => null);
-  if (manifest?.isFile()) return PackageTarget.Manager;
-  return (await isTemplateGame(dir)) ? PackageTarget.ImportMap : null;
+  return manifest?.isFile() === true || (await templatePageOf(dir)) !== null;
 }
 
 /** Adds a pinned Genex SDK package to the game a call is bound to, and nowhere else. */
@@ -103,25 +97,39 @@ export class GenexPackageService {
     this.#deps = deps;
   }
 
-  /** Check the package and the folder, then install or map; nothing runs when either is refused. */
+  /**
+   * Check the package and the folder, then run the install, or map Studio's copies in a template
+   * game's page; nothing runs or changes when either is refused.
+   */
   async add(args: Record<string, unknown>, binding: PluginBinding): Promise<GenexPackageAnswer> {
     const name = genexPackageOf(args);
-    const folder = await this.preflight(args, binding);
-    if (folder.target === PackageTarget.ImportMap) return mapVendoredSdk(folder.dir, name);
-    const result = await this.#deps.addPackages({ project: binding.project, dir: folder.dir }, genexPackageSet(name));
-    return { package: name, version: GENEX_GAME_PACKAGES[name], ...result };
+    const target = await this.#target(binding);
+    const version = GENEX_GAME_PACKAGES[name];
+    if (target.templatePage) {
+      await mapStudioSdk(target.templatePage, name);
+      return { package: name, version, ok: true, lines: [...MAPPED_LINES[name]] };
+    }
+    const result = await this.#deps.addPackages({ project: binding.project, dir: target.dir }, genexPackageSet(name));
+    return { package: name, version, ...result };
+  }
+
+  /** Refuse unsupported or foreign folders before asking for installation approval. No process is started. */
+  async preflight(args: Record<string, unknown>, binding: PluginBinding): Promise<string> {
+    genexPackageOf(args);
+    return (await this.#target(binding)).dir;
   }
 
   /**
-   * Refuse unsupported or foreign folders before asking for approval, and say where the packages
-   * go: a package.json's manager, or a template game's import map. No process is started.
+   * The bound folder, and its page when it is a template game: one with a package.json installs,
+   * a template game maps Studio's copies, anything else is refused.
    */
-  async preflight(args: Record<string, unknown>, binding: PluginBinding): Promise<PackageFolder> {
-    genexPackageOf(args);
+  async #target(binding: PluginBinding): Promise<{ dir: string; templatePage?: string }> {
     const dir = await this.#boundFolder(binding);
-    const target = await genexPackageTarget(dir);
-    if (!target) throw new Error(GENEX_CLI_PROMPT.NoPackageJson);
-    return { dir, target };
+    const manifest = await stat(path.join(dir, "package.json")).catch(() => null);
+    if (manifest?.isFile()) return { dir };
+    const templatePage = await templatePageOf(dir);
+    if (!templatePage) throw new Error(GENEX_CLI_PROMPT.NoPackageJson);
+    return { dir, templatePage };
   }
 
   /** The binding's folder by real path: the game's own, or a worktree of it under Studio's scratch. */
@@ -149,21 +157,4 @@ export class GenexPackageService {
     const real = await Promise.all(worktrees.map((line) => realpath(line.slice(WORKTREE_LINE.length)).catch(() => "")));
     return real.includes(dir);
   }
-}
-
-/**
- * Map Studio's own copies of `name` and what it needs into a template game's page, keeping what
- * the map already holds; refused, with nothing written, when the page has no import map to add to.
- */
-async function mapVendoredSdk(dir: string, name: GenexGamePackage): Promise<GenexPackageAnswer> {
-  const page = await containedReal(dir, TEMPLATE_PAGE);
-  const entries = vendoredSdkEntries(name);
-  const html = withImportMapEntries(await readFile(page, "utf8"), entries);
-  if (html === null) throw new Error(GENEX_CLI_PROMPT.NoImportMap);
-  await atomicWriteText(page, html);
-  const lines = [
-    ...entries.map(([specifier, url]) => GENEX_CLI_PROMPT.Mapped(specifier, url)),
-    GENEX_CLI_PROMPT.MappedNext,
-  ];
-  return { package: name, version: GENEX_GAME_PACKAGES[name], ok: true, lines };
 }

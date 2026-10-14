@@ -125,7 +125,6 @@ export {
   detectProjectShape,
   findGameRoot,
   isBuiltShape,
-  isGenexLocalTest,
   plainRelativePath,
   readProjectShape,
   TEMPLATE_SHAPE,

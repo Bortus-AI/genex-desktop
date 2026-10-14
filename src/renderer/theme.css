@@ -125,9 +125,9 @@
   --dur-2: var(--duration-fast);
   --ease: var(--ease-smooth-out);
   --sidebar: #0b0b0d;
-  --danger-fill: #f08287;
-  --danger-foreground: #000000;
-  --danger-hover: color-mix(in oklab, #f08287 92%, #ffffff);
+  --danger-fill: #b54e55;
+  --danger-foreground: #ffffff;
+  --danger-hover: #bd565c;
   --success-foreground: #000000;
   --image-outline: #ffffff1a;
   --error-foreground: #000000;
@@ -349,6 +349,7 @@
   .home-backdrop-glint,
   .animate-ping,
   .animate-spin,
+  .making-spinner,
   .loader-grid > span,
   [style*="infinite"]
 ),
@@ -1413,6 +1414,14 @@ button.chat-header-title:hover {
     background-color var(--duration-quick),
     color var(--duration-quick);
 }
+/* A header control that says something beside its icon: the Free button. */
+.header-control[data-label] {
+  display: flex;
+  gap: 6px;
+  width: auto;
+  padding-inline: 8px;
+  font: 12px / 1 var(--font-family-code);
+}
 .header-control:hover,
 .header-control[aria-expanded="true"] {
   background: var(--control-hover, var(--hover));
@@ -2005,13 +2014,6 @@ button.chat-header-title:hover {
 .profile-plate-main:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: -2px;
-}
-/* The making-cards drawing's line colour, and (outline) the beam's light: the accent mixed toward the
-   ink, so it reads in either theme (the empty states' paler --wire-art is too faint for it). */
-.making-art {
-  color: color-mix(in oklab, var(--accent-primary) 62%, var(--ink));
-  outline-color: color-mix(in oklab, var(--accent-primary) 30%, var(--ink));
-  outline-style: none;
 }
 /* Where a face goes while there is no account to show: signed out, and while the browser signs in. */
 .plate-slot {
@@ -3155,6 +3157,13 @@ button.chat-header-title:hover {
 .chat-disclosure > svg:last-child {
   margin-inline-start: -2px;
 }
+/* Wrapped words keep their mark and chevron on the first line, centred on it. */
+.chat-disclosure[data-wraps] {
+  align-items: flex-start;
+}
+.chat-disclosure[data-wraps] > svg {
+  margin-block: 4px;
+}
 /* The status line without details to open: laid out as its disclosure is, so nothing moves when one comes. */
 .chat-status-line {
   display: flex;
@@ -3458,6 +3467,13 @@ button.chat-header-title:hover {
 /* Rows already supply reading space; do not double it before the live status. */
 .chat-conversation-stack > [data-chat-transcript] {
   margin-block-end: -16px;
+}
+/* The live status belongs to the reply above it: half the stack's gap, so the reply sits closer
+   while the status keeps its place above the composer. */
+.chat-conversation-stack > .presence.chat-work {
+  /* Opening and closing collapse the half gap it keeps, not the stack's whole gap. */
+  --presence-gap: 0.5rem;
+  margin-block-start: -8px;
 }
 .chat-user-content[data-collapsed] {
   max-height: 154px;
@@ -4740,9 +4756,32 @@ a:focus-visible {
   position: relative;
   z-index: 1;
 }
+/* Open in Builds, at the foot of the Building card's parts: a quiet link above the card's own toggle. */
+.build-checklist-open {
+  display: inline-flex;
+  align-self: flex-start;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink-3);
+  font-family: inherit;
+  cursor: pointer;
+  transition: color var(--duration-quick);
+}
+.build-checklist-open:is(:hover, :focus-visible) {
+  color: var(--ink);
+}
+.build-checklist-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 @media (prefers-reduced-motion: reduce) {
   .build-card,
-  .build-card-open svg {
+  .build-card-open svg,
+  .build-checklist-open {
     transition: none;
   }
 }
@@ -4850,6 +4889,173 @@ a:focus-visible {
 }
 .asset-thumbnail {
   animation: fade-in 150ms ease-out;
+}
+/* An asset card while its asset is being made (panels/MakingCard.tsx), in the spot it will land:
+   the kind's drawing, the tool at top left, the clock at top right, the kind and prompt below. */
+.making-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  background: var(--inset);
+}
+.making-card[data-making="review"] {
+  box-shadow: 0 0 0 1.5px var(--accent);
+}
+.making-art-slot {
+  position: absolute;
+  left: 12px;
+  top: 10px;
+  width: 160px;
+  height: 112px;
+  pointer-events: none;
+}
+/* The drawing's line colour, and (outline) the beam's light: the accent mixed toward the ink, so it
+   reads on the card in either theme (the empty states' paler --wire-art is too faint for a status). */
+.making-art {
+  color: color-mix(in oklab, var(--accent-primary) 62%, var(--ink));
+  outline-color: color-mix(in oklab, var(--accent-primary) 30%, var(--ink));
+  outline-style: none;
+}
+/* Waiting for its tool, or ended without its files: grey and still. */
+.making-card:is(
+  [data-making="queued"],
+  [data-making="failed"],
+  [data-making="stopped"],
+  [data-making="unsure"],
+  [data-making="not-fetched"],
+  [data-making="not-in-game"]
+) .making-art {
+  color: var(--ink-3);
+  opacity: 0.45;
+}
+.making-card[data-making="failed"] .making-art {
+  opacity: 0.3;
+}
+.making-chip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  /* Room for the clock at the other corner, up to an hour's worth. */
+  max-width: calc(100% - 66px);
+  height: 22px;
+  padding: 0 8px 0 3px;
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 14px;
+  pointer-events: none;
+}
+/* The tools' marks are drawn for a dark tile (the Genex page's), so they sit on one in either theme. */
+.making-chip-mark {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  padding: 2px;
+  border-radius: 4px;
+  object-fit: contain;
+  background: #1d1e21;
+}
+.making-corner {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--ink-3);
+}
+.making-spinner {
+  animation: spin 0.9s linear infinite;
+}
+.making-label {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.making-title,
+.making-prompt {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.making-title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--ink-3);
+}
+.making-title[data-tone="failed"] {
+  color: var(--red);
+}
+.making-prompt {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
+.making-tooltip {
+  max-width: 280px;
+  text-align: left;
+  text-wrap: pretty;
+}
+.making-picture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Approve keeps a card's own width: it fills a canvas card, and sits at the right of a larger one. */
+.making-actions {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.making-actions > * {
+  max-width: 168px;
+}
+.making-tabs {
+  top: 7px;
+  right: 7px;
+  gap: 2px;
+}
+.making-tab {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--background) 66%, transparent);
+  cursor: pointer;
+}
+.making-tab[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--background);
+}
+.making-tab:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .making-spinner {
+    animation: none;
+  }
 }
 /* A row for what has no picture: a sound, an animation, a file. The trailing slot shows the sound's
    length at rest and gives way to the row's action on hover or focus. */
@@ -5133,6 +5339,12 @@ a:focus-visible {
 /* A card waiting above the composer fades in when it is shown, after the one before it is answered. */
 .chat-waiting-card:not([hidden]) {
   animation: chat-fade-in 200ms ease-out;
+}
+/* Above the composer the dock's own inset (14px) is the disclosure's overhang: without the pull its
+   hover fill starts where it does in the transcript and its words line up with the chat's, and the
+   card's height animation, which clips, never cuts it. */
+.chat-waiting-card [data-question-reopen] {
+  margin-inline: 0;
 }
 .chat-jump {
   animation: chat-fade-in var(--duration-quick) ease-out;
@@ -5872,8 +6084,9 @@ a:focus-visible {
 .usage-credits {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px 12px;
-  padding-block: 4px 8px;
+  align-items: center;
+  gap: 8px 12px;
+  padding-block: 2px 8px;
   font-size: 13px;
 }
 .usage-credits dd {
@@ -5881,14 +6094,32 @@ a:focus-visible {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: end;
+  color: var(--ink);
 }
-.usage-plan,
+.usage-credits-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 24px;
+  font-weight: 500;
+  color: var(--ink);
+}
+/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. */
+.usage-plan {
+  margin: 6px 4px 0;
+  padding: 6px 12px 4px;
+  border: 1px solid var(--line-strong, var(--line));
+  border-radius: 12px;
+}
+.usage-plan:last-child {
+  margin-bottom: 4px;
+}
 .usage-divider {
   position: relative;
   margin-top: 4px;
   padding: 10px 10px 2px;
 }
-.usage-plan::before,
 .usage-divider::before {
   content: "";
   position: absolute;
@@ -5901,13 +6132,12 @@ a:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 24px;
+  min-height: 28px;
   font-family: var(--font-family-content);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--ink-3);
+  color: var(--ink);
 }
 .usage-plan-link {
   display: inline-flex;
@@ -5928,16 +6158,41 @@ a:focus-visible {
   color: var(--ink-2);
 }
 .usage-plan-roles {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   margin-inline-start: auto;
   overflow: hidden;
+  color: var(--ink-3);
+  font-size: 12px;
   text-overflow: ellipsis;
   font-weight: 400;
   letter-spacing: 0;
   white-space: nowrap;
 }
+/* Whether a plan is in use, as a dot before its words: filled green in use, an empty ring not. */
+.usage-plan-roles::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+.usage-plan-roles[data-in-use]::before {
+  background: var(--green);
+  box-shadow: none;
+}
 .usage-limit {
   padding: 6px 0 4px;
+}
+/* Compact sits on the reading's line, a size under the panel's other actions. */
+.picker-action.usage-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding-inline: 8px 10px;
 }
 .usage-limit-head {
   display: flex;

@@ -65,6 +65,10 @@ export const FixtureName = {
    */
   OpenProjects: "open-projects",
   PluginUpdates: "plugin-updates",
+  /** A Loop a usage limit paused and resumed: a worker's try Paused, one Added after, one Left out. */
+  PausedBuild: "paused-build",
+  /** A Loop still going, for the chat's Building card and its parts: added, working, restarted, waiting. */
+  BuildingCard: "building-card",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 

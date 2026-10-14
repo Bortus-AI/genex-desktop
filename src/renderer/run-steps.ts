@@ -15,12 +15,13 @@
  * Pure: no DOM, no window. `panels/RunGraph.tsx` draws it and the tests read it directly.
  */
 import { MINUTE_MS } from "../shared/duration.ts";
+import { assetFormat, type ProjectAsset } from "../shared/game-assets.ts";
 import { GameEngine } from "../shared/game-engine.ts";
 import { comparedWithNothing, ExecutionStatus, type RunWorked, VerdictPass, workedMs } from "../shared/run-state.ts";
 import { type RunSummary, UNKNOWN_EXECUTION } from "../shared/run-summary.ts";
 import { plural } from "../shared/skill-words.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
-import { WorkerEnd, WorkerVerdict } from "../shared/workers.ts";
+import { WorkerEnd, WorkerIsolation, WorkerStopCode, WorkerVerdict } from "../shared/workers.ts";
 import {
   boundsOf,
   type FacetNode,
@@ -34,10 +35,12 @@ import {
   plainDefect,
   type Rect,
   type RunGraph,
+  type RunNode,
   truncate,
   type VerdictRecord,
   WorkerState,
 } from "./run-graph.ts";
+import { AssetCardState } from "./run-graph-assets.ts";
 import type { WorkerInfo } from "./run-graph-workers.ts";
 import {
   GAME_ENGINE_WORDS,
@@ -60,8 +63,9 @@ import {
  * `in-build`: merged into the build. `kept`: the judges kept it and the lead has not merged it
  * (yet). `delivered`: a sub-agent's files are in the game folder and wait for the lead to use
  * them. `undone`: the judges threw every try away. `building`/`judging`: in hand now.
- * `not-in-build`: it ended unjudged and unmerged — stopped, or the run ended first. `waiting`:
- * a part that has not started.
+ * `not-in-build`: it ended unjudged and unmerged — stopped, or the run ended first. `paused`: the
+ * run's close stopped it unjudged while the run can still add its kept work (a pause, or the run
+ * resumed and has not added it yet). `waiting`: a part that has not started.
  */
 export const StepState = {
   InBuild: "in-build",
@@ -74,6 +78,8 @@ export const StepState = {
   /** A single session that failed: it delivered nothing to leave out. */
   NotDelivered: "not-delivered",
   Waiting: "waiting",
+  /** The run's own close stopped it unjudged (a pause), its work kept, and the run can still add it. */
+  Paused: "paused",
 } as const;
 export type StepState = (typeof StepState)[keyof typeof StepState];
 
@@ -107,7 +113,31 @@ export interface Step {
   verdict: VerdictRecord | null;
   /** What a worker's own records say, on the one node of its row: it picks the node's words. */
   worker?: WorkerInfo;
+  /** A worker's picture: what it delivered, else for a reader the save point it looked at. */
+  picture?: WorkerPicture;
+  /** A save point after the first: the one before it, whose pictures its own are compared with. */
+  earlier?: IterationNode;
 }
+
+/** Where a worker's node gets its picture from. */
+export const PictureSource = {
+  /** a picture it delivered into the game, by its game-relative file */
+  File: "file",
+  /** Blender's render of a model it made, under the run's folder */
+  Render: "render",
+  /** a model or image it delivered, drawn as the Assets stage draws it */
+  Asset: "asset",
+  /** a reader that delivered nothing: the save point it looked at */
+  Reviewed: "reviewed",
+} as const;
+export type PictureSource = (typeof PictureSource)[keyof typeof PictureSource];
+
+/** A worker's picture, by where it comes from. */
+export type WorkerPicture =
+  | { source: typeof PictureSource.File; file: string }
+  | { source: typeof PictureSource.Render; path: string }
+  | { source: typeof PictureSource.Asset; asset: ProjectAsset }
+  | { source: typeof PictureSource.Reviewed; round: IterationNode };
 
 export interface PartRow {
   facet: FacetNode;
@@ -205,8 +235,19 @@ function roundsMergedBy(rounds: IterationNode[], merge: MergeInfo): IterationNod
 const keptBy = (node: IterationNode): CheckedBy =>
   savedByLead(node.verdictSource) ? CheckedBy.Lead : CheckedBy.Judges;
 
-/** Where a folded step stands, and who let it in: the build first, the judges second. */
-function stepStanding(tries: IterationNode[], merged: Set<IterationNode>): Pick<Step, "state" | "checkedBy"> {
+/** A try the run's own close stopped before anyone judged it: a pause, or the run's end. */
+const stoppedByRunClose = (node: IterationNode | undefined): boolean =>
+  node?.status === IterationStatus.Stopped && node.stopCode === WorkerStopCode.RunEnded;
+
+/**
+ * Where a folded step stands, and who let it in: the build first, the judges second. A try the
+ * run's close stopped is paused while the run can still add its kept work (`mayStillAdd`).
+ */
+function stepStanding(
+  tries: IterationNode[],
+  merged: Set<IterationNode>,
+  mayStillAdd: boolean,
+): Pick<Step, "state" | "checkedBy"> {
   const kept = tries.find(isKept);
   if (kept) return { state: merged.has(kept) ? StepState.InBuild : StepState.Kept, checkedBy: keptBy(kept) };
   const latest = tries.at(-1);
@@ -214,6 +255,7 @@ function stepStanding(tries: IterationNode[], merged: Set<IterationNode>): Pick<
     return { state: latest.liveness ? StepState.Judging : StepState.Building, checkedBy: null };
   if (tries.some((node) => merged.has(node))) return { state: StepState.InBuild, checkedBy: CheckedBy.Lead };
   if (tries.some(isJudgedTry)) return { state: StepState.Undone, checkedBy: null };
+  if (mayStillAdd && stoppedByRunClose(latest)) return { state: StepState.Paused, checkedBy: null };
   return { state: StepState.NotInBuild, checkedBy: null };
 }
 
@@ -231,11 +273,15 @@ function shownTry(tries: IterationNode[], merged: Set<IterationNode>, latest: It
   return [...tries].reverse().find((node) => node.shots.length > 0) ?? latest;
 }
 
-function roundStep(tries: IterationNode[], merged: Set<IterationNode>, active: boolean): Step {
+function roundStep(
+  tries: IterationNode[],
+  merged: Set<IterationNode>,
+  { active, mayStillAdd }: { active: boolean; mayStillAdd: boolean },
+): Step {
   const first = tries[0];
   const latest = tries.at(-1);
   if (!first || !latest) throw new Error("a step folds at least one try");
-  const standing = stepStanding(tries, merged);
+  const standing = stepStanding(tries, merged, mayStillAdd);
   return {
     id: `step:${first.facetId}:${first.iteration}`,
     facetId: first.facetId,
@@ -275,11 +321,106 @@ function partRow(graph: RunGraph, facet: FacetNode, merges: MergeInfo[], summary
     rounds.some((round) => round.status === IterationStatus.Building);
   const working = graph.active && busy;
   const merged = mergedRounds(rounds, partMerges);
+  const run = { active: graph.active, mayStillAdd: runMayStillAdd(graph) };
   const steps = rounds.length
-    ? foldTries(rounds).map((tries) => roundStep(tries, merged, graph.active))
+    ? withEarlierSaves(foldTries(rounds).map((tries) => roundStep(tries, merged, run)))
     : [sessionStep(graph, facet, task, { integrated, working })];
   const inBuild = steps.filter((step) => step.state === StepState.InBuild).length;
   return { facet, steps, inBuild, integrated, working };
+}
+
+/** A save point the lead made itself: a step it kept with no judge. */
+export const isSavePoint = (step: Step): boolean => step.tries.some((node) => savedByLead(node.verdictSource));
+
+/** The run's last save point, when the lead made one. */
+export const lastSavePoint = (rows: PartRow[]): Step | null =>
+  rows
+    .flatMap((row) => row.steps)
+    .filter(isSavePoint)
+    .at(-1) ?? null;
+
+/** Each save point after a row's first knows the one before it, whose pictures its own are compared with. */
+function withEarlierSaves(steps: Step[]): Step[] {
+  return steps.map((step, index) => {
+    const before = steps[index - 1];
+    const earlier = before && isSavePoint(step) && isSavePoint(before) ? before.shown : null;
+    return earlier ? { ...step, earlier } : step;
+  });
+}
+
+/** The lead's save points of a graph, in the order the log kept them. */
+function savePointsOf(graph: RunGraph): IterationNode[] {
+  return graph.nodes
+    .filter((node): node is IterationNode => node.kind === GraphNodeKind.Iteration && savedByLead(node.verdictSource))
+    .sort((a, b) => (a.judgedSeq ?? a.startedSeq) - (b.judgedSeq ?? b.startedSeq));
+}
+
+/**
+ * What a part delivered, oldest first: its delivered asset cards (the plugins' jobs and the
+ * modeller's own) and its work folded onto another part's card (Blender processing a Genex model).
+ */
+interface Delivery {
+  files: string[];
+  render: string | null;
+  preview?: ProjectAsset;
+  inGame?: boolean;
+}
+
+function deliveriesOf(graph: RunGraph, facetId: string): Delivery[] {
+  const cards = graph.nodes.flatMap((node) => {
+    if (node.kind === GraphNodeKind.Assets) return node.jobs;
+    return node.kind === GraphNodeKind.Blender ? node.assets : [];
+  });
+  const own: Array<Delivery & { at: string }> = cards.filter(
+    (card) => card.facetId === facetId && card.state === AssetCardState.Delivered,
+  );
+  const folded = cards.flatMap((card) =>
+    (card.derived ?? []).filter((step) => step.facetId === facetId).map((step) => ({ ...step, render: null })),
+  );
+  return [...own, ...folded].sort((a, b) => (a.at < b.at ? -1 : Number(a.at > b.at)));
+}
+
+/** A delivery's picture: an image it delivered, the modeller's render, else the model as the Assets stage draws it. */
+function deliveryPicture(delivery: Delivery): WorkerPicture | null {
+  const image = delivery.files.find((file) => assetFormat(file)?.raster);
+  if (image) return { source: PictureSource.File, file: image };
+  if (delivery.render) return { source: PictureSource.Render, path: delivery.render };
+  return delivery.preview ? { source: PictureSource.Asset, asset: delivery.preview } : null;
+}
+
+/**
+ * A worker's picture: what it delivered, newest first and what is in the game before what is not;
+ * a reader that delivered nothing shows the save point that was current when it started to look.
+ */
+function workerPicture(facet: FacetNode, made: Delivery[], saves: IterationNode[]): WorkerPicture | undefined {
+  const newest = [...made].reverse();
+  const inGame = newest.filter((delivery) => delivery.inGame === true);
+  for (const delivery of [...inGame, ...newest]) {
+    const picture = deliveryPicture(delivery);
+    if (picture) return picture;
+  }
+  const worker = facet.worker;
+  if (worker?.isolation !== WorkerIsolation.Read || worker.startedSeq === null) return undefined;
+  const startedAt = worker.startedSeq;
+  const reviewed = saves.filter((round) => (round.judgedSeq ?? round.startedSeq) < startedAt).at(-1);
+  return reviewed ? { source: PictureSource.Reviewed, round: reviewed } : undefined;
+}
+
+/**
+ * A worker that finished, changed nothing and delivered nothing: no files handed back, nothing of
+ * it in the game, no asset it asked for made. A reader changes nothing by design and is never one.
+ */
+function madeNothing(facet: FacetNode, made: Delivery[]): boolean {
+  const worker = facet.worker;
+  if (worker?.ended !== WorkerEnd.Done || worker.isolation === WorkerIsolation.Read) return false;
+  return !facet.delivered && !worker.merged && made.length === 0;
+}
+
+/** Whether the run can still add work kept from a stopped try: it goes on, or it is paused. */
+function runMayStillAdd(graph: RunGraph): boolean {
+  if (graph.active) return true;
+  const run = graph.nodes.find((node): node is RunNode => node.kind === GraphNodeKind.Run);
+  return run?.paused === true;
 }
 
 /** A part built in one session: one node for the whole part. */
@@ -290,7 +431,9 @@ function sessionStep(
   part: { integrated: boolean; working: boolean },
 ): Step {
   const verdict = sessionVerdict(graph, facet, task);
-  const state = sessionState(graph, facet, task, part);
+  const made = facet.worker ? deliveriesOf(graph, facet.facetId) : [];
+  const state = sessionState(graph, facet, task, { ...part, nothingMade: madeNothing(facet, made) });
+  const picture = facet.worker ? workerPicture(facet, made, savePointsOf(graph)) : undefined;
   return {
     id: `session:${facet.facetId}`,
     facetId: facet.facetId,
@@ -305,6 +448,7 @@ function sessionStep(
     checkedBy: sessionCheckedBy(verdict, part.integrated),
     verdict,
     ...(facet.worker ? { worker: facet.worker } : {}),
+    ...(picture ? { picture } : {}),
   };
 }
 
@@ -336,12 +480,14 @@ function sessionState(
   graph: RunGraph,
   facet: FacetNode,
   task: RunTask | null,
-  part: { integrated: boolean; working: boolean },
+  part: { integrated: boolean; working: boolean; nothingMade: boolean },
 ): StepState {
   if (part.integrated) return StepState.InBuild;
   if (part.working) return StepState.Building;
   // The lead did not use what the worker made: its work stops there, whatever it delivered.
   if (facet.worker?.verdict === WorkerVerdict.Rejected) return StepState.NotInBuild;
+  // A worker that finished with nothing made has nothing to stand on the line with.
+  if (part.nothingMade) return StepState.NotInBuild;
   if (facet.delivered) return StepState.Delivered;
   if (facet.failed) return StepState.NotDelivered;
   // A worker that finished its task is done, whether or not it made files to add.
@@ -371,6 +517,7 @@ export function rowMeta(row: PartRow, active: boolean): string {
   const total = row.steps.length;
   if (row.inBuild === total) return total === 1 ? "added" : `all ${total} added`;
   if (active && row.working) return row.inBuild ? `${row.inBuild} added so far` : "working";
+  if (!row.inBuild && row.steps.some((step) => step.state === StepState.Paused)) return "paused";
   if (!row.inBuild) return "nothing added";
   return `${row.inBuild} of ${total} added`;
 }
@@ -407,6 +554,7 @@ export const STATE_TONE: Record<StepState, Tone> = {
   [StepState.NotInBuild]: Tone.Muted,
   [StepState.NotDelivered]: Tone.Muted,
   [StepState.Waiting]: Tone.Muted,
+  [StepState.Paused]: Tone.Muted,
 };
 
 /** How many tries a folded node stands for, or nothing for one. */
@@ -427,6 +575,7 @@ const STEP_WORD: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.Waiting]: "Waiting to start",
   [StepState.NotInBuild]: "Left out",
   [StepState.NotDelivered]: "Didn't deliver",
+  [StepState.Paused]: "Paused",
 };
 
 /**
@@ -476,8 +625,14 @@ function workerWord(step: Step): string | null {
   }
   const rejected = worker.verdict === WorkerVerdict.Rejected;
   if (step.state === StepState.NotInBuild && rejected) return WORKER_WORDS.notUsed;
+  if (step.state === StepState.NotInBuild && worker.ended === WorkerEnd.Done) return WORKER_WORDS.nothingMade;
+  if (isRefused(step)) return WORKER_WORDS.notStarted;
   return WORKER_STATE_WORD[step.state] ?? null;
 }
+
+/** A worker the host refused to start (the person's Settings allow no more at once): it never ran. */
+const isRefused = (step: Step): boolean =>
+  step.state === StepState.NotDelivered && step.worker?.stopCode === WorkerStopCode.HostRefused;
 
 /** The one status line on a node; the tries it folds are counted on its picture. */
 export function stepWord(step: Step, active: boolean): string {
@@ -495,6 +650,7 @@ const STEP_PILL: Record<Exclude<StepState, typeof StepState.Kept>, string> = {
   [StepState.Undone]: "Rejected by reviewers",
   [StepState.NotInBuild]: "Left out of your build",
   [StepState.NotDelivered]: "Didn't deliver",
+  [StepState.Paused]: "Paused, its work is kept for the lead",
 };
 
 /** The status at the top of a step's card: who decided it, or where it stands against the build you play. */
@@ -557,6 +713,8 @@ function standingSentence(step: Step, active: boolean, anyStopped: boolean): str
         : "The lead didn't merge it, so it isn't in your build.";
     case StepState.NotInBuild:
       return anyStopped ? "Its work is saved, not merged." : "The run ended before the reviewers saw it.";
+    case StepState.Paused:
+      return "The build paused before the reviewers saw it. Its work is kept, and the lead can still add it.";
     case StepState.Building:
       return tries > 1 ? `The worker is on try ${tries}.` : "A worker is building it.";
     case StepState.Judging:
@@ -574,7 +732,8 @@ export function stepSentence(step: Step, active: boolean): string {
   if (step.session) return sessionSentence(step.state);
   const all = step.tries;
   const undone = all.filter((node) => node.status === IterationStatus.Rolled).length;
-  const stopped = all.filter((node) => node.status === IterationStatus.Stopped);
+  // The lead's stops: the run's own close (a pause, the end) is nobody's decision about the work.
+  const stopped = all.filter((node) => node.status === IterationStatus.Stopped && !stoppedByRunClose(node));
   const keptAt = all.findIndex(isKept) + 1;
   const savedAt = all.find(isKept);
   const parts = [
@@ -934,18 +1093,18 @@ function failedChecks(summary: RunSummary | null): number {
   return current.filter((row) => row.status === "failed" && row.category !== "comparison").length;
 }
 
-/** A save point the lead made itself: a step it kept with no judge. */
-const isSavePoint = (step: Step): boolean => step.tries.some((node) => savedByLead(node.verdictSource));
+/** A worker that ran and didn't deliver: one the host refused never ran, so it is not one. */
+const didNotDeliver = (step: Step): boolean => step.state === StepState.NotDelivered && !isRefused(step);
 
 /**
  * A lead's run in its own terms: how many save points it made, then each worker that didn't
  * deliver, by its title as written (counted past two). A delivery the lead didn't use is on its
- * node, not here.
+ * node, not here, and a worker the host refused to start never ran.
  */
 function leadLandedWords(rows: PartRow[]): string {
   const steps = rows.flatMap((row) => row.steps);
   const saves = plural(steps.filter(isSavePoint).length, "save point");
-  const failed = rows.filter((row) => row.steps.some((step) => step.state === StepState.NotDelivered));
+  const failed = rows.filter((row) => row.steps.some(didNotDeliver));
   if (!failed.length) return saves;
   const named = failed.length <= MAX_NAMED_MISSING;
   const lost = named
@@ -1051,6 +1210,8 @@ export interface GatePoint {
 }
 
 export interface StepsLayout {
+  /** The steps in reading order when the layout has one of its own (a lead's tree in place); else row by row. */
+  order?: string[];
   /**
    * `start`, `assets`, `optimization`, `final`, `lead`, every step id, `row:<facetId>` for a label,
    * and in a tree `jobs` and `finish_check`
@@ -1064,7 +1225,8 @@ export interface StepsLayout {
   height: number;
 }
 
-type LayoutDraft = Pick<StepsLayout, "rects" | "edges" | "gates" | "ghosts">;
+/** What a layout fills in as it places things. */
+export type LayoutDraft = Pick<StepsLayout, "rects" | "edges" | "gates" | "ghosts">;
 
 /** A tree's extra nodes: the lead's background work under it, and the finish check after the result. */
 export interface TreeOptions {
@@ -1093,7 +1255,7 @@ interface BusOrigin {
 }
 
 /** The lead of a tree stands right of the start by the lead's gap. */
-const treeLeadX = (): number => STEPS.pad + STEPS.startW + STEPS.leadGap;
+export const treeLeadX = (): number => STEPS.pad + STEPS.startW + STEPS.leadGap;
 
 function busOrigin(tree: boolean): BusOrigin {
   const from = tree ? treeLeadX() + STEPS.nodeW : STEPS.pad + STEPS.startW;
@@ -1260,7 +1422,7 @@ function placeHanging(draft: LayoutDraft, cursor: RowCursor, step: Step, at: { h
  * The start on the middle of the rows (with pictures, its words in a strip under them), and the
  * assets card under it with its dotted link.
  */
-function placeStart(draft: LayoutDraft, midY: number, assets: boolean, words: boolean): void {
+export function placeStart(draft: LayoutDraft, midY: number, assets: boolean, words: boolean): void {
   const S = STEPS;
   draft.rects.start = { x: S.pad, y: midY - S.startH / 2, w: S.startW, h: S.startH };
   const bottom = midY + S.startH / 2 + (words ? S.startWordsH : 0);
@@ -1276,7 +1438,7 @@ function placeStart(draft: LayoutDraft, midY: number, assets: boolean, words: bo
 }
 
 /** The result, with the optimisation card before it when there is one; returns the result's rect. */
-function placeResult(draft: LayoutDraft, into: number, midY: number, optimization: boolean): Rect {
+export function placeResult(draft: LayoutDraft, into: number, midY: number, optimization: boolean): Rect {
   const S = STEPS;
   const y = midY - S.resultH / 2;
   if (!optimization) {
@@ -1294,7 +1456,7 @@ function placeResult(draft: LayoutDraft, into: number, midY: number, optimizatio
 }
 
 /** After the result: a tree's finish check, else the lead while it has the run. */
-function placeEnd(draft: LayoutDraft, final: Rect, midY: number, options: LayoutOptions): void {
+export function placeEnd(draft: LayoutDraft, final: Rect, midY: number, options: LayoutOptions): void {
   if (!options.tree) {
     if (options.lead) placeLead(draft, final, midY);
     return;
@@ -1306,7 +1468,7 @@ function placeEnd(draft: LayoutDraft, final: Rect, midY: number, options: Layout
  * A tree's lead, right of the start on the middle line: a live line into it while it works alone.
  * Its background work hangs under it on a dotted line, as the assets hang under the start.
  */
-function placeTreeLead(draft: LayoutDraft, midY: number, jobs: boolean, alone: boolean): void {
+export function placeTreeLead(draft: LayoutDraft, midY: number, jobs: boolean, alone: boolean): void {
   const S = STEPS;
   const startRight = S.pad + S.startW;
   const x = treeLeadX();
@@ -1382,7 +1544,7 @@ function busOut(drawn: DrawnRow[], rightBus: number, midY: number, into: number)
 }
 
 /** From the bus at `fromY` up or down to a row at `toY`, then right into its first node. */
-function bend(x: number, fromY: number, toY: number, toX: number, r: number): string {
+export function bend(x: number, fromY: number, toY: number, toX: number, r: number): string {
   if (fromY === toY) return `M${x} ${fromY} H${toX}`;
   const dir = toY > fromY ? 1 : -1;
   return `M${x} ${fromY} V${toY - dir * r} Q${x} ${toY} ${x + r} ${toY} H${toX}`;

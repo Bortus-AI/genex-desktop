@@ -3,6 +3,8 @@ export const SettingsSection = {
   /** The Genex account (`panels/AccountSection.tsx`): its avatar, name and credits, or the way to sign in. */
   Account: "account",
   Games: "games",
+  /** What freeing space deletes, and one button that frees it (`panels/StorageSection.tsx`). */
+  Storage: "storage",
   Providers: "providers",
   Local: "local",
   Appearance: "appearance",

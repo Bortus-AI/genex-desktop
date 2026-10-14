@@ -22,6 +22,7 @@ import { EngineLinkLine } from "./EngineLinkLine.tsx";
 import { JobLine } from "./JobLine.tsx";
 import { WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
+import { JudgeLine } from "./JudgeLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
@@ -72,9 +73,20 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     [onNotice],
   );
   const deliveries = useMemo(() => (entry.kind === EntryKind.Assets ? [entry.delivery] : []), [entry]);
+  const making = useMemo(
+    () => (context.project ? { project: context.project, onNotice } : undefined),
+    [context.project, onNotice],
+  );
   switch (entry.kind) {
     case WORK_KIND:
-      return <WorkLog items={entry.items} deliveries={entry.deliveries} onOpenAssets={context.onShowAssets} />;
+      return (
+        <WorkLog
+          items={entry.items}
+          deliveries={entry.deliveries}
+          onOpenAssets={context.onShowAssets}
+          making={making}
+        />
+      );
     case EntryKind.Assets:
       return <AssetResults deliveries={deliveries} onOpenAssets={context.onShowAssets} />;
     case EntryKind.GenexCover:
@@ -243,7 +255,7 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
   );
 }
 
-/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission. */
+/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission, a judge's play. */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
   context: TranscriptContext,
@@ -253,6 +265,7 @@ function quietLine(
   if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Judge && entry.judge) return <JudgeLine judge={entry.judge} />;
   return null;
 }
 

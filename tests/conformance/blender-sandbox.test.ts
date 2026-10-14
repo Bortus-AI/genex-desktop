@@ -244,6 +244,43 @@ bpy.context.active_object.name = "Cable"
     await readFile(frontRenderPath(png));
   });
 
+  it("counts each material slot's faces and triangles, an empty slot as none", { skip: SKIP }, async () => {
+    const { ws, assets, out, scratch, wrapper } = await setup();
+    const script = path.join(assets, "src", "crate.py");
+    // A cube of six quads: two faces on the second slot, none on the third.
+    await writeFile(
+      script,
+      [
+        "import bpy",
+        "bpy.ops.mesh.primitive_cube_add(size=1)",
+        "cube = bpy.context.active_object",
+        "for name in ('wood', 'iron', 'paint'):",
+        "    cube.data.materials.append(bpy.data.materials.new(name))",
+        "for face in cube.data.polygons[:2]:",
+        "    face.material_index = 1",
+        "",
+      ].join("\n"),
+    );
+    const result = await runBlender({
+      binary: BLENDER,
+      script: wrapper,
+      args: [script, path.join(assets, "crate.glb"), path.join(out, "crate-1.png"), "crate"],
+      cwd: ws,
+      allowWrite: [assets, out],
+      denyRead: [],
+      scratch,
+      timeoutMs: 60_000,
+    });
+    const parsed = resultLine(result.stdout);
+    assert.ok(parsed?.ok === true, `result line: ${JSON.stringify(parsed)}\nstderr: ${result.stderr.slice(-800)}`);
+    const [mesh] = parsed.meshes as Array<{ slots?: unknown }>;
+    assert.deepEqual(mesh?.slots, [
+      { slot: 0, material: "wood", polygons: 4, triangles: 8 },
+      { slot: 1, material: "iron", polygons: 2, triangles: 4 },
+      { slot: 2, material: "paint", polygons: 0, triangles: 0 },
+    ]);
+  });
+
   it("a script that raises exits 1 with the traceback in the result line", { skip: SKIP }, async () => {
     const { ws, assets, out, scratch, wrapper } = await setup();
     const script = path.join(assets, "src", "bad.py");

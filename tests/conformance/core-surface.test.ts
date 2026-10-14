@@ -14,6 +14,7 @@ const METHODS = [
   "_computerToolsFor",
   "_directorToolsFor",
   "_playtestToolsFor",
+  "_runOfGame",
   "acceptStagedProposal",
   "activeBuilders",
   "activityEvents",
@@ -32,8 +33,6 @@ const METHODS = [
   "buildProblem",
   "changeQueuedMessage",
   "chatFileTarget",
-  // A game's history space, and clearing Rewind history (studio:game.history, studio:game.history.clear).
-  "clearGameHistory",
   "compactThread",
   "connectionSnapshot",
   "createGame",
@@ -44,9 +43,10 @@ const METHODS = [
   "emit",
   "exportPublicCopy",
   "forgetPermission",
+  // What freeing space deletes, and deleting it (studio:storage, studio:storage.free).
+  "freeStorage",
   // Create game's location, checked before anything is written (studio:game.location.pick).
   "gameLocation",
-  "gameHistory",
   "init",
   "inspectFolder",
   "installPackages",
@@ -118,6 +118,7 @@ const METHODS = [
   "stopLive",
   "stopRun",
   "stopThread",
+  "storageSpace",
   "threadForGame",
   "undoEngineLink",
   "undoSelfChange",

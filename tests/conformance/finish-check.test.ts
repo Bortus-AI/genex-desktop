@@ -446,12 +446,15 @@ describe("the finish check", () => {
     await writeFile(path.join(folder, "big.log"), Buffer.alloc(PROOF_FILE_MAX_BYTES + 1, 0x61));
     await writeFile(path.join(folder, "nul.txt"), Buffer.from("text\0more"));
     await writeFile(path.join(folder, "bad\nname.txt"), "a name with a line break");
-    const hostile = ["../x", "/etc/hosts", "~/x", "link-out.txt", "a-folder", "big.log", "nul.txt", "bad\nname.txt"];
+    const kinds = ["../x", "/etc/hosts", "~/x", "link-out.txt", "a-folder", "big.log", "nul.txt", "bad\nname.txt"];
+    // Every name up to the cap is a hostile one: the climbs past the kinds fill it.
+    const climbs = Array.from({ length: MAX_PROOF_FILES - kinds.length }, (_, i) => `../climb-${i}`);
+    const hostile = [...kinds, ...climbs];
     assert.equal(hostile.length, MAX_PROOF_FILES);
     const { r } = host([]);
     const proof = await readProof(r.ctx as never, RUN, folder, [...hostile, "reports/tests.txt"]);
     assert.deepEqual(proof.images, [], "no picture");
-    assert.deepEqual(proof.texts, [], "no text: the ninth name is past the cap");
+    assert.deepEqual(proof.texts, [], "no text: the name after the cap is past it");
     assert.equal(proof.refused.length, hostile.length + 1, `a line each, and one for the rest: ${proof.refused}`);
     for (const line of proof.refused) assert.ok(!line.includes("\n"), `one line: ${JSON.stringify(line)}`);
     assert.deepEqual(
