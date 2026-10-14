@@ -1443,6 +1443,14 @@ export const AUTO_RESUME_SETTING_WORDS = {
     "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
 } as const;
 
+/** Settings → Permissions: the switch that lets agents ask to control the person's Mac. */
+export const COMPUTER_CONTROL_SETTING_WORDS = {
+  section: "Computer control",
+  label: "Let agents control your computer",
+  detail:
+    "An agent can ask to see your screen, then click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. macOS only.",
+} as const;
+
 export function resumedWords(parts: number): string {
   const done = Math.max(0, Math.trunc(parts || 0));
   return `picking up where it left off${done ? ` — ${plural(done, "finished part")} kept` : ""}`;

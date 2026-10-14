@@ -180,13 +180,21 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   with `GENEX_VENDOR_CUA_DRIVER=1`, else runs an installed driver (`~/.local/bin/cua-driver` and the
   usual paths), embedded the same way. Moving to a newer driver: change the pin and the notices, then
   verify the web and desktop scenarios live.
-- **Who holds it.** The chat's own session on every engine is handed a `desktop` tool (the computer
-  vocabulary under its own name, so it sits beside a game's `computer`), where a driver is
-  found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
+- **The setting.** Settings → Permissions → **Let agents control your computer** (`computerControl`
+  in the studio's `settings.json`) is off for every install, new or existing; only an explicit on
+  turns it on, and only macOS offers it. Off, no session is handed the `desktop` tool, no consent card
+  shows, the driver is never looked for or started, and `desktop.computer` answers that computer
+  control is off in Settings (an answer, never an error). Turning it off stops every running driver
+  (`stopAll`, as ⌃⌥⌘Esc) and a session already holding the tool reads the same answer on its next
+  call; turned on, the next call or session works as below.
+- **Who holds it.** With the setting on, the chat's own session on every engine is handed a `desktop`
+  tool (the computer vocabulary under its own name, so it sits beside a game's `computer`), where a
+  driver is found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
   `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
-  session's yes covers every app.
+  session's yes covers every app. A yes stands while the driver fails to connect (missing grants, no
+  driver): the next call retries without a new card. A stop ends it, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front

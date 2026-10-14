@@ -354,6 +354,7 @@ export interface StudioApi {
     agentsMax?: number;
     blender?: boolean;
     autoResume?: boolean;
+    computerControl?: boolean;
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
@@ -667,6 +668,8 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
+  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  computerControl?: boolean;
 }
 
 declare global {

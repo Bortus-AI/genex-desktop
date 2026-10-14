@@ -46,9 +46,16 @@ export interface DesktopSessionPlace {
   signal?: AbortSignal;
 }
 
+/** Whether the person turned computer control on (Settings → Permissions; off by default). */
+export function computerControlOn(core: Pick<StudioCore, "settings">): boolean {
+  return core.settings.computerControl;
+}
+
 /**
- * The `desktop` tool for one chat, where a desktop driver is installed; null otherwise. Nothing
- * moves before the person answers its card in that chat — once for the session, then once per app.
+ * The `desktop` tool for one chat, where computer control is on and a desktop driver is installed;
+ * null otherwise, without looking for the driver while it is off. Nothing moves before the person
+ * answers its card in that chat — once for the session, then once per app — and turned off later,
+ * every further call answers so.
  */
 export async function desktopSessionTools(
   core: StudioCore,
@@ -56,7 +63,8 @@ export async function desktopSessionTools(
   place: DesktopSessionPlace,
 ): Promise<DesktopTools | null> {
   const desktop = core.options.desktop;
-  if (!desktop || !(await desktop.available())) return null;
+  if (!desktop || !computerControlOn(core)) return null;
+  if (!(await desktop.available())) return null;
   const screen: AgentScreen = {
     handle: `${DESKTOP_TOOL_NAME}:${place.threadId}`,
     label: MESSAGE.label,
@@ -72,6 +80,7 @@ export async function desktopSessionTools(
     return answer.approved;
   };
   return desktop.toolsFor({
+    enabled: () => computerControlOn(core),
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,
     frame: async (shown, jpeg, caption, act) => {

@@ -49,7 +49,7 @@ const NOTES: DesktopApp = { name: "Notes", bundleId: "com.apple.Notes", pid: 9 }
 
 async function toolsWith(
   answers: { session: boolean; apps?: Record<string, boolean> },
-  options: { vm?: boolean } = {},
+  options: { vm?: boolean; failConnects?: number; enabled?: () => boolean } = {},
 ) {
   const fake = driverWith(NOTES);
   const asked: string[] = [];
@@ -57,6 +57,7 @@ async function toolsWith(
   const tools = desktopTools({
     connect: async () => {
       connects += 1;
+      if (connects <= (options.failConnects ?? 0)) throw new Error("Accessibility is not granted");
       return fake.driver;
     },
     ask: async (question, app) => {
@@ -66,6 +67,7 @@ async function toolsWith(
     ownApp: () => false,
     frameDir: await tmpDir("desktop-tools-"),
     ...(options.vm ? { vm: true } : {}),
+    ...(options.enabled ? { enabled: options.enabled } : {}),
   });
   return { tools, fake, asked, connects: () => connects };
 }
@@ -122,10 +124,66 @@ describe("the desktop tool", () => {
     assert.deepEqual(fake.calls, ["close"]);
   });
 
-  it("stops the driver on release", async () => {
-    const { tools, fake } = await toolsWith({ session: true, apps: { Notes: true } });
+  it("after a yes for the session, a connection that failed is retried on the next call, never asked again", async () => {
+    const { tools, fake, asked, connects } = await toolsWith(
+      { session: true, apps: { Notes: true } },
+      { failConnects: 2 },
+    );
+    const first = text(await tools.onLiveTool("desktop", { action: "screenshot" }));
+    assert.match(first, /computer control is not available: Accessibility is not granted/);
+    const second = text(await tools.onLiveTool("desktop", { action: "screenshot" }));
+    assert.match(second, /Accessibility is not granted/, "a retry that fails again says the same reason");
+    await tools.onLiveTool("desktop", { action: "screenshot" });
+    await tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
+    assert.equal(connects(), 3, "each call retried the connection until it held");
+    assert.deepEqual(fake.calls, ["click 10,10"]);
+    assert.deepEqual(asked, ["session", "app:Notes"], "the session's yes was asked for once");
+  });
+
+  it("turned off in Settings, the next call is refused in words and reaches nothing", async () => {
+    let on = true;
+    const { tools, fake, connects } = await toolsWith({ session: true, apps: { Notes: true } }, { enabled: () => on });
+    await tools.onLiveTool("desktop", { action: "screenshot" });
+    on = false;
+    const answer = await tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
+    assert.equal(typeof answer, "string", "an answer, never an error");
+    assert.match(text(answer), /computer control is off in Settings/);
+    assert.match(text(answer), /Settings → Permissions/);
+    assert.deepEqual(fake.calls, [], "the click never reached the driver");
+    on = true;
+    await tools.onLiveTool("desktop", { action: "left_click", coordinate: "10,10" });
+    assert.deepEqual(fake.calls, ["click 10,10"], "turned back on, the next call works");
+    assert.equal(connects(), 1);
+  });
+
+  it("turned off while the session's card waits, a yes connects nothing", async () => {
+    let on = true;
+    const fake = driverWith(NOTES);
+    let connects = 0;
+    const tools = desktopTools({
+      connect: async () => {
+        connects += 1;
+        return fake.driver;
+      },
+      ask: async () => {
+        on = false;
+        return true;
+      },
+      ownApp: () => false,
+      enabled: () => on,
+      frameDir: await tmpDir("desktop-tools-"),
+    });
+    const answer = text(await tools.onLiveTool("desktop", { action: "screenshot" }));
+    assert.match(answer, /computer control is off in Settings/);
+    assert.equal(connects, 0, "the driver never started");
+  });
+
+  it("stops the driver on release, and the next call asks for the session again", async () => {
+    const { tools, fake, asked } = await toolsWith({ session: true, apps: { Notes: true } });
     await tools.onLiveTool("desktop", { action: "screenshot" });
     await tools.release();
     assert.deepEqual(fake.calls, ["close"]);
+    await tools.onLiveTool("desktop", { action: "screenshot" });
+    assert.deepEqual(asked, ["session", "session"], "a stop ends the session's yes");
   });
 });
