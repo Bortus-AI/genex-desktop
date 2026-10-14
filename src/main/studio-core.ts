@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
-import { ignoreLine } from "../shared/project-workspace.ts";
+import { deliveryFolderFor, ignoreLine } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
 import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/backdrop-shader.ts";
@@ -1019,6 +1019,8 @@ export class StudioCore {
     this.pluginServices.assetLimits = (id) =>
       this.plugins.list().find((p) => p.manifest.id === id)?.manifest.assetLimits;
     this.pluginServices.assetRoot = async (binding) => {
+      const own = deliveryFolderFor(await this.games.factsOf(binding.project).catch(() => []));
+      if (own) return path.join(binding.directory, own);
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };

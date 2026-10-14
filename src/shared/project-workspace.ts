@@ -22,6 +22,11 @@ export interface FactWorkspace {
   ignore: readonly string[];
   copySkip: readonly string[];
   assets: readonly AssetFolder[];
+  /**
+   * Where files a plugin delivers (generated assets) land, relative to the fact's folder, for a
+   * kind whose engine reads only its own project's folder; absent keeps Genex's default (the game's root).
+   */
+  deliver?: string;
 }
 
 /** The game's root, as a fact's path spells it. */
@@ -84,7 +89,13 @@ export const CORE_WORKSPACE = {
     assets: [],
   },
   // Godot's `*.import` files stay in history: the project needs them to open.
-  [CoreFact.GodotProject]: { ignore: [".godot/"], copySkip: [], assets: [{ folder: ROOT, formats: MEDIA_FORMATS }] },
+  // Delivered files land in the project, where `res://assets/...` reaches them.
+  [CoreFact.GodotProject]: {
+    ignore: [".godot/"],
+    copySkip: [],
+    assets: [{ folder: ROOT, formats: MEDIA_FORMATS }],
+    deliver: ROOT,
+  },
   [CoreFact.UnityProject]: {
     ignore: ["Library/", "Temp/", "Logs/", "obj/", "UserSettings/"],
     copySkip: [],
@@ -356,6 +367,23 @@ function reachedFolders(plugin: PluginWorkspace, facts: readonly FactRef[]): Ass
   const { assets } = plugin;
   if (!assets) return [];
   return facts.filter((fact) => plugin.facts.includes(fact.id)).flatMap((fact) => pluginFolders(fact.path, assets));
+}
+
+/**
+ * The folder, relative to the game, where a plugin's delivered files land for a game with these
+ * facts: the folder of the first fact (the root's first) whose kind keeps them in its own project;
+ * null keeps Genex's default, as does a web game at the root, which serves the files itself.
+ */
+export function deliveryFolderFor(facts: readonly FactRef[]): string | null {
+  if (facts.some((fact) => fact.id === CoreFact.WebGame && fact.path === ROOT)) return null;
+  const bases = facts.filter((fact) => isPlaceableBase(fact.path));
+  const ordered = [...bases.filter((fact) => fact.path === ROOT), ...bases.filter((fact) => fact.path !== ROOT)];
+  for (const fact of ordered) {
+    const workspace: FactWorkspace | undefined = isCoreFact(fact.id) ? CORE_WORKSPACE[fact.id] : undefined;
+    const deliver = workspace?.deliver;
+    if (deliver !== undefined) return joinFolder(fact.path, deliver);
+  }
+  return null;
 }
 
 /**

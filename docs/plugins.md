@@ -1218,8 +1218,10 @@ Available services are capability checked and scoped to the calling plugin:
 - `storage.root`: plugin-owned durable storage, outside games and exports.
 - `project.read` / `project.write`: relative files in the bound worktree; private/internal paths
   and traversal are refused. Existing parent directories are required for writes.
-- `assets.deliver`: copy plugin-owned output into a unique project asset directory, refusing
-  symlinks and overwrites; requires `project.write`. Studio records each delivery in the project's
+- `assets.deliver`: copy plugin-owned output into a unique project asset directory
+  (`assets/<plugin>/<job>/`: under `public/` for a web game with a build, under a Godot project's
+  folder when the game has no web game at its root, `deliveryFolderFor` in
+  `shared/project-workspace.ts`), refusing symlinks and overwrites; requires `project.write`. Studio records each delivery in the project's
   log as a host-owned `asset_delivered` event (plugin id, job id, files, sizes, kinds) and shows it
   on the Assets stage tab; plugins do not need to emit anything for that, and a ledger failure
   never fails the delivery.

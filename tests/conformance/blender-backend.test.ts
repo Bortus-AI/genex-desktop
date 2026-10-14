@@ -46,7 +46,9 @@ async function game(): Promise<string> {
 }
 
 /** A host that records every call and answers like Studio's for one completed job. */
-async function recordingHost(options: { studio?: unknown; made?: Record<string, unknown> } = {}) {
+async function recordingHost(
+  options: { studio?: unknown; made?: Record<string, unknown>; delivered?: string[]; godot?: string } = {},
+) {
   const calls: Call[] = [];
   const output = await tmpDir("blender-backend-output-");
   for (const file of ["render.png", "render-front.png"]) await writeFile(path.join(output, file), PNG);
@@ -65,7 +67,9 @@ async function recordingHost(options: { studio?: unknown; made?: Record<string, 
         stdout: `${STUDIO_BLENDER_RESULT}${JSON.stringify({ ...MADE, ...options.made })}\n`,
         createdAt: new Date(0).toISOString(),
       };
-    if (method === "assets.deliver") return ["assets/blender/job-1/model.glb", "assets/blender/job-1/render.png"];
+    if (method === "assets.deliver")
+      return options.delivered ?? ["assets/blender/job-1/model.glb", "assets/blender/job-1/render.png"];
+    if (method === "project.read" && args.path === options.godot) return "config_version=5\n";
     if (method === "jobs.write") return true;
     if (method === "project.read" && args.path === "studio.json" && options.studio !== undefined)
       return JSON.stringify(options.studio);
@@ -302,5 +306,17 @@ describe("Local Blender model calls", () => {
     const notes = String((await parts.run).guidance);
     assert.match(notes, /join/i, "several meshes: join them for Unreal");
     assert.match(notes, /rig/, "an armature left out: say how to export it");
+  });
+
+  it("guides a Godot game to the model's res:// path, by the project it was delivered into", async () => {
+    const dir = await game();
+    const delivered = ["godot/assets/blender/job-1/model.glb", "godot/assets/blender/job-1/render.png"];
+    const godot = await callModel(dir, { name: "panel" }, { delivered, godot: "godot/project.godot" });
+    const guidance = String((await godot.run).guidance);
+    assert.match(guidance, /res:\/\/assets\/blender\/job-1\/model\.glb/);
+    assert.match(guidance, /godot__screenshot/);
+    assert.doesNotMatch(guidance, /GLTFLoader/);
+    const elsewhere = await callModel(dir, { name: "panel" }, { delivered });
+    assert.match(String((await elsewhere.run).guidance), /GLTFLoader/, "no project.godot there: a web game's words");
   });
 });
