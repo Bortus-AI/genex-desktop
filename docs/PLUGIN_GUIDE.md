@@ -192,6 +192,17 @@ optional leading `**/` for any depth; a `notUnder` glob ends with `/`. At most 8
 1–8 `files` and up to 8 `notUnder`; a fact id is lowercase letters, digits and dashes. Genex knows
 web, Unreal, Godot, Unity and Blender folders itself ([Project facts](plugins.md#project-facts)).
 
+A plugin that is an engine, with capability `game-engine`, declares it in `engine`, under your
+plugin's own id:
+`"engine": { "id": "toy-engine", "label": "Toy", "projectFiles": [".toyproj"], "fact": "toy-project", "projectInFolder": false }`.
+`label` is the engine's name as people read it; `projectFiles` lists 1–4 extensions a project file
+has (one or two dotted parts, such as `.project.json`); `fact` is one your `detect` declares;
+`projectInFolder` is true when the project must sit inside the game folder for save points to hold
+it. Optional `play` says what your editor can do in play (`players` 1–8, `clock`, `pointer`,
+`state`), and `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at
+most 4 each), which computer use never drives to build or play. See
+[The engine declaration](plugins.md#the-engine-declaration).
+
 What your engine generates while it runs stays out of the game's history when you say so:
 `"workspace": { "ignore": ["Cache/"], "copySkip": ["Cache/"] }` puts `/Cache/` (or `sub/Cache/` for
 a project in `sub`) in the game's `.gitignore` before its first commit and every snapshot after; `copySkip` names what

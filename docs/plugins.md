@@ -146,7 +146,7 @@ and the Plugins page — no polling is needed for a change to show.
 | --- | --- | --- |
 | `apiVersion` | 1, 2, 3 | Supported SDK major; unrecognized versions are incompatible |
 | `id`, `version`, `name`, `publisher`, `description`, `backend` | 1 | Identity, semver, display text and the backend module path |
-| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` |
+| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` and `game-engine` |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
@@ -159,6 +159,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `toolbar[]` | 2 | Up to 4 buttons in the stage strip; see below |
 | `mcpServers[]` | 2 | Up to 4 MCP servers the plugin ships, run by the host as connectors the plugin owns, each (API 3) with `facts`; see below |
 | `detect[]` | 3 | Up to 8 `{fact, files, notUnder?}` rules that recognise the plugin's kinds of project by their files; see [Project facts](#project-facts) |
+| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
@@ -1814,6 +1815,35 @@ instead of only showing the note (`main/core/plugin-hooks.ts` `takeCheckpoint`,
 `DelegateRequest.onCheckpoint`; in Plan mode, while the person plays, or when Genex can't tell
 whether they do, it changes nothing). With the Unreal plugin off, a linked Unreal game's tool still
 snapshots the game folder, running no step: the session is told to save in the editor first.
+
+### The engine declaration
+
+A `game-engine` plugin declares its engine in `engine` (API 3, `substrate/plugins/engine-manifest.ts`,
+`EngineDeclaration` in `shared/game-engine.ts`), so an engine is the plugin's data rather than
+Genex's code. Unreal's is `{"id": "unreal", "label": "Unreal", "projectFiles": [".uproject"],
+"fact": "unreal-project", "projectInFolder": true}`. The manifest is refused unless:
+
+- `id` is the plugin's own id and an engine id (2–40 lowercase letters, digits and dashes, a letter
+  first), never `web`, so a plugin cannot speak for another engine;
+- `label`, the engine's name as people read it, is 1–40 characters on one line;
+- `projectFiles` lists 1–4 distinct extensions a linked project file may have, each one or two
+  lowercase dotted parts (`.uproject`, `.project.json`);
+- `fact`, the fact a linked game holds, is one the plugin's `detect` declares or one of Genex's own
+  (never `web-game`);
+- `projectInFolder` is a boolean: true when the Loop needs the project inside the game folder,
+  because its save points hold it;
+- `play`, when present, is `{players?, clock?, pointer?, state?}`: at most `players` players (1–8)
+  in one play, a `ClockLevel`, and whether the mouse aims as a player's does and the game's state
+  can be read;
+- `apps`, when present, is `{mac?, windows?}`, each 1–4 distinct names: Mac bundle ids in
+  reverse-DNS form and Windows `.exe` file names, never paths. They name the apps the editor runs
+  as, which computer use never drives to build or play.
+
+Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
+engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's
+ids at its engine's service (`{placeId, universeId}`, decimal strings of at most 20 digits, never
+numbers), and `isProjectPath(value, extensions)` checks a project path against an engine's
+extensions. A `game-engine` plugin without `engine` still loads.
 
 ## Panels and trusted approval
 
