@@ -18,16 +18,22 @@ import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import { GENEX_PLUGIN_ID, GenexAction } from "../../src/shared/genex.ts";
 import { PluginAccountState } from "../../src/shared/plugins.ts";
 
-/** A port the test drives: what the account is, and every call made of it. */
-function fakePort(start: { state?: PluginAccountState; token?: string } = {}) {
+/**
+ * A port the test drives: what the account is, and every call made of it. `held` keeps each
+ * connect waiting until the test lets it go, as a slow Genex does.
+ */
+function fakePort(start: { state?: PluginAccountState; token?: string; held?: boolean } = {}) {
   const calls: string[] = [];
   let state = start.state;
   let token = start.token;
+  let release = (): void => {};
+  const gate = start.held ? new Promise<void>((go) => (release = go)) : Promise.resolve();
   const port: GenexAccountPort = {
     state: async () => state,
     token: async () => token,
     connect: async () => {
       calls.push("connect");
+      await gate;
       if (token) return {};
       state = PluginAccountState.Authorizing;
       return { verifyUrl: "https://genex.games/device?code=ABCD-1234", userCode: "ABCD-1234" };
@@ -41,13 +47,17 @@ function fakePort(start: { state?: PluginAccountState; token?: string } = {}) {
       state = PluginAccountState.NotConnected;
       token = undefined;
     },
+    signedIn: async () => {
+      calls.push("signed in");
+    },
   };
   /** The browser approved the sign-in: the token is saved. */
   const approve = (next: string): void => {
     state = PluginAccountState.Unlocked;
     token = next;
   };
-  return { port, calls, approve };
+  /** Let every held connect answer, now and from now on. */
+  return { port, calls, approve, release: () => release() };
 }
 
 /** The account over `port`, with the pages it opened. */
@@ -122,6 +132,47 @@ test("signing out forgets the account, and a sign-in that ended with it", async 
   assert.deepEqual(await service.view(), { status: GenexAccountStatus.SignedIn }, "a new sign-in starts clean");
 });
 
+test("two presses at once start one sign-in and open one page", async () => {
+  const fake = fakePort({ state: PluginAccountState.NotConnected, held: true });
+  const { service, opened } = account(fake.port);
+  const first = service.signIn();
+  const second = service.signIn();
+  fake.release();
+  assert.deepEqual(await first, await second);
+  assert.deepEqual(fake.calls, ["connect"]);
+  assert.equal(opened.length, 1);
+});
+
+test("a cancel while the sign-in is starting wins: no page opens and the sign-in stops", async () => {
+  const fake = fakePort({ state: PluginAccountState.NotConnected, held: true });
+  const { service, opened } = account(fake.port);
+  const signing = service.signIn();
+  const cancelled = await service.cancel();
+  fake.release();
+  assert.deepEqual(await signing, { status: GenexAccountStatus.SignedOut });
+  assert.deepEqual(cancelled, { status: GenexAccountStatus.SignedOut });
+  assert.deepEqual(opened, [], "the browser never opens");
+  assert.deepEqual(fake.calls, ["cancel", "connect", "cancel"], "the sign-in Genex started late is stopped too");
+});
+
+test("a sign-in that finishes turns Genex on once, as does one that reuses the saved account", async () => {
+  const fake = fakePort({ state: PluginAccountState.NotConnected });
+  const { service } = account(fake.port);
+  await service.signIn();
+  await service.view();
+  assert.ok(!fake.calls.includes("signed in"), "not before the browser approves it");
+  fake.approve("token-1");
+  await service.view();
+  await service.view();
+  assert.equal(fake.calls.filter((call) => call === "signed in").length, 1);
+  const saved = fakePort({ state: PluginAccountState.Unlocked, token: "token-2" });
+  await account(saved.port).service.signIn();
+  assert.deepEqual(saved.calls, ["connect", "signed in"]);
+  const restored = fakePort({ state: PluginAccountState.Unlocked, token: "token-3" });
+  await account(restored.port).service.view();
+  assert.deepEqual(restored.calls, [], "an account restored at launch is no sign-in");
+});
+
 /** A registry as the plugin port reads it: Genex as listed, and every call made of it. */
 function fakeRegistry(genex: { enabled: boolean; removed: boolean } | null) {
   const calls: string[] = [];
@@ -138,6 +189,10 @@ function fakeRegistry(genex: { enabled: boolean; removed: boolean } | null) {
       calls.push(`${name} ${id}`);
       return name === GenexAction.Connect ? { verifyUrl: "https://genex.games/device", userCode: "C0DE" } : {};
     },
+    enableForSignIn: async (id: string) => {
+      calls.push(`turn on ${id}`);
+      return true;
+    },
   };
   return { registry, calls };
 }
@@ -150,7 +205,13 @@ test("the Genex port brings back a removed Genex before it signs in, and leaves 
   assert.deepEqual(removed.calls, [`restore ${GENEX_PLUGIN_ID}`, `${GenexAction.Connect} ${GENEX_PLUGIN_ID}`]);
   const off = fakeRegistry({ enabled: false, removed: false });
   await pluginAccountPort(off.registry).connect();
-  assert.deepEqual(off.calls, [`${GenexAction.Connect} ${GENEX_PLUGIN_ID}`], "turned off by the person, it stays off");
+  assert.deepEqual(
+    off.calls,
+    [`${GenexAction.Connect} ${GENEX_PLUGIN_ID}`],
+    "nothing turns on before the sign-in ends",
+  );
+  await pluginAccountPort(off.registry).signedIn();
+  assert.deepEqual(off.calls.at(-1), `turn on ${GENEX_PLUGIN_ID}`, "the registry decides whether it turns on");
 });
 
 test("the Genex port cancels and signs out through Genex's own actions, and does nothing with no Genex", async () => {

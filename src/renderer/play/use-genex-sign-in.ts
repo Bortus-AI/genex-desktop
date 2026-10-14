@@ -21,11 +21,13 @@ export async function signInToGenex(): Promise<void> {
   }
 }
 
-/** Stop a sign-in that waits in the browser. */
+/** Stop a sign-in that waits in the browser; a failure is a toast. */
 export async function cancelGenexSignIn(): Promise<void> {
-  await studio()
-    .people.cancelSignIn()
-    .catch(() => undefined);
+  try {
+    await studio().people.cancelSignIn();
+  } catch {
+    studio().notify(WORDS.cancelFailed, ToastTone.Error);
+  }
 }
 
 /** Sign in, busy while main opens the browser (a second press waits for the first). */

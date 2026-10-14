@@ -332,7 +332,8 @@ function FeedBody({
         onRemix={onRemix}
       />
       {feed.moreFailed && <MoreFailed noun={noun} online={online} onRetry={more} />}
-      {feed.nextCursor && <MoreMarker onNear={more} scroller={scroller} />}
+      {/* Made afresh for each page: a page too short to move the marker out of the look-ahead still reads the next. */}
+      {feed.nextCursor && <MoreMarker key={feed.nextCursor} onNear={more} scroller={scroller} />}
       {feed.loadingMore && (
         <span className="sr-only" role="status">
           {WORDS.loadingMore}

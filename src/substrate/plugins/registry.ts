@@ -97,6 +97,8 @@ interface Installed {
   lastSkillChange?: PluginSkillChange;
   /** A local plugin's agent tools the person allowed to run without asking; gone on new code or turn-off. */
   allowed?: string[];
+  /** The person turned it off themselves: only they turn it on again (a sign-in leaves it off). */
+  turnedOff?: boolean;
 }
 /**
  * Who a package is, as far as its saved account and data are concerned. The id is only a name: two
@@ -1418,6 +1420,8 @@ export class PluginRegistry {
       // A local plugin loaded off ran none of its code: its backend is proven as the person turns it on.
       if (enabled && !wasEnabled && p.source === PluginSourceKind.Local) await this.#probe(p.directory, p.manifest);
       p.enabled = enabled;
+      if (enabled) delete p.turnedOff;
+      else p.turnedOff = true;
       const pending = this.#pending.get(id);
       if (pending) pending.enabled = enabled;
       if (!enabled) this.#turnOff(id, p);
@@ -1427,15 +1431,29 @@ export class PluginRegistry {
       this.#fire({ id, reason: enabled ? PluginChangeReason.Enabled : PluginChangeReason.Disabled });
     });
   }
-  /** What turning a plugin off stops: its backend, its folder's watch and its tools' grants; its account too, unless it is the app's. */
+  /**
+   * What turning a plugin off stops: its tools' grants, its account, its folder's watch and its
+   * backend. The app's account plugin keeps its account, a sign-in under way and its backend, which
+   * serves the account and a Publish under way: only its tools and servers go (`isLive`).
+   */
   #turnOff(id: string, p: Installed) {
     // Turned off, its tools ask again once it is back on.
     delete p.allowed;
-    // The app's account plugin keeps its account (and a sign-in under way): only its tools go.
-    if (!this.#keepsAccount(p)) this.#lockAccount(id);
+    if (this.#keepsAccount(p)) return;
+    this.#lockAccount(id);
     this.#unwatch(id);
     this.#processes.get(id)?.stop();
     this.#processes.delete(id);
+  }
+  /**
+   * A sign-in to the app's account finished: its plugin turns on, unless the person turned it off
+   * themselves or it failed to load. True when it was turned on now.
+   */
+  async enableForSignIn(id: string): Promise<boolean> {
+    const p = this.#installed.get(id);
+    if (!p || !this.#keepsAccount(p) || p.enabled || p.turnedOff || this.#errors.has(id)) return false;
+    await this.setEnabled(id, true);
+    return true;
   }
   async remove(id: string) {
     return this.#serial(async () => {

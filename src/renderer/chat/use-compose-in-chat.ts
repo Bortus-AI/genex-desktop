@@ -43,8 +43,13 @@ export function useComposeInChat(
       if (request.send) {
         // Composed first, as a launch hands over its first message: a send the chat can't make
         // yet (no model, a sign-in first) leaves the words in the composer instead of losing them.
+        // A draft the person was typing stays theirs: the send leaves it as it is.
+        const typing = chat.drafts.draft.trim() !== "";
         composer.current?.compose(request.text);
-        void send.current(request.text);
+        send.current(request.text, undefined, typing).catch(() => {
+          // The send failed: the words wait in the composer, as typed words would.
+          if (!open.current.drafts.draft.includes(request.text)) open.current.drafts.putBack(thread, request.text);
+        });
         return;
       }
       // Asked again before sending, the words are already there: they go in once.

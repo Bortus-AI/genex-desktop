@@ -253,6 +253,32 @@ describe("Play viewer", () => {
     assert.equal(failing.bar()?.note, PlayNote.LikeFailed);
   });
 
+  it("says a game failed when its sign-in ticket can't be read, never loading for good", async () => {
+    const { viewer, events, opened } = rig({
+      ticket: async () => {
+        throw new Error("no window to mint for");
+      },
+    });
+    viewer.open("lost-cathedral");
+    await settle();
+    assert.equal(opened.length, 0);
+    assert.equal(events.at(-1)?.phase, PlayViewerPhase.Failed);
+  });
+
+  it("copies the game's page for an invite whose code can't be read", async () => {
+    const { viewer, copied, bar } = rig({
+      inviteCode: async () => {
+        throw new Error("offline");
+      },
+    });
+    viewer.open("lost-cathedral");
+    await settle();
+    viewer.control(PlayControl.Invite);
+    await settle();
+    assert.deepEqual(copied, ["https://genex.games/lost-cathedral"]);
+    assert.equal(bar()?.note, PlayNote.InviteCopied);
+  });
+
   it("copies the game's page for Share and an invite with the referral code", async () => {
     const { viewer, copied, bar } = rig();
     viewer.open("lost-cathedral");

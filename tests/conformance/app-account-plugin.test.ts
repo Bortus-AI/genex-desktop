@@ -24,7 +24,7 @@ const BACKEND = `export async function activate(){return {
   async review(){return {message:'Publish this game?'};},
   async action(n,a,c){
     if(n==='connect'){await c.host('credentials.read',{});return {userCode:'ABCD-1234'};}
-    if(n==='status'){if(a&&a.approve)await c.host('credentials.write',{token:'approved-token'});return {connected:true};}
+    if(n==='status'){if(a&&a.approve)await c.host('credentials.write',{token:'approved-token'});return {connected:true,pid:process.pid};}
     if(n==='unlock')await c.host('credentials.read',{});
     if(n==='disconnect')await c.host('credentials.clear',{});
     if(n==='publish')return {published:true};
@@ -177,6 +177,60 @@ test("a saved account of the app's account plugin is restored at start while it 
     assert.equal(second.enabled("example"), false);
     assert.equal(await second.accountState("example"), "unlocked");
     assert.equal(await second.hostCredential("example"), "approved-token");
+  } finally {
+    await f.close();
+  }
+});
+
+test("turning the app's account plugin off keeps its backend, so a Publish under way goes on", async () => {
+  const f = await accountFixture();
+  try {
+    const registry = await f.open("example");
+    const before = (await registry.action("example", "status", {})) as { pid: number };
+    await registry.setEnabled("example", false);
+    const after = (await registry.action("example", "status", {})) as { pid: number };
+    assert.equal(after.pid, before.pid, "the same backend answers");
+  } finally {
+    await f.close();
+  }
+});
+
+test("a sign-in turns the app's account plugin back on, unless the person turned it off", async () => {
+  const f = await accountFixture();
+  try {
+    const first = await f.open("example");
+    await first.setEnabled("example", false);
+    assert.equal(await first.enableForSignIn("example"), false);
+    assert.equal(first.enabled("example"), false, "the person's off stays");
+    first.cancel();
+    // Off without the person on record (a record that failed to load, an older profile): a sign-in turns it on.
+    const file = path.join(f.root, "installed", "installed.json");
+    const records = JSON.parse(await readFile(file, "utf8"));
+    delete records.example.turnedOff;
+    await writeFile(file, JSON.stringify(records));
+    const second = await f.open("example");
+    assert.equal(second.enabled("example"), false);
+    assert.equal(await second.enableForSignIn("example"), true);
+    assert.equal(second.enabled("example"), true);
+    assert.equal(await second.enableForSignIn("example"), false, "already on");
+  } finally {
+    await f.close();
+  }
+});
+
+test("a sign-in never turns on a plugin that isn't the app's account plugin", async () => {
+  const f = await accountFixture();
+  try {
+    const registry = await f.open();
+    const file = path.join(f.root, "installed", "installed.json");
+    await registry.setEnabled("example", false);
+    const records = JSON.parse(await readFile(file, "utf8"));
+    delete records.example.turnedOff;
+    await writeFile(file, JSON.stringify(records));
+    registry.cancel();
+    const reopened = await f.open();
+    assert.equal(await reopened.enableForSignIn("example"), false);
+    assert.equal(reopened.enabled("example"), false);
   } finally {
     await f.close();
   }

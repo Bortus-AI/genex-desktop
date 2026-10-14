@@ -3,10 +3,11 @@
  * cloned shallowly over https from Genex's git into a fresh folder in the games folder, its history
  * is dropped (the copy starts its own), and the folder is adopted as a game without trusting the
  * Claude settings or hooks it came with. Nothing of the copy runs while it is made: no hooks, no
- * content filters, no LFS downloads, and links come out as plain files.
+ * content filters, and links come out as plain files. Files the game keeps in Git LFS (its models
+ * and textures) come next, by the host's git-lfs, from that same repository only.
  */
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS } from "../../shared/duration.ts";
@@ -27,6 +28,8 @@ const GIT_HOST = "git.genex.games";
 
 const MESSAGE = {
   NotRemixable: "This game can’t be remixed",
+  NeedsLfs:
+    "This game keeps its files in Git LFS. Install git-lfs on this Mac (brew install git-lfs), then remix it again.",
   NoFolder: "There is no free folder for the copy",
   Title: (title: string) => `${title} remix`,
 } as const;
@@ -87,6 +90,32 @@ export function cloneArgs(url: string, dest: string): string[] {
   ];
 }
 
+/**
+ * The git command line that brings a clone's Git LFS files, run in the clone: from the repository it
+ * was cloned from (`lfs.url` set here outranks any `.lfsconfig` in the copy), https only, no hooks.
+ */
+export function lfsPullArgs(url: string): string[] {
+  return [
+    ...HOST_GIT_CONFIG,
+    "-c",
+    "protocol.allow=never",
+    "-c",
+    "protocol.https.allow=always",
+    "-c",
+    `lfs.url=${url}/info/lfs`,
+    "lfs",
+    "pull",
+  ];
+}
+
+/** Whether a clone keeps files in Git LFS: a line of its `.gitattributes` (not a comment) names the lfs filter. */
+export async function tracksLfs(dir: string): Promise<boolean> {
+  const attributes = await readFile(path.join(dir, ".gitattributes"), "utf8").catch(() => "");
+  return attributes
+    .split("\n")
+    .some((line) => !line.trimStart().startsWith("#") && line.split(/\s+/).includes("filter=lfs"));
+}
+
 /** Where a remix goes and how it is cloned and adopted. */
 export interface RemixDeps {
   /** Where new games go. */
@@ -139,15 +168,17 @@ export async function remixGame(world: PlayWorld, deps: RemixDeps): Promise<stri
   }
 }
 
-/** The host's git clone, under the host's git policy and a deadline. */
+/** How the host runs git for a remix: its policy's environment, a deadline and bounded output. */
+const GIT_RUN = { timeout: REMIX_CLONE_TIMEOUT_MS, windowsHide: true, maxBuffer: CLONE_OUTPUT_MAX_BYTES } as const;
+
+/** The host's git clone under the host's git policy and a deadline, then its Git LFS files if it has any. */
 export async function gitClone(url: string, dest: string): Promise<void> {
   if (!isRemixSource(url)) throw new Error(MESSAGE.NotRemixable);
-  await exec("git", cloneArgs(url, dest), {
-    env: hostGitEnv({ GIT_LFS_SKIP_SMUDGE: "1" }),
-    timeout: REMIX_CLONE_TIMEOUT_MS,
-    windowsHide: true,
-    maxBuffer: CLONE_OUTPUT_MAX_BYTES,
-  });
+  await exec("git", cloneArgs(url, dest), { ...GIT_RUN, env: hostGitEnv({ GIT_LFS_SKIP_SMUDGE: "1" }) });
+  if (!(await tracksLfs(dest))) return;
+  const lfs = await exec("git", ["lfs", "version"], { ...GIT_RUN, env: hostGitEnv() }).catch(() => null);
+  if (!lfs) throw new Error(MESSAGE.NeedsLfs);
+  await exec("git", lfsPullArgs(url), { ...GIT_RUN, cwd: dest, env: hostGitEnv() });
 }
 
 /** A fixture launch's clone: a one-page stand-in game, so a remix can be followed with no network. */

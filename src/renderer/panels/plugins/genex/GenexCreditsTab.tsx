@@ -23,6 +23,7 @@ import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { GENEX_WORDS } from "../../../words.ts";
+import { accountCreditsOf, CreditsKind } from "./genex-view.ts";
 
 const WORDS = GENEX_WORDS.creditsTab;
 /** Credits read with the reader's own digit grouping. */
@@ -45,27 +46,37 @@ const KIND_ICONS: Record<CreditKind, IconName> = {
   [CreditKind.CoverRegenerate]: "image",
 };
 
-/** Where the tab's read stands. */
-type CreditsRead = { credits: PlayCredits | null; failed: boolean };
+/** Where the tab's read stands, and whose credits it holds. */
+type CreditsRead = { credits: PlayCredits | null; failed: boolean; account: string | null };
 
 /** The account's credits, read when the tab opens and again for another account. */
-function useCredits(accountId: string | null): CreditsRead & { reload: () => void } {
-  const [read, setRead] = useState<CreditsRead>({ credits: null, failed: false });
+function useCredits(accountId: string | null): Omit<CreditsRead, "account"> & { reload: () => void } {
+  const [read, setRead] = useState<CreditsRead>({ credits: null, failed: false, account: null });
   const [attempt, setAttempt] = useState(0);
   useAsyncEffect(
     (alive) => {
       if (!accountId) return;
-      setRead((before) => ({ credits: before.credits, failed: false }));
+      // Another account's credits never show under this one, even for the moment its read takes.
+      setRead((before) => ({
+        credits: before.account === accountId ? before.credits : null,
+        failed: false,
+        account: accountId,
+      }));
       studio()
         .api.playCredits()
         .then(
-          (credits) => alive() && setRead({ credits, failed: false }),
-          () => alive() && setRead((before) => ({ credits: before.credits, failed: true })),
+          (credits) => alive() && setRead({ credits, failed: false, account: accountId }),
+          () => alive() && setRead((before) => ({ ...before, failed: true })),
         );
     },
     [accountId, attempt],
   );
-  return { ...read, reload: () => setAttempt((count) => count + 1) };
+  const mine = read.account === accountId;
+  return {
+    credits: mine ? read.credits : null,
+    failed: mine && read.failed,
+    reload: () => setAttempt((count) => count + 1),
+  };
 }
 
 /** The line under the balance: the Pro allowance and when it comes, and that one balance covers every tool. */
@@ -76,23 +87,37 @@ function planLine(credits: PlayCredits): string {
   return [plan, WORDS.shared].filter(Boolean).join(" · ");
 }
 
+/** The balance itself: Unlimited, the count with its unit, or a dash when genex.games couldn't say. */
+function BalanceAmount({ credits }: { credits: PlayCredits }): JSX.Element {
+  const shown = accountCreditsOf(credits);
+  if (shown.kind === CreditsKind.Unlimited)
+    return (
+      <span className="credits-band-number" data-unlimited>
+        {WORDS.unlimited}
+      </span>
+    );
+  if (shown.kind === CreditsKind.Unknown)
+    return (
+      <span className="credits-band-amount" data-balance-unknown>
+        <span className="credits-band-number">{WORDS.noBalance}</span>
+        <span className="credits-note">{WORDS.balanceUnread}</span>
+      </span>
+    );
+  return (
+    <span className="credits-band-amount">
+      <ScrambleNumber className="credits-band-number" text={NUMBER.format(shown.count)} />
+      <span className="credits-note">{WORDS.unit(shown.count)}</span>
+    </span>
+  );
+}
+
 /** The balance band. */
 function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
-  const balance = credits.balance;
   return (
     <div className="credits-band" data-credits-balance>
       <CreditsShard size={44} />
       <div className="credits-band-copy">
-        {credits.unlimited || balance === null ? (
-          <span className="credits-band-number" data-unlimited>
-            {WORDS.unlimited}
-          </span>
-        ) : (
-          <span className="credits-band-amount">
-            <ScrambleNumber className="credits-band-number" text={NUMBER.format(balance)} />
-            <span className="credits-note">{WORDS.unit(balance)}</span>
-          </span>
-        )}
+        <BalanceAmount credits={credits} />
         <span className="credits-note">{planLine(credits)}</span>
       </div>
       <span className="credits-band-actions">
@@ -100,7 +125,7 @@ function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
           {WORDS.inviteFriend}
           {credits.inviteBonus !== null && credits.inviteBonus > 0 && (
             <span className="credits-invite-bonus">
-              +{credits.inviteBonus}
+              {WORDS.bonus(credits.inviteBonus)}
               <CreditsShard size={13} />
             </span>
           )}
@@ -159,6 +184,8 @@ function PriceList({ credits }: { credits: PlayCredits }): JSX.Element {
       <p className="credits-note credits-subtitle">
         <span>{WORDS.payForLine}</span>
         <span data-credits-free>{WORDS.freeBuilding}</span>
+        <span>{WORDS.refunds}</span>
+        <span>{WORDS.outOfCredits}</span>
       </p>
       <div className="credits-body">
         {priced.length === 0 && <p className="credits-note">{WORDS.pricesUnavailable}</p>}

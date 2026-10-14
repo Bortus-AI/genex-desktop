@@ -22,6 +22,8 @@ export interface GenexAccountPort {
   cancel(): Promise<void>;
   /** Forget the account on this Mac. */
   disconnect(): Promise<void>;
+  /** A sign-in this account started has finished: what the account rides on may turn on for it. */
+  signedIn(): Promise<void>;
 }
 
 export interface GenexAccountDeps {
@@ -37,6 +39,12 @@ export function createGenexAccount(deps: GenexAccountDeps) {
   let refusedToken: string | null = null;
   /** The code of the sign-in this account started, shown while it waits. */
   let code: string | undefined;
+  /** The sign-in being started, which a second press joins instead of opening another page. */
+  let starting: Promise<GenexAccountView> | null = null;
+  /** Counts sign-ins and cancels: a sign-in started before the latest cancel opens nothing. */
+  let attempt = 0;
+  /** A sign-in this account started is waiting for the browser: once it is signed in, `signedIn` runs. */
+  let awaiting = false;
 
   const view = async (): Promise<GenexAccountView> => {
     const state = await port.state();
@@ -44,29 +52,49 @@ export function createGenexAccount(deps: GenexAccountDeps) {
       return code ? { status: GenexAccountStatus.SigningIn, code } : { status: GenexAccountStatus.SigningIn };
     code = undefined;
     const token = state === PluginAccountState.Unlocked ? await port.token() : undefined;
+    const signedIn = Boolean(token) && token !== refusedToken;
+    if (awaiting && signedIn) await port.signedIn();
+    awaiting = false;
     if (!token) return { status: GenexAccountStatus.SignedOut };
-    return { status: token === refusedToken ? GenexAccountStatus.Ended : GenexAccountStatus.SignedIn };
+    return { status: signedIn ? GenexAccountStatus.SignedIn : GenexAccountStatus.Ended };
   };
 
   /** Sign in in the browser; a refused token is forgotten first, or the sign-in would reuse it. */
-  const signIn = async (): Promise<GenexAccountView> => {
+  const startSignIn = async (): Promise<GenexAccountView> => {
+    const mine = ++attempt;
     const token = await port.token();
     if (token && token === refusedToken) await port.disconnect();
     refusedToken = null;
+    awaiting = true;
     const answer = await port.connect();
+    // Cancelled while Genex was starting it: the sign-in Genex began after the cancel stops too.
+    if (mine !== attempt) {
+      await port.cancel();
+      return view();
+    }
     code = typeof answer.userCode === "string" ? answer.userCode : undefined;
     if (typeof answer.verifyUrl === "string") await deps.openSignIn(answer.verifyUrl);
     return view();
   };
 
+  const signIn = (): Promise<GenexAccountView> => {
+    starting ??= startSignIn().finally(() => {
+      starting = null;
+    });
+    return starting;
+  };
+
   const cancel = async (): Promise<GenexAccountView> => {
+    attempt++;
     code = undefined;
+    awaiting = false;
     await port.cancel();
     return view();
   };
 
   const signOut = async (): Promise<GenexAccountView> => {
     refusedToken = null;
+    awaiting = false;
     await port.disconnect();
     return view();
   };
@@ -89,15 +117,15 @@ export function createGenexAccount(deps: GenexAccountDeps) {
 export type GenexAccount = ReturnType<typeof createGenexAccount>;
 
 /** What the plugin port reads and runs of the registry. */
-type AccountRegistry = Pick<PluginRegistry, "accountState" | "hostCredential" | "action"> & {
+type AccountRegistry = Pick<PluginRegistry, "accountState" | "hostCredential" | "action" | "enableForSignIn"> & {
   list(): Array<Pick<PluginInfo, "enabled" | "removed"> & { manifest: Pick<PluginInfo["manifest"], "id"> }>;
   restore(id: string): Promise<unknown>;
 };
 
 /**
  * The Genex plugin's account as the app's. Its actions run whether Genex is on or off; signing in
- * brings back a Genex that was removed (an older build let the person remove it), and leaves one
- * the person turned off as it is.
+ * brings back a Genex that was removed (an older build let the person remove it), and once it
+ * finishes turns Genex on, unless the person turned it off themselves (`enableForSignIn`).
  */
 export function pluginAccountPort(plugins: AccountRegistry): GenexAccountPort {
   const installed = (): boolean => plugins.list().some((p) => p.manifest.id === GENEX_PLUGIN_ID && !p.removed);
@@ -114,5 +142,8 @@ export function pluginAccountPort(plugins: AccountRegistry): GenexAccountPort {
     },
     cancel: () => run(GenexAction.CancelConnect),
     disconnect: () => run(GenexAction.Disconnect),
+    signedIn: async () => {
+      await plugins.enableForSignIn(GENEX_PLUGIN_ID);
+    },
   };
 }

@@ -274,7 +274,7 @@ const FIXTURE_SAFE = [
   "studio:play.online",
   "studio:play.open",
   "studio:play.close",
-  // The viewer header's controls: a fixture launch has no Genex account, so likes and invites answer signed out.
+  // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
   "studio:play.control",
   // Play's people: a fixture launch answers from its own people (`dev/fixture-play.ts`), signed out
   // unless the launch asks for its fixture account, and an avatar "upload" stays in memory.

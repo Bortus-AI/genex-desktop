@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlayWorld } from "../../src/main/play/gallery.ts";
-import { claimFolder, cloneArgs, isRemixSource, remixGame } from "../../src/main/play/remix.ts";
+import { claimFolder, cloneArgs, isRemixSource, lfsPullArgs, remixGame, tracksLfs } from "../../src/main/play/remix.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const WORLD: PlayWorld = {
@@ -65,6 +65,21 @@ describe("Play remix", () => {
     const clone = args.indexOf("clone");
     assert.ok(clone > 0 && args.includes("--depth=1"));
     assert.deepEqual(args.slice(-3), ["--", WORLD.cloneUrl, "/games/lost-cathedral-remix"]);
+  });
+
+  it("brings a copy's Git LFS files from the game's own repository, never where a file in it points", async () => {
+    const url = WORLD.cloneUrl as string;
+    const args = lfsPullArgs(url);
+    assert.ok(args.includes(`lfs.url=${url}/info/lfs`), "the repository's own LFS, whatever its .lfsconfig says");
+    for (const setting of ["protocol.allow=never", "protocol.https.allow=always", "core.hooksPath=/dev/null"])
+      assert.ok(args.includes(setting), setting);
+    assert.deepEqual(args.slice(-2), ["lfs", "pull"]);
+    const dir = await tmpDir("studio-remix-lfs-");
+    assert.equal(await tracksLfs(dir), false, "no attributes");
+    await writeFile(path.join(dir, ".gitattributes"), "# models: filter=lfs\n*.txt text\n");
+    assert.equal(await tracksLfs(dir), false, "a comment turns nothing on");
+    await writeFile(path.join(dir, ".gitattributes"), "*.txt text\n*.glb filter=lfs diff=lfs merge=lfs -text\n");
+    assert.equal(await tracksLfs(dir), true);
   });
 
   it("claims the first free remix folder by making it, so two remixes never share one", async () => {

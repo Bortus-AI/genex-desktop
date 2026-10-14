@@ -272,7 +272,7 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
   }
   const worldPrefix = PlayRoute.world("");
   if (pathname.startsWith(worldPrefix)) return world(decodeURIComponent(pathname.slice(worldPrefix.length)));
-  // Likes, tickets and invites need a Genex account, which a fixture profile never has.
+  // Likes, tickets and invites answer signed out, even for the fixture account: no game's page signs in here.
   return SIGNED_OUT;
 };
 

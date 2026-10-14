@@ -160,7 +160,8 @@ async function toggleLike(ctx: ViewerContext): Promise<void> {
 async function copyInvite(ctx: ViewerContext): Promise<void> {
   const s = ctx.session();
   if (!s) return;
-  const code = await ctx.deps.gallery.inviteCode();
+  // A code that can't be read leaves the page alone, as signed out.
+  const code = await ctx.deps.gallery.inviteCode().catch(() => undefined);
   if (!ctx.current(s.epoch)) return;
   ctx.deps.clipboard(code ? `${playPageUrl(s.slug)}?ref=${encodeURIComponent(code)}` : playPageUrl(s.slug));
   ctx.note(PlayNote.InviteCopied);
@@ -276,7 +277,7 @@ function barActions(ctx: ViewerContext): Record<PlayControl, (at?: PlayPoint) =>
     [PlayControl.Resume]: () => {
       if (ctx.session()?.phase === PlayViewerPhase.Playing) ctx.deps.game.focus();
     },
-    [PlayControl.Mic]: () => void toggleMic(ctx),
+    [PlayControl.Mic]: () => void toggleMic(ctx).catch(() => ctx.note(PlayNote.MicFailed)),
     [PlayControl.MicDevices]: (at) => chooseMic(ctx, at),
   };
 }
@@ -350,9 +351,15 @@ export function playViewer(deps: PlayViewerDeps) {
     void loadGame(ctx, opened, () => {
       showTimer = null;
       if (ctx.current(opened)?.phase === PlayViewerPhase.Loading) setPhase(PlayViewerPhase.Playing);
-    }).then((timer) => {
-      if (timer !== null) showTimer = timer;
-    });
+    }).then(
+      (timer) => {
+        if (timer !== null) showTimer = timer;
+      },
+      // No ticket read, or no window to open the game in: the game failed, never loading for good.
+      () => {
+        if (ctx.current(opened)) setPhase(PlayViewerPhase.Failed);
+      },
+    );
   };
   const actions = barActions(ctx);
   const heldEsc = heldEscape(clock, () => focusBarByKeyboard(ctx));

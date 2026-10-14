@@ -242,7 +242,7 @@ function createStores(
     engines: createEnginesStore(api),
     plugins: createPluginsStore(api),
     play: createPlayStore(api, storage),
-    people: createPeopleStore(api),
+    people: createPeopleStore(api, storage),
     agentScreens: createAgentScreensStore(),
     commandRuns: createCommandRunsStore(),
     commandOutput: createCommandOutput(),

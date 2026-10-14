@@ -11,7 +11,7 @@ import { GenexPromoState, storedGenexPromo } from "../genex-promo.ts";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
 import type { PlayMe } from "../../shared/play-people.ts";
 import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
-import { usePeople } from "../state/hooks.ts";
+import { usePeople, usePlay } from "../state/hooks.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
 import { DialogSurface } from "../ui/dialog.tsx";
 import { AVATAR_WORDS } from "../words.ts";
@@ -33,14 +33,20 @@ const LONGITUDES = [0.3, 0.66] as const;
 /** How often a waiting welcome looks again whether the Genex promo card has settled. */
 const PROMO_CHECK_MS = 2 * SECOND_MS;
 
-/** Whether the Genex promo card is still out (connecting, or saying it connected): the welcome waits for it. */
+/**
+ * Whether the Genex promo card is still out (connecting, or saying it connected): the welcome waits
+ * for it. Looked at again whenever the welcome could show, since the card may come after the app
+ * started (the first launch's welcome queues it), and every little while until it settles.
+ */
 function usePromoOut(active: boolean): boolean {
   const [out, setOut] = useState(() => storedGenexPromo() === GenexPromoState.Pending);
   useEffect(() => {
-    if (!active || !out) return;
-    const timer = window.setInterval(() => setOut(storedGenexPromo() === GenexPromoState.Pending), PROMO_CHECK_MS);
+    if (!active) return;
+    const look = (): void => setOut(storedGenexPromo() === GenexPromoState.Pending);
+    look();
+    const timer = window.setInterval(look, PROMO_CHECK_MS);
     return () => window.clearInterval(timer);
-  }, [active, out]);
+  }, [active]);
   return out;
 }
 
@@ -107,13 +113,18 @@ function Welcome({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Elemen
   );
 }
 
-/** Shows the welcome once for each account signed in on this Mac, when nothing else is in front. */
+/**
+ * Shows the welcome once for each account signed in on this Mac, when nothing else is in front:
+ * not over the first launch's welcome, a game playing in Play, or the Genex promo card.
+ */
 export function AvatarWelcome({ blocked }: { blocked: boolean }): JSX.Element | null {
   const me = usePeople((s) => s.me);
+  const playing = usePlay((s) => s.viewer !== null);
   const [done, setDone] = useState<string | null>(null);
-  const promoOut = usePromoOut(me !== null && !blocked);
-  if (!me || blocked || promoOut || done === me.id) return null;
-  if (readText(storageKeyFor.avatarWelcomed(me.id)) === "1") return null;
+  const welcomed = !me || done === me.id || readText(storageKeyFor.avatarWelcomed(me.id)) === "1";
+  const waiting = blocked || playing;
+  const promoOut = usePromoOut(!welcomed && !waiting);
+  if (!me || welcomed || waiting || promoOut) return null;
   const finish = () => {
     writeText(storageKeyFor.avatarWelcomed(me.id), "1");
     setDone(me.id);

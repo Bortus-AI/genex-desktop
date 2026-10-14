@@ -22,6 +22,7 @@ import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { PLAY_WORDS } from "../words.ts";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { SignInNote } from "./SignInNote.tsx";
 import { formatCount, formatStat } from "./play-model.ts";
 import { AreaChart, Sparkline } from "./StatsCharts.tsx";
 import { ChangeMark } from "./StatsStrip.tsx";
@@ -186,9 +187,10 @@ export function PlayStats({
 }): JSX.Element {
   const [period, setPeriod] = useState<StatsPeriod>(DEFAULT_STATS_PERIOD);
   const entry = usePeople((s) => s.stats[period]);
+  const signedIn = usePeople((s) => s.me !== null);
   useEffect(() => {
-    void studio().people.loadStats(period);
-  }, [period]);
+    if (signedIn) void studio().people.loadStats(period);
+  }, [period, signedIn]);
   const stats = entry?.stats ?? null;
   const noGames = stats !== null && stats.published === 0 && stats.games.length === 0;
   return (
@@ -205,6 +207,7 @@ export function PlayStats({
           <span className="stats-only-you">{WORDS.onlyYou}</span>
           <PeriodSwitch period={period} onChange={setPeriod} />
         </div>
+        {!signedIn && <SignInNote text={WORDS.signedOut} />}
         {entry?.unavailable && <p className="people-note">{WORDS.unavailable}</p>}
         {entry?.status === LoadStatus.Failed && !stats && (
           <div className="people-note">
@@ -223,7 +226,7 @@ export function PlayStats({
           </div>
         )}
         {stats && !noGames && <StatsBody stats={stats} />}
-        {!stats && !entry?.unavailable && entry?.status !== LoadStatus.Failed && <StatsPlaceholder />}
+        {signedIn && !stats && !entry?.unavailable && entry?.status !== LoadStatus.Failed && <StatsPlaceholder />}
       </div>
     </PlayPageFrame>
   );

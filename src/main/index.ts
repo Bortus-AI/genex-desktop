@@ -119,7 +119,14 @@ import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
 import { isFixtureAccount } from "./dev/fixture-people.ts";
-import { fixtureUpload, networkUpload, type PeopleDeps, type PlayPeople, playPeople } from "./play/people.ts";
+import {
+  fixtureUpload,
+  networkUpload,
+  type PeopleDeps,
+  type PlayPeople,
+  playPeople,
+  refusingRequest,
+} from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
@@ -916,7 +923,9 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
     upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
     refused: account.refused,
   };
-  playAccount ??= { people: playPeople(deps), creators: creatorStats(deps), credits: genexCredits(deps) };
+  // A 401 to a creator's numbers or the credits ends the sign-in as one to the account's own calls does.
+  const counted = { ...deps, request: refusingRequest(deps.request, deps.refused) };
+  playAccount ??= { people: playPeople(deps), creators: creatorStats(counted), credits: genexCredits(counted) };
   return playAccount;
 }
 

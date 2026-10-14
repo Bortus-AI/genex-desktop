@@ -665,6 +665,17 @@ describe("Play state actions", () => {
   });
 });
 
+describe("Play store: an opening main refused", () => {
+  it("closes from Back even though main never answered it", async () => {
+    const { api } = fakeApi({ playOpen: () => Promise.reject(new Error("no view")) });
+    const store = createPlayStore(api, memory(), manualClock().now);
+    await store.open(game("a"));
+    assert.equal(store.getState().viewer?.phase, PlayViewerPhase.Failed);
+    await store.close();
+    assert.equal(store.getState().viewer, null, "nothing in main to close: the cover goes here");
+  });
+});
+
 describe("Play store: reading tabs", () => {
   it("reads a tab once while its first page is on its way", async () => {
     const pending = deferred<PlayFeedPage>();

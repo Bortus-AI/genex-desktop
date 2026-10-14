@@ -57,6 +57,8 @@ export function App(): JSX.Element {
   useGuestSignIn();
   // While Play's game or its menu lies over the window, no drag region takes the pointer from them (play.css).
   const playNative = usePlay((s) => nativeViewsUp(s.viewer));
+  // A game playing in Play is modal: nothing under it takes the keyboard or a click.
+  const viewing = usePlay((s) => s.viewer !== null);
   useEffect(() => {
     const refresh = () => {
       void app.engines.refresh();
@@ -85,6 +87,7 @@ export function App(): JSX.Element {
         navigation={navigation}
         notices={notices}
         welcoming={welcoming}
+        covered={viewing}
       />
       {chrome.drawerCovers && (
         <button
@@ -94,7 +97,7 @@ export function App(): JSX.Element {
           onClick={chrome.toggleSidebar}
         />
       )}
-      <main className="relative min-h-0 min-w-0" inert={chrome.drawerCovers || welcoming}>
+      <main className="relative min-h-0 min-w-0" inert={chrome.drawerCovers || welcoming || viewing}>
         <Workspace
           app={app}
           chrome={chrome}

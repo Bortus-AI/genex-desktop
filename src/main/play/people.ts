@@ -36,6 +36,7 @@ import {
   type GalleryDeps,
   GalleryError,
   imageUrl,
+  type GalleryRequest,
   isRecord,
   PlayRoute,
   readRoute,
@@ -94,8 +95,21 @@ const MESSAGE = {
 export interface PeopleDeps extends GalleryDeps {
   /** PUT `bytes` to a presigned `url` with `contentType`; the answer's HTTP status. */
   upload(url: string, bytes: Uint8Array, contentType: string): Promise<number>;
-  /** genex.games answered 401 to `token` on the account's own read: its sign-in has ended. */
+  /** genex.games answered 401 to `token`, on any of the account's calls: its sign-in has ended. */
   refused?(token: string): void;
+}
+
+/** `request`, telling `refused` which token genex.games refused (401) on any call that carried one. */
+export function refusingRequest(
+  request: GalleryRequest,
+  refused: ((token: string) => void) | undefined,
+): GalleryRequest {
+  if (!refused) return request;
+  return async (route, init) => {
+    const answer = await request(route, init);
+    if (answer.status === HTTP_UNAUTHORIZED && init.token) refused(init.token);
+    return answer;
+  };
 }
 
 /**
@@ -235,10 +249,8 @@ function accountCalls(deps: PeopleDeps) {
     if (!current) return null;
     if (me?.token === current && now() - me.at < ME_TTL_MS) return me.value;
     const answer = await request(PeopleRoute.Me, { method: "GET", token: current });
-    if (answer.status === HTTP_UNAUTHORIZED) {
-      deps.refused?.(current);
-      return null;
-    }
+    // `request` told `refused` already: the account reads as ended, not as signed out.
+    if (answer.status === HTTP_UNAUTHORIZED) return null;
     const body = checked(PeopleRoute.Me, answer);
     const user = isRecord(body) ? body.user : null;
     const person = toPerson(user, local);
@@ -402,7 +414,8 @@ function friendCalls(deps: PeopleDeps, auth: () => Promise<string>) {
 }
 
 /** Play's people over `deps`. */
-export function playPeople(deps: PeopleDeps) {
+export function playPeople(given: PeopleDeps) {
+  const deps = { ...given, request: refusingRequest(given.request, given.refused) };
   const { request, token, now } = deps;
   const local = deps.localImages === true;
   const account = accountCalls(deps);

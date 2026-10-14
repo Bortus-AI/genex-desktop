@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { type PlayTicket, type PlayWorld, TicketStatus } from "../../src/main/play/gallery.ts";
-import { MIC_OPEN_GRANT_MS, micGate } from "../../src/main/play/mic.ts";
+import { MIC_OPEN_GRANT_MS, micGate, micGateFor } from "../../src/main/play/mic.ts";
 import { openPlayMicStore } from "../../src/main/play/mic-store.ts";
 import { type PlayMicDeps, type PlayViewerDeps, playViewer } from "../../src/main/play/viewer.ts";
 import { installPlayMic } from "../../src/preload/play-mic-page.ts";
@@ -286,6 +286,27 @@ describe("Play mic: main's gate", () => {
     assert.equal(gate.names("audio", false), false);
     gate.allow(2000);
     assert.equal(gate.take(audio, 2000 + MIC_OPEN_GRANT_MS + 1), false, "too late");
+  });
+
+  it("starts each page of the game afresh, and never opens for a page anywhere else", () => {
+    const home = "https://neon-rush.genex.technology/?genex_r=1#genex_ticket=t";
+    const audio = { mediaTypes: ["audio"], isMainFrame: true };
+    const fresh = micGateFor("https://neon-rush.genex.technology/level-2", home);
+    assert.equal(fresh.names("audio", true), false, "a new page of the game starts untrusted");
+    fresh.allow(0);
+    assert.equal(fresh.take(audio, 1), true, "and opens once main asks it to");
+    const elsewhere: Array<[string, string]> = [
+      ["another game", "https://other-game.genex.technology/"],
+      ["Genex's sign-in hop", "https://genex.games/play/authorize?guest=ok"],
+      ["the game over plain http", "http://neon-rush.genex.technology/"],
+      ["an address that isn't one", "not a url"],
+    ];
+    for (const [name, page] of elsewhere) {
+      const gate = micGateFor(page, home);
+      gate.allow(0);
+      assert.equal(gate.take(audio, 1), false, name);
+      assert.equal(gate.names("audio", true), false, `${name}: no microphone names either`);
+    }
   });
 });
 

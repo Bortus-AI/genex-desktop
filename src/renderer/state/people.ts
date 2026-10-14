@@ -111,10 +111,19 @@ export const initialPeople = (): PeopleState => ({
   creators: { status: LoadStatus.Idle, list: null },
 });
 
+/** Whether two reads of the account show the same thing: every field equal. */
+function sameAccount(a: PlayMe | null, b: PlayMe | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const keys = Object.keys(a) as Array<keyof PlayMe>;
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
 /** The account was read: a different account (or none) forgets the last one's friends. */
 export function meRead(state: PeopleState, me: PlayMe | null): PeopleState {
   const switched = state.me?.id !== me?.id;
-  if (!switched && state.meKnown && state.me === me) return state;
+  // The same account read again changes nothing: nothing re-renders, nothing is written again.
+  if (!switched && state.meKnown && sameAccount(state.me, me)) return state;
   // Where the account stands is main's to say: a read of who it is keeps it.
   const kept = { account: state.account, signInCode: state.signInCode, ended: state.ended };
   return switched
@@ -163,12 +172,29 @@ function rememberedAccount(value: unknown): PlayMe | null {
   return valid ? (value as PlayMe) : null;
 }
 
-/** Keep the account where the next start finds it while offline: the one shown, or whose sign-in ended. */
+/** A balance remembered on this Mac, as it was kept, or null for anything that isn't one. */
+function rememberedCredits(value: unknown): AccountCredits | null {
+  if (!value || typeof value !== "object") return null;
+  const { balance, unlimited } = value as Record<string, unknown>;
+  const count = balance === null || (typeof balance === "number" && Number.isSafeInteger(balance) && balance >= 0);
+  return count && typeof unlimited === "boolean" ? { balance: balance as number | null, unlimited } : null;
+}
+
+/** Signed out, or signing in afresh: there is no account on this Mac to remember. */
+const noAccount = (state: PeopleState): boolean =>
+  state.account === GenexAccountStatus.SignedOut || state.account === GenexAccountStatus.SigningIn;
+
+/**
+ * Keep the account where the next start finds it while offline: the one shown, or whose sign-in
+ * ended, and its balance as last read.
+ */
 function rememberAccount(state: PeopleState, storage: KeyValueStorage | null): void {
   const who = state.me ?? state.ended;
   if (who) writeJson(STORAGE_KEYS.genexMe, who, storage);
-  else if (state.account === GenexAccountStatus.SignedOut || state.account === GenexAccountStatus.SigningIn)
-    removeKey(STORAGE_KEYS.genexMe, storage);
+  if (state.me && state.credits) writeJson(STORAGE_KEYS.genexCredits, state.credits, storage);
+  if (who || !noAccount(state)) return;
+  removeKey(STORAGE_KEYS.genexMe, storage);
+  removeKey(STORAGE_KEYS.genexCredits, storage);
 }
 
 /** The account's own profile entry, kept in step with a rename or a new picture. */
@@ -323,6 +349,7 @@ function avatarVariantWrites(
   store: StoreApi<PeopleState>,
   set: PeopleSet,
   api: Pick<PeopleApi, "playAvatarVariant" | "playMe">,
+  answered: (me: PlayMe | null) => Promise<void>,
 ): (variant: number) => Promise<void> {
   let newest = 0;
   let saved: Promise<unknown> = Promise.resolve();
@@ -334,12 +361,9 @@ function avatarVariantWrites(
     saved = write.catch(() => undefined);
     try {
       const me = await write;
-      if (press === newest) set((state) => meRead(state, me));
+      if (press === newest) await answered(me);
     } catch (error) {
-      if (press === newest) {
-        const kept = await api.playMe().catch(() => shown);
-        set((state) => meRead(state, kept));
-      }
+      if (press === newest) await answered(await api.playMe().catch(() => shown));
       throw error;
     }
   };
@@ -393,10 +417,12 @@ function accountCalls(
     set((state) => accountRead(state, view, undefined));
   };
   const loadCredits = async (): Promise<void> => {
-    if (!store.getState().me) return;
+    const asked = store.getState().me?.id;
+    if (!asked) return;
     try {
       const { balance, unlimited } = await api.playCredits();
-      set((state) => (state.me ? { ...state, credits: { balance, unlimited } } : state));
+      // A balance read for another account lands nowhere.
+      set((state) => (state.me?.id === asked ? { ...state, credits: { balance, unlimited } } : state));
     } catch {
       // Offline or Genex down: the last balance stays.
     }
@@ -409,48 +435,32 @@ function accountCalls(
   };
 }
 
-/** People's store over `api`, remembering the account in `storage` for an offline start. */
-export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | null = browserStorage()): PeopleStore {
-  const remembered = rememberedAccount(readJson<unknown>(STORAGE_KEYS.genexMe, null, storage));
-  const store = createStore<PeopleState>()(() => ({ ...initialPeople(), me: remembered }));
-  const set = (change: (state: PeopleState) => PeopleState) => store.setState(change, true);
-  // A rename or a new picture is remembered as it shows, as is a sign-in or a sign-out.
-  store.subscribe((state, before) => {
-    if (state.me !== before.me || state.ended !== before.ended || state.account !== before.account)
-      rememberAccount(state, storage);
-  });
+/**
+ * The Friends page and the people search: reads where only the newest answer, for the account that
+ * asked, lands; a press on a person, and whether friends see the game the account is in.
+ */
+function friendCalls(
+  store: StoreApi<PeopleState>,
+  set: PeopleSet,
+  api: Pick<PeopleApi, "playFriends" | "playFriend" | "playPeople" | "playVisibility">,
+) {
   let searches = 0;
-
-  const loadMe = async (): Promise<void> => {
-    // Undefined: genex.games could not be reached, which is not the same as signed out.
-    const me = await api.playMe().catch(() => undefined);
-    // Asked after: a refused token reads as a sign-in that ended only once genex.games refused it.
-    const view = await api.genexAccount().catch(() => null);
-    set((state) => accountRead(state, view, me));
-  };
+  /** Counts Friends reads: only the newest read's answer lands. */
+  let friendsReads = 0;
 
   const loadFriends = async (): Promise<void> => {
-    if (!store.getState().me) return;
+    const asked = store.getState().me?.id;
+    if (!asked) return;
+    const read = ++friendsReads;
+    // An answer for an older read, or for another account, lands nowhere.
+    const landing = (state: PeopleState): boolean => read === friendsReads && state.me?.id === asked;
     set((state) => (state.friends ? state : { ...state, friendsStatus: LoadStatus.Loading }));
     try {
       const friends = await api.playFriends();
-      set((state) => ({ ...state, friends, friendsStatus: LoadStatus.Ready }));
+      set((state) => (landing(state) ? { ...state, friends, friendsStatus: LoadStatus.Ready } : state));
     } catch {
-      set((state) => ({ ...state, friendsStatus: state.friends ? LoadStatus.Ready : LoadStatus.Failed }));
-    }
-  };
-
-  const loadProfile = async (userId: string, options: { force?: boolean } = {}): Promise<void> => {
-    const known = store.getState().profiles[userId];
-    if (known?.status === LoadStatus.Loading || (known?.status === LoadStatus.Ready && !options.force)) return;
-    const loading: ProfileEntry = { status: LoadStatus.Loading, profile: known?.profile ?? null };
-    set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: loading } }));
-    try {
-      const profile = await api.playProfile(userId);
-      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: { status: LoadStatus.Ready, profile } } }));
-    } catch {
-      const failed: ProfileEntry = { status: LoadStatus.Failed, profile: known?.profile ?? null };
-      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: failed } }));
+      const failed = (state: PeopleState) => (state.friends ? LoadStatus.Ready : LoadStatus.Failed);
+      set((state) => (landing(state) ? { ...state, friendsStatus: failed(state) } : state));
     }
   };
 
@@ -495,32 +505,72 @@ export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | nul
     }
   };
 
-  const { loadStats, loadCreators } = numberReads(store, set, api);
-  const setAvatarVariant = avatarVariantWrites(store, set, api);
+  return { loadFriends, act, search, setVisibility };
+}
+
+/** Someone's profile, read once unless forced; a failed read keeps what was shown. */
+function profileReads(store: StoreApi<PeopleState>, set: PeopleSet, api: Pick<PeopleApi, "playProfile">) {
+  return async (userId: string, options: { force?: boolean } = {}): Promise<void> => {
+    const known = store.getState().profiles[userId];
+    if (known?.status === LoadStatus.Loading || (known?.status === LoadStatus.Ready && !options.force)) return;
+    const loading: ProfileEntry = { status: LoadStatus.Loading, profile: known?.profile ?? null };
+    set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: loading } }));
+    try {
+      const profile = await api.playProfile(userId);
+      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: { status: LoadStatus.Ready, profile } } }));
+    } catch {
+      const failed: ProfileEntry = { status: LoadStatus.Failed, profile: known?.profile ?? null };
+      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: failed } }));
+    }
+  };
+}
+
+/** The store, starting from the account (and its balance) remembered in `storage`, which it keeps up to date. */
+function rememberingStore(storage: KeyValueStorage | null): StoreApi<PeopleState> {
+  const remembered = rememberedAccount(readJson<unknown>(STORAGE_KEYS.genexMe, null, storage));
+  const balance = remembered ? rememberedCredits(readJson<unknown>(STORAGE_KEYS.genexCredits, null, storage)) : null;
+  const store = createStore<PeopleState>()(() => ({ ...initialPeople(), me: remembered, credits: balance }));
+  // A rename, a new picture or a balance is remembered as it shows, as is a sign-in or a sign-out.
+  store.subscribe((state, before) => {
+    const changed =
+      state.me !== before.me ||
+      state.ended !== before.ended ||
+      state.account !== before.account ||
+      state.credits !== before.credits;
+    if (changed) rememberAccount(state, storage);
+  });
+  return store;
+}
+
+/** People's store over `api`, remembering the account in `storage` for an offline start. */
+export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | null = browserStorage()): PeopleStore {
+  const store = rememberingStore(storage);
+  const set = (change: (state: PeopleState) => PeopleState) => store.setState(change, true);
+
+  const loadMe = async (): Promise<void> => {
+    // Undefined: genex.games could not be reached, which is not the same as signed out.
+    const me = await api.playMe().catch(() => undefined);
+    // Asked after: a refused token reads as a sign-in that ended only once genex.games refused it.
+    const view = await api.genexAccount().catch(() => null);
+    set((state) => accountRead(state, view, me));
+  };
+
+  /** A write answered with the account, or with none (genex.games refused it): then main says where it stands. */
+  const accountAnswered = async (me: PlayMe | null): Promise<void> => {
+    if (me) set((state) => meRead(state, me));
+    else await loadMe();
+  };
 
   return Object.assign(store, {
     loadMe,
     ...accountCalls(store, set, api),
-    loadStats,
-    loadCreators,
-    loadFriends,
-    loadProfile,
-    act,
-    search,
-    rename: async (name: string) => {
-      const me = await api.playRename(name);
-      set((state) => meRead(state, me));
-    },
-    setAvatar: async (webp: Uint8Array) => {
-      const me = await api.playAvatar(webp);
-      set((state) => meRead(state, me));
-    },
-    setAvatarStyle: async (style: AvatarStyle) => {
-      const me = await api.playAvatarStyle(style);
-      set((state) => meRead(state, me));
-    },
-    setAvatarVariant,
-    setVisibility,
+    ...numberReads(store, set, api),
+    ...friendCalls(store, set, api),
+    loadProfile: profileReads(store, set, api),
+    rename: async (name: string) => accountAnswered(await api.playRename(name)),
+    setAvatar: async (webp: Uint8Array) => accountAnswered(await api.playAvatar(webp)),
+    setAvatarStyle: async (style: AvatarStyle) => accountAnswered(await api.playAvatarStyle(style)),
+    setAvatarVariant: avatarVariantWrites(store, set, api, accountAnswered),
   });
 }
 

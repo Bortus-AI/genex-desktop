@@ -47,5 +47,7 @@ export function fixtureAccountPort(account: FixtureAccount | null, now: () => nu
       approvesAt = null;
       signedIn = null;
     },
+    // A fixture launch's Genex is as the fixture set it up.
+    signedIn: async () => {},
   };
 }

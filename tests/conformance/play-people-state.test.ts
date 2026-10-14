@@ -72,6 +72,8 @@ function page(overrides: Partial<PlayFriendsPage> = {}): PlayFriendsPage {
 }
 
 const ids = (rows: Array<{ id: string }>): string[] => rows.map((row) => row.id);
+/** A friend request from `id`. */
+const request = (id: string) => ({ ...person(id), requestedAt: "2026-10-12T09:00:00.000Z" });
 
 /** A promise the test settles. */
 function deferred<T>() {
@@ -473,6 +475,81 @@ describe("the account across sign-in, offline and a sign-in that ended", () => {
     assert.equal(store.getState().credits?.balance, 1700);
     await store.signOut();
     assert.equal(store.getState().credits, null);
+  });
+});
+
+describe("the people store's reads in order", () => {
+  it("lets an older Friends read that answers late land nowhere", async () => {
+    const slow = deferred<PlayFriendsPage>();
+    let reads = 0;
+    const { api } = fakeApi({
+      playFriends: () => {
+        reads += 1;
+        return reads === 1 ? slow.promise : Promise.resolve(page({ incoming: [] }));
+      },
+    });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    const first = store.loadFriends();
+    await store.loadFriends();
+    slow.resolve(page({ incoming: [request("old")] }));
+    await first;
+    assert.deepEqual(store.getState().friends?.incoming, [], "the newer read stays");
+  });
+
+  it("lets a read for another account land nowhere", async () => {
+    const slow = deferred<PlayFriendsPage>();
+    let who = "u1";
+    const { api } = fakeApi({ playMe: async () => me(who), playFriends: () => slow.promise });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    const reading = store.loadFriends();
+    who = "u2";
+    await store.loadMe();
+    slow.resolve(page({ incoming: [request("someone")] }));
+    await reading;
+    assert.equal(store.getState().me?.id, "u2");
+    assert.equal(store.getState().friends, null, "u1's friends never show as u2's");
+  });
+
+  it("reads the account again when a write answers with no account, instead of hiding it", async () => {
+    const { api, calls } = fakeApi({ playRename: async () => null });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    await store.rename("Someone");
+    assert.equal(store.getState().me?.id, "me", "the plate stays until main says otherwise");
+    assert.equal(calls.filter(([name]) => name === "playMe").length, 2);
+  });
+
+  it("changes nothing when a read brings the same account again", async () => {
+    const storage = memoryStorage();
+    const { api } = fakeApi();
+    const store = createPeopleStore(api, storage);
+    await store.loadMe();
+    const shown = store.getState().me;
+    let writes = 0;
+    const setItem = storage.setItem.bind(storage);
+    storage.setItem = (key, value) => {
+      writes += 1;
+      setItem(key, value);
+    };
+    await store.loadMe();
+    assert.equal(store.getState().me, shown, "the same object: nothing re-renders");
+    assert.equal(writes, 0, "and nothing is written again");
+  });
+
+  it("remembers the last balance on this Mac for an offline start, and forgets it on sign-out", async () => {
+    const storage = memoryStorage();
+    const first = createPeopleStore(fakeApi().api, storage);
+    await first.loadMe();
+    await first.loadCredits();
+    const offlineStart = createPeopleStore(fakeApi({ playMe: offline, playCredits: offline }).api, storage);
+    assert.equal(offlineStart.getState().credits?.balance, 1700, "before anything is read");
+    await offlineStart.loadMe();
+    await offlineStart.loadCredits();
+    assert.equal(offlineStart.getState().credits?.balance, 1700);
+    await offlineStart.signOut();
+    assert.equal(storage.values.has(STORAGE_KEYS.genexCredits), false);
   });
 });
 

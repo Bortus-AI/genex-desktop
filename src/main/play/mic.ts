@@ -248,3 +248,25 @@ export function micGate() {
 
 /** A game view's gate, as {@link micGate} makes it. */
 export type MicGate = ReturnType<typeof micGate>;
+
+/** A gate that never opens: for a page that isn't the game's own. */
+const CLOSED_GATE: MicGate = { allow: () => {}, take: () => false, names: () => false };
+
+/** The origin of an address, or null for one that isn't an address. */
+function originOf(address: string): string | null {
+  try {
+    return new URL(address).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The gate for a page the game's view just moved to: a fresh one on the game's own origin (`home`,
+ * the address it opened), so nothing granted on an earlier page carries over; one that never opens
+ * anywhere else, such as another game a link led to, which never gets this game's microphone.
+ */
+export function micGateFor(page: string, home: string): MicGate {
+  const origin = originOf(page);
+  return origin !== null && origin === originOf(home) ? micGate() : CLOSED_GATE;
+}

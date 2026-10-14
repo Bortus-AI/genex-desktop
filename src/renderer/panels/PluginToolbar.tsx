@@ -349,13 +349,20 @@ function useStudioPublish(
  * ask goes out the moment Genex is on. While Studio bundles a newer Genex, the press opens Plugins
  * at Genex first, as Publish's does: an older Genex's instructions refuse a game made from the template.
  */
+/** A second Multiplayer press within this long is the same press. */
+const REPEAT_PRESS_MS = 1.5 * SECOND_MS;
+
 function useMultiplayer(project: string | null, shown: boolean, genex: PluginToolbarEntry | undefined) {
   const genexOn = Boolean(genex);
   const behind = genex ? toolbarUpdateStatus(genex.plugin, PLUGIN_TOOLBAR_WORDS.update) : null;
   const pressed = multiplayerPress(genex?.plugin);
   const [setup, setSetup] = useState(false);
+  const asked = useRef(Number.NEGATIVE_INFINITY);
   const ask = useCallback(() => {
-    if (project) composeInChat({ project, text: GENEX_WORDS.multiplayer.prompt, send: true });
+    // A double click is one press: the chat gets the request once.
+    if (!project || performance.now() - asked.current < REPEAT_PRESS_MS) return;
+    asked.current = performance.now();
+    composeInChat({ project, text: GENEX_WORDS.multiplayer.prompt, send: true });
   }, [project]);
   const press = useCallback(() => {
     if (pressed === MultiplayerPress.Update) openPluginsAt(GENEX_PLUGIN_ID);
@@ -363,12 +370,12 @@ function useMultiplayer(project: string | null, shown: boolean, genex: PluginToo
     else setSetup(true);
   }, [pressed, ask]);
   const close = useCallback(() => setSetup(false), []);
-  // Genex came on while its dialog was up: what the press asked for goes out now.
+  // Genex came on while its dialog was up: the press goes on as it would now, Update first for an older Genex.
   useEffect(() => {
     if (!setup || !genexOn) return;
     setSetup(false);
-    ask();
-  }, [setup, genexOn, ask]);
+    press();
+  }, [setup, genexOn, press]);
   useEffect(() => {
     if (setup && !shown) setSetup(false);
   }, [setup, shown]);

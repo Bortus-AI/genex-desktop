@@ -168,6 +168,12 @@ describe("the Genex account Play is signed in as", () => {
     assert.deepEqual(refused, [TOKEN], "the account reads as ended, not as signed out");
   });
 
+  it("ends the sign-in on a 401 from any of the account's calls, not only its own read", async () => {
+    const { people, refused } = rig((call) => (call.route === PeopleRoute.Friends ? status(401) : accountApi(call)));
+    await assert.rejects(people.friends());
+    assert.deepEqual(refused, [TOKEN]);
+  });
+
   it("renames itself with a trimmed 2–20 character name, and sends nothing else", async () => {
     const { people, calls } = rig((call) => (call.method === "PATCH" ? ok({ user: {} }) : accountApi(call)));
     for (const bad of ["", " a ", "x".repeat(21), "   "]) await assert.rejects(people.rename(bad), /2 to 20/);

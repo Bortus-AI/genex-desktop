@@ -3452,6 +3452,11 @@ export const GENEX_WORDS = {
     label: "Genex plugin, Credits",
     unit: (count: number) => (count === 1 ? "credit" : "credits"),
     unlimited: "Unlimited credits",
+    /** The balance genex.games couldn't give: a dash, and why. */
+    noBalance: "—",
+    balanceUnread: "balance couldn’t be read",
+    /** What an invite earns, beside Invite a friend. */
+    bonus: (credits: number) => `+${credits}`,
     shared: "one balance for every game dev tool",
     plan: (allowance: string, when: string) => `Pro · ${allowance} more on ${when}`,
     inviteFriend: "Invite a friend",
@@ -3460,6 +3465,8 @@ export const GENEX_WORDS = {
     payForLine: "Only assets made with external game dev tools",
     freeBuilding:
       "Building your games is free: your agents run on your own subscription, and Genex charges nothing extra.",
+    refunds: "Failed generations are refunded automatically.",
+    outOfCredits: "Out of credits, your games still build with procedural assets and Local Blender.",
     from: "from",
     pricesUnavailable: "Prices couldn’t be read from genex.games right now.",
     recent: "Recent spending",
@@ -3472,7 +3479,7 @@ export const GENEX_WORDS = {
     centNote: "1 credit is about 1¢",
     loading: "Reading your credits…",
     failed: "Couldn’t read your credits.",
-    signedOut: "Connect your Genex account to see your credits.",
+    signedOut: "Sign in to Genex to see your credits.",
     /** Each kind of generation and the tool Genex routes it to. */
     kinds: {
       [CreditKind.Model]: { name: "3D model", tool: "Tripo" },
@@ -3708,6 +3715,7 @@ export const PLAY_WORDS = {
     signInAgain: "Sign in again",
     signInAgainLabel: (name: string | null) => (name ? `${name}: sign in to Genex again` : "Sign in to Genex again"),
     signInFailed: "Couldn’t start signing in. Check your connection and try again.",
+    cancelFailed: "Couldn’t stop signing in. Try again in a moment.",
     offlineFriends: "Offline: friends show again when you’re back online",
     /** Sign out's question, asked in Studio before the app and the Genex plugin sign out together. */
     signOutTitle: "Sign out of Genex?",
@@ -3832,6 +3840,7 @@ export const PLAY_WORDS = {
     inTotal: "Your game stats · in total",
     unavailable: "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.",
     failed: "Couldn’t load your stats.",
+    signedOut: "Sign in to Genex to see your game stats.",
     backToProfile: "Profile",
   },
   /** Play's Top creators row, at the top of Games. */

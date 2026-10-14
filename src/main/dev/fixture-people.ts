@@ -11,6 +11,13 @@
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
 import type { GalleryAnswer } from "../play/gallery.ts";
 import { PeopleRoute } from "../play/people.ts";
+import {
+  AvatarStyle,
+  FriendStatus,
+  isAvatarStyle,
+  isPresenceVisibility,
+  PresenceVisibility,
+} from "../../shared/play-people.ts";
 
 /** The fixture accounts a launch may sign in as: `STUDIO_FIXTURE_GENEX_ACCOUNT`'s values. */
 export const FixtureAccount = {
@@ -50,7 +57,7 @@ interface FixturePerson {
   image: null;
   pro: boolean;
   createdAt: string;
-  avatarStyle: "generated";
+  avatarStyle: typeof AvatarStyle.Generated;
 }
 
 /** The id the fixture catalog gives an author: their name in lowercase words. */
@@ -66,7 +73,7 @@ const person = (name: string, pro = false, createdAt = "2026-08-12T10:00:00.000Z
   image: null,
   pro,
   createdAt,
-  avatarStyle: "generated",
+  avatarStyle: AvatarStyle.Generated,
 });
 
 /** Everyone the fixture knows, the account first. */
@@ -99,9 +106,9 @@ const FIXTURE_PHOTO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
 const state = {
   name: ME.name,
   photo: null as string | null,
-  avatarStyle: "generated" as "generated" | "photo",
+  avatarStyle: AvatarStyle.Generated as AvatarStyle,
   avatarVariant: 0,
-  visibility: "game",
+  visibility: PresenceVisibility.Game as PresenceVisibility,
 };
 
 /** An account's friends and its requests both ways. */
@@ -167,11 +174,11 @@ function friendsOf(id: string, circle: Circle): string[] {
 }
 
 /** The relationship the fixture account has with `id`. */
-function statusOf(id: string, circle: Circle): string {
-  if (id === ME.id) return "self";
-  if (circle.friends.has(id)) return "friends";
-  if (circle.outgoing.has(id)) return "outgoing";
-  return circle.incoming.has(id) ? "incoming" : "none";
+function statusOf(id: string, circle: Circle): FriendStatus {
+  if (id === ME.id) return FriendStatus.Self;
+  if (circle.friends.has(id)) return FriendStatus.Friends;
+  if (circle.outgoing.has(id)) return FriendStatus.Outgoing;
+  return circle.incoming.has(id) ? FriendStatus.Incoming : FriendStatus.None;
 }
 
 /** What the fixture's author answers need: each author's published games. */
@@ -231,7 +238,7 @@ function friendWrite(method: string, pathname: string, body: unknown, circle: Ci
     if (circle.incoming.delete(userId)) circle.friends.add(userId);
     else circle.outgoing.add(userId);
     const user = PEOPLE.find((p) => p.id === userId) ?? person(userId);
-    return ok({ status: circle.friends.has(userId) ? "friends" : "outgoing", user: slim(user) });
+    return ok({ status: circle.friends.has(userId) ? FriendStatus.Friends : FriendStatus.Outgoing, user: slim(user) });
   }
   const id = decodeURIComponent(pathname.split("/").at(pathname.endsWith("/accept") ? -2 : -1) ?? "");
   if (pathname.endsWith("/accept") && circle.incoming.delete(id)) circle.friends.add(id);
@@ -239,7 +246,7 @@ function friendWrite(method: string, pathname: string, body: unknown, circle: Ci
     circle.incoming.delete(id);
     circle.outgoing.delete(id);
   } else circle.friends.delete(id);
-  return ok({ status: circle.friends.has(id) ? "friends" : "none", userId: id });
+  return ok({ status: circle.friends.has(id) ? FriendStatus.Friends : FriendStatus.None, userId: id });
 }
 
 /** How many different people played a fixture person's games: about a third of their plays. */
@@ -287,11 +294,11 @@ function patchAccount(body: unknown): GalleryAnswer {
     avatarStyle?: unknown;
     avatarVariant?: unknown;
   };
-  if (avatarStyle === "photo" && !state.photo) return { status: 400, body: { error: "no photo uploaded" } };
+  if (avatarStyle === AvatarStyle.Photo && !state.photo) return { status: 400, body: { error: "no photo uploaded" } };
   if (avatarVariant !== undefined && !isAvatarVariant(avatarVariant))
     return { status: 400, body: { error: "not an avatar variant" } };
   if (typeof name === "string") state.name = name;
-  if (avatarStyle === "generated" || avatarStyle === "photo") state.avatarStyle = avatarStyle;
+  if (isAvatarStyle(avatarStyle)) state.avatarStyle = avatarStyle;
   if (isAvatarVariant(avatarVariant)) state.avatarVariant = avatarVariant;
   return ok({ user: meSlim() });
 }
@@ -362,7 +369,7 @@ export function fixturePeopleAnswer(
   if (method === "GET") return peopleRead(pathname, query, account, catalog);
   if (method === "PATCH" && pathname === PeopleRoute.Visibility) {
     const visibility = (init.body as { presenceVisibility?: unknown })?.presenceVisibility;
-    if (visibility === "game" || visibility === "hidden") state.visibility = visibility;
+    if (isPresenceVisibility(visibility)) state.visibility = visibility;
     return ok({ presenceVisibility: state.visibility });
   }
   return friendWrite(method, pathname, init.body, circleOf(account));

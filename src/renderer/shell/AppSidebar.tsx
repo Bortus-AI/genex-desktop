@@ -27,6 +27,7 @@ export function AppSidebar({
   navigation,
   notices,
   welcoming,
+  covered = false,
 }: {
   app: Studio;
   chrome: ShellChrome;
@@ -34,6 +35,8 @@ export function AppSidebar({
   navigation: Navigation;
   notices: Notifications;
   welcoming: boolean;
+  /** Something modal is over it (a game playing in Play): shown, but out of reach. */
+  covered?: boolean;
 }): JSX.Element {
   const { records: threads, status: threadStatus, activeThreadId, activeThread, project, room } = useThreadsView();
   const launch = useLaunch((s) => s.launch);
@@ -67,7 +70,7 @@ export function AppSidebar({
     });
   };
   return (
-    <aside className="studio-sidebar" inert={hidden} aria-hidden={hidden}>
+    <aside className="studio-sidebar" inert={hidden || covered} aria-hidden={hidden}>
       <BootstrapGate
         failed={({ error, retry, retrying }) => (
           <div className={SIDEBAR_PANE}>

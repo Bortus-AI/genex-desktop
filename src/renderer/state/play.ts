@@ -215,6 +215,14 @@ export function openRefused(state: PlayState, slug: string): PlayState {
   return { ...state, viewer: { ...shown, phase: PlayViewerPhase.Failed } };
 }
 
+/**
+ * Back from an opening main never answered: main has no game to close for it, so its cover goes
+ * here; any other viewer goes when main says it closed.
+ */
+export function unansweredClosed(state: PlayState): PlayState {
+  return state.viewer?.openId === null ? { ...state, viewer: null } : state;
+}
+
 /** The shell opened the remix in Create. */
 export const remixOpened = (state: PlayState): PlayState =>
   state.remixed === null ? state : { ...state, remixed: null };
@@ -336,7 +344,10 @@ export function createPlayStore(
     loadFeed,
     countOnline,
     open,
-    close: () => api.playClose(),
+    close: async () => {
+      set(unansweredClosed);
+      await api.playClose();
+    },
     retry: async () => {
       const shown = store.getState().viewer;
       if (shown) await open(shown);

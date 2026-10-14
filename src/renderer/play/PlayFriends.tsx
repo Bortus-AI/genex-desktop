@@ -23,6 +23,7 @@ import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard } from "./CreditsShard.tsx";
 import { FriendCard, FriendCardKind } from "./FriendCard.tsx";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { SignInNote } from "./SignInNote.tsx";
 import { OfflineChip, OfflineNotice } from "./PlayOffline.tsx";
 
 const WORDS = PLAY_WORDS.people;
@@ -290,11 +291,11 @@ export function PlayFriends({
   const page = read && offline ? withoutPresence(read) : read;
   const [query, setQuery] = useState("");
   useEffect(() => {
-    void studio().people.loadFriends();
-  }, []);
+    if (signedIn) void studio().people.loadFriends();
+  }, [signedIn]);
   return (
     <PlayPageFrame label={WORDS.friends} sidebarHidden={sidebarHidden} onToggleSidebar={onToggleSidebar}>
-      {!signedIn && <p className="people-note">{WORDS.signedOut}</p>}
+      {!signedIn && <SignInNote text={WORDS.signedOut} />}
       {signedIn && !page && offline && <OfflineNotice text={PLAY_WORDS.offline.shelf(WORDS.friends)} />}
       {signedIn && !page && !offline && status === LoadStatus.Failed && (
         <div className="people-note">

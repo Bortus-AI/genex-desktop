@@ -1239,12 +1239,13 @@ async function checkPublishGate(buildSmoke: BuildSmoke): Promise<void> {
   await wc.executeJavaScript(
     `document.querySelector('[role="dialog"][data-testid="genex-publish"] button[aria-label="Close"]').click()`,
   );
+  const refusedRemoval = await core.plugins.remove("genex").then(
+    () => false,
+    () => true,
+  );
   check(
     "Genex holds the app's account: it can't be removed, only turned off",
-    await core.plugins.remove("genex").then(
-      () => false,
-      (error: unknown) => /turn it off/.test(String(error)),
-    ),
+    refusedRemoval && core.plugins.list().some((p) => p.manifest.id === "genex" && !p.removed),
   );
   await core.plugins.setEnabled("genex", true);
   check(

@@ -26,7 +26,7 @@ import type { FullScreenKey, Rect } from "../game-full-screen.ts";
 import { GAME_DISABLED_BLINK_FEATURES } from "../game-view.ts";
 import { linkGate, playAddress, playNavigationAllowed } from "./game-address.ts";
 import type { PlayGallery, PlayWorld } from "./gallery.ts";
-import { type MicGate, micGate } from "./mic.ts";
+import { type MicGate, micGate, micGateFor } from "./mic.ts";
 import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer } from "./viewer.ts";
 
@@ -236,8 +236,11 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents) 
     contents.on("did-fail-load", (_event, code, _description, _url, isMainFrame) => {
       if (mine() && isMainFrame && code !== ERR_ABORTED) events.failed();
     });
-    contents.on("did-navigate", (_event, _url, status) => {
-      if (mine() && (status === GONE_STATUS || status >= SERVER_ERROR)) events.failed();
+    contents.on("did-navigate", (_event, page, status) => {
+      if (!mine()) return;
+      // Each page starts with its own gate; a page off the game's origin never gets the microphone.
+      micGates.set(contents, micGateFor(page, url));
+      if (status === GONE_STATUS || status >= SERVER_ERROR) events.failed();
     });
     contents.on("render-process-gone", () => mine() && events.failed());
     contents.on("dom-ready", () => {
