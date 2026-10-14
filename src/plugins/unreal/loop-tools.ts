@@ -148,6 +148,7 @@ const EPIC_APP_TOOLSET = "EditorToolset.EditorAppToolset";
 export const TOOLSET_OF = {
   [LoopTool.ApplyPart]: LOOP_TOOLSET,
   [LoopTool.StartPlay]: EPIC_APP_TOOLSET,
+  [LoopTool.SearchCVars]: EPIC_APP_TOOLSET,
   [LoopTool.Hold]: HELPER_TOOLSET,
   [LoopTool.CapturePlay]: LOOP_TOOLSET,
   [LoopTool.GameState]: LOOP_TOOLSET,

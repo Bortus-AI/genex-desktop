@@ -45,6 +45,8 @@ const PARAMETERS: Partial<Record<string, string[]>> = {
 /** Unreal's background throttle, where Epic's ObjectTools read and write it. */
 const SETTINGS = "/Script/UnrealEd.Default__EditorPerformanceSettings";
 export const THROTTLE = "bThrottleCPUWhenNotForeground";
+/** The console variable that says whether the editor ray-traces. */
+const RAY_TRACING = "r.RayTracing";
 
 /** Like the Genex editor helper, a probe answers only during play and refuses otherwise. */
 const NO_PLAY = { error: "No play session is running; start one first." };
@@ -53,7 +55,14 @@ const NO_PLAY = { error: "No play session is running; start one first." };
 export function standIn(overrides: Partial<Record<string, (args: Record<string, unknown>) => unknown>> = {}) {
   const calls: Call[] = [];
   // Unreal's default: an editor in the background throttles itself.
-  const state = { answering: true, pie: false, activity: 0, throttle: true, throttleAtPlay: undefined as unknown };
+  const state = {
+    answering: true,
+    pie: false,
+    activity: 0,
+    throttle: true,
+    throttleAtPlay: undefined as unknown,
+    rayTracing: false,
+  };
   const answers: Record<string, (args: Record<string, unknown>) => unknown> = {
     [LoopTool.ApplyPart]: () => ({
       ok: true,
@@ -89,6 +98,14 @@ export function standIn(overrides: Partial<Record<string, (args: Record<string, 
       a.instance === SETTINGS && Array.isArray(a.properties) && a.properties.includes(THROTTLE)
         ? { [THROTTLE]: state.throttle }
         : { error: "No such property." },
+    // Epic's SearchCVars lists every console variable whose name holds the one asked.
+    [LoopTool.SearchCVars]: (a) =>
+      a.name === RAY_TRACING
+        ? {
+            [RAY_TRACING]: { help: "Enables ray tracing.", value: state.rayTracing ? 1 : 0 },
+            "r.RayTracing.PSOCacheSize": { help: "Pipelines kept.", value: 50 },
+          }
+        : {},
     [LoopTool.SetProperties]: (a) => {
       const values = JSON.parse(String(a.values)) as Record<string, unknown>;
       if (a.instance !== SETTINGS || typeof values[THROTTLE] !== "boolean") return false;
@@ -177,9 +194,9 @@ export const written = (calls: Call[]) =>
     .filter(([tool]) => tool === LoopTool.SetProperties)
     .map(([, args]) => (JSON.parse(String(args.values)) as Record<string, unknown>)[THROTTLE]);
 
-/** Runs the Lantern part through a queue over `port` until it settles. */
-export async function runLantern(port: EditorPort) {
-  const queue = createEditorQueue(deps(port));
+/** Runs the Lantern part through a queue over `port` (an editor on `platform`) until it settles. */
+export async function runLantern(port: EditorPort, platform?: NodeJS.Platform) {
+  const queue = createEditorQueue({ ...deps(port), ...(platform ? { platform } : {}) });
   return settled(queue, queue.enqueue({ game: "valley", part: "Lantern", script: "/s", test: TEST }));
 }
 

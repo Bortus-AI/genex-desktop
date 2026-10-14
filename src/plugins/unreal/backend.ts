@@ -5,6 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { isInside } from "../../substrate/paths.ts";
+import { projectRayTracing, turnOffRayTracing } from "./ray-tracing.ts";
 import type {
   Activate,
   PluginActivation,
@@ -157,6 +158,7 @@ const UnrealAction = {
   Steps: "steps",
   GetXcode: "get-xcode",
   StageStatus: "stage-status",
+  RayTracingOff: "ray-tracing-off",
 } as const;
 type UnrealAction = (typeof UnrealAction)[keyof typeof UnrealAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(UnrealAction));
@@ -214,6 +216,9 @@ const MESSAGE = {
   SetupQuestion: (name: string) => `Set up ${name} for Genex?`,
   SetupIntro: (name: string, file: string) => `Genex will change ${name} (${file}):`,
   UndoQuestion: (name: string) => `Undo setup for ${name}?`,
+  RayTracingQuestion: (name: string) => `Turn off ray tracing in ${name}?`,
+  RayTracingDetail: (name: string) =>
+    `Genex will set r.RayTracing=False in ${name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.`,
   NoGame: "Open a game in Genex first: an Unreal project is used by a game.",
   NotSetUp: (name: string) => `${name} isn't set up for Genex yet. Set it up from the Unreal button first.`,
   NoSetUpProject: "No Unreal project is set up for Genex yet. Set one up from the Unreal button first.",
@@ -495,6 +500,20 @@ function busyPortOf(state: ProjectState | undefined, editor: EditorFacts): numbe
   return own?.busyPort ?? null;
 }
 
+const MAC: NodeJS.Platform = "darwin";
+
+/** Whether the shown project ray-traces on a Mac, where UE 5.8 then crashes behind another app (`ray-tracing.ts`). */
+async function rayTracingRisk(env: SetupEnv, state: ProjectState | undefined): Promise<boolean> {
+  return env.platform === MAC && state !== undefined && (await projectRayTracing(realProjectFile(state)));
+}
+
+/** Turns hardware ray tracing off in a project Genex knows (`ray-tracing-off`). */
+async function rayTracingOff(file: string, options: SetupOptions): Promise<{ rayTracing: false }> {
+  const state = await inspectProject(file, options);
+  await turnOffRayTracing(realProjectFile(state));
+  return { rayTracing: false };
+}
+
 /** The steps that say what holds Unreal: set up beside it, switch from it, or open once it is free. */
 const HOLDER_STEPS: ReadonlySet<PanelStep> = new Set([PanelStep.SetUp, PanelStep.Switch, PanelStep.OpenWhenFree]);
 
@@ -721,6 +740,8 @@ async function status(
     /** The port Genex found still held when it opened this project, while its editor runs unanswered; else null. */
     busyPort: busyPortOf(state, editor),
     next,
+    /** Whether to offer turning ray tracing off: the shown project ray-traces, on a Mac. */
+    rayTracingRisk: await rayTracingRisk(env, state),
     ...(await computerNotes(env, state, engine)),
   };
 }
@@ -1273,6 +1294,8 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealAction.Steps]: async (_args, context) => stepsFor(deps.env, await gameProject(deps, context)),
     [UnrealAction.GetXcode]: (args) => getXcode(deps, args),
     [UnrealAction.StageStatus]: (_args, context) => stageStatus(deps, context, scanned),
+    [UnrealAction.RayTracingOff]: async (args, context) =>
+      rayTracingOff(projectArg(args), await setupOptions(deps, context)),
   };
   const loop = loopTools(deps);
   const tools: Record<UnrealTool, ToolHandler> = {
@@ -1303,6 +1326,10 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
       if (name === UnrealAction.UndoSetup) {
         const project = (await inspectProject(projectArg(args), options)).name;
         return { message: MESSAGE.UndoQuestion(project), detail: MESSAGE.Undo(project) };
+      }
+      if (name === UnrealAction.RayTracingOff) {
+        const project = (await inspectProject(projectArg(args), options)).name;
+        return { message: MESSAGE.RayTracingQuestion(project), detail: MESSAGE.RayTracingDetail(project) };
       }
       return {};
     },

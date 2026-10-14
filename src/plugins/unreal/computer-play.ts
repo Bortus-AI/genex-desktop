@@ -142,7 +142,7 @@ export function createComputerPlay(deps: {
     const joined = await playing(port);
     // A session that is already open keeps what it owes; only a new one lifts the throttle.
     const known = sessions.get(key);
-    const giveBack = known?.giveBack ?? (await liftThrottle(port));
+    const giveBack = known?.giveBack ?? (await liftThrottle(port, queueDeps.platform));
     if (!joined) {
       // Marked before play starts: a probe between the two would read the play as the person's.
       await markerOf(storage, game, queueDeps).started();

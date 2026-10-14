@@ -23,7 +23,16 @@
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { type CrashCheck, type CrashReport, shownLine } from "./editor-log.ts";
-import { ObjectTool, readThrottleArgs, throttleIn, writeThrottleArgs } from "./editor-throttle.ts";
+import {
+  CVarTool,
+  mayLiftThrottle,
+  ObjectTool,
+  rayTracingArgs,
+  rayTracingIn,
+  readThrottleArgs,
+  throttleIn,
+  writeThrottleArgs,
+} from "./editor-throttle.ts";
 import { type DriveStep, frameName, type PartCheck, type PartStep, PartStepKind, type PartTest } from "./part-test.ts";
 
 /**
@@ -51,6 +60,7 @@ export const LoopTool = {
   PlayerState: "player_state",
   GetProperties: ObjectTool.GetProperties,
   SetProperties: ObjectTool.SetProperties,
+  SearchCVars: CVarTool.Search,
 } as const;
 export type LoopTool = (typeof LoopTool)[keyof typeof LoopTool];
 
@@ -130,6 +140,8 @@ export type QueueDeps = {
   fileReady(file: string): Promise<boolean>;
   /** A shot's bytes, base64. */
   readShot(file: string): Promise<string>;
+  /** The platform the editor runs on (this one's, unless a test says otherwise): it decides whether a play may run unthrottled. */
+  platform?: NodeJS.Platform;
 };
 
 /** One part to run: the game, the part, its `apply.py` in the game folder, its parsed test and a C++ part's code. */
@@ -613,13 +625,16 @@ const NOTHING_OWED: GiveBack = async () => {};
 
 /**
  * Turns Unreal's background throttle off for one play test, when it is on: an editor behind Genex
- * otherwise plays at a few frames per second and the test measures a slow game. Answers what gives
- * the setting back. A setting that can't be read is left alone and the test runs anyway; one that is
+ * otherwise plays at a few frames per second and the test measures a slow game. On a Mac it stays on
+ * unless the editor says it runs without ray tracing (`mayLiftThrottle`). Answers what gives the
+ * setting back. A setting that can't be read is left alone and the test runs anyway; one that is
  * already off (the user's choice, or the bridge's own play session) is left as it is.
  */
-export async function liftThrottle(port: EditorPort): Promise<GiveBack> {
+export async function liftThrottle(port: EditorPort, platform: NodeJS.Platform = process.platform): Promise<GiveBack> {
   const read = await port.call(LoopTool.GetProperties, readThrottleArgs()).catch(() => undefined);
   if (throttleIn(read) !== true) return NOTHING_OWED;
+  const traced = await port.call(LoopTool.SearchCVars, rayTracingArgs()).catch(() => undefined);
+  if (!mayLiftThrottle(platform, rayTracingIn(traced))) return NOTHING_OWED;
   await port.call(LoopTool.SetProperties, writeThrottleArgs(false)).catch(() => undefined);
   // Writing the value it had is safe even when the write above was refused or half-done.
   return async () => {
@@ -772,7 +787,7 @@ async function checkPlay(deps: QueueDeps, guard: CrashGuard, job: PlayCheckJob):
 
 /** Runs `work` with Unreal's background throttle off, then stops play and gives the throttle back, whatever happened. */
 async function unthrottled<T>(deps: QueueDeps, port: EditorPort, work: () => Promise<T>): Promise<T> {
-  const giveBack = await liftThrottle(port);
+  const giveBack = await liftThrottle(port, deps.platform);
   try {
     return await work();
   } finally {
