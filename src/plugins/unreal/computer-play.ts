@@ -6,7 +6,8 @@
  *
  * A session joins a play that is already running rather than restarting it, and ends only a play
  * it started itself. A play it started is marked as the agent's (`agent-play.ts`) while it runs, so
- * the lock's person-first probe does not read it as the person playing. While the editor queue still has a part or a play-check of the game to run,
+ * the lock's person-first probe does not read it as the person playing; a session whose plugin
+ * restarted takes over the play that mark still claims, and ends it. While the editor queue still has a part or a play-check of the game to run,
  * the editor is the queue's: a session is refused (`busy`) rather than playing over it.
  */
 import {
@@ -21,7 +22,7 @@ import {
   playInputKeys,
 } from "../../shared/engine-play.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
-import { type AgentPlayMarker, agentPlayFolder, agentPlayMarker, NO_AGENT_PLAY } from "./agent-play.ts";
+import { type AgentPlayMarker, agentPlayFolder, agentPlayMarker, agentPlaying, NO_AGENT_PLAY } from "./agent-play.ts";
 import {
   type EditorQueue,
   gameClock,
@@ -150,7 +151,9 @@ export function createComputerPlay(deps: {
       // UE 5.8 has nothing to capture in a play's first moments.
       await playFor(queueDeps, port, WARMUP_SECONDS);
     }
-    sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined });
+    // A play the agent's mark still claims is the agent's own, left by a session whose plugin restarted.
+    const agents = joined && !known && (await agentPlaying(storage, game, queueDeps.now()));
+    sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined || agents });
     const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
     return opened;
   };

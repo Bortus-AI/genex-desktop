@@ -76,6 +76,24 @@ describe("the Unreal plugin's play tools for the computer", () => {
     assert.ok(seconds() >= 2, "the play ran 2 game seconds before the session looks");
   });
 
+  // A plugin update restarts the backend mid-session: the play the old session started must not outlive it.
+  it("takes over the agent's own play a restarted plugin left running, and ends it when it closes", async () => {
+    const storage = await tmpDir("computer-play-");
+    const before = playTools({ storage });
+    await before.call(EnginePlayTool.Open);
+    // The plugin's process is replaced: new tools over the same editor and storage, nothing in memory.
+    const after = createComputerPlay({
+      queueDeps: () => before.deps,
+      queue: () => createEditorQueue(before.deps),
+      game: () => GAME,
+    });
+    const call = (tool: EnginePlayTool) => after.handlers[tool]({}, CONTEXT, storage);
+    assert.deepEqual(await call(EnginePlayTool.Open), { ...ENGINE_PLAY_VIEW, joined: true });
+    assert.deepEqual(await call(EnginePlayTool.Close), { closed: true });
+    assert.equal(before.editor.state.pie, false, "the agent's play ended with the session that took it over");
+    assert.equal(await agentPlaying(storage, GAME, before.deps.now()), false);
+  });
+
   it("joins a play the person started, and leaves it running when it closes", async () => {
     const { call, editor, tools } = playTools();
     editor.state.pie = true;
