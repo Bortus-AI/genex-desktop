@@ -192,9 +192,13 @@ export interface FinishScope {
   keep?: () => Promise<unknown>;
 }
 
-/** The lead's claim: its summary, the files it names as proof, and its `finish` hooks' notes and pictures. */
+/**
+ * The lead's claim: its summary, what it says is not done yet (read first and whole, apart from the
+ * summary's clip), the files it names as proof, and its `finish` hooks' notes and pictures.
+ */
 export interface FinishClaim {
   summary: string;
+  remaining?: readonly string[];
   proof: readonly unknown[];
   hookNotes: readonly string[];
   hookImages: readonly HookImage[];
@@ -374,6 +378,7 @@ function briefFor(
     said: quoted(scope.said),
     relayed: quoted(scope.relayed ?? []),
     claim: clipMarked(claim.summary, CLAIM_CHARS),
+    remaining: claim.remaining ?? [],
     proof: gathered.proof,
     hookNotes,
     jobs: gathered.jobs,

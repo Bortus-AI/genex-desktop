@@ -6,8 +6,17 @@ import type { UnsavedFile } from "./unsaved-files.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { type JobRecord, JobState, JobStopper } from "../../shared/jobs.ts";
 
-/** Why a call was cut off, as the cut-off notice says it. */
+/** A skill's plugin: its `<plugin>/<skill>` name up to the slash. */
+const skillPlugin = (skill: string): string => skill.split("/")[0] ?? skill;
+
+/** Why a call was cut off, and what a resumed session hears of withdrawn plugins and skills. */
 const MESSAGE = {
+  withdrawnOff: (plugins: readonly string[], skills: readonly string[]) => {
+    const named = [`plugins: ${plugins.join(", ")}`, skills.length ? `skills: ${skills.join(", ")}` : ""];
+    return `these are no longer enabled (${named.filter(Boolean).join("; ")}). Ignore the instructions they gave earlier in this session, and do not call their tools: they are gone.`;
+  },
+  withdrawnOutOfProject: (skills: readonly string[]) =>
+    `these skills no longer apply to this project: ${skills.join(", ")}. Their plugins (${[...new Set(skills.map(skillPlugin))].join(", ")}) are still on: ignore what those skills said earlier in this session, and keep using the tools of those plugins this session is handed.`,
   cutOffWhy: {
     [CallCutOff.HarnessEnded]: "the studio's loop ended while it ran",
     [CallCutOff.PluginEnded]: "its plugin stopped while it ran",
@@ -29,14 +38,19 @@ export const anyWithdrawn = (withdrawn: PluginAppliedSet): boolean =>
 
 /**
  * The first paragraph of a resumed session's brief when plugins or skills it was given earlier
- * are gone: its transcript still holds their instructions, and only this says to drop them.
+ * are gone: its transcript still holds their instructions, and only this says to drop them. A
+ * plugin switched off takes its tools and skills with it. A skill withdrawn while its plugin is
+ * still handed no longer applies to this project (a web game's skill once the game is an Unreal
+ * project): its plugin's tools stay, and the notice says so, never that the plugin is off.
  */
 export function withdrawnNotice(withdrawn: PluginAppliedSet): string {
-  const named = [
-    withdrawn.plugins.length ? `plugins: ${withdrawn.plugins.join(", ")}` : "",
-    withdrawn.skills.length ? `skills: ${withdrawn.skills.join(", ")}` : "",
+  const off = (skill: string) => withdrawn.plugins.includes(skillPlugin(skill));
+  const outOfProject = withdrawn.skills.filter((skill) => !off(skill));
+  const parts = [
+    withdrawn.plugins.length ? MESSAGE.withdrawnOff(withdrawn.plugins, withdrawn.skills.filter(off)) : "",
+    outOfProject.length ? MESSAGE.withdrawnOutOfProject(outOfProject) : "",
   ].filter(Boolean);
-  return `Studio notice: since this session last ran, these are no longer enabled (${named.join("; ")}). Ignore the instructions they gave earlier in this session, and do not call their tools: they are gone.`;
+  return `Studio notice: since this session last ran, ${parts.join(" Also, ")}`;
 }
 
 /**

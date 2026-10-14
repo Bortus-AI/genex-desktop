@@ -168,6 +168,8 @@ const UNREAL_EDITOR_TOOLS = [
   "unreal__check-part",
   "unreal__cpp-status",
   "unreal__add-cpp-module",
+  "unreal__motion-status",
+  "unreal__add-motion-matching",
 ];
 const UNREAL_SKILL = "unreal/unreal-editor";
 /** The Unreal plugin's tools and skill for a game that holds an Unreal plugin only. */

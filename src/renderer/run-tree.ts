@@ -34,6 +34,7 @@ import {
   Tone,
 } from "./run-steps.ts";
 import { backgroundCount, FINISH_CHECK_WORDS, jobStatusWords, LEAD_WORDS } from "./words.ts";
+import { isInPlaceTree, layoutComb } from "./run-graph-comb.ts";
 
 /** What the lead's node says it is doing: working itself, waiting for its workers, paused, done or stopped. */
 export const LeadFace = {
@@ -66,21 +67,24 @@ const asksWithPictures = (graph: RunGraph): boolean =>
 /**
  * The Builds tab's layout of a graph: today's options (the assets under the start, the
  * optimisation card, the result's gate, the lead while it has the run), plus the tree's when the
- * graph is one: the lead's background work when it has any, the finish check when it waits.
+ * graph is one: the lead's background work when it has any, the finish check when it waits. A
+ * lead's tree in place (workers and its own save points) hangs its workers off the save points
+ * (`run-graph-comb.ts`); every other graph lays out a row per part.
  */
 export function buildsLayout(graph: RunGraph, rows: PartRow[], summary: RunSummary | null): StepsLayout {
   const lead = leadNodeOf(graph);
   const tree = graph.tree
     ? { tree: { jobs: (lead?.jobs.length ?? 0) > 0, finishCheck: hasNode(graph, GraphNodeKind.FinishCheck) } }
     : {};
-  return layoutSteps(rows, {
+  const options = {
     assets: hasNode(graph, GraphNodeKind.Blender) || hasNode(graph, GraphNodeKind.Assets),
     startWords: asksWithPictures(graph),
     optimization: hasNode(graph, GraphNodeKind.Optimization),
     resultGate: resultGate(graph),
     lead: leadWorking(graph, summary, rows),
     ...tree,
-  });
+  };
+  return graph.tree && isInPlaceTree(rows) ? layoutComb(rows, options) : layoutSteps(rows, options);
 }
 
 /** How a run's close reads on the lead: stopped for a failure or a cancel, done for any other. */
@@ -170,10 +174,14 @@ export function readingNodes(graph: RunGraph, rows: PartRow[], summary: RunSumma
 
 /**
  * The graph's reading order, left to right: what you asked and its assets, the lead and its
- * background work (in a tree), every step of every row, the optimisation card, the result, then
- * the finish check (in a tree) or the lead while it has the run.
+ * background work (in a tree), every step (row by row, or in the layout's own `steps` order), the
+ * optimisation card, the result, then the finish check (in a tree) or the lead while it has the run.
  */
-export function readingOrder(rows: PartRow[], nodes: ReadingNodes): string[] {
+export function readingOrder(
+  rows: PartRow[],
+  nodes: ReadingNodes,
+  steps: string[] = rows.flatMap((row) => row.steps.map((step) => step.id)),
+): string[] {
   const head = nodes.tree ? [GraphSelection.Lead, ...(nodes.jobs ? [GraphSelection.Jobs] : [])] : [];
   const last = nodes.tree ? nodes.finishCheck && GraphSelection.FinishCheck : nodes.lead && GraphSelection.Lead;
   const tail = last ? [last] : [];
@@ -181,7 +189,7 @@ export function readingOrder(rows: PartRow[], nodes: ReadingNodes): string[] {
     GraphSelection.Start,
     ...(nodes.assets ? [GraphSelection.Assets] : []),
     ...head,
-    ...rows.flatMap((row) => row.steps.map((step) => step.id)),
+    ...steps,
     ...(nodes.optimization ? [GraphSelection.Optimization] : []),
     GraphSelection.Final,
     ...tail,

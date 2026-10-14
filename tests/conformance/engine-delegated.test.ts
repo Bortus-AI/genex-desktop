@@ -18,7 +18,7 @@ import { STEER_STALL_MS, steerFeed, steerSession, userFrame } from "../../src/su
 import { credentialHomes } from "../../src/substrate/credential-homes.ts";
 import { absoluteRule } from "../../src/substrate/engines/claude-permissions.ts";
 import { EngineError, type Engine } from "../../src/substrate/engines/types.ts";
-import { registeredSchema, scriptedClaude } from "../helpers/scripted-claude.ts";
+import { registeredSchema, scriptedClaude, wokenSession } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 // An engine resolves — and sweeps — its login homes the moment it is built, and `CLAUDE_CONFIG_DIR`
@@ -2100,5 +2100,17 @@ describe("an account whose access was taken away (provider lost)", () => {
     ];
     const engine = await engineWithLogin(fakeQuery(recovered).fn);
     assert.equal((await engine.delegate({ prompt: "build", cwd: "/tmp/x" })).ok, true);
+  });
+});
+
+/** A session that ended its turn to wait on a background sleep, then was woken by it after its input had ended. */
+const wokenRun = wokenSession();
+
+describe("a session that goes on after its input ended", () => {
+  it("without a worker's seat, a session a background task woke after its last result keeps that result's verdict: its own loop resumes it", async () => {
+    const engine = await engineWithLogin(fakeQuery(wokenRun).fn);
+    const answer = await engine.delegate({ prompt: "Make the character.", cwd: await tmpDir("claude-woken-") });
+    assert.equal(answer.ok, true);
+    assert.equal(answer.summary, "Done.");
   });
 });

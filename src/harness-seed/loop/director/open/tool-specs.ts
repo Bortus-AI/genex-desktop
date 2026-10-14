@@ -7,6 +7,8 @@
  * Its own list, so the director's (`DIRECTOR_TOOLS`) never changes for it.
  */
 import type { LiveToolSpec, WorkerType } from "../../../types/host-api.d.ts";
+import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
+import { minutes } from "../../time.ts";
 import { workerTools } from "../../workers/specs.ts";
 import { DIRECTOR_TOOLS, DirectorTool } from "../tool-specs.ts";
 import { MAX_SAVE_POINT_LABEL, OpenTool } from "./contract.ts";
@@ -17,12 +19,14 @@ const text = (description: string) => ({ type: "string", description });
 /** The open lead's `finish`: a claim, checked by a reviewer; a yes closes the Loop in place. */
 const OPEN_FINISH: LiveToolSpec = {
   name: DirectorTool.Finish,
-  description:
-    "Claim the goal is reached. A reviewer who did none of the work checks the project in its folder, your proof and Genex's captures; a yes closes the Loop, a no comes back with its reasons. Call it with nothing else in the same turn.",
+  description: `Claim the goal is reached. A reviewer who did none of the work checks the project in its folder, your proof and Genex's captures; a yes closes the Loop, a no comes back with its reasons. While you name something that remains and more than ${minutes(GAPS_FIRST_MIN_MS)} minutes are left, no reviewer reads the claim: you work on what remains first. Call it with nothing else in the same turn.`,
   parameters: {
     type: "object",
     properties: {
-      summary: text("What the project holds now, what you checked, and what remains: the person's report."),
+      summary: text("What the project holds now and what you checked: the person's report."),
+      remaining: text(
+        "Everything you know is not done or not right yet, one item per line; empty only when nothing is. The reviewer reads it first.",
+      ),
       proof: text(
         "Comma-separated paths in the project's folder that show the goal is reached (a test report, a picture, a log).",
       ),
@@ -35,12 +39,15 @@ const OPEN_FINISH: LiveToolSpec = {
 const SAVE_POINT: LiveToolSpec = {
   name: OpenTool.SavePoint,
   description:
-    "Keep the project's folder as it is now in Genex's checkpoint: the project's plugins save their apps first, and their notes and pictures come back. Keep one after each step that works; rewind goes back to one.",
+    "Keep the project's folder as it is now in Genex's checkpoint: the project's plugins save their apps first, and their notes and pictures come back. Keep one after each step that works, once you have looked at a close-up picture of the change; rewind goes back to one.",
   parameters: {
     type: "object",
     properties: {
       label: text(`A few words naming what works now (at most ${MAX_SAVE_POINT_LABEL} characters).`),
       summary: text("What this save point holds, in one sentence."),
+      shows: text(
+        "The path in the project's folder of the picture (PNG or JPEG) that shows what changed, taken after the change: a close-up of a character, a crop of a building, never a wide or back shot. It becomes this save point's picture.",
+      ),
     },
     required: ["label"],
   },
@@ -77,9 +84,15 @@ const OPEN_STATUS: LiveToolSpec = {
 /** The director's tools the open lead shares, by name. */
 const SHARED: readonly string[] = [DirectorTool.Note, DirectorTool.WrapUp];
 
-/** The open lead's tools, with `worker_start` naming the kinds of worker on offer, and `restart` only when `restart`. */
-export function openTools(types: readonly WorkerType[] = [], { restart = false } = {}): LiveToolSpec[] {
+/**
+ * The open lead's tools, with `worker_start` naming the kinds of worker on offer and how many may run
+ * at once (`workers`, when the pool knows it), and `restart` only when `restart`.
+ */
+export function openTools(
+  types: readonly WorkerType[] = [],
+  { restart = false, workers }: { restart?: boolean; workers?: number } = {},
+): LiveToolSpec[] {
   const shared = DIRECTOR_TOOLS.filter((tool) => SHARED.includes(tool.name));
   const saves = restart ? [SAVE_POINT, REWIND, RESTART] : [SAVE_POINT, REWIND];
-  return [...shared, OPEN_STATUS, ...workerTools(types), ...saves, OPEN_FINISH];
+  return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, OPEN_FINISH];
 }

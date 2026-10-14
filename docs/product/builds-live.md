@@ -6,7 +6,7 @@ Auto edits directly; Loop delegates workers (four by default) while the chat
 leads. Parts grow boldly within the ask; an art director reviews the whole game; only its
 blockers send a part back (flaws and nits are reported). Other
 projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap (a
-reviewer's yes ends it early; 15 minutes' grace).
+reviewer's yes ends it early, in place after the lead's named gaps; 15 minutes' grace).
 Acceptance survives workers and restarts. External blockers pause the run at its
 checkpoint. ∞ ends on verified outcomes with no blocker. Asked in chat to finish, the lead lets
 rounds end, then lands. Finish overrides the clock, never the final judge
@@ -34,11 +34,11 @@ works. Tries at one step fold into one node; what reached the build forms the li
 hangs below. Tries a pause cut off show Paused until added. An eye marks (and opens) the reviewers'
 notes. A new build is “Checking it starts…” until it runs. A working node shows its agent's
 screen and action; a selected one opens as a card. **Follow up in chat** notes the next message to its build.
-Earlier builds open from chat cards. A Loop in place draws the lead's save points on one row
-(no eye). A Loop's lead, workers, jobs or a claim make a tree: the lead (jobs below), a row per
-worker, then the finish check, tinted by state (Checking, Not yet with reasons and round of 3, Done,
-Stopped; a chat line each round). Finished workers stand on the line, others ghosted. A chat
-message's workers get a graph while newest.
+Chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
+below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
+line each round. In place, save points form one line showing each change; workers hang off
+it, solid under the save point taking their work, else ghosts. A chat message's
+workers get a graph while newest.
 
 Agents test in hidden windows, never Live; blind judges play when screenshots can't decide;
 chat frames never certify a build. A finished worker, passing checks, integration and Live's

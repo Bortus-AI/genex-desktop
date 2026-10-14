@@ -686,7 +686,14 @@ Loop run must confirm the two known changes: builders can no longer read sibling
   can include what a lead left there. A lead's commit made after its last run tool and before a
   Stop is not on the run's integration ref (`syncHead` runs before each tool and at the landing).
 
-- The never-touch hook reads a command's words: a path built while it runs from a variable other
+- The never-touch hook reads a command's words, relative paths from the folder the session's shell
+  stands in (the hook's `cwd`, which Claude Code moves with each `cd`). A here-document a program
+  takes as text (`TEXT_READERS`: `cat`, `python3`, `node`, Blender and the like), on the command
+  line the session runs itself with nothing on it that runs input as commands or a file by its path
+  (`./x.sh`), names paths only as paths alone, so code and prose in it (`a / b`, `~40 deg`) reach no
+  folder; one a shell, `xargs`, a loop, any other reader or a substitution (`eval "$(cat <<…)"`)
+  takes is screened as commands, and a `<<` in a comment or an arithmetic or parameter expansion is
+  no here-document. A path built while it runs from a variable other
   than `$HOME`, or a `cd` into a folder that only names itself at run time, escapes it. A command a
   worker runs outside its box (approved by Auto's classifier, or by the person in Accept edits and
   Manual) is held by the hook alone, as every command in Bypass is. The box names the roots holding

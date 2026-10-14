@@ -2366,6 +2366,8 @@ export interface HarnessHostApi {
       live: boolean;
       headless: boolean;
       memory: { freeMb: number; totalMb: number };
+      /** The most workers the person's Settings let one chat run at once. */
+      workers: number;
     };
   };
 

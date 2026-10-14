@@ -1035,17 +1035,32 @@ export async function neverTouchScreen(
 }
 
 /**
+ * The folder a call's relative paths are read from: where the session's shell stands now, which
+ * Claude Code hands each hook as `cwd` and moves with every `cd` a command leaves it in; the
+ * session's own folder when the hook names no absolute one.
+ */
+function shellFolder(reported: unknown, session: string): string {
+  return typeof reported === "string" && path.isAbsolute(reported) ? reported : session;
+}
+
+/**
  * A worker's never-touch screen, as a PreToolUse hook: Claude Code runs hooks before its deny, ask
  * and allow rules, in every mode, Bypass included. It screens every call, reads included (a lead's
  * screen skips those): a file tool by its paths, a command by the paths it names and any keychain
- * call, each path also as its links lead. Anything it cannot read or decide is refused.
+ * call, each path also as its links lead, relative paths from where the session's shell stands.
+ * Anything it cannot read or decide is refused.
  */
 export function neverTouchHook(list: NeverTouchList, cwd: string, home: string = os.homedir()) {
   return async (input: unknown): Promise<Record<string, unknown>> => {
-    const hook = input as { hook_event_name?: unknown; tool_name?: unknown; tool_input?: unknown } | null;
+    const hook = input as {
+      hook_event_name?: unknown;
+      tool_name?: unknown;
+      tool_input?: unknown;
+      cwd?: unknown;
+    } | null;
     if (hook?.hook_event_name !== PRE_TOOL_USE) return {};
     try {
-      const hit = await neverTouchScreen(screenedCall(hook), list, cwd, home);
+      const hit = await neverTouchScreen(screenedCall(hook), list, shellFolder(hook.cwd, cwd), home);
       return hit ? preToolDeny(neverTouchReason(hit)) : {};
     } catch {
       return preToolDeny(MESSAGE.untouchable);
