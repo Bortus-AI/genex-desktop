@@ -18,12 +18,14 @@ import {
   launcherText,
   setUpGame,
   withAutoload,
+  withEditorPlugin,
 } from "../../src/plugins/godot/genex-addon.ts";
 import { ADDON, godotBackendFixture } from "../helpers/godot-fake-engine.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const SETTINGS = 'config_version=5\n\n[application]\n\nconfig/name="Moon"\n';
 const AUTOLOAD = 'GenexPlay="*res://addons/genex/play_protocol.gd"';
+const EDITOR_PLUGIN = '"res://addons/genex/plugin.cfg"';
 
 /** A game with a Godot project at `where` (relative), and its studio.json as given. */
 async function game(where = "godot", studio: object | null = { title: "Moon" }) {
@@ -48,6 +50,36 @@ describe("the Genex addon in a Godot project", () => {
     assert.ok(merged.endsWith("[display]\n"), "the sections after it stay");
   });
 
+  it("turns its editor plugin on once, beside the person's own", () => {
+    const rows: Array<[string, string, string]> = [
+      ["no section", SETTINGS, `${SETTINGS}\n[editor_plugins]\n\nenabled=PackedStringArray(${EDITOR_PLUGIN})\n`],
+      [
+        "a section with no list",
+        `${SETTINGS}\n[editor_plugins]\n\n[display]\n`,
+        `${SETTINGS}\n[editor_plugins]\nenabled=PackedStringArray(${EDITOR_PLUGIN})\n\n[display]\n`,
+      ],
+      [
+        "the person's plugins",
+        `[editor_plugins]\n\nenabled=PackedStringArray("res://addons/dialogue/plugin.cfg")\n`,
+        `[editor_plugins]\n\nenabled=PackedStringArray("res://addons/dialogue/plugin.cfg", ${EDITOR_PLUGIN})\n`,
+      ],
+      [
+        "an empty list",
+        `[editor_plugins]\nenabled=PackedStringArray()\n`,
+        `[editor_plugins]\nenabled=PackedStringArray(${EDITOR_PLUGIN})\n`,
+      ],
+    ];
+    for (const [what, settings, enabled] of rows) {
+      assert.equal(withEditorPlugin(settings), enabled, what);
+      assert.equal(withEditorPlugin(enabled), enabled, `${what}: twice is once`);
+    }
+    const later = `[editor_plugins]\n\n[other]\nenabled=PackedStringArray("res://x/plugin.cfg")\n`;
+    assert.ok(
+      withEditorPlugin(later).startsWith(`[editor_plugins]\nenabled=PackedStringArray(${EDITOR_PLUGIN})\n`),
+      "another section's list stays its own",
+    );
+  });
+
   it("launches the project with Genex's play on, from GENEX_GODOT, the install found, the usual places or the PATH", () => {
     const text = launcherText("godot", "/Apps/It's Godot.app/Contents/MacOS/Godot");
     assert.ok(text.startsWith("#!/bin/sh\n"));
@@ -63,6 +95,7 @@ describe("the Genex addon in a Godot project", () => {
     assert.deepEqual(await addonState(dir, project, ADDON), {
       addon: "missing",
       autoload: false,
+      editor: false,
       launcher: false,
       bridge: false,
     });
@@ -73,7 +106,9 @@ describe("the Genex addon in a Godot project", () => {
       await readFile(path.join(project, ADDON_FOLDER, "play_protocol.gd"), "utf8"),
       await readFile(path.join(ADDON, "play_protocol.gd"), "utf8"),
     );
-    assert.ok((await readFile(path.join(project, "project.godot"), "utf8")).includes(AUTOLOAD));
+    const settings = await readFile(path.join(project, "project.godot"), "utf8");
+    assert.ok(settings.includes(AUTOLOAD));
+    assert.ok(settings.includes(`[editor_plugins]\n\nenabled=PackedStringArray(${EDITOR_PLUGIN})`), settings);
     assert.equal(((await lstat(path.join(dir, LAUNCHER))).mode & 0o111) !== 0, true, "the launcher runs");
     assert.deepEqual(await json(path.join(dir, "studio.json")), {
       title: "Moon",
@@ -141,7 +176,7 @@ describe("New game and Set up", () => {
     const fixture = await godotBackendFixture();
     await fixture.backend.tool?.(GodotTool.NewGame, { template: "2d", name: "Moon" }, fixture.context());
     const status = (await fixture.backend.action?.("status", {}, fixture.context())) as { setup: object };
-    assert.deepEqual(status.setup, { addon: "current", autoload: true, launcher: true, bridge: true });
+    assert.deepEqual(status.setup, { addon: "current", autoload: true, editor: true, launcher: true, bridge: true });
     const launcher = await readFile(path.join(fixture.gameDir, LAUNCHER), "utf8");
     assert.ok(launcher.includes(path.join(fixture.root, "Applications", "Godot.app")), "the install found comes first");
   });

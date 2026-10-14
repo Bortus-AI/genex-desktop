@@ -14,8 +14,7 @@ snapshots first, keeps the web files as reference and goes on in the new kind.
 
 Asked for an engine whose plugin is off, the chat shows its card (**Turn on** or **Install…**; a
 cross hides it), which only your click acts on. On your word agents go on without it (as for
-Unity): background jobs, `app_look` at its windows (never clicking), its docs, or a plugin they
-write you.
+Unity): background jobs, `app_look` at its windows (never clicking), its docs, or a plugin they write.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each tool asks
 before it runs; Always allow lists it under **Runs without asking**, with **Ask every
@@ -40,15 +39,15 @@ build, test headless and package it.
 ## Godot
 
 It ships off and needs Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D or
-3D, in `godot/`) and opens your editor, which agents never drive: they check, run and shoot the
-game in Genex's sandbox.
+3D, in `godot/`) and opens your editor. Agents never drive it (they check, run and shoot in a
+sandbox); it saves before save points and reloads after Rewind.
 
 ## Live's views
 
 Live shows the web preview, an engine's card (latest shot, its one step: **Open in Unreal**, **Set
-up for Genex**, **Open in Godot**) or a run's pictures; only the preview has web controls. A web game
-plus an engine project gets a tab each, the last chosen remembered per game; a web build shown from
-the chat brings Web game forward.
+up for Genex**, **Open in Godot**) or run pictures; only the preview has web controls. A web game
+plus an engine project gets a tab each, the last chosen kept per game; a chat's web build brings
+Web game forward.
 
 ## Where to work
 

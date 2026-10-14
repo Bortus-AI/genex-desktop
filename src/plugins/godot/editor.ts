@@ -1,14 +1,16 @@
 /**
  * The person's own Godot editor: opening a game's project in it, opening Godot's download page,
  * and whether an editor has the project open now. Each launch is a value (`Launch`), so tests
- * record what would start instead of starting it. Genex never quits or drives the person's editor:
- * Godot reloads a script or scene changed on disk by itself and asks before replacing one the
- * person has unsaved.
+ * record what would start instead of starting it. Genex never quits or drives the person's editor;
+ * it only asks the Genex addon's editor plugin to save or reload (`editor-bridge.ts`), on the
+ * clock this env gives.
  */
 import { execFile, spawn } from "node:child_process";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
+import type { BridgeClock } from "./editor-bridge.ts";
 import type { GodotInstall } from "./find-godot.ts";
 import { PROJECT_FILE } from "./game-project.ts";
 
@@ -27,7 +29,7 @@ const EDITOR_FLAGS = new Set(["-e", "--editor"]);
 export type Launch = { command: string; args: string[]; detached: boolean };
 
 /** What the editor's moves need from the computer; tests record launches and hand in a process list. */
-export type EditorEnv = {
+export type EditorEnv = BridgeClock & {
   open(launch: Launch): Promise<void>;
   /** Every running process's command line. */
   commandLines(): Promise<string[]>;
@@ -65,6 +67,8 @@ export function systemEditorEnv(): EditorEnv {
         });
       });
     },
+    now: () => Date.now(),
+    sleep: (ms, signal) => sleep(ms, undefined, { signal }),
     commandLines: async () => {
       const listed = await run(PS, ["-axo", "command="], { timeout: COMMAND_TIMEOUT_MS, maxBuffer: PS_MAX_BYTES });
       return listed.stdout.split("\n").filter(Boolean);

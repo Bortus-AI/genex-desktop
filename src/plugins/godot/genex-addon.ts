@@ -1,7 +1,8 @@
 /**
  * Setting a Godot game up for Genex's own play: the Genex addon in the project
- * (`addons/genex/`, the Play Protocol autoload that sleeps unless the game is started with
- * `--play-protocol`), its autoload line in `project.godot`, a `bin/play` launcher at the game's root
+ * (`addons/genex/`: the Play Protocol autoload that sleeps unless the game is started with
+ * `--play-protocol`, and the editor plugin that saves and reloads for Genex), its autoload line and
+ * the editor plugin turned on in `project.godot`, a `bin/play` launcher at the game's root
  * that finds Godot and starts the project with it, and `runtime: bridge` in the game's
  * `studio.json`, which tells Genex's computer tool, playtesters and judges to drive the game through
  * that launcher (docs/play-protocol.md). Every file is the person's: nothing is written through a
@@ -21,6 +22,9 @@ const AUTOLOAD_SCRIPT = "play_protocol.gd";
 /** The launcher at the game's root that `studio.json`'s play command names. */
 export const LAUNCHER = "bin/play";
 const AUTOLOAD_SECTION = "[autoload]";
+const EDITOR_PLUGINS_SECTION = "[editor_plugins]";
+/** The addon's editor plugin as `project.godot` lists it among the enabled ones. */
+const EDITOR_PLUGIN = `res://${ADDON_FOLDER}/plugin.cfg`;
 const STUDIO_JSON = "studio.json";
 const BRIDGE_RUNTIME = "bridge";
 /** The native runtime plugin.json declares for Godot (`nativeRuntimes[].id`). */
@@ -39,17 +43,21 @@ const MESSAGE = {
 /** Why setting a game up was refused. */
 export class AddonError extends Error {}
 
-/** Where a game stands for Genex's play: the addon (its files as shipped, older, or missing), its autoload, the launcher and studio.json's runtime. */
+/**
+ * Where a game stands for Genex's play: the addon (its files as shipped, older, or missing), its
+ * autoload, its editor plugin turned on, the launcher and studio.json's runtime.
+ */
 export type AddonState = {
   addon: "current" | "outdated" | "missing";
   autoload: boolean;
+  editor: boolean;
   launcher: boolean;
   bridge: boolean;
 };
 
 /** Whether every part is in place. */
 export const isSetUp = (state: AddonState): boolean =>
-  state.addon === "current" && state.autoload && state.launcher && state.bridge;
+  state.addon === "current" && [state.autoload, state.editor, state.launcher, state.bridge].every(Boolean);
 
 const textOf = (file: string) => readFile(file, "utf8").catch(() => null);
 
@@ -76,6 +84,29 @@ export function withAutoload(settings: string): string {
   const section = lines.findIndex((line) => line.trim() === AUTOLOAD_SECTION);
   if (section < 0) return `${settings.replace(/\s*$/, "")}\n\n${AUTOLOAD_SECTION}\n\n${autoloadLine()}\n`;
   lines.splice(section + 1, 0, autoloadLine());
+  return lines.join("\n");
+}
+
+/** The line of a section's `enabled=PackedStringArray(...)`, and the plugin paths it lists. */
+const ENABLED_LINE = /^enabled=PackedStringArray\((.*)\)\s*$/;
+
+/** `project.godot` with the addon's editor plugin enabled (its section made when it has none); unchanged when it is. */
+export function withEditorPlugin(settings: string): string {
+  const lines = settings.split("\n");
+  const section = lines.findIndex((line) => line.trim() === EDITOR_PLUGINS_SECTION);
+  const listed = `"${EDITOR_PLUGIN}"`;
+  if (section < 0)
+    return `${settings.replace(/\s*$/, "")}\n\n${EDITOR_PLUGINS_SECTION}\n\nenabled=PackedStringArray(${listed})\n`;
+  const end = lines.findIndex((line, at) => at > section && line.trim().startsWith("["));
+  const within = (at: number) => at > section && (end < 0 || at < end);
+  const at = lines.findIndex((line, index) => within(index) && ENABLED_LINE.test(line.trim()));
+  if (at < 0) {
+    lines.splice(section + 1, 0, `enabled=PackedStringArray(${listed})`);
+    return lines.join("\n");
+  }
+  const inside = ENABLED_LINE.exec(lines[at]?.trim() ?? "")?.[1]?.trim() ?? "";
+  if (inside.includes(listed)) return settings;
+  lines[at] = `enabled=PackedStringArray(${inside ? `${inside}, ${listed}` : listed})`;
   return lines.join("\n");
 }
 
@@ -135,6 +166,7 @@ export async function addonState(gameDir: string, project: string, source: strin
   return {
     addon,
     autoload: withAutoload(settings) === settings && settings !== "",
+    editor: withEditorPlugin(settings) === settings && settings !== "",
     launcher: (await lstat(path.join(gameDir, LAUNCHER)).catch(() => null))?.isFile() === true,
     bridge: studio.runtime === BRIDGE_RUNTIME && playsWithEngine(studio.play),
   };
@@ -161,12 +193,12 @@ async function installAddon(project: string, source: string): Promise<string[]> 
   return kept;
 }
 
-/** The autoload line into `project.godot`, when it isn't there. */
-async function addAutoload(project: string): Promise<void> {
+/** The autoload line and the editor plugin into `project.godot`, when they aren't there. */
+async function addToSettings(project: string): Promise<void> {
   const file = path.join(project, PROJECT_FILE);
   await assertNoLink(file);
   const settings = await readFile(file, "utf8");
-  const next = withAutoload(settings);
+  const next = withEditorPlugin(withAutoload(settings));
   if (next !== settings) await writeFileNoFollow(file, next);
 }
 
@@ -215,7 +247,7 @@ async function recordBridge(gameDir: string, project: string): Promise<void> {
 }
 
 /**
- * Sets a game up for Genex's play: the addon, its autoload, the launcher (naming `godot`, the
+ * Sets a game up for Genex's play: the addon, its autoload and editor plugin, the launcher (naming `godot`, the
  * install Genex found, first) and studio.json's runtime. Answers the addon files kept as `.mine`.
  */
 export async function setUpGame(
@@ -227,7 +259,7 @@ export async function setUpGame(
   if (!isInside(gameDir, project) && path.resolve(gameDir) !== path.resolve(project))
     throw new AddonError(MESSAGE.Outside);
   const kept = await installAddon(project, source);
-  await addAutoload(project);
+  await addToSettings(project);
   await writeLauncher(gameDir, project, godot);
   await recordBridge(gameDir, project);
   return kept;

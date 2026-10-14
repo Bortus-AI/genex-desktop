@@ -134,6 +134,24 @@
       }
     },
     {
+      "name": "save-all",
+      "audience": "harness",
+      "description": "Before a checkpoint or a restore, the person's open Godot editor saves its scenes and scripts through the Genex addon: a note of what stayed unsaved, and before a restore a block until the person saves it.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "reload-editor",
+      "audience": "harness",
+      "description": "After a restore, the person's open Godot editor reads its files again and reloads its open scenes through the Genex addon.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "hero-shots",
       "audience": "harness",
       "description": "Stills of the game's main scene from its genex_shot cameras: a run's save point thumbnails, and the viewport observer's pictures.",
@@ -211,12 +229,27 @@
   "hooks": [
     {
       "on": "checkpoint.before",
+      "tool": "save-all",
+      "facts": ["godot-project"]
+    },
+    {
+      "on": "checkpoint.before",
       "tool": "checkpoint-check",
       "facts": ["godot-project"]
     },
     {
       "on": "checkpoint.after",
       "tool": "hero-shots",
+      "facts": ["godot-project"]
+    },
+    {
+      "on": "restore.before",
+      "tool": "save-all",
+      "facts": ["godot-project"]
+    },
+    {
+      "on": "restore.after",
+      "tool": "reload-editor",
       "facts": ["godot-project"]
     }
   ],

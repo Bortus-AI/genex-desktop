@@ -6,6 +6,9 @@
  * with Godot 4.3 or newer in Applications.
  */
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { setTimeout as sleep } from "node:timers/promises";
 import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +16,8 @@ import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { createGodotBackend, GodotTool } from "../../src/plugins/godot/backend.ts";
 import { systemEditorEnv } from "../../src/plugins/godot/editor.ts";
-import { systemGodotEnv } from "../../src/plugins/godot/find-godot.ts";
+import { liveEditor } from "../../src/plugins/godot/editor-bridge.ts";
+import { findGodots, systemGodotEnv, usableGodot } from "../../src/plugins/godot/find-godot.ts";
 import { confinedRunner } from "../../src/plugins/godot/godot-run.ts";
 import { launchGameBridge } from "../../src/main/core/game-bridge-target.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
@@ -28,6 +32,9 @@ const LIVE = process.env.STUDIO_GODOT_LIVE === "1";
 const PNG_SIGNATURE = "iVBORw0KGgo";
 /** A first import and a first capture compile shaders: generous for a cold Mac. */
 const LIVE_TIMEOUT_MS = 5 * 60 * 1000;
+/** How often, and how many times, the test looks for the editor's first heartbeat. */
+const EDITOR_START_POLL_MS = 500;
+const EDITOR_START_TRIES = 120;
 
 type Answer = Record<string, unknown>;
 
@@ -128,6 +135,30 @@ describe("the Godot plugin on this Mac's Godot", { skip: !LIVE, timeout: LIVE_TI
       assert.notDeepEqual(after.jpeg, before.jpeg, "the jump shows");
     } finally {
       await launched.stop();
+    }
+  });
+
+  it("asks the person's own editor to save before a checkpoint and to reload after a restore", async () => {
+    const { project, call } = await liveGame();
+    await call(GodotTool.NewGame, { template: "2d", name: "Live Probe" });
+    const install = usableGodot(await findGodots(systemGodotEnv()));
+    assert.ok(install);
+    // The person's editor, headless: the Genex addon's editor plugin runs in it as in a windowed one.
+    const editor = spawn(install.binary, ["--headless", "--editor", "--path", project], { stdio: "ignore" });
+    const exited = once(editor, "exit");
+    try {
+      let beat = null;
+      for (let tries = 0; tries < EDITOR_START_TRIES && !beat; tries++) {
+        await sleep(EDITOR_START_POLL_MS);
+        beat = await liveEditor(project, systemEditorEnv());
+      }
+      assert.ok(beat, "the editor beats");
+      assert.deepEqual(await call(GodotTool.SaveAll, {}, { hook: { on: HookEvent.CheckpointBefore } }), {});
+      assert.deepEqual(await call(GodotTool.SaveAll, {}, { hook: { on: HookEvent.RestoreBefore } }), {});
+      assert.deepEqual(await call(GodotTool.ReloadEditor, {}, { hook: { on: HookEvent.RestoreAfter } }), {});
+    } finally {
+      editor.kill();
+      await exited;
     }
   });
 

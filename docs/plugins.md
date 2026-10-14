@@ -2244,6 +2244,15 @@ only the project (Godot's `.godot/` cache) and the job's own folder, gets a priv
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
 (`gpu`). Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
+Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
+`[editor_plugins]` in `project.godot`). Its hooks reach the person's open editor through files in the
+project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a heartbeat each second
+(fresh for 5 s), Genex leaves `ask-<id>.json` (`save` or `reload`) and the editor answers
+`answer-<id>.json` within 15 s, every file written whole and none through a link. `save-all` at
+`checkpoint.before` saves the open scenes and the changed scripts whose text Godot holds, noting
+scripts left unsaved or an editor that didn't answer; at `restore.before` either one blocks, so a
+restore never replaces work the editor still holds. `reload-editor` at `restore.after` rescans and
+reloads the open scenes. With no editor beating, each answers nothing.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted
 executable code, as disclosed at installation. The isolated custom panel has no Node or IPC.

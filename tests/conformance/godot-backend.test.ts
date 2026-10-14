@@ -52,8 +52,11 @@ describe("the Godot manifest", () => {
     assert.deepEqual(
       (manifest.hooks ?? []).map((h) => [h.on, h.tool]),
       [
+        [HookEvent.CheckpointBefore, GodotTool.SaveAll],
         [HookEvent.CheckpointBefore, GodotTool.CheckpointCheck],
         [HookEvent.CheckpointAfter, GodotTool.HeroShots],
+        [HookEvent.RestoreBefore, GodotTool.SaveAll],
+        [HookEvent.RestoreAfter, GodotTool.ReloadEditor],
       ],
     );
     assert.deepEqual(

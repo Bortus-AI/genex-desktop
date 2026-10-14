@@ -4,11 +4,12 @@
  * Godot's recorded words (`tests/fixtures/godot-cli/`), and the plugin's backend over both in an
  * open Genex game, with the host calls it makes recorded. Nothing here starts Godot.
  */
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { createGodotBackend } from "../../src/plugins/godot/backend.ts";
 import type { EditorEnv, Launch } from "../../src/plugins/godot/editor.ts";
+import { BRIDGE_FOLDER } from "../../src/plugins/godot/editor-bridge.ts";
 import type { GodotEnv } from "../../src/plugins/godot/find-godot.ts";
 import { type GodotCall, GodotJob, type GodotResult, type GodotRunner } from "../../src/plugins/godot/godot-run.ts";
 import { tmpDir } from "./tmp.ts";
@@ -117,13 +118,57 @@ export async function fakeMac(
 /** An editor that records what it opens and answers the process list it is given. */
 export function recordingEditor(lines: string[] = []) {
   const opened: Launch[] = [];
+  const clock = { at: Date.UTC(2026, 9, 14, 12) };
+  let standIn: (() => Promise<void>) | null = null;
   const editor: EditorEnv = {
     open: async (launch) => {
       opened.push(launch);
     },
     commandLines: async () => lines,
+    now: () => clock.at,
+    sleep: async (ms) => {
+      clock.at += ms;
+      await standIn?.();
+    },
   };
-  return { editor, opened, lines };
+  /** The editor plugin's turn each time the backend waits: it answers what was asked meanwhile. */
+  const answerWith = (turn: () => Promise<void>) => {
+    standIn = turn;
+  };
+  return { editor, opened, lines, clock, answerWith };
+}
+
+/**
+ * The Genex addon's editor plugin in `project`, as a test plays it on the fixture's clock: a
+ * heartbeat now (`beat` writes another), and each ask answered by `answer` (null leaves it
+ * unanswered), the ops asked kept in order.
+ */
+export async function editorStandIn(
+  recorded: ReturnType<typeof recordingEditor>,
+  project: string,
+  answer: (op: string) => object | null,
+) {
+  const folder = path.join(project, BRIDGE_FOLDER);
+  await mkdir(folder, { recursive: true });
+  const asked: string[] = [];
+  const beat = (fields: object = {}) =>
+    writeFile(
+      path.join(folder, "editor.json"),
+      JSON.stringify({ at: recorded.clock.at, playing: false, unsavedScripts: 0, ...fields }),
+    );
+  await beat();
+  recorded.answerWith(async () => {
+    for (const name of await readdir(folder)) {
+      const id = /^ask-([0-9a-f]+)\.json$/.exec(name)?.[1];
+      if (!id) continue;
+      const { op } = JSON.parse(await readFile(path.join(folder, name), "utf8"));
+      await rm(path.join(folder, name));
+      asked.push(op);
+      const said = answer(op);
+      if (said) await writeFile(path.join(folder, `answer-${id}.json`), JSON.stringify(said));
+    }
+  });
+  return { folder, asked, beat };
 }
 
 /** A host call made by the backend: its method and arguments. */

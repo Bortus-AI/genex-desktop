@@ -15,6 +15,7 @@ import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plu
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
 import type { Activate, PluginActivation, PluginContext, PluginReview } from "../../plugin-sdk/index.d.ts";
 import { answerQuery, createReference } from "./class-reference.ts";
+import { askEditor, EditorOp, liveEditor, unsavedScriptsOf } from "./editor-bridge.ts";
 import { editorOpen, type EditorEnv, getGodotLaunch, openEditorLaunch, systemEditorEnv } from "./editor.ts";
 import {
   findGodots,
@@ -69,6 +70,8 @@ export const GodotTool = {
   ClassReference: "class-reference",
   EngineStatus: "engine-status",
   CheckpointCheck: "checkpoint-check",
+  SaveAll: "save-all",
+  ReloadEditor: "reload-editor",
   HeroShots: "hero-shots",
   SetUp: "set-up",
 } as const;
@@ -113,9 +116,20 @@ const MESSAGE = {
   NoStills: "Godot saved no stills: check that the scene loads (godot__check) and has a camera.",
   CheckNote: (count: number, lines: readonly string[]) =>
     `Godot's check found ${count} ${count === 1 ? "problem" : "problems"}: ${lines.slice(0, NOTED_PROBLEMS).join(" | ")}${count > NOTED_PROBLEMS ? ` (and ${count - NOTED_PROBLEMS} more)` : ""}`,
+  Editor: {
+    NoAnswer:
+      "Your Godot editor didn't answer Genex's ask to save, so Genex won't rewind over work open in it: save in Godot, then try again.",
+    Unsaved: (scripts: number) =>
+      `Your Godot editor holds ${scripts === 1 ? "a script" : `${scripts} scripts`} with changes Genex couldn't save: save ${scripts === 1 ? "it" : "them"} in Godot, then try again.`,
+    NotSaved: "Your Godot editor didn't answer Genex's ask to save, so work open in it may not be in this save point.",
+    UnsavedNote: (scripts: number) =>
+      `${scripts === 1 ? "A script" : `${scripts} scripts`} open in Godot with unsaved changes ${scripts === 1 ? "isn't" : "aren't"} in this save point.`,
+    NotReloaded:
+      "Your Godot editor didn't answer Genex's ask to reload: it will offer to reload the changed files when you return to it.",
+  },
   SetUpQuestion: "Set this Godot game up for Genex's play?",
   SetUpDetail: (where: string) =>
-    `Genex will add its addon to the project (${where}/addons/genex: a script that sleeps unless Genex starts the game), list it as an autoload in project.godot, write bin/play (starts the game for Genex) and mark the game in studio.json, so Genex's computer tool, playtesters and judges can play it. A Genex file you changed is kept beside the new one as .mine.`,
+    `Genex will add its addon to the project (${where}/addons/genex: a script that sleeps unless Genex starts the game, and an editor plugin that saves your open scenes before a save point and reloads them after a Rewind), list them in project.godot, write bin/play (starts the game for Genex) and mark the game in studio.json, so Genex's computer tool, playtesters and judges can play it. A Genex file you changed is kept beside the new one as .mine.`,
   SetUpDone:
     "This game is set up for Genex's play: Genex's computer tool, playtesters and judges can now start it with bin/play, press keys, point, step its clock and read its state.",
   BadSeconds: `seconds is a whole number from 1 to ${MAX_RUN_SECONDS}.`,
@@ -257,6 +271,33 @@ async function checkAtMoment(deps: GodotBackendDeps, context: PluginContext): Pr
   const result = await runCheck(deps, install, project, context.signal).catch(() => null);
   const errors = result?.problems.filter(isError) ?? [];
   return errors.length ? { note: MESSAGE.CheckNote(errors.length, problemLines(errors)) } : {};
+}
+
+/**
+ * `save-all` before a checkpoint or a restore: the person's open Godot editor saves its scenes and
+ * the scripts it can. A checkpoint notes what stayed unsaved; a restore, which would replace those
+ * files, waits for the person instead (a block) when the editor didn't answer or kept work unsaved.
+ * Nothing without an editor that has the project open.
+ */
+async function saveAll(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
+  const project = context.directory ? await findGameProject(context.directory) : null;
+  if (!project || !(await liveEditor(project, deps.editor))) return {};
+  const answer = await askEditor(project, EditorOp.Save, deps.editor, context.signal);
+  const restoring = context.hook?.on === HookEvent.RestoreBefore;
+  const left = answer ? unsavedScriptsOf(answer) : 0;
+  if (restoring && !answer) return { block: MESSAGE.Editor.NoAnswer };
+  if (restoring && left) return { block: MESSAGE.Editor.Unsaved(left) };
+  if (!answer) return { note: MESSAGE.Editor.NotSaved };
+  return left ? { note: MESSAGE.Editor.UnsavedNote(left) } : {};
+}
+
+/** `reload-editor` after a restore: the person's open Godot editor reads its files again and reloads its open scenes. */
+async function reloadEditor(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
+  if (context.hook?.on !== HookEvent.RestoreAfter) return {};
+  const project = context.directory ? await findGameProject(context.directory) : null;
+  if (!project || !(await liveEditor(project, deps.editor))) return {};
+  const answer = await askEditor(project, EditorOp.Reload, deps.editor, context.signal);
+  return answer ? {} : { note: MESSAGE.Editor.NotReloaded };
 }
 
 /** The seconds a run asks for: a whole number from 1 to {@link MAX_RUN_SECONDS}, or the default when absent. */
@@ -508,6 +549,8 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotTool.ClassReference]: classReference(deps),
     [GodotTool.EngineStatus]: () => engineStatus(deps),
     [GodotTool.CheckpointCheck]: (_args, context) => checkAtMoment(deps, context),
+    [GodotTool.SaveAll]: (_args, context) => saveAll(deps, context),
+    [GodotTool.ReloadEditor]: (_args, context) => reloadEditor(deps, context),
     [GodotTool.HeroShots]: (_args, context) => heroShots(deps, context),
     [GodotTool.SetUp]: async (_args, context) => {
       await setUp(deps, context);
