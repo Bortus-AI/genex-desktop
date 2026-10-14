@@ -13,9 +13,11 @@
 import { SECOND_MS } from "../../shared/duration.ts";
 import {
   ENGINE_PLAY_VIEW,
+  type EnginePlayMouse,
   EnginePlayTool,
   isEnginePlayRefused,
   MAX_PLAY_INPUT_SECONDS,
+  MouseButtonCode,
   playInputArgs,
 } from "../../shared/engine-play.ts";
 import { EDITOR_CAPABILITIES, InputRoute, type TargetCapabilities } from "../../shared/computer-target.ts";
@@ -23,11 +25,24 @@ import { errorMessage } from "../../shared/errors.ts";
 import { StillMimeType } from "../../shared/preview-contract.ts";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
 import type { ComputerTarget, TargetLoad, TargetShot } from "../../substrate/computer-target.ts";
+import { SCROLL_NOTCH_PX } from "../../substrate/computer-vocabulary.ts";
 import { normalizeKey, parseCombo, type PreviewInputAction } from "../../substrate/preview-input.ts";
 import type { TargetSource } from "./computer-session.ts";
 
 /** How long a key pressed once is held, in game seconds: a tap. */
 const TAP_SECONDS = 0.1;
+/** How long the game runs after one frame of the mouse, in game seconds, so the frame has been played. */
+const MOUSE_SECONDS = 0.05;
+
+/** The engine plugin's name for each mouse button. */
+const BUTTON_CODE = {
+  left: MouseButtonCode.Left,
+  right: MouseButtonCode.Right,
+  middle: MouseButtonCode.Middle,
+} as const satisfies Record<"left" | "right" | "middle", MouseButtonCode>;
+
+/** One `play-input`: keys held together for game seconds, after one frame of the mouse when it moves. */
+type Hold = { keys: string[]; seconds: number; mouse?: EnginePlayMouse };
 
 /** Calls one of the game's engine plugin's play tools, under the session's hold on the editor. */
 export type EnginePlayCall = (tool: EnginePlayTool, args: Record<string, unknown>) => Promise<unknown>;
@@ -70,8 +85,25 @@ function charCodes(char: string): string[] {
   return /[A-Z]/.test(char) ? ["ShiftLeft", key.code] : [key.code];
 }
 
+/** The holds one mouse action is carried out as: buttons pressed where the view is aimed, a look, the wheel. */
+function mouseHolds(action: PreviewInputAction): Hold[] | null {
+  switch (action.type) {
+    case "click": {
+      const keys = [...(action.modifiers ?? []), BUTTON_CODE[action.button ?? "left"]];
+      return Array.from({ length: Math.max(1, action.clicks ?? 1) }, () => ({ keys, seconds: TAP_SECONDS }));
+    }
+    case "look":
+      return [{ keys: [], seconds: MOUSE_SECONDS, mouse: { dx: action.dx, dy: action.dy } }];
+    case "scroll":
+      // A wheel turned down the page is notches down: negative, as engines count them.
+      return [{ keys: [], seconds: MOUSE_SECONDS, mouse: { wheel: -(action.dy ?? 0) / SCROLL_NOTCH_PX } }];
+    default:
+      return null;
+  }
+}
+
 /** The holds one input action is carried out as, each keys and game seconds; null when the editor has no way to do it. */
-function holdsOf(action: PreviewInputAction): Array<{ keys: string[]; seconds: number }> | null {
+function holdsOf(action: PreviewInputAction): Hold[] | null {
   switch (action.type) {
     case "tap":
       return [{ keys: action.keys, seconds: action.stepMs ? action.stepMs / SECOND_MS : TAP_SECONDS }];
@@ -82,7 +114,7 @@ function holdsOf(action: PreviewInputAction): Array<{ keys: string[]; seconds: n
     case "hold": {
       // A long hold goes out in turns of the longest one call holds.
       let left = (action.ms ?? TAP_SECONDS * SECOND_MS) / SECOND_MS;
-      const turns: Array<{ keys: string[]; seconds: number }> = [];
+      const turns: Hold[] = [];
       while (left > 0) {
         turns.push({ keys: action.keys, seconds: Math.min(left, MAX_PLAY_INPUT_SECONDS) });
         left -= MAX_PLAY_INPUT_SECONDS;
@@ -94,7 +126,7 @@ function holdsOf(action: PreviewInputAction): Array<{ keys: string[]; seconds: n
     case "wait":
       return [{ keys: [], seconds: action.ms / SECOND_MS }];
     default:
-      return null;
+      return mouseHolds(action);
   }
 }
 
@@ -119,7 +151,7 @@ function editorPlayTarget(call: EnginePlayCall, view: { width: number; height: n
         const holds = holdsOf(action);
         if (!holds) break;
         for (const hold of holds)
-          await answered(call, EnginePlayTool.Input, { ...playInputArgs(hold.keys, hold.seconds) });
+          await answered(call, EnginePlayTool.Input, { ...playInputArgs(hold.keys, hold.seconds, hold.mouse) });
         applied += 1;
       }
       return { applied, route: InputRoute.Editor };

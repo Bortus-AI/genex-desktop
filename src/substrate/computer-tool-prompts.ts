@@ -74,6 +74,10 @@ const POINTER_LINES =
   "left_click | right_click | middle_click | double_click | triple_click coordinate=x,y (text=shift|ctrl+alt holds modifiers). " +
   "left_click_drag start_coordinate=x,y coordinate=x,y. mouse_move coordinate=x,y. left_mouse_down / left_mouse_up. ";
 
+/** The clicks of a target that presses its buttons where the view is aimed, with no point to give. */
+const AIMED_CLICK_LINE =
+  "left_click | right_click | middle_click | double_click: press that mouse button where the view is aimed (no coordinate; turn with look first). ";
+
 /** The web page sentences, for a target that drives pages by their structure. */
 const WEB_LINES =
   "Web pages — prefer these to pixels for anything on the web: web_open text=<https:// address> opens it in a separate, clean Chrome (no logins, none of the person's tabs). " +
@@ -133,9 +137,11 @@ export function computerToolDescription(options: {
     "Actions — screenshot: what the window shows now (the picture comes back with the answer). " +
     (caps.zoom ? "zoom region=x0,y0,x1,y1: that part of the last screenshot at full size. " : "") +
     (canPoint(caps) ? POINTER_LINES : "") +
+    (!canPoint(caps) && caps.aimedClicks ? AIMED_CLICK_LINE : "") +
     "scroll scroll_direction=up|down|left|right scroll_amount=<notches> [coordinate=x,y]. " +
     "type text=<literal text>. key text=<a key or +chord: w, i, Return, Escape, space, ctrl+s> [repeat=n]. hold_key text=w duration=<seconds> (walks, grinds). " +
-    "wait duration=<seconds>. cursor_position. " +
+    "wait duration=<seconds>. " +
+    (canPoint(caps) ? "cursor_position. " : "") +
     (caps.pointer !== PointerLevel.None ? "look dx=<pixels> dy=<pixels>: turn the view (mouse-look). " : "") +
     (caps.actions
       ? "act text=<action> [duration=<seconds>]: the game's own named action (jump, attack), pressed once or held. "

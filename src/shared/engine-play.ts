@@ -41,12 +41,24 @@ export interface EnginePlayOpened {
   joined: boolean;
 }
 
+/** The mouse buttons, as `play-input` names them among its keys (web key codes have none). Wire values: never rename. */
+export const MouseButtonCode = { Left: "MouseLeft", Right: "MouseRight", Middle: "MouseMiddle" } as const;
+export type MouseButtonCode = (typeof MouseButtonCode)[keyof typeof MouseButtonCode];
+
+/** One frame of the player's mouse: motion in pixels (down the screen is +dy) and wheel notches (up is +). */
+export interface EnginePlayMouse {
+  dx?: number;
+  dy?: number;
+  wheel?: number;
+}
+
 /**
  * What `play-input` is asked: keys as web key codes (`KeyboardEvent.code`: `KeyW`, `Space`,
- * `ArrowUp`, `ShiftLeft`, `Digit1`) joined by commas, held together; the engine plugin names them
- * in its engine. Plugin tool parameters are scalars, so the keys are one string; none is a wait.
+ * `ArrowUp`, `ShiftLeft`, `Digit1`) or mouse buttons ({@link MouseButtonCode}) joined by commas,
+ * held together, after one frame of the mouse when it moves; the engine plugin names them in its
+ * engine. Plugin tool parameters are scalars, so the keys are one string; none is a wait.
  */
-export interface EnginePlayInputArgs {
+export interface EnginePlayInputArgs extends EnginePlayMouse {
   keys: string;
   seconds: number;
 }
@@ -61,9 +73,13 @@ export function playInputKeys(keys: unknown): string[] {
     : [];
 }
 
-/** A `play-input`'s arguments for keys held together for `seconds`. */
-export function playInputArgs(keys: readonly string[], seconds: number): EnginePlayInputArgs {
-  return { keys: keys.join(","), seconds };
+/** A `play-input`'s arguments for keys held together for `seconds`, after one frame of `mouse` when it moves. */
+export function playInputArgs(
+  keys: readonly string[],
+  seconds: number,
+  mouse: EnginePlayMouse = {},
+): EnginePlayInputArgs {
+  return { keys: keys.join(","), seconds, ...mouse };
 }
 
 /** What `play-input` answers: the keys the engine took, and the game seconds that passed. */

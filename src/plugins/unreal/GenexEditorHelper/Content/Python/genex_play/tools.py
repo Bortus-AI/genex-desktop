@@ -58,6 +58,22 @@ class GenexPlayTools(unreal.ToolsetDefinition):
 
     @toolset_registry.tool_call
     @staticmethod
+    def mouse(dx: float = 0.0, dy: float = 0.0, wheel: float = 0.0) -> str:
+        """Moves the player's mouse and turns its wheel for one frame of the game, as a mouse does:
+        the game's own look mapping turns the view by what moved.
+
+        Args:
+            dx: Pixels of mouse motion to the right (negative: left).
+            dy: Pixels of mouse motion down the screen (negative: up).
+            wheel: Notches of the wheel, up positive.
+
+        Returns:
+            JSON {moved: [dx, dy], wheel}, or {error} without a play session.
+        """
+        return _answer(play.move_mouse, dx, dy, wheel)
+
+    @toolset_registry.tool_call
+    @staticmethod
     def release_all() -> int:
         """Lets go of every held input action and key, and ends a settle or a drive.
 

@@ -16,8 +16,8 @@ import type { ScreenAct } from "../../shared/agent-screen.ts";
 import {
   ComputerPacing,
   canPause,
+  canPoint,
   InputRoute,
-  PointerLevel,
   type TargetCapabilities,
 } from "../../shared/computer-target.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -185,9 +185,9 @@ interface SessionHelpers {
   readonly observeByDefault: boolean;
 }
 
-/** Where the pointer is, for an answer; null on a target with no pointer (a game played in its engine's editor). */
+/** Where the pointer is, for an answer; null on a target with no pointer at a point (a game turned by mouse-look). */
 function cursorAt(ctx: ActionContext): string | null {
-  if (ctx.target.caps.pointer === PointerLevel.None) return null;
+  if (!canPoint(ctx.target.caps)) return null;
   const c = ctx.helpers.cursor(ctx.target, ctx.size);
   return `cursor at ${c.x},${c.y}`;
 }

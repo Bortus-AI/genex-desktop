@@ -119,6 +119,25 @@ describe("the Unreal plugin's play tools for the computer", () => {
     assert.deepEqual((held as { held: string[] }).held, ["W", "LeftShift"]);
   });
 
+  it("moves the player's mouse and turns its wheel for one frame through the helper, and presses its buttons as keys", async () => {
+    const { call, editor } = playTools();
+    await call(EnginePlayTool.Open);
+    await call(EnginePlayTool.Input, { keys: "", seconds: 0.05, dx: 40, dy: -10 });
+    await call(EnginePlayTool.Input, { keys: "", seconds: 0.05, wheel: -2 });
+    await call(EnginePlayTool.Input, { keys: "ShiftLeft,MouseLeft", seconds: 0.1 });
+    assert.deepEqual(
+      editor.calls.filter(([tool]) => tool === LoopTool.Mouse).map(([, args]) => args),
+      [
+        { dx: 40, dy: -10, wheel: 0 },
+        { dx: 0, dy: 0, wheel: -2 },
+      ],
+    );
+    assert.deepEqual(
+      editor.calls.filter(([tool]) => tool === LoopTool.Hold).map(([, args]) => args.name),
+      ["LeftShift", "LeftMouseButton"],
+    );
+  });
+
   it("refuses a key Unreal has no name for before holding anything, and any input once play has ended", async () => {
     const { call, editor } = playTools();
     await call(EnginePlayTool.Open);
@@ -165,6 +184,9 @@ describe("the Unreal plugin's play tools for the computer", () => {
       ["Space", "SpaceBar"],
       ["ArrowUp", "Up"],
       ["ShiftLeft", "LeftShift"],
+      ["MouseLeft", "LeftMouseButton"],
+      ["MouseRight", "RightMouseButton"],
+      ["MouseMiddle", "MiddleMouseButton"],
       ["Enter", "Enter"],
       ["F5", "F5"],
       ["F13", null],

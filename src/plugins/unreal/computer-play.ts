@@ -1,8 +1,8 @@
 /**
  * The studio's `computer` tool playing an Unreal game (`shared/engine-play.ts`): a play session in
  * the game's own editor (Play In Editor), driven through the Genex editor helper the editor queue
- * already uses — keys held on the game's own clock, a shot of what the player sees, the player's
- * state. Each tool takes the editor lock for its call (`needs: ["editor"]`), the person first.
+ * already uses — keys held on the game's own clock, one frame of the player's mouse (looking, the
+ * wheel; its buttons are keys), a shot of what the player sees, the player's state. Each tool takes the editor lock for its call (`needs: ["editor"]`), the person first.
  *
  * A session joins a play that is already running rather than restarting it, and ends only a play
  * it started itself. A play it started is marked as the agent's (`agent-play.ts`) while it runs, so
@@ -19,6 +19,7 @@ import {
   type EnginePlayShot,
   EnginePlayTool,
   MAX_PLAY_INPUT_SECONDS,
+  MouseButtonCode,
   playInputKeys,
 } from "../../shared/engine-play.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
@@ -82,6 +83,9 @@ const UNREAL_KEYS: Readonly<Record<string, string>> = {
   BracketRight: "RightBracket",
   Backslash: "Backslash",
   Backquote: "Tilde",
+  [MouseButtonCode.Left]: "LeftMouseButton",
+  [MouseButtonCode.Right]: "RightMouseButton",
+  [MouseButtonCode.Middle]: "MiddleMouseButton",
 };
 /** Unreal's names for the digit keys, `Digit0` to `Digit9`. */
 const DIGITS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"] as const;
@@ -106,6 +110,9 @@ export function unrealKey(code: string): string | null {
 }
 
 const refused = (code: EnginePlayRefusal, message: string): EnginePlayRefused => ({ refused: code, message });
+
+/** A finite number argument, else 0. */
+const numberArg = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
 /** The game's folder name the call is for, as the queue names a game. */
 type GameOf = (context: PluginContext) => string;
@@ -168,6 +175,9 @@ export function createComputerPlay(deps: {
     const asked = typeof args.seconds === "number" ? args.seconds : MIN_HOLD_SECONDS;
     const seconds = Math.min(MAX_PLAY_INPUT_SECONDS, Math.max(MIN_HOLD_SECONDS, asked));
     const held = names.flatMap((key) => (key.name ? [key.name] : []));
+    const mouse = { dx: numberArg(args.dx), dy: numberArg(args.dy), wheel: numberArg(args.wheel) };
+    // One frame of the mouse first, as a player turns to aim, then presses.
+    if (mouse.dx || mouse.dy || mouse.wheel) await startStep(port, LoopTool.Mouse, mouse);
     for (const name of held) await startStep(port, LoopTool.Hold, { name, x: 1, y: 0, seconds });
     await playFor(queueDeps, port, seconds);
     const answer: EnginePlayInputAnswer = { held, gameSeconds: (await gameClock(port)).gameSeconds };

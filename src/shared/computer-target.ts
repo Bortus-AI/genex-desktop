@@ -119,6 +119,11 @@ export interface TargetCapabilities {
    * button and field by ref — in a separate, clean browser (`web_open`, `web_read`, `web_click`, `web_type`).
    */
   dom: boolean;
+  /**
+   * Whether the mouse buttons press where the view is aimed, with no point to put the pointer at:
+   * a game turned by mouse-look (a relative pointer). Absent is no.
+   */
+  aimedClicks?: boolean;
 }
 
 /** The studio's own browser window: everything, step-locked, seeded through the page shim. */
@@ -158,11 +163,13 @@ export const DESKTOP_CAPABILITIES: TargetCapabilities = {
 
 /**
  * A game played in its engine's editor: the player's view, keys held on the game's own clock (which
- * the studio cannot stop), and the player's state. No pointer, seed, cameras or console yet.
+ * the studio cannot stop), the mouse as a player has it (mouse-look, the buttons where the view is
+ * aimed, the wheel), and the player's state. No seed, cameras or console yet.
  */
 export const EDITOR_CAPABILITIES: TargetCapabilities = {
   runtime: TargetRuntime.Editor,
-  pointer: PointerLevel.None,
+  pointer: PointerLevel.Relative,
+  aimedClicks: true,
   clock: ClockLevel.None,
   state: StateLevel.Game,
   seed: false,
@@ -186,6 +193,11 @@ export function canPause(caps: Pick<TargetCapabilities, "clock">): boolean {
 /** Can the target's pointer click at a point? */
 export function canPoint(caps: Pick<TargetCapabilities, "pointer">): boolean {
   return caps.pointer === PointerLevel.Absolute;
+}
+
+/** Can the target press a mouse button: at a point, or where its view is aimed? */
+export function canClick(caps: Pick<TargetCapabilities, "pointer" | "aimedClicks">): boolean {
+  return canPoint(caps) || caps.aimedClicks === true;
 }
 
 /** Does the target answer with its own state? */

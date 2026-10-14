@@ -24,6 +24,11 @@ import unreal
 
 KMH_PER_CM_PER_S = 0.036
 MIN_HOLD_SECONDS = 0.05
+# The mouse's own keys: its movement (2D, in pixels) and its wheel (notches, up positive).
+MOUSE_MOVE = 'Mouse2D'
+MOUSE_WHEEL = 'MouseWheelAxis'
+# A mouse movement lasts until the game clock has moved at all: one frame of the game.
+ONE_FRAME_S = 1e-6
 # A game-time wait of s seconds ends after WALL_FACTOR * s + WALL_GRACE_S wall seconds at most.
 WALL_FACTOR = 4.0
 WALL_GRACE_S = 10.0
@@ -269,6 +274,25 @@ def hold(name: str, x: float, y: float, seconds: float) -> str:
     held_input = resolve(name)
     press(held_input, x, y, held_seconds)
     return json.dumps({'held': held_input.label, 'seconds': held_seconds})
+
+
+def _one_frame(key: str, value: str) -> None:
+    """Forces `key` to `value` until one frame of the game has run, as one frame of a mouse is."""
+    _run(f'Input.+key {key} {value}')
+    _held[key] = Held(f'Input.-key {key}', game_seconds() + ONE_FRAME_S, wall_clock() + wall_cap(ONE_FRAME_S))
+    _ensure_ticking()
+
+
+def move_mouse(dx: float, dy: float, wheel: float) -> dict:
+    """Moves the player's mouse by (dx, dy) pixels, down on screen being +dy, and turns its wheel by
+    `wheel` notches, up being +, for one frame of the game: what a mouse does in that frame."""
+    game_world()
+    if dx or dy:
+        # Unreal's mouse Y grows upward, a screen's downward.
+        _one_frame(MOUSE_MOVE, f'X={dx:g} Y={-dy:g}')
+    if wheel:
+        _one_frame(MOUSE_WHEEL, f'{wheel:g}')
+    return {'moved': [dx, dy], 'wheel': wheel}
 
 
 def release_all() -> int:

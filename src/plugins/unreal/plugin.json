@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.12.3",
+  "version": "0.13.0",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -439,15 +439,24 @@
       "name": "play-input",
       "audience": "harness",
       "needs": ["editor"],
-      "description": "For Genex's computer tool only: hold keys together for seconds of the game's own time, then let go. Answers {held, gameSeconds} once that time has passed, or {refused, message}.",
+      "description": "For Genex's computer tool only: move the player's mouse for one frame when asked, then hold keys together for seconds of the game's own time, then let go. Answers {held, gameSeconds} once that time has passed, or {refused, message}.",
       "parameters": {
         "type": "object",
         "properties": {
           "keys": {
             "type": "string",
-            "description": "Web key codes held together, joined by commas: KeyW,ShiftLeft (empty: just let the game play)."
+            "description": "Web key codes or mouse buttons (MouseLeft, MouseRight, MouseMiddle) held together, joined by commas: KeyW,ShiftLeft (empty: just let the game play)."
           },
-          "seconds": { "type": "number", "description": "Game seconds to hold them, 0.05 to 10." }
+          "seconds": { "type": "number", "description": "Game seconds to hold them, 0.05 to 10." },
+          "dx": {
+            "type": "number",
+            "description": "Pixels of mouse motion to the right for one frame first (negative: left)."
+          },
+          "dy": {
+            "type": "number",
+            "description": "Pixels of mouse motion down the screen for one frame first (negative: up)."
+          },
+          "wheel": { "type": "number", "description": "Notches of the mouse wheel for one frame first, up positive." }
         },
         "required": ["keys", "seconds"]
       }

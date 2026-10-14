@@ -40,6 +40,7 @@ const PARAMETERS: Partial<Record<string, string[]>> = {
   [LoopTool.DriveRoute]: ["seconds", "throttle", "steer"],
   [LoopTool.ProbeRoute]: [],
   [LoopTool.PlayerState]: [],
+  [LoopTool.Mouse]: ["dx", "dy", "wheel"],
 };
 
 /** Unreal's background throttle, where Epic's ObjectTools read and write it. */
@@ -77,6 +78,7 @@ export function standIn(overrides: Partial<Record<string, (args: Record<string, 
       return true;
     },
     [LoopTool.Hold]: (a) => ({ held: a.name, seconds: a.seconds }),
+    [LoopTool.Mouse]: (a) => (state.pie ? { moved: [a.dx, a.dy], wheel: a.wheel } : NO_PLAY),
     [LoopTool.CapturePlay]: (a) => ({ queued: true, file: `/p/Saved/Genex/captures/${a.name}.png` }),
     [LoopTool.GameState]: () => ({ pie: true, player: { speedKmh: 12 }, actors: [{ label: "Lantern_0" }] }),
     [LoopTool.StopPlay]: () => {

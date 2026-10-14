@@ -30,6 +30,7 @@ import {
 import type { PreviewSetup } from "../shared/preview-contract.ts";
 import {
   BROWSER_CAPABILITIES,
+  canClick,
   canPoint,
   hasState,
   PointerLevel,
@@ -546,13 +547,17 @@ export function computerToInput(request: ComputerRequest, pointer: { x: number; 
   }
 }
 
-/** The pointer actions: each needs a target that can put its pointer at a point. */
-const POINTED_ACTIONS: ReadonlySet<ComputerAction> = new Set([
+/** The clicks: each needs a target that can press a button, at a point or where its view is aimed. */
+const CLICK_ACTIONS: ReadonlySet<ComputerAction> = new Set([
   "left_click",
   "right_click",
   "middle_click",
   "double_click",
   "triple_click",
+]);
+
+/** The pointer actions: each needs a target that can put its pointer at a point. */
+const POINTED_ACTIONS: ReadonlySet<ComputerAction> = new Set([
   "left_click_drag",
   "mouse_move",
   "left_mouse_down",
@@ -566,7 +571,7 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   look: (caps) => caps.pointer !== PointerLevel.None,
   // A wheel turns and a cursor sits somewhere in a view: a target with no pointer has neither.
   scroll: (caps) => caps.pointer !== PointerLevel.None,
-  cursor_position: (caps) => caps.pointer !== PointerLevel.None,
+  cursor_position: (caps) => canPoint(caps),
   act: (caps) => caps.actions,
   state: (caps) => hasState(caps),
   console: (caps) => caps.console,
@@ -579,6 +584,7 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
 
 /** Can this target carry out this action? */
 function actionFits(action: ComputerAction, caps: TargetCapabilities): boolean {
+  if (CLICK_ACTIONS.has(action)) return canClick(caps);
   if (POINTED_ACTIONS.has(action) && !canPoint(caps)) return false;
   return ACTION_NEEDS_CAPABILITY[action]?.(caps) ?? true;
 }

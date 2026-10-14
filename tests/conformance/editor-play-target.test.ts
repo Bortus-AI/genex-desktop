@@ -10,7 +10,13 @@ import { describe, it } from "node:test";
 import { computerSession } from "../../src/main/core/computer-session.ts";
 import { editorPlaySource } from "../../src/main/core/editor-play-target.ts";
 import { InputRoute } from "../../src/shared/computer-target.ts";
-import { ENGINE_PLAY_VIEW, EnginePlayRefusal, EnginePlayTool, playInputKeys } from "../../src/shared/engine-play.ts";
+import {
+  ENGINE_PLAY_VIEW,
+  EnginePlayRefusal,
+  EnginePlayTool,
+  MouseButtonCode,
+  playInputKeys,
+} from "../../src/shared/engine-play.ts";
 import { computerActionsFor, computerToolDefinition } from "../../src/substrate/computer-tool.ts";
 import type { LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -52,12 +58,19 @@ function standInEngine(options: { refuseOpen?: boolean } = {}) {
 }
 
 describe("the computer on a game played in its engine's editor", () => {
-  it("offers keys, waits, pictures and the player's state, never a pointer the editor play cannot take", () => {
+  it("offers keys, the mouse as a player has it, waits, pictures and the player's state, never a point to click at", () => {
     const { source } = standInEngine();
     assert.deepEqual(computerActionsFor(source.caps), [
+      "left_click",
+      "right_click",
+      "middle_click",
+      "double_click",
+      "triple_click",
+      "scroll",
       "type",
       "key",
       "hold_key",
+      "look",
       "screenshot",
       "wait",
       "state",
@@ -82,6 +95,21 @@ describe("the computer on a game played in its engine's editor", () => {
       { keys: "KeyI", seconds: 0.1 },
     ]);
     assert.equal(session.trace().routes?.includes(InputRoute.Editor), true, "recorded as the editor's own input");
+  });
+
+  it("carries mouse-look, clicks and the wheel as one frame of the player's mouse, the buttons as keys", async () => {
+    const { source, inputs } = standInEngine();
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });
+    await session.run("computer", { action: "look", dx: 40, dy: -10 });
+    await session.run("computer", { action: "left_click" });
+    await session.run("computer", { action: "right_click" });
+    await session.run("computer", { action: "scroll", scroll_direction: "down", scroll_amount: 2 });
+    assert.deepEqual(inputs(), [
+      { keys: "", seconds: 0.05, dx: 40, dy: -10 },
+      { keys: MouseButtonCode.Left, seconds: 0.1 },
+      { keys: MouseButtonCode.Right, seconds: 0.1 },
+      { keys: "", seconds: 0.05, wheel: -2 },
+    ]);
   });
 
   it("never names a cursor the editor play has none of", async () => {

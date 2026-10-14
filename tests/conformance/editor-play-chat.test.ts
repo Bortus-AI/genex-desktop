@@ -54,7 +54,8 @@ describe("the computer on an Unreal game's editor play, for the chat's own sessi
     assert.equal(offered(request), true, "the linked Unreal game's chat plays its editor");
     const computer = request?.liveTools?.find((tool) => tool.name === COMPUTER_TOOL_NAME);
     assert.match(String(computer?.description), /engine's editor/);
-    assert.doesNotMatch(String(computer?.description), /left_click/, "no pointer verbs");
+    assert.match(String(computer?.description), /where the view is aimed/, "the mouse as a player has it");
+    assert.doesNotMatch(String(computer?.description), /mouse_move coordinate/, "no point to put a pointer at");
     assert.match(text(looked), /Unreal Editor is not open/, "the plugin's own reason, through the real backend");
 
     // The plugin off: no editor computer, even on the linked game.

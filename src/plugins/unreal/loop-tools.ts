@@ -162,6 +162,7 @@ export const TOOLSET_OF = {
   [LoopTool.DriveRoute]: HELPER_TOOLSET,
   [LoopTool.ProbeRoute]: HELPER_TOOLSET,
   [LoopTool.PlayerState]: HELPER_TOOLSET,
+  [LoopTool.Mouse]: HELPER_TOOLSET,
   [LoopTool.GetProperties]: OBJECT_TOOLSET,
   [LoopTool.SetProperties]: OBJECT_TOOLSET,
   [LoopEditorTool.RollbackPart]: LOOP_TOOLSET,
