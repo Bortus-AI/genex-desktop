@@ -30,8 +30,13 @@ const MAX_THUMBNAILS = 4;
 /** The graph's words: the lead's row, and the close's sentence. */
 const WORDS = {
   lead: "Lead",
-  saves: (count: number, label: string, summary: string) =>
-    count === 1 ? `One save point: ${label} (${summary}).` : `${count} save points; the last, ${label}: ${summary}.`,
+  /** The save points, and the last one's summary when the lead gave one (without its own full stop). */
+  saves: (count: number, label: string, summary: string) => {
+    if (count === 1) return summary ? `One save point: ${label} (${summary}).` : `One save point: ${label}.`;
+    return summary
+      ? `${count} save points; the last, ${label}: ${summary}.`
+      : `${count} save points; the last, ${label}.`;
+  },
   noSaves: "No save point was made, so the project is as the Loop left it.",
   lastKept: "Genex kept the last work in a checkpoint at the close.",
 } as const;
@@ -108,7 +113,8 @@ export async function savePointRound(
 /** The close's sentence: the save points and the last one's summary, and whether the close kept the last work. */
 function closeSentence(journal: OpenJournal, lastKept: boolean): string {
   const last = journal.savePoints.at(-1);
-  const saves = last ? WORDS.saves(journal.savePoints.length, last.label, last.summary) : WORDS.noSaves;
+  const summary = last?.summary.trim().replace(/\.+$/, "") ?? "";
+  const saves = last ? WORDS.saves(journal.savePoints.length, last.label, summary) : WORDS.noSaves;
   return lastKept ? `${saves} ${WORDS.lastKept}` : saves;
 }
 
