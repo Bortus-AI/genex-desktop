@@ -180,7 +180,7 @@ test("an Unreal game has no Publish on its strip: its folder holds an Unreal pro
   });
 });
 
-test("Publish sits on the strip only while the game is served as a web game at its root", () => {
+test("Publish sits on the strip while the game is served as a web game at its root, or has one in a folder of it", () => {
   const strip = (facts: FactRef[], holds?: FolderHolds) => ({
     genex: stripEntries([genex(), other()], "game", facts, holds).some(isGenexPublish),
     studio: studioPublishButton([other()], "game", facts, holds),
@@ -193,7 +193,21 @@ test("Publish sits on the strip only while the game is served as a web game at i
     ["a folder of its own files of a kind no rule knows", [], FolderHolds.OwnFiles, false],
     ["a folder that can't be read", [], FolderHolds.Unreadable, false],
     ["a Godot project", [{ id: CoreFact.GodotProject, path: "." }], undefined, false],
-    ["a web game only below the root", [{ id: CoreFact.WebGame, path: "site" }], undefined, false],
+    [
+      "a web game only below the root (an engine's web export) publishes that folder",
+      [{ id: CoreFact.WebGame, path: "site" }],
+      undefined,
+      true,
+    ],
+    [
+      "a Godot project with its web export",
+      [
+        { id: CoreFact.GodotProject, path: "godot" },
+        { id: CoreFact.WebGame, path: "web" },
+      ],
+      undefined,
+      true,
+    ],
     ["a linked Unreal project", [{ id: CoreFact.UnrealProject, path: "unreal" }], undefined, false],
   ];
   for (const [name, facts, holds, shown] of rows)
