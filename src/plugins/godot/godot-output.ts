@@ -29,7 +29,8 @@ const HEAD = /^(SCRIPT ERROR|USER SCRIPT ERROR|USER ERROR|USER WARNING|ERROR|WAR
 const AT = /^\s+at: .*\((res:\/\/[^)]+?):(\d+)\)\s*$/;
 const ENGINE_AT = /^\s+at: /;
 const CHECKED = /^GENEX_CHECKED (\d+)$/m;
-const SHOT = /^GENEX_SHOT (\S+) (.+\.png)$/gm;
+const SHOT = /^GENEX_SHOT (\S+) (\d+) (.+\.png)$/gm;
+const PLAYED = /^GENEX_PLAYED (\d+)$/m;
 /**
  * Lines Godot prints about its own surroundings, never about the project: the macOS sandbox Genex
  * runs it in keeps it from the system's certificates, which a game that never goes online ignores.
@@ -80,14 +81,20 @@ export function checkedCount(output: string): number | null {
   return found?.[1] ? Number(found[1]) : null;
 }
 
-/** One still Genex's capture script saved: its camera's name and its file. */
-export type SavedShot = { name: string; file: string };
+/** One still Genex's play script saved: its camera's name, the frame it was taken at, and its file. */
+export type SavedShot = { name: string; frame: number; file: string };
 
-/** The stills Genex's capture script says it saved, in order. */
+/** The stills Genex's play script says it saved, in order. */
 export function savedShots(output: string): SavedShot[] {
   return [...output.matchAll(SHOT)].flatMap((match) =>
-    match[1] && match[2] ? [{ name: match[1], file: match[2] }] : [],
+    match[1] && match[2] && match[3] ? [{ name: match[1], frame: Number(match[2]), file: match[3] }] : [],
   );
+}
+
+/** How many frames Genex's play script played, or null when it stopped before the end. */
+export function playedFrames(output: string): number | null {
+  const found = PLAYED.exec(output);
+  return found?.[1] ? Number(found[1]) : null;
 }
 
 /** The problems as one line each, for an answer an agent reads: `file:line: message`. */

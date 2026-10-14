@@ -33,17 +33,31 @@ export type RanJob = { binary: string; call: GodotCall };
 /** How the fake answers a job: its words, or its words and the stills it saves; else a quiet success. */
 export type JobAnswers = Partial<Record<GodotJob, string | ((call: GodotCall) => Promise<string>)>>;
 
-/** The capture's answer: a PNG for each camera named, saved where the call says, and Godot's line for each. */
+/** A play script argument's value (`key=value` after `--`), or "". */
+export const playArg = (call: GodotCall, key: string) =>
+  call.args
+    .slice(call.args.indexOf("--") + 1)
+    .find((arg) => arg.startsWith(`${key}=`))
+    ?.slice(key.length + 1) ?? "";
+
+/**
+ * The play script's answer to a capture: at each frame `shots=` names, a PNG of every camera named
+ * (or the first only, for a recording's frame), saved where `out=` says, and Godot's line for each.
+ */
 export function capturing(cameras: readonly string[]) {
   return async (call: GodotCall) => {
-    const prefix = call.args[call.args.indexOf("--") + 2] ?? "";
+    const prefix = playArg(call, "out");
     const lines: string[] = [];
-    for (const [index, camera] of cameras.entries()) {
-      const file = `${prefix}-${index}.png`;
-      await writeFile(file, PNG_BYTES);
-      lines.push(`GENEX_SHOT ${camera} ${file}`);
+    for (const shot of playArg(call, "shots").split(";").filter(Boolean)) {
+      const [frame = "0", mode = "all"] = shot.split(":");
+      const shooting = mode === "first" ? cameras.slice(0, 1) : cameras;
+      for (const [index, camera] of shooting.entries()) {
+        const file = `${prefix}-${frame}-${index}.png`;
+        await writeFile(file, PNG_BYTES);
+        lines.push(`GENEX_SHOT ${camera} ${frame} ${file}`);
+      }
     }
-    return lines.join("\n");
+    return [...lines, `GENEX_PLAYED ${playArg(call, "frames")}`].join("\n");
   };
 }
 

@@ -12,6 +12,7 @@ import {
   ProblemKind,
   problemLines,
   readProblems,
+  playedFrames,
   savedShots,
 } from "../../src/plugins/godot/godot-output.ts";
 
@@ -46,9 +47,15 @@ describe("Godot's output, read", () => {
     assert.deepEqual(readProblems(fixture("sandbox-noise.log")), []);
   });
 
-  it("says a check that never finished loaded nothing, and reads the stills a capture saved", () => {
+  it("says a check that never finished loaded nothing, and reads the stills and frames a play saved", () => {
     assert.equal(checkedCount(fixture("run-null-call.log")), null);
-    assert.deepEqual(savedShots(fixture("capture.log")), [{ name: "Camera3D", file: "/storage/shots/s-0.png" }]);
+    assert.deepEqual(savedShots(fixture("capture.log")), [
+      { name: "HeroCamera", frame: 30, file: "/storage/shots/s-30-0.png" },
+      { name: "HeroCamera", frame: 100, file: "/storage/shots/s-100-0.png" },
+      { name: "HeroCamera", frame: 180, file: "/storage/shots/s-180-0.png" },
+    ]);
+    assert.equal(playedFrames(fixture("capture.log")), 200);
+    assert.equal(playedFrames(fixture("run-null-call.log")), null);
   });
 
   it("counts a warning as no error", () => {

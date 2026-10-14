@@ -11,7 +11,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { type HookAnswer, HookEvent } from "../../shared/plugin-hooks.ts";
+import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
 import type { Activate, PluginActivation, PluginContext } from "../../plugin-sdk/index.d.ts";
 import { answerQuery, createReference } from "./class-reference.ts";
@@ -34,10 +34,12 @@ import {
   type GodotRunner,
   importCall,
   MAX_RUN_SECONDS,
+  playCall,
   runCall,
 } from "./godot-run.ts";
 import { findGameProject, GAME_PROJECT_FOLDER, projectScene, requireGameProject } from "./game-project.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
+import { frameAt, type KeyPress, keysEnd, MAX_PLAY_SECONDS, PLAY_FPS, readKeys, recordingShots } from "./play-input.ts";
 import { MAX_STILLS, stillsAnswer, stillsForAgent, takeStills } from "./stills.ts";
 
 /** The host services this backend calls, by their public SDK names. */
@@ -79,6 +81,13 @@ const OBSERVE_MARGIN_MS = 5 * SECOND_MS;
 const MIN_OBSERVE_MS = SECOND_MS;
 /** The most lines of a run's own printing an answer carries, from its end. */
 const RUN_OUTPUT_LINES = 40;
+/** When a screenshot is taken by default, the earliest it may be, and when a save point's and the reviewer's stills are. */
+const SCREENSHOT_SECONDS = 1;
+const MIN_SHOT_SECONDS = 0.1;
+const HERO_SECONDS = 3;
+/** The reviewer's recording: this many frames of the first hero camera, spread over these seconds of play. */
+const HERO_RECORDING_FRAMES = 6;
+const HERO_RECORDING_SECONDS = 6;
 /** How many problems a checkpoint's note names. */
 const NOTED_PROBLEMS = 3;
 /** The agent's name for the new-game tool, as the engine question reads it. */
@@ -100,6 +109,7 @@ const MESSAGE = {
   CheckNote: (count: number, lines: readonly string[]) =>
     `Godot's check found ${count} ${count === 1 ? "problem" : "problems"}: ${lines.slice(0, NOTED_PROBLEMS).join(" | ")}${count > NOTED_PROBLEMS ? ` (and ${count - NOTED_PROBLEMS} more)` : ""}`,
   BadSeconds: `seconds is a whole number from 1 to ${MAX_RUN_SECONDS}.`,
+  BadShotSeconds: `seconds is when the screenshot is taken: from ${MIN_SHOT_SECONDS} to ${MAX_PLAY_SECONDS} seconds of play.`,
   Toolbar: {
     Get: "Get Godot 4",
     Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with`,
@@ -236,22 +246,31 @@ function ownOutput(output: string): string[] {
   return lines.filter((line) => !/^\s/.test(line) && !/^[A-Z ]*(ERROR|WARNING): /.test(line)).slice(-RUN_OUTPUT_LINES);
 }
 
-/** The agent's `run-scene`: a headless play of a scene, what it printed and what went wrong. */
+/** The agent's `run-scene`: a headless play of a scene, with keys pressed when asked, what it printed and what went wrong. */
 async function runScene(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const project = await requireGameProject(context.directory);
   const seconds = runSeconds(args);
+  const keys = readKeys(textArg(args, "keys"));
   const scene = await projectScene(project, textArg(args, "scene"));
   const install = await requireGodot(deps);
   await deps.run(install.binary, importCall(project), context.signal);
-  const ran = await deps.run(install.binary, runCall(project, scene, seconds), context.signal);
+  const call = keys.length ? keysPlay(project, deps.scripts, scene, seconds, keys) : runCall(project, scene, seconds);
+  const ran = await deps.run(install.binary, call, context.signal);
   const errors = readProblems(ran.output).filter(isError);
   return {
     scene: scene || "main scene",
     seconds,
+    ...(keys.length ? { keys: textArg(args, "keys") } : {}),
     errors: problemLines(errors.slice(0, MAX_PROBLEMS)),
     output: ownOutput(ran.output),
     ...(ran.timedOut ? { summary: MESSAGE.TimedOut } : {}),
   };
+}
+
+/** A headless play with keys: as long as the run asks, or until the last key lets go. */
+function keysPlay(project: string, scripts: string, scene: string, seconds: number, keys: KeyPress[]) {
+  const frames = Math.max(seconds * PLAY_FPS, keysEnd(keys));
+  return playCall(project, scripts, { scene, frames, keys, shots: [], out: null, most: 1, hero: false });
 }
 
 /** The most stills an agent asks for: a whole number from 1 to {@link MAX_STILLS}, else all of them. */
@@ -260,29 +279,50 @@ const stillCount = (args: Record<string, unknown>) => {
   return Number.isInteger(asked) && asked >= 1 ? Math.min(asked, MAX_STILLS) : MAX_STILLS;
 };
 
-/** The agent's `screenshot`: the stills, which the model sees, and their cameras' names. */
+/** The moment a screenshot is taken, in seconds of play: from a tenth of a second to a minute, else the default. */
+function shotSeconds(args: Record<string, unknown>): number {
+  if (args.seconds === undefined || args.seconds === "") return SCREENSHOT_SECONDS;
+  const seconds = Number(args.seconds);
+  if (!Number.isFinite(seconds) || seconds < MIN_SHOT_SECONDS || seconds > MAX_PLAY_SECONDS)
+    throw new Error(MESSAGE.BadShotSeconds);
+  return seconds;
+}
+
+/** How many frames of a recording a screenshot adds: 2 to {@link HOOK_RECORDING_MAX}, else none. */
+function recordingCount(args: Record<string, unknown>): number {
+  const asked = Number(args.frames);
+  return Number.isInteger(asked) && asked >= 2 ? Math.min(asked, HOOK_RECORDING_MAX) : 0;
+}
+
+/** The agent's `screenshot`: stills at a moment of play (after keys, when asked), and a recording up to it; the model sees them. */
 async function screenshot(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const project = await requireGameProject(context.directory);
+  const seconds = shotSeconds(args);
+  const keys = readKeys(textArg(args, "keys"));
   const scene = await projectScene(project, textArg(args, "scene"));
   const install = await requireGodot(deps);
   const storage = await storageOf(context);
   await deps.run(install.binary, importCall(project), context.signal);
-  const stills = await takeStills(
-    { ...deps, storage },
-    install,
-    project,
-    { scene, most: stillCount(args) },
-    context.signal,
-  );
-  if (stills.length === 0) throw new Error(MESSAGE.NoStills);
-  return stillsForAgent(stills);
+  const count = recordingCount(args);
+  const request = {
+    scene,
+    at: frameAt(seconds),
+    recording: count ? recordingShots(seconds, count) : [],
+    keys,
+    most: stillCount(args),
+    hero: false,
+  };
+  const taken = await takeStills({ ...deps, storage }, install, project, request, context.signal);
+  if (taken.stills.length === 0) throw new Error(MESSAGE.NoStills);
+  return stillsForAgent(taken);
 }
 
 /**
- * `hero-shots`: the main scene's stills as pictures. At a checkpoint only a run's save point takes
- * them (a chat's checkpoint keeps none); as the viewport observer they must land within the time
- * Genex gives; a plain call answers them as the agent's screenshot does. Nothing when the game has
- * no project or this Mac no Godot.
+ * `hero-shots`: the main scene's stills a few seconds into play (or at the moment and after the keys
+ * the game names itself), as pictures. At a checkpoint only a run's save point takes them (a chat's
+ * checkpoint keeps none); as the viewport observer they come with a short recording and must land
+ * within the time Genex gives; a plain call answers them as the agent's screenshot does. Nothing when
+ * the game has no project or this Mac no Godot.
  */
 async function heroShots(deps: GodotBackendDeps, context: PluginContext): Promise<unknown> {
   if (context.hook && (context.hook.on !== HookEvent.CheckpointAfter || !context.hook.runId)) return {};
@@ -293,8 +333,10 @@ async function heroShots(deps: GodotBackendDeps, context: PluginContext): Promis
   const storage = await storageOf(context);
   // A fresh project's assets are imported first, or its stills would show them missing.
   await deps.run(install.binary, importCall(project), signal);
-  const stills = await takeStills({ ...deps, storage }, install, project, { scene: "", most: MAX_STILLS }, signal);
-  return context.hook || context.observe ? stillsAnswer(stills) : stillsForAgent(stills);
+  const recording = context.hook ? [] : recordingShots(HERO_RECORDING_SECONDS, HERO_RECORDING_FRAMES);
+  const request = { scene: "", at: frameAt(HERO_SECONDS), recording, keys: [], most: MAX_STILLS, hero: true };
+  const taken = await takeStills({ ...deps, storage }, install, project, request, signal);
+  return context.hook || context.observe ? stillsAnswer(taken, Boolean(context.observe)) : stillsForAgent(taken);
 }
 
 /** An observer's call ends with the turn or once the time Genex gives it, less what keeping the pictures takes, runs out. */

@@ -12,6 +12,7 @@ import os from "node:os";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { NativeEndReason, runNativeProcess } from "../../substrate/plugins/native-process.ts";
+import { type KeyPress, keysArg, PLAY_FPS, type ShotAt, shotsArg } from "./play-input.ts";
 
 /** The jobs Genex runs Godot for. Never rename a value: records name them. */
 export const GodotJob = {
@@ -19,31 +20,29 @@ export const GodotJob = {
   Check: "check",
   Run: "run",
   Capture: "capture",
+  Play: "play",
   Reference: "reference",
 } as const;
 export type GodotJob = (typeof GodotJob)[keyof typeof GodotJob];
 
 /** Genex's own GDScript, shipped beside the backend in `scripts/`. */
-export const GodotScript = { Check: "genex_check.gd", Capture: "genex_capture.gd" } as const;
+export const GodotScript = { Check: "genex_check.gd", Play: "genex_play.gd" } as const;
 
 /** An import of a big project's assets can take minutes the first time; later ones are quick. */
 const IMPORT_TIMEOUT_MS = 5 * MINUTE_MS;
 const CHECK_TIMEOUT_MS = 2 * MINUTE_MS;
-const CAPTURE_TIMEOUT_MS = MINUTE_MS;
 const REFERENCE_TIMEOUT_MS = 2 * MINUTE_MS;
 /** A run's own seconds play at a fixed 60 frames each, faster than real time headless; this covers its start and a slow game. */
 const RUN_START_MS = 30 * SECOND_MS;
 const RUN_SECOND_BUDGET_MS = 3 * SECOND_MS;
-/** The frames a run plays each second of its game time. */
-export const RUN_FPS = 60;
+/** The frames a run plays each second of its game time (the play script's own rate). */
+export const RUN_FPS = PLAY_FPS;
 /** The longest a run plays and the default, in game seconds. */
 export const MAX_RUN_SECONDS = 60;
 export const DEFAULT_RUN_SECONDS = 5;
 /** The size of a still, and where its window opens: off every screen, so it never covers the person's work. */
 const STILL_SIZE = "1280x720";
 const OFF_SCREEN = "-10000,-10000";
-/** The frames a scene plays before its stills, so it settles. */
-const SETTLE_FRAMES = 30;
 /** The most of Godot's output one job keeps, from its end. */
 const OUTPUT_BYTES = 200_000;
 const SCRATCH_PREFIX = "genex-godot-";
@@ -118,30 +117,58 @@ export function runCall(project: string, scene: string, seconds: number): GodotC
   };
 }
 
-/** Stills of a scene (the main scene when `scene` is empty): Genex's capture script saves them as `<prefix>-<n>.png`. */
-export function captureCall(project: string, scripts: string, prefix: string, scene: string, most: number): GodotCall {
+/**
+ * A play of a scene (the main scene when `scene` is empty) through Genex's play script: `frames` at
+ * 60 a second, `keys` pressed on their timeline, and `shots` saved as `<out>-<frame>-<n>.png`. With
+ * stills it draws, in a window off every screen; without, it runs headless. `hero` lets the game's
+ * own project settings move its hero shot (`genex/shot_seconds`, `genex/shot_keys`).
+ */
+export type PlayRequest = {
+  scene: string;
+  frames: number;
+  keys: readonly KeyPress[];
+  shots: readonly ShotAt[];
+  out: string | null;
+  most: number;
+  hero: boolean;
+};
+
+/** The play script's arguments for a request, each one `key=value`. */
+function playArgs(request: PlayRequest): string[] {
+  return [
+    `scene=${request.scene}`,
+    `frames=${request.frames}`,
+    `keys=${keysArg(request.keys)}`,
+    `shots=${shotsArg(request.shots)}`,
+    ...(request.out ? [`out=${request.out}`] : []),
+    `most=${request.most}`,
+    ...(request.hero ? ["hero=1"] : []),
+  ];
+}
+
+/** A play job: drawn with stills to take, headless without. */
+export function playCall(project: string, scripts: string, request: PlayRequest): GodotCall {
+  const draws = request.out !== null && request.shots.length > 0;
+  const window = draws ? ["--position", OFF_SCREEN, "--resolution", STILL_SIZE, "--disable-vsync"] : ["--headless"];
+  const seconds = request.frames / PLAY_FPS;
   return {
-    job: GodotJob.Capture,
+    job: draws ? GodotJob.Capture : GodotJob.Play,
     args: [
+      ...window,
       "--path",
       project,
-      "--position",
-      OFF_SCREEN,
-      "--resolution",
-      STILL_SIZE,
+      "--fixed-fps",
+      String(PLAY_FPS),
       "-s",
-      path.join(scripts, GodotScript.Capture),
+      path.join(scripts, GodotScript.Play),
       "--",
-      scene,
-      prefix,
-      String(SETTLE_FRAMES),
-      String(most),
+      ...playArgs(request),
     ],
     cwd: project,
     reads: [scripts],
-    writes: [project, path.dirname(prefix)],
-    timeoutMs: CAPTURE_TIMEOUT_MS,
-    gpu: true,
+    writes: [project, ...(draws && request.out ? [path.dirname(request.out)] : [])],
+    timeoutMs: RUN_START_MS + Math.ceil(seconds) * RUN_SECOND_BUDGET_MS,
+    gpu: draws,
   };
 }
 

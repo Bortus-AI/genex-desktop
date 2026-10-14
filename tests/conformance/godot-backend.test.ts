@@ -17,7 +17,7 @@ import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { ObserverLive } from "../../src/shared/observers.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
-import { capturing, godotBackendFixture, godotOutput, SCRIPTS } from "../helpers/godot-fake-engine.ts";
+import { capturing, godotBackendFixture, playArg, godotOutput, SCRIPTS } from "../helpers/godot-fake-engine.ts";
 
 type Answer = Record<string, unknown>;
 const tool = async (fixture: Awaited<ReturnType<typeof godotBackendFixture>>, name: string, args = {}, more = {}) =>
@@ -166,8 +166,34 @@ describe("the agent's Godot tools", () => {
     );
     const capture = fixture.jobs.find((j) => j.call.job === GodotJob.Capture);
     assert.equal(capture?.call.gpu, true);
-    assert.equal(capture?.call.args.at(-1), "2");
+    assert.ok(capture?.call.args.includes("most=2"), "at most the two cameras asked for");
     assert.deepEqual(await promisify(readdir)(path.join(fixture.storage, "stills")), []);
+  });
+
+  it("screenshot plays to a moment after keys, with a short recording, and run-scene presses keys headless", async () => {
+    const fixture = await withProject({ answers: { [GodotJob.Capture]: capturing(["HeroCamera"]) } });
+    const seen = await tool(fixture, GodotTool.Screenshot, { seconds: 2, keys: "right 1, space", frames: 4 });
+    assert.deepEqual(seen.shots, ["HeroCamera", "HeroCamera-0.5s", "HeroCamera-1.0s", "HeroCamera-1.5s"]);
+    const capture = fixture.jobs.find((j) => j.call.job === GodotJob.Capture)?.call;
+    assert.ok(capture);
+    assert.equal(playArg(capture, "keys"), "right@0:60;space@60:6");
+    assert.equal(playArg(capture, "shots"), "120:all;30:first;60:first;90:first");
+    assert.equal(playArg(capture, "frames"), "121");
+    fixture.jobs.length = 0;
+    await tool(fixture, GodotTool.RunScene, { seconds: 1, keys: "left 3" });
+    const played = fixture.jobs.find((j) => j.call.job === GodotJob.Play)?.call;
+    assert.ok(played);
+    assert.ok(played.args.includes("--headless"), "a play with no stills runs headless");
+    assert.equal(playArg(played, "frames"), "181", "it runs until the last key lets go");
+    assert.equal(played.gpu, false);
+  });
+
+  it("refuses keys and moments it can't play before Godot runs", async () => {
+    const fixture = await withProject();
+    await assert.rejects(tool(fixture, GodotTool.Screenshot, { keys: "jump" }), /isn't a key/);
+    await assert.rejects(tool(fixture, GodotTool.RunScene, { keys: "right 61" }), /60 seconds/);
+    await assert.rejects(tool(fixture, GodotTool.Screenshot, { seconds: 0 }), /seconds is when/);
+    assert.deepEqual(fixture.jobs, []);
   });
 
   it("screenshot says so when Godot saved nothing", async () => {
@@ -244,10 +270,14 @@ describe("Genex's moments in a Godot game", () => {
     );
     const observe = { observer: "godot/viewport", runId: "r1", why: "finish" as const, withinMs: 30_000 };
     const seen = await tool(fixture, GodotTool.HeroShots, {}, { observe });
-    assert.deepEqual(Object.keys(seen), ["images"]);
+    assert.deepEqual(Object.keys(seen), ["images", "recording"], "the reviewer also gets a short recording");
+    assert.deepEqual(
+      (seen.recording as Array<{ name: string }>).map((frame) => frame.name),
+      ["HeroCamera-1.0s", "HeroCamera-2.0s", "HeroCamera-4.0s", "HeroCamera-5.0s", "HeroCamera-6.0s"],
+    );
     // Less time than keeping the pictures takes still asks for them, never fails the observer.
     const late = await tool(fixture, GodotTool.HeroShots, {}, { observe: { ...observe, withinMs: 1_000 } });
-    assert.deepEqual(Object.keys(late), ["images"]);
+    assert.deepEqual(Object.keys(late), ["images", "recording"]);
   });
 });
 
