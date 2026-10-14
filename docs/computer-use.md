@@ -126,22 +126,30 @@ conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 A game played in its engine's editor is the `editor` runtime
 ([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): the target calls its engine
 plugin's play tools ([`shared/engine-play.ts`](../src/shared/engine-play.ts): `play-open`,
-`play-input`, `play-shot`, `play-state`, `play-close`, harness-only, each needing the plugin's
-editor lock for its call, the person first). Unreal provides them
+`play-input`, `play-shot`, `play-state`, `play-pause`, `play-close`, harness-only, each needing the
+plugin's editor lock for its call, the person first). Unreal provides them
 ([`plugins/unreal/computer-play.ts`](../src/plugins/unreal/computer-play.ts)): Play In Editor through
-the Genex editor helper the editor queue already uses, with the background throttle off, keys held
-on the game's own clock (web key codes, named as Unreal names them: `KeyW` is `W`), the player's
-view by `capture_play`, and `player_state` as the state goals are checked against. A session joins
-a play that already runs and ends only one it started; a play it starts warms up 2 game seconds
-before the first look and is marked as the agent's (`agent-play.ts`), so the lock's person-first
-probe does not read it as the person playing. While the editor queue still has a part or a
-play-check of the game, a session is refused (`busy`). Capabilities (`EDITOR_CAPABILITIES`): no pointer, no
-clock the studio can stop (a `wait` is wall time, `hold_key` game time), game state, input route
-`editor`. Who holds it: the chat's own session on a game an engine plugin that is on holds the link
-of and provides every play tool ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts));
-nothing starts until the agent first uses it, and the turn's end ends the play it started. Not yet:
-the Unreal Loop's workers, playtests and judges, `judge_play` on an Unreal game, a pointer, and a
-pause and step for a replayable clock.
+the Genex editor helper the editor queue already uses, keys held on the game's own clock (web key
+codes, named as Unreal names them: `KeyW` is `W`; the mouse buttons as `MouseLeft`… are
+`LeftMouseButton`…), one frame of the player's mouse for `look` and the wheel (Unreal's `Mouse2D` and
+`MouseWheelAxis`, held still a frame before they are let go, since letting go of a forced analog key
+injects its opposite), the player's view by `capture_play`, and `player_state` as the state goals
+are checked against. A session joins a play that already runs and ends only one it started; a play
+it starts warms up 2 game seconds before the first look and is marked as the agent's
+(`agent-play.ts`), so the lock's person-first probe does not read it as the person playing, and a
+session whose plugin restarted takes over the play that mark still claims. While the editor queue
+still has a part or a play-check of the game, a session is refused (`busy`). Capabilities
+(`EDITOR_CAPABILITIES`): a relative pointer (`look`, the clicks pressing where the view is aimed —
+`aimedClicks` — and the wheel; no point, drag or cursor), a clock the studio can stand still but not
+step (`Freeze`: the play's own pause, held between a judge's or playtester's moves, so a run never
+claims to replay), game state, input route `editor`. Who holds it: any session the studio hands a
+computer for a game an engine plugin that is on holds the link of and provides every play tool —
+the chat's own ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts)), and a judge's or
+playtester's through `_computerToolsFor`; `judge_play` is offered to such a chat, and the Unreal
+Loop's lead has its own (`loop/unreal/lead-judge.ts`). Nothing starts until the agent first uses it,
+and the session's end ends the play it started, never leaving a game paused. On a Mac, Unreal's
+background throttle is lifted only for an editor without hardware ray tracing (UE 5.8 hangs the GPU
+rendering a ray-traced level at full speed behind another app); see [plugins](plugins.md).
 
 ## The person's computer
 
