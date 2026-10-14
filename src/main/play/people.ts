@@ -94,6 +94,8 @@ const MESSAGE = {
 export interface PeopleDeps extends GalleryDeps {
   /** PUT `bytes` to a presigned `url` with `contentType`; the answer's HTTP status. */
   upload(url: string, bytes: Uint8Array, contentType: string): Promise<number>;
+  /** genex.games answered 401 to `token` on the account's own read: its sign-in has ended. */
+  refused?(token: string): void;
 }
 
 /**
@@ -233,7 +235,10 @@ function accountCalls(deps: PeopleDeps) {
     if (!current) return null;
     if (me?.token === current && now() - me.at < ME_TTL_MS) return me.value;
     const answer = await request(PeopleRoute.Me, { method: "GET", token: current });
-    if (answer.status === HTTP_UNAUTHORIZED) return null;
+    if (answer.status === HTTP_UNAUTHORIZED) {
+      deps.refused?.(current);
+      return null;
+    }
     const body = checked(PeopleRoute.Me, answer);
     const user = isRecord(body) ? body.user : null;
     const person = toPerson(user, local);

@@ -11,7 +11,7 @@ import { GamesSection } from "./GamesSection.tsx";
 import { PermissionsSection } from "./PermissionsSection.tsx";
 import { PrivacySection } from "./PrivacySection.tsx";
 import { AboutSection } from "./AboutSection.tsx";
-import { AccountSection } from "./AccountSection.tsx";
+import { AccountSection, AccountSignOut } from "./AccountSection.tsx";
 import { usePeople } from "../state/hooks.ts";
 import { ABOUT_WORDS, ACCOUNT_WORDS, PRIVACY_WORDS } from "../words.ts";
 
@@ -33,9 +33,11 @@ const SECTIONS: readonly SectionTab[] = [
   { id: SettingsSection.About, label: ABOUT_WORDS.tab, icon: "info" },
 ];
 
-/** The sections the dialog lists: Genex account only while Genex is signed in. */
-const sectionsFor = (signedIn: boolean): readonly SectionTab[] =>
-  signedIn ? SECTIONS : SECTIONS.filter((tab) => tab.id !== SettingsSection.Account);
+/** A section's title: Genex account says "Sign in to Genex" while there is no account to show. */
+function sectionTitle(section: SettingsSection, signedIn: boolean): string | undefined {
+  if (section === SettingsSection.Account && !signedIn) return ACCOUNT_WORDS.signInTitle;
+  return SECTIONS.find((tab) => tab.id === section)?.label;
+}
 
 /** The tab a key moves to from the tab at `index`: first, last, next or previous (wrapping), or none. */
 function tabAfterKey(sections: readonly SectionTab[], key: string, index: number): SectionTab | undefined {
@@ -110,7 +112,7 @@ export function SettingsDialog({
     return () => media.removeEventListener("change", update);
   }, []);
   const signedIn = usePeople((s) => s.me !== null);
-  const sections = sectionsFor(signedIn);
+  const sections = SECTIONS;
   const selectedTab = useRef<HTMLButtonElement>(null);
   const navigate = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const next = tabAfterKey(sections, event.key, index);
@@ -163,8 +165,9 @@ export function SettingsDialog({
           </div>
         </nav>
         <div className="settings-content flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="mt-3.5 flex min-h-8 shrink-0 items-center ps-5 pe-14">
-            <h2 className="text-lg font-medium text-foreground">{SECTIONS.find((tab) => tab.id === section)?.label}</h2>
+          <div className="mt-3.5 flex min-h-8 shrink-0 items-center gap-3 ps-5 pe-14">
+            <h2 className="text-lg font-medium text-foreground">{sectionTitle(section, signedIn)}</h2>
+            {section === SettingsSection.Account && signedIn && <AccountSignOut />}
           </div>
           <div
             key={section}

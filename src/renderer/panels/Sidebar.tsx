@@ -146,7 +146,6 @@ export function Sidebar(props: Props): JSX.Element {
   const sorted = useSortedGames(games, threads);
   const { playOpen } = props;
   usePeopleSync(playOpen);
-  const signedIn = usePeople((s) => s.me !== null);
   return (
     <nav
       ref={nav}
@@ -191,8 +190,8 @@ export function Sidebar(props: Props): JSX.Element {
         <span className="sidebar-fade" aria-hidden="true" />
         <SidebarFooter {...props} />
       </div>
-      {/* Signed in to Genex, the plate stands where the plugin's promo would. */}
-      {playOpen && !signedIn && <PlayPromo project={null} />}
+      {/* Shown once, until the first sign-in: the account plate stays under it. */}
+      {playOpen && <PlayPromo />}
       <ProfilePlate onPlayMode={props.onPlayMode} />
     </nav>
   );
@@ -378,6 +377,7 @@ function SidebarTop({
 }: Props & { studio: ConversationRecord | undefined; harnessOpen: boolean }): JSX.Element {
   const studioStatus = studio ? threadStatus[studio.id]?.status : undefined;
   const studioBusy = Boolean(studio && busyThreads.has(studio.id));
+  const hasRecent = usePlay((s) => s.recent.length > 0);
   return (
     <div className="sidebar-fixed">
       <div className="titlebar-drag sidebar-titlebar">
@@ -476,9 +476,12 @@ function SidebarTop({
         </NavRow>
       </div>
       {playOpen ? (
-        <div className="sidebar-games-heading" key="recent">
-          <span>{PLAY_WORDS.recent}</span>
-        </div>
+        // Nothing played yet, nothing to head: Recent appears with the first game played.
+        hasRecent && (
+          <div className="sidebar-games-heading" key="recent">
+            <span>{PLAY_WORDS.recent}</span>
+          </div>
+        )
       ) : (
         <div className="sidebar-games-heading" key="games">
           <span>Games</span>

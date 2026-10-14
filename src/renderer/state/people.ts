@@ -3,9 +3,14 @@
  * last read, the profiles opened, what a people search found, the account's own stats (read only
  * when shown) and Top creators. Main reads them all from genex.games; a press on a person changes
  * how every list shows them at once (Accept moves the row into Friends), then the Friends page is
- * read again behind it.
+ * read again behind it. The account is the app's: main says where it stands (signed out, signing
+ * in, signed in, or a sign-in genex.games ended), and the account last read is remembered on this
+ * Mac, so an offline start still shows it. Only main saying it is signed out forgets it.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
+import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
+import { GenexAccountStatus, type GenexAccountView } from "../../shared/genex-account.ts";
+import type { PlayCredits } from "../../shared/play-credits.ts";
 import {
   type AvatarStyle,
   FriendAction,
@@ -19,10 +24,13 @@ import {
   type PlayPerson,
   type PlayProfile,
   type PresenceVisibility,
+  isAccountId,
+  isAvatarStyle,
   peopleQuery,
 } from "../../shared/play-people.ts";
 import type { PlayStats, StatsPeriod } from "../../shared/play-stats.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
+import { browserStorage, type KeyValueStorage, readJson, removeKey, STORAGE_KEYS, writeJson } from "../storage.ts";
 
 /** Where a read stands. */
 export const LoadStatus = { Idle: "idle", Loading: "loading", Ready: "ready", Failed: "failed" } as const;
@@ -55,12 +63,26 @@ export interface CreatorsEntry {
   list: PlayCreator[] | null;
 }
 
+/** The account's credits as the app last read them: kept while genex.games can't be reached. */
+export type AccountCredits = Pick<PlayCredits, "balance" | "unlimited">;
+
 /** What Play knows of people. */
 export interface PeopleState {
-  /** The account Play is signed in as, or null signed out (or before the first read). */
+  /**
+   * The account the app is signed in as: as last read, or as remembered on this Mac while
+   * genex.games can't be reached. Null signed out, signing in, or after a sign-in ended.
+   */
   me: PlayMe | null;
   /** The account has been read once: a plate that is not there is signed out, not unknown. */
   meKnown: boolean;
+  /** Where the account stands, as main last said; null before it was asked. */
+  account: GenexAccountStatus | null;
+  /** While a sign-in waits in the browser: the code the browser shows. */
+  signInCode: string | null;
+  /** The account whose sign-in genex.games ended: the plate shows it dimmed, to sign in again. */
+  ended: PlayMe | null;
+  /** The balance as last read, or null before it was. */
+  credits: AccountCredits | null;
   friends: PlayFriendsPage | null;
   friendsStatus: LoadStatus;
   profiles: Record<string, ProfileEntry>;
@@ -76,6 +98,10 @@ export interface PeopleState {
 export const initialPeople = (): PeopleState => ({
   me: null,
   meKnown: false,
+  account: null,
+  signInCode: null,
+  ended: null,
+  credits: null,
   friends: null,
   friendsStatus: LoadStatus.Idle,
   profiles: {},
@@ -89,9 +115,60 @@ export const initialPeople = (): PeopleState => ({
 export function meRead(state: PeopleState, me: PlayMe | null): PeopleState {
   const switched = state.me?.id !== me?.id;
   if (!switched && state.meKnown && state.me === me) return state;
+  // Where the account stands is main's to say: a read of who it is keeps it.
+  const kept = { account: state.account, signInCode: state.signInCode, ended: state.ended };
   return switched
-    ? { ...initialPeople(), me, meKnown: true }
+    ? { ...initialPeople(), ...kept, me, meKnown: true }
     : { ...state, me, meKnown: true, profiles: withOwnProfile(state.profiles, me) };
+}
+
+/**
+ * Main said where the account stands (`view`, or null when main did not answer) after genex.games
+ * answered `me` (undefined when it could not be reached). Signed in, the account read shows, or
+ * the one already shown stays while offline. A sign-in that ended keeps whose it was for the plate
+ * and nothing else; signed out and signing in, there is no account.
+ */
+export function accountRead(
+  state: PeopleState,
+  view: GenexAccountView | null,
+  me: PlayMe | null | undefined,
+): PeopleState {
+  if (!view) return state.meKnown ? state : { ...state, meKnown: true };
+  const stands = { account: view.status, signInCode: view.code ?? null };
+  if (view.status === GenexAccountStatus.SignedIn) {
+    const known = me ? meRead(state, me) : { ...state, meKnown: true };
+    return { ...known, ...stands, ended: null };
+  }
+  const ended = view.status === GenexAccountStatus.Ended ? (state.me ?? state.ended) : null;
+  return { ...meRead(state, null), ...stands, ended, credits: null };
+}
+
+/** An account remembered on this Mac, as it was kept, or null for anything that isn't one. */
+function rememberedAccount(value: unknown): PlayMe | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const picture = (url: unknown): url is string | null =>
+    url === null || (typeof url === "string" && url.startsWith("https://"));
+  const valid =
+    isAccountId(v.id) &&
+    typeof v.name === "string" &&
+    v.name.trim() !== "" &&
+    picture(v.imageUrl) &&
+    picture(v.photoUrl) &&
+    isAvatarVariant(v.avatarVariant) &&
+    typeof v.pro === "boolean" &&
+    (v.joinedAt === null || typeof v.joinedAt === "string") &&
+    (v.avatarStyle === null || isAvatarStyle(v.avatarStyle)) &&
+    typeof v.avatarVariantKept === "boolean";
+  return valid ? (value as PlayMe) : null;
+}
+
+/** Keep the account where the next start finds it while offline: the one shown, or whose sign-in ended. */
+function rememberAccount(state: PeopleState, storage: KeyValueStorage | null): void {
+  const who = state.me ?? state.ended;
+  if (who) writeJson(STORAGE_KEYS.genexMe, who, storage);
+  else if (state.account === GenexAccountStatus.SignedOut || state.account === GenexAccountStatus.SigningIn)
+    removeKey(STORAGE_KEYS.genexMe, storage);
 }
 
 /** The account's own profile entry, kept in step with a rename or a new picture. */
@@ -162,13 +239,31 @@ export function stackFaces(friends: readonly PlayFriend[]): PlayFriend[] {
   return friends.toSorted((a, b) => Number(b.playing !== null) - Number(a.playing !== null)).slice(0, STACK_FACES);
 }
 
+/**
+ * The Friends page as it shows offline: nobody's status is known, so nobody is playing (no green
+ * ring, live dot or Join); everything else is the page as last read, which stays for when the Mac
+ * is back online.
+ */
+export function withoutPresence(page: PlayFriendsPage): PlayFriendsPage {
+  if (!page.friends.some((friend) => friend.playing)) return page;
+  return { ...page, friends: page.friends.map((friend) => (friend.playing ? { ...friend, playing: null } : friend)) };
+}
+
 /** How many friend requests wait for the account's answer. */
 export const waitingRequests = (state: PeopleState): number => state.friends?.incoming.length ?? 0;
 
 /** The store and what it reads and writes. */
 export interface PeopleStore extends StoreApi<PeopleState> {
-  /** Read who Play is signed in as. */
+  /** Read who the app is signed in as, and where the account stands. */
   loadMe(): Promise<void>;
+  /** Sign in to Genex in the browser (again, after a sign-in ended). */
+  signIn(): Promise<void>;
+  /** Stop a sign-in waiting in the browser. */
+  cancelSignIn(): Promise<void>;
+  /** Sign out of Genex, the app and the Genex plugin together (the person confirmed in Studio first). */
+  signOut(): Promise<void>;
+  /** Read the account's balance; a failed read keeps the last one. */
+  loadCredits(): Promise<void>;
   /** Read the Friends page (signed in only). */
   loadFriends(): Promise<void>;
   /** Read someone's profile; `force` reads again one already read. */
@@ -208,6 +303,11 @@ type PeopleApi = Pick<
   | "playAvatarVariant"
   | "playStats"
   | "playCreators"
+  | "playCredits"
+  | "genexAccount"
+  | "genexSignIn"
+  | "genexCancelSignIn"
+  | "genexSignOut"
 >;
 
 /** Replace the store's state with what a change makes of it. */
@@ -282,20 +382,51 @@ function numberReads(store: StoreApi<PeopleState>, set: PeopleSet, api: Pick<Peo
   return { loadStats, loadCreators };
 }
 
-/** People's store over `api`. */
-export function createPeopleStore(api: PeopleApi): PeopleStore {
-  const store = createStore<PeopleState>()(initialPeople);
+/** The account's sign-in and sign-out through main, and its balance: each answer says where it stands. */
+function accountCalls(
+  store: StoreApi<PeopleState>,
+  set: PeopleSet,
+  api: Pick<PeopleApi, "playCredits" | "genexSignIn" | "genexCancelSignIn" | "genexSignOut">,
+) {
+  const stands = async (call: () => Promise<GenexAccountView>): Promise<void> => {
+    const view = await call();
+    set((state) => accountRead(state, view, undefined));
+  };
+  const loadCredits = async (): Promise<void> => {
+    if (!store.getState().me) return;
+    try {
+      const { balance, unlimited } = await api.playCredits();
+      set((state) => (state.me ? { ...state, credits: { balance, unlimited } } : state));
+    } catch {
+      // Offline or Genex down: the last balance stays.
+    }
+  };
+  return {
+    signIn: () => stands(api.genexSignIn),
+    cancelSignIn: () => stands(api.genexCancelSignIn),
+    signOut: () => stands(api.genexSignOut),
+    loadCredits,
+  };
+}
+
+/** People's store over `api`, remembering the account in `storage` for an offline start. */
+export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | null = browserStorage()): PeopleStore {
+  const remembered = rememberedAccount(readJson<unknown>(STORAGE_KEYS.genexMe, null, storage));
+  const store = createStore<PeopleState>()(() => ({ ...initialPeople(), me: remembered }));
   const set = (change: (state: PeopleState) => PeopleState) => store.setState(change, true);
+  // A rename or a new picture is remembered as it shows, as is a sign-in or a sign-out.
+  store.subscribe((state, before) => {
+    if (state.me !== before.me || state.ended !== before.ended || state.account !== before.account)
+      rememberAccount(state, storage);
+  });
   let searches = 0;
 
   const loadMe = async (): Promise<void> => {
-    try {
-      const me = await api.playMe();
-      set((state) => meRead(state, me));
-    } catch {
-      // Offline or Genex down: what the plate shows stays until the next read.
-      set((state) => (state.meKnown ? state : { ...state, meKnown: true }));
-    }
+    // Undefined: genex.games could not be reached, which is not the same as signed out.
+    const me = await api.playMe().catch(() => undefined);
+    // Asked after: a refused token reads as a sign-in that ended only once genex.games refused it.
+    const view = await api.genexAccount().catch(() => null);
+    set((state) => accountRead(state, view, me));
   };
 
   const loadFriends = async (): Promise<void> => {
@@ -369,6 +500,7 @@ export function createPeopleStore(api: PeopleApi): PeopleStore {
 
   return Object.assign(store, {
     loadMe,
+    ...accountCalls(store, set, api),
     loadStats,
     loadCreators,
     loadFriends,

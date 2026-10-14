@@ -26,6 +26,26 @@ export const GenexAction = {
   PublishOpen: "publish-open",
   PublishBadge: "publish-badge",
 } as const;
+export type GenexAction = (typeof GenexAction)[keyof typeof GenexAction];
+
+/**
+ * The Genex actions that belong to the person's account, not the agent's tools: signing in and
+ * out, the account's status and terms, and Publish. They run while the Genex plugin is off.
+ */
+export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
+  GenexAction.Status,
+  GenexAction.Unlock,
+  GenexAction.Connect,
+  GenexAction.Terms,
+  GenexAction.Disconnect,
+  GenexAction.CancelConnect,
+  GenexAction.PublishStatus,
+  GenexAction.PublishDraft,
+  GenexAction.PublishGallery,
+  GenexAction.PublishAllowUpload,
+  GenexAction.PublishOpen,
+  GenexAction.PublishBadge,
+];
 
 /**
  * The Genex SDK packages a game may add, each at the exact version Studio installs. The agent names

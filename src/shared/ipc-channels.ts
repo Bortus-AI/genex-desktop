@@ -178,6 +178,10 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.stats": "playStats",
   "studio:play.creators": "playCreators",
   "studio:play.credits": "playCredits",
+  "studio:genex-account.read": "genexAccount",
+  "studio:genex-account.sign-in": "genexSignIn",
+  "studio:genex-account.cancel": "genexCancelSignIn",
+  "studio:genex-account.sign-out": "genexSignOut",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
   "studio:rollback": "rollback",
@@ -398,6 +402,10 @@ export interface StudioInvokePayloads {
   "studio:play.stats": { days: StatsPeriod };
   "studio:play.creators": undefined;
   "studio:play.credits": undefined;
+  "studio:genex-account.read": undefined;
+  "studio:genex-account.sign-in": undefined;
+  "studio:genex-account.cancel": undefined;
+  "studio:genex-account.sign-out": undefined;
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };

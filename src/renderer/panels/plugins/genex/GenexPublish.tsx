@@ -1,8 +1,9 @@
 /**
- * Publish to the web, drawn by Studio over the game's stage in the app's own type and buttons. It
- * asks first for what publishing needs and the person lacks (the Genex plugin installed and on, then a
- * Genex account), then shows one dialog with one main button: the game and the name players will
- * see, Publish, its progress in that same button and under it, and the link once the game is live.
+ * Publish to the web, drawn by Studio over the game's stage in the app's own type and buttons.
+ * Publish belongs to the person's Genex account, not to the Genex plugin: with the plugin off it
+ * works the same, and the one thing it asks for first is an account (signing in from here brings
+ * back a Genex that was removed). Then it shows one dialog with one main button: the game and the
+ * name players will see, Publish, its progress in that same button and under it, and the link once the game is live.
  * A failed attempt is said calmly, with the raw detail kept for support. The Publish press is the
  * consent to the files it uploads (listed on request beside it); nothing asks again. While the
  * game has no Genex cover to send, one quiet line offers to ask its chat for one.
@@ -17,8 +18,11 @@ import {
   type GenexPublishState,
 } from "../../../../shared/genex.ts";
 import type { ExportReview, PluginInfo } from "../../../../shared/plugins.ts";
+import { GenexAccountStatus } from "../../../../shared/genex-account.ts";
 import { chatPrompt, composeInChat } from "../../../compose-in-chat.ts";
-import { useLibrary } from "../../../state/hooks.ts";
+import { MakingDrawing } from "../../../making-art.ts";
+import { cancelGenexSignIn, signInToGenex, useGenexSignIn } from "../../../play/use-genex-sign-in.ts";
+import { useLibrary, usePeople } from "../../../state/hooks.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
@@ -26,10 +30,13 @@ import { GameAvatar } from "../../../ui/GameAvatar.tsx";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { useCopy } from "../../../use-copy.ts";
-import { GENEX_WORDS, problemWords } from "../../../words.ts";
+import { ACCOUNT_WORDS, GENEX_WORDS, problemWords } from "../../../words.ts";
+import { MakingArt } from "../../MakingArt.tsx";
 import { PluginApproval } from "../../PluginApproval.tsx";
 import { GenexAccountKind, genexAccountView } from "./genex-view.ts";
 import {
+  GenexSetup,
+  genexSetup,
   offeredTitle,
   PublishGate,
   PublishOutcome,
@@ -262,8 +269,9 @@ function Ask({ children, actions }: { children: ReactNode; actions: ReactNode })
 }
 
 /**
- * Connect a Genex account from the Publish dialog: Connect, then finishing in the browser with the
- * code to check, then the terms, until the account is connected and `onConnected` re-reads the record.
+ * Sign in to Genex from the Publish dialog: Sign in in browser, then finishing in the browser with
+ * the code to check, then the terms, until the account is connected and `onConnected` re-reads the
+ * record. The sign-in is the app's own, the one the sidebar's plate and Settings start.
  */
 function ConnectGenex({
   plugin,
@@ -293,6 +301,77 @@ function ConnectGenex({
   );
 }
 
+/**
+ * Publish with no account: the account card (as Settings draws it), why, and Sign in in browser,
+ * which opens genex.games and brings back a Genex that was removed. A saved sign-in that couldn't
+ * be opened on this Mac says so.
+ */
+function SignInToPublish({ retry = false }: { retry?: boolean }): JSX.Element {
+  const { busy, signIn } = useGenexSignIn();
+  return (
+    <div className="genex-publish-sign-in" data-genex-publish-sign-in>
+      <MakingArt drawing={MakingDrawing.Account} still={false} offset={0} className="genex-publish-sign-in-art" />
+      <p>{retry ? ACCOUNT.retryText : WORDS.signInText}</p>
+      <button
+        type="button"
+        className="people-button genex-publish-sign-in-button"
+        data-tone="primary"
+        aria-label={ACCOUNT_WORDS.signInLabel}
+        aria-busy={busy || undefined}
+        disabled={busy}
+        data-genex-sign-in
+        onClick={signIn}
+      >
+        {ACCOUNT_WORDS.signIn}
+        <Icon name="arrow-up-right" size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** While the browser has the sign-in: the code it should show, the page again, Cancel, and the wait. */
+function FinishSignIn({ code }: { code: string | null }): JSX.Element {
+  return (
+    <Ask
+      actions={
+        <>
+          <Button size="default" onClick={() => void cancelGenexSignIn()}>
+            {ACCOUNT.cancel}
+          </Button>
+          <Button variant="default" size="default" busy>
+            {ACCOUNT.waitingBrowser}
+          </Button>
+        </>
+      }
+    >
+      {code && (
+        <div className="genex-publish-code">
+          <span>{ACCOUNT.browserShows}</span>
+          <code>{code}</code>
+        </div>
+      )}
+      <TextButton onClick={() => void signInToGenex()}>
+        {ACCOUNT.reopen}
+        <Icon name="arrow-up-right" size={12} />
+      </TextButton>
+    </Ask>
+  );
+}
+
+/**
+ * Publish while no Genex is installed (an older build let the person remove it): sign in, which
+ * brings Genex back; its own Publish then takes over the dialog.
+ */
+export function PublishSignInDialog({ onClose }: { onClose: () => void }): JSX.Element {
+  const waiting = usePeople((s) => s.account === GenexAccountStatus.SigningIn);
+  const code = usePeople((s) => s.signInCode);
+  return (
+    <PublishFrame intro={WORDS.intro} onClose={onClose}>
+      {waiting ? <FinishSignIn code={code} /> : <SignInToPublish />}
+    </PublishFrame>
+  );
+}
+
 /** The account step the person is on, with only the presses it needs, each showing it is working. */
 function ConnectStep({
   view,
@@ -302,45 +381,11 @@ function ConnectStep({
   live: ReturnType<typeof useGenexStatus>;
 }): JSX.Element {
   const busy = live.running !== null;
-  const connecting = live.running === GenexAction.Connect;
-  const connect = () => void live.act(GenexAction.Connect);
   switch (view.kind) {
     case GenexAccountKind.SignedOut:
-      return (
-        <Ask
-          actions={
-            <Button variant="default" size="default" busy={connecting} disabled={busy && !connecting} onClick={connect}>
-              {(connecting && ACCOUNT.connecting) || (view.retry ? ACCOUNT.retry : ACCOUNT.connect)}
-            </Button>
-          }
-        >
-          <p>{view.retry ? ACCOUNT.retryText : WORDS.connectText}</p>
-        </Ask>
-      );
+      return <SignInToPublish retry={view.retry} />;
     case GenexAccountKind.SigningIn:
-      return (
-        <Ask
-          actions={
-            <>
-              <Button size="default" disabled={busy} onClick={() => void live.act(GenexAction.CancelConnect)}>
-                {ACCOUNT.cancel}
-              </Button>
-              <Button variant="default" size="default" busy>
-                {ACCOUNT.waitingBrowser}
-              </Button>
-            </>
-          }
-        >
-          <div className="genex-publish-code">
-            <span>{ACCOUNT.browserShows}</span>
-            <code>{view.code}</code>
-          </div>
-          <TextButton disabled={busy} onClick={connect}>
-            {ACCOUNT.reopen}
-            <Icon name="arrow-up-right" size={12} />
-          </TextButton>
-        </Ask>
-      );
+      return <FinishSignIn code={view.code} />;
     case GenexAccountKind.Terms:
       return (
         <Ask
@@ -394,54 +439,34 @@ function PluginLink({ onLeave }: { onLeave: () => void }): JSX.Element {
   );
 }
 
-/** What a Genex setup dialog was opened for: the press it answers. */
-export const GenexSetupFor = { Publish: "publish", Multiplayer: "multiplayer" } as const;
-export type GenexSetupFor = (typeof GenexSetupFor)[keyof typeof GenexSetupFor];
-
 const MULTIPLAYER = GENEX_WORDS.multiplayer;
 
 /** What Multiplayer brings, each with its glyph: why the plugin is worth installing. */
 const MULTIPLAYER_POINTS: ReadonlyArray<{ icon: IconName; text: string }> = [
   { icon: "globe", text: MULTIPLAYER.rooms },
   { icon: "mic", text: MULTIPLAYER.voice },
-  { icon: "users", text: MULTIPLAYER.friends },
+  { icon: "coin", text: MULTIPLAYER.economy },
 ];
 
-/** Each purpose's frame and opening words. */
-const SETUP_COPY = {
-  [GenexSetupFor.Publish]: {
-    heading: { title: WORDS.title, icon: "globe", testId: "genex-publish" },
-    intro: WORDS.intro,
-    through: WORDS.through,
-  },
-  [GenexSetupFor.Multiplayer]: {
-    heading: { title: MULTIPLAYER.title, icon: "users", testId: "genex-multiplayer" },
-    intro: MULTIPLAYER.intro,
-    through: MULTIPLAYER.through,
-  },
-} as const satisfies Record<
-  GenexSetupFor,
-  { heading: { title: string; icon: IconName; testId: string }; intro: string; through: string }
->;
+/** Multiplayer's dialog frame: its own title and glyph. */
+const MULTIPLAYER_HEADING = { title: MULTIPLAYER.title, icon: "users", testId: "genex-multiplayer" } as const;
 
 /**
- * Publish or Multiplayer while the Genex plugin is off or not installed: what Genex brings (for
- * Multiplayer), one line naming the plugin it uses (its name opens the plugin's page), and the one
- * press that brings it back, busy while it works.
+ * Multiplayer while the Genex plugin is off or not installed, laid out as Publish's sign-in: a room
+ * drawn as the account card's sibling, what Genex brings in one row, one line saying why it needs
+ * the plugin (its name opens the plugin's page), and the one press that brings it back, busy while
+ * it works. Publish never asks this: it is the account's, and the plugin may be off.
  */
 export function GenexSetupDialog({
   genex,
   onClose,
-  purpose = GenexSetupFor.Publish,
 }: {
   genex: PluginInfo | undefined;
   onClose: () => void;
-  purpose?: GenexSetupFor;
 }): JSX.Element {
-  const copy = SETUP_COPY[purpose];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const install = publishGate(genex, undefined) === PublishGate.Install;
+  const install = genexSetup(genex) === GenexSetup.Install;
   const press = async (): Promise<void> => {
     setBusy(true);
     setError("");
@@ -457,33 +482,37 @@ export function GenexSetupDialog({
   const label = install ? WORDS.install : WORDS.turnOn;
   const working = install ? WORDS.installing : WORDS.turningOn;
   return (
-    <PublishFrame intro={copy.intro} onClose={onClose} heading={copy.heading}>
-      {purpose === GenexSetupFor.Multiplayer && (
+    <PublishFrame intro={MULTIPLAYER.intro} onClose={onClose} heading={MULTIPLAYER_HEADING}>
+      <div className="genex-publish-sign-in" data-genex-multiplayer-setup>
+        <MakingArt drawing={MakingDrawing.Multiplayer} still={false} offset={0} className="genex-publish-sign-in-art" />
         <ul className="genex-setup-points">
           {MULTIPLAYER_POINTS.map((point) => (
             <li key={point.text}>
-              <Icon name={point.icon} size={18} />
+              <Icon name={point.icon} size={15} />
               <span>{point.text}</span>
             </li>
           ))}
         </ul>
-      )}
-      <p className="genex-publish-ask">
-        {copy.through} <PluginLink onLeave={onClose} />
-        {install ? WORDS.installEnd : WORDS.throughEnd}
-      </p>
-      {error && (
-        <p role="alert" className="genex-publish-problem">
-          {error}
+        <p>
+          {MULTIPLAYER.through} <PluginLink onLeave={onClose} />
+          {install ? WORDS.installEnd : WORDS.throughEnd}
         </p>
-      )}
-      <div className="genex-publish-actions">
-        <div className="genex-publish-lead" />
-        <div className="genex-publish-presses">
-          <Button variant="default" size="default" busy={busy} aria-label={label} onClick={() => void press()}>
-            {busy ? working : label}
-          </Button>
-        </div>
+        {error && (
+          <p role="alert" className="genex-publish-problem">
+            {error}
+          </p>
+        )}
+        <button
+          type="button"
+          className="people-button genex-publish-sign-in-button"
+          data-tone="primary"
+          aria-label={label}
+          aria-busy={busy || undefined}
+          disabled={busy}
+          onClick={() => void press()}
+        >
+          {busy ? working : label}
+        </button>
       </div>
     </PublishFrame>
   );
@@ -519,7 +548,7 @@ function Lead({
   );
 }
 
-/** The dialog over the stage, while the Genex plugin is on. */
+/** The dialog over the stage, the Genex plugin on or off. */
 export function GenexPublishDialog({
   plugin,
   project,
@@ -539,7 +568,7 @@ export function GenexPublishDialog({
     composeInChat({ project, text: WORDS.coverPrompt });
     onClose();
   };
-  if (state && publishGate(plugin, state.connected) === PublishGate.Connect)
+  if (state && publishGate(plugin, state.connected) === PublishGate.SignIn)
     return (
       <PublishFrame intro={WORDS.intro} state={state} onClose={onClose}>
         <ConnectGenex plugin={plugin} project={project} onConnected={record.refresh} />
@@ -553,7 +582,15 @@ export function GenexPublishDialog({
           {record.readError}
         </p>
       )}
-      {view && <PublishBody view={view} record={record} project={project ?? ""} onAskCover={askForCover} />}
+      {view && (
+        <PublishBody
+          view={view}
+          record={record}
+          project={project ?? ""}
+          // A cover is the Genex plugin's to make: with it off, nobody in the chat can.
+          onAskCover={plugin.enabled ? askForCover : null}
+        />
+      )}
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </PublishFrame>
   );
@@ -572,7 +609,8 @@ function PublishBody({
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   project: string;
-  onAskCover: () => void;
+  /** Leave the cover ask in the game's chat; null while no one there can make a cover. */
+  onAskCover: (() => void) | null;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -592,7 +630,7 @@ function PublishBody({
         </p>
       ))}
       <GameLine project={project} title={name} onTitle={setTitle} view={view} publishing={publishing} />
-      {view.coverAsk && !publishing && <CoverAsk onAsk={onAskCover} />}
+      {view.coverAsk && !publishing && onAskCover && <CoverAsk onAsk={onAskCover} />}
       {view.running && <Progress view={view} />}
       {view.link && !publishing && <LinkField link={view.link} />}
       {failure && !publishing && <Failure title={failure.title} text={failure.text} />}

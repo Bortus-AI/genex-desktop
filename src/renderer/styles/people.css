@@ -523,6 +523,22 @@
   color: var(--ink-3);
   font: 400 12px / 16px var(--font-family-mono);
 }
+/* A quiet line under a section's heading: offline, why nobody shows as playing. */
+.people-section-note {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+}
+/* Offline: the title's mark sits on its line; search waits, dimmed. */
+.people-title .play-offline-chip {
+  margin-inline: 12px 0;
+  vertical-align: 6px;
+}
+.people-search[data-offline] {
+  cursor: default;
+  opacity: 0.55;
+}
 .people-note {
   display: flex;
   flex-direction: column;
@@ -1268,11 +1284,73 @@
 .account-name-field:focus-visible {
   box-shadow: inset 0 0 0 1px var(--focus-edge);
 }
-.account-signed-out {
+/* The balance, then Buy credits; under them, what credits pay for. */
+.account-credits {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 20px;
+}
+.account-note-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-ink);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.account-note-link:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+/* Sign out beside the title, at the header's far end (left of the dialog's close). */
+.account-sign-out {
+  margin-inline-start: auto;
+  height: 30px;
+}
+/* Signed out: the account card, one line and one press, in the middle of the section. */
+.account-sign-in {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
+  align-items: center;
+  gap: 18px;
+  padding-block: 28px 12px;
+  text-align: center;
+}
+.account-sign-in > p {
+  max-width: 40ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 22px;
+  text-wrap: balance;
+}
+.account-sign-in-art {
+  width: 280px;
+  height: 196px;
+  max-width: 100%;
+}
+.account-sign-in-button,
+.account-sign-in-presses > * {
+  height: 36px;
+  padding-inline: 18px;
+}
+.account-sign-in-presses {
+  display: flex;
+  gap: 8px;
+}
+.account-code {
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.04em;
 }
 
 /* ── First sign-in: the avatar built under a beam over its wireframe ── */

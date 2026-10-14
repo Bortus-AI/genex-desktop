@@ -3066,6 +3066,9 @@ export const PLUGINS_WORDS = {
   /** A plugin row's account, by what it needs next. */
   account: {
     connect: "Connect",
+    /** Genex's row: its account is the app's, signed in as everywhere else. */
+    signIn: "Sign in",
+    signInLabel: "Sign in to Genex in your browser",
     connectHint: "Uses your saved sign-in, or opens your browser",
     reconnect: "Reconnect",
     finishing: "Finish in your browser",
@@ -3306,12 +3309,18 @@ export const GENEX_WORDS = {
     shared: "One balance for all your games. Failed generations are refunded.",
     outOfCredits: "Games still build with procedural assets and Local Blender.",
     paused: (kinds: string) => `Paused on Genex right now: ${kinds}.`,
-    off: "Turn on the Genex plugin to connect your account.",
+    off: "Off. Your agent can't use Genex tools. Your profile, friends and Publish stay.",
   },
   /** Genex as the Plugins page shows it: the router, its line, and the tools it routes. */
   router: {
     name: "Genex plugin",
     description: "Game dev tools router",
+    /** Genex's row line, on and off: what the switch takes away (the agent's tools) and what it never does. */
+    rowOn: {
+      lead: "Tools for your agent: 3D, textures, animation, music, multiplayer.",
+      tail: "Uses your Genex account.",
+    },
+    rowOff: { lead: "Off. Your agent can't use Genex tools.", tail: "Your profile, friends and Publish stay." },
     /** The line under the plugin page's title while an account is connected. */
     connectedAs: (name: string) => `Game dev tools router · connected as ${name}`,
     intro:
@@ -3388,15 +3397,16 @@ export const GENEX_WORDS = {
     prompt: "Make this game multiplayer using Genex",
     title: "Make it multiplayer",
     intro: "Friends join your game from anywhere. Genex runs the rooms, the voices and the sign-in.",
-    rooms: "Online rooms and matchmaking",
-    voice: "Voice chat while you play",
-    friends: "Friends find it on Play",
-    through: "Multiplayer uses the",
+    rooms: "Online rooms",
+    voice: "Voice chat",
+    economy: "In-game economy",
+    /** Setup's line while the plugin is off, around its name: the agent builds multiplayer with its tools. */
+    through: "Your agent builds multiplayer with the",
   },
   /** The Publish dialog on the game's stage, drawn by Studio. */
   publish: {
-    title: "Publish to the web",
-    intro: "Get a link anyone can play in their browser.",
+    title: "Publish your game",
+    intro: "It goes on Play in Genex and gets a link anyone can play in a browser.",
     published: "Your game is live. Anyone with the link can play it.",
     /** The stage strip's own Publish, when Genex adds none: the words of Genex's button. */
     button: "Publish",
@@ -3446,9 +3456,9 @@ export const GENEX_WORDS = {
     allowUpload: "I checked — allow a new upload",
     reviewTerms: "Review Genex terms",
     termsNote: "Review the updated Genex terms in your browser before publishing.",
-    connectText: "Sign in to Genex once to publish. You finish in your browser.",
-    /** Setup's one line, around the plugin's name; its button says what is missing. */
-    through: "Publishing uses the",
+    /** With no account: why to sign in, under the account card. */
+    signInText: "Your games go on your Genex profile. Sign in to publish.",
+    /** Multiplayer's setup line ends, around the plugin's name; its button says what is missing. */
     throughEnd: ". Turn it on to continue.",
     installEnd: ". Install it to continue.",
     plugin: "Genex plugin",
@@ -3600,6 +3610,20 @@ export const PLAY_WORDS = {
     creditsUnlimited: "Unlimited",
     accountSettings: "Account settings",
     signOut: "Sign out",
+    /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */
+    signIn: "Sign in to Genex",
+    signInLabel: "Sign in to Genex in your browser",
+    finishInBrowser: "Finish in browser",
+    finishInBrowserLabel: "Finish signing in to Genex in your browser",
+    cancelSignIn: "Cancel signing in",
+    signInAgain: "Sign in again",
+    signInAgainLabel: (name: string | null) => (name ? `${name}: sign in to Genex again` : "Sign in to Genex again"),
+    signInFailed: "Couldn’t start signing in. Check your connection and try again.",
+    offlineFriends: "Offline: friends show again when you’re back online",
+    /** Sign out's question, asked in Studio before the app and the Genex plugin sign out together. */
+    signOutTitle: "Sign out of Genex?",
+    signOutText: "Your profile, friends and Publish wait until you sign in again, and the Genex plugin’s tools stop.",
+    signOutFailed: "Couldn’t sign out. Try again in a moment.",
     back: "Back",
     joined: (when: string) => `Joined ${when}`,
     /** What a friend card says when they are not playing: how many games they made. */
@@ -3671,6 +3695,8 @@ export const PLAY_WORDS = {
     or: "or",
     friendsFailed: "Couldn’t load your friends.",
     signedOut: "Sign in to Genex to see your friends.",
+    /** Under Friends while offline, where Playing now was. */
+    playingOffline: "Who’s playing shows again when you’re back online.",
   },
   /** The account's own numbers: the profile's strip and the stats page. Only the account sees them. */
   stats: {
@@ -3727,7 +3753,6 @@ export const PLAY_WORDS = {
   },
   modes: { label: "Mode", play: "Play", create: "Create" },
   recent: "Recent",
-  recentEmpty: "Games you play show up here.",
   page: "Play",
   shelvesLabel: "Shelves",
   shelves: {
@@ -3782,6 +3807,7 @@ export const PLAY_WORDS = {
     title: "You’re offline",
     shelf: (things: string) => `${things} load as soon as you’re back online.`,
     search: "Search works again as soon as you’re back online.",
+    profile: "This profile loads as soon as you’re back online.",
     more: (noun: string) => `More ${noun} load when you’re back online.`,
     game: (title: string) => `${title} opens as soon as you’re back online.`,
   },
@@ -3807,7 +3833,7 @@ export const PLAY_WORDS = {
     notes: {
       [PlayNote.Copied]: "Link copied",
       [PlayNote.InviteCopied]: "Invite link copied",
-      [PlayNote.SignIn]: "Connect Genex to like games",
+      [PlayNote.SignIn]: "Sign in to Genex to like games",
       [PlayNote.LikeFailed]: "Couldn’t save your like",
       [PlayNote.Remixing]: "Making your copy…",
       [PlayNote.RemixFailed]: "Couldn’t make a copy",
@@ -3820,25 +3846,22 @@ export const PLAY_WORDS = {
     /** Worn by the mic while the game is in voice chat and nobody hears the person yet. */
     micWaiting: "Turn on mic",
     micDevices: "Choose microphone",
-    guest: "Save your progress with the Genex plugin",
-    install: "Install plugin",
+    guest: "Save your progress with a Genex account",
+    install: "Sign in",
     dismissGuest: "Close",
   },
   promo: {
-    label: "Genex plugin",
-    eyebrow: "Genex plugin",
+    label: "Genex account",
+    eyebrow: "Genex account",
     title: "Put your game on Play",
     publish: "Publish in one click",
     multiplayer: "Make it multiplayer",
     tools: "Every game dev tool",
     learn: "Learn",
-    learnLabel: "Learn about the Genex plugin",
+    learnLabel: "Learn about Genex",
     linkCopied: "Link copied",
-    install: "Install plugin",
-    waiting: "Finish in your browser",
-    cancel: "Cancel",
-    failed: "Sign-in didn’t finish.",
-    retry: "Try again",
+    signIn: "Sign in",
+    signInLabel: "Sign in to Genex in your browser",
     dismiss: "Close",
   },
 } as const;
@@ -3927,8 +3950,25 @@ export const ACCOUNT_WORDS = {
   regenerate: "Regenerate",
   regenerateFailed: "Couldn’t regenerate your avatar.",
   name: "Name",
-  signedOut: "Connect your Genex account to choose your avatar and name.",
-  connect: "Open the Genex plugin",
+  credits: "Credits",
+  creditsCount: (count: string) => `${count} credits`,
+  creditsUnlimited: "Unlimited credits",
+  buyCredits: "Buy credits",
+  buyCreditsLabel: "Buy credits on genex.games",
+  /** Under the balance: what credits pay for, the plugin's name a link to its page. */
+  creditsNote: { before: "For ", plugin: "Genex plugin", after: " tools: 3D, animation, textures, music. Optional." },
+  creditsPluginLabel: "Open the Genex plugin page",
+  signOut: "Sign out",
+  /** Signed out: the one title, the line and the button, nothing under it. */
+  signInTitle: "Sign in to Genex",
+  signInText: "Make a profile, publish your games, play with friends.",
+  signIn: "Sign in in browser",
+  signInLabel: "Sign in to Genex in your browser",
+  /** While the sign-in waits in the browser. */
+  waiting: "Waiting for browser…",
+  browserShows: "Your browser should show",
+  cancel: "Cancel",
+  offline: "Changes wait until you’re back online.",
 } as const;
 
 /** The avatar every Genex account gets, as people meet it: its parts' names and the first-sign-in dialog. */

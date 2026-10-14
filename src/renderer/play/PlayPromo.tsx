@@ -1,27 +1,25 @@
 /**
- * Play's Genex card at the foot of the sidebar, for someone who cannot publish to Play yet: a short
- * film of a game going live on Play, three things the Genex plugin gives, Learn, and Install plugin,
- * which connects the Genex account (or opens Plugins when Genex is not installed or is off), the same
- * path as a game's guest card (`use-play-install.ts`). It goes for good once dismissed, and stays
- * away while Genex is connected.
+ * Play's Genex card at the foot of the sidebar, for someone who has not signed in to Genex yet: a
+ * short film of a game going live on Play, three things a Genex account gives, Learn, and Sign in,
+ * which opens genex.games in the browser, the same path as the plate under it and a game's guest
+ * card (`use-genex-sign-in.ts`). It shows once: the first sign-in or a close retires it for good.
  */
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { PLAY_ORIGIN } from "../../shared/play.ts";
-import { PromoPhase, promoPhase } from "../genex-promo.ts";
-import { usePlay } from "../state/hooks.ts";
+import { GenexAccountStatus } from "../../shared/genex-account.ts";
+import { usePeople, usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
-import { LoaderGrid } from "../ui/LoadingState.tsx";
 import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { dismissPlayPromo, playPromoDismissed, playPromoVisible } from "./play-model.ts";
-import { usePlayInstall } from "./use-play-install.ts";
+import { useGenexSignIn } from "./use-genex-sign-in.ts";
 
 const WORDS = PLAY_WORDS.promo;
-/** Where Learn goes: what the Genex plugin's tools are. */
+/** Where Learn goes: what Genex gives a game and its maker. */
 const LEARN_URL = `${PLAY_ORIGIN.web}/tools`;
 /** The film and its still, copied beside the renderer by the build (`design/play-publish-video/`). */
 const FILM = "media/play-publish.mp4";
@@ -97,57 +95,45 @@ function Learn(): JSX.Element {
   );
 }
 
-/** Learn and Install plugin (or Try again), or the browser wait with Cancel. */
-function Footer({
-  phase,
-  busy,
-  onInstall,
-  onCancel,
-}: {
-  phase: PromoPhase;
-  busy: boolean;
-  onInstall: () => void;
-  onCancel: () => void;
-}): JSX.Element {
-  if (phase === PromoPhase.Waiting)
-    return (
-      <div className="genex-promo-footer">
-        <span className="genex-promo-status" role="status">
-          <LoaderGrid />
-          {WORDS.waiting}
-        </span>
-        <Button onClick={onCancel}>{WORDS.cancel}</Button>
-      </div>
-    );
-  const failed = phase === PromoPhase.Failed;
+/** Learn and Sign in, which opens genex.games in the browser. */
+function Footer(): JSX.Element {
+  const { busy, signIn } = useGenexSignIn();
+  const waiting = usePeople((s) => s.account === GenexAccountStatus.SigningIn);
   return (
     <div className="genex-promo-footer">
       <Learn />
-      <Button variant="default" disabled={busy} title={failed ? WORDS.failed : undefined} onClick={onInstall}>
-        {failed && <Icon name="reload" />}
-        {failed ? WORDS.retry : WORDS.install}
+      <Button
+        variant="default"
+        busy={busy || waiting}
+        aria-label={WORDS.signInLabel}
+        data-genex-sign-in
+        onClick={signIn}
+      >
+        {WORDS.signIn}
       </Button>
     </div>
   );
 }
 
-/** The Genex card at the sidebar's foot in Play, or nothing once it has no reason to show. */
-export function PlayPromo({ project }: { project: string | null }): JSX.Element | null {
-  const [dismissed, setDismissed] = useState(() => playPromoDismissed());
-  const { installed, connectable, account, attempt, signIn, install } = usePlayInstall(project, !dismissed);
-  // Until the account is read, a connected person's card would flash: it waits for the answer.
-  const known = !connectable || account !== undefined;
-  if (!known || !playPromoVisible({ dismissed, plugin: installed, account })) return null;
-  const phase = connectable ? promoPhase(account, attempt) : PromoPhase.Offer;
+/**
+ * The Genex card at the sidebar's foot in Play, shown once: to someone who has not signed in yet,
+ * until they sign in or close it. The account plate stays under it.
+ */
+export function PlayPromo(): JSX.Element | null {
+  const [closed, setClosed] = useState(false);
+  const account = usePeople((s) => s.account);
+  // Read each time: the first sign-in retires the card in storage while it is mounted (`use-people-sync.ts`).
+  const dismissed = closed || playPromoDismissed();
+  if (!playPromoVisible({ dismissed, account })) return null;
   const dismiss = (): void => {
     dismissPlayPromo();
-    setDismissed(true);
+    setClosed(true);
   };
   return (
     <aside
       className="play-promo"
       aria-label={WORDS.label}
-      data-play-promo={phase}
+      data-play-promo
       onKeyDown={(event) => {
         if (event.key === "Escape") dismiss();
       }}
@@ -168,7 +154,7 @@ export function PlayPromo({ project }: { project: string | null }): JSX.Element 
           ))}
         </ul>
       </div>
-      <Footer phase={phase} busy={signIn.busy} onInstall={install} onCancel={() => void signIn.cancel()} />
+      <Footer />
     </aside>
   );
 }

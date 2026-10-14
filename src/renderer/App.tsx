@@ -23,7 +23,7 @@ import { nativeViewsUp } from "./play/play-model.ts";
 import { AvatarWelcome } from "./play/AvatarWelcome.tsx";
 import { PlayPages } from "./play/PlayPages.tsx";
 import { PlayViewerLayer } from "./play/PlayViewerLayer.tsx";
-import { usePlayInstallAsked } from "./play/use-play-install.ts";
+import { useGuestSignIn } from "./play/use-genex-sign-in.ts";
 import { usePlayRemixes } from "./play/use-play-remixes.ts";
 import { AppSidebar } from "./shell/AppSidebar.tsx";
 import { PluginsRoom, Toasts } from "./shell/store-leaves.tsx";
@@ -54,7 +54,7 @@ export function App(): JSX.Element {
   const updateReady = useUpdate((s) => s.ready !== null);
   useChatWidthVariable(shell, app);
   const openRemix = usePlayRemixes(navigation);
-  usePlayInstallAsked();
+  useGuestSignIn();
   // While Play's game or its menu lies over the window, no drag region takes the pointer from them (play.css).
   const playNative = usePlay((s) => nativeViewsUp(s.viewer));
   useEffect(() => {

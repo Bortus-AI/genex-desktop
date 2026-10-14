@@ -10,17 +10,17 @@ opens **home** (also the wordmark): one composer over an optional picture. A
 game opens its chat beside the stage (Live, Builds once planned, Assets); Harness opens its chat
 and Activity; Plugins fills the workspace.
 
-Settings (a modal): Genex account, Model Providers, Local Models, Appearance, Games, Harness, Permissions,
-Privacy, About. Narrow windows use a drawer.
+Settings (a modal): Genex account, Model Providers, Local Models, Appearance, Games, Harness,
+Permissions, Privacy, About; narrow windows use a drawer.
 
-The bell keeps questions, plans and permission requests until answered, then build endings and
+The bell keeps unanswered questions, plans and permission requests, then build endings and
 sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
 them.
 
-**Play** shows genex.games' shelves, **Recent**, **Top creators**, tabs and search. Accounts get
-an id-generated avatar (rerollable) or their photo. Signed in, the sidebar's foot shows the
-account and two friends; Play adds **Friends** and a first sign-in shows the avatar. Profiles
-show friends and games; yours, a 7-day strip opening **Stats**.
+**Play** shows genex.games' shelves, **Recent** (once played), **Top creators**, tabs and search.
+The sidebar's foot always shows the Genex account, kept with the plugin off and offline. Accounts
+get a rerollable generated avatar or a photo; Play adds **Friends**. Profiles show friends and
+games; yours, a 7-day strip opening **Stats**.
 Games play full window under a header (held Esc): Like, Share, Invite, Remix
 ([what Play sends](../../PRIVACY.md#play)), Exit and, in voice chat, a mic; guests see Genex.
 
@@ -57,7 +57,7 @@ A game's folder owns its identity. Commits and checkpoints skip engine scratch (
 merges. Snapshots and links use raw bytes, Git hooks and filters off; LFS pointers stay
 pointers. Unsent text survives loading; hidden workspaces ignore keys.
 
-The live game is a native view outside React that overlays occlude; desktop captures can't prove it.
+The live game is a native view overlays occlude; desktop captures can't prove it.
 
 ## Where to work
 

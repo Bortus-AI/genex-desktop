@@ -111,8 +111,12 @@ import { registerPluginsIpc } from "./ipc/plugins.ts";
 import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
 import { registerPlayIpc } from "./ipc/play.ts";
+import { registerGenexAccountIpc } from "./ipc/genex-account.ts";
+import { createGenexAccount, type GenexAccount, pluginAccountPort } from "./core/genex-account.ts";
+import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
+import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
-import { fixtureAccountToken, isFixtureAccount } from "./dev/fixture-people.ts";
+import { isFixtureAccount } from "./dev/fixture-people.ts";
 import { fixtureUpload, networkUpload, type PeopleDeps, type PlayPeople, playPeople } from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
@@ -121,7 +125,6 @@ import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { wirePlayViewer } from "./play/viewer-view.ts";
-import { GENEX_PLUGIN_ID } from "../shared/genex.ts";
 import { PLAY_ORIGIN } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
@@ -394,6 +397,8 @@ let gameScreen: GameFullScreen | null = null;
 /** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
 let playCatalog: PlayGallery | null = null;
 let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits } | null = null;
+/** The app's Genex account, made with the core: Play, Settings and Publish read it. */
+let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
 const fixtureGenexAccount = isFixtureAccount(process.env.STUDIO_FIXTURE_GENEX_ACCOUNT)
   ? process.env.STUDIO_FIXTURE_GENEX_ACCOUNT
@@ -867,11 +872,23 @@ function attachPreviews(studio: StudioCore, win: BrowserWindow): void {
   gameScreen = wireGameFullScreen({ studio, win, view, boundsSeen: previewBoundsSeen });
 }
 
+/**
+ * The app's Genex account for this core: the Genex plugin's account, kept while Genex is off, or a
+ * fixture launch's own (signed in as the fixture account it asked for).
+ */
+function genexAccountFor(studio: StudioCore): GenexAccount {
+  genexAccount ??= createGenexAccount({
+    port: fixtureNativePolicy ? fixtureAccountPort(fixtureGenexAccount, Date.now) : pluginAccountPort(studio.plugins),
+    openSignIn: (url) => openGenexPage(fixtureNativePolicy, url),
+  });
+  return genexAccount;
+}
+
 /** Play's catalog for this core: genex.games over the network, or a fixture launch's own answers. */
 function playCatalogFor(studio: StudioCore): PlayGallery {
   playCatalog ??= playGallery({
     request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
-    token: () => studio.plugins.hostCredential(GENEX_PLUGIN_ID),
+    token: genexAccountFor(studio).token,
     now: Date.now,
     localImages: fixtureNativePolicy,
   });
@@ -883,13 +900,14 @@ function playCatalogFor(studio: StudioCore): PlayGallery {
  * genex.games over the network, or a fixture launch's own people and numbers.
  */
 function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
-  const fixtureToken = async () => (fixtureGenexAccount ? fixtureAccountToken(fixtureGenexAccount) : undefined);
+  const account = genexAccountFor(studio);
   const deps: PeopleDeps = {
     request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
-    token: fixtureNativePolicy ? fixtureToken : () => studio.plugins.hostCredential(GENEX_PLUGIN_ID),
+    token: account.token,
     now: Date.now,
     localImages: fixtureNativePolicy,
     upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
+    refused: account.refused,
   };
   playAccount ??= { people: playPeople(deps), creators: creatorStats(deps), credits: genexCredits(deps) };
   return playAccount;
@@ -1274,6 +1292,7 @@ function registerIpc(studio: StudioCore): void {
   });
   registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel });
+  registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),

@@ -3,7 +3,8 @@
  * PRO, and beside it a pencil on the account's own (which opens Settings → Genex account) or the
  * friend button on anyone else's; under it their games and players as chips, then when they
  * joined. Then their friends as a row (people the viewer knows first), the account's own last 7
- * days (only it ever sees them), and their games as the dashboard's cards.
+ * days (only it ever sees them), and their games as the dashboard's cards. Offline it shows what
+ * was read last, and reads again once the Mac is back online.
  */
 import type { JSX } from "react";
 import { useEffect } from "react";
@@ -20,11 +21,13 @@ import { LoadStatus } from "../state/people.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
+import { useBackOnline, useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { AddTone, FriendButton } from "./FriendButton.tsx";
 import { PeopleCarousel, PersonTile } from "./PeopleCarousel.tsx";
 import { PersonAvatar } from "./PersonAvatar.tsx";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { OfflineNotice } from "./PlayOffline.tsx";
 import { Grid, useCardRemix } from "./PlayRoom.tsx";
 import { formatCount } from "./play-model.ts";
 import { joinedWhen } from "./ProfilePlate.tsx";
@@ -168,9 +171,12 @@ export function PlayProfile({
 }): JSX.Element {
   const entry = usePeople((s) => s.profiles[userId]);
   const me = usePeople((s) => s.me);
+  const offline = !useOnline();
   useEffect(() => {
     void studio().people.loadProfile(userId, { force: true });
   }, [userId]);
+  // Offline it shows what was read last; back online it reads again by itself.
+  useBackOnline(() => void studio().people.loadProfile(userId, { force: true }));
   const profile = entry?.profile ?? null;
   const own = me?.id === userId;
   return (
@@ -180,7 +186,8 @@ export function PlayProfile({
       onToggleSidebar={onToggleSidebar}
       onBack={() => studio().play.back()}
     >
-      {!profile && entry?.status === LoadStatus.Failed && (
+      {!profile && offline && <OfflineNotice text={PLAY_WORDS.offline.profile} />}
+      {!profile && !offline && entry?.status === LoadStatus.Failed && (
         <div className="people-note">
           {WORDS.profileFailed}
           <Button variant="secondary" onClick={() => void studio().people.loadProfile(userId, { force: true })}>
@@ -188,7 +195,7 @@ export function PlayProfile({
           </Button>
         </div>
       )}
-      {!profile && entry?.status !== LoadStatus.Failed && <ProfilePlaceholder />}
+      {!profile && !offline && entry?.status !== LoadStatus.Failed && <ProfilePlaceholder />}
       {profile && (
         <div className="profile-page" data-profile-page={own ? "own" : "other"}>
           <ProfileHead profile={profile} me={me} />

@@ -35,6 +35,7 @@ const status = (code: number): GalleryAnswer => ({ status: code, body: null });
 function rig(answers: (call: Call) => GalleryAnswer, options: { token?: string | undefined; upload?: number } = {}) {
   const token = "token" in options ? options.token : TOKEN;
   const calls: Call[] = [];
+  const refused: string[] = [];
   const uploads: Array<{ url: string; bytes: number; type: string }> = [];
   let clock = 1_000_000;
   const request: GalleryRequest = async (route, init) => {
@@ -50,8 +51,9 @@ function rig(answers: (call: Call) => GalleryAnswer, options: { token?: string |
       uploads.push({ url, bytes: bytes.length, type });
       return options.upload ?? 200;
     },
+    refused: (value) => refused.push(value),
   });
-  return { people, calls, uploads, advance: (ms: number) => (clock += ms) };
+  return { people, calls, uploads, refused, advance: (ms: number) => (clock += ms) };
 }
 
 /** The account as `/api/me` and the public profile answer it. */
@@ -160,9 +162,10 @@ describe("the Genex account Play is signed in as", () => {
     assert.equal(calls.length, before, "a bad variant never reaches the network");
   });
 
-  it("is null when Genex refuses the token", async () => {
-    const { people } = rig(() => status(401));
+  it("is null when Genex refuses the token, and says which token it refused", async () => {
+    const { people, refused } = rig(() => status(401));
     assert.equal(await people.me(), null);
+    assert.deepEqual(refused, [TOKEN], "the account reads as ended, not as signed out");
   });
 
   it("renames itself with a trimmed 2–20 character name, and sends nothing else", async () => {

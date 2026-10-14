@@ -2006,6 +2006,58 @@ button.chat-header-title:hover {
   outline: 2px solid var(--focus-edge);
   outline-offset: -2px;
 }
+/* The making-cards drawing's line colour, and (outline) the beam's light: the accent mixed toward the
+   ink, so it reads in either theme (the empty states' paler --wire-art is too faint for it). */
+.making-art {
+  color: color-mix(in oklab, var(--accent-primary) 62%, var(--ink));
+  outline-color: color-mix(in oklab, var(--accent-primary) 30%, var(--ink));
+  outline-style: none;
+}
+/* Where a face goes while there is no account to show: signed out, and while the browser signs in. */
+.plate-slot {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink-3);
+}
+.plate-slot-spin {
+  position: absolute;
+  inset: -1px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--play-blue);
+  border-radius: 50%;
+  animation: plate-slot-spin 1s linear infinite;
+}
+@keyframes plate-slot-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plate-slot-spin {
+    animation: none;
+  }
+}
+/* A sign-in genex.games ended: the account's face, dimmed. */
+.plate-ended-face {
+  display: inline-flex;
+  flex: none;
+  opacity: 0.45;
+}
+/* Offline, in the friends' place: the signal, which is not a button. */
+.plate-offline {
+  color: var(--ink-3);
+  cursor: default;
+}
+.plate-offline:hover {
+  background: transparent;
+}
 /* The account's menu: the person on top, then what there is to do. */
 .profile-menu {
   min-width: 248px;
@@ -2577,6 +2629,10 @@ button.chat-header-title:hover {
   line-height: 1.5;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* Genex's row: the account's half of its line, a step brighter. */
+.extension-description-tail {
+  color: var(--ink-2);
 }
 /* A row's account once it needs no button: the browser step, or the balance. */
 .extension-account-note,

@@ -1,9 +1,11 @@
 /**
  * Play's decisions, pure: which tabs a shelf shows, how a tab's pages add up, how counts read, which games are Recent, when
- * the sidebar's Genex card shows and what its button does, what the viewer's cover says, which header
+ * the sidebar's Genex card shows, what the account plate at the sidebar's foot shows, what the viewer's cover says, which header
  * button wears a note, and when the window's drag regions give way to the viewer's native views. `PlayRoom.tsx`, `PlayRecent.tsx`,
- * `PlayPromo.tsx`, `PlayViewerLayer.tsx` and `App.tsx` draw what these decide.
+ * `PlayPromo.tsx`, `ProfilePlate.tsx`, `PlayViewerLayer.tsx` and `App.tsx` draw what these decide.
  */
+import { GenexAccountStatus } from "../../shared/genex-account.ts";
+import type { PlayMe } from "../../shared/play-people.ts";
 import {
   isPlaySlug,
   PLAY_SHELF_TABS,
@@ -17,7 +19,6 @@ import {
   PlayViewerPhase,
   shelfOf,
 } from "../../shared/play.ts";
-import { PluginAccountState } from "../../shared/plugins.ts";
 import {
   type KeyValueStorage,
   browserStorage,
@@ -216,32 +217,52 @@ export function dismissPlayPromo(storage: KeyValueStorage | null = browserStorag
   writeText(STORAGE_KEYS.playPromo, PLAY_PROMO_DONE, storage);
 }
 
-/** The Genex plugin as the plugins store has it: installed (not removed or unlisted) and switched on. */
-export type GenexPluginState = { installed: boolean; enabled: boolean } | undefined;
-
-/** Whether the Genex plugin is there and on. */
-const genexLive = (plugin: GenexPluginState): boolean => Boolean(plugin?.installed && plugin.enabled);
+/** Where the account stands while it has never been signed in on this Mac: the card's time. */
+const NEVER_SIGNED_IN: ReadonlySet<GenexAccountStatus | null> = new Set<GenexAccountStatus | null>([
+  GenexAccountStatus.SignedOut,
+  GenexAccountStatus.SigningIn,
+]);
 
 /**
- * Whether the sidebar's Genex card shows: never once dismissed; otherwise until Genex is installed,
- * on and its account connected, which is what publishing to Play takes.
+ * Whether the sidebar's Genex card shows: once, to someone who has not signed in yet (and while
+ * their sign-in waits in the browser), until they close it. Not before the account is read.
  */
-export function playPromoVisible(input: {
-  dismissed: boolean;
-  plugin: GenexPluginState;
-  account: PluginAccountState | undefined;
-}): boolean {
-  if (input.dismissed) return false;
-  return !(genexLive(input.plugin) && input.account === PluginAccountState.Unlocked);
+export function playPromoVisible(input: { dismissed: boolean; account: GenexAccountStatus | null }): boolean {
+  return !input.dismissed && NEVER_SIGNED_IN.has(input.account);
 }
 
-/** What the card's button does: connect the account, or open Plugins to install or switch Genex on. */
-export const PlayInstall = { Connect: "connect", OpenPlugins: "open-plugins" } as const;
-export type PlayInstall = (typeof PlayInstall)[keyof typeof PlayInstall];
+/** Whether the card is done for good: the account has been signed in (a sign-in that ended was one). */
+export const playPromoRetires = (account: GenexAccountStatus | null): boolean =>
+  account === GenexAccountStatus.SignedIn || account === GenexAccountStatus.Ended;
 
-/** What Install plugin does for the Genex plugin as it is. */
-export const playInstallAction = (plugin: GenexPluginState): PlayInstall =>
-  genexLive(plugin) ? PlayInstall.Connect : PlayInstall.OpenPlugins;
+/** What the account plate at the sidebar's foot shows. Its `data-profile-plate` value. */
+export const PlateState = {
+  /** Nothing yet: the account is not read and none is remembered. */
+  Hidden: "hidden",
+  SignedOut: "signed-out",
+  SigningIn: "signing-in",
+  SignedIn: "signed-in",
+  /** The account as last read, with the Offline mark in place of the friends. */
+  Offline: "offline",
+  /** genex.games no longer takes the sign-in: the account dimmed, to sign in again. */
+  Ended: "ended",
+} as const;
+export type PlateState = (typeof PlateState)[keyof typeof PlateState];
+
+/**
+ * The plate for where the account stands and whether the Mac is `online`. A remembered account
+ * shows before main has answered; offline only ever changes the friends beside it.
+ */
+export function plateState(
+  people: { me: PlayMe | null; account: GenexAccountStatus | null },
+  online: boolean,
+): PlateState {
+  if (people.account === GenexAccountStatus.SignedOut) return PlateState.SignedOut;
+  if (people.account === GenexAccountStatus.SigningIn) return PlateState.SigningIn;
+  if (people.account === GenexAccountStatus.Ended) return PlateState.Ended;
+  if (!people.me) return PlateState.Hidden;
+  return online ? PlateState.SignedIn : PlateState.Offline;
+}
 
 /** The game the viewer's cover shows while the game itself is not on screen. */
 export interface ViewerShown {

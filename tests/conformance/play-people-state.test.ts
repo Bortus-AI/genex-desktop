@@ -19,6 +19,9 @@ import {
 } from "../../src/shared/play-people.ts";
 import { PlayShelf } from "../../src/shared/play.ts";
 import type { StudioApi } from "../../src/shared/studio-api.ts";
+import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
+import type { PlayCredits } from "../../src/shared/play-credits.ts";
+import { type KeyValueStorage, STORAGE_KEYS } from "../../src/renderer/storage.ts";
 import {
   createPeopleStore,
   initialPeople,
@@ -27,6 +30,7 @@ import {
   primaryAction,
   relationshipChanged,
   waitingRequests,
+  withoutPresence,
 } from "../../src/renderer/state/people.ts";
 import {
   backFromProfile,
@@ -103,9 +107,40 @@ function fakeApi(handlers: Partial<PeopleApi> = {}) {
     playAvatarVariant: record("playAvatarVariant", async (variant: number) => ({ ...me(), avatarVariant: variant })),
     playStats: record("playStats", async () => null),
     playCreators: record("playCreators", async () => null),
+    playCredits: record("playCredits", async () => credits(1700)),
+    genexAccount: record("genexAccount", async () => ({ status: GenexAccountStatus.SignedIn })),
+    genexSignIn: record("genexSignIn", async () => ({ status: GenexAccountStatus.SigningIn, code: "ABCD-1234" })),
+    genexCancelSignIn: record("genexCancelSignIn", async () => ({ status: GenexAccountStatus.SignedOut })),
+    genexSignOut: record("genexSignOut", async () => ({ status: GenexAccountStatus.SignedOut })),
   };
   return { api, calls };
 }
+
+/** The account's credits as genex.games answers them: a balance and nothing else. */
+const credits = (balance: number | null): PlayCredits => ({
+  balance,
+  unlimited: false,
+  plan: null,
+  inviteBonus: null,
+  prices: {},
+  recent: [],
+});
+
+/** A storage of this Mac's own, in memory. */
+function memoryStorage(entries: Record<string, string> = {}): KeyValueStorage & { values: Map<string, string> } {
+  const values = new Map(Object.entries(entries));
+  return {
+    values,
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => void values.set(key, value),
+    removeItem: (key) => void values.delete(key),
+  };
+}
+/** A storage that remembers `who` as the account last signed in on this Mac. */
+const remembering = (who: PlayMe) => memoryStorage({ [STORAGE_KEYS.genexMe]: JSON.stringify(who) });
+const offline = async (): Promise<never> => {
+  throw new Error("fetch failed");
+};
 
 describe("Play's pages", () => {
   it("opens Friends and profiles from the sidebar, and Back goes where the profile was opened from", () => {
@@ -188,13 +223,16 @@ describe("the people store", () => {
   });
 
   it("reads the Friends page only while signed in", async () => {
-    const { api, calls } = fakeApi({ playMe: async () => null });
+    const { api, calls } = fakeApi({
+      playMe: async () => null,
+      genexAccount: async () => ({ status: GenexAccountStatus.SignedOut }),
+    });
     const store = createPeopleStore(api);
     await store.loadMe();
     await store.loadFriends();
     assert.deepEqual(
       calls.map(([name]) => name),
-      ["playMe"],
+      ["playMe", "genexAccount"],
     );
   });
 
@@ -325,5 +363,139 @@ describe("regenerating the account's avatar", () => {
     second.resolve({ ...me(), avatarVariant: 2 });
     await two;
     assert.equal(store.getState().me?.avatarVariant, 2);
+  });
+});
+
+describe("the account across sign-in, offline and a sign-in that ended", () => {
+  it("shows the account remembered on this Mac at once, and keeps it while genex.games can't be reached", async () => {
+    const storage = remembering(me("u1"));
+    const { api } = fakeApi({ playMe: offline });
+    const store = createPeopleStore(api, storage);
+    assert.equal(store.getState().me?.id, "u1", "before anything is read");
+    await store.loadMe();
+    assert.equal(store.getState().me?.id, "u1", "offline is not signed out");
+    assert.equal(store.getState().account, GenexAccountStatus.SignedIn);
+    assert.equal(store.getState().meKnown, true);
+  });
+
+  it("remembers the account it read, and forgets it once signed out", async () => {
+    const storage = memoryStorage();
+    let status: GenexAccountStatus = GenexAccountStatus.SignedIn;
+    const { api } = fakeApi({ genexAccount: async () => ({ status }) });
+    const store = createPeopleStore(api, storage);
+    await store.loadMe();
+    assert.equal(JSON.parse(storage.values.get(STORAGE_KEYS.genexMe) ?? "null")?.id, "me");
+    status = GenexAccountStatus.SignedOut;
+    await store.loadMe();
+    assert.equal(store.getState().me, null);
+    assert.equal(storage.values.has(STORAGE_KEYS.genexMe), false);
+  });
+
+  it("keeps who it was for a sign-in genex.games ended, and nothing else of the account", async () => {
+    const storage = memoryStorage();
+    let ended = false;
+    const { api } = fakeApi({
+      playMe: async () => (ended ? null : me("u1")),
+      genexAccount: async () => ({ status: ended ? GenexAccountStatus.Ended : GenexAccountStatus.SignedIn }),
+    });
+    const store = createPeopleStore(api, storage);
+    await store.loadMe();
+    await store.loadFriends();
+    ended = true;
+    await store.loadMe();
+    const state = store.getState();
+    assert.equal(state.account, GenexAccountStatus.Ended);
+    assert.equal(state.me, null, "nothing reads as signed in");
+    assert.equal(state.friends, null);
+    assert.equal(state.ended?.id, "u1", "the plate still knows whose sign-in it was");
+    assert.ok(storage.values.has(STORAGE_KEYS.genexMe), "and so does the next start");
+  });
+
+  it("starts with the remembered account dimmed when the sign-in ended while the app was closed", async () => {
+    const { api } = fakeApi({
+      playMe: async () => null,
+      genexAccount: async () => ({ status: GenexAccountStatus.Ended }),
+    });
+    const store = createPeopleStore(api, remembering(me("u1")));
+    await store.loadMe();
+    assert.equal(store.getState().ended?.id, "u1");
+    assert.equal(store.getState().me, null);
+  });
+
+  it("ignores a remembered account that isn't one", () => {
+    for (const kept of ["{", "null", JSON.stringify({ id: "../x", name: "A" }), JSON.stringify({ ...me(), name: 7 })]) {
+      const store = createPeopleStore(fakeApi().api, memoryStorage({ [STORAGE_KEYS.genexMe]: kept }));
+      assert.equal(store.getState().me, null, kept);
+    }
+  });
+
+  it("signs in in the browser, waits, then reads the account it signed in as", async () => {
+    let status: GenexAccountStatus = GenexAccountStatus.SignedOut;
+    const { api, calls } = fakeApi({ genexAccount: async () => ({ status }), playMe: async () => null });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    await store.signIn();
+    assert.equal(store.getState().account, GenexAccountStatus.SigningIn);
+    assert.equal(store.getState().signInCode, "ABCD-1234");
+    status = GenexAccountStatus.SignedIn;
+    api.playMe = async () => me("u2");
+    await store.loadMe();
+    assert.equal(store.getState().me?.id, "u2");
+    assert.equal(store.getState().signInCode, null);
+    assert.ok(calls.some(([name]) => name === "genexSignIn"));
+  });
+
+  it("cancels a sign-in and signs out through main, signed out after", async () => {
+    const { api, calls } = fakeApi();
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    await store.signOut();
+    assert.equal(store.getState().me, null);
+    assert.equal(store.getState().account, GenexAccountStatus.SignedOut);
+    await store.signIn();
+    await store.cancelSignIn();
+    assert.equal(store.getState().account, GenexAccountStatus.SignedOut);
+    assert.deepEqual(
+      calls.map(([name]) => name).filter((name) => name.startsWith("genex") && name !== "genexAccount"),
+      ["genexSignOut", "genexSignIn", "genexCancelSignIn"],
+    );
+  });
+
+  it("keeps the last known balance while genex.games can't be reached, and forgets it on sign-out", async () => {
+    let reachable = true;
+    const { api } = fakeApi({ playCredits: async () => (reachable ? credits(1700) : offline()) });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    await store.loadCredits();
+    assert.equal(store.getState().credits?.balance, 1700);
+    reachable = false;
+    await store.loadCredits();
+    assert.equal(store.getState().credits?.balance, 1700);
+    await store.signOut();
+    assert.equal(store.getState().credits, null);
+  });
+});
+
+describe("the Friends page offline", () => {
+  it("shows nobody playing: no game, so no green ring, live dot or Join, and nothing else changes", () => {
+    const online = page({
+      friends: [
+        { ...person("ann"), pro: true, playing: { slug: "stick-steel", title: "Stick & Steel" }, games: 2 },
+        { ...person("bo"), playing: null, games: 0 },
+      ],
+    });
+    const offline = withoutPresence(online);
+    assert.deepEqual(
+      offline.friends.map((friend) => [friend.id, friend.playing, friend.games, friend.pro]),
+      [
+        ["ann", null, 2, true],
+        ["bo", null, 0, false],
+      ],
+    );
+    assert.deepEqual(offline.incoming, online.incoming);
+    assert.deepEqual(offline.outgoing, online.outgoing);
+    assert.equal(online.friends[0]?.playing?.slug, "stick-steel", "the page as read is kept for when it is back");
+    const quiet = page({ friends: [{ ...person("bo"), playing: null, games: 0 }] });
+    assert.equal(withoutPresence(quiet), quiet, "nobody playing: the same page");
   });
 });

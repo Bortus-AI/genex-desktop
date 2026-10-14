@@ -293,6 +293,12 @@ const FIXTURE_SAFE = [
   "studio:play.stats",
   "studio:play.creators",
   "studio:play.credits",
+  // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
+  // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
+  "studio:genex-account.read",
+  "studio:genex-account.sign-in",
+  "studio:genex-account.cancel",
+  "studio:genex-account.sign-out",
   // Connectors write a file inside the profile; only the trust step is native.
   "studio:mcp.list",
   "studio:mcp.save",

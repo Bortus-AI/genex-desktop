@@ -3,23 +3,27 @@
  * search for people by name, then grids of cards in the order things need the account: requests
  * waiting for an answer, friends playing now (Join opens their game), every other friend, and
  * requests sent. Beside them, the invite card (its link, Copy, and the credits an invite earns) and
- * whether friends see the game the account is in. With nobody yet, the page is the invite.
+ * whether friends see the game the account is in. With nobody yet, the page is the invite. Offline
+ * it shows the page as last read, with nobody playing (nobody's status is known), the Offline mark
+ * by the title, and search and every press waiting for the connection; back online it reads again.
  */
 import type { JSX, ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { type PlayFriendsPage, PresenceVisibility, peopleQuery } from "../../shared/play-people.ts";
 import { usePeople, useShallow } from "../state/hooks.ts";
-import { LoadStatus } from "../state/people.ts";
+import { LoadStatus, withoutPresence } from "../state/people.ts";
 import { studio } from "../state/studio.ts";
 import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Toggle } from "../ui/Toggle.tsx";
+import { useOnline } from "../ui/use-online.ts";
 import { useCopy } from "../use-copy.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard } from "./CreditsShard.tsx";
 import { FriendCard, FriendCardKind } from "./FriendCard.tsx";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { OfflineChip, OfflineNotice } from "./PlayOffline.tsx";
 
 const WORDS = PLAY_WORDS.people;
 /** A search waits this long after the last key before it asks. */
@@ -27,16 +31,21 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** How many card shapes stand in for the page on its way. */
 const PLACEHOLDER_CARDS = 6;
 
-/** A section of the page: its heading with how many, then its cards; `bare` leaves the heading to the page's title. */
+/**
+ * A section of the page: its heading with how many, a quiet note under it when there is one, then
+ * its cards; `bare` leaves the heading to the page's title.
+ */
 function Section({
   label,
   count,
   bare = false,
+  note,
   children,
 }: {
   label: string;
   count: number;
   bare?: boolean;
+  note?: string;
   children: ReactNode;
 }): JSX.Element {
   return (
@@ -46,6 +55,7 @@ function Section({
           {label} · {count}
         </h2>
       )}
+      {note && <p className="people-section-note">{note}</p>}
       <div className="friend-grid">{children}</div>
     </section>
   );
@@ -55,7 +65,7 @@ function Section({
  * The account's people, in the order they need it. The friends need no heading of their own when
  * nothing comes before them: the page's title already says Friends and how many.
  */
-function FriendSections({ page }: { page: PlayFriendsPage }): JSX.Element {
+function FriendSections({ page, offline }: { page: PlayFriendsPage; offline: boolean }): JSX.Element {
   const playing = page.friends.filter((friend) => friend.playing);
   const others = page.friends.filter((friend) => !friend.playing);
   const othersFirst = page.incoming.length === 0 && playing.length === 0;
@@ -64,7 +74,7 @@ function FriendSections({ page }: { page: PlayFriendsPage }): JSX.Element {
       {page.incoming.length > 0 && (
         <Section label={WORDS.requests} count={page.incoming.length}>
           {page.incoming.map((person) => (
-            <FriendCard key={person.id} kind={FriendCardKind.Request} person={person} />
+            <FriendCard key={person.id} kind={FriendCardKind.Request} person={person} offline={offline} />
           ))}
         </Section>
       )}
@@ -76,16 +86,21 @@ function FriendSections({ page }: { page: PlayFriendsPage }): JSX.Element {
         </Section>
       )}
       {others.length > 0 && (
-        <Section label={WORDS.allFriends} count={others.length} bare={othersFirst}>
+        <Section
+          label={WORDS.allFriends}
+          count={others.length}
+          bare={othersFirst}
+          note={offline ? WORDS.playingOffline : undefined}
+        >
           {others.map((friend) => (
-            <FriendCard key={friend.id} kind={FriendCardKind.Friend} person={friend} />
+            <FriendCard key={friend.id} kind={FriendCardKind.Friend} person={friend} offline={offline} />
           ))}
         </Section>
       )}
       {page.outgoing.length > 0 && (
         <Section label={WORDS.sentRequests} count={page.outgoing.length}>
           {page.outgoing.map((person) => (
-            <FriendCard key={person.id} kind={FriendCardKind.Sent} person={person} />
+            <FriendCard key={person.id} kind={FriendCardKind.Sent} person={person} offline={offline} />
           ))}
         </Section>
       )}
@@ -110,21 +125,31 @@ function SearchResults(): JSX.Element {
   );
 }
 
-/** The search box; a query long enough to send asks a moment after the last key. */
-function PeopleSearchField({ query, onQuery }: { query: string; onQuery: (query: string) => void }): JSX.Element {
+/** The search box; a query long enough to send asks a moment after the last key. Offline it waits. */
+function PeopleSearchField({
+  query,
+  onQuery,
+  offline,
+}: {
+  query: string;
+  onQuery: (query: string) => void;
+  offline: boolean;
+}): JSX.Element {
   useEffect(() => {
+    if (offline) return;
     const timer = window.setTimeout(() => void studio().people.search(query), SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [query]);
+  }, [query, offline]);
   return (
-    <label className="people-search">
+    <label className="people-search" data-offline={offline || undefined}>
       <Icon name="search" />
       <input
         type="search"
-        value={query}
-        placeholder={WORDS.find}
+        value={offline ? "" : query}
+        placeholder={offline ? PLAY_WORDS.offline.search : WORDS.find}
         aria-label={WORDS.findLabel}
         spellCheck={false}
+        disabled={offline}
         data-people-search
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={(event) => {
@@ -171,8 +196,8 @@ function InviteCard({ link, bonus }: { link: string; bonus: number | null }): JS
   );
 }
 
-/** Whether friends see the game the account is in; a refusal puts the switch back and says so. */
-function VisibilityCard({ visibility }: { visibility: PresenceVisibility }): JSX.Element {
+/** Whether friends see the game the account is in; a refusal puts the switch back and says so. Offline it waits. */
+function VisibilityCard({ visibility, offline }: { visibility: PresenceVisibility; offline: boolean }): JSX.Element {
   const shown = visibility === PresenceVisibility.Game;
   const change = (on: boolean): void => {
     studio()
@@ -185,7 +210,7 @@ function VisibilityCard({ visibility }: { visibility: PresenceVisibility }): JSX
         <div className="people-visibility-title">{WORDS.showPlaying}</div>
         <p className="people-visibility-text">{WORDS.showPlayingOff}</p>
       </div>
-      <Toggle on={shown} onChange={change} ariaLabel={WORDS.showPlaying} />
+      <Toggle on={shown} onChange={change} ariaLabel={WORDS.showPlaying} disabled={offline} />
     </div>
   );
 }
@@ -195,10 +220,12 @@ function EmptyFriends({
   page,
   query,
   onQuery,
+  offline,
 }: {
   page: PlayFriendsPage;
   query: string;
   onQuery: (q: string) => void;
+  offline: boolean;
 }) {
   return (
     <div className="people-empty" data-friends-empty>
@@ -207,8 +234,8 @@ function EmptyFriends({
       <div className="people-or" aria-hidden="true">
         {WORDS.or}
       </div>
-      <PeopleSearchField query={query} onQuery={onQuery} />
-      {peopleQuery(query) && <SearchResults />}
+      <PeopleSearchField query={query} onQuery={onQuery} offline={offline} />
+      {!offline && peopleQuery(query) && <SearchResults />}
     </div>
   );
 }
@@ -222,24 +249,27 @@ function FriendsLayout({
   page,
   query,
   onQuery,
+  offline,
 }: {
   page: PlayFriendsPage;
   query: string;
   onQuery: (q: string) => void;
+  offline: boolean;
 }) {
-  const searching = peopleQuery(query) !== null;
+  const searching = !offline && peopleQuery(query) !== null;
   return (
-    <div className="people-layout" data-friends-page>
+    <div className="people-layout" data-friends-page data-offline={offline || undefined}>
       <div className="people-main">
         <h1 className="people-title">
           {WORDS.friends} <span className="people-title-count">{page.friends.length}</span>
+          {offline && <OfflineChip />}
         </h1>
-        <PeopleSearchField query={query} onQuery={onQuery} />
-        {searching ? <SearchResults /> : <FriendSections page={page} />}
+        <PeopleSearchField query={query} onQuery={onQuery} offline={offline} />
+        {searching ? <SearchResults /> : <FriendSections page={page} offline={offline} />}
       </div>
       <aside className="people-aside">
         {page.inviteLink && <InviteCard link={page.inviteLink} bonus={page.inviteBonus} />}
-        <VisibilityCard visibility={page.visibility} />
+        <VisibilityCard visibility={page.visibility} offline={offline} />
       </aside>
     </div>
   );
@@ -254,8 +284,10 @@ export function PlayFriends({
   onToggleSidebar: () => void;
 }): JSX.Element {
   const signedIn = usePeople((s) => s.me !== null);
-  const page = usePeople((s) => s.friends);
+  const read = usePeople((s) => s.friends);
   const status = usePeople((s) => s.friendsStatus);
+  const offline = !useOnline();
+  const page = read && offline ? withoutPresence(read) : read;
   const [query, setQuery] = useState("");
   useEffect(() => {
     void studio().people.loadFriends();
@@ -263,7 +295,8 @@ export function PlayFriends({
   return (
     <PlayPageFrame label={WORDS.friends} sidebarHidden={sidebarHidden} onToggleSidebar={onToggleSidebar}>
       {!signedIn && <p className="people-note">{WORDS.signedOut}</p>}
-      {signedIn && !page && status === LoadStatus.Failed && (
+      {signedIn && !page && offline && <OfflineNotice text={PLAY_WORDS.offline.shelf(WORDS.friends)} />}
+      {signedIn && !page && !offline && status === LoadStatus.Failed && (
         <div className="people-note">
           {WORDS.friendsFailed}
           <Button variant="secondary" onClick={() => void studio().people.loadFriends()}>
@@ -271,9 +304,13 @@ export function PlayFriends({
           </Button>
         </div>
       )}
-      {signedIn && page && nobody(page) && <EmptyFriends page={page} query={query} onQuery={setQuery} />}
-      {signedIn && page && !nobody(page) && <FriendsLayout page={page} query={query} onQuery={setQuery} />}
-      {signedIn && !page && status !== LoadStatus.Failed && <FriendsPlaceholder />}
+      {signedIn && page && nobody(page) && (
+        <EmptyFriends page={page} query={query} onQuery={setQuery} offline={offline} />
+      )}
+      {signedIn && page && !nobody(page) && (
+        <FriendsLayout page={page} query={query} onQuery={setQuery} offline={offline} />
+      )}
+      {signedIn && !page && !offline && status !== LoadStatus.Failed && <FriendsPlaceholder />}
     </PlayPageFrame>
   );
 }

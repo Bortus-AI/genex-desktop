@@ -1,16 +1,16 @@
 /** Plugins: the trust dialogs, reviewed actions, consent answers, and installing from any origin. */
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
-import { type BrowserWindow, dialog, shell } from "electron";
+import { type BrowserWindow, dialog } from "electron";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { isUserCancelled, UserCancelledError } from "../../shared/errors.ts";
 import type { StudioInvokePayload } from "../../shared/ipc-channels.ts";
-import { tagGenexLink } from "../../plugins/genex/http.ts";
 import { isGithubVersion, PluginCapability, type PluginSource, PluginSourceKind } from "../../shared/plugins.ts";
 import type { PluginMarketplace } from "../../substrate/plugins/marketplace.ts";
 import { scanPackage } from "../../substrate/plugins/scan.ts";
 import { publishFromDialog, publishReview } from "../core/genex-publish.ts";
 import { createPluginFilePicker } from "../core/plugin-file-picker.ts";
+import { openGenexPage } from "../genex-browser.ts";
 import { assertNativeActionAllowed } from "../dev/native-policy.ts";
 import type { ConfirmPluginInstall } from "../plugin-install-dialog.ts";
 import { type ActionApprovalDialog, actionApprovalDialog } from "../plugin-install-words.ts";
@@ -43,7 +43,6 @@ const MESSAGE = {
   noNewerRelease: "No compatible newer release is available for this installed plugin",
   actionUnavailable: "Plugin action unavailable",
   reviewFirst: "Review this action in Studio before approving",
-  invalidAuthUrl: "Invalid authentication URL",
   stillStarting: "Studio is still starting",
   notFound: "Plugin not found",
   invalidLink: "Invalid GitHub link",
@@ -192,7 +191,9 @@ function takeApproval(ctx: PluginsContext, ticket: string | undefined, key: stri
 
 async function runPluginAction(ctx: PluginsContext, p: ActionRequest) {
   const { core } = ctx;
-  const plugin = core.plugins.list().find((x) => x.manifest.id === p.id && x.enabled && !x.removed);
+  // On, or Genex's account actions (sign-in, Publish) while Genex is off: they are the person's, not the agent's.
+  const serves = core.plugins.servesAction(p.id, p.name);
+  const plugin = serves ? core.plugins.list().find((x) => x.manifest.id === p.id) : undefined;
   const action = plugin?.manifest.actions.find((a) => a.name === p.name);
   if (!plugin || !action) throw new Error(MESSAGE.actionUnavailable);
   // An action that starts or opens an app or writes outside the plugin's storage never runs in a fixture.
@@ -207,7 +208,8 @@ async function runPluginAction(ctx: PluginsContext, p: ActionRequest) {
     if (!approved) throw new UserCancelledError();
   }
   const result = await core.plugins.action(p.id, p.name, p.args, await core.pluginBinding(p.project));
-  if (result?.verifyUrl && opensSignIn(plugin, p.name)) await openVerifyUrl(ctx, result.verifyUrl);
+  // Fixture profiles never open the browser, whichever plugin action asks.
+  if (result?.verifyUrl && opensSignIn(plugin, p.name)) await openGenexPage(ctx.fixtureNativePolicy, result.verifyUrl);
   return result;
 }
 
@@ -221,15 +223,6 @@ async function confirmAction(box: ActionApprovalDialog): Promise<boolean> {
 function opensSignIn(plugin: InstalledPlugin, name: string): boolean {
   const signInActions = [plugin.manifest.account?.connect ?? "connect", ...EXTERNAL_AUTH_ACTIONS];
   return signInActions.includes(name) && plugin.manifest.capabilities.includes(PluginCapability.ExternalAuth);
-}
-
-async function openVerifyUrl(ctx: PluginsContext, verifyUrl: string): Promise<void> {
-  // Fixture profiles never open the browser, whichever plugin action asks.
-  assertNativeActionAllowed(ctx.fixtureNativePolicy, "studio:open-url");
-  const url = new URL(verifyUrl);
-  if (url.protocol !== "https:") throw new Error(MESSAGE.invalidAuthUrl);
-  // Genex's sign-in, terms and game pages go tagged `s=desktop`; the code in the link is kept.
-  await shell.openExternal(tagGenexLink(url.href));
 }
 
 function requireMarketplace(ctx: PluginsContext): PluginMarketplace {

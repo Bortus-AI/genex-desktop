@@ -1,18 +1,19 @@
 /**
- * The Genex account at the foot of the sidebar, in Play and in Create: its avatar, its name (and
- * Pro), and beside it the friends themselves: up to two faces, people playing first in a green
- * ring, with the count of requests waiting on their corner (two grey placeholders and a "+" while
- * there are no friends). The name opens a menu: Profile, Friends, Credits, Account settings and
- * Sign out. Shown only while Genex is signed in; Profile and Friends open Play at that page.
+ * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
+ * Signed in: its avatar, its name (and Pro), and beside it the friends themselves: up to two faces,
+ * people playing first in a green ring, with the count of requests waiting on their corner (two grey
+ * placeholders and a "+" while there are no friends). The name opens a menu: Profile, Friends,
+ * Credits, Account settings and Sign out. Offline it shows the account as last time, the Offline
+ * mark where the friends were. Signed out it signs in in the browser; while that waits it says so,
+ * with a way to cancel; and once genex.games ends a sign-in it shows the account dimmed, to sign in
+ * again. The account is the app's: the Genex plugin being on or off changes nothing here.
  */
 import type { JSX } from "react";
-import { GENEX_PLUGIN_ID, GenexAction, type GenexStatus } from "../../shared/genex.ts";
+import { useState } from "react";
 import type { PlayMe } from "../../shared/play-people.ts";
-import type { PluginInfo } from "../../shared/plugins.ts";
 import { GenexTab, openGenexPage } from "../panels/plugins/genex/genex-tab.ts";
-import { useGenexStatus } from "../panels/plugins/genex/use-genex-status.ts";
-import { runPluginAction } from "../plugin-actions.ts";
-import { usePeople, usePlugins, useShallow } from "../state/hooks.ts";
+import { openSettings, SettingsSection } from "../settings-navigation.ts";
+import { usePeople, useShallow } from "../state/hooks.ts";
 import { stackFaces, waitingRequests } from "../state/people.ts";
 import { PlayPage } from "../state/play.ts";
 import { studio } from "../state/studio.ts";
@@ -25,14 +26,20 @@ import {
 } from "../ui/dropdown-menu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
+import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard } from "./CreditsShard.tsx";
-import { formatCount } from "./play-model.ts";
+import { formatCount, PlateState, plateState } from "./play-model.ts";
 import { GhostAvatar, PersonAvatar } from "./PersonAvatar.tsx";
+import { OfflineMark } from "./PlayOffline.tsx";
+import { SignOutDialog } from "./SignOutDialog.tsx";
+import { cancelGenexSignIn, useGenexSignIn } from "./use-genex-sign-in.ts";
 
 const WORDS = PLAY_WORDS.people;
 /** The size of the stack's faces. */
 const STACK_FACE = 24;
+/** The size of the plate's own face. */
+const PLATE_FACE = 28;
 /** The placeholders' ids: each draws its own grey face. */
 const GHOSTS = ["ghost-a", "ghost-b"] as const;
 
@@ -40,35 +47,18 @@ const GHOSTS = ["ghost-a", "ghost-b"] as const;
 export const joinedWhen = (iso: string | null): string | null =>
   iso ? new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(new Date(iso)) : null;
 
-/** Sign out of Genex through the plugin's own action, its confirmation asked natively first. */
-async function signOut(genex: PluginInfo | undefined): Promise<void> {
-  if (!genex) return;
-  try {
-    await runPluginAction({
-      plugin: genex,
-      name: GenexAction.Disconnect,
-      args: {},
-      project: null,
-      // Signing out shows no pictures: the review that would is refused, not shown.
-      review: (request) => request.resolve(false),
-    });
-  } catch {
-    // Declined in the confirmation: still signed in, nothing to say.
-  }
-  await studio().people.loadMe();
+/** Settings › Genex account, where the account's avatar, name and balance are. */
+const openAccountSettings = (): void => openSettings(SettingsSection.Account);
+
+/** The credits as the menu shows them: the last balance read, or nothing before one was. */
+function creditsWords(credits: { balance: number | null; unlimited: boolean } | null): string | null {
+  if (credits?.unlimited) return WORDS.creditsUnlimited;
+  return credits?.balance == null ? null : formatCount(credits.balance);
 }
 
-/** The credits as the menu shows them, or null while the plugin has not said. */
-function creditsWords(status: GenexStatus | null): string | null {
-  if (!status?.connected) return null;
-  if (status.unlimited) return WORDS.creditsUnlimited;
-  return status.balance === null ? null : formatCount(status.balance);
-}
-
-/** The account's credits, read while the menu is open; they open the Genex plugin's Credits tab. */
-function Credits({ genex }: { genex: PluginInfo }): JSX.Element {
-  const { status } = useGenexStatus(genex, null);
-  const amount = creditsWords(status);
+/** The account's credits, as last read; they open the Genex plugin's Credits tab, where credits are spent. */
+function Credits(): JSX.Element {
+  const amount = creditsWords(usePeople((s) => s.credits));
   return (
     <DropdownMenuItem data-profile-menu="credits" onSelect={() => openGenexPage(GenexTab.Credits)}>
       <CreditsShard size={16} />
@@ -82,13 +72,13 @@ function Credits({ genex }: { genex: PluginInfo }): JSX.Element {
 function PlateMenu({
   me,
   waiting,
-  genex,
   onOpen,
+  onSignOut,
 }: {
   me: PlayMe;
   waiting: number;
-  genex: PluginInfo | undefined;
   onOpen: (page: typeof PlayPage.Profile | typeof PlayPage.Friends) => void;
+  onSignOut: () => void;
 }): JSX.Element {
   const joined = joinedWhen(me.joinedAt);
   return (
@@ -112,13 +102,13 @@ function PlateMenu({
         <span className="flex-1">{WORDS.friends}</span>
         {waiting > 0 && <span className="sidebar-badge">{waiting}</span>}
       </DropdownMenuItem>
-      {genex && <Credits genex={genex} />}
+      <Credits />
       <DropdownMenuSeparator />
-      <DropdownMenuItem data-profile-menu="account" onSelect={() => openGenexPage(GenexTab.Tools)}>
+      <DropdownMenuItem data-profile-menu="account" onSelect={openAccountSettings}>
         <Icon name="settings" />
         {WORDS.accountSettings}
       </DropdownMenuItem>
-      <DropdownMenuItem data-profile-menu="sign-out" onSelect={() => void signOut(genex)}>
+      <DropdownMenuItem data-profile-menu="sign-out" onSelect={onSignOut}>
         <Icon name="sign-out" />
         {WORDS.signOut}
       </DropdownMenuItem>
@@ -173,23 +163,57 @@ function FriendsStack({ onOpen }: { onOpen: () => void }): JSX.Element {
   );
 }
 
-/** The plate: nothing while Genex is signed out. */
-export function ProfilePlate({ onPlayMode }: { onPlayMode: (play: boolean) => void }): JSX.Element | null {
-  const me = usePeople((s) => s.me);
+/** Offline, in the friends' place: nobody's status is known, so the Offline signal stands there. */
+function OfflineSlot(): JSX.Element {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="friends-stack plate-offline" role="img" aria-label={WORDS.offlineFriends} tabIndex={0}>
+          <OfflineMark />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{WORDS.offlineFriends}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** The grey round slot where a face goes, with a person in it; `waiting` rings it while the browser has the sign-in. */
+function FaceSlot({ waiting = false }: { waiting?: boolean }): JSX.Element {
+  return (
+    <span className="plate-slot" aria-hidden="true">
+      <Icon name="character" size={16} />
+      {waiting && <span className="plate-slot-spin" />}
+    </span>
+  );
+}
+
+/** Signed in (or offline, as last time): the account, its menu, and the friends or the Offline mark. */
+function AccountPlate({
+  me,
+  offline,
+  onPlayMode,
+}: {
+  me: PlayMe;
+  offline: boolean;
+  onPlayMode: (play: boolean) => void;
+}): JSX.Element {
   const waiting = usePeople(waitingRequests);
-  const genex = usePlugins((s) => s.list.find((p) => p.manifest.id === GENEX_PLUGIN_ID));
-  if (!me) return null;
+  const [signingOut, setSigningOut] = useState(false);
   const open = (page: typeof PlayPage.Profile | typeof PlayPage.Friends): void => {
     onPlayMode(true);
     if (page === PlayPage.Friends) studio().play.showFriends();
     else studio().play.showProfile(me.id);
   };
   return (
-    <div className="profile-plate" data-profile-plate>
-      <DropdownMenu>
+    <>
+      <DropdownMenu
+        onOpenChange={(opened) => {
+          if (opened) void studio().people.loadCredits();
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <button type="button" className="profile-plate-main" aria-label={WORDS.plateLabel(me.name)} data-avatar-host>
-            <PersonAvatar person={me} size={28} />
+            <PersonAvatar person={me} size={PLATE_FACE} />
             <span className="profile-plate-name">
               <span className="profile-plate-name-text">{me.name}</span>
               {me.pro && <span className="profile-plate-plan"> · {WORDS.pro}</span>}
@@ -197,9 +221,104 @@ export function ProfilePlate({ onPlayMode }: { onPlayMode: (play: boolean) => vo
             <Icon name="chevrons" size={14} className="profile-plate-chevrons" />
           </button>
         </DropdownMenuTrigger>
-        <PlateMenu me={me} waiting={waiting} genex={genex} onOpen={open} />
+        <PlateMenu me={me} waiting={waiting} onOpen={open} onSignOut={() => setSigningOut(true)} />
       </DropdownMenu>
-      <FriendsStack onOpen={() => open(PlayPage.Friends)} />
+      {offline ? <OfflineSlot /> : <FriendsStack onOpen={() => open(PlayPage.Friends)} />}
+      {signingOut && <SignOutDialog onDismiss={() => setSigningOut(false)} />}
+    </>
+  );
+}
+
+/** Signed out: one press opens genex.games in the browser to sign in or make an account. */
+function SignInPlate(): JSX.Element {
+  const { busy, signIn } = useGenexSignIn();
+  return (
+    <button
+      type="button"
+      className="profile-plate-main"
+      aria-label={WORDS.signInLabel}
+      aria-busy={busy || undefined}
+      data-genex-sign-in
+      onClick={signIn}
+    >
+      <FaceSlot waiting={busy} />
+      <span className="profile-plate-name">
+        <span className="profile-plate-name-text">{WORDS.signIn}</span>
+      </span>
+      <Icon name="arrow-up-right" size={14} className="profile-plate-chevrons" />
+    </button>
+  );
+}
+
+/** While the browser has the sign-in: a press opens its page again, and × stops it. */
+function SigningInPlate(): JSX.Element {
+  const { signIn } = useGenexSignIn();
+  return (
+    <>
+      <button
+        type="button"
+        className="profile-plate-main"
+        aria-label={WORDS.finishInBrowserLabel}
+        data-genex-sign-in
+        onClick={signIn}
+      >
+        <FaceSlot waiting />
+        <span className="profile-plate-name" role="status">
+          <span className="profile-plate-name-text">{WORDS.finishInBrowser}</span>
+        </span>
+      </button>
+      <button
+        type="button"
+        className="people-button people-button-icon"
+        aria-label={WORDS.cancelSignIn}
+        data-genex-cancel-sign-in
+        onClick={() => void cancelGenexSignIn()}
+      >
+        <Icon name="close" size={16} />
+      </button>
+    </>
+  );
+}
+
+/** genex.games ended the sign-in: the account dimmed, and one press to sign in again. */
+function EndedPlate(): JSX.Element {
+  const ended = usePeople((s) => s.ended);
+  const { busy, signIn } = useGenexSignIn();
+  return (
+    <button
+      type="button"
+      className="profile-plate-main"
+      aria-label={WORDS.signInAgainLabel(ended?.name ?? null)}
+      aria-busy={busy || undefined}
+      data-genex-sign-in
+      onClick={signIn}
+    >
+      <span className="plate-ended-face" aria-hidden="true">
+        {ended ? <PersonAvatar person={ended} size={PLATE_FACE} /> : <FaceSlot />}
+      </span>
+      <span className="profile-plate-name">
+        <span className="profile-plate-name-text">{WORDS.signInAgain}</span>
+      </span>
+      <Icon name="arrow-up-right" size={14} className="profile-plate-chevrons" />
+    </button>
+  );
+}
+
+/** The plate for where the account stands; nothing until the account is known or remembered. */
+export function ProfilePlate({ onPlayMode }: { onPlayMode: (play: boolean) => void }): JSX.Element | null {
+  const me = usePeople((s) => s.me);
+  const account = usePeople((s) => s.account);
+  const online = useOnline();
+  const state = plateState({ me, account }, online);
+  if (state === PlateState.Hidden) return null;
+  return (
+    <div className="profile-plate" data-profile-plate={state}>
+      {state === PlateState.SignedOut && <SignInPlate />}
+      {state === PlateState.SigningIn && <SigningInPlate />}
+      {state === PlateState.Ended && <EndedPlate />}
+      {me && (state === PlateState.SignedIn || state === PlateState.Offline) && (
+        <AccountPlate me={me} offline={state === PlateState.Offline} onPlayMode={onPlayMode} />
+      )}
     </div>
   );
 }

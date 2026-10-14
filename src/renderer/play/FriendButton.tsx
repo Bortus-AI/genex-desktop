@@ -89,8 +89,19 @@ export function FriendButton({
   return null;
 }
 
-/** A friend's ⋯: its menu removes them. Hidden on a card until the card is hovered or focused. */
-export function FriendMoreMenu({ person, className = "" }: { person: PlayPerson; className?: string }): JSX.Element {
+/**
+ * A friend's ⋯: its menu removes them. Hidden on a card until the card is hovered or focused;
+ * `disabled` while removing waits for the connection.
+ */
+export function FriendMoreMenu({
+  person,
+  className = "",
+  disabled = false,
+}: {
+  person: PlayPerson;
+  className?: string;
+  disabled?: boolean;
+}): JSX.Element {
   const busy = usePeople((s) => Boolean(s.busy[person.id]));
   return (
     <DropdownMenu>
@@ -100,7 +111,7 @@ export function FriendMoreMenu({ person, className = "" }: { person: PlayPerson;
           className={`people-more ${className}`}
           aria-label={WORDS.more(person.name)}
           aria-busy={busy}
-          disabled={busy}
+          disabled={busy || disabled}
         >
           <Icon name="more" />
         </button>

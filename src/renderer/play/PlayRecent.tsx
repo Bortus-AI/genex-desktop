@@ -3,7 +3,6 @@ import type { JSX } from "react";
 import { useState } from "react";
 import { usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
-import { PLAY_WORDS } from "../words.ts";
 import type { PlayRecentEntry } from "./play-model.ts";
 
 /**
@@ -41,10 +40,10 @@ function RecentRow({ entry }: { entry: PlayRecentEntry }): JSX.Element {
   );
 }
 
-/** The Recent list, or a line saying where played games will show. */
-export function PlayRecent(): JSX.Element {
+/** The Recent list; nothing at all until a game has been played. */
+export function PlayRecent(): JSX.Element | null {
   const recent = usePlay((s) => s.recent);
-  if (recent.length === 0) return <p className="play-recent-empty">{PLAY_WORDS.recentEmpty}</p>;
+  if (recent.length === 0) return null;
   return (
     <div className="sidebar-games" data-play-recent-list>
       {recent.map((entry) => (

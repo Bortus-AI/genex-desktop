@@ -797,25 +797,56 @@
   color: var(--ink);
   font-size: 14px;
 }
-/* Multiplayer's setup: what Genex brings, one line each, divided like the publish facts. */
+/* Multiplayer's setup: what Genex brings, as small chips in one row under the drawing. */
 .genex-setup-points {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 13px;
 }
 .genex-setup-points li {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 14px;
-  color: var(--ink);
+  gap: 6px;
+  height: 28px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--line);
 }
 .genex-setup-points .gi {
-  color: var(--icon, var(--ink-2));
+  color: var(--ink-3);
+}
+/* Publish with no account: the account card, why, and Sign in in browser, as Settings shows them. */
+.genex-publish-sign-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding-block: 4px 6px;
+  text-align: center;
+}
+.genex-publish-sign-in > p {
+  max-width: 36ch;
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 20px;
+  text-wrap: balance;
+}
+.genex-publish-sign-in-art {
+  width: 200px;
+  height: 140px;
+  max-width: 100%;
+}
+.genex-publish-sign-in-button {
+  height: 36px;
+  padding-inline: 18px;
 }
 /* An account step: its line or sign-in code, then any quiet press under it. */
 .genex-publish-step {

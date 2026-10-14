@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import { MoreView, moreView } from "../../src/renderer/panels/plugins/labels.ts";
-import { shownDescription, shownIntro, shownName } from "../../src/renderer/panels/plugins/labels.ts";
+import { routerLine, shownDescription, shownIntro, shownName } from "../../src/renderer/panels/plugins/labels.ts";
 import { BOARD_CELLS, boardMoves, pieceFrames } from "../../src/renderer/panels/plugins/genex/router-icon.ts";
 import { ICON_TOOLS, ROUTED_TOOLS } from "../../src/renderer/panels/plugins/genex/routed-tools.ts";
 
@@ -19,9 +19,30 @@ describe("Genex's row and page name the router", () => {
   it("shows Genex as the Genex plugin, the game dev tools router, connected as the account on its page", () => {
     const genex = plugin(GENEX_PLUGIN_ID, "Genex plugin", "3D models, characters, sound and art…");
     assert.equal(shownName(genex), "Genex plugin");
-    assert.equal(shownDescription(genex), "Game dev tools router");
     assert.equal(shownIntro(genex), "Game dev tools router");
     assert.equal(shownIntro(genex, "Rab Neba"), "Game dev tools router · connected as Rab Neba");
+  });
+
+  it("says on Genex's row what its switch does: tools for the agent, never the account", () => {
+    const genex = plugin(GENEX_PLUGIN_ID, "Genex plugin", "3D models, characters, sound and art…");
+    const on = { ...genex, enabled: true, removed: false };
+    const off = { ...genex, enabled: false, removed: false };
+    assert.deepEqual(routerLine(on), {
+      lead: "Tools for your agent: 3D, textures, animation, music, multiplayer.",
+      tail: "Uses your Genex account.",
+    });
+    assert.deepEqual(routerLine(off), {
+      lead: "Off. Your agent can't use Genex tools.",
+      tail: "Your profile, friends and Publish stay.",
+    });
+    assert.equal(
+      shownDescription(on),
+      "Tools for your agent: 3D, textures, animation, music, multiplayer. Uses your Genex account.",
+    );
+    assert.equal(
+      shownDescription(off),
+      "Off. Your agent can't use Genex tools. Your profile, friends and Publish stay.",
+    );
   });
 
   it("leaves every other plugin's own name and description alone", () => {

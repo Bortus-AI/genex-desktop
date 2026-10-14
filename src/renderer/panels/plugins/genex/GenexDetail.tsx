@@ -180,7 +180,7 @@ function GenexTabs({ tab }: { tab: GenexTab }): JSX.Element {
   );
 }
 
-/** Genex is off: the line that says so, and what went wrong on the way here. */
+/** Genex is off: the line that says what that takes away (the agent's tools, not the account), and what went wrong. */
 function GenexOff({ page }: { page: PluginsPage }): JSX.Element {
   return (
     <>
@@ -222,7 +222,8 @@ export function GenexDetail({
           <Information detail={detail} />
         </>
       )}
-      {tab === GenexTab.Credits && (active ? <GenexCreditsTab /> : <GenexOff page={page} />)}
+      {/* Credits are the account's, which stays signed in with the plugin off. */}
+      {tab === GenexTab.Credits && <GenexCreditsTab />}
     </div>
   );
 }

@@ -153,12 +153,6 @@
   padding-block: 6px;
   padding-inline-end: 8px;
 }
-.play-recent-empty {
-  padding: 2px 8px;
-  color: var(--ink-3);
-  font-size: 13px;
-  line-height: 18px;
-}
 /* A rounded 16:9 rectangle, so Play's rows read apart from Create's round game pictures; its edge is
    the theme's line. */
 .play-thumb {

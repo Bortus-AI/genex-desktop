@@ -1,6 +1,6 @@
 /** A section of the Settings dialog a request can open. */
 export const SettingsSection = {
-  /** The Genex account's avatar and name (`panels/AccountSection.tsx`), shown while Genex is signed in. */
+  /** The Genex account (`panels/AccountSection.tsx`): its avatar, name and credits, or the way to sign in. */
   Account: "account",
   Games: "games",
   Providers: "providers",

@@ -2,7 +2,7 @@
  * Publish pressed in Studio's own Publish dialog. The dialog Studio draws says what publishing
  * does and then shows the exact files that would go online; publishing that list is the consent,
  * so no native dialog and no chat card ask again. Only for a game Studio may open, only through
- * the bundled Genex plugin while it is on, and only for the very files the person saw.
+ * the bundled Genex plugin, on or off, and only for the very files the person saw.
  */
 import assert from "node:assert/strict";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -213,7 +213,7 @@ test("Publish refuses anything but a game's name and a file list, and asks Genex
   }
 });
 
-test("Publish needs the bundled Genex plugin, on", async () => {
+test("Publish needs the bundled Genex plugin installed, on or off", async () => {
   const rig = await dialogRig();
   try {
     const review = await publishReview(rig.core, GAME);
@@ -221,7 +221,6 @@ test("Publish needs the bundled Genex plugin, on", async () => {
     assert.ok(installed.some((p) => p.manifest.id === "genex" && p.source === PluginSourceKind.Bundled));
     const unusable: Array<[string, (p: (typeof installed)[number]) => (typeof installed)[number] | null]> = [
       ["missing", () => null],
-      ["off", (p) => ({ ...p, enabled: false })],
       ["removed", (p) => ({ ...p, removed: true })],
       ["not bundled", (p) => ({ ...p, source: PluginSourceKind.Local })],
     ];
@@ -236,6 +235,24 @@ test("Publish needs the bundled Genex plugin, on", async () => {
       await assert.rejects(publishFromDialog(rig.core, GAME, review), /Genex/, label);
     }
     assert.deepEqual(rig.calls, []);
+  } finally {
+    await rig.close();
+  }
+});
+
+test("Publish belongs to the account: with the Genex plugin off it still lists and publishes the game", async () => {
+  const rig = await dialogRig();
+  try {
+    await rig.core.plugins.setEnabled(GENEX_PLUGIN_ID, false);
+    const review = await publishReview(rig.core, GAME);
+    assert.ok(review.included.includes("index.html"));
+    await publishFromDialog(rig.core, GAME, review, "Off Plugin Game");
+    assert.deepEqual(
+      rig.calls.map((call) => [call.id, call.name, call.args]),
+      [[GENEX_PLUGIN_ID, GenexAction.PublishGallery, { title: "Off Plugin Game" }]],
+    );
+    assert.equal(rig.core.plugins.servesAction(GENEX_PLUGIN_ID, GenexAction.PublishGallery), true);
+    assert.equal(rig.core.plugins.servesAction(GENEX_PLUGIN_ID, GenexAction.Approve), false, "the agent's steps wait");
   } finally {
     await rig.close();
   }

@@ -29,6 +29,7 @@ import { SCRAMBLE_FRAMES, SHARD_CELLS, scrambled } from "../../src/renderer/play
 import { dayAt, labelledDays, niceMax } from "../../src/renderer/play/stats-chart.ts";
 import { StripKind, stripView } from "../../src/renderer/play/stats-view.ts";
 import { createPeopleStore, LoadStatus, stackFaces, type StatsEntry } from "../../src/renderer/state/people.ts";
+import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import { backFromProfile, initialPlay, PlayPage, profileShown, statsShown } from "../../src/renderer/state/play.ts";
 
 /** A game's stats over a week. */
@@ -233,8 +234,13 @@ describe("the people store's numbers", () => {
         calls.push("creators");
         return (answers.creators ?? (async () => null))();
       },
+      playCredits: async () => assert.fail("not read"),
+      genexAccount: async () => ({ status: GenexAccountStatus.SignedIn }),
+      genexSignIn: async () => assert.fail("not signed in"),
+      genexCancelSignIn: async () => assert.fail("not cancelled"),
+      genexSignOut: async () => assert.fail("not signed out"),
     };
-    return { people: createPeopleStore(api), calls };
+    return { people: createPeopleStore(api, null), calls };
   }
 
   it("reads stats only signed in, once a period unless forced, and marks a period genex.games has none for", async () => {

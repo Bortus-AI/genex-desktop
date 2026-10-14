@@ -1202,7 +1202,7 @@ async function checkPublishGate(buildSmoke: BuildSmoke): Promise<void> {
   check(
     "Studio draws the Publish dialog and reads the game's publishing state",
     await waitFor(
-      `!!document.querySelector('[role="dialog"][aria-label="Publish to the web"] [data-genex-publish-status]')&&!document.querySelector('[role="dialog"][aria-label="Publish to the web"] iframe')`,
+      `!!document.querySelector('[role="dialog"][data-testid="genex-publish"] [data-genex-publish-status]')&&!document.querySelector('[role="dialog"][data-testid="genex-publish"] iframe')`,
     ),
   );
   const publishRefused = await wc.executeJavaScript(
@@ -1210,40 +1210,44 @@ async function checkPublishGate(buildSmoke: BuildSmoke): Promise<void> {
   );
   check("fixture native policy blocks the publish confirmation", publishRefused);
   await wc.executeJavaScript(
-    `document.querySelector('[role="dialog"][aria-label="Publish to the web"] button[aria-label="Close"]').click()`,
+    `document.querySelector('[role="dialog"][data-testid="genex-publish"] button[aria-label="Close"]').click()`,
   );
   check(
     "Publish closes before changing plugin availability",
-    await waitFor(`!document.querySelector('[role="dialog"][aria-label="Publish to the web"]')`),
+    await waitFor(`!document.querySelector('[role="dialog"][data-testid="genex-publish"]')`),
   );
   await core.plugins.setEnabled("genex", false);
   check(
     "disabled Genex contributes no tools or guidance",
     !core.plugins.tools().some((t) => t.name.startsWith("genex__")) && !core.plugins.guidance().includes("Genex"),
   );
-  // Publish stays for every open game: with Genex off it offers to turn Genex on.
+  // Publish belongs to the account, not the agent's tools: with Genex off its own Publish stays.
   check(
-    "disabled Genex leaves a Publish that offers to turn it on",
-    await waitFor(`!!document.querySelector('button[aria-label="Publish game"]')`),
+    "disabled Genex keeps its own Publish",
+    await waitFor(
+      `!!document.querySelector('[data-plugin-toolbar="genex:publish"]') && !document.querySelector('[data-studio-publish]')`,
+    ),
   );
   await wc.executeJavaScript(`document.querySelector('button[aria-label="Publish game"]').click()`);
   check(
-    "Publish with Genex off asks to turn it on",
+    "Publish with Genex off opens the same dialog, which asks only for an account",
     await waitFor(
-      `[...document.querySelectorAll('[role="dialog"][aria-label="Publish to the web"] button')].some((b)=>b.textContent.trim()==="Turn on Genex plugin")`,
+      `!!document.querySelector('[role="dialog"][data-testid="genex-publish"] [data-genex-publish-status], [role="dialog"][data-testid="genex-publish"] [data-genex-publish-sign-in]')`,
     ),
   );
   await wc.executeJavaScript(
-    `document.querySelector('[role="dialog"][aria-label="Publish to the web"] button[aria-label="Close"]').click()`,
+    `document.querySelector('[role="dialog"][data-testid="genex-publish"] button[aria-label="Close"]').click()`,
   );
-  await core.plugins.remove("genex");
   check(
-    "removed Genex retains prior accounting and ciphertext",
-    Boolean(await fs.stat(path.join(core.pluginServices.root("genex"), "credentials/genex.bin")).catch(() => null)),
+    "Genex holds the app's account: it can't be removed, only turned off",
+    await core.plugins.remove("genex").then(
+      () => false,
+      (error: unknown) => /turn it off/.test(String(error)),
+    ),
   );
-  await core.plugins.restore("genex");
+  await core.plugins.setEnabled("genex", true);
   check(
-    "restored Genex brings its own Publish button back",
+    "Genex back on keeps its own Publish button",
     await waitFor(
       `!document.querySelector('[data-studio-publish]') && !!document.querySelector('[data-plugin-toolbar="genex:publish"]')`,
     ),

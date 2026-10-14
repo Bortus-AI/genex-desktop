@@ -205,6 +205,7 @@ const MESSAGE = {
   DigestMismatch: "Plugin artifact digest mismatch",
   CatalogMismatch: "Catalog manifest mismatch",
   EnableFirst: "Enable the plugin first",
+  AccountPlugin: (name: string) => `${name} holds your account, so it can't be removed: turn it off instead`,
   OnlyLocalWatch: "Only plugins loaded from a local folder can be watched",
   UnlockRequired: "Explicit account unlock required",
   ConnectionRequired: "Explicit account connection required",
@@ -659,7 +660,7 @@ export class PluginRegistry {
     const state = { timer: undefined as ReturnType<typeof setTimeout> | undefined, expires };
     this.#accountPolls.set(id, state);
     const tick = async () => {
-      if (this.#accountPolls.get(id) !== state || !this.enabled(id)) return;
+      if (this.#accountPolls.get(id) !== state || !this.#runs(this.#installed.get(id))) return;
       if (Date.now() >= state.expires) {
         this.#accountPolls.delete(id);
         this.#saveAuthorized.delete(id);
@@ -733,6 +734,13 @@ export class PluginRegistry {
       ) => Record<string, unknown> | Promise<Record<string, unknown>>)
     | undefined;
   seedEnabled: Record<string, boolean> = {};
+  /**
+   * The plugin whose account is the app's own (Genex) and the actions it answers while off: its
+   * sign-in and Publish belong to the person, not to the agent. Turned off, it loses its tools,
+   * servers, skills, hooks and toolbar but keeps its account signed in and serves these actions;
+   * it can't be removed. The host sets it.
+   */
+  appAccount: { id: string; actions: readonly string[] } | undefined;
   readonly bootstrap: string;
   readonly service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>;
   /** One source for the `plugins.changed` UI event; the host sets it. A throwing hook never fails a mutation. */
@@ -906,7 +914,7 @@ export class PluginRegistry {
   async #restoreSavedAccount(id: string) {
     const p = this.#installed.get(id);
     const hasAccount = Boolean(p?.manifest.account) && hasCapability(p, PluginCapability.Credentials);
-    if (!p?.rememberAccount || !isLive(p) || !hasAccount) return;
+    if (!p?.rememberAccount || !this.#runs(p) || !hasAccount) return;
     try {
       await this.#account(id).unlock();
       if (await this.#account(id).get()) this.#mcpAuthorized.add(id);
@@ -1109,19 +1117,46 @@ export class PluginRegistry {
     return this.#mcpLaunch(id, this.#active(id)).credentialFile();
   }
   /**
-   * The account token of a live plugin for the host's own calls (Play's likes and sign-in tickets):
-   * the same gate as {@link hostCredentialFile}, so nothing until the user unlocked the account, and
-   * nothing for a plugin that is removed or off.
+   * The account token for the host's own calls (Play's people, likes and sign-in tickets): the same
+   * gate as {@link hostCredentialFile}, so nothing until the user unlocked the account, and nothing
+   * for a plugin that is removed or off, unless it is the app's account plugin, whose account stays.
    */
   async hostCredential(id: string): Promise<string | undefined> {
-    const p = this.#installed.get(id);
-    if (!p || !isLive(p)) return undefined;
+    if (!this.#runs(this.#installed.get(id))) return undefined;
     return this.#mcpCredential(id);
   }
   #active(id: string) {
     const p = this.#installed.get(id);
     if (!p || !isLive(p)) throw new Error(MESSAGE.Unavailable(id));
     return p;
+  }
+  /** Whether `p` is the app's account plugin, installed: on or off, its account stays. */
+  #keepsAccount(p: Installed | undefined): boolean {
+    return Boolean(p && !p.removed && this.appAccount?.id === p.manifest.id);
+  }
+  /** Whether `p`'s backend may run now: it is on, or it is the app's account plugin. */
+  #runs(p: Installed | undefined): p is Installed {
+    return isLive(p) || this.#keepsAccount(p);
+  }
+  /** A plugin whose backend may run now (`#runs`), or Unavailable. */
+  #running(id: string): Installed {
+    const p = this.#installed.get(id);
+    if (!this.#runs(p)) throw new Error(MESSAGE.Unavailable(id));
+    return p;
+  }
+  /**
+   * Whether the person may run action `name` of plugin `id` now: the plugin is on, or it is the
+   * app's account plugin and the action is one of those it keeps while off.
+   */
+  servesAction(id: string, name: string): boolean {
+    const p = this.#installed.get(id);
+    if (isLive(p)) return true;
+    return this.#keepsAccount(p) && (this.appAccount?.actions ?? []).includes(name);
+  }
+  /** The plugin behind an action the person may run now (`servesAction`), or Unavailable. */
+  #serving(id: string, name: string): Installed {
+    if (!this.servesAction(id, name)) throw new Error(MESSAGE.Unavailable(id));
+    return this.#running(id);
   }
   enabled(id: string) {
     return isLive(this.#installed.get(id));
@@ -1385,24 +1420,28 @@ export class PluginRegistry {
       p.enabled = enabled;
       const pending = this.#pending.get(id);
       if (pending) pending.enabled = enabled;
-      if (!enabled) {
-        // Turned off, its tools ask again once it is back on.
-        delete p.allowed;
-        this.#lockAccount(id);
-        this.#unwatch(id);
-        this.#processes.get(id)?.stop();
-        this.#processes.delete(id);
-      }
+      if (!enabled) this.#turnOff(id, p);
       await this.#save();
       if (enabled && !wasEnabled) await this.#restoreSavedAccount(id);
       await this.#mcpSync(id);
       this.#fire({ id, reason: enabled ? PluginChangeReason.Enabled : PluginChangeReason.Disabled });
     });
   }
+  /** What turning a plugin off stops: its backend, its folder's watch and its tools' grants; its account too, unless it is the app's. */
+  #turnOff(id: string, p: Installed) {
+    // Turned off, its tools ask again once it is back on.
+    delete p.allowed;
+    // The app's account plugin keeps its account (and a sign-in under way): only its tools go.
+    if (!this.#keepsAccount(p)) this.#lockAccount(id);
+    this.#unwatch(id);
+    this.#processes.get(id)?.stop();
+    this.#processes.delete(id);
+  }
   async remove(id: string) {
     return this.#serial(async () => {
       const p = this.#installed.get(id);
       if (!p) throw new Error(MESSAGE.UnknownPlugin);
+      if (this.#keepsAccount(p)) throw new Error(MESSAGE.AccountPlugin(p.manifest.name));
       p.enabled = false;
       p.removed = true;
       this.#lockAccount(id);
@@ -1702,13 +1741,13 @@ export class PluginRegistry {
     if (method === PluginService.CredentialsSession) return this.#account(id).get();
     if (method === PluginService.CredentialsRead) {
       await this.#account(id).unlock();
-      this.#active(id);
+      this.#running(id);
       return this.#account(id).get();
     }
     if (method === PluginService.CredentialsClear) return this.#account(id).clear();
     const account = this.#account(id);
     await account.set(args.token);
-    this.#active(id);
+    this.#running(id);
     this.#saveAuthorized.delete(id);
     p.rememberAccount = true;
     await this.#save();
@@ -1731,7 +1770,7 @@ export class PluginRegistry {
   /** Every host service one plugin's backend calls, gated by its declared capabilities. */
   #hostService(id: string, p: Installed): ConstructorParameters<typeof PluginProcess>[2] {
     return async (method, args, binding, invocation) => {
-      this.#active(id);
+      this.#running(id);
       this.#assertAccountAccess(id, p, method, invocation);
       if (isNativeService(method)) return this.#nativeCall(p, method, args, binding, invocation);
       if (method === PluginService.SettingsRead) return this.settings(id);
@@ -1743,8 +1782,9 @@ export class PluginRegistry {
       return this.service(id, method, args, binding);
     };
   }
+  /** The plugin's backend child, started on first use: an agent's tool reaches it only while the plugin is on. */
   #process(id: string) {
-    const p = this.#active(id);
+    const p = this.#running(id);
     let process = this.#processes.get(id);
     if (!process) {
       process = new PluginProcess(
@@ -1983,7 +2023,7 @@ export class PluginRegistry {
   }
   #connecting = new Map<string, Promise<any>>();
   async action(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    const p = this.#active(id);
+    const p = this.#serving(id, name);
     if (name !== accountActionsOf(p.manifest).connect) return this.#action(id, name, args, binding);
     const pending = this.#connecting.get(id);
     if (pending) return pending;
@@ -2029,7 +2069,7 @@ export class PluginRegistry {
       // A successful explicit unlock is the sole read; MCP launches share its memory lease.
       // Some backends delegate the unlock entirely to the host rather than reading themselves.
       await this.#account(id).unlock();
-      this.#active(id);
+      this.#running(id);
       if (await this.#account(id).get()) {
         p.rememberAccount = true;
         await this.#save();
@@ -2039,7 +2079,7 @@ export class PluginRegistry {
     if (name !== account.connect) return;
     // Connect may reuse an existing saved token without writing a new credential.
     if (await this.#account(id).get()) {
-      this.#active(id);
+      this.#running(id);
       p.rememberAccount = true;
       await this.#save();
     }
@@ -2055,7 +2095,7 @@ export class PluginRegistry {
     this.#fire({ id, reason: PluginChangeReason.Account });
   }
   async #action(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    const p = this.#active(id);
+    const p = this.#serving(id, name);
     if (!p.manifest.actions.some((a) => a.name === name)) throw new Error(MESSAGE.UnknownAction);
     const account = accountActionsOf(p.manifest);
     await this.#beforeAccountAction(id, p, name, account);
@@ -2089,7 +2129,7 @@ export class PluginRegistry {
     }
   }
   async review(id: string, name: string, args: unknown, binding?: PluginBinding) {
-    this.#active(id);
+    this.#serving(id, name);
     return this.#process(id).call("review", name, args, binding);
   }
   /**
@@ -2132,7 +2172,7 @@ export class PluginRegistry {
    * the backend or a `setting:` server variable, and the next save drops it.
    */
   async settings(id: string): Promise<Record<string, unknown>> {
-    const p = this.#active(id);
+    const p = this.#running(id);
     const stored = JSON.parse(
       await readFile(path.join(this.root, "data", id, "settings.json"), "utf8").catch(() => "{}"),
     ) as Record<string, unknown>;

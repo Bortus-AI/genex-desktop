@@ -2145,10 +2145,10 @@ opening `[role="dialog"][aria-label="SDK demo"] iframe[sandbox="allow-scripts"]`
 button disappearing on `setEnabled('example', false)` and returning on re-enable through the real
 `plugins.changed` event, never a synthetic push. The Genex publish checks sit in the same block:
 `button[aria-label="Publish game"]` present while Genex is enabled, its click opening Studio's own
-`[role="dialog"][aria-label="Publish to the web"]` with `[data-genex-publish-status]` and no frame, the ticketed
-`publish-draft` approval refused with `unsupported-in-fixture`, Publish staying with
-`setEnabled('genex', false)` as Studio's own button whose dialog offers Turn on Genex plugin, and Genex's
-own button returning with `restore('genex')`.
+`[role="dialog"][data-testid="genex-publish"]` with `[data-genex-publish-status]` and no frame, the ticketed
+`publish-draft` approval refused with `unsupported-in-fixture`, Genex's own Publish staying with
+`setEnabled('genex', false)` and opening the same dialog (Publish is the account's), `remove('genex')`
+refused (Genex holds the app's account), and Genex's Publish still there once it is back on.
 
 Claude Code's permissions ([tool permissions](tool-permissions.md)): `chat-permissions.test.ts`
 drives the host on a lite core (who asks, forged threads and rows, withdrawal, modes, restart),

@@ -239,6 +239,10 @@ function studioCalls(bridge: BridgeCalls) {
     playStats: (days) => invoke("studio:play.stats", { days }),
     playCreators: () => invoke("studio:play.creators"),
     playCredits: () => invoke("studio:play.credits"),
+    genexAccount: () => invoke("studio:genex-account.read"),
+    genexSignIn: () => invoke("studio:genex-account.sign-in"),
+    genexCancelSignIn: () => invoke("studio:genex-account.cancel"),
+    genexSignOut: () => invoke("studio:genex-account.sign-out"),
     notify: (note) => invoke("studio:notify", note),
     setBadge: (count) => invoke("studio:badge", { count }),
   } satisfies Partial<StudioApi>;

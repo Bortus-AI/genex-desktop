@@ -1,6 +1,7 @@
 /**
  * The buttons plugins contribute at the end of the stage strip, dressed as the app's own
- * buttons, and Studio's own Multiplayer and Publish for every web game. Which buttons exist is the manifest's (`toolbarItems`); what they say is the plugin's status action or a `plugin.event` of kind
+ * buttons, and Studio's own Multiplayer and Publish for every web game. Genex's Publish stays while
+ * Genex is off: it belongs to the account, not to the agent's tools. Which buttons exist is the manifest's (`toolbarItems`); what they say is the plugin's status action or a `plugin.event` of kind
  * `toolbar`, both sanitized before they reach the DOM. A panel target opens its own dialog over
  * the stage (and says so, so the native game view gets out of the way); an action target runs
  * the same review → ticket → native approval sequence as the Plugins dialog. While Studio bundles
@@ -35,7 +36,7 @@ import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../ui/dialog.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
-import { GenexPublishDialog, GenexSetupDialog, GenexSetupFor } from "./plugins/genex/GenexPublish.tsx";
+import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PanelSurface } from "./panel-bridge.ts";
@@ -284,8 +285,8 @@ function usePress({ project, onNotice, refreshRef, setPanel, setReview, setBusy 
 }
 
 /**
- * Publish for every open web game: while Genex is off or not installed, Studio's own button opens a
- * dialog that brings Genex back, and once Genex's own Publish is there it takes over the dialog.
+ * Publish for every open web game: while no Genex is installed, Studio's own button opens a dialog
+ * that signs in (which brings Genex back), and once Genex's own Publish is there it takes over.
  */
 function useStudioPublish(
   plugins: PluginInfo[],
@@ -375,7 +376,7 @@ function MultiplayerButton({
   );
 }
 
-/** Studio's own Publish, dressed as Genex's: quiet, since whoever turned Genex off is not publishing yet. */
+/** Studio's own Publish, dressed as Genex's: quiet, since nobody has published from this Mac yet. */
 function StudioPublishButton({ onPress }: { onPress: () => void }): JSX.Element {
   return (
     <Button variant="pill" data-studio-publish aria-label={GENEX_WORDS.publish.buttonLabel} onClick={onPress}>
@@ -412,7 +413,12 @@ export function PluginToolbar({
   const genexPublish = entries.find(isGenexPublish);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
   const multiplayerShown = showsMultiplayer(Boolean(genexPublish) || studioPublish.shown, emptyGame);
-  const multiplayer = useMultiplayer(project, multiplayerShown, genexPublish);
+  // Multiplayer is the plugin's: its Publish shows while it is off, but only an on Genex makes a game multiplayer.
+  const multiplayer = useMultiplayer(
+    project,
+    multiplayerShown,
+    genexPublish?.plugin.enabled ? genexPublish : undefined,
+  );
   useEffect(() => {
     onOpenChange(Boolean(panel) || studioPublish.setup || multiplayer.setup);
     return () => onOpenChange(false);
@@ -469,10 +475,8 @@ export function PluginToolbar({
       ))}
       {studioPublish.shown && multiplayerShown && <MultiplayerButton onPress={multiplayer.press} />}
       {studioPublish.shown && <StudioPublishButton onPress={studioPublish.open} />}
-      {studioPublish.setup && <GenexSetupDialog genex={genexPlugin} onClose={studioPublish.close} />}
-      {multiplayer.setup && (
-        <GenexSetupDialog genex={genexPlugin} onClose={multiplayer.close} purpose={GenexSetupFor.Multiplayer} />
-      )}
+      {studioPublish.setup && <PublishSignInDialog onClose={studioPublish.close} />}
+      {multiplayer.setup && <GenexSetupDialog genex={genexPlugin} onClose={multiplayer.close} />}
       {panel?.drawn && livePanelPlugin ? (
         <GenexPublishDialog plugin={livePanelPlugin} project={project} onClose={() => setPanel(null)} />
       ) : null}

@@ -18,6 +18,7 @@ import type {
   PlayProfile,
   PresenceVisibility,
 } from "./play-people.ts";
+import type { GenexAccountView } from "./genex-account.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type { PlayStats, StatsPeriod } from "./play-stats.ts";
 import type { PerformanceMark } from "./performance.ts";
@@ -476,6 +477,14 @@ export interface StudioApi {
   playCreators(): Promise<PlayCreator[] | null>;
   /** The Genex plugin's Credits tab: balance, plan, invite bonus, live prices and recent spends. */
   playCredits(): Promise<PlayCredits>;
+  /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
+  genexAccount(): Promise<GenexAccountView>;
+  /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */
+  genexSignIn(): Promise<GenexAccountView>;
+  /** Stop a sign-in waiting in the browser; the account as it is after. */
+  genexCancelSignIn(): Promise<GenexAccountView>;
+  /** Sign out of Genex once the person confirms in Studio's question; the account as it is after. */
+  genexSignOut(): Promise<GenexAccountView>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */
   notify(note: { id?: string; title: string; subtitle?: string; body: string }): Promise<boolean>;
   /** The Dock badge: how much work waits on the person. Zero clears it. */

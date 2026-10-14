@@ -41,6 +41,8 @@ export const STORAGE_KEYS = {
   playRecent: "studio.play.recent",
   /** Play's Genex card in the sidebar: "done" once dismissed (`play/play-model.ts` owns the value). */
   playPromo: "studio.play.promo",
+  /** The Genex account last signed in on this Mac, for an offline start (`state/people.ts` owns the format). */
+  genexMe: "studio.genex.me",
   /** The developer colour tweaker: open ("1") or not. */
   colorTweakerOpen: "studio.dev.colorTweaker.open",
   /** The developer colour tweaker's drafts and place (`appearance/tweaker/tweaker-memory.ts` owns the format). */

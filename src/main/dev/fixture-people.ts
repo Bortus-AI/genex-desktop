@@ -4,8 +4,8 @@
  * profile plate, the profile page and the Friends page can be checked with no socket and no Genex
  * account. A launch is signed out unless it asks for a fixture account
  * (`STUDIO_FIXTURE_GENEX_ACCOUNT=1`, or `new`, `quiet` or `fresh` for a new account with no games and
- * nobody yet, with games nobody played this week, or with one game two days old); then every call carries that
- * account's token. State lives for the launch: adding a friend, renaming the account or choosing an
+ * nobody yet, with games nobody played this week, or with one game two days old, or `ended` for a
+ * sign-in genex.games no longer takes); then every call carries that account's token. State lives for the launch: adding a friend, renaming the account or choosing an
  * avatar shows at once and is gone at the next launch.
  */
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
@@ -22,6 +22,8 @@ export const FixtureAccount = {
   Quiet: "quiet",
   /** One game, published two days ago. */
   Fresh: "fresh",
+  /** Signed in earlier, but genex.games no longer takes the token: every call of the account is a 401. */
+  Ended: "ended",
 } as const;
 export type FixtureAccount = (typeof FixtureAccount)[keyof typeof FixtureAccount];
 
@@ -320,6 +322,12 @@ function publicRead(pathname: string, account: FixtureAccount, catalog: FixtureC
   return rest.includes("/") ? NOT_FOUND : profile(decodeURIComponent(rest), account, catalog);
 }
 
+/** The fixture account a token signs in as while genex.games still takes it: an ended one is none. */
+function takenAccount(token: string | undefined): FixtureAccount | null {
+  const account = fixtureAccountOf(token);
+  return account === FixtureAccount.Ended ? null : account;
+}
+
 /**
  * The fixture account's answer to a people route, or null when the route is not one of them (the
  * gallery's fixture answers it). Signed out, every people route but a public read is a 401.
@@ -331,7 +339,7 @@ export function fixturePeopleAnswer(
 ): GalleryAnswer | null {
   const [pathname = "", query = ""] = route.split("?");
   const method = init.method ?? "GET";
-  const account = fixtureAccountOf(init.token);
+  const account = takenAccount(init.token);
   if (method === "GET") {
     const shown = publicRead(pathname, account ?? FixtureAccount.Full, catalog);
     if (shown) return shown;

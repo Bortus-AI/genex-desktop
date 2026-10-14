@@ -3,12 +3,12 @@
  * keeps the newest game first, once each, at most RECENT_MAX of them, and reads back from storage
  * only entries that name a game. A tab's first page replaces what it had and a further page adds
  * only the games it did not have; a player count changes only the multiplayer games it is about.
- * The sidebar's Genex card shows until it is dismissed or Genex is installed, on and connected. The
+ * The sidebar's Genex card shows once: until the first sign-in or until it is dismissed. The
  * store reads a tab once while it is on its way, again only once it is stale or forced, keeps the
  * games it has when a read fails, counts only multiplayer games, and opening a game shows its cover
  * at once, leads Recent (remembered in storage) and turns to Failed when main refuses it. The window's
- * drag regions give way while the viewer's native views may cover it, and the guest card's Install
- * plugin waits in the store until the shell has run it once.
+ * drag regions give way while the viewer's native views may cover it, and the guest card's Sign in
+ * waits in the store until the shell has run it once.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -21,17 +21,17 @@ import {
   type FeedState,
   FeedStatus,
   formatCount,
-  type GenexPluginState,
   escapeLeaves,
   justLiked,
   nativeViewsUp,
   noteOn,
+  PlateState,
+  plateState,
   NoteLook,
   PLAY_PROMO_DONE,
-  PlayInstall,
   type PlayRecentEntry,
-  playInstallAction,
   playPromoDismissed,
+  playPromoRetires,
   playPromoVisible,
   RECENT_MAX,
   readRecent,
@@ -72,7 +72,7 @@ import {
   type PlayShelves,
   PlayViewerPhase,
 } from "../../src/shared/play.ts";
-import { PluginAccountState } from "../../src/shared/plugins.ts";
+import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 
 type PlayApi = Parameters<typeof createPlayStore>[0];
 
@@ -328,41 +328,27 @@ describe("Play pages", () => {
 });
 
 describe("Play's Genex card", () => {
-  const live: GenexPluginState = { installed: true, enabled: true };
-  const notLive: [string, GenexPluginState][] = [
-    ["missing", undefined],
-    ["removed", { installed: false, enabled: true }],
-    ["switched off", { installed: true, enabled: false }],
-  ];
-  const otherAccounts = [
-    PluginAccountState.Locked,
-    PluginAccountState.Authorizing,
-    PluginAccountState.NotConnected,
-    PluginAccountState.Failed,
-    undefined,
-  ];
+  const ALL = [...Object.values(GenexAccountStatus), null];
 
   it("never shows once dismissed", () => {
-    for (const [, plugin] of [...notLive, ["live", live] as const])
-      for (const account of [...otherAccounts, PluginAccountState.Unlocked])
-        assert.equal(playPromoVisible({ dismissed: true, plugin, account }), false);
+    for (const account of ALL) assert.equal(playPromoVisible({ dismissed: true, account }), false, String(account));
   });
 
-  it("shows while Genex is not installed and on, whatever the account", () => {
-    for (const [name, plugin] of notLive)
-      for (const account of [...otherAccounts, PluginAccountState.Unlocked])
-        assert.equal(playPromoVisible({ dismissed: false, plugin, account }), true, `${name}, ${account}`);
+  it("shows to someone who has never signed in, and while their first sign-in waits in the browser", () => {
+    assert.equal(playPromoVisible({ dismissed: false, account: GenexAccountStatus.SignedOut }), true);
+    assert.equal(playPromoVisible({ dismissed: false, account: GenexAccountStatus.SigningIn }), true);
   });
 
-  it("shows while a live Genex has no connected account, and hides once it has", () => {
-    assert.equal(playPromoVisible({ dismissed: false, plugin: live, account: PluginAccountState.Unlocked }), false);
-    for (const account of otherAccounts)
-      assert.equal(playPromoVisible({ dismissed: false, plugin: live, account }), true, String(account));
+  it("waits for the account before it shows, and never shows to someone who has signed in", () => {
+    for (const account of [null, GenexAccountStatus.SignedIn, GenexAccountStatus.Ended])
+      assert.equal(playPromoVisible({ dismissed: false, account }), false, String(account));
   });
 
-  it("connects the account only when Genex is installed and on, and opens Plugins otherwise", () => {
-    assert.equal(playInstallAction(live), PlayInstall.Connect);
-    for (const [name, plugin] of notLive) assert.equal(playInstallAction(plugin), PlayInstall.OpenPlugins, name);
+  it("goes for good at the first sign-in, and a sign-in that ended was one", () => {
+    assert.equal(playPromoRetires(GenexAccountStatus.SignedIn), true);
+    assert.equal(playPromoRetires(GenexAccountStatus.Ended), true);
+    for (const account of [null, GenexAccountStatus.SignedOut, GenexAccountStatus.SigningIn])
+      assert.equal(playPromoRetires(account), false, String(account));
   });
 
   it("stays dismissed in storage, and a storage that cannot keep it reads as not dismissed", () => {
@@ -904,5 +890,39 @@ describe("Play store: counting, opening and tabs", () => {
     assert.deepEqual(read.getState().counts, shelves.counts);
     read.chooseShelf(PlayShelf.Assets);
     assert.equal(read.getState().shelf, PlayShelf.Assets);
+  });
+});
+
+describe("the sidebar's account plate", () => {
+  const who = {
+    id: "u1",
+    name: "Rab Neba",
+    imageUrl: null,
+    avatarVariant: 0,
+    pro: true,
+    joinedAt: null,
+    avatarStyle: null,
+    photoUrl: null,
+    avatarVariantKept: true,
+  };
+  const shown = (people: Partial<Parameters<typeof plateState>[0]>, online = true) =>
+    plateState({ me: null, account: null, ...people }, online);
+
+  it("says nothing until it knows the account, unless one is remembered", () => {
+    assert.equal(shown({}), PlateState.Hidden);
+    assert.equal(shown({ me: who }), PlateState.SignedIn);
+    assert.equal(shown({ me: who }, false), PlateState.Offline);
+  });
+
+  it("is always there signed out, signing in, or once a sign-in ended", () => {
+    assert.equal(shown({ account: GenexAccountStatus.SignedOut }), PlateState.SignedOut);
+    assert.equal(shown({ account: GenexAccountStatus.SigningIn }), PlateState.SigningIn);
+    assert.equal(shown({ account: GenexAccountStatus.Ended }), PlateState.Ended);
+  });
+
+  it("shows the account signed in, and as last time while offline: offline is never signed out", () => {
+    assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }), PlateState.SignedIn);
+    assert.equal(shown({ account: GenexAccountStatus.SignedIn, me: who }, false), PlateState.Offline);
+    assert.equal(shown({ account: GenexAccountStatus.SignedIn }), PlateState.Hidden, "signed in, not read yet");
   });
 });

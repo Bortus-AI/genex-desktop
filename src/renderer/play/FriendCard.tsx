@@ -3,6 +3,7 @@
  * name under it, a line on what they are up to, and what can be done. One component in five states:
  * a friend (⋯ removes them), a friend playing now (a green ring and dot, their game, Join), a request
  * waiting (Accept, ✕), a request sent (Cancel), and someone a search found (their friend button).
+ * Offline, what a card can do waits for the connection.
  */
 import type { JSX, ReactNode } from "react";
 import {
@@ -32,11 +33,12 @@ export const FriendCardKind = {
 } as const;
 export type FriendCardKind = (typeof FriendCardKind)[keyof typeof FriendCardKind];
 
-/** A card's person, and what its kind needs of them. */
-export type FriendCardProps =
+/** A card's person, what its kind needs of them, and whether its presses wait for the connection. */
+export type FriendCardProps = (
   | { kind: typeof FriendCardKind.Friend | typeof FriendCardKind.Playing; person: PlayFriend }
   | { kind: typeof FriendCardKind.Request | typeof FriendCardKind.Sent; person: PlayFriendRequest }
-  | { kind: typeof FriendCardKind.Found; person: PlayFoundPerson };
+  | { kind: typeof FriendCardKind.Found; person: PlayFoundPerson }
+) & { offline?: boolean };
 
 /** Join a friend: their game opens in the viewer, as a card would open it. */
 export function joinFriend(friend: PlayFriend): void {
@@ -84,6 +86,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
           type="button"
           className="people-button"
           data-tone="accept"
+          disabled={props.offline}
           onClick={() => void actOn(FriendAction.Accept, person)}
         >
           {WORDS.accept}
@@ -92,6 +95,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
           type="button"
           className="people-button people-button-icon"
           aria-label={WORDS.decline(person.name)}
+          disabled={props.offline}
           onClick={() => void actOn(FriendAction.Withdraw, person)}
         >
           <Icon name="close" />
@@ -105,6 +109,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
         className="people-button"
         data-tone="quiet"
         aria-label={WORDS.cancelRequest(person.name)}
+        disabled={props.offline}
         onClick={() => void actOn(FriendAction.Withdraw, person)}
       >
         {WORDS.cancel}
@@ -158,7 +163,9 @@ export function FriendCard(props: FriendCardProps): JSX.Element {
   const live = kind === FriendCardKind.Playing;
   return (
     <article className="friend-card" data-friend-card={kind} data-person={person.id} data-avatar-host>
-      {kind === FriendCardKind.Friend && <FriendMoreMenu person={person} className="friend-card-more" />}
+      {kind === FriendCardKind.Friend && (
+        <FriendMoreMenu person={person} className="friend-card-more" disabled={props.offline} />
+      )}
       <button
         type="button"
         className="friend-card-open"

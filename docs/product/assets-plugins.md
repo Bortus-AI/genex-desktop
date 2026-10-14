@@ -18,7 +18,7 @@ thumbnails until landing.
 The prompt bar's Add menu holds attachments, plugin and MCP switches, Connect and Manage.
 Enabled, connected, signed in and permitted differ.
 
-The Plugins page (Plugins/Skills, search, rows, details) lists installed plugins, your servers, the
+The Plugins page lists installed plugins, your servers, the
 Marketplace (Coming soon until it lists more) and the plugin guide, with
 [icons](../plugins.md#icons) or initials. Install from GitHub pins a pasted link's latest release
 (else the newest commit). Games build, preview and export without plugins. The host draws Genex's
@@ -33,8 +33,8 @@ copies) after consent. Publish (a host-drawn
 dialog) tests the draft, goes public and sends the `genex-cover` demo frame as the Genex cover, not
 the sidebar sphere ([rules](../plugins.md#first-party-privileges)); lacking one, Ask for a cover
 drafts the request in chat. Agents check `genex__cover` before each publish; consented
-`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer asks chat for Genex multiplayer;
-both offer Genex while off, Update while older. Agents read Genex’s guide and
+`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer asks chat for Genex multiplayer (off: turn Genex
+on); Publish works with Genex off; both offer Update while older. Agents read Genex’s guide and
 cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists
@@ -51,7 +51,7 @@ native code.
 Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every
 included/excluded file for a second approval. Revoking stops future calls, not remote effects.
-Removal keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
+Removal (never Genex's) keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
 rows offer **Update to x**, the sidebar **Update plugins** (all). Built-in plugins install and update
 without asking. Reusing a plugin's id from another source needs **Replace and erase data** (never a
 bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed secrets
