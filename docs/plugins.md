@@ -521,9 +521,13 @@ doubt) and the frame rate (`editor-captures.ts`, `tone.ts`); a strip and a chara
 Blueprint's component, and `set_route` (the route the play checks drive), `track_terrain` along it
 and `dirt_material` serve racing games. The plugin's skill (`unreal-editor`) tells every agent to
 look with these eyes, never `CaptureEditorImage` (the whole editor window) or `CaptureViewport` (the
-editor camera), and the lead's brief says the same. It also holds a character to
-`character_check` before it goes into the game or a save point claims one, and asks for foliage and
-props that match the reference's biome.
+editor camera), and the lead's brief says the same. It also asks for a review of every character,
+up close and moving (`character_check` and its sheet, then a look in play), before it goes into the
+game or a save point claims one: a whole body, five-fingered hands, arms at its sides, nothing
+tearing between the legs, textures in play. What is wrong is fixed where it is (Blender for the rig,
+finger bones and weights, Unreal for materials and the retarget), and a character is regenerated only
+as a last resort. The character sub-agent's brief says the same. It also asks for foliage and props
+that match the reference's biome.
 
 **Motion Matching** (plugin 0.11.0). Epic's Game Animation Sample can't ship with Genex (Fab content
 for Unreal projects, not Genex's to hand on): the person gets it once, and `motion-status` finds it
