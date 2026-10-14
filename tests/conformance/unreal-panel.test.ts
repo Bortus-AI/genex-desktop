@@ -720,15 +720,27 @@ describe("The Set up Unreal panel in Studio's sandboxed frame", { skip }, () => 
         const a = document.activeElement;
         return { id: a?.id ?? "", text: a?.textContent?.trim() ?? "" };
       });
-    /** Waits until the panel has answered: not busy, and every request it sent settled. */
+    /** A pause in which the panel could send a request it shouldn't; a check of what it shows waits with `answered`. */
     const settled = () => tab.waitForTimeout(600);
+    /**
+     * Waits until the project view shows its answer to a press: `#id`'s text starts with `text`, and
+     * Change, held while an action runs, is pressable again. The panel puts focus back in the same
+     * turn that renders the answer, so focus can be read right after.
+     */
+    const answered = (id: string, text: string) =>
+      frame.waitForFunction(
+        ([shownId, start]) =>
+          (document.getElementById(shownId)?.textContent ?? "").startsWith(start) &&
+          (document.getElementById("change") as HTMLButtonElement | null)?.disabled === false,
+        [id, text] as const,
+      );
     /** The names of the requests the panel sent, once `ready` holds for them or the wait runs out. */
     const sentOnce = async (ready: (names: string[]) => boolean) => {
       const names = async () => ((await requests()) as Array<[string]>).map(([name]) => name);
       for (let i = 0; i < WAIT_TRIES && !ready(await names()); i++) await tab.waitForTimeout(WAIT_STEP_MS);
       return names();
     };
-    return { tab, frame, requests, focused, settled, sentOnce };
+    return { tab, frame, requests, focused, settled, answered, sentOnce };
   }
 
   for (const how of ["Enter in the name", "Enter on Create and open"] as const)
@@ -776,7 +788,7 @@ describe("The Set up Unreal panel in Studio's sandboxed frame", { skip }, () => 
       assert.equal(await p.frame.textContent("#secondary"), "Set up Later");
       await p.frame.focus("#secondary");
       await p.tab.keyboard.press("Enter");
-      await p.settled();
+      await p.answered("secondary", "Open in Unreal");
       assert.deepEqual(await p.focused(), { id: "secondary", text: "Open in Unreal" });
     } finally {
       await p.tab.close();
@@ -792,7 +804,7 @@ describe("The Set up Unreal panel in Studio's sandboxed frame", { skip }, () => 
       assert.equal(await p.frame.textContent("#primary"), "Set up and open Drift");
       await p.frame.focus("#primary");
       await p.tab.keyboard.press("Enter");
-      await p.settled();
+      await p.answered("headline", "Opening in Unreal");
       assert.deepEqual(
         ((await p.requests()) as Array<[string]>).map(([name]) => name),
         ["setup", "open-editor"],
@@ -911,7 +923,7 @@ describe("The Set up Unreal panel in Studio's sandboxed frame", { skip }, () => 
       await p.frame.evaluate(() => document.getElementById("more")?.setAttribute("open", ""));
       await p.frame.focus("#undo");
       await p.tab.keyboard.press("Enter");
-      await p.settled();
+      await p.answered("primary", "Set up and open Drift");
       assert.deepEqual(await p.focused(), { id: "primary", text: "Set up and open Drift" });
     } finally {
       await p.tab.close();
