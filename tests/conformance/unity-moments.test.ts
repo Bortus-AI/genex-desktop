@@ -5,6 +5,7 @@ import path from "node:path";
 import type { PluginHookContext } from "../../src/plugin-sdk/index.d.ts";
 import { UnityTool } from "../../src/plugins/unity/backend.ts";
 import { PIPELINE_VERSION } from "../../src/plugins/unity/pipeline.ts";
+import { encodePng } from "../../src/substrate/png.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { backendOn, commandsSent, look, ok, ready, withProject } from "../helpers/unity-backend.ts";
 import { editorRow, json, type Reply, STAND_IN } from "../helpers/unity-editor-stand-in.ts";
@@ -15,6 +16,12 @@ const scenes = (...listed: Array<[string, boolean]>) =>
 const failed = (details: string) =>
   json(400, { success: false, error: "Command Execution Failed", errorDetails: details });
 const png = Buffer.from("\x89PNG\r\n\x1a\nfake-pixels").toString("base64");
+/** A real PNG, base64, of `width` x `height` pixels coloured by `colour`. */
+function still(width: number, height: number, colour: (x: number, y: number) => [number, number, number]): string {
+  const rgb = new Uint8Array(width * height * 3);
+  for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) rgb.set(colour(x, y), (y * width + x) * 3);
+  return encodePng({ width, height, rgb }).toString("base64");
+}
 
 const chat = (on: HookEvent): PluginHookContext => ({ on });
 const run = (on: HookEvent): PluginHookContext => ({ on, runId: "run-7" });
@@ -367,6 +374,31 @@ describe("scene-shots", () => {
     const inChat = await openGame([look(), shot()]);
     assert.deepEqual(await inChat.at(UnityTool.SceneShots, chat(HookEvent.CheckpointAfter)), {});
     assert.deepEqual(inChat.seen, []);
+  });
+
+  it("gives a save point no picture when the main camera sees one flat colour, and says why", async () => {
+    // A scene built only when Play starts: outside Play mode the camera sees its own background.
+    const empty = still(160, 90, () => [3, 3, 5]);
+    const shot = () => ok({ width: 160, height: 90, encoding: "png", base64: empty, source: "camera:Main Camera" });
+    for (const asked of [run(HookEvent.CheckpointAfter), undefined]) {
+      const game = await openGame([look(), shot()]);
+      const answer = (await game.at(UnityTool.SceneShots, asked)) as { images?: unknown[]; note?: string };
+      assert.equal(answer.images, undefined, "no black card for the save point or the reviewer");
+      assert.match(String(answer.note), /one flat colour.* outside Play mode .* into the scene/);
+    }
+  });
+
+  it("keeps a dark still that shows something, and one it can't read", async () => {
+    // A night scene: black, with a lit window and a little dither.
+    const night = still(160, 90, (x, y) => (x > 70 && x < 90 && y > 40 && y < 50 ? [250, 220, 140] : [x % 2, 0, 1]));
+    const truncated = Buffer.from(night, "base64").subarray(0, 60).toString("base64");
+    for (const data of [night, truncated]) {
+      const shot = ok({ width: 160, height: 90, encoding: "png", base64: data, source: "camera:Main Camera" });
+      const game = await openGame([look(), shot]);
+      assert.deepEqual(await game.at(UnityTool.SceneShots, run(HookEvent.CheckpointAfter)), {
+        images: [{ name: "Main Camera", data }],
+      });
+    }
   });
 
   it("answers no still when there is no camera, no answering editor or no editor at all", async () => {

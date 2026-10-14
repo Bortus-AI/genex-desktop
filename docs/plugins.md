@@ -1862,7 +1862,7 @@ operation timed out". Three things keep an unattended agent out of it and get it
 | --- | --- |
 | `open-for-run` at `run.prepare` | Opens the editor and waits; a project with no Pipeline package, or an editor that does not answer, closes the run with the reason. |
 | `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In Play mode: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
-| `scene-shots` at `checkpoint.after`, and as the `viewport` observer (`live: "stills"`) | The main camera's still (1280×720) as an image, in a run and for the reviewer; a chat's checkpoint takes none. |
+| `scene-shots` at `checkpoint.after`, and as the `viewport` observer (`live: "stills"`) | The main camera's still (1280×720) as an image, in a run and for the reviewer; a chat's checkpoint takes none. A still of one flat colour (a scene that builds itself only when Play starts) is no image but a note saying so; the skill asks agents to build the level into the scene with an Editor script, saving the meshes, textures and materials it makes as assets. |
 | `save-all`, then `end-editor`, at `restore.before` | Stops a play, saves, ends the editor and records that it did (`restore/<game>.json`); work it can't save, or an editor that won't end, blocks the restore. |
 | `reopen-editor` at `restore.after` | Opens the project again only when `end-editor` closed it for this restore. |
 | `editor-state` at `health`, `reopen-editor` at `crash` | As above. |

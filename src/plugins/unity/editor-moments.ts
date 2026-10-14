@@ -11,7 +11,7 @@
  * | `reopen-editor` at `crash` | ends what is left of the editor, then opens the project again | same |
  * | `editor-state` at `health` | answers: nothing; starting, reloading or busy: pending; not running: block; a main thread that ran nothing for two minutes: block when nobody is at the computer, pending while somebody is (the dialog may be theirs) | same |
  * | `open-for-run` at `run.prepare` | opens Unity and waits; a project that is not set up, or an editor that does not answer: block | — |
- * | `scene-shots` at `checkpoint.after`, and as the `viewport` observer | the main camera's still as an image | nothing: no still taken |
+ * | `scene-shots` at `checkpoint.after`, and as the `viewport` observer | the main camera's still as an image; one flat colour (a scene built only when Play starts): no image, a note | nothing: no still taken |
  * | `editor-activity` as the lock's probe | no editor: nobody, nothing unsaved; a play counts only when the agent did not start it; an editor that can't be asked: can't tell, but nobody when it is stalled and the computer was left alone | same |
  */
 import { mkdir, rm } from "node:fs/promises";
@@ -20,6 +20,7 @@ import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import type { PluginHookAnswer, PluginHookContext } from "../../plugin-sdk/index.d.ts";
 import { HookEvent } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson, isJsonObject, readJsonIfExists } from "../../substrate/fsx.ts";
+import { decodePng } from "../../substrate/png.ts";
 import { agentPlaying, forgetAgentPlay } from "./agent-play.ts";
 import { editorCommand, editorRuns, endEditor, openScenes, saveWork } from "./editor-life.ts";
 import { type OpenDeps, Opened, type Opening, openProject, usable } from "./editor-open.ts";
@@ -43,6 +44,8 @@ const STOP_PLAY = "editor_stop";
 const Records = { Restore: "restore", Health: "health" } as const;
 /** A game id as Genex names a game's record: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
+/** How far a channel may stray from the first pixel's and still be the same flat colour: a dither, not a picture. */
+const FLAT_TOLERANCE = 2;
 
 const WORDS = {
   CantAsk: "Unity doesn't answer, so its unsaved work can't be saved.",
@@ -69,6 +72,8 @@ const WORDS = {
   NoEditor: (version: string) => `Unity ${version}, which this project was saved with, isn't installed here.`,
   SetAside: (folder: string) =>
     `Unity's backups of the scenes that were unsaved when it last ended were moved to ${folder}, so that it opens without asking to recover them.`,
+  EmptyStill:
+    "No picture of this save point: the main camera saw one flat colour, since outside Play mode the scene shows nothing of the game. Build the level into the scene with an Assets/Editor script run by run_script, so its camera sees the game.",
 } as const;
 
 /** What a handler works on: the game, the plugin's storage, the game's project and the moment. */
@@ -264,9 +269,26 @@ const stillName = (source: unknown): string =>
   typeof source === "string" && source.includes(":") ? source.slice(source.indexOf(":") + 1) : "Game view";
 
 /**
+ * Whether a PNG still is one flat colour, give or take a dither: a camera that sees nothing but its
+ * own background. A still that can't be read is not called flat.
+ */
+export function isFlatStill(png: Uint8Array): boolean {
+  let rgb: Uint8Array;
+  try {
+    rgb = decodePng(png).rgb;
+  } catch {
+    return false;
+  }
+  for (let at = 3; at < rgb.length; at++)
+    if (Math.abs((rgb[at] ?? 0) - (rgb[at % 3] ?? 0)) > FLAT_TOLERANCE) return false;
+  return true;
+}
+
+/**
  * `scene-shots`: the main camera's still, for a run's save point and for the reviewer of its
  * finish (the `viewport` observer). A chat's checkpoint takes none; an editor that is not there, or
- * a scene with no camera, answers none.
+ * a scene with no camera, answers none. A still of one flat colour is a scene that builds itself
+ * only when Play starts: it answers a note saying so, never a blank card.
  */
 export async function sceneShots(moment: Moment, deps: MomentDeps): Promise<PluginHookAnswer> {
   const root = moment.project?.root;
@@ -276,6 +298,7 @@ export async function sceneShots(moment: Moment, deps: MomentDeps): Promise<Plug
   const shot = await editorCommand(root, deps, CAPTURE, { ...STILL }, moment.signal);
   const data = shot.ok && isJsonObject(shot.result) ? shot.result.base64 : undefined;
   if (typeof data !== "string" || !data) return {};
+  if (isFlatStill(Buffer.from(data, "base64"))) return { note: WORDS.EmptyStill };
   const source = shot.ok && isJsonObject(shot.result) ? shot.result.source : undefined;
   return { images: [{ name: stillName(source), data }] };
 }
