@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { readdir, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
@@ -95,6 +95,19 @@ describe("making a Godot game", () => {
       [[GodotJob.Import, ["--headless", "--path", project, "--import"], [project], false]],
     );
     assert.equal(fixture.jobs[0]?.binary.endsWith(path.join("Godot.app", "Contents", "MacOS", "Godot")), true);
+  });
+
+  it("a new game fills whatever size Live and the web page show it at: no black bars", async () => {
+    for (const template of ["2d", "3d"]) {
+      const fixture = await godotBackendFixture();
+      await tool(fixture, GodotTool.NewGame, { template, name: "Valley" });
+      const settings = await readFile(path.join(fixture.gameDir, "godot", "project.godot"), "utf8");
+      const stretches = /^window\/stretch\/mode="(\w+)"$/m.exec(settings)?.[1];
+      const aspect = /^window\/stretch\/aspect="(\w+)"$/m.exec(settings)?.[1];
+      // A game that stretches widens its view to the space it has; one that doesn't is that space.
+      if (stretches) assert.equal(aspect, "expand", `${template}: stretched to fill, never letterboxed`);
+      else assert.equal(aspect, undefined, `${template}: its viewport is the window`);
+    }
   });
 
   it("refuses outside a game, and without Godot, making nothing", async () => {
