@@ -21,6 +21,11 @@ import type { LiveToolSpec } from "../types/host-api.d.ts";
 
 /** How long the judge may play: a director's playtest's default. */
 const JUDGE_MS = 5 * MINUTE_MS;
+/**
+ * The moves the judge may make: walking a 3D level, turning and using things takes more than a web
+ * page's dozen (a live Unreal judge ran out between two rooms), still within its few minutes.
+ */
+const JUDGE_MAX_ACTIONS = 30;
 /** The longest question the judge is handed, in characters. */
 const MAX_ASK_CHARS = 500;
 /** Who put the question on the board, and the facet its frames are filed under. */
@@ -113,6 +118,7 @@ export async function askJudge(asker: JudgeAsker, args: AnyRecord, play: JudgePl
     questions: [check],
     quest,
     deadline: asker.now() + JUDGE_MS,
+    maxActions: JUDGE_MAX_ACTIONS,
     facetId: FACET,
   });
   if ("noWindow" in played) return JUDGE_PLAY_WORDS.noWindow(played.noWindow);

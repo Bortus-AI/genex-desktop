@@ -97,6 +97,7 @@ describe("a Loop lead's judge_play", () => {
     assert.equal(asked[0]?.run, RUN);
     assert.equal(asked[0]?.questions[0]?.ask, "Can the player climb to the lighthouse door?");
     assert.equal(asked[0]?.quest, null);
+    assert.ok((asked[0]?.maxActions ?? 0) >= 24, "room to walk a level, turn and use things, not a web page's dozen");
     const [record] = recorded();
     assert.equal(record?.payload.label, "Can the player climb to the lighthouse door?");
   });
