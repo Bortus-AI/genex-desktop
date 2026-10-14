@@ -42,6 +42,15 @@ through the JS API imports `@typescript/typescript6`.
   `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
   templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
   a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
+- `unity-editor-stand-in.ts`: a Unity project folder, the descriptor Unity's Pipeline package
+  keeps in it while an editor has it open, and a stand-in for that editor's HTTP server (scripted
+  answers, every request recorded, a clock only `sleep` moves) as the Unity plugin's `PipelineDeps`;
+  a Mac's folders with editors installed as Unity Hub lays them out (`macEnv`, `fakeEditor`), a
+  process table whose signals a test decides (`processTable`, `editorRow`), and a call's binding as
+  the host hands it to the plugin's backend (`pluginContext`). `unity-backend.ts`: the Unity
+  plugin's backend on all of those in a game folder (`backendOn`: its tools by `call`, its panel's
+  actions by `act`), with launches recorded and an opened editor started as a process with its
+  descriptor.
 - `loop-host.ts`: a fake host for the one Loop (`runDirector` on a project of any kind): a real git
   repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
   the lead's scripted turns, the pool's workers and the reviewer as three kinds of delegation, on

@@ -203,7 +203,7 @@ paths remain unavailable. Paid account acceptance remains a separate live gate. 
 logs even when an isolated retry passes: sandbox-runtime's one-second executable lookup has
 intermittently reported a missing bash during loaded test runs.
 
-Unity retirement: the active app supports browser games only. The CLI, editor, bridge, Unity templates, tools and UI are archived in `archive/unity/`; no feature flag enables them. There is no Unity-specific compatibility or migration path. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
+Unity retirement: the earlier built-in Unity integration (CLI, editor, bridge, Unity templates, tools and UI) is archived in `archive/unity/`; no feature flag enables it. There is no compatibility or migration path from it. Unity is now reached through the [bundled Unity plugin](plugins.md#the-bundled-unity-plugin), which shares no code with the archive. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
 
 Full regression coverage: `npm run typecheck`, `npm test`, `npm run test:e2e` (real sandbox, scripted
 Ollama wire, Chromium and CSS), `npm run test:build-ui` (build/history fixture, and since M1.8

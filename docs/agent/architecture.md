@@ -5,9 +5,9 @@ the affected product page, then read only the section you need here. Each sectio
 current contract and names the code that owns it; history lives in Git and PR descriptions, not
 here. When code and this page disagree, fix the one that is wrong in the same change.
 
-The active app builds browser games only. The Unity CLI, editor, bridge, templates, tools and UI
-are archived in [`archive/unity/`](../../archive/unity/); no flag enables them and there is no
-migration path.
+The earlier built-in Unity integration (CLI, editor, bridge, templates, tools, UI) is archived in
+[`archive/unity/`](../../archive/unity/): no flag enables it and nothing migrates. Unity is now a
+bundled plugin ([plugins](../plugins.md#the-bundled-unity-plugin)).
 
 ## Processes and trust boundaries
 
