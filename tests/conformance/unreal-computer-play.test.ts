@@ -8,14 +8,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
+import { agentPlaying } from "../../src/plugins/unreal/agent-play.ts";
 import { ENGINE_PLAY_VIEW, EnginePlayRefusal, EnginePlayTool } from "../../src/shared/engine-play.ts";
 import { createComputerPlay, unrealKey } from "../../src/plugins/unreal/computer-play.ts";
 import { createEditorQueue, LoopTool } from "../../src/plugins/unreal/editor-queue.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 import { playable, TEST, written } from "../helpers/unreal-editor-stand-in.ts";
 
 const STORAGE = "/storage";
+const GAME = "valley";
 const CONTEXT: PluginContext = {
-  project: "valley",
+  project: GAME,
   directory: "/games/valley",
   signal: new AbortController().signal,
   callId: 1,
@@ -26,14 +29,16 @@ const CONTEXT: PluginContext = {
 };
 
 /** The play tools over a stand-in editor that plays the game at `rate` game seconds per second. */
-function playTools(options: { rate?: number } = {}) {
+function playTools(options: { rate?: number; storage?: string } = {}) {
+  const storage = options.storage ?? STORAGE;
   const game = playable({ rate: options.rate ?? 1 });
   const queue = createEditorQueue(game.deps);
-  const play = createComputerPlay({ queueDeps: () => game.deps, queue: () => queue, game: () => "valley" });
+  const play = createComputerPlay({ queueDeps: () => game.deps, queue: () => queue, game: () => GAME });
   const call = (tool: EnginePlayTool, args: Record<string, unknown> = {}) =>
-    play.handlers[tool](args, CONTEXT, STORAGE);
+    play.handlers[tool](args, CONTEXT, storage);
   const tools = () => game.editor.calls.map(([tool]) => tool);
-  return { ...game, queue, call, tools };
+  const agentPlays = () => agentPlaying(storage, GAME, game.deps.now());
+  return { ...game, queue, call, tools, agentPlays };
 }
 
 describe("the Unreal plugin's play tools for the computer", () => {
@@ -49,6 +54,26 @@ describe("the Unreal plugin's play tools for the computer", () => {
     assert.equal(editor.state.pie, false, "the play it started ended");
     assert.deepEqual(written(editor.calls), [false, true], "the throttle went back as it was");
     assert.deepEqual(await call(EnginePlayTool.Close), { closed: false }, "nothing left to close");
+  });
+
+  // Unreal's person-first probe reads any play it isn't told is the agent's as the person's, and
+  // every later call of the session would wait for "the person" to finish playing.
+  it("marks the play it started as the agent's while it runs, and a joined play of the person's never", async () => {
+    const { call, editor, agentPlays } = playTools({ storage: await tmpDir("computer-play-") });
+    await call(EnginePlayTool.Open);
+    assert.equal(await agentPlays(), true, "the probe reads the session's play as the agent's");
+    await call(EnginePlayTool.Close);
+    assert.equal(await agentPlays(), false, "the mark goes with the play");
+    editor.state.pie = true;
+    await call(EnginePlayTool.Open);
+    assert.equal(await agentPlays(), false, "the person's play stays the person's");
+  });
+
+  // UE 5.8 renders nothing to capture in the first moments of a play: the first look came back empty.
+  it("warms a play it starts up for 2 game seconds before the first look", async () => {
+    const { call, seconds } = playTools({ rate: 0.5 });
+    await call(EnginePlayTool.Open);
+    assert.ok(seconds() >= 2, "the play ran 2 game seconds before the session looks");
   });
 
   it("joins a play the person started, and leaves it running when it closes", async () => {
@@ -102,7 +127,7 @@ describe("the Unreal plugin's play tools for the computer", () => {
 
   it("leaves the editor to the queue while it has a build to play, and says why", async () => {
     const { call, queue, tools } = playTools();
-    queue.enqueue({ game: "valley", part: "Lantern", script: "/s", test: TEST });
+    queue.enqueue({ game: GAME, part: "Lantern", script: "/s", test: TEST });
     const before = tools().length;
     const answer = await call(EnginePlayTool.Open);
     assert.equal((answer as { refused: string }).refused, EnginePlayRefusal.Busy);

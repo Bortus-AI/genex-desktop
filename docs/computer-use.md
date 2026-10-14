@@ -132,8 +132,10 @@ editor lock for its call, the person first). Unreal provides them
 the Genex editor helper the editor queue already uses, with the background throttle off, keys held
 on the game's own clock (web key codes, named as Unreal names them: `KeyW` is `W`), the player's
 view by `capture_play`, and `player_state` as the state goals are checked against. A session joins
-a play that already runs and ends only one it started; while the editor queue still has a part or a
-play-check of the game, it is refused (`busy`). Capabilities (`EDITOR_CAPABILITIES`): no pointer, no
+a play that already runs and ends only one it started; a play it starts warms up 2 game seconds
+before the first look and is marked as the agent's (`agent-play.ts`), so the lock's person-first
+probe does not read it as the person playing. While the editor queue still has a part or a
+play-check of the game, a session is refused (`busy`). Capabilities (`EDITOR_CAPABILITIES`): no pointer, no
 clock the studio can stop (a `wait` is wall time, `hold_key` game time), game state, input route
 `editor`. Who holds it: the chat's own session on a game an engine plugin that is on holds the link
 of and provides every play tool ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts));

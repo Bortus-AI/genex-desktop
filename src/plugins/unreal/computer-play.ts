@@ -5,7 +5,8 @@
  * state. Each tool takes the editor lock for its call (`needs: ["editor"]`), the person first.
  *
  * A session joins a play that is already running rather than restarting it, and ends only a play
- * it started itself. While the editor queue still has a part or a play-check of the game to run,
+ * it started itself. A play it started is marked as the agent's (`agent-play.ts`) while it runs, so
+ * the lock's person-first probe does not read it as the person playing. While the editor queue still has a part or a play-check of the game to run,
  * the editor is the queue's: a session is refused (`busy`) rather than playing over it.
  */
 import {
@@ -20,6 +21,7 @@ import {
   playInputKeys,
 } from "../../shared/engine-play.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
+import { type AgentPlayMarker, agentPlayFolder, agentPlayMarker, NO_AGENT_PLAY } from "./agent-play.ts";
 import {
   type EditorQueue,
   gameClock,
@@ -35,6 +37,8 @@ import {
   stopPlay,
 } from "./editor-queue.ts";
 
+/** How long a play this session starts runs before the first look, in game seconds, as the play-check's does. */
+const WARMUP_SECONDS = 2;
 /** The shortest hold the helper takes, in game seconds: about a tap. */
 const MIN_HOLD_SECONDS = 0.05;
 /** A play shot's name: the helper takes 1 to 64 letters, digits, `_` or `-`. */
@@ -120,6 +124,10 @@ export function createComputerPlay(deps: {
   const sessions = new Map<string, PlaySession>();
   let shots = 0;
   const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
+  const markerOf = (storage: string, game: string, queueDeps: QueueDeps): AgentPlayMarker => {
+    const folder = agentPlayFolder(storage, game);
+    return folder ? agentPlayMarker(folder, queueDeps.now) : NO_AGENT_PLAY;
+  };
   const portOf = (storage: string, context: PluginContext) => {
     const game = deps.game(context);
     const queueDeps = deps.queueDeps(storage);
@@ -135,7 +143,13 @@ export function createComputerPlay(deps: {
     // A session that is already open keeps what it owes; only a new one lifts the throttle.
     const known = sessions.get(key);
     const giveBack = known?.giveBack ?? (await liftThrottle(port));
-    if (!joined) await startPlay(queueDeps, port);
+    if (!joined) {
+      // Marked before play starts: a probe between the two would read the play as the person's.
+      await markerOf(storage, game, queueDeps).started();
+      await startPlay(queueDeps, port);
+      // UE 5.8 has nothing to capture in a play's first moments.
+      await playFor(queueDeps, port, WARMUP_SECONDS);
+    }
     sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined });
     const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
     return opened;
@@ -179,7 +193,10 @@ export function createComputerPlay(deps: {
     sessions.delete(key);
     if (!session) return { closed: false };
     // A play the person or the queue started goes on; one this session started ends with it.
-    if (session.started) await stopPlay(queueDeps, port);
+    if (session.started) {
+      await stopPlay(queueDeps, port);
+      await markerOf(storage, game, queueDeps).stopped();
+    }
     await session.giveBack();
     return { closed: true };
   };

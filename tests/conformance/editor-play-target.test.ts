@@ -84,6 +84,17 @@ describe("the computer on a game played in its engine's editor", () => {
     assert.equal(session.trace().routes?.includes(InputRoute.Editor), true, "recorded as the editor's own input");
   });
 
+  it("never names a cursor the editor play has none of", async () => {
+    const { source } = standInEngine();
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });
+    const answers = [
+      await session.run("computer", { action: "screenshot" }),
+      await session.run("computer", { action: "hold_key", text: "w", duration: 1 }),
+      await session.run("computer", { action: "batch", actions: [{ action: "key", text: "d" }] }),
+    ];
+    for (const answer of answers) assert.doesNotMatch(text(answer), /cursor/);
+  });
+
   it("looks with the player's view, as a picture the model sees", async () => {
     const { source } = standInEngine();
     const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });
