@@ -60,6 +60,7 @@ import {
   linkedToAGame,
   listSetUpProjects,
   rememberChoice,
+  rememberWant,
   sameProject,
 } from "./editor-port.ts";
 import { callProjectTool } from "./editor-mcp.ts";
@@ -76,7 +77,7 @@ import {
 } from "./game-folder.ts";
 import { isProjectPath, UPROJECT_EXTENSION } from "./project-file.ts";
 import { xcodeDownloadsLaunch } from "./xcode.ts";
-import { EditorWait, engineReadiness, waitForEditor } from "./editor-wait.ts";
+import { EditorWait, EngineReadiness, engineReadiness, waitForEditor } from "./editor-wait.ts";
 import { readinessAnswer } from "./hook-answers.ts";
 import {
   answersOrBlocked,
@@ -101,6 +102,7 @@ import {
   EngineMatch,
   engineMatch,
   findEngines,
+  installEngineVersion,
   HELPER_FOLDER,
   HelperState,
   helperNeedsInstall,
@@ -222,6 +224,8 @@ const MESSAGE = {
   Linked: (name: string, file: string) =>
     `This game now builds in ${name} (${file}). Later Unreal calls in this game go to it.`,
   StepsShown: "The Unreal setup card is in the chat.",
+  ButtonOut: (version: string) =>
+    `The Unreal button is now above the game. Ask the user to press it: it shows how to get Unreal Engine ${version} free from Epic and notices when it's installed. They send a message once it is.`,
   NewGame: (file: string) =>
     `Made this game's Unreal project, ${file}, set it up for Genex and linked this game to it. Unreal is opening it now; a first start can take several minutes while it prepares shaders. Don't wait for it and don't promise to check back later: end your reply now by telling the user what you will build first. Genex continues this chat by itself as soon as Unreal is ready, and from then on the Unreal tools reach this project.`,
   NewGameNotOpened: (file: string, why: string) =>
@@ -947,9 +951,30 @@ async function waitEditor(deps: UnrealBackendDeps, args: Record<string, unknown>
   return { state, project: editor.name };
 }
 
-/** The agent's `show-steps`: the card in its chat while a step is open. */
+/** Whether this computer has an Unreal Genex makes new games with. */
+const canMakeGames = async (deps: UnrealBackendDeps): Promise<boolean> =>
+  engineReadiness(await findEngines(deps.env)).engine === EngineReadiness.Ready;
+
+/**
+ * Remembers that the calling game's chat chose Unreal while it can't be made here yet, so the
+ * game's stage strip shows the Unreal button (which shows how to get Unreal) from the turn's end.
+ */
+async function rememberChoiceOfUnreal(deps: UnrealBackendDeps, context: PluginContext): Promise<void> {
+  const storage = (await setupOptions(deps, context)).storage;
+  await rememberWant(storage, context.project, deps.launch.now());
+}
+
+/**
+ * The agent's `show-steps`: the card in its chat while a step is open. In a game with no Unreal
+ * project while no Unreal that makes games is installed, it brings the Unreal button out instead.
+ */
 async function showSteps(deps: UnrealBackendDeps, context: PluginContext): Promise<string> {
-  const steps = await stepsFor(deps.env, await gameProject(deps, context));
+  const project = await gameProject(deps, context);
+  if (!project && context.project && !(await canMakeGames(deps))) {
+    await rememberChoiceOfUnreal(deps, context);
+    return MESSAGE.ButtonOut(installEngineVersion());
+  }
+  const steps = await stepsFor(deps.env, project);
   if (!steps.open) return MESSAGE.StepsDone;
   return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
 }
@@ -1146,6 +1171,8 @@ function updateNote(opened: OpenResult): { note: string } | Record<string, never
  */
 async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGame);
+  // Refused below for want of Unreal: the game's strip still shows the Unreal button, which gets it.
+  if (!(await canMakeGames(deps))) await rememberChoiceOfUnreal(deps, context);
   const made = await create(deps, args, context);
   const opened = await openForUser(deps, made.project, context).then(
     () => undefined,
@@ -1168,6 +1195,7 @@ async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, c
 async function newPlugin(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGame);
+  if (!(await canMakeGames(deps))) await rememberChoiceOfUnreal(deps, context);
   const engine = await creatingEngine(deps);
   const name = await assertPluginName(textArg(args, "name"), engine.directory);
   const template = await readPluginTemplate(engine.directory, args.template ?? PluginTemplate.Window);

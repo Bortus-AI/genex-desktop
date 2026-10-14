@@ -19,9 +19,8 @@ Godot: the lead and workers run its programs as background jobs in the chat's mo
 at its windows with `app_look` (never clicking), read its docs, or write you a plugin.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each of its tools
-asks before an agent runs it; Always allow lists that tool on its page under **Runs without
-asking**, with **Ask every time**. New code or turning it off clears those; its steps at Genex's
-moments never ask.
+asks before an agent runs it; Always allow lists it under **Runs without asking**. New code or
+turning it off clears those; its steps at Genex's moments never ask.
 
 ## Loops in place
 
@@ -33,8 +32,9 @@ plugin's editor, agents wait.
 
 ## Unreal
 
+The **Unreal** button shows only on Unreal games (or once the chat chose Unreal).
 The lead works in the open editor through the Genex editor helper, one holder at a time; while you
-play there the chat reads “Waiting for you to finish in Unreal” (a build waits 10 minutes). A
+play there the chat waits for you (a build waits 10 minutes). A
 turn saves and snapshots unsaved editor work. Rewind saves, closes and reopens Unreal; if it can't,
 files stay and the chat says why. An **Unreal plugin** project is a host project with the
 plugin in `Plugins/`; its tools build it, test it headless and package it.
@@ -43,8 +43,8 @@ plugin in `Plugins/`; its tools build it, test it headless and package it.
 
 Live shows what the folder holds: the web preview, the Unreal card (setup step, latest shot,
 **Open in Unreal**) or a run's pictures; only the preview has web controls. A web game plus Unreal
-project gets **Web game** and **Unreal** tabs in Live's place, the last chosen remembered per game;
-a web build shown from the chat brings Web game forward.
+project gets **Web game** and **Unreal** tabs, the last chosen remembered per game; a web build
+shown from the chat brings Web game forward.
 
 ## Where to work
 

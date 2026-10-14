@@ -270,6 +270,10 @@ tools (`delegation-prompts.ts`).
   the stage (`role="dialog"`, labelled with the panel title, closed by a button reading
   `Close <title>`); the native game view is hidden while it is open.
 - `requiresProject` (default `true`) hides the button until a game is loaded.
+- `facts` (API 3, 1–8 fact ids) shows the button only on a game served by one of them (an
+  engine's project); absent, every game. Out of its facts the button is still
+  asked for its status and shows while that status says `shown: true` (its chat chose the engine
+  before the project exists); `visibleToolbarEntries` in `shared/plugin-toolbar.ts` decides.
 - Buttons render as `button[data-plugin-toolbar="<plugin>:<item>"]` immediately after the
   Live/Builds group, for enabled installed plugins only; a disabled, removed or not-enabled plugin
   contributes nothing.
@@ -277,15 +281,17 @@ tools (`delegation-prompts.ts`).
 **Status.** `status` names a declared action **without** confirmation. Studio calls it with no
 arguments (and the current project binding) when the toolbar mounts, on every `plugins.changed`,
 debounced to once per second, whenever the open game's own record changes (`game.changed` without a
-file, as a link to an engine project does), and every 30 s while a project is open; switching games
+file, as a link to an engine project does), when a turn of the open game's chat finishes
+(`delegation.finished`), and every 30 s while a project is open; switching games
 clears the old game's words at once. It returns a
-`PluginToolbarStatus` — `{badge?, disabled?, title?, tone?: ok | warn | err | info, attention?, dot?}`
+`PluginToolbarStatus` — `{badge?, disabled?, title?, tone?: ok | warn | err | info, attention?, dot?, shown?}`
 — sanitized by `toolbarStatusFrom` (badge ≤ 16 characters, title ≤ 120, unknown tones dropped,
-`attention` and `dot` booleans). The badge is a word in its tone, or with `dot` a 6 px dot in it
+`attention`, `dot` and `shown` booleans). The badge is a word in its tone, or with `dot` a 6 px dot in it
 (green, amber, red, grey) whose word leads the tooltip. The title shows in the strip's own tooltip.
 A button is drawn in the prompt bar's quiet pill fill, or in the accent while its status sets
 `attention` (the action is due) and the game is not empty; Genex's Publish uses only `title` and
-`attention`. An offered update's Update badge is always a word in the quiet tone. A backend can also
+`attention`, in Play's blue (its tint, filled once due). While the strip is too narrow for the
+labels, every button folds into its icon, the label in its tooltip and a dot on its corner. An offered update's Update badge is always a word in the quiet tone. A backend can also
 push a status without being asked through `events.emit` with
 `{kind: "toolbar", item, badge, tone, title, attention, dot}`; the renderer applies it to that item,
 or re-asks the status action when the item is not named.
@@ -893,22 +899,30 @@ schema (`unreal-part-manifest-contract.test.ts`). In `apply.py`, `unreal.<Class>
 classes passes; an unknown method is unverified only on what such a class made, and an unknown name
 is told that `unreal.load_class(None, '/Script/<Module>.<Class>')` is the reliable form.
 
-**The Unreal projects panel** (`setup.ts`, `backend.ts` and the `setup` panel, titled "Unreal
-projects") finds the engines in Epic's
-launcher list (`LauncherInstalled.dat`). Its project list (`find-projects.ts`) joins Unreal's
-recent list (each 5.8+ engine's `EditorSettings.ini`), `*/*.uproject` one level inside Documents ›
-Unreal Projects, and the projects Genex created, set up or was shown. Each project appears once by
-its real path, with the file's own name on disk (another case of the name is the same project),
-newest first, at most 12; the folder scan is kept for 10 s. Types come from `lstat`, never from
-`readdir`, so Windows OneDrive placeholders count as plain files and folders while real links are
-still skipped or refused. There is no path box: **Choose another project…** calls
-`studioPlugin.chooseFile({title, extensions: ["uproject"]})`. The list is "Choose an Unreal project".
-In a web game with no Unreal project it leads with "Make this game in Unreal" (a new project in the
-game's folder; what was made for the web stays, and Undo in the chat switches back), then "Or use a
-project you have"; in a game, each row outside its folder is tagged "Chats only" (Loops and Rewind
-can't reach it). A pick is linked only by
-"Use … in this game", which leads, with Open in Unreal second, for a set-up project the game doesn't
-use yet.
+**The Unreal projects panel** (`setup.ts`, `backend.ts` and the `setup` panel, titled "Unreal")
+finds the engines in Epic's launcher list (`LauncherInstalled.dat`). Its project list
+(`find-projects.ts`) joins Unreal's recent list (each 5.8+ engine's `EditorSettings.ini`),
+`*/*.uproject` one level inside Documents › Unreal Projects, and the projects Genex created, set up
+or was shown. Each project appears once by its real path, with the file's own name on disk (another
+case of the name is the same project), newest first, at most 12; the folder scan is kept for 10 s.
+Types come from `lstat`, never from `readdir`, so Windows OneDrive placeholders count as plain files
+and folders while real links are still skipped or refused. There is no path box: **Choose a project
+file…** calls `studioPlugin.chooseFile({title, extensions: ["uproject"]})`.
+
+The panel groups what belongs together in outlined blocks: a quiet label above each, a rule between
+the rows inside, the actions in the block's foot. It opens on the shown project: its block holds the
+name, its place and where it stands (a dot and a word; Ready is the green dot alone, its word for
+screen readers and the tooltip), the step's words, the Engine it was made with and, in a game,
+whether Rewind and Loops reach it, then the step's buttons, **Change project** and ⋯ More; a second
+block, This computer, holds the engine, Xcode and the disk and memory notes. Change project opens
+"Choose a project" (in a web game with no Unreal project, "Make this game in Unreal") with Back: a
+New Unreal project row leads (in a web game: what was made for the web stays, and Undo in the chat
+switches back), then the projects on this computer with their count and, past six, a name filter.
+A row's place reads from `~` inside home, else the whole path; a temporary folder is "Temporary
+folder › <Name>" and a long path keeps its first folder and last two around …, whole in its tooltip.
+The shown project is tagged In use and, in a game, each one outside its folder Outside game,
+explained once under the list (Loops and Rewind can't reach it). A pick is linked only by "Use … in
+this game", which leads, with Open in Unreal second, for a set-up project the game doesn't use yet.
 
 `stage-status` answers the same step for the open game's own project, which the Live card turns into
 one button (`whereItStands` is shared with `status`). `status` returns the engines, the list, the
@@ -963,10 +977,10 @@ start; the panel shows its first-start hints only then, and while a project star
 the panel may close (the Unreal button says Ready when it is done). With Unreal closed and another app on a
 set-up project's port, `next` is set-up again, which moves the port (not yet on Windows). Xcode
 is recommended to every Mac user, since without it Genex works in Blueprints only: status's `xcode`
-(`xcode.ts`) gives the panel an Xcode row, last and only under a shown project, that says to get
+(`xcode.ts`) gives This computer an Xcode row, only under a shown project, that says to get
 Xcode, to open it once to finish its setup, to run one Terminal command (with Copy) when another
-developer folder is selected, or the range the engine builds with (once ready, only its version
-beside the engine's at the panel's end): one too new
+developer folder is selected, or the range the engine builds with (once ready, a ticked row with its
+version under the engine's): one too new
 (`tooNew`) is kept and an older one added from Apple's downloads, and a second installed Xcode in
 range is judged instead of the selected one. It warns
 about an engine mismatch and under 16 GB of memory, and about free disk below
@@ -1053,8 +1067,11 @@ run by full path under `SystemRoot` with no window. These four actions are `nati
 profile refuses them.
 
 **Toolbar.** The item `editor` ("Unreal" after the host's `unreal` glyph, aria-label "Unreal
-Editor", `requiresProject: false`) opens the setup panel and stays while the plugin is on, also
-before any game exists and for a web game. Its `toolbar-status` is per game. While no Unreal 5.8 or
+Editor", `facts: ["unreal-project", "unreal-plugin"]`) opens the setup panel on an Unreal game only:
+a web game, a game with no kind yet and no game at all get no Unreal button. A game whose chat chose
+Unreal while no Unreal that makes games is installed (the agent's `show-steps`, or a `new-game` or
+`new-plugin` refused for it) is remembered in `wants/<game>.json`, and its status says `shown`, so
+its strip shows the button that gets Unreal from the turn's end. Its `toolbar-status` is per game. While no Unreal 5.8 or
 newer is installed (Epic's launcher list, read on every ask) the badge is Not installed, whatever
 the game. With a game open and no link (`links/<game>.json` missing,
 undone or not trusted: a symlink, not JSON, another engine, a `.uproject` that is gone or not a

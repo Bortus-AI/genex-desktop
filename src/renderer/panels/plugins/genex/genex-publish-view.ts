@@ -26,7 +26,7 @@ import {
 } from "../../../../shared/genex.ts";
 import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin-toolbar.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
-import { type FactRef, type FolderHolds, servedAsWebGame } from "../../../../shared/project-facts.ts";
+import { type FactRef, type FolderHolds, type GameKind, servedAsWebGame } from "../../../../shared/project-facts.ts";
 import { relativeTime } from "../../../chat-labels.ts";
 import { GENEX_WORDS } from "../../../words.ts";
 
@@ -302,12 +302,13 @@ const isGenexOff = (plugin: PluginInfo): boolean =>
   plugin.manifest.id === GENEX_PLUGIN_ID && !plugin.enabled && !plugin.removed && !plugin.unlisted;
 
 /**
- * Each plugin's buttons in list order: an enabled plugin's all, and an off Genex's Publish alone,
- * since Publish belongs to the account and not to the agent's tools.
+ * Each plugin's buttons in list order: an enabled plugin's all (those scoped to facts `game` isn't
+ * served by marked out of scope), and an off Genex's Publish alone, since Publish belongs to the
+ * account and not to the agent's tools.
  */
-function toolbarEntries(plugins: readonly PluginInfo[], project: string | null): PluginToolbarEntry[] {
+function toolbarEntries(plugins: readonly PluginInfo[], project: string | null, game?: GameKind): PluginToolbarEntry[] {
   return plugins.flatMap((plugin) => {
-    if (!isGenexOff(plugin)) return toolbarItems([plugin], project);
+    if (!isGenexOff(plugin)) return toolbarItems([plugin], project, game);
     if (!project) return [];
     return (plugin.manifest.toolbar ?? [])
       .map((item) => ({ key: `${plugin.manifest.id}:${item.id}`, plugin, item }))
@@ -325,7 +326,7 @@ export function stripEntries(
   facts: readonly FactRef[],
   holds?: FolderHolds,
 ): PluginToolbarEntry[] {
-  const entries = toolbarEntries(plugins, project);
+  const entries = toolbarEntries(plugins, project, { facts, holds });
   return publishable(facts, holds) ? entries : entries.filter((entry) => !isGenexPublish(entry));
 }
 
