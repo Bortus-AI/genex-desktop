@@ -22,6 +22,7 @@ import { EngineLinkLine } from "./EngineLinkLine.tsx";
 import { JobLine } from "./JobLine.tsx";
 import { WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
+import { JudgeLine } from "./JudgeLine.tsx";
 import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
@@ -254,7 +255,7 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
   );
 }
 
-/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission. */
+/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission, a judge's play. */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
   context: TranscriptContext,
@@ -264,6 +265,7 @@ function quietLine(
   if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Judge && entry.judge) return <JudgeLine judge={entry.judge} />;
   return null;
 }
 

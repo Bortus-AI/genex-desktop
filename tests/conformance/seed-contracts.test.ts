@@ -38,6 +38,12 @@ import {
 } from "../../src/harness-seed/loop/preview-gone.ts";
 import { PageMethod as seedPageMethod } from "../../src/harness-seed/loop/page-contract.ts";
 import * as seedJudgeProvenance from "../../src/harness-seed/loop/judge-provenance.ts";
+import { InteractionObjective, InteractionSource, InteractionStatus } from "../../src/shared/run-summary.ts";
+import * as seedInteractionEvidence from "../../src/harness-seed/loop/interaction-evidence.ts";
+import * as seedInteractionWords from "../../src/harness-seed/loop/interaction-words.ts";
+import * as seedComputerLoop from "../../src/harness-seed/loop/computer-loop.ts";
+import { ScreenRole } from "../../src/shared/agent-screen.ts";
+import { ComputerPacing } from "../../src/shared/computer-target.ts";
 import * as seedRunEvents from "../../src/harness-seed/loop/run-events.ts";
 import * as seedSkills from "../../src/harness-seed/loop/skills.ts";
 import * as seedStateShape from "../../src/harness-seed/loop/state-shape.ts";
@@ -109,7 +115,15 @@ import { applyEdits, SKILL_EDIT_OPS } from "../../src/shared/skill-edits.ts";
 import * as studioStateShape from "../../src/shared/studio-state-shape.ts";
 import { CONTRACT_LESSONS_FILE, LESSONS_SKILL, StagedTarget } from "../../src/shared/self-change-files.ts";
 import { EventKind, type EventEnvelope, MessageUsageSource } from "../../src/shared/event-log.ts";
-import { DIRECTOR_LOOP_ENV, harnessRunEnv, UNREAL_RUNNER_ENV, UnrealRunnerChoice } from "../../src/shared/protocol.ts";
+import {
+  DIRECTOR_LOOP_ENV,
+  HarnessCapability,
+  harnessRunEnv,
+  UNREAL_RUNNER_ENV,
+  UnrealRunnerChoice,
+} from "../../src/shared/protocol.ts";
+import { CHAT_JUDGE_CAPABILITY } from "../../src/harness-seed/loop/chat-judge.ts";
+import { LOCAL_ROLES_CAPABILITY } from "../../src/harness-seed/loop/local-roles-served.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
 import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
 import { EngineKind } from "../../src/shared/engine-descriptor.ts";
@@ -468,6 +482,21 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.deepEqual(seedRunEvents.EventKind, EventKind);
   });
 
+  it("names who played and what an interaction rests on as the app does", () => {
+    assert.deepEqual(seedInteractionWords.InteractionSource, InteractionSource);
+    assert.deepEqual(seedInteractionWords.InteractionObjective, InteractionObjective);
+    assert.deepEqual(seedInteractionEvidence.InteractionStatus, InteractionStatus);
+  });
+
+  it("names who holds the computer and how its clock is held as the host does", () => {
+    const roles: Readonly<Record<string, string>> = ScreenRole;
+    for (const [member, role] of Object.entries(seedComputerLoop.PlayRole))
+      assert.equal(roles[member], role, `PlayRole.${member} is ScreenRole.${member}`);
+    const pacings: Readonly<Record<string, string>> = ComputerPacing;
+    for (const [member, pacing] of Object.entries(seedComputerLoop.PlayPacing))
+      assert.equal(pacings[member], pacing, `PlayPacing.${member} is ComputerPacing.${member}`);
+  });
+
   it("stages a lessons suggestion for the file the host lets it write", () => {
     assert.deepEqual(seedContractLessons.StagedTarget, StagedTarget);
     assert.equal(seedContractLessons.CONTRACT_LESSONS_FILE, CONTRACT_LESSONS_FILE);
@@ -753,6 +782,11 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   it("the seed's starters and project tool names are the app's", () => {
     assert.deepEqual(seedFolderFacts.ProjectStarter, ProjectStarter);
     assert.deepEqual(seedFolderFacts.ProjectTool, ProjectTool);
+  });
+
+  it("the capabilities the seed claims when its parts serve them are the app's", () => {
+    assert.equal(CHAT_JUDGE_CAPABILITY, HarnessCapability.ChatJudge);
+    assert.equal(LOCAL_ROLES_CAPABILITY, HarnessCapability.LocalRoles);
   });
 });
 

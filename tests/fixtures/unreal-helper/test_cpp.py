@@ -202,10 +202,12 @@ class Recompile(HelperCase):
             'the hot reload failed': 'LogHotReload: Error: Hot reload failed, GxCpp could not be reloaded.',
             'the module did not load': 'LogModuleManager: Error: Unable to load module GxCpp-5706.',
         }
-        for label, line in cases.items():
+        # Each case builds a library of its own: one written again within the same timestamp tick
+        # as the case before it (a fast runner) would look untouched, so not compiled.
+        for index, (label, line) in enumerate(cases.items()):
             with self.subTest(label):
                 self.fresh()
-                self.ubt([*COMPILED, f'{STAMP}{line}'], suffix='5706')
+                self.ubt([*COMPILED, f'{STAMP}{line}'], suffix=str(5706 + index))
                 result = self.recompile()
                 self.assertEqual({k: result[k] for k in ['ok', 'compiled', 'missing']},
                                  {'ok': False, 'compiled': True, 'missing': []})

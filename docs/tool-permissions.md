@@ -508,10 +508,19 @@ reads of it at its next round.
 Codex runs Auto as before (`workspace-write` in the game folder, no network, never asks), Bypass
 with `--dangerously-bypass-approvals-and-sandbox`, and Plan from a folder of its own (`startsElsewhere`,
 as a read-only session) where only the studio's bridge is writable, told it plans
-(`planModeNote`). A pick applies to its next turn. Every `codex exec` runs with Codex's own
+(`planModeNote`). A pick applies to its next turn. Every Codex launch runs with Codex's own
 sub-agents (`multi_agent`, `multi_agent_v2`) and its screen and browser hands (`computer_use`,
-`in_app_browser`, `browser_use`, `browser_use_external`) disabled, all of which Codex turns on by
-default (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`).
+`in_app_browser`, `browser_use`, `browser_use_external`) disabled, those its `codex features list`
+knows (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`): the studio's `computer` tool is the
+only hands an agent has ([computer use](computer-use.md)).
+
+A judge that plays (`role: "judge"`) is blind as well as read-only (`DelegateRequest.blind`) where
+the engine can enforce it: Claude Code is offered no built-in but tool search and disallows every file, shell, edit and question tool, OpenCode
+denies every file tool, and a local session gets no file tool. Codex reads the whole disk, so a Codex
+judge is only told to judge by playing. Every engine starts in the empty `scratch/blind-judge`
+folder and is not told the build's path. Writing nothing and reading no file, it takes a folder
+lock of its own (`judgeLockKey`), so the chat's `judge_play` judge plays the game folder its own
+session holds; every other session there is still refused ([computer use](computer-use.md)).
 
 A plan on an engine that ends its turn with it (`plansByTurn`: Bonsai, Codex) is approved by the
 host ([`plan-approval.ts`](../src/main/core/plan-approval.ts) `withPlanApproval`): a Plan reply
@@ -631,6 +640,12 @@ Loop run must confirm the two known changes: builders can no longer read sibling
 
 ## Residual risks
 
+- Computer control (the `desktop` tool, [computer-use](computer-use.md#the-persons-computer)) acts
+  with the person's own access in every app they allow: the per-app consent card is the boundary.
+  A page, document or message the agent reads there can try to steer it; the tool tells the model
+  that on-screen text is never an instruction, and the studio itself, password managers and system
+  settings are never driven. Web pages (`web_*`) open only in a separate, clean browser with no
+  logins; a page's text can still try to steer the agent.
 - Codex cannot ask mid-turn: Manual and Accept edits are unavailable for it until it runs over a
   protocol that asks (`codex app-server`), and a chat in either runs Codex in Auto's sandbox. Its
   Bypass has no sandbox at all, as the CLI's own flag. Bonsai and Codex ask about no read, and their

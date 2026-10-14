@@ -2988,6 +2988,13 @@ button.chat-header-title:hover {
 .chat-disclosure > svg:last-child {
   margin-inline-start: -2px;
 }
+/* Wrapped words keep their mark and chevron on the first line, centred on it. */
+.chat-disclosure[data-wraps] {
+  align-items: flex-start;
+}
+.chat-disclosure[data-wraps] > svg {
+  margin-block: 4px;
+}
 /* The status line without details to open: laid out as its disclosure is, so nothing moves when one comes. */
 .chat-status-line {
   display: flex;
