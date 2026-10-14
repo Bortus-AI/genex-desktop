@@ -14,7 +14,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { setTimeout as sleep } from "node:timers/promises";
-import { canPause, canPoint, PointerLevel } from "../../src/shared/computer-target.ts";
+import { canPoint, canStep, PointerLevel } from "../../src/shared/computer-target.ts";
 import { CaptureSurface, type PreviewInputAction } from "../../src/shared/preview-contract.ts";
 import {
   PLAY_MAX_STEP_MS,
@@ -202,7 +202,7 @@ for (const subject of SUBJECTS) {
     });
 
     it("pauses: a paused game's state stands still", async (t) => {
-      if (!canPause(game.target.caps)) return t.skip("the engine declares no step-locked clock");
+      if (!canStep(game.target.caps)) return t.skip("the engine declares no step-locked clock");
       await game.target.clock?.pause();
       const first = fingerprint(await state());
       await sleep(STILL_WATCH_MS);
@@ -210,7 +210,7 @@ for (const subject of SUBJECTS) {
     });
 
     it("steps by milliseconds and says how many it simulated", async (t) => {
-      if (!canPause(game.target.caps)) return t.skip("the engine declares no step-locked clock");
+      if (!canStep(game.target.caps)) return t.skip("the engine declares no step-locked clock");
       await game.target.clock?.pause();
       const before = fingerprint(await state());
       const ran = readStep(await game.client.call(PlayOp.Step, { ms: 200 }));
@@ -220,7 +220,7 @@ for (const subject of SUBJECTS) {
     });
 
     it("rounds a step to whole ticks, at least one, and takes the longest step the studio sends", async (t) => {
-      if (!canPause(game.target.caps)) return t.skip("the engine declares no step-locked clock");
+      if (!canStep(game.target.caps)) return t.skip("the engine declares no step-locked clock");
       await game.target.clock?.pause();
       const tiny = readStep(await game.client.call(PlayOp.Step, { ms: 1 }));
       assert.ok(tiny !== null && tiny > 0, `a 1 ms step runs at least one tick (answered ${tiny})`);
@@ -230,7 +230,7 @@ for (const subject of SUBJECTS) {
 
     it("replays: the same seed and the same inputs reach the same state", async (t) => {
       const caps = game.target.caps;
-      if (!caps.seed || !canPause(caps)) return t.skip("the engine declares no seed or no step-locked clock");
+      if (!caps.seed || !canStep(caps)) return t.skip("the engine declares no seed or no step-locked clock");
       const run = async () => {
         await freshStart(42);
         await input([{ type: "down", keys: ["ArrowRight"] }]);
@@ -248,7 +248,7 @@ for (const subject of SUBJECTS) {
 
     it("applies ops in the order it received them, whatever order the replies take", async (t) => {
       const caps = game.target.caps;
-      if (!caps.seed || !canPause(caps)) return t.skip("the engine declares no seed or no step-locked clock");
+      if (!caps.seed || !canStep(caps)) return t.skip("the engine declares no seed or no step-locked clock");
       const plan: Array<[PlayOp, Record<string, unknown>]> = [
         [PlayOp.Key, { code: "ArrowRight", down: true }],
         [PlayOp.Step, { ms: 96 }],
@@ -267,8 +267,7 @@ for (const subject of SUBJECTS) {
     it("acts: a named action given while paused takes effect on the next step, not before", async (t) => {
       const caps = game.target.caps;
       const actions = hello().capabilities.actions;
-      if (!caps.actions || !caps.seed || !canPause(caps))
-        return t.skip("the engine declares no actions, seed or clock");
+      if (!caps.actions || !caps.seed || !canStep(caps)) return t.skip("the engine declares no actions, seed or clock");
       const reach = async (list: Parameters<NonNullable<typeof game.target.act>>[0]) => {
         await freshStart(7);
         const start = fingerprint(await state());
@@ -289,7 +288,7 @@ for (const subject of SUBJECTS) {
 
     it("queues keys and clicks given while paused until the next step", async (t) => {
       const caps = game.target.caps;
-      if (!canPause(caps)) return t.skip("the engine declares no step-locked clock");
+      if (!canStep(caps)) return t.skip("the engine declares no step-locked clock");
       await freshStart(9);
       const start = fingerprint(await state());
       const view = hello().view;
@@ -361,7 +360,7 @@ for (const subject of SUBJECTS) {
 
     it("photographs the stepped state, and a picture never moves time", async (t) => {
       const caps = game.target.caps;
-      if (!canPause(caps)) return t.skip("the engine declares no step-locked clock");
+      if (!canStep(caps)) return t.skip("the engine declares no step-locked clock");
       await freshStart(13);
       const start = fingerprint(await state());
       const shoot = () => game.target.screenshot({ quality: 80, surface: CaptureSurface.Auto });
@@ -388,7 +387,7 @@ for (const subject of SUBJECTS) {
       if (takes(PlayOp.Look) && caps.pointer !== PointerLevel.None) played.push({ type: "look", dx: 5, dy: 5 });
       if (canPoint(caps) && takes(PlayOp.Pointer)) played.push({ type: "click", x: 2, y: 2, px: true });
       await input(played);
-      if (canPause(caps)) await game.target.clock?.step?.(200);
+      if (canStep(caps)) await game.target.clock?.step?.(200);
       await game.target.seed?.(11);
       assert.deepEqual(replayable(await state()), initial);
     });

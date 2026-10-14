@@ -191,6 +191,11 @@ export function canPause(caps: Pick<TargetCapabilities, "clock">): boolean {
   return caps.clock !== ClockLevel.None;
 }
 
+/** Can the target's time be stepped by an exact amount? */
+export function canStep(caps: Pick<TargetCapabilities, "clock">): boolean {
+  return caps.clock === ClockLevel.StepLocked || caps.clock === ClockLevel.Replayable;
+}
+
 /** Can the target's pointer click at a point? */
 export function canPoint(caps: Pick<TargetCapabilities, "pointer">): boolean {
   return caps.pointer === PointerLevel.Absolute;
