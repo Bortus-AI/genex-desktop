@@ -59,6 +59,11 @@ const IMAGE_HOSTS = new Set([
   "avatars.githubusercontent.com",
 ]);
 
+/** The one host a cover clip plays from, and its folder; `renderer/index.html`'s `media-src` lists the host. */
+const CLIP_HOST = "cdn.genex.technology";
+const CLIP_FOLDER = "/covers/";
+const CLIP_EXTENSION = ".mp4";
+
 /** The routes Play calls. */
 export const PlayRoute = {
   Feed: "/api/gallery",
@@ -180,6 +185,19 @@ export function imageUrl(value: unknown, local: boolean): string | null {
   }
 }
 
+/** A cover clip: an https MP4 in Genex's cover folder on its CDN, nothing else, else null. */
+export function clipUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const plain = url.protocol === "https:" && !url.username && !url.password && !url.port;
+    const ours = url.hostname === CLIP_HOST && url.pathname.startsWith(CLIP_FOLDER);
+    return plain && ours && url.pathname.endsWith(CLIP_EXTENSION) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The gallery's public git address for a game, when it is one the app will clone. */
 function cloneUrlOf(item: Record<string, unknown>): string | null {
   const value = item.cloneUrl;
@@ -205,12 +223,15 @@ export function toPlayGame(item: unknown, local = false): PlayGame | null {
   if (!id || !title || !isPlaySlug(item.slug)) return null;
   const author = isRecord(item.author) ? item.author : {};
   const online = typeof item.online === "number" && Number.isFinite(item.online) ? count(item.online) : null;
+  const coverUrl = imageUrl(item.thumbnailUrl, local);
   return {
     id,
     slug: item.slug,
     title,
     description: text(item.description).trim(),
-    coverUrl: imageUrl(item.thumbnailUrl, local),
+    coverUrl,
+    // A clip plays over its still, never in place of it.
+    clipUrl: coverUrl ? clipUrl(item.coverClipUrl) : null,
     multiplayer: item.multiplayer === true,
     plays: count(item.playsCount),
     online: item.multiplayer === true ? online : null,

@@ -98,6 +98,8 @@ export interface PlayGame {
   description: string;
   /** The 16:9 cover, or null when the game has none the app may load. */
   coverUrl: string | null;
+  /** A five-second clip of real play that runs over the cover while the card is hovered, or null. */
+  clipUrl: string | null;
   multiplayer: boolean;
   /** Plays so far, as the gallery counts them. */
   plays: number;

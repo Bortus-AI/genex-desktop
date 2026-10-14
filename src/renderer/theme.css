@@ -1967,7 +1967,7 @@ button.chat-header-title:hover {
   gap: 8px;
   min-width: 0;
   height: 44px;
-  padding-inline: 6px 4px;
+  padding-inline: 6px;
   border-radius: var(--radius-control);
   color: var(--ink);
   text-align: start;
@@ -3006,6 +3006,16 @@ button.chat-header-title:hover {
 }
 .xterm .xterm-scrollable-element > .scrollbar > .slider {
   border-radius: 99px;
+}
+
+/* A page's content on its way (Pending `spinner`): the working mark centred over the shimmering label. */
+.pending-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 200px;
 }
 
 /* Only current work animates. History and disclosures mount without entrance choreography. */

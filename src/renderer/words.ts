@@ -3334,28 +3334,26 @@ export const GENEX_WORDS = {
   },
   /** The Genex plugin page's tabs. */
   tabs: { label: "Genex plugin", tools: "Tools", credits: "Credits" },
-  /** The Credits tab: the balance, what credits pay for (live prices), what they don't, and recent spends. */
+  /** The Credits tab: the balance, what credits pay for (live prices), that building is free, and recent spends. */
   creditsTab: {
     label: "Genex plugin, Credits",
     unit: (count: number) => (count === 1 ? "credit" : "credits"),
     unlimited: "Unlimited credits",
-    shared: "one balance for all your games",
+    shared: "one balance for every game dev tool",
     plan: (allowance: string, when: string) => `Pro · ${allowance} more on ${when}`,
     inviteFriend: "Invite a friend",
     getCredits: "Get credits",
     payFor: "What credits pay for",
-    payForLine: "What Genex makes for your games when you or your agent ask",
+    payForLine: "Only assets made with external game dev tools",
+    freeBuilding:
+      "Building your games is free: your agents run on your own subscription, and Genex charges nothing extra.",
     from: "from",
     pricesUnavailable: "Prices couldn’t be read from genex.games right now.",
-    notPaid: "Not paid with credits",
-    notPaidLines: [
-      "Building and changing your game: your agents run on your own Claude or Codex plan.",
-      "A generation that fails is refunded on its own.",
-      "Out of credits, games still build, with procedural assets and Local Blender.",
-    ],
-    recent: "Recent",
-    noRecent: "Nothing spent yet.",
-    refunded: (count: number) => `+${count} refunded`,
+    recent: "Recent spending",
+    recentLine: "Your latest generations and refunds",
+    noRecent: "Nothing spent yet",
+    refunded: (count: number) => `+${count}`,
+    refundedNote: "refunded",
     failedKind: (kind: string) => `${kind}, failed`,
     spent: (count: number) => `−${Math.abs(count)}`,
     centNote: "1 credit is about 1¢",
@@ -3370,7 +3368,7 @@ export const GENEX_WORDS = {
       [CreditKind.Image]: { name: "Image or sprite", tool: "GPT Image" },
       [CreditKind.Texture]: { name: "Texture set", tool: "Nano Banana" },
       [CreditKind.Video]: { name: "Video, 5 s", tool: "MiniMax" },
-      [CreditKind.Music]: { name: "Music, 90 s", tool: "ElevenLabs" },
+      [CreditKind.Music]: { name: "Music track", tool: "ElevenLabs" },
       [CreditKind.Sound]: { name: "Sound effect", tool: "ElevenLabs" },
       [CreditKind.Voice]: { name: "Voice line", tool: "ElevenLabs" },
       [CreditKind.ModelRig]: { name: "Rig a model", tool: "Tripo" },
@@ -3676,7 +3674,7 @@ export const PLAY_WORDS = {
   },
   /** The account's own numbers: the profile's strip and the stats page. Only the account sees them. */
   stats: {
-    lastDays: (days: number) => `Last ${days} days`,
+    lastDays: (days: number) => `Your game stats · last ${days} days`,
     sectionLabel: "My stats",
     plays: (count: number) => (count === 1 ? "play" : "plays"),
     players: (count: number) => (count === 1 ? "player" : "players"),
@@ -3716,7 +3714,7 @@ export const PLAY_WORDS = {
     dayByDayColumn: "Day by day",
     changeColumn: "Change",
     /** The strip's label while genex.games has no daily stats: the plays in total. */
-    inTotal: "In total",
+    inTotal: "Your game stats · in total",
     unavailable: "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.",
     failed: "Couldn’t load your stats.",
     backToProfile: "Profile",
@@ -3724,7 +3722,7 @@ export const PLAY_WORDS = {
   /** Play's Top creators row, at the top of Games. */
   creators: {
     title: "Top creators",
-    period: "this month",
+    heading: "Top creators this month",
     line: (games: number, hours: string) => `${games === 1 ? "1 game" : `${games} games`} · ${hours} h`,
   },
   modes: { label: "Mode", play: "Play", create: "Create" },

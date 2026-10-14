@@ -70,7 +70,8 @@ Play reads the genex.games catalog from `https://api.genex.games` without a sign
 games, tools and assets, which tabs have something in them, the search catalog and, every 20 seconds while the dashboard
 is in view, how many people are in its multiplayer games. Covers and author pictures load from
 cdn.genex.technology, assets.genex.games, assets.genex.technology, api.genex.games, Google
-(lh3.googleusercontent.com) and GitHub (avatars.githubusercontent.com).
+(lh3.googleusercontent.com) and GitHub (avatars.githubusercontent.com). A game's five-second cover
+clip loads from cdn.genex.technology only while you rest the pointer on its card.
 
 Playing a game loads it from its own `https://<name>.genex.technology/` address, and genex.games
 counts the play. The game runs in Play's own storage, apart from your games and the rest of the

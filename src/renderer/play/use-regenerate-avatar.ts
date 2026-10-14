@@ -11,6 +11,8 @@ import { studio } from "../state/studio.ts";
 import { ToastTone } from "../state/toasts.ts";
 import { ACCOUNT_WORDS } from "../words.ts";
 
+const WORDS = ACCOUNT_WORDS;
+
 /** What the Regenerate button needs: whether it works yet, and the press. */
 export interface RegenerateAvatar {
   /** genex.games keeps a regenerated avatar; until then the button waits. */
@@ -24,7 +26,7 @@ export function useRegenerateAvatar(me: PlayMe | null, random: () => number = Ma
     if (!me?.avatarVariantKept) return;
     studio()
       .people.setAvatarVariant(nextAvatarVariant(me.avatarVariant, random()))
-      .catch(() => studio().notify(ACCOUNT_WORDS.regenerateFailed, ToastTone.Error));
+      .catch(() => studio().notify(WORDS.regenerateFailed, ToastTone.Error));
   };
   return { available: me?.avatarVariantKept === true, regenerate };
 }

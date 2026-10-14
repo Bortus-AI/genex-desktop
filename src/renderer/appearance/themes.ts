@@ -30,6 +30,36 @@ export const COLOR_ROLES = [
   "danger",
 ] as const;
 export type ColorRole = (typeof COLOR_ROLES)[number];
+/**
+ * Play's tinted families (people.css): the profile chips and edit button, the tint buttons (Invite,
+ * Join, Copy), the credits card and the invite card, each a hue the stylesheet mixes into its fill and
+ * edge. Unset, each wears the Play / Create switch's selected blue, the credits card the chips' hue.
+ */
+export const PLAY_HUE_ROLES = ["peopleChip", "peopleTint", "creditsCard", "inviteCard"] as const;
+export type PlayHueRole = (typeof PLAY_HUE_ROLES)[number];
+/**
+ * Play's people, stats and credits colours set by name (people.css): the chips' label and number, the
+ * primary button, genex.games' blue, playing now, Pro, the request count, the stats' line and changes,
+ * and the credit shard. Unset, each keeps the stylesheet's own colour for the scheme.
+ */
+export const PEOPLE_ROLES = [
+  "peopleChipText",
+  "peopleChipNumber",
+  "playBlue",
+  "peoplePrimary",
+  "peoplePrimaryShade",
+  "peopleLive",
+  "peopleLiveText",
+  "peoplePro",
+  "peopleRequest",
+  "statsLine",
+  "statsUp",
+  "statsDown",
+  "shardLight",
+  "shardMid",
+  "shardDark",
+] as const;
+export type PeopleRole = (typeof PEOPLE_ROLES)[number];
 /** Roles a palette may set or leave to the app, which derives each from the core roles until it is set. */
 export const DETAIL_ROLES = [
   "accentFill",
@@ -73,6 +103,8 @@ export const DETAIL_ROLES = [
   "hatch",
   "hatchGround",
   "settingsTab",
+  ...PLAY_HUE_ROLES,
+  ...PEOPLE_ROLES,
 ] as const;
 export type DetailRole = (typeof DETAIL_ROLES)[number];
 /** Every role a palette can carry: the core ones, then the details. */
@@ -130,6 +162,25 @@ const DETAIL_SOURCE: Record<DetailRole, ColorRole> = {
   hatch: "foreground",
   hatchGround: "background",
   settingsTab: "accent",
+  peopleChip: "accent",
+  peopleTint: "accent",
+  creditsCard: "accent",
+  inviteCard: "accent",
+  peopleChipText: "accent",
+  peopleChipNumber: "accent",
+  playBlue: "accent",
+  peoplePrimary: "accent",
+  peoplePrimaryShade: "accent",
+  peopleLive: "success",
+  peopleLiveText: "success",
+  peoplePro: "accent",
+  peopleRequest: "accent",
+  statsLine: "accent",
+  statsUp: "success",
+  statsDown: "danger",
+  shardLight: "accent",
+  shardMid: "accent",
+  shardDark: "accent",
 };
 /** The variable each place-dependent detail is drawn as; unset, theme.css falls back per place. */
 const PLACE_VARIABLE: Partial<Record<DetailRole, string>> = {
@@ -170,6 +221,25 @@ const PLACE_VARIABLE: Partial<Record<DetailRole, string>> = {
   hatch: "--hatch-stripe",
   hatchGround: "--hatch-ground",
   settingsTab: "--settings-tab",
+  peopleChip: "--people-chip-hue",
+  peopleTint: "--people-tint-hue",
+  creditsCard: "--credits-card-hue",
+  inviteCard: "--people-invite-hue",
+  peopleChipText: "--people-chip-ink",
+  peopleChipNumber: "--people-chip-number",
+  playBlue: "--play-blue",
+  peoplePrimary: "--people-primary-top",
+  peoplePrimaryShade: "--people-primary-bottom",
+  peopleLive: "--people-live",
+  peopleLiveText: "--people-live-ink",
+  peoplePro: "--people-pro",
+  peopleRequest: "--people-request",
+  statsLine: "--stats-line",
+  statsUp: "--stats-up",
+  statsDown: "--stats-down",
+  shardLight: "--shard-light",
+  shardMid: "--shard-mid",
+  shardDark: "--shard-dark",
 };
 /** The variable each shadow is drawn as; unset, theme.css keeps the place's own. */
 const SHADOW_VARIABLE: Record<ShadowPlace, string> = {
@@ -242,6 +312,11 @@ export const PRESETS: ThemePreset[] = [
       playTrackEdge: "#1f2021",
       playTab: "#0d0d0e",
       playTabEdge: "#232325",
+      peopleChip: "#4169d1",
+      inviteCard: "#4160b1",
+      peopleChipText: "#e3e6f4",
+      peopleChipNumber: "#d8ddf4",
+      peoplePrimaryShade: "#1a34b5",
     },
   ),
   preset(
@@ -297,6 +372,14 @@ export const PRESETS: ThemePreset[] = [
       playTab: "#ffffff",
       playTabEdge: "#f1f1f1",
       wireArt: "#a2abd5",
+      peopleChip: "#bfbfbf",
+      peopleTint: "#c3d5ff",
+      creditsCard: "#b1c3e6",
+      inviteCard: "#a9b8d9",
+      peopleChipText: "#3f61b2",
+      peopleChipNumber: "#3a5ace",
+      peoplePrimary: "#5b84e3",
+      peoplePrimaryShade: "#4561e4",
       shadows: {
         panel: { y: 17, blur: 40, spread: -10, color: "#000000", alpha: 0 },
         promptBar: { y: 3, blur: 8, spread: 0, color: "#000000", alpha: 3 },

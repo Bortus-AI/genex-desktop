@@ -27,22 +27,38 @@ const SEARCH_DEBOUNCE_MS = 300;
 /** How many card shapes stand in for the page on its way. */
 const PLACEHOLDER_CARDS = 6;
 
-/** A section of the page: its heading with how many, then its cards. */
-function Section({ label, count, children }: { label: string; count: number; children: ReactNode }): JSX.Element {
+/** A section of the page: its heading with how many, then its cards; `bare` leaves the heading to the page's title. */
+function Section({
+  label,
+  count,
+  bare = false,
+  children,
+}: {
+  label: string;
+  count: number;
+  bare?: boolean;
+  children: ReactNode;
+}): JSX.Element {
   return (
     <section className="people-section" aria-label={label}>
-      <h2 className="people-section-head">
-        {label} · {count}
-      </h2>
+      {!bare && (
+        <h2 className="people-section-head">
+          {label} · {count}
+        </h2>
+      )}
       <div className="friend-grid">{children}</div>
     </section>
   );
 }
 
-/** The account's people, in the order they need it. */
+/**
+ * The account's people, in the order they need it. The friends need no heading of their own when
+ * nothing comes before them: the page's title already says Friends and how many.
+ */
 function FriendSections({ page }: { page: PlayFriendsPage }): JSX.Element {
   const playing = page.friends.filter((friend) => friend.playing);
   const others = page.friends.filter((friend) => !friend.playing);
+  const othersFirst = page.incoming.length === 0 && playing.length === 0;
   return (
     <>
       {page.incoming.length > 0 && (
@@ -60,7 +76,7 @@ function FriendSections({ page }: { page: PlayFriendsPage }): JSX.Element {
         </Section>
       )}
       {others.length > 0 && (
-        <Section label={WORDS.allFriends} count={others.length}>
+        <Section label={WORDS.allFriends} count={others.length} bare={othersFirst}>
           {others.map((friend) => (
             <FriendCard key={friend.id} kind={FriendCardKind.Friend} person={friend} />
           ))}

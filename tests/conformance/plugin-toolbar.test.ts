@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   MultiplayerPress,
   multiplayerPress,
+  showsMultiplayer,
   toolbarItems,
   toolbarReaction,
   toolbarStatusFrom,
@@ -154,6 +155,11 @@ test("Multiplayer brings Genex in, updates an older Genex first, and otherwise a
   const waiting = plugin("genex", [item()], { availableVersion: "1.10.0", pendingVersion: "1.10.0" });
   assert.equal(multiplayerPress(waiting), MultiplayerPress.Ask, "as Publish: the update waits for its sessions");
   assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
+});
+test("Multiplayer stands beside Publish only on a game with something in it", () => {
+  assert.equal(showsMultiplayer(true, false), true);
+  assert.equal(showsMultiplayer(true, true), false, "an empty game has nothing to play together yet");
+  assert.equal(showsMultiplayer(false, false), false, "no Publish, no Multiplayer");
 });
 test("toolbarStatusFrom keeps attention as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ attention: true }), { attention: true });

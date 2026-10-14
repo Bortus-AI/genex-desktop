@@ -373,10 +373,12 @@ function SearchBody({
 
 /**
  * The bar over the cards as they scroll: whether they are under it (its controls then wear a
- * backing) and whether it has stepped away; both start over when `reset` changes.
+ * backing) and whether it has stepped away; both start over when `reset` changes. What stands
+ * above the bar (`lead`, Top creators) scrolls away first: the bar counts from where it sticks.
  */
 function useBarScroll(reset: unknown) {
   const bar = useRef<HTMLElement>(null);
+  const lead = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState(BAR_AT_TOP);
   const [scrolled, setScrolled] = useState(false);
   const [resetFor, setResetFor] = useState(reset);
@@ -386,11 +388,24 @@ function useBarScroll(reset: unknown) {
     setScrolled(false);
   }
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    const top = event.currentTarget.scrollTop;
+    const top = Math.max(0, event.currentTarget.scrollTop - (lead.current?.offsetHeight ?? 0));
     setScrolled(top > 0);
     setScroll((before) => barAfterScroll(before, top, bar.current?.offsetHeight ?? 0));
   }, []);
-  return { bar, scrolled, hidden: scroll.hidden, onScroll };
+  return { bar, lead, scrolled, hidden: scroll.hidden, onScroll };
+}
+
+/**
+ * Top creators at the head of Games, over the tabs and search; they stay while a search is typed
+ * so the field does not jump, and the box is empty while there are none. `inset` clears the
+ * window's buttons when the sidebar is hidden.
+ */
+function CreatorsLead({ lead, inset }: { lead: RefObject<HTMLDivElement | null>; inset: boolean }): JSX.Element {
+  return (
+    <div ref={lead} className={`play-top titlebar-drag ${inset ? "play-toolbar-inset" : ""}`}>
+      <TopCreators />
+    </div>
+  );
 }
 
 /** Once the Mac is online again: the shelves' counts, and the shown tab's page that could not be read. */
@@ -429,7 +444,7 @@ export function PlayRoom({
   }
   const { search, retry } = useSearch(query, shelf);
   const { remixing, remix } = useCardRemix(onRemixed);
-  const { bar, scrolled, hidden, onScroll } = useBarScroll(shelf);
+  const { bar, lead, scrolled, hidden, onScroll } = useBarScroll(shelf);
   const online = useOnline();
   const scroll = useRef<HTMLDivElement>(null);
   const tabs = shelfTabs(categories, shelf);
@@ -452,6 +467,7 @@ export function PlayRoom({
     <section data-play-page aria-label={WORDS.page} className="play-page">
       {/* Keyed by shelf: another shelf starts at the top. The cards scroll under the bar. */}
       <div ref={scroll} key={shelf} className="play-scroll" onScroll={onScroll}>
+        {shelf === PlayShelf.Games && <CreatorsLead lead={lead} inset={sidebarHidden} />}
         <header
           ref={bar}
           className={`play-toolbar titlebar-drag window-controls-end ${sidebarHidden ? "play-toolbar-inset" : ""}`}
@@ -475,7 +491,6 @@ export function PlayRoom({
           <SearchField query={query} noun={noun} onQuery={setQuery} />
         </header>
         <div className="play-content">
-          {shelf === PlayShelf.Games && !search && <TopCreators />}
           {search ? (
             <SearchBody
               search={search}

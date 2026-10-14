@@ -910,7 +910,7 @@
   }
 }
 
-/* ── The Genex plugin page's tabs: Account, Credits, Tools, in Play's selected blue ── */
+/* ── The Genex plugin page's tabs: Tools and Credits, in the Play / Create switch's colours (play.css) ── */
 .genex-tabs {
   display: flex;
   width: fit-content;
@@ -918,7 +918,6 @@
   gap: 2px;
   padding: 2px;
   border-radius: 10px;
-  box-shadow: inset 0 0 0 1px var(--line);
 }
 .genex-tab {
   display: flex;
@@ -932,20 +931,12 @@
   font: 13px / 1 var(--font-family-mono);
   cursor: pointer;
 }
-.genex-tab:hover {
-  color: var(--ink);
-}
-.genex-tab[aria-selected="true"] {
-  background: var(--people-tint);
-  box-shadow: inset 0 0 0 1px var(--people-tint-edge);
-  color: var(--ink);
-}
 .genex-tab:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: 1px;
 }
 
-/* ── The Credits tab: the balance band, what credits pay for, what they don't, recent spends ── */
+/* ── The Credits tab: the balance band, what credits pay for, recent spending ── */
 .credits-tab {
   display: flex;
   flex-direction: column;
@@ -960,8 +951,8 @@
   gap: 16px;
   padding: 18px 20px;
   border-radius: 14px;
-  background: linear-gradient(180deg, var(--people-chip-bottom), transparent);
-  box-shadow: inset 0 0 0 1px var(--people-chip-edge);
+  background: linear-gradient(180deg, var(--credits-card), transparent);
+  box-shadow: inset 0 0 0 1px var(--credits-card-edge);
 }
 .credits-band-copy {
   display: flex;
@@ -1006,21 +997,26 @@
   color: var(--ink-3);
   font: 12px / 16px var(--font-family-mono);
 }
+/* Two columns on one set of rows (subgrid): a heading, a line under it, then the list, so both lists
+   start level however long either line is. */
 .credits-columns {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  gap: 30px;
+  gap: 6px 30px;
   min-width: 0;
 }
 @media (max-width: 860px) {
   .credits-columns {
     grid-template-columns: minmax(0, 1fr);
   }
+  .credits-column + .credits-column {
+    margin-top: 24px;
+  }
 }
 .credits-column {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
   min-width: 0;
 }
 .credits-heading {
@@ -1029,17 +1025,23 @@
   font-size: 15px;
   font-weight: 500;
 }
-.credits-prices,
-.credits-recent-rows,
-.credits-free-lines {
+.credits-subtitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   margin: 0;
+}
+.credits-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.credits-rows {
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
-.credits-prices {
-  margin-top: 4px;
-}
-.credits-price {
+.credits-row {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
@@ -1047,7 +1049,7 @@
   padding: 8px 4px;
   border-bottom: 1px solid var(--line);
 }
-.credits-price-mark {
+.credits-row-mark {
   display: grid;
   place-items: center;
   width: 32px;
@@ -1056,80 +1058,36 @@
   background: color-mix(in srgb, var(--play-blue) 10%, transparent);
   color: var(--stats-line);
 }
-.credits-price-name {
+.credits-row-name {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  min-width: 0;
   color: var(--ink);
   font-size: 14px;
 }
-.credits-price-tool {
+.credits-row-sub {
+  overflow: hidden;
   color: var(--ink-3);
   font: 11px / 14px var(--font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.credits-price-from {
+.credits-row-amount {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--ink-3);
   font: 12px / 1 var(--font-family-mono);
 }
-.credits-price-from b {
+.credits-row-amount b {
   color: var(--ink);
   font-size: 13px;
   font-weight: 500;
 }
-.credits-free,
-.credits-recent {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.credits-recent {
-  margin-top: 18px;
-  gap: 4px;
-}
-.credits-free-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.credits-free-lines li {
-  position: relative;
-  padding-inline-start: 14px;
-  color: var(--ink-2);
-  font-size: 13px;
-  line-height: 1.45;
-}
-.credits-free-lines li::before {
-  content: "";
-  position: absolute;
-  top: 7px;
-  left: 0;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--people-live);
-}
-.credits-recent-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  gap: 12px;
-  padding: 8px 2px;
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-  font-size: 13px;
-}
-.credits-recent-amount {
-  min-width: 96px;
-  color: var(--ink);
-  font: 500 12px / 1 var(--font-family-mono);
-  text-align: end;
-}
-.credits-recent-amount[data-refund] {
+.credits-row-amount[data-refund] b {
   color: var(--stats-up);
 }
 .credits-cent {
-  margin-top: 6px;
+  margin-top: 10px;
 }

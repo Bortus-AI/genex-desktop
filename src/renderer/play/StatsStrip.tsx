@@ -1,7 +1,8 @@
 /**
- * The account's own "Last 7 days" on its profile: one slim strip of numbers, no chart. Plays and
- * players with how they moved, who is playing now, and More, which opens the stats page. With no
- * games yet it invites the first; in a quiet week it shows honest zeros and a link to share.
+ * The account's own game stats for the last 7 days on its profile: one slim strip of numbers, no
+ * chart. Plays and players with how they moved, who is playing now, and More, which opens the stats
+ * page. With no games yet it invites the first; in a quiet week it shows honest zeros and a link to
+ * share.
  */
 import type { JSX } from "react";
 import { useEffect } from "react";

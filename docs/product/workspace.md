@@ -17,7 +17,7 @@ The bell keeps questions, plans and permission requests until answered, then bui
 sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
 them.
 
-**Play** shows genex.games' shelves, **Recent**, tabs, search and **Top creators**. Accounts get
+**Play** shows genex.games' shelves, **Recent**, **Top creators**, tabs and search. Accounts get
 an id-generated avatar (rerollable) or their photo. Signed in, the sidebar's foot shows the
 account and two friends; Play adds **Friends** and a first sign-in shows the avatar. Profiles
 show friends and games; yours, a 7-day strip opening **Stats**.

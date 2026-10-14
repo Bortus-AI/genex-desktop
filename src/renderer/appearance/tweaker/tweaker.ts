@@ -15,7 +15,11 @@ import {
   defaultPresetId,
   hex,
   PRESETS,
+  PEOPLE_ROLES,
+  PLAY_HUE_ROLES,
   type Palette,
+  type PeopleRole,
+  type PlayHueRole,
   SHADOW_PLACES,
   Scheme,
   type Shadow,
@@ -109,6 +113,8 @@ const DETAIL_VARIABLE: Record<
     | "playTrackEdge"
     | "playTabEdge"
     | "playSearchFocus"
+    | PeopleRole
+    | PlayHueRole
   >,
   string
 > = {
@@ -152,7 +158,20 @@ const ON_GROUND: readonly { marks: readonly DetailRole[]; grounds: readonly Deta
 export const ROLE_GROUPS: readonly { label: string; roles: readonly AnyRole[] }[] = [
   // First while Play's colours are being tuned, so the panel opens on them.
   {
-    label: "Play: switch and tabs",
+    label: "Play: chips, buttons and cards",
+    roles: [
+      "peopleChip",
+      "peopleChipText",
+      "peopleChipNumber",
+      "peopleTint",
+      "peoplePrimary",
+      "peoplePrimaryShade",
+      "creditsCard",
+      "inviteCard",
+    ],
+  },
+  {
+    label: "Play: switches and tabs (Play / Create, Tools / Credits, stats period)",
     roles: [
       "playSelected",
       "playSelectedEdge",
@@ -163,6 +182,22 @@ export const ROLE_GROUPS: readonly { label: string; roles: readonly AnyRole[] }[
       "playTabEdge",
       "playTabText",
       "playSearchFocus",
+    ],
+  },
+  {
+    label: "Play: people and stats",
+    roles: [
+      "playBlue",
+      "peopleLive",
+      "peopleLiveText",
+      "peoplePro",
+      "peopleRequest",
+      "statsLine",
+      "statsUp",
+      "statsDown",
+      "shardLight",
+      "shardMid",
+      "shardDark",
     ],
   },
   { label: "Surfaces", roles: ["background", "sidebar", "surface", "popover", "field", "hover"] },
@@ -240,6 +275,25 @@ export const ROLE_LABEL: Record<AnyRole, string> = {
   hatch: "Stripes",
   hatchGround: "Stripe ground",
   settingsTab: "Selected tab",
+  peopleChip: "Chips and edit button",
+  peopleChipText: "Chip label",
+  peopleChipNumber: "Chip number",
+  peopleTint: "Tint buttons (Invite, Join, Copy)",
+  creditsCard: "Credits card",
+  inviteCard: "Invite card",
+  playBlue: "Genex blue",
+  peoplePrimary: "Primary button",
+  peoplePrimaryShade: "Primary button shade",
+  peopleLive: "Playing now dot",
+  peopleLiveText: "Playing now text",
+  peoplePro: "Pro",
+  peopleRequest: "Request count",
+  statsLine: "Stats line",
+  statsUp: "Up",
+  statsDown: "Down",
+  shardLight: "Credit shard light",
+  shardMid: "Credit shard",
+  shardDark: "Credit shard dark",
 };
 
 /**
@@ -345,6 +399,53 @@ function sidebarRowColor(palette: Palette, row: SidebarRow): string {
   return mixOklab(color, palette.sidebar, percent / 100);
 }
 
+/** people.css's own colours for Play's people, stats and credits, on a dark canvas and a light one. */
+const PEOPLE_COLORS: Record<Scheme, Record<PeopleRole, string>> = {
+  [Scheme.Dark]: {
+    peopleChipText: "#9fb0ff",
+    peopleChipNumber: "#d3dbff",
+    playBlue: "#4b60bf",
+    peoplePrimary: "#4b60bf",
+    peoplePrimaryShade: "#3f51a8",
+    peopleLive: "#22a55b",
+    peopleLiveText: "#5fd18b",
+    peoplePro: "#8d9bff",
+    peopleRequest: "#3f61f5",
+    statsLine: "#7d8ff0",
+    statsUp: "#5fd18b",
+    statsDown: "#ff8a7a",
+    shardLight: "#aeb7e2",
+    shardMid: "#6b7fdc",
+    shardDark: "#4555a8",
+  },
+  [Scheme.Light]: {
+    peopleChipText: "#3d58d8",
+    peopleChipNumber: "#1e33b4",
+    playBlue: "#4b60bf",
+    peoplePrimary: "#4b60bf",
+    peoplePrimaryShade: "#3f51a8",
+    peopleLive: "#22a55b",
+    peopleLiveText: "#16803f",
+    peoplePro: "#4353d9",
+    peopleRequest: "#3f61f5",
+    statsLine: "#4b60bf",
+    statsUp: "#16803f",
+    statsDown: "#b42318",
+    shardLight: "#aeb7e2",
+    shardMid: "#4b60bf",
+    shardDark: "#313e7c",
+  },
+};
+/** A canvas darker than this is a dark scheme's: people.css picks its colours by the theme. */
+const DARK_CANVAS_LIGHTNESS = 0.5;
+const isPeopleRole = (role: AnyRole): role is PeopleRole => (PEOPLE_ROLES as readonly string[]).includes(role);
+const isPlayHueRole = (role: AnyRole): role is PlayHueRole => (PLAY_HUE_ROLES as readonly string[]).includes(role);
+/** An unset people role's colour: people.css's own for the palette's scheme. */
+function peopleColor(palette: Palette, role: PeopleRole): string {
+  const scheme = oklch(palette.background)[0] < DARK_CANVAS_LIGHTNESS ? Scheme.Dark : Scheme.Light;
+  return PEOPLE_COLORS[scheme][role];
+}
+
 /** {@link DETAIL_VARIABLE} looked up by any role: the details with no variable of their own answer nothing. */
 const DETAIL_VARIABLES: ReadonlyMap<string, string> = new Map(Object.entries(DETAIL_VARIABLE));
 
@@ -366,6 +467,17 @@ const LAYERED: Partial<Record<AnyRole, (p: Palette) => [string, string, number]>
   playSearchFocus: (p) => [p.background, p.foreground, PLAY_SEARCH_FOCUS_SHARE],
 };
 
+/**
+ * An unset Play colour: the selected blue is Play's own, the tinted families wear it (the credits card
+ * the chips' hue), and the people and stats colours are people.css's own; null for any other role.
+ */
+function unsetPlayColor(palette: Palette, role: AnyRole): string | null {
+  if (role === "playSelected") return PLAY_BLUE;
+  if (isPeopleRole(role)) return peopleColor(palette, role);
+  if (!isPlayHueRole(role)) return null;
+  return role === "creditsCard" ? shownColor(palette, "peopleChip") : (palette.playSelected ?? PLAY_BLUE);
+}
+
 /** The colour a role is drawn in: its own, or for an unset detail the one the app derives. */
 export function shownColor(palette: Palette, role: AnyRole): string {
   const own = palette[role];
@@ -379,7 +491,8 @@ export function shownColor(palette: Palette, role: AnyRole): string {
   if (layered) return over(...layered);
   // Unset, the logo's shade is mixed as --ink-2 is.
   if (role === "logoShade") return mixOklab(palette.logo ?? palette.foreground, palette.muted, LOGO_SHADE_SHARE);
-  if (role === "playSelected") return PLAY_BLUE;
+  const play = unsetPlayColor(palette, role);
+  if (play) return play;
   const variable = DETAIL_VARIABLES.get(role);
   return variable ? (themeVariables(palette, DEFAULT_CONTRAST)[variable] ?? "") : "";
 }

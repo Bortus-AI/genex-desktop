@@ -80,6 +80,7 @@ describe("Play gallery items", () => {
       title: "Lost Cathedral",
       description: "A cathedral to get lost in.",
       coverUrl: "https://cdn.genex.technology/covers/cm1.webp?v=1",
+      clipUrl: null,
       multiplayer: false,
       plays: 2682,
       online: null,
@@ -133,6 +134,38 @@ describe("Play gallery items", () => {
       assert.equal(game?.coverUrl, null, String(thumbnailUrl));
       assert.equal(game?.author.imageUrl, null, String(thumbnailUrl));
     }
+  });
+
+  it("hands on a cover clip from Genex's CDN, over a cover only", () => {
+    const clip = "https://cdn.genex.technology/covers/cm1/0b6f6a2e-1c1f-4c63-9a55-2f4e7c1d2a11.mp4";
+    assert.equal(toPlayGame(item({ coverClipUrl: clip }))?.clipUrl, clip);
+    assert.equal(toPlayGame(item())?.clipUrl, null, "no clip yet");
+    assert.equal(
+      toPlayGame(item({ coverClipUrl: clip, thumbnailUrl: null }))?.clipUrl,
+      null,
+      "a clip plays over its still",
+    );
+  });
+
+  it("never hands on a clip from anywhere but Genex's cover folder", () => {
+    const hostile = [
+      "http://cdn.genex.technology/covers/cm1/a.mp4",
+      "https://evil.example/covers/cm1/a.mp4",
+      "https://cdn.genex.technology.evil.example/covers/cm1/a.mp4",
+      "https://user:pass@cdn.genex.technology/covers/cm1/a.mp4",
+      "https://cdn.genex.technology:8443/covers/cm1/a.mp4",
+      "https://cdn.genex.technology/avatars/cm1/a.mp4",
+      "https://cdn.genex.technology/covers/cm1/a.webm",
+      "https://assets.genex.games/covers/cm1/a.mp4",
+      "javascript:alert(1)",
+      "data:video/mp4;base64,AAAA",
+      "blob:https://cdn.genex.technology/1",
+      "not a url",
+      42,
+      {},
+    ];
+    for (const coverClipUrl of hostile)
+      assert.equal(toPlayGame(item({ coverClipUrl }))?.clipUrl, null, JSON.stringify(coverClipUrl));
   });
 
   it("offers a remix only for public source on Genex's own git", () => {

@@ -125,7 +125,7 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
   const connect = () => void live.act(GenexAction.Connect);
   switch (view.kind) {
     case GenexAccountKind.Loading:
-      return <Pending label={WORDS.loading} className="genex-checking" />;
+      return <Pending label={WORDS.loading} className="genex-checking" spinner />;
     case GenexAccountKind.SignedOut:
       return (
         <Prompt
@@ -178,7 +178,7 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
         </Prompt>
       );
     case GenexAccountKind.Checking:
-      return <Pending label={WORDS.checking} className="genex-checking" />;
+      return <Pending label={WORDS.checking} className="genex-checking" spinner />;
     case GenexAccountKind.Attention:
       return (
         <Prompt

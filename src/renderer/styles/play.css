@@ -18,9 +18,13 @@
 }
 
 /* Play's selected look, genex.games' blue secondary (its Invite and agent buttons): the blue at 12%
-   with a 1px edge of it at 40%, the label in ink. The switch's pill and the selected tab wear it. */
+   with a 1px edge of it at 40%, the label in ink. The switch's pill and the selected tab wear it, and so
+   do the app's other segmented switches (the Genex plugin's Tools / Credits, the stats' period), so the
+   colour tweaker's "Play: switches and tabs" group tunes them all at once. */
 .play-switch-pill,
-.play-tab[aria-selected="true"] {
+.play-tab[aria-selected="true"],
+.genex-tab[aria-selected="true"],
+.stats-period[aria-selected="true"] {
   background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 12%, transparent);
   box-shadow: inset 0 0 0 1px
     var(--play-selected-edge, color-mix(in srgb, var(--play-selected, var(--play-blue)) 40%, transparent));
@@ -62,8 +66,16 @@
   transition: color var(--duration-quick);
 }
 .play-switch-tab:hover,
-.play-switch-tab[aria-selected="true"] {
+.play-switch-tab[aria-selected="true"],
+.genex-tab:hover,
+.stats-period:hover {
   color: var(--play-selected-text, var(--ink));
+}
+/* The other segmented switches sit in the Play / Create switch's track. */
+.genex-tabs,
+.stats-periods {
+  background: var(--play-switch-track, var(--play-track));
+  box-shadow: inset 0 0 0 1px var(--play-switch-edge, var(--play-track-edge));
 }
 .play-switch-tab:focus-visible {
   outline: 2px solid var(--focus-edge);
@@ -584,6 +596,20 @@
 }
 .play-card-cover:hover .play-card-image {
   scale: 1.03;
+}
+/* The cover's clip lies over the still and fades in on its first frame, as genex.games plays it. */
+.play-card-clip {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+.play-card-clip[data-shown] {
+  opacity: 1;
 }
 .play-card-shade {
   position: absolute;
@@ -1233,6 +1259,9 @@
   .play-card-image,
   .game-sidebar .sidebar-games-heading {
     transition: none;
+  }
+  .play-card-clip {
+    display: none;
   }
   .sidebar-list > .sidebar-scroll[data-off="true"] {
     translate: none;

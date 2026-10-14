@@ -1,10 +1,20 @@
 /* ── Play's people: friends, profiles, stats, Top creators, the account's avatar ─────────────────── */
 /* genex.games' blue in its roles: the light tint of secondary actions, the gradient of the one primary
-   action, the translucent chips, the green of people playing now and of Accept, the requests badge. */
+   action, the translucent chips, the green of people playing now and of Accept, the requests badge.
+   The tinted families (chips, tint buttons, the credits card, the invite card) wear the Play / Create
+   switch's selected blue until the colour tweaker's "Play: chips, buttons and cards" group gives one
+   its own hue (`--*-hue`), so a theme that sets Play's blue carries them. That group and "Play: people
+   and stats" set the other colours here by name; their defaults for an unset role are copied in
+   `PEOPLE_COLORS`, tweaker.ts: change both together. */
 :root {
-  --people-tint: color-mix(in srgb, var(--play-blue) 16%, transparent);
-  --people-tint-hover: color-mix(in srgb, var(--play-blue) 24%, transparent);
-  --people-tint-edge: color-mix(in srgb, var(--play-blue) 55%, transparent);
+  --people-blue: var(--play-selected, var(--play-blue));
+  --people-tint-color: var(--people-tint-hue, var(--people-blue));
+  --people-chip-color: var(--people-chip-hue, var(--people-blue));
+  --credits-card-color: var(--credits-card-hue, var(--people-chip-color));
+  --people-invite-color: var(--people-invite-hue, var(--people-blue));
+  --people-tint: color-mix(in srgb, var(--people-tint-color) 16%, transparent);
+  --people-tint-hover: color-mix(in srgb, var(--people-tint-color) 24%, transparent);
+  --people-tint-edge: color-mix(in srgb, var(--people-tint-color) 55%, transparent);
   --people-primary-top: #4b60bf;
   --people-primary-bottom: #3f51a8;
   --people-accept: rgb(34 165 91 / 0.16);
@@ -19,15 +29,17 @@
   --people-pro-ring: rgb(103 120 245 / 0.7);
   --people-request: #3f61f5;
   --people-card-hover: var(--hover);
-  --people-chip-top: rgb(63 97 245 / 0.22);
-  --people-chip-bottom: rgb(63 97 245 / 0.1);
-  --people-chip-edge: rgb(110 136 255 / 0.4);
+  /* On the dark canvas a chip's edge is its hue lifted toward white, so it reads as a rim. */
+  --people-chip-top: color-mix(in srgb, var(--people-chip-color) 22%, transparent);
+  --people-chip-bottom: color-mix(in srgb, var(--people-chip-color) 10%, transparent);
+  --people-chip-edge: color-mix(in srgb, color-mix(in srgb, var(--people-chip-color) 75%, #ffffff) 40%, transparent);
   --people-chip-shine: rgb(255 255 255 / 0.06);
   --people-chip-ink: #9fb0ff;
   --people-chip-number: #d3dbff;
-  --people-invite: color-mix(in srgb, var(--play-blue) 12%, transparent);
-  --people-invite-edge: color-mix(in srgb, var(--play-blue) 34%, transparent);
-  --people-invite-ink: #9fb0ff;
+  --credits-card: color-mix(in srgb, var(--credits-card-color) 10%, transparent);
+  --credits-card-edge: color-mix(in srgb, color-mix(in srgb, var(--credits-card-color) 75%, #ffffff) 40%, transparent);
+  --people-invite: color-mix(in srgb, var(--people-invite-color) 12%, transparent);
+  --people-invite-edge: color-mix(in srgb, var(--people-invite-color) 34%, transparent);
   --stats-up: #5fd18b;
   --stats-down: #ff8a7a;
   --stats-line: #7d8ff0;
@@ -47,9 +59,9 @@
   --shard-earned-dark: #1a713c;
 }
 :root[data-theme="light"] {
-  --people-tint: rgb(75 96 191 / 0.12);
-  --people-tint-hover: rgb(75 96 191 / 0.18);
-  --people-tint-edge: rgb(75 96 191 / 0.4);
+  --people-tint: color-mix(in srgb, var(--people-tint-color) 12%, transparent);
+  --people-tint-hover: color-mix(in srgb, var(--people-tint-color) 18%, transparent);
+  --people-tint-edge: color-mix(in srgb, var(--people-tint-color) 40%, transparent);
   --people-accept: rgb(34 165 91 / 0.13);
   --people-accept-hover: rgb(34 165 91 / 0.2);
   --people-accept-edge: rgb(34 165 91 / 0.45);
@@ -60,15 +72,16 @@
   --people-pro: #4353d9;
   --people-pro-ring: rgb(67 83 217 / 0.6);
   --people-card-hover: #f3f3f4;
-  --people-chip-top: rgb(63 97 245 / 0.13);
-  --people-chip-bottom: rgb(63 97 245 / 0.05);
-  --people-chip-edge: rgb(63 97 245 / 0.32);
+  --people-chip-top: color-mix(in srgb, var(--people-chip-color) 13%, transparent);
+  --people-chip-bottom: color-mix(in srgb, var(--people-chip-color) 5%, transparent);
+  --people-chip-edge: color-mix(in srgb, var(--people-chip-color) 32%, transparent);
   --people-chip-shine: rgb(255 255 255 / 0.55);
   --people-chip-ink: #3d58d8;
   --people-chip-number: #1e33b4;
-  --people-invite: rgb(75 96 191 / 0.07);
-  --people-invite-edge: rgb(75 96 191 / 0.22);
-  --people-invite-ink: #3f51a8;
+  --credits-card: color-mix(in srgb, var(--credits-card-color) 5%, transparent);
+  --credits-card-edge: color-mix(in srgb, var(--credits-card-color) 32%, transparent);
+  --people-invite: color-mix(in srgb, var(--people-invite-color) 7%, transparent);
+  --people-invite-edge: color-mix(in srgb, var(--people-invite-color) 22%, transparent);
   --stats-up: #16803f;
   --stats-down: #b42318;
   --stats-line: #4b60bf;
@@ -284,9 +297,11 @@
   font-weight: 500;
   white-space: nowrap;
 }
+/* The status sits close under the name: 2px, not the card's 6px. */
 .friend-card-sub {
   max-width: 100%;
   min-height: 16px;
+  margin-top: -4px;
   overflow: hidden;
   color: var(--ink-3);
   font: 12px / 16px var(--font-family-mono);
@@ -349,7 +364,8 @@
   font-weight: 500;
 }
 .people-carousel-note,
-.profile-section-count {
+.profile-section-count,
+.people-carousel-title[data-quiet] {
   color: var(--ink-3);
   font: 13px / 1 var(--font-family-mono);
 }
@@ -359,10 +375,13 @@
   margin-inline-start: auto;
   align-self: center;
 }
+/* Sideways only: a wheel turned over the row scrolls the page. (overflow-x alone makes the row
+   scroll both ways, so the little its tiles overflow would take the wheel.) */
 .people-rail {
   display: flex;
   gap: 2px;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-snap-type: x proximity;
   scrollbar-width: none;
@@ -400,7 +419,9 @@
   font-size: 13px;
   white-space: nowrap;
 }
+/* The status sits close under the name: 2px, not the tile's 5px. */
 .person-tile-sub {
+  margin-top: -3px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -434,6 +455,7 @@
   gap: 22px;
   min-width: 0;
 }
+/* The aside never grows with its content: Copy turning into Copied takes its width from the link. */
 .people-aside {
   position: sticky;
   top: 64px;
@@ -441,6 +463,7 @@
   flex: 1 1 280px;
   flex-direction: column;
   gap: 14px;
+  min-width: 0;
   max-width: 320px;
 }
 .people-title {
@@ -452,7 +475,7 @@
 }
 .people-title-count {
   color: var(--ink-3);
-  font: 400 15px / 1 var(--font-family-mono);
+  font: 400 20px / 1 var(--font-family-mono);
   letter-spacing: 0;
 }
 .people-search {
@@ -536,7 +559,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: var(--people-invite-ink);
+  color: var(--ink);
   font: 13px / 1 var(--font-family-mono);
 }
 .people-invite-text {
@@ -552,6 +575,7 @@
 }
 .people-invite-link input {
   flex: 1;
+  width: 0;
   min-width: 0;
   height: 32px;
   padding-inline: 10px;
@@ -699,6 +723,10 @@
   max-width: 1080px;
   margin-inline: auto;
   padding-top: 8px;
+}
+/* The game stats sit close under the friends: the tiles' own padding already spaces them. */
+.profile-page > [data-profile-friends] + .stats-strip-section {
+  margin-top: -20px;
 }
 .profile-head {
   display: flex;
@@ -950,7 +978,6 @@
   margin-inline-start: auto;
   padding: 2px;
   border-radius: 10px;
-  box-shadow: inset 0 0 0 1px var(--line);
 }
 .stats-period {
   height: 28px;
@@ -961,11 +988,6 @@
   color: var(--ink-3);
   font: 12px / 1 var(--font-family-mono);
   cursor: pointer;
-}
-.stats-period[aria-selected="true"] {
-  background: var(--people-tint);
-  box-shadow: inset 0 0 0 1px var(--people-tint-edge);
-  color: var(--ink);
 }
 .stats-period:focus-visible {
   outline: 2px solid var(--focus-edge);
@@ -1259,7 +1281,7 @@
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 26px 30px 22px;
+  padding: 14px 30px 14px;
   text-align: center;
 }
 .avatar-welcome-stage {
@@ -1362,9 +1384,48 @@
   color: var(--ink-3);
   font: 11px / 1.4 var(--font-family-mono);
 }
-/* Top creators over the dashboard's cards, with the cards' own spacing under them. */
-.play-content > [data-top-creators] {
-  margin-bottom: 20px;
+/* Top creators at the head of Games, over the tabs and search. The row's head drags the window
+   like the bar does; the people under it take the pointer and the wheel. Its small heading sits
+   in the middle of the head, beside the arrows, close over the faces. */
+.play-top {
+  padding: 22px 20px 0;
+}
+.play-top:empty {
+  display: none;
+}
+.play-top > [data-top-creators] {
+  gap: 0;
+  margin-bottom: 4px;
+  -webkit-app-region: no-drag;
+}
+.play-top .people-carousel-head {
+  align-items: center;
+  -webkit-app-region: drag;
+}
+/* A creator's tile while the row loads: a 64px face in the 80px box a ringed avatar takes, and a
+   bar on each of the two text lines, so the row keeps its height when people arrive. */
+.person-tile-placeholder {
+  cursor: default;
+  animation: play-fade-in 200ms 120ms ease-out both;
+}
+.person-tile-placeholder:hover {
+  background: transparent;
+}
+.person-tile-placeholder .people-placeholder-avatar {
+  width: 64px;
+  height: 64px;
+  margin: 8px;
+}
+.person-tile-placeholder .play-bar {
+  display: inline-block;
+  width: 72px;
+  height: 10px;
+  vertical-align: middle;
+  background: var(--play-placeholder);
+}
+.person-tile-placeholder .person-tile-sub .play-bar {
+  width: 88px;
+  height: 8px;
 }
 /* The shard before a balance wherever one is shown: the Plugins row, the usage panel, the account card. */
 .extension-credits,

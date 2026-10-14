@@ -107,6 +107,7 @@ function game(slug: string, overrides: Partial<PlayGame> = {}): PlayGame {
     title: slug.toUpperCase(),
     description: "",
     coverUrl: null,
+    clipUrl: null,
     multiplayer: false,
     plays: 0,
     online: null,

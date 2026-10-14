@@ -176,6 +176,15 @@ const glyphs = {
   expand: (
     <path d="M4 9V6.5A2.5 2.5 0 0 1 6.5 4H9M15 4h2.5A2.5 2.5 0 0 1 20 6.5V9M20 15v2.5a2.5 2.5 0 0 1-2.5 2.5H15M9 20H6.5A2.5 2.5 0 0 1 4 17.5V15" />
   ),
+  /** An update waiting: an arrow rising in a ring. */
+  update: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <g className="a-up">
+        <path d="M12 16V8.5M8.75 11.5L12 8.25l3.25 3.25" />
+      </g>
+    </>
+  ),
   send: (
     <g className="a-up">
       <path d="M12 19V5M6 11l6-6 6 6" />

@@ -51,13 +51,16 @@ function useEnds(rail: { current: HTMLDivElement | null }): [Ends, () => void] {
 export function PeopleCarousel({
   title,
   note,
+  quiet = false,
   label,
   hook,
   children,
 }: {
   title: string;
-  /** What sits beside the title: a count, or the period the row covers. */
-  note: string;
+  /** What sits beside the title: a count, or the period the row covers; none when the title says it. */
+  note?: string;
+  /** The title set small and mono like a note: a row that labels itself rather than heads the page. */
+  quiet?: boolean;
   /** The row's accessible name, and what its arrows scroll. */
   label: string;
   /** The section's `data-*` hook. */
@@ -75,8 +78,10 @@ export function PeopleCarousel({
   return (
     <section className="people-carousel" aria-label={label} {...hook}>
       <div className="people-carousel-head">
-        <h2 className="people-carousel-title">{title}</h2>
-        <span className="people-carousel-note">{note}</span>
+        <h2 className="people-carousel-title" data-quiet={quiet || undefined}>
+          {title}
+        </h2>
+        {note && <span className="people-carousel-note">{note}</span>}
         {(ends.back || ends.forward) && (
           <span className="people-carousel-arrows">
             <button

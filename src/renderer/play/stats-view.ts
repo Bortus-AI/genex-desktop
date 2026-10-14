@@ -1,5 +1,5 @@
 /**
- * What the profile's "Last 7 days" strip shows, decided from the stats read and the account's games:
+ * What the profile's game stats strip shows, decided from the stats read and the account's games:
  * the first-game invitation with no games, a dash and honest zeros in a quiet week (and a link to
  * share), "New" for a game with nothing before it, the numbers with their change and More otherwise,
  * and the plays in total while genex.games has no daily stats to give.

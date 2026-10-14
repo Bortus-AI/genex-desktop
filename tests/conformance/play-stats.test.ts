@@ -64,6 +64,7 @@ const card = (slug: string, plays: number, online: number | null = null): PlayGa
   title: slug.toUpperCase(),
   description: "",
   coverUrl: null,
+  clipUrl: null,
   multiplayer: online !== null,
   plays,
   online,

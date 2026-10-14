@@ -69,6 +69,9 @@ export function toolbarUpdateStatus(plugin: PluginInfo, words: ToolbarUpdateWord
 const updateDue = (plugin: PluginInfo): string | null =>
   plugin.availableVersion && !plugin.pendingVersion ? plugin.availableVersion : null;
 
+/** Multiplayer stands beside Publish, and only on a game with something in it: an empty one has nothing to play together. */
+export const showsMultiplayer = (publish: boolean, emptyGame: boolean): boolean => publish && !emptyGame;
+
 /** What Multiplayer's press does, by where Genex stands. */
 export const MultiplayerPress = { SetUp: "set-up", Update: "update", Ask: "ask" } as const;
 export type MultiplayerPress = (typeof MultiplayerPress)[keyof typeof MultiplayerPress];

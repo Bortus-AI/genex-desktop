@@ -17,6 +17,7 @@ import {
   toolbarStatusFrom,
   MultiplayerPress,
   multiplayerPress,
+  showsMultiplayer,
   toolbarUpdateStatus,
 } from "../../shared/plugin-toolbar.ts";
 import {
@@ -206,16 +207,27 @@ function ToolbarButton({
     >
       <ToolbarIcon icon={entry.item.icon} />
       <span>{entry.item.label}</span>
-      {status?.badge ? (
-        <span
-          id={badgeId}
-          data-plugin-badge
-          className={`text-micro ${status.tone ? TONE_CLASS[status.tone] : "text-ink-2"}`}
-        >
-          {status.badge}
-        </span>
-      ) : null}
+      <ToolbarBadge id={badgeId} update={Boolean(update)} status={status} />
     </Button>
+  );
+}
+
+/** A button's badge: the update mark while its plugin is behind, else the word its status gives, if any. */
+function ToolbarBadge({
+  id,
+  update,
+  status,
+}: {
+  id: string;
+  update: boolean;
+  status: PluginToolbarStatus | undefined;
+}): JSX.Element | null {
+  if (update) return <UpdateMark id={id} word={PLUGIN_TOOLBAR_WORDS.update.badge} />;
+  if (!status?.badge) return null;
+  return (
+    <span id={id} data-plugin-badge className={`text-micro ${status.tone ? TONE_CLASS[status.tone] : "text-ink-2"}`}>
+      {status.badge}
+    </span>
   );
 }
 
@@ -325,6 +337,18 @@ function useMultiplayer(project: string | null, shown: boolean, genex: PluginToo
   return { press, setup: setup && shown, close, behind };
 }
 
+/**
+ * A plugin behind the version Studio bundles: a small rising arrow in the button's own ink, the word
+ * ("Update") read by assistive tech and the button's title saying what pressing does.
+ */
+function UpdateMark({ id, word }: { id: string; word: string }): JSX.Element {
+  return (
+    <span id={id} data-plugin-badge data-plugin-update role="img" aria-label={word} className="inline-flex opacity-80">
+      <Icon name="update" size={14} />
+    </span>
+  );
+}
+
 /** Multiplayer: quiet like Publish beside it, since neither is the game's next step until asked. */
 function MultiplayerButton({
   onPress,
@@ -340,17 +364,13 @@ function MultiplayerButton({
       variant="pill"
       data-genex-multiplayer
       aria-label={GENEX_WORDS.multiplayer.buttonLabel}
-      aria-describedby={behind?.badge ? badgeId : undefined}
+      aria-describedby={behind ? badgeId : undefined}
       title={behind?.title}
       onClick={onPress}
     >
       <Icon name="users" />
       <span>{GENEX_WORDS.multiplayer.button}</span>
-      {behind?.badge ? (
-        <span id={badgeId} data-plugin-badge className="text-micro text-ink-2">
-          {behind.badge}
-        </span>
-      ) : null}
+      {behind ? <UpdateMark id={badgeId} word={PLUGIN_TOOLBAR_WORDS.update.badge} /> : null}
     </Button>
   );
 }
@@ -391,7 +411,8 @@ export function PluginToolbar({
   }, [entries, panel]);
   const genexPublish = entries.find(isGenexPublish);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
-  const multiplayer = useMultiplayer(project, Boolean(genexPublish) || studioPublish.shown, genexPublish);
+  const multiplayerShown = showsMultiplayer(Boolean(genexPublish) || studioPublish.shown, emptyGame);
+  const multiplayer = useMultiplayer(project, multiplayerShown, genexPublish);
   useEffect(() => {
     onOpenChange(Boolean(panel) || studioPublish.setup || multiplayer.setup);
     return () => onOpenChange(false);
@@ -425,6 +446,7 @@ export function PluginToolbar({
     return () => window.removeEventListener(PLUGIN_SETUP_EVENT, open);
   }, [entries, press]);
 
+  const genexPlugin = plugins.find((p) => p.manifest.id === GENEX_PLUGIN_ID);
   const livePanelPlugin = panel
     ? (plugins.find((p) => p.manifest.id === panel.plugin.manifest.id) ?? panel.plugin)
     : null;
@@ -432,7 +454,9 @@ export function PluginToolbar({
     <>
       {entries.map((entry) => (
         <Fragment key={entry.key}>
-          {entry === genexPublish && <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} />}
+          {entry === genexPublish && multiplayerShown && (
+            <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} />
+          )}
           <ToolbarButton
             entry={entry}
             status={status[entry.key]}
@@ -443,20 +467,11 @@ export function PluginToolbar({
           />
         </Fragment>
       ))}
-      {studioPublish.shown && <MultiplayerButton onPress={multiplayer.press} />}
+      {studioPublish.shown && multiplayerShown && <MultiplayerButton onPress={multiplayer.press} />}
       {studioPublish.shown && <StudioPublishButton onPress={studioPublish.open} />}
-      {studioPublish.setup && (
-        <GenexSetupDialog
-          genex={plugins.find((p) => p.manifest.id === GENEX_PLUGIN_ID)}
-          onClose={studioPublish.close}
-        />
-      )}
+      {studioPublish.setup && <GenexSetupDialog genex={genexPlugin} onClose={studioPublish.close} />}
       {multiplayer.setup && (
-        <GenexSetupDialog
-          genex={plugins.find((p) => p.manifest.id === GENEX_PLUGIN_ID)}
-          onClose={multiplayer.close}
-          purpose={GenexSetupFor.Multiplayer}
-        />
+        <GenexSetupDialog genex={genexPlugin} onClose={multiplayer.close} purpose={GenexSetupFor.Multiplayer} />
       )}
       {panel?.drawn && livePanelPlugin ? (
         <GenexPublishDialog plugin={livePanelPlugin} project={project} onClose={() => setPanel(null)} />

@@ -373,7 +373,7 @@ function ConnectStep({
         </Ask>
       );
     default:
-      return <Pending label={ACCOUNT.checking} className="genex-checking" />;
+      return <Pending label={ACCOUNT.checking} className="genex-checking" spinner />;
   }
 }
 
