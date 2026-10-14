@@ -6,7 +6,8 @@
  * with Godot 4.3 or newer in Applications.
  */
 import assert from "node:assert/strict";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
@@ -14,7 +15,12 @@ import { createGodotBackend, GodotTool } from "../../src/plugins/godot/backend.t
 import { systemEditorEnv } from "../../src/plugins/godot/editor.ts";
 import { systemGodotEnv } from "../../src/plugins/godot/find-godot.ts";
 import { confinedRunner } from "../../src/plugins/godot/godot-run.ts";
+import { launchGameBridge } from "../../src/main/core/game-bridge-target.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
+import { CaptureSurface } from "../../src/shared/preview-contract.ts";
+import { PluginNativeServices } from "../../src/substrate/plugins/native.ts";
+import { spawnNativeLongLived } from "../../src/substrate/plugins/native-process.ts";
+import { readProjectShape } from "../../src/substrate/project-shape.ts";
 import { ADDON, SCRIPTS, TEMPLATES } from "../helpers/godot-fake-engine.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -86,6 +92,43 @@ describe("the Godot plugin on this Mac's Godot", { skip: !LIVE, timeout: LIVE_TI
     assert.match(String(note.note), /broken\.gd:3/);
     const ran = await call(GodotTool.RunScene, { seconds: 1 });
     assert.deepEqual(ran.errors, []);
+  });
+
+  it("plays a new game through the Play Protocol: the plugin's Godot runtime, confined with the GPU", async () => {
+    const { game, call } = await liveGame();
+    await call(GodotTool.NewGame, { template: "3d", name: "Live Probe" });
+    const manifest = JSON.parse(await readFile("src/plugins/godot/plugin.json", "utf8"));
+    const found = await new PluginNativeServices(os.tmpdir(), []).detect(manifest.nativeRuntimes[0], os.tmpdir());
+    assert.equal(found.state, "ready", found.detail);
+    const engine = (await readProjectShape(game)).play?.engine;
+    assert.ok(engine && found.path);
+    const scratch = await realpath(await tmpDir("studio-godot-play-"));
+    const spawnEngine = async () => ({
+      child: await spawnNativeLongLived({
+        binary: found.path ?? "",
+        args: engine.args,
+        cwd: game,
+        scratch,
+        reads: [game],
+        writes: [game],
+        denyRead: [],
+        gpu: true,
+      }),
+    });
+    const sandbox = { spawnLongLived: () => Promise.reject(new Error("the engine runs instead")) };
+    const launched = await launchGameBridge({ sandbox, command: "", cwd: game, spawn: spawnEngine });
+    try {
+      assert.equal(launched.target.hello?.protocol, 3);
+      assert.ok(launched.target.hello?.capabilities.actions.includes("jump"), "the template's own actions");
+      await launched.target.clock?.pause();
+      const before = await launched.target.screenshot({ quality: 80, surface: CaptureSurface.Auto });
+      await launched.target.act?.([{ action: "jump", state: "press" }]);
+      await launched.target.clock?.step?.(300);
+      const after = await launched.target.screenshot({ quality: 80, surface: CaptureSurface.Auto });
+      assert.notDeepEqual(after.jpeg, before.jpeg, "the jump shows");
+    } finally {
+      await launched.stop();
+    }
   });
 
   it("answers the installed version's API", async () => {

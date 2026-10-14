@@ -7,7 +7,7 @@
   "publisher": "Genex",
   "description": "Agents build your game in Godot 4 on this Mac: they make its project, write its scenes and GDScript, check it and look at it with Godot's own tools. Open it in your Godot editor any time.",
   "backend": "backend.mjs",
-  "capabilities": ["game-engine"],
+  "capabilities": ["game-engine", "native-runtime"],
   "tools": [
     {
       "name": "new-game",
@@ -230,5 +230,25 @@
       "label": "Godot game",
       "tool": "new-game"
     }
-  ]
+  ],
+  "nativeRuntimes": [
+    {
+      "id": "godot",
+      "label": "Godot",
+      "candidates": [
+        "/Applications/Godot.app/Contents/MacOS/Godot",
+        "home:Applications/Godot.app/Contents/MacOS/Godot",
+        "/Applications/Godot_mono.app/Contents/MacOS/Godot",
+        "home:Downloads/Godot.app/Contents/MacOS/Godot",
+        "/opt/homebrew/bin/godot",
+        "/usr/local/bin/godot"
+      ],
+      "version": {
+        "args": ["--version"],
+        "pattern": "^(\\d+\\.\\d+(?:\\.\\d+)?)\\.",
+        "minimum": "4.3.0"
+      }
+    }
+  ],
+  "nativeJobs": []
 }

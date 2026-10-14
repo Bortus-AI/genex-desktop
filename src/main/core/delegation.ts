@@ -744,7 +744,7 @@ export class DelegationService {
     if (shape?.runtime !== TargetRuntime.Bridge)
       return computerTools(this.#x.previews, grant, initialRoot, outDir, session);
     const tools = computerTools(this.#x.previews, grant, initialRoot, outDir, session, {
-      bridge: { sandbox: this.#core.sandbox },
+      bridge: { sandbox: this.#core.sandbox, engine: (engine, root) => this.#core.startEngine(engine, root) },
     });
     // A Play Protocol game says what it can do only once it runs: start it now, so the tool the
     // session is handed offers only what this game can do. A game that fails to start is said on

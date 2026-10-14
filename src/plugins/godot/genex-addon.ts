@@ -23,6 +23,11 @@ export const LAUNCHER = "bin/play";
 const AUTOLOAD_SECTION = "[autoload]";
 const STUDIO_JSON = "studio.json";
 const BRIDGE_RUNTIME = "bridge";
+/** The native runtime plugin.json declares for Godot (`nativeRuntimes[].id`). */
+export const GODOT_RUNTIME = "godot";
+/** The addon's flag: its Play Protocol runs only when the game is started with it. */
+const PLAY_FLAG = "--play-protocol";
+const OFF_SCREEN = "-10000,-10000";
 const MINE_SUFFIX = ".mine";
 const EXECUTABLE = 0o755;
 
@@ -74,6 +79,10 @@ export function withAutoload(settings: string): string {
   return lines.join("\n");
 }
 
+/** The project's folder as the game's root names it, with forward slashes ("." at the root). */
+const projectPath = (gameDir: string, project: string) =>
+  (path.relative(gameDir, project) || ".").split(path.sep).join("/");
+
 /** A shell string literal. */
 const shellString = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
 
@@ -91,13 +100,20 @@ export function launcherText(projectFromGame: string, godot: string | null): str
     'root=$(cd "$(dirname "$0")/.." && pwd)',
     `for godot in "$GENEX_GODOT" ${godot ? `${shellString(godot)} ` : ""}/Applications/Godot.app/Contents/MacOS/Godot "$HOME/Applications/Godot.app/Contents/MacOS/Godot" "$(command -v godot)"; do`,
     '  if [ -n "$godot" ] && [ -x "$godot" ]; then',
-    `    exec "$godot" --path "$root${project}" --no-header --fixed-fps 60 --max-fps 60 --position -10000,-10000 -- --play-protocol "$@"`,
+    `    exec "$godot" --path "$root${project}" --no-header --fixed-fps 60 --max-fps 60 --position ${OFF_SCREEN} -- ${PLAY_FLAG} "$@"`,
     "  fi",
     "done",
     'echo \'{"event":"fatal","error":"Godot 4 was not found: install it in Applications or set GENEX_GODOT."}\'',
     "exit 1",
     "",
   ].join("\n");
+}
+
+/** Whether studio.json's play names the plugin's Godot as its engine. */
+function playsWithEngine(play: unknown): boolean {
+  const engine =
+    typeof play === "object" && play !== null ? (play as { engine?: { runtime?: unknown } }).engine : undefined;
+  return engine?.runtime === GODOT_RUNTIME;
 }
 
 /** The addon as installed: every file as shipped, none of them, or something between. */
@@ -120,7 +136,7 @@ export async function addonState(gameDir: string, project: string, source: strin
     addon,
     autoload: withAutoload(settings) === settings && settings !== "",
     launcher: (await lstat(path.join(gameDir, LAUNCHER)).catch(() => null))?.isFile() === true,
-    bridge: studio.runtime === BRIDGE_RUNTIME,
+    bridge: studio.runtime === BRIDGE_RUNTIME && playsWithEngine(studio.play),
   };
 }
 
@@ -160,17 +176,41 @@ async function writeLauncher(gameDir: string, project: string, godot: string | n
   await assertNoLink(path.dirname(file));
   await mkdir(path.dirname(file), { recursive: true });
   await assertNoLink(file);
-  const projectFromGame = path.relative(gameDir, project) || ".";
-  await writeFileNoFollow(file, launcherText(projectFromGame.split(path.sep).join("/"), godot));
+  await writeFileNoFollow(file, launcherText(projectPath(gameDir, project), godot));
   await chmod(file, EXECUTABLE);
 }
 
-/** `runtime: bridge` and the launcher as studio.json's play command; every other key stays. */
-async function recordBridge(gameDir: string): Promise<void> {
+/**
+ * The arguments Genex starts the plugin's Godot runtime with for the game's play: the project, a
+ * fixed 60 ticks, a window off every screen, and the addon's flag.
+ */
+export function engineArgs(projectFromGame: string): string[] {
+  return [
+    "--path",
+    projectFromGame,
+    "--no-header",
+    "--fixed-fps",
+    "60",
+    "--max-fps",
+    "60",
+    "--position",
+    OFF_SCREEN,
+    "--",
+    PLAY_FLAG,
+  ];
+}
+
+/**
+ * `runtime: bridge`, the launcher as studio.json's play command (a person's way to start it) and
+ * the plugin's Godot as the engine Genex starts it with (in its sandbox, with a window and the
+ * GPU); every other key stays.
+ */
+async function recordBridge(gameDir: string, project: string): Promise<void> {
   const file = path.join(gameDir, STUDIO_JSON);
   await assertNoLink(file);
   const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
-  const next = { ...current, runtime: BRIDGE_RUNTIME, play: { command: LAUNCHER } };
+  const engine = { runtime: GODOT_RUNTIME, args: engineArgs(projectPath(gameDir, project)) };
+  const next = { ...current, runtime: BRIDGE_RUNTIME, play: { command: LAUNCHER, engine } };
   await writeFileNoFollow(file, `${JSON.stringify(next, null, 2)}\n`);
 }
 
@@ -189,6 +229,6 @@ export async function setUpGame(
   const kept = await installAddon(project, source);
   await addAutoload(project);
   await writeLauncher(gameDir, project, godot);
-  await recordBridge(gameDir);
+  await recordBridge(gameDir, project);
   return kept;
 }

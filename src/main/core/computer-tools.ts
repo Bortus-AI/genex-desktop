@@ -31,7 +31,7 @@ import {
   computerSession,
   type TargetSource,
 } from "./computer-session.ts";
-import { gameBridgeSource } from "./game-bridge-target.ts";
+import { type EngineLauncher, gameBridgeSource } from "./game-bridge-target.ts";
 import type { FramePort, PreviewService } from "./previews.ts";
 import { iterationDir } from "./run-shots.ts";
 import { markVerified } from "./verified-traces.ts";
@@ -152,8 +152,11 @@ export function targetFramePort(target: ComputerTarget): FramePort {
 
 /** What else a computer may need: a sandbox to start a Play Protocol game in, when the build is one. */
 export interface ComputerToolsOptions {
-  /** Set when the build's studio.json declares the `bridge` runtime: its game is started here. */
-  bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived"> };
+  /**
+   * Set when the build's studio.json declares the `bridge` runtime: its game is started here, or by
+   * `engine` when its play names an engine a plugin runs (an engine draws: a window and the GPU).
+   */
+  bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived">; engine?: EngineLauncher };
 }
 
 /** The tools over one session, whatever its target: the tool definition, its calls, its load and its trace. */
@@ -298,8 +301,10 @@ const TARGET_SOURCES: Record<GameRuntime, (deps: SourceDeps, build: ToolsBuilder
   [TargetRuntime.Bridge]: (deps, build) => {
     const sandbox = deps.options.bridge?.sandbox;
     if (!sandbox) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
+    const engine = deps.options.bridge?.engine;
     const source = gameBridgeSource({
       sandbox,
+      ...(engine ? { engine } : {}),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);

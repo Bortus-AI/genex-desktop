@@ -5,7 +5,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { GAME_RUNTIMES, TargetRuntime } from "../shared/computer-target.ts";
-import type { GameCandidate, PlayCommand, ProjectKind, ProjectShape } from "../shared/game-project.ts";
+import type { GameCandidate, PlayCommand, PlayEngine, ProjectKind, ProjectShape } from "../shared/game-project.ts";
 import { pageLoadsGenexSdk } from "../shared/genex-page.ts";
 import { CoreFact, FolderHolds, hasFact } from "../shared/project-facts.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
@@ -247,11 +247,31 @@ function usablePlayArg(arg: unknown): arg is string {
  */
 function declaredPlay(raw: unknown): PlayCommand | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const { command, args } = raw as { command?: unknown; args?: unknown };
+  const { command, args, engine } = raw as { command?: unknown; args?: unknown; engine?: unknown };
   if (typeof command !== "string" || !plainRelativePath(command)) return null;
-  if (args === undefined) return { command, args: [] };
+  const words = playArgs(args);
+  if (!words) return null;
+  const runs = declaredEngine(engine);
+  return runs ? { command, args: words, engine: runs } : { command, args: words };
+}
+
+/** A play's arguments: none when absent, else at most 32 usable words; null when unusable. */
+function playArgs(args: unknown): string[] | null {
+  if (args === undefined) return [];
   if (!Array.isArray(args) || args.length > MAX_PLAY_ARGS || !args.every(usablePlayArg)) return null;
-  return { command, args: [...args] };
+  return [...args];
+}
+
+/** A plugin runtime's id as a manifest declares it: never a path, never a shell word. */
+const ENGINE_RUNTIME = /^[a-z][a-z0-9-]{0,39}$/;
+
+/** The engine a play names: a runtime id and its arguments; null when absent or unusable (the command still stands). */
+function declaredEngine(raw: unknown): PlayEngine | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const { runtime, args } = raw as { runtime?: unknown; args?: unknown };
+  if (typeof runtime !== "string" || !ENGINE_RUNTIME.test(runtime)) return null;
+  const words = playArgs(args);
+  return words ? { runtime, args: words } : null;
 }
 
 /**

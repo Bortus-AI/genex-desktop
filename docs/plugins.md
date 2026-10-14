@@ -2217,6 +2217,10 @@ each opened without following links and checked by device and inode (`copyDeclar
 link, a hard-linked file or a file swapped during delivery is refused. A pinned `.dmg` runtime is
 copied with its relative links kept (`copyRuntimeTree`; a link out of the runtime is refused) and
 probed after the image is detached.
+A runtime's version is `x.y.z` or `x.y` (read as `x.y.0`). An enabled plugin's runtime also starts a
+bridge game whose `studio.json` play names it as its `engine` (docs/play-protocol.md): the studio
+detects it as above and runs it long-lived in the same profile with the GPU, its stdio open.
+
 `native.jobs` / `native.result` read recorded jobs and never replay an interrupted operation.
 The backend then calls `assets.deliver`, stores the reference and verifies actual preview use.
 Raw host output roots and process logs should stay in the trusted setup UI, not agent results.

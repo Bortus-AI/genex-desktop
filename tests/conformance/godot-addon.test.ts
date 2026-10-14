@@ -78,7 +78,25 @@ describe("the Genex addon in a Godot project", () => {
     assert.deepEqual(await json(path.join(dir, "studio.json")), {
       title: "Moon",
       runtime: "bridge",
-      play: { command: "bin/play" },
+      play: {
+        command: "bin/play",
+        engine: {
+          runtime: "godot",
+          args: [
+            "--path",
+            "godot",
+            "--no-header",
+            "--fixed-fps",
+            "60",
+            "--max-fps",
+            "60",
+            "--position",
+            "-10000,-10000",
+            "--",
+            "--play-protocol",
+          ],
+        },
+      },
     });
   });
 

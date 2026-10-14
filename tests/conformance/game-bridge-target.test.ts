@@ -5,6 +5,7 @@
  * after a release. The last rows drive the fake game through the real computer session.
  */
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { chmod, mkdir, readFile, readdir, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -447,6 +448,32 @@ describe("game bridge source — started through the sandbox, stopped on release
     assert.equal(loaded.fresh, true);
     assert.deepEqual(spawned, [{ command: `${shellQuote(path.join(root, "bin", "game"))} '--view=32x20'`, cwd: root }]);
     assert.deepEqual(loaded.target.viewSize(), { width: 32, height: 20 });
+  });
+
+  it("starts the engine a play names through the engine launcher, with its arguments, and none in the sandbox", async () => {
+    const { sandbox, spawned } = await recordingSandbox();
+    const engine = { runtime: "fake-engine", args: ["--view=40x30"] };
+    const root = await bridgeProject([], { command: "bin/game", engine });
+    const asked: Array<{ engine: unknown; root: string }> = [];
+    const launcher = async (named: typeof engine, at: string) => {
+      asked.push({ engine: named, root: at });
+      return {
+        child: spawn(process.execPath, [FAKE_GAME, ...named.args], { cwd: at, stdio: ["pipe", "pipe", "pipe"] }),
+      };
+    };
+    const loaded = await source(sandbox, { engine: launcher }).load(root, false);
+    assert.equal(loaded.problem, null);
+    assert.deepEqual(asked, [{ engine, root }]);
+    assert.deepEqual(spawned, [], "the engine ran instead of the command");
+    assert.deepEqual(loaded.target.viewSize(), { width: 40, height: 30 });
+  });
+
+  it("runs the play's own command when no enabled plugin has its engine ready", async () => {
+    const { sandbox, spawned } = await recordingSandbox();
+    const root = await bridgeProject([], { command: "bin/game", engine: { runtime: "fake-engine", args: [] } });
+    const loaded = await source(sandbox, { engine: async () => null }).load(root, false);
+    assert.equal(loaded.problem, null);
+    assert.equal(spawned.length, 1, "the command, in the sandbox");
   });
 
   it("keeps one game between loads of the same build, and starts again when forced", async () => {
