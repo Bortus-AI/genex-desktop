@@ -1112,6 +1112,8 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
+  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  computerControl?: boolean;
 }
 // ↑ src/shared/studio-api.ts
 
@@ -2290,7 +2292,7 @@ export interface HarnessHostApi {
    * The `desktop` tool, run by the host for an engine whose tool loop is the harness's own
    * (Ollama): the person's computer, behind the consent asked on a card in `threadId`. `describe`
    * answers the tool's schema and starts the chat's session afresh; `unavailable` says why there is
-   * none (no desktop driver, no chat to ask in).
+   * none (computer control off in Settings, no desktop driver, no chat to ask in).
    */
   "desktop.computer": {
     params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
