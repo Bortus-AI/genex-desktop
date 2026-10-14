@@ -406,7 +406,9 @@
   "get_player_pawn",
   "get_time_seconds",
   "get_world_delta_seconds",
-  "set_editor_property"
+  "is_game_paused",
+  "set_editor_property",
+  "set_game_paused"
  ],
  "GeometryScriptBoneInfo": [],
  "GeometryScriptBoneWeight": [],

@@ -34,10 +34,10 @@ plugin's editor, agents wait.
 ## Unreal
 
 The lead works in the open editor through the Genex editor helper, one holder at a time; while you
-play there the chat reads “Waiting for you to finish in Unreal” (a build waits 10 minutes). A
-turn saves and snapshots unsaved editor work. Rewind saves, closes and reopens Unreal; if it can't,
-files stay and the chat says why. An **Unreal plugin** project is a host project with the
-plugin in `Plugins/`; its tools build it, test it headless and package it.
+play there the chat reads “Waiting for you to finish in Unreal”. A turn snapshots editor work;
+Rewind saves, closes and reopens Unreal. Agents and blind judges play it with keys and the
+mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**
+project is a host project with the plugin in `Plugins/`; its tools build, test and package it.
 
 ## Live's views
 
