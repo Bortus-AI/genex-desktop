@@ -126,6 +126,11 @@ export interface GatherOptions {
   keepPaths?: string[];
   /** Look at this size: a leased window is sized before it loads (`preview.viewport`), never the live view. */
   viewport?: { width: number; height: number } | null;
+  /**
+   * The build's camera wiring is this look's to answer for (default): a part that does not own the
+   * entry cannot rewire the cameras, so a dead cameras contract is a warning for it, never a failure.
+   */
+  camerasOwned?: boolean;
 }
 
 /** The pass's own state, phase to phase: its arguments, then what each phase found. */
@@ -777,6 +782,7 @@ export async function gatherEvidence(
     inheritedConsole = [],
     keepPaths = [],
     viewport = null,
+    camerasOwned = true,
   }: GatherOptions,
 ): Promise<Evidence> {
   const kept = Array.isArray(keepPaths) ? keepPaths.map(String) : [];
@@ -806,6 +812,7 @@ export async function gatherEvidence(
     // The bot's race is read by its position and finish: cut last, like the board's own paths.
     keepPaths: challenge === true ? [...new Set([...kept, ...RACE_PATHS])] : kept,
     viewport,
+    camerasOwned,
   };
   for (const phase of LOOK_OPENING) {
     const done = await phase(look);
@@ -2039,11 +2046,17 @@ function weighBlackness(look: Look, statBearing: Shot[]): void {
 /** When every camera returned the same frame: an overlay, a dead camera contract, a stale picture, or one viewpoint. */
 function sameFrameEverywhere(look: Look): void {
   const { canvasSourced, declaredViewpoints, problems, uiEntries, uiPrimary, warnings } = look;
+  // Several viewpoints drawn on the canvas, all one picture: the camera wiring switches nothing.
+  const wiringDead = declaredViewpoints.length > 1 && canvasSourced;
   if (uiPrimary) {
     warnings.push(
       `a full-screen overlay covers the game (${uiEntries.slice(0, MAX_UI_ENTRIES).join(", ") || "the page"}) — every camera frame is the same picture behind it; judge user:view`,
     );
-  } else if (declaredViewpoints.length > 1 && canvasSourced) {
+  } else if (wiringDead && look.camerasOwned === false) {
+    warnings.push(
+      "every camera returned the same frame — the camera wiring is the entry owner's, not this part's: judge it on its other evidence",
+    );
+  } else if (wiringDead) {
     problems.push("every camera returned the same frame — debugCamera switches nothing, the cameras contract is dead");
   } else if (declaredViewpoints.length > 1) {
     warnings.push(
