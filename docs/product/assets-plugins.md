@@ -23,16 +23,17 @@ Marketplace (Coming soon) and the plugin guide, with
 (else newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
-Game spend is in the usage panel. Enabled Genex suggests assets in planning.
+Game spend is in the usage panel, prices in Genex's Credits tab. Enabled Genex suggests assets in planning.
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
-`genex__package` (multiplayer, player identity) after consent. Publish (a host-drawn dialog)
+`genex__package` (multiplayer, player identity; template games map Studio's copies) after consent. Publish (a host-drawn dialog)
 connects SDK-less games for sign-in, tests the draft, goes public and sends the `genex-cover` demo
 frame as the Genex cover, not the sidebar sphere ([rules](../plugins.md#first-party-privileges));
 else Ask for a cover drafts it in chat. Agents check `genex__cover` before publishing; consented
-`genex__cover-set` sends it. Chat shows the kept shot with Publish. Agents read Genex’s guide and
-cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
+`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer asks chat (Genex
+off: turn it on); Publish needs only the account; both offer Update while older. Agents read
+Genex’s guide and cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists
 Genex and Local Blender as official; its installs require native-code trust
@@ -48,7 +49,7 @@ native code.
 Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every
 included/excluded file for a second approval. Revoking stops future calls, not remote effects.
-Removal keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
+Removal (never Genex's) keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
 rows offer **Update to x**, the sidebar **Update plugins** (all). Built-in plugins install and update
 without asking. Reusing a plugin's id from another source needs **Replace and erase data** (never a
 bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed secrets

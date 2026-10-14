@@ -15,7 +15,7 @@ import type { StudioCore } from "../studio-core.ts";
 /** Why Publish is refused before Genex is asked anything. */
 const MESSAGE = {
   NoGame: "Open a game to publish it",
-  GenexUnavailable: "Turn on Genex Tools to publish",
+  GenexUnavailable: "Publishing needs the Genex plugin, which isn't installed",
   NoFileList: "Review the files before publishing",
   UnrealGame: (title: string) => `${title} builds in Unreal; publishing an Unreal game isn't supported yet.`,
   NotWebGame: (title: string) => `${title} isn't a web game, so Genex can't publish it yet.`,
@@ -38,12 +38,12 @@ export class PublishRefusedError extends Error {
 type InstalledPlugin = ReturnType<StudioCore["plugins"]["list"]>[number];
 type DialogCore = Pick<StudioCore, "games" | "plugins" | "pluginBinding" | "publicCopyFiles" | "withApprovedExport">;
 
-/** Studio's own Genex, on: the only plugin whose publish the dialog runs. */
+/**
+ * Studio's own Genex, installed: the only plugin whose publish the dialog runs. On or off: Publish
+ * belongs to the person's account, and Genex off takes only the agent's tools.
+ */
 const isUsableGenex = (plugin: InstalledPlugin): boolean =>
-  plugin.manifest.id === GENEX_PLUGIN_ID &&
-  plugin.source === PluginSourceKind.Bundled &&
-  plugin.enabled &&
-  !plugin.removed;
+  plugin.manifest.id === GENEX_PLUGIN_ID && plugin.source === PluginSourceKind.Bundled && !plugin.removed;
 
 const isFileList = (files: unknown): files is string[] =>
   Array.isArray(files) && files.every((file) => typeof file === "string");
@@ -72,7 +72,7 @@ export async function assertPublishable(core: Pick<StudioCore, "games">, project
   throw new PublishRefusedError(PublishRefusal.NotWebGame, MESSAGE.NotWebGame(game.title));
 }
 
-/** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is on. */
+/** The game the dialog names, bound as Studio allows it to be opened, while Studio's Genex is installed. */
 async function dialogBinding(core: DialogCore, project: unknown): Promise<PluginBinding> {
   if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame);
   if (!core.plugins.list().some(isUsableGenex)) throw new Error(MESSAGE.GenexUnavailable);

@@ -12,45 +12,50 @@ const fromHome = (app: Studio) => (select: () => void) => {
   else select();
 };
 
-/** Moving between conversations and games: each closes Plugins and the drawer on the way. */
+/** Moving between conversations and games: each closes Plugins, Play and the drawer on the way. */
 export function useNavigation(app: Studio, chrome: ShellChrome, handoff: ComposerHandoff) {
-  const { setPluginsOpen, setDrawerOpen, closeOverlays } = chrome;
+  const { setPluginsOpen, setPlayOpen, setDrawerOpen, closeOverlays } = chrome;
+  /** Leave Plugins and Play for the workspace. */
+  const leaveRooms = useCallback(() => {
+    setPluginsOpen(false);
+    setPlayOpen(false);
+  }, [setPluginsOpen, setPlayOpen]);
   const studioThread = useThreads(studioThreadOf);
   const selectThread = useCallback(
     (threadId: string) => {
       fromHome(app)(() => {
-        setPluginsOpen(false);
+        leaveRooms();
         app.selectThread(threadId);
       });
       setDrawerOpen(false);
     },
-    [app, setPluginsOpen, setDrawerOpen],
+    [app, leaveRooms, setDrawerOpen],
   );
   /** Home: no conversation open, and the composer that starts a new game. */
   const goHome = useCallback(() => {
     const atHome = roomOf(app.threads.getState()) === Room.Home;
     const go = () => {
-      setPluginsOpen(false);
+      leaveRooms();
       app.goHome();
     };
     if (atHome) go();
     else withViewTransition(go);
     setDrawerOpen(false);
-  }, [app, setPluginsOpen, setDrawerOpen]);
+  }, [app, leaveRooms, setDrawerOpen]);
   const enterStudio = useCallback(() => {
     if (studioThread) selectThread(studioThread.id);
   }, [studioThread, selectThread]);
   const { focusWhenOpen, focusOnly } = handoff;
   const enterProject = useCallback(
     (name: string, focusComposer = false): Promise<void> => {
-      setPluginsOpen(false);
+      leaveRooms();
       return app.enterProject(name, { open: fromHome(app) }).then((record) => {
         if (!record) return;
         if (focusComposer) focusWhenOpen(record.id);
         setDrawerOpen(false);
       });
     },
-    [app, setPluginsOpen, setDrawerOpen, focusWhenOpen],
+    [app, leaveRooms, setDrawerOpen, focusWhenOpen],
   );
   /** Back to the game chat last open, else the first game; `focusComposer` puts the cursor in it. */
   const returnToGame = useCallback(

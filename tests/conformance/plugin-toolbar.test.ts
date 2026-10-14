@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  MultiplayerPress,
+  multiplayerPress,
+  showsMultiplayer,
   shownToolbarStatus,
   toolbarItems,
   toolbarReaction,
@@ -146,6 +149,19 @@ test("a plugin behind the version Studio bundles says Update on its buttons, unt
   assert.equal(toolbarUpdateStatus(plugin("unreal", [item()]), PLUGIN_TOOLBAR_WORDS.update), null, "up to date");
   const status = toolbarStatusFrom(toolbarUpdateStatus(behind, PLUGIN_TOOLBAR_WORDS.update));
   assert.equal(status?.badge, "Update", "the badge survives the toolbar's own sanitizing");
+});
+test("Multiplayer brings Genex in, updates an older Genex first, and otherwise asks the game's chat", () => {
+  assert.equal(multiplayerPress(undefined), MultiplayerPress.SetUp, "Genex off or not installed");
+  const behind = plugin("genex", [item()], { availableVersion: "1.10.0" });
+  assert.equal(multiplayerPress(behind), MultiplayerPress.Update, "an older Genex's instructions refuse the template");
+  const waiting = plugin("genex", [item()], { availableVersion: "1.10.0", pendingVersion: "1.10.0" });
+  assert.equal(multiplayerPress(waiting), MultiplayerPress.Ask, "as Publish: the update waits for its sessions");
+  assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
+});
+test("Multiplayer stands beside Publish only on a game with something in it", () => {
+  assert.equal(showsMultiplayer(true, false), true);
+  assert.equal(showsMultiplayer(true, true), false, "an empty game has nothing to play together yet");
+  assert.equal(showsMultiplayer(false, false), false, "no Publish, no Multiplayer");
 });
 test("toolbarStatusFrom keeps attention as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ attention: true }), { attention: true });

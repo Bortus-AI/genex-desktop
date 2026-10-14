@@ -283,7 +283,7 @@ it("every engine path leaves the same host-owned record of a plugin tool call", 
           ),
       );
     for (const s of started) {
-      assert.equal(s.pluginName, "Genex Tools");
+      assert.equal(s.pluginName, "Genex plugin");
       assert.equal(s.pluginId, "genex");
       assert.equal(s.tool, "asset");
       assert.equal(s.toolName, "genex__asset");
@@ -397,7 +397,7 @@ it("agent publish requests wait for Studio consent on every engine path", async 
           const approve = answerNext(true);
           await assert.rejects(
             Promise.resolve().then(() => request.onLiveTool!("genex__publish", { operation: "draft" })),
-            /Connect Genex Tools first/,
+            /Connect the Genex plugin first/,
           );
           await approve;
           return { ok: true, engine, summary: "fixture", turns: 1, usage: {} };

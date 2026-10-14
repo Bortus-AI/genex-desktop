@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   coverAsk,
   coverCardPublish,
+  GenexSetup,
+  genexSetup,
   isGenexPublish,
   offeredTitle,
   PublishGate,
@@ -62,17 +64,20 @@ test("the dialog names where the game is and offers one press from there", () =>
   assert.deepEqual(signedOut.problems, [], "Connect Genex is offered in its place, not reported as a problem");
 });
 
-test("Publish asks for what is missing in order: Genex installed, turned on, then an account", () => {
-  assert.equal(publishGate(undefined, undefined), PublishGate.Install);
-  assert.equal(publishGate({ enabled: false, removed: true }, undefined), PublishGate.Install);
-  assert.equal(publishGate({ enabled: false, removed: false }, undefined), PublishGate.TurnOn);
-  assert.equal(publishGate({ enabled: true, removed: false }, false), PublishGate.Connect);
-  assert.equal(publishGate({ enabled: true, removed: false }, true), PublishGate.Ready);
-  assert.equal(
-    publishGate({ enabled: true, removed: false }, undefined),
-    PublishGate.Ready,
-    "unread yet is not asked for",
-  );
+test("Publish asks only for an account: Genex on or off publishes, and signing in brings back a missing Genex", () => {
+  assert.equal(publishGate(undefined, undefined), PublishGate.SignIn);
+  assert.equal(publishGate({ enabled: false, removed: true }, undefined), PublishGate.SignIn);
+  for (const enabled of [true, false]) {
+    assert.equal(publishGate({ enabled, removed: false }, false), PublishGate.SignIn, `on: ${enabled}`);
+    assert.equal(publishGate({ enabled, removed: false }, true), PublishGate.Ready, `on: ${enabled}`);
+    assert.equal(publishGate({ enabled, removed: false }, undefined), PublishGate.Ready, "unread yet is not asked for");
+  }
+});
+
+test("Multiplayer asks for the Genex plugin: installed, then turned on", () => {
+  assert.equal(genexSetup(undefined), GenexSetup.Install);
+  assert.equal(genexSetup({ enabled: false, removed: true }), GenexSetup.Install);
+  assert.equal(genexSetup({ enabled: false, removed: false }), GenexSetup.TurnOn);
 });
 
 const genex = (over: Partial<PluginInfo> = {}): PluginInfo => ({
@@ -109,8 +114,14 @@ const genex = (over: Partial<PluginInfo> = {}): PluginInfo => ({
 
 test("every open web game has Publish on its stage strip, whether Genex is on, off, removed or missing", () => {
   const web: FactRef[] = [{ id: CoreFact.WebGame, path: "." }];
+  const off = genex({ enabled: false, state: "disabled" });
   assert.equal(studioPublishButton([genex()], "game", web), false, "Genex's own button is the one shown");
-  assert.equal(studioPublishButton([genex({ enabled: false, state: "disabled" })], "game", web), true);
+  assert.equal(studioPublishButton([off], "game", web), false, "off too: Publish is the account's");
+  assert.deepEqual(
+    stripEntries([off], "game", web).map((entry) => [entry.key, entry.plugin.enabled]),
+    [[`${GENEX_PLUGIN_ID}:publish`, false]],
+    "only Publish of an off Genex's buttons, on the plugin as it is",
+  );
   assert.equal(studioPublishButton([genex({ enabled: false, removed: true, state: "disabled" })], "game", web), true);
   assert.equal(studioPublishButton([], "game", web), true);
   assert.equal(studioPublishButton([], null, web), false, "with no game open there is nothing to publish");
@@ -157,6 +168,11 @@ test("an Unreal game has no Publish on its strip: its folder holds an Unreal pro
     studio: false,
     others: ["demo:demo"],
   });
+  assert.deepEqual(strip([genex({ enabled: false, state: "disabled" }), other()], []), {
+    genex: true,
+    studio: false,
+    others: ["demo:demo"],
+  });
   assert.deepEqual(strip([other()], [{ id: CoreFact.WebGame, path: "." }]), {
     genex: false,
     studio: true,
@@ -195,7 +211,7 @@ test("the chat's Genex cover card offers Publish while Genex's own Publish is on
   assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "unresolved" }) })), false);
   assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "done", phase: "done" }) })), true);
   assert.equal(coverCardPublish([genex()], "game", state({ job: job({ state: "failed", phase: "failed" }) })), true);
-  assert.equal(coverCardPublish([genex({ enabled: false, state: "disabled" })], "game", state()), false, "Genex off");
+  assert.equal(coverCardPublish([genex({ enabled: false, state: "disabled" })], "game", state()), true, "Genex off");
   assert.equal(coverCardPublish([genex({ removed: true })], "game", state()), false, "Genex removed");
   assert.equal(coverCardPublish([], "game", state()), false, "Genex missing");
   assert.equal(coverCardPublish([genex()], null, state()), false, "no game to publish");

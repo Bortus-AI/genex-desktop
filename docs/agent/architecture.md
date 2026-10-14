@@ -237,7 +237,8 @@ and must stay so.
 ## Renderer
 
 **State.** Zustand domain stores in [`src/renderer/state/`](../../src/renderer/state/) (engines,
-event log, layout, library, plugins, session, threads, toasts, agent screens, command runs) are wired once by
+event log, layout, library, plugins, session, threads, toasts, agent screens, command runs,
+Play/people) are wired once by
 `createStudio(api)` in `state/studio.ts`: one `onEvent` subscription, the log poll, the bootstrap
 and the commands that span stores. The app has one instance started before React mounts, so
 StrictMode cannot subscribe twice. Components read through the selector hooks in `state/hooks.ts`

@@ -1,3 +1,26 @@
+import type {
+  PlayControl,
+  PlayFeedPage,
+  PlayFeedRequest,
+  PlayGame,
+  PlayPoint,
+  PlayShelf,
+  PlayShelves,
+} from "./play.ts";
+import type {
+  AvatarStyle,
+  FriendActionRequest,
+  FriendStatus,
+  PlayCreator,
+  PlayFriendsPage,
+  PlayMe,
+  PlayPeopleResult,
+  PlayProfile,
+  PresenceVisibility,
+} from "./play-people.ts";
+import type { GenexAccountView } from "./genex-account.ts";
+import type { PlayCredits } from "./play-credits.ts";
+import type { PlayStats, StatsPeriod } from "./play-stats.ts";
 import type { PerformanceMark } from "./performance.ts";
 import type { ComposerSendOptions } from "./composer.ts";
 import type {
@@ -412,6 +435,56 @@ export interface StudioApi {
   onCodexLogin(listener: (state: CodexLoginState) => void): () => void;
   subscriptionForgetStudioLogin(engine?: string): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
+  /** Play: one page of a tab of genex.games' catalog. */
+  playFeed(request: PlayFeedRequest): Promise<PlayFeedPage>;
+  /** Play: each shelf's count and the tabs with something in them, shelf by shelf. */
+  playShelves(): Promise<PlayShelves>;
+  /** Play: what on one shelf of the catalog answers a search, best first. */
+  playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
+  /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
+  playRemix(slug: string): Promise<string>;
+  /** Play: players in each named game now; a game nobody counts is left out. */
+  playOnline(slugs: string[]): Promise<Record<string, number>>;
+  /** Play: open a game full screen in the viewer; how it goes arrives as `UiEvent.PlayViewer`. */
+  playOpen(slug: string): Promise<void>;
+  /** Play: close the viewer. */
+  playClose(): Promise<void>;
+  /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
+  playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
+  /** Play: the Genex account the app is signed in as, or null while it is signed out. */
+  playMe(): Promise<PlayMe | null>;
+  /** Play: rename the account (2–20 characters); the account as it is after. */
+  playRename(name: string): Promise<PlayMe | null>;
+  /** Play: make a square WebP picture (at most 512 KB) the account's avatar; the account as it is after. */
+  playAvatar(webp: Uint8Array): Promise<PlayMe | null>;
+  /** Play: anyone's public profile and games, with the viewer's relationship to them. */
+  playProfile(userId: string): Promise<PlayProfile>;
+  /** Play: the Friends page, read at once: friends, requests both ways, visibility, invite link. */
+  playFriends(): Promise<PlayFriendsPage>;
+  /** Play: add, accept, withdraw or remove a friend; the relationship after it. */
+  playFriend(request: FriendActionRequest): Promise<FriendStatus>;
+  /** Play: people whose name matches, to add them. */
+  playPeople(query: string): Promise<PlayPeopleResult>;
+  /** Play: whether friends see the game the account is in. */
+  playVisibility(visibility: PresenceVisibility): Promise<PresenceVisibility>;
+  /** Play: show the generated avatar or the uploaded photo, in the app and on genex.games; the account after. */
+  playAvatarStyle(style: AvatarStyle): Promise<PlayMe | null>;
+  /** Play: show another generated avatar, in the app and on genex.games; the account after. */
+  playAvatarVariant(variant: number): Promise<PlayMe | null>;
+  /** Play: the account's own stats for a period; null while genex.games has none to give. */
+  playStats(days: StatsPeriod): Promise<PlayStats | null>;
+  /** Play: the Top creators row; null while genex.games does not rank creators. */
+  playCreators(): Promise<PlayCreator[] | null>;
+  /** The Genex plugin's Credits tab: balance, plan, invite bonus, live prices and recent spends. */
+  playCredits(): Promise<PlayCredits>;
+  /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
+  genexAccount(): Promise<GenexAccountView>;
+  /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */
+  genexSignIn(): Promise<GenexAccountView>;
+  /** Stop a sign-in waiting in the browser; the account as it is after. */
+  genexCancelSignIn(): Promise<GenexAccountView>;
+  /** Sign out of Genex once the person confirms in Studio's question; the account as it is after. */
+  genexSignOut(): Promise<GenexAccountView>;
   /** A macOS notification; clicking it focuses Studio and sends `notification.open` with the id. */
   notify(note: { id?: string; title: string; subtitle?: string; body: string }): Promise<boolean>;
   /** The Dock badge: how much work waits on the person. Zero clears it. */

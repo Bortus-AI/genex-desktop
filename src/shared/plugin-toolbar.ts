@@ -61,9 +61,30 @@ export interface ToolbarUpdateWords {
  * once the update is applied or waits for the plugin's sessions to end.
  */
 export function toolbarUpdateStatus(plugin: PluginInfo, words: ToolbarUpdateWords): PluginToolbarStatus | null {
-  const version = plugin.availableVersion;
-  if (!version || plugin.pendingVersion) return null;
+  const version = updateDue(plugin);
+  if (!version) return null;
   return { badge: words.badge, title: words.title(plugin.manifest.name, version) };
+}
+
+/** The bundled version the plugin's buttons send the user to update to, or null when none is due. */
+const updateDue = (plugin: PluginInfo): string | null =>
+  plugin.availableVersion && !plugin.pendingVersion ? plugin.availableVersion : null;
+
+/** Multiplayer stands beside Publish, and only on a game with something in it: an empty one has nothing to play together. */
+export const showsMultiplayer = (publish: boolean, emptyGame: boolean): boolean => publish && !emptyGame;
+
+/** What Multiplayer's press does, by where Genex stands. */
+export const MultiplayerPress = { SetUp: "set-up", Update: "update", Ask: "ask" } as const;
+export type MultiplayerPress = (typeof MultiplayerPress)[keyof typeof MultiplayerPress];
+
+/**
+ * Multiplayer's press with `genex`, the Genex plugin while it is on (undefined while off or not
+ * installed): bring Genex in, update an older one first as its own buttons do (an older Genex's
+ * instructions refuse a game made from the template), or ask the game's chat.
+ */
+export function multiplayerPress(genex: PluginInfo | undefined): MultiplayerPress {
+  if (!genex) return MultiplayerPress.SetUp;
+  return updateDue(genex) ? MultiplayerPress.Update : MultiplayerPress.Ask;
 }
 
 /**

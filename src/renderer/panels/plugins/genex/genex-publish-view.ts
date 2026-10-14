@@ -1,9 +1,10 @@
 /**
  * The Publish dialog's view of Genex's publish record: where the game is (not online, draft only,
  * public), the running attempt's steps, how the last one ended, and the one press the next step
- * needs. What Publish asks for first (Genex installed and on, then an account), whether to ask the
- * game's chat for a Genex cover, whether Studio puts Publish on the strip itself, which games get
- * none (an Unreal game) and whether the chat's cover card offers Publish are decided here too.
+ * needs. What Publish asks for first (a Genex account; the plugin may be off), what Multiplayer asks
+ * for (the plugin on), whether to ask the game's chat for a Genex cover, whether Studio puts Publish
+ * on the strip itself, which games get none (an Unreal game) and whether the chat's cover card
+ * offers Publish are decided here too.
  * Pure, so the dialog only draws it.
  */
 import {
@@ -256,22 +257,30 @@ export function offeredTitle(state: GenexPublishState | null, gameTitle: string 
   return state?.title ?? cleanGenexTitle(gameTitle) ?? defaultGenexTitle(project);
 }
 
-/** What Publish asks for before it can publish, in this order. */
-export const PublishGate = { Install: "install", TurnOn: "turn-on", Connect: "connect", Ready: "ready" } as const;
+/** What Publish asks for before it can publish: a Genex account, or nothing. */
+export const PublishGate = { SignIn: "sign-in", Ready: "ready" } as const;
 export type PublishGate = (typeof PublishGate)[keyof typeof PublishGate];
 
 /**
- * What stands between the person and Publish: Genex installed (`genex` missing or removed), turned
- * on, then a connected account. A record not read yet asks for nothing.
+ * What stands between the person and Publish: only a Genex account. Publish is the account's, so
+ * the Genex plugin being off asks nothing; a Genex that is missing or removed is brought back by
+ * signing in. A record not read yet asks for nothing.
  */
 export function publishGate(
   genex: Pick<PluginInfo, "enabled" | "removed"> | undefined,
   connected: boolean | undefined,
 ): PublishGate {
-  if (!genex || genex.removed) return PublishGate.Install;
-  if (!genex.enabled) return PublishGate.TurnOn;
-  return connected === false ? PublishGate.Connect : PublishGate.Ready;
+  if (!genex || genex.removed) return PublishGate.SignIn;
+  return connected === false ? PublishGate.SignIn : PublishGate.Ready;
 }
+
+/** What Multiplayer asks for while the Genex plugin is not on: installed, then turned on. */
+export const GenexSetup = { Install: "install", TurnOn: "turn-on" } as const;
+export type GenexSetup = (typeof GenexSetup)[keyof typeof GenexSetup];
+
+/** Install a missing or removed Genex, else turn it on. */
+export const genexSetup = (genex: Pick<PluginInfo, "enabled" | "removed"> | undefined): GenexSetup =>
+  !genex || genex.removed ? GenexSetup.Install : GenexSetup.TurnOn;
 
 /** Whether a stage-strip button is Genex's Publish. */
 export const isGenexPublish = (entry: PluginToolbarEntry): boolean =>
@@ -288,9 +297,27 @@ export const isGenexPublish = (entry: PluginToolbarEntry): boolean =>
 const publishable = (facts: readonly FactRef[], holds: FolderHolds | undefined): boolean =>
   servedAsWebGame({ facts, holds });
 
+/** Whether a plugin is the Genex plugin, installed but switched off. */
+const isGenexOff = (plugin: PluginInfo): boolean =>
+  plugin.manifest.id === GENEX_PLUGIN_ID && !plugin.enabled && !plugin.removed && !plugin.unlisted;
+
 /**
- * The plugin buttons on the open game's stage strip: every enabled plugin's, less Genex's Publish
- * for a game Publish can't put online (`publishable`).
+ * Each plugin's buttons in list order: an enabled plugin's all, and an off Genex's Publish alone,
+ * since Publish belongs to the account and not to the agent's tools.
+ */
+function toolbarEntries(plugins: readonly PluginInfo[], project: string | null): PluginToolbarEntry[] {
+  return plugins.flatMap((plugin) => {
+    if (!isGenexOff(plugin)) return toolbarItems([plugin], project);
+    if (!project) return [];
+    return (plugin.manifest.toolbar ?? [])
+      .map((item) => ({ key: `${plugin.manifest.id}:${item.id}`, plugin, item }))
+      .filter(isGenexPublish);
+  });
+}
+
+/**
+ * The plugin buttons on the open game's stage strip: every enabled plugin's and Genex's Publish, on
+ * or off, less that Publish for a game it can't put online (`publishable`).
  */
 export function stripEntries(
   plugins: readonly PluginInfo[],
@@ -298,13 +325,13 @@ export function stripEntries(
   facts: readonly FactRef[],
   holds?: FolderHolds,
 ): PluginToolbarEntry[] {
-  const entries = toolbarItems(plugins, project);
+  const entries = toolbarEntries(plugins, project);
   return publishable(facts, holds) ? entries : entries.filter((entry) => !isGenexPublish(entry));
 }
 
 /**
- * Whether Studio puts Publish on the strip itself: a web game is open and Genex, off or gone, adds
- * none.
+ * Whether Studio puts Publish on the strip itself: a web game is open and no Genex is installed to
+ * add its own (signing in from it brings Genex back).
  */
 export function studioPublishButton(
   plugins: readonly PluginInfo[],
@@ -312,7 +339,7 @@ export function studioPublishButton(
   facts: readonly FactRef[],
   holds?: FolderHolds,
 ): boolean {
-  return Boolean(project) && publishable(facts, holds) && !toolbarItems(plugins, project).some(isGenexPublish);
+  return Boolean(project) && publishable(facts, holds) && !toolbarEntries(plugins, project).some(isGenexPublish);
 }
 
 /**
@@ -337,7 +364,7 @@ function keptFrameAnswered(cover: GenexCoverRecord | undefined): boolean {
 
 /**
  * Whether the chat's Genex cover card offers Publish: Genex's own Publish is on the strip (Genex
- * installed and on), no publish of this game runs, and Genex has not yet answered for the kept
+ * installed, on or off), no publish of this game runs, and Genex has not yet answered for the kept
  * frame (a publish re-shoots and sends it, so once one has, the cover's next step is done). A
  * record not read yet hides nothing.
  */
@@ -346,6 +373,6 @@ export function coverCardPublish(
   project: string | null,
   state: GenexPublishState | null,
 ): boolean {
-  if (!project || !toolbarItems(plugins, project).some(isGenexPublish)) return false;
+  if (!project || !toolbarEntries(plugins, project).some(isGenexPublish)) return false;
   return !isLive(state?.job) && !keptFrameAnswered(state?.cover);
 }

@@ -23,6 +23,18 @@ import { NotificationsMenu } from "./NotificationsMenu.tsx";
 import type { Notice } from "../notifications.ts";
 import type { LaunchInSidebar } from "../state/launch.ts";
 import { sidebarGames } from "../state/threads.ts";
+import { PLAY_SHELVES, PlayShelf } from "../../shared/play.ts";
+import { formatCount } from "../play/play-model.ts";
+import { PlayPromo } from "../play/PlayPromo.tsx";
+import { ProfilePlate } from "../play/ProfilePlate.tsx";
+import { usePeopleSync } from "../play/use-people-sync.ts";
+import { PlayRecent } from "../play/PlayRecent.tsx";
+import { PlaySwitch } from "../play/PlaySwitch.tsx";
+import { usePeople, usePlay, useShallow } from "../state/hooks.ts";
+import { waitingRequests } from "../state/people.ts";
+import { PlayPage } from "../state/play.ts";
+import { studio as studioApp } from "../state/studio.ts";
+import { PLAY_WORDS } from "../words.ts";
 
 interface Props {
   threads: ConversationRecord[];
@@ -48,6 +60,10 @@ interface Props {
   onSettings: () => void;
   pluginsOpen: boolean;
   onPlugins: () => void;
+  /** Play is up: the rooms fold away and the list is the games played last. */
+  playOpen: boolean;
+  /** Play or Create, from the switch under the wordmark. */
+  onPlayMode: (play: boolean) => void;
   stagedCount: number;
   onNewGame: () => void;
   onSelectThread: (threadId: string) => void;
@@ -128,6 +144,8 @@ export function Sidebar(props: Props): JSX.Element {
   const nav = useRef<HTMLElement>(null);
   const { scrolled, onScroll } = useScrollState(nav);
   const sorted = useSortedGames(games, threads);
+  const { playOpen } = props;
+  usePeopleSync(playOpen);
   return (
     <nav
       ref={nav}
@@ -136,10 +154,25 @@ export function Sidebar(props: Props): JSX.Element {
       aria-label="Main navigation"
       className="game-sidebar"
       data-scrolled={scrolled}
+      data-play={playOpen}
     >
       <SidebarTop {...props} studio={studio} harnessOpen={harnessOpen} />
       <div className="sidebar-list">
-        <div className="sidebar-scroll" data-sidebar-scroll onScroll={(event) => onScroll(event.currentTarget)}>
+        <div
+          className="sidebar-scroll play-recent-scroll"
+          data-off={!playOpen}
+          inert={!playOpen}
+          onScroll={(event) => onScroll(event.currentTarget)}
+        >
+          <PlayRecent />
+        </div>
+        <div
+          className="sidebar-scroll"
+          data-sidebar-scroll
+          data-off={playOpen}
+          inert={playOpen}
+          onScroll={(event) => onScroll(event.currentTarget)}
+        >
           <div className="sidebar-games">
             {sorted.map((game, index) => (
               <Fragment key={game.name}>
@@ -157,6 +190,9 @@ export function Sidebar(props: Props): JSX.Element {
         <span className="sidebar-fade" aria-hidden="true" />
         <SidebarFooter {...props} />
       </div>
+      {/* Shown once, until the first sign-in: the account plate stays under it. */}
+      {playOpen && <PlayPromo />}
+      <ProfilePlate onPlayMode={props.onPlayMode} />
     </nav>
   );
 }
@@ -311,8 +347,8 @@ function SidebarGame({
 }
 
 /**
- * The fixed top: the toggle and Send feedback, the brand with search and notifications, the rooms,
- * the games heading.
+ * The fixed top: the toggle with search, notifications and Send feedback; the brand with the Play /
+ * Create switch; the rooms in Create or the shelves in Play; the games or Recent heading.
  */
 function SidebarTop({
   studio,
@@ -336,9 +372,12 @@ function SidebarTop({
   onSelectThread,
   atHome,
   onHome,
+  playOpen,
+  onPlayMode,
 }: Props & { studio: ConversationRecord | undefined; harnessOpen: boolean }): JSX.Element {
   const studioStatus = studio ? threadStatus[studio.id]?.status : undefined;
   const studioBusy = Boolean(studio && busyThreads.has(studio.id));
+  const hasRecent = usePlay((s) => s.recent.length > 0);
   return (
     <div className="sidebar-fixed">
       <div className="titlebar-drag sidebar-titlebar">
@@ -354,30 +393,7 @@ function SidebarTop({
             <Icon name="sidebar" />
           </button>
         </Hint>
-        <Hint label={FEEDBACK_WORDS.title}>
-          <button
-            type="button"
-            className="no-drag sidebar-toggle sidebar-feedback"
-            data-feedback-open
-            aria-label={FEEDBACK_WORDS.title}
-            aria-haspopup="dialog"
-            onClick={onFeedback}
-          >
-            <Icon name="bug" />
-          </button>
-        </Hint>
-      </div>
-      <div className="sidebar-brand-row">
-        <button
-          type="button"
-          className="sidebar-home"
-          aria-label="Home"
-          aria-current={atHome ? "page" : undefined}
-          onClick={onHome}
-        >
-          <GenexLogo className="brand sidebar-wordmark" />
-        </button>
-        <div className="sidebar-brand-actions">
+        <div className="no-drag sidebar-brand-actions">
           <IconButton
             icon="search"
             label="Search games"
@@ -393,55 +409,151 @@ function SidebarTop({
             onRead={onReadNotices}
             onClear={onClearNotices}
           />
+          <Hint label={FEEDBACK_WORDS.title}>
+            <button
+              type="button"
+              className="sidebar-toggle sidebar-feedback"
+              data-feedback-open
+              aria-label={FEEDBACK_WORDS.title}
+              aria-haspopup="dialog"
+              onClick={onFeedback}
+            >
+              <Icon name="bug" />
+            </button>
+          </Hint>
         </div>
       </div>
-      <div className="sidebar-nav">
-        <Hint label="New game" shortcut="⌘N">
-          <NavRow icon="new-game" aria-keyshortcuts="Meta+N Control+N" onClick={onNewGame}>
-            New game
-          </NavRow>
-        </Hint>
-        <NavRow icon="plugins" aria-label="Plugins" current={pluginsOpen} onClick={onPlugins}>
-          Plugins
-        </NavRow>
-        {studio && (
-          <Hint label="Harness" shortcut="⌘2">
-            <NavRow
-              icon="harness"
-              data-thread="studio"
-              current={harnessOpen}
-              busy={studioBusy}
-              onClick={() => onSelectThread(studio.id)}
-            >
-              <span className="min-w-0 flex-1 truncate">Harness</span>
-              {stagedCount > 0 && (
-                <span className="sidebar-badge" aria-label={`${stagedCount} skill improvements to review`}>
-                  {stagedCount}
-                </span>
-              )}
-              {studioBusy && studioStatus && <span className="sr-only">{statusWords(studioStatus).short}</span>}
+      <div className="sidebar-brand-row">
+        <button
+          type="button"
+          className="sidebar-home"
+          aria-label="Home"
+          aria-current={atHome && !playOpen ? "page" : undefined}
+          onClick={onHome}
+        >
+          <GenexLogo className="brand sidebar-wordmark" />
+        </button>
+        <PlaySwitch playing={playOpen} onChange={onPlayMode} />
+      </div>
+      <div className="sidebar-fold" data-folded={!playOpen} inert={!playOpen}>
+        <PlayShelfRows />
+      </div>
+      <div className="sidebar-fold" data-folded={playOpen} inert={playOpen}>
+        <div className="sidebar-nav">
+          <Hint label="New game" shortcut="⌘N">
+            <NavRow icon="new-game" aria-keyshortcuts="Meta+N Control+N" onClick={onNewGame}>
+              New game
             </NavRow>
           </Hint>
-        )}
+          <NavRow icon="plugins" aria-label="Plugins" current={pluginsOpen} onClick={onPlugins}>
+            Plugins
+          </NavRow>
+          {studio && (
+            <Hint label="Harness" shortcut="⌘2">
+              <NavRow
+                icon="harness"
+                data-thread="studio"
+                current={harnessOpen}
+                busy={studioBusy}
+                onClick={() => onSelectThread(studio.id)}
+              >
+                <span className="min-w-0 flex-1 truncate">Harness</span>
+                {stagedCount > 0 && (
+                  <span className="sidebar-badge" aria-label={`${stagedCount} skill improvements to review`}>
+                    {stagedCount}
+                  </span>
+                )}
+                {studioBusy && studioStatus && <span className="sr-only">{statusWords(studioStatus).short}</span>}
+              </NavRow>
+            </Hint>
+          )}
+        </div>
+      </div>
+      {/* Settings is in both Create and Play: under whichever rows are up. */}
+      <div className="sidebar-nav sidebar-nav-shared">
         <NavRow icon="settings" aria-label="Settings" aria-haspopup="dialog" onClick={onSettings}>
           Settings
         </NavRow>
       </div>
-      <div className="sidebar-games-heading">
-        <span>Games</span>
-        <IconButton
-          icon="plus"
-          label="Create game"
-          title="Create game · ⌘N"
-          className="sidebar-icon"
-          onClick={onNewGame}
-        />
-      </div>
+      {playOpen ? (
+        // Nothing played yet, nothing to head: Recent appears with the first game played.
+        hasRecent && (
+          <div className="sidebar-games-heading" key="recent">
+            <span>{PLAY_WORDS.recent}</span>
+          </div>
+        )
+      ) : (
+        <div className="sidebar-games-heading" key="games">
+          <span>Games</span>
+          <IconButton
+            icon="plus"
+            label="Create game"
+            title="Create game · ⌘N"
+            className="sidebar-icon"
+            onClick={onNewGame}
+          />
+        </div>
+      )}
     </div>
   );
 }
 
-/** New game, Plugins, Harness and Settings: one stack of equal rows. */
+/** Each shelf's glyph in Play's sidebar. */
+const SHELF_ICONS = {
+  [PlayShelf.Games]: "gamepad",
+  [PlayShelf.Tools]: "wrench",
+  [PlayShelf.Assets]: "box",
+} as const satisfies Record<PlayShelf, IconName>;
+
+/**
+ * Play's shelves in the rooms' place: Games, Tools and Assets, each with its count, as genex.games
+ * lists them, and Friends after them while Genex is signed in, with the requests waiting.
+ */
+function PlayShelfRows(): JSX.Element {
+  const onShelf = usePlay((s) => s.view.page === PlayPage.Shelf);
+  const shown = usePlay((s) => s.shelf);
+  const counts = usePlay(useShallow((s) => s.counts));
+  const friendsShown = usePlay((s) => s.view.page === PlayPage.Friends);
+  const signedIn = usePeople((s) => s.me !== null);
+  const waiting = usePeople(waitingRequests);
+  return (
+    <div className="sidebar-nav" role="group" aria-label={PLAY_WORDS.shelvesLabel}>
+      {PLAY_SHELVES.map((shelf) => {
+        const count = counts[shelf];
+        return (
+          <NavRow
+            key={shelf}
+            icon={SHELF_ICONS[shelf]}
+            current={onShelf && shelf === shown}
+            data-play-shelf={shelf}
+            onClick={() => studioApp().play.chooseShelf(shelf)}
+          >
+            <span className="min-w-0 flex-1 truncate">{PLAY_WORDS.shelves[shelf]}</span>
+            {count !== null && <span className="sidebar-count">{formatCount(count)}</span>}
+          </NavRow>
+        );
+      })}
+      {signedIn && (
+        <NavRow
+          icon="users"
+          current={friendsShown}
+          data-play-friends=""
+          aria-label={PLAY_WORDS.people.friendsLabel(waiting)}
+          onClick={() => studioApp().play.showFriends()}
+        >
+          <span className="min-w-0 flex-1 truncate">{PLAY_WORDS.people.friends}</span>
+          {waiting > 0 && (
+            <span className="sidebar-badge" aria-hidden="true">
+              {waiting}
+            </span>
+          )}
+        </NavRow>
+      )}
+    </div>
+  );
+}
+
+/** New game, Plugins, Harness (or Play's shelves) and Settings: one stack of equal rows. */
 function NavRow({
   icon,
   current = false,

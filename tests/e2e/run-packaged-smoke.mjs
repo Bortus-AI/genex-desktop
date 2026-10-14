@@ -297,6 +297,11 @@ async function signatureChecks() {
   const developerId = gatekeeper.ok && /source=Notarized Developer ID/.test(gatekeeper.text);
   addCheck("Gatekeeper accepts the app as a notarized Developer ID build", developerId, gatekeeper.text.trim());
   const entitlements = await outcome("codesign", ["-d", "--entitlements", "-", "--xml", appBundle]);
-  const exempt = /disable-library-validation|device\.(?:camera|audio-input)/.test(entitlements.text);
-  addCheck("signed entitlements carry no library-validation or device exemptions", entitlements.ok && !exempt);
+  // The microphone is Play's voice chat (build/entitlements.mac.plist); nothing else is a device exemption.
+  const exempt = /disable-library-validation|device\.(?!audio-input<)/.test(entitlements.text);
+  const microphone = /device\.audio-input</.test(entitlements.text);
+  addCheck(
+    "signed entitlements carry the microphone for Play's voice chat and no other library-validation or device exemption",
+    entitlements.ok && microphone && !exempt,
+  );
 }

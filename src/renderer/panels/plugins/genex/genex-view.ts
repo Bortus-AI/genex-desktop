@@ -97,6 +97,15 @@ export function creditsOf(status: GenexStatus): CreditsView {
     : { kind: CreditsKind.Unknown };
 }
 
+/**
+ * The account's balance as the Credits tab shows it: Unlimited only when genex.games says so, and
+ * Unknown (never Unlimited) when it couldn't read the balance.
+ */
+export function accountCreditsOf(credits: { balance: number | null; unlimited: boolean }): CreditsView {
+  if (credits.unlimited) return { kind: CreditsKind.Unlimited };
+  return credits.balance === null ? { kind: CreditsKind.Unknown } : { kind: CreditsKind.Count, count: credits.balance };
+}
+
 /** The game's spend from the CLI's budget answer, only when it is a real number. */
 export function spentOf(allowance: unknown): number | null {
   const spent = (allowance as { spent?: unknown } | null)?.spent;

@@ -11,11 +11,13 @@ import { SEED_GENERATED } from "./gen-harness-types.ts";
 import { packageBin } from "./package-bin.ts";
 import { vendorCuaDriver } from "./vendor-cua-driver.ts";
 import { vendorTsc } from "./vendor-tsc.ts";
+import { vendorGenexMultiplayer } from "./vendor-genex-multiplayer.ts";
 /**
  * Build — assembles `dist/` for Electron.
  *
  *   dist/main/main.mjs        substrate + app shell (ESM, Electron 43 supports ESM main)
  *   dist/preload/preload.cjs  renderer bridge (sandboxed preloads must be CommonJS)
+ *   dist/preload/play-mic.cjs Play game view's microphone (the app's mic in a published game's page)
  *   dist/renderer/*           React UI
  *   dist/resources/*          read-only app resources: the harness seed, the bootstrap, the game
  *                             template, vendored three.js, and the TypeScript 7 compiler the
@@ -112,6 +114,12 @@ async function nodeContexts() {
       ...shared,
       entryPoints: [path.join(root, "src/preload/index.ts")],
       outfile: path.join(dist, "preload/preload.cjs"),
+      format: "cjs",
+    }),
+    await esbuild.context({
+      ...shared,
+      entryPoints: [path.join(root, "src/preload/play-mic.ts")],
+      outfile: path.join(dist, "preload/play-mic.cjs"),
       format: "cjs",
     }),
   ];
@@ -231,6 +239,11 @@ async function buildAll() {
   await mkdir(dist, { recursive: true });
   const contexts = [...(await nodeContexts()), ...(await rendererContexts()), ...(await pageContexts())];
   const bundledInputs = await runContexts(contexts);
+  // Genex's multiplayer SDK, for template games that turn multiplayer on: built once, even in
+  // watch mode, since node_modules does not change under a running build.
+  const genexSdk = await vendorGenexMultiplayer(root, path.join(dist, "resources", "vendor"));
+  console.log(`vendored Genex multiplayer: ${(genexSdk.bytes / 1024).toFixed(0)} KB`);
+  for (const input of genexSdk.inputs) bundledInputs.add(input);
   await buildTheme();
   await copyResources();
   if (watch) watchPlugins();

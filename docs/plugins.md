@@ -1664,9 +1664,9 @@ its `offer` (`turn-on`, `install`, or none when it is on) and its facts; the ans
 `suggest`, `use` (only plugins already on match) or `write-plugin` (none: the agent may offer to
 write a local Genex plugin, or go on with its own tools on the person's word), and its note says
 that an engine's own plugins are project files, not Genex plugins. With `write-plugin` the note
-names the guide while Genex Tools is on (read `genex__skill {"name":"plugin-author"}`, write the
+names the guide while the Genex plugin is on (read `genex__skill {"name":"plugin-author"}`, write the
 plugin in the project, check it with `plugin_check`, tell the person how to load it) and otherwise
-says the guide comes with Genex Tools, to suggest with `plugins_suggest`. The `plugin-author` skill
+says the guide comes with the Genex plugin, to suggest with `plugins_suggest`. The `plugin-author` skill
 (Studio's own, not vendored: `STUDIO_SKILLS` in `scripts/refresh-genex-skills.ts`) teaches the
 manifest section by section with a complete example plugin for a made-up engine, its backend and
 its skill, written into `genex-plugins/<id>/` in the project. The example's backend starts no
@@ -2033,6 +2033,12 @@ retired or turned into a manifest declaration or host service when a second plug
 
 Genex:
 
+- Its account is the app's (`PluginRegistry.appAccount`, set by `studio-core.ts`; the app's view
+  of it is `main/core/genex-account.ts`, see [Play](play.md)). Turned off, Genex keeps its account,
+  its credential, its backend and the actions in `GENEX_ACCOUNT_ACTIONS` (sign-in, status, sign-out
+  and Publish; `servesAction`); only its tools, MCP servers, skills and toolbar contributions go.
+  It can't be removed. A finished sign-in turns it on unless the person turned it off themselves
+  (the record's `turnedOff`, set only by `setEnabled(false)`).
 - `host-cli` MCP servers run Studio's own bundled Genex CLI (`@genex-ai/cli-demo`, an app
   dependency unpacked from the asar) behind `src/genex-host/preload.mjs`. The manifest validator
   reserves the command for the id `genex`, and the launcher also requires source `bundled`.
@@ -2265,10 +2271,10 @@ opening `[role="dialog"][aria-label="SDK demo"] iframe[sandbox="allow-scripts"]`
 button disappearing on `setEnabled('example', false)` and returning on re-enable through the real
 `plugins.changed` event, never a synthetic push. The Genex publish checks sit in the same block:
 `button[aria-label="Publish game"]` present while Genex is enabled, its click opening Studio's own
-`[role="dialog"][aria-label="Publish to the web"]` with `[data-genex-publish-status]` and no frame, the ticketed
-`publish-draft` approval refused with `unsupported-in-fixture`, Publish staying with
-`setEnabled('genex', false)` as Studio's own button whose dialog offers Turn on Genex plugin, and Genex's
-own button returning with `restore('genex')`.
+`[role="dialog"][data-testid="genex-publish"]` with `[data-genex-publish-status]` and no frame, the ticketed
+`publish-draft` approval refused with `unsupported-in-fixture`, Genex's own Publish staying with
+`setEnabled('genex', false)` and opening the same dialog (Publish is the account's), `remove('genex')`
+refused (Genex holds the app's account), and Genex's Publish still there once it is back on.
 
 Claude Code's permissions ([tool permissions](tool-permissions.md)): `chat-permissions.test.ts`
 drives the host on a lite core (who asks, forged threads and rows, withdrawal, modes, restart),

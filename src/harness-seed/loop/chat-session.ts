@@ -20,7 +20,7 @@ import {
   hasFact,
   kindPending,
   kindUnknown,
-  LoopProfile,
+  type LoopProfile,
   loopProfileOf,
   servedAsWeb,
 } from "./folder-facts.ts";

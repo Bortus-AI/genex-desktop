@@ -136,9 +136,12 @@ export async function embedSdkFiles(dir: string): Promise<string[]> {
   return [...reached].sort();
 }
 
-/** Whether a game's own package.json brings the SDK: either Genex package ships it inside the game. */
+/**
+ * Whether a game brings the embed SDK itself, and so calls `initEmbed()` itself. Multiplayer alone
+ * does not: a template game that maps Studio's multiplayer copy is still connected by Studio.
+ */
 export function bringsOwnSdk(manifest: GenexGameManifest | undefined): boolean {
-  return Object.keys(manifest?.dependencies ?? {}).length > 0;
+  return Object.hasOwn(manifest?.dependencies ?? {}, "@genex-ai/embed-sdk");
 }
 
 /**

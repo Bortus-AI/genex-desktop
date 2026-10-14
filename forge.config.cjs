@@ -120,6 +120,9 @@ module.exports = {
         "Genex reads an app window when an agent looks at it. It clicks and types only after you let the chat's agent use your computer.",
       NSScreenCaptureUsageDescription:
         "Genex sees your screen only after you let the chat's agent use your computer, so it can see the apps it works in.",
+      // Voice chat in a Play game, only while the person turns its mic on in the game's header.
+      NSMicrophoneUsageDescription:
+        "Genex uses your microphone for voice chat in Play games, while you turn the mic on.",
     },
     // The Windows executable's version resource: what Explorer, Task Manager and UAC show.
     win32metadata: {
