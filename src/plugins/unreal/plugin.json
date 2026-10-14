@@ -536,6 +536,7 @@
       "id": "editor",
       "label": "Unreal",
       "ariaLabel": "Unreal Editor",
+      "icon": "unreal",
       "requiresProject": false,
       "target": {
         "kind": "panel",
