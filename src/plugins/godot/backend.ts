@@ -39,7 +39,7 @@ import {
 } from "./godot-run.ts";
 import { findGameProject, GAME_PROJECT_FOLDER, projectScene, requireGameProject } from "./game-project.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
-import { addonState, setUpGame } from "./genex-addon.ts";
+import { addonState, isSetUp, setUpGame } from "./genex-addon.ts";
 import { frameAt, type KeyPress, keysEnd, MAX_PLAY_SECONDS, PLAY_FPS, readKeys, recordingShots } from "./play-input.ts";
 import { MAX_STILLS, stillsAnswer, stillsForAgent, takeStills } from "./stills.ts";
 
@@ -53,6 +53,7 @@ const GodotAction = {
   OpenEditor: "open-editor",
   GetGodot: "get-godot",
   ToolbarStatus: "toolbar-status",
+  StageStatus: "stage-status",
   SetUp: "set-up",
 } as const;
 type GodotAction = (typeof GodotAction)[keyof typeof GodotAction];
@@ -124,6 +125,19 @@ const MESSAGE = {
     Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with`,
     Ready: (version: string) => `Godot ${version}`,
     Open: (version: string) => `Godot ${version} has this game's project open`,
+  },
+  /** Live's card (`stage-status`): one line, a quieter hint and one step, as `shared/plugin-stage-card.ts` reads them. */
+  Stage: {
+    Get: "Plays in Godot 4, which isn't on this Mac yet.",
+    GetButton: "Get Godot",
+    Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with.`,
+    NoProject: "No Godot project in this game's folder yet.",
+    NotSetUp: "Plays in Godot. Set it up so Genex's playtesters and judges can play it too.",
+    SetUpButton: "Set up for Genex",
+    Open: (version: string) => `Open in Godot ${version}.`,
+    OpenHint: "Your Godot reloads the files Genex changes.",
+    Ready: (version: string) => `Plays in Godot ${version}.`,
+    OpenButton: "Open in Godot",
   },
 } as const;
 
@@ -424,6 +438,33 @@ async function toolbarStatus(deps: GodotBackendDeps, context: PluginContext) {
   return open ? { tone: "ok", title: MESSAGE.Toolbar.Open(version) } : { title: MESSAGE.Toolbar.Ready(version) };
 }
 
+/**
+ * Live's card for this game: where it stands in Godot, and its one step (get Godot, set the project
+ * up for Genex's play, or open it in the person's Godot).
+ */
+async function stageStatus(deps: GodotBackendDeps, context: PluginContext) {
+  const installs = await findGodots(deps.env);
+  const install = usableGodot(installs);
+  const older = installs[0];
+  if (!install && older) return { line: MESSAGE.Stage.Old(versionName(older.version)), button: getButton() };
+  if (!install) return { line: MESSAGE.Stage.Get, button: getButton() };
+  const game = gameFolderOf(context);
+  const project = game ? await findGameProject(game) : null;
+  if (!game || !project) return { line: MESSAGE.Stage.NoProject };
+  if (!isSetUp(await addonState(game, project, deps.addon)))
+    return { line: MESSAGE.Stage.NotSetUp, button: { label: MESSAGE.Stage.SetUpButton, action: GodotAction.SetUp } };
+  const version = versionName(install.version);
+  if (await editorOpen(deps.editor, project))
+    return { line: MESSAGE.Stage.Open(version), hint: MESSAGE.Stage.OpenHint };
+  return {
+    line: MESSAGE.Stage.Ready(version),
+    button: { label: MESSAGE.Stage.OpenButton, action: GodotAction.OpenEditor },
+  };
+}
+
+/** The card's Get Godot: the plugin's own panel, where the download and the choice of an install are. */
+const getButton = () => ({ label: MESSAGE.Stage.GetButton, panel: true });
+
 /** The panel's Create: the open game's project, or a new Genex game for it when none is open. */
 async function create(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const install = await requireGodot(deps);
@@ -456,6 +497,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
       return { opened: true };
     },
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
+    [GodotAction.StageStatus]: (_args, context) => stageStatus(deps, context),
     [GodotAction.SetUp]: (_args, context) => setUp(deps, context),
   };
   const tools: Record<GodotTool, Handler> = {

@@ -16,6 +16,7 @@ import { GodotJob } from "../../src/plugins/godot/godot-run.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { ObserverLive } from "../../src/shared/observers.ts";
+import { stageCardFrom } from "../../src/shared/plugin-stage-card.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { capturing, godotBackendFixture, playArg, godotOutput, SCRIPTS } from "../helpers/godot-fake-engine.ts";
 
@@ -33,9 +34,11 @@ async function withProject(options: Parameters<typeof godotBackendFixture>[0] = 
   return { ...fixture, project: path.join(fixture.gameDir, "godot") };
 }
 
+/** The Godot manifest as Genex reads it. */
+const MANIFEST = validateManifest(JSON.parse(readFileSync("src/plugins/godot/plugin.json", "utf8")) as PluginManifest);
+
 describe("the Godot manifest", () => {
-  const raw = JSON.parse(readFileSync("src/plugins/godot/plugin.json", "utf8")) as PluginManifest;
-  const manifest = validateManifest(raw);
+  const manifest = MANIFEST;
 
   it("is valid and declares exactly the backend's tools", () => {
     assert.deepEqual(manifest.tools.map((t) => t.name).sort(), Object.values(GodotTool).sort());
@@ -43,7 +46,7 @@ describe("the Godot manifest", () => {
     assert.deepEqual(manifest.tools.find((t) => t.name === GodotTool.NewGame)?.makes, ["godot-project"]);
   });
 
-  it("runs only quiet harness tools at its moments and as its observer, which Live shows as stills", () => {
+  it("runs only quiet harness tools at its moments and as its observer, which Live shows as its card", () => {
     const harness = new Set(manifest.tools.filter((t) => t.audience === "harness").map((t) => t.name));
     for (const hook of manifest.hooks ?? []) assert.ok(harness.has(hook.tool), hook.tool);
     assert.deepEqual(
@@ -54,8 +57,8 @@ describe("the Godot manifest", () => {
       ],
     );
     assert.deepEqual(
-      (manifest.observers ?? []).map((o) => [o.id, o.tool, o.live]),
-      [["viewport", GodotTool.HeroShots, ObserverLive.Stills]],
+      (manifest.observers ?? []).map((o) => [o.id, o.tool, o.live, o.status]),
+      [["viewport", GodotTool.HeroShots, ObserverLive.Card, "stage-status"]],
     );
   });
 
@@ -299,6 +302,34 @@ describe("the panel and the toolbar", () => {
     assert.equal(status.project, "godot");
     assert.equal(status.editorOpen, true);
     assert.equal((status.godot as { version: string }).version, "4.6.1");
+  });
+
+  it("tells Live's card where the game stands in Godot, with the one step it needs", async () => {
+    const actions = new Set(MANIFEST.actions.map((a) => a.name));
+    const card = async (fixture: Awaited<ReturnType<typeof godotBackendFixture>>) =>
+      stageCardFrom(await action(fixture, "stage-status"), actions);
+    assert.deepEqual(await card(await godotBackendFixture({ apps: [] })), {
+      line: "Plays in Godot 4, which isn't on this Mac yet.",
+      button: { label: "Get Godot", panel: true },
+    });
+    assert.deepEqual(await card(await godotBackendFixture()), { line: "No Godot project in this game's folder yet." });
+    const fixture = await withProject();
+    assert.deepEqual(await card(fixture), {
+      line: "Plays in Godot 4.6.1.",
+      button: { label: "Open in Godot", action: "open-editor" },
+    });
+    fixture.editor.lines.push(`/Applications/Godot.app/Contents/MacOS/Godot --path ${fixture.project} --editor`);
+    assert.deepEqual(await card(fixture), {
+      line: "Open in Godot 4.6.1.",
+      hint: "Your Godot reloads the files Genex changes.",
+    });
+    const existing = await godotBackendFixture();
+    await mkdir(path.join(existing.gameDir, "client"), { recursive: true });
+    await writeFile(path.join(existing.gameDir, "client", "project.godot"), "config_version=5\n");
+    assert.deepEqual(await card(existing), {
+      line: "Plays in Godot. Set it up so Genex's playtesters and judges can play it too.",
+      button: { label: "Set up for Genex", action: "set-up" },
+    });
   });
 
   it("opens the game's project in a new Godot editor, and Godot's download page", async () => {

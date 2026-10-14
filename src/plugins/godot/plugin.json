@@ -185,6 +185,10 @@
       "label": "Godot status"
     },
     {
+      "name": "stage-status",
+      "label": "Godot on the Live stage"
+    },
+    {
       "name": "set-up",
       "label": "Set up for Genex",
       "confirmation": "Set this Godot game up for Genex's play?",
@@ -221,7 +225,8 @@
       "id": "viewport",
       "facts": ["godot-project"],
       "tool": "hero-shots",
-      "live": "stills"
+      "live": "card",
+      "status": "stage-status"
     }
   ],
   "scaffolds": [

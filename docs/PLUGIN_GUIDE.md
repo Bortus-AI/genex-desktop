@@ -238,7 +238,10 @@ makes) keep finding facts your `detect` skips, even while your plugin is off. Se
 An observer is what Genex can capture of a project of your kind, for the reviewer who checks a
 Loop's finish: `"observers": [{ "id": "viewport", "facts": ["toy-project"], "tool": "capture" }]`
 names one of your harness tools that asks nothing and answers pictures. Add `"live": "stills"` to
-have Live show its latest pictures for such a project (`unreal-card` is the bundled Unreal
+have Live show its latest pictures for such a project, or `"live": "card", "status": "<action>"`
+for a card like Unreal's: the latest picture, the game's name, and what your action (one that asks
+nothing) answers, `{ line, hint?, button?: { label, action } | { label, panel: true } }`, one line
+each, the button one of your declared actions or your panel (`unreal-card` is the bundled Unreal
 plugin's own view; `preview` and `proof` are Genex's ids). Add `"label": "Board"` to name that
 view's tab when a folder has more than one view (1–24 characters, not a name the stage strip
 already shows); without it the tab takes your plugin's name. Your observer captures only while your

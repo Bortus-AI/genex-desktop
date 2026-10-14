@@ -64,18 +64,22 @@ const NO_GAME: LiveView = { live: ObserverLive.Preview, at: ROOT, observer: PREV
 /** A folder no observer draws. */
 const STILLS: LiveView = { live: ObserverLive.Stills, at: ROOT, observer: null };
 
-/** In one folder, which view comes first: the Unreal card, Genex's preview, then a plugin's pictures. */
+/** In one folder, which view comes first: an engine's card (Unreal's, a plugin's), Genex's preview, then a plugin's pictures. */
 const VIEW_RANK: Record<ObserverLive, number> = {
   [ObserverLive.UnrealCard]: 0,
+  [ObserverLive.Card]: 0,
   [ObserverLive.Preview]: 1,
   [ObserverLive.Stills]: 2,
 };
 
+/** The views a plugin draws from its own observer: they show only while the plugin is on, one per observer. */
+const PLUGIN_DRAWN: ReadonlySet<ObserverLive> = new Set([ObserverLive.Stills, ObserverLive.Card]);
+
 /** The game's root before any other folder. */
 const rootFirst = (a: string, b: string): number => Number(b === ROOT) - Number(a === ROOT);
 
-/** Whether an observer's view counts: a plugin's pictures only while the plugin is on. */
-const counts = (ref: ObserverRef): boolean => ref.live !== null && (ref.on || ref.live !== ObserverLive.Stills);
+/** Whether an observer's view counts: a plugin's pictures or card only while the plugin is on. */
+const counts = (ref: ObserverRef): boolean => ref.live !== null && (ref.on || !PLUGIN_DRAWN.has(ref.live));
 
 /** Genex's own Unreal card at each folder holding an Unreal project, so the card never waits on the plugin. */
 function unrealCards(facts: readonly FactRef[]): ObserverRef[] {
@@ -97,9 +101,9 @@ const linkedUnreal = (facts: readonly LiveFact[]): string[] =>
     .filter((fact) => fact.id === CoreFact.UnrealProject && fact.source === FactSource.Link)
     .map((fact) => fact.path);
 
-/** Which views are one: of Genex's own, one per kind; a plugin's pictures, one per observer. */
+/** Which views are one: of Genex's own, one per kind; a plugin's pictures or card, one per observer. */
 const viewIdentity = (ref: ObserverRef): string =>
-  ref.live === ObserverLive.Stills ? `${ref.live}:${ref.key}` : String(ref.live);
+  ref.live !== null && PLUGIN_DRAWN.has(ref.live) ? `${ref.live}:${ref.key}` : String(ref.live);
 
 /**
  * Live's views of a game, the default first (see the module's header): the first-ranked observer of
@@ -157,7 +161,8 @@ const EARLIER_RUNS_MAX = 8;
 /** Whether a run's graph has the pictures a Live view shows: the Unreal card's shot, or a capture's pictures. */
 export function hasLivePictures(graph: RunGraph | null, view: LiveView): boolean {
   if (!graph) return false;
-  if (view.live === ObserverLive.UnrealCard) return view.observer !== null && latestShot(graph, view.observer) !== null;
+  const card = view.live === ObserverLive.UnrealCard || view.live === ObserverLive.Card;
+  if (card) return view.observer !== null && latestShot(graph, view.observer) !== null;
   return latestCaptures(graph, view.observer ?? undefined).length > 0;
 }
 

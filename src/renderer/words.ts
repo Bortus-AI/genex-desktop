@@ -1485,6 +1485,14 @@ export const STILLS_WORDS = {
   picture: (label: string, name: string) => (name ? `${label}: ${name}` : label),
 } as const;
 
+/** A plugin's Live card (`panels/stage/PluginCardStage.tsx`): the words Studio draws around what the plugin says. */
+export const PLUGIN_CARD_WORDS = {
+  /** The shot's alt text: the game's name in play. */
+  playShot: (game: string) => `${game} in play`,
+  /** The line while the plugin is off or has not answered, under the game's name. */
+  waiting: (plugin: string) => `Plays in ${plugin}.`,
+} as const;
+
 // ── an agent at its screen ────────────────────────────────────────────────────────────────
 
 /** What an agent is doing at its screen, as its node says it while it happens. */

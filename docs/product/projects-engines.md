@@ -40,15 +40,15 @@ build, test headless and package it.
 ## Godot
 
 It ships off and needs Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D or
-3D, in `godot/`) and opens your Godot editor, which agents never drive: they check, run and shoot
-the game in Genex's sandbox; Loops keep `genex_shot` cameras' stills.
+3D, in `godot/`) and opens your editor, which agents never drive: they check, run and shoot the
+game in Genex's sandbox.
 
 ## Live's views
 
-Live shows the web preview, the Unreal card (setup step, latest shot, **Open in Unreal**), Godot's
-stills or a run's pictures; only the preview has web controls. A web game plus Unreal
-project gets **Web game** and **Unreal** tabs, the last chosen remembered per game; a web build
-shown from the chat brings Web game forward.
+Live shows the web preview, an engine's card (latest shot, its one step: **Open in Unreal**, **Set
+up for Genex**, **Open in Godot**) or a run's pictures; only the preview has web controls. A web game
+plus an engine project gets a tab each, the last chosen remembered per game; a web build shown from
+the chat brings Web game forward.
 
 ## Where to work
 

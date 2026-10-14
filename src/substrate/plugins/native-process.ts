@@ -282,7 +282,10 @@ const aliases = async (values: string[]) => [
 ];
 
 /** What a confined process may reach: its program, the folders it reads and writes, and the GPU. */
-type SandboxRequest = Pick<NativeProcessRequest, "binary" | "binaryRoot" | "scratch" | "reads" | "writes" | "denyRead" | "gpu">;
+type SandboxRequest = Pick<
+  NativeProcessRequest,
+  "binary" | "binaryRoot" | "scratch" | "reads" | "writes" | "denyRead" | "gpu"
+>;
 
 /** Write the job's sandbox profile and make its private HOME; returns both paths. */
 async function prepareSandbox(p: SandboxRequest): Promise<{ profile: string; home: string }> {
