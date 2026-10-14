@@ -48,6 +48,8 @@ const WHERE_IT_RUNS: Record<TargetRuntime, (view: { width: number; height: numbe
     `running live in its own hidden ${view.width}×${view.height} window (Chromium, the same one the judges use)`,
   [TargetRuntime.Bridge]: (view) =>
     `running as its own game process, seen through a ${view.width}×${view.height} view of what it draws`,
+  [TargetRuntime.Editor]: (view) =>
+    `running in its engine's editor (a play session in the editor), seen through a ${view.width}×${view.height} view of what the player sees; keys are held on the game's own time`,
   [TargetRuntime.Desktop]: (view) =>
     `its real screen, seen as a ${view.width}×${view.height} picture (input outside the allowed apps is refused, and the person can stop you at any moment)`,
   [TargetRuntime.Vm]: (view) => `a virtual machine's screen, seen as a ${view.width}×${view.height} picture`,

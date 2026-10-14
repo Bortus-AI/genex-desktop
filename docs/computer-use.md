@@ -122,6 +122,25 @@ the `ProcessSandbox`. The playtest shorthands are not offered there; its moves a
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
 conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
+
+A game played in its engine's editor is the `editor` runtime
+([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): the target calls its engine
+plugin's play tools ([`shared/engine-play.ts`](../src/shared/engine-play.ts): `play-open`,
+`play-input`, `play-shot`, `play-state`, `play-close`, harness-only, each needing the plugin's
+editor lock for its call, the person first). Unreal provides them
+([`plugins/unreal/computer-play.ts`](../src/plugins/unreal/computer-play.ts)): Play In Editor through
+the Genex editor helper the editor queue already uses, with the background throttle off, keys held
+on the game's own clock (web key codes, named as Unreal names them: `KeyW` is `W`), the player's
+view by `capture_play`, and `player_state` as the state goals are checked against. A session joins
+a play that already runs and ends only one it started; while the editor queue still has a part or a
+play-check of the game, it is refused (`busy`). Capabilities (`EDITOR_CAPABILITIES`): no pointer, no
+clock the studio can stop (a `wait` is wall time, `hold_key` game time), game state, input route
+`editor`. Who holds it: the chat's own session on a game an engine plugin that is on holds the link
+of and provides every play tool ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts));
+nothing starts until the agent first uses it, and the turn's end ends the play it started. Not yet:
+the Unreal Loop's workers, playtests and judges, `judge_play` on an Unreal game, a pointer, and a
+pause and step for a replayable clock.
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),

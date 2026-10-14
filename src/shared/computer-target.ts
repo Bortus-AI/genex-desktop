@@ -8,19 +8,24 @@
  */
 
 /**
- * What the computer drives and how the studio reaches it: a game in its own browser window or as a
- * process speaking the Play Protocol, or — from outside any game — the person's desktop or a
- * virtual machine, through the desktop driver (cua-driver).
+ * What the computer drives and how the studio reaches it: a game in its own browser window, as a
+ * process speaking the Play Protocol, or in its engine's editor through its engine plugin's play
+ * tools (`shared/engine-play.ts`), or — from outside any game — the person's desktop or a virtual
+ * machine, through the desktop driver (cua-driver).
  */
 export const TargetRuntime = {
   Browser: "browser",
   Bridge: "bridge",
+  Editor: "editor",
   Desktop: "desktop",
   Vm: "vm",
 } as const;
 export type TargetRuntime = (typeof TargetRuntime)[keyof typeof TargetRuntime];
 
-/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+/**
+ * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
+ * grants, nor the editor, which the game's engine link decides.
+ */
 export type GameRuntime = typeof TargetRuntime.Browser | typeof TargetRuntime.Bridge;
 
 /** The runtimes a game may declare. */
@@ -75,6 +80,8 @@ export const InputRoute = {
   OsForeground: "os-foreground",
   /** Events dispatched into a web page through its browser's DevTools protocol (a separate, clean browser). */
   Page: "page",
+  /** Input the game's engine carried into its play session in the editor (Unreal's forced input), on game time. */
+  Editor: "editor",
 } as const;
 export type InputRoute = (typeof InputRoute)[keyof typeof InputRoute];
 
@@ -147,6 +154,25 @@ export const DESKTOP_CAPABILITIES: TargetCapabilities = {
   surfaces: false,
   actions: false,
   dom: true,
+};
+
+/**
+ * A game played in its engine's editor: the player's view, keys held on the game's own clock (which
+ * the studio cannot stop), and the player's state. No pointer, seed, cameras or console yet.
+ */
+export const EDITOR_CAPABILITIES: TargetCapabilities = {
+  runtime: TargetRuntime.Editor,
+  pointer: PointerLevel.None,
+  clock: ClockLevel.None,
+  state: StateLevel.Game,
+  seed: false,
+  reload: false,
+  cameras: false,
+  console: false,
+  zoom: false,
+  surfaces: false,
+  actions: false,
+  dom: false,
 };
 
 /** A VM's screen: the desktop's abilities, reached inside the machine. */

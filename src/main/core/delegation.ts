@@ -6,6 +6,7 @@
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { DesktopTools } from "./desktop-tools.ts";
 import { desktopSessionTools } from "./desktop-session.ts";
+import { editorPlayTools } from "./editor-play-session.ts";
 import { type JudgePlayCaller, judgePlayFor, runJudgePlay, studioJudgeHost } from "./judge-play-tool.ts";
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
@@ -2302,7 +2303,10 @@ export class DelegationService {
     if (session.hostTools && isChatsOwnSession(p)) await this.#offerChatScreens(p, target, grants, session, tools);
   }
 
-  /** The chat's own session's screen tools: the person's computer, behind consent, and a judge that plays. */
+  /**
+   * The chat's own session's screen tools: the person's computer, behind consent, a judge that plays,
+   * and on a game played in its engine's editor (an Unreal game) the computer on that editor's play.
+   */
   async #offerChatScreens(
     p: DelegateParams,
     target: DelegationTarget,
@@ -2311,6 +2315,15 @@ export class DelegationService {
     tools: SessionTools,
   ): Promise<void> {
     tools.desktop = await this.#desktopTools(p, target, session);
+    if (!tools.builder && p.computer !== false) {
+      const place = {
+        project: p.project,
+        directory: target.cwd,
+        threadId: session.threadId,
+        engineId: target.engineId,
+      };
+      tools.builder = await editorPlayTools(this.#core, this.#x, { ...place, signal: session.abort.signal });
+    }
     this.#offerJudge(p, target, grants, session, tools);
   }
 

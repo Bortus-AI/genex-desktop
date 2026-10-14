@@ -69,6 +69,9 @@ export const PartRunState = {
 } as const;
 export type PartRunState = (typeof PartRunState)[keyof typeof PartRunState];
 
+/** The states a run ends in. */
+const FINISHED: ReadonlySet<PartRunState> = new Set([PartRunState.Done, PartRunState.Failed]);
+
 /** What a waiting run waits for: Unreal to answer, or the person to stop working in the editor. */
 export const WaitingFor = { Editor: "editor", Owner: "owner" } as const;
 export type WaitingFor = (typeof WaitingFor)[keyof typeof WaitingFor];
@@ -393,7 +396,8 @@ async function waitForOwner(deps: QueueDeps, run: PartRun, port: EditorPort, lim
   throw new WaitFailedError(PartRunFailure.OwnerBusy, MESSAGE.OwnerBusy);
 }
 
-async function shoot(deps: QueueDeps, port: EditorPort, name: string): Promise<Shot> {
+/** A play shot of what the player sees: the helper queues it, the file is waited for and read. */
+export async function shoot(deps: QueueDeps, port: EditorPort, name: string): Promise<Shot> {
   const answer = record(await port.call(LoopTool.CapturePlay, { name, width: SHOT_WIDTH, height: SHOT_HEIGHT }));
   const file = String(answer.file ?? "");
   if (!file || !(await pollUntil(deps, () => deps.fileReady(file), FILE_POLL_MS, SHOT_WAIT_MS)))
@@ -402,7 +406,7 @@ async function shoot(deps: QueueDeps, port: EditorPort, name: string): Promise<S
 }
 
 /** The play world's clock in game seconds, or null from a helper that keeps none (older than 0.5). */
-async function gameClock(port: EditorPort): Promise<{ gameSeconds: number | null; fps: number | null }> {
+export async function gameClock(port: EditorPort): Promise<{ gameSeconds: number | null; fps: number | null }> {
   const state = record(await port.call(LoopTool.PlayState, {}));
   return { gameSeconds: numberOr(state.gameSeconds), fps: numberOr(state.fps) };
 }
@@ -414,7 +418,7 @@ const wallCapMs = (seconds: number) => WALL_CAP_FACTOR * seconds * SECOND_MS + W
  * Lets the game play on for `seconds` of its own time, at most {@link wallCapMs} on the queue's
  * clock; an editor whose helper keeps no game clock is given `seconds` on the queue's clock.
  */
-async function playFor(deps: QueueDeps, port: EditorPort, seconds: number): Promise<void> {
+export async function playFor(deps: QueueDeps, port: EditorPort, seconds: number): Promise<void> {
   const start = (await gameClock(port)).gameSeconds;
   if (start === null) return deps.sleep(seconds * SECOND_MS);
   const reached = async () => ((await gameClock(port)).gameSeconds ?? Number.POSITIVE_INFINITY) >= start + seconds;
@@ -422,7 +426,7 @@ async function playFor(deps: QueueDeps, port: EditorPort, seconds: number): Prom
 }
 
 /** Calls one of the helper's play steps, which answers at once; throws its refusal (`{error}`). */
-async function startStep(port: EditorPort, tool: LoopTool, args: Record<string, unknown>) {
+export async function startStep(port: EditorPort, tool: LoopTool, args: Record<string, unknown>) {
   const answer = record(await port.call(tool, args));
   if (answer.error !== undefined) throw new Error(MESSAGE.StepRefused(tool, String(answer.error)));
   return answer;
@@ -533,7 +537,8 @@ async function playStep(context: PartPlay, step: PartStep): Promise<void> {
 }
 
 /** Whether the editor is in a play session. */
-const playing = async (port: EditorPort) => record(await port.call(LoopTool.PlayState, {})).pie === true;
+/** Whether a play session runs in the editor now. */
+export const playing = async (port: EditorPort) => record(await port.call(LoopTool.PlayState, {})).pie === true;
 
 /** A probe's answer, or `{error}` when it couldn't run: a probe never fails its run. */
 const askProbe = (port: EditorPort, tool: LoopTool, args: Record<string, unknown>) =>
@@ -565,7 +570,7 @@ async function probe(port: EditorPort): Promise<PartProbes> {
 }
 
 /** Starts play in the editor and waits until it runs. */
-async function startPlay(deps: QueueDeps, port: EditorPort) {
+export async function startPlay(deps: QueueDeps, port: EditorPort) {
   await port.call(LoopTool.StartPlay, { options: PIE_OPTIONS });
   if (!(await pollUntil(deps, () => playing(port), FILE_POLL_MS, PLAY_WAIT_MS)))
     throw new Error(MESSAGE.PlayDidNotStart);
@@ -603,7 +608,7 @@ async function playTheGame(deps: QueueDeps, port: EditorPort, job: PlayCheckJob)
 }
 
 /** Gives a setting back; never throws. */
-type GiveBack = () => Promise<void>;
+export type GiveBack = () => Promise<void>;
 const NOTHING_OWED: GiveBack = async () => {};
 
 /**
@@ -612,7 +617,7 @@ const NOTHING_OWED: GiveBack = async () => {};
  * the setting back. A setting that can't be read is left alone and the test runs anyway; one that is
  * already off (the user's choice, or the bridge's own play session) is left as it is.
  */
-async function liftThrottle(port: EditorPort): Promise<GiveBack> {
+export async function liftThrottle(port: EditorPort): Promise<GiveBack> {
   const read = await port.call(LoopTool.GetProperties, readThrottleArgs()).catch(() => undefined);
   if (throttleIn(read) !== true) return NOTHING_OWED;
   await port.call(LoopTool.SetProperties, writeThrottleArgs(false)).catch(() => undefined);
@@ -623,7 +628,7 @@ async function liftThrottle(port: EditorPort): Promise<GiveBack> {
 }
 
 /** Stops a play session the queue started, and waits for it to end; never throws. */
-async function stopPlay(deps: QueueDeps, port: EditorPort) {
+export async function stopPlay(deps: QueueDeps, port: EditorPort) {
   try {
     await port.call(LoopTool.StopPlay, {});
     await pollUntil(deps, async () => !(await playing(port)), FILE_POLL_MS, PLAY_WAIT_MS);
@@ -860,7 +865,11 @@ export function createEditorQueue(deps: QueueDeps) {
   const playing = (game: string): boolean =>
     [...runs.values()].some((run) => run.game === game && run.state === PartRunState.Playing);
 
-  return { enqueue, enqueuePlayCheck, playing, status: (id: string): PartRun | undefined => runs.get(id) };
+  /** Whether a run of `game`'s is still to finish (queued, waiting, applying or playing): the editor is the queue's. */
+  const busy = (game: string): boolean =>
+    [...runs.values()].some((run) => run.game === game && !FINISHED.has(run.state));
+
+  return { enqueue, enqueuePlayCheck, playing, busy, status: (id: string): PartRun | undefined => runs.get(id) };
 }
 
 /** The queue a backend keeps. */

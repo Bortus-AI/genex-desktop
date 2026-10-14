@@ -564,6 +564,9 @@ const ACTION_NEEDS_CAPABILITY: Partial<Record<ComputerAction, (caps: TargetCapab
   zoom: (caps) => caps.zoom,
   camera: (caps) => caps.cameras,
   look: (caps) => caps.pointer !== PointerLevel.None,
+  // A wheel turns and a cursor sits somewhere in a view: a target with no pointer has neither.
+  scroll: (caps) => caps.pointer !== PointerLevel.None,
+  cursor_position: (caps) => caps.pointer !== PointerLevel.None,
   act: (caps) => caps.actions,
   state: (caps) => hasState(caps),
   console: (caps) => caps.console,

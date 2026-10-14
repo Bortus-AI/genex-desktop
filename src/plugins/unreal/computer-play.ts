@@ -1,0 +1,198 @@
+/**
+ * The studio's `computer` tool playing an Unreal game (`shared/engine-play.ts`): a play session in
+ * the game's own editor (Play In Editor), driven through the Genex editor helper the editor queue
+ * already uses — keys held on the game's own clock, a shot of what the player sees, the player's
+ * state. Each tool takes the editor lock for its call (`needs: ["editor"]`), the person first.
+ *
+ * A session joins a play that is already running rather than restarting it, and ends only a play
+ * it started itself. While the editor queue still has a part or a play-check of the game to run,
+ * the editor is the queue's: a session is refused (`busy`) rather than playing over it.
+ */
+import {
+  ENGINE_PLAY_VIEW,
+  type EnginePlayInputAnswer,
+  type EnginePlayOpened,
+  EnginePlayRefusal,
+  type EnginePlayRefused,
+  type EnginePlayShot,
+  EnginePlayTool,
+  MAX_PLAY_INPUT_SECONDS,
+  playInputKeys,
+} from "../../shared/engine-play.ts";
+import type { PluginContext } from "../../plugin-sdk/index.d.ts";
+import {
+  type EditorQueue,
+  gameClock,
+  type GiveBack,
+  LoopTool,
+  liftThrottle,
+  playFor,
+  playing,
+  type QueueDeps,
+  shoot,
+  startPlay,
+  startStep,
+  stopPlay,
+} from "./editor-queue.ts";
+
+/** The shortest hold the helper takes, in game seconds: about a tap. */
+const MIN_HOLD_SECONDS = 0.05;
+/** A play shot's name: the helper takes 1 to 64 letters, digits, `_` or `-`. */
+const SHOT_PREFIX = "genex-computer";
+
+/** Web key codes (`KeyboardEvent.code`) by Unreal's key names: letters and digits are by rule, below. */
+const UNREAL_KEYS: Readonly<Record<string, string>> = {
+  Space: "SpaceBar",
+  Enter: "Enter",
+  NumpadEnter: "Enter",
+  Escape: "Escape",
+  Tab: "Tab",
+  Backspace: "BackSpace",
+  Delete: "Delete",
+  Insert: "Insert",
+  Home: "Home",
+  End: "End",
+  PageUp: "PageUp",
+  PageDown: "PageDown",
+  ArrowUp: "Up",
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  ShiftLeft: "LeftShift",
+  ShiftRight: "RightShift",
+  ControlLeft: "LeftControl",
+  ControlRight: "RightControl",
+  AltLeft: "LeftAlt",
+  AltRight: "RightAlt",
+  MetaLeft: "LeftCommand",
+  MetaRight: "RightCommand",
+  Minus: "Hyphen",
+  Equal: "Equals",
+  Comma: "Comma",
+  Period: "Period",
+  Slash: "Slash",
+  Semicolon: "Semicolon",
+  Quote: "Apostrophe",
+  BracketLeft: "LeftBracket",
+  BracketRight: "RightBracket",
+  Backslash: "Backslash",
+  Backquote: "Tilde",
+};
+/** Unreal's names for the digit keys, `Digit0` to `Digit9`. */
+const DIGITS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"] as const;
+/** The function keys Unreal names, `F1` to `F12`. */
+const FUNCTION_KEY = /^F(?:[1-9]|1[0-2])$/;
+
+const MESSAGE = {
+  busy: "Unreal is playing a build for the Loop right now; try again once it has finished.",
+  noEditor: "This game's Unreal Editor is not open or does not answer; open it (the Unreal button) and try again.",
+  notPlaying: "No play is running in Unreal (it ended, or the person stopped it); look again to start one.",
+  unknownKey: (keys: string[]) => `Unreal has no key for ${keys.join(", ")}.`,
+} as const;
+
+/** Unreal's name for a web key code, or null when Unreal has none. */
+export function unrealKey(code: string): string | null {
+  const letter = /^Key([A-Z])$/.exec(code);
+  if (letter) return letter[1] ?? null;
+  const digit = /^Digit([0-9])$/.exec(code);
+  if (digit) return DIGITS[Number(digit[1])] ?? null;
+  if (FUNCTION_KEY.test(code)) return code;
+  return UNREAL_KEYS[code] ?? null;
+}
+
+const refused = (code: EnginePlayRefusal, message: string): EnginePlayRefused => ({ refused: code, message });
+
+/** The game's folder name the call is for, as the queue names a game. */
+type GameOf = (context: PluginContext) => string;
+
+/** What a session owes when it ends: the throttle back, and whether to stop the play it started. */
+interface PlaySession {
+  giveBack: GiveBack;
+  started: boolean;
+}
+
+/** The play tools over the queue's own editor port and clock. */
+export function createComputerPlay(deps: {
+  queueDeps(storage: string): QueueDeps;
+  queue(storage: string): EditorQueue;
+  game: GameOf;
+}) {
+  const sessions = new Map<string, PlaySession>();
+  let shots = 0;
+  const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
+  const portOf = (storage: string, context: PluginContext) => {
+    const game = deps.game(context);
+    const queueDeps = deps.queueDeps(storage);
+    return { game, queueDeps, port: queueDeps.editor(game) };
+  };
+
+  const open = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { game, queueDeps, port } = portOf(storage, context);
+    if (deps.queue(storage).busy(game)) return refused(EnginePlayRefusal.Busy, MESSAGE.busy);
+    if (!(await port.answering())) return refused(EnginePlayRefusal.NoEditor, MESSAGE.noEditor);
+    const key = keyOf(storage, game);
+    const joined = await playing(port);
+    // A session that is already open keeps what it owes; only a new one lifts the throttle.
+    const known = sessions.get(key);
+    const giveBack = known?.giveBack ?? (await liftThrottle(port));
+    if (!joined) await startPlay(queueDeps, port);
+    sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined });
+    const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
+    return opened;
+  };
+
+  const input = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { queueDeps, port } = portOf(storage, context);
+    const codes = playInputKeys(args.keys);
+    const names = codes.map((code) => ({ code, name: unrealKey(code) }));
+    const unknown = names.filter((key) => key.name === null).map((key) => key.code);
+    if (unknown.length) return refused(EnginePlayRefusal.UnknownKey, MESSAGE.unknownKey(unknown));
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    const asked = typeof args.seconds === "number" ? args.seconds : MIN_HOLD_SECONDS;
+    const seconds = Math.min(MAX_PLAY_INPUT_SECONDS, Math.max(MIN_HOLD_SECONDS, asked));
+    const held = names.flatMap((key) => (key.name ? [key.name] : []));
+    for (const name of held) await startStep(port, LoopTool.Hold, { name, x: 1, y: 0, seconds });
+    await playFor(queueDeps, port, seconds);
+    const answer: EnginePlayInputAnswer = { held, gameSeconds: (await gameClock(port)).gameSeconds };
+    return answer;
+  };
+
+  const shot = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { queueDeps, port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    shots += 1;
+    const taken = await shoot(queueDeps, port, `${SHOT_PREFIX}-${shots}`);
+    const answer: EnginePlayShot = { png: taken.data, ...ENGINE_PLAY_VIEW };
+    return answer;
+  };
+
+  const state = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    return port.call(LoopTool.PlayerState, {});
+  };
+
+  const close = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { game, queueDeps, port } = portOf(storage, context);
+    const key = keyOf(storage, game);
+    const session = sessions.get(key);
+    sessions.delete(key);
+    if (!session) return { closed: false };
+    // A play the person or the queue started goes on; one this session started ends with it.
+    if (session.started) await stopPlay(queueDeps, port);
+    await session.giveBack();
+    return { closed: true };
+  };
+
+  const handlers = {
+    [EnginePlayTool.Open]: open,
+    [EnginePlayTool.Input]: input,
+    [EnginePlayTool.Shot]: shot,
+    [EnginePlayTool.State]: state,
+    [EnginePlayTool.Close]: close,
+  } as const satisfies Record<
+    EnginePlayTool,
+    (args: Record<string, unknown>, context: PluginContext, storage: string) => Promise<unknown>
+  >;
+  return { handlers };
+}

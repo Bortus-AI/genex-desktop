@@ -1191,7 +1191,7 @@ export interface CompleteResponse {
 }
 // ↑ src/shared/engine-requests.ts
 
-export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page';
+export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page' | 'editor';
 // ↑ src/shared/computer-target.ts
 
 /** What a finished computer session's trace adds up to, as a delegation's result carries it. */
@@ -1367,7 +1367,10 @@ export type ProjectKind =
   | "own-script";
 // ↑ src/shared/game-project.ts
 
-/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+/**
+ * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
+ * grants, nor the editor, which the game's engine link decides.
+ */
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts
 

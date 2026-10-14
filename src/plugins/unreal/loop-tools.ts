@@ -82,8 +82,11 @@ import {
   LoopTool,
   type PartCode,
   pollUntil,
+  type QueueDeps,
 } from "./editor-queue.ts";
 import { OBJECT_TOOLSET } from "./editor-throttle.ts";
+import { createComputerPlay } from "./computer-play.ts";
+import type { EnginePlayTool } from "../../shared/engine-play.ts";
 import { GAME_PROJECT_FOLDER } from "./game-folder.ts";
 import { copyStamp, PART_NAME, readOtherParts, readPartCpp, readPartFiles } from "./part-files.ts";
 import {
@@ -602,26 +605,31 @@ async function compileProblems(
 }
 
 /** The one editor queue the Loop's tools share, made on first use for the plugin's storage. */
+/** What the editor queue and the computer's play tools reach the game's editor and the clock through. */
+function queueDepsFor(deps: LoopToolsDeps, storage: string): QueueDeps {
+  const { watchCrash } = deps;
+  return {
+    editor: (game): EditorPort => ({
+      answering: () => deps.editorAnswers(storage, game),
+      call: (tool, args, timeoutMs) => deps.editorCall(storage, game, tool, args, timeoutMs),
+      ...(watchCrash ? { watchCrash: () => watchCrash(storage, game) } : {}),
+    }),
+    landCpp: landPartCpp,
+    now: deps.now,
+    sleep: deps.sleep,
+    fileReady: async (file) => (await stat(file).catch(() => null))?.isFile() === true,
+    readShot: async (file) => {
+      const info = await stat(file);
+      if (info.size > MAX_SHOT_BYTES) throw new Error(`${file} is too large`);
+      return (await readFile(file)).toString("base64");
+    },
+  };
+}
+
 function sharedQueue(deps: LoopToolsDeps): (storage: string) => EditorQueue {
   let queue: EditorQueue | undefined;
-  const { watchCrash } = deps;
   return (storage) => {
-    queue ??= createEditorQueue({
-      editor: (game): EditorPort => ({
-        answering: () => deps.editorAnswers(storage, game),
-        call: (tool, args, timeoutMs) => deps.editorCall(storage, game, tool, args, timeoutMs),
-        ...(watchCrash ? { watchCrash: () => watchCrash(storage, game) } : {}),
-      }),
-      landCpp: landPartCpp,
-      now: deps.now,
-      sleep: deps.sleep,
-      fileReady: async (file) => (await stat(file).catch(() => null))?.isFile() === true,
-      readShot: async (file) => {
-        const info = await stat(file);
-        if (info.size > MAX_SHOT_BYTES) throw new Error(`${file} is too large`);
-        return (await readFile(file)).toString("base64");
-      },
-    });
+    queue ??= createEditorQueue(queueDepsFor(deps, storage));
     return queue;
   };
 }
@@ -651,6 +659,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
   // Those jobs and building a plugin restart Unreal: the reopen tools read them as Genex's own reopen.
   const reopen = createReopenTools(set, (project) => restartsForJob(project) || ship.restarting(project));
   const moments = momentTools(set, queueFor, reopen);
+  const play = createComputerPlay({ queueDeps: (storage) => queueDepsFor(deps, storage), queue: queueFor, game });
 
   const handlers: Record<LoopToolName, Handler> = {
     [LoopToolName.CheckPart]: async (args, context, storage) => {
@@ -713,6 +722,7 @@ export function createLoopTools(deps: LoopToolsDeps) {
     [MomentToolName.OpenForRun]: async (_args, context, storage) => openForRun(moments.ops(context, storage)),
     [MotionToolName.Status]: (_args, context, storage) => motion.status(storage, game(context)),
     [MotionToolName.Add]: (_args, context, storage) => motion.add(storage, game(context), context.directory),
+    ...play.handlers,
   };
   return {
     has: (name: string): name is AnyLoopToolName => Object.hasOwn(every, name),
@@ -728,7 +738,8 @@ export type AnyLoopToolName =
   | LeadLoopToolName
   | MomentToolName
   | ShipToolName
-  | MotionToolName;
+  | MotionToolName
+  | EnginePlayTool;
 
 /** The tools' dependencies with setup's chosen: a test's, or this computer's. */
 type SetDeps = LoopToolsDeps & { setup(storage: string): SetupOptions };
