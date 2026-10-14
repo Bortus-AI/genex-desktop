@@ -106,7 +106,7 @@ def _body(blueprint, mesh: unreal.SkeletalMesh, abp, tag: str) -> None:
 
 def motion_character(mesh: str, name: str) -> dict:
     """Gives `mesh` the sample's Motion Matching (see the module notes); {blueprint, retargeter, tag, fbik,
-    spineFrom, oneToOne, ikOff, armFixDeg, fingersAligned, next, ms}."""
+    spineFrom, oneToOne, ikOff, armFixDeg, fingersAligned, skinnedMaterials?, next, ms}."""
     imports.refuse_during_play()
     if not isinstance(name, str) or re.fullmatch(NAME, name) is None:
         raise Refused(MESSAGE['name'], name=name)
@@ -126,8 +126,11 @@ def motion_character(mesh: str, name: str) -> dict:
     if not compiled:
         raise Refused(MESSAGE['compile'].format(blueprint=blueprint.get_name(), why='; '.join(messages)[:600]))
     unreal.EditorAssetLibrary.save_loaded_asset(blueprint, False)
+    # A character imported before import_character marked its materials would play grey.
+    skinned = imports.skinned_materials(target)
     path = blueprint.get_path_name().split('.')[0]
     return {'blueprint': path, 'retargeter': rig.get_path_name().split('.')[0], 'tag': tag, **facts,
+            **({'skinnedMaterials': skinned} if skinned else {}),
             'next': (f'Use {path} as the game mode\'s default pawn (or place it), then run character_check on '
                      f'{mesh} with the mannequin as its driver.'),
             'ms': editor.elapsed_ms(started)}

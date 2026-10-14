@@ -11,7 +11,9 @@ turned off first, so later captures stay clean. Every import runs to the end bef
 
 A rigged .glb whose skeleton hangs under a scaled root (a centimetre Armature at 0.01) is imported
 from a copy with that scale baked in (rig_math), written to the project's Saved/Genex/imports/, and
-the answer says so (skeletonScale); one the bake can't take still imports, with scaleWarning.
+the answer says so (skeletonScale); one the bake can't take still imports, with scaleWarning. A
+character's own materials are marked for use on skinned meshes (skinnedMaterials): Unreal otherwise
+draws the default grey material in its place in game, though the editor shows the textures.
 
 Importing again into a folder that already holds an import doesn't import over it (Unreal's importer
 then imports nothing): the same file, unchanged, answers the first import's answer again (reused),
@@ -324,6 +326,24 @@ def rig_source(source: str, folder: str) -> tuple[str, dict]:
     return copy, {'skeletonScale': {'baked': round(taken, 6), 'file': copy}}
 
 
+def skinned_materials(mesh) -> list[str]:
+    """The game's own base materials on a skeletal mesh that weren't marked for skinned meshes, marked and
+    saved; Unreal draws the default material in game for one without that flag. Engine materials are left."""
+    library = unreal.MaterialEditingLibrary
+    usage = unreal.MaterialUsage.MATUSAGE_SKELETAL_MESH
+    marked: list[str] = []
+    for slot in mesh.get_editor_property('materials'):
+        material = slot.get_editor_property('material_interface')
+        base = material.get_base_material() if material else None
+        if base is None or not base.get_path_name().startswith('/Game/') or library.has_material_usage(base, usage):
+            continue
+        if library.set_material_usage(base, usage):
+            library.recompile_material(base)
+        unreal.EditorAssetLibrary.save_loaded_asset(base, False)
+        marked.append(base.get_path_name())
+    return marked
+
+
 def import_character(file: str, dest: str, name: str) -> dict:
     """A rigged character from a model file of the game's assets: its skeletal mesh, skeleton, physics asset and clips."""
     folder = check_import(dest, name)
@@ -340,11 +360,12 @@ def import_character(file: str, dest: str, name: str) -> dict:
     physics = mesh.get_editor_property('physics_asset')
     extent = mesh.get_bounds().box_extent
     clips = _of_class(made, unreal.AnimSequence)
+    skinned = skinned_materials(mesh)
     answer = {'mesh': _paths([mesh])[0], 'skeleton': _paths([skeleton])[0] if skeleton else None,
               'physicsAsset': _paths([physics])[0] if physics else None,
               'boundsCm': [round(extent.x * 2), round(extent.y * 2), round(extent.z * 2)],
               'animations': [{'path': p, 'seconds': round(c.get_play_length(), 2)} for p, c in zip(_paths(clips), clips)],
-              'folder': folder, **rig}
+              'folder': folder, **rig, **({'skinnedMaterials': skinned} if skinned else {})}
     _record(folder, source, digest, answer)
     return {**answer, 'ms': editor.elapsed_ms(started)}
 

@@ -233,6 +233,20 @@ class ImportRigged(HelperCase):
         self.assertEqual(mesh_math.source_counter_scale(copy), 1.0)
         self.assertEqual(read_bytes(source), original, "the game's own file is left as it was")
 
+    def test_its_own_materials_are_marked_for_skinned_meshes_so_the_game_draws_their_textures(self) -> None:
+        self.file('hero.glb', rigged())
+        copy = os.path.join(self.project, 'Saved', 'Genex', 'imports', 'Cast', 'Hero', 'hero.glb')
+        made = self.character_made('/Game/Cast/Hero', 'hero')
+        own = unreal.Material('/Game/Cast/Hero/Material_0')
+        engine = unreal.Material('/InterchangeAssets/gltf/M_Default')
+        made[0][1].materials = [unreal.SkeletalMaterial(own), unreal.SkeletalMaterial(unreal.MaterialInstanceConstant(own)),
+                                unreal.SkeletalMaterial(engine), unreal.SkeletalMaterial(None)]
+        unreal.state['imports'][copy] = made
+        answer = tool('import_character', 'assets/genex/job1/hero.glb', '/Game/Cast', 'Hero')
+        self.assertEqual(answer['skinnedMaterials'], ['/Game/Cast/Hero/Material_0.Material_0'], 'marked once')
+        self.assertIn('MATUSAGE_SKELETAL_MESH', own.usages)
+        self.assertEqual(engine.usages, set(), "the engine's own material is left as it is")
+
     def test_its_clips_are_baked_too(self) -> None:
         self.file('idle.glb', rigged(skin=False))
         unreal.state['loaded']['/Game/Cast/Hero/hero_Skeleton'] = unreal.Skeleton()

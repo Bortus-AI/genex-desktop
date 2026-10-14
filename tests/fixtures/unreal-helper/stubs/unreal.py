@@ -387,6 +387,7 @@ class SkeletalMesh(Object):
         self.vertices: list = []
         self.triangles: list = []
         self.weights: list = []
+        self.materials: list = []
 
     def get_path_name(self) -> str:
         return f'{self.path}.{_leaf(self.path)}'
@@ -395,7 +396,7 @@ class SkeletalMesh(Object):
         return _leaf(self.path)
 
     def get_editor_property(self, name: str):
-        return {'skeleton': self.skeleton, 'physics_asset': None}[name]
+        return {'skeleton': self.skeleton, 'physics_asset': None, 'materials': self.materials}[name]
 
     def get_bounds(self) -> BoxSphereBounds:
         return BoxSphereBounds(Vector(0.0, 0.0, self.extent.z), self.extent)
@@ -452,9 +453,28 @@ class Texture2D(Object):
 class MaterialInterface(Object):
     """A material or a material instance."""
 
+    def get_base_material(self):
+        return None
+
 
 class MaterialInstanceConstant(MaterialInterface):
-    """A material an import made beside its mesh."""
+    """A material an import made beside its mesh; `parent` is the material it instances."""
+
+    def __init__(self, parent=None) -> None:
+        self.parent = parent
+
+    def get_base_material(self):
+        return self.parent.get_base_material() if self.parent else None
+
+
+class SkeletalMaterial(Object):
+    """A skeletal mesh's material slot."""
+
+    def __init__(self, material_interface=None) -> None:
+        self.material_interface = material_interface
+
+    def get_editor_property(self, name: str):
+        return {'material_interface': self.material_interface}[name]
 
 
 class StaticMeshComponent(MeshComponent):
@@ -685,6 +705,10 @@ class FirstPersonPrimitiveType:
     NONE = _EnumValue('NONE')
     FIRST_PERSON = _EnumValue('FIRST_PERSON')
     WORLD_SPACE_REPRESENTATION = _EnumValue('WORLD_SPACE_REPRESENTATION')
+
+
+class MaterialUsage:
+    MATUSAGE_SKELETAL_MESH = _EnumValue('MATUSAGE_SKELETAL_MESH')
 
 
 def get_default_object(cls):
@@ -1543,12 +1567,16 @@ class Material(MaterialInterface):
         self.path = path
         self.expressions: list = []
         self.links: list[tuple] = []
+        self.usages: set = set()
 
     def get_name(self) -> str:
         return self.path.rsplit('/', 1)[-1]
 
     def get_path_name(self) -> str:
         return f'{self.path}.{self.get_name()}'
+
+    def get_base_material(self):
+        return self
 
 
 class MaterialFactoryNew(Object):
@@ -1621,6 +1649,18 @@ class MaterialEditingLibrary:
     @staticmethod
     def recompile_material(material: Material) -> None:
         _record('recompile_material', material.path)
+
+    @staticmethod
+    def has_material_usage(material: Material, usage) -> bool:
+        return usage.name in material.usages
+
+    @staticmethod
+    def set_material_usage(material: Material, usage) -> bool:
+        """Marks the usage; True when the material needs a recompile for it."""
+        _record('set_material_usage', material.path, usage.name)
+        added = usage.name not in material.usages
+        material.usages.add(usage.name)
+        return added
 
 
 def new_object(type, outer=None, name='None', base_type=None):

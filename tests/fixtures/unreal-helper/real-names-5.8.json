@@ -849,6 +849,7 @@
   "load"
  ],
  "Material": [
+  "get_base_material",
   "get_class",
   "get_default_object",
   "get_editor_property",
@@ -866,11 +867,13 @@
   "get_editor_property",
   "get_name",
   "get_path_name",
+  "has_material_usage",
   "recompile_material",
   "set_editor_property",
   "set_material_instance_parent",
   "set_material_instance_scalar_parameter_value",
   "set_material_instance_vector_parameter_value",
+  "set_material_usage",
   "update_material_instance"
  ],
  "MaterialExpression": [
@@ -986,6 +989,7 @@
   "set_editor_property"
  ],
  "MaterialInstanceConstant": [
+  "get_base_material",
   "get_class",
   "get_default_object",
   "get_editor_property",
@@ -1002,6 +1006,7 @@
   "set_editor_property"
  ],
  "MaterialInterface": [
+  "get_base_material",
   "get_class",
   "get_default_object",
   "get_editor_property",
@@ -1014,6 +1019,10 @@
   "MP_EMISSIVE_COLOR",
   "MP_METALLIC",
   "MP_ROUGHNESS",
+  "name"
+ ],
+ "MaterialUsage": [
+  "MATUSAGE_SKELETAL_MESH",
   "name"
  ],
  "MathLibrary": [
@@ -1209,6 +1218,9 @@
   "name"
  ],
  "ShapeComponent": [],
+ "SkeletalMaterial": [
+  "get_editor_property"
+ ],
  "SkeletalMesh": [
   "get_bone_children",
   "get_bone_parent",
