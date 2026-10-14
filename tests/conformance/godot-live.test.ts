@@ -15,7 +15,7 @@ import { systemEditorEnv } from "../../src/plugins/godot/editor.ts";
 import { systemGodotEnv } from "../../src/plugins/godot/find-godot.ts";
 import { confinedRunner } from "../../src/plugins/godot/godot-run.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
-import { SCRIPTS, TEMPLATES } from "../helpers/godot-fake-engine.ts";
+import { ADDON, SCRIPTS, TEMPLATES } from "../helpers/godot-fake-engine.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const LIVE = process.env.STUDIO_GODOT_LIVE === "1";
@@ -38,6 +38,7 @@ async function liveGame() {
     run: confinedRunner(),
     scripts: SCRIPTS,
     templates: TEMPLATES,
+    addon: ADDON,
   });
   const context = (more: Partial<PluginContext> = {}): PluginContext => ({
     project: "live",

@@ -106,6 +106,16 @@
       }
     },
     {
+      "name": "set-up",
+      "description": "Set this game's existing Godot project up for Genex's play, so Genex's computer tool, playtesters and judges can start it, press keys, point, step its clock and read its state: adds Genex's addon (addons/genex, a script that sleeps unless Genex starts the game) and its autoload, bin/play and studio.json's runtime. A game New Godot game made is set up already. The person confirms first.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "facts": ["godot-project"],
+      "confirmation": "Set this Godot game up for Genex's play: add Genex's addon and its autoload to the project, bin/play, and runtime: bridge in studio.json?"
+    },
+    {
       "name": "engine-status",
       "audience": "harness",
       "description": "Whether this Mac's Godot can make a new Godot game now, and the words the engine question offers it with.",
@@ -173,6 +183,12 @@
     {
       "name": "toolbar-status",
       "label": "Godot status"
+    },
+    {
+      "name": "set-up",
+      "label": "Set up for Genex",
+      "confirmation": "Set this Godot game up for Genex's play?",
+      "native": true
     }
   ],
   "toolbar": [

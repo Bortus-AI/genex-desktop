@@ -91,7 +91,9 @@ export async function takeStills(
     const play = playOf(request, path.join(folder, SHOT_PREFIX));
     const { output } = await deps.run(install.binary, playCall(project, deps.scripts, play), signal);
     // Only the recording's own frames: one that fell on the stills' moment was dropped, and that moment's pictures are stills.
-    const recordedFrames = new Set(play.shots.filter((shot) => shot.cameras === ShotCameras.First).map((shot) => shot.frame));
+    const recordedFrames = new Set(
+      play.shots.filter((shot) => shot.cameras === ShotCameras.First).map((shot) => shot.frame),
+    );
     const taken: Taken = { stills: [], recording: [], output };
     for (const shot of savedShots(output)) {
       const recorded = recordedFrames.has(shot.frame);

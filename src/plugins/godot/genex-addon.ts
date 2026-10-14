@@ -1,0 +1,194 @@
+/**
+ * Setting a Godot game up for Genex's own play: the Genex addon in the project
+ * (`addons/genex/`, the Play Protocol autoload that sleeps unless the game is started with
+ * `--play-protocol`), its autoload line in `project.godot`, a `bin/play` launcher at the game's root
+ * that finds Godot and starts the project with it, and `runtime: bridge` in the game's
+ * `studio.json`, which tells Genex's computer tool, playtesters and judges to drive the game through
+ * that launcher (docs/play-protocol.md). Every file is the person's: nothing is written through a
+ * link, a Genex file the person changed is kept beside the new one as `.mine`, and every other key
+ * of `studio.json` stays.
+ */
+import { chmod, lstat, mkdir, readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { readJsonForUpdate, writeFileNoFollow } from "../../substrate/fsx.ts";
+import { isInside } from "../../substrate/paths.ts";
+import { PROJECT_FILE } from "./game-project.ts";
+
+/** Where the addon lives in a project, and the autoload Godot starts it as. */
+export const ADDON_FOLDER = "addons/genex";
+export const AUTOLOAD_NAME = "GenexPlay";
+const AUTOLOAD_SCRIPT = "play_protocol.gd";
+/** The launcher at the game's root that `studio.json`'s play command names. */
+export const LAUNCHER = "bin/play";
+const AUTOLOAD_SECTION = "[autoload]";
+const STUDIO_JSON = "studio.json";
+const BRIDGE_RUNTIME = "bridge";
+const MINE_SUFFIX = ".mine";
+const EXECUTABLE = 0o755;
+
+const MESSAGE = {
+  Link: (file: string) => `${file} is a link, so Genex won't write through it.`,
+  Outside: "The Godot project isn't inside this game's folder.",
+} as const;
+
+/** Why setting a game up was refused. */
+export class AddonError extends Error {}
+
+/** Where a game stands for Genex's play: the addon (its files as shipped, older, or missing), its autoload, the launcher and studio.json's runtime. */
+export type AddonState = {
+  addon: "current" | "outdated" | "missing";
+  autoload: boolean;
+  launcher: boolean;
+  bridge: boolean;
+};
+
+/** Whether every part is in place. */
+export const isSetUp = (state: AddonState): boolean =>
+  state.addon === "current" && state.autoload && state.launcher && state.bridge;
+
+const textOf = (file: string) => readFile(file, "utf8").catch(() => null);
+
+/** Refuses a path that is a link; a missing one is fine. */
+async function assertNoLink(file: string): Promise<void> {
+  if ((await lstat(file).catch(() => null))?.isSymbolicLink()) throw new AddonError(MESSAGE.Link(path.basename(file)));
+}
+
+/** The shipped addon's files, by name. */
+async function shippedFiles(source: string): Promise<Map<string, string>> {
+  const names = (await readdir(source)).filter((name) => !name.startsWith("."));
+  return new Map(
+    await Promise.all(names.map(async (name) => [name, await readFile(path.join(source, name), "utf8")] as const)),
+  );
+}
+
+/** The autoload line as Godot writes it: `*` makes it a singleton node. */
+const autoloadLine = () => `${AUTOLOAD_NAME}="*res://${ADDON_FOLDER}/${AUTOLOAD_SCRIPT}"`;
+
+/** `project.godot` with Genex's autoload in its `[autoload]` section (made when it has none); unchanged when it is there. */
+export function withAutoload(settings: string): string {
+  if (settings.split(/\r?\n/).some((line) => line.trim().startsWith(`${AUTOLOAD_NAME}=`))) return settings;
+  const lines = settings.split("\n");
+  const section = lines.findIndex((line) => line.trim() === AUTOLOAD_SECTION);
+  if (section < 0) return `${settings.replace(/\s*$/, "")}\n\n${AUTOLOAD_SECTION}\n\n${autoloadLine()}\n`;
+  lines.splice(section + 1, 0, autoloadLine());
+  return lines.join("\n");
+}
+
+/** A shell string literal. */
+const shellString = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * The launcher: Godot from `GENEX_GODOT`, the install Genex found, the usual places or the PATH,
+ * starting the project with Genex's play on, at a fixed 60 ticks a second in a window off every
+ * screen (a headless Godot draws nothing to show).
+ */
+export function launcherText(projectFromGame: string, godot: string | null): string {
+  const project = projectFromGame === "." ? "" : `/${projectFromGame}`;
+  return [
+    "#!/bin/sh",
+    "# Starts this game for Genex's computer tool, playtesters and judges (Genex Play Protocol).",
+    "# Made by Genex's Godot plugin; set GENEX_GODOT to use another Godot.",
+    'root=$(cd "$(dirname "$0")/.." && pwd)',
+    `for godot in "$GENEX_GODOT" ${godot ? `${shellString(godot)} ` : ""}/Applications/Godot.app/Contents/MacOS/Godot "$HOME/Applications/Godot.app/Contents/MacOS/Godot" "$(command -v godot)"; do`,
+    '  if [ -n "$godot" ] && [ -x "$godot" ]; then',
+    `    exec "$godot" --path "$root${project}" --no-header --fixed-fps 60 --max-fps 60 --position -10000,-10000 -- --play-protocol "$@"`,
+    "  fi",
+    "done",
+    'echo \'{"event":"fatal","error":"Godot 4 was not found: install it in Applications or set GENEX_GODOT."}\'',
+    "exit 1",
+    "",
+  ].join("\n");
+}
+
+/** The addon as installed: every file as shipped, none of them, or something between. */
+function addonOf(installed: ReadonlyArray<{ text: string; now: string | null }>): AddonState["addon"] {
+  if (installed.every((file) => file.now === null)) return "missing";
+  return installed.every((file) => file.now === file.text) ? "current" : "outdated";
+}
+
+/** Where a game stands for Genex's play, read without changing anything. */
+export async function addonState(gameDir: string, project: string, source: string): Promise<AddonState> {
+  const shipped = await shippedFiles(source);
+  const installed = await Promise.all(
+    [...shipped].map(async ([name, text]) => ({ text, now: await textOf(path.join(project, ADDON_FOLDER, name)) })),
+  );
+  const addon = addonOf(installed);
+  const settings = (await textOf(path.join(project, PROJECT_FILE))) ?? "";
+  const studio =
+    (await readJsonForUpdate<Record<string, unknown>>(path.join(gameDir, STUDIO_JSON)).catch(() => null)) ?? {};
+  return {
+    addon,
+    autoload: withAutoload(settings) === settings && settings !== "",
+    launcher: (await lstat(path.join(gameDir, LAUNCHER)).catch(() => null))?.isFile() === true,
+    bridge: studio.runtime === BRIDGE_RUNTIME,
+  };
+}
+
+/** The addon's files into the project; a Genex file the person changed is kept beside it as `.mine`. Answers the names kept. */
+async function installAddon(project: string, source: string): Promise<string[]> {
+  const folder = path.join(project, ADDON_FOLDER);
+  await assertNoLink(path.join(project, "addons"));
+  await assertNoLink(folder);
+  await mkdir(folder, { recursive: true });
+  const kept: string[] = [];
+  for (const [name, text] of await shippedFiles(source)) {
+    const file = path.join(folder, name);
+    await assertNoLink(file);
+    const now = await textOf(file);
+    if (now === text) continue;
+    if (now !== null) {
+      await writeFileNoFollow(`${file}${MINE_SUFFIX}`, now);
+      kept.push(name);
+    }
+    await writeFileNoFollow(file, text);
+  }
+  return kept;
+}
+
+/** The autoload line into `project.godot`, when it isn't there. */
+async function addAutoload(project: string): Promise<void> {
+  const file = path.join(project, PROJECT_FILE);
+  await assertNoLink(file);
+  const settings = await readFile(file, "utf8");
+  const next = withAutoload(settings);
+  if (next !== settings) await writeFileNoFollow(file, next);
+}
+
+/** The launcher at the game's root, executable. */
+async function writeLauncher(gameDir: string, project: string, godot: string | null): Promise<void> {
+  const file = path.join(gameDir, LAUNCHER);
+  await assertNoLink(path.dirname(file));
+  await mkdir(path.dirname(file), { recursive: true });
+  await assertNoLink(file);
+  const projectFromGame = path.relative(gameDir, project) || ".";
+  await writeFileNoFollow(file, launcherText(projectFromGame.split(path.sep).join("/"), godot));
+  await chmod(file, EXECUTABLE);
+}
+
+/** `runtime: bridge` and the launcher as studio.json's play command; every other key stays. */
+async function recordBridge(gameDir: string): Promise<void> {
+  const file = path.join(gameDir, STUDIO_JSON);
+  await assertNoLink(file);
+  const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
+  const next = { ...current, runtime: BRIDGE_RUNTIME, play: { command: LAUNCHER } };
+  await writeFileNoFollow(file, `${JSON.stringify(next, null, 2)}\n`);
+}
+
+/**
+ * Sets a game up for Genex's play: the addon, its autoload, the launcher (naming `godot`, the
+ * install Genex found, first) and studio.json's runtime. Answers the addon files kept as `.mine`.
+ */
+export async function setUpGame(
+  gameDir: string,
+  project: string,
+  source: string,
+  godot: string | null,
+): Promise<string[]> {
+  if (!isInside(gameDir, project) && path.resolve(gameDir) !== path.resolve(project))
+    throw new AddonError(MESSAGE.Outside);
+  const kept = await installAddon(project, source);
+  await addAutoload(project);
+  await writeLauncher(gameDir, project, godot);
+  await recordBridge(gameDir);
+  return kept;
+}

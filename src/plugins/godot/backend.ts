@@ -13,7 +13,7 @@ import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
-import type { Activate, PluginActivation, PluginContext } from "../../plugin-sdk/index.d.ts";
+import type { Activate, PluginActivation, PluginContext, PluginReview } from "../../plugin-sdk/index.d.ts";
 import { answerQuery, createReference } from "./class-reference.ts";
 import { editorOpen, type EditorEnv, getGodotLaunch, openEditorLaunch, systemEditorEnv } from "./editor.ts";
 import {
@@ -39,6 +39,7 @@ import {
 } from "./godot-run.ts";
 import { findGameProject, GAME_PROJECT_FOLDER, projectScene, requireGameProject } from "./game-project.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
+import { addonState, setUpGame } from "./genex-addon.ts";
 import { frameAt, type KeyPress, keysEnd, MAX_PLAY_SECONDS, PLAY_FPS, readKeys, recordingShots } from "./play-input.ts";
 import { MAX_STILLS, stillsAnswer, stillsForAgent, takeStills } from "./stills.ts";
 
@@ -52,6 +53,7 @@ const GodotAction = {
   OpenEditor: "open-editor",
   GetGodot: "get-godot",
   ToolbarStatus: "toolbar-status",
+  SetUp: "set-up",
 } as const;
 type GodotAction = (typeof GodotAction)[keyof typeof GodotAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(GodotAction));
@@ -67,6 +69,7 @@ export const GodotTool = {
   EngineStatus: "engine-status",
   CheckpointCheck: "checkpoint-check",
   HeroShots: "hero-shots",
+  SetUp: "set-up",
 } as const;
 type GodotTool = (typeof GodotTool)[keyof typeof GodotTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(GodotTool));
@@ -75,6 +78,7 @@ const isGodotTool = (name: string): name is GodotTool => TOOL_NAMES.has(name);
 /** The folders shipped beside the backend: Genex's GDScript and the new-game templates. */
 const SCRIPTS_FOLDER = "scripts";
 const TEMPLATES_FOLDER = "templates";
+const ADDON_SOURCE = ["addon", "genex"];
 /** What an observer's capture keeps free of the time Genex gives it: reading and handing back the pictures. */
 const OBSERVE_MARGIN_MS = 5 * SECOND_MS;
 /** The least an observer's capture is given, however little time is left: a shorter one could draw nothing. */
@@ -108,6 +112,11 @@ const MESSAGE = {
   NoStills: "Godot saved no stills: check that the scene loads (godot__check) and has a camera.",
   CheckNote: (count: number, lines: readonly string[]) =>
     `Godot's check found ${count} ${count === 1 ? "problem" : "problems"}: ${lines.slice(0, NOTED_PROBLEMS).join(" | ")}${count > NOTED_PROBLEMS ? ` (and ${count - NOTED_PROBLEMS} more)` : ""}`,
+  SetUpQuestion: "Set this Godot game up for Genex's play?",
+  SetUpDetail: (where: string) =>
+    `Genex will add its addon to the project (${where}/addons/genex: a script that sleeps unless Genex starts the game), list it as an autoload in project.godot, write bin/play (starts the game for Genex) and mark the game in studio.json, so Genex's computer tool, playtesters and judges can play it. A Genex file you changed is kept beside the new one as .mine.`,
+  SetUpDone:
+    "This game is set up for Genex's play: Genex's computer tool, playtesters and judges can now start it with bin/play, press keys, point, step its clock and read its state.",
   BadSeconds: `seconds is a whole number from 1 to ${MAX_RUN_SECONDS}.`,
   BadShotSeconds: `seconds is when the screenshot is taken: from ${MIN_SHOT_SECONDS} to ${MAX_PLAY_SECONDS} seconds of play.`,
   Toolbar: {
@@ -131,6 +140,8 @@ export type GodotBackendDeps = {
   run: GodotRunner;
   scripts: string;
   templates: string;
+  /** The shipped Genex addon (`addon/genex`): the Play Protocol autoload a set-up game carries. */
+  addon: string;
 };
 
 type Handler = (args: Record<string, unknown>, context: PluginContext) => Promise<unknown>;
@@ -187,6 +198,8 @@ async function newGame(deps: GodotBackendDeps, args: Record<string, unknown>, co
   const install = await requireGodot(deps);
   const template = textArg(args, "template") || GodotTemplate.ThreeD;
   const project = await createProject(game, { template, name: textArg(args, "name") }, deps.templates);
+  // A game New Godot game makes is Genex's play target from the start: nothing of the person's changes.
+  await setUpGame(game, project, deps.addon, install.binary);
   const note = await firstImport(deps, install, project, context.signal);
   const made = MESSAGE.NewGame(template.toLowerCase(), versionName(install.version));
   return note ? `${made}\n${note}` : made;
@@ -369,7 +382,31 @@ async function status(deps: GodotBackendDeps, context: PluginContext) {
     game: Boolean(gameFolderOf(context)),
     project: project && context.directory ? path.relative(context.directory, project) || "." : null,
     editorOpen: project ? await editorOpen(deps.editor, project) : false,
+    setup: project && context.directory ? await addonState(context.directory, project, deps.addon) : null,
   };
+}
+
+/**
+ * The panel's and the agent's Set up: the game's existing Godot project made Genex's play target
+ * (the addon, its autoload, the launcher, studio.json's runtime), after the person confirms.
+ */
+async function setUp(deps: GodotBackendDeps, context: PluginContext) {
+  const game = gameFolderOf(context);
+  if (!game) throw new Error(MESSAGE.NoGameOpen);
+  const project = await requireGameProject(game);
+  const install = usableGodot(await findGodots(deps.env));
+  const kept = await setUpGame(game, project, deps.addon, install?.binary ?? null);
+  if (install) await firstImport(deps, install, project, context.signal);
+  return { setup: await addonState(game, project, deps.addon), kept };
+}
+
+/** What Set up will change, for the person to confirm. */
+async function describeSetUp(context: PluginContext): Promise<PluginReview> {
+  const game = gameFolderOf(context);
+  const project = game ? await findGameProject(game) : null;
+  if (!game || !project) return {};
+  const where = path.relative(game, project) || ".";
+  return { message: MESSAGE.SetUpQuestion, detail: MESSAGE.SetUpDetail(where) };
 }
 
 /** The toolbar button's word: get Godot, too old, or its version and whether it has this game open. */
@@ -396,6 +433,7 @@ async function create(deps: GodotBackendDeps, args: Record<string, unknown>, con
   const game = gameFolderOf(context) ?? made?.directory;
   if (!game) throw new Error(MESSAGE.NoGameOpen);
   const project = await createProject(game, request, deps.templates);
+  await setUpGame(game, project, deps.addon, install.binary);
   const note = await firstImport(deps, install, project, context.signal);
   return { project, game: made ? { project: made.project } : null, ...(note ? { note } : {}) };
 }
@@ -418,6 +456,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
       return { opened: true };
     },
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
+    [GodotAction.SetUp]: (_args, context) => setUp(deps, context),
   };
   const tools: Record<GodotTool, Handler> = {
     [GodotTool.NewGame]: (args, context) => newGame(deps, args, context),
@@ -428,6 +467,10 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotTool.EngineStatus]: () => engineStatus(deps),
     [GodotTool.CheckpointCheck]: (_args, context) => checkAtMoment(deps, context),
     [GodotTool.HeroShots]: (_args, context) => heroShots(deps, context),
+    [GodotTool.SetUp]: async (_args, context) => {
+      await setUp(deps, context);
+      return MESSAGE.SetUpDone;
+    },
   };
   return {
     async action(name, args, context) {
@@ -437,6 +480,9 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     async tool(name, args, context) {
       if (!isGodotTool(name)) throw new Error(MESSAGE.UnknownTool(name));
       return tools[name](args, context);
+    },
+    async review(name, _args, context): Promise<PluginReview> {
+      return name === GodotAction.SetUp ? describeSetUp(context) : {};
     },
   };
 }
@@ -449,5 +495,6 @@ export const activate: Activate = () => {
     run: confinedRunner(),
     scripts: path.join(here, SCRIPTS_FOLDER),
     templates: path.join(here, TEMPLATES_FOLDER),
+    addon: path.join(here, ...ADDON_SOURCE),
   });
 };

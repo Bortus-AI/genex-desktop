@@ -16,6 +16,7 @@ import { tmpDir } from "./tmp.ts";
 /** The shipped scripts and templates, read where the source keeps them. */
 export const SCRIPTS = path.resolve("src/plugins/godot/scripts");
 export const TEMPLATES = path.resolve("src/plugins/godot/templates");
+export const ADDON = path.resolve("src/plugins/godot/addon/genex");
 /** Godot 4.6.1's own version line. */
 export const GODOT_461 = "4.6.1.stable.official.14d19694e";
 /** A one-pixel PNG, as a capture saves it. */
@@ -149,6 +150,7 @@ export async function godotBackendFixture(
     run: runner.run,
     scripts: SCRIPTS,
     templates: TEMPLATES,
+    addon: ADDON,
   });
   const hostCalls: HostCall[] = [];
   const host = (async (method: string, args?: unknown) => {

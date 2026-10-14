@@ -289,6 +289,20 @@ describe("the rules each kind gets", () => {
     assert.match(prompt, /a Godot project/);
   });
 
+  it("a Godot game set up for Genex's play gets the window its computer tool drives, and no web page's checks", async () => {
+    const bridge = { own: true, runtime: "bridge", play: { command: "bin/play", args: [] } };
+    const godot = game([fact(CoreFact.GodotProject, "godot")], { built: true, shape: bridge });
+    const { capture, validated, prompt } = await firstMessage(godot, NONE_ON);
+    assert.equal(capture, true, "a window of the game, which it plays through bin/play");
+    assert.equal(validated, false, "no page contract check");
+    assert.doesNotMatch(prompt, /window\.__studio/);
+    const declaredOnly = game([fact(CoreFact.GodotProject, "godot")], {
+      built: true,
+      shape: { own: true, runtime: "bridge" },
+    });
+    assert.equal((await firstMessage(declaredOnly, NONE_ON)).capture, false, "no play command, nothing to start");
+  });
+
   it("a folder of a kind Genex doesn't know is served as no web game: no web capture, contract check or Reload checkpoint", async () => {
     for (const holds of ["own-files", "unreadable"]) {
       const { prompt, capture, validated, handoffText } = await firstMessage(game([], { holds }), NONE_ON);

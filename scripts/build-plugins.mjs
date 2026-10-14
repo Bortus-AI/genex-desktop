@@ -181,8 +181,9 @@ async function buildGodot(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"]) await cp(path.join(source, file), path.join(godot, file));
   const panel = await inlinePanelSdk(await readFile(path.join(source, "panel.html"), "utf8"), sdk);
   await writeFile(path.join(godot, "panel.html"), await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")));
-  // Genex's own GDScript (the check and the stills) and the new-game templates, read beside the backend.
-  for (const folder of ["scripts", "templates"])
+  // Genex's own GDScript (the check and the plays), the new-game templates and the addon a set-up
+  // game carries (the Play Protocol autoload), read beside the backend.
+  for (const folder of ["scripts", "templates", "addon"])
     await cp(path.join(source, folder), path.join(godot, folder), { recursive: true });
   await build({
     ...NODE_BACKEND,

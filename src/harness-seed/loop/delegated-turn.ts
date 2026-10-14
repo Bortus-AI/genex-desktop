@@ -33,6 +33,7 @@ import {
   factsOfGame,
   hasFact,
   kindPending,
+  playsThroughBridge,
   servedAsWeb,
   servedFactsKey,
   servedFactsOf,
@@ -902,9 +903,11 @@ async function recordDelegateRequest(ctx: HarnessCtx, options: DelegatedOptions,
  */
 function senses(options: DelegatedOptions, handoff: Handoff): AnyRecord {
   const { project, projectDir } = handoff;
-  // Only a web game (or a folder with no kind yet, served as one) is a page to capture or drive: an
-  // Unreal game is seen in its editor, and any other kind in its own app.
-  if (!projectDir || !servedAsWeb(handoff.descriptor)) return {};
+  // A web game (or a folder with no kind yet, served as one) is a page to capture and drive, and a
+  // game that plays through the Play Protocol (a Godot game Genex set up) is a process to start and
+  // drive the same way; an Unreal game is seen in its editor, and any other kind in its own app.
+  const playable = servedAsWeb(handoff.descriptor) || playsThroughBridge(handoff.descriptor);
+  if (!projectDir || !playable) return {};
   return {
     selfCapture: {
       project,

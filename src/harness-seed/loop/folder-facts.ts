@@ -137,6 +137,18 @@ export function servedFactsKey(game: FactsOfDescriptor): string {
     .join("\n");
 }
 
+/** How a game runs, as its studio.json declares it: the app's `TargetRuntime` a game may name (held to it by seed-contracts). */
+export const GameRuntime = { Browser: "browser", Bridge: "bridge" } as const;
+export type GameRuntime = (typeof GameRuntime)[keyof typeof GameRuntime];
+
+/**
+ * Whether the game is its own process Genex starts and plays through the Play Protocol: its
+ * studio.json declares the bridge runtime and a play command (a Godot game Genex set up does).
+ */
+export function playsThroughBridge(game: Pick<GameProject, "shape"> | null | undefined): boolean {
+  return game?.shape?.runtime === GameRuntime.Bridge && Boolean(game.shape.play);
+}
+
 /**
  * Whether briefs, tools and senses serve the game as a web game: it holds one at its root, or it has
  * no kind yet (served as a web game until its first message decides), as the app's `servedFacts`. A
