@@ -443,7 +443,7 @@ describe("Play viewer", () => {
     assert.deepEqual(log, ["game.focus"]);
   });
 
-  it("offers a signed-out guest the Genex plugin in the header once the game plays, and keeps offering it", async () => {
+  it("offers a signed-out guest a Genex account in the header once the game plays, and keeps offering it", async () => {
     const { viewer, bar, advance } = rig({ ticket: async () => SIGNED_OUT });
     viewer.open("lost-cathedral");
     await settle();

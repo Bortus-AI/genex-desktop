@@ -4,7 +4,7 @@
  * Share, Invite a friend, Remix and Exit. Main keeps what the header shows and acts on what it asks
  * (`studio:play.control`). Holding Esc in the game moves the keyboard to the header (a tap still
  * reaches the game: pause menus, mouse lock); Esc there gives it back. A guest with no Genex account
- * is offered the Genex plugin in the header until its ×. A game in voice chat gets the header's mic
+ * is offered a Genex account in the header until its ×. A game in voice chat gets the header's mic
  * switch and its menu (`mic.ts`). Electron-free: the game's view, the window, the clipboard, the
  * microphone and the clock come in as deps.
  */
@@ -221,7 +221,7 @@ async function loadGame(ctx: ViewerContext, epoch: number, showAnyway: () => voi
   return ctx.deps.clock.setTimeout(showAnyway, SHOW_GAME_AFTER_MS);
 }
 
-/** Offer a signed-out guest the Genex plugin in the header, until its × or the game closes. */
+/** Offer a signed-out guest a Genex account in the header, until its × or the game closes. */
 function offerGuestCard(ctx: ViewerContext, s: Session): void {
   if (!s.signedOut) return;
   s.state = { ...s.state, guestCard: true };
