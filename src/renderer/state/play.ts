@@ -75,7 +75,7 @@ export interface PlayState {
   remixed: string | null;
   /** A remix failed after its viewer had closed: the shell says so once. */
   remixFailed: boolean;
-  /** The viewer's guest card asked for the Genex plugin: the shell runs Install plugin once. */
+  /** The viewer's guest card asked to sign in: the shell signs in to Genex once (`useGuestSignIn`). */
   installAsked: boolean;
 }
 
@@ -193,7 +193,7 @@ export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
 
 /**
  * Main's news about the viewer; a finished remix, a late remix's failure, or the guest card's
- * Install plugin waits for the shell.
+ * Sign in waits for the shell.
  */
 export function viewerReported(state: PlayState, event: PlayViewerEvent): PlayState {
   const viewer = viewerAfter(state.viewer, event);
@@ -231,7 +231,7 @@ export const remixOpened = (state: PlayState): PlayState =>
 export const remixFailureTold = (state: PlayState): PlayState =>
   state.remixFailed ? { ...state, remixFailed: false } : state;
 
-/** The shell ran the guest card's Install plugin. */
+/** The shell ran the guest card's Sign in. */
 export const installAnswered = (state: PlayState): PlayState =>
   state.installAsked ? { ...state, installAsked: false } : state;
 

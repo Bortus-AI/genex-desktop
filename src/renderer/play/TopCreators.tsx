@@ -31,7 +31,13 @@ export function TopCreators(): JSX.Element | null {
   if (!creators && waiting) return <CreatorsPlaceholder />;
   if (!creators || creators.length === 0) return null;
   return (
-    <PeopleCarousel title={WORDS.heading} quiet label={WORDS.title} hook={{ "data-top-creators": "" }}>
+    <PeopleCarousel
+      title={WORDS.title}
+      note={WORDS.period}
+      quiet
+      label={WORDS.title}
+      hook={{ "data-top-creators": "" }}
+    >
       {creators.map((creator) => (
         <PersonTile
           key={creator.id}
@@ -46,7 +52,13 @@ export function TopCreators(): JSX.Element | null {
 /** The row while genex.games answers: its heading, and tiles the size of a creator's. */
 function CreatorsPlaceholder(): JSX.Element {
   return (
-    <PeopleCarousel title={WORDS.heading} quiet label={WORDS.title} hook={{ "data-top-creators": "loading" }}>
+    <PeopleCarousel
+      title={WORDS.title}
+      note={WORDS.period}
+      quiet
+      label={WORDS.title}
+      hook={{ "data-top-creators": "loading" }}
+    >
       {Array.from({ length: PLACEHOLDER_TILES }, (_, tile) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: placeholders are identical and only counted
         <span key={tile} className="person-tile person-tile-placeholder" aria-hidden="true">

@@ -122,6 +122,8 @@ function scanCell(frame: AvatarFrame, layout: ReturnType<typeof blockLayout>, pl
 /** Blocks: the CRT original. Squares only; the silhouette is the expression. */
 function blockEyes(frame: AvatarFrame): void {
   const { ctx, recipe, cx, cy, rad, t } = frame;
+  // The alpha the eyes are drawn at (half for a placeholder): every change here is relative to it.
+  const base = ctx.globalAlpha;
   const width = BLOCKS[recipe.state][0]?.length ?? 2;
   const layout = blockLayout(frame, width);
   const { crt, unit, ink } = layout;
@@ -136,12 +138,12 @@ function blockEyes(frame: AvatarFrame): void {
   const glowing = recipe.dark && !crt;
   ctx.fillStyle = ink;
   if (glowing) glow(ctx, ink, rad * 0.16);
-  if (recipe.state === BlockState.Scan && glowing) ctx.globalAlpha = 0.5;
+  if (recipe.state === BlockState.Scan && glowing) ctx.globalAlpha = base * 0.5;
   const placed = [
     blitBlocks(frame, layout, left, { x: cx - half + dx, y, mirror: false }),
     blitBlocks(frame, layout, right, { x: cx + half + dx + jolt, y, mirror: true }),
   ];
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = base;
   noGlow(ctx);
   if (!shut && recipe.state === BlockState.Scan) scanCell(frame, layout, placed);
 }
@@ -328,6 +330,8 @@ function shardFill(frame: AvatarFrame, level: number): string {
 /** Grille: a short stack of level vents with light behind them, and a sweep running down it. */
 function grilleEyes(frame: AvatarFrame): void {
   const { ctx, recipe, cx, cy, rad, t } = frame;
+  // The alpha the eyes are drawn at (half for a placeholder): every change here is relative to it.
+  const base = ctx.globalAlpha;
   const length = recipe.len * rad * 0.78;
   const vents = recipe.slats + 1;
   const step = rad * 0.072;
@@ -348,7 +352,7 @@ function grilleEyes(frame: AvatarFrame): void {
         [ex + length / 2, y + height],
         [ex - length / 2, y + height],
       ];
-      ctx.globalAlpha = recipe.dark ? alpha : 1;
+      ctx.globalAlpha = base * (recipe.dark ? alpha : 1);
       if (recipe.dark) {
         glow(ctx, recipe.glow, rad * 0.14 * (1 + surge));
         poly(ctx, vent);
@@ -358,13 +362,13 @@ function grilleEyes(frame: AvatarFrame): void {
         poly(ctx, vent);
         ctx.fillStyle = SOCKET;
         ctx.fill();
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = base * alpha;
         glow(ctx, recipe.glow, rad * 0.12 * (1 + surge));
         ctx.fillStyle = recipe.glow;
         ctx.fillRect(ex - length / 2 + height * 0.4, y + height * 0.3, length - height * 0.8, height * 0.4);
       }
       noGlow(ctx);
-      ctx.globalAlpha = 1;
+      ctx.globalAlpha = base;
     }
   }
 }

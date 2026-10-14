@@ -637,7 +637,7 @@ describe("Play state actions", () => {
     assert.equal(remixOpened(done), done, "nothing waiting: the same state");
   });
 
-  it("holds the guest card's Install plugin until the shell has run it, once", () => {
+  it("holds the guest card's Sign in until the shell has run it, once", () => {
     const opened = gameOpened(initialPlay(), entry("a"));
     const named = viewerReported(opened, { slug: "a", openId: 1, phase: PlayViewerPhase.Playing });
     assert.equal(named.installAsked, false);

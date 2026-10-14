@@ -1,6 +1,6 @@
 # Desktop data and privacy
 
-Updated October 11, 2026. Contact: **team@genex.games**. This describes the desktop
+Updated October 14, 2026. Contact: **team@genex.games**. This describes the desktop
 application. Connected providers, plugins and the hosted Genex service have separate policies.
 
 ## Local storage
@@ -78,18 +78,21 @@ counts the play. The game runs in Play's own storage, apart from your games and 
 app, where it keeps its saves; it may use only pointer lock, full screen and clipboard writes, and
 links that leave Genex games open in your browser. A game in voice chat gets a microphone the app
 controls: your microphone feeds it only while you turn on the mic in the game's header (off for
-every game until you do), and a game never gets a camera. Which games you left the mic on for,
-and the microphone you chose, stay in the app profile. With a connected Genex account, the app sends
+every game until you do), and a game never gets a camera. What the game does with that audio is
+the game's: a Genex game in voice chat sends it to the other players in its room, directly or
+through Genex's relay. Which games you left the mic on for, and the microphone you chose, stay in
+the app profile. Signed in to Genex, the app sends
 the account's token to the Genex API to get a single-use sign-in ticket for that game (without
 one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
 only copy a genex.games link to the clipboard.
 
-With a connected Genex account the app also reads, with that token, who the account is (its name,
+Signed in, the app also reads, with that token, who the account is (its name,
 picture, Pro and join date; the email the API returns never leaves the app's main process) and the
 Friends page: your friends with the game each is in when they share it, requests both ways, whether
 friends see the game you are in, and your invite link. Who the account is is read at launch, when
-the window comes to the front and when plugins change; the Friends page at launch, every 2 minutes
+the window comes to the front, when the Mac is back online, when plugins change and, while a sign-in
+waits in your browser, every 2 seconds; the Friends page at launch, every 2 minutes
 for the sidebar's count of waiting requests, every 20 seconds while Friends is open and after each
 change you make there. A profile reads that account's public profile (name, picture, Pro, join date,
 published games) and, signed in, how you stand with them. Adding, accepting, declining, cancelling
@@ -104,10 +107,14 @@ the generated avatar itself is drawn in the app from your account id and that nu
 nothing. The Genex plugin's Credits tab reads, with the token,
 your balance, Pro allowance, invite bonus and last few spends, and the public price list; Get
 credits opens genex.games/plans in your browser. That an account has seen its avatar's welcome
-stays in the app profile.
+stays in the app profile, as do the account last signed in (its id, name, picture addresses, Pro,
+join date and avatar choice) and its last balance, so the app shows them while offline; signing
+out removes them. Signing in happens in your browser, on genex.games; signing out forgets the
+account on this Mac; turning the Genex plugin off signs nothing out.
 
 Remix clones the game's public source over https from git.genex.games into a new folder in your
-games folder, without its history, hooks, content filters, LFS files or symbolic links. The copy's
+games folder, without its history, hooks, content filters or symbolic links; files the game keeps
+in Git LFS come from that same repository, through your Mac's git-lfs. The copy's
 Claude settings and hooks are not trusted. Recent (the last 12 games played) and a dismissed Genex
 card stay in the app profile. Development fixture launches answer from local data and open no
 connection.

@@ -6,6 +6,7 @@
 import type { JSX } from "react";
 import { FriendAction, FriendStatus, type PlayPerson } from "../../shared/play-people.ts";
 import { usePeople } from "../state/hooks.ts";
+import { useOnline } from "../ui/use-online.ts";
 import { studio } from "../state/studio.ts";
 import { ToastTone } from "../state/toasts.ts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu.tsx";
@@ -37,7 +38,10 @@ export function FriendButton({
   status: FriendStatus;
   tone?: AddTone;
 }): JSX.Element | null {
-  const busy = usePeople((s) => Boolean(s.busy[person.id]));
+  const pressing = usePeople((s) => Boolean(s.busy[person.id]));
+  // A press waits for the one before it, and for the connection.
+  const online = useOnline();
+  const busy = pressing || !online;
   if (status === FriendStatus.None)
     return (
       <button
@@ -45,7 +49,7 @@ export function FriendButton({
         className="people-button"
         data-tone={tone}
         data-friend-button={status}
-        aria-busy={busy}
+        aria-busy={pressing}
         disabled={busy}
         onClick={() => void actOn(FriendAction.Add, person)}
       >
@@ -60,7 +64,7 @@ export function FriendButton({
         className="people-button"
         data-tone="quiet"
         data-friend-button={status}
-        aria-busy={busy}
+        aria-busy={pressing}
         disabled={busy}
         aria-label={WORDS.cancelRequest(person.name)}
         title={WORDS.cancelRequest(person.name)}
@@ -77,7 +81,7 @@ export function FriendButton({
         className="people-button"
         data-tone="accept"
         data-friend-button={status}
-        aria-busy={busy}
+        aria-busy={pressing}
         disabled={busy}
         onClick={() => void actOn(FriendAction.Accept, person)}
       >
@@ -85,7 +89,7 @@ export function FriendButton({
         {WORDS.acceptRequest}
       </button>
     );
-  if (status === FriendStatus.Friends) return <FriendsMenu person={person} busy={busy} />;
+  if (status === FriendStatus.Friends) return <FriendsMenu person={person} busy={busy} pressing={pressing} />;
   return null;
 }
 
@@ -125,8 +129,16 @@ export function FriendMoreMenu({
   );
 }
 
-/** Friends: pressing it opens the one thing to do about a friend, removing them. */
-function FriendsMenu({ person, busy }: { person: PlayPerson; busy: boolean }): JSX.Element {
+/** Friends: pressing it opens the one thing to do about a friend, removing them; `pressing` while a press on them waits. */
+function FriendsMenu({
+  person,
+  busy,
+  pressing,
+}: {
+  person: PlayPerson;
+  busy: boolean;
+  pressing: boolean;
+}): JSX.Element {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -135,7 +147,7 @@ function FriendsMenu({ person, busy }: { person: PlayPerson; busy: boolean }): J
           className="people-button"
           data-tone="quiet"
           data-friend-button={FriendStatus.Friends}
-          aria-busy={busy}
+          aria-busy={pressing}
           disabled={busy}
           aria-label={WORDS.more(person.name)}
         >

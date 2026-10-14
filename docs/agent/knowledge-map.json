@@ -54,7 +54,8 @@
         "docs/local-models.md",
         "docs/connections-and-context.md",
         "docs/tool-permissions.md",
-        "docs/performance.md"
+        "docs/performance.md",
+        "docs/play.md"
       ],
       "commands": ["typecheck", "test:build-ui"]
     },
@@ -77,6 +78,7 @@
         "docs/product/studio-learning.md",
         "docs/product/projects-engines.md",
         "docs/agent/architecture.md",
+        "docs/play.md",
         "docs/conversation-coordinator.md",
         "docs/plugins.md",
         "docs/PLUGIN_GUIDE.md",

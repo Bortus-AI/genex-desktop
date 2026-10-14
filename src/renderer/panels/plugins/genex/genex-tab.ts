@@ -1,7 +1,7 @@
 /**
  * The Genex plugin page's tab (Tools, which holds the account, and Credits), and the way other
- * places open the page on one: the account menu's Credits row opens Credits, its Account settings
- * opens Tools. The tab is kept for the window's life, so the page reopens where it was left.
+ * places open the page on one: the account menu's Credits row opens Credits, Settings' note on what
+ * credits pay for opens Tools. The tab is kept for the window's life, so the page reopens where it was left.
  */
 import { useSyncExternalStore } from "react";
 import { GENEX_PLUGIN_ID } from "../../../../shared/genex.ts";
@@ -23,15 +23,18 @@ export function chooseGenexTab(tab: GenexTab): void {
   for (const listener of listeners) listener();
 }
 
+/** Listen for the tab changing; the stop that `useSyncExternalStore` keeps. */
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/** The tab now. */
+const shownTab = (): GenexTab => current;
+
 /** The tab the Genex page shows. */
 export function useGenexTab(): GenexTab {
-  return useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    () => current,
-  );
+  return useSyncExternalStore(subscribe, shownTab);
 }
 
 /** Open Plugins on the Genex plugin's page, at `tab`. */

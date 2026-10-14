@@ -129,7 +129,7 @@ export function PersonTile({
       className="person-tile"
       data-person={person.id}
       data-avatar-host
-      aria-label={live ? WORDS.playingLabel(person.name, sub) : `${person.name}, ${sub}`}
+      aria-label={live ? WORDS.playingLabel(person.name, sub) : WORDS.tileLabel(person.name, sub)}
       onClick={() => studio().play.showProfile(person.id)}
     >
       <RingedAvatar person={person} size={TILE_AVATAR} live={live} gear />

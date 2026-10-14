@@ -115,10 +115,9 @@ export function SettingsDialog({
     return () => media.removeEventListener("change", update);
   }, []);
   const signedIn = usePeople((s) => s.me !== null);
-  const sections = SECTIONS;
   const selectedTab = useRef<HTMLButtonElement>(null);
   const navigate = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const next = tabAfterKey(sections, event.key, index);
+    const next = tabAfterKey(SECTIONS, event.key, index);
     if (!next) return;
     event.preventDefault();
     onSection(next.id);
@@ -147,7 +146,7 @@ export function SettingsDialog({
             aria-orientation={horizontal ? "horizontal" : "vertical"}
             className="flex gap-1 sm:flex-col"
           >
-            {sections.map((tab, index) => (
+            {SECTIONS.map((tab, index) => (
               <button
                 key={tab.id}
                 id={`settings-tab-${tab.id}`}

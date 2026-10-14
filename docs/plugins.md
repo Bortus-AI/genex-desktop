@@ -2033,6 +2033,12 @@ retired or turned into a manifest declaration or host service when a second plug
 
 Genex:
 
+- Its account is the app's (`PluginRegistry.appAccount`, set by `studio-core.ts`; the app's view
+  of it is `main/core/genex-account.ts`, see [Play](play.md)). Turned off, Genex keeps its account,
+  its credential, its backend and the actions in `GENEX_ACCOUNT_ACTIONS` (sign-in, status, sign-out
+  and Publish; `servesAction`); only its tools, MCP servers, skills and toolbar contributions go.
+  It can't be removed. A finished sign-in turns it on unless the person turned it off themselves
+  (the record's `turnedOff`, set only by `setEnabled(false)`).
 - `host-cli` MCP servers run Studio's own bundled Genex CLI (`@genex-ai/cli-demo`, an app
   dependency unpacked from the asar) behind `src/genex-host/preload.mjs`. The manifest validator
   reserves the command for the id `genex`, and the launcher also requires source `bundled`.

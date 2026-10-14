@@ -61,7 +61,8 @@ A plugin's missing account or required setting is a global setup requirement, so
 visible even before that project's transport has been opened.
 
 Disable/remove blocks further dispatch immediately, even while the current session holds an
-older tool list. Stop aborts local connector/plugin waiting associated with that conversation.
+older tool list. Genex is the exception for what is the person's: turned off, its account,
+sign-in and Publish actions keep running, and it can't be removed ([Play](play.md)). Stop aborts local connector/plugin waiting associated with that conversation.
 An accepted remote request may continue; local cancellation does not prove remote cancellation
 or a refund. Changes to unrelated sources do not wait behind another project's session.
 
@@ -262,7 +263,7 @@ not proof that every provider's sign-in flow works.
 Genex Connect advances one account flow without an extra Studio confirmation: existing browser authorization
 when required, and host-owned completion polling. Closing its panel does not discard the flow.
 An already unlocked account is leased in memory to Genex's backend and declared MCP transports;
-restarting a child does not independently reread Keychain. A successful connection/unlock records host-owned remember intent. On app restart, enabled installed plugins with that intent restore the saved encrypted credential once. Explicit re-enable or reinstall also restores that saved authorization once, without browser sign-in. A refused OS unlock remains failed until another explicit action; duplicate enable requests and status polling never retry. Explicit disconnect clears remember intent before credential deletion. Older installations establish intent on their next successful Connect/Unlock.
+restarting a child does not independently reread Keychain. A successful connection/unlock records host-owned remember intent. On app restart, enabled installed plugins with that intent (and Genex, on or off) restore the saved encrypted credential once. Explicit re-enable or reinstall also restores that saved authorization once, without browser sign-in. A refused OS unlock remains failed until another explicit action; duplicate enable requests and status polling never retry. Explicit disconnect clears remember intent before credential deletion. Older installations establish intent on their next successful Connect/Unlock.
 Studio never resets Keychain. Legitimate OS consent remains possible. On Linux, non-KDE sessions
 use the Secret Service backend and KDE keeps KWallet; without OS-backed encryption the
 connection remains locked and credentials are never stored through Electron's `basic_text` fallback.

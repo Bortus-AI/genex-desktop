@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { type PlayTicket, type PlayWorld, TicketStatus } from "../../src/main/play/gallery.ts";
+import { playPermissionShown, playPermitted } from "../../src/main/play/game-permissions.ts";
 import { MIC_OPEN_GRANT_MS, micGate, micGateFor } from "../../src/main/play/mic.ts";
 import { openPlayMicStore } from "../../src/main/play/mic-store.ts";
 import { type PlayMicDeps, type PlayViewerDeps, playViewer } from "../../src/main/play/viewer.ts";
@@ -286,6 +287,44 @@ describe("Play mic: main's gate", () => {
     assert.equal(gate.names("audio", false), false);
     gate.allow(2000);
     assert.equal(gate.take(audio, 2000 + MIC_OPEN_GRANT_MS + 1), false, "too late");
+  });
+
+  it("grants a game's page only Play's few permissions, from its top frame, and the microphone only through its gate", () => {
+    const top = { mediaTypes: [], isMainFrame: true };
+    for (const permission of ["pointerLock", "fullscreen", "clipboard-sanitized-write"]) {
+      assert.equal(playPermitted(permission, top, undefined, 0), true, permission);
+      assert.equal(
+        playPermitted(permission, { ...top, isMainFrame: false }, undefined, 0),
+        false,
+        `${permission} in a frame`,
+      );
+      assert.equal(playPermissionShown(permission, { mediaType: undefined, isMainFrame: true }, undefined), true);
+    }
+    const refused = [
+      "geolocation",
+      "notifications",
+      "midi",
+      "midiSysex",
+      "hid",
+      "serial",
+      "usb",
+      "openExternal",
+      "unknown",
+    ];
+    for (const permission of refused) assert.equal(playPermitted(permission, top, undefined, 0), false, permission);
+    const gate = micGate();
+    const audio = { mediaTypes: ["audio"], isMainFrame: true };
+    assert.equal(playPermitted("media", audio, gate, 1), false, "the microphone waits for main's word");
+    assert.equal(playPermitted("media", audio, undefined, 1), false, "and a view with no gate never gets it");
+    gate.allow(0);
+    assert.equal(
+      playPermitted("media", { mediaTypes: ["video"], isMainFrame: true }, gate, 1),
+      false,
+      "a camera, never",
+    );
+    assert.equal(playPermitted("media", audio, gate, 1), true);
+    assert.equal(playPermissionShown("media", { mediaType: "audio", isMainFrame: true }, gate), true);
+    assert.equal(playPermissionShown("media", { mediaType: "video", isMainFrame: true }, gate), false);
   });
 
   it("starts each page of the game afresh, and never opens for a page anywhere else", () => {

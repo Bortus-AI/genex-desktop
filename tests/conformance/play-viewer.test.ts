@@ -2,7 +2,7 @@
  * Play's viewer: a game fills the window under the studio's own header (Back, the game's name and
  * facts, Like, Share, Invite a friend, Remix, Exit), drawn by the app above the game's view. It signs
  * the player in with a ticket when there is a Genex account, shows the cover until the page has
- * loaded (or long enough), and closes from Back, Exit, Install plugin or a finished remix. A held Esc
+ * loaded (or long enough), and closes from Back, Exit, the guest card's Sign in or a finished remix. A held Esc
  * in the game moves the keyboard to the header; Esc there gives it back. A guest with no Genex
  * account is offered the Genex plugin in the header until its ×.
  */
@@ -478,7 +478,7 @@ describe("Play viewer", () => {
     assert.equal(bar()?.guestCard, false);
   });
 
-  it("closes for Install plugin, asking the app to install Genex, only for a signed-out guest", async () => {
+  it("closes for the guest card's Sign in, asking the app to sign in to Genex, only for a signed-out guest", async () => {
     const { viewer, events, log } = rig({ ticket: async () => SIGNED_OUT });
     viewer.open("lost-cathedral");
     await settle();

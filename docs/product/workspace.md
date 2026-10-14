@@ -17,12 +17,8 @@ The bell keeps unanswered questions, plans and permission requests, then build e
 sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
 them.
 
-**Play** shows genex.games' shelves, **Recent** (once played), **Top creators**, tabs and search.
-The sidebar's foot always shows the Genex account, kept with the plugin off and offline. Accounts
-get a rerollable generated avatar or a photo; Play adds **Friends**. Profiles show friends and
-games; yours, a 7-day strip opening **Stats**.
-Games play full window under a header (held Esc): Like, Share, Invite, Remix
-([what Play sends](../../PRIVACY.md#play)), Exit and, in voice chat, a mic; guests see Genex.
+**Play** shows genex.games' games, the Genex account (kept with the plugin off, offline),
+**Friends**, profiles and **Stats** ([Play](../play.md)).
 
 ## First launch
 
@@ -64,7 +60,7 @@ The live game is a native view overlays occlude; desktop captures can't prove it
 
 - [Shell](../../src/renderer/shell): navigation, [home](../../src/renderer/shell/HomeScreen.tsx),
   selected conversation, stage, [notification feed](../../src/renderer/notifications.ts).
-- [Onboarding](../../src/renderer/onboarding/Onboarding.tsx): first launch.
+- [Onboarding](../../src/renderer/onboarding/Onboarding.tsx): first launch; [Play](../../src/renderer/play).
 - [Chat header](../../src/renderer/panels/ChatHeader.tsx) and
   [Settings](../../src/renderer/panels/SettingsDialog.tsx): workspace actions.
 - [Architecture](../agent/architecture.md); [Feature Map](../agent/feature-map.md).

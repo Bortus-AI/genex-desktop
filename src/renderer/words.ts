@@ -3746,6 +3746,8 @@ export const PLAY_WORDS = {
     nextOf: (what: string) => `Next ${what.toLowerCase()}`,
     openProfile: (name: string) => `Open ${name}’s profile`,
     playingLabel: (name: string, game: string) => `${name}, playing ${game}`,
+    /** A person's tile read aloud: their name, then its line. */
+    tileLabel: (name: string, line: string) => `${name}, ${line}`,
     nameLabel: "Name",
     nameHint: "Same name everywhere on Genex.",
     nameRule: "2 to 20 characters.",
@@ -3797,7 +3799,7 @@ export const PLAY_WORDS = {
   },
   /** The account's own numbers: the profile's strip and the stats page. Only the account sees them. */
   stats: {
-    lastDays: (days: number) => `Your game stats · last ${days} days`,
+    lastDays: (days: number) => `Last ${days} days`,
     sectionLabel: "My stats",
     plays: (count: number) => (count === 1 ? "play" : "plays"),
     players: (count: number) => (count === 1 ? "player" : "players"),
@@ -3837,7 +3839,7 @@ export const PLAY_WORDS = {
     dayByDayColumn: "Day by day",
     changeColumn: "Change",
     /** The strip's label while genex.games has no daily stats: the plays in total. */
-    inTotal: "Your game stats · in total",
+    inTotal: "In total",
     unavailable: "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.",
     failed: "Couldn’t load your stats.",
     signedOut: "Sign in to Genex to see your game stats.",
@@ -3846,7 +3848,8 @@ export const PLAY_WORDS = {
   /** Play's Top creators row, at the top of Games. */
   creators: {
     title: "Top creators",
-    heading: "Top creators this month",
+    /** Beside the title: the rolling 30 days the ranking covers. */
+    period: "this month",
     line: (games: number, hours: string) => `${games === 1 ? "1 game" : `${games} games`} · ${hours} h`,
   },
   modes: { label: "Mode", play: "Play", create: "Create" },

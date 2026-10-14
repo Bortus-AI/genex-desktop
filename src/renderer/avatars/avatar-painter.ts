@@ -7,6 +7,8 @@
  * under Reduce Motion, nothing moves.
  */
 import type { AvatarRecipe } from "../../shared/avatar-recipe.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
+import { Motion } from "../motion-rest.ts";
 import { REDUCED_MOTION_QUERY } from "../ui/media-queries.ts";
 import {
   type BodyDraw,
@@ -25,6 +27,8 @@ import { drawBackGear, drawFrontGear, drawSkinGear } from "./gear.ts";
 
 /** A frame at most this often: 25 a second. */
 const FRAME_MS = 40;
+/** How long the first frame waits for the GPU before it draws bodies in 2D. */
+const GPU_ANSWER_MS = 1.5 * SECOND_MS;
 /** The most avatars painted in one frame. */
 export const PAINT_BUDGET = 28;
 /** The moment a still avatar shows, in seconds; nudged on if its eyes would be mid-blink. */
@@ -107,18 +111,36 @@ let asking = false;
 let observer: IntersectionObserver | null = null;
 let reduced = typeof matchMedia === "function" && matchMedia(REDUCED_MOTION_QUERY).matches;
 
-/** Ask for the GPU once; the frame waits for the answer. */
+/** Ask for the GPU once; the frame waits for the answer, or draws bodies in 2D if it never comes. */
 function askGpu(): void {
   if (asking) return;
   asking = true;
+  const late = setTimeout(() => {
+    if (gpu !== undefined) return;
+    gpu = null;
+    wake();
+  }, GPU_ANSWER_MS);
   void bodyGpu()
     .catch(() => null)
     .then((answer) => {
-      gpu = answer;
+      clearTimeout(late);
+      // An answer after the wait gave up stays unused until the GPU is asked again (a lost device).
+      if (gpu === undefined) gpu = answer;
       asking = false;
       wake();
     });
 }
+
+/** Whether the app's motion rests: the window idle or out of sight (`motion-rest.ts`). */
+const resting = (): boolean => document.documentElement.dataset.motion === Motion.Rest;
+
+/** Whether an avatar's clock runs: it animates on screen, nothing modal covers it, and motion is neither reduced nor resting. */
+function moves(entry: Entry): boolean {
+  return entry.animating && entry.visible && !reduced && !resting() && !entry.layers.front.closest("[inert]");
+}
+
+/** Whether an avatar paints this frame: on screen, and waiting to be drawn or moving. */
+const isDue = (entry: Entry): boolean => entry.visible && (entry.dirty || moves(entry));
 
 onBodyGpuLost(() => {
   gpu = undefined;
@@ -190,7 +212,7 @@ function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
 /** One frame: move the clocks of avatars that run, then paint this frame's share. */
 function tick(now: number): void {
   frame = 0;
-  const due = [...entries].filter((entry) => entry.visible && (entry.dirty || (entry.animating && !reduced)));
+  const due = [...entries].filter(isDue);
   if (!due.length) {
     lastFrame = 0;
     return;
@@ -203,7 +225,7 @@ function tick(now: number): void {
   if (lastFrame && now - lastFrame < FRAME_MS) return;
   const step = lastFrame ? Math.min(MAX_STEP_SECONDS, (now - lastFrame) / 1000) : 0;
   lastFrame = now;
-  if (!reduced) for (const entry of entries) if (entry.animating && entry.visible) entry.t += step;
+  for (const entry of entries) if (moves(entry)) entry.t += step;
   const painted = roundRobin(due, cursor, PAINT_BUDGET);
   cursor = (cursor + painted.length) % Math.max(1, due.length);
   const context = gpu;
@@ -216,15 +238,21 @@ function wake(): void {
   if (!frame && typeof requestAnimationFrame === "function") frame = requestAnimationFrame(tick);
 }
 
-/** The observer that tells the painter which avatars are on screen. */
+/**
+ * The observer that tells the painter which avatars are on screen; the first time, the painter also
+ * starts watching the app's motion and modal covers, so a moving avatar stops and starts with them.
+ */
 function visibility(): IntersectionObserver {
-  observer ??= new IntersectionObserver((seen) => {
+  if (observer) return observer;
+  observer = new IntersectionObserver((seen) => {
     for (const { target, isIntersecting } of seen) {
       const entry = byElement.get(target);
       if (entry) entry.visible = isIntersecting;
     }
     wake();
   });
+  new MutationObserver(wake).observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
+  new MutationObserver(wake).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["inert"] });
   return observer;
 }
 
@@ -258,6 +286,11 @@ export function mountAvatar(layers: AvatarLayers, look: AvatarLook): AvatarHandl
     animate(on) {
       if (entry.animating === on) return;
       entry.animating = on;
+      // Stopped, it goes back to its still pose: never held mid-blink.
+      if (!on) {
+        entry.t = stillTime(entry.look.recipe);
+        entry.dirty = true;
+      }
       wake();
     },
     dispose() {

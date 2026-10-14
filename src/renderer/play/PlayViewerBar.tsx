@@ -5,7 +5,7 @@
  * it is about, in place of its label ("Link copied" on Share), and the button turns back when main
  * drops it; a like of the player's own bursts. Main keeps what it shows (`PlayViewerEvent.bar`) and
  * acts on what it asks (`studio:play.control`). An Esc held in the game puts the keyboard here (Esc
- * gives it back: `PlayViewerLayer.tsx`). A signed-out guest is offered the Genex plugin here until its ×.
+ * gives it back: `PlayViewerLayer.tsx`). A signed-out guest is offered a Genex account here until its ×.
  * A game in voice chat gets the mic switch beside its name, with a menu of microphones.
  * Offline, the facts say so in place of the players, and Like and Remix wait for the connection.
  */
@@ -26,7 +26,12 @@ const G_MARK =
   "M526.479 314.98H239.981V266.964H683V397.295C683 397.295 648.57 532.96 347.968 532.96C347.968 532.96 0 542.868 0 252.483C0 -16.5617 376.426 0.205967 376.426 0.205967C666.184 0.205967 683 141.207 683 141.207L607.973 153.401C607.973 153.401 584.689 45.1737 371.252 45.1737C371.252 45.1737 85.375 34.5034 85.375 257.818C85.375 257.818 78.9072 480.37 351.849 486.467C566.58 493.327 597.625 379.002 600.212 359.186C607.973 334.034 574.341 314.98 526.479 314.98Z";
 
 /** Ask main for one of the header's controls. */
-export const sendPlayControl = (control: PlayControl): void => void studio().api.playControl(control);
+export const sendPlayControl = (control: PlayControl): void => {
+  // The viewer may have closed under the press: nothing is left for it to do.
+  studio()
+    .api.playControl(control)
+    .catch(() => undefined);
+};
 const send = sendPlayControl;
 
 /**
@@ -97,8 +102,8 @@ function GenexMark(): JSX.Element {
 }
 
 /**
- * The guest's offer of the Genex plugin: a strip in Play's blue secondary wipes in around the G, one
- * line and Install plugin, its × just outside it. It stays until that × or the game closes.
+ * The guest's offer of a Genex account: a strip in Play's blue secondary wipes in around the G, one
+ * line and Sign in, its × just outside it. It stays until that × or the game closes.
  */
 function GuestOffer(): JSX.Element {
   return (
@@ -174,7 +179,11 @@ function MicControl({ bar, mic }: { bar: PlayBarState; mic: PlayMicBar }): JSX.E
         aria-label={WORDS.micDevices}
         aria-haspopup="menu"
         data-play-bar={PlayControl.MicDevices}
-        onClick={(event) => void studio().api.playControl(PlayControl.MicDevices, under(event.currentTarget))}
+        onClick={(event) => {
+          studio()
+            .api.playControl(PlayControl.MicDevices, under(event.currentTarget))
+            .catch(() => undefined);
+        }}
       >
         <Icon name="chevron-down" size={12} strokeWidth={2} />
       </button>

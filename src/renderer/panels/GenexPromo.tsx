@@ -49,8 +49,7 @@ const LEAVE_MS = 180;
 /** How often the account is re-read while a sign-in the card started is under way. */
 const SIGN_IN_POLL_MS = 2 * SECOND_MS;
 
-/** A sign-in the card has not started. */
-export const IDLE_ATTEMPT: PromoAttempt = { started: false, error: "", sawSignIn: false };
+const IDLE_ATTEMPT: PromoAttempt = { started: false, error: "", sawSignIn: false };
 
 const FEATURES: ReadonlyArray<[IconName, { title: string; text: string }]> = [
   ["box", WORDS.models],
@@ -59,7 +58,7 @@ const FEATURES: ReadonlyArray<[IconName, { title: string; text: string }]> = [
 ];
 
 /** The Genex account as the connection snapshot reports it, re-read on changes and, while signing in, on a timer. */
-export function useGenexAccount(project: string | null, watching: boolean, polling: boolean) {
+function useGenexAccount(project: string | null, watching: boolean, polling: boolean) {
   const [account, setAccount] = useState<PromoAccount>();
   const read = useCallback(async () => {
     try {
@@ -252,7 +251,7 @@ function Body({ phase }: { phase: PromoPhase }): JSX.Element {
 }
 
 /** Starting and cancelling the card's own sign-in; the attempt it leaves behind is the card's. */
-export function useSignIn(
+function useSignIn(
   plugin: PluginInfo | undefined,
   project: string | null,
   reread: () => Promise<void>,

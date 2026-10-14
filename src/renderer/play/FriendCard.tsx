@@ -13,6 +13,7 @@ import {
   type PlayFriendRequest,
   type PlayPerson,
 } from "../../shared/play-people.ts";
+import { usePeople } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Icon } from "../ui/icons.tsx";
 import { PLAY_WORDS } from "../words.ts";
@@ -63,9 +64,14 @@ function subLine(props: FriendCardProps): string {
   }
 }
 
-/** What can be done from the card, by state; a friend's only action is behind ⋯, so it has none here. */
+/**
+ * What can be done from the card, by state; a friend's only action is behind ⋯, so it has none here.
+ * A press waits for the one before it on this person, and every press waits offline.
+ */
 function Actions(props: FriendCardProps): JSX.Element | null {
   const { person } = props;
+  const pressing = usePeople((s) => Boolean(s.busy[person.id]));
+  const waits = props.offline === true || pressing;
   if (props.kind === FriendCardKind.Playing)
     return (
       <button
@@ -86,7 +92,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
           type="button"
           className="people-button"
           data-tone="accept"
-          disabled={props.offline}
+          disabled={waits}
           onClick={() => void actOn(FriendAction.Accept, person)}
         >
           {WORDS.accept}
@@ -95,7 +101,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
           type="button"
           className="people-button people-button-icon"
           aria-label={WORDS.decline(person.name)}
-          disabled={props.offline}
+          disabled={waits}
           onClick={() => void actOn(FriendAction.Withdraw, person)}
         >
           <Icon name="close" />
@@ -109,7 +115,7 @@ function Actions(props: FriendCardProps): JSX.Element | null {
         className="people-button"
         data-tone="quiet"
         aria-label={WORDS.cancelRequest(person.name)}
-        disabled={props.offline}
+        disabled={waits}
         onClick={() => void actOn(FriendAction.Withdraw, person)}
       >
         {WORDS.cancel}

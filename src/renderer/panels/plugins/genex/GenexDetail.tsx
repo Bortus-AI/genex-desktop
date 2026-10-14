@@ -1,11 +1,11 @@
 /**
- * The Genex plugin's page, below its title, in three tabs: Account (the account card and what waits
- * for review), Credits (the balance, what credits pay for at live prices, recent spends) and Tools
- * (the tools it routes, the skills it gives agents and what it is). The page is app-wide: one
- * balance covers every game, a game's own spend is in its usage panel, and Publish lives on the
- * game's stage.
+ * The Genex plugin's page, below its title, in two tabs: Tools (the account card, what waits for
+ * review, the tools it routes, the skills it gives agents and what it is) and Credits (the balance,
+ * what credits pay for at live prices, recent spends). The page is app-wide: one balance covers
+ * every game, a game's own spend is in its usage panel, and Publish lives on the game's stage.
  */
 import type { JSX, KeyboardEvent } from "react";
+import { useId } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { Button } from "../../../ui/Button.tsx";
@@ -145,7 +145,7 @@ function LiveAccount({ detail, page }: { detail: PluginInfo; page: PluginsPage }
 }
 
 /** The page's tabs: Tools (with the account) and Credits; arrow keys move along them. */
-function GenexTabs({ tab }: { tab: GenexTab }): JSX.Element {
+function GenexTabs({ tab, ids }: { tab: GenexTab; ids: string }): JSX.Element {
   const words = GENEX_WORDS.tabs;
   const label: Record<GenexTab, string> = {
     [GenexTab.Tools]: words.tools,
@@ -166,6 +166,8 @@ function GenexTabs({ tab }: { tab: GenexTab }): JSX.Element {
           key={id}
           type="button"
           role="tab"
+          id={`${ids}-${id}`}
+          aria-controls={`${ids}-panel`}
           aria-selected={id === tab}
           tabIndex={id === tab ? 0 : -1}
           data-genex-tab={id}
@@ -206,24 +208,27 @@ export function GenexDetail({
 }): JSX.Element {
   const active = isActive(detail);
   const tab = useGenexTab();
+  const ids = useId();
   return (
     <div className="genex-page" data-genex-page={tab}>
-      <GenexTabs tab={tab} />
-      {tab === GenexTab.Tools && (
-        <>
-          <p className="genex-section-intro">{GENEX_WORDS.router.intro}</p>
-          <PluginNotes detail={detail} />
-          <div className="extensions-detail-actions">
-            <UpdateButton detail={detail} page={page} />
-          </div>
-          {active ? <LiveAccount detail={detail} page={page} /> : <GenexOff page={page} />}
-          <RoutedTools />
-          <PluginSkills detail={detail} onSkill={onSkill} />
-          <Information detail={detail} />
-        </>
-      )}
-      {/* Credits are the account's, which stays signed in with the plugin off. */}
-      {tab === GenexTab.Credits && <GenexCreditsTab />}
+      <GenexTabs tab={tab} ids={ids} />
+      <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`} className="contents">
+        {tab === GenexTab.Tools && (
+          <>
+            <p className="genex-section-intro">{GENEX_WORDS.router.intro}</p>
+            <PluginNotes detail={detail} />
+            <div className="extensions-detail-actions">
+              <UpdateButton detail={detail} page={page} />
+            </div>
+            {active ? <LiveAccount detail={detail} page={page} /> : <GenexOff page={page} />}
+            <RoutedTools />
+            <PluginSkills detail={detail} onSkill={onSkill} />
+            <Information detail={detail} />
+          </>
+        )}
+        {/* Credits are the account's, which stays signed in with the plugin off. */}
+        {tab === GenexTab.Credits && <GenexCreditsTab />}
+      </div>
     </div>
   );
 }

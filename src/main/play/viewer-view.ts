@@ -26,6 +26,7 @@ import type { FullScreenKey, Rect } from "../game-full-screen.ts";
 import { GAME_DISABLED_BLINK_FEATURES } from "../game-view.ts";
 import { linkGate, playAddress, playNavigationAllowed } from "./game-address.ts";
 import type { PlayGallery, PlayWorld } from "./gallery.ts";
+import { playPermissionShown, playPermitted } from "./game-permissions.ts";
 import { type MicGate, micGate, micGateFor } from "./mic.ts";
 import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer } from "./viewer.ts";
@@ -36,8 +37,6 @@ const prepared = new WeakSet<Session>();
 const micGates = new WeakMap<WebContents, MicGate>();
 /** Play's own storage: games keep their saves across launches, apart from the studio's. */
 export const PLAY_PARTITION = "persist:genex-play";
-/** The permissions a game in Play may have; everything else (camera, microphone, location…) is refused. */
-const GRANTED = new Set(["pointerLock", "fullscreen", "clipboard-sanitized-write"]);
 /** What a game's page shows before it paints. */
 const GAME_BACKGROUND = "#000000";
 /** A navigation the browser itself aborted (a new one replaced it): not a failure. */
@@ -89,14 +88,13 @@ function playSession(): Session {
   if (prepared.has(play)) return play;
   prepared.add(play);
   play.setPermissionRequestHandler((contents, permission, callback, details) => {
-    if (permission !== "media") return callback(GRANTED.has(permission) && details.isMainFrame);
     const mediaTypes = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-    callback(micGates.get(contents)?.take({ mediaTypes, isMainFrame: details.isMainFrame }, Date.now()) === true);
+    const request = { mediaTypes, isMainFrame: details.isMainFrame };
+    callback(playPermitted(permission, request, micGates.get(contents), Date.now()));
   });
   play.setPermissionCheckHandler((contents, permission, _origin, details) => {
-    if (permission !== "media") return GRANTED.has(permission) && details.isMainFrame;
     const gate = contents ? micGates.get(contents) : undefined;
-    return gate?.names(details.mediaType, details.isMainFrame) === true;
+    return playPermissionShown(permission, { mediaType: details.mediaType, isMainFrame: details.isMainFrame }, gate);
   });
   play.on("will-download", (event) => event.preventDefault());
   return play;
