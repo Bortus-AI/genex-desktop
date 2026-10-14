@@ -12,8 +12,7 @@ import { hasText } from "../text.ts";
 import { minutes } from "../time.ts";
 import { agentStatus } from "./agents.ts";
 import { askCritic } from "./critic.ts";
-import { askJudge } from "./lead-judge.ts";
-import { JUDGE_PLAY_ARGS, JUDGE_PLAY_DESCRIPTION } from "./lead-judge-prompts.ts";
+import { askJudge, JUDGE_PLAY_SPEC } from "../judge-play.ts";
 import { requiredText } from "./critic-prompts.ts";
 import {
   AGENT_PART_PREFIX,
@@ -158,15 +157,7 @@ export const LEAD_TOOLS: LiveToolSpec[] = [
       required: ["shots"],
     },
   },
-  {
-    name: LeadTool.JudgePlay,
-    description: JUDGE_PLAY_DESCRIPTION,
-    parameters: {
-      type: "object",
-      properties: { ask: text(JUDGE_PLAY_ARGS.ask), goal_state: text(JUDGE_PLAY_ARGS.goalState) },
-      required: ["ask"],
-    },
-  },
+  JUDGE_PLAY_SPEC,
   {
     name: LeadTool.RebuildUnreal,
     description:
@@ -291,7 +282,8 @@ function tools(lead: FinishingLead): Record<LeadTool, (args: AnyRecord) => Promi
     [LeadTool.WorkerStop]: workers[LeadTool.WorkerStop],
     [LeadTool.WorkerMark]: workers[LeadTool.WorkerMark],
     [LeadTool.Critic]: (args) => askCritic(lead, args),
-    [LeadTool.JudgePlay]: (args) => askJudge(lead, args),
+    [LeadTool.JudgePlay]: (args) =>
+      askJudge({ ctx: lead.ctx, run: lead.run, root: lead.game.dir, now: () => lead.clock.now() }, args),
     [LeadTool.RebuildUnreal]: (args) => askRebuild(lead, args),
     [LeadTool.Note]: (args) => leaveNote(lead, args),
     [LeadTool.Finish]: (args) => leadFinish(lead, args),

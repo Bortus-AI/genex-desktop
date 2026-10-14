@@ -1,8 +1,11 @@
-/** What the Unreal lead's `judge_play` tool says to the lead, in its tool answers. */
+/** What a Loop lead's `judge_play` tool says to the lead: its description, arguments and answers. */
+
+/** The tool's name: the chat's own name for it. Never rename. */
+export const JUDGE_PLAY_TOOL = "judge_play";
 
 /** The tool's description, as the lead's engine sees it. */
 export const JUDGE_PLAY_DESCRIPTION =
-  "A blind judge plays the game in Unreal's editor (a play session it starts, with keys and the mouse, on the game's own clock) and answers one yes/no question it can settle by playing. It never sees your code or your notes. With goal_state, Genex itself checks the game's state after every move, and a yes it saw reached is studio-verified. Takes a few minutes; the answer is written to the run's record.";
+  "A blind judge plays the game in its engine's editor (a play session it starts, with keys and the mouse, the game standing still while it decides) and answers one yes/no question it can settle by playing. It never sees your code or your notes. With goal_state, Genex itself checks the game's state after every move, and a yes it saw reached is studio-verified. Takes a few minutes; the answer is written to the run's record.";
 
 /** The tool's words for each answer and refusal. */
 export const JUDGE_PLAY_WORDS = {

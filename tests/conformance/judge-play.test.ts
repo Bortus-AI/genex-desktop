@@ -1,15 +1,19 @@
 /**
- * The Unreal lead's `judge_play` (loop/unreal/lead-judge.ts): a blind judge plays the game folder in
- * Unreal's editor and answers one yes/no question, which goes to the run's record and back to the
- * lead in words; a studio-verified yes says so. A question it can't take is refused before any play.
+ * A Loop lead's `judge_play` (loop/judge-play.ts) on a game the studio plays in its engine's editor:
+ * a blind judge plays the game folder and answers one yes/no question, which goes to the run's
+ * record and back to the lead in words; a studio-verified yes says so. A question it can't take is
+ * refused before any play. The one Loop's open lead and the Unreal runner's lead both offer it, the
+ * open lead only for a game played in an editor.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { openBrief } from "../../src/harness-seed/loop/director/open/prompts.ts";
+import { openTools } from "../../src/harness-seed/loop/director/open/tool-specs.ts";
+import { CoreFact, playedInEditor } from "../../src/harness-seed/loop/folder-facts.ts";
 import type { HandsOnOutcome } from "../../src/harness-seed/loop/hands-on-judge.ts";
 import { InteractionObjective } from "../../src/harness-seed/loop/interaction-words.ts";
-import { askJudge, type JudgePlay } from "../../src/harness-seed/loop/unreal/lead-judge.ts";
+import { askJudge, type JudgeAsker, type JudgePlay } from "../../src/harness-seed/loop/judge-play.ts";
 import { LEAD_TOOLS } from "../../src/harness-seed/loop/unreal/lead-tools.ts";
-import type { Lead } from "../../src/harness-seed/loop/unreal/lead-journal.ts";
 import type { HarnessCtx, Run } from "../../src/harness-seed/types/harness.d.ts";
 import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 
@@ -39,13 +43,7 @@ function leadWithJudge(outcome: Partial<HandsOnOutcome> | { noWindow: string } |
       ...outcome,
     } as unknown as HandsOnOutcome;
   };
-  const lead = {
-    ctx: rec.ctx as unknown as HarnessCtx,
-    run: RUN,
-    threadId: "t1",
-    clock: { now: () => 1_000 },
-    game: { dir: GAME_DIR, title: "Night Spire" },
-  } as unknown as Lead;
+  const lead: JudgeAsker = { ctx: rec.ctx as unknown as HarnessCtx, run: RUN, root: GAME_DIR, now: () => 1_000 };
   const recorded = () =>
     rec
       .paramsOf("events.append")
@@ -54,12 +52,40 @@ function leadWithJudge(outcome: Partial<HandsOnOutcome> | { noWindow: string } |
   return { lead, play, asked, recorded };
 }
 
-describe("the Unreal lead's judge_play", () => {
-  it("is one of the lead's run tools, asking one yes/no question and an optional goal state", () => {
+describe("a Loop lead's judge_play", () => {
+  it("is offered to the Unreal runner's lead, and to the open lead only on a game played in an editor", () => {
     const tool = LEAD_TOOLS.find((spec) => spec.name === "judge_play");
-    assert.ok(tool, "offered to the lead");
-    assert.match(tool.description, /blind judge plays the game in Unreal's editor/);
+    assert.ok(tool, "offered to the Unreal runner's lead");
+    assert.match(tool.description, /blind judge plays the game in its engine's editor/);
     assert.deepEqual((tool.parameters as { required?: string[] }).required, ["ask"]);
+    const unreal = [{ id: CoreFact.UnrealProject, path: "unreal/Tower.uproject" }];
+    assert.equal(playedInEditor(unreal), true);
+    assert.equal(playedInEditor([]), false, "a folder with no Unreal project: no judge to play it");
+    const offered = (judge: boolean) => openTools([], { judge }).some((spec) => spec.name === "judge_play");
+    assert.deepEqual([offered(true), offered(false)], [true, false]);
+    const brief = (judge: boolean) =>
+      openBrief({
+        goal: "A tower.",
+        folder: GAME_DIR,
+        folderLabel: "night-spire",
+        facts: judge ? unreal : [],
+        holds: null,
+        carried: [],
+        references: [],
+        workerTypes: [],
+        appSaved: false,
+        restart: false,
+        cppRestart: false,
+        judge,
+        savePoints: [],
+        now: 0,
+        softDeadline: 60_000,
+        finalDeadline: 60_000,
+        untilFinish: true,
+        skills: [],
+      });
+    assert.match(brief(true), /judge_play: a blind judge plays the game/, "the open lead's brief names it");
+    assert.doesNotMatch(brief(false), /judge_play/);
   });
 
   it("has the judge play the game folder blind, and writes its answer to the run's record", async () => {
