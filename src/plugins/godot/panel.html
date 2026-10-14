@@ -65,7 +65,8 @@ input[aria-invalid="true"]{box-shadow:inset 0 0 0 1px var(--err)}
     <h2 id="project-title">This game's Godot project</h2>
     <p id="project-state" class="state" role="status"></p>
     <p id="project-path" class="mono quiet"></p>
-    <div class="actions"><button id="open" class="primary external" type="button">Open in Godot</button></div>
+    <p id="setup-state" class="quiet" hidden>Not set up for Genex's play yet: Genex's computer tool, playtesters and judges can't start it, and your open Godot doesn't save for save points.</p>
+    <div class="actions"><button id="set-up" type="button" hidden>Set up for Genex</button><button id="open" class="primary external" type="button">Open in Godot</button></div>
   </section>
   <form id="new" hidden aria-labelledby="new-title" novalidate>
     <h2 id="new-title">New Godot game</h2>
@@ -117,6 +118,9 @@ const setText = (node, text) => {
   if (node.textContent !== text) node.textContent = text;
 };
 
+/** Whether every part of Genex's play is in the project (the backend's `AddonState`). */
+const isSetUp = (setup) => Boolean(setup) && setup.addon === "current" && [setup.autoload, setup.editor, setup.launcher, setup.bridge].every(Boolean);
+
 /** Which view the status asks for: get Godot, the game's project, or a new game. */
 function render(s) {
   $("app").setAttribute("aria-busy", "false");
@@ -131,6 +135,9 @@ function render(s) {
     setText($("project-path"), s.project === "." ? "project.godot" : `${s.project}/project.godot`);
     setText($("project-state"), s.editorOpen ? WORDS.open : WORDS.closed);
     $("project-state").dataset.tone = s.editorOpen ? "ok" : "";
+    const setUp = isSetUp(s.setup);
+    $("setup-state").hidden = setUp;
+    $("set-up").hidden = setUp;
   }
   setText($("new-where"), s.game ? WORDS.inGame : WORDS.newGame);
 }
@@ -164,6 +171,10 @@ async function act(button, name, args, options) {
 
 $("get-godot").onclick = () => void act($("get-godot"), "get-godot", {});
 $("recheck").onclick = () => void refresh();
+$("set-up").onclick = async () => {
+  await act($("set-up"), "set-up", {}, { timeoutMs: CREATE_TIMEOUT_MS });
+  void refresh();
+};
 $("open").onclick = async () => {
   await act($("open"), "open-editor", {});
   void refresh();

@@ -139,6 +139,7 @@ const MESSAGE = {
     Old: (version: string) => `Godot ${version} is older than the 4.3 Genex builds with`,
     Ready: (version: string) => `Godot ${version}`,
     Open: (version: string) => `Godot ${version} has this game's project open`,
+    SetUp: "Set this Godot game up for Genex's play",
   },
   /** Live's card (`stage-status`): one line, a quieter hint and one step, as `shared/plugin-stage-card.ts` reads them. */
   Stage: {
@@ -157,6 +158,8 @@ const MESSAGE = {
 
 /** The toolbar button's badge while Godot is missing. */
 const GET_BADGE = "Get";
+/** The toolbar button's badge while the game's project isn't set up for Genex's play. */
+const SET_UP_BADGE = "Set up";
 
 /**
  * What the backend is given: how Godot is found and run, the person's editor, and the folders of
@@ -474,7 +477,10 @@ async function toolbarStatus(deps: GodotBackendDeps, context: PluginContext) {
     return { badge: GET_BADGE, tone: "warn", title };
   }
   const version = versionName(install.version);
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const game = gameFolderOf(context);
+  const project = game ? await findGameProject(game) : null;
+  if (game && project && !isSetUp(await addonState(game, project, deps.addon)))
+    return { badge: SET_UP_BADGE, tone: "warn", title: MESSAGE.Toolbar.SetUp };
   const open = project ? await editorOpen(deps.editor, project) : false;
   return open ? { tone: "ok", title: MESSAGE.Toolbar.Open(version) } : { title: MESSAGE.Toolbar.Ready(version) };
 }

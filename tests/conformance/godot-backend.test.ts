@@ -288,7 +288,7 @@ describe("Genex's moments in a Godot game", () => {
 });
 
 describe("the panel and the toolbar", () => {
-  it("says to get Godot, names its version, and shows when Godot has the game open", async () => {
+  it("says to get Godot, names its version, asks to set a game up, and shows when Godot has it open", async () => {
     assert.deepEqual(await action(await godotBackendFixture({ apps: [] }), "toolbar-status"), {
       badge: "Get",
       tone: "warn",
@@ -300,6 +300,14 @@ describe("the panel and the toolbar", () => {
     assert.deepEqual(await action(fixture, "toolbar-status"), {
       tone: "ok",
       title: "Godot 4.6.1 has this game's project open",
+    });
+    const existing = await godotBackendFixture();
+    await mkdir(path.join(existing.gameDir, "client"), { recursive: true });
+    await writeFile(path.join(existing.gameDir, "client", "project.godot"), "config_version=5\n");
+    assert.deepEqual(await action(existing, "toolbar-status"), {
+      badge: "Set up",
+      tone: "warn",
+      title: "Set this Godot game up for Genex's play",
     });
     const status = await action(fixture, "status");
     assert.equal(status.project, "godot");
