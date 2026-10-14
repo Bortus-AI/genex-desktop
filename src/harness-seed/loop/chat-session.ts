@@ -29,12 +29,11 @@ import {
   factPrefix,
   ownKindRules,
   pendingKindRule,
-  pluginWebBuilds,
-  webBuildLine,
   unknownKindRules,
   unrealWithoutPlugin,
 } from "./project-prompts.ts";
 import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
+import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
 import type { PluginKindOffer } from "../types/host-api.d.ts";
 
