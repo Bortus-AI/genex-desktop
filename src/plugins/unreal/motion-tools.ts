@@ -284,7 +284,8 @@ async function copyFolders(platform: NodeJS.Platform, sample: string, content: s
     const target = path.join(parent, path.posix.basename(folder));
     if (platform === StudioPlatform.Mac)
       await execFileAsync(MAC_CP, ["-c", "-R", "-n", "--", source, `${parent}${path.sep}`]);
-    else await cp(source, target, { recursive: true, errorOnExist: true, force: false });
+    // Like `cp -n`: into a folder the game has already, skipping a file there (refuseGameInTheWay refused those).
+    else await cp(source, target, { recursive: true, errorOnExist: false, force: false });
   }
   for (const file of SAMPLE_LEFT_OUT) await unlink(onDisk(content, file)).catch(() => {});
 }

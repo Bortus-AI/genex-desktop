@@ -14,6 +14,7 @@ import { mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { describe, it } from "node:test";
+import { StudioPlatform } from "../../src/shared/boot.ts";
 import { mergeEngineIni, mergeGameplayTagsIni } from "../../src/plugins/unreal/motion-config.ts";
 import { createMotionTools, MotionAddState, type MotionToolsDeps } from "../../src/plugins/unreal/motion-tools.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -170,6 +171,9 @@ function standIns(w: World, open = true, free = 500 * 1024 ** 3) {
   return { deps, done };
 }
 
+/** The copy paths this computer runs: Node's copy (Linux, Windows) everywhere, and the clone on a Mac. */
+const COPY_PLATFORMS = [StudioPlatform.Linux, ...(process.platform === StudioPlatform.Mac ? [StudioPlatform.Mac] : [])];
+
 /** How long a test waits for the add job's real copy at most. */
 const SETTLE_LIMIT_MS = 20_000;
 
@@ -254,19 +258,23 @@ describe("add-motion-matching", () => {
     assert.ok(!existsSync(path.join(w.content, "Blueprints")));
   });
 
-  it("keeps only what the copy adds out of checkpoints: the game's own folders and files in them stay in", async () => {
-    const w = await world();
-    await mkdir(path.join(w.content, "Audio"), { recursive: true });
-    await writeFile(path.join(w.content, "Audio", "Theme.uasset"), "the game's own");
-    const { deps } = standIns(w);
-    const tools = createMotionTools(deps);
-    await tools.add("storage", "town", w.game);
-    assert.equal((await settled(tools, w)).state, MotionAddState.Done);
-    const ignored = (await readFile(path.join(w.game, ".gitignore"), "utf8")).split("\n");
-    assert.ok(ignored.includes("/unreal/Content/Audio/Foley/"), "a folder the copy made");
-    assert.ok(ignored.includes("/unreal/Content/Audio/Mix.uasset"), "a file the copy put in the game's own folder");
-    assert.ok(!ignored.includes("/unreal/Content/Audio/"), "the game's own folder stays in checkpoints");
-  });
+  for (const platform of COPY_PLATFORMS)
+    it(`keeps only what the copy adds out of checkpoints: the game's own folders and files in them stay in (${platform})`, async () => {
+      const w = await world();
+      await mkdir(path.join(w.content, "Audio"), { recursive: true });
+      await writeFile(path.join(w.content, "Audio", "Theme.uasset"), "the game's own");
+      const { deps } = standIns(w);
+      const tools = createMotionTools({ ...deps, platform });
+      await tools.add("storage", "town", w.game);
+      const end = await settled(tools, w);
+      assert.equal(end.state, MotionAddState.Done, end.error);
+      assert.equal(await readFile(path.join(w.content, "Audio", "Theme.uasset"), "utf8"), "the game's own");
+      assert.ok(existsSync(path.join(w.content, "Audio", "Mix.uasset")), "the sample's file joins the game's folder");
+      const ignored = (await readFile(path.join(w.game, ".gitignore"), "utf8")).split("\n");
+      assert.ok(ignored.includes("/unreal/Content/Audio/Foley/"), "a folder the copy made");
+      assert.ok(ignored.includes("/unreal/Content/Audio/Mix.uasset"), "a file the copy put in the game's own folder");
+      assert.ok(!ignored.includes("/unreal/Content/Audio/"), "the game's own folder stays in checkpoints");
+    });
 
   it("refuses a game whose Content folder the sample's files go in is a link, writing nothing through it", async () => {
     const w = await world();
