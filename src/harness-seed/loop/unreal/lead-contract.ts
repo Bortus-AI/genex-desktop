@@ -41,6 +41,8 @@ export const LeadTool = {
   WorkerStop: WorkerTool.Stop,
   WorkerMark: WorkerTool.Mark,
   Critic: "critic",
+  /** A blind judge plays the game and answers one yes/no question (`lead-judge.ts`): the chat's own name for it. */
+  JudgePlay: "judge_play",
   RebuildUnreal: "rebuild_unreal",
   Note: DirectorTool.Note,
   /** The lead's claim that the game meets the request, which a reviewer checks: the director's own name. */

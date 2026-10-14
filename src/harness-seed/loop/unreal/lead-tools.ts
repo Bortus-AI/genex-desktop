@@ -12,6 +12,8 @@ import { hasText } from "../text.ts";
 import { minutes } from "../time.ts";
 import { agentStatus } from "./agents.ts";
 import { askCritic } from "./critic.ts";
+import { askJudge } from "./lead-judge.ts";
+import { JUDGE_PLAY_ARGS, JUDGE_PLAY_DESCRIPTION } from "./lead-judge-prompts.ts";
 import { requiredText } from "./critic-prompts.ts";
 import {
   AGENT_PART_PREFIX,
@@ -157,6 +159,15 @@ export const LEAD_TOOLS: LiveToolSpec[] = [
     },
   },
   {
+    name: LeadTool.JudgePlay,
+    description: JUDGE_PLAY_DESCRIPTION,
+    parameters: {
+      type: "object",
+      properties: { ask: text(JUDGE_PLAY_ARGS.ask), goal_state: text(JUDGE_PLAY_ARGS.goalState) },
+      required: ["ask"],
+    },
+  },
+  {
     name: LeadTool.RebuildUnreal,
     description:
       "Restart Unreal: when your turn ends, Genex saves, closes Unreal, builds the game's C++ (when it has any) and opens it again. After C++ changes in unreal/Source (never Live Coding), or when the editor renders differently from play (nearly black capture_shot frames while play looks right). End your turn soon after you ask.",
@@ -280,6 +291,7 @@ function tools(lead: FinishingLead): Record<LeadTool, (args: AnyRecord) => Promi
     [LeadTool.WorkerStop]: workers[LeadTool.WorkerStop],
     [LeadTool.WorkerMark]: workers[LeadTool.WorkerMark],
     [LeadTool.Critic]: (args) => askCritic(lead, args),
+    [LeadTool.JudgePlay]: (args) => askJudge(lead, args),
     [LeadTool.RebuildUnreal]: (args) => askRebuild(lead, args),
     [LeadTool.Note]: (args) => leaveNote(lead, args),
     [LeadTool.Finish]: (args) => leadFinish(lead, args),
