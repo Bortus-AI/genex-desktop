@@ -15,7 +15,7 @@ import {
   connectCuaDriver,
   cuaDriver,
   findCuaDriver,
-  localDriverCommand,
+  GrantHolder,
   vmDriverCommand,
 } from "../../src/substrate/cua-driver-client.ts";
 import { macApps, parseAppInfo } from "../../src/substrate/mac-apps.ts";
@@ -200,18 +200,20 @@ describe("cua-driver as the desktop driver", () => {
     );
   });
 
-  it("starts this Mac's driver as `cua-driver mcp`, and finds it where its installer puts it", async () => {
-    assert.deepEqual(localDriverCommand("/Users/me/.local/bin/cua-driver"), {
-      command: "/Users/me/.local/bin/cua-driver",
-      args: ["mcp"],
-    });
+  it("runs the driver bundled with the app, and an installed one only where none is bundled", async () => {
     const home = await tmpDir("cua-home-");
-    assert.equal(await findCuaDriver(home).then((found) => found?.startsWith(home) ?? false), false);
+    const bundled = path.join(await tmpDir("cua-resources-"), "cua-driver", "cua-driver");
+    assert.equal(await findCuaDriver({ bundled, home }).then((found) => found?.startsWith(home) ?? false), false);
     const wrapper = path.join(home, ".local", "bin", "cua-driver");
     await mkdir(path.dirname(wrapper), { recursive: true });
     await writeFile(wrapper, "#!/bin/sh\n");
     await chmod(wrapper, 0o755);
-    assert.equal(await findCuaDriver(home), wrapper);
+    assert.equal(await findCuaDriver({ bundled, home }), wrapper, "a development build: the installed one");
+    await mkdir(path.dirname(bundled), { recursive: true });
+    await writeFile(bundled, "#!/bin/sh\n");
+    assert.equal(await findCuaDriver({ bundled, home }), wrapper, "a bundled file that cannot run is not the driver");
+    await chmod(bundled, 0o755);
+    assert.equal(await findCuaDriver({ bundled, home }), bundled, "the app's own, ahead of an installed one");
   });
 
   it("reaches a VM's driver over ssh, with the address as one plain word", () => {
@@ -265,7 +267,7 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
     });
   });
 
-  it("asks for the grants without a macOS prompt, which the standalone daemon refuses", async () => {
+  it("asks for the grants without a driver prompt: the studio asks macOS itself, and a VM's daemon refuses one", async () => {
     const log = path.join(await tmpDir("cua-real-"), "calls.jsonl");
     const driver = await connectCuaDriver({ command: process.execPath, args: [FAKE, "--log", log] }, { local: false });
     await driver.close();
@@ -305,10 +307,13 @@ describe("cua-driver over a real MCP connection (a stand-in driver process)", ()
     );
   });
 
-  it("refuses to start when the driver lacks Accessibility or Screen Recording, and says how to fix it", async () => {
+  it("refuses to start without Accessibility or Screen Recording, and says whose grant to turn on", async () => {
+    const denied = { command: process.execPath, args: [FAKE, "--denied"] };
+    // A VM's standalone driver holds its own grants; this Mac's embedded driver uses Genex's.
+    await assert.rejects(connectCuaDriver(denied, { local: false }), /cua-driver needs .*allow CuaDriver/);
     await assert.rejects(
-      connectCuaDriver({ command: process.execPath, args: [FAKE, "--denied"] }, { local: false }),
-      /needs Accessibility and Screen Recording/,
+      connectCuaDriver(denied, { local: false, holder: GrantHolder.Host }),
+      /Genex needs Accessibility and Screen Recording .*turn Genex on/,
     );
   });
 });

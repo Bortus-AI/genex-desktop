@@ -6,6 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -14,7 +15,9 @@ import { HostMethod } from "../../src/shared/harness-api.ts";
 import { UiEvent, type UiEvent as UiEventData } from "../../src/shared/ui-events.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import type { DesktopDriver } from "../../src/substrate/desktop-driver.ts";
-import { connectCuaDriver } from "../../src/substrate/cua-driver-client.ts";
+import { connectCuaDriver, driverEnv, GrantHolder } from "../../src/substrate/cua-driver-client.ts";
+import { embeddedCuaDriver, HOST_BUNDLE_ID } from "../../src/substrate/cua-embedded.ts";
+import { running } from "../helpers/processes.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -210,7 +213,7 @@ it("without a desktop driver, nothing is offered and desktop.computer says why",
     const threadId = await core.createGameThread("no-driver");
     const api = core.api() as unknown as Record<string, (input: unknown) => Promise<Record<string, unknown>>>;
     const answered = await api[HostMethod.DesktopComputer]!({ project: "no-driver", threadId, describe: true });
-    assert.match(String(answered.unavailable), /install cua-driver/);
+    assert.match(String(answered.unavailable), /no cua-driver is bundled or installed/);
   } finally {
     await lite.close();
   }
@@ -337,4 +340,79 @@ it("end to end: a chat opens a web page, reads it and types into it by ref, thro
   } finally {
     await lite.close();
   }
+});
+
+it("end to end: a chat's click goes through the app's own embedded daemon, which the stop shortcut ends", async () => {
+  const fake = fileURLToPath(new URL("../fixtures/fake-cua-driver.mjs", import.meta.url));
+  const dir = await tmpDir("desktop-embedded-");
+  const log = path.join(dir, "calls.jsonl");
+  const serveLog = path.join(dir, "serve.jsonl");
+  // Wired as the app wires it (desktop-control-host.ts): one embedded daemon, a restart, and its stop.
+  const daemon = embeddedCuaDriver(
+    { command: process.execPath, args: [fake, "--log", log, "--serve-log", serveLog] },
+    { hostBundleId: HOST_BUNDLE_ID, env: driverEnv() },
+  );
+  const desktop = desktopControl({
+    findDriver: async () => process.execPath,
+    connect: () =>
+      connectCuaDriver(() => daemon.command(), {
+        local: false,
+        holder: GrantHolder.Host,
+        restart: () => daemon.restart(),
+      }),
+    ownApp: () => false,
+    shutdown: () => daemon.stop(),
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.games.scaffold("desk-embedded");
+    const threadId = await core.createGameThread("desk-embedded");
+    let said = "";
+    core.engines.register({
+      id: "fixture-delegate",
+      label: "Fixture",
+      kind: "delegated",
+      status: async () => ({ code: "ready", detail: "Fixture" }),
+      models: async () => [],
+      delegate: async (request: DelegateRequest) => {
+        said = text(await request.onLiveTool!("desktop", { action: "left_click", coordinate: "100,200" }));
+        return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
+      },
+    } as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.EngineDelegate]!({
+      engine: "fixture-delegate",
+      project: "desk-embedded",
+      threadId,
+      prompt: "go",
+    });
+    assert.match(said, /OK — left click at 100,200/);
+    const [served] = (await readFile(serveLog, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { pid: number; env: Record<string, string> });
+    assert.equal(served?.env.CUA_DRIVER_EMBEDDED, "1", "the click went through the app's own embedded daemon");
+    assert.equal(running(served!.pid), true, "the daemon stays up between sessions");
+    await desktop.stopAll();
+    assert.equal(running(served!.pid), false, "⌃⌥⌘Esc and quitting stop it");
+  } finally {
+    await daemon.stop();
+    await lite.close();
+  }
+});
+
+it("tells the embedded driver the release app's bundle id", async () => {
+  const require = createRequire(import.meta.url);
+  const { APP_BUNDLE_ID } = require("../../scripts/package-signing.cjs") as { APP_BUNDLE_ID: string };
+  assert.equal(HOST_BUNDLE_ID, APP_BUNDLE_ID);
 });

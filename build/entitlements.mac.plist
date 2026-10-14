@@ -5,7 +5,10 @@
   allow-jit: V8 needs it in main, the renderers and the ELECTRON_RUN_AS_NODE children (harness,
   plugin backends, MCP servers, the self-edit gate).
   automation.apple-events: an agent's app_look reads a window's accessibility tree through System
-  Events (osascript run by main); the hardened runtime refuses Apple events without it.
+  Events (osascript run by main), and the bundled cua-driver (dist/resources/cua-driver, signed with
+  these entitlements) may message an app it drives; the hardened runtime refuses Apple events
+  without it. The driver needs no entitlement for Accessibility or Screen Recording: it runs embedded,
+  as the app's child, so macOS asks for and keeps those grants as the app's own.
   Deliberately absent: camera, microphone, bluetooth, USB, location and print (games are denied
   media permissions in main/preview.ts), and disable-library-validation, so only native addons
   signed with the app's own team load. Third-party plugins' native addons are not supported; the

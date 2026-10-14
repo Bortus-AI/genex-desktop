@@ -114,9 +114,12 @@ module.exports = {
       NSDesktopFolderUsageDescription: folderAccess("your Desktop"),
       NSDownloadsFolderUsageDescription: folderAccess("your Downloads folder"),
       NSRemovableVolumesUsageDescription: folderAccess("folders on an external drive"),
-      // app_look reads an app window's accessibility tree through System Events (Automation).
+      // app_look reads an app window's accessibility tree through System Events (Automation), and
+      // the embedded cua-driver runs as Genex, so its Automation and screen requests name Genex too.
       NSAppleEventsUsageDescription:
-        "Genex reads the accessibility tree of an app window when an agent looks at it. It never clicks or types.",
+        "Genex reads an app window when an agent looks at it. It clicks and types only after you let the chat's agent use your computer.",
+      NSScreenCaptureUsageDescription:
+        "Genex sees your screen only after you let the chat's agent use your computer, so it can see the apps it works in.",
     },
     // The Windows executable's version resource: what Explorer, Task Manager and UAC show.
     win32metadata: {
