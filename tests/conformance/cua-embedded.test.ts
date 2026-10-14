@@ -9,12 +9,15 @@ import { existsSync } from "node:fs";
 import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { connectCuaDriver, driverEnv, GrantHolder } from "../../src/substrate/cua-driver-client.ts";
 import { bundledCuaDriver, type EmbeddedCuaDriver, embeddedCuaDriver } from "../../src/substrate/cua-embedded.ts";
 import { running } from "../helpers/processes.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
+/** How long a killed daemon's exit may take to reach the studio on a loaded machine. */
+const DIED_WITHIN_MS = 10_000;
 const FAKE = fileURLToPath(new URL("../fixtures/fake-cua-driver.mjs", import.meta.url));
 const HOST = "games.genex.desktop";
 const started: EmbeddedCuaDriver[] = [];
@@ -104,9 +107,10 @@ describe("the studio's embedded cua-driver", () => {
     assert.notEqual(second, first);
     const latest = (await served()).at(-1)!;
     process.kill(latest.pid, "SIGKILL");
-    // A daemon that died is started again on the next call, not reported as running.
-    for (let tries = 0; tries < 100 && valueOf((await driver.command()).args, "--socket") === second; tries += 1)
-      await new Promise((resolve) => setImmediate(resolve));
+    // A daemon that died is started again on the next call, not reported as running. The death
+    // reaches the studio as the child's exit event, whenever the machine gets to it: wait for that.
+    const until = Date.now() + DIED_WITHIN_MS;
+    while (Date.now() < until && valueOf((await driver.command()).args, "--socket") === second) await sleep(20);
     assert.equal((await served()).length, 3);
     await driver.stop();
     assert.equal(running((await served()).at(-1)!.pid), false);
