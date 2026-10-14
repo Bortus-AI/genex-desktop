@@ -64,6 +64,8 @@ export type GodotCall = {
   timeoutMs: number;
   /** A job that draws (a still) needs the GPU and a window. */
   gpu: boolean;
+  /** Files written under names that only start so (a program's own temporary names), as real absolute paths. */
+  writePrefixes?: string[];
   /** Folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
   homeLinks?: ReadonlyArray<{ at: string; to: string }>;
 };
@@ -213,6 +215,7 @@ export function confinedRunner(platform: NodeJS.Platform = process.platform): Go
         scratch,
         reads: call.reads,
         writes: call.writes,
+        ...(call.writePrefixes ? { writePrefixes: call.writePrefixes } : {}),
         denyRead: [],
         gpu: call.gpu,
         signal,

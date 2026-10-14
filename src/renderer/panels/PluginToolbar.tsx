@@ -40,6 +40,7 @@ import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
 import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
+import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PanelSurface } from "./panel-bridge.ts";
@@ -456,7 +457,11 @@ export function PluginToolbar({
   }, [entries, panel]);
   const genexPublish = entries.find(isGenexPublish);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
-  const multiplayerShown = showsMultiplayer(Boolean(genexPublish) || studioPublish.shown, emptyGame);
+  const multiplayerShown = showsMultiplayer({
+    publish: Boolean(genexPublish) || studioPublish.shown,
+    emptyGame,
+    webExport: webFolderOf({ facts, holds }) !== null,
+  });
   // Multiplayer is the plugin's: its Publish shows while it is off, but only an on Genex makes a game multiplayer.
   const multiplayer = useMultiplayer(
     project,

@@ -70,8 +70,13 @@ export function toolbarUpdateStatus(plugin: PluginInfo, words: ToolbarUpdateWord
 const updateDue = (plugin: PluginInfo): string | null =>
   plugin.availableVersion && !plugin.pendingVersion ? plugin.availableVersion : null;
 
-/** Multiplayer stands beside Publish, and only on a game with something in it: an empty one has nothing to play together. */
-export const showsMultiplayer = (publish: boolean, emptyGame: boolean): boolean => publish && !emptyGame;
+/**
+ * Multiplayer stands beside Publish, only on a game with something in it (an empty one has nothing
+ * to play together) whose page is its own: an engine's web export (`webFolderOf`) is a build, made
+ * again from its project, that the chat never edits to add Genex's multiplayer to.
+ */
+export const showsMultiplayer = (game: { publish: boolean; emptyGame: boolean; webExport: boolean }): boolean =>
+  [game.publish, !game.emptyGame, !game.webExport].every(Boolean);
 
 /** What Multiplayer's press does, by where Genex stands. */
 export const MultiplayerPress = { SetUp: "set-up", Update: "update", Ask: "ask" } as const;

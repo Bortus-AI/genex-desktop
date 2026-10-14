@@ -158,10 +158,16 @@ test("Multiplayer brings Genex in, updates an older Genex first, and otherwise a
   assert.equal(multiplayerPress(waiting), MultiplayerPress.Ask, "as Publish: the update waits for its sessions");
   assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
 });
-test("Multiplayer stands beside Publish only on a game with something in it", () => {
-  assert.equal(showsMultiplayer(true, false), true);
-  assert.equal(showsMultiplayer(true, true), false, "an empty game has nothing to play together yet");
-  assert.equal(showsMultiplayer(false, false), false, "no Publish, no Multiplayer");
+test("Multiplayer stands beside Publish only on a game with something in it, whose page is its own", () => {
+  const game = { publish: true, emptyGame: false, webExport: false };
+  assert.equal(showsMultiplayer(game), true);
+  assert.equal(showsMultiplayer({ ...game, emptyGame: true }), false, "an empty game has nothing to play together yet");
+  assert.equal(showsMultiplayer({ ...game, publish: false }), false, "no Publish, no Multiplayer");
+  assert.equal(
+    showsMultiplayer({ ...game, webExport: true }),
+    false,
+    "an engine's web export is a build, never edited",
+  );
 });
 test("toolbarStatusFrom keeps attention as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ attention: true }), { attention: true });

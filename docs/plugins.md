@@ -2269,7 +2269,10 @@ Godot's Export Template Manager) linked read-only into the job's private home; w
 is refused before Godot runs. The plugin's `detect` names the folder `godot-web-export` (a folder
 with `index.pck`). A game with no web game at its root plays and publishes its first web game in a
 folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
-`index.html`, and Publish uploads the folder in the root's place. A web game a plugin's fact also
+`index.html`, and Publish uploads the folder in the root's place; Multiplayer stays off for it, as
+the chat never edits a build. Godot writes the exported settings through its own temporary name
+(`tmpproject.binary-*`) in macOS's per-user temporary folder, the one place outside the project an
+export may write (`writePrefixes` in the native profile: one name's prefix, never a folder). A web game a plugin's fact also
 claims is told to chats as a web build, never with the web template's rules.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted

@@ -82,6 +82,11 @@ describe("a Godot game's web export", () => {
       path.join(game.web, "index.html"),
     ]);
     assert.deepEqual(job?.call.writes, [game.project, game.web]);
+    assert.deepEqual(
+      job?.call.writePrefixes,
+      [path.join(game.root, "user-temp", "tmpproject.binary")],
+      "and the one file Godot writes, under names of its own, in macOS's own temporary folder",
+    );
     assert.deepEqual(job?.call.reads, [path.join(game.home, TEMPLATES)]);
     assert.deepEqual(job?.call.homeLinks, [{ at: TEMPLATES, to: path.join(game.home, TEMPLATES) }]);
     assert.match(await readFile(path.join(game.project, "export_presets.cfg"), "utf8"), /name="Genex Web"/);

@@ -18,6 +18,9 @@ const exec = promisify(execFile);
 export const MIN_GODOT = { major: 4, minor: 3 } as const;
 /** How long a binary may take to say its version. */
 const VERSION_TIMEOUT_MS = 10 * SECOND_MS;
+/** The macOS program and key that name this user's own temporary folder. */
+const GETCONF = "/usr/bin/getconf";
+const USER_TEMP_KEY = "DARWIN_USER_TEMP_DIR";
 /** The executable inside a Godot app bundle. */
 const APP_BINARY = ["Contents", "MacOS", "Godot"];
 const GODOT_APP = /^godot.*\.app$/i;
@@ -56,6 +59,8 @@ export type GodotEnv = {
   binaries: string[];
   /** The first line a binary prints for `--version`, or null when it doesn't answer. */
   version(binary: string): Promise<string | null>;
+  /** macOS's own temporary folder for this user (`DARWIN_USER_TEMP_DIR`), where Godot writes some files whatever TMPDIR says; null when unknown. */
+  userTemp(): Promise<string | null>;
 };
 
 /** The computer's own: its platform, home, PATH, and each binary asked for real. */
@@ -71,6 +76,13 @@ export function systemGodotEnv(): GodotEnv {
         stdout: "",
       }));
       return stdout.trim().split(/\r?\n/).pop()?.trim() || null;
+    },
+    userTemp: async () => {
+      const { stdout } = await exec(GETCONF, [USER_TEMP_KEY], { timeout: VERSION_TIMEOUT_MS }).catch(() => ({
+        stdout: "",
+      }));
+      // Its real path (`/private/var/…`): the sandbox matches real paths, and the files Godot writes there don't exist yet to resolve.
+      return stdout.trim() ? realpath(stdout.trim()).catch(() => null) : null;
     },
   };
 }

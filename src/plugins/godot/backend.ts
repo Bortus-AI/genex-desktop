@@ -343,7 +343,12 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   await addWebPreset(project, MESSAGE.Web.Link);
   const folder = await prepareWebFolder(game, MESSAGE.Web.Link);
   const templates = webTemplates(deps.env.home, install).folder;
-  const call = webExportCall(project, folder, templates, templateVersion(install.version));
+  const userTemp = await deps.env.userTemp();
+  const call = webExportCall(project, folder, {
+    folder: templates,
+    version: templateVersion(install.version),
+    userTemp,
+  });
   const started = Date.now();
   const result = await deps.run(install.binary, call, context.signal);
   if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);

@@ -111,6 +111,7 @@ export async function fakeMac(
     applications,
     binaries: [],
     version: async (binary) => versions.get(binary) ?? null,
+    userTemp: async () => path.join(root, "user-temp"),
   };
   return { root, home, env, versions };
 }

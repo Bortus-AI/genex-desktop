@@ -29,6 +29,11 @@ export const WEB_TEMPLATE = "web_nothreads_release.zip";
 const TEMPLATES_HOME = "Library/Application Support/Godot/export_templates";
 /** Tells Godot to leave a folder out of the project, should the export sit inside it. */
 const GDIGNORE = ".gdignore";
+/**
+ * The file Godot writes the exported project's settings to before packing them, in macOS's own
+ * temporary folder for the user whatever TMPDIR says: the one file there an export may write.
+ */
+export const EXPORT_SETTINGS_TEMP = "tmpproject.binary";
 /** An export imports the whole project first, the first time with every asset. */
 const EXPORT_TIMEOUT_MS = 10 * MINUTE_MS;
 
@@ -110,17 +115,25 @@ export async function prepareWebFolder(game: string, linkMessage: string): Promi
 
 /**
  * The export: Godot imports the project and writes Genex's Web preset's page and files into
- * `folder`, with the person's Web template linked into the job's private home.
+ * `folder`, with the person's Web template linked into the job's private home, and the one file
+ * Godot writes (under names of its own) in the user's own temporary folder.
  */
-export function webExportCall(project: string, folder: string, templates: string, version: string): GodotCall {
+export function webExportCall(
+  project: string,
+  folder: string,
+  templates: { folder: string; version: string; userTemp: string | null },
+): GodotCall {
+  // Godot writes the file under a name of its own that starts with this one, then renames it into place.
+  const settings = templates.userTemp ? [path.join(templates.userTemp, EXPORT_SETTINGS_TEMP)] : [];
   return {
     job: GodotJob.Export,
     args: ["--headless", "--path", project, "--export-release", WEB_PRESET, path.join(folder, WEB_PAGE)],
     cwd: project,
-    reads: [templates],
+    reads: [templates.folder],
     writes: [project, folder],
+    writePrefixes: settings,
     timeoutMs: EXPORT_TIMEOUT_MS,
     gpu: false,
-    homeLinks: [{ at: path.join(TEMPLATES_HOME, version), to: templates }],
+    homeLinks: [{ at: path.join(TEMPLATES_HOME, templates.version), to: templates.folder }],
   };
 }

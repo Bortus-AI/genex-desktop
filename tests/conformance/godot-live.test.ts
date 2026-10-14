@@ -6,9 +6,10 @@
  * with Godot 4.3 or newer in Applications.
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
+import { promisify } from "node:util";
 import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -33,6 +34,7 @@ const LIVE = process.env.STUDIO_GODOT_LIVE === "1";
 const PNG_SIGNATURE = "iVBORw0KGgo";
 /** A first import and a first capture compile shaders: generous for a cold Mac. */
 const LIVE_TIMEOUT_MS = 5 * 60 * 1000;
+const run = promisify(execFile);
 /** How often, and how many times, the test looks for the editor's first heartbeat. */
 const EDITOR_START_POLL_MS = 500;
 const EDITOR_START_TRIES = 120;
@@ -175,6 +177,16 @@ describe("the Godot plugin on this Mac's Godot", { skip: !LIVE, timeout: LIVE_TI
     assert.match(String(await call(GodotTool.WebExport)), /Exported the game for the web/);
     const files = await readdir(path.join(game, "web"));
     for (const file of ["index.html", "index.js", "index.wasm", "index.pck"]) assert.ok(files.includes(file), file);
+    // The pack loads: its project settings were written whole (a sandbox that kept Godot from its
+    // temporary file once made a pack whose settings were empty).
+    const loaded = await run(install.binary, [
+      "--headless",
+      "--main-pack",
+      path.join(game, "web", "index.pck"),
+      "--quit-after",
+      "2",
+    ]);
+    assert.doesNotMatch(`${loaded.stdout}\n${loaded.stderr}`, /Corrupted|Couldn't load project data/);
   });
 
   it("answers the installed version's API", async () => {
