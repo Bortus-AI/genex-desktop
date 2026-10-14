@@ -2,7 +2,7 @@
 
 ## What the user sees
 
-The sidebar contains Search, Notifications, Send feedback
+The sidebar holds Search, Notifications, Send feedback
 ([what it sends](../../PRIVACY.md#send-feedback)), New game, Plugins, Harness, Settings, Games
 and, once updates wait, **Update plugins** and **Relaunch to update** (Linux: **Download**); only
 games scroll. Pinned games lead, then recent activity. Every launch opens **home** (also the
@@ -33,7 +33,7 @@ commands to copy, Retry.
 - **Home's first message** starts a game the model names, where the chip says
   ([its kind](projects-engines.md)). Duplicates never overwrite; a greeting stays **Untitled game** until an idea. **New game**, the Games **+** and Command-N open home.
 - **Settings → Games** moves new games to an empty folder (default `~/AI Games`);
-  **Storage** frees older builds, keeping paused and latest ones.
+  **Storage** frees older builds, keeping paused and latest.
 - **Settings → Privacy**: Share build metrics (off by default), See what would be sent and
   Delete what I shared ([PRIVACY](../../PRIVACY.md)).
 - Home's **Open a folder…** inspects before writing (Claude settings and hooks trusted unless

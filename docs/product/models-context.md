@@ -2,7 +2,7 @@
 
 ## Selecting a model
 
-The model button opens Main agent, Workers and Reviewers, grouped by provider; Add more models opens
+The model button opens Main agent, Workers and Reviewers by provider; Add more models opens
 setup. Blocked plans keep the request, offering settings or retry.
 
 Claude Code and Codex discover models without generating. The list names each family's newest
@@ -10,12 +10,13 @@ model of the newest generation; older ones switch on in Settings; a model in use
 An unset pick runs the CLI's named default, else a default row. Aliases follow the CLI;
 versions stay pinned.
 
-Settings shows CLI versions; Account rechecks or updates CLIs; failed refreshes offer Try again.
-Unavailable picks block sends; without models, Connect AI model replaces the model pill. Listing
-does not prove access.
+Settings shows CLI versions; Account rechecks or updates them; failed refreshes offer Try again.
+Unavailable picks block sends; without models, Connect AI model replaces the model pill. A
+listing proves no access.
 
 Each chat keeps its model, effort and Loop; fresh games inherit the last picks. One effort, on the
-main agent's levels, serves every role at its closest. Workers and Reviewers run only in Loop and
+main agent's levels, serves every role (Workers and Reviewers at most high).
+Workers and Reviewers run only in Loop and
 survive a main-agent change. Each Ollama job takes its own model; Reviewers must see images and
 check a Loop's finish.
 

@@ -1,4 +1,5 @@
 import { consentAudience, priorConsentDecline } from "./consent-audience.ts";
+import { STUDIO_CONSENT_NAMES, type StudioConsentSource } from "../../shared/plugins.ts";
 /**
  * Plugin and connector tools as agents call them: the consent a confirmed tool waits for, the
  * call itself with its durable record, and the MCP servers a plugin declares. Composed by
@@ -232,6 +233,11 @@ export interface PluginCallContext {
   lead?: boolean;
 }
 
+/** The name of a consent card the studio itself asks with, or null for a plugin's. */
+function studioConsentName(source: string): string | null {
+  return Object.hasOwn(STUDIO_CONSENT_NAMES, source) ? STUDIO_CONSENT_NAMES[source as StudioConsentSource] : null;
+}
+
 /** How a connector call is made, beyond its name, arguments and game. */
 export interface ConnectorCallOptions {
   /** A build's lead's call: its card and the call outlive the chat's turns, ending with its own session. */
@@ -426,6 +432,7 @@ export class PluginToolService {
     return (
       this.#core.mcp.nameOf(pluginId) ??
       this.#core.plugins.list().find((p) => p.manifest.id === pluginId)?.manifest.name ??
+      studioConsentName(pluginId) ??
       pluginId
     );
   }

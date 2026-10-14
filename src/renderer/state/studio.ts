@@ -98,6 +98,11 @@ import { createUpdateStore, updateDownloaded, type UpdateStore } from "./update.
 
 /** The log is the source of truth; this poll is the safety net for anything the stream missed. */
 export const EVENT_POLL_MS = 3 * SECOND_MS;
+/** What a launch says when it stops before making a game. */
+const MESSAGE = {
+  outOfUsage: (why: string) =>
+    `${why.replace(/[\s.]+$/, "")}. No game was made: send it again after the reset, from another account or with another model.`,
+} as const;
 
 /** An agent screen that went away. */
 const SCREEN_CLOSED: AgentScreenEvent["state"] = "closed";
@@ -448,14 +453,18 @@ async function enterProject(
 const UNTITLED_GAME = "Untitled game";
 let launches = 0;
 
-/** The name for a launch's game: the model's, else Untitled game, waiting for an idea. Never fails. */
+/**
+ * The name for a launch's game: the model's, else Untitled game, waiting for an idea, and whether
+ * the picked model is out of usage (`limited`). Never fails.
+ */
 async function launchName(api: StudioApi, input: LaunchInput): Promise<GameName> {
   const { engine, model } = parseModelKey(input.modelKey);
   const request = { prompt: input.text, ...(engine ? { engine } : {}), ...(model ? { model } : {}) };
   const named = await api.nameGame(request).catch(() => null);
+  const limited = typeof named?.limited === "string" && named.limited.trim() ? { limited: named.limited.trim() } : {};
   const title = named?.title.trim();
-  if (!title) return { title: UNTITLED_GAME, provisional: true };
-  return named?.provisional ? { title, provisional: true } : { title };
+  if (!title) return { title: UNTITLED_GAME, provisional: true, ...limited };
+  return named?.provisional ? { title, provisional: true, ...limited } : { title, ...limited };
 }
 
 /** The new chat opens on home's model and effort, the ones its first message was written for. */
@@ -471,7 +480,13 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
   if (launch.getState().launch) return;
   const id = `launch-${++launches}`;
   launch.setState((state) => launchStarted(state, { id, text: input.text, extras: input.extras, at: ctx.now() }), true);
-  const { title, provisional } = await launchName(api, input);
+  const { title, provisional, limited } = await launchName(api, input);
+  // The picked model cannot take the game's first turn: no game waits empty for it, and the words go back home.
+  if (limited) {
+    notify(MESSAGE.outOfUsage(limited), ToastTone.Error);
+    launch.setState((state) => launchFailed(state, id), true);
+    return;
+  }
   launch.setState((state) => launchNamed(state, id, title), true);
   try {
     const options = { ...(input.parent ? { parent: input.parent } : {}), ...(provisional ? { provisional } : {}) };

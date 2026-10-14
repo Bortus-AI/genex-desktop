@@ -17,12 +17,14 @@
  * vendored three.js — so restore is a pure checkout. {@link SnapshotEngine.restore} still calls
  * the `afterRestore` hook where an install step would go.
  */
-import { cp, lstat, readdir, symlink, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { copyFile, cp, lstat, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ensureDir, pathExists } from "./fsx.ts";
 import { shortId } from "./ids.ts";
 import { throughClaudeFolder } from "./paths.ts";
 import type { SnapshotGitRefs } from "./types.ts";
+import { StudioPlatform } from "../shared/boot.ts";
 import { type SnapshotRecord, SnapshotScope } from "../shared/event-log.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -60,6 +62,67 @@ export const WRITER_COPY_MAX_BYTES = 2 * 1024 ** 3;
 
 /** Folders a copy never receives from a nested repository: its history, and packages it links instead. */
 const NEVER_COPIED = new Set([".git", "node_modules"]);
+
+/**
+ * Clone `files` (paths inside the game) from the game folder into a copy of it, each to the same
+ * path: a clone shares the file's blocks until either side changes it, so it takes neither the
+ * time of writing the file again nor its disk. A file it could not clone is left out (git writes
+ * it); it may fail as a whole.
+ */
+export type CloneFiles = (gameDir: string, targetDir: string, files: readonly string[]) => Promise<void>;
+/** macOS's own `cp`: with `-c` it clones through clonefile(2) on APFS (and copies elsewhere). */
+const MAC_CP = "/bin/cp";
+/** How many files one `cp -c` clones: one folder's files, a batch at a time, well under the argument limit. */
+const CLONE_BATCH = 200;
+/** How many files a copy looks at at once. */
+const FILES_AT_ONCE = 64;
+/** How many `cp -c` batches run at once. */
+const CLONE_BATCHES_AT_ONCE = 4;
+
+/** Clone with `cp -c`, one batch per folder of the copy. */
+async function cloneByCp(gameDir: string, targetDir: string, files: readonly string[]): Promise<void> {
+  const byFolder = new Map<string, string[]>();
+  for (const file of files) {
+    const folder = path.posix.dirname(file);
+    const inFolder = byFolder.get(folder) ?? [];
+    inFolder.push(file);
+    byFolder.set(folder, inFolder);
+  }
+  const batches = [...byFolder].flatMap(([folder, inFolder]) =>
+    Array.from({ length: Math.ceil(inFolder.length / CLONE_BATCH) }, (_, i) => ({
+      folder,
+      files: inFolder.slice(i * CLONE_BATCH, (i + 1) * CLONE_BATCH),
+    })),
+  );
+  const one = async ({ folder, files: batch }: { folder: string; files: string[] }) => {
+    const to = path.join(targetDir, folder);
+    await mkdir(to, { recursive: true });
+    const from = batch.map((file) => path.join(gameDir, file));
+    await execFileAsync(MAC_CP, ["-c", "--", ...from, `${to}${path.sep}`], { windowsHide: true });
+  };
+  for (let at = 0; at < batches.length; at += CLONE_BATCHES_AT_ONCE)
+    await Promise.all(batches.slice(at, at + CLONE_BATCHES_AT_ONCE).map((batch) => one(batch).catch(() => {})));
+}
+
+/** Clone with a reflink where the file system has them (Btrfs, XFS); the first refusal ends it. */
+async function cloneByReflink(gameDir: string, targetDir: string, files: readonly string[]): Promise<void> {
+  for (const file of files) {
+    const to = path.join(targetDir, file);
+    await mkdir(path.dirname(to), { recursive: true });
+    await copyFile(path.join(gameDir, file), to, constants.COPYFILE_FICLONE_FORCE);
+  }
+}
+
+/** The clone each platform makes; none on another (Windows): git checks every file out, as it always did. */
+const PLATFORM_CLONES: Partial<Record<NodeJS.Platform, CloneFiles>> = {
+  [StudioPlatform.Mac]: cloneByCp,
+  [StudioPlatform.Linux]: cloneByReflink,
+};
+const PLATFORM_CLONE: CloneFiles | null = PLATFORM_CLONES[process.platform] ?? null;
+/** `git ls-tree -r -z` modes of the files a copy may clone: plain and executable regular files. */
+const CLONABLE_MODES = new Set(["100644", "100755"]);
+/** One `git ls-tree -r -z` entry: its mode and path. */
+const TREE_ENTRY = /^(\d+) \w+ [0-9a-f]+\t(.+)$/s;
 
 /** What a worker's copy of a game would take, in all and by top-level folder, largest first. */
 export interface CopySize {
@@ -259,6 +322,72 @@ async function tallyNested(gameDir: string, rel: string, tally: CopyTally): Prom
   const pending = [rel];
   for (let folder = pending.pop(); folder !== undefined; folder = pending.pop())
     pending.push(...(await tallyFolder(gameDir, folder, tally)));
+}
+
+/** The NUL-separated paths git printed with `-z`. */
+const zPaths = (out: string | null): string[] => (out ?? "").split("\0").filter(Boolean);
+
+/**
+ * The tracked paths of `commit` the game folder no longer holds as committed: changed, deleted, of
+ * another mode or kind. Null when git cannot say, and then nothing is cloned.
+ */
+async function changedSince(gameDir: string, commit: string): Promise<Set<string> | null> {
+  const out = await gitOrNull(gameDir, ["diff", "--name-only", "--no-renames", "-z", "--end-of-options", commit, "--"]);
+  return out === null ? null : new Set(zPaths(out));
+}
+
+/** Whether `file` is a regular file at `root`, reached as written (its last part no link). */
+const isRegularFile = async (root: string, file: string): Promise<boolean> =>
+  Boolean((await lstat(path.join(root, file)).catch(() => null))?.isFile());
+
+/** The files of `files` that are regular files at `root`, looked at a few at once. */
+async function regularFiles(root: string, files: readonly string[]): Promise<Set<string>> {
+  const found = new Set<string>();
+  for (let at = 0; at < files.length; at += FILES_AT_ONCE) {
+    const batch = files.slice(at, at + FILES_AT_ONCE);
+    const regular = await Promise.all(batch.map((file) => isRegularFile(root, file)));
+    for (const [i, file] of batch.entries()) if (regular[i]) found.add(file);
+  }
+  return found;
+}
+
+/** Git writes `files` into the copy from its index (the commit), recording their stat. */
+async function checkoutFiles(targetDir: string, files: string[]): Promise<void> {
+  if (files.length) await git(targetDir, ["checkout-index", "-f", "-u", "--stdin", "-z"], {}, `${files.join("\0")}\0`);
+}
+
+/**
+ * Fill a copy made without a checkout with `commit`'s files. Each regular file the game folder still
+ * holds as committed is cloned from there (`CloneFiles`: copy-on-write where the volume can, so a
+ * large project costs neither the time of writing its files again nor the disk); git writes every
+ * other entry. Git then records each file's stat, and any clone that does not read as committed (the
+ * folder changed between the look and the clone) is written again from the commit: the copy is
+ * exactly the commit's, however it was made.
+ */
+async function fillWorktree(gameDir: string, targetDir: string, commit: string, clone: CloneFiles): Promise<void> {
+  await git(targetDir, ["read-tree", "--end-of-options", commit]);
+  const entries = zPaths(await git(gameDir, ["ls-tree", "-r", "-z", "--end-of-options", commit])).flatMap((line) => {
+    const entry = TREE_ENTRY.exec(line);
+    return entry?.[1] && entry[2] ? [{ mode: entry[1], file: entry[2] }] : [];
+  });
+  const changed = await changedSince(gameDir, commit);
+  const same = changed ? entries.filter((e) => CLONABLE_MODES.has(e.mode) && !changed.has(e.file)) : [];
+  // Only a regular file reached as git saw it; anything put there since (a link) git writes.
+  const clonable = [
+    ...(await regularFiles(
+      gameDir,
+      same.map((e) => e.file),
+    )),
+  ];
+  await clone(gameDir, targetDir, clonable).catch(() => {});
+  const cloned = await regularFiles(targetDir, clonable);
+  await checkoutFiles(
+    targetDir,
+    entries.map((e) => e.file).filter((file) => !cloned.has(file)),
+  );
+  if (!cloned.size) return;
+  await gitOrNull(targetDir, ["update-index", "-q", "--refresh"]);
+  await checkoutFiles(targetDir, zPaths(await git(targetDir, ["diff", "--name-only", "--no-renames", "-z"])));
 }
 
 export class SnapshotEngine {
@@ -489,12 +618,16 @@ export class SnapshotEngine {
     workspace: string,
     commit: string,
     targetDir: string,
-    options: { versionNested?: boolean; skip?: (rel: string) => boolean } = {},
+    options: { versionNested?: boolean; skip?: (rel: string) => boolean; cloneFiles?: CloneFiles | null } = {},
   ): Promise<string> {
     const dir = this.dirFor(workspace);
     const skip = options.skip ?? (() => false);
     const resolved = await resolveCommit(dir, commit);
-    await git(dir, ["worktree", "add", "--detach", "-f", "--end-of-options", targetDir, resolved]);
+    const clone = options.cloneFiles === undefined ? PLATFORM_CLONE : options.cloneFiles;
+    if (clone) {
+      await git(dir, ["worktree", "add", "--no-checkout", "--detach", "-f", "--end-of-options", targetDir, resolved]);
+      await fillWorktree(dir, targetDir, resolved, clone);
+    } else await git(dir, ["worktree", "add", "--detach", "-f", "--end-of-options", targetDir, resolved]);
     // A game with its own build needs its dependencies in the copy too: node_modules is
     // ignored by git, so the worktree gets a link to the workspace's own.
     await this.#linkModules(dir, targetDir, "");
@@ -509,6 +642,8 @@ export class SnapshotEngine {
       await cp(source, target, {
         recursive: true,
         force: true,
+        // A reflink where Linux's file system makes one; a plain copy elsewhere.
+        mode: constants.COPYFILE_FICLONE,
         // Besides its history and packages, what the game's copy rules leave out (`skip`, by the
         // path inside the game): an engine's scratch a worker never needs.
         filter: (from) => !NEVER_COPIED.has(path.basename(from)) && !skip(gameRelative(dir, from)),

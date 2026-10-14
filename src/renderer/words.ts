@@ -19,6 +19,7 @@
  *      director invented with a sha in it comes out readable.
  */
 
+import { InteractionObjective, InteractionSource } from "../shared/run-summary.ts";
 import type { GameEngine } from "../shared/game-engine.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
 import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
@@ -34,7 +35,7 @@ import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
-import type { OutcomeView } from "../shared/run-summary.ts";
+import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
 import {
   GrantKind,
@@ -56,6 +57,7 @@ import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
 import { MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
+import { JUDGE_PLAY_TOOL_NAME } from "../shared/chat-judge.ts";
 import {
   APP_LOOK_TOOL_NAME,
   AppLookAccessKind,
@@ -1744,6 +1746,10 @@ export const WORKER_WORDS = {
   added: "Added to your game",
   done: "Done",
   didntFinish: "Didn't finish",
+  /** the host refused its session: it never ran */
+  notStarted: "Not started",
+  /** it finished, changed nothing and delivered nothing */
+  nothingMade: "Nothing made",
   stopped: "Stopped",
   notUsed: "Not used",
   /** the quotes on a worker's card */
@@ -1789,6 +1795,31 @@ export const WORKER_LINE_WORDS = {
   didntFinish: (title: string, because: WorkerStopCode | null) =>
     because ? `${title}: didn't finish. ${asSentence(WORKER_STOP_WORDS[because])}` : `${title}: didn't finish.`,
   stopped: (title: string) => `${title}: stopped.`,
+} as const;
+
+/**
+ * The Building card's checklist (`chat/build-checklist.ts`): each part's status on its row, the
+ * lead's last step, and the card's one line, counted from the parts.
+ */
+export const BUILD_CHECKLIST_WORDS = {
+  added: "Added",
+  working: "Working",
+  workingFor: (minutes: number) => `Working · about ${minutes} min`,
+  workingRound: (round: number) => `Working · round ${round}`,
+  waiting: "Waiting to start",
+  notAdded: "Not added",
+  notStarted: "Not started",
+  next: "Next",
+  /** The lead's own last step, after the parts. */
+  together: "Put it together and check",
+  caption: (added: number, total: number, working: number) =>
+    working ? `${added} of ${total} parts added · ${working} working` : `${added} of ${total} parts added`,
+  finishing: (working: number) => (working ? `Finishing up · ${working} working` : "Finishing up"),
+  open: "Open in Builds",
+  /** The card's toggle, as a screen reader names it. */
+  toggle: "Building: show or hide its parts",
+  /** The list's own name, for a screen reader. */
+  list: "Parts of the build",
 } as const;
 
 /** The status line's rest while a Loop's workers work: "3 workers on it". */
@@ -2469,12 +2500,14 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   [JobTool.Tail]: { icon: "read", label: "read background work's output" },
   [JobTool.Stop]: { icon: "run", label: "stopped background work" },
   [APP_LOOK_TOOL_NAME]: { icon: "see", label: "looked at an app window", active: "Looking at an app window" },
+  [JUDGE_PLAY_TOOL_NAME]: { icon: "game", label: "had a judge play the game", active: "A judge is playing the game" },
   wait: { icon: "think", label: "waited", active: "Waiting" },
   judge: { icon: "see", label: "reviewed a build", active: "Reviewing a build" },
   playtest: { icon: "game", label: "had a build playtested", active: "Playtesting a build" },
   integrate: { icon: "write", label: "merged a worker's work", active: "Merging a worker's work" },
   show: { icon: "see", label: "showed you a build" },
   note: { icon: "think", label: "noted a decision" },
+  wrap_up: { icon: "run", label: "began finishing the build", active: "Finishing the build" },
   finish: { icon: "run", label: "wrapped up the build", active: "Wrapping up the build" },
 };
 
@@ -2950,6 +2983,12 @@ export const ASSET_WORDS = {
   animations: "Animations",
   speed: "Speed",
   playFailed: "This sound could not be played",
+} as const;
+
+/** The Builds graph's assets tile and card: jobs still open when the run ended. */
+export const ASSET_JOB_WORDS = {
+  notFinished: (count: number) => `${count} not finished`,
+  notFinishedGroup: "Not finished",
 } as const;
 
 /** What an asset card says while its asset is being made (`asset-making.ts`). */
@@ -3561,6 +3600,43 @@ export function privacyDeleteWords(result: RunSharingDeleteResult): string {
   return words[result.outcome];
 }
 
+/** Who took a check, for the sources that played the build. */
+export const PLAYED_SOURCE_WORDS: Record<InteractionSource, string> = {
+  [InteractionSource.IndependentPlaytester]: "Independent playtester",
+  [InteractionSource.HandsOnJudge]: "Judge who played it",
+  [InteractionSource.RouteReplay]: "Replayed route",
+};
+
+/** What an interaction result rests on: the studio's own check of the game's state, or the player's word. */
+export const OBJECTIVE_WORDS: Record<InteractionObjective, string> = {
+  [InteractionObjective.StudioVerified]: "verified by the studio",
+  [InteractionObjective.ModelSaid]: "the player's word",
+};
+
+/** A chat's judge line (`JudgeLine.tsx`): what leads the question inside it. */
+export const CHAT_JUDGE_WORDS = {
+  asked: "Asked:",
+  /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
+  notPlayed: "The judge didn't play",
+} as const;
+
+/** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
+export const CHECK_WORDS = {
+  status: {
+    passed: "Passed",
+    failed: "Failed",
+    unknown: "Not measured",
+    incomplete: "Incomplete",
+  } satisfies Record<RunEvidence["status"], string>,
+  thisBuild: "This build",
+  earlierBuilds: "Earlier builds",
+  reviewer: "Reviewer",
+  recorded: "Recorded check",
+  routeTitle: "Replayed the judge's route",
+  routeHeld: "The judge's moves were replayed on this build, and the goal held.",
+  showAll: "Show all",
+  showLess: "Show less",
+} as const;
 /** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
 export const PLUGIN_TOOLBAR_WORDS = {
   update: {

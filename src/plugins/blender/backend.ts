@@ -59,6 +59,11 @@ const PROTECTED_SEGMENTS = new Set(["node_modules", "AGENTS.md", "CLAUDE.md"]);
 const SECRET_NAME = /^(credentials|secrets|id_rsa|id_ed25519)(\.|$)/i;
 /** The label the compose job's `inputs` value gives the model's slot. */
 const MODEL_SLOT = "model";
+/** A control character or a backslash: never in a path a native job is handed. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching control characters is the point: they are refused.
+const CONTROL_OR_BACKSLASH = /[\x00-\x1f\\]/;
+/** How much of a refused script a refusal quotes back. */
+const QUOTE_CHARS = 60;
 
 /** The setup actions plugin.json declares. */
 const BlenderAction = { Status: "status", Install: "install", CancelInstall: "cancel-install" } as const;
@@ -98,6 +103,10 @@ const MESSAGE = {
   InputLink: (file: string) => `Input ${file} goes through a symbolic link; name the file itself.`,
   InputNotFile: (file: string) => `Input ${file} is not a file.`,
   InputTooLarge: (file: string) => `Input ${file} is more than ${MAX_INPUT_BYTES / MIB} MiB.`,
+  ScriptNotPath: (script: string) =>
+    `script takes the path of a bpy script in this game, such as ${SCRIPT_FOLDER}/house.py, never code: write the script to that file first, then pass its path (${JSON.stringify(clip(script))} is no such path).`,
+  ScriptMissing: (file: string) =>
+    `No script at ${file}: write the bpy script to that file first (a regular file, not a link), then call blender__model again with its path as script.`,
   Renamed: (name: string, slug: string) => `The asset name ${name} became ${slug}.`,
   WebGuidance:
     "Files are relative to the game workspace. Load model.glb with GLTFLoader at its returned asset path (omit public/ in a built app URL). Inspect these renders, integrate the mesh into the scene, then use the preview to verify visible use. A delivered file alone is not integration proof.",
@@ -164,16 +173,40 @@ async function isGameFile(directory: string | undefined, relative: string): Prom
   return Boolean(info?.isFile());
 }
 
-/**
- * The script to run: the one named, else `assets/src/<name>.py` with the name as written, else with
- * its slug when only that file exists. A missing script is reported by the name as written.
- */
-async function scriptFor(args: ToolArgs, name: string, slug: string, directory: string | undefined): Promise<string> {
+/** The script the call names, or the one at its asset name: `assets/src/<name>.py` as written, else its slug's. */
+async function namedScript(args: ToolArgs, name: string, slug: string, directory: string | undefined): Promise<string> {
   if (args.script) return String(args.script);
   const written = `${SCRIPT_FOLDER}/${name}.py`;
   const slugged = `${SCRIPT_FOLDER}/${slug}.py`;
   if (slugged === written || (await isGameFile(directory, written))) return written;
   return (await isGameFile(directory, slugged)) ? slugged : written;
+}
+
+/**
+ * The script to run: the one named, else `assets/src/<name>.py` with the name as written, else with
+ * its slug when only that file exists. Code passed as the script, a path the host would refuse, and
+ * (in a game) a path that is no regular file there are refused here with what script takes, before
+ * anything runs; a missing script is reported by the name as written. The host checks it again.
+ */
+async function scriptFor(args: ToolArgs, name: string, slug: string, directory: string | undefined): Promise<string> {
+  const script = await namedScript(args, name, slug, directory);
+  if (!isRelativePath(script)) throw new Error(MESSAGE.ScriptNotPath(script));
+  if (directory && !(await isGameFile(directory, script))) {
+    const looksLikePath = isPlainPath(script) && script.endsWith(MODULE_EXTENSION);
+    throw new Error(looksLikePath ? MESSAGE.ScriptMissing(script) : MESSAGE.ScriptNotPath(script));
+  }
+  return script;
+}
+
+/** The shape a native job's input path must have: relative, `/`-separated, no control character, backslash, `.` or `..`. */
+function isRelativePath(file: string): boolean {
+  if (!file || CONTROL_OR_BACKSLASH.test(file) || path.isAbsolute(file)) return false;
+  return file.split("/").every((segment) => segment && segment !== "." && segment !== "..");
+}
+
+/** `text` cut to a short quote, for a refusal that repeats what it was given. */
+function clip(text: string): string {
+  return text.length > QUOTE_CHARS ? `${text.slice(0, QUOTE_CHARS)}…` : text;
 }
 
 /** A plain relative path of plain segments, short enough to label a job slot. */

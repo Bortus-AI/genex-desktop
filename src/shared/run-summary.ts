@@ -3,6 +3,7 @@ import { compareIds } from "./compare-ids.ts";
 import { LoopProfile } from "./project-facts.ts";
 import { CustomEvent } from "./custom-events.ts";
 import { EventKind, type EventEnvelope } from "./event-log.ts";
+import { isWorkerEnd } from "./workers.ts";
 import {
   ExecutionStatus,
   executionActivity,
@@ -32,7 +33,38 @@ export interface RunTask {
   integrations: number;
   attempts: RunAttempt[];
   reason: string | null;
+  /** The round its newest worker last started (absent: none started). */
+  round?: number | null;
+  /** When that round's worker must be done, in epoch ms, as its round's start said (absent: unknown). */
+  deadlineMs?: number | null;
+  /** A worker's own end or the lead's verdict says its work is in the game, with no merge of the run's to record it. */
+  added?: boolean;
 }
+/**
+ * Who established an interaction result (`run_interaction_evidence.source`). Wire values: the
+ * seed writes them (`harness-seed/loop/interaction-words.ts` `InteractionSource`, held equal by
+ * `seed-contracts.test.ts`) and the outcome panel names them.
+ */
+export const InteractionSource = {
+  /** A fresh playtester answered a yes/no question by playing. */
+  IndependentPlaytester: "independent-playtester",
+  /** A judge played the build blind to settle what screenshots could not. */
+  HandsOnJudge: "hands-on-judge",
+  /** A kept route was replayed on this build without a model. */
+  RouteReplay: "route-replay",
+} as const;
+export type InteractionSource = (typeof InteractionSource)[keyof typeof InteractionSource];
+
+/**
+ * Whether an interaction result rests on the studio's own check of the game's state (a goal it
+ * verified after a move) or only on what the model said it saw.
+ */
+export const InteractionObjective = {
+  StudioVerified: "studio-verified",
+  ModelSaid: "model-said",
+} as const;
+export type InteractionObjective = (typeof InteractionObjective)[keyof typeof InteractionObjective];
+
 export interface RunEvidence {
   id: string;
   head: string | null;
@@ -42,6 +74,10 @@ export interface RunEvidence {
   note: string | null;
   source: string;
   capture?: string;
+  /** For an interaction: verified by the studio against the game's state, or only the model's word. */
+  objective?: InteractionObjective;
+  /** For an interaction: the session's trace (`trace.jsonl`), when it played through the computer tool. */
+  trace?: string;
 }
 export interface RunSummary {
   /** Revision of the memoized persisted summary; preview identity is separate. */
@@ -120,7 +156,13 @@ const OPEN_OR_FAILED_STATES: ReadonlySet<string> = new Set([
   ExecutionStatus.Cancelled,
 ]);
 
-const INTERACTION_STATUSES: ReadonlySet<string> = new Set(["passed", "failed", "incomplete"]);
+/**
+ * How an interaction ended (`run_interaction_evidence.status`): the seed's `InteractionStatus`
+ * (`harness-seed/loop/interaction-evidence.ts`), word for word, held equal by `seed-contracts.test.ts`.
+ */
+export const InteractionStatus = { Passed: "passed", Failed: "failed", Incomplete: "incomplete" } as const;
+export type InteractionStatus = (typeof InteractionStatus)[keyof typeof InteractionStatus];
+const INTERACTION_STATUSES: ReadonlySet<unknown> = new Set(Object.values(InteractionStatus));
 
 const record = (value: unknown): Row =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Row) : {};
@@ -304,7 +346,11 @@ const readRound: RecordReader = (run, { event_type, payload, workerId }) => {
   if (!hasWorker || typeof payload.iteration !== "number") return;
   const w = workerRow(run, workerId ?? BUILD_WORKER);
   w.title = payload.facetTitle ?? w.title;
-  if (event_type === CustomEvent.FacetBuildStarted) w.state = "running";
+  if (event_type === CustomEvent.FacetBuildStarted) {
+    w.state = "running";
+    w.round = payload.iteration;
+    w.deadlineMs = typeof payload.deadlineMs === "number" ? payload.deadlineMs : null;
+  }
   const attempt = attemptRow(run, workerId ?? BUILD_WORKER, payload.iteration);
   if (event_type === CustomEvent.FacetBuildStarted) return;
   // A judged round is accepted or rejected; a stopped one is stopped; one that recorded no
@@ -406,6 +452,13 @@ const readVisualEvidence: RecordReader = (run, { event, event_type, payload }) =
   });
 };
 
+/** The objective and trace an interaction record carries, read field by field: a record may hold anything. */
+function interactionProof(payload: Record<string, unknown>): Pick<RunEvidence, "objective" | "trace"> {
+  const objective = Object.values(InteractionObjective).find((value) => value === payload.objective);
+  const trace = string(payload.trace);
+  return { ...(objective ? { objective } : {}), ...(trace ? { trace } : {}) };
+}
+
 const readInteractionEvidence: RecordReader = (run, { event, event_type, payload }) => {
   addEvidence(run, {
     id: event.id,
@@ -415,7 +468,32 @@ const readInteractionEvidence: RecordReader = (run, { event, event_type, payload
     status: INTERACTION_STATUSES.has(payload.status) ? payload.status : "unknown",
     note: string(payload.note),
     source: string(payload.source) ?? event_type,
+    ...interactionProof(payload),
   });
+};
+
+/** A worker of Genex's one model started (or resumed): a part at work. */
+const readWorkerStarted: RecordReader = (run, { payload, workerId }) => {
+  if (!workerId) return;
+  const w = workerRow(run, workerId);
+  w.title = string(payload.title) ?? w.title;
+  w.state = "running";
+};
+
+/** A worker's end, or the lead's later verdict on it: how it ended, and whether its work is in the game. */
+const readWorkerFinished: RecordReader = (run, { payload, workerId }) => {
+  if (!workerId) return;
+  const w = workerRow(run, workerId);
+  w.title = string(payload.title) ?? w.title;
+  if (isWorkerEnd(payload.state)) w.state = payload.state;
+  // Work in the game stays in the game: a rejection after it went in takes nothing out.
+  if (payload.inGame === true || payload.merged === true) w.added = true;
+};
+
+/** A round waiting on its model provider: the wait moves its deadline on, so the one its start gave no longer holds. */
+const readProviderOutage: RecordReader = (run, { workerId }) => {
+  if (!workerId) return;
+  workerRow(run, workerId).deadlineMs = null;
 };
 
 const readWorkerStop: RecordReader = (run, { payload, workerId }) => {
@@ -465,6 +543,9 @@ const READERS: ReadonlyMap<string, RecordReader> = new Map([
   [CustomEvent.RunVisualEvidence, readVisualEvidence],
   [CustomEvent.RunInteractionEvidence, readInteractionEvidence],
   [CustomEvent.WorkerStopRequested, readWorkerStop],
+  [CustomEvent.FacetProviderOutage, readProviderOutage],
+  [CustomEvent.WorkerStarted, readWorkerStarted],
+  [CustomEvent.WorkerFinished, readWorkerFinished],
   [CustomEvent.RunFinished, readRunFinished],
   [CustomEvent.RunLearning, readRunLearning],
 ]);
@@ -522,6 +603,9 @@ function groupTasks(workers: Map<string, Row>): Map<string, RunTask> {
     task.workers.push(id);
     task.state = w.state;
     task.reason = string(w.reason);
+    task.round = typeof w.round === "number" ? w.round : null;
+    task.deadlineMs = typeof w.deadlineMs === "number" ? w.deadlineMs : null;
+    if (w.added === true) task.added = true;
   }
   return tasks;
 }

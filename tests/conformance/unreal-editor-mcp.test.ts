@@ -1457,6 +1457,90 @@ test("a capture outside the project's captures folder, through a link, or never 
   }
 });
 
+test("a character check's pictures reach the agent as one sheet with each shot's view, beside its numbers", async () => {
+  const { captures, project } = await captureProject();
+  const files = ["idle-front", "idle-side", "walk-0"].map((name) => path.join(captures, `character-1-${name}.png`));
+  const record = path.join(captures, "character-1.json");
+  const unreal = editor(async () => {
+    for (const file of files) await writeFile(file, frame(0));
+    const frames = [{ label: "idle front" }, { label: "idle side" }, { label: "walk 0.00 s" }];
+    await writeFile(record, JSON.stringify({ frames, files }));
+    const pictures = { record, files, waitS: 60 };
+    return { returnValue: JSON.stringify({ passed: false, reasons: ["idle: arms out"], pictures }) };
+  }, project.project);
+  const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+  try {
+    const call = captureCall("character_check", {
+      mesh: "/Game/Cast/SK_Hero",
+      idle: "",
+      walk: "",
+      driver: "",
+      pictures: true,
+    });
+    const result: any = await client.callTool(call);
+    const images = result.content.filter((part: any) => part.type === "image");
+    assert.equal(images.length, 1, "one sheet");
+    const text = result.content.map((part: any) => part.text ?? "").join("\n");
+    assert.match(text, /idle: arms out/, "the numbers stay in the answer");
+    assert.match(text, /shot 0: idle front/);
+    assert.match(text, /shot 2: walk 0\.00 s/);
+  } finally {
+    await close();
+  }
+});
+
+test("a character sheet whose record or shots lie outside the captures folder is never read", async () => {
+  const { root, captures, project } = await captureProject();
+  const outside = path.join(root, "outside.png");
+  const outsideRecord = path.join(root, "outside.json");
+  await writeFile(outside, frame(7));
+  await writeFile(outsideRecord, JSON.stringify({ frames: [{ label: "idle front" }], files: [outside] }));
+  await symlink(outsideRecord, path.join(captures, "linked.json"));
+  const pointingOut = path.join(captures, "character-2.json");
+  await writeFile(pointingOut, JSON.stringify({ frames: [{ label: "idle front" }], files: [outside] }));
+  const cases = {
+    "a record elsewhere": outsideRecord,
+    "a record linked out": path.join(captures, "linked.json"),
+    "a record climbing out": path.join(captures, "..", "..", "..", "..", "outside.json"),
+    "a record that names shots elsewhere": pointingOut,
+    "not a path": 42,
+  };
+  for (const [label, record] of Object.entries(cases)) {
+    const pictures = { record, files: [outside], waitS: 1 };
+    const unreal = editor(() => ({ returnValue: JSON.stringify({ passed: true, pictures }) }), project.project);
+    const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+    try {
+      const call = captureCall("character_check", { mesh: "x", idle: "", walk: "", driver: "", pictures: true });
+      const result: any = await client.callTool(call);
+      assert.deepEqual(
+        result.content.filter((part: any) => part.type === "image"),
+        [],
+        label,
+      );
+    } finally {
+      await close();
+    }
+  }
+});
+
+test("a character check without pictures, or one refused, gets no picture", async () => {
+  const { project } = await captureProject();
+  for (const answer of [{ passed: true, reasons: [] }, { error: "mesh must be a SkeletalMesh asset" }]) {
+    const unreal = editor(() => ({ returnValue: JSON.stringify(answer) }), project.project);
+    const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+    try {
+      const call = captureCall("character_check", { mesh: "x", idle: "", walk: "", driver: "", pictures: false });
+      const result: any = await client.callTool(call);
+      assert.deepEqual(
+        result.content.filter((part: any) => part.type === "image"),
+        [],
+      );
+    } finally {
+      await close();
+    }
+  }
+});
+
 test("a motion strip reaches the agent as one contact sheet with each frame's pose and how much it moved", async () => {
   const { captures, project } = await captureProject();
   const files = [0, 1, 2].map((i) => path.join(captures, `strip-1-${i}.png`));
