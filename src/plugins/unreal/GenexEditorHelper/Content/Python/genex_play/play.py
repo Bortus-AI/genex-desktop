@@ -27,7 +27,7 @@ MIN_HOLD_SECONDS = 0.05
 # The mouse's own keys: its movement (2D, in pixels) and its wheel (notches, up positive).
 MOUSE_MOVE = 'Mouse2D'
 MOUSE_WHEEL = 'MouseWheelAxis'
-# A mouse movement lasts until the game clock has moved at all: one frame of the game.
+# A mouse movement lasts one frame of the game; its wall-clock cap is a wait of almost no game time.
 ONE_FRAME_S = 1e-6
 # A game-time wait of s seconds ends after WALL_FACTOR * s + WALL_GRACE_S wall seconds at most.
 WALL_FACTOR = 4.0
@@ -276,11 +276,39 @@ def hold(name: str, x: float, y: float, seconds: float) -> str:
     return json.dumps({'held': held_input.label, 'seconds': held_seconds})
 
 
-def _one_frame(key: str, value: str) -> None:
-    """Forces `key` to `value` until one frame of the game has run, as one frame of a mouse is."""
+def _try_run(command: str) -> None:
+    """Runs a console command in the play session, when there still is one."""
+    try:
+        _run(command)
+    except RuntimeError:  # the play session already ended and took its input with it
+        pass
+
+
+def _one_frame(key: str, value: str, still: str) -> None:
+    """Forces `key` to `value` for one frame of the game, as one frame of a mouse is. Unreal lets go
+    of a forced analog key by injecting its opposite (the mouse moved straight back), so the key is
+    forced to `still` for the next frame and let go after that, when its opposite is nothing."""
     _run(f'Input.+key {key} {value}')
-    _held[key] = Held(f'Input.-key {key}', game_seconds() + ONE_FRAME_S, wall_clock() + wall_cap(ONE_FRAME_S))
-    _ensure_ticking()
+    stage = {'frames': 0, 'last': game_seconds(), 'until_wall': wall_clock() + wall_cap(ONE_FRAME_S)}
+
+    def let_go() -> None:
+        _try_run(f'Input.-key {key}')
+
+    def step(game_now: float, wall_now: float) -> bool:
+        if wall_now >= stage['until_wall']:
+            let_go()
+            return False
+        if game_now <= stage['last']:
+            return True
+        stage['last'] = game_now
+        stage['frames'] += 1
+        if stage['frames'] == 1:
+            _try_run(f'Input.+key {key} {still}')
+            return True
+        let_go()
+        return False
+
+    watch(step, let_go)
 
 
 def move_mouse(dx: float, dy: float, wheel: float) -> dict:
@@ -289,9 +317,9 @@ def move_mouse(dx: float, dy: float, wheel: float) -> dict:
     game_world()
     if dx or dy:
         # Unreal's mouse Y grows upward, a screen's downward.
-        _one_frame(MOUSE_MOVE, f'X={dx:g} Y={-dy:g}')
+        _one_frame(MOUSE_MOVE, f'X={dx:g} Y={-dy:g}', 'X=0 Y=0')
     if wheel:
-        _one_frame(MOUSE_WHEEL, f'{wheel:g}')
+        _one_frame(MOUSE_WHEEL, f'{wheel:g}', '0')
     return {'moved': [dx, dy], 'wheel': wheel}
 
 

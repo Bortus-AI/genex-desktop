@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { TargetRuntime } from "../../src/shared/computer-target.ts";
 import { COMPUTER_TOOL_NAME } from "../../src/substrate/computer-tool.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -63,5 +64,46 @@ describe("the computer on an Unreal game's editor play, for the chat's own sessi
     whileRunning(async () => {});
     await delegate({ chatTurn: { messageId: await personSays() } });
     assert.equal(offered(seen.at(-1)), false, "no engine plugin on: no editor computer");
+  });
+});
+
+describe("the computer of a judge or playtester on an Unreal game", () => {
+  it("plays its editor where the Unreal plugin holds the game's link, and a web game in its window", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, game, project } = await workerChat();
+    const outDir = await tmpDir("editor-play-judge-");
+    const session = {
+      loaded: null,
+      handle: () => "pool:1",
+      get: async () => assert.fail("no window"),
+      release: async () => {},
+    };
+    const computer = (role: "judge" | "playtester") =>
+      core._computerToolsFor(
+        { project: game, root: project.dir, handle: "pool:1", role },
+        project.dir,
+        outDir,
+        session as never,
+      );
+    assert.notEqual((await computer("judge")).runtime, TargetRuntime.Editor, "a web game plays in its window");
+    await core.plugins.setEnabled(UNREAL_PLUGIN, true);
+    await core.engineLinks.link(
+      UNREAL_PLUGIN,
+      { project: game, directory: project.dir },
+      { project: await uproject("Valley") },
+    );
+    try {
+      for (const role of ["judge", "playtester"] as const) {
+        const tools = await computer(role);
+        assert.equal(tools.runtime, TargetRuntime.Editor, role);
+        const looked = await tools.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot" });
+        assert.match(text(looked), /Unreal Editor is not open/, `${role}: the plugin's own reason`);
+        await tools.release();
+      }
+    } finally {
+      // Turning the plugin off stops its backend's process.
+      await core.plugins.setEnabled(UNREAL_PLUGIN, false);
+    }
   });
 });

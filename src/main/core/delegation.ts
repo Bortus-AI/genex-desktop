@@ -6,7 +6,7 @@
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { DesktopTools } from "./desktop-tools.ts";
 import { desktopSessionTools } from "./desktop-session.ts";
-import { editorPlayTools } from "./editor-play-session.ts";
+import { editorPlayComputer, editorPlayTools } from "./editor-play-session.ts";
 import { type JudgePlayCaller, judgePlayFor, runJudgePlay, studioJudgeHost } from "./judge-play-tool.ts";
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
@@ -726,6 +726,15 @@ export class DelegationService {
     this.#x = x;
   }
 
+  /** A listed game's folder, or null for a project the studio doesn't list. */
+  #gameDirectory(project: string): string | null {
+    try {
+      return this.#core.games.dirFor(project);
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * The computer: hands and eyes on one pooled window for the whole session — the
    * builder's worktree, the playtester's build under test, the scout's live folder. Loaded
@@ -739,6 +748,12 @@ export class DelegationService {
     outDir: string,
     session: SessionPort,
   ): Promise<ComputerTools> {
+    // A game an engine plugin plays in its editor (an Unreal game) is played there, whoever the session is.
+    const directory = this.#gameDirectory(grant.project);
+    const editor = directory
+      ? await editorPlayComputer(this.#core, this.#x, { project: grant.project, directory }, { grant, outDir, session })
+      : null;
+    if (editor) return editor;
     // A build whose studio.json declares the bridge runtime is played as its own process, started
     // in the studio's sandbox; every other build in the session's browser window, as before.
     const shape = await readProjectShape(initialRoot).catch(() => null);
@@ -2338,8 +2353,10 @@ export class DelegationService {
   }
 
   /**
-   * `judge_play` for the chat's own session, on a game the studio plays in a window of its own (a
-   * web game: `selfCapture`), where the harness serves it. A plugin tool of the same name is refused.
+   * `judge_play` for the chat's own session, on a game the studio plays: in a window of its own (a
+   * web game: `selfCapture`), or in its engine's editor (the session's computer is the editor's),
+   * the judge playing the game folder; where the harness serves it. A plugin tool of the same name
+   * is refused.
    */
   #offerJudge(
     p: DelegateParams,
@@ -2348,7 +2365,8 @@ export class DelegationService {
     session: DelegationSession,
     tools: SessionTools,
   ): void {
-    const window = grants.selfCapture;
+    const editor = tools.builder?.runtime === TargetRuntime.Editor ? { root: target.cwd } : undefined;
+    const window = grants.selfCapture ?? editor;
     const capable = this.#core.host.hasCapability(HarnessCapability.ChatJudge);
     const offered = judgePlayFor(Boolean(window), capable).filter((tool) => offers(session, tool.name));
     if (!window || !offered.length) return;
