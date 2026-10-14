@@ -9,6 +9,7 @@ import { sourceIdentity, safeChild, publishBuild } from "./studio-dev/files.mjs"
 import { devRoot, slug } from "./studio-dev/ownership.mjs";
 import { SEED_GENERATED } from "./gen-harness-types.ts";
 import { packageBin } from "./package-bin.ts";
+import { vendorCuaDriver } from "./vendor-cua-driver.ts";
 import { vendorTsc } from "./vendor-tsc.ts";
 /**
  * Build — assembles `dist/` for Electron.
@@ -18,7 +19,9 @@ import { vendorTsc } from "./vendor-tsc.ts";
  *   dist/renderer/*           React UI
  *   dist/resources/*          read-only app resources: the harness seed, the bootstrap, the game
  *                             template, vendored three.js, and the TypeScript 7 compiler the
- *                             in-app type gate runs (dist/resources/tsc, scripts/vendor-tsc.ts)
+ *                             in-app type gate runs (dist/resources/tsc, scripts/vendor-tsc.ts);
+ *                             on a macOS release, cua-driver for computer control
+ *                             (dist/resources/cua-driver, scripts/vendor-cua-driver.ts)
  *
  * esbuild only, deliberately: one tool, no plugin-compatibility surface, and the game workspaces
  * need no bundler at all (import maps + vendored three).
@@ -310,6 +313,13 @@ async function copyResources() {
       .map(([id, bytes]) => `${id} ${(bytes / 1024 / 1024).toFixed(1)} MB`)
       .join(", ")}`,
   );
+  // Computer control's driver ships with every macOS release, so it works once the app is installed
+  // (scripts/vendor-cua-driver.ts); a development build takes it only when asked to.
+  const vendorCua = release || process.env.GENEX_VENDOR_CUA_DRIVER === "1";
+  if (process.platform === "darwin" && vendorCua) {
+    const cua = await vendorCuaDriver(root, resources);
+    console.log(`vendored cua-driver ${cua.version}: ${(cua.bytes / 1024 / 1024).toFixed(1)} MB`);
+  }
   await buildPlugins(root, resources);
   // The stable bootstrap — shipped, never edited by the agent.
   await cp(path.join(root, "src/genex-host"), path.join(resources, "genex-host"), { recursive: true });

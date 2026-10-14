@@ -638,7 +638,7 @@ function appLookOptions(userData: string): Pick<StudioCoreOptions, "appLook" | "
 let desktop: DesktopControl | undefined;
 
 async function createCore(userData: string): Promise<StudioCore> {
-  desktop ??= createDesktopControl({ automated: isSmoke || isSelfTest });
+  desktop ??= createDesktopControl({ automated: isSmoke || isSelfTest, resources });
   // Smoke runs keep everything under their throwaway userData.
   const launch = launchCoreOptions();
   const studio = new StudioCore({

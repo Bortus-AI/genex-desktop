@@ -13,7 +13,7 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 const MESSAGE = {
   noChat: "computer control is asked about in a chat, and this call names none",
   noProject: "open a project first",
-  noDriver: "computer control is not set up on this computer (install cua-driver)",
+  noDriver: "computer control is not available in this build: no cua-driver is bundled or installed",
 } as const;
 
 /** One registry of chat sessions per core: the harness's calls outlive any one `api()` table. */

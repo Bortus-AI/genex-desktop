@@ -125,20 +125,35 @@ conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
-driven by [cua-driver](https://github.com/trycua/cua) (MIT): `cua-driver mcp` relays to the
-CuaDriver.app daemon, which holds the Accessibility and Screen Recording grants; a VM's driver is
-reached as `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest; `cua-driver mcp`
-starts its own daemon, the grants are checked without a macOS prompt, and a daemon that started
-before the person granted them is restarted once; the driver's own cursor overlay is never "the app
-under a point"
+driven by [cua-driver](https://github.com/trycua/cua) (MIT). On this Mac the driver ships inside the
+app and runs **embedded** (cua's `EMBEDDING.md`; [`cua-embedded.ts`](../src/substrate/cua-embedded.ts)):
+the app starts `cua-driver serve --embedded` itself, as its direct child, on a socket in a private
+folder, and talks MCP to it through `cua-driver mcp --embedded --socket <path>`. A child the app
+spawns stays in the app's macOS responsibility chain, so Accessibility and Screen Recording are
+**Genex's own** grants: one entry in System Settings, no second app, no driver prompt. The daemon
+runs with `DO_NOT_TRACK=1` and `CUA_DRIVER_RS_UPDATE_CHECK=0` (no product telemetry, no update
+check) and starts on first use; ⌃⌥⌘Esc and quitting stop it. Its grants are checked without a
+prompt; a daemon without them is restarted once (macOS keeps a process's old answer), and still
+without them Genex asks macOS itself: the Accessibility prompt, then System Settings at Screen
+Recording (`desktop-control-host.ts`). A VM's driver is reached as
+`ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest, where the guest's
+CuaDriver.app holds the grants; the driver's own cursor overlay is never "the app under a point"
 ([`cua-driver-client.ts`](../src/substrate/cua-driver-client.ts)). Every action targets the whole
 display in the foreground, because background clicks into a canvas are rerouted and reported as
 success (cua #4350). The driver is a host helper started with fixed arguments and a minimal
 environment, outside the ProcessSandbox, which would deny it the screen.
 
+- **Where the driver comes from.** Every macOS release build downloads the pinned cua release
+  (version and SHA-256 in [`vendor-cua-driver.ts`](../scripts/vendor-cua-driver.ts); an archive with
+  any other digest is refused), takes only the `cua-driver` executable, thins it to the app's
+  architecture and puts it in `dist/resources/cua-driver` with cua's license and notices
+  (`build/cua-driver/`); the packager signs it with the app's identity. A development build takes it
+  with `GENEX_VENDOR_CUA_DRIVER=1`, else runs an installed driver (`~/.local/bin/cua-driver` and the
+  usual paths), embedded the same way. Moving to a newer driver: change the pin and the notices, then
+  verify the web and desktop scenarios live.
 - **Who holds it.** The chat's own session on every engine is handed a `desktop` tool (the computer
-  vocabulary under its own name, so it sits beside a game's `computer`), where the driver is
-  installed (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
+  vocabulary under its own name, so it sits beside a game's `computer`), where a driver is
+  found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
   `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the

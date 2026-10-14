@@ -7,8 +7,16 @@
  * JSON line, `--denied` answers that a grant is missing, `--fail-start` exits the way the real
  * driver does when its daemon never comes up, and `--pending <file>` answers `permissions_pending`
  * until that file exists (the restart a test stands in for creates it).
+ *
+ * Embedded, as the studio runs the real one: `serve --embedded --socket <path>` is the daemon. It
+ * listens on that socket, appends one line to `--serve-log <file>` (its pid, arguments and what it
+ * saw of the environment), and reads its grants once, when it starts, from whether `--grants <file>`
+ * exists, as macOS caches a process's grants; `--serve-fail` exits the way a daemon that cannot
+ * start does. `mcp --embedded --socket <path>` is the proxy: it asks the daemon on that socket for
+ * its grants and answers the MCP tools with them.
  */
 import { appendFileSync, existsSync } from "node:fs";
+import net from "node:net";
 import readline from "node:readline";
 
 /** A 1×1 PNG. */
@@ -22,6 +30,25 @@ if (argv.includes("--fail-start")) {
   process.exit(1);
 }
 
+/** One flag's value, or null. */
+const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : null);
+const socket = flag("--socket");
+
+/** The proxy's grants: the embedded daemon's, asked over its socket; else the flags'. */
+async function daemonGrants() {
+  if (!socket) return !denied;
+  return new Promise((resolve) => {
+    const connection = net.connect(socket);
+    let answer = "";
+    connection.on("data", (chunk) => (answer += chunk));
+    connection.on("end", () => resolve(answer.trim() === "granted"));
+    connection.on("error", () => {
+      process.stderr.write(`cua-driver-rs: no daemon is listening on ${socket}\n`);
+      process.exit(1);
+    });
+  });
+}
+
 const json = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value });
 
 const ANSWERS = {
@@ -31,7 +58,7 @@ const ANSWERS = {
           isError: true,
           content: [{ type: "text", text: "permissions_pending: macOS Accessibility or Screen Recording permission is still pending" }],
         }
-      : json({ accessibility: !denied, screen_recording: !denied }),
+      : json({ accessibility: grants, screen_recording: grants }),
   get_desktop_state: () => ({
     content: [{ type: "image", data: PIXEL, mimeType: "image/png" }],
     structuredContent: { screenshot_width: 1366, screenshot_height: 854, screen_width: 1512, screen_height: 945 },
@@ -92,13 +119,43 @@ function handle(message) {
   send({ id, error: { code: -32601, message: `method not found: ${method}` } });
 }
 
-const lines = readline.createInterface({ input: process.stdin });
-lines.on("line", (line) => {
-  if (!line.trim()) return;
-  try {
-    handle(JSON.parse(line));
-  } catch {
-    // Not JSON: a real server would ignore it too.
+/** The grants this proxy answers with. */
+let grants = !denied;
+
+async function startProxy() {
+  grants = await daemonGrants();
+  const lines = readline.createInterface({ input: process.stdin });
+  lines.on("line", (line) => {
+    if (!line.trim()) return;
+    try {
+      handle(JSON.parse(line));
+    } catch {
+      // Not JSON: a real server would ignore it too.
+    }
+  });
+  lines.on("close", () => process.exit(0));
+}
+
+/** The embedded daemon: listens on its socket and answers with the grants it read when it started. */
+function serve() {
+  if (argv.includes("--serve-fail")) {
+    process.stderr.write("cua-driver-rs: could not bind the daemon socket\n");
+    process.exit(3);
   }
-});
-lines.on("close", () => process.exit(0));
+  const grantsFile = flag("--grants");
+  const granted = grantsFile ? existsSync(grantsFile) : true;
+  const seen = ["CUA_DRIVER_EMBEDDED", "CUA_DRIVER_HOST_BUNDLE_ID", "DO_NOT_TRACK", "CUA_DRIVER_RS_UPDATE_CHECK", "GENEX_SECRET"];
+  const env = Object.fromEntries(seen.filter((name) => process.env[name] !== undefined).map((name) => [name, process.env[name]]));
+  const serveLog = flag("--serve-log");
+  if (serveLog) appendFileSync(serveLog, `${JSON.stringify({ pid: process.pid, argv, env })}\n`);
+  const server = net.createServer((connection) => {
+    // A readiness probe hangs up at once: like the real daemon, it shrugs that off.
+    connection.on("error", () => {});
+    connection.end(granted ? "granted\n" : "denied\n");
+  });
+  server.listen(socket);
+  process.on("SIGTERM", () => server.close(() => process.exit(0)));
+}
+
+if (argv.includes("serve")) serve();
+else await startProxy();
