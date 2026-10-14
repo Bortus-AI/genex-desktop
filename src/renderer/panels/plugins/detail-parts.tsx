@@ -9,7 +9,7 @@ import { Icon } from "../../ui/icons.tsx";
 import { IconButton } from "../../ui/kit.tsx";
 import { PLUGINS_WORDS, SKILLS_WORDS, consentToolWords } from "../../words.ts";
 import { PluginPanelHost } from "../PluginPanelHost.tsx";
-import { capabilityLine, foldersLine, localAccessNote, sourceWords } from "./labels.ts";
+import { capabilityLine, foldersLine, localAccessNote, shownName, sourceWords } from "./labels.ts";
 
 const PAGE = PLUGINS_WORDS.page;
 import type { OpenPanel, PluginsPage } from "./page.ts";
@@ -153,7 +153,7 @@ export function PluginSkills({
         </p>
       )}
       <div className="extension-skills-line">
-        <p>{PAGE.skillsLine(manifest.name)}</p>
+        <p>{PAGE.skillsLine(shownName(detail))}</p>
         <Button variant="ghost" aria-expanded={open} onClick={() => setOpen((shown) => !shown)}>
           {open ? PAGE.showFewer : PAGE.showAll}
           <Icon name="chevron-down" size={14} className={open ? "rotate-180" : ""} />

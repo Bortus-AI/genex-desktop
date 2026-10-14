@@ -1,0 +1,401 @@
+/**
+ * Play's people in the renderer: the Genex account the app is signed in as, the Friends page as
+ * last read, the profiles opened, what a people search found, the account's own stats (read only
+ * when shown) and Top creators. Main reads them all from genex.games; a press on a person changes
+ * how every list shows them at once (Accept moves the row into Friends), then the Friends page is
+ * read again behind it.
+ */
+import { createStore, type StoreApi } from "zustand/vanilla";
+import {
+  type AvatarStyle,
+  FriendAction,
+  FriendStatus,
+  type PlayCreator,
+  type PlayFoundPerson,
+  type PlayFriend,
+  type PlayFriendsPage,
+  type PlayMe,
+  type PlayPeopleResult,
+  type PlayPerson,
+  type PlayProfile,
+  type PresenceVisibility,
+  peopleQuery,
+} from "../../shared/play-people.ts";
+import type { PlayStats, StatsPeriod } from "../../shared/play-stats.ts";
+import type { StudioApi } from "../../shared/studio-api.ts";
+
+/** Where a read stands. */
+export const LoadStatus = { Idle: "idle", Loading: "loading", Ready: "ready", Failed: "failed" } as const;
+export type LoadStatus = (typeof LoadStatus)[keyof typeof LoadStatus];
+
+/** A profile opened: its read, and the profile once it came. */
+export interface ProfileEntry {
+  status: LoadStatus;
+  profile: PlayProfile | null;
+}
+
+/** The people search: what was typed, and what it found. */
+export interface PeopleSearch {
+  query: string;
+  status: LoadStatus;
+  result: PlayPeopleResult | null;
+}
+
+/** The account's stats for one period: its read, and the stats once they came. */
+export interface StatsEntry {
+  status: LoadStatus;
+  stats: PlayStats | null;
+  /** genex.games answered that it has no stats to give yet: the page shows what it can without them. */
+  unavailable: boolean;
+}
+
+/** Play's Top creators: the read, and the row once it came (null while genex.games does not rank them). */
+export interface CreatorsEntry {
+  status: LoadStatus;
+  list: PlayCreator[] | null;
+}
+
+/** What Play knows of people. */
+export interface PeopleState {
+  /** The account Play is signed in as, or null signed out (or before the first read). */
+  me: PlayMe | null;
+  /** The account has been read once: a plate that is not there is signed out, not unknown. */
+  meKnown: boolean;
+  friends: PlayFriendsPage | null;
+  friendsStatus: LoadStatus;
+  profiles: Record<string, ProfileEntry>;
+  /** People a press is changing, by id: their buttons wait. */
+  busy: Record<string, true>;
+  search: PeopleSearch;
+  /** The account's stats by period, read only when a page shows them. */
+  stats: Partial<Record<StatsPeriod, StatsEntry>>;
+  creators: CreatorsEntry;
+}
+
+/** Nothing read yet. */
+export const initialPeople = (): PeopleState => ({
+  me: null,
+  meKnown: false,
+  friends: null,
+  friendsStatus: LoadStatus.Idle,
+  profiles: {},
+  busy: {},
+  search: { query: "", status: LoadStatus.Idle, result: null },
+  stats: {},
+  creators: { status: LoadStatus.Idle, list: null },
+});
+
+/** The account was read: a different account (or none) forgets the last one's friends. */
+export function meRead(state: PeopleState, me: PlayMe | null): PeopleState {
+  const switched = state.me?.id !== me?.id;
+  if (!switched && state.meKnown && state.me === me) return state;
+  return switched
+    ? { ...initialPeople(), me, meKnown: true }
+    : { ...state, me, meKnown: true, profiles: withOwnProfile(state.profiles, me) };
+}
+
+/** The account's own profile entry, kept in step with a rename or a new picture. */
+function withOwnProfile(profiles: PeopleState["profiles"], me: PlayMe | null): PeopleState["profiles"] {
+  const own = me ? profiles[me.id] : undefined;
+  if (!me || !own?.profile) return profiles;
+  const person = { id: me.id, name: me.name, imageUrl: me.imageUrl, avatarVariant: me.avatarVariant, pro: me.pro };
+  return { ...profiles, [me.id]: { ...own, profile: { ...own.profile, person } } };
+}
+
+/** The friends list once `friend` is (or is no longer) one. */
+function friendsAfter(friends: PlayFriend[], friend: PlayFriend, status: FriendStatus): PlayFriend[] {
+  if (status !== FriendStatus.Friends) return friends.filter((row) => row.id !== friend.id);
+  return friends.some((row) => row.id === friend.id) ? friends : [...friends, friend];
+}
+
+/** The Friends page as one person's relationship changed: Accept moves them in, the rest move them out. */
+export function pageAfter(page: PlayFriendsPage, person: PlayPerson, status: FriendStatus): PlayFriendsPage {
+  const others = <T extends { id: string }>(rows: T[]): T[] => rows.filter((row) => row.id !== person.id);
+  const friend: PlayFriend = {
+    id: person.id,
+    name: person.name,
+    imageUrl: person.imageUrl,
+    avatarVariant: person.avatarVariant,
+    pro: person.pro,
+    playing: null,
+    games: null,
+  };
+  const sent = { ...friend, requestedAt: new Date().toISOString() };
+  return {
+    ...page,
+    friends: friendsAfter(page.friends, friend, status),
+    incoming: others(page.incoming),
+    outgoing: status === FriendStatus.Outgoing ? [...others(page.outgoing), sent] : others(page.outgoing),
+  };
+}
+
+/** Every list's view of `person` once their relationship is `status`. */
+export function relationshipChanged(state: PeopleState, person: PlayPerson, status: FriendStatus): PeopleState {
+  const entry = state.profiles[person.id];
+  const profiles =
+    entry?.profile && entry.profile.status !== status
+      ? { ...state.profiles, [person.id]: { ...entry, profile: { ...entry.profile, status } } }
+      : state.profiles;
+  const result = state.search.result;
+  const people = result?.people.map(
+    (found): PlayFoundPerson => (found.id === person.id ? { ...found, status } : found),
+  );
+  const search = result && people ? { ...state.search, result: { ...result, people } } : state.search;
+  const friends = state.friends ? pageAfter(state.friends, person, status) : null;
+  return { ...state, profiles, search, friends };
+}
+
+/** A press on `id` started or ended. */
+export function busyChanged(state: PeopleState, id: string, busy: boolean): PeopleState {
+  if (Boolean(state.busy[id]) === busy) return state;
+  const next = { ...state.busy };
+  if (busy) next[id] = true;
+  else delete next[id];
+  return { ...state, busy: next };
+}
+
+/** How many faces the sidebar's friends stack shows. */
+export const STACK_FACES = 2;
+
+/** The faces the sidebar's friends stack shows: friends playing now first, then the rest, as the API sorts them. */
+export function stackFaces(friends: readonly PlayFriend[]): PlayFriend[] {
+  return friends.toSorted((a, b) => Number(b.playing !== null) - Number(a.playing !== null)).slice(0, STACK_FACES);
+}
+
+/** How many friend requests wait for the account's answer. */
+export const waitingRequests = (state: PeopleState): number => state.friends?.incoming.length ?? 0;
+
+/** The store and what it reads and writes. */
+export interface PeopleStore extends StoreApi<PeopleState> {
+  /** Read who Play is signed in as. */
+  loadMe(): Promise<void>;
+  /** Read the Friends page (signed in only). */
+  loadFriends(): Promise<void>;
+  /** Read someone's profile; `force` reads again one already read. */
+  loadProfile(userId: string, options?: { force?: boolean }): Promise<void>;
+  /** Add, accept, withdraw or remove; throws when Genex refused it, and every list keeps what it showed. */
+  act(action: FriendAction, person: PlayPerson): Promise<void>;
+  /** Search people by name; an older search's answer that arrives late lands nowhere. */
+  search(query: string): Promise<void>;
+  rename(name: string): Promise<void>;
+  setAvatar(webp: Uint8Array): Promise<void>;
+  /** Show the generated avatar or the uploaded photo, everywhere; throws when Genex refused. */
+  setAvatarStyle(style: AvatarStyle): Promise<void>;
+  /**
+   * Show another generated avatar, everywhere: at once on screen, then as genex.games keeps it;
+   * throws (and puts the old one back) when Genex refused.
+   */
+  setAvatarVariant(variant: number): Promise<void>;
+  /** Read the account's stats for a period (signed in only); `force` reads again one already read. */
+  loadStats(days: StatsPeriod, options?: { force?: boolean }): Promise<void>;
+  /** Read Top creators, once. */
+  loadCreators(): Promise<void>;
+  /** Show or hide the game the account is in; throws (and puts the old choice back) when Genex refused. */
+  setVisibility(visibility: PresenceVisibility): Promise<void>;
+}
+
+type PeopleApi = Pick<
+  StudioApi,
+  | "playMe"
+  | "playRename"
+  | "playAvatar"
+  | "playProfile"
+  | "playFriends"
+  | "playFriend"
+  | "playPeople"
+  | "playVisibility"
+  | "playAvatarStyle"
+  | "playAvatarVariant"
+  | "playStats"
+  | "playCreators"
+>;
+
+/** Replace the store's state with what a change makes of it. */
+type PeopleSet = (change: (state: PeopleState) => PeopleState) => void;
+
+/**
+ * Regenerate's writes: each new variant shows at once and is saved after the one before it, so the
+ * last press is the variant genex.games keeps. Only the newest press's answer lands: an older one
+ * arriving behind it never puts its face back. When the newest is refused, the account is read again
+ * and shows what genex.games kept.
+ */
+function avatarVariantWrites(
+  store: StoreApi<PeopleState>,
+  set: PeopleSet,
+  api: Pick<PeopleApi, "playAvatarVariant" | "playMe">,
+): (variant: number) => Promise<void> {
+  let newest = 0;
+  let saved: Promise<unknown> = Promise.resolve();
+  return async (variant: number): Promise<void> => {
+    const press = ++newest;
+    const shown = store.getState().me;
+    if (shown) set((state) => meRead(state, { ...shown, avatarVariant: variant }));
+    const write = saved.then(() => api.playAvatarVariant(variant));
+    saved = write.catch(() => undefined);
+    try {
+      const me = await write;
+      if (press === newest) set((state) => meRead(state, me));
+    } catch (error) {
+      if (press === newest) {
+        const kept = await api.playMe().catch(() => shown);
+        set((state) => meRead(state, kept));
+      }
+      throw error;
+    }
+  };
+}
+
+/** The account's stats and Top creators: read when a page shows them. */
+function numberReads(store: StoreApi<PeopleState>, set: PeopleSet, api: Pick<PeopleApi, "playStats" | "playCreators">) {
+  const loadStats = async (days: StatsPeriod, options: { force?: boolean } = {}): Promise<void> => {
+    const known = store.getState().stats[days];
+    if (!store.getState().me) return;
+    if (known?.status === LoadStatus.Loading || (known?.status === LoadStatus.Ready && !options.force)) return;
+    const keep = known ?? { stats: null, unavailable: false };
+    const entry = (status: LoadStatus, change: Partial<StatsEntry> = {}): StatsEntry => ({
+      ...keep,
+      status,
+      ...change,
+    });
+    set((state) => ({ ...state, stats: { ...state.stats, [days]: entry(LoadStatus.Loading) } }));
+    try {
+      const stats = await api.playStats(days);
+      const read = entry(LoadStatus.Ready, { stats, unavailable: stats === null });
+      set((state) => ({ ...state, stats: { ...state.stats, [days]: read } }));
+    } catch {
+      set((state) => ({ ...state, stats: { ...state.stats, [days]: entry(LoadStatus.Failed) } }));
+    }
+  };
+
+  const loadCreators = async (): Promise<void> => {
+    const known = store.getState().creators;
+    if (known.status === LoadStatus.Loading || known.status === LoadStatus.Ready) return;
+    set((state) => ({ ...state, creators: { ...state.creators, status: LoadStatus.Loading } }));
+    try {
+      const list = await api.playCreators();
+      set((state) => ({ ...state, creators: { status: LoadStatus.Ready, list } }));
+    } catch {
+      set((state) => ({ ...state, creators: { ...state.creators, status: LoadStatus.Failed } }));
+    }
+  };
+
+  return { loadStats, loadCreators };
+}
+
+/** People's store over `api`. */
+export function createPeopleStore(api: PeopleApi): PeopleStore {
+  const store = createStore<PeopleState>()(initialPeople);
+  const set = (change: (state: PeopleState) => PeopleState) => store.setState(change, true);
+  let searches = 0;
+
+  const loadMe = async (): Promise<void> => {
+    try {
+      const me = await api.playMe();
+      set((state) => meRead(state, me));
+    } catch {
+      // Offline or Genex down: what the plate shows stays until the next read.
+      set((state) => (state.meKnown ? state : { ...state, meKnown: true }));
+    }
+  };
+
+  const loadFriends = async (): Promise<void> => {
+    if (!store.getState().me) return;
+    set((state) => (state.friends ? state : { ...state, friendsStatus: LoadStatus.Loading }));
+    try {
+      const friends = await api.playFriends();
+      set((state) => ({ ...state, friends, friendsStatus: LoadStatus.Ready }));
+    } catch {
+      set((state) => ({ ...state, friendsStatus: state.friends ? LoadStatus.Ready : LoadStatus.Failed }));
+    }
+  };
+
+  const loadProfile = async (userId: string, options: { force?: boolean } = {}): Promise<void> => {
+    const known = store.getState().profiles[userId];
+    if (known?.status === LoadStatus.Loading || (known?.status === LoadStatus.Ready && !options.force)) return;
+    const loading: ProfileEntry = { status: LoadStatus.Loading, profile: known?.profile ?? null };
+    set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: loading } }));
+    try {
+      const profile = await api.playProfile(userId);
+      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: { status: LoadStatus.Ready, profile } } }));
+    } catch {
+      const failed: ProfileEntry = { status: LoadStatus.Failed, profile: known?.profile ?? null };
+      set((state) => ({ ...state, profiles: { ...state.profiles, [userId]: failed } }));
+    }
+  };
+
+  const act = async (action: FriendAction, person: PlayPerson): Promise<void> => {
+    set((state) => busyChanged(state, person.id, true));
+    try {
+      const status = await api.playFriend({ action, userId: person.id });
+      set((state) => relationshipChanged(state, person, status));
+    } finally {
+      set((state) => busyChanged(state, person.id, false));
+    }
+    void loadFriends();
+  };
+
+  const search = async (query: string): Promise<void> => {
+    searches += 1;
+    const mine = searches;
+    const q = peopleQuery(query);
+    if (!q) {
+      set((state) => ({ ...state, search: { query, status: LoadStatus.Idle, result: null } }));
+      return;
+    }
+    set((state) => ({ ...state, search: { ...state.search, query, status: LoadStatus.Loading } }));
+    try {
+      const result = await api.playPeople(q);
+      if (mine === searches) set((state) => ({ ...state, search: { query, status: LoadStatus.Ready, result } }));
+    } catch {
+      if (mine === searches) set((state) => ({ ...state, search: { query, status: LoadStatus.Failed, result: null } }));
+    }
+  };
+
+  const setVisibility = async (visibility: PresenceVisibility): Promise<void> => {
+    const before = store.getState().friends?.visibility;
+    const show = (value: PresenceVisibility | undefined) =>
+      set((state) => (state.friends && value ? { ...state, friends: { ...state.friends, visibility: value } } : state));
+    show(visibility);
+    try {
+      show(await api.playVisibility(visibility));
+    } catch (error) {
+      show(before);
+      throw error;
+    }
+  };
+
+  const { loadStats, loadCreators } = numberReads(store, set, api);
+  const setAvatarVariant = avatarVariantWrites(store, set, api);
+
+  return Object.assign(store, {
+    loadMe,
+    loadStats,
+    loadCreators,
+    loadFriends,
+    loadProfile,
+    act,
+    search,
+    rename: async (name: string) => {
+      const me = await api.playRename(name);
+      set((state) => meRead(state, me));
+    },
+    setAvatar: async (webp: Uint8Array) => {
+      const me = await api.playAvatar(webp);
+      set((state) => meRead(state, me));
+    },
+    setAvatarStyle: async (style: AvatarStyle) => {
+      const me = await api.playAvatarStyle(style);
+      set((state) => meRead(state, me));
+    },
+    setAvatarVariant,
+    setVisibility,
+  });
+}
+
+/** The action a person's main button runs from where they stand with the account. */
+export function primaryAction(status: FriendStatus): FriendAction | null {
+  if (status === FriendStatus.None) return FriendAction.Add;
+  if (status === FriendStatus.Incoming) return FriendAction.Accept;
+  if (status === FriendStatus.Outgoing) return FriendAction.Withdraw;
+  return null;
+}

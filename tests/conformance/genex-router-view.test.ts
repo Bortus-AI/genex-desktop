@@ -8,20 +8,20 @@ import { describe, it } from "node:test";
 import { GENEX_PLUGIN_ID } from "../../src/shared/genex.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import { MoreView, moreView } from "../../src/renderer/panels/plugins/labels.ts";
-import { shownDescription, shownName } from "../../src/renderer/panels/plugins/labels.ts";
+import { shownDescription, shownIntro, shownName } from "../../src/renderer/panels/plugins/labels.ts";
 import { BOARD_CELLS, boardMoves, pieceFrames } from "../../src/renderer/panels/plugins/genex/router-icon.ts";
 import { ICON_TOOLS, ROUTED_TOOLS } from "../../src/renderer/panels/plugins/genex/routed-tools.ts";
-import { GENEX_WORDS } from "../../src/renderer/words.ts";
 
 const plugin = (id: string, name: string, description: string): PluginInfo =>
   ({ manifest: { id, name, description, publisher: "Someone" } }) as unknown as PluginInfo;
 
 describe("Genex's row and page name the router", () => {
-  it("shows Genex as the game dev tools router, with the tools it routes on its line", () => {
-    const genex = plugin(GENEX_PLUGIN_ID, "Genex Tools", "3D models, characters, sound and art…");
-    assert.equal(shownName(genex), "Game dev tools router");
-    assert.equal(shownDescription(genex), GENEX_WORDS.router.description);
-    assert.match(shownDescription(genex), /^Genex · .*Meshy/);
+  it("shows Genex as the Genex plugin, the game dev tools router, connected as the account on its page", () => {
+    const genex = plugin(GENEX_PLUGIN_ID, "Genex plugin", "3D models, characters, sound and art…");
+    assert.equal(shownName(genex), "Genex plugin");
+    assert.equal(shownDescription(genex), "Game dev tools router");
+    assert.equal(shownIntro(genex), "Game dev tools router");
+    assert.equal(shownIntro(genex, "Rab Neba"), "Game dev tools router · connected as Rab Neba");
   });
 
   it("leaves every other plugin's own name and description alone", () => {

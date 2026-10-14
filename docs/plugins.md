@@ -1565,9 +1565,9 @@ its `offer` (`turn-on`, `install`, or none when it is on) and its facts; the ans
 `suggest`, `use` (only plugins already on match) or `write-plugin` (none: the agent may offer to
 write a local Genex plugin, or go on with its own tools on the person's word), and its note says
 that an engine's own plugins are project files, not Genex plugins. With `write-plugin` the note
-names the guide while Genex Tools is on (read `genex__skill {"name":"plugin-author"}`, write the
+names the guide while the Genex plugin is on (read `genex__skill {"name":"plugin-author"}`, write the
 plugin in the project, check it with `plugin_check`, tell the person how to load it) and otherwise
-says the guide comes with Genex Tools, to suggest with `plugins_suggest`. The `plugin-author` skill
+says the guide comes with the Genex plugin, to suggest with `plugins_suggest`. The `plugin-author` skill
 (Studio's own, not vendored: `STUDIO_SKILLS` in `scripts/refresh-genex-skills.ts`) teaches the
 manifest section by section with a complete example plugin for a made-up engine, its backend and
 its skill, written into `genex-plugins/<id>/` in the project. The example's backend starts no

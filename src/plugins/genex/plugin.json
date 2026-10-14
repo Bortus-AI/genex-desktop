@@ -1,8 +1,8 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.9.0",
-  "name": "Genex Tools",
+  "version": "1.10.2",
+  "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
   "icon": "icon.png",
@@ -116,7 +116,7 @@
     },
     {
       "name": "package",
-      "description": "Add Genex's multiplayer package (@genex-ai/multiplayer) or player-identity package (@genex-ai/embed-sdk) to this game, at the version Studio pins, with the game's own package manager. A multiplayer request installs both multiplayer and player identity in one approved command. A game without package.json, such as one made from Studio's template, cannot add them.",
+      "description": "Add Genex's multiplayer package (@genex-ai/multiplayer) or player-identity package (@genex-ai/embed-sdk) to this game, at the version Studio pins. A game with a package.json installs it with its own package manager; a game made from Studio's template gets Studio's built-in copy mapped into its index.html import map, with nothing downloaded. A multiplayer request adds both multiplayer and player identity in one approved call.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -127,7 +127,7 @@
         },
         "required": ["package"]
       },
-      "confirmation": "Install the listed pinned Genex packages. Multiplayer includes its player-identity dependency. Studio opens the npm registry for this command only.",
+      "confirmation": "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.",
       "host": "genex-package"
     },
     {

@@ -15,7 +15,7 @@ game), **Builds** (work and results) and **Assets** (files and generated media).
 The prompt bar chooses the model, permissions, Auto or Loop mode, planning, references and
 tools. Chat shows replies, questions, compact status and results; details expand on demand.
 
-Studio pairs an assistant with Activity to review runs and instruction improvements. Plugins add tools, assets and integrations. Settings owns
+Studio pairs an assistant with Activity to review runs and instruction improvements. Settings owns
 the games folder, appearance, provider/model setup and saved permissions. Accounts, local projects and installed harness edits
 must survive application changes.
 
@@ -31,14 +31,11 @@ must survive application changes.
 | [Projects and engines](../product/projects-engines.md) | Project kinds, engines, plugins on or off, ports |
 | [Studio and learning](../product/studio-learning.md) | Studio chat, Activity, instruction proposals and rollback |
 
-Read only the relevant page. Product pages describe visible behavior, references mechanisms;
-code and tests resolve discrepancies.
+Product pages describe visible behavior, references mechanisms; code and tests resolve
+discrepancies.
 
 ## For the developer
 
 [AGENTS.md](../../AGENTS.md) owns development rules and PR policy, the
 [design workflow](design.md) visual conventions, [verification](verification.md#choose-the-verification-scope)
 the checks and the [field guide](../STUDIO-DEVELOPER-FIELD-GUIDE.md) running the app.
-
-Update the affected page in the same PR, replacing outdated text;
-`npm run verify:context` checks its size.

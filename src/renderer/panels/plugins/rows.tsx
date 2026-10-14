@@ -22,6 +22,7 @@ import {
   shownName,
 } from "./labels.ts";
 import type { PluginsPage } from "./page.ts";
+import { CreditsShard } from "../../play/CreditsShard.tsx";
 
 const ACCOUNT_WORDS = PLUGINS_WORDS.account;
 /** Credits read with the reader's own digit grouping. */
@@ -182,7 +183,12 @@ export function AccountStep({
       );
     default: {
       const balance = step === RowAccountStep.Connected ? creditsWords(credits) : null;
-      return balance ? <span className="extension-credits">{balance}</span> : null;
+      return balance ? (
+        <span className="extension-credits">
+          <CreditsShard size={13} />
+          {balance}
+        </span>
+      ) : null;
     }
   }
 }

@@ -1,6 +1,6 @@
 /**
  * Publish to the web, drawn by Studio over the game's stage in the app's own type and buttons. It
- * asks first for what publishing needs and the person lacks (Genex Tools installed and on, then a
+ * asks first for what publishing needs and the person lacks (the Genex plugin installed and on, then a
  * Genex account), then shows one dialog with one main button: the game and the name players will
  * see, Publish, its progress in that same button and under it, and the link once the game is live.
  * A failed attempt is said calmly, with the raw detail kept for support. The Publish press is the
@@ -23,8 +23,9 @@ import { Button } from "../../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
 import { GameAvatar } from "../../../ui/GameAvatar.tsx";
-import { Icon } from "../../../ui/icons.tsx";
+import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
+import { useCopy } from "../../../use-copy.ts";
 import { GENEX_WORDS, problemWords } from "../../../words.ts";
 import { PluginApproval } from "../../PluginApproval.tsx";
 import { GenexAccountKind, genexAccountView } from "./genex-view.ts";
@@ -46,8 +47,6 @@ const WORDS = GENEX_WORDS.publish;
 const ACCOUNT = GENEX_WORDS.account;
 /** Where the publish-open action sends the browser (the plugin's `PublishLinkTarget`). */
 const LinkTarget = { Gallery: "gallery" } as const;
-/** How long Copy reads "Copied". */
-const COPIED_MS = 1600;
 
 /** A cancelled review or approval is the person's choice, not an error to show. */
 const CANCELLED = /Cancelled/;
@@ -63,22 +62,6 @@ function useElapsed(startedAt: string | null): number | null {
   }, [startedAt]);
   if (!startedAt) return null;
   return Math.max(0, Math.floor((now - Date.parse(startedAt)) / SECOND_MS));
-}
-
-/** A press that reads "Copied" for a moment after it copied `text`. */
-function useCopy(): [boolean, (text: string) => void] {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), COPIED_MS);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const copy = (text: string) =>
-    void navigator.clipboard.writeText(text).then(
-      () => setCopied(true),
-      () => {},
-    );
-  return [copied, copy];
 }
 
 /** The running attempt: what it is doing, for how long, and its steps as one bar with their names. */
@@ -233,6 +216,7 @@ function PublishFrame({
   state = null,
   onClose,
   returnFocus,
+  heading = { title: WORDS.title, icon: "globe", testId: "genex-publish" },
   children,
 }: {
   intro: string;
@@ -240,16 +224,18 @@ function PublishFrame({
   onClose: () => void;
   /** Where focus goes as the dialog closes, when not back to the press that opened it. */
   returnFocus?: RefObject<HTMLElement | null>;
+  /** The dialog's title, its icon and its smoke-check id: Publish's unless another press opened it. */
+  heading?: { title: string; icon: IconName; testId: string };
   children: ReactNode;
 }): JSX.Element {
   return (
     <DialogSurface
-      title={WORDS.title}
-      titleIcon={<Icon name="globe" size={20} className="text-ink-3" />}
+      title={heading.title}
+      titleIcon={<Icon name={heading.icon} size={20} className="text-ink-3" />}
       description={intro}
       onDismiss={onClose}
       size="lg"
-      testId="genex-publish"
+      testId={heading.testId}
       returnFocus={returnFocus}
     >
       <div
@@ -408,17 +394,51 @@ function PluginLink({ onLeave }: { onLeave: () => void }): JSX.Element {
   );
 }
 
+/** What a Genex setup dialog was opened for: the press it answers. */
+export const GenexSetupFor = { Publish: "publish", Multiplayer: "multiplayer" } as const;
+export type GenexSetupFor = (typeof GenexSetupFor)[keyof typeof GenexSetupFor];
+
+const MULTIPLAYER = GENEX_WORDS.multiplayer;
+
+/** What Multiplayer brings, each with its glyph: why the plugin is worth installing. */
+const MULTIPLAYER_POINTS: ReadonlyArray<{ icon: IconName; text: string }> = [
+  { icon: "globe", text: MULTIPLAYER.rooms },
+  { icon: "mic", text: MULTIPLAYER.voice },
+  { icon: "users", text: MULTIPLAYER.friends },
+];
+
+/** Each purpose's frame and opening words. */
+const SETUP_COPY = {
+  [GenexSetupFor.Publish]: {
+    heading: { title: WORDS.title, icon: "globe", testId: "genex-publish" },
+    intro: WORDS.intro,
+    through: WORDS.through,
+  },
+  [GenexSetupFor.Multiplayer]: {
+    heading: { title: MULTIPLAYER.title, icon: "users", testId: "genex-multiplayer" },
+    intro: MULTIPLAYER.intro,
+    through: MULTIPLAYER.through,
+  },
+} as const satisfies Record<
+  GenexSetupFor,
+  { heading: { title: string; icon: IconName; testId: string }; intro: string; through: string }
+>;
+
 /**
- * Publish while Genex Tools is off or not installed: one line naming what publishing uses (its
- * name opens the plugin's page), and the one press that brings it back, busy while it works.
+ * Publish or Multiplayer while the Genex plugin is off or not installed: what Genex brings (for
+ * Multiplayer), one line naming the plugin it uses (its name opens the plugin's page), and the one
+ * press that brings it back, busy while it works.
  */
 export function GenexSetupDialog({
   genex,
   onClose,
+  purpose = GenexSetupFor.Publish,
 }: {
   genex: PluginInfo | undefined;
   onClose: () => void;
+  purpose?: GenexSetupFor;
 }): JSX.Element {
+  const copy = SETUP_COPY[purpose];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const install = publishGate(genex, undefined) === PublishGate.Install;
@@ -437,9 +457,19 @@ export function GenexSetupDialog({
   const label = install ? WORDS.install : WORDS.turnOn;
   const working = install ? WORDS.installing : WORDS.turningOn;
   return (
-    <PublishFrame intro={WORDS.intro} onClose={onClose}>
+    <PublishFrame intro={copy.intro} onClose={onClose} heading={copy.heading}>
+      {purpose === GenexSetupFor.Multiplayer && (
+        <ul className="genex-setup-points">
+          {MULTIPLAYER_POINTS.map((point) => (
+            <li key={point.text}>
+              <Icon name={point.icon} size={18} />
+              <span>{point.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="genex-publish-ask">
-        {WORDS.through} <PluginLink onLeave={onClose} />
+        {copy.through} <PluginLink onLeave={onClose} />
         {install ? WORDS.installEnd : WORDS.throughEnd}
       </p>
       {error && (
@@ -489,7 +519,7 @@ function Lead({
   );
 }
 
-/** The dialog over the stage, while Genex Tools is on. */
+/** The dialog over the stage, while the Genex plugin is on. */
 export function GenexPublishDialog({
   plugin,
   project,

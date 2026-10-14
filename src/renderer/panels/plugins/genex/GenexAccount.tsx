@@ -5,6 +5,7 @@
  */
 import type { JSX, ReactNode } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
+import { CreditsShard } from "../../../play/CreditsShard.tsx";
 import { Button } from "../../../ui/Button.tsx";
 import { Icon } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
@@ -58,7 +59,10 @@ function Stat({ label, value, warn = false }: { label: string; value: string; wa
   return (
     <div className="genex-stat" data-warn={warn || undefined}>
       <dt>{label}</dt>
-      <dd>{value}</dd>
+      <dd>
+        <CreditsShard size={20} />
+        {value}
+      </dd>
     </div>
   );
 }

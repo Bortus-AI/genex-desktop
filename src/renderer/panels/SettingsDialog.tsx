@@ -11,7 +11,9 @@ import { GamesSection } from "./GamesSection.tsx";
 import { PermissionsSection } from "./PermissionsSection.tsx";
 import { PrivacySection } from "./PrivacySection.tsx";
 import { AboutSection } from "./AboutSection.tsx";
-import { ABOUT_WORDS, PRIVACY_WORDS } from "../words.ts";
+import { AccountSection } from "./AccountSection.tsx";
+import { usePeople } from "../state/hooks.ts";
+import { ABOUT_WORDS, ACCOUNT_WORDS, PRIVACY_WORDS } from "../words.ts";
 
 interface SectionTab {
   id: SettingsSection;
@@ -20,6 +22,7 @@ interface SectionTab {
 }
 
 const SECTIONS: readonly SectionTab[] = [
+  { id: SettingsSection.Account, label: ACCOUNT_WORDS.tab, icon: "character" },
   { id: SettingsSection.Providers, label: "Model Providers", icon: "globe" },
   { id: SettingsSection.Local, label: "Local Models", icon: "box" },
   { id: SettingsSection.Appearance, label: "Appearance", icon: "palette" },
@@ -30,13 +33,17 @@ const SECTIONS: readonly SectionTab[] = [
   { id: SettingsSection.About, label: ABOUT_WORDS.tab, icon: "info" },
 ];
 
+/** The sections the dialog lists: Genex account only while Genex is signed in. */
+const sectionsFor = (signedIn: boolean): readonly SectionTab[] =>
+  signedIn ? SECTIONS : SECTIONS.filter((tab) => tab.id !== SettingsSection.Account);
+
 /** The tab a key moves to from the tab at `index`: first, last, next or previous (wrapping), or none. */
-function tabAfterKey(key: string, index: number): SectionTab | undefined {
-  const count = SECTIONS.length;
-  if (key === "Home") return SECTIONS[0];
-  if (key === "End") return SECTIONS[count - 1];
-  if (key === "ArrowDown" || key === "ArrowRight") return SECTIONS[(index + 1) % count];
-  if (key === "ArrowUp" || key === "ArrowLeft") return SECTIONS[(index + count - 1) % count];
+function tabAfterKey(sections: readonly SectionTab[], key: string, index: number): SectionTab | undefined {
+  const count = sections.length;
+  if (key === "Home") return sections[0];
+  if (key === "End") return sections[count - 1];
+  if (key === "ArrowDown" || key === "ArrowRight") return sections[(index + 1) % count];
+  if (key === "ArrowUp" || key === "ArrowLeft") return sections[(index + count - 1) % count];
   return undefined;
 }
 
@@ -56,6 +63,7 @@ function SectionBody({
   gamesRootLabel: string;
   onGamesRoot: (label: string) => void;
 }): JSX.Element {
+  if (section === SettingsSection.Account) return <AccountSection />;
   if (section === SettingsSection.Games) return <GamesSection rootLabel={gamesRootLabel} onRoot={onGamesRoot} />;
   if (section === SettingsSection.Appearance) return <AppearanceSection />;
   if (section === SettingsSection.Providers)
@@ -101,9 +109,11 @@ export function SettingsDialog({
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
+  const signedIn = usePeople((s) => s.me !== null);
+  const sections = sectionsFor(signedIn);
   const selectedTab = useRef<HTMLButtonElement>(null);
   const navigate = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const next = tabAfterKey(event.key, index);
+    const next = tabAfterKey(sections, event.key, index);
     if (!next) return;
     event.preventDefault();
     onSection(next.id);
@@ -132,7 +142,7 @@ export function SettingsDialog({
             aria-orientation={horizontal ? "horizontal" : "vertical"}
             className="flex gap-1 sm:flex-col"
           >
-            {SECTIONS.map((tab, index) => (
+            {sections.map((tab, index) => (
               <button
                 key={tab.id}
                 id={`settings-tab-${tab.id}`}

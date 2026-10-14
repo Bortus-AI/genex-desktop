@@ -1,9 +1,11 @@
 /**
- * The Genex plugin's page, below its title: the account card, the tools it routes, the skills it
- * gives agents and what it is. The page is app-wide: one balance covers every game,
- * a game's own spend is in its usage panel, and Publish lives on the game's stage.
+ * The Genex plugin's page, below its title, in three tabs: Account (the account card and what waits
+ * for review), Credits (the balance, what credits pay for at live prices, recent spends) and Tools
+ * (the tools it routes, the skills it gives agents and what it is). The page is app-wide: one
+ * balance covers every game, a game's own spend is in its usage panel, and Publish lives on the
+ * game's stage.
  */
-import type { JSX } from "react";
+import type { JSX, KeyboardEvent } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { Button } from "../../../ui/Button.tsx";
@@ -16,6 +18,8 @@ import type { PluginsPage } from "../page.ts";
 import { Section } from "../rows.tsx";
 import type { ShownSkill } from "../skills-sections.ts";
 import { GenexAccount } from "./GenexAccount.tsx";
+import { GenexCreditsTab } from "./GenexCreditsTab.tsx";
+import { chooseGenexTab, GENEX_TABS, GenexTab, useGenexTab } from "./genex-tab.ts";
 import { type GenexJobRow, genexJobRows, JobState } from "./genex-view.ts";
 import { ROUTED_TOOLS, toolCopy } from "./routed-tools.ts";
 import { type GenexLive, useGenexStatus } from "./use-genex-status.ts";
@@ -140,6 +144,56 @@ function LiveAccount({ detail, page }: { detail: PluginInfo; page: PluginsPage }
   );
 }
 
+/** The page's tabs: Tools (with the account) and Credits; arrow keys move along them. */
+function GenexTabs({ tab }: { tab: GenexTab }): JSX.Element {
+  const words = GENEX_WORDS.tabs;
+  const label: Record<GenexTab, string> = {
+    [GenexTab.Tools]: words.tools,
+    [GenexTab.Credits]: words.credits,
+  };
+  const keys = (event: KeyboardEvent<HTMLButtonElement>, index: number): void => {
+    const moves: Record<string, number> = { ArrowLeft: index - 1, ArrowRight: index + 1 };
+    const next = GENEX_TABS[moves[event.key] ?? -1];
+    if (!next) return;
+    event.preventDefault();
+    chooseGenexTab(next);
+    event.currentTarget.parentElement?.querySelector<HTMLButtonElement>(`[data-genex-tab="${next}"]`)?.focus();
+  };
+  return (
+    <div className="genex-tabs" role="tablist" aria-label={words.label}>
+      {GENEX_TABS.map((id, index) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          aria-selected={id === tab}
+          tabIndex={id === tab ? 0 : -1}
+          data-genex-tab={id}
+          className="genex-tab"
+          onClick={() => chooseGenexTab(id)}
+          onKeyDown={(event) => keys(event, index)}
+        >
+          {label[id]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Genex is off: the line that says so, and what went wrong on the way here. */
+function GenexOff({ page }: { page: PluginsPage }): JSX.Element {
+  return (
+    <>
+      <p className="genex-off">{GENEX_WORDS.account.off}</p>
+      {page.error && (
+        <p role="alert" className="extensions-error">
+          {page.error}
+        </p>
+      )}
+    </>
+  );
+}
+
 /** The Genex page below its title. */
 export function GenexDetail({
   detail,
@@ -151,27 +205,24 @@ export function GenexDetail({
   onSkill: (skill: ShownSkill) => void;
 }): JSX.Element {
   const active = isActive(detail);
+  const tab = useGenexTab();
   return (
-    <div className="genex-page">
-      <PluginNotes detail={detail} />
-      <div className="extensions-detail-actions">
-        <UpdateButton detail={detail} page={page} />
-      </div>
-      {active ? (
-        <LiveAccount detail={detail} page={page} />
-      ) : (
+    <div className="genex-page" data-genex-page={tab}>
+      <GenexTabs tab={tab} />
+      {tab === GenexTab.Tools && (
         <>
-          <p className="genex-off">{GENEX_WORDS.account.off}</p>
-          {page.error && (
-            <p role="alert" className="extensions-error">
-              {page.error}
-            </p>
-          )}
+          <p className="genex-section-intro">{GENEX_WORDS.router.intro}</p>
+          <PluginNotes detail={detail} />
+          <div className="extensions-detail-actions">
+            <UpdateButton detail={detail} page={page} />
+          </div>
+          {active ? <LiveAccount detail={detail} page={page} /> : <GenexOff page={page} />}
+          <RoutedTools />
+          <PluginSkills detail={detail} onSkill={onSkill} />
+          <Information detail={detail} />
         </>
       )}
-      <RoutedTools />
-      <PluginSkills detail={detail} onSkill={onSkill} />
-      <Information detail={detail} />
+      {tab === GenexTab.Credits && (active ? <GenexCreditsTab /> : <GenexOff page={page} />)}
     </div>
   );
 }

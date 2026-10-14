@@ -1,13 +1,13 @@
 /**
  * The buttons plugins contribute at the end of the stage strip, dressed as the app's own
- * buttons. Which buttons exist is the manifest's (`toolbarItems`); what they say is the plugin's status action or a `plugin.event` of kind
+ * buttons, and Studio's own Multiplayer and Publish for every web game. Which buttons exist is the manifest's (`toolbarItems`); what they say is the plugin's status action or a `plugin.event` of kind
  * `toolbar`, both sanitized before they reach the DOM. A panel target opens its own dialog over
  * the stage (and says so, so the native game view gets out of the way); an action target runs
  * the same review → ticket → native approval sequence as the Plugins dialog. While Studio bundles
  * a newer version of the plugin, its buttons say Update instead and open Plugins at it.
  */
 import type { Dispatch, JSX, SetStateAction } from "react";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GENEX_PLUGIN_ID, GENEX_PUBLISH_PANEL } from "../../shared/genex.ts";
 import type { FactRef, FolderHolds } from "../../shared/project-facts.ts";
@@ -15,6 +15,8 @@ import {
   type PluginToolbarEntry,
   toolbarReaction,
   toolbarStatusFrom,
+  MultiplayerPress,
+  multiplayerPress,
   toolbarUpdateStatus,
 } from "../../shared/plugin-toolbar.ts";
 import {
@@ -23,6 +25,7 @@ import {
   type PluginPanelDocument,
   type PluginToolbarStatus,
 } from "../../shared/plugins.ts";
+import { composeInChat } from "../compose-in-chat.ts";
 import { type PluginReviewRequest, runPluginAction } from "../plugin-actions.ts";
 import { PLUGIN_SETUP_EVENT } from "../plugin-setup.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
@@ -31,7 +34,7 @@ import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../ui/dialog.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
-import { GenexPublishDialog, GenexSetupDialog } from "./plugins/genex/GenexPublish.tsx";
+import { GenexPublishDialog, GenexSetupDialog, GenexSetupFor } from "./plugins/genex/GenexPublish.tsx";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PanelSurface } from "./panel-bridge.ts";
@@ -290,6 +293,68 @@ function useStudioPublish(
   return { shown, setup: setup && shown, open, close, handOff };
 }
 
+/**
+ * Multiplayer, left of Publish on every game that gets Publish. With Genex on, one press asks the
+ * game's chat to make it multiplayer; without it, the setup dialog brings Genex in first, and the
+ * ask goes out the moment Genex is on. While Studio bundles a newer Genex, the press opens Plugins
+ * at Genex first, as Publish's does: an older Genex's instructions refuse a game made from the template.
+ */
+function useMultiplayer(project: string | null, shown: boolean, genex: PluginToolbarEntry | undefined) {
+  const genexOn = Boolean(genex);
+  const behind = genex ? toolbarUpdateStatus(genex.plugin, PLUGIN_TOOLBAR_WORDS.update) : null;
+  const pressed = multiplayerPress(genex?.plugin);
+  const [setup, setSetup] = useState(false);
+  const ask = useCallback(() => {
+    if (project) composeInChat({ project, text: GENEX_WORDS.multiplayer.prompt, send: true });
+  }, [project]);
+  const press = useCallback(() => {
+    if (pressed === MultiplayerPress.Update) openPluginsAt(GENEX_PLUGIN_ID);
+    else if (pressed === MultiplayerPress.Ask) ask();
+    else setSetup(true);
+  }, [pressed, ask]);
+  const close = useCallback(() => setSetup(false), []);
+  // Genex came on while its dialog was up: what the press asked for goes out now.
+  useEffect(() => {
+    if (!setup || !genexOn) return;
+    setSetup(false);
+    ask();
+  }, [setup, genexOn, ask]);
+  useEffect(() => {
+    if (setup && !shown) setSetup(false);
+  }, [setup, shown]);
+  return { press, setup: setup && shown, close, behind };
+}
+
+/** Multiplayer: quiet like Publish beside it, since neither is the game's next step until asked. */
+function MultiplayerButton({
+  onPress,
+  behind = null,
+}: {
+  onPress: () => void;
+  /** Genex is older than the one Studio bundles: the button says Update, as Genex's own buttons do. */
+  behind?: PluginToolbarStatus | null;
+}): JSX.Element {
+  const badgeId = useId();
+  return (
+    <Button
+      variant="pill"
+      data-genex-multiplayer
+      aria-label={GENEX_WORDS.multiplayer.buttonLabel}
+      aria-describedby={behind?.badge ? badgeId : undefined}
+      title={behind?.title}
+      onClick={onPress}
+    >
+      <Icon name="users" />
+      <span>{GENEX_WORDS.multiplayer.button}</span>
+      {behind?.badge ? (
+        <span id={badgeId} data-plugin-badge className="text-micro text-ink-2">
+          {behind.badge}
+        </span>
+      ) : null}
+    </Button>
+  );
+}
+
 /** Studio's own Publish, dressed as Genex's: quiet, since whoever turned Genex off is not publishing yet. */
 function StudioPublishButton({ onPress }: { onPress: () => void }): JSX.Element {
   return (
@@ -324,11 +389,13 @@ export function PluginToolbar({
   useEffect(() => {
     if (panel && !entries.some((e) => e.key === panel.key)) setPanel(null);
   }, [entries, panel]);
-  const studioPublish = useStudioPublish(plugins, project, { facts, holds }, entries.find(isGenexPublish));
+  const genexPublish = entries.find(isGenexPublish);
+  const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
+  const multiplayer = useMultiplayer(project, Boolean(genexPublish) || studioPublish.shown, genexPublish);
   useEffect(() => {
-    onOpenChange(Boolean(panel) || studioPublish.setup);
+    onOpenChange(Boolean(panel) || studioPublish.setup || multiplayer.setup);
     return () => onOpenChange(false);
-  }, [panel, studioPublish.setup, onOpenChange]);
+  }, [panel, studioPublish.setup, multiplayer.setup, onOpenChange]);
   useEffect(
     () => () =>
       setReview((r) => {
@@ -364,21 +431,31 @@ export function PluginToolbar({
   return (
     <>
       {entries.map((entry) => (
-        <ToolbarButton
-          key={entry.key}
-          entry={entry}
-          status={status[entry.key]}
-          project={project}
-          busy={busy === entry.key}
-          due={Boolean(status[entry.key]?.attention) && !emptyGame}
-          onPress={() => void press(entry)}
-        />
+        <Fragment key={entry.key}>
+          {entry === genexPublish && <MultiplayerButton onPress={multiplayer.press} behind={multiplayer.behind} />}
+          <ToolbarButton
+            entry={entry}
+            status={status[entry.key]}
+            project={project}
+            busy={busy === entry.key}
+            due={Boolean(status[entry.key]?.attention) && !emptyGame}
+            onPress={() => void press(entry)}
+          />
+        </Fragment>
       ))}
+      {studioPublish.shown && <MultiplayerButton onPress={multiplayer.press} />}
       {studioPublish.shown && <StudioPublishButton onPress={studioPublish.open} />}
       {studioPublish.setup && (
         <GenexSetupDialog
           genex={plugins.find((p) => p.manifest.id === GENEX_PLUGIN_ID)}
           onClose={studioPublish.close}
+        />
+      )}
+      {multiplayer.setup && (
+        <GenexSetupDialog
+          genex={plugins.find((p) => p.manifest.id === GENEX_PLUGIN_ID)}
+          onClose={multiplayer.close}
+          purpose={GenexSetupFor.Multiplayer}
         />
       )}
       {panel?.drawn && livePanelPlugin ? (

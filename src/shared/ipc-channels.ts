@@ -17,6 +17,8 @@
 import type { StudioApi } from "./studio-api.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
+import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
+import type { StatsPeriod } from "./play-stats.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
 
@@ -163,6 +165,19 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.open": "playOpen",
   "studio:play.close": "playClose",
   "studio:play.control": "playControl",
+  "studio:play.me": "playMe",
+  "studio:play.rename": "playRename",
+  "studio:play.avatar": "playAvatar",
+  "studio:play.profile": "playProfile",
+  "studio:play.friends": "playFriends",
+  "studio:play.friend": "playFriend",
+  "studio:play.people": "playPeople",
+  "studio:play.visibility": "playVisibility",
+  "studio:play.avatarStyle": "playAvatarStyle",
+  "studio:play.avatarVariant": "playAvatarVariant",
+  "studio:play.stats": "playStats",
+  "studio:play.creators": "playCreators",
+  "studio:play.credits": "playCredits",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
   "studio:rollback": "rollback",
@@ -370,6 +385,19 @@ export interface StudioInvokePayloads {
   "studio:play.open": { slug: string };
   "studio:play.close": undefined;
   "studio:play.control": { control: PlayControl; at?: PlayPoint };
+  "studio:play.me": undefined;
+  "studio:play.rename": { name: string };
+  "studio:play.avatar": { webp: Uint8Array };
+  "studio:play.profile": { userId: string };
+  "studio:play.friends": undefined;
+  "studio:play.friend": FriendActionRequest;
+  "studio:play.people": { query: string };
+  "studio:play.visibility": { visibility: PresenceVisibility };
+  "studio:play.avatarStyle": { style: AvatarStyle };
+  "studio:play.avatarVariant": { variant: number };
+  "studio:play.stats": { days: StatsPeriod };
+  "studio:play.creators": undefined;
+  "studio:play.credits": undefined;
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };

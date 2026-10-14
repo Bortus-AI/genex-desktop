@@ -51,7 +51,7 @@ undo a remote action or recall data already sent.
 | Blender assets | Blender on this Mac, or one click downloads a pinned release from download.blender.org |
 | Plugin catalog | Anonymous downloads from `plugins.genex.games` and GitHub |
 | Genex asset generation, credits and hosted publishing | A Genex account (paid credits); publishing also needs `git-lfs` |
-| Play | Nothing to browse and play; likes, signed-in play and invite links need a Genex account; Remix needs `git`; voice chat needs microphone access (macOS asks once) |
+| Play | Nothing to browse and play; likes, signed-in play, invite links, profiles and friends need a Genex account; Remix needs `git`; voice chat needs microphone access (macOS asks once) |
 
 Studio finds Claude Code and Codex through a manual override, your login-shell `PATH`, then
 standard locations, and never installs or updates them unless you choose that in Settings.
@@ -83,6 +83,27 @@ the account's token to the Genex API to get a single-use sign-in ticket for that
 one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
 only copy a genex.games link to the clipboard.
+
+With a connected Genex account the app also reads, with that token, who the account is (its name,
+picture, Pro and join date; the email the API returns never leaves the app's main process) and the
+Friends page: your friends with the game each is in when they share it, requests both ways, whether
+friends see the game you are in, and your invite link. Who the account is is read at launch, when
+the window comes to the front and when plugins change; the Friends page at launch, every 2 minutes
+for the sidebar's count of waiting requests, every 20 seconds while Friends is open and after each
+change you make there. A profile reads that account's public profile (name, picture, Pro, join date,
+published games) and, signed in, how you stand with them. Adding, accepting, declining, cancelling
+and removing a friend, changing who sees your game, renaming your account and a new picture (made
+into a 512-pixel WebP in the app, then uploaded to the address Genex hands back) are sent with the
+token; people search sends what you type (2 to 40 characters). A profile also reads that person's
+friends (yours first) and how many people played their games. Your own stats (plays and players
+per game per day, and who plays now) are read with the token only while your profile or the Stats
+page shows them, and only you see them. Top creators are read without a sign-in. Choosing your
+generated avatar or your photo, and Regenerate's new variant (a number), are sent with the token;
+the generated avatar itself is drawn in the app from your account id and that number and sends
+nothing. The Genex plugin's Credits tab reads, with the token,
+your balance, Pro allowance, invite bonus and last few spends, and the public price list; Get
+credits opens genex.games/plans in your browser. That an account has seen its avatar's welcome
+stays in the app profile.
 
 Remix clones the game's public source over https from git.genex.games into a new folder in your
 games folder, without its history, hooks, content filters, LFS files or symbolic links. The copy's

@@ -202,7 +202,7 @@ function Footer({
 }
 
 /**
- * Opens Genex Tools in the browser. Where the browser may not be opened (a fixture profile), the
+ * Opens the Genex plugin's page in the browser. Where the browser may not be opened (a fixture profile), the
  * address is copied instead and the link says so for a moment.
  */
 function LearnMore(): JSX.Element {

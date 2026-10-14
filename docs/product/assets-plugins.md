@@ -11,7 +11,7 @@ An opened file has only Reveal in Finder and Close: images (click: full size), a
 models with clips, textures or bounded text; unsupported formats and decoder failures say why.
 
 Chat shows game-folder files with Open in Assets. Builds shows a Loop's workspace assets as
-thumbnails until landing. Job completion or “seen in game” never proves integration or passing checks.
+thumbnails until landing.
 
 ## Tools and setup
 
@@ -24,15 +24,17 @@ Marketplace (Coming soon until it lists more) and the plugin guide, with
 (else the newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
-Game spend is in the usage panel. Enabled Genex suggests assets in planning.
+Game spend is in the usage panel; Genex's Credits tab has live prices. Enabled Genex suggests assets in planning.
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
-`genex__package` (multiplayer or player-identity packages) after consent. Publish (a host-drawn
+`genex__package` (multiplayer or player-identity packages; template games map Studio's built-in
+copies) after consent. Publish (a host-drawn
 dialog) tests the draft, goes public and sends the `genex-cover` demo frame as the Genex cover, not
 the sidebar sphere ([rules](../plugins.md#first-party-privileges)); lacking one, Ask for a cover
 drafts the request in chat. Agents check `genex__cover` before each publish; consented
-`genex__cover-set` sends it. Chat shows the kept shot with Publish. Agents read Genex’s guide and
+`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer asks chat for Genex multiplayer;
+both offer Genex while off, Update while older. Agents read Genex’s guide and
 cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists

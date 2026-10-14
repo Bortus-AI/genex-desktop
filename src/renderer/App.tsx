@@ -20,7 +20,8 @@ import { Onboarding } from "./onboarding/Onboarding.tsx";
 import { AppDialogs } from "./panels/AppDialogs.tsx";
 import { GenexPromo } from "./panels/GenexPromo.tsx";
 import { nativeViewsUp } from "./play/play-model.ts";
-import { PlayRoom } from "./play/PlayRoom.tsx";
+import { AvatarWelcome } from "./play/AvatarWelcome.tsx";
+import { PlayPages } from "./play/PlayPages.tsx";
 import { PlayViewerLayer } from "./play/PlayViewerLayer.tsx";
 import { usePlayInstallAsked } from "./play/use-play-install.ts";
 import { usePlayRemixes } from "./play/use-play-remixes.ts";
@@ -115,7 +116,7 @@ export function App(): JSX.Element {
           />
         )}
         {chrome.playOpen && !chrome.pluginsOpen && (
-          <PlayRoom sidebarHidden={chrome.sidebarHidden} onToggleSidebar={chrome.toggleSidebar} onRemixed={openRemix} />
+          <PlayPages chrome={chrome} onRemixed={openRemix} onNewGame={navigation.newGame} />
         )}
       </main>
       <AppDialogs
@@ -135,6 +136,7 @@ export function App(): JSX.Element {
         />
       )}
       <GenexPromo welcoming={welcoming} pluginsOpen={chrome.workspaceCovered} project={project} />
+      <AvatarWelcome blocked={welcoming} />
       <PlayViewerLayer />
       <Toasts />
       <CodexLoginPanel />

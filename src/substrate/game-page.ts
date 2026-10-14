@@ -48,6 +48,53 @@ export function importMapKeys(html: string): string[] {
   }
 }
 
+/** The page's own import map block: where its JSON starts and ends in the HTML, and the JSON. */
+function importMapBlock(html: string): { start: number; end: number; body: string } | null {
+  const match = /(<script\b[^>]*\btype\s*=\s*["']importmap["'][^>]*>)([\s\S]*?)<\/script>/i.exec(html);
+  if (!match) return null;
+  const start = match.index + (match[1]?.length ?? 0);
+  const body = match[2] ?? "";
+  return { start, end: start + body.length, body };
+}
+
+/** The specifiers the page's own import map resolves, each to its URL; empty when it has none or it isn't JSON. */
+export function importMapImports(html: string): Record<string, string> {
+  const block = importMapBlock(html);
+  if (!block) return {};
+  try {
+    const imports = (JSON.parse(block.body) as { imports?: Record<string, unknown> }).imports ?? {};
+    return Object.fromEntries(
+      Object.entries(imports).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The page with `entries` set in its own import map, written back in the map's own indentation;
+ * null when the page has no import map, or one that isn't a JSON object, to add them to.
+ */
+export function withImportMapEntries(html: string, entries: ReadonlyArray<readonly [string, string]>): string | null {
+  const block = importMapBlock(html);
+  if (!block) return null;
+  let map: { imports?: Record<string, unknown> };
+  try {
+    map = JSON.parse(block.body);
+  } catch {
+    return null;
+  }
+  if (typeof map !== "object" || map === null || Array.isArray(map)) return null;
+  map.imports = { ...(map.imports ?? {}), ...Object.fromEntries(entries) };
+  const indent = /\n([ \t]*)\S/.exec(block.body)?.[1] ?? "";
+  const closing = /\n([ \t]*)$/.exec(block.body)?.[1] ?? "";
+  const json = JSON.stringify(map, null, 2)
+    .split("\n")
+    .map((line) => indent + line)
+    .join("\n");
+  return `${html.slice(0, block.start)}\n${json}\n${closing}${html.slice(block.end)}`;
+}
+
 /** Whether an import map with these keys resolves `specifier` (a `/`-ended key is a prefix). */
 export function resolvedByMap(keys: string[], specifier: string): boolean {
   return keys.some((key) => (key.endsWith("/") ? specifier.startsWith(key) : key === specifier));

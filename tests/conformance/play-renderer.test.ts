@@ -110,7 +110,7 @@ function game(slug: string, overrides: Partial<PlayGame> = {}): PlayGame {
     multiplayer: false,
     plays: 0,
     online: null,
-    author: { name: "Author", imageUrl: null },
+    author: { id: null, name: "Author", imageUrl: null },
     remixable: false,
     ...overrides,
   };

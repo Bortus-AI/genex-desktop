@@ -80,6 +80,17 @@ export function writeRecent(
   writeJson(STORAGE_KEYS.playRecent, list, storage);
 }
 
+/** Below this a stat is shown whole: the account's own numbers keep every play until they run long. */
+const STAT_WHOLE_BELOW = 10_000;
+/** Digit grouping in the reader's own style. */
+const GROUPED = new Intl.NumberFormat();
+
+/** A count as the stats show it: whole and grouped below ten thousand (1,240), else as a card does (12k). */
+export function formatStat(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "0";
+  return value < STAT_WHOLE_BELOW ? GROUPED.format(Math.floor(value)) : formatCount(value);
+}
+
 /** A count as a card shows it: 999, 2.7k, 12k, 1.4M. */
 export function formatCount(value: number): string {
   if (!Number.isFinite(value) || value < 0) return "0";

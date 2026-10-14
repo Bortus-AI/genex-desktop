@@ -1931,7 +1931,7 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
   it("the plugin-author skill writes a plugin like this one into a local folder", async () => {
     const dir = await mkdtemp(path.join(cases, "plugin-author-"));
     const binding = { project: "plugin-author", directory: dir };
-    // The guide comes with Genex Tools, on as it ships.
+    // The guide comes with the Genex plugin, on as it ships.
     const genexWas = lite.core.plugins.enabled(GENEX_PLUGIN);
     await lite.core.plugins.setEnabled(GENEX_PLUGIN, true);
     const { folder } = await writeSkillExample(lite.core.plugins, binding, dir).finally(() =>

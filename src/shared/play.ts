@@ -103,7 +103,8 @@ export interface PlayGame {
   plays: number;
   /** Players in it now; null when the game is single-player or the count is unknown. */
   online: number | null;
-  author: { name: string; imageUrl: string | null };
+  /** Who made it; `id` opens their profile, null when the API did not name the account. */
+  author: { id: string | null; name: string; imageUrl: string | null };
   /** Anyone may make their own copy: its source is public. */
   remixable: boolean;
 }
@@ -192,6 +193,8 @@ export type PlayNote = (typeof PlayNote)[keyof typeof PlayNote];
 /** The game's facts under its name in the header. */
 export interface PlayFacts {
   author: string;
+  /** The maker's account, whose name opens their profile; null when the gallery did not name it. */
+  authorId: string | null;
   plays: number;
   /** Players in it now; null for a single-player game or an unknown count. */
   online: number | null;

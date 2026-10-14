@@ -26,9 +26,13 @@ import { sidebarGames } from "../state/threads.ts";
 import { PLAY_SHELVES, PlayShelf } from "../../shared/play.ts";
 import { formatCount } from "../play/play-model.ts";
 import { PlayPromo } from "../play/PlayPromo.tsx";
+import { ProfilePlate } from "../play/ProfilePlate.tsx";
+import { usePeopleSync } from "../play/use-people-sync.ts";
 import { PlayRecent } from "../play/PlayRecent.tsx";
 import { PlaySwitch } from "../play/PlaySwitch.tsx";
-import { usePlay, useShallow } from "../state/hooks.ts";
+import { usePeople, usePlay, useShallow } from "../state/hooks.ts";
+import { waitingRequests } from "../state/people.ts";
+import { PlayPage } from "../state/play.ts";
 import { studio as studioApp } from "../state/studio.ts";
 import { PLAY_WORDS } from "../words.ts";
 
@@ -141,6 +145,8 @@ export function Sidebar(props: Props): JSX.Element {
   const { scrolled, onScroll } = useScrollState(nav);
   const sorted = useSortedGames(games, threads);
   const { playOpen } = props;
+  usePeopleSync(playOpen);
+  const signedIn = usePeople((s) => s.me !== null);
   return (
     <nav
       ref={nav}
@@ -185,7 +191,9 @@ export function Sidebar(props: Props): JSX.Element {
         <span className="sidebar-fade" aria-hidden="true" />
         <SidebarFooter {...props} />
       </div>
-      {playOpen && <PlayPromo project={null} />}
+      {/* Signed in to Genex, the plate stands where the plugin's promo would. */}
+      {playOpen && !signedIn && <PlayPromo project={null} />}
+      <ProfilePlate onPlayMode={props.onPlayMode} />
     </nav>
   );
 }
@@ -494,10 +502,17 @@ const SHELF_ICONS = {
   [PlayShelf.Assets]: "box",
 } as const satisfies Record<PlayShelf, IconName>;
 
-/** Play's shelves in the rooms' place: Games, Tools and Assets, each with its count, as genex.games lists them. */
+/**
+ * Play's shelves in the rooms' place: Games, Tools and Assets, each with its count, as genex.games
+ * lists them, and Friends after them while Genex is signed in, with the requests waiting.
+ */
 function PlayShelfRows(): JSX.Element {
+  const onShelf = usePlay((s) => s.view.page === PlayPage.Shelf);
   const shown = usePlay((s) => s.shelf);
   const counts = usePlay(useShallow((s) => s.counts));
+  const friendsShown = usePlay((s) => s.view.page === PlayPage.Friends);
+  const signedIn = usePeople((s) => s.me !== null);
+  const waiting = usePeople(waitingRequests);
   return (
     <div className="sidebar-nav" role="group" aria-label={PLAY_WORDS.shelvesLabel}>
       {PLAY_SHELVES.map((shelf) => {
@@ -506,7 +521,7 @@ function PlayShelfRows(): JSX.Element {
           <NavRow
             key={shelf}
             icon={SHELF_ICONS[shelf]}
-            current={shelf === shown}
+            current={onShelf && shelf === shown}
             data-play-shelf={shelf}
             onClick={() => studioApp().play.chooseShelf(shelf)}
           >
@@ -515,6 +530,22 @@ function PlayShelfRows(): JSX.Element {
           </NavRow>
         );
       })}
+      {signedIn && (
+        <NavRow
+          icon="users"
+          current={friendsShown}
+          data-play-friends=""
+          aria-label={PLAY_WORDS.people.friendsLabel(waiting)}
+          onClick={() => studioApp().play.showFriends()}
+        >
+          <span className="min-w-0 flex-1 truncate">{PLAY_WORDS.people.friends}</span>
+          {waiting > 0 && (
+            <span className="sidebar-badge" aria-hidden="true">
+              {waiting}
+            </span>
+          )}
+        </NavRow>
+      )}
     </div>
   );
 }

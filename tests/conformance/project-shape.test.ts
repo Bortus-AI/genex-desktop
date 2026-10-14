@@ -27,7 +27,7 @@ import {
   studioContractGeneration,
 } from "../../src/substrate/game-workspace.ts";
 import { bootBudget } from "../../src/substrate/preview-ready.ts";
-import { webGameSignal } from "../../src/substrate/project-shape.ts";
+import { isGenexLocalTest, webGameSignal } from "../../src/substrate/project-shape.ts";
 import { ensureRepo, git } from "../../src/substrate/snapshots.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import {
@@ -180,6 +180,49 @@ describe("a project's own shape", () => {
       }),
     );
     assert.equal((await detectProjectShape(genex))!.entry, "dist/index.html?genex_local_test=1");
+  });
+
+  it("runs a template game that maps Studio's Genex sign-in in local test mode, on loopback, and no other", async () => {
+    const base = await tmpDir("studio-shape-");
+    const page = (imports: Record<string, string>) =>
+      `<!doctype html>\n<script type="importmap">${JSON.stringify({ imports })}</script>\n<script type="module" src="/src/main.js"></script>\n`;
+    const three = { three: "/vendor/three.module.js" };
+    const cases: Array<[string, Record<string, string>, string]> = [
+      ["plain template", three, "index.html"],
+      [
+        "Studio's sign-in",
+        { ...three, "@genex-ai/embed-sdk": "/vendor/genex/embed-sdk.js" },
+        "index.html?genex_local_test=1",
+      ],
+      [
+        "Studio's multiplayer and sign-in",
+        {
+          ...three,
+          "@genex-ai/multiplayer": "/vendor/genex/multiplayer.js",
+          "@genex-ai/embed-sdk": "/vendor/genex/embed-sdk.js",
+        },
+        "index.html?genex_local_test=1",
+      ],
+      [
+        "sign-in from a CDN, not Studio's",
+        { ...three, "@genex-ai/embed-sdk": "https://esm.sh/@genex-ai/embed-sdk" },
+        "index.html",
+      ],
+      [
+        "multiplayer without sign-in",
+        { ...three, "@genex-ai/multiplayer": "/vendor/genex/multiplayer.js" },
+        "index.html",
+      ],
+    ];
+    for (const [name, imports, entry] of cases) {
+      const dir = path.join(base, name.replaceAll(/\W+/g, "-"));
+      await templateFolder(dir);
+      await writeFile(path.join(dir, "index.html"), page(imports));
+      const shape = await readProjectShape(dir);
+      assert.equal(shape.entry, entry, name);
+      assert.equal(shape.own, false, `${name}: still the studio's own template`);
+      assert.equal(isGenexLocalTest(shape), entry.endsWith("genex_local_test=1"), name);
+    }
   });
 
   it("waits as long as the folder asks it to boot, and adds nothing to a folder that asks nothing", async () => {

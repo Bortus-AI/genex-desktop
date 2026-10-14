@@ -10,6 +10,7 @@ import { devRoot, slug } from "./studio-dev/ownership.mjs";
 import { SEED_GENERATED } from "./gen-harness-types.ts";
 import { packageBin } from "./package-bin.ts";
 import { vendorTsc } from "./vendor-tsc.ts";
+import { vendorGenexSdk } from "./vendor-genex-sdk.ts";
 /**
  * Build — assembles `dist/` for Electron.
  *
@@ -235,6 +236,11 @@ async function buildAll() {
   await mkdir(dist, { recursive: true });
   const contexts = [...(await nodeContexts()), ...(await rendererContexts()), ...(await pageContexts())];
   const bundledInputs = await runContexts(contexts);
+  // Genex's game SDKs, for template games that turn multiplayer or sign-in on: built once, even
+  // in watch mode, since node_modules does not change under a running build.
+  const genexSdk = await vendorGenexSdk(root, path.join(dist, "resources", "vendor"));
+  console.log(`vendored Genex SDKs: ${(genexSdk.bytes / 1024).toFixed(0)} KB`);
+  for (const input of genexSdk.inputs) bundledInputs.add(input);
   await buildTheme();
   await copyResources();
   if (watch) watchPlugins();

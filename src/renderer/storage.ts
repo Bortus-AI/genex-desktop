@@ -67,6 +67,8 @@ export const storageKeyFor = {
   engineStepsDismissed: (project: string): string => `studio.engineSteps.dismissed.${project}`,
   /** The Live view last chosen for a game whose folder has more than one, as its observer key (`live-views.ts`). */
   liveView: (project: string): string => `studio.liveView.${project}`,
+  /** Set ("1") once a Genex account has met its generated avatar (`play/AvatarWelcome.tsx`). */
+  avatarWelcomed: (accountId: string): string => `studio.genex.avatarWelcomed.${accountId}`,
 } as const;
 
 /** The IndexedDB database of cover sphere stills (`ui/cover-stills.ts` owns the format). */

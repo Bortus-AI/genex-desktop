@@ -42,6 +42,7 @@ const WORLD: PlayWorld = {
   remixable: false,
   cloneUrl: null,
   author: "Ada",
+  authorId: null,
   plays: 10,
   online: 2,
 };

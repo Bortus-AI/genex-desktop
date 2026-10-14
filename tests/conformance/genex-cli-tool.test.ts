@@ -389,7 +389,7 @@ describe("genex__package: a pinned Genex SDK install into the bound game", () =>
       /not bound to the game/,
     ],
     [
-      "a template game with no package.json",
+      "a game with neither a package.json nor Studio's template page",
       async (lib) => {
         const game = lib.games["space-race"] ?? "";
         await exec("git", ["rm", "-q", "package.json"], { cwd: game, env: GIT_ENV });
@@ -590,4 +590,63 @@ it("package preflight refuses unsupported projects before approval and starts no
     /package.json/,
   );
   assert.equal(lib.runner.seen.length, 0);
+});
+
+/** Make a library game Studio's template: its stamp, its page with the vendored-three map, no package.json. */
+async function asTemplate(
+  dir: string,
+  map = '{\n    "imports": {\n      "three": "/vendor/three.module.js"\n    }\n  }',
+): Promise<string> {
+  await exec("git", ["rm", "-q", "package.json"], { cwd: dir, env: GIT_ENV });
+  await writeFile(path.join(dir, "studio.json"), '{"contractVersion":1}\n');
+  const page = `<!doctype html>\n<script type="importmap">\n  ${map}\n</script>\n<script type="module" src="/src/main.js"></script>\n`;
+  await writeFile(path.join(dir, "index.html"), page);
+  return page;
+}
+
+describe("genex__package in a game made from Studio's template", () => {
+  it("maps Studio's built-in copies into the page's import map, downloading nothing", async () => {
+    const lib = await packageLibrary();
+    const game = lib.games["space-race"] ?? "";
+    await asTemplate(game);
+    const answer = await lib.packages.add(
+      { package: "@genex-ai/multiplayer" },
+      { project: "space-race", directory: game },
+    );
+    assert.equal(answer.ok, true);
+    assert.equal(lib.runner.seen.length, 0, "no package manager ran");
+    const html = await readFile(path.join(game, "index.html"), "utf8");
+    const map = JSON.parse(/<script type="importmap">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "{}");
+    assert.deepEqual(map.imports, {
+      three: "/vendor/three.module.js",
+      "@genex-ai/multiplayer": "/vendor/genex/multiplayer.js",
+      "@genex-ai/multiplayer/schema": "/vendor/genex/multiplayer-schema.js",
+      "@genex-ai/embed-sdk": "/vendor/genex/embed-sdk.js",
+    });
+    assert.match(html, /<script type="module" src="\/src\/main\.js"><\/script>/, "the rest of the page is kept");
+    // Asked again, the map is the same: entries are set, never stacked.
+    await lib.packages.add({ package: "@genex-ai/multiplayer" }, { project: "space-race", directory: game });
+    assert.equal(await readFile(path.join(game, "index.html"), "utf8"), html);
+  });
+
+  it("maps player identity alone when that is all a call asks for", async () => {
+    const lib = await packageLibrary();
+    const game = lib.games["space-race"] ?? "";
+    await asTemplate(game);
+    await lib.packages.add({ package: "@genex-ai/embed-sdk" }, { project: "space-race", directory: game });
+    const html = await readFile(path.join(game, "index.html"), "utf8");
+    assert.match(html, /"@genex-ai\/embed-sdk": "\/vendor\/genex\/embed-sdk\.js"/);
+    assert.doesNotMatch(html, /@genex-ai\/multiplayer/);
+  });
+
+  it("writes nothing when the template page's import map is not JSON", async () => {
+    const lib = await packageLibrary();
+    const game = lib.games["space-race"] ?? "";
+    const page = await asTemplate(game, '{ "imports": { "three": "/vendor/three.module.js", } }');
+    await assert.rejects(
+      lib.packages.add({ package: "@genex-ai/multiplayer" }, { project: "space-race", directory: game }),
+      /no import map/,
+    );
+    assert.equal(await readFile(path.join(game, "index.html"), "utf8"), page);
+  });
 });

@@ -38,7 +38,12 @@ export const GENEX_CLI_PROMPT = {
   UnknownPackage: (name: string, allowed: readonly string[]) =>
     `${name} is not a package genex__package adds. It adds: ${allowed.join(", ")}.`,
   NoPackageJson:
-    "This game has no package.json (it uses Studio's template and its /vendor/ import maps), so it cannot add Genex packages. Multiplayer needs a game with its own build.",
+    "This game has its own page but no package.json, so there is nothing to install Genex packages into. Give it one with a build (npm init, then a bundler such as Vite), then call genex__package again.",
+  NoImportMap:
+    'This game\'s index.html has no import map to add Genex to. Add one (<script type="importmap">{"imports":{}}</script> before the first module script), then call genex__package again.',
+  Mapped: (specifier: string, url: string) => `Mapped ${specifier} to Studio's built-in copy, ${url}, in index.html.`,
+  MappedNext:
+    "Nothing was downloaded. Import these exactly as the card shows. From now on Studio previews this game in Genex local test mode, so connect() and matchmake() still fail there: test multiplayer on a published draft.",
   ForeignFolder:
     "This call is not bound to the game's own folder or one of its Studio worktrees; nothing was installed.",
 } as const;

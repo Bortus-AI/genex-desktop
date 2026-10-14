@@ -276,6 +276,23 @@ const FIXTURE_SAFE = [
   "studio:play.close",
   // The viewer header's controls: a fixture launch has no Genex account, so likes and invites answer signed out.
   "studio:play.control",
+  // Play's people: a fixture launch answers from its own people (`dev/fixture-play.ts`), signed out
+  // unless the launch asks for its fixture account, and an avatar "upload" stays in memory.
+  "studio:play.me",
+  "studio:play.rename",
+  "studio:play.avatar",
+  "studio:play.profile",
+  "studio:play.friends",
+  "studio:play.friend",
+  "studio:play.people",
+  "studio:play.visibility",
+  "studio:play.avatarStyle",
+  "studio:play.avatarVariant",
+  // A creator's stats, Top creators and the Credits tab: a fixture launch answers from its own
+  // made-up numbers, signed out unless it asks for its fixture account.
+  "studio:play.stats",
+  "studio:play.creators",
+  "studio:play.credits",
   // Connectors write a file inside the profile; only the trust step is native.
   "studio:mcp.list",
   "studio:mcp.save",

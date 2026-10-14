@@ -393,6 +393,31 @@ const glyphs = {
       <path d="M5 20c.6-3.8 3.4-6.2 7-6.2s6.4 2.4 7 6.2" />
     </>
   ),
+  // A figure with a plus beside it: asking someone to be a friend. The head nods once.
+  "user-plus": (
+    <>
+      <g className="a-bob">
+        <circle cx="9.5" cy="8.5" r="3.2" />
+      </g>
+      <path d="M4 19.5c.5-3.4 2.8-5.5 5.5-5.5s5 2.1 5.5 5.5M18.5 8v6M15.5 11h6" />
+    </>
+  ),
+  // A door and an arrow leaving through it: signing out.
+  "sign-out": (
+    <>
+      <path d="M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10" />
+      <path d="M14.5 8l4 4-4 4M18.5 12H9" />
+    </>
+  ),
+  // Up and down chevrons: a control that opens a menu above or below.
+  chevrons: <path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" />,
+  // Two links of a chain: an address to share.
+  link: (
+    <>
+      <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" />
+      <path d="M13.5 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" />
+    </>
+  ),
   // Two figures side by side, for players together: the front head nods once.
   users: (
     <>
@@ -487,6 +512,35 @@ const glyphs = {
       <path d="M10 3.5v3M14 3.5v3M10 17.5v3M14 17.5v3M3.5 10h3M3.5 14h3M17.5 10h3M17.5 14h3" />
     </>
   ),
+  /** A film camera: video. */
+  video: (
+    <>
+      <path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 11" />
+      <rect x="2" y="6" width="14" height="12" rx="2" />
+    </>
+  ),
+  /** Two notes: music. */
+  music: (
+    <>
+      <path d="M9 18V5l12-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="18" cy="16" r="3" />
+    </>
+  ),
+  /** A pulse: an animation clip. */
+  motion: <path d="M4 12h3.5l2-6 4 12 2-6H20" />,
+  /** Four tiles: a texture set. */
+  tiles: (
+    <>
+      <rect x="4" y="4" width="7" height="7" rx="1" />
+      <rect x="13" y="4" width="7" height="7" rx="1" />
+      <rect x="4" y="13" width="7" height="7" rx="1" />
+      <rect x="13" y="13" width="7" height="7" rx="1" />
+    </>
+  ),
+  /** A small triangle up or down: a number that rose or fell. */
+  "caret-up": <path d="M12 7l6 9H6z" fill="currentColor" stroke="none" />,
+  "caret-down": <path d="M12 17l6-9H6z" fill="currentColor" stroke="none" />,
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof glyphs;

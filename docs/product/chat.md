@@ -5,7 +5,7 @@
 One conversation per game. User messages are right-aligned bubbles, images above; long
 ones fold with Show more. Replies are Markdown prose. Any existing file the chat
 names is a link: game Markdown and images open beside it, others in their app (programs
-only shown). Empty chat is blank. Only the prompt bar writes and sends; a pasted image
+only shown). Only the prompt bar writes and sends; a pasted image
 adds the picture, not its file name.
 
 Chat work shows a short status and elapsed time; waiting is static. A running build is one card
@@ -16,7 +16,6 @@ failures stay visible. Play views and assets sit under the work
 that made them. Build updates use a short status and See it;
 a finished build is that card with Play, opening Builds; checks stay in Builds and Studio.
 A build that taught nothing adds no learned line.
-The [design specification](../agent/design.md#chat-reading-and-activity) owns exact values.
 
 ## Questions and plans
 

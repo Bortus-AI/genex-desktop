@@ -112,6 +112,10 @@ import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
 import { registerPlayIpc } from "./ipc/play.ts";
 import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { fixtureAccountToken, isFixtureAccount } from "./dev/fixture-people.ts";
+import { fixtureUpload, networkUpload, type PeopleDeps, type PlayPeople, playPeople } from "./play/people.ts";
+import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
+import { type GenexCredits, genexCredits } from "./play/credits.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
 import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
 import type { PlayViewer } from "./play/viewer.ts";
@@ -389,6 +393,11 @@ let preview: GamePreview | null = null;
 let gameScreen: GameFullScreen | null = null;
 /** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
 let playCatalog: PlayGallery | null = null;
+let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits } | null = null;
+/** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
+const fixtureGenexAccount = isFixtureAccount(process.env.STUDIO_FIXTURE_GENEX_ACCOUNT)
+  ? process.env.STUDIO_FIXTURE_GENEX_ACCOUNT
+  : null;
 /** Play's game viewer in the current window. */
 let playView: PlayViewer | null = null;
 /** Where startup stands for the window: Ready, or the sandbox setup screen with its Retry. */
@@ -869,6 +878,23 @@ function playCatalogFor(studio: StudioCore): PlayGallery {
   return playCatalog;
 }
 
+/**
+ * Play's people, a creator's numbers and the Credits tab for this core, all on the Genex account:
+ * genex.games over the network, or a fixture launch's own people and numbers.
+ */
+function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
+  const fixtureToken = async () => (fixtureGenexAccount ? fixtureAccountToken(fixtureGenexAccount) : undefined);
+  const deps: PeopleDeps = {
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
+    token: fixtureNativePolicy ? fixtureToken : () => studio.plugins.hostCredential(GENEX_PLUGIN_ID),
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
+  };
+  playAccount ??= { people: playPeople(deps), creators: creatorStats(deps), credits: genexCredits(deps) };
+  return playAccount;
+}
+
 /** A Play game's public source as a new game of the person's own; answers its library name. */
 function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
   return remixGame(world, {
@@ -1252,6 +1278,7 @@ function registerIpc(studio: StudioCore): void {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),
     viewer: () => playView,
+    ...playAccountFor(studio),
   });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },

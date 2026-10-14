@@ -1477,7 +1477,7 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
   const assetCall = startedPayload({
     callId: randomUUID(),
     pluginId: "genex",
-    pluginName: "Genex Tools",
+    pluginName: "Genex plugin",
     tool: "asset",
     toolName: "genex__asset",
     args: { operation: "image", prompt: "A painted banner over the bridge" },
@@ -1507,7 +1507,7 @@ async function checkPluginJobInGraph(buildSmoke: BuildSmoke, assetJobId: string)
   check(
     "a plugin's asset job appears in the graph under the part that asked for it",
     await waitFor(
-      `(() => { const node = document.querySelector('[data-graph-node="assets"]'); if (!node || !node.textContent.includes('Making 1')) return false; node.click(); const panel = document.querySelector('[data-graph-panel="assets"]')?.textContent || ""; return panel.includes('Genex Tools') && panel.includes('Part 1') && panel.includes('Making'); })()`,
+      `(() => { const node = document.querySelector('[data-graph-node="assets"]'); if (!node || !node.textContent.includes('Making 1')) return false; node.click(); const panel = document.querySelector('[data-graph-panel="assets"]')?.textContent || ""; return panel.includes('Genex plugin') && panel.includes('Part 1') && panel.includes('Making'); })()`,
     ),
   );
   pushUiEvent({

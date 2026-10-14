@@ -22,6 +22,7 @@ const WORLD: PlayWorld = {
   remixable: true,
   cloneUrl: "https://git.genex.games/u-1/lost-cathedral.git",
   author: "Simeon M",
+  authorId: null,
   plays: 0,
   online: null,
 };

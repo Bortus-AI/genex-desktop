@@ -724,7 +724,7 @@ it("disconnect blocks a new submission even while protected credential deletion 
     await deleting;
     const job = (await tools.execute("game", temp, { operation: "image", prompt: "fixture" })) as any;
     assert.equal(job.status, "failed");
-    assert.match(job.error, /Connect Genex Tools first/);
+    assert.match(job.error, /Connect the Genex plugin first/);
     assert.equal(job.requestId, undefined);
   } finally {
     release();

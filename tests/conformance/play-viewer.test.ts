@@ -48,6 +48,7 @@ const WORLD: PlayWorld = {
   remixable: true,
   cloneUrl: "https://git.genex.games/u-1/lost-cathedral.git",
   author: "Simeon M",
+  authorId: null,
   plays: 5300,
   online: 8,
 };
@@ -155,7 +156,7 @@ describe("Play viewer", () => {
       note: null,
       busy: false,
       guestCard: false,
-      facts: { author: "Simeon M", plays: 5300, online: 8 },
+      facts: { author: "Simeon M", authorId: null, plays: 5300, online: 8 },
       mic: null,
     });
     assert.equal(viewer.showing(), "lost-cathedral");

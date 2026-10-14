@@ -137,7 +137,7 @@ test("publishing the shown files publishes the open game to the gallery, and the
   }
 });
 
-test("the name typed in the dialog reaches Genex as one clean line, and a blank one is left to Genex Tools", async () => {
+test("the name typed in the dialog reaches Genex as one clean line, and a blank one is left to the Genex plugin", async () => {
   const rig = await dialogRig();
   try {
     const titles: Array<[unknown, Record<string, unknown>]> = [

@@ -15,6 +15,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { ensureDir } from "../../substrate/fsx.ts";
 import {
+  isGenexLocalTest,
   TEMPLATE_SHAPE,
   isImageFile,
   nestedForLanding,
@@ -605,7 +606,7 @@ export class PreviewService {
   ): Promise<{ entry: string; root: string | undefined; loopback: boolean; stale: string | null } | null> {
     const descriptor = (await this.#core.games.list().catch(() => [] as GameProject[])).find((g) => g.name === project);
     const shape = descriptor?.shape ?? TEMPLATE_SHAPE;
-    const loopback = descriptor?.built === true;
+    const loopback = descriptor?.built === true || isGenexLocalTest(shape);
     const base = root ?? this.#core.games.dirFor(project);
     const outcome = await this.#core.builds.ensure({ project, dir: base, shape });
     const note = outcome.problem ? buildFailureNote(outcome.problem) : null;

@@ -5,9 +5,10 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { GameCandidate, ProjectKind, ProjectShape } from "../shared/game-project.ts";
+import { vendoredSdkPackages } from "../shared/genex.ts";
 import { CoreFact, FolderHolds, hasFact } from "../shared/project-facts.ts";
 import { pathExists, readJsonIfExists } from "./fsx.ts";
-import { isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
+import { importMapImports, isRemoteSrc, pageScripts, projectRelative } from "./game-page.ts";
 import { detectFacts } from "./project-facts.ts";
 import { declaredBootMs } from "./preview-ready.ts";
 import { isInstallCommand, packageCommands } from "./toolchain.ts";
@@ -65,6 +66,14 @@ const STUDIO_IMPORT_MAP = "/vendor/three.module.js";
 
 /** The query a Genex game reads to skip its authorization redirect in a local test run. */
 const GENEX_LOCAL_TEST_QUERY = "?genex_local_test=1";
+
+/**
+ * Whether a shape's entry asks for a Genex local test run. The embed SDK honours it only on a
+ * plain-http loopback origin, so the preview serves such a game there rather than on `game:`.
+ */
+export function isGenexLocalTest(shape: Pick<ProjectShape, "entry">): boolean {
+  return shape.entry.endsWith(GENEX_LOCAL_TEST_QUERY);
+}
 
 /** Where a bundler writes the built page when its config says nothing else. */
 const DEFAULT_OUTPUT_DIR = "dist";
@@ -281,6 +290,17 @@ async function recordedShape(dir: string, meta: ShapeMeta): Promise<ProjectShape
  * function so that everything asking "how does this folder run" — describe, validate, the
  * inspector — gets the same answer.
  */
+/**
+ * The studio's own shape for a template game, entered with the local-test query once its page maps
+ * Studio's own copy of the Genex embed SDK (`GENEX_VENDORED_SDK`): that mapping is the game turning
+ * sign-in or multiplayer on.
+ */
+async function templateShape(dir: string): Promise<ProjectShape> {
+  const html = await readFile(path.join(dir, "index.html"), "utf8").catch(() => "");
+  const genex = vendoredSdkPackages(importMapImports(html)).includes("@genex-ai/embed-sdk");
+  return genex ? { ...TEMPLATE_SHAPE, entry: `${TEMPLATE_SHAPE.entry}${GENEX_LOCAL_TEST_QUERY}` } : TEMPLATE_SHAPE;
+}
+
 export async function readProjectShape(dir: string): Promise<ProjectShape> {
   const meta = await readJsonIfExists<ShapeMeta>(path.join(dir, "studio.json")).catch(() => null);
   // A folder may declare only how long it takes to boot, so the number is read before the
@@ -289,7 +309,7 @@ export async function readProjectShape(dir: string): Promise<ProjectShape> {
   const bootMs = declaredBootMs(meta?.bootMs);
   const declaredBoot = bootMs === null ? {} : { bootMs };
   if (!meta || !recordsShape(meta)) {
-    const detected = (await detectProjectShape(dir)) ?? TEMPLATE_SHAPE;
+    const detected = (await detectProjectShape(dir)) ?? (await templateShape(dir));
     return bootMs === null ? detected : { ...detected, ...declaredBoot };
   }
   return { ...(await recordedShape(dir, meta)), ...declaredBoot };

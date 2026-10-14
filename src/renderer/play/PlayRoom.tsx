@@ -10,7 +10,7 @@
 import type { JSX, KeyboardEvent, RefObject, UIEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { PlayCategory, type PlayGame, type PlayShelf } from "../../shared/play.ts";
+import { PlayCategory, type PlayGame, PlayShelf } from "../../shared/play.ts";
 import { SIDEBAR_TOGGLE } from "../shell/use-shell-chrome.ts";
 import { feedOf } from "../state/play.ts";
 import { usePlay, useShallow } from "../state/hooks.ts";
@@ -23,6 +23,7 @@ import { useBackOnline, useOnline } from "../ui/use-online.ts";
 import { PlayCard, PlayCardPlaceholder } from "./PlayCard.tsx";
 import { OfflineChip, OfflineMark, OfflineNotice } from "./PlayOffline.tsx";
 import { BAR_AT_TOP, barAfterScroll, FeedStatus, shelfTabs } from "./play-model.ts";
+import { TopCreators } from "./TopCreators.tsx";
 
 const WORDS = PLAY_WORDS;
 /** How often the players in the shown multiplayer games are counted again. */
@@ -190,7 +191,7 @@ function MoreMarker({
 }
 
 /** Remix from a card: the copy is made in main, then opens in Create. */
-function useCardRemix(onRemixed: (name: string) => void) {
+export function useCardRemix(onRemixed: (name: string) => void) {
   const [remixing, setRemixing] = useState<ReadonlySet<string>>(new Set());
   const remix = useCallback(
     (game: PlayGame) => {
@@ -213,16 +214,22 @@ function useCardRemix(onRemixed: (name: string) => void) {
 }
 
 /** The grid of cards, with the shapes of the ones still coming. */
-function Grid({
+export function Grid({
   games,
   placeholders,
   remixing,
   onRemix,
+  showAuthor = true,
+  marquee = false,
 }: {
   games: readonly PlayGame[];
   placeholders: number;
   remixing: ReadonlySet<string>;
   onRemix: (game: PlayGame) => void;
+  /** Whether cards say who made them. */
+  showAuthor?: boolean;
+  /** Titles too long for their card scroll back and forth (a profile's cards). */
+  marquee?: boolean;
 }): JSX.Element {
   const play = useCallback(
     (game: PlayGame) => void studio().play.open({ slug: game.slug, title: game.title, coverUrl: game.coverUrl }),
@@ -231,7 +238,15 @@ function Grid({
   return (
     <div className="play-grid">
       {games.map((game) => (
-        <PlayCard key={game.id} game={game} remixing={remixing.has(game.slug)} onPlay={play} onRemix={onRemix} />
+        <PlayCard
+          key={game.id}
+          game={game}
+          remixing={remixing.has(game.slug)}
+          onPlay={play}
+          onRemix={onRemix}
+          showAuthor={showAuthor}
+          marquee={marquee}
+        />
       ))}
       {Array.from({ length: placeholders }, (_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: placeholders are identical and only counted
@@ -460,6 +475,7 @@ export function PlayRoom({
           <SearchField query={query} noun={noun} onQuery={setQuery} />
         </header>
         <div className="play-content">
+          {shelf === PlayShelf.Games && !search && <TopCreators />}
           {search ? (
             <SearchBody
               search={search}

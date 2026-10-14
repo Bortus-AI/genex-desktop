@@ -36,7 +36,12 @@ function item(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     multiplayer: false,
     playsCount: 2682,
     online: null,
-    author: { id: "u1", name: "Simeon M", image: "https://api.genex.games/api/character-assets/avatars/u1/1.webp" },
+    author: {
+      id: "u1",
+      name: "Simeon M",
+      image: "https://api.genex.games/api/character-assets/avatars/u1/1.webp",
+      avatarStyle: "photo",
+    },
     ...overrides,
   };
 }
@@ -78,9 +83,22 @@ describe("Play gallery items", () => {
       multiplayer: false,
       plays: 2682,
       online: null,
-      author: { name: "Simeon M", imageUrl: "https://api.genex.games/api/character-assets/avatars/u1/1.webp" },
+      author: {
+        id: "u1",
+        name: "Simeon M",
+        imageUrl: "https://api.genex.games/api/character-assets/avatars/u1/1.webp",
+      },
       remixable: true,
     });
+  });
+
+  it("hands on the maker's picture only when they chose it as their avatar", () => {
+    const author = (avatarStyle?: string) =>
+      toPlayGame(item({ author: { id: "u1", name: "Simeon M", image: "https://api.genex.games/a.webp", avatarStyle } }))
+        ?.author.imageUrl;
+    assert.equal(author("photo"), "https://api.genex.games/a.webp");
+    assert.equal(author("generated"), null);
+    assert.equal(author(), null, "while genex.games does not say, the generated avatar shows");
   });
 
   it("refuses an item that does not name a game", () => {
@@ -347,6 +365,7 @@ describe("Play gallery calls", () => {
       remixable: true,
       cloneUrl: "https://git.genex.games/u-1/lost-cathedral.git",
       author: "Simeon M",
+      authorId: "u1",
       plays: 2682,
       online: null,
     });

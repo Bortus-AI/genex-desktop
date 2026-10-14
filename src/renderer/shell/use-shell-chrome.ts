@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useLayoutEffect, useState } from "reac
 import type { AppDialogs as Dialogs } from "../panels/AppDialogs.tsx";
 import { chatWidthOf, sidebarToggled } from "../state/layout.ts";
 import type { Studio } from "../state/studio.ts";
+import { OPEN_PLAY_EVENT } from "../play/open-play.ts";
 import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
 
 const COMPACT = "(max-width: 900px)";
@@ -96,6 +97,12 @@ export function useShellChrome(app: Studio, dialogs: Dialogs, sidebarOpen: boole
     },
     [setPluginsOpen],
   );
+  // Another place asked for Play (the Credits tab's invite): it comes up over Plugins.
+  useEffect(() => {
+    const open = () => choosePlay(true);
+    window.addEventListener(OPEN_PLAY_EVENT, open);
+    return () => window.removeEventListener(OPEN_PLAY_EVENT, open);
+  }, [choosePlay]);
   const toggleSidebar = useCallback(() => {
     if (compactWindow) setDrawerOpen((open) => !open);
     else app.layout.setState((s) => sidebarToggled(s), true);

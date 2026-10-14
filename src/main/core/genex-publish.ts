@@ -15,7 +15,7 @@ import type { StudioCore } from "../studio-core.ts";
 /** Why Publish is refused before Genex is asked anything. */
 const MESSAGE = {
   NoGame: "Open a game to publish it",
-  GenexUnavailable: "Turn on Genex Tools to publish",
+  GenexUnavailable: "Turn on the Genex plugin to publish",
   NoFileList: "Review the files before publishing",
   UnrealGame: (title: string) => `${title} builds in Unreal; publishing an Unreal game isn't supported yet.`,
   NotWebGame: (title: string) => `${title} isn't a web game, so Genex can't publish it yet.`,

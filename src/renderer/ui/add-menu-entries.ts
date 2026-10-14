@@ -53,7 +53,7 @@ const AUTHORIZING: Account = "authorizing";
 const FAILED: Account = "failed";
 const ACCOUNT_WORDS = PLUGINS_WORDS.account;
 
-/** Short name of a plugin's own server: "Genex Tools · Blender" → "Blender". */
+/** Short name of a plugin's own server: "Genex plugin · Blender" → "Blender". */
 export const serverName = (view: McpConnectorView): string =>
   view.connector.name.split(" · ").pop() ?? view.connector.name;
 

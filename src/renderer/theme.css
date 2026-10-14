@@ -7,6 +7,7 @@
 @import "./styles/onboarding.css";
 @import "./styles/genex.css";
 @import "./styles/play.css";
+@import "./styles/people.css";
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @source "./";
@@ -1946,6 +1947,110 @@ button.chat-header-title:hover {
 }
 .sidebar-list:has(.sidebar-update + .sidebar-update) .sidebar-scroll::-webkit-scrollbar-track {
   margin-block-end: 88px;
+}
+/* The Genex account at the sidebar's foot (`play/ProfilePlate.tsx`), under the list in Play and in
+ * Create: the name opens the account's menu, the friends glyph beside it opens Friends, with the
+ * requests waiting on its corner. */
+/* The account plate: its name block, then (4px on, so Pro has room) the friends stack (`people.css`). */
+.profile-plate {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--line);
+}
+.profile-plate-main {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 44px;
+  padding-inline: 6px 4px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  text-align: start;
+  cursor: pointer;
+  transition: background-color var(--duration-quick);
+}
+.profile-plate-main:hover {
+  background: var(--sidebar-hover);
+}
+.profile-plate-main[data-state="open"] {
+  background: var(--sidebar-selected);
+}
+/* The name gives way before its plan: "Rab Ne… · Pro" rather than "Rab Neba · …". */
+.profile-plate-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+}
+.profile-plate-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-plate-plan {
+  flex: none;
+  white-space: pre;
+}
+.profile-plate-plan,
+.profile-plate-chevrons {
+  color: var(--ink-3);
+}
+.profile-plate-main:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: -2px;
+}
+/* The account's menu: the person on top, then what there is to do. */
+.profile-menu {
+  min-width: 248px;
+}
+.profile-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  font-size: 14px;
+}
+.profile-menu-sub,
+.profile-menu-value {
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+}
+/* A person's photo, round; everyone without one gets their generated avatar (`.cy-avatar`). */
+.person-avatar {
+  display: inline-block;
+  flex: none;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--image-outline, rgb(0 0 0 / 0.1));
+  user-select: none;
+}
+.person-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* A generated avatar: gear behind, the body, then the eyes, stacked canvases in one box. */
+.cy-avatar {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  user-select: none;
+}
+.cy-avatar-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
 }
 /* A secondary button in the field colour: the light palette's own secondary fill is one step from the
  * sidebar and would vanish here. The label and the reload glyph share the ink, never the accent. */

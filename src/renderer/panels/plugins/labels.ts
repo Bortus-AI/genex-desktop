@@ -184,8 +184,14 @@ export const shownRelease = (update: PluginUpdate): string => `${shownName(updat
 export const shownDescription = (p: PluginInfo): string =>
   isRouter(p) ? GENEX_WORDS.router.description : p.manifest.description;
 
-/** The line under a plugin's page title: Genex says what the router does; any other its own description. */
-export const shownIntro = (p: PluginInfo): string => (isRouter(p) ? GENEX_WORDS.router.intro : p.manifest.description);
+/**
+ * The line under a plugin's page title: Genex is the game dev tools router, connected as the account
+ * when there is one; any other its own description.
+ */
+export function shownIntro(p: PluginInfo, accountName: string | null = null): string {
+  if (!isRouter(p)) return p.manifest.description;
+  return accountName ? GENEX_WORDS.router.connectedAs(accountName) : GENEX_WORDS.router.description;
+}
 
 /** What the Marketplace shows: what the catalog offers you, or that more is coming. */
 export const MoreView = { List: "list", Soon: "soon" } as const;

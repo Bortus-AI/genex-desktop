@@ -68,6 +68,7 @@ import {
 } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
 import { createPlayStore, type PlayStore, viewerReported } from "./play.ts";
+import { createPeopleStore, type PeopleStore } from "./people.ts";
 import {
   bootstrapFailed,
   bootstrapReady,
@@ -125,6 +126,8 @@ export interface Studio {
   readonly plugins: PluginsStore;
   /** Play: genex.games' catalog, Recent and the viewer (`play.ts`). */
   readonly play: PlayStore;
+  /** Play's people: the Genex account, friends and profiles (`people.ts`). */
+  readonly people: PeopleStore;
   readonly agentScreens: AgentScreensStore;
   readonly commandRuns: CommandRunsStore;
   /** What commands a reply offered have printed, outside React state. */
@@ -204,6 +207,7 @@ interface Stores {
   readonly engines: EnginesStore;
   readonly plugins: PluginsStore;
   readonly play: PlayStore;
+  readonly people: PeopleStore;
   readonly agentScreens: AgentScreensStore;
   readonly commandRuns: CommandRunsStore;
   readonly commandOutput: CommandOutput;
@@ -233,6 +237,7 @@ function createStores(
     engines: createEnginesStore(api),
     plugins: createPluginsStore(api),
     play: createPlayStore(api, storage),
+    people: createPeopleStore(api),
     agentScreens: createAgentScreensStore(),
     commandRuns: createCommandRunsStore(),
     commandOutput: createCommandOutput(),

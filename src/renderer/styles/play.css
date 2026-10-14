@@ -1278,3 +1278,44 @@
 :root[data-motion="rest"] .play-card-placeholder :is(.play-card-cover, .play-bar)::before {
   animation-play-state: paused;
 }
+
+/* ── Play's people: the Friends page and profiles (`PlayFriends.tsx`, `PlayProfile.tsx`) ───── */
+/* The same page and bar as the dashboard; the bar holds only the sidebar's toggle and Back. */
+.people-toolbar {
+  min-height: 56px;
+}
+.people-content {
+  padding: 4px 32px 56px;
+}
+.play-card-author-link {
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.play-card-author-link:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.play-card-author-link:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The maker's name in the viewer's header: it leaves the game for their profile. */
+.play-viewer-bar-maker {
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.play-viewer-bar-maker:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.play-viewer-bar-maker:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

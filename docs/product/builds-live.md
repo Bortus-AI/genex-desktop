@@ -18,7 +18,7 @@ nothing to draw. Files and images opened from the chat get closable tabs.
 
 **Live** plays the browser game in a native view; unwatched previews pause. The strip
 holds Live/Builds/Assets, Play/Stop, Reload, the sound switch (⌥⌘M; only a shown Live is heard),
-Full screen (hold Esc) and plugin actions such as Publish. Stop halts it until Play
+Full screen (hold Esc), plugin actions, Multiplayer and Publish. Stop halts it until Play
 or Reload. An empty scaffold shows “Ready for your first idea”, or
 “Building your game” with Watch progress while a run works, Play latest once a build is ready; the first healthy build then shows itself. Otherwise only the user changes Live (opening a
 game, Reload, Play, Make live, a chat request while hidden). A newer healthy build, a

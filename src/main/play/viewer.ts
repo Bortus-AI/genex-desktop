@@ -190,7 +190,7 @@ const withWorld = (state: PlayBarState, world: PlayWorld): PlayBarState => ({
   liked: world.liked,
   likes: world.likes,
   remixable: world.remixable,
-  facts: { author: world.author, plays: world.plays, online: world.online },
+  facts: { author: world.author, authorId: world.authorId, plays: world.plays, online: world.online },
 });
 
 /**

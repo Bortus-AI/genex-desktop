@@ -1,6 +1,6 @@
 /**
- * Play: the shelf shown, the shelves' counts and tabs, the pages of genex.games' catalog read so far,
- * Recent, and the game the viewer shows. A tab read once draws at once when it comes back, and is read again behind it once a
+ * Play: the page shown (a shelf, Friends or someone's profile), the shelves' counts and tabs, the
+ * pages of genex.games' catalog read so far, Recent, and the game the viewer shows. A tab read once draws at once when it comes back, and is read again behind it once a
  * minute old. Opening a game shows its cover at once and remembers it in Recent; main's
  * `UiEvent.PlayViewer` then says how the viewer goes.
  */
@@ -37,8 +37,30 @@ import type { KeyValueStorage } from "../storage.ts";
 /** A tab this old is read again behind what it shows. */
 export const FEED_STALE_MS = MINUTE_MS;
 
+/** Which page Play shows: a shelf's dashboard, the Friends page, someone's profile, or the account's stats. */
+export const PlayPage = { Shelf: "shelf", Friends: "friends", Profile: "profile", Stats: "stats" } as const;
+export type PlayPage = (typeof PlayPage)[keyof typeof PlayPage];
+
+/** The page a profile was opened from, where its Back goes. */
+type ProfileFrom = typeof PlayPage.Shelf | typeof PlayPage.Friends;
+
+/**
+ * The page Play shows. A profile remembers the page it was opened from, where Back goes; the stats
+ * page remembers the profile it was opened from (the account's own), where its Back goes.
+ */
+export type PlayView =
+  | { page: typeof PlayPage.Shelf }
+  | { page: typeof PlayPage.Friends }
+  | { page: typeof PlayPage.Profile; userId: string; from: ProfileFrom }
+  | { page: typeof PlayPage.Stats; userId: string; from: ProfileFrom };
+
+const SHELF_VIEW: PlayView = { page: PlayPage.Shelf };
+const FRIENDS_VIEW: PlayView = { page: PlayPage.Friends };
+
 /** What Play holds between visits. */
 export interface PlayState {
+  /** The page shown: the chosen shelf's dashboard until Friends or a profile is opened. */
+  view: PlayView;
   /** The shelf the sidebar has chosen: Games, Tools or Assets. */
   shelf: PlayShelf;
   /** Each shelf's size beside its name; null until it is read. */
@@ -59,6 +81,7 @@ export interface PlayState {
 
 /** Play before anything is read: on Games, each shelf's first tab, and Recent as this profile remembers it. */
 export const initialPlay = (recent: PlayRecentEntry[] = []): PlayState => ({
+  view: SHELF_VIEW,
   shelf: PlayShelf.Games,
   counts: { [PlayShelf.Games]: null, [PlayShelf.Tools]: null, [PlayShelf.Assets]: null },
   categories: PLAY_SHELVES.map((shelf) => PLAY_SHELF_TABS[shelf][0]),
@@ -82,9 +105,37 @@ const withFeed = (state: PlayState, category: PlayCategory, feed: FeedState): Pl
 export const shelvesLoaded = (state: PlayState, shelves: PlayShelves): PlayState =>
   shelves.categories.length > 0 ? { ...state, counts: shelves.counts, categories: shelves.categories } : state;
 
-/** The sidebar turned to `shelf`. */
+/** The sidebar turned to `shelf`: its dashboard shows, whatever page was up. */
 export const shelfChosen = (state: PlayState, shelf: PlayShelf): PlayState =>
-  state.shelf === shelf ? state : { ...state, shelf };
+  state.shelf === shelf && state.view.page === PlayPage.Shelf ? state : { ...state, shelf, view: SHELF_VIEW };
+
+/** The Friends page shows. */
+export const friendsShown = (state: PlayState): PlayState =>
+  state.view.page === PlayPage.Friends ? state : { ...state, view: FRIENDS_VIEW };
+
+/** Someone's profile shows; Back returns to the page it was opened from. */
+export function profileShown(state: PlayState, userId: string): PlayState {
+  const current = state.view;
+  if (current.page === PlayPage.Profile && current.userId === userId) return state;
+  const from = current.page === PlayPage.Profile || current.page === PlayPage.Stats ? current.from : current.page;
+  return { ...state, view: { page: PlayPage.Profile, userId, from } };
+}
+
+/** The stats page shows, from the profile on screen; its Back returns to that profile. */
+export function statsShown(state: PlayState): PlayState {
+  const current = state.view;
+  if (current.page !== PlayPage.Profile) return state;
+  return { ...state, view: { page: PlayPage.Stats, userId: current.userId, from: current.from } };
+}
+
+/** Back: from the stats page to its profile, from a profile to the page it was opened from. */
+export function backFromProfile(state: PlayState): PlayState {
+  const current = state.view;
+  if (current.page === PlayPage.Stats)
+    return { ...state, view: { page: PlayPage.Profile, userId: current.userId, from: current.from } };
+  if (current.page !== PlayPage.Profile) return state;
+  return { ...state, view: current.from === PlayPage.Friends ? FRIENDS_VIEW : SHELF_VIEW };
+}
 
 /** A page is on its way: a tab with nothing yet says it is loading; one with games keeps them. */
 export function feedRequested(state: PlayState, category: PlayCategory, more: boolean): PlayState {
@@ -182,6 +233,14 @@ export interface PlayStore extends StoreApi<PlayState> {
   loadShelves(): Promise<void>;
   /** Show another shelf. */
   chooseShelf(shelf: PlayShelf): void;
+  /** Show the Friends page. */
+  showFriends(): void;
+  /** Show someone's profile (the account's own too). */
+  showProfile(userId: string): void;
+  /** Show the account's stats, from its profile. */
+  showStats(): void;
+  /** Back from the stats page or a profile. */
+  back(): void;
   /** Read a tab's first page (when it has none or is stale), or with `more` its next one. */
   loadFeed(category: PlayCategory, options?: { more?: boolean; force?: boolean }): Promise<void>;
   /** Count the players in a tab's multiplayer games. */
@@ -270,6 +329,10 @@ export function createPlayStore(
   return Object.assign(store, {
     loadShelves,
     chooseShelf: (shelf: PlayShelf) => set((state) => shelfChosen(state, shelf)),
+    showFriends: () => set(friendsShown),
+    showProfile: (userId: string) => set((state) => profileShown(state, userId)),
+    showStats: () => set(statsShown),
+    back: () => set(backFromProfile),
     loadFeed,
     countOnline,
     open,

@@ -33,6 +33,8 @@ import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
+import { CreditKind } from "../shared/play-credits.ts";
+import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
@@ -3250,19 +3252,19 @@ export function commandResultWords(command: string, session: { exitCode?: number
   return `I ran this in the terminal:\n${command}\n\n${ended} ${tail}`;
 }
 
-// ── Genex Tools ───────────────────────────────────────────────────────────────────────────
+// ── Genex plugin ───────────────────────────────────────────────────────────────────────────
 
 /** The Genex promo after the welcome, the Genex plugin page and its generations. */
 export const GENEX_WORDS = {
   promo: {
-    label: "Genex Tools",
+    label: "Genex plugin",
     eyebrow: "Featured Genex plugin",
     title: "Generate game assets in chat",
     models: { title: "3D models and characters", text: "Rigged, animated and ready for your game." },
     media: { title: "Sound, music and art", text: "Effects, soundtracks, voices and textures." },
     publish: { title: "Publish with a playable link", text: "Anyone can play it in their browser." },
     learnMore: "Learn more",
-    learnMoreLabel: "Learn more about Genex Tools",
+    learnMoreLabel: "Learn more about the Genex plugin",
     linkCopied: "Link copied",
     connect: "Connect Genex plugin",
     waiting: "Finish in your browser",
@@ -3308,8 +3310,10 @@ export const GENEX_WORDS = {
   },
   /** Genex as the Plugins page shows it: the router, its line, and the tools it routes. */
   router: {
-    name: "Game dev tools router",
-    description: "Genex · Tripo, Meshy, Uthana, ElevenLabs, GPT Image and more on one balance",
+    name: "Genex plugin",
+    description: "Game dev tools router",
+    /** The line under the plugin page's title while an account is connected. */
+    connectedAs: (name: string) => `Game dev tools router · connected as ${name}`,
     intro:
       "The Genex plugin connects your agents to every game dev tool. Pay on demand, with one balance for every tool.",
     toolsTitle: "Tools it routes",
@@ -3327,6 +3331,69 @@ export const GENEX_WORDS = {
       elevenlabs: { name: "ElevenLabs", line: "SFX · music · voice" },
       publishing: { name: "Genex", line: "Publishing" },
     },
+  },
+  /** The Genex plugin page's tabs. */
+  tabs: { label: "Genex plugin", tools: "Tools", credits: "Credits" },
+  /** The Credits tab: the balance, what credits pay for (live prices), what they don't, and recent spends. */
+  creditsTab: {
+    label: "Genex plugin, Credits",
+    unit: (count: number) => (count === 1 ? "credit" : "credits"),
+    unlimited: "Unlimited credits",
+    shared: "one balance for all your games",
+    plan: (allowance: string, when: string) => `Pro · ${allowance} more on ${when}`,
+    inviteFriend: "Invite a friend",
+    getCredits: "Get credits",
+    payFor: "What credits pay for",
+    payForLine: "What Genex makes for your games when you or your agent ask",
+    from: "from",
+    pricesUnavailable: "Prices couldn’t be read from genex.games right now.",
+    notPaid: "Not paid with credits",
+    notPaidLines: [
+      "Building and changing your game: your agents run on your own Claude or Codex plan.",
+      "A generation that fails is refunded on its own.",
+      "Out of credits, games still build, with procedural assets and Local Blender.",
+    ],
+    recent: "Recent",
+    noRecent: "Nothing spent yet.",
+    refunded: (count: number) => `+${count} refunded`,
+    failedKind: (kind: string) => `${kind}, failed`,
+    spent: (count: number) => `−${Math.abs(count)}`,
+    centNote: "1 credit is about 1¢",
+    loading: "Reading your credits…",
+    failed: "Couldn’t read your credits.",
+    signedOut: "Connect your Genex account to see your credits.",
+    /** Each kind of generation and the tool Genex routes it to. */
+    kinds: {
+      [CreditKind.Model]: { name: "3D model", tool: "Tripo" },
+      [CreditKind.Character]: { name: "Rigged character", tool: "Meshy" },
+      [CreditKind.ModelAnimation]: { name: "Animation clip", tool: "Tripo · Uthana" },
+      [CreditKind.Image]: { name: "Image or sprite", tool: "GPT Image" },
+      [CreditKind.Texture]: { name: "Texture set", tool: "Nano Banana" },
+      [CreditKind.Video]: { name: "Video, 5 s", tool: "MiniMax" },
+      [CreditKind.Music]: { name: "Music, 90 s", tool: "ElevenLabs" },
+      [CreditKind.Sound]: { name: "Sound effect", tool: "ElevenLabs" },
+      [CreditKind.Voice]: { name: "Voice line", tool: "ElevenLabs" },
+      [CreditKind.ModelRig]: { name: "Rig a model", tool: "Tripo" },
+      [CreditKind.CoverRegenerate]: { name: "New cover", tool: "Genex" },
+    } satisfies Record<CreditKind, { name: string; tool: string }>,
+    otherKind: "Generation",
+  },
+  /**
+   * The stage strip's Multiplayer, left of Publish: one press asks the game's chat to make it
+   * multiplayer with Genex; without the plugin it opens the setup dialog, in Publish's words.
+   */
+  multiplayer: {
+    button: "Multiplayer",
+    buttonLabel: "Make this game multiplayer",
+    hint: "Make this game multiplayer with Genex",
+    /** What the press sends to the game's chat. */
+    prompt: "Make this game multiplayer using Genex",
+    title: "Make it multiplayer",
+    intro: "Friends join your game from anywhere. Genex runs the rooms, the voices and the sign-in.",
+    rooms: "Online rooms and matchmaking",
+    voice: "Voice chat while you play",
+    friends: "Friends find it on Play",
+    through: "Multiplayer uses the",
   },
   /** The Publish dialog on the game's stage, drawn by Studio. */
   publish: {
@@ -3514,6 +3581,152 @@ export function privacyDeleteWords(result: RunSharingDeleteResult): string {
 
 /** Play: the genex.games catalog inside the app, its sidebar and its Genex card. */
 export const PLAY_WORDS = {
+  /** The Genex account at the sidebar's foot, profiles and the Friends page. */
+  people: {
+    friends: "Friends",
+    friendsLabel: (waiting: number) => (waiting > 0 ? `Friends, ${waiting} waiting` : "Friends"),
+    /** The friends stack's tooltip and label: "12 friends · 2 playing · 2 requests". */
+    stackSummary: ({ friends, playing, waiting }: { friends: number; playing: number; waiting: number }) => {
+      const parts = [friends === 1 ? "1 friend" : `${friends} friends`];
+      if (playing > 0) parts.push(`${playing} playing`);
+      if (waiting > 0) parts.push(waiting === 1 ? "1 request" : `${waiting} requests`);
+      return parts.join(" · ");
+    },
+    noFriendsYet: "No friends yet: invite friends",
+    plateLabel: (name: string) => `${name}, Genex account`,
+    pro: "Pro",
+    proTag: "PRO",
+    menuLabel: "Genex account",
+    profile: "Profile",
+    credits: "Credits",
+    creditsUnlimited: "Unlimited",
+    accountSettings: "Account settings",
+    signOut: "Sign out",
+    back: "Back",
+    joined: (when: string) => `Joined ${when}`,
+    /** What a friend card says when they are not playing: how many games they made. */
+    games: (count: number) => {
+      if (count === 0) return "No games yet";
+      return count === 1 ? "1 game" : `${count} games`;
+    },
+    /** A profile's chips: the number bold, then its noun. */
+    chipGames: (count: number) => (count === 1 ? "game" : "games"),
+    chipPlayers: (count: number) => (count === 1 ? "player" : "players"),
+    chipPlays: (count: number) => (count === 1 ? "play" : "plays"),
+    since: (when: string) => `since ${when}`,
+    editProfile: "Edit profile",
+    myGames: "My games",
+    gamesBy: (name: string) => `Games by ${name}`,
+    noGames: "No published games yet.",
+    noGamesOwn: "Games you publish show up here.",
+    profileFailed: "Couldn’t load this profile.",
+    friendsOf: (name: string) => `${name}’s friends`,
+    previous: "Previous",
+    next: "Next",
+    previousOf: (what: string) => `Previous ${what.toLowerCase()}`,
+    nextOf: (what: string) => `Next ${what.toLowerCase()}`,
+    openProfile: (name: string) => `Open ${name}’s profile`,
+    playingLabel: (name: string, game: string) => `${name}, playing ${game}`,
+    nameLabel: "Name",
+    nameHint: "Same name everywhere on Genex.",
+    nameRule: "2 to 20 characters.",
+    save: "Save",
+    saving: "Saving…",
+    cancel: "Cancel",
+    pictureFailed: "Couldn’t use that picture. Try a PNG or JPEG.",
+    renameFailed: "Couldn’t change your name.",
+    add: "Add friend",
+    sent: "Request sent",
+    cancelRequest: (name: string) => `Cancel your request to ${name}`,
+    accept: "Accept",
+    acceptRequest: "Accept request",
+    decline: (name: string) => `Decline ${name}`,
+    isFriend: "Friends",
+    remove: "Remove friend",
+    more: (name: string) => `More for ${name}`,
+    actionFailed: "Genex didn’t take that. Try again in a moment.",
+    findLabel: "Find people by name",
+    find: "Find people by name",
+    searching: "Searching…",
+    nobody: (query: string) => `Nobody named “${query}”.`,
+    searchUnavailable: "Finding people by name isn’t on Genex yet. Send your link instead.",
+    searchFailed: "Couldn’t search. Check your connection and try again.",
+    found: "People",
+    requests: "Requests",
+    wantsToBeFriends: "Wants to be friends",
+    playingNow: "Playing now",
+    allFriends: "Friends",
+    sentRequests: "Sent",
+    join: "Join",
+    joinLabel: (name: string, game: string) => `Join ${name} in ${game}`,
+    invite: "Invite a friend",
+    inviteFriends: "Invite friends",
+    inviteText: "Whoever joins Genex from your link becomes your friend.",
+    inviteBonus: (credits: number) => `+${credits}`,
+    inviteBonusLabel: (credits: number) => `${credits} credits for you when a friend starts creating`,
+    inviteLinkLabel: "Your invite link",
+    copy: "Copy",
+    copied: "Copied",
+    showPlaying: "Show friends what I’m playing",
+    showPlayingOff: "Off: friends see your name only.",
+    empty: "No friends yet — send your link and play together.",
+    or: "or",
+    friendsFailed: "Couldn’t load your friends.",
+    signedOut: "Sign in to Genex to see your friends.",
+  },
+  /** The account's own numbers: the profile's strip and the stats page. Only the account sees them. */
+  stats: {
+    lastDays: (days: number) => `Last ${days} days`,
+    sectionLabel: "My stats",
+    plays: (count: number) => (count === 1 ? "play" : "plays"),
+    players: (count: number) => (count === 1 ? "player" : "players"),
+    playingNow: "playing now",
+    more: "More",
+    startFirst: "Your stats start with your first game",
+    createGame: "Create a game",
+    copyLink: (title: string) => `Copy the ${title} link`,
+    linkCopied: "Link copied",
+    newChange: "New",
+    noChange: "—",
+    up: (percent: number) => `+${percent}%`,
+    down: (percent: number) => `−${Math.abs(percent)}%`,
+    upLabel: (percent: number) => `up ${percent}%`,
+    downLabel: (percent: number) => `down ${Math.abs(percent)}%`,
+    newLabel: "new: nothing before to compare",
+    title: "Stats",
+    onlyYou: "only you see these",
+    periodLabel: "Period",
+    period: (days: number) => `${days} days`,
+    playsTile: "Plays",
+    playersTile: "Players",
+    playingNowTile: "Playing now",
+    gamesTile: "Games",
+    vsPrevious: (days: number) => `vs previous ${days} days`,
+    liveIn: (game: string, others: number) => (others > 0 ? `in ${game} and ${others} more` : `in ${game}`),
+    nobodyNow: "nobody right now",
+    thisMonth: "this month",
+    addedThisMonth: (count: number) => `+${count}`,
+    chartTitle: "Plays per day",
+    chartLabel: (days: number) => `Plays per day over the last ${days} days`,
+    tooltip: (count: string) => `${count} plays`,
+    tableLabel: "My games",
+    gameColumn: "Game",
+    playsColumn: "Plays",
+    playersColumn: "Players",
+    dayByDayColumn: "Day by day",
+    changeColumn: "Change",
+    /** The strip's label while genex.games has no daily stats: the plays in total. */
+    inTotal: "In total",
+    unavailable: "Daily stats arrive with the next genex.games update. Until then, your games’ plays in total.",
+    failed: "Couldn’t load your stats.",
+    backToProfile: "Profile",
+  },
+  /** Play's Top creators row, at the top of Games. */
+  creators: {
+    title: "Top creators",
+    period: "this month",
+    line: (games: number, hours: string) => `${games === 1 ? "1 game" : `${games} games`} · ${hours} h`,
+  },
   modes: { label: "Mode", play: "Play", create: "Create" },
   recent: "Recent",
   recentEmpty: "Games you play show up here.",
@@ -3697,4 +3910,79 @@ export const UNREAL_WORDS = {
     project
       ? `Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the Unreal button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
       : "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+} as const;
+
+// ── Genex account settings and avatars ─────────────────────────────────────────────────────
+
+/** Settings → Genex account: the avatar (generated or a photo) and the name, used everywhere on Genex. */
+export const ACCOUNT_WORDS = {
+  tab: "Genex account",
+  avatar: "Avatar",
+  avatarLabel: "Avatar",
+  generated: "Generated",
+  photo: "Photo",
+  uploadPhoto: "Upload a photo",
+  replacePhoto: "Upload another photo",
+  uploading: "Uploading…",
+  everywhere: "Changes show in the app and on genex.games right away.",
+  styleFailed: "Couldn’t change your avatar.",
+  regenerate: "Regenerate",
+  regenerateFailed: "Couldn’t regenerate your avatar.",
+  name: "Name",
+  signedOut: "Connect your Genex account to choose your avatar and name.",
+  connect: "Open the Genex plugin",
+} as const;
+
+/** The avatar every Genex account gets, as people meet it: its parts' names and the first-sign-in dialog. */
+export const AVATAR_WORDS = {
+  welcomeTitle: "Meet your Genex avatar",
+  welcomeText: "Nobody else has this one.",
+  mixLabel: "Your mix",
+  continue: "Continue",
+  welcomeNote: "You can change it in Settings",
+  bodies: {
+    [AvatarBody.Vapor]: "Vaporwave sun",
+    [AvatarBody.Crt]: "CRT dither",
+    [AvatarBody.Matrix]: "Matrix rain",
+    [AvatarBody.Holo]: "Hologram",
+    [AvatarBody.Circuit]: "Circuit",
+    [AvatarBody.Toon]: "Anime cel",
+    [AvatarBody.Glitch]: "Glitch",
+    [AvatarBody.Chrome]: "Y2K chrome",
+    [AvatarBody.Halftone]: "Manga halftone",
+    [AvatarBody.Foil]: "Holo foil",
+    [AvatarBody.Neon]: "Neon rings",
+    [AvatarBody.Galaxy]: "Galaxy",
+  } satisfies Record<AvatarBody, string>,
+  eyes: {
+    [AvatarEyes.Blocks]: "Blocks",
+    [AvatarEyes.Blades]: "Blades",
+    [AvatarEyes.Shards]: "PS1 shards",
+    [AvatarEyes.Grille]: "Grille",
+    [AvatarEyes.Optic]: "Optic",
+    [AvatarEyes.Mono]: "Mono eye",
+    [AvatarEyes.Demon]: "Demon",
+  } satisfies Record<AvatarEyes, string>,
+  states: {
+    [BlockState.Steady]: "steady",
+    [BlockState.Wide]: "wide",
+    [BlockState.Cold]: "cold",
+    [BlockState.Slit]: "slit",
+    [BlockState.Menace]: "menace",
+    [BlockState.Fury]: "fury",
+    [BlockState.Tired]: "tired",
+    [BlockState.Squint]: "squint",
+    [BlockState.Scan]: "scan",
+  } satisfies Record<BlockState, string>,
+  gear: {
+    [AvatarGear.None]: null,
+    [AvatarGear.Horns]: "Horns",
+    [AvatarGear.Blades]: "Blades",
+    [AvatarGear.Spikes]: "Spikes",
+    [AvatarGear.Mast]: "Mast",
+    [AvatarGear.Jack]: "Jack",
+    [AvatarGear.Headset]: "Headset",
+    [AvatarGear.Sigil]: "Sigil",
+    [AvatarGear.Scar]: "Scar",
+  } satisfies Record<AvatarGear, string | null>,
 } as const;

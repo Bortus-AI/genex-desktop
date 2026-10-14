@@ -7,20 +7,22 @@ The sidebar contains Search, Notifications, Send feedback
 Harness, Settings, Games and, once updates wait, **Update plugins** and **Relaunch to update**
 (Linux: **Download**); only games scroll. Pinned games lead, then recent activity. Every launch
 opens **home** (also the wordmark): one composer over an optional picture. A
-game opens its conversation beside the stage (Live, Builds once planned, Assets); Harness opens
-its conversation and Activity; Plugins fills the workspace.
+game opens its chat beside the stage (Live, Builds once planned, Assets); Harness opens its chat
+and Activity; Plugins fills the workspace.
 
-Settings (a modal): Model Providers, Local Models, Appearance, Games, Harness, Permissions,
-Privacy, About. Narrow windows use a drawer; wide ones remember the sidebar.
+Settings (a modal): Genex account, Model Providers, Local Models, Appearance, Games, Harness, Permissions,
+Privacy, About. Narrow windows use a drawer.
 
 The bell keeps questions, plans and permission requests until answered, then build endings and
-sign-outs; a count marks waiting work, a dot news. Rows open where the answer lives; unfocused,
-macOS notifications and the Dock badge carry them.
+sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
+them.
 
-**Play** shows genex.games' shelves, **Recent**, tabs and search. Games play full window under a
-header (held Esc): Like, Share, Invite a friend, Remix
-([what Play sends](../../PRIVACY.md#play)), Exit and, in voice chat, a mic switch. Guests are
-offered Genex.
+**Play** shows genex.games' shelves, **Recent**, tabs, search and **Top creators**. Accounts get
+an id-generated avatar (rerollable) or their photo. Signed in, the sidebar's foot shows the
+account and two friends; Play adds **Friends** and a first sign-in shows the avatar. Profiles
+show friends and games; yours, a 7-day strip opening **Stats**.
+Games play full window under a header (held Esc): Like, Share, Invite, Remix
+([what Play sends](../../PRIVACY.md#play)), Exit and, in voice chat, a mic; guests see Genex.
 
 ## First launch
 
@@ -28,7 +30,7 @@ An empty, never-welcomed profile opens a full-window welcome that ends connectin
 ChatGPT, a local model, OpenRouter or OpenCode; Skip or Start building opens home, keeping a typed
 idea.
 
-Then a Genex Tools card offers **Connect Genex plugin** once.
+Then a Genex plugin card offers **Connect Genex plugin** once.
 
 A sandbox that cannot start opens **Set up the protected workspace**: what's missing or blocked,
 commands to copy, Retry.

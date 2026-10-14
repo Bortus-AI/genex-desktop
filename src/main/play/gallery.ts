@@ -20,6 +20,7 @@ import {
   type PlayShelves,
   shelfOf,
 } from "../../shared/play.ts";
+import { AvatarStyle, isAccountId } from "../../shared/play-people.ts";
 
 /** One page of a tab: what the website loads at a time. */
 export const FEED_PAGE_SIZE = 24;
@@ -85,7 +86,7 @@ export interface GalleryAnswer {
 /** One API call: the route with its query, the method, a JSON body and the token to send. */
 export type GalleryRequest = (
   route: string,
-  init: { method?: "GET" | "PUT" | "DELETE" | "POST"; body?: unknown; token?: string },
+  init: { method?: "GET" | "PUT" | "DELETE" | "POST" | "PATCH"; body?: unknown; token?: string },
 ) => Promise<GalleryAnswer>;
 
 /** What the gallery needs: a way to call the API, the account token and the time. */
@@ -147,16 +148,19 @@ export interface PlayWorld {
   remixable: boolean;
   /** The public git address a remix clones, when the game may be remixed. */
   cloneUrl: string | null;
-  /** Who made it, as the header names them. */
+  /** Who made it, as the header names them, and their account. */
   author: string;
+  authorId: string | null;
   plays: number;
   /** Players in it now; null for a single-player game or an unknown count. */
   online: number | null;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
+/** Whether a value is a plain object, as the API's JSON objects are. */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-const text = (value: unknown, max: number = TEXT_MAX.description): string =>
+/** A string field cut to `max`, or "" for anything else. */
+export const text = (value: unknown, max: number = TEXT_MAX.description): string =>
   typeof value === "string" ? value.slice(0, max) : "";
 const count = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
@@ -165,7 +169,7 @@ const count = (value: unknown): number =>
 const LOCAL_IMAGE = "data:image/svg+xml;";
 
 /** An https image on a host the app loads images from (or, `local`, a drawn SVG), else null. */
-function imageUrl(value: unknown, local: boolean): string | null {
+export function imageUrl(value: unknown, local: boolean): string | null {
   if (typeof value !== "string") return null;
   if (local && value.startsWith(LOCAL_IMAGE)) return value;
   try {
@@ -210,7 +214,12 @@ export function toPlayGame(item: unknown, local = false): PlayGame | null {
     multiplayer: item.multiplayer === true,
     plays: count(item.playsCount),
     online: item.multiplayer === true ? online : null,
-    author: { name: text(author.name, TEXT_MAX.author).trim(), imageUrl: imageUrl(author.image, local) },
+    author: {
+      id: isAccountId(author.id) ? author.id : null,
+      name: text(author.name, TEXT_MAX.author).trim(),
+      // A photo only when they chose one; everyone else gets their generated avatar.
+      imageUrl: author.avatarStyle === AvatarStyle.Photo ? imageUrl(author.image, local) : null,
+    },
     remixable: cloneUrlOf(item) !== null,
   };
 }
@@ -314,7 +323,7 @@ const isCursor = (value: unknown): value is string =>
   typeof value === "string" && value.length <= CURSOR_MAX && /^[A-Za-z0-9_-]+$/.test(value);
 
 /** A GET that throws {@link GalleryError} for any answer but a 2xx. */
-async function readRoute(request: GalleryRequest, route: string, auth?: string): Promise<unknown> {
+export async function readRoute(request: GalleryRequest, route: string, auth?: string): Promise<unknown> {
   const answer = await request(route, { method: "GET", ...(auth ? { token: auth } : {}) });
   if (answer.status < 200 || answer.status >= 300) throw new GalleryError(route, answer.status);
   return answer.body;
@@ -427,6 +436,7 @@ function accountCalls(deps: GalleryDeps) {
       remixable,
       cloneUrl: cloneUrlOf(item),
       author: game.author.name,
+      authorId: game.author.id,
       plays,
       online,
     };

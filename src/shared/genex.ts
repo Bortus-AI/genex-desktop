@@ -3,7 +3,7 @@ import { type CaptureSource, type StillExposure, StillMimeType } from "./preview
 
 /** The bundled Genex plugin's id: the host's own Genex surfaces (its page, the promo) look it up by this. */
 export const GENEX_PLUGIN_ID = "genex";
-/** The Genex Tools skill that teaches an agent to write a Genex plugin (`plugins_find` names it). */
+/** The Genex plugin's skill that teaches an agent to write a Genex plugin (`plugins_find` names it). */
 export const GENEX_PLUGIN_AUTHOR_SKILL = "plugin-author";
 
 /**
@@ -37,6 +37,51 @@ export const GENEX_GAME_PACKAGES = {
 } as const;
 /** A Genex SDK package a game may add. */
 export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
+
+/**
+ * Studio's own copy of each Genex SDK, built at the versions pinned above and served under the
+ * vendor root. A game made from Studio's template has no package manager: it turns sign-in or
+ * multiplayer on by mapping these in its import map, and that mapping is how Studio knows it uses
+ * them (preview, publish). The keys are the specifiers the game imports.
+ */
+export const GENEX_VENDORED_SDK = {
+  "@genex-ai/multiplayer": "/vendor/genex/multiplayer.js",
+  "@genex-ai/multiplayer/schema": "/vendor/genex/multiplayer-schema.js",
+  "@genex-ai/embed-sdk": "/vendor/genex/embed-sdk.js",
+} as const;
+/** A specifier Studio's vendored Genex SDKs answer. */
+export type GenexVendoredSpecifier = keyof typeof GENEX_VENDORED_SDK;
+
+/** The specifiers each package brings into a template game's import map. */
+const VENDORED_SPECIFIERS = {
+  "@genex-ai/multiplayer": ["@genex-ai/multiplayer", "@genex-ai/multiplayer/schema"],
+  "@genex-ai/embed-sdk": ["@genex-ai/embed-sdk"],
+} as const satisfies Record<GenexGamePackage, readonly GenexVendoredSpecifier[]>;
+
+/** The packages a request installs: multiplayer always brings its player-identity dependency. */
+export function genexPackageSet(name: GenexGamePackage): GenexGamePackage[] {
+  return name === "@genex-ai/multiplayer" ? [name, "@genex-ai/embed-sdk"] : [name];
+}
+
+/** The import-map entries a template game needs for `name`, its dependency included. */
+export function vendoredSdkEntries(name: GenexGamePackage): Array<[GenexVendoredSpecifier, string]> {
+  return genexPackageSet(name).flatMap((pkg) =>
+    VENDORED_SPECIFIERS[pkg].map((specifier): [GenexVendoredSpecifier, string] => [
+      specifier,
+      GENEX_VENDORED_SDK[specifier],
+    ]),
+  );
+}
+
+/**
+ * The packages an import map turns on: each whose main specifier maps to Studio's own copy, and
+ * nothing that maps a Genex name somewhere else (a CDN, the game's own file).
+ */
+export function vendoredSdkPackages(imports: Readonly<Record<string, string>>): GenexGamePackage[] {
+  return (Object.keys(GENEX_GAME_PACKAGES) as GenexGamePackage[]).filter(
+    (pkg) => Object.hasOwn(imports, pkg) && imports[pkg] === GENEX_VENDORED_SDK[pkg],
+  );
+}
 /** Whether a name is one of those packages: an own key, never an inherited one. */
 export function isGenexGamePackage(name: unknown): name is GenexGamePackage {
   return typeof name === "string" && Object.hasOwn(GENEX_GAME_PACKAGES, name);

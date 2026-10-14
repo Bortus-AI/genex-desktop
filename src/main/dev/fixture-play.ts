@@ -5,6 +5,14 @@
  * draws the same catalog.
  */
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
+import { fixtureCreatorAnswer } from "./fixture-creator.ts";
+import {
+  FIXTURE_REFERRAL,
+  type FixtureCatalog,
+  fixtureAccountOf,
+  fixtureAuthorId,
+  fixturePeopleAnswer,
+} from "./fixture-people.ts";
 
 /** One fixture game: what a card needs and what varies between cards. */
 interface FixtureGame {
@@ -194,7 +202,7 @@ function item(game: FixtureGame, index: number) {
     categories: game.categories,
     playsCount: game.plays,
     online: game.multiplayer ? (game.online ?? 0) : null,
-    author: { id: "fixture", name: game.author, image: null },
+    author: { id: fixtureAuthorId(game.author), name: game.author, image: null },
   };
 }
 
@@ -242,8 +250,17 @@ function corpus(): GalleryAnswer {
   return ok({ items });
 }
 
-/** The gallery's answers in a fixture launch. */
-export const fixturePlayRequest: GalleryRequest = async (route) => {
+/** The fixture catalog by author: the gallery items of one author's games, as a profile lists them. */
+const catalog: FixtureCatalog = {
+  games: (authorId) => CATALOG.map(item).filter((game) => game.author.id === authorId),
+};
+
+/** The gallery's answers in a fixture launch, its people's (`fixture-people.ts`) and its numbers' (`fixture-creator.ts`). */
+export const fixturePlayRequest: GalleryRequest = async (route, init) => {
+  // The creator routes first: the account's stats live under `/api/users/me`, beside the people routes.
+  const people = fixtureCreatorAnswer(route, init, catalog) ?? fixturePeopleAnswer(route, init, catalog);
+  if (people) return people;
+  if (route === PlayRoute.Referral && fixtureAccountOf(init.token)) return ok(FIXTURE_REFERRAL);
   const [pathname = "", search = ""] = route.split("?");
   const query = new URLSearchParams(search);
   if (pathname === PlayRoute.Feed) return feed(query);

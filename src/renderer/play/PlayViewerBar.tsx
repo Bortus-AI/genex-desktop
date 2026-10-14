@@ -36,7 +36,7 @@ const send = sendPlayControl;
 function Facts({ bar, online }: { bar: PlayBarState | undefined; online: boolean }): JSX.Element | null {
   const facts = bar?.facts;
   if (!facts && online) return null;
-  const parts = facts ? [WORDS.plays(formatCount(facts.plays)), facts.author].filter(Boolean) : [];
+  const parts = facts ? [WORDS.plays(formatCount(facts.plays))] : [];
   const players = online && facts?.online ? facts.online : 0;
   return (
     <span className="play-viewer-bar-facts">
@@ -53,8 +53,30 @@ function Facts({ bar, online }: { bar: PlayBarState | undefined; online: boolean
           {WORDS.playing(players)} ·{" "}
         </>
       )}
-      {parts.join(" · ")}
+      <span>
+        {parts.join(" · ")}
+        {facts?.author && (
+          <>
+            {" · "}
+            <Maker name={facts.author} id={facts.authorId} />
+          </>
+        )}
+      </span>
     </span>
+  );
+}
+
+/** The maker's name; with their account known, it leaves the game for their profile. */
+function Maker({ name, id }: { name: string; id: string | null }): JSX.Element {
+  if (!id) return <>{name}</>;
+  const open = (): void => {
+    void studio().play.close();
+    studio().play.showProfile(id);
+  };
+  return (
+    <button type="button" className="play-viewer-bar-maker" data-play-maker onClick={open}>
+      {name}
+    </button>
   );
 }
 

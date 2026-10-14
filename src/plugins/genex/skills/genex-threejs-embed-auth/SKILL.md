@@ -16,15 +16,19 @@ unchanged. Where it disagrees with this preface, this preface wins.
   design, as the card says. They persist only once the game is published to the gallery, which
   happens only when the user wants it public. Keep the card's localStorage fallback.
 - Studio installs the version it pins. Never run `npm i` for this package yourself.
-- A game made from Studio's template has no `package.json` (it loads three.js through an import
-  map), so it cannot add the SDK. Tell the user player identity needs a game with its own package
-  manager and build; never copy the SDK into the game by hand.
+- A game made from Studio's template has no `package.json`: it loads three.js through an import
+  map, and the same `genex__package` call maps Studio's built-in copy of the SDK into that map,
+  with nothing downloaded. Import it exactly as the card shows, in plain JavaScript (leave out the
+  card's type annotations), and keep settings in `genex.json` at the game's root wherever the card
+  says package.json's `genex` field. Never copy the SDK into the game by hand. A game with its own
+  build but no `package.json` needs one first: give it one, then call `genex__package`.
 
 ## Config without `genex init`
 
 Studio never runs `genex init`, so the game starts without `src/genex.config.ts` or `.env`, and
 "re-run `genex init`" is not available. After the first draft, `genex__publish-status` reports the
-game's `slug`. Write the config yourself, then publish a new draft:
+game's `slug`. Write the config yourself, then publish a new draft (a template game:
+`src/genex.config.js`, the same object without `as const`, imported as `./genex.config.js`):
 
 ```ts
 // src/genex.config.ts
