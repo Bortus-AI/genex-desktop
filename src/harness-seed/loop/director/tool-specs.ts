@@ -377,6 +377,11 @@ export const DIRECTOR_TOOLS: LiveToolSpec[] = [
             "Zero-based acceptance scenario to verify; only independently passed scenarios reset no-progress attempts.",
         },
         ask: { type: "string", description: "One yes/no question (ignored with goal)." },
+        goal_state: {
+          type: "string",
+          description:
+            'Optional JSON state the game reaches when the ask is met, e.g. {"path":"level.cleared","truthy":true}: a blind judge plays to it; yes counts once the studio sees it.',
+        },
         minutes: { type: "string", description: "2–8, default 5." },
       },
       required: [],

@@ -142,6 +142,11 @@ new plan and explicit approval. Failed plan generation uses a recovery card with
 and plan APIs; they do not add the web app's question protocol. Permission cards/docks scroll when available height is short; option lists have no separate
 scroll box. The plan body scrolls independently so all three footer actions remain reachable.
 
+A judge the chat asked to play (`judge_play`, `chat/JudgeLine.tsx`) is one quiet disclosure line,
+never a card: the checks list's state mark and its exact words ("Passed · Judge who played it ·
+verified by the studio", or "The judge didn't play" when nobody played); open, "Asked: …" in ink-2
+and the judge's note, or why it didn't play, in ink-3.
+
 An engine link is one quiet line in ink-3, not a card: "Lantern Run now builds in Unreal ·
 Lantern" with a secondary **Undo** while it is the game's newest link, flowing after the line's last
 word like text (a space, not a margin, so a wrapped Undo starts flush); after Undo the line keeps
@@ -459,6 +464,11 @@ In chat the outcome is the build card above: delivery, capture and Play; the car
 Counts and revision identifiers live under **Technical details** in the Builds result card. Checks and
 play/history actions remain separate, and a summary embedded in a completion card adds no
 second card surface. Do not hide adverse evidence merely to make a result look cleaner.
+Its checks list this build's first and an earlier build's under **Earlier builds**, failures first. A row
+is a 14px state mark (green check, red cross, ink-3 dash) beside the title, which clamps to three lines with
+**Show all** only when it hides words; one 12px line under it says the state in words, who checked and, for
+a check that played, what it rests on ("Passed · Judge who played it · verified by the studio"), red when
+it failed; then the checker's note. No category or revision on a row (`outcome-checks.ts`).
 The Builds graph stays a node graph: every node is one size (208×130), its picture filling it, a
 name and one status on a dark fade at its bottom, and a count in a chip at the top right; a ring
 outside it, never a border, so no state changes its size. Colour means state only (no per-part

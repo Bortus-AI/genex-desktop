@@ -2,7 +2,7 @@
 
 ## What the user sees
 
-The sidebar contains Search, Notifications, Send feedback
+The sidebar holds Search, Notifications, Send feedback
 ([what it sends](../../PRIVACY.md#send-feedback)), New game, Plugins, Harness, Settings, Games
 and, once updates wait, **Update plugins** and **Relaunch to update** (Linux: **Download**); only
 games scroll. Pinned games lead, then recent activity. Every launch opens **home** (also the

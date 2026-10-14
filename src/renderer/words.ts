@@ -19,6 +19,7 @@
  *      director invented with a sha in it comes out readable.
  */
 
+import { InteractionObjective, InteractionSource } from "../shared/run-summary.ts";
 import type { GameEngine } from "../shared/game-engine.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
 import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
@@ -34,7 +35,7 @@ import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
-import type { OutcomeView } from "../shared/run-summary.ts";
+import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
 import {
   GrantKind,
@@ -56,6 +57,7 @@ import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
 import { MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
+import { JUDGE_PLAY_TOOL_NAME } from "../shared/chat-judge.ts";
 import {
   APP_LOOK_TOOL_NAME,
   AppLookAccessKind,
@@ -2498,6 +2500,7 @@ const STUDIO_TOOLS: Record<string, ToolWords> = {
   [JobTool.Tail]: { icon: "read", label: "read background work's output" },
   [JobTool.Stop]: { icon: "run", label: "stopped background work" },
   [APP_LOOK_TOOL_NAME]: { icon: "see", label: "looked at an app window", active: "Looking at an app window" },
+  [JUDGE_PLAY_TOOL_NAME]: { icon: "game", label: "had a judge play the game", active: "A judge is playing the game" },
   wait: { icon: "think", label: "waited", active: "Waiting" },
   judge: { icon: "see", label: "reviewed a build", active: "Reviewing a build" },
   playtest: { icon: "game", label: "had a build playtested", active: "Playtesting a build" },
@@ -3597,6 +3600,43 @@ export function privacyDeleteWords(result: RunSharingDeleteResult): string {
   return words[result.outcome];
 }
 
+/** Who took a check, for the sources that played the build. */
+export const PLAYED_SOURCE_WORDS: Record<InteractionSource, string> = {
+  [InteractionSource.IndependentPlaytester]: "Independent playtester",
+  [InteractionSource.HandsOnJudge]: "Judge who played it",
+  [InteractionSource.RouteReplay]: "Replayed route",
+};
+
+/** What an interaction result rests on: the studio's own check of the game's state, or the player's word. */
+export const OBJECTIVE_WORDS: Record<InteractionObjective, string> = {
+  [InteractionObjective.StudioVerified]: "verified by the studio",
+  [InteractionObjective.ModelSaid]: "the player's word",
+};
+
+/** A chat's judge line (`JudgeLine.tsx`): what leads the question inside it. */
+export const CHAT_JUDGE_WORDS = {
+  asked: "Asked:",
+  /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
+  notPlayed: "The judge didn't play",
+} as const;
+
+/** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
+export const CHECK_WORDS = {
+  status: {
+    passed: "Passed",
+    failed: "Failed",
+    unknown: "Not measured",
+    incomplete: "Incomplete",
+  } satisfies Record<RunEvidence["status"], string>,
+  thisBuild: "This build",
+  earlierBuilds: "Earlier builds",
+  reviewer: "Reviewer",
+  recorded: "Recorded check",
+  routeTitle: "Replayed the judge's route",
+  routeHeld: "The judge's moves were replayed on this build, and the goal held.",
+  showAll: "Show all",
+  showLess: "Show less",
+} as const;
 /** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
 export const PLUGIN_TOOLBAR_WORDS = {
   update: {

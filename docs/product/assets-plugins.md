@@ -8,13 +8,13 @@ deliveries and outside changes refresh it. Cards hide metadata; [jobs being made
 (any plugin's, any MCP tool's) keep their spot, chat included; animation-only GLBs fold into models.
 
 An opened file has only Reveal in Finder and Close: images (click: full size), audio/video, 3D
-models with clips, textures or bounded text; unsupported formats and decoder failures say why.
+models with clips, textures, bounded text; unsupported formats and decoder failures say why.
 
 Chat shows game-folder files with Open in Assets; Builds, a Loop's workspace assets until landing. Job completion or “seen in game” never proves integration or passing checks.
 
 ## Tools and setup
 
-The prompt bar's Add menu holds attachments, plugin and MCP switches, Connect and Manage.
+The Add menu holds attachments, plugin and MCP switches, Connect and Manage.
 Enabled, connected, signed in and permitted differ.
 
 The Plugins page (Plugins/Skills, search, details) lists installed plugins, your servers, the
