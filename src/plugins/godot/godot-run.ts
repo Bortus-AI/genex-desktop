@@ -7,7 +7,7 @@
  * a must: a script that awaits a frame that never draws (a headless capture) would wait forever.
  * Tests hand in their own runner and never start Godot.
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
@@ -22,6 +22,7 @@ export const GodotJob = {
   Capture: "capture",
   Play: "play",
   Reference: "reference",
+  Export: "export",
 } as const;
 export type GodotJob = (typeof GodotJob)[keyof typeof GodotJob];
 
@@ -46,6 +47,8 @@ const OFF_SCREEN = "-10000,-10000";
 /** The most of Godot's output one job keeps, from its end. */
 const OUTPUT_BYTES = 200_000;
 const SCRATCH_PREFIX = "genex-godot-";
+/** The private home the sandbox makes in a job's scratch folder (`runNativeProcess`). */
+const HOME_FOLDER = "home";
 
 const MESSAGE = {
   MacOnly: "Genex runs Godot on a Mac only for now.",
@@ -61,6 +64,8 @@ export type GodotCall = {
   timeoutMs: number;
   /** A job that draws (a still) needs the GPU and a window. */
   gpu: boolean;
+  /** Folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
+  homeLinks?: ReadonlyArray<{ at: string; to: string }>;
 };
 
 /** What a job printed (errors first, then the rest), and how it ended. */
@@ -185,12 +190,22 @@ export function referenceCall(folder: string): GodotCall {
   };
 }
 
+/** The job's home (`<scratch>/home`, as the sandbox makes it) with each link in place before Godot starts. */
+async function linkIntoHome(scratch: string, links: NonNullable<GodotCall["homeLinks"]>): Promise<void> {
+  for (const { at, to } of links) {
+    const where = path.join(scratch, HOME_FOLDER, at);
+    await mkdir(path.dirname(where), { recursive: true });
+    await symlink(to, where);
+  }
+}
+
 /** The runner Genex uses: each job in the native-job sandbox, in a scratch folder removed after it. */
 export function confinedRunner(platform: NodeJS.Platform = process.platform): GodotRunner {
   return async (binary, call, signal) => {
     if (platform !== "darwin") throw new Error(MESSAGE.MacOnly);
     const scratch = await mkdtemp(path.join(os.tmpdir(), SCRATCH_PREFIX));
     try {
+      await linkIntoHome(scratch, call.homeLinks ?? []);
       const ended = await runNativeProcess({
         binary,
         args: call.args,

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as sleep } from "node:timers/promises";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -17,6 +17,7 @@ import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { createGodotBackend, GodotTool } from "../../src/plugins/godot/backend.ts";
 import { systemEditorEnv } from "../../src/plugins/godot/editor.ts";
 import { liveEditor } from "../../src/plugins/godot/editor-bridge.ts";
+import { hasWebTemplate, templateVersion } from "../../src/plugins/godot/web-export.ts";
 import { findGodots, systemGodotEnv, usableGodot } from "../../src/plugins/godot/find-godot.ts";
 import { confinedRunner } from "../../src/plugins/godot/godot-run.ts";
 import { launchGameBridge } from "../../src/main/core/game-bridge-target.ts";
@@ -160,6 +161,20 @@ describe("the Godot plugin on this Mac's Godot", { skip: !LIVE, timeout: LIVE_TI
       editor.kill();
       await exited;
     }
+  });
+
+  it("exports a new game for the web: Godot's page, its data and its engine in web/", async (t) => {
+    const install = usableGodot(await findGodots(systemGodotEnv()));
+    assert.ok(install);
+    if (!(await hasWebTemplate(os.homedir(), install))) {
+      t.skip(`no Web export template for Godot ${templateVersion(install.version)} on this Mac`);
+      return;
+    }
+    const { game, call } = await liveGame();
+    await call(GodotTool.NewGame, { template: "2d", name: "Live Probe" });
+    assert.match(String(await call(GodotTool.WebExport)), /Exported the game for the web/);
+    const files = await readdir(path.join(game, "web"));
+    for (const file of ["index.html", "index.js", "index.wasm", "index.pck"]) assert.ok(files.includes(file), file);
   });
 
   it("answers the installed version's API", async () => {

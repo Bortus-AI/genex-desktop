@@ -66,7 +66,7 @@ input[aria-invalid="true"]{box-shadow:inset 0 0 0 1px var(--err)}
     <p id="project-state" class="state" role="status"></p>
     <p id="project-path" class="mono quiet"></p>
     <p id="setup-state" class="quiet" hidden>Not set up for Genex's play yet: Genex's computer tool, playtesters and judges can't start it, and your open Godot doesn't save for save points.</p>
-    <div class="actions"><button id="set-up" type="button" hidden>Set up for Genex</button><button id="open" class="primary external" type="button">Open in Godot</button></div>
+    <div class="actions"><button id="set-up" type="button" hidden>Set up for Genex</button><button id="web-export" type="button">Export for the web</button><button id="open" class="primary external" type="button">Open in Godot</button></div>
   </section>
   <form id="new" hidden aria-labelledby="new-title" novalidate>
     <h2 id="new-title">New Godot game</h2>
@@ -79,6 +79,7 @@ input[aria-invalid="true"]{box-shadow:inset 0 0 0 1px var(--err)}
     <div class="field"><label for="name">Name</label><input id="name" type="text" autocomplete="off" maxlength="40" spellcheck="false" aria-describedby="name-error"></div>
     <div class="actions"><button id="create" class="primary" type="submit">Create</button></div>
   </form>
+  <p id="note" class="quiet" role="status"></p>
   <p id="error" class="error" role="alert"></p>
   <p id="facts" class="facts mono"></p>
 </main>
@@ -171,6 +172,11 @@ async function act(button, name, args, options) {
 
 $("get-godot").onclick = () => void act($("get-godot"), "get-godot", {});
 $("recheck").onclick = () => void refresh();
+$("web-export").onclick = async () => {
+  setText($("note"), "");
+  const done = await act($("web-export"), "web-export", {}, { timeoutMs: CREATE_TIMEOUT_MS });
+  if (done?.note) setText($("note"), done.note);
+};
 $("set-up").onclick = async () => {
   await act($("set-up"), "set-up", {}, { timeoutMs: CREATE_TIMEOUT_MS });
   void refresh();

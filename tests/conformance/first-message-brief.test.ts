@@ -228,6 +228,27 @@ describe("the rules each kind gets", () => {
     assert.ok(off.prompt.includes(PLUGINS_FIND), "another plugin's kind covers nothing here");
   });
 
+  it("a plugin's web build in a folder is said once as a build, never handed the web game's rules", () => {
+    const brief = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      facts: [
+        fact(CoreFact.GodotProject, "godot"),
+        fact(CoreFact.WebGame, "web"),
+        fact("godot-web-export", "web", "plugin:godot"),
+      ] as never,
+    });
+    assert.ok(!brief.includes("window.__studio"), "no web game's rules for the build");
+    assert.match(brief, /The web page in `web\/` is a web build a plugin exports[^\n]*Never edit its files/);
+    assert.ok(!brief.includes("godot-web-export"), "the plugin's fact needs no line of its own");
+    const site = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      facts: [fact(CoreFact.GodotProject, "godot"), fact(CoreFact.WebGame, "site")] as never,
+    });
+    assert.ok(site.includes("window.__studio"), "a web game no plugin claims keeps its rules");
+  });
+
   it("each kind gets its own rules, named by path when there are two", () => {
     const brief = buildContractorBrief({
       ask: ASK,

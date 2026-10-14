@@ -39,7 +39,7 @@ import {
   WRITER_COPY_MAX_BYTES,
 } from "../../substrate/snapshots.ts";
 import { sizeWords } from "../../shared/byte-size.ts";
-import { isAssetPath, ruleMatches } from "../../shared/project-workspace.ts";
+import { isAssetPath, ruleMatches, webFolderOf } from "../../shared/project-workspace.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -340,6 +340,15 @@ async function placeCamera(port: PreviewPort, camera: string, placeable: boolean
     if (nothingToRetry) break;
   }
   return actual;
+}
+
+/**
+ * The page the preview opens from the game's own folder: its shape's entry, or for a game whose web
+ * game is in a folder of it (an engine's web export, `webFolderOf`) that folder's page.
+ */
+function sourceEntry(game: GameProject | undefined, shape: ProjectShape): string {
+  const folder = game ? webFolderOf(game) : null;
+  return folder ? `${folder}/${TEMPLATE_SHAPE.entry}` : shape.entry;
 }
 
 /** The address a load answers with when the build had nothing to serve. */
@@ -646,7 +655,7 @@ export class PreviewService {
     // its own, and a review worktree keeps the root its caller passed.
     const asSource = path.resolve(served.dir) === path.resolve(base);
     return {
-      entry: entry ?? (asSource ? shape.entry : path.basename(shape.entry)),
+      entry: entry ?? (asSource ? sourceEntry(descriptor, shape) : path.basename(shape.entry)),
       root: asSource ? (root ?? undefined) : served.dir,
       loopback,
       stale: served.stale ? note : null,

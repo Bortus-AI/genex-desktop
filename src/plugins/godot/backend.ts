@@ -7,6 +7,7 @@
  * and its reviewer get stills (`hero-shots`). The panel and the toolbar find Godot, make a game
  * and open it in the person's own Godot editor, which Genex never drives.
  */
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -15,6 +16,16 @@ import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plu
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
 import type { Activate, PluginActivation, PluginContext, PluginReview } from "../../plugin-sdk/index.d.ts";
 import { answerQuery, createReference } from "./class-reference.ts";
+import {
+  addWebPreset,
+  hasWebTemplate,
+  prepareWebFolder,
+  templateVersion,
+  WEB_EXPORT_FOLDER,
+  WEB_PACK,
+  webExportCall,
+  webTemplates,
+} from "./web-export.ts";
 import { askEditor, EditorOp, liveEditor, unsavedScriptsOf } from "./editor-bridge.ts";
 import { editorOpen, type EditorEnv, getGodotLaunch, openEditorLaunch, systemEditorEnv } from "./editor.ts";
 import {
@@ -56,6 +67,7 @@ const GodotAction = {
   ToolbarStatus: "toolbar-status",
   StageStatus: "stage-status",
   SetUp: "set-up",
+  WebExport: "web-export",
 } as const;
 type GodotAction = (typeof GodotAction)[keyof typeof GodotAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(GodotAction));
@@ -70,6 +82,7 @@ export const GodotTool = {
   ClassReference: "class-reference",
   EngineStatus: "engine-status",
   CheckpointCheck: "checkpoint-check",
+  WebExport: "web-export",
   SaveAll: "save-all",
   ReloadEditor: "reload-editor",
   HeroShots: "hero-shots",
@@ -96,6 +109,8 @@ const HERO_SECONDS = 3;
 /** The reviewer's recording: this many frames of the first hero camera, spread over these seconds of play. */
 const HERO_RECORDING_FRAMES = 6;
 const HERO_RECORDING_SECONDS = 6;
+/** How far a file system's clock may lag Genex's when it tells a fresh export from an old one. */
+const EXPORT_CLOCK_SLACK_MS = 2 * SECOND_MS;
 /** How many problems a checkpoint's note names. */
 const NOTED_PROBLEMS = 3;
 /** The agent's name for the new-game tool, as the engine question reads it. */
@@ -116,6 +131,17 @@ const MESSAGE = {
   NoStills: "Godot saved no stills: check that the scene loads (godot__check) and has a camera.",
   CheckNote: (count: number, lines: readonly string[]) =>
     `Godot's check found ${count} ${count === 1 ? "problem" : "problems"}: ${lines.slice(0, NOTED_PROBLEMS).join(" | ")}${count > NOTED_PROBLEMS ? ` (and ${count - NOTED_PROBLEMS} more)` : ""}`,
+  Web: {
+    NoTemplates: (version: string) =>
+      `Godot ${version}'s Web export template isn't installed on this Mac. Tell the person to open the project in Godot (the Godot button above the game), choose Editor → Manage Export Templates and press Download and Install, then export again.`,
+    Link: "The web export's folder or the project's export_presets.cfg is a link, so Genex won't write through it.",
+    Failed: (lines: readonly string[]) =>
+      `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
+    TimedOut: "Godot's web export didn't finish in time and was stopped.",
+    Exported: "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.",
+    Done: (files: number) =>
+      `Exported the game for the web into ${WEB_EXPORT_FOLDER}/ (${files} files): Live's Web game tab plays it and Publish puts it online. It is Godot's build: never edit its files; export again after changing the project.`,
+  },
   Editor: {
     NoAnswer:
       "Your Godot editor didn't answer Genex's ask to save, so Genex won't rewind over work open in it: save in Godot, then try again.",
@@ -301,6 +327,31 @@ async function reloadEditor(deps: GodotBackendDeps, context: PluginContext): Pro
   if (!project || !(await liveEditor(project, deps.editor))) return {};
   const answer = await askEditor(project, EditorOp.Reload, deps.editor, context.signal);
   return answer ? {} : { note: MESSAGE.Editor.NotReloaded };
+}
+
+/**
+ * `web-export`: Godot's Web export of the game's project into `web/`, with the person's Web template
+ * for this Godot. Refused before Godot runs when the template is missing. Answers how many files it wrote.
+ */
+async function webExport(deps: GodotBackendDeps, context: PluginContext): Promise<number> {
+  const game = gameFolderOf(context);
+  if (!game) throw new Error(MESSAGE.NoGameOpen);
+  const project = await requireGameProject(game);
+  const install = await requireGodot(deps);
+  if (!(await hasWebTemplate(deps.env.home, install)))
+    throw new Error(MESSAGE.Web.NoTemplates(versionName(install.version)));
+  await addWebPreset(project, MESSAGE.Web.Link);
+  const folder = await prepareWebFolder(game, MESSAGE.Web.Link);
+  const templates = webTemplates(deps.env.home, install).folder;
+  const call = webExportCall(project, folder, templates, templateVersion(install.version));
+  const started = Date.now();
+  const result = await deps.run(install.binary, call, context.signal);
+  if (result.timedOut) throw new Error(MESSAGE.Web.TimedOut);
+  const pack = await stat(path.join(folder, WEB_PACK)).catch(() => null);
+  const written = pack !== null && pack.mtimeMs >= started - EXPORT_CLOCK_SLACK_MS;
+  const errors = readProblems(result.output).filter(isError);
+  if (!written) throw new Error(MESSAGE.Web.Failed(problemLines(errors.slice(0, NOTED_PROBLEMS))));
+  return (await readdir(folder)).filter((name) => !name.startsWith(".")).length;
 }
 
 /** The seconds a run asks for: a whole number from 1 to {@link MAX_RUN_SECONDS}, or the default when absent. */
@@ -546,6 +597,10 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [GodotAction.StageStatus]: (_args, context) => stageStatus(deps, context),
     [GodotAction.SetUp]: (_args, context) => setUp(deps, context),
+    [GodotAction.WebExport]: async (_args, context) => {
+      await webExport(deps, context);
+      return { note: MESSAGE.Web.Exported };
+    },
   };
   const tools: Record<GodotTool, Handler> = {
     [GodotTool.NewGame]: (args, context) => newGame(deps, args, context),
@@ -555,6 +610,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotTool.ClassReference]: classReference(deps),
     [GodotTool.EngineStatus]: () => engineStatus(deps),
     [GodotTool.CheckpointCheck]: (_args, context) => checkAtMoment(deps, context),
+    [GodotTool.WebExport]: async (_args, context) => MESSAGE.Web.Done(await webExport(deps, context)),
     [GodotTool.SaveAll]: (_args, context) => saveAll(deps, context),
     [GodotTool.ReloadEditor]: (_args, context) => reloadEditor(deps, context),
     [GodotTool.HeroShots]: (_args, context) => heroShots(deps, context),

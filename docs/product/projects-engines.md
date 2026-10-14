@@ -38,14 +38,15 @@ build, test headless and package it.
 
 ## Godot
 
-It ships off and needs Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D or
-3D, in `godot/`) and opens your editor. Agents never drive it (they check, run and shoot in a
-sandbox); it saves before save points and reloads after Rewind.
+Off by default; needs Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, in
+`godot/`) and opens your editor, which saves before save points and reloads after Rewind. Agents
+check, run and shoot in a sandbox. **Export for the web** writes `web/`, played in Live and
+published.
 
 ## Live's views
 
-Live shows the web preview, an engine's card (latest shot, its one step: **Open in Unreal**, **Set
-up for Genex**, **Open in Godot**) or run pictures; only the preview has web controls. A web game
+Live shows the web preview, an engine's card (latest shot and one step, such as **Open in
+Godot**) or run pictures; only the preview has web controls. A web game
 plus an engine project gets a tab each, the last chosen kept per game; a chat's web build brings
 Web game forward.
 

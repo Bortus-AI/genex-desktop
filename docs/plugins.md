@@ -2261,6 +2261,16 @@ project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a hea
 scripts left unsaved or an editor that didn't answer; at `restore.before` either one blocks, so a
 restore never replaces work the editor still holds. `reload-editor` at `restore.after` rescans and
 reloads the open scenes. With no editor beating, each answers nothing.
+`web-export` (agent tool, and the panel's Export for the web) writes Godot's Web export into `web/`
+at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads) added to
+`export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that
+version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`, installed by
+Godot's Export Template Manager) linked read-only into the job's private home; without it the tool
+is refused before Godot runs. The plugin's `detect` names the folder `godot-web-export` (a folder
+with `index.pck`). A game with no web game at its root plays and publishes its first web game in a
+folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
+`index.html`, and Publish uploads the folder in the root's place. A web game a plugin's fact also
+claims is told to chats as a web build, never with the web template's rules.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted
 executable code, as disclosed at installation. The isolated custom panel has no Node or IPC.

@@ -19,7 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
-import { deliveryFolderFor, ignoreLine } from "../shared/project-workspace.ts";
+import { deliveryFolderFor, ignoreLine, webFolderOf } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
 import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/backdrop-shader.ts";
@@ -1999,8 +1999,10 @@ export class StudioCore {
   async exportPublicCopy(project: string, targetDir: string): Promise<ExportResult> {
     const game = (await this.games.list()).find((g) => g.name === project);
     if (!game) throw new Error(MESSAGE.gameNotFound);
-    let output: string | undefined;
-    if (game.shape?.build) {
+    // A game whose web game is in a folder of it (an engine's web export) publishes that folder.
+    const folder = webFolderOf(game);
+    let output: string | undefined = folder ? path.join(game.dir, folder) : undefined;
+    if (!folder && game.shape?.build) {
       const built = await this.builds.ensure({ project: game.name, dir: game.dir, shape: game.shape });
       if (!built.ok || !built.output) throw new Error(MESSAGE.exportBuildFailed);
       output = built.output;

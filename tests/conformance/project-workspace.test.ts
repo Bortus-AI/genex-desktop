@@ -7,12 +7,14 @@ import { readFileSync } from "node:fs";
 import { lstat, mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { CoreFact, type FactRef } from "../../src/shared/project-facts.ts";
+import { CoreFact, type FactRef, hasFact } from "../../src/shared/project-facts.ts";
 import { MEDIA_FORMATS } from "../../src/shared/game-assets.ts";
 import {
   type AssetFolder,
   assetFoldersFor,
   deliveryFolderFor,
+  publishesAsWebGame,
+  webFolderOf,
   ignoreLine,
   ignoreRulesFor,
   isAssetPath,
@@ -286,6 +288,20 @@ const DELIVERY_CASES: Array<[string, FactRef[], string | null]> = [
 describe("where a project's assets live", () => {
   it("delivers a plugin's files where the game's engine reads them", () => {
     for (const [name, facts, folder] of DELIVERY_CASES) assert.equal(deliveryFolderFor(facts), folder, name);
+  });
+
+  it("plays and publishes a web game in a folder only when there is none at the root", () => {
+    const rows: Array<[string, FactRef[], string | null]> = [
+      ["a web game at the root", [fact(CoreFact.WebGame, ROOT), fact(CoreFact.WebGame, "web")], null],
+      ["a Godot game's web export", [fact(CoreFact.GodotProject, "godot"), fact(CoreFact.WebGame, "web")], "web"],
+      ["a Godot game with none", [fact(CoreFact.GodotProject, "godot")], null],
+      ["a folder it cannot name safely", [fact(CoreFact.WebGame, "../web")], null],
+    ];
+    for (const [name, facts, folder] of rows) {
+      assert.equal(webFolderOf({ facts }), folder, name);
+      assert.equal(publishesAsWebGame({ facts }), folder !== null || hasFact(facts, CoreFact.WebGame, ROOT), name);
+    }
+    assert.equal(webFolderOf({ facts: [] }), null, "a game with no kind yet is served at its root");
   });
 
   it("finds each fact's asset folders", () => {

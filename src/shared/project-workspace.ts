@@ -9,7 +9,16 @@
  * Renderer-safe: no Node. The ignore file is written by `substrate/nested-repos.ts`.
  */
 import { assetExtension, listsModels, MEDIA_FORMATS, MODEL_COMPANION_FORMATS } from "./game-assets.ts";
-import { CoreFact, type FactRef, globMatches, isFileGlob, isFolderGlob, NOT_WALKED } from "./project-facts.ts";
+import {
+  CoreFact,
+  type FactRef,
+  type GameKind,
+  globMatches,
+  isFileGlob,
+  isFolderGlob,
+  NOT_WALKED,
+  servedAsWebGame,
+} from "./project-facts.ts";
 
 /** A folder of assets, relative to its fact's folder (`"."` for it); `formats` are lowercase extensions, absent for any file. */
 export interface AssetFolder {
@@ -368,6 +377,22 @@ function reachedFolders(plugin: PluginWorkspace, facts: readonly FactRef[]): Ass
   if (!assets) return [];
   return facts.filter((fact) => plugin.facts.includes(fact.id)).flatMap((fact) => pluginFolders(fact.path, assets));
 }
+
+/**
+ * The folder of a game's web game when it has none at its root: the first web game in a folder of
+ * the game (a Godot game's web export in `web/`), which Live plays and Publish puts online in the
+ * root's place; null for a game served as a web game at its root, or with none.
+ */
+export function webFolderOf(game: GameKind): string | null {
+  if (servedAsWebGame(game)) return null;
+  const inFolder = game.facts.find(
+    (fact) => fact.id === CoreFact.WebGame && fact.path !== ROOT && isPlaceableBase(fact.path),
+  );
+  return inFolder?.path ?? null;
+}
+
+/** Whether Publish can put the game online: a web game at its root, or one in a folder of it (`webFolderOf`). */
+export const publishesAsWebGame = (game: GameKind): boolean => servedAsWebGame(game) || webFolderOf(game) !== null;
 
 /**
  * The folder, relative to the game, where a plugin's delivered files land for a game with these

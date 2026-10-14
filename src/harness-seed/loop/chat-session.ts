@@ -29,6 +29,8 @@ import {
   factPrefix,
   ownKindRules,
   pendingKindRule,
+  pluginWebBuilds,
+  webBuildLine,
   unknownKindRules,
   unrealWithoutPlugin,
 } from "./project-prompts.ts";
@@ -425,7 +427,10 @@ function factRules(
   const several = game.facts.length > 1;
   // The kinds the plugins that are on make: their plugin is on already, nothing to look for.
   const made = new Set(offered.flatMap((kind) => (Array.isArray(kind.makes) ? kind.makes : [])));
+  // A plugin's web build is said once, by its own line, and gets no web game's rules.
+  const builds = pluginWebBuilds(game.facts);
   return game.facts.flatMap((fact) => {
+    if (builds.has(fact.path)) return fact.id === CoreFact.WebGame ? [webBuildLine(fact.path)] : [];
     const rules = rulesOfFact(engine, fact, game, folder, made);
     const prefix = several ? factPrefix(fact) : "";
     return rules.map((rule) => `${prefix}${rule}`);

@@ -67,8 +67,20 @@ const NO_FACT_WORDS = {
 /** What the folder holds, in words: each kind and where, or what a folder with no facts holds. */
 function holdsWords(facts: readonly FactRef[], holds?: FolderHolds | null): string {
   if (facts.length === 0) return NO_FACT_WORDS[holds ?? FolderHolds.Nothing];
-  return facts.map((fact) => `${factWords(fact.id)} ${whereWords(fact.path)}`).join(", ");
+  // A plugin's web build is one thing in its folder: the web page, named as the build it is.
+  const builds = pluginWebBuilds(facts);
+  return facts
+    .filter((fact) => !builds.has(fact.path) || fact.id === CoreFact.WebGame)
+    .map((fact) =>
+      builds.has(fact.path)
+        ? `${WEB_BUILD_WORDS} ${whereWords(fact.path)}`
+        : `${factWords(fact.id)} ${whereWords(fact.path)}`,
+    )
+    .join(", ");
 }
+
+/** A plugin's web build, as the folder's contents name it. */
+const WEB_BUILD_WORDS = "a web build exported from the game's own project";
 
 /**
  * Who runs the session, the first thing every brief says: Genex, the Mac app the chat runs in; the
@@ -163,6 +175,21 @@ const isCoreFact = (id: string) => (Object.values(CoreFact) as string[]).include
  */
 const detectedByPlugin = (fact: FactRef & { source?: string }) =>
   fact.source === undefined || fact.source.startsWith(PLUGIN_FACT_SOURCE_PREFIX);
+
+/**
+ * The folders holding a web game that a plugin's `detect` also claims: a web build the plugin makes
+ * from the game's own project (Godot's web export in `web/`), never a web game of its own to build.
+ */
+export function pluginWebBuilds(facts: readonly (FactRef & { source?: string })[]): Set<string> {
+  const webAt = new Set(facts.filter((fact) => fact.id === CoreFact.WebGame).map((fact) => fact.path));
+  const claimed = facts.filter((fact) => !isCoreFact(fact.id) && detectedByPlugin(fact) && webAt.has(fact.path));
+  return new Set(claimed.map((fact) => fact.path));
+}
+
+/** The one rule of a plugin's web build: played and published as it is, made again from the project, never edited. */
+export function webBuildLine(path: string): string {
+  return `The web page ${whereWords(path)} is a web build a plugin exports from this game's own project: Live's Web game tab plays it and Publish puts it online. Never edit its files: change the project, then export it again with the plugin's export tool.`;
+}
 
 /**
  * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, or a plugin's
