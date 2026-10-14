@@ -3676,6 +3676,7 @@ export const UNREAL_WORDS = {
     switchTo: (project: string) => `Switch to ${project}`,
     notAnswering: (project: string) => `${project} isn’t answering in Unreal.`,
     portBlocked: (project: string) => `Unreal couldn’t use the port Genex gave ${project}.`,
+    crashed: (project: string) => `Unreal crashed. Close its crash report window, then open ${project} again.`,
     restart: "Restart Unreal",
     quitFirst: (project: string) =>
       `${project} is open in Unreal. Quit Unreal to set it up; Unreal asks you to save first.`,

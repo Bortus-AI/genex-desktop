@@ -181,7 +181,8 @@ const isUnrealTool = (name: string): name is UnrealTool => TOOL_NAMES.has(name);
  * updates an older Genex editor helper), wait while it starts, use it, switch from another set-up
  * project Unreal has open, quit and reopen an editor that has the project open but doesn't answer
  * or whose own log says Epic's server couldn't listen on the project's port, or open it once Unreal
- * is free (`open-when-free`: Unreal has some other project open, which nothing here quits).
+ * is free (`open-when-free`: Unreal has some other project open, which nothing here quits), or
+ * close Unreal's crash report first (`crashed`: its reporter keeps the project's port).
  */
 export const PanelStep = {
   GetUnreal: "get-unreal",
@@ -195,6 +196,7 @@ export const PanelStep = {
   NotAnswering: "not-answering",
   PortBlocked: "port-blocked",
   OpenWhenFree: "open-when-free",
+  Crashed: "crashed",
 } as const;
 export type PanelStep = (typeof PanelStep)[keyof typeof PanelStep];
 
@@ -375,6 +377,8 @@ type StepFacts = {
   projectOpen: boolean;
   /** Its log never closed, and nothing could tell whether an editor holds it: it may be another project Unreal has open. */
   openUnsure: boolean;
+  /** Unreal crashed: its crash reporter holds the set-up project's port until the report is closed. */
+  crashed: boolean;
 };
 
 /** A set-up project Unreal has open: its name and real `.uproject`. */
@@ -428,6 +432,8 @@ function nextStep(facts: StepFacts): PanelStep {
   if (!engine) return PanelStep.GetUnreal;
   if (!state) return PanelStep.Choose;
   if (current === Connection.Ready) return PanelStep.Connected;
+  // Setup would move the port and a restart couldn't take it back: the report has to close first.
+  if (facts.crashed) return PanelStep.Crashed;
   if (current === Connection.Starting) return PanelStep.Starting;
   // Setup refuses only while Unreal has this project open; it moves a taken port and switches a project from an older Unreal.
   const needsSetup = current === Connection.SetUp || facts.portTaken || match === EngineMatch.TooOld;
@@ -536,6 +542,13 @@ async function holderOf(
   return names.find((name) => name.toLowerCase() !== shown) ?? null;
 }
 
+/** Whether Unreal's crash reporter holds the set-up project's port while its editor doesn't answer: Unreal crashed. */
+async function crashReporterOn(env: SetupEnv, state: ProjectState | undefined, editor: { answering: boolean }) {
+  const port = isSetUp(state) ? state.port : null;
+  if (port === null || editor.answering || !env.crashReporterHolds) return false;
+  return (await env.crashReporterHolds(port).catch(() => undefined)) === true;
+}
+
 /**
  * Where a project stands and the one step it needs, as the panel and the Live card both read it:
  * the editor's facts, the engine match, the connection, a taken or blocked port, another set-up
@@ -555,7 +568,9 @@ async function whereItStands(
   const engine = engines.find((e) => e.supported);
   const match = state ? engineMatch(state.engine, engines) : null;
   const where = connection(deps, state, editor);
-  const portTaken = port !== null && mayBePortTaken(state, editor, env.platform) && (await env.portListening(port));
+  const crashed = await crashReporterOn(env, state, editor);
+  const portTaken =
+    !crashed && port !== null && mayBePortTaken(state, editor, env.platform) && (await env.portListening(port));
   const portBlocked = editor.portBlocked === true;
   const elsewhere = isSetUp(state) && editor.running && !portBlocked && where.connection === Connection.NotOpen;
   const openProject = elsewhere ? await openElsewhere(storage, realProjectFile(state), env) : null;
@@ -571,6 +586,7 @@ async function whereItStands(
     portBlocked,
     projectOpen: editor.projectOpen,
     openUnsure: !editor.answering && editor.openUnsure === true,
+    crashed,
   });
   const holder = HOLDER_STEPS.has(next) ? await holderOf(env, state, editor, openProject) : null;
   return { port, editor, engine, match, where, portTaken, openProject, next, holder };

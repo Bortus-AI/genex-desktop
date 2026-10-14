@@ -287,6 +287,7 @@ const Step = {
   Switch: "switch",
   NotAnswering: "not-answering",
   PortBlocked: "port-blocked",
+  Crashed: "crashed",
   OpenWhenFree: "open-when-free",
 };
 /** How long the panel waits for an action that takes longer than most; the rest get the SDK's own wait. */
@@ -401,6 +402,7 @@ const WORDS = {
   switchTo: (name) => `Switch to ${name}`,
   notAnswering: (name) => `${name} isn't answering in Unreal.`,
   portBlocked: (name) => `Unreal couldn't use the port Genex gave ${name}.`,
+  crashed: (name) => `Unreal crashed. Close its crash report window, then open ${name} again.`,
   portBusy: (name) =>
     `Another app was still using the port Genex gave ${name} as Unreal opened. If it doesn't connect, this panel offers Restart Unreal.`,
   quitToUndo: "Quit Unreal to undo setup.",
@@ -806,6 +808,8 @@ function stepView(s) {
       return restartStep(s, notAnsweringWords(s));
     case Step.PortBlocked:
       return restartStep(s, WORDS.portBlocked(name));
+    case Step.Crashed:
+      return { say: WORDS.crashed(name) };
     case Step.OpenWhenFree:
       return { say: `${holderWords(s)} ${WORDS.openWhenFree(name)}`, ...openLater };
     default:
@@ -823,6 +827,7 @@ const STATE = {
   [Step.Connected]: [WORDS.state.ready, Tone.Ok],
   [Step.NotAnswering]: [WORDS.state.notAnswering, Tone.Warn],
   [Step.PortBlocked]: [WORDS.state.notConnected, Tone.Err],
+  [Step.Crashed]: [WORDS.state.notConnected, Tone.Err],
   [Step.OpenWhenFree]: [WORDS.state.busy, Tone.Warn],
 };
 

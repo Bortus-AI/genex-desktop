@@ -28,7 +28,7 @@ import {
 } from "../../substrate/fsx.ts";
 import { containedReal } from "../../substrate/paths.ts";
 import { envValue } from "../../substrate/toolchain.ts";
-import { editorHoldsLog, heldProjectNames } from "./editor-holds.ts";
+import { crashReporterHolds, editorHoldsLog, heldProjectNames } from "./editor-holds.ts";
 import { type EditorLog, editorLogPath, readEditorLog } from "./editor-log.ts";
 import { isProjectPath, projectName } from "./project-file.ts";
 import {
@@ -155,6 +155,11 @@ export type SetupEnv = {
   editorCount?: () => Promise<number>;
   /** Whether anything accepts connections on a port (setup's choice of a free one). */
   portListening: (port: number) => Promise<boolean>;
+  /**
+   * Whether Unreal's crash reporter holds a port (a crashed editor's reporter keeps its sockets);
+   * undefined, or absent, when this computer can't tell.
+   */
+  crashReporterHolds?: (port: number) => Promise<boolean | undefined>;
   /**
    * Whether Epic's Unreal MCP completes an `initialize` on a port, and, given a project's real
    * `.uproject`, whether that editor has this project open (the Genex editor helper names it).
@@ -304,6 +309,7 @@ export function systemSetupEnv(
     editorRunning: async () => (await editorProcesses(platform, env, runner)) > 0,
     editorCount: () => editorProcesses(platform, env, runner),
     portListening,
+    crashReporterHolds: (port) => crashReporterHolds(port, platform, runner),
     editorAnswers: rememberAnswers((port, project) => {
       const endpoint = editorEndpoint(String(port));
       return project === undefined ? editorAnswers(endpoint) : editorServes(endpoint, project);
