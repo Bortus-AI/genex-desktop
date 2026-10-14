@@ -413,7 +413,8 @@ capabilities. Nothing else counts, so another app's MCP server on the port is ne
 Unreal. Epic's answer names no project, so the bridge and the status also ask the Genex editor
 helper's `project_file` which project the editor has open, and use the editor only when it names
 this project's real `.uproject`; another project's editor on the port gets no call and never
-shows Connected. The panel and toolbar status remember a project's last good answer for 10 s:
+shows Connected. Epic sends that tool's answer as an event stream it keeps open for about 15 s
+after the answer, so the check reads up to the first event and closes it. The panel and toolbar status remember a project's last good answer for 10 s:
 while it stands they say yes at once and ask the editor again in the background, so status stays
 fast with Unreal behind another app and one stalled request doesn't flip Connected; a failed ask
 is never remembered, so a stopped editor reads as not answering one refresh later. A record whose
