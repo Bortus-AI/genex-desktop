@@ -29,7 +29,7 @@ Any folder but a web game at its root (Blender files beside it allowed), Blender
 the chat's session leads the Loop in place, on Claude Code, Codex or OpenCode (others refuse). The lead keeps save points,
 starts workers (of its plugins' types, if any) and claims finish; a reviewer checks (three no's
 stop it). Plugins add steps at Genex's moments, reviewer pictures and locks: while you work in a
-plugin's editor, agents wait. Unity's plugin makes, sets up and opens the folder's project.
+plugin's editor, agents wait. Unity's plugin makes, sets up and opens the project.
 
 ## Unreal
 
