@@ -323,6 +323,13 @@ def move_mouse(dx: float, dy: float, wheel: float) -> dict:
     return {'moved': [dx, dy], 'wheel': wheel}
 
 
+def set_paused(paused: bool) -> dict:
+    """Pauses or resumes the play session's game, as its own pause does; what it is now."""
+    world = game_world()
+    unreal.GameplayStatics.set_game_paused(world, bool(paused))
+    return {'paused': bool(unreal.GameplayStatics.is_game_paused(world))}
+
+
 def release_all() -> int:
     """Lets go of every held input and ends every watch; how many inputs were held."""
     _stop_watches()

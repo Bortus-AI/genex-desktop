@@ -199,12 +199,20 @@ export function createComputerPlay(deps: {
     return port.call(LoopTool.PlayerState, {});
   };
 
+  const pause = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
+    const { port } = portOf(storage, context);
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    return port.call(LoopTool.Pause, { paused: args.paused === true });
+  };
+
   const close = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {
     const { game, queueDeps, port } = portOf(storage, context);
     const key = keyOf(storage, game);
     const session = sessions.get(key);
     sessions.delete(key);
     if (!session) return { closed: false };
+    // A paused game is never left behind, the person's own play least of all.
+    if (await playing(port)) await port.call(LoopTool.Pause, { paused: false }).catch(() => undefined);
     // A play the person or the queue started goes on; one this session started ends with it.
     if (session.started) {
       await stopPlay(queueDeps, port);
@@ -219,6 +227,7 @@ export function createComputerPlay(deps: {
     [EnginePlayTool.Input]: input,
     [EnginePlayTool.Shot]: shot,
     [EnginePlayTool.State]: state,
+    [EnginePlayTool.Pause]: pause,
     [EnginePlayTool.Close]: close,
   } as const satisfies Record<
     EnginePlayTool,

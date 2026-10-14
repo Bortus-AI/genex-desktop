@@ -167,6 +167,21 @@ class Mouse(PlayCase):
         self.assertIn('error', tool('mouse', 5.0, 0.0, 0.0))
 
 
+class Pause(PlayCase):
+    """The play session's own pause, which Genex holds between a judge's moves so the game waits
+    while the judge looks and decides."""
+
+    def test_pauses_and_resumes_the_game(self) -> None:
+        self.assertEqual(tool('pause', True), {'paused': True})
+        self.assertTrue(unreal.state['paused'])
+        self.assertEqual(tool('pause', False), {'paused': False})
+        self.assertFalse(unreal.state['paused'])
+
+    def test_without_a_play_session_it_is_an_error_not_an_exception(self) -> None:
+        unreal.state['pie'] = False
+        self.assertIn('error', tool('pause', True))
+
+
 class Clocks(PlayCase):
     def test_player_state_reads_the_game_clock_and_the_frame_rate(self) -> None:
         tool('hold', 'Throttle', 1.0, 0.0, 10.0)

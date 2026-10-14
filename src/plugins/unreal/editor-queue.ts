@@ -59,6 +59,7 @@ export const LoopTool = {
   ProbeRoute: "probe_route",
   PlayerState: "player_state",
   Mouse: "mouse",
+  Pause: "pause",
   GetProperties: ObjectTool.GetProperties,
   SetProperties: ObjectTool.SetProperties,
   SearchCVars: CVarTool.Search,

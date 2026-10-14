@@ -20,6 +20,8 @@ export const EnginePlayTool = {
   Shot: "play-shot",
   /** The game's state: the player and the game's own numbers, as the engine plugin reads them. */
   State: "play-state",
+  /** Stand the play still (`paused: true`) or let it run: the studio holds a judge's game still between moves. */
+  Pause: "play-pause",
   /** Let go of every key and end the play the session started. */
   Close: "play-close",
 } as const;

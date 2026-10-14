@@ -29,7 +29,7 @@ const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QD
 /** A stand-in engine plugin: its play tools, recorded, and a game whose player wins once W was held 2 s. */
 function standInEngine(options: { refuseOpen?: boolean } = {}) {
   const calls: Array<[EnginePlayTool, Record<string, unknown>]> = [];
-  const game = { heldW: 0, playing: false };
+  const game = { heldW: 0, playing: false, paused: false, pausedAtInput: [] as boolean[] };
   const call = async (tool: EnginePlayTool, args: Record<string, unknown>) => {
     calls.push([tool, args]);
     switch (tool) {
@@ -39,6 +39,7 @@ function standInEngine(options: { refuseOpen?: boolean } = {}) {
         game.playing = true;
         return { ...ENGINE_PLAY_VIEW, joined: false };
       case EnginePlayTool.Input: {
+        game.pausedAtInput.push(game.paused);
         const keys = playInputKeys(args.keys);
         if (keys.includes("KeyW")) game.heldW += Number(args.seconds);
         return { held: keys, gameSeconds: 1 };
@@ -47,8 +48,12 @@ function standInEngine(options: { refuseOpen?: boolean } = {}) {
         return { png: PIXEL, ...ENGINE_PLAY_VIEW };
       case EnginePlayTool.State:
         return { pawn: "Hero_0", phase: game.heldW >= 2 ? "won" : "playing" };
+      case EnginePlayTool.Pause:
+        game.paused = Boolean(args.paused);
+        return { paused: game.paused };
       case EnginePlayTool.Close:
         game.playing = false;
+        game.paused = false;
         return { closed: true };
     }
   };
@@ -78,6 +83,30 @@ describe("the computer on a game played in its engine's editor", () => {
     ]);
     const tool = computerToolDefinition({ role: "builder", capabilities: source.caps, observeByDefault: false });
     assert.match(tool.description, /engine's editor/);
+  });
+
+  it("stands the game still between a judge's moves and runs it only while a move lasts; a builder's game runs on", async () => {
+    const judged = standInEngine();
+    const judge = computerSession(judged.source, "/game", {
+      pacing: "stepped",
+      frameDir: await tmpDir("editor-play-"),
+    });
+    await judge.run("computer", { action: "screenshot" });
+    assert.equal(judged.game.paused, true, "still while the judge looks");
+    await judge.run("computer", { action: "hold_key", text: "w", duration: 1 });
+    assert.deepEqual(judged.game.pausedAtInput, [false], "running while the key is held");
+    assert.equal(judged.game.paused, true, "still again after the move");
+    const built = standInEngine();
+    const builder = computerSession(built.source, "/game", {
+      pacing: "running",
+      frameDir: await tmpDir("editor-play-"),
+    });
+    await builder.run("computer", { action: "hold_key", text: "w", duration: 1 });
+    assert.equal(
+      built.calls.some(([tool]) => tool === EnginePlayTool.Pause),
+      false,
+      "a builder's game is never paused",
+    );
   });
 
   it("carries each key verb as holds on the game's own time", async () => {

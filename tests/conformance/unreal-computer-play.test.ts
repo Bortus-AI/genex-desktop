@@ -94,6 +94,21 @@ describe("the Unreal plugin's play tools for the computer", () => {
     assert.equal(await agentPlaying(storage, GAME, before.deps.now()), false);
   });
 
+  it("pauses and resumes the play through the helper, and never leaves a game paused when it closes", async () => {
+    const { call, editor } = playTools();
+    await call(EnginePlayTool.Open);
+    assert.deepEqual(await call(EnginePlayTool.Pause, { paused: true }), { paused: true });
+    assert.equal(editor.state.paused, true);
+    await call(EnginePlayTool.Close);
+    assert.equal(editor.state.paused, false, "resumed before the session let go");
+    const joined = playTools();
+    joined.editor.state.pie = true;
+    await joined.call(EnginePlayTool.Open);
+    await joined.call(EnginePlayTool.Pause, { paused: true });
+    await joined.call(EnginePlayTool.Close);
+    assert.deepEqual([joined.editor.state.pie, joined.editor.state.paused], [true, false], "the person's play runs on");
+  });
+
   it("joins a play the person started, and leaves it running when it closes", async () => {
     const { call, editor, tools } = playTools();
     editor.state.pie = true;

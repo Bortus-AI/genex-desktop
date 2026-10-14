@@ -74,6 +74,19 @@ class GenexPlayTools(unreal.ToolsetDefinition):
 
     @toolset_registry.tool_call
     @staticmethod
+    def pause(paused: bool = True) -> str:
+        """Pauses or resumes the running play session's game, as its own pause does.
+
+        Args:
+            paused: True stands the game still; False lets it run.
+
+        Returns:
+            JSON {paused}, or {error} without a play session.
+        """
+        return _answer(play.set_paused, paused)
+
+    @toolset_registry.tool_call
+    @staticmethod
     def release_all() -> int:
         """Lets go of every held input action and key, and ends a settle or a drive.
 

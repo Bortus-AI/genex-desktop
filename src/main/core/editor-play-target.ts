@@ -6,7 +6,8 @@
  * player as the plugin reads it, which the session checks goals against.
  *
  * Every play tool takes the plugin's editor lock for its call (the person first, another caller in
- * turn), and opening is refused while the engine's own queue plays a build. The lock is not held
+ * turn), and opening is refused while the engine's own queue plays a build. The play's own pause is
+ * the target's clock: a judge's game stands still between its moves. The lock is not held
  * between calls: the agent's own editor calls in the same turn go on as they would. The session's
  * release ends the play it started.
  */
@@ -157,6 +158,15 @@ function editorPlayTarget(call: EnginePlayCall, view: { width: number; height: n
       return { applied, route: InputRoute.Editor };
     },
     state: () => answered(call, EnginePlayTool.State),
+    // The play's own pause: a judge's game stands still while it looks; no exact step.
+    clock: {
+      pause: async () => {
+        await answered(call, EnginePlayTool.Pause, { paused: true });
+      },
+      start: async () => {
+        await answered(call, EnginePlayTool.Pause, { paused: false });
+      },
+    },
   };
 }
 

@@ -41,6 +41,7 @@ const PARAMETERS: Partial<Record<string, string[]>> = {
   [LoopTool.ProbeRoute]: [],
   [LoopTool.PlayerState]: [],
   [LoopTool.Mouse]: ["dx", "dy", "wheel"],
+  [LoopTool.Pause]: ["paused"],
 };
 
 /** Unreal's background throttle, where Epic's ObjectTools read and write it. */
@@ -63,6 +64,7 @@ export function standIn(overrides: Partial<Record<string, (args: Record<string, 
     throttle: true,
     throttleAtPlay: undefined as unknown,
     rayTracing: false,
+    paused: false,
   };
   const answers: Record<string, (args: Record<string, unknown>) => unknown> = {
     [LoopTool.ApplyPart]: () => ({
@@ -79,10 +81,16 @@ export function standIn(overrides: Partial<Record<string, (args: Record<string, 
     },
     [LoopTool.Hold]: (a) => ({ held: a.name, seconds: a.seconds }),
     [LoopTool.Mouse]: (a) => (state.pie ? { moved: [a.dx, a.dy], wheel: a.wheel } : NO_PLAY),
+    [LoopTool.Pause]: (a) => {
+      if (!state.pie) return NO_PLAY;
+      state.paused = Boolean(a.paused);
+      return { paused: state.paused };
+    },
     [LoopTool.CapturePlay]: (a) => ({ queued: true, file: `/p/Saved/Genex/captures/${a.name}.png` }),
     [LoopTool.GameState]: () => ({ pie: true, player: { speedKmh: 12 }, actors: [{ label: "Lantern_0" }] }),
     [LoopTool.StopPlay]: () => {
       state.pie = false;
+      state.paused = false;
       return { stopping: true, released: 0 };
     },
     [LoopTool.PlayState]: () => ({ pie: state.pie }),

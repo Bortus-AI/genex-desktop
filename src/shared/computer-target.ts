@@ -163,14 +163,15 @@ export const DESKTOP_CAPABILITIES: TargetCapabilities = {
 
 /**
  * A game played in its engine's editor: the player's view, keys held on the game's own clock (which
- * the studio cannot stop), the mouse as a player has it (mouse-look, the buttons where the view is
- * aimed, the wheel), and the player's state. No seed, cameras or console yet.
+ * the studio can stand still between moves, though not step exactly), the mouse as a player has it
+ * (mouse-look, the buttons where the view is aimed, the wheel), and the player's state. No seed,
+ * cameras or console yet.
  */
 export const EDITOR_CAPABILITIES: TargetCapabilities = {
   runtime: TargetRuntime.Editor,
   pointer: PointerLevel.Relative,
   aimedClicks: true,
-  clock: ClockLevel.None,
+  clock: ClockLevel.Freeze,
   state: StateLevel.Game,
   seed: false,
   reload: false,
@@ -185,9 +186,9 @@ export const EDITOR_CAPABILITIES: TargetCapabilities = {
 /** A VM's screen: the desktop's abilities, reached inside the machine. */
 export const VM_CAPABILITIES: TargetCapabilities = { ...DESKTOP_CAPABILITIES, runtime: TargetRuntime.Vm };
 
-/** Can the target's time be stood still between moves? */
+/** Can the target's time be stood still between moves (frozen, or stepped)? */
 export function canPause(caps: Pick<TargetCapabilities, "clock">): boolean {
-  return caps.clock === ClockLevel.StepLocked || caps.clock === ClockLevel.Replayable;
+  return caps.clock !== ClockLevel.None;
 }
 
 /** Can the target's pointer click at a point? */
