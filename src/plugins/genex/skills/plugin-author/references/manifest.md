@@ -18,6 +18,12 @@ manifest requires may be empty). `plugin_check` names the first thing Genex refu
 
 - `detect` (API 3): how Genex knows a project of the engine's kind, as facts: `{fact, files,
   notUnder?}`, `files` globs such as `**/*.sketchproj`, `notUnder` folders to skip (vendored copies).
+- `engine` (API 3, capability `game-engine`): the engine the plugin is, which games linked to its
+  projects build in: `{id, label, projectFiles, fact, projectInFolder, play?, apps?}`. `id` is the
+  plugin's own id; `label` the engine's name; `projectFiles` 1–4 extensions a project file has
+  (`.sketchproj`); `fact` one of its `detect` facts; `projectInFolder` true when save points must
+  hold the project inside the game folder; `apps` the editor's Mac bundle ids and Windows `.exe`
+  names, which computer use never drives to build or play.
 - `tools`: what agents call. Each `{name, description, parameters}` (a JSON schema object), with
   `facts` (the kinds of project it reaches; none: every project), `needs` (the locks a call holds),
   `makes` (the facts it makes in an empty folder) and `confirmation` (a question asked each call).
@@ -66,9 +72,16 @@ Write `genex-plugins/sketch/plugin.json`:
   "publisher": "Written in this project",
   "description": "Builds and checks Sketch projects through the Sketch editor.",
   "backend": "backend.mjs",
-  "capabilities": ["network"],
+  "capabilities": ["network", "game-engine"],
   "network": { "hosts": ["127.0.0.1"] },
   "detect": [{ "fact": "sketch-project", "files": ["**/*.sketchproj"], "notUnder": ["**/vendor/"] }],
+  "engine": {
+    "id": "sketch",
+    "label": "Sketch",
+    "projectFiles": [".sketchproj"],
+    "fact": "sketch-project",
+    "projectInFolder": true
+  },
   "tools": [
     {
       "name": "build",

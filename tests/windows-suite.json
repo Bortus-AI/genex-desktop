@@ -164,6 +164,7 @@
   "tests/conformance/plugin-activity.test.ts",
   "tests/conformance/plugin-consent.test.ts",
   "tests/conformance/plugin-devkit.test.ts",
+  "tests/conformance/plugin-engine-manifest.test.ts",
   "tests/conformance/plugin-file-picker.test.ts",
   "tests/conformance/plugin-identity.test.ts",
   "tests/conformance/plugin-lifecycle.test.ts",

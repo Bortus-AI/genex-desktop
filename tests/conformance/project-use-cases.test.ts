@@ -737,6 +737,7 @@ async function toyPorter(t: { after: (fn: () => Promise<void>) => void }): Promi
   await cp(TOY_PLUGIN, dir, { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
   manifest.id = id;
+  manifest.engine.id = id;
   manifest.tools.push({
     name: "start-toy",
     description: "Make this game a toy project, in place.",
@@ -788,6 +789,7 @@ async function unrealStandIn(t: { after: (fn: () => Promise<void>) => void }): P
   await cp(TOY_PLUGIN, dir, { recursive: true });
   const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
   manifest.id = id;
+  manifest.engine.id = id;
   const real = unrealManifest as unknown as { tools: Array<{ name: string }>; scaffolds: unknown };
   manifest.tools.push(
     ...real.tools.filter((declared) => ["new-game", "new-plugin", "engine-status"].includes(declared.name)),
@@ -876,6 +878,7 @@ async function shipStandIn(t: { after: (fn: () => Promise<void>) => void }) {
   const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
   const real = unrealManifest as unknown as { tools: Array<{ name: string }>; locks: unknown[] };
   manifest.id = id;
+  manifest.engine.id = id;
   manifest.locks.push(...real.locks);
   manifest.tools.push(...real.tools.filter((declared) => ["plugin-build", "editor-activity"].includes(declared.name)));
   manifest.detect.push({ fact: "unreal-plugin", files: ["**/*.uplugin"], notUnder: ["**/GenexEditorHelper/"] });

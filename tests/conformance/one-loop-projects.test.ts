@@ -184,6 +184,7 @@ async function renamedToyPlugin(): Promise<{ dir: string; id: string; rename: (t
   const rename = (tool: string) => `r-${tool}`;
   const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
   manifest.id = "toy-renamed";
+  manifest.engine.id = "toy-renamed";
   manifest.name = "Toy Renamed";
   for (const tool of manifest.tools) tool.name = rename(tool.name);
   for (const hook of manifest.hooks) hook.tool = rename(hook.tool);

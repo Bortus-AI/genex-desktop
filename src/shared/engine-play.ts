@@ -10,6 +10,8 @@
  * call: the person first, any other caller in turn.
  */
 
+import type { ClockLevel } from "./computer-target.ts";
+
 /** The play tools, by their names after `<plugin>__`. Wire values: never rename. */
 export const EnginePlayTool = {
   /** Start play (or join the play already running): answers the view's size. */
@@ -35,6 +37,22 @@ export const ENGINE_PLAY_VIEW = { width: 1280, height: 720 } as const;
 
 /** The longest one `play-input` holds keys, in game seconds. */
 export const MAX_PLAY_INPUT_SECONDS = 10;
+
+/** The most players one play may open: each is its own window of the editor's play. */
+export const MAX_PLAY_PLAYERS = 8;
+
+/**
+ * What an engine's editor can do in play, as its plugin declares it (`engine.play`): how many
+ * players one play opens at most, its clock, whether the mouse aims as a player's does and whether
+ * the game's state can be read. Absent fields are the editor defaults.
+ */
+export interface EnginePlayDeclaration {
+  /** 1 to `MAX_PLAY_PLAYERS`. */
+  players?: number;
+  clock?: ClockLevel;
+  pointer?: boolean;
+  state?: boolean;
+}
 
 /** What `play-open` answers: the view's size, and whether the play was already running. */
 export interface EnginePlayOpened {

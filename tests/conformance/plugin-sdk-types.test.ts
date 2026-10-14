@@ -174,6 +174,13 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       export const hostToShared: SharedHost = sdkHost;
       export const hostToSdk: SdkHost = sharedHost;
     `,
+    "engine.ts": `
+      import type { PluginEngineDeclaration as SdkEngine } from ${quote(sdk)};
+      import type { EngineDeclaration as SharedEngine } from ${quote(path.resolve("src/shared/game-engine.ts"))};
+      declare const sdkEngine: SdkEngine; declare const sharedEngine: SharedEngine;
+      export const engineToShared: SharedEngine = sdkEngine;
+      export const engineToSdk: SdkEngine = sharedEngine;
+    `,
   });
   assert.equal(diagnostics.length, 0, report(diagnostics));
 });

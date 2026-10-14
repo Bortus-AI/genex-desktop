@@ -6,7 +6,9 @@
   "publisher": "Genex tests",
   "description": "A made-up engine for tests: it carries every section a plugin can declare, so tests see which ones Genex keeps.",
   "backend": "backend.mjs",
-  "capabilities": [],
+  "capabilities": [
+    "game-engine"
+  ],
   "detect": [
     {
       "fact": "toy-project",
@@ -18,6 +20,15 @@
       ]
     }
   ],
+  "engine": {
+    "id": "toy-engine",
+    "label": "Toy",
+    "projectFiles": [
+      ".toyproj"
+    ],
+    "fact": "toy-project",
+    "projectInFolder": false
+  },
   "tools": [
     {
       "name": "build",

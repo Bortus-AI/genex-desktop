@@ -1,4 +1,5 @@
 import { validateDetect } from "./detect-manifest.ts";
+import { validateEngine } from "./engine-manifest.ts";
 import { validateAssets, validateWorkspace } from "./workspace-manifest.ts";
 import { validateFolders, validateWorkerTypes } from "./worker-manifest.ts";
 import { validateScaffolds } from "./scaffold-manifest.ts";
@@ -581,13 +582,14 @@ function validateReachSections(m: PluginManifest, canonical: PluginManifest): vo
 
 /**
  * The account flow (API 2), and the API 3 delivery limits, native declarations, project detection,
- * what a project's history leaves out and where its assets live, the plugin's worker types, its
+ * the engine a game-engine plugin declares, what a project's history leaves out and where its assets live, the plugin's worker types, its
  * scaffolds and the folders its engine programs write to, its locks and the handlers of Genex's moments, and its
  * observers.
  */
 function validateHostSections(m: PluginManifest, canonical: PluginManifest): void {
   if (m.account !== undefined) canonical.account = validateAccount(m, canonical.actions);
   if (m.detect !== undefined) canonical.detect = validateDetect(m);
+  if (m.engine !== undefined) canonical.engine = validateEngine({ ...m, detect: canonical.detect });
   if (m.workspace !== undefined) canonical.workspace = validateWorkspace(m);
   if (m.assets !== undefined) canonical.assets = validateAssets(m);
   if (m.assetLimits !== undefined) canonical.assetLimits = validateAssetLimits(m);

@@ -170,6 +170,39 @@ export interface PluginManifestTool extends PluginTool {
  */
 export type PluginGameEngine = "web" | "unreal";
 
+/** What an engine's editor can do in play (`engine.play`); absent fields are the editor defaults. */
+export interface PluginEnginePlay {
+  /** The most players one play opens, 1–8. */
+  players?: number;
+  clock?: "none" | "freeze" | "step-locked" | "replayable";
+  /** Whether the mouse aims as a player's does. */
+  pointer?: boolean;
+  /** Whether the game's state can be read in play. */
+  state?: boolean;
+}
+
+/**
+ * API 3, capability `game-engine`: the engine your plugin declares (`engine` in the manifest).
+ * - `id` is your plugin's own id (2–40 lowercase letters, digits and dashes), never `web`.
+ * - `label` is the engine's name as people read it, 1–40 characters on one line.
+ * - `projectFiles` lists 1–4 extensions a linked project file may have, each one or two lowercase
+ *   dotted parts: `.uproject`, `.project.json`.
+ * - `fact` is the fact a linked game holds: one your `detect` declares, or one of Genex's own.
+ * - `projectInFolder` is true when the Loop needs the project inside the game folder, because its
+ *   save points hold it.
+ * - `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at most 4
+ *   each): computer use never drives them to build or play.
+ */
+export interface PluginEngineDeclaration {
+  id: string;
+  label: string;
+  projectFiles: string[];
+  fact: string;
+  projectInFolder: boolean;
+  play?: PluginEnginePlay;
+  apps?: { mac?: string[]; windows?: string[] };
+}
+
 /** A skill whose text sits in the manifest (1–16 000 characters); agents get all of it in their brief. */
 export interface PluginInlineSkill {
   name: string;
@@ -303,6 +336,8 @@ export interface PluginManifest {
   toolbar?: PluginToolbarItem[];
   /** API 2: up to four MCP servers the plugin ships, run by the host as connectors it owns. */
   mcpServers?: PluginMcpServer[];
+  /** API 3, capability `game-engine`: the engine the plugin declares. */
+  engine?: PluginEngineDeclaration;
   /** Host-managed account flow. Status may finish a pending browser authorization. */
   account?: { connect: string; unlock: string; disconnect: string; status: string; cancel?: string };
   /**

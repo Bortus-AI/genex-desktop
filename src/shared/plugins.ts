@@ -1,5 +1,5 @@
 import type { PluginToolAsset } from "./asset-making.ts";
-import type { GameEngine } from "./game-engine.ts";
+import type { EngineCatalog, EngineDeclaration, EngineId, GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
 import type { ObserveContext, PluginObserver } from "./observers.ts";
 import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
@@ -476,6 +476,11 @@ export interface PluginManifest {
    */
   detect?: FactRule[];
   /**
+   * API 3, capability `game-engine`: the engine the plugin declares, by its own id
+   * (`shared/game-engine.ts`): what a game linked to its projects builds in.
+   */
+  engine?: EngineDeclaration;
+  /**
    * API 3: what history (`ignore`) and writers' copies (`copySkip`) leave out of a folder holding
    * the plugin's facts, as patterns placed at each fact's folder (`shared/project-workspace.ts`).
    * `facts` names the facts it reaches; without it, those the plugin's `detect` declares.
@@ -510,6 +515,14 @@ export interface PluginManifest {
    */
   icon?: string;
 }
+
+/** The engines `manifests` declare, by id: the first declaration of an id wins. */
+export function engineCatalog(manifests: readonly Pick<PluginManifest, "engine">[]): EngineCatalog {
+  const catalog = new Map<EngineId, EngineDeclaration>();
+  for (const { engine } of manifests) if (engine && !catalog.has(engine.id)) catalog.set(engine.id, engine);
+  return catalog;
+}
+
 /** Where an installed plugin came from. Persisted in install records: never rename a value. */
 export const PluginSourceKind = {
   Bundled: "bundled",

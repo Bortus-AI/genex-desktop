@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unreal",
-  "version": "0.14.0",
+  "version": "0.15.0",
   "icon": "icon.svg",
   "name": "Unreal Engine",
   "publisher": "Genex",
@@ -12,6 +12,13 @@
     { "fact": "unreal-project", "files": ["**/*.uproject"] },
     { "fact": "unreal-plugin", "files": ["**/*.uplugin"], "notUnder": ["**/Plugins/"] }
   ],
+  "engine": {
+    "id": "unreal",
+    "label": "Unreal",
+    "projectFiles": [".uproject"],
+    "fact": "unreal-project",
+    "projectInFolder": true
+  },
   "tools": [
     {
       "name": "use-project",
