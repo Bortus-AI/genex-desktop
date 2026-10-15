@@ -99,6 +99,7 @@ import {
   showSteps,
 } from "./place-actions.ts";
 import { insertAsset } from "./insert-asset.ts";
+import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { openLaunch, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import {
@@ -170,18 +171,22 @@ export const RobloxTool = {
   UploadImage: AskFirstTool.UploadImage,
   StoreImage: AskFirstTool.StoreImage,
   InsertAsset: AskFirstTool.InsertAsset,
+  CheckModel: "check-model",
+  ImportModel: "import-model",
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
 /**
  * The tools that may run in a worker's copy of the game: its folder is never the game's, so the
- * script sync isn't told of it. The ask-first tools need no folder but a picture's.
+ * script sync isn't told of it. The ask-first and model tools need no folder but that of a file they read.
  */
 const COPY_TOOLS: ReadonlySet<string> = new Set([
   RobloxTool.CheckScripts,
   RobloxTool.LuauNote,
   RobloxTool.LuauFinish,
   ...Object.values(AskFirstTool),
+  RobloxTool.CheckModel,
+  RobloxTool.ImportModel,
 ]);
 const isRobloxTool = (name: string): name is RobloxTool => TOOL_NAMES.has(name);
 
@@ -751,6 +756,25 @@ function askFirstHandlers(deps: RobloxDeps, services: MomentServices) {
   } as const satisfies Partial<Record<RobloxTool, Handler>>;
 }
 
+/** The asset gate's check, and the import of a model that passes into the game's own Studio. */
+function modelHandlers(deps: RobloxDeps, services: MomentServices) {
+  return {
+    [RobloxTool.CheckModel]: async (args, context) => checkModelTool(args, context.directory),
+    [RobloxTool.ImportModel]: async (args, context) => {
+      const storage = await context.host(HostService.StorageRoot);
+      const game = context.project ?? "";
+      await linkFor(deps, services, storage, game);
+      const marks = agentFolder(storage, game);
+      return importModel({ now: deps.now }, args, {
+        ask: services.ask(game),
+        bound: () => services.bound(game),
+        ...(context.directory ? { folder: context.directory } : {}),
+        ...(marks ? { marks } : {}),
+      });
+    },
+  } as const satisfies Partial<Record<RobloxTool, Handler>>;
+}
+
 /**
  * The game a play tool's call is for: its Studio as the helper link has it bound, the helper, the
  * agent's marks and whether its link names a published place. The helper link starts once Studio
@@ -851,6 +875,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
     ...playHandlers(deps, services),
     ...askFirstHandlers(deps, services),
+    ...modelHandlers(deps, services),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {

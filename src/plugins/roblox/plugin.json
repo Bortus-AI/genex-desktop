@@ -263,6 +263,37 @@
       }
     },
     {
+      "name": "check-model",
+      "facts": ["roblox-project"],
+      "description": "Check a .glb or .gltf model in the game folder before it goes into the place: at most 20,000 triangles, closed (no holes), one material, at most 4 bones per vertex, its root at the origin, and textures at most 1024 by 1024 (sizes read from the PNG or JPEG). It answers each problem in plain words; fix them in Blender and export again. An FBX isn't checked: export it as .glb. Nothing leaves the computer.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string", "description": "The model's path in the game folder, such as models/chair.glb." },
+          "textureSide": {
+            "type": "number",
+            "description": "A stricter longest texture side than 1024, a whole number such as 512 for small props."
+          }
+        },
+        "required": ["file"]
+      }
+    },
+    {
+      "name": "import-model",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Add a .glb or .gltf model from the game folder to this game's place as an anchored MeshPart at the origin, in studs (glTF's metres converted). It runs check-model first and adds only a model that passes. Only the shape comes in: give it a SurfaceAppearance for its textures. Studio uploads it to the person's Roblox account when they publish the place. The person approves each import on a card.",
+      "confirmation": "Add this model to the game's place? Genex checks it first, then Studio adds it. It is uploaded to your Roblox account when you publish the place, and Roblox moderates it there.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string", "description": "The model's path in the game folder, such as models/chair.glb." },
+          "name": { "type": "string", "description": "The part's name in the place. Leave out for the file's name." }
+        },
+        "required": ["file"]
+      }
+    },
+    {
       "name": "luau-note",
       "audience": "harness",
       "description": "For Genex only: at a worker's end, the Luau checks over the scripts changed since they last passed, noted with each problem's file and line.",

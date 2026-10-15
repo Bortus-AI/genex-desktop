@@ -212,6 +212,8 @@ const ROBLOX_ONLY_TOOLS = [
   "roblox__upload-image",
   "roblox__store-image",
   "roblox__insert-asset",
+  "roblox__check-model",
+  "roblox__import-model",
 ];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */

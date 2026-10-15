@@ -57,6 +57,9 @@ through the JS API imports `@typescript/typescript6`.
 - `roblox-mac.ts`: a fake Mac for the Roblox plugin's backend (Studio's app a stand-in; home, storage
   and games real temporary folders; Studio's running, answering and open places set by the test)
   and `hostFor`, Genex's side of a plugin call in one game, keeping links as the host does.
+- `roblox-models.ts`: small synthetic glTF models for the Roblox plugin's asset gate (a GLB writer, a
+  cube made of grids, a real grey PNG of any size) and the builders of `fixtures/roblox-models/`,
+  each model failing the gate for one reason; `writeModelFixtures` writes them again.
 - `engines.ts`: the Unreal plugin's and the toy engine's `engine` declarations, read from their
   manifests, and a catalog of both (what `PluginRegistry.engines()` answers), for linking games.
 - `plugin-author.ts`: the Genex plugin's plugin-author skill read as an agent reads it (`genex__skill`,

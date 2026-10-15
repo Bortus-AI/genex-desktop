@@ -452,13 +452,14 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
         "segment-mesh",
         "roblox-playtest",
         "insert-asset",
+        "import-model",
         "load-place",
         ...ENGINE_PLAY_TOOLS,
         "players-state",
         "cheat-remotes",
         "phone-check",
       ],
-      "only what changes or plays the place waits on the person (Roblox's AI tools and inserts, the load, the play lane and the judges' probes in it); reading, exporting and sending pictures never do",
+      "only what changes or plays the place waits on the person (Roblox's AI tools, inserts and model imports, the load, the play lane and the judges' probes in it); reading, exporting, checking models and sending pictures never do",
     );
     for (const name of [
       "open-for-run",
