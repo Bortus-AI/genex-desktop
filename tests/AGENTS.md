@@ -74,6 +74,10 @@ through the JS API imports `@typescript/typescript6`.
 - `worker-pool-host.ts`: a fake host for the seed's worker pool (real git in a temporary game and
   its copies, worker sessions the test ends, every record the pool appends), for `worker-pool` and
   `worker-events`.
+- `isolated-import.ts`: imports a module in a worker thread of its own and answers with its
+  exports' types or the error that stopped it linking. Node never frees a linked module, so a test
+  that loads a whole harness from one fresh workspace after another (`seed-upgrade`) links each in
+  a worker; otherwise every copy stays in the file's heap and a CI runner's heap runs out.
 - `git.ts`, `tmp.ts`: temporary repositories and directories with cleanup. A test removes its own
   temporary folder with `removeTree` (or leaves it to `tmpDir`), not a bare `rm`: on Windows a
   sandboxed test file's srt-win entries re-propagate through all of `%TEMP%` and hold each folder
