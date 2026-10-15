@@ -13,6 +13,12 @@ import type { EventEnvelope } from "../../src/shared/event-log.ts";
 import type { ConversationRecord, GameProject, ProjectAssets } from "../../src/shared/studio-api.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
 import { createRefresher } from "../../src/renderer/state/refresher.ts";
+import {
+  computerControlOffered,
+  computerControlOn,
+  setComputerControl,
+} from "../../src/renderer/use-computer-control.ts";
+import { StudioPlatform } from "../../src/shared/boot.ts";
 import { UpdateAction } from "../../src/shared/app-update.ts";
 import {
   createEventLogStore,
@@ -949,6 +955,26 @@ function rendererFiles(): string[] {
     .filter((file) => /\.tsx?$/.test(file))
     .map((file) => path.join(root, file));
 }
+
+describe("Settings → Permissions: Let agents control your computer", () => {
+  it("is off unless the host's settings say it is on, and offered only on macOS", () => {
+    assert.equal(computerControlOn(null), false, "before the settings load");
+    assert.equal(computerControlOn({ learning: true, selfImproving: false }), false, "an older host's view");
+    assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: false }), false);
+    assert.equal(computerControlOn({ learning: true, selfImproving: false, computerControl: true }), true);
+    assert.equal(computerControlOffered(StudioPlatform.Mac), true);
+    for (const platform of [StudioPlatform.Windows, StudioPlatform.Linux, ""])
+      assert.equal(computerControlOffered(platform), false, platform || "before main answered");
+  });
+
+  it("the switch sends only this setting and shows what the host saved", async () => {
+    const fake = fakeStudioApi();
+    fake.stub("setSettings", async () => ({ learning: true, selfImproving: false, computerControl: false }));
+    const view = await setComputerControl(fake.api, true);
+    assert.deepEqual(fake.callsOf("setSettings"), [[{ computerControl: true }]]);
+    assert.equal(computerControlOn(view), false, "the switch follows the host's answer, not the click");
+  });
+});
 
 describe("components read the stores through selectors", () => {
   it("never calls a store hook without one, and never reaches a store's whole state", () => {

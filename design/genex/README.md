@@ -636,7 +636,7 @@ do not replace them with hover-only controls.
 
 ## Engine panels
 
-Every plugin that works with an engine's or tool's files (Unreal now; Unity, Godot, Blender, Roblox
+Every plugin that works with an engine's or tool's files (Unreal and Unity now; Godot, Blender, Roblox
 next) follows one pattern. Its strip button shows only on a game that is that engine: the game's
 facts name its project (`toolbar[].facts`), or its chat chose the engine before the project exists
 (the status's `shown`). A plugin that is on adds nothing to other games. The button opens one panel,

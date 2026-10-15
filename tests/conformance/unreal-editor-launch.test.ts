@@ -34,7 +34,12 @@ import {
   systemOpener,
 } from "../../src/plugins/unreal/editor-launch.ts";
 import { hotLibraryLoaded } from "../../src/plugins/unreal/cpp-module.ts";
-import { editorHoldsLog, heldProjectNames, namesInLsof } from "../../src/plugins/unreal/editor-holds.ts";
+import {
+  crashReporterHolds,
+  editorHoldsLog,
+  heldProjectNames,
+  namesInLsof,
+} from "../../src/plugins/unreal/editor-holds.ts";
 import {
   type Engine,
   HelperState,
@@ -147,6 +152,8 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     openError?: Error;
     /** Ports another app listens on. */
     listening: Set<number>;
+    /** Ports Unreal's crash reporter holds after a crash (they listen too). */
+    crashReporter?: Set<number>;
     /** What the shown project's own Unreal log says, if it has one. */
     log?: EditorLog;
     /** What other projects' own logs say, by their real `.uproject`; a project not named here has `log`. */
@@ -176,6 +183,7 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     },
     heldProjects: async () => live.held ?? [],
     portListening: async (port) => live.listening.has(port),
+    crashReporterHolds: async (port) => live.crashReporter?.has(port) ?? false,
     editorAnswers: async (port, project) => {
       asked.push(port);
       return live.answering && (live.serving === undefined || live.serving === project);
@@ -1315,6 +1323,28 @@ describe("The Unreal panel's next step", () => {
     assert.equal((await f.act("status", { project: f.drift })).next, "open");
   });
 
+  // A crashed editor's crash reporter keeps the project's port: Unreal crashed, which setup would not fix.
+  it("set up, Unreal closed, its crash reporter on the port: Unreal crashed, never sent to setup", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.listening.add(set.port);
+    f.live.crashReporter = new Set([set.port]);
+    const status = await f.act("status", { project: f.drift });
+    assert.deepEqual([status.next, status.portTaken], ["crashed", false]);
+    f.live.listening.delete(set.port);
+    f.live.crashReporter.clear();
+    assert.equal((await f.act("status", { project: f.drift })).next, "open", "the report closed: open it again");
+  });
+
+  it("set up, Unreal reopened while its crash reporter holds the port: Unreal crashed, not a blocked port", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.running = true;
+    f.live.log = ownLog(25 * SECOND, { openedAt: START + 5 * SECOND, portBlocked: true });
+    f.live.crashReporter = new Set([set.port]);
+    assert.equal((await f.act("status", { project: f.drift })).next, "crashed");
+  });
+
   it("set up, Unreal running with another project and its port held: opens once Unreal is free, never sent to setup", async () => {
     const f = await launchFixture();
     const set = await f.act("setup", { project: f.drift });
@@ -2079,6 +2109,35 @@ describe("The projects Unreal has open, by the logs its editors hold", () => {
     it(`reads ${JSON.stringify(line)} as ${JSON.stringify(names)}`, () => {
       assert.deepEqual(namesInLsof(`${line}\n`), names);
     });
+});
+
+// A crashed editor's crash reporter inherits its sockets and keeps the project's port until it is closed.
+describe("Unreal's crash reporter holding a project's port", () => {
+  const ASK = [LSOF, ["-w", "-n", "-P", "-t", "-a", "-c", "CrashRep", "-iTCP:18090", "-sTCP:LISTEN"]];
+
+  it("is asked of lsof by the reporter's name and the port, listening only", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "37769\n" });
+    assert.equal(await crashReporterHolds(18090, "darwin", runner), true);
+    assert.deepEqual(calls, [ASK]);
+  });
+
+  it("is false when lsof finds no reporter there, and unknown when lsof can't answer", async () => {
+    assert.equal(await crashReporterHolds(18090, "darwin", lsofStandIn({ exit: 1 }).runner), false);
+    for (const answer of [{ error: "ENOENT" }, { killed: true }, { exit: 2 }])
+      assert.equal(
+        await crashReporterHolds(18090, "darwin", lsofStandIn(answer).runner),
+        undefined,
+        JSON.stringify(answer),
+      );
+  });
+
+  it("asks nothing off a Mac, or for a port Unreal can't use", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "1\n" });
+    assert.equal(await crashReporterHolds(18090, "win32", runner), undefined);
+    for (const port of [0, -1, 1.5, 70_000, Number.NaN])
+      assert.equal(await crashReporterHolds(port, "darwin", runner), undefined, String(port));
+    assert.deepEqual(calls, []);
+  });
 });
 
 describe("A project's log naming it in another spelling", () => {

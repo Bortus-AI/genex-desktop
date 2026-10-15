@@ -6,7 +6,7 @@ One conversation per game. User messages are right-aligned bubbles, images above
 ones fold with Show more. Replies are Markdown prose. Any existing file the chat
 names is a link: game Markdown and images open beside it, others in their app (programs
 only shown). Only the prompt bar writes and sends; a pasted image
-adds the picture, not its file name.
+adds the picture, not its filename.
 
 Chat work shows a short status and elapsed time; waiting is static. A running build is one card,
 its parts counted; it opens to their checklist and Open in Builds. Run workers get no lines.
@@ -27,12 +27,12 @@ quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any m
 - An `ask_user` question opens the question panel: options and a typed-answer row; Send answer
   confirms a choice. Chat about this puts it aside for the composer; any reply settles it.
   Progress is never a question; an unsaid game, look or engine before a build is.
-- Permission requests need an explicit answer, pinned above the composer; a worker's plugin
-  questions appear in its run's conversation, cancelled with it. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
+- Permission requests need an answer, pinned above the composer; a worker's plugin
+  questions appear in its run, cancelled with it. Plugins ask Approve or Decline; Claude asks **Allow**, the grant it offers
   (**Always allow …**) or **Deny**, or takes words instead; a plan leaving Plan is approved
   into a mode. Stop, the turn's end or a restart withdraws one; answered ones collapse.
-- Approved per session and app, cua-driver drives the Mac and web pages (clean
-  Chrome); ⌃⌥⌘Esc stops it ([computer use](../computer-use.md#the-persons-computer)).
+- Settings → Permissions can let cua-driver drive the Mac and web pages, approved per session
+  and app; ⌃⌥⌘Esc stops it ([computer use](../computer-use.md#the-persons-computer)).
 - A game reply's one-line `bash` block offers **Run** and **Copy**; output shows below and
   reaches the agent unseen, reopening no build.
 - **Plan mode** (Add's bulb) is a one-message choice: the plan is Markdown with **Approve**,

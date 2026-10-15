@@ -419,7 +419,8 @@ capabilities. Nothing else counts, so another app's MCP server on the port is ne
 Unreal. Epic's answer names no project, so the bridge and the status also ask the Genex editor
 helper's `project_file` which project the editor has open, and use the editor only when it names
 this project's real `.uproject`; another project's editor on the port gets no call and never
-shows Connected. The panel and toolbar status remember a project's last good answer for 10 s:
+shows Connected. Epic sends that tool's answer as an event stream it keeps open for about 15 s
+after the answer, so the check reads up to the first event and closes it. The panel and toolbar status remember a project's last good answer for 10 s:
 while it stands they say yes at once and ask the editor again in the background, so status stays
 fast with Unreal behind another app and one stalled request doesn't flip Connected; a failed ask
 is never remembered, so a stopped editor reads as not answering one refresh later. A record whose
@@ -928,7 +929,7 @@ this game", which leads, with Open in Unreal second, for a set-up project the ga
 one button (`whereItStands` is shared with `status`). `status` returns the engines, the list, the
 shown project and `next`, the panel's one primary step
 (`PanelStep`: get-unreal, choose, quit-first, set-up, update-helper, open, starting, connected,
-switch, not-answering, port-blocked, open-when-free). The shown project is, in order: the one the panel names,
+switch, not-answering, port-blocked, open-when-free, crashed). The shown project is, in order: the one the panel names,
 only ever a project the person picked there or the only one found (remembered in `chosen.json`);
 the open game's linked project (when that can't be read, its error over the list, never another
 game's project); the project chosen last; the newest. `chosen` is false for the newest and for a
@@ -975,7 +976,19 @@ panel never offers to quit a loading editor. Genex's own Starting record is drop
 project answers. `firstStart` is true until Unreal's recent list names the project before this
 start; the panel shows its first-start hints only then, and while a project starts it always says
 the panel may close (the Unreal button says Ready when it is done). With Unreal closed and another app on a
-set-up project's port, `next` is set-up again, which moves the port (not yet on Windows). Xcode
+set-up project's port, `next` is set-up again, which moves the port (not yet on Windows). When
+that app is Unreal's own crash reporter (lsof finds `CrashRep…` listening there on a Mac: a crashed
+editor's reporter inherits its sockets), `next` is crashed instead, closed or reopened alike: the
+panel and the Live card say Unreal crashed and to close its crash report window, then open the
+game again, and nothing moves the port. On a Mac, status's `rayTracingRisk` says the shown
+project's `Config/DefaultEngine.ini` turns hardware ray tracing on (`ray-tracing.ts`: the last
+`r.RayTracing` in the renderer settings): UE 5.8 rendering a ray-traced level behind another app
+hangs the GPU (on an M4 Max it crashed within a few plays, throttled ones too at startup), so the
+panel notes it with Turn off ray tracing (`ray-tracing-off`, confirmed first), which sets every
+such line to False, Lumen lighting the level in software from the next start. A new game made on a
+Mac is made without it (`create-project.ts`, after Epic's own values), and the bridge, the editor
+queue and the computer's play lift the background throttle on a Mac only for an editor that says
+`r.RayTracing` is 0 (`editor-throttle.ts`). Xcode
 is recommended to every Mac user, since without it Genex works in Blueprints only: status's `xcode`
 (`xcode.ts`) gives This computer an Xcode row, only under a shown project, that says to get
 Xcode, to open it once to finish its setup, to run one Terminal command (with Copy) when another
@@ -1818,6 +1831,207 @@ instead of only showing the note (`main/core/plugin-hooks.ts` `takeCheckpoint`,
 `DelegateRequest.onCheckpoint`; in Plan mode, while the person plays, or when Genex can't tell
 whether they do, it changes nothing). With the Unreal plugin off, a linked Unreal game's tool still
 snapshots the game folder, running no step: the session is told to save in the editor first.
+
+### The bundled Unity plugin
+
+Unity (`src/plugins/unity`, id `unity`, off until turned on) reaches the person's open Unity editor
+through Unity's Pipeline package (`com.unity.pipeline`), the HTTP server an editor runs on
+127.0.0.1 while a project holding the package is open in it. It asks for no engine link: a game's
+Unity project is the one in the game's own folder, found with the walk and the rule the host finds
+the `unity-project` fact by (the game's own folder first, then `unity/`, then the first by path;
+`project-folder.ts`), so the game's checkpoints and Rewind cover it. A project outside the game's
+folder is not reached; a Unity project opened as a project of its own is its game's folder. Genex
+runs the harness tool `find-project` at `turn.start` and `run.prepare` of a game holding the fact:
+it keeps the real paths of the project and of the game's folder in the plugin's storage as
+`projects/<game>.json`, which the connector reads for every call (it knows only its game's id, from
+its folder `mcp/<game>`) and believes only while that folder is still a Unity project at exactly
+that path. The handler's trouble is a note, never a block.
+
+The plugin makes, sets up and opens that project itself (`backend.ts`), with no Unity CLI and no
+sign-in of its own:
+
+- `new-game` (`makes: ["unity-project"]`, `ready: "engine-status"`, the scaffold `Unity game`)
+  writes an empty project into the game's folder as `unity/` (`new-project.ts`): `Assets/`,
+  `ProjectSettings/ProjectVersion.txt` naming the newest installed Unity 6, and
+  `Packages/manifest.json` asking for the Pipeline package at the version this plugin was run
+  against (`PIPELINE_VERSION`), the built-in modules of Unity's own empty 3D project that this
+  editor ships and its UI package. Unity writes the rest on first open. The project is built in a
+  hidden sibling and renamed into place; a game that already holds a Unity project, or anything
+  named `unity`, is refused with nothing changed. Once the editor answers, the plugin turns Run In
+  Background on (a game otherwise runs at about 10 frames a second while Unity is behind other
+  windows) and replaces the untitled scene a new project opens with by a saved
+  `Assets/Scenes/Main.unity` holding a camera and a light, so no later save has a file name to ask
+  for (`editor-life.ts` `firstSetup`). The harness tool `engine-status` answers the engine
+  question's `{ready, note}`: ready with a Unity 6 installed, else that the person installs one in
+  Unity Hub.
+- `setup` and `undo-setup` (each with a `confirmation`) add the Pipeline package's line to an
+  existing project's manifest, or take it back (`setup.ts`): the manifest is read by real path
+  inside the project, never through a link out of it; a copy is kept in the plugin's storage before
+  the first change (`setup/<game>/manifest.json`); what was added is recorded, so Undo removes
+  exactly that line and only while it is still the version Genex wrote. A project older than
+  Unity 6 is refused.
+- `open-editor` opens the project in the editor of exactly the version its `ProjectVersion.txt`
+  names (`editor-open.ts`), never another one, and nothing when an editor already has it open.
+  `new-game` and `setup` open it the same way. A Mac opens the app through `/usr/bin/open -n -a`,
+  so the editor is the person's own app, not a child of Genex. The call then waits up to 150 s for
+  the editor's `/api/status` to say `ready`, says which it was, and turns Pipeline's auto-tick on
+  so the editor keeps running its loop while unfocused: the chat's own wait on `health` after a
+  kind change follows an engine link, which Unity has none of.
+- `restart-editor` (a `confirmation`, no lock) ends the game's editor and opens the project again,
+  for an editor that stopped answering while somebody is there to confirm it. It waits 120 s for
+  the new editor, not 150: ending the old one may take half a minute, and the host ends one plugin
+  call at 190 s.
+
+The six harness-only `play-*` tools implement the shared editor computer contract
+([computer use](computer-use.md#game-engines-and-other-targets)). Each requires the `editor` lock
+and the `unity-project` fact, so chat agents and judges can play this folder's Unity game without
+an engine link. Pipeline carries Play mode, Game-view captures, pause and input; keyboard and
+mouse control require an installed, active Input System package. Genex never adds that dependency
+or changes the project's input settings implicitly. Unsupported input answers with the reason.
+Fixed host-owned Pipeline code supplies the game clock, player state and relative mouse events;
+agent-supplied C# remains subject to the connector's existing gate.
+
+Whether an editor has a project open is read from the computer's processes (`processes.ts`: a
+Unity editor whose command line names the project with `-projectPath`, in either spelling), and
+where they can't be listed from a descriptor whose process still runs. Unity's lock file
+(`Temp/UnityLockfile`) is no sign: a killed editor leaves it and its descriptor behind. Installed
+editors are found where Unity Hub puts them (`editors.ts`): its own folder
+(`/Applications/Unity/Hub/Editor/<version>/Unity.app`) and the folder Hub records in
+`secondaryInstallPath.json`; an editor that is a link to one is not listed.
+
+#### The panel and the toolbar button
+
+The toolbar button (`unity:editor`, labelled Unity, only on a game with a Unity project: `facts`) opens the plugin's
+one panel (`panel.html`, also on the plugin's page). The button's status action `toolbar-status`
+and the panel's `status` answer the same look (`panel-status.ts`), which only reads: the installed
+editors, the project the game's folder holds and whether its manifest asks for the Pipeline
+package, whether an editor has it open, and one `GET /api/editor_status`. It sends the editor no
+command, so the toolbar may ask as often as it does.
+
+| Step (`PanelStep`) | When | Badge | The panel offers |
+| --- | --- | --- | --- |
+| `get-unity` | No Unity 6 is installed and the game has no project to open | Get | Get Unity |
+| `no-game`, `no-project` | No game is open, or its folder holds no Unity project | none | Words only |
+| `old-project` | The project was saved with a Unity older than 6 | Not set up | Open Unity Hub |
+| `not-set-up` | Its manifest does not ask for the Pipeline package | Not set up | Set up |
+| `no-editor` | The Unity it was saved with is not installed | Not open | Open Unity Hub |
+| `not-open` | No editor has it open | Not open | Open in Unity, Undo setup |
+| `opening` | An editor has it open and does not answer yet | Starting | Restart Unity |
+| `ready` | Its main thread answers (the panel says when it plays or compiles) | Ready | Restart Unity |
+| `stalled` | Its server is there and its main thread runs nothing | Stalled, `warn`, `attention` | Restart Unity |
+
+Every badge but Stalled is a `dot` (grey, amber while Starting, green once Ready). The first three
+steps never reach the button, which a game without a Unity project doesn't show.
+
+The actions take nothing from their arguments: each acts on the open game's own project.
+`open-editor`, `setup`, `undo-setup` and `restart-editor` run the steps of the agent's tools of
+those names and answer in codes the panel words itself (an `Opening`, `{changed, version, opening}`,
+`{changed}`, `{ended, opening?}`); a refusal is worded for the person, not for an agent.
+`get-unity` opens Unity Hub where its installer puts it (`/Applications/Unity Hub.app`, a folder
+that is no link), else `https://unity.com/download`. These five are `native`, so a fixture profile
+refuses them; `setup`, `undo-setup` and `restart-editor` carry a `confirmation`. No action makes a
+project: that changes what a game is, which Genex snapshots around a tool that declares `makes`,
+so a game without a project is sent to the chat. The panel asks `status` every 3 s while it is in
+view and waits 200 s for an action that opens Unity, past the host's limit for one call, so the
+host's answer always comes first; the host asks the button again when the panel closes. `tests/conformance/unity-panel.test.ts` runs the real panel against the
+real backend in headless Chrome (opt-in: `STUDIO_BROWSER_TESTS=1`).
+
+#### An editor that stops answering
+
+Unity's main thread runs nothing while a system dialog is up. A save of a scene that has no file
+yet opens one (the system save panel), and Pipeline does not see it: `/api/status` keeps saying
+`ready`, `/api/dialog` lists none, and every command waits a minute, then fails with "Main thread
+operation timed out". Three things keep an unattended agent out of it and get it back out:
+
+- **No such save is sent.** The connector lists the open scenes before a `save_all`, or a
+  `save_scene` with no `path` (alone or in a `batch`), and refuses it while a scene has no file.
+  Genex's own save (`saveWork`) never calls `save_all`: it saves each named scene with unsaved work
+  by its path, then `AssetDatabase.SaveAssets()`, and counts an unsaved untitled scene as work it
+  could not save. `new-game` leaves no untitled scene behind.
+- **A stall is read as one.** Before each command the connector looks at the main thread
+  (`GET /api/editor_status`, ten seconds): no answer while the server itself answers is
+  `PipelineProblem.Stalled`, the command is not sent, and the agent is told to wait, then to call
+  `restart-editor`. Pipeline's own "Main thread operation timed out" reads the same; neither is
+  recorded as outcome unknown, since the command never ran.
+- **A run recovers by itself, when nobody is there.** `editor-state` at `health` is pending while
+  Unity starts, reloads or imports, and for the first two minutes of a stall (`STALL_GRACE_MS`, kept
+  between checks in `health/<game>.json`); after that it blocks only when nobody has touched the
+  computer's keyboard or pointer for five minutes (`AWAY_AFTER_MS`, read from the Mac's
+  `HIDIdleTime`): with somebody there the dialog may be their own, so the check stays pending and
+  asks them to answer it, and their editor is never ended under them. Where the idle time can't be
+  read, somebody may be there. A block, like no editor having the project open at all, is followed
+  by `reopen-editor` at `crash`, which ends what is left of the editor and opens the project again. Ending is
+  a clean `EditorApplication.Exit(0)` when the main thread answers and a signal to the project's own
+  processes (TERM, then KILL) when it does not. Unsaved editor work is lost with a stalled editor,
+  which is why every checkpoint saves first.
+- **The reopened editor has nothing to ask.** An editor that was killed or crashed leaves its scene
+  backups in the project (`Temp/__Backupscenes`), and the next Unity to open it asks whether to
+  recover them, in a dialog before the project loads. Before Genex opens a project no editor has
+  open, it moves that folder into the plugin's storage (`recovered/<game>/<time>/`; a folder of the
+  project itself, never through a link out of it) and says where: the work is kept, not deleted
+  (`setAsideBackups`).
+
+#### Genex's moments and the lock
+
+| Handler at its moment | What it does (`editor-moments.ts`) |
+| --- | --- |
+| `open-for-run` at `run.prepare` | Opens the editor and waits; a project with no Pipeline package, or an editor that does not answer, closes the run with the reason. |
+| `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In Play mode: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
+| `scene-shots` at `checkpoint.after`, and as the `viewport` observer (`live: "stills"`) | The main camera's still (1280×720) as an image, in a run and for the reviewer; a chat's checkpoint takes none. A still of one flat colour (a scene that builds itself only when Play starts) is no image but a note saying so; the skill asks agents to build the level into the scene with an Editor script, saving the meshes, textures and materials it makes as assets. |
+| `save-all`, then `end-editor`, at `restore.before` | Stops a play, saves, ends the editor and records that it did (`restore/<game>.json`); work it can't save, or an editor that won't end, blocks the restore. |
+| `reopen-editor` at `restore.after` | Opens the project again only when `end-editor` closed it for this restore. |
+| `editor-state` at `health`, `reopen-editor` at `crash` | As above. |
+
+The `editor` lock (`per: project`) has `editor-activity` as its `personFirst` probe: the person is
+using the editor while it plays a game the agent did not start, and `unsaved` is the open scenes
+with unsaved work. The connector marks the agent's own play (`agent-play.ts`: a marker in its
+folder from its `editor_play` until its `editor_stop`, believed for half an hour), so the agent's
+play never makes its own calls wait. An editor that can't be asked answers nothing: Genex can't
+tell, and the agents' calls wait. A stalled one says nobody is there once the computer was left
+alone for five minutes, so that the recovery above can take the lock. `save-all`, `end-editor`,
+`reopen-editor`, `open-for-run` and `scene-shots` need the lock; the probe, `editor-state` and
+`restart-editor` do not: a restart is the person's own confirmed word, and must not wait on a probe
+a stalled editor can't answer.
+
+#### The connector
+
+The connector `unity-editor` (`editor-mcp.ts`; scoped to `unity-project`; it needs the `editor`
+lock) offers three tools: `list_commands` (the editor's own catalogue: each command's name,
+description and tags), `describe_command {command}` (its parameters: name, type, required,
+description), both reads, and `run_command {command, parameters?}`. A call finds its editor by the
+descriptor the package writes into the project (`Library/Pipeline/.unity-pipeline-port`: process,
+port, token), read anew for every try, by real path inside the project, and only while that process
+runs: Genex chooses and keeps no port. Requests go to `127.0.0.1` with the bearer and follow no
+redirect (`pipeline.ts`). A call waits up to a minute for an editor that is busy (503: importing, a
+dialog of Unity's own), reloading (nothing listens) or restarted (401: the descriptor is read again,
+once), then says which. A command is never sent twice: one that was sent and got no answer is
+recorded as outcome unknown. A captured picture (`capture_game_view`, `capture_scene_view`, in a
+batch too) is handed over as an MCP image, at most four an answer, with a note in place of its
+base64 text.
+
+Before a command is sent the gate (`pipeline-gate.ts`) checks it against the catalogue just read.
+It refuses a name the editor does not list; the commands agents never run (`eval`, `eval_file`,
+`menu`, `quit`, `build`, `switch_build_target`, `set_authoring_root`,
+`set_runtime_pipeline_settings`, and every `package_` command but `package_list`, `package_search`
+and `package_status`; `list_commands` leaves them out and `describe_command` describes none); and a
+file outside the game's folder once links are resolved. `run_script` stays available: it compiles
+and runs a C# file of the game's own folder, which the game's checkpoints keep, and is how a scene
+is built with code. Which parameters name files comes from the catalogue's own types: a text
+parameter (`String`, `String[]`) named `path`, `paths`, `save_path`, `output`, `outputPath`,
+`file`, `filename`, `assemblyDir`, `source`, `destination` or `scene_path` is one, relative to the
+Unity project, while an `ObjectRef` (an asset path, a GUID, a hierarchy path such as `/Player`) is
+Unity's to resolve inside the project. The bound is the game's folder, not only the Unity project
+in it, so `import_asset` can take a file of the game's own `assets/`. Every operation of a `batch`
+(`{id?, command, params}`) is held to the same rules, a batch inside a batch is refused, and so is
+a file named by an earlier operation's answer (`$0.field`), which no check can read ahead of time.
+Project settings and the build's scene list stay available: a game needs its tags, layers, input
+and scenes. The gate is a guardrail for the person's editor, not a sandbox: C# an agent writes into
+the project compiles and runs in that editor, and Genex's own steps run `eval` there themselves
+(to save assets, to set Run In Background, to exit).
+
+Not there yet: a still of every camera (only the main one), and a dialog of Unity's own
+(`blocked_by_dialog`) answered for the person: it is waited out, then ends in the same restart. All of the above was run against Pipeline 0.8.0-exp.1 on Unity 6000.3.10f1
+(2026-10-14) with the built package.
 
 ## Panels and trusted approval
 

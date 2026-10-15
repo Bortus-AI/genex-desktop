@@ -79,6 +79,8 @@ const SESSION_HEADER = "mcp-session-id";
 const PLAIN_PORT = /^[1-9]\d*$/;
 const LINE_BREAK = /\r?\n/;
 const SSE_DATA = "data:";
+/** The blank line that ends one server-sent event. */
+const EVENT_END = /\r?\n\r?\n/;
 
 /**
  * What setup keeps in the plugin's storage: one folder per project with its record, the panel's
@@ -226,16 +228,46 @@ const INITIALIZE = JSON.stringify({
   params: { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: { name: "genex-studio", version: "0" } },
 });
 
+/** The data of an event stream's first event that carries any, or undefined while none has. */
+function firstEventData(text: string): string | undefined {
+  const events = text.split(EVENT_END);
+  // The last piece is an event still arriving, unless the stream has ended.
+  for (const event of events.slice(0, -1)) {
+    const data = event
+      .split(LINE_BREAK)
+      .filter((line) => line.startsWith(SSE_DATA))
+      .map((line) => line.slice(SSE_DATA.length).trimStart());
+    if (data.length > 0) return data.join("\n");
+  }
+  return undefined;
+}
+
+/**
+ * The text of an event stream up to the end of its first event with data. Epic's server keeps a
+ * tool call's stream open after the answer until the connection idles out (about 15 s), so
+ * waiting for the stream to end would miss every deadline.
+ */
+async function firstEvent(body: ReadableStream<Uint8Array>): Promise<string | undefined> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      text += decoder.decode(value, { stream: !done });
+      if (done) return firstEventData(`${text}\n\n`);
+      const data = firstEventData(text);
+      if (data !== undefined) return data;
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+  }
+}
+
 /** The JSON-RPC message an answer carries, whether sent as JSON or as one server-sent event. */
 async function answerMessage(response: Response): Promise<unknown> {
-  const text = await response.text();
   const events = (response.headers.get("content-type") ?? "").includes("text/event-stream");
-  const json = events
-    ? text
-        .split(LINE_BREAK)
-        .find((line) => line.startsWith(SSE_DATA))
-        ?.slice(SSE_DATA.length)
-    : text;
+  const json = events && response.body ? await firstEvent(response.body) : await response.text();
   try {
     return JSON.parse(json ?? "");
   } catch {

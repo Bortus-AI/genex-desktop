@@ -2095,6 +2095,7 @@ describe("the one Loop's save points in its messages", () => {
       appSaved: false,
       restart: false,
       cppRestart: false,
+      judge: false,
       savePoints: points,
       now: 0,
       softDeadline: 60 * MINUTE,
