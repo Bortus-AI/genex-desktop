@@ -1885,16 +1885,28 @@ button.chat-header-title:hover {
   width: 28px;
   height: 28px;
 }
-/* Only the game list scrolls. Its 3px thumb sits 2px from the border and shows while the sidebar is hovered or scrolling. */
+/* The game list scrolls, the friends under it scroll on their own, and what waits to be installed
+ * stands at the foot. Each thumb is 3px, 2px from the border, shown while the sidebar is hovered or
+ * scrolling. */
 .sidebar-list {
-  position: relative;
   display: flex;
   flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The games (Create's or Play's Recent) take what they need and scroll past it; the friends stand
+ * right under them. */
+.sidebar-lists {
+  position: relative;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
   min-height: 0;
 }
 .sidebar-scroll {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
   /* The scrollbar's 7px stay reserved, so a selected game keeps its right inset with no scrollbar. */
@@ -1923,54 +1935,40 @@ button.chat-header-title:hover {
   transition: opacity var(--duration-quick);
   pointer-events: none;
 }
-.game-sidebar[data-scrolled="true"] .sidebar-fade {
+.game-sidebar[data-scrolled="true"] .sidebar-lists > .sidebar-fade {
   opacity: 1;
 }
-/* What waits to be installed floats over the foot of the game list: Update plugins while plugin
- * releases wait, Relaunch to update while a downloaded version does. The list scrolls under it and
- * fades out above it, as it does under the chrome at the top; its last game and its scrollbar stop
- * clear of the buttons. */
-.sidebar-footer {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 4px 8px 8px;
-  background: var(--sidebar);
+/* The games end in a long fade above the friends: a soft gap between the two, and a row cut by the
+ * list's foot reads as more below. The list's foot is as deep, so its last game ends clear of it. */
+.sidebar-lists > .sidebar-scroll {
+  padding-block-end: 40px;
 }
-.sidebar-footer::before {
+.sidebar-lists::after {
   content: "";
   position: absolute;
-  inset-inline: 0;
-  bottom: 100%;
-  height: 24px;
+  inset-inline: 0 7px;
+  bottom: 0;
+  height: 56px;
   background: linear-gradient(transparent, var(--sidebar));
   pointer-events: none;
 }
-.sidebar-list:has(.sidebar-footer) .sidebar-scroll {
-  padding-block-end: 72px;
-}
-.sidebar-list:has(.sidebar-footer) .sidebar-scroll::-webkit-scrollbar-track {
-  margin-block-end: 48px;
-}
-/* Both wait: the list stops one button and its gap higher. */
-.sidebar-list:has(.sidebar-update + .sidebar-update) .sidebar-scroll {
-  padding-block-end: 112px;
-}
-.sidebar-list:has(.sidebar-update + .sidebar-update) .sidebar-scroll::-webkit-scrollbar-track {
-  margin-block-end: 88px;
+/* What waits to be installed, at the foot of the list: Update plugins while plugin releases wait,
+ * Relaunch to update while a downloaded version does. */
+.sidebar-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-block-start: auto;
+  padding: 4px 8px 8px;
 }
 /* The Genex account at the sidebar's foot (`play/ProfilePlate.tsx`), under the list in Play and in
- * Create: the name opens the account's menu, the friends glyph beside it opens Friends, with the
- * requests waiting on its corner. */
-/* The account plate: its name block, then (4px on, so Pro has room) the friends stack (`people.css`). */
+ * Create: the name opens the account's menu, the credits beside it open Credits. */
+/* The account plate: its name block, then (2px on, so the name has room) the credits (`people.css`). */
 .profile-plate {
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding: 6px 8px 8px;
   border-top: 1px solid var(--line);
 }

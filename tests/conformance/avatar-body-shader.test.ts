@@ -6,7 +6,13 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { AVATAR_BODIES, type AvatarRecipe, avatarRecipe } from "../../src/shared/avatar-recipe.ts";
-import { BODY_SHADER, BODY_UNIFORM_BYTES, bodyUniforms } from "../../src/renderer/avatars/body-shader.ts";
+import {
+  BODY_SHADER,
+  BODY_UNIFORM_BYTES,
+  BRIGHT_STARS,
+  bodyUniforms,
+  type StarLook,
+} from "../../src/renderer/avatars/body-shader.ts";
 
 const SIZE = 64;
 const FORMAT: GPUTextureFormat = "rgba8unorm";
@@ -34,7 +40,7 @@ const onBody = (index: number, id = "rab neba"): AvatarRecipe => ({
 });
 
 /** Draw a body at SIZE pixels and read it back as RGBA bytes, row by row. */
-async function render(recipe: AvatarRecipe, t = 3): Promise<Uint8Array> {
+async function render(recipe: AvatarRecipe, t = 3, stars?: StarLook): Promise<Uint8Array> {
   if (!device || !pipeline) throw new Error("no device");
   const target = device.createTexture({
     size: [SIZE, SIZE],
@@ -42,7 +48,7 @@ async function render(recipe: AvatarRecipe, t = 3): Promise<Uint8Array> {
     usage: USAGE.renderAttachment | USAGE.textureCopySrc,
   });
   const uniforms = device.createBuffer({ size: BODY_UNIFORM_BYTES, usage: USAGE.uniform | USAGE.copyDst });
-  device.queue.writeBuffer(uniforms, 0, bodyUniforms(recipe, t, SIZE));
+  device.queue.writeBuffer(uniforms, 0, bodyUniforms(recipe, t, SIZE, stars));
   const readback = device.createBuffer({ size: BYTES_PER_ROW * SIZE, usage: USAGE.copyDst | USAGE.mapRead });
   const encoder = device.createCommandEncoder();
   const pass = encoder.beginRenderPass({
@@ -137,6 +143,22 @@ describe("generated avatar body shader", () => {
       );
     for (let at = 0; at < pixels.length; at += 4)
       if (pixels[at + 3] === 255) assert.ok(matches(Array.from(pixels.subarray(at, at + 3))), `pixel ${at / 4}`);
+  });
+
+  it("draws a galaxy's stars white unless asked for quieter ones in its blue", async (t) => {
+    if (!device) return t.skip("no WebGPU adapter on this machine");
+    const recipe = onBody(AVATAR_BODIES.indexOf("galaxy"), "sign-in");
+    const white = (pixels: Uint8Array) => {
+      let count = 0;
+      for (let at = 0; at < pixels.length; at += 4)
+        if ([0, 1, 2].every((channel) => (pixels[at + channel] ?? 0) > 220)) count += 1;
+      return count;
+    };
+    const plain = await render(recipe);
+    assert.deepEqual(plain, await render(recipe, 3, BRIGHT_STARS), "stars are bright unless asked");
+    const quiet = await render(recipe, 3, { strength: 0.4, tint: 1 });
+    assert.ok(white(plain) > 0, "a galaxy shows white stars");
+    assert.ok(white(quiet) < white(plain), `quiet stars leave ${white(quiet)} white pixels of ${white(plain)}`);
   });
 
   it("moves with the avatar's clock", async (t) => {

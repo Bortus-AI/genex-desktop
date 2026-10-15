@@ -3505,26 +3505,24 @@ export const GENEX_WORDS = {
     balanceUnread: "balance couldn’t be read",
     /** What an invite earns, beside Invite a friend. */
     bonus: (credits: number) => `+${credits}`,
-    shared: "one balance for every game dev tool",
     plan: (allowance: string, when: string) => `Pro · ${allowance} more on ${when}`,
     inviteFriend: "Invite a friend",
     getCredits: "Get credits",
     payFor: "What credits pay for",
-    payForLine: "Only assets made with external game dev tools",
-    freeBuilding:
-      "Building your games is free: your agents run on your own subscription, and Genex charges nothing extra.",
-    refunds: "Failed generations are refunded automatically.",
-    outOfCredits: "Out of credits, your games still build with procedural assets and Local Blender.",
+    /** Beside the tools' marks, over the prices. */
+    toolsLine:
+      "The best game dev tools, always up to date. No MCPs or API keys to install: they’re connected in one click.",
     from: "from",
     pricesUnavailable: "Prices couldn’t be read from genex.games right now.",
     recent: "Recent spending",
     recentLine: "Your latest generations and refunds",
+    /** What a credit is worth, beside Recent spending's line; it wraps as one piece. */
+    perCredit: "1\u00a0credit\u00a0≈\u00a01¢",
     noRecent: "Nothing spent yet",
     refunded: (count: number) => `+${count}`,
     refundedNote: "refunded",
     failedKind: (kind: string) => `${kind}, failed`,
     spent: (count: number) => `−${Math.abs(count)}`,
-    centNote: "1 credit is about 1¢",
     loading: "Reading your credits…",
     failed: "Couldn’t read your credits.",
     signedOut: "Sign in to Genex to see your credits.",
@@ -3743,14 +3741,6 @@ export const PLAY_WORDS = {
   people: {
     friends: "Friends",
     friendsLabel: (waiting: number) => (waiting > 0 ? `Friends, ${waiting} waiting` : "Friends"),
-    /** The friends stack's tooltip and label: "12 friends · 2 playing · 2 requests". */
-    stackSummary: ({ friends, playing, waiting }: { friends: number; playing: number; waiting: number }) => {
-      const parts = [friends === 1 ? "1 friend" : `${friends} friends`];
-      if (playing > 0) parts.push(`${playing} playing`);
-      if (waiting > 0) parts.push(waiting === 1 ? "1 request" : `${waiting} requests`);
-      return parts.join(" · ");
-    },
-    noFriendsYet: "No friends yet: invite friends",
     plateLabel: (name: string) => `${name}, Genex account`,
     pro: "Pro",
     proTag: "PRO",
@@ -3758,6 +3748,8 @@ export const PLAY_WORDS = {
     profile: "Profile",
     credits: "Credits",
     creditsUnlimited: "Unlimited",
+    /** The credits beside the plate's name: "1,700 credits, open Credits". */
+    creditsLabel: (amount: string) => `${amount} credits, open Credits`,
     accountSettings: "Account settings",
     signOut: "Sign out",
     /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */
@@ -3770,7 +3762,7 @@ export const PLAY_WORDS = {
     signInAgainLabel: (name: string | null) => (name ? `${name}: sign in to Genex again` : "Sign in to Genex again"),
     signInFailed: "Couldn’t start signing in. Check your connection and try again.",
     cancelFailed: "Couldn’t stop signing in. Try again in a moment.",
-    offlineFriends: "Offline: friends show again when you’re back online",
+    offlineFriends: "Offline: friends’ games and credits update when you’re back online",
     /** Sign out's question, asked in Studio before the app and the Genex plugin sign out together. */
     signOutTitle: "Sign out of Genex?",
     signOutText: "Your profile, friends and Publish wait until you sign in again, and the Genex plugin’s tools stop.",
