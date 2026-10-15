@@ -52,6 +52,16 @@ text behind a Studio-written preface; `vendor.json` records each source, version
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
+## Adapted Roblox skill
+
+`src/plugins/roblox/skills/get-started.md` (shipped as
+`dist/resources/plugins/roblox/skills/get-started.md`) adapts the `roblox-get-started` skill from
+Roblox's [roblox-studio-agent-plugin](https://github.com/Roblox/roblox-studio-agent-plugin)
+(plugin version 0.2.1, `skills/roblox-get-started`), MIT, Copyright (c) 2026 Roblox Corporation. It
+is rewritten for Genex's Roblox Studio button and keeps the original's license text at its end.
+The Roblox Studio plugin's other skills are Genex's own. Roblox and Roblox Studio are trademarks of
+Roblox Corporation; Genex is not affiliated with Roblox Corporation.
+
 ## Vendored three.js
 
 Games and the asset preview use a vendored three.js (MIT, Copyright © 2010-2026 three.js

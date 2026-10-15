@@ -179,6 +179,7 @@ async function buildRoblox(root, resources, sdk) {
   await mkdir(roblox, { recursive: true });
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/roblox", file), path.join(roblox, file));
+  await cp(path.join(root, "src/plugins/roblox/skills"), path.join(roblox, "skills"), { recursive: true });
   const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/roblox/panel.html"), "utf8"), sdk);
   await writeFile(
     path.join(roblox, "panel.html"),

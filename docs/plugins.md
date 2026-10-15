@@ -1103,6 +1103,16 @@ Genex's setup record (`setup/record.json` in plugin storage) exists. Neither the
 panel's `status` reads `~/Documents`, where macOS asks the person first; the Mac Plugins folder
 (`~/Documents/Roblox/Plugins`) is only named there.
 
+Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
+`engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and
+`judge_play`, the desktop tool never builds or play-tests in Studio, Roblox's AI tools, uploads and
+inserts ask) and the file skills `luau`, `remotes` (server-authoritative), `player-data`
+(session-locked, `UpdateAsync`, `BindToClose`), `purchases` (idempotent `ProcessReceipt`),
+`ui-scale` (`UIScale`, `ScreenInsets`, touch targets), `assets` (Roblox's mesh and texture rules)
+and `get-started`, adapted from Roblox's MIT `roblox-get-started` skill
+([notices](../THIRD-PARTY-NOTICES.md#adapted-roblox-skill)). A web or Unreal game reads none of
+them and is not offered `roblox__skill`.
+
 ## What Studio records around a tool call
 
 A plugin never has to report its own activity, and Studio never takes a plugin's word for it. The

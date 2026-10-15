@@ -29,7 +29,55 @@
       }
     }
   ],
-  "skills": [],
+  "skills": [
+    {
+      "name": "roblox-studio",
+      "text": "This game is built in the person's own Roblox Studio, which stays open and visible; Genex attaches to this game's place through the Roblox Studio connection (its tools fill in which Studio and place, so never pick one yourself).\nScripts are files: write and change the game's code as .luau files under src/<Service>/ in the game folder, named as the luau skill says. Genex's helper keeps them in step with Studio both ways. Never edit a script's Source through execute_luau. Everything else in the place (parts, models, UI, lighting, settings) you read with the connection's read tools and change with execute_luau in Edit.\nPlay-testing: the computer tool plays the game in Studio's own play session as a player would, and judge_play hands it to a judge who never saw the code. The desktop tool never builds or play-tests in Studio; it is refused there except for a setup click the person asked for (Do it for me).\nAsk first: Roblox's AI tools (mesh, texture, material and model generation, its playtest and explore agents), uploads and Creator Store inserts each show the person a card, because they run on the person's Roblox account and moderation penalties land on it. Never ask for Roblox API keys or passwords, never read cookies or sign-in files, never put bots in live servers, and never publish without the person's OK.\nThe person comes first: while they work in Studio, Genex's calls wait. Never close or force-quit Studio. Save points cover the scripts and the place; Rewind brings both back.\nRead the matching Roblox skill before that work: luau (code), remotes (anything a client sends), player-data (saving), purchases (Robux), ui-scale (any UI), assets (models, textures, sounds), get-started (Studio not connected).",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "luau",
+      "summary": "How this game's Luau is written: --!strict, typed modules, where server and client code live, Rojo file names under src/, the engine's rules (task library, events over polling, cleanup) and the checks code must pass.",
+      "file": "skills/luau.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "remotes",
+      "summary": "Server-authoritative RemoteEvents and RemoteFunctions: the client only asks; every handler checks rate, types, ranges and state before the server acts, so the cheater judge can't change the game. Read before writing or changing any remote.",
+      "file": "skills/remotes.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "player-data",
+      "summary": "Saving player data safely: one server owns a profile through a session lock, every write is UpdateAsync, autosave, save on leave and in BindToClose, retries and migrations, and testing without touching live players' data.",
+      "file": "skills/player-data.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "purchases",
+      "summary": "Developer products and game passes: an idempotent ProcessReceipt that records each PurchaseId with the grant before answering PurchaseGranted, what is not proof of a purchase, and what stays the person's (ids, prices).",
+      "file": "skills/purchases.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "ui-scale",
+      "summary": "UI that fits phones, tablets, monitors and TVs: Scale over Offset, UIScale and constraints, ScreenInsets safe areas and the top bar inset, touch target sizes, readable text and gamepad selection. Read before building or changing any UI.",
+      "file": "skills/ui-scale.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "assets",
+      "summary": "Roblox's rules for models, textures and sounds: at most 20k triangles, watertight, one material per mesh, 4 bone influences, root at the origin, phone-sized textures, moderation risk to the person's account, and safe Creator Store inserts.",
+      "file": "skills/assets.md",
+      "facts": ["roblox-project"]
+    },
+    {
+      "name": "get-started",
+      "summary": "Getting Roblox Studio connected through Genex's Roblox Studio button: what each status means, sign-in, the MCP server switch, choosing the place, and troubleshooting. Read when the Studio tools are missing or answer that Studio isn't open.",
+      "file": "skills/get-started.md",
+      "facts": ["roblox-project"]
+    }
+  ],
   "panels": [{ "id": "setup", "title": "Roblox Studio", "file": "panel.html", "placement": "settings" }],
   "settings": [],
   "actions": [
