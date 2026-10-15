@@ -333,10 +333,7 @@ describe("the panel and the toolbar", () => {
   it("a game whose chat chose Godot before Godot was here shows the Godot button, and no other game does", async () => {
     const none = await godotBackendFixture({ apps: [] });
     assert.equal((await action(none, "toolbar-status")).shown, undefined, "nothing chosen yet");
-    await assert.rejects(
-      tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }),
-      /godot__show-steps/,
-    );
+    await assert.rejects(tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }), /godot__show-steps/);
     assert.equal((await action(none, "toolbar-status")).shown, true, "the refused game keeps its button out");
     const other = await none.backend.action?.("toolbar-status", {}, none.context({ project: "another" }));
     assert.equal((other as Answer).shown, undefined, "another game's strip stays as it was");
