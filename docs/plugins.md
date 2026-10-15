@@ -1361,6 +1361,18 @@ origin, and the mesh is uploaded to the person's account only when they publish.
 comes in. When Studio can't add it, the answer names the checked file and Studio's own File ›
 Import 3D.
 
+**Publish an update** (`publish.ts`). No Studio or plugin API publishes a place, and Open Cloud's
+place publishing takes API keys Genex never asks for, so publishing is a Do it for me: the panel's
+`publish-update` action (native, after its card, which names the place) and the agent's
+`publish-update` tool (a card every call; no lock) send the game's changed script files to Studio,
+then hand the game's chat "Publish <place> to Roblox: File › Publish to Roblox in its Roblox Studio
+window…" through `game.engine.assist`, which accepts only the pressed action or the approved card.
+It updates a place that is already published (its link has `remote` ids): the panel offers it in
+the place block once every step is done. A place never published gets the first publish's click
+path and no assist, because Roblox asks for the game's details and an age check there; the person
+then links the published place again with Use in this game. Computer control is a Mac's only: on
+Windows, or with no driver, the answer gives the click path.
+
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
 `hook-answers.ts`), each hooked for games with the `roblox-project` fact; nothing hooks `run.end`,

@@ -271,7 +271,12 @@ window's tree). A refusal ends the plan and its reason is the answer.
   <task>" to the game's chat and grants that chat the plugin's declared apps until the turn
   answering the message ends (the turn it started, or the running turn it was steered into), and
   never past 20 minutes. That chat's own session then works as below, with its session and app
-  cards. Windows and a Mac with no driver answer `unavailable`.
+  cards. Windows and a Mac with no driver answer `unavailable`. Roblox Studio's **Publish an
+  update** is the one assist that is not a setup click ([plugins](plugins.md)): the
+  person presses it or approves the agent's `publish-update` card, and the chat clicks File ›
+  Publish to Roblox in their Studio, on a Mac only (elsewhere the answer gives that click path). It
+  updates a place already published; a place's first publish stays the person's, with its click
+  path and no assist.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
