@@ -56,6 +56,7 @@ const MESSAGE = {
   NotUnity: "This Unity Hub isn't signed by Unity, so Genex didn't install it.",
   Copy: (why: string) => `Couldn't put Unity Hub in Applications (${why}).`,
   NoHub: "Get Unity Hub first.",
+  List: (why: string) => `Unity Hub couldn't list the Unity versions to install (${why}).`,
   NoRelease: "Unity Hub listed no Unity 6 to install. Open Unity Hub and install Unity 6 from Installs.",
   Space: (free: number) =>
     `Unity 6 needs about ${UNITY_SIZE_GB} GB; ${free.toFixed(1)} GB is free. Free up space, then try again.`,
@@ -273,7 +274,24 @@ async function failEditor(deps: InstallDeps, folder: string, why: string, inHub 
   throw new Error(why);
 }
 
-/** Starts Hub installing the newest Unity 6 of Genex's line, once there is room for it. */
+/** Asks Hub for its releases and starts installing the chosen one on its own; answers the record kept. */
+async function startEditor(deps: InstallDeps, hub: string, folder: string): Promise<void> {
+  const arch = archOf(deps.arch);
+  const listing = ["--", "--headless", "editors", "--releases", "--json", "--architecture", arch];
+  const listed = await deps.run(hubProgram(hub), listing, RELEASES_MS).catch((error: unknown) => {
+    return failEditor(deps, folder, MESSAGE.List(errorMessage(error)), true);
+  });
+  const version = chooseRelease(releasesIn(listed.out));
+  if (!version) return failEditor(deps, folder, MESSAGE.NoRelease, true);
+  const args = ["--", "--headless", "install", "--version", version, "--architecture", arch];
+  const pid = await deps.start(hubProgram(hub), args, path.join(folder, EDITOR_LOG));
+  await atomicWriteJson(path.join(folder, EDITOR_RECORD), { version, pid, startedAt: deps.now().toISOString() });
+}
+
+/**
+ * Starts Hub installing the newest Unity 6 of Genex's line, once there is room for it. The card
+ * shows it started at once, while Hub still lists its releases (up to a minute).
+ */
 async function installEditor(state: Installing): Promise<void> {
   const { deps } = state;
   const hub = await findHub(deps.env);
@@ -283,13 +301,12 @@ async function installEditor(state: Installing): Promise<void> {
   await mkdir(folder, { recursive: true });
   const free = (await deps.freeBytes(deps.env.applications)) / GIGABYTE;
   if (free < UNITY_SIZE_GB) await failEditor(deps, folder, MESSAGE.Space(free));
-  const arch = archOf(deps.arch);
-  const listing = ["--", "--headless", "editors", "--releases", "--json", "--architecture", arch];
-  const version = chooseRelease(releasesIn((await deps.run(hubProgram(hub), listing, RELEASES_MS)).out));
-  if (!version) return failEditor(deps, folder, MESSAGE.NoRelease, true);
-  const args = ["--", "--headless", "install", "--version", version, "--architecture", arch];
-  const pid = await deps.start(hubProgram(hub), args, path.join(folder, EDITOR_LOG));
-  await atomicWriteJson(path.join(folder, EDITOR_RECORD), { version, pid, startedAt: deps.now().toISOString() });
+  state.hubJob = { kind: JobKind.Editor, state: JobState.Running };
+  try {
+    await startEditor(deps, hub, folder);
+  } finally {
+    state.hubJob = null;
+  }
 }
 
 /** Waits for the person to sign in to Hub, up to half an hour. */
@@ -336,7 +353,10 @@ export function createInstaller(deps: InstallDeps, storage: () => Promise<string
     /** Starts Do it for me and answers at once; the card follows it, and a stop shows on its row. */
     setUp: (): void => {
       state.driving ??= drive(state)
-        .catch(() => undefined)
+        .catch((error: unknown) => {
+          // A step that failed says so on its own row; anything else shows on the install's.
+          state.hubJob ??= { kind: JobKind.Editor, state: JobState.Failed, why: errorMessage(error) };
+        })
         .finally(() => {
           state.driving = null;
         });

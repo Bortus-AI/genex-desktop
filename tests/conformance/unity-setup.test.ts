@@ -335,6 +335,37 @@ describe("installing Unity 6 through Hub", () => {
     assert.equal(await mac.installer.job(), null, "an install that ended with Unity there is done");
   });
 
+  it("shows the install as started while Hub lists its releases, and says why when listing fails", async () => {
+    const mac = await installMac({ hub: true });
+    const listed = Promise.withResolvers<void>();
+    const asked = Promise.withResolvers<void>();
+    const run = mac.deps.run;
+    mac.deps.run = async (command, args, timeoutMs) => {
+      if (args.includes("--releases")) {
+        asked.resolve();
+        await listed.promise;
+      }
+      return run(command, args, timeoutMs);
+    };
+    const installing = mac.installer.installEditor();
+    await asked.promise;
+    assert.deepEqual(await mac.installer.job(), { kind: JobKind.Editor, state: JobState.Running });
+    listed.resolve();
+    await installing;
+    assert.equal((await mac.installer.job())?.state, JobState.Running, "now Hub's own install");
+
+    const broken = await installMac({ hub: true });
+    broken.deps.run = async (command, args, timeoutMs) => {
+      if (args.includes("--releases")) throw new Error("Unity Hub didn't answer");
+      return run(command, args, timeoutMs);
+    };
+    await assert.rejects(broken.installer.installEditor(), /Unity Hub didn't answer/);
+    const failed = await broken.installer.job();
+    assert.equal(failed?.state, JobState.Failed);
+    assert.match(String(failed?.why), /Unity Hub didn't answer/);
+    assert.equal(failed?.inHub, true);
+  });
+
   it("starts nothing without room for Unity, and says how much is free", async () => {
     const mac = await installMac({ hub: true, freeGb: 4.1 });
     await assert.rejects(mac.installer.installEditor(), /needs about 12 GB; 4\.1 GB is free/);
