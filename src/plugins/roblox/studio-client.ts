@@ -358,21 +358,17 @@ export function createStudioClient(deps: StudioClientDeps): StudioClient {
   let session: Promise<Session> | undefined;
   let closed = false;
 
+  /** A fresh StudioMCP past its handshake; one that fails the handshake is ended, never left running. */
   async function open(): Promise<Session> {
     const launch = await studioMcpLaunch(deps);
     const started = startSession(deps, launch);
-    const timeoutMs = HANDSHAKE_MS;
-    await request(
-      deps,
-      started,
-      "initialize",
-      {
-        protocolVersion: PROTOCOL_VERSION,
-        capabilities: {},
-        clientInfo: CLIENT_INFO,
-      },
-      { timeoutMs },
-    );
+    const hello = { protocolVersion: PROTOCOL_VERSION, capabilities: {}, clientInfo: CLIENT_INFO };
+    try {
+      await request(deps, started, "initialize", hello, { timeoutMs: HANDSHAKE_MS });
+    } catch (error) {
+      await stopSession(deps, started);
+      throw error;
+    }
     send(started, { method: "notifications/initialized" });
     return started;
   }

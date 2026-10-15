@@ -13,7 +13,8 @@
  * `--studios <json>` lists those Studios (default one, `studio-1` named Place1); `--lose-after <n>`
  * lists them for its first n lists only, as a StudioMCP that reached Studio through another one
  * loses it when that one ends; `--extra-tool
- * <name>` lists one more tool, unknown to Genex, that answers like any other.
+ * <name>` lists one more tool, unknown to Genex, that answers like any other; `--no-init` never
+ * answers `initialize`.
  */
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -92,6 +93,7 @@ const send = (message) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0
 
 function handle(message) {
   if (message.id === undefined) return;
+  if (message.method === "initialize" && argv.includes("--no-init")) return;
   if (message.method === "initialize")
     return send({
       id: message.id,

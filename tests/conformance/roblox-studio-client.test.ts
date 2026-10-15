@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -311,4 +311,25 @@ test("the backend counts Studio as answering only while StudioMCP lists one, and
   const missing = createStudioClient(macDeps(standIn().run, { mcp: async () => undefined }));
   assert.equal(await studioAnswers(missing), false, "no StudioMCP");
   await missing.close();
+});
+
+test("a StudioMCP that never answers initialize is ended, not left running", async () => {
+  const children: ChildProcess[] = [];
+  const fake = standIn(["--no-init"]);
+  const run: SpawnStudioMcp = (file, args, options) => {
+    const child = fake.run(file, args, options);
+    children.push(child);
+    return child;
+  };
+  const client = createStudioClient(macDeps(run, { limit: async () => {} }));
+  try {
+    await assert.rejects(client.studios(), failure(StudioClientFailure.TimedOut));
+    assert.equal(children.length, 1);
+    const [child] = children;
+    if (child && child.exitCode === null && child.signalCode === null)
+      await Promise.race([new Promise((resolve) => child.once("exit", resolve)), sleep(3_000)]);
+    assert.ok(child?.exitCode !== null || child?.signalCode !== null, "it was ended");
+  } finally {
+    await client.close();
+  }
 });
