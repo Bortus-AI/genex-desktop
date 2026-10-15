@@ -39,7 +39,7 @@ export function judgePlayToolWithJudges(judges: readonly JudgeRef[]): LiveToolSp
         ...JUDGE_PLAY_TOOL.parameters.properties,
         judge: {
           type: "string",
-          description: `Optional: which of this game's engine judges plays, by id: ${listed}. Each has its own brief and players; pick the one whose checks the change touches, or leave it out for a plain judge.`,
+          description: `Optional: which of this game's engine judges plays, by id: ${listed}. Each has its own brief and players; leave it out for a plain judge. Whether a judge plays at all is yours to decide: a change that touches what a judge tests is a hint, not a rule.`,
         },
       },
     },

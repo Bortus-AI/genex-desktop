@@ -1893,6 +1893,10 @@ images}`: measurements and pictures, never source. They open the judge's first a
 pictures are kept in the game's captures folder and shown on the chat's judge line, only for the
 trace the host wrote (`judge-probe-pictures.ts`). A `play-open` that answers `liveData: true` adds
 the note that saved data there is the live game's and only the play's test players may be used.
+In an open Loop the lead's `judge_play` names the game's judges too, and after each turn that keeps
+a save point every one of them plays it in turn, each answer a run check carried to the lead
+([harness runtime](harness-runtime.md)). Whether a chat's session calls a judge is its own choice: a
+change that touches what a judge tests is a hint, not a rule.
 
 ## Panels and trusted approval
 
