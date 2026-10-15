@@ -373,6 +373,36 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     assert.deepEqual(messageCheckpointPlan(plugins, unrealKind), [], "but never before each chat message");
   });
 
+  it("the bundled Roblox manifest is valid: its version, its lock, its toolbar button, and no folders", () => {
+    const raw = JSON.parse(readFileSync("src/plugins/roblox/plugin.json", "utf8")) as PluginManifest;
+    const roblox = validateManifest(raw);
+    assert.equal(roblox.version, "0.1.0", "the plugin is new in this release and stays at its first version");
+    assert.deepEqual(roblox.locks, [
+      { id: "studio", label: "Roblox Studio", per: LockScope.Project, personFirst: "studio-activity" },
+    ]);
+    const probe = roblox.tools.find((t) => t.name === "studio-activity");
+    assert.equal(probe?.audience, "harness");
+    assert.equal(probe?.needs, undefined, "the probe asks without waiting for its own lock");
+    assert.deepEqual(roblox.toolbar, [
+      {
+        id: "studio",
+        label: "Roblox Studio",
+        ariaLabel: "Roblox Studio",
+        icon: "box",
+        requiresProject: false,
+        target: { kind: "panel", id: "setup" },
+        status: "toolbar-status",
+      },
+    ]);
+    assert.equal(roblox.engine?.id, "roblox");
+    assert.deepEqual(roblox.engine?.projectFiles, [".rbxl", ".rbxlx", ".project.json"]);
+    assert.equal(roblox.engine?.projectInFolder, false, "the helper exports the place into the game folder");
+    assert.deepEqual(roblox.engine?.apps, { mac: ["com.Roblox.RobloxStudio"], windows: ["RobloxStudioBeta.exe"] });
+    assert.equal("folders" in raw, false, "no worker or job may write Studio's Plugins folder");
+    assert.equal(roblox.folders, undefined);
+    assert.match(roblox.description, /Not affiliated with Roblox Corporation\. For people 18 and over\./);
+  });
+
   it("gives the Unreal plugin's save before a restore longer than it waits for a busy editor", () => {
     assert.ok(
       HOOK_CALL_MS[HookEvent.RestoreBefore] > RESTORE_SAVE_MAX_MS,

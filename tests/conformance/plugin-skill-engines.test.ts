@@ -135,7 +135,7 @@ test("the capability facts a session without plugin tools reads carry only the s
 });
 
 /** The bundled plugins whose skills a game's brief can carry, all turned on. */
-const BUNDLED = ["blender", "genex", "unreal"];
+const BUNDLED = ["blender", "genex", "roblox", "unreal"];
 /** The web-only skills of the bundled plugins: three.js loading, multiplayer, embed sign-in, Genex's web publishing and play-time lanes. */
 const WEB_ONLY = [
   "blender/local-modeling",

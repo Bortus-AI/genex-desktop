@@ -1084,6 +1084,25 @@ project's identity check on its port (remembered like the panel's), plus the pro
 while Unreal runs unanswered. It scans no folders, and the only thing it writes is removing its own
 stale Starting record once the project answers.
 
+**Roblox Studio.** The bundled `roblox` plugin (`src/plugins/roblox`) is off until the user turns
+it on (`seedEnabled.roblox = false`): it needs Roblox Studio and a Roblox account, and its
+description and panel say "Not affiliated with Roblox Corporation. For people 18 and over." It
+declares the engine `roblox` (label "Roblox Studio", project files `.rbxl`, `.rbxlx` and
+`.project.json`, fact `roblox-project`, `projectInFolder: false`, play for up to 8 players, and the
+editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the per-game lock `studio` with
+its probe `studio-activity`, and no `folders`: a write root there would let any worker drop a
+plugin into Studio's Plugins folder. `studio-locate.ts` finds Studio on a Mac at
+`/Applications/RobloxStudio.app` (a link only while it stays inside /Applications; its version
+from Info.plist through `plutil`) with `Contents/MacOS/StudioMCP`, and on Windows as the newest
+`%LOCALAPPDATA%\Roblox\Versions\version-*\RobloxStudioBeta.exe` beside `mcp.bat`; it refuses
+links out of those folders and a home or LOCALAPPDATA of the other system. Whether Studio runs is
+`pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox Studio"
+after the host's `box` glyph, `requiresProject: false`) opens the panel; its `toolbar-status` is a
+dot: Not installed and Not open `info`, Set up and Starting `warn`, Ready `ok`. Set up holds until
+Genex's setup record (`setup/record.json` in plugin storage) exists. Neither the button nor the
+panel's `status` reads `~/Documents`, where macOS asks the person first; the Mac Plugins folder
+(`~/Documents/Roblox/Plugins`) is only named there.
+
 ## What Studio records around a tool call
 
 A plugin never has to report its own activity, and Studio never takes a plugin's word for it. The

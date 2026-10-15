@@ -1021,8 +1021,9 @@ export class StudioCore {
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };
-    // The Unreal Editor bridge is an early integration: bundled, and off until the user turns it on.
-    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false };
+    // The Unreal and Roblox Studio plugins are bundled and off until the user turns them on:
+    // each needs its editor, and Roblox an account for people 18 and over.
+    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, roblox: false };
     // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
     this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {

@@ -1,0 +1,51 @@
+{
+  "apiVersion": 3,
+  "id": "roblox",
+  "version": "0.1.0",
+  "icon": "icon.svg",
+  "name": "Roblox Studio",
+  "publisher": "Genex",
+  "description": "Agents build your game in Roblox Studio on this computer, through Studio's own MCP server and a small Genex helper. Needs Roblox Studio and a Roblox account. Not affiliated with Roblox Corporation. For people 18 and over.",
+  "backend": "backend.mjs",
+  "capabilities": ["game-engine"],
+  "detect": [{ "fact": "roblox-project", "files": ["**/*.rbxl", "**/*.rbxlx", "**/default.project.json"] }],
+  "engine": {
+    "id": "roblox",
+    "label": "Roblox Studio",
+    "projectFiles": [".rbxl", ".rbxlx", ".project.json"],
+    "fact": "roblox-project",
+    "projectInFolder": false,
+    "play": { "players": 8, "clock": "none", "pointer": true, "state": true },
+    "apps": { "mac": ["com.Roblox.RobloxStudio"], "windows": ["RobloxStudioBeta.exe"] }
+  },
+  "tools": [
+    {
+      "name": "studio-activity",
+      "audience": "harness",
+      "description": "For Genex only: as the Roblox Studio lock's probe, whether the person is using Studio for this game (personActive), read before Genex's own calls to it.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "skills": [],
+  "panels": [{ "id": "setup", "title": "Roblox Studio", "file": "panel.html", "placement": "settings" }],
+  "settings": [],
+  "actions": [
+    { "name": "status", "label": "Roblox Studio status" },
+    { "name": "toolbar-status", "label": "Roblox Studio connection" }
+  ],
+  "toolbar": [
+    {
+      "id": "studio",
+      "label": "Roblox Studio",
+      "ariaLabel": "Roblox Studio",
+      "icon": "box",
+      "requiresProject": false,
+      "target": { "kind": "panel", "id": "setup" },
+      "status": "toolbar-status"
+    }
+  ],
+  "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }]
+}

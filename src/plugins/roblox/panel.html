@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><!-- STUDIO_PANEL_FONTS --><style>
+:root{--bg:#0e0d0f;--fg:#dee0e2;--quiet:color-mix(in srgb,var(--fg) 64%,var(--bg));--line:color-mix(in srgb,var(--fg) 12%,var(--bg));color-scheme:dark;
+  --sans:"Zalando Sans SemiExpanded",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+:root[data-scheme="light"]{color-scheme:light}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 28px;font:14px/20px var(--sans);color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+@media (max-width:480px){body{padding:20px 16px}}
+main{max-width:640px;display:grid;gap:16px}
+h1{margin:0;font-size:20px;line-height:28px;font-weight:500}
+.step{padding:14px 16px;border:1px solid var(--line);border-radius:12px}
+footer{color:var(--quiet);font-size:12px;line-height:18px}
+</style></head><body>
+<main>
+<h1>Roblox Studio</h1>
+<p class="step" id="studio" role="status">Looking for Roblox Studio…</p>
+<footer>Not affiliated with Roblox Corporation. For people 18 and over.</footer>
+</main>
+<!-- STUDIO_PANEL_SDK -->
+<script>
+const api = window.studioPlugin, $ = (id) => document.getElementById(id);
+const REFRESH_MS = 3000;
+/** What the backend's status names (StudioStatus). Wire values: never rename. */
+const Status = { Get: "get", SetUp: "set-up", NotOpen: "not-open", Starting: "starting", Ready: "ready" };
+const WORDS = {
+  [Status.Get]: "Roblox Studio isn't on this computer.",
+  [Status.SetUp]: "Roblox Studio is here. Genex still needs to add its helper and turn on Studio's MCP server.",
+  [Status.NotOpen]: "Roblox Studio is set up but not open.",
+  [Status.Starting]: "Roblox Studio is open. Genex is waiting for it to answer.",
+  [Status.Ready]: "Roblox Studio is open and answering Genex.",
+};
+let closed = false;
+async function refresh() {
+  if (closed) return;
+  try {
+    const s = await api.call("action", "status", {});
+    if (closed) return;
+    const version = s.version ? ` (version ${s.version.split(".").slice(0, 2).join(".")})` : "";
+    $("studio").textContent = (WORDS[s.studio] ?? "") + (s.studio === Status.Get ? "" : version);
+  } catch (e) {
+    if (!closed) $("studio").textContent = String(e);
+  }
+}
+/** The host's theme colours. */
+function applyTheme(c) {
+  const root = document.documentElement;
+  root.style.setProperty("--bg", c.theme.background);
+  root.style.setProperty("--fg", c.theme.foreground);
+  const hex = c.theme.background.replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  root.dataset.scheme = 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5 ? "light" : "dark";
+}
+void api.call("context").then(applyTheme).catch(() => {});
+void refresh();
+const timer = setInterval(() => {
+  if (document.visibilityState === "visible") void refresh();
+}, REFRESH_MS);
+window.addEventListener("pagehide", () => {
+  closed = true;
+  clearInterval(timer);
+});
+</script></body></html>
