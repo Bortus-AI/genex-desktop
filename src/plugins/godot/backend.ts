@@ -215,8 +215,8 @@ const MESSAGE = {
   },
 } as const;
 
-/** The toolbar button's badge while Godot is missing. */
-const GET_BADGE = "Get";
+/** The toolbar button's badge while Godot is missing: the same word Unity's and Unreal's say. */
+const GET_BADGE = "Not installed";
 /** The toolbar button's badge while the game's project isn't set up for Genex's play. */
 const SET_UP_BADGE = "Set up";
 
@@ -694,7 +694,7 @@ async function buttonStatus(deps: GodotBackendDeps, context: PluginContext) {
   if (!install) {
     const older = installs[0];
     const title = older ? MESSAGE.Toolbar.Old(versionName(older.version)) : MESSAGE.Toolbar.Get;
-    return { badge: GET_BADGE, tone: "warn", title };
+    return { badge: GET_BADGE, tone: "info", dot: true, title };
   }
   const version = versionName(install.version);
   const game = gameFolderOf(context);

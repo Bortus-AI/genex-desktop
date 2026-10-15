@@ -304,9 +304,11 @@ describe("Genex's moments in a Godot game", () => {
 
 describe("the panel and the toolbar", () => {
   it("says to get Godot, names its version, asks to set a game up, and shows when Godot has it open", async () => {
+    // The same word as Unity's and Unreal's: what is true, in grey; the setup card is where to get it.
     assert.deepEqual(await action(await godotBackendFixture({ apps: [] }), "toolbar-status"), {
-      badge: "Get",
-      tone: "warn",
+      badge: "Not installed",
+      tone: "info",
+      dot: true,
       title: "Get Godot 4",
     });
     const fixture = await withProject();
