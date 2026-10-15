@@ -44,10 +44,7 @@ export function AppSidebar({
   const atHome = room === Room.Home && !launch;
   const { games, building, stagedCount } = useSidebarLibrary();
   // A game home is starting has one row: a placeholder until it is made and listed, then its own.
-  const launching = useMemo(
-    () => launchInSidebar(launch, (name) => games.some((game) => game.name === name)),
-    [launch, games],
-  );
+  const launching = useMemo(() => launchInSidebar(launch, games), [launch, games]);
   const update = useUpdate((s) => s.ready);
   // Strings, compared one by one: the sidebar re-renders when a release comes or goes, not on every plugin read.
   const pluginReleases = usePlugins(useShallow((s) => pluginUpdates(s.list, s.index).map(shownRelease)));
