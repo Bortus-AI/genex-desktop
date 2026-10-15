@@ -212,7 +212,22 @@ export async function startWebIfPending(
   await host.call(HostMethod.GameStart, { project, starter: ProjectStarter.Web });
 }
 
-/** Whether the studio plays a game with these facts in its engine's editor, where a judge can play it: an Unreal game. */
-export function playedInEditor(facts: readonly FactRef[] | null | undefined): boolean {
-  return (facts ?? []).some((fact) => fact.id === CoreFact.UnrealProject);
+/** What says whether the studio plays a game in its engine's editor: the host's word (`editorPlay`), and the game's facts. */
+export type EditorPlayedGame = { editorPlay?: unknown; facts?: readonly FactRef[] | null | undefined };
+
+/** Whether these facts hold an Unreal project, the one game an older host plays in its editor. */
+const holdsUnreal = (facts: readonly FactRef[] | null | undefined): boolean =>
+  (facts ?? []).some((fact) => fact.id === CoreFact.UnrealProject);
+
+/**
+ * Whether the studio plays a game in its engine's editor, where a judge can play it: as the host's
+ * `game.list` says (`editorPlay`, set by the plugin that declares the game's engine and its play).
+ * A host that never says (an older one), and a kept older caller that hands the facts alone, read
+ * it by the facts: an Unreal game.
+ */
+export function playedInEditor(game: EditorPlayedGame | readonly FactRef[] | null | undefined): boolean {
+  if (Array.isArray(game)) return holdsUnreal(game);
+  const described = game as EditorPlayedGame | null | undefined;
+  if (typeof described?.editorPlay === "boolean") return described.editorPlay;
+  return holdsUnreal(described?.facts);
 }

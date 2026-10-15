@@ -124,6 +124,8 @@ import {
   UnrealRunnerChoice,
 } from "../../src/shared/protocol.ts";
 import { CHAT_JUDGE_CAPABILITY } from "../../src/harness-seed/loop/chat-judge.ts";
+import * as seedEngineJudges from "../../src/harness-seed/loop/engine-judges.ts";
+import { judgePlayToolWithJudges } from "../../src/main/core/judge-play-tool-prompts.ts";
 import { LOCAL_ROLES_CAPABILITY } from "../../src/harness-seed/loop/local-roles-served.ts";
 import * as seedEngineSeat from "../../src/harness-seed/loop/engine-seat.ts";
 import * as seedLoopSwitch from "../../src/harness-seed/loop/loop-switch.ts";
@@ -802,6 +804,22 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
   it("the capabilities the seed claims when its parts serve them are the app's", () => {
     assert.equal(CHAT_JUDGE_CAPABILITY, HarnessCapability.ChatJudge);
     assert.equal(LOCAL_ROLES_CAPABILITY, HarnessCapability.LocalRoles);
+  });
+
+  it("names an engine's judge in judge_play by the argument the host reads, for a direct model and a Loop lead alike", async () => {
+    const judges = [{ id: "crowd", label: "Crowd" }];
+    const keys = (spec: { parameters?: { properties?: Record<string, unknown> } } | undefined) =>
+      Object.keys(spec?.parameters?.properties ?? {}).sort();
+    const hostTool = judgePlayToolWithJudges(judges);
+    const [directTool] = (await import("../../src/harness-seed/tools/judge-tools.ts")).tools;
+    assert.equal(directTool?.name, hostTool.name);
+    assert.deepEqual(
+      keys(directTool as never),
+      keys(hostTool),
+      "the direct model's tool takes the session's arguments",
+    );
+    assert.deepEqual(keys(seedEngineJudges.judgePlaySpec(judges)), keys(hostTool), "so does a Loop lead's");
+    assert.equal(seedEngineJudges.servesEngineJudges(), true, "the shipped judge modules hand the judge on");
   });
 });
 
