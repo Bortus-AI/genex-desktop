@@ -1889,8 +1889,15 @@ The plugin makes, sets up and opens that project itself (`backend.ts`), with no 
   newest final release of the line Genex was measured on (`INSTALL_LINE`, else the newest final
   Unity 6) and starts `-- --headless install` on its own, its output kept in
   `unity-setup/editor-install.log` and read back for the row's percentage or why it stopped.
-  `set-up` (the card's Do it for me) runs these in order, waiting up to 30 minutes for the sign-in.
-  Once nothing is open, the card tells the agent (`doneSays`) and the chat goes on.
+  `set-up` (the card's Do it for me) runs these in order, its sign-in row waiting on the person for
+  up to 30 minutes. Hub is copied into Applications under another name and renamed, so a half copy
+  never reads as installed; the row reads Hub's phase and percentage past its terminal escapes and
+  Chromium's log lines. Once nothing is open the card tells the agent (`doneSays`) and the chat
+  goes on; when an install stops it tells the agent once (`stuckSays`): finish it in Unity Hub's
+  own window with the `desktop` tool when computer control is on, else say what stopped (a stop
+  only the person can fix, such as disk space, never asks for clicking). A development test points
+  the backend at a made-up Mac with `STUDIO_UNITY_TEST_ROOT` (its `Applications/` and `home/`),
+  which the host passes to the plugin's backend; the app never sets it.
 - `setup` and `undo-setup` (each with a `confirmation`) add the Pipeline package's line to an
   existing project's manifest, or take it back (`setup.ts`): the manifest is read by real path
   inside the project, never through a link out of it; a copy is kept in the plugin's storage before
