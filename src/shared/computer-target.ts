@@ -124,6 +124,11 @@ export interface TargetCapabilities {
    * a game turned by mouse-look (a relative pointer). Absent is no.
    */
   aimedClicks?: boolean;
+  /**
+   * How many players the target plays at once, each with its own view, keys and state, addressed
+   * by number (an engine's editor play of several players). Absent is one.
+   */
+  players?: number;
 }
 
 /** The studio's own browser window: everything, step-locked, seeded through the page shim. */

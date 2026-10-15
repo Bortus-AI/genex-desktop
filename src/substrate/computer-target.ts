@@ -106,6 +106,11 @@ export interface ComputerTarget {
   act?(actions: TargetGameAction[]): Promise<{ applied: number; route: InputRoute }>;
   /** Web pages by their structure, where the target declares `dom`. */
   web?: TargetWeb;
+  /**
+   * Address this player (1 to `caps.players`) with every later look, input and state read, where
+   * the target plays several at once.
+   */
+  selectPlayer?(player: number): void;
 }
 
 /** A target's load: the target, what went wrong, and what is worth saying about the setup. */

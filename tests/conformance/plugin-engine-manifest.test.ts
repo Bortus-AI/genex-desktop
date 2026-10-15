@@ -106,6 +106,7 @@ describe("a plugin's engine declaration", () => {
       projectFiles: [".toyproj"],
       fact: "toy-project",
       projectInFolder: false,
+      play: { players: 3, clock: "none", pointer: true },
     });
     const unreal = read(path.join("src", "plugins", "unreal", "plugin.json"));
     assert.deepEqual(validateManifest(unreal).engine, {

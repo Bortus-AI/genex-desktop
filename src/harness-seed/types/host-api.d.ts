@@ -319,6 +319,11 @@ export interface DelegatePlaytestGrant {
   maxActions?: number;
   /** How the build's clock is held between moves: wall-time pacing, or seeded exact steps. */
   pacing?: "paced" | "stepped";
+  /**
+   * How many players a game played in its engine's editor opens for this session (1 to
+   * `MAX_PLAY_PLAYERS`, never more than its engine declares); absent is one.
+   */
+  players?: number;
 }
 // ↑ src/shared/engine-requests.ts
 

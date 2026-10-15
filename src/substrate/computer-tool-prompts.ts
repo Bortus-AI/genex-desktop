@@ -88,6 +88,13 @@ const WEB_LINES =
 const BATCH_LINE =
   'batch actions=[{"action":"key","text":"w"},{"action":"wait","duration":0.5}]: up to 8 input actions and waits in one call, run in order, stopping at the first that fails. ';
 
+/** The players sentence, for a target that plays several at once. */
+function playersLine(caps: TargetCapabilities): string {
+  const players = caps.players ?? 1;
+  if (players < 2) return "";
+  return `This play has ${players} players, each with its own view, keys and state: player=<1–${players}> on any action addresses that player from then on (player 1 to start). `;
+}
+
 /** The observe sentence, with what this session does when observe is left out. */
 function observeLine(byDefault: boolean): string {
   const fallback = byDefault ? "a screenshot comes back by default" : "leave it out and nothing comes back";
@@ -148,6 +155,7 @@ export function computerToolDescription(options: {
       : "") +
     (caps.dom ? WEB_LINES : "") +
     BATCH_LINE +
+    playersLine(caps) +
     observeLine(options.observeByDefault ?? false) +
     studioVerbLines(caps, options.cameras) +
     reload +
@@ -192,6 +200,8 @@ export const COMPUTER_PARAMETER_TEXT = {
   actions: 'batch only: a JSON list of steps, e.g. [{"action":"key","text":"w"},{"action":"wait","duration":0.5}]',
   ref: "web_click and web_type: the element ref web_read listed, e.g. p3:12",
   submit: "web_type only: true presses Enter after the text (submits a search or a form)",
+  player: (players: number) =>
+    `which player, 1 to ${players}, this and every later action addresses (player 1 to start)`,
 } as const;
 
 /** What the model is told instead of an action, when its arguments cannot run. */
@@ -215,6 +225,9 @@ export const COMPUTER_ARG_PROBLEM = {
   webTypeNeedsRefAndText: "web_type needs ref=<the field's ref from web_read> and text=<what to type>",
   unsupported: (action: string, actions: string) =>
     `${action} is not available on this game — it cannot do that from here. Use one of ${actions}`,
+  badPlayer: (max: number) => `player needs a whole number from 1 to ${max}`,
+  noSuchPlayer: (player: number, players: number) =>
+    `player ${player} is not in this play: it has ${players} player${players === 1 ? "" : "s"}`,
   unknownObserve: (raw: string) => `observe "${raw}" is not screenshot, canvas or none — the studio decided itself`,
   batchNeedsActions:
     'batch needs actions=[…]: a JSON list of steps, e.g. [{"action":"key","text":"w"},{"action":"wait","duration":0.5}]',

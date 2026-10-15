@@ -8,7 +8,8 @@
  */
 import path from "node:path";
 import { ScreenRole } from "../../shared/agent-screen.ts";
-import { ENGINE_PLAY_TOOLS, type EnginePlayTool } from "../../shared/engine-play.ts";
+import type { TargetCapabilities } from "../../shared/computer-target.ts";
+import { ENGINE_PLAY_TOOLS, type EnginePlayTool, editorCapabilities, playersArg } from "../../shared/engine-play.ts";
 import { type PluginBinding, PluginCapability, PluginToolAudience } from "../../shared/plugins.ts";
 import { readEngineBinding } from "../../substrate/game-engine-binding.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
@@ -43,12 +44,19 @@ export interface EditorPlayPlace extends EditorPlayGame {
   signal: AbortSignal;
 }
 
+/** The engine plugin that plays a game in its editor, and what its declaration says that play can do. */
+export interface EditorPlayPlugin {
+  id: string;
+  caps: TargetCapabilities;
+}
+
 /**
  * The engine plugin that plays this game in its editor: on, an engine plugin, holding the game's
- * current engine link (the one its studio.json mirrors), and providing every play tool. Null for a
- * web game, or when no such plugin is on.
+ * current engine link (the one its studio.json mirrors, of the same engine), and providing every
+ * play tool; with the capabilities its `engine.play` declares. Null for a web game, or when no such
+ * plugin is on.
  */
-export async function editorPlayPlugin(core: StudioCore, project: string): Promise<string | null> {
+export async function editorPlayPlugin(core: StudioCore, project: string): Promise<EditorPlayPlugin | null> {
   const directory = core.games.dirFor(project);
   const bound = await readEngineBinding(directory, core.plugins.engines()).catch(() => undefined);
   if (!bound) return null;
@@ -58,7 +66,8 @@ export async function editorPlayPlugin(core: StudioCore, project: string): Promi
     const names = new Set(manifest.tools.filter((t) => t.audience === PluginToolAudience.Harness).map((t) => t.name));
     if (!ENGINE_PLAY_TOOLS.every((tool) => names.has(tool))) continue;
     const link = await core.engineLinks.read(manifest.id, { project, directory }).catch(() => null);
-    if (link?.project === bound.project) return manifest.id;
+    if (link?.project === bound.project && link.kind === bound.kind)
+      return { id: manifest.id, caps: editorCapabilities(manifest.engine?.play) };
   }
   return null;
 }
@@ -85,8 +94,9 @@ export async function editorPlayComputer(
   game: EditorPlayGame,
   use: { grant: ComputerGrant; outDir: string; session: SessionPort },
 ): Promise<ComputerTools | null> {
-  const plugin = await editorPlayPlugin(core, game.project).catch(() => null);
-  if (!plugin) return null;
+  const plays = await editorPlayPlugin(core, game.project).catch(() => null);
+  if (!plays) return null;
+  const plugin = plays.id;
   const binding: PluginBinding = {
     project: game.project,
     directory: game.directory,
@@ -98,7 +108,9 @@ export async function editorPlayComputer(
       engine: game.engineId ?? STUDIO_ENGINE,
       caller: PluginToolAudience.Harness,
     });
-  return computerTools(x.previews, use.grant, game.directory, use.outDir, use.session, { editor: { call } });
+  // The grant's players, as many as the engine declares at most (the source holds it to that).
+  const editor = { call, caps: plays.caps, players: playersArg(use.grant.players) };
+  return computerTools(x.previews, use.grant, game.directory, use.outDir, use.session, { editor });
 }
 
 /** The editor computer for the chat's own session, or null where no engine plugin plays the game. */

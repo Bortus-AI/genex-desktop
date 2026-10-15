@@ -10,7 +10,13 @@
  * call: the person first, any other caller in turn.
  */
 
-import type { ClockLevel } from "./computer-target.ts";
+import {
+  ClockLevel,
+  EDITOR_CAPABILITIES,
+  PointerLevel,
+  StateLevel,
+  type TargetCapabilities,
+} from "./computer-target.ts";
 
 /** The play tools, by their names after `<plugin>__`. Wire values: never rename. */
 export const EnginePlayTool = {
@@ -18,7 +24,7 @@ export const EnginePlayTool = {
   Open: "play-open",
   /** Hold keys together for a time on the game's own clock, then let go: answers once that time has passed. */
   Input: "play-input",
-  /** A picture of what the player sees: answers a PNG. */
+  /** A picture of what the player sees: answers a JPEG or a PNG, as its `mime` says. */
   Shot: "play-shot",
   /** The game's state: the player and the game's own numbers, as the engine plugin reads them. */
   State: "play-state",
@@ -54,11 +60,111 @@ export interface EnginePlayDeclaration {
   state?: boolean;
 }
 
-/** What `play-open` answers: the view's size, and whether the play was already running. */
+/** The most bytes one play shot may hold: a bigger picture is refused, never shown to a model (its limit is 1 MB). */
+export const MAX_PLAY_SHOT_BYTES = 1_000_000;
+
+/** The clock levels, from none to the most the studio can do with a clock. */
+const CLOCK_ORDER: readonly ClockLevel[] = [
+  ClockLevel.None,
+  ClockLevel.Freeze,
+  ClockLevel.StepLocked,
+  ClockLevel.Replayable,
+];
+
+/** The play tools pause a play and never step it: the most clock an editor's play can have. */
+const EDITOR_CLOCK_MOST: ClockLevel = ClockLevel.Freeze;
+
+/** The lower of two clock levels. */
+function lowerClock(a: ClockLevel, b: ClockLevel): ClockLevel {
+  return CLOCK_ORDER.indexOf(a) <= CLOCK_ORDER.indexOf(b) ? a : b;
+}
+
+/** Whether a value is one of the clock levels. */
+function isClockLevel(value: unknown): value is ClockLevel {
+  return (CLOCK_ORDER as readonly unknown[]).includes(value);
+}
+
+/** A player's number: a whole number from 1 to `MAX_PLAY_PLAYERS`, else null. */
+export function playerArg(value: unknown): number | null {
+  const valid = typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= MAX_PLAY_PLAYERS;
+  return valid ? value : null;
+}
+
+/** How many players a play is asked to open: a player's number, else 1. */
+export function playersArg(value: unknown): number {
+  return playerArg(value) ?? 1;
+}
+
+/** The capabilities with `players` set, or left out at one player (which is what absent means). */
+function withPlayers(caps: TargetCapabilities, players: number): TargetCapabilities {
+  const { players: _dropped, ...rest } = caps;
+  return players > 1 ? { ...rest, players } : rest;
+}
+
+/**
+ * What the computer can do in an engine's editor play, as the engine's plugin declares it
+ * (`engine.play`): its players, its clock (at most the play's own pause), whether the mouse aims as
+ * a player's does, and whether the game's state can be read. Nothing declared is the editor's own
+ * ({@link EDITOR_CAPABILITIES}).
+ */
+export function editorCapabilities(play: EnginePlayDeclaration = {}): TargetCapabilities {
+  const caps: TargetCapabilities = { ...EDITOR_CAPABILITIES };
+  if (play.clock !== undefined) caps.clock = lowerClock(play.clock, EDITOR_CLOCK_MOST);
+  if (play.pointer === false) Object.assign(caps, { pointer: PointerLevel.None, aimedClicks: false });
+  if (play.state === false) caps.state = StateLevel.None;
+  return withPlayers(caps, playersArg(play.players));
+}
+
+/** A field of an object, when the value is an object that has it. */
+function ownField(value: unknown, name: string): unknown {
+  if (typeof value !== "object" || value === null || !Object.hasOwn(value, name)) return undefined;
+  const field: unknown = Reflect.get(value, name);
+  return field;
+}
+
+/**
+ * The capabilities `caps` as a play's own answer says it can do (`play-open`'s `capabilities`, in
+ * the declaration's shape): each field can only lower what was declared, never raise it, and
+ * anything the answer does not say stays as declared.
+ */
+export function narrowCapabilities(caps: TargetCapabilities, answered: unknown): TargetCapabilities {
+  const narrowed: TargetCapabilities = { ...caps };
+  const clock = ownField(answered, "clock");
+  if (isClockLevel(clock)) narrowed.clock = lowerClock(caps.clock, clock);
+  if (ownField(answered, "pointer") === false)
+    Object.assign(narrowed, { pointer: PointerLevel.None, aimedClicks: false });
+  if (ownField(answered, "state") === false) narrowed.state = StateLevel.None;
+  const players = playerArg(ownField(answered, "players"));
+  return withPlayers(narrowed, Math.min(caps.players ?? 1, players ?? MAX_PLAY_PLAYERS));
+}
+
+/** What `play-open` is asked: how many players to open; absent is one. */
+export interface EnginePlayOpenArgs {
+  players?: number;
+}
+
+/**
+ * What `play-open` answers: the view's size, whether the play was already running, and where the
+ * engine can say so, how many players joined, what this play can do (in the declaration's shape, which
+ * can only narrow it) and whether the game's live saved data can be reached from it.
+ */
 export interface EnginePlayOpened {
   width: number;
   height: number;
   joined: boolean;
+  players?: number;
+  capabilities?: EnginePlayDeclaration;
+  liveData?: boolean;
+}
+
+/** Which player a play tool is for: absent is player 1, which is never sent. */
+export interface EnginePlayerArgs {
+  player?: number;
+}
+
+/** The arguments that name a player: nothing for player 1. */
+export function playerArgs(player: number): EnginePlayerArgs {
+  return player > 1 ? { player } : {};
 }
 
 /** The mouse buttons, as `play-input` names them among its keys (web key codes have none). Wire values: never rename. */
@@ -78,7 +184,7 @@ export interface EnginePlayMouse {
  * held together, after one frame of the mouse when it moves; the engine plugin names them in its
  * engine. Plugin tool parameters are scalars, so the keys are one string; none is a wait.
  */
-export interface EnginePlayInputArgs extends EnginePlayMouse {
+export interface EnginePlayInputArgs extends EnginePlayMouse, EnginePlayerArgs {
   keys: string;
   seconds: number;
 }
@@ -93,13 +199,17 @@ export function playInputKeys(keys: unknown): string[] {
     : [];
 }
 
-/** A `play-input`'s arguments for keys held together for `seconds`, after one frame of `mouse` when it moves. */
+/**
+ * A `play-input`'s arguments for keys held together for `seconds`, after one frame of `mouse` when
+ * it moves, by `player` (named only above 1).
+ */
 export function playInputArgs(
   keys: readonly string[],
   seconds: number,
   mouse: EnginePlayMouse = {},
+  player = 1,
 ): EnginePlayInputArgs {
-  return { keys: keys.join(","), seconds, ...mouse };
+  return { keys: keys.join(","), seconds, ...mouse, ...playerArgs(player) };
 }
 
 /** What `play-input` answers: the keys the engine took, and the game seconds that passed. */
@@ -108,9 +218,15 @@ export interface EnginePlayInputAnswer {
   gameSeconds: number | null;
 }
 
-/** What `play-shot` answers: the picture as base64 PNG, at the view's size. */
+/**
+ * What `play-shot` answers: the picture as base64 `data` with its `mime` (`image/jpeg` or
+ * `image/png`; anything else is read as PNG), at the view's size. `png` is the older name for a
+ * PNG's data, read when `data` is absent.
+ */
 export interface EnginePlayShot {
-  png: string;
+  data?: string;
+  png?: string;
+  mime?: string;
   width: number;
   height: number;
 }
@@ -125,6 +241,8 @@ export const EnginePlayRefusal = {
   NotPlaying: "not-playing",
   /** A key the engine has no name for. */
   UnknownKey: "unknown-key",
+  /** The engine cannot do this at all (more players, a pause): the studio stops asking, never retries. */
+  Unsupported: "unsupported",
 } as const;
 export type EnginePlayRefusal = (typeof EnginePlayRefusal)[keyof typeof EnginePlayRefusal];
 

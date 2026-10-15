@@ -156,8 +156,12 @@ export function targetFramePort(target: ComputerTarget): FramePort {
 export interface ComputerToolsOptions {
   /** Set when the build's studio.json declares the `bridge` runtime: its game is started here. */
   bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived"> };
-  /** Set when the game is played in its engine's editor: the engine plugin's play tools. */
-  editor?: { call: EnginePlayCall };
+  /**
+   * Set when the game is played in its engine's editor: the engine plugin's play tools, what its
+   * declaration says the play can do (known before play opens, so the tool is described from it),
+   * and how many players to open.
+   */
+  editor?: { call: EnginePlayCall; caps?: TargetCapabilities; players?: number };
 }
 
 /** The runtimes a computer is built for: those a game declares, and its engine's editor. */

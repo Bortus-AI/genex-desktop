@@ -19,6 +19,7 @@ import {
   setupReached,
   setupVerifyExpr,
   unsupportedAction,
+  unsupportedPlayer,
 } from "../../src/substrate/computer-tool.ts";
 import {
   BROWSER_CAPABILITIES,
@@ -495,5 +496,48 @@ describe("computer tool — mouse-look and named game actions, where the target 
     assert.equal(act.ok && act.request.text, "jump");
     const actNothing = parseComputerArgs({ action: "act" });
     assert.match((actNothing as { error: string }).error, /act needs text/);
+  });
+});
+
+describe("computer tool — a play with several players", () => {
+  const editor = { ...BROWSER_CAPABILITIES, runtime: TargetRuntime.Editor, pointer: PointerLevel.Relative };
+
+  it("offers player only where the play has more than one player, and says how many there are", () => {
+    for (const one of [editor, { ...editor, players: 1 }]) {
+      const definition = computerToolDefinition({ role: "judge", capabilities: one });
+      assert.equal(Object.hasOwn(definition.parameters.properties, "player"), false);
+      assert.doesNotMatch(definition.description, /player=/);
+    }
+    const three = computerToolDefinition({ role: "judge", capabilities: { ...editor, players: 3 } });
+    assert.equal(three.parameters.properties.player?.type, "number");
+    assert.match(three.description, /3 players/);
+    assert.match(three.description, /player=<1–3>/);
+  });
+
+  it("reads player as either transport delivers it, and says when it is no player's number", () => {
+    const named = parseComputerArgs({ action: "screenshot", player: "2" });
+    assert.equal(named.ok && named.request.player, 2);
+    assert.equal(parseComputerArgs({ action: "key", text: "w", player: 3 }).ok, true);
+    const absent = parseComputerArgs({ action: "screenshot" });
+    assert.equal(absent.ok && Object.hasOwn(absent.request, "player"), false, "absent stays absent");
+    for (const bad of [0, -1, 1.5, 9, "two", true]) {
+      const parsed = parseComputerArgs({ action: "screenshot", player: bad });
+      assert.equal(parsed.ok, false, String(bad));
+      assert.match((parsed as { error: string }).error, /player needs a whole number from 1 to 8/, String(bad));
+    }
+  });
+
+  it("refuses a player the play does not have, and every player on a play of one but the first", () => {
+    const three = { ...editor, players: 3 };
+    const fourth = parseComputerArgs({ action: "screenshot", player: 4 });
+    assert.ok(fourth.ok);
+    assert.match(String(unsupportedPlayer(fourth.request, three)), /player 4 is not in this play: it has 3 players/);
+    const second = parseComputerArgs({ action: "screenshot", player: 2 });
+    assert.ok(second.ok);
+    assert.equal(unsupportedPlayer(second.request, three), null);
+    assert.match(String(unsupportedPlayer(second.request, editor)), /it has 1 player\b/);
+    const first = parseComputerArgs({ action: "screenshot", player: 1 });
+    assert.ok(first.ok);
+    assert.equal(unsupportedPlayer(first.request, editor), null, "player 1 is always there");
   });
 });

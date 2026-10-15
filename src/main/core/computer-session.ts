@@ -35,6 +35,7 @@ import {
   parseComputerArgs,
   setupReached,
   unsupportedAction,
+  unsupportedPlayer,
   WebVerb,
 } from "../../substrate/computer-tool.ts";
 import { COMPUTER_ARG_PROBLEM } from "../../substrate/computer-tool-prompts.ts";
@@ -833,6 +834,8 @@ export function computerSession<T extends ComputerTarget>(
     return sentence;
   };
   const act = async (request: ComputerRequest, loaded: TargetLoad<T>): Promise<LiveToolResult> => {
+    // The player this action is for stays addressed until another is named.
+    if (request.player !== undefined) loaded.target.selectPlayer?.(request.player);
     const ctx = actionContext(request, loaded, loaded.note ?? note.value, helpers);
     const answer = await (isHostAction(request.action) ? HOST_ACTIONS[request.action](ctx) : input(ctx)).catch(
       (err: unknown) => {
@@ -883,9 +886,12 @@ async function goalHoldsNow(quest: ComputerQuest | undefined, target: ComputerTa
   return setupReached(quest.until, state) === true;
 }
 
-/** The sentence for an action, or any step of a batch, the target cannot carry out; null when it can. */
+/**
+ * The sentence for an action, or any step of a batch, the target cannot carry out, or for a player
+ * it does not play; null when it can.
+ */
 function refusalOf(request: ComputerRequest, caps: TargetCapabilities): string | null {
-  const own = unsupportedAction(request.action, caps);
+  const own = unsupportedAction(request.action, caps) ?? unsupportedPlayer(request, caps);
   if (own) return own;
   for (const step of request.steps ?? []) {
     const refused = unsupportedAction(step.action, caps);
