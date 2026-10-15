@@ -31,6 +31,7 @@ import {
 import { atomicWriteJson, pathExists } from "../../src/substrate/fsx.ts";
 import { StudioCore } from "../../src/main/studio-core.ts";
 import { makeResources } from "../helpers/resources.ts";
+import { cloneSeededWorkspace } from "../helpers/seed-upgrade-fixture.ts";
 import { closeBeforeCleanup, removeTree, tmpDir } from "../helpers/tmp.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -2496,9 +2497,7 @@ describe("seed upgrade across goal-directed generation", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-goals-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       // The agent's copy of the older vintage: every name it exported then, and nothing newer.
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
@@ -2540,9 +2539,7 @@ describe("seed upgrade across the drive's evidence", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-drive-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       await applySeed({
@@ -2577,9 +2574,7 @@ describe("seed upgrade across the review fixes", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-review-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       await applySeed({
@@ -2616,9 +2611,7 @@ describe("seed upgrade across the open harness", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-open-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2660,9 +2653,7 @@ describe("seed upgrade across one Loop for every project", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-one-loop-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2710,9 +2701,7 @@ describe("seed upgrade across one Loop for every project", () => {
     }> = [];
     for (const part of OPEN_LOOP_PARTS) {
       const root = await tmpDir("seed-open-guard-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       // The agent's copy from before Loops on any project: everything else as shipped, but no flag.
       const copy = await readFile(path.join(ws, part), "utf8");
       const older = copy.replace(/^export const SERVES_OPEN_LOOP = true;$/m, "");
@@ -2804,9 +2793,7 @@ describe("seed upgrade across the worker model", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-workers-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2862,9 +2849,7 @@ describe("seed upgrade across Genex's moments", () => {
     const unlinked: string[] = [];
     for (const rel of Object.keys(vintage.modules)) {
       const root = await tmpDir("seed-moments-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       await writeFile(path.join(ws, rel), `${keptModule(rel)}\n`);
       const report = await applySeed({
         seedDir: shipped,
@@ -2888,9 +2873,7 @@ describe("seed upgrade across Genex's moments", () => {
 
   it("a kept host-method table without the moments', locks' and finish check's methods is reported once and noted for the agent", async () => {
     const root = await tmpDir("seed-moments-methods-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+    const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
     const file = "loop/host-methods.ts";
     const copy = await readFile(path.join(ws, file), "utf8");
     const newer = [
@@ -2972,9 +2955,7 @@ describe("seed upgrade across the Unreal lead", () => {
     const unlinked: string[] = [];
     for (const rel of Object.keys(vintage.modules)) {
       const root = await tmpDir("seed-lead-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: older, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(older, root);
       await writeFile(path.join(ws, rel), `${olderModule(rel)}\n`);
       const report = await applySeed({
         seedDir: shipped,
@@ -3012,9 +2993,7 @@ describe("seed upgrade across computer use", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-computer-use-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
