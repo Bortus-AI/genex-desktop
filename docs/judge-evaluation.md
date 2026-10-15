@@ -69,6 +69,18 @@ record the judge id with the model and prompt version, and compare against the s
 with no plugin judge. A probe's pictures are evidence the judge saw, not a verdict; keep them with
 the captures.
 
+Roblox Studio's plugin declares three, each with a brief in `src/plugins/roblox/judges/` and a probe
+in `src/plugins/roblox/probes.ts`:
+
+- **Multiplayer** (3 test players, `players-state`): a picture per player, and each client's view of
+  every player against the server's.
+- **Cheater** (1 player, `cheat-remotes`): hostile values sent to every remote from the client, the
+  server's leaderstats and attributes read before and after each; skipped when live saved data is
+  reachable.
+- **Phone** (1 player, `phone-check`): a phone and a tablet, upright and sideways, through Studio's
+  Device Simulator, a picture of each, interface overlap, off-screen and safe-area findings, and the
+  place's memory against `PHONE_MEMORY_BUDGET_MB`.
+
 ## Human review and metrics
 
 Have at least two reviewers label each pair independently before seeing the model's answer.

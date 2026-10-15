@@ -2184,6 +2184,12 @@ a save point every one of them plays it in turn, each answer a run check carried
 ([harness runtime](harness-runtime.md)). Whether a chat's session calls a judge is its own choice: a
 change that touches what a judge tests is a hint, not a rule.
 
+The Roblox Studio plugin declares `multiplayer` (3 players, probe `players-state`), `cheater`
+(1, `cheat-remotes`) and `phone` (1, `phone-check`), for `roblox-project` games. Their briefs are in
+`judges/`; the cheater and phone probes send Luau the build copies beside `backend.mjs`
+(`cheat-remotes.luau`, `phone-check.luau`), read from the package at run time
+([computer use](computer-use.md#game-engines-and-other-targets) says what each measures).
+
 ## Panels and trusted approval
 
 Panels register `settings` or `project` placements. They are opaque-origin sandboxed frames

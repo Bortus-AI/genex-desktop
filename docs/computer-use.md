@@ -192,6 +192,23 @@ and a play that reaches the live game's saved data (`liveData: true` on `play-op
 later answers carry neither. A judge named for a game no engine plugin plays in its editor is
 refused.
 
+Roblox Studio's three judges ([plugins](plugins.md#judges)) open with these probes, each a harness
+tool under the `studio` lock that reads the play the play tools hold (`plugins/roblox/probes.ts`).
+`players-state` takes a picture from each player and compares what each client sees of every
+player (who is there, leaderstats, attributes) with the server. `cheat-remotes` runs the package's
+`cheat-remotes.luau` in the player's Client data model: it lists every RemoteEvent,
+UnreliableRemoteEvent and RemoteFunction the client reaches and sends each one hostile values (no
+values, wrong types, negative, huge and broken numbers, a 50 000-character string, other players'
+and the world's instances, then a burst of 60), reading the server's leaderstats, player attributes
+and ServerStorage's attributes before and after each; it starts no remote past `CHEAT_MAX_MS`
+(2 minutes) and sends nothing when the play reaches live saved data. `phone-check` runs
+`phone-check.luau` in the Client data model, which can set Studio's Device Simulator during a play
+(the Edit data model can't be reached then): four sizes (`PHONE_SIZES`), a picture each, overlaps
+between pressable elements or with Roblox's jump button and move stick, elements off the screen,
+outside the device's safe area or under Roblox's top-bar buttons, and the place's memory (Studio's
+own memory kinds left out) against `PHONE_MEMORY_BUDGET_MB` (600). The simulator keeps its device
+after a play ends, so the probe always puts back the device shown before.
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
