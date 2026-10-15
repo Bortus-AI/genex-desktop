@@ -324,6 +324,12 @@ export interface DelegatePlaytestGrant {
    * `MAX_PLAY_PLAYERS`, never more than its engine declares); absent is one.
    */
   players?: number;
+  /**
+   * A judge the game's engine plugin declares (`PluginJudge.id`), for a `judge` role on a game played
+   * in its editor: the host appends its brief to the session's rubric, opens its players and runs
+   * its probe once the play opens. A judge the game does not have is refused.
+   */
+  judge?: string;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1475,6 +1481,34 @@ export interface LinkedEngine {
 }
 // ↑ src/shared/game-engine.ts
 
+/**
+ * API 3: a blind judge an engine plugin declares (`judges`). It plays a game in the engine's editor
+ * through the play tools, never sees code, and answers from playing. Data only: the host runs it.
+ */
+export interface PluginJudge {
+  /** Unique in the manifest: what an agent names the judge by. */
+  id: string;
+  /** What the person and the agent read it as, 1-40 characters on one line. */
+  label: string;
+  /** The facts of the games it judges; every game the plugin plays in its editor when absent. */
+  facts?: string[];
+  /** The package's Markdown file holding its brief, appended to the judge's rubric (at most `MAX_JUDGE_BRIEF_CHARS`). */
+  brief: string;
+  /** How many players its play opens, 1 to the engine's `play.players`; one when absent. */
+  players?: number;
+  /**
+   * A quiet harness tool of the plugin, needing the play tools' locks, that the host runs once in
+   * the judge's play right after it opens: its `note` and `images` (measurements and pictures,
+   * never source) open the judge's first message.
+   */
+  probe?: string;
+}
+// ↑ src/shared/plugins.ts
+
+/** A judge as a game's descriptor and an agent name it. */
+export type JudgeRef = Pick<PluginJudge, "id" | "label">;
+// ↑ src/shared/plugins.ts
+
 export type FactSource = 'core' | 'link' | 'scaffold';
 // ↑ src/shared/project-facts.ts
 
@@ -1517,6 +1551,13 @@ export interface GameProject {
   engine?: EngineBinding;
   /** The linked engine as its plugin declares it (its name, project files, project in the folder); absent for a web game. */
   linkedEngine?: LinkedEngine;
+  /**
+   * True when an engine plugin that is on plays this game in its editor (its play tools hold the
+   * game's link): judges and the computer play it there. Filled by the harness's `game.list`.
+   */
+  editorPlay?: boolean;
+  /** The judges that play this game in its editor, as its engine plugin declares them; only with `editorPlay`. */
+  judges?: JudgeRef[];
   /**
    * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
    * `detect` and the engine link. Empty while the first message has not picked a kind.
@@ -2668,6 +2709,8 @@ export type DispatchAction =
       effort?: string;
       ask: string;
       goalState?: string;
+      /** The engine plugin's judge to play as (`PluginJudge.id`), checked by the host against the game's judges. */
+      judge?: string;
     }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };

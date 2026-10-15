@@ -37,7 +37,7 @@ const images = (result: LiveToolResult): number => (typeof result === "string" ?
 const PIXEL = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
 
 /** A stand-in engine plugin: its play tools, recorded, and a game whose player wins once W was held 2 s. */
-function standInEngine(options: { refuseOpen?: boolean } = {}) {
+function standInEngine(options: { refuseOpen?: boolean; afterOpen?: (answer: unknown) => Promise<void> } = {}) {
   const calls: Array<[EnginePlayTool, Record<string, unknown>]> = [];
   const game = { heldW: 0, playing: false, paused: false, pausedAtInput: [] as boolean[] };
   const call = async (tool: EnginePlayTool, args: Record<string, unknown>) => {
@@ -67,7 +67,7 @@ function standInEngine(options: { refuseOpen?: boolean } = {}) {
         return { closed: true };
     }
   };
-  const source = editorPlaySource({ call });
+  const source = editorPlaySource({ call, ...(options.afterOpen ? { afterOpen: options.afterOpen } : {}) });
   const inputs = () => calls.filter(([tool]) => tool === EnginePlayTool.Input).map(([, args]) => args);
   return { source, calls, game, inputs };
 }
@@ -181,6 +181,22 @@ describe("the computer on a game played in its engine's editor", () => {
     assert.equal(game.playing, false, "the play it started ended");
     await source.release();
     assert.equal(calls.filter(([tool]) => tool === EnginePlayTool.Close).length, 1, "closed once");
+  });
+
+  it("runs its after-open step once, right after the play opens and before any move, with the open's answer", async () => {
+    const seen: Array<{ before: EnginePlayTool[]; answer: unknown }> = [];
+    const { source, calls } = standInEngine({
+      afterOpen: async (answer) => {
+        seen.push({ before: calls.map(([tool]) => tool), answer });
+      },
+    });
+    const session = computerSession(source, "/game", { pacing: "running", frameDir: await tmpDir("editor-play-") });
+    await session.run("computer", { action: "screenshot" });
+    await session.run("computer", { action: "key", text: "w" });
+    await session.run("computer", { action: "screenshot" });
+    assert.equal(seen.length, 1, "once for the session's play");
+    assert.deepEqual(seen[0]?.before, [EnginePlayTool.Open], "right after the play opened, before any move");
+    assert.equal((seen[0]?.answer as { width?: number } | undefined)?.width, ENGINE_PLAY_VIEW.width);
   });
 
   it("says the engine's reason when play cannot open, and has nothing to close", async () => {

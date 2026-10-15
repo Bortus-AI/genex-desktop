@@ -6,7 +6,13 @@
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { DesktopTools } from "./desktop-tools.ts";
 import { desktopSessionTools } from "./desktop-session.ts";
-import { editorPlayComputer, editorPlayTools } from "./editor-play-session.ts";
+import {
+  editorPlayComputer,
+  editorPlayTools,
+  gameJudge,
+  gameJudgeRefs,
+  judgeBriefText,
+} from "./editor-play-session.ts";
 import { type JudgePlayCaller, judgePlayFor, runJudgePlay, studioJudgeHost } from "./judge-play-tool.ts";
 import { uuidv7 } from "../../substrate/ids.ts";
 import { replaceableCover } from "../../shared/game-library.ts";
@@ -149,6 +155,8 @@ const MESSAGE = {
   tooManyWorkers: (max: number) =>
     `this chat already runs ${max} workers, the most the person's Settings allow: wait for one to finish (${WorkerTool.Wait}) before starting another`,
   toolCollision: (name: string) => `Plugin tool collision: ${name}`,
+  judgeWithoutEditor: (id: string) =>
+    `No judge named "${id}" plays this game: an engine's judges play only a game its plugin plays in its editor.`,
   unknownTool: (name: string) => `Unknown tool: ${name}`,
   turnEndUnrecorded: (err: unknown) => `[core] could not record the end of the lead's turn: ${errorMessage(err)}`,
   cleanupFailed: (step: string, err: unknown) =>
@@ -409,6 +417,8 @@ interface SessionTools {
   judge: LiveToolSpec[];
   /** Whom a judge's play answers to; null for a session without `judge_play`. */
   judgeCaller: JudgePlayCaller | null;
+  /** An engine judge's brief, beside its rubric: only a judge's session that plays as one. */
+  judgeBrief: string;
 }
 
 /**
@@ -747,13 +757,17 @@ export class DelegationService {
     initialRoot: string,
     outDir: string,
     session: SessionPort,
+    options: { judgeBrief?: boolean } = {},
   ): Promise<ComputerTools> {
     // A game an engine plugin plays in its editor (an Unreal game) is played there, whoever the session is.
     const directory = this.#gameDirectory(grant.project);
+    const use = { grant, outDir, session, ...(options.judgeBrief ? { brief: true } : {}) };
     const editor = directory
-      ? await editorPlayComputer(this.#core, this.#x, { project: grant.project, directory }, { grant, outDir, session })
+      ? await editorPlayComputer(this.#core, this.#x, { project: grant.project, directory }, use)
       : null;
     if (editor) return editor;
+    // A plugin's judges play only in its editor: a judge named for a game played anywhere else has no play.
+    if (grant.judge) throw new Error(MESSAGE.judgeWithoutEditor(grant.judge));
     // A build whose studio.json declares the bridge runtime is played as its own process, started
     // in the studio's sandbox; every other build in the session's browser window, as before.
     const shape = await readProjectShape(initialRoot).catch(() => null);
@@ -2340,7 +2354,7 @@ export class DelegationService {
       };
       tools.builder = await editorPlayTools(this.#core, this.#x, { ...place, signal: session.abort.signal });
     }
-    this.#offerJudge(p, target, grants, session, tools);
+    await this.#offerJudge(p, target, grants, session, tools);
   }
 
   /** The person's computer for the chat's own session (`desktop-session.ts`), behind their consent. */
@@ -2356,20 +2370,21 @@ export class DelegationService {
   /**
    * `judge_play` for the chat's own session, on a game the studio plays: in a window of its own (a
    * web game: `selfCapture`), or in its engine's editor (the session's computer is the editor's),
-   * the judge playing the game folder; where the harness serves it. A plugin tool of the same name
-   * is refused.
+   * the judge playing the game folder; where the harness serves it. A game its engine plugin
+   * declares judges for offers them by id. A plugin tool of the same name is refused.
    */
-  #offerJudge(
+  async #offerJudge(
     p: DelegateParams,
     target: DelegationTarget,
     grants: DelegationGrants,
     session: DelegationSession,
     tools: SessionTools,
-  ): void {
+  ): Promise<void> {
     const editor = tools.builder?.runtime === TargetRuntime.Editor ? { root: target.cwd } : undefined;
     const window = grants.selfCapture ?? editor;
     const capable = this.#core.host.hasCapability(HarnessCapability.ChatJudge);
-    const offered = judgePlayFor(Boolean(window), capable).filter((tool) => offers(session, tool.name));
+    const judges = editor && capable ? await gameJudgeRefs(this.#core, p.project) : [];
+    const offered = judgePlayFor(Boolean(window), capable, judges).filter((tool) => offers(session, tool.name));
     if (!window || !offered.length) return;
     const taken = tools.plugins.find((plugin) => offered.some((tool) => tool.name === plugin.name));
     if (taken) throw new Error(MESSAGE.toolCollision(taken.name));
@@ -2423,6 +2438,16 @@ export class DelegationService {
       throw new Error(MESSAGE.toolCollision(COVER_TOOL.name));
   }
 
+  /**
+   * The brief of the engine judge a judge's grant plays as, beside its rubric; refused in plain words
+   * for a judge the game does not have. Nothing for any other grant.
+   */
+  async #judgeBrief(project: string, grant: PlaytestGrant): Promise<string> {
+    if (!grant.judge || grant.role !== ScreenRole.Judge) return "";
+    const { plugin, judge } = await gameJudge(this.#core, project, grant.judge);
+    return judgeBriefText(this.#core, plugin.id, judge);
+  }
+
   /** The builder's computer, the playtester's hands and the director's tools, each on its own window. */
   async #prepareWindowTools(
     p: DelegateParams,
@@ -2443,6 +2468,7 @@ export class DelegationService {
       );
     }
     if (playtest && playShotsDir) {
+      tools.judgeBrief = await this.#judgeBrief(p.project, playtest);
       await ensureDir(playShotsDir);
       tools.playtest = await this.#core._playtestToolsFor(playtest, cwd, playShotsDir);
     }
@@ -2604,6 +2630,7 @@ export class DelegationService {
       tools.jobNews.notice,
       tools.withdrawn ? withdrawnNotice(tools.withdrawn) : "",
       p.prompt,
+      tools.judgeBrief,
       reach.reachesMac ? mainAgentReachNote() : "",
       session.hostTools ? tools.pluginGuidance : tools.capabilityFacts,
       toldWhereLeadToolsWork ? leadToolsNote() : "",
@@ -2942,6 +2969,7 @@ function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance" | "appl
     desktop: null,
     judge: [],
     judgeCaller: null,
+    judgeBrief: "",
   };
 }
 

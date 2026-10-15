@@ -3993,6 +3993,8 @@ export const CHAT_JUDGE_WORDS = {
   asked: "Asked:",
   /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
   notPlayed: "The judge didn't play",
+  /** Which of the engine's judges played, by the name its plugin gives it. */
+  playedAs: (judge: string) => `Played as the ${judge} judge`,
 } as const;
 
 /** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */

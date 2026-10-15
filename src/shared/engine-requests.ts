@@ -98,6 +98,12 @@ export interface DelegatePlaytestGrant {
    * `MAX_PLAY_PLAYERS`, never more than its engine declares); absent is one.
    */
   players?: number;
+  /**
+   * A judge the game's engine plugin declares (`PluginJudge.id`), for a `judge` role on a game played
+   * in its editor: the host appends its brief to the session's rubric, opens its players and runs
+   * its probe once the play opens. A judge the game does not have is refused.
+   */
+  judge?: string;
 }
 
 /**
