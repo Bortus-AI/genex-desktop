@@ -192,6 +192,9 @@ describe("choosing what to install", () => {
     const output = `Hub starting\n[\n  { "version": "6000.3.26f1", "architecture": "arm64" },\n  { "version": "6000.6.6f1" }\n]\ndone`;
     assert.deepEqual(releasesIn(output), ["6000.3.26f1", "6000.6.6f1"]);
     for (const nothing of ["", "no list", "[not json]", "{}"]) assert.deepEqual(releasesIn(nothing), []);
+    // Hub's own Chromium may log on the same stream, in square brackets, before the list.
+    const noisy = `[19294:1015/223654.598386:ERROR:content/browser/backing_store.cc:237] Failed to open LevelDB\n${output}`;
+    assert.deepEqual(releasesIn(noisy), ["6000.3.26f1", "6000.6.6f1"]);
   });
 
   it("reads an install's phase, its last percentage and its last line, through Hub's own noise", () => {

@@ -97,13 +97,28 @@ export function chooseRelease(versions: readonly string[]): string | undefined {
   return finals.find((version) => version.startsWith(`${INSTALL_LINE}.`)) ?? finals[0];
 }
 
-/** The versions in Hub's `editors --releases --json` answer, which may print other lines around it. */
+/** Hub's last line once every task of an install went through. */
+const HUB_DONE = /all tasks completed successfully/i;
+/** A terminal escape Hub prints to redraw its progress, and a log line of Hub's own Chromium. */
+const TERMINAL_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
+const CHROMIUM_LOG = /^\[\d+:\d+\/\d+\.\d+:/;
+/** One of Hub's progress lines: `[Unity (6000.3.26f1)] downloading 12.00%`, or `installing...` with none. */
+const PROGRESS = /\]\s+([a-z]+)(?:\s+(\d{1,3}(?:\.\d+)?)\s?%|\s*[a-z ]*\.\.\.)/i;
+
+/**
+ * The versions in Hub's `editors --releases --json` answer, which may print other lines around it,
+ * Chromium's own log lines (in square brackets) among them.
+ */
 export function releasesIn(output: string): string[] {
-  const start = output.indexOf("[");
-  const end = output.lastIndexOf("]");
+  const text = output
+    .split(/\r?\n/)
+    .filter((line) => !CHROMIUM_LOG.test(line.trim()))
+    .join("\n");
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
   if (start < 0 || end < start) return [];
   try {
-    const list: unknown = JSON.parse(output.slice(start, end + 1));
+    const list: unknown = JSON.parse(text.slice(start, end + 1));
     if (!Array.isArray(list)) return [];
     return list
       .map((item) => (item as { version?: unknown })?.version)
@@ -112,14 +127,6 @@ export function releasesIn(output: string): string[] {
     return [];
   }
 }
-
-/** Hub's last line once every task of an install went through. */
-const HUB_DONE = /all tasks completed successfully/i;
-/** A terminal escape Hub prints to redraw its progress, and a log line of Hub's own Chromium. */
-const TERMINAL_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
-const CHROMIUM_LOG = /^\[\d+:\d+\/\d+\.\d+:/;
-/** One of Hub's progress lines: `[Unity (6000.3.26f1)] downloading 12.00%`, or `installing...` with none. */
-const PROGRESS = /\]\s+([a-z]+)(?:\s+(\d{1,3}(?:\.\d+)?)\s?%|\s*[a-z ]*\.\.\.)/i;
 
 /**
  * How far an install got from Hub's output: its phase and percentage from its last progress line
