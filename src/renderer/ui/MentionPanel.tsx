@@ -14,7 +14,6 @@ import { GameAvatar } from "./GameAvatar.tsx";
 import { Icon } from "./icons.tsx";
 import { pickerItem } from "./PickerPanel.tsx";
 import { PluginIcon } from "./PluginIcon.tsx";
-import { Pending } from "./Pending.tsx";
 import { CatalogState } from "./use-mention-docs.ts";
 
 /** The chip each kind wears. */
@@ -186,6 +185,33 @@ function OptionCard({
   );
 }
 
+/** Lines of cards each skeleton shelf holds while genex.games answers: Assets two, Tools and Games one. */
+const SKELETON_LINES = [2, 1, 1] as const;
+
+/**
+ * While genex.games answers, the shelves it will fill stand in their real size as quiet cards, so
+ * the panel opens at the height it settles at and nothing jumps when the covers arrive.
+ */
+function MentionSkeleton({ columns, query }: { columns: number; query: string }): JSX.Element {
+  const shelves = query.trim() ? [1] : SKELETON_LINES;
+  return (
+    <div aria-busy="true" aria-label={MENTION_WORDS.reading} data-mention-skeleton>
+      {shelves.map((lines, shelf) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: placeholder shelves have no identity.
+        <section key={shelf} className="mention-shelf" aria-hidden>
+          {query.trim() ? null : <span className="mention-skeleton-label" />}
+          <div className="mention-grid">
+            {Array.from({ length: lines * columns }, (_, card) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: placeholder cards have no identity.
+              <span key={card} className="mention-skeleton-card" />
+            ))}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
 /** What the panel shows and how it acts; `active` indexes cards first, then rows. */
 export interface MentionPanelProps {
   list: string;
@@ -261,7 +287,7 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
           </div>
         </section>
       ))}
-      {props.catalog === CatalogState.Reading ? <Pending label={MENTION_WORDS.reading} className={pickerItem} /> : null}
+      {props.catalog === CatalogState.Reading ? <MentionSkeleton columns={props.columns} query={props.query} /> : null}
       {rows.length > 0 ? (
         <section className="mention-shelf">
           {props.query ? null : <h4 className="mention-shelf-label">{MENTION_WORDS.plugins}</h4>}

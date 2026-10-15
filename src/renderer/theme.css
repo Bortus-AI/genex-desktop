@@ -5830,6 +5830,37 @@ a:focus-visible {
   gap: 2px;
   padding-bottom: 4px;
 }
+/* The shelves genex.games will fill, standing in while it answers: quiet cards with a slow sweep. */
+.mention-skeleton-label,
+.mention-skeleton-card {
+  display: block;
+  background: linear-gradient(
+      100deg,
+      transparent 30%,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
+      transparent 70%
+    )
+    var(--control-quiet);
+  background-size: 250% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.mention-skeleton-label {
+  width: 72px;
+  height: 12px;
+  margin: 12px 4px 8px;
+  border-radius: 6px;
+}
+.mention-skeleton-card {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid var(--control-quiet-edge);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mention-skeleton-label,
+  .mention-skeleton-card {
+    animation: none;
+  }
+}
 /* A plugin's or Images' card: its picture in the middle of the plain card, above the title. */
 .mention-card-icon {
   color: rgb(255 255 255 / 0.85);
