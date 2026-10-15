@@ -38,6 +38,8 @@
   --people-chip-number: #d3dbff;
   --credits-card: color-mix(in srgb, var(--credits-card-color) 10%, transparent);
   --credits-card-edge: color-mix(in srgb, color-mix(in srgb, var(--credits-card-color) 75%, #ffffff) 40%, transparent);
+  /* The soft shadow under the bare tool marks on the Credits tab. */
+  --credits-mark-shadow: rgb(0 0 0 / 0.7);
   --people-invite: color-mix(in srgb, var(--people-invite-color) 12%, transparent);
   --people-invite-edge: color-mix(in srgb, var(--people-invite-color) 34%, transparent);
   --stats-up: #5fd18b;
@@ -80,6 +82,7 @@
   --people-chip-number: #1e33b4;
   --credits-card: color-mix(in srgb, var(--credits-card-color) 5%, transparent);
   --credits-card-edge: color-mix(in srgb, var(--credits-card-color) 32%, transparent);
+  --credits-mark-shadow: rgb(24 28 60 / 0.3);
   --people-invite: color-mix(in srgb, var(--people-invite-color) 7%, transparent);
   --people-invite-edge: color-mix(in srgb, var(--people-invite-color) 22%, transparent);
   --stats-up: #16803f;
@@ -188,7 +191,7 @@
 .people-arrow:focus-visible,
 .friend-card-open:focus-visible,
 .person-tile:focus-visible,
-.friends-stack:focus-visible,
+.plate-end:focus-visible,
 .profile-edit:focus-visible,
 .handle-suggestion:focus-visible {
   outline: 2px solid var(--focus-edge);
@@ -705,65 +708,28 @@
   height: 24px;
 }
 
-/* ── The sidebar's friends stack: two faces, people playing first in green, requests on the corner ── */
-.friends-stack {
-  position: relative;
+/* ── Beside the plate's name: the credits (which open Credits), or the Offline mark ── */
+.plate-end {
   display: flex;
   flex: none;
   align-items: center;
+  gap: 4px;
   height: 40px;
   padding-inline: 4px;
   border: 0;
   border-radius: 9px;
   background: transparent;
+  color: var(--ink-2);
+  font: 11px / 16px var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
-  transition: background-color var(--duration-quick);
-  --stack-edge: var(--sidebar);
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick);
 }
-.friends-stack:hover {
+.plate-end:hover {
   background: var(--sidebar-hover);
-  --stack-edge: var(--sidebar-hover);
-}
-.friends-stack-face {
-  display: inline-flex;
-  border-radius: 50%;
-  box-shadow: 0 0 0 2px var(--stack-edge);
-}
-.friends-stack-face + .friends-stack-face,
-.friends-stack-face + .friends-stack-plus {
-  margin-inline-start: -10px;
-}
-.friends-stack-face[data-live] {
-  box-shadow:
-    0 0 0 1.5px var(--stack-edge),
-    0 0 0 3px var(--people-live);
-}
-.friends-stack-plus {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--page);
-  box-shadow:
-    0 0 0 2px var(--stack-edge),
-    inset 0 0 0 1px var(--line-strong);
-  color: var(--play-blue);
-}
-.friends-stack-count {
-  position: absolute;
-  top: 3px;
-  right: 1px;
-  min-width: 16px;
-  height: 16px;
-  padding-inline: 4px;
-  border-radius: 8px;
-  background: var(--people-request);
-  box-shadow: 0 0 0 2px var(--stack-edge);
-  color: #ffffff;
-  font: 500 10px / 16px var(--font-family-mono);
-  text-align: center;
+  color: var(--ink);
 }
 
 /* ── A profile: centred, at most 1080px wide ── */
@@ -1772,4 +1738,178 @@
   align-items: center;
   justify-content: flex-end;
   gap: 5px;
+}
+
+/* ── The friends under the games in the sidebar (`play/SidebarFriends.tsx`) ── */
+/* About four and a half rows, then they scroll on their own: the half row says there are more. */
+.sidebar-friends {
+  --page: var(--sidebar);
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The word Friends is the way to the Friends page: the games' heading type, with its ↗ always on. */
+.sidebar-friends-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin: 12px 0 4px 8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-control);
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick);
+}
+.sidebar-friends-heading:hover,
+.sidebar-friends-heading[aria-current="page"] {
+  background: var(--sidebar-hover);
+  color: var(--ink);
+}
+.sidebar-friends-heading:focus-visible {
+  outline: 2px solid var(--focus-edge);
+  outline-offset: -2px;
+}
+.sidebar-friends-heading .sidebar-badge {
+  min-width: 18px;
+  height: 16px;
+  padding-inline: 5px;
+  line-height: 16px;
+}
+.sidebar-friends-arrow {
+  opacity: 0.6;
+  transition: opacity var(--duration-quick);
+}
+.sidebar-friends-heading:hover .sidebar-friends-arrow {
+  opacity: 1;
+}
+/* 4½ rows of a friend in a game (45px and the list's 2px gap), and a 16px foot the fade lies on. */
+.sidebar-friends-scroll {
+  max-height: calc(4.5 * 47px + 16px);
+  padding-block-end: 16px;
+  overflow-x: hidden;
+}
+/* The friends fade in under the heading once scrolled, and out at their foot while more wait below:
+   the games' own fades (`.sidebar-fade`, `.sidebar-lists::after`). */
+.sidebar-friends-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* Taller than the games' fade: a friend's row is two lines, and a soft edge reads as more above. */
+.sidebar-friends-list > .sidebar-fade {
+  height: 32px;
+  background: linear-gradient(var(--sidebar) 15%, transparent);
+}
+.sidebar-friends-list[data-scrolled="true"] > .sidebar-fade {
+  opacity: 1;
+}
+.sidebar-friends-list::after {
+  content: "";
+  position: absolute;
+  inset-inline: 0 7px;
+  bottom: 0;
+  height: 24px;
+  background: linear-gradient(transparent, var(--sidebar));
+  pointer-events: none;
+}
+.sidebar-friends .sidebar-games {
+  gap: 2px;
+}
+.sidebar-friend-open {
+  gap: 10px;
+  padding-block: 5px;
+  padding-inline-end: 8px;
+}
+.sidebar-friend-who {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+/* The name gives way before its Pro tag. */
+.sidebar-friend-name {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 19px;
+}
+.sidebar-friend-name .people-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sidebar-friend-name .people-pro {
+  flex: none;
+  margin-inline-start: 6px;
+  vertical-align: 0;
+}
+/* The game they are in: one green line. */
+.sidebar-friend-playing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--people-live-ink);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: normal;
+}
+.sidebar-friend-playing > .gi {
+  flex: none;
+}
+/* A small face keeps a thin ring and a small dot. */
+.sidebar-friend .people-avatar:not([data-gear])[data-live] > .cy-avatar,
+.sidebar-friend .people-avatar:not([data-gear])[data-live] > .person-avatar {
+  box-shadow:
+    0 0 0 1.5px var(--page),
+    0 0 0 3px var(--people-live);
+}
+.sidebar-friend .people-avatar:not([data-gear])[data-pro] > .cy-avatar,
+.sidebar-friend .people-avatar:not([data-gear])[data-pro] > .person-avatar {
+  box-shadow:
+    0 0 0 1.5px var(--page),
+    0 0 0 3px var(--people-pro-ring);
+}
+.sidebar-friend .people-live-dot {
+  right: -2px;
+  bottom: -2px;
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 2px var(--page);
+}
+.sidebar-friend:is(:hover, :focus-within) {
+  --page: var(--sidebar-hover);
+}
+/* Join, on hover, for a friend who is playing. */
+.sidebar-friend-join {
+  position: absolute;
+  inset-inline-end: 6px;
+  height: 24px;
+  padding-inline: 10px;
+  border-radius: 12px;
+  background: var(--people-accept);
+  color: var(--people-accept-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-quick),
+    background-color var(--duration-quick);
+}
+.sidebar-friend-join:hover {
+  background: var(--people-accept-hover);
+}
+.sidebar-friend:is(:hover, :focus-within) .sidebar-friend-join {
+  opacity: 1;
+}
+.sidebar-friend:is(:hover, :focus-within):has(.sidebar-friend-join) .sidebar-friend-open {
+  padding-inline-end: 64px;
 }

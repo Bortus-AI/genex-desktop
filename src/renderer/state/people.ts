@@ -266,14 +266,6 @@ export function busyChanged(state: PeopleState, id: string, busy: boolean): Peop
   return { ...state, busy: next };
 }
 
-/** How many faces the sidebar's friends stack shows. */
-export const STACK_FACES = 2;
-
-/** The faces the sidebar's friends stack shows: friends playing now first, then the rest, as the API sorts them. */
-export function stackFaces(friends: readonly PlayFriend[]): PlayFriend[] {
-  return friends.toSorted((a, b) => Number(b.playing !== null) - Number(a.playing !== null)).slice(0, STACK_FACES);
-}
-
 /**
  * The Friends page as it shows offline: nobody's status is known, so nobody is playing (no green
  * ring, live dot or Join); everything else is the page as last read, which stays for when the Mac
@@ -286,6 +278,16 @@ export function withoutPresence(page: PlayFriendsPage): PlayFriendsPage {
 
 /** How many friend requests wait for the account's answer. */
 export const waitingRequests = (state: PeopleState): number => state.friends?.incoming.length ?? 0;
+
+/**
+ * The friends the sidebar lists under the games, in the API's order (playing first): null signed
+ * out (no Friends block), none until the Friends page is read, and nobody playing offline.
+ */
+export function sidebarFriends(state: Pick<PeopleState, "me" | "friends">, online: boolean): PlayFriend[] | null {
+  if (!state.me) return null;
+  if (!state.friends) return [];
+  return (online ? state.friends : withoutPresence(state.friends)).friends;
+}
 
 /** The store and what it reads and writes. */
 export interface PeopleStore extends StoreApi<PeopleState> {

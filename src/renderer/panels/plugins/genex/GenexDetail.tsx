@@ -21,7 +21,7 @@ import { GenexAccount } from "./GenexAccount.tsx";
 import { GenexCreditsTab } from "./GenexCreditsTab.tsx";
 import { chooseGenexTab, GENEX_TABS, GenexTab, useGenexTab } from "./genex-tab.ts";
 import { type GenexJobRow, genexJobRows, JobState } from "./genex-view.ts";
-import { ROUTED_TOOLS, toolCopy } from "./routed-tools.ts";
+import { markIsLight, ROUTED_TOOLS, toolCopy } from "./routed-tools.ts";
 import { type GenexLive, useGenexStatus } from "./use-genex-status.ts";
 
 /** The tools Genex routes, each with its mark and what it does. */
@@ -36,7 +36,7 @@ function RoutedTools(): JSX.Element {
           return (
             <li key={id} className="genex-tool" data-genex-tool={id}>
               <span className="genex-tool-mark" aria-hidden="true">
-                <img src={mark} alt="" draggable={false} />
+                <img src={mark} alt="" draggable={false} data-light-mark={markIsLight(id) || undefined} />
               </span>
               <span className="genex-tool-copy">
                 <span className="genex-tool-name">{tool.name}</span>

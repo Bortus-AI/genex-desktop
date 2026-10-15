@@ -1,4 +1,7 @@
-/** One game, one row. The chrome and navigation stay put; only the game list scrolls. */
+/**
+ * One game, one row. The chrome and navigation stay put; the game list scrolls, and under it the
+ * friends scroll on their own.
+ */
 import type { ComponentPropsWithRef, CSSProperties, JSX, ReactNode, RefObject } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { type ReadyUpdate, UpdateAction } from "../../shared/app-update.ts";
@@ -32,8 +35,8 @@ import { ProfilePlate } from "../play/ProfilePlate.tsx";
 import { usePeopleSync } from "../play/use-people-sync.ts";
 import { PlayRecent } from "../play/PlayRecent.tsx";
 import { PlaySwitch } from "../play/PlaySwitch.tsx";
-import { usePeople, usePlay, useShallow } from "../state/hooks.ts";
-import { waitingRequests } from "../state/people.ts";
+import { SidebarFriends } from "../play/SidebarFriends.tsx";
+import { usePlay, useShallow } from "../state/hooks.ts";
 import { PlayPage } from "../state/play.ts";
 import { besideRemix, remixCovers, remixShare } from "../play/remix-model.ts";
 import { remixTitle } from "../../shared/play.ts";
@@ -162,7 +165,7 @@ export function Sidebar(props: Props): JSX.Element {
     </>
   );
   const { playOpen } = props;
-  usePeopleSync(playOpen);
+  usePeopleSync();
   return (
     <nav
       ref={nav}
@@ -175,32 +178,35 @@ export function Sidebar(props: Props): JSX.Element {
     >
       <SidebarTop {...props} studio={studio} harnessOpen={harnessOpen} />
       <div className="sidebar-list">
-        <div
-          className="sidebar-scroll play-recent-scroll"
-          data-off={!playOpen}
-          inert={!playOpen}
-          onScroll={(event) => onScroll(event.currentTarget)}
-        >
-          <PlayRecent />
-        </div>
-        <div
-          className="sidebar-scroll"
-          data-sidebar-scroll
-          data-off={playOpen}
-          inert={playOpen}
-          onScroll={(event) => onScroll(event.currentTarget)}
-        >
-          <div className="sidebar-games">
-            {sorted.map((game, index) => (
-              <Fragment key={game.name}>
-                {index === firstUnpinned(sorted) ? pending : null}
-                <SidebarGame {...props} game={game} harnessOpen={harnessOpen} />
-              </Fragment>
-            ))}
-            {firstUnpinned(sorted) === sorted.length ? pending : null}
+        <div className="sidebar-lists">
+          <div
+            className="sidebar-scroll play-recent-scroll"
+            data-off={!playOpen}
+            inert={!playOpen}
+            onScroll={(event) => onScroll(event.currentTarget)}
+          >
+            <PlayRecent />
           </div>
+          <div
+            className="sidebar-scroll"
+            data-sidebar-scroll
+            data-off={playOpen}
+            inert={playOpen}
+            onScroll={(event) => onScroll(event.currentTarget)}
+          >
+            <div className="sidebar-games">
+              {sorted.map((game, index) => (
+                <Fragment key={game.name}>
+                  {index === firstUnpinned(sorted) ? pending : null}
+                  <SidebarGame {...props} game={game} harnessOpen={harnessOpen} />
+                </Fragment>
+              ))}
+              {firstUnpinned(sorted) === sorted.length ? pending : null}
+            </div>
+          </div>
+          <span className="sidebar-fade" aria-hidden="true" />
         </div>
-        <span className="sidebar-fade" aria-hidden="true" />
+        <SidebarFriends onPlayMode={props.onPlayMode} />
         <SidebarFooter {...props} />
       </div>
       {/* Shown once, until the first sign-in: the account plate stays under it. */}
@@ -528,15 +534,12 @@ const SHELF_ICONS = {
 
 /**
  * Play's shelves in the rooms' place: Games, Tools and Assets, each with its count, as genex.games
- * lists them, and Friends after them while Genex is signed in, with the requests waiting.
+ * lists them. Friends are under the games (`SidebarFriends`), not a row here.
  */
 function PlayShelfRows(): JSX.Element {
   const onShelf = usePlay((s) => s.view.page === PlayPage.Shelf);
   const shown = usePlay((s) => s.shelf);
   const counts = usePlay(useShallow((s) => s.counts));
-  const friendsShown = usePlay((s) => s.view.page === PlayPage.Friends);
-  const signedIn = usePeople((s) => s.me !== null);
-  const waiting = usePeople(waitingRequests);
   return (
     <div className="sidebar-nav" role="group" aria-label={PLAY_WORDS.shelvesLabel}>
       {PLAY_SHELVES.map((shelf) => {
@@ -554,22 +557,6 @@ function PlayShelfRows(): JSX.Element {
           </NavRow>
         );
       })}
-      {signedIn && (
-        <NavRow
-          icon="users"
-          current={friendsShown}
-          data-play-friends=""
-          aria-label={PLAY_WORDS.people.friendsLabel(waiting)}
-          onClick={() => studioApp().play.showFriends()}
-        >
-          <span className="min-w-0 flex-1 truncate">{PLAY_WORDS.people.friends}</span>
-          {waiting > 0 && (
-            <span className="sidebar-badge" aria-hidden="true">
-              {waiting}
-            </span>
-          )}
-        </NavRow>
-      )}
     </div>
   );
 }
