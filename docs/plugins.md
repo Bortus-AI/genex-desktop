@@ -1283,7 +1283,8 @@ Available services are capability checked and scoped to the calling plugin:
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
   `genex` settings), read only when that file lives inside the game.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
-  the bound game to an Unreal project file, read its link, or show the plugin's steps card in the
+  the bound game to an engine project file (an Unreal `.uproject`, or a Godot project's
+  `project.godot`: the file names the link's `kind`), read its link, or show the plugin's steps card in the
   calling chat (see "A game's engine" below).
 - `game.snapshot {reason}` (capability `game-engine`): an ordinary game snapshot of the bound game,
   listed in Rewind under `reason`, taken before the plugin changes files there (the Unreal plugin,
@@ -1733,7 +1734,8 @@ description come from the live plugin list when the plugin is installed: **Turn 
 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
 link and the host makes it (`substrate/plugins/engine-links.ts`). `game.engine.link {project}`
-checks the `.uproject` by real path (absolute, no `..`, a regular file once every link is
+checks the project file (a `.uproject`, kind `unreal`, or a `project.godot`, kind `godot`;
+`shared/game-engine.ts` `engineOfProjectFile`) by real path (absolute, no `..`, a regular file once every link is
 resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
 linkedAt, previous}`, which the plugin's MCP servers read and agents can't write), mirrors it into
 the game's `studio.json` as `engine` (`substrate/game-engine-binding.ts`; believed only while the
@@ -2496,6 +2498,17 @@ project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a hea
 scripts left unsaved or an editor that didn't answer; at `restore.before` either one blocks, so a
 restore never replaces work the editor still holds. `reload-editor` at `restore.after` rescans and
 reloads the open scenes. With no editor beating, each answers nothing.
+Its panel is an engine panel (design README): This game's project (state, the step: Set up for
+Genex or Open in Godot, Change project, ⋯ Export for the web) and This computer (Godot, the Web
+template), and Choose a project behind Change project: New project on top, then the person's Godot
+projects (`find-projects.ts`: Godot's own `projects.cfg` and Documents › Godot Projects or
+GodotProjects one level down, each once by real path, at most 12) tagged In use or Outside game,
+and Choose a project.godot…. `use-project {folder}` links the game to that project
+(`game.engine.link`, kind `godot`); every tool, hook and the observer then work in the project the
+link names (`project-link.ts` `projectOf`), else in the game's own. A game linked outside its
+folder gets no Loop and a Rewind note (`renderer/linked-project.ts`), its brief says the work
+happens there, Set up installs the addon there (bin/play naming it by its path), and the chat's
+session, leads, workers and Genex's play engine reach that folder.
 `web-export` (agent tool, and the panel's Export for the web) writes Godot's Web export into `web/`
 at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads) added to
 `export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that

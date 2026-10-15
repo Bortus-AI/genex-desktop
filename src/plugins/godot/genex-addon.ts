@@ -110,9 +110,14 @@ export function withEditorPlugin(settings: string): string {
   return lines.join("\n");
 }
 
-/** The project's folder as the game's root names it, with forward slashes ("." at the root). */
+/**
+ * The project's folder as the game's root names it, with forward slashes ("." at the root); a
+ * linked project outside the game by its absolute path.
+ */
 const projectPath = (gameDir: string, project: string) =>
-  (path.relative(gameDir, project) || ".").split(path.sep).join("/");
+  isInside(gameDir, project) || path.resolve(gameDir) === path.resolve(project)
+    ? (path.relative(gameDir, project) || ".").split(path.sep).join("/")
+    : project;
 
 /** A shell string literal. */
 const shellString = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
@@ -123,7 +128,9 @@ const shellString = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
  * screen (a headless Godot draws nothing to show).
  */
 export function launcherText(projectFromGame: string, godot: string | null): string {
-  const project = projectFromGame === "." ? "" : `/${projectFromGame}`;
+  const where = projectFromGame === "." ? '"$root"' : `"$root/${projectFromGame}"`;
+  // A linked project outside the game is named by its own path.
+  const project = path.isAbsolute(projectFromGame) ? shellString(projectFromGame) : where;
   return [
     "#!/bin/sh",
     "# Starts this game for Genex's computer tool, playtesters and judges (Genex Play Protocol).",
@@ -131,7 +138,7 @@ export function launcherText(projectFromGame: string, godot: string | null): str
     'root=$(cd "$(dirname "$0")/.." && pwd)',
     `for godot in "$GENEX_GODOT" ${godot ? `${shellString(godot)} ` : ""}/Applications/Godot.app/Contents/MacOS/Godot "$HOME/Applications/Godot.app/Contents/MacOS/Godot" "$(command -v godot)"; do`,
     '  if [ -n "$godot" ] && [ -x "$godot" ]; then',
-    `    exec "$godot" --path "$root${project}" --no-header --fixed-fps 60 --max-fps 60 --position ${OFF_SCREEN} -- ${PLAY_FLAG} "$@"`,
+    `    exec "$godot" --path ${project} --no-header --fixed-fps 60 --max-fps 60 --position ${OFF_SCREEN} -- ${PLAY_FLAG} "$@"`,
     "  fi",
     "done",
     'echo \'{"event":"fatal","error":"Godot 4 was not found: install it in Applications or set GENEX_GODOT."}\'',
@@ -255,9 +262,11 @@ export async function setUpGame(
   project: string,
   source: string,
   godot: string | null,
+  options: { linked?: boolean } = {},
 ): Promise<string[]> {
-  if (!isInside(gameDir, project) && path.resolve(gameDir) !== path.resolve(project))
-    throw new AddonError(MESSAGE.Outside);
+  // A project outside the game is set up only when the game is linked to it (its engine link).
+  const inside = isInside(gameDir, project) || path.resolve(gameDir) === path.resolve(project);
+  if (!inside && !options.linked) throw new AddonError(MESSAGE.Outside);
   const kept = await installAddon(project, source);
   await addToSettings(project);
   await writeLauncher(gameDir, project, godot);

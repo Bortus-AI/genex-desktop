@@ -199,9 +199,17 @@ export async function godotBackendFixture(
     addon: ADDON,
   });
   const hostCalls: HostCall[] = [];
+  /** The game's engine link as the host keeps it (`game.engine.link` / `game.engine.read`). */
+  let link: { kind: string; project: string; name: string; linkedAt: string } | null = null;
   const host = (async (method: string, args?: unknown) => {
     hostCalls.push({ method, args });
     if (method === "storage.root") return storage;
+    if (method === "game.engine.read") return link;
+    if (method === "game.engine.link") {
+      const project = typeof args === "object" && args !== null && "project" in args ? String(args.project) : "";
+      link = { kind: "godot", project, name: path.basename(path.dirname(project)), linkedAt: "2026-10-15T00:00:00Z" };
+      return link;
+    }
     if (method === "game.create") {
       await mkdir(made, { recursive: true });
       return { project: "made-game", directory: made };

@@ -415,7 +415,8 @@ export interface PluginEvent {
  * plugin's MCP servers may read it, and mirrors it into the game's `studio.json`.
  */
 export interface PluginEngineLink {
-  kind: "unreal";
+  /** The project's engine, by its file: an Unreal `.uproject`, or a Godot project's `project.godot`. */
+  kind: "unreal" | "godot";
   project: string;
   name: string;
   linkedAt: string;
@@ -465,8 +466,8 @@ export interface PluginHostCall {
   (method: "credentials.write", args: { token: string }): Promise<void>;
   (method: "credentials.clear"): Promise<void>;
   /**
-   * `game-engine`: links the bound game to an Unreal project file (`.uproject`, checked by real
-   * path). The chat it was called from shows one line with Undo; `auto` says the link was made by
+   * `game-engine`: links the bound game to an engine project file (an Unreal `.uproject`, or a Godot
+   * project's `project.godot`), checked by real path; the file says the link's engine. The chat it was called from shows one line with Undo; `auto` says the link was made by
    * the game's first call rather than asked for. From outside any game, `game` names one this
    * plugin made with `game.create`; any other game is refused.
    */

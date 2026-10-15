@@ -74,6 +74,7 @@ import {
 } from "../shared/ui-events.ts";
 import { observeMediaPlayback } from "../substrate/audio-observation.ts";
 import { BudgetLedger } from "../substrate/budget.ts";
+import { readEngineBinding } from "../substrate/game-engine-binding.ts";
 import { latestBuildPreview } from "../substrate/build-preview.ts";
 import { ContextPreferences } from "../substrate/context-settings.ts";
 import { BonsaiEngine } from "../substrate/engines/bonsai.ts";
@@ -1869,13 +1870,16 @@ export class StudioCore {
     const found = await native.detect(runtime, this.pluginServices.root(owner.manifest.id));
     if (found.state !== NativeRuntimeState.Ready || !found.path) return null;
     const scratch = await mkdtemp(path.join(os.tmpdir(), ENGINE_SCRATCH_PREFIX));
+    // A game linked to an engine project outside its folder plays that project: the engine reaches it too.
+    const linked = await readEngineBinding(root).catch(() => undefined);
+    const reach = [root, ...(linked ? [path.dirname(linked.project)] : [])];
     const child = await spawnNativeLongLived({
       binary: found.path,
       args: engine.args,
       cwd: root,
       scratch,
-      reads: [root],
-      writes: [root],
+      reads: reach,
+      writes: reach,
       denyRead: [this.layout.secrets],
       gpu: true,
     });

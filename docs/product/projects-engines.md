@@ -39,9 +39,9 @@ project is a host project with the plugin in `Plugins/`; its tools build, test a
 
 ## Godot
 
-Off by default (Godot 4.3+). Its button gets Godot, makes a **New Godot game** (2D/3D, in
-`godot/`) and opens your editor, which saves before save points, reloads after Rewind. Agents
-work in a sandbox. **Export for the web** writes `web/` for Live and Publish.
+Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, in `godot/`) and opens your
+editor, which saves for save points and reloads after Rewind. **Change project** links one
+anywhere (outside: no Loops or Rewind). **Export for the web** writes `web/`.
 
 ## Live's views
 

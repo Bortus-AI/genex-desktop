@@ -7,7 +7,7 @@
  * and its reviewer get stills (`hero-shots`). The panel and the toolbar find Godot, make a game
  * and open it in the person's own Godot editor, which Genex never drives.
  */
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -50,7 +50,9 @@ import {
   playCall,
   runCall,
 } from "./godot-run.ts";
-import { findGameProject, GAME_PROJECT_FOLDER, projectScene, requireGameProject } from "./game-project.ts";
+import { GAME_PROJECT_FOLDER, projectScene } from "./game-project.ts";
+import { linkProject, outsideGame, projectOf, requireProject } from "./project-link.ts";
+import { findProjects, readProject } from "./find-projects.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
 import { addonState, isSetUp, setUpGame } from "./genex-addon.ts";
 import { frameAt, type KeyPress, keysEnd, MAX_PLAY_SECONDS, PLAY_FPS, readKeys, recordingShots } from "./play-input.ts";
@@ -69,6 +71,7 @@ const GodotAction = {
   StageStatus: "stage-status",
   SetUp: "set-up",
   WebExport: "web-export",
+  UseProject: "use-project",
 } as const;
 type GodotAction = (typeof GodotAction)[keyof typeof GodotAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(GodotAction));
@@ -275,7 +278,7 @@ async function runCheck(deps: GodotBackendDeps, install: GodotInstall, project: 
 
 /** The agent's `check`: errors and warnings by file and line, at most {@link MAX_PROBLEMS} of each. */
 async function check(deps: GodotBackendDeps, context: PluginContext) {
-  const project = await requireGameProject(context.directory);
+  const project = await requireProject(context);
   const result = await runCheck(deps, await requireGodot(deps), project, context.signal);
   const errors = result.problems.filter(isError);
   const warnings = result.problems.filter((p) => !isError(p));
@@ -297,7 +300,7 @@ function checkSummary(result: { checked: number | null; timedOut: boolean }): st
 /** `checkpoint-check`, Genex's check at a checkpoint: a note of what Godot found, never a block; nothing when all is well or Godot is missing. */
 async function checkAtMoment(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
   if (context.hook?.on !== HookEvent.CheckpointBefore) return {};
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const project = await projectOf(context);
   const install = usableGodot(await findGodots(deps.env));
   if (!project || !install) return {};
   const result = await runCheck(deps, install, project, context.signal).catch(() => null);
@@ -312,7 +315,7 @@ async function checkAtMoment(deps: GodotBackendDeps, context: PluginContext): Pr
  * Nothing without an editor that has the project open.
  */
 async function saveAll(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const project = await projectOf(context);
   if (!project || !(await liveEditor(project, deps.editor))) return {};
   const answer = await askEditor(project, EditorOp.Save, deps.editor, context.signal);
   const restoring = context.hook?.on === HookEvent.RestoreBefore;
@@ -326,7 +329,7 @@ async function saveAll(deps: GodotBackendDeps, context: PluginContext): Promise<
 /** `reload-editor` after a restore: the person's open Godot editor reads its files again and reloads its open scenes. */
 async function reloadEditor(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
   if (context.hook?.on !== HookEvent.RestoreAfter) return {};
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const project = await projectOf(context);
   if (!project || !(await liveEditor(project, deps.editor))) return {};
   const answer = await askEditor(project, EditorOp.Reload, deps.editor, context.signal);
   return answer ? {} : { note: MESSAGE.Editor.NotReloaded };
@@ -339,7 +342,7 @@ async function reloadEditor(deps: GodotBackendDeps, context: PluginContext): Pro
 async function webExport(deps: GodotBackendDeps, context: PluginContext): Promise<number> {
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGameOpen);
-  const project = await requireGameProject(game);
+  const project = await requireProject(context);
   const install = await requireGodot(deps);
   if (!(await hasWebTemplate(deps.env.home, install)))
     throw new Error(MESSAGE.Web.NoTemplates(versionName(install.version)));
@@ -378,7 +381,7 @@ function ownOutput(output: string): string[] {
 
 /** The agent's `run-scene`: a headless play of a scene, with keys pressed when asked, what it printed and what went wrong. */
 async function runScene(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
-  const project = await requireGameProject(context.directory);
+  const project = await requireProject(context);
   const seconds = runSeconds(args);
   const keys = readKeys(textArg(args, "keys"));
   const scene = await projectScene(project, textArg(args, "scene"));
@@ -426,7 +429,7 @@ function recordingCount(args: Record<string, unknown>): number {
 
 /** The agent's `screenshot`: stills at a moment of play (after keys, when asked), and a recording up to it; the model sees them. */
 async function screenshot(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
-  const project = await requireGameProject(context.directory);
+  const project = await requireProject(context);
   const seconds = shotSeconds(args);
   const keys = readKeys(textArg(args, "keys"));
   const scene = await projectScene(project, textArg(args, "scene"));
@@ -456,7 +459,7 @@ async function screenshot(deps: GodotBackendDeps, args: Record<string, unknown>,
  */
 async function heroShots(deps: GodotBackendDeps, context: PluginContext): Promise<unknown> {
   if (context.hook && (context.hook.on !== HookEvent.CheckpointAfter || !context.hook.runId)) return {};
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const project = await projectOf(context);
   const install = usableGodot(await findGodots(deps.env));
   if (!project || !install) return {};
   const signal = context.observe ? observeSignal(context.signal, context.observe.withinMs) : context.signal;
@@ -485,11 +488,46 @@ function classReference(deps: GodotBackendDeps): Handler {
   };
 }
 
-/** The panel's status: the Godot Genex uses, every Godot found, and the open game's project. */
+/**
+ * The projects the panel offers under Change project: the person's Godot projects (`find-projects.ts`)
+ * and the game's own, each once, with whether the game uses it now and whether it lies outside the
+ * game's folder (Rewind and Loops can't reach it there).
+ */
+async function chooserProjects(deps: GodotBackendDeps, context: PluginContext, project: string | null) {
+  const found = await findProjects(deps.env.home);
+  const own = project && !found.some((p) => p.folder === project) ? await readProject(project) : undefined;
+  const game = gameFolderOf(context);
+  return Promise.all(
+    [...(own ? [own] : []), ...found].map(async (p) => ({
+      ...p,
+      shown: shownPath(p.folder, deps.env.home),
+      inUse: p.folder === project,
+      outside: game ? await outsideGame(game, p.folder) : false,
+    })),
+  );
+}
+
+/** A folder as the panel shows it: from `~` when it is in the home folder, else as it is. */
+const shownPath = (folder: string, home: string) =>
+  folder.startsWith(`${home}${path.sep}`) ? `~${folder.slice(home.length)}` : folder;
+
+/** How the panel shows a project's place: inside the game its folder there (`godot/`), outside it from `~`. */
+const placeShown = (place: { path: string; outside: boolean }, home: string) =>
+  place.outside ? shownPath(place.path, home) : `${place.path}/`;
+
+/** The game's project as the panel names it: its folder inside the game ("." at the root), or its absolute folder outside. */
+async function projectPlace(context: PluginContext, project: string): Promise<{ path: string; outside: boolean }> {
+  const game = gameFolderOf(context);
+  if (!game || (await outsideGame(game, project))) return { path: project, outside: Boolean(game) };
+  return { path: path.relative(await realpath(game).catch(() => game), project) || ".", outside: false };
+}
+
+/** The panel's status: the Godot Genex uses, every Godot found, the open game's project and the projects to choose from. */
 async function status(deps: GodotBackendDeps, context: PluginContext) {
   const installs = await findGodots(deps.env);
   const install = usableGodot(installs);
-  const project = context.directory ? await findGameProject(context.directory) : null;
+  const project = await projectOf(context);
+  const place = project ? await projectPlace(context, project) : null;
   return {
     ...godotReadiness(installs),
     godot: install
@@ -497,10 +535,21 @@ async function status(deps: GodotBackendDeps, context: PluginContext) {
       : null,
     installs: installs.map((i) => ({ version: i.version.text, binary: i.binary, supported: i.supported })),
     game: Boolean(gameFolderOf(context)),
-    project: project && context.directory ? path.relative(context.directory, project) || "." : null,
+    project: place?.path ?? null,
+    projectShown: place ? placeShown(place, deps.env.home) : null,
+    webTemplates: install ? await hasWebTemplate(deps.env.home, install) : false,
+    projectName: project ? ((await readProject(project))?.name ?? path.basename(project)) : null,
+    outside: place?.outside ?? false,
     editorOpen: project ? await editorOpen(deps.editor, project) : false,
     setup: project && context.directory ? await addonState(context.directory, project, deps.addon) : null,
+    projects: await chooserProjects(deps, context, project),
   };
+}
+
+/** The panel's Use this project: links the open game to the chosen Godot project, wherever it is. */
+async function useProject(args: Record<string, unknown>, context: PluginContext) {
+  if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGameOpen);
+  return { linked: await linkProject(context, textArg(args, "folder")) };
 }
 
 /**
@@ -510,9 +559,11 @@ async function status(deps: GodotBackendDeps, context: PluginContext) {
 async function setUp(deps: GodotBackendDeps, context: PluginContext) {
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGameOpen);
-  const project = await requireGameProject(game);
+  const project = await requireProject(context);
   const install = usableGodot(await findGodots(deps.env));
-  const kept = await setUpGame(game, project, deps.addon, install?.binary ?? null);
+  // A project outside the game is set up only as the one it is linked to (`projectOf` found it so).
+  const linked = await outsideGame(game, project);
+  const kept = await setUpGame(game, project, deps.addon, install?.binary ?? null, { linked });
   if (install) await firstImport(deps, install, project, context.signal);
   return { setup: await addonState(game, project, deps.addon), kept };
 }
@@ -520,9 +571,9 @@ async function setUp(deps: GodotBackendDeps, context: PluginContext) {
 /** What Set up will change, for the person to confirm. */
 async function describeSetUp(context: PluginContext): Promise<PluginReview> {
   const game = gameFolderOf(context);
-  const project = game ? await findGameProject(game) : null;
+  const project = game ? await projectOf(context) : null;
   if (!game || !project) return {};
-  const where = path.relative(game, project) || ".";
+  const where = (await projectPlace(context, project)).path;
   return { message: MESSAGE.SetUpQuestion, detail: MESSAGE.SetUpDetail(where) };
 }
 
@@ -571,7 +622,7 @@ async function buttonStatus(deps: GodotBackendDeps, context: PluginContext) {
   }
   const version = versionName(install.version);
   const game = gameFolderOf(context);
-  const project = game ? await findGameProject(game) : null;
+  const project = game ? await projectOf(context) : null;
   if (game && project && !isSetUp(await addonState(game, project, deps.addon)))
     return { badge: SET_UP_BADGE, tone: "warn", title: MESSAGE.Toolbar.SetUp };
   const open = project ? await editorOpen(deps.editor, project) : false;
@@ -589,7 +640,7 @@ async function stageStatus(deps: GodotBackendDeps, context: PluginContext) {
   if (!install && older) return { line: MESSAGE.Stage.Old(versionName(older.version)), button: getButton() };
   if (!install) return { line: MESSAGE.Stage.Get, button: getButton() };
   const game = gameFolderOf(context);
-  const project = game ? await findGameProject(game) : null;
+  const project = game ? await projectOf(context) : null;
   if (!game || !project) return { line: MESSAGE.Stage.NoProject };
   if (!isSetUp(await addonState(game, project, deps.addon)))
     return { line: MESSAGE.Stage.NotSetUp, button: { label: MESSAGE.Stage.SetUpButton, action: GodotAction.SetUp } };
@@ -621,7 +672,7 @@ async function create(deps: GodotBackendDeps, args: Record<string, unknown>, con
 
 /** The panel's Open in Godot: the open game's project in the person's own editor. */
 async function openInEditor(deps: GodotBackendDeps, context: PluginContext) {
-  const project = await requireGameProject(context.directory);
+  const project = await requireProject(context);
   await deps.editor.open(openEditorLaunch(await requireGodot(deps), project));
   return { opened: project };
 }
@@ -639,6 +690,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [GodotAction.StageStatus]: (_args, context) => stageStatus(deps, context),
     [GodotAction.SetUp]: (_args, context) => setUp(deps, context),
+    [GodotAction.UseProject]: (args, context) => useProject(args, context),
     [GodotAction.WebExport]: async (_args, context) => {
       await webExport(deps, context);
       return { note: MESSAGE.Web.Exported };
