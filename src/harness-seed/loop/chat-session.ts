@@ -508,7 +508,7 @@ export function buildContractorBrief({
   contractMissing = false,
   /** Which engine reads this: the one thing in the brief that is spelled per engine. */
   engine = undefined,
-  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): an Unreal game is no web page. */
+  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): a game in any engine is no web page. */
   gameEngine = GameEngine.Web,
   /** The Unreal project file an Unreal game is linked to, which its work lands in. */
   engineProject = null,

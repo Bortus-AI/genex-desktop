@@ -1458,6 +1458,18 @@ export type EngineBinding = {
 };
 // ↑ src/shared/game-engine.ts
 
+/**
+ * What the app reads of a linked game's engine, as its plugin declares it, carried on the game's
+ * descriptor: the name the person reads, the project files whose names it shows, and whether the
+ * Loop needs the project inside the game folder.
+ */
+export interface LinkedEngine {
+  label: string;
+  projectFiles: string[];
+  projectInFolder: boolean;
+}
+// ↑ src/shared/game-engine.ts
+
 export type FactSource = 'core' | 'link' | 'scaffold';
 // ↑ src/shared/project-facts.ts
 
@@ -1498,6 +1510,8 @@ export interface GameProject {
   built: boolean;
   /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
   engine?: EngineBinding;
+  /** The linked engine as its plugin declares it (its name, project files, project in the folder); absent for a web game. */
+  linkedEngine?: LinkedEngine;
   /**
    * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
    * `detect` and the engine link. Empty while the first message has not picked a kind.

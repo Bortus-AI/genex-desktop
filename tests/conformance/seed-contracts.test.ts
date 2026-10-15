@@ -13,6 +13,7 @@ import * as seedCompletionPolicy from "../../src/harness-seed/loop/completion-po
 import { endsSessions as seedEndsSessions } from "../../src/harness-seed/loop/compaction-log.ts";
 import * as seedDelegatedTurn from "../../src/harness-seed/loop/delegated-turn.ts";
 import * as seedFolderFacts from "../../src/harness-seed/loop/folder-facts.ts";
+import * as seedEngineGame from "../../src/harness-seed/loop/engine-game.ts";
 import * as seedGameEngine from "../../src/harness-seed/loop/game-engine.ts";
 import * as seedUnrealLead from "../../src/harness-seed/loop/unreal/lead-contract.ts";
 import * as seedUnrealLive from "../../src/harness-seed/loop/unreal/live-contract.ts";
@@ -75,7 +76,7 @@ import {
   customPayload,
 } from "../../src/shared/custom-events.ts";
 import * as duration from "../../src/shared/duration.ts";
-import { ENGINE_ID, engineOf, GameEngine } from "../../src/shared/game-engine.ts";
+import { ENGINE_ID, engineOf, GameEngine, isEngineGame } from "../../src/shared/game-engine.ts";
 import { ToolPermissionState } from "../../src/shared/permissions.ts";
 import {
   CoreFact,
@@ -524,6 +525,11 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     const misspelt = { kind: "Toy Engine", project: "/p/A.toyproj", linkedAt: "" };
     assert.equal(seedGameEngine.engineOfGame({ engine: misspelt }), GameEngine.Web, "a kind no engine id spells");
   });
+
+  it("tells an engine game from a web game as the app does", () => {
+    for (const kind of [GameEngine.Web, GameEngine.Unreal, "toy-engine", undefined, null, "", "Toy Engine", 3])
+      assert.equal(seedEngineGame.isEngineGame(kind), isEngineGame(kind), String(kind));
+  });
   it("reads why the host held a plugin call back as the host answers it", () => {
     assert.deepEqual(seedPluginCallBlocker, PluginCallBlocker);
   });
@@ -704,6 +710,7 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
     assert.deepEqual(seedFolderFacts.CoreFact, CoreFact);
     const at = (id: string, path: string) => ({ id, path, source: FactSource.Core });
     const linked = { kind: GameEngine.Unreal, project: "/p/A.uproject", linkedAt: "" } as const;
+    const toyLinked = { kind: "toy-engine", project: "/p/A.toyproj", linkedAt: "" };
     assert.deepEqual(seedFolderFacts.FolderHolds, FolderHolds);
     // Each descriptor beside the facts the app lists for the same folder, and whether both serve it
     // as a web game: only one with no kind yet or one holding a web game at its root is.
@@ -722,6 +729,7 @@ describe("project facts (shared/project-facts.ts ↔ loop/folder-facts.ts)", () 
       ],
       ["an older descriptor", {}, [at(CoreFact.WebGame, ".")], true],
       ["an older linked one", { engine: linked }, [at(CoreFact.UnrealProject, ".")], false],
+      ["an older one linked to another engine", { engine: toyLinked }, [at("toy-project", ".")], false],
       ["an older folder with no web page (a Godot one, say)", { web: false }, [at(CoreFact.GodotProject, ".")], false],
     ];
     for (const [name, descriptor, facts, web] of table) {

@@ -4022,6 +4022,21 @@ export const PLUGIN_TOOLBAR_WORDS = {
   },
 } as const;
 
+/**
+ * A game linked to an engine whose Loop needs its project inside the game folder, named by the
+ * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ */
+export const ENGINE_GAME_WORDS = {
+  /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
+  rewindNote: (engine: string, project: string) =>
+    `Rewind doesn’t undo changes made in ${engine}: ${project} is outside the game folder.`,
+  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
+  loopUnavailable: (engine: string, project: string | null, place: string) =>
+    project
+      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
+      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
+} as const;
+
 /** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
 export const UNREAL_WORDS = {
   /** The Live tab's line under the project's name, in place of the web page. */
@@ -4074,12 +4089,10 @@ export const UNREAL_WORDS = {
   /** The latest play shot's alt text. */
   playShot: (project: string) => `${project} in play`,
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
-  rewindNote: (project: string) => `Rewind doesn’t undo changes made in Unreal: ${project} is outside the game folder.`,
+  rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
   /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (project: string | null, place: string) =>
-    project
-      ? `Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the Unreal button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
-      : "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 // ── Genex account settings and avatars ─────────────────────────────────────────────────────

@@ -39,7 +39,12 @@ import type {
   ProjectRecent,
   ProjectShape,
 } from "../shared/game-project.ts";
-import type { EngineBinding, EngineCatalog, EngineDeclaration } from "../shared/game-engine.ts";
+import {
+  type EngineBinding,
+  type EngineCatalog,
+  type EngineDeclaration,
+  linkedEngineOf,
+} from "../shared/game-engine.ts";
 import {
   CoreFact,
   FactSource,
@@ -986,6 +991,7 @@ export class GameWorkspaces {
     // A folder that can't be read is still listed: it has no facts and is of no kind Genex can name.
     const { facts, holds } = await this.#kind(dir, record).catch(unreadableKind);
     const hookEvents = this.#hookEvents({ facts, ...(holds ? { holds } : {}) });
+    const declared = engine ? this.#engines().get(engine.kind) : undefined;
     return {
       name,
       dir,
@@ -1001,6 +1007,7 @@ export class GameWorkspaces {
       shape,
       built: isBuiltShape(shape),
       ...(engine ? { engine } : {}),
+      ...(declared ? { linkedEngine: linkedEngineOf(declared) } : {}),
       facts,
       ...(holds ? { holds } : {}),
       ...(hookEvents.length > 0 ? { hookEvents: [...hookEvents] } : {}),

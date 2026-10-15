@@ -14938,3 +14938,26 @@ describe("a worker waiting on its provider when the user asks to finish", () => 
     assert.equal(stopped?.by, "user");
   });
 });
+
+describe("a chat in a game linked to an engine other than Unreal", () => {
+  it("EG1. its brief never gives web-page rules, the preview's Reload or the web Loop, whether or not the host lists facts", async () => {
+    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const { launchRules } = await import("../../src/harness-seed/loop/launch-prompts.ts");
+    const launch = { toolName: "start_build", hours: 2 };
+    const toy = { ask: "make the garden", gameEngine: "toy-engine", engineProject: "/g/garden/Garden.toyproj", launch };
+    const webWords = [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/];
+    for (const [name, brief] of [
+      ["with facts", buildContractorBrief({ ...toy, facts: [{ id: "toy-project", path: "." }] })],
+      ["an older caller that names only the engine", buildContractorBrief(toy)],
+    ] as const)
+      for (const words of webWords) assert.doesNotMatch(brief, words, `${name}: ${words}`);
+    const unnamedLoop = launchRules("claude-code", launch, "toy-engine").join("\n");
+    assert.doesNotMatch(
+      unnamedLoop,
+      /builders working in parallel/,
+      "with no Loop named, another engine's is the one Loop",
+    );
+    assert.match(unnamedLoop, /reviewer/);
+    assert.match(launchRules("claude-code", launch, "unreal").join("\n"), /the Unreal Loop/, "Unreal's stays Unreal's");
+  });
+});

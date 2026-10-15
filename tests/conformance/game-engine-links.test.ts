@@ -17,7 +17,7 @@ import { readEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { createEngineLinks, EngineLinkStale } from "../../src/substrate/plugins/engine-links.ts";
 import { copyOfExample as copyOf, pluginFixture } from "../helpers/plugins.ts";
 import { coreLite } from "../helpers/core-lite.ts";
-import { ENGINES } from "../helpers/engines.ts";
+import { ENGINES, TOY_ENGINE } from "../helpers/engines.ts";
 import { TOY_PLUGIN } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -568,6 +568,11 @@ test("a game linked by an engine plugin that is turned off still builds in that 
       [["toy-project", FactSource.Link]],
       "the toy engine's fact, not Unreal's",
     );
+    // What the app reads of its engine (the Loop's gate, Rewind's note) comes with the game, as declared.
+    const { label, projectFiles, projectInFolder } = TOY_ENGINE;
+    assert.deepEqual(game?.linkedEngine, { label, projectFiles, projectInFolder });
+    const web = await core.games.scaffold("pond");
+    assert.equal((await core.games.list()).find((g) => g.name === web.name)?.linkedEngine, undefined, "a web game");
   } finally {
     lite.core.plugins.cancel();
     await lite.close();

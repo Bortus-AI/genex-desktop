@@ -47,7 +47,7 @@ import { plainDefect, reportSummary } from "./run-graph.ts";
 import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
-import { type EngineLinkedPayload, GameEngine, isGameEngine } from "../shared/game-engine.ts";
+import { type EngineLinkedPayload, GameEngine, isEngineId, isGameEngine } from "../shared/game-engine.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
 import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
 import {
@@ -1106,14 +1106,15 @@ function narrateCompaction(chat: ChatDraft, event: EventEnvelope): void {
 }
 
 /**
- * The engine a link names, as the chat says it: the label its plugin declares; an older record,
- * with no label, by Genex's own words for its engine, and one that names no engine is the Unreal
- * plugin's.
+ * The engine a link names, as the chat says it: the label its plugin declares; a record with no
+ * label by Genex's own words for an engine it knows, else by the engine's id; one that names no
+ * engine is from before engines were declared, all the Unreal plugin's.
  */
 function linkedEngineWords(link: EngineLinkedPayload): string {
   const label = typeof link.label === "string" ? link.label.trim() : "";
   if (label) return label;
-  return GAME_ENGINE_WORDS[isGameEngine(link.engine) ? link.engine : GameEngine.Unreal];
+  if (isGameEngine(link.engine)) return GAME_ENGINE_WORDS[link.engine];
+  return isEngineId(link.engine) ? link.engine : GAME_ENGINE_WORDS[GameEngine.Unreal];
 }
 
 /** "Fog Valley now builds in Unreal · Valley": the newest link of a game keeps its Undo. */

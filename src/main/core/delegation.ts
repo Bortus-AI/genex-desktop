@@ -90,7 +90,7 @@ import { ShotKind, iterationDir, runDir, runShotsDir, safePathSegment } from "./
 import type { SessionPort } from "./session-port.ts";
 import { isBelow, isInside, toPosixRelative } from "../../substrate/paths.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { type EngineId, engineOf, GameEngine } from "../../shared/game-engine.ts";
+import { type EngineId, engineOf, isEngineGame } from "../../shared/game-engine.ts";
 import { readEngineBinding } from "../../substrate/game-engine-binding.ts";
 import { FolderHolds, kindPending, type ProjectFact } from "../../shared/project-facts.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
@@ -560,10 +560,10 @@ function honouredDirector(p: DelegateParams, cwd: string, seat: DelegationSeat):
 /**
  * A director works through a browser window only in a web Loop: never a Loop's lead in place (the
  * seat its grant earned, which the run's start fixed), nor a lead of a game its engine record binds
- * elsewhere (the Unreal runner's). Never read from the folder's facts now: a read failure or the
- * run's own work may change those mid-run.
+ * to any engine (Unreal's runner, or an engine another plugin declares). Never read from the
+ * folder's facts now: a read failure or the run's own work may change those mid-run.
  */
-const directorWindowed = (seat: DelegationSeat): boolean => !seat.leadsInPlace && seat.engine === GameEngine.Web;
+const directorWindowed = (seat: DelegationSeat): boolean => !seat.leadsInPlace && !isEngineGame(seat.engine);
 
 /**
  * The run whose own consent may cover this session's calls to its game's engine connector: an
@@ -2560,7 +2560,7 @@ export class DelegationService {
     if (!(inGame && isChatsOwnSession(p))) return {};
     const events = this.#core.plugins.hookEvents({ facts: seat.facts, ...(seat.holds ? { holds: seat.holds } : {}) });
     const hooked = events.includes(HookEvent.CheckpointBefore) || events.includes(HookEvent.CheckpointAfter);
-    if (!hooked && seat.engine === GameEngine.Web) return {};
+    if (!hooked && !isEngineGame(seat.engine)) return {};
     const ask = { project: p.project, threadId: session.threadId, signal: session.abort.signal };
     const take = (note: string) => this.#core.hooks.takeCheckpoint({ ...ask, label: note });
     return { onCheckpoint: async (note) => checkpointWords(await take(note), CHECKPOINT_TOOL.reply) };

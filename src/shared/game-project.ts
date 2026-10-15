@@ -4,7 +4,7 @@
  * and re-exports the types; the renderer reads them through `window.studio`.
  */
 import type { GameRuntime } from "./computer-target.ts";
-import type { EngineBinding } from "./game-engine.ts";
+import type { EngineBinding, LinkedEngine } from "./game-engine.ts";
 import type { GameLibraryEntry } from "./game-library.ts";
 import type { HookEvent } from "./plugin-hooks.ts";
 import type { FolderHolds, ProjectFact } from "./project-facts.ts";
@@ -28,6 +28,8 @@ export interface GameProject {
   built: boolean;
   /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
   engine?: EngineBinding;
+  /** The linked engine as its plugin declares it (its name, project files, project in the folder); absent for a web game. */
+  linkedEngine?: LinkedEngine;
   /**
    * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
    * `detect` and the engine link. Empty while the first message has not picked a kind.

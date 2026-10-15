@@ -65,6 +65,24 @@ export interface EngineDeclaration {
 export type EngineCatalog = ReadonlyMap<EngineId, EngineDeclaration>;
 
 /**
+ * What the app reads of a linked game's engine, as its plugin declares it, carried on the game's
+ * descriptor: the name the person reads, the project files whose names it shows, and whether the
+ * Loop needs the project inside the game folder.
+ */
+export interface LinkedEngine {
+  label: string;
+  projectFiles: string[];
+  projectInFolder: boolean;
+}
+
+/** The part of an engine's declaration a linked game's descriptor carries. */
+export const linkedEngineOf = ({ label, projectFiles, projectInFolder }: EngineDeclaration): LinkedEngine => ({
+  label,
+  projectFiles: [...projectFiles],
+  projectInFolder,
+});
+
+/**
  * A published game's ids at its engine's service, kept beside a link when the project lives there
  * rather than in a file on this computer: decimal strings, never numbers, which would lose digits.
  */
@@ -140,6 +158,13 @@ export const sameRemote = (a: EngineRemote | undefined, b: EngineRemote | undefi
 
 /** The engine a game builds in: its binding's, else the web. */
 export const engineOf = (binding: EngineBinding | undefined | null): EngineId => binding?.kind ?? GameEngine.Web;
+
+/**
+ * Whether `kind` names an engine game: an engine id other than the web's. Everything that asks
+ * whether a game is a web page asks this of its engine; only Unreal's own card, editor and words
+ * ask for Unreal by name. The harness keeps a copy (`loop/engine-game.ts`).
+ */
+export const isEngineGame = (kind: unknown): kind is EngineId => isEngineId(kind) && kind !== GameEngine.Web;
 
 /**
  * The project's name as its engine shows it: the file name without the longest of `extensions`

@@ -7,6 +7,7 @@
  */
 import type { Host } from "../types/harness.d.ts";
 import type { GameProject, ProjectFact } from "../types/host-api.d.ts";
+import { isEngineGame } from "./engine-game.ts";
 import { type EngineId, engineOfGame, GameEngine } from "./game-engine.ts";
 import { HostMethod } from "./host-methods.ts";
 
@@ -77,22 +78,26 @@ export type FactsOfDescriptor =
 const ROOT = FACT_ROOT;
 
 /**
- * The facts an engine of the older vocabulary stands for: its fact at the game's root (the app's
- * `factsOfEngine`). Only an older caller, which names no other engine, reads a game this way; any
- * other id reads as the web's.
+ * The facts an engine stands for when a caller names the engine and not the facts (an older
+ * caller): its project at the game's root. The web and Unreal by their facts (the app's
+ * `factsOfEngine`); any other engine, whose declared fact only the app knows, by its own id, so it
+ * is never read as a web game.
  */
 export function factsOfEngine(engine: EngineId): FactRef[] {
-  return [{ id: engine === GameEngine.Unreal ? CoreFact.UnrealProject : CoreFact.WebGame, path: ROOT }];
+  if (engine === GameEngine.Unreal) return [{ id: CoreFact.UnrealProject, path: ROOT }];
+  return [{ id: isEngineGame(engine) ? engine : CoreFact.WebGame, path: ROOT }];
 }
 
 /**
  * The facts of a game descriptor: the ones it carries. One from a host that predates facts reads by
- * its older fields: a link is an Unreal project at the root, a folder that said it holds no web
- * game has none, and anything else (no descriptor at all included) is a web game at the root.
+ * its older fields: a link is its engine's project at the root (`factsOfEngine`), a folder that
+ * said it holds no web game has none, and anything else (no descriptor at all included) is a web
+ * game at the root.
  */
 export function factsOfGame(game: FactsOfDescriptor): FactRef[] {
   if (Array.isArray(game?.facts)) return game.facts.map(({ id, path }) => ({ id, path }));
-  if (engineOfGame(game) === GameEngine.Unreal) return [{ id: CoreFact.UnrealProject, path: ROOT }];
+  const engine = engineOfGame(game);
+  if (isEngineGame(engine)) return factsOfEngine(engine);
   if (game?.web === false) return [];
   return [{ id: CoreFact.WebGame, path: ROOT }];
 }
