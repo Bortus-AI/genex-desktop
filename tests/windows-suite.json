@@ -203,6 +203,7 @@
   "tests/conformance/renderer-state.test.ts",
   "tests/conformance/rewind-undo-entries.test.ts",
   "tests/conformance/roblox-backend.test.ts",
+  "tests/conformance/roblox-computer-play.test.ts",
   "tests/conformance/roblox-create-place.test.ts",
   "tests/conformance/roblox-helper-build.test.ts",
   "tests/conformance/roblox-helper-link.test.ts",

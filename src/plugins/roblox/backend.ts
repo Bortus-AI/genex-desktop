@@ -17,7 +17,10 @@ import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
 import type { HookAnswer, HookContext } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
+import { EnginePlayTool } from "../../shared/engine-play.ts";
 import { RobloxAction } from "./actions.ts";
+import { agentFolder } from "./agent-marks.ts";
+import { createComputerPlay, type PlayGame } from "./computer-play.ts";
 import { type HelperAsk, type HelperLink, startHelperLink } from "./helper-link.ts";
 import type { ScriptChange } from "./helper-protocol.ts";
 import {
@@ -60,6 +63,7 @@ import {
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
 import { createScriptSyncs, type ScriptSyncs, systemWatch } from "./script-sync.ts";
 import { createStudioClient, type StudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
+import { type ShrinkShot, systemShrink } from "./studio-shot.ts";
 import {
   ALLOWED_HOST,
   afterInstall,
@@ -129,6 +133,12 @@ export const RobloxTool = {
   StudioState: "studio-state",
   StudioCrashNote: "studio-crash-note",
   TeamNote: "team-note",
+  PlayOpen: EnginePlayTool.Open,
+  PlayInput: EnginePlayTool.Input,
+  PlayShot: EnginePlayTool.Shot,
+  PlayState: EnginePlayTool.State,
+  PlayPause: EnginePlayTool.Pause,
+  PlayClose: EnginePlayTool.Close,
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
@@ -213,6 +223,8 @@ export interface RobloxDeps extends PlaceActionDeps {
   helperLink?(storage: string): void;
   /** The helper link and the script sync, for Genex's moments; without them no helper is ever connected. */
   moments?: MomentServices;
+  /** Makes a play shot over 1 MB smaller; this computer's own by default. */
+  shrink?: ShrinkShot;
 }
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
@@ -633,11 +645,45 @@ async function momentOps(deps: RobloxDeps, services: MomentServices, context: Pl
   return momentOpsFor(deps, services, context, { storage, setUp });
 }
 
+/**
+ * The game a play tool's call is for: its Studio as the helper link has it bound, the helper, the
+ * agent's marks and whether its link names a published place. The helper link starts once Studio
+ * is set up, as for the moments, when the game isn't bound yet.
+ */
+async function playGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<PlayGame> {
+  const storage = await context.host(HostService.StorageRoot);
+  const game = context.project ?? "";
+  // Bound means the link already runs; only an unbound game needs it started.
+  const unbound = services.bound(game) === undefined;
+  if (unbound && (await locateStudio(deps)).installed && (await setUpIn(deps, storage))) deps.helperLink?.(storage);
+  const link = await linkHere(context);
+  const marks = agentFolder(storage, game);
+  return {
+    storage,
+    game,
+    edit: () => services.bound(game),
+    ask: services.ask(game),
+    remote: Boolean(link?.remote),
+    signal: context.signal,
+    ...(marks ? { marks } : {}),
+  };
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
   const scan: ScanCache = {};
   const services = deps.moments ?? noMomentServices(deps.now);
+  const play = createComputerPlay({
+    ...(deps.studio ? { studio: deps.studio } : {}),
+    shrink: deps.shrink ?? systemShrink(deps.platform, deps.env),
+    now: deps.now,
+    sleep: deps.sleep,
+  }).handlers;
+  const playing =
+    (tool: EnginePlayTool): Handler =>
+    async (args, context) =>
+      play[tool](args, await playGame(deps, services, context));
   // A moment's tool answers only at its moments: called any other way, it says nothing.
   const atMoment =
     (handler: MomentHandler): Handler =>
@@ -674,6 +720,12 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.StudioState]: atMoment((ops) => studioStateAt(ops)),
     [RobloxTool.StudioCrashNote]: async (_args, context) => (context.hook ? crashAnswer() : {}),
     [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
+    [RobloxTool.PlayOpen]: playing(EnginePlayTool.Open),
+    [RobloxTool.PlayInput]: playing(EnginePlayTool.Input),
+    [RobloxTool.PlayShot]: playing(EnginePlayTool.Shot),
+    [RobloxTool.PlayState]: playing(EnginePlayTool.State),
+    [RobloxTool.PlayPause]: playing(EnginePlayTool.Pause),
+    [RobloxTool.PlayClose]: playing(EnginePlayTool.Close),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {

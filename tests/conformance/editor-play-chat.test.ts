@@ -5,11 +5,12 @@
  * through this path. With no Unreal Editor open, its first look answers the plugin's own words.
  */
 import assert from "node:assert/strict";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { TargetRuntime } from "../../src/shared/computer-target.ts";
-import { PluginSourceKind } from "../../src/shared/plugins.ts";
+import { ClockLevel, TargetRuntime } from "../../src/shared/computer-target.ts";
+import { ENGINE_PLAY_TOOLS, EnginePlayTool, MAX_PLAY_PLAYERS } from "../../src/shared/engine-play.ts";
+import { type PluginManifest, PluginSourceKind, PluginToolAudience } from "../../src/shared/plugins.ts";
 import { COMPUTER_TOOL_NAME } from "../../src/substrate/computer-tool.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
@@ -174,5 +175,29 @@ describe("the computer on a game another engine plays in its editor", () => {
     } finally {
       await core.plugins.setEnabled(TOY_PLUGIN_ID, false);
     }
+  });
+});
+
+describe("the Roblox plugin's play tools", () => {
+  it("declares every play tool as a harness step under the Studio lock, with players on open and a player on the others", async () => {
+    const manifest = JSON.parse(
+      await readFile(path.join(import.meta.dirname, "../../src/plugins/roblox/plugin.json"), "utf8"),
+    ) as PluginManifest;
+    const tools = new Map(manifest.tools.map((tool) => [tool.name, tool]));
+    for (const name of ENGINE_PLAY_TOOLS) {
+      const tool = tools.get(name);
+      assert.equal(tool?.audience, PluginToolAudience.Harness, name);
+      assert.deepEqual(tool?.needs, ["studio"], name);
+    }
+    const params = (name: string) => Object.keys(tools.get(name)?.parameters?.properties ?? {});
+    assert.ok(params(EnginePlayTool.Open).includes("players"));
+    for (const name of [EnginePlayTool.Input, EnginePlayTool.Shot, EnginePlayTool.State])
+      assert.ok(params(name).includes("player"), name);
+    assert.deepEqual(manifest.engine?.play, {
+      players: MAX_PLAY_PLAYERS,
+      clock: ClockLevel.None,
+      pointer: true,
+      state: true,
+    });
   });
 });

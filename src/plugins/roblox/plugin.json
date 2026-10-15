@@ -143,6 +143,113 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "play-open",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: start a play test in this game's Roblox Studio, or join the one running. One player is Play Solo, as the person's own account; 2 to 8 are a multiplayer test of test players through the Genex helper. Answers {width, height, joined, players, capabilities, liveData} (liveData: Studio can reach the published game's live saved data), or {refused, message} (no-editor when Studio isn't open for this game, unsupported for more than 8 players or when the helper can't start a test).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "players": {
+            "type": "number",
+            "description": "How many players, 1 to 8; absent is one."
+          }
+        }
+      }
+    },
+    {
+      "name": "play-input",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: move one player's mouse aim for one frame when asked, then hold keys and mouse buttons together for seconds, then let go. Answers {held, gameSeconds} once that time has passed, or {refused, message} (unknown-key for a key Roblox has no name for).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "string",
+            "description": "Web key codes or mouse buttons (MouseLeft, MouseRight) held together, joined by commas: KeyW,ShiftLeft (empty: just let the game play)."
+          },
+          "seconds": {
+            "type": "number",
+            "description": "Seconds to hold them, 0.05 to 10."
+          },
+          "dx": {
+            "type": "number",
+            "description": "Pixels to move the aim right first (negative: left)."
+          },
+          "dy": {
+            "type": "number",
+            "description": "Pixels to move the aim down the screen first (negative: up)."
+          },
+          "wheel": {
+            "type": "number",
+            "description": "Notches of the mouse wheel first, up positive."
+          },
+          "player": {
+            "type": "number",
+            "description": "Which player, 1 to the players the test opened; absent is player 1."
+          }
+        },
+        "required": ["keys", "seconds"]
+      }
+    },
+    {
+      "name": "play-shot",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: a picture of what one player sees in the running test, Roblox's own interface included. Answers {data (base64), mime (image/jpeg), width, height}, or {refused, message}.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "number",
+            "description": "Which player, 1 to the players the test opened; absent is player 1."
+          }
+        }
+      }
+    },
+    {
+      "name": "play-state",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: one player in the running test, as their client sees them (position, velocity, health, leaderstats, attributes) and as the server sees every player, with the last lines of that player's output. Answers {player, players, mode, client, server, console}, or {refused, message}.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "player": {
+            "type": "number",
+            "description": "Which player, 1 to the players the test opened; absent is player 1."
+          }
+        }
+      }
+    },
+    {
+      "name": "play-pause",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: Roblox Studio can't hold a play test still, so this answers {refused: unsupported} unless the Genex helper can.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean",
+            "description": "True stands the game still; false lets it run."
+          }
+        },
+        "required": ["paused"]
+      }
+    },
+    {
+      "name": "play-close",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's computer tool only: end the play test the computer started (a play the person started goes on). Answers {closed}.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "skills": [

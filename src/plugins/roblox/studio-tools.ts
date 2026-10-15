@@ -75,8 +75,11 @@ export type StudioTool = (typeof StudioTool)[keyof typeof StudioTool];
 export const STUDIO_ID_ARG = "studio_id";
 /** The data model a call runs in (Edit, Client or Server), on the tools that take one. */
 export const DATAMODEL_ARG = "datamodel_type";
+/** The data models a call can run in: the person's place, and a play test's client and server. Wire values: never rename. */
+export const DataModel = { Edit: "Edit", Client: "Client", Server: "Server" } as const;
+export type DataModel = (typeof DataModel)[keyof typeof DataModel];
 /** The data model a connection call runs in unless the agent names another: the person's place. */
-export const EDIT_DATAMODEL = "Edit";
+export const EDIT_DATAMODEL = DataModel.Edit;
 /** A picture's name on `screen_capture`, which StudioMCP requires. */
 export const CAPTURE_ID_ARG = "capture_id";
 

@@ -166,6 +166,24 @@ cannot do at all with `unsupported`: a pause is then asked once and the clock is
 Unreal answers it for more than one player. The toy engine fixture (`tests/fixtures/toy-engine-plugin`)
 plays three players this way.
 
+Roblox Studio declares `players` 8, `clock` `none`, `pointer` and `state`, and its play tools
+([`plugins/roblox/computer-play.ts`](../src/plugins/roblox/computer-play.ts)) go through Studio's own
+MCP server under the `studio` lock. One player is Play Solo (`start_stop_play`) in the game's own
+Studio, which plays as the signed-in account. More players is the Genex helper's multiplayer test:
+Studio opens a server and a window per client, and its MCP server lists each as a nameless Studio; a
+client answers its Client data model as test player `Player<k>` (UserId `-k`), which is player k, and
+the server answers only its Server data model. Starting a multiplayer test brings Studio to the
+front; Play Solo does not. Keys are held in one `user_keyboard_input` call (down, wait, up, named by
+[`keys.ts`](../src/plugins/roblox/keys.ts): `KeyW` is `W`, `Enter` is `Return`), the mouse buttons
+(left and right only) and wheel through `user_mouse_input` at the player's aim, which `dx`/`dy` moves.
+A shot is `screen_capture` on the player's Studio (a JPEG of that player's view; a test's server has
+none), shrunk past 1 MB and refused when it can't be. The state is the client's and the server's
+view of the players (position, velocity, health, leaderstats, attributes) with the player's last
+output lines. No pause holds a client's clock, so `play-pause` answers `unsupported`. For a game
+whose link names a published place, `play-open` asks the server once whether the live saved data
+can be reached (`liveData`) and keeps the answer for the Set up panel. A play the session starts is
+marked as the agent's (`agent-marks.ts`) from just before it starts until `play-close` ends it.
+
 A judge's grant may name one of the judges the engine plugin declares (`judge`;
 [plugins](plugins.md#judges)): its session opens that judge's players, and `play-open`'s source runs
 one step right after the play first opens (`afterOpen`), the judge's probe, through the plugin's
