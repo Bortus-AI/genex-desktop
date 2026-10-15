@@ -12,6 +12,7 @@ import { GrantKind, PLAN_TOOL, RuleScope } from "../../shared/permissions.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { StudioCore } from "../studio-core.ts";
+import { ChatCheckpoints, CheckpointPhase } from "../chat-checkpoints.ts";
 import { FIXTURE_MODEL, FixtureName, fixtureRun, SHOT } from "./fixture-kit.ts";
 import { ExecutionStatus } from "../../shared/run-state.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
@@ -107,7 +108,8 @@ const said = (content: string): EventData => ({
 /**
  * A short game chat whose every message offers Rewind: one from before the queue (no queue
  * record), the first queued one, one a landed build followed, one whose answer failed, and one
- * read into the answer under way. Rewinding to the one the build followed rewinds the chat alone.
+ * read into the answer under way. Rewinding to the one the build followed rewinds the chat alone;
+ * rewinding to the paper boats can put the river's files back, and then bring them back again.
  */
 export async function seedRewindChat(core: StudioCore): Promise<void> {
   const game = await core.games.scaffold("rewind-chat", { title: "Rewind chat" });
@@ -144,6 +146,12 @@ export async function seedRewindChat(core: StudioCore): Promise<void> {
     ]),
     thread,
   );
+  // The folder before the boats were answered, then as their answer left it.
+  await fs.writeFile(path.join(game.dir, "river.txt"), "Calm water.\n");
+  const checkpoints = new ChatCheckpoints(path.join(core.layout.scratch, "fixture-checkpoints"));
+  await checkpoints.take(game.dir, thread, boats, CheckpointPhase.Before);
+  await fs.writeFile(path.join(game.dir, "river.txt"), "Paper boats drift by.\n");
+  await fs.writeFile(path.join(game.dir, "boats.txt"), "Twelve glowing boats.\n");
   await core.append(
     [
       ...sent(boats, "Float paper boats down the river."),

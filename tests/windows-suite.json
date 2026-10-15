@@ -201,6 +201,7 @@
   "tests/conformance/renderer-build.test.ts",
   "tests/conformance/renderer-performance.test.ts",
   "tests/conformance/renderer-state.test.ts",
+  "tests/conformance/rewind-undo-entries.test.ts",
   "tests/conformance/roving-focus.test.ts",
   "tests/conformance/rpc-authority.test.ts",
   "tests/conformance/rpc-surface.test.ts",

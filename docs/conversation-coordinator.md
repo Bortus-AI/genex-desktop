@@ -598,7 +598,13 @@ reads them after the cut-off notice (`delegation-prompts.ts` `unsavedFilesNotice
 `refs/studio/chat/<thread>/before|after/<message>` with hooks off, without moving HEAD, branches
 or the user's index. Restoring changes the working tree only, and only while HEAD is the
 checkpoint's parent. The pre-rewind folder is saved on `.../rewound/<id>`; a restore that fails
-partway, or a rewind that fails after it, is put back from there. Paths the restored ignore rules
+partway, or a rewind that fails after it, is put back from there. A rewind that put files back
+records that `<id>` as `rewindId` on its marker, and its chat line offers **Bring back newer
+version** (`studio:chat.rewind.undo`, `ChatRewindService.undo`) while it is the chat's newest
+rewind, no message was sent after it and it was not taken (`undoRewindRefusal`):
+`ChatCheckpoints.restoreSaved` saves the present on a `rewound/` ref of its own, then restores that
+copy under the restore steps, only while HEAD is still its parent, and the host appends
+`conversation_rewind_undone`. The conversation stays rewound. Paths the restored ignore rules
 cover are never deleted, a folder still holding anything never saved is not replaced by a file,
 and reference pictures only withdrawn messages added are removed. Paths changed outside the
 chat's answers (between an `after` and the next `before`) are named in the confirmation; when a
