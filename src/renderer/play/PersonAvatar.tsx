@@ -40,8 +40,16 @@ export function PersonAvatar({
   return <GeneratedAvatar recipe={recipe} size={size} full={!gear} flat={flat} motion={motion} />;
 }
 
-/** A grey placeholder where a person will be (no friends yet). */
-export function GhostAvatar({ id, size }: { id: string; size: number }): JSX.Element {
+/** A grey placeholder where a person will be (no friends yet, or nobody signed in). Still unless asked. */
+export function GhostAvatar({
+  id,
+  size,
+  motion = AvatarMotion.Still,
+}: {
+  id: string;
+  size: number;
+  motion?: AvatarMotion;
+}): JSX.Element {
   const recipe = useMemo(() => ghostRecipe(id), [id]);
-  return <GeneratedAvatar recipe={recipe} size={size} full ghost motion={AvatarMotion.Still} />;
+  return <GeneratedAvatar recipe={recipe} size={size} full ghost motion={motion} />;
 }

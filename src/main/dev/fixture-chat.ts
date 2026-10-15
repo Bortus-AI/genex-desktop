@@ -56,6 +56,8 @@ export async function seedChatHistory(core: StudioCore, project: { name: string;
     engine: EngineId.Ollama,
     model: FIXTURE_MODEL,
   });
+  // A lead's run, as a real one announces it: without this the start waits for a starting point.
+  await append(CustomEvent.AutopilotStarted, { director: true, facets: [] });
   await append(CustomEvent.DirectorWorker, { ...BRIDGE, mode: "single", state: "running" });
   await append(CustomEvent.DirectorWorker, { ...LIGHT, mode: "single", state: "running" });
   await core.append(toolReads(), threadId);
@@ -260,6 +262,7 @@ export async function activateLiveChat(
         engine: EngineId.Ollama,
         model: FIXTURE_MODEL,
       }),
+      run(CustomEvent.AutopilotStarted, { director: true, facets: [] }),
       run(CustomEvent.DirectorWorker, { ...BRIDGE, mode: "single", state: "running" }),
       run(CustomEvent.DirectorWorker, { ...LIGHT, mode: "single", state: "done" }),
       run(CustomEvent.SessionActivity, { role: SessionActivityRole.Planner, phase: ChatActivityPhase.Thinking }),
