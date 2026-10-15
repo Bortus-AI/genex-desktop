@@ -1145,10 +1145,21 @@ lets the person sign in in the Studio the installer opens (it closes by itself a
 closes it and never sees the password), runs Set up while it is closed (the helper always; the
 switch when a settings file exists), and opens Studio once. The action answers at once; `status`
 carries the phase (`install`) and `install/state.json` in storage keeps the last one, and **Stop**
-(`cancel-get-studio`) ends a download or a wait. The `steps` action is the chat's steps card: rows
-for Studio (ticked with its version, so Get Roblox Studio is never offered with Studio here), signing
-in, the helper, the MCP server and the game's place. The install has not been run live; it is
-proven with fakes.
+(`cancel-get-studio`) ends a download or a wait. The install has not been run live; it is proven
+with fakes.
+
+The Set up panel and the chat's steps card draw the same rows (`engine-steps.ts`): Studio (ticked
+with its version, so Get Roblox Studio is never offered with Studio here), signing in, the helper,
+the MCP server and the game's place, each with the same words, tick and button. `steps` answers the
+card; `status` answers the rows, the step that is next (`now`: Studio, then Set up, which needs
+Studio closed, then opening Studio, its MCP server and the place), the MCP switch read from
+Studio's settings and the helper version Genex's record names, without reading `~/Documents`. On
+the next step the panel adds Restart Studio beside Do it for me, Studio's click path, what Genex
+waits for, and on a Mac before Set up the Documents note. Choose your place calls `places` only on
+the person's press. A linked place's block names the place, says when the person's own Rojo project
+keeps the scripts, and warns when the last play found Studio can reach the game's live saved data
+(`live-data/<game>.json` in storage, which the play adapter writes), with Studio's switch to turn
+it off.
 
 Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
 is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in

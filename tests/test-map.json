@@ -23,7 +23,10 @@
       "tests/conformance/roblox-setup.test.ts",
       "tests/conformance/roblox-backend.test.ts"
     ],
-    "src/plugins/roblox/panel.html": ["tests/conformance/roblox-backend.test.ts"],
+    "src/plugins/roblox/panel.html": [
+      "tests/conformance/roblox-backend.test.ts",
+      "tests/conformance/roblox-panel.test.ts"
+    ],
     "src/plugins/roblox/skills/**": ["tests/conformance/plugin-skill-engines.test.ts"],
     "src/plugins/roblox/templates/**": [
       "tests/conformance/roblox-create-place.test.ts",
