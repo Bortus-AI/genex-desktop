@@ -22,8 +22,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   (avatar, name, Pro, friends stack), offline (the last account with the offline mark), ended
   (dimmed, Sign in again). Its menu: Profile, Friends, Credits (the Genex plugin page's Credits
   tab), Account settings, Sign out.
-- Settings › Genex account: avatar (generated or photo, Regenerate), name, credits with Buy credits,
-  Sign out by the title. Signed out it is the sign-in stage, with the account-card drawing.
+- Settings › Genex account: avatar (generated or photo, Regenerate), name, nickname (`@handle` and
+  Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
+  out it is the sign-in stage, with the account-card drawing.
 - Publish needs only the account: signed out it asks to sign in. Multiplayer needs the Genex plugin
   on, since the agent builds it with Genex's tools.
 
@@ -32,11 +33,20 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Games, Tools and Assets, each with tabs and search; Recent once something was played; Top
   creators (the last 30 days) above Games' tabs. The promo card shows until the first sign-in or
   its ×.
-- Friends: requests, playing now (Join), friends, sent, people search, the invite link and whether
-  friends see the game the account is in. Offline it shows the page as last read with nobody
-  playing, and every press waits.
-- Profiles: the avatar, name, chips, friends and games. The account's own adds a 7-day strip
-  opening Stats (7, 30 or 90 days; tiles, plays per day, every game).
+- Friends: requests, playing now (Join), friends, sent, people search, the invite card and whether
+  friends see the game the account is in. The invite link (`/api/referrals/me`, on the website
+  only) opens genex.games' download page with a card from the account; the card has Copy, Post on
+  X and, on a Mac, Share… (its share menu). Its credits are the API's `inviterBonus`. Offline it
+  shows the page as last read with nobody playing, and every press waits.
+- Profiles: the avatar, name, `@handle`, chips, friends and games. The account's own adds Share
+  beside the pencil (a popover: the link preview drawn in the app, its avatar body flat as the
+  preview draws it, the link, Copy, Post on X, Share…) and a 7-day strip opening Stats (7, 30 or 90 days; tiles, plays per day, every game).
+- Nicknames: a handle is the profile's address, `genex.games/@<handle>` (by id while there is
+  none). Its shape (3–20 of a–z, 0–9 and inner dashes) is judged as it is typed
+  (`src/shared/handle.ts`, genex.games' rules); whether it is free is genex.games' to say. The
+  avatar welcome asks for one once while `/api/me` says `handleChosen: false` (a new account, and
+  each older one once, whichever of app or site comes first), and never after; a genex.games
+  without handles gets the avatar-only welcome once per account on this Mac.
 - Generated avatars come from the account's id (`src/shared/avatar-recipe.ts`, the same recipe
   genex.games draws): a WebGPU body with a 2D fallback, eyes and gear in 2D, 25 frames a second,
   at most 28 avatars a frame, still under Reduce Motion, while idle and under a modal.
@@ -59,6 +69,14 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,
 `src/main/play/`, `src/main/core/genex-account.ts`; selectors in the
-[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|new|quiet|fresh`
-signs a fixture launch in, `ended` gives it a refused one. Tests: `tests/conformance/play-*`,
+[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|new|quiet|fresh|nickname`
+signs a fixture launch in (`new` and `nickname` have not chosen a nickname; a few names, such as
+`rab`, read as taken), `ended` gives it a refused one. Tests: `tests/conformance/play-*`,
 `genex-account`, `app-account-plugin`.
+
+A live `studio:dev` profile can point Play at a local or test genex.games with
+`GENEX_DEV_PLAY_API_ORIGIN` and `GENEX_DEV_PLAY_WEB_ORIGIN` (bare origins: https, or http on this
+Mac; `src/main/play/origins.ts`). A packaged app or a fixture launch ignores them. With another
+API the account signs in on that server's own device sign-in, for the launch only
+(`src/main/dev/dev-stand-account.ts`); Publish, the Genex plugin, games' pages and their
+pictures stay on genex.games.

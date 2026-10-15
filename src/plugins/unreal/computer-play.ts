@@ -128,32 +128,32 @@ interface PlaySession {
   started: boolean;
 }
 
-/** The marker of the agent's own play in a game, or none where its folder can't be named. */
+/** One session per game in one storage. */
+const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
+
+/** The mark that says a play is the agent's own, or none when the game has no folder. */
 function markerOf(storage: string, game: string, queueDeps: QueueDeps): AgentPlayMarker {
   const folder = agentPlayFolder(storage, game);
   return folder ? agentPlayMarker(folder, queueDeps.now) : NO_AGENT_PLAY;
 }
 
-/** Keys held (and the mouse moved first) for a while of play, answering the game clock after. */
-async function playInput(
-  args: Record<string, unknown>,
+/**
+ * Ends a play left running so a fresh one can start: an agent's (the session's own, or one its mark
+ * claims) is stopped; the person's is never touched. Null when nothing ran or it was stopped.
+ */
+async function endForFresh(
+  sessions: ReadonlyMap<string, PlaySession>,
+  storage: string,
+  game: string,
   queueDeps: QueueDeps,
   port: ReturnType<QueueDeps["editor"]>,
-): Promise<EnginePlayInputAnswer | EnginePlayRefused> {
-  const codes = playInputKeys(args.keys);
-  const names = codes.map((code) => ({ code, name: unrealKey(code) }));
-  const unknown = names.filter((key) => key.name === null).map((key) => key.code);
-  if (unknown.length) return refused(EnginePlayRefusal.UnknownKey, MESSAGE.unknownKey(unknown));
-  if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
-  const asked = typeof args.seconds === "number" ? args.seconds : MIN_HOLD_SECONDS;
-  const seconds = Math.min(MAX_PLAY_INPUT_SECONDS, Math.max(MIN_HOLD_SECONDS, asked));
-  const held = names.flatMap((key) => (key.name ? [key.name] : []));
-  const mouse = { dx: numberArg(args.dx), dy: numberArg(args.dy), wheel: numberArg(args.wheel) };
-  // One frame of the mouse first, as a player turns to aim, then presses.
-  if (mouse.dx || mouse.dy || mouse.wheel) await startStep(port, LoopTool.Mouse, mouse);
-  for (const name of held) await startStep(port, LoopTool.Hold, { name, x: 1, y: 0, seconds });
-  await playFor(queueDeps, port, seconds);
-  return { held, gameSeconds: (await gameClock(port)).gameSeconds };
+): Promise<RestartRefusal | null> {
+  if (!(await playing(port))) return null;
+  const ours = sessions.get(keyOf(storage, game))?.started || (await agentPlaying(storage, game, queueDeps.now()));
+  if (!ours) return RestartRefusal.PersonPlaying;
+  await stopPlay(queueDeps, port);
+  await markerOf(storage, game, queueDeps).stopped();
+  return null;
 }
 
 /** The play tools over the queue's own editor port and clock. */
@@ -164,7 +164,6 @@ export function createComputerPlay(deps: {
 }) {
   const sessions = new Map<string, PlaySession>();
   let shots = 0;
-  const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
   const portOf = (storage: string, context: PluginContext) => {
     const game = deps.game(context);
     const queueDeps = deps.queueDeps(storage);
@@ -176,7 +175,7 @@ export function createComputerPlay(deps: {
     if (deps.queue(storage).busy(game)) return refused(EnginePlayRefusal.Busy, MESSAGE.busy);
     if (!(await port.answering())) return refused(EnginePlayRefusal.NoEditor, MESSAGE.noEditor);
     const key = keyOf(storage, game);
-    const restarted = args.fresh === true ? await endForFresh(storage, game, queueDeps, port) : null;
+    const restarted = args.fresh === true ? await endForFresh(sessions, storage, game, queueDeps, port) : null;
     if (restarted === RestartRefusal.PersonPlaying)
       return refused(EnginePlayRefusal.PersonPlaying, MESSAGE.personPlaying);
     const joined = await playing(port);
@@ -197,27 +196,23 @@ export function createComputerPlay(deps: {
     return opened;
   };
 
-  /**
-   * Ends a play left running so a fresh one can start: an agent's (the session's own, or one its mark
-   * claims) is stopped; the person's is never touched. Null when nothing ran or it was stopped.
-   */
-  const endForFresh = async (
-    storage: string,
-    game: string,
-    queueDeps: QueueDeps,
-    port: ReturnType<QueueDeps["editor"]>,
-  ): Promise<RestartRefusal | null> => {
-    if (!(await playing(port))) return null;
-    const ours = sessions.get(keyOf(storage, game))?.started || (await agentPlaying(storage, game, queueDeps.now()));
-    if (!ours) return RestartRefusal.PersonPlaying;
-    await stopPlay(queueDeps, port);
-    await markerOf(storage, game, queueDeps).stopped();
-    return null;
-  };
-
   const input = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {
     const { queueDeps, port } = portOf(storage, context);
-    return playInput(args, queueDeps, port);
+    const codes = playInputKeys(args.keys);
+    const names = codes.map((code) => ({ code, name: unrealKey(code) }));
+    const unknown = names.filter((key) => key.name === null).map((key) => key.code);
+    if (unknown.length) return refused(EnginePlayRefusal.UnknownKey, MESSAGE.unknownKey(unknown));
+    if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
+    const asked = typeof args.seconds === "number" ? args.seconds : MIN_HOLD_SECONDS;
+    const seconds = Math.min(MAX_PLAY_INPUT_SECONDS, Math.max(MIN_HOLD_SECONDS, asked));
+    const held = names.flatMap((key) => (key.name ? [key.name] : []));
+    const mouse = { dx: numberArg(args.dx), dy: numberArg(args.dy), wheel: numberArg(args.wheel) };
+    // One frame of the mouse first, as a player turns to aim, then presses.
+    if (mouse.dx || mouse.dy || mouse.wheel) await startStep(port, LoopTool.Mouse, mouse);
+    for (const name of held) await startStep(port, LoopTool.Hold, { name, x: 1, y: 0, seconds });
+    await playFor(queueDeps, port, seconds);
+    const answer: EnginePlayInputAnswer = { held, gameSeconds: (await gameClock(port)).gameSeconds };
+    return answer;
   };
 
   const shot = async (_args: Record<string, unknown>, context: PluginContext, storage: string) => {

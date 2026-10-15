@@ -11,6 +11,11 @@ export interface PlayPerson {
   id: string;
   name: string;
   /**
+   * Their nickname, which is also their profile's address (`genex.games/@<handle>`); null while
+   * genex.games has not given them one (or does not know handles yet): links then use their id.
+   */
+  handle: string | null;
+  /**
    * The photo they chose as their avatar, on a host the app loads images from; null draws their
    * generated avatar (`avatar-recipe.ts`), which every account has.
    */
@@ -39,6 +44,12 @@ export interface PlayMe extends PlayPerson {
   photoUrl: string | null;
   /** Whether genex.games keeps a regenerated avatar; until it does, Regenerate waits. */
   avatarVariantKept: boolean;
+  /**
+   * Whether the account confirmed its nickname (in the welcome, here or on genex.games); false opens
+   * the welcome with the nickname field once. Null while genex.games does not know handles yet: the
+   * welcome is then the avatar alone, as before.
+   */
+  handleChosen: boolean | null;
 }
 
 /** The viewer's relationship with someone. Wire values, as the API names them: never rename one. */
@@ -94,7 +105,11 @@ export interface PlayFriendsPage {
   incoming: PlayFriendRequest[];
   outgoing: PlayFriendRequest[];
   visibility: PresenceVisibility;
-  /** The account's invite link (following it makes the two friends), or null when it could not be read. */
+  /**
+   * The account's invite link as genex.games hands it out (`/@<handle>/invite?ref=<code>`, the code
+   * its proof): the Genex download page, with a card from the account. Null when it could not be
+   * read, or is not on the website Play links to.
+   */
   inviteLink: string | null;
   /** The credits the account earns when someone it invited makes their first thing, or null when unread. */
   inviteBonus: number | null;

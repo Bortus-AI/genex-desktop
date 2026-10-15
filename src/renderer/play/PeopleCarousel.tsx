@@ -13,8 +13,6 @@ import { PLAY_WORDS } from "../words.ts";
 import { PersonName, RingedAvatar } from "./FriendCard.tsx";
 
 const WORDS = PLAY_WORDS.people;
-/** A tile's avatar, with room for gear. */
-const TILE_AVATAR = 80;
 /** An arrow scrolls this share of the row's width. */
 const PAGE_SHARE = 0.85;
 /** Scrolled within this many pixels of an end counts as at it. */
@@ -116,10 +114,13 @@ export function PeopleCarousel({
 export function PersonTile({
   person,
   sub,
+  avatar,
   live = false,
 }: {
   person: PlayPerson;
   sub: string;
+  /** The avatar's side in pixels, with room for gear. */
+  avatar: number;
   /** In a game right now: the line is the game, in green, after a play mark. */
   live?: boolean;
 }): JSX.Element {
@@ -132,7 +133,7 @@ export function PersonTile({
       aria-label={live ? WORDS.playingLabel(person.name, sub) : WORDS.tileLabel(person.name, sub)}
       onClick={() => studio().play.showProfile(person.id)}
     >
-      <RingedAvatar person={person} size={TILE_AVATAR} live={live} gear />
+      <RingedAvatar person={person} size={avatar} live={live} gear />
       <PersonName person={person} className="person-tile-name" />
       <span className="person-tile-sub" data-live={live || undefined}>
         {live && <Icon name="play" size={10} className="people-play-glyph" />}
