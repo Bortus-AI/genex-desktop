@@ -77,7 +77,10 @@ describe("where a game's Unity stands, for the panel and the toolbar button", ()
       version: UNITY_6,
       installed: [UNITY_6],
     });
-    for (const backend of [old, plain]) assert.equal((await wordOf(backend)).badge, "Not set up");
+    for (const backend of [old, plain]) {
+      const word = await wordOf(backend);
+      assert.deepEqual([word.badge, word.dot], ["Not set up", true]);
+    }
   });
 
   it("says a set-up project is not open, or that the Unity it was saved with isn't installed", async () => {
@@ -88,7 +91,7 @@ describe("where a game's Unity stands, for the panel and the toolbar button", ()
       version: UNITY_6,
       installed: [UNITY_6],
     });
-    assert.equal((await wordOf(closed)).badge, "Not open");
+    assert.deepEqual(await wordOf(closed), { badge: "Not open", tone: "info", dot: true, title: "Unity isn't open" });
 
     const other = await backendOn(["6000.0.26f1"]);
     await withProject(other.game, UNITY_6, SET_UP);
@@ -105,7 +108,12 @@ describe("where a game's Unity stands, for the panel and the toolbar button", ()
 
     const refusing = await openGame([refusedConnection(), refusedConnection()]);
     assert.equal((await statusOf(refusing)).step, PanelStep.Opening, "a server that isn't listening yet");
-    assert.equal((await wordOf(refusing)).badge, "Starting");
+    assert.deepEqual(await wordOf(refusing), {
+      badge: "Starting",
+      tone: "warn",
+      dot: true,
+      title: "Unity is starting",
+    });
   });
 
   it("says Unity is ready once its main thread answers, and whether it plays or compiles", async () => {
@@ -118,7 +126,7 @@ describe("where a game's Unity stands, for the panel and the toolbar button", ()
       playing: false,
       compiling: false,
     });
-    assert.deepEqual(await wordOf(idle), { badge: "Ready", tone: "info", title: "Unity is open and answers" });
+    assert.deepEqual(await wordOf(idle), { badge: "Ready", tone: "ok", dot: true, title: "Unity is open and answers" });
 
     const busy = await openGame([json(200, { playMode: "playing", compiling: true })]);
     const status = await statusOf(busy);

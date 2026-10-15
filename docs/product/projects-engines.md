@@ -13,10 +13,11 @@ the new kind.
 
 ## Plugins on or off
 
-Asked for an engine whose plugin is off, the chat shows its card (**Turn on** or **Install…**; a
-cross puts it away), which only your click acts on. On your word agents continue without it, as for
-Godot: the lead and workers run its programs as background jobs in the chat's mode, look
-at its windows with `app_look` (never clicking), read its docs, or write you a plugin.
+Engine buttons show only on their games. Asked for an engine whose plugin is off, the chat shows its
+card (**Turn on** or **Install…**; a cross puts it away), which only your click acts on. On your
+word agents continue without it, as for Godot: the lead and workers run its programs as background
+jobs in the chat's mode, look at its windows with `app_look` (never clicking), read its docs, or
+write you a plugin.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each tool
 asks before an agent runs it; Always allow lists that tool on its page under **Runs without
@@ -33,7 +34,7 @@ play through Pipeline, with Input System required for keyboard and mouse control
 
 ## Unreal
 
-The lead works in the open editor through the Genex editor helper, one holder at a time; while you
+The lead works in the open editor through Genex's editor helper, one holder at a time; while you
 play there the chat reads “Waiting for you to finish in Unreal”. A turn snapshots editor work;
 Rewind saves, closes and reopens Unreal. Agents and blind judges play it with keys and the
 mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**
@@ -43,8 +44,8 @@ project is a host project with the plugin in `Plugins/`; its tools build, test a
 
 Live shows what the folder holds: the web preview, the Unreal card (setup step, latest shot,
 **Open in Unreal**) or a run's pictures; only the preview has web controls. A web game plus Unreal
-project gets **Web game** and **Unreal** tabs in Live's place, the last chosen remembered per game;
-a web build shown from the chat brings Web game forward.
+project gets **Web game** and **Unreal** tabs, the last chosen remembered per game; a web build
+shown from the chat brings Web game forward.
 
 ## Where to work
 

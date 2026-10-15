@@ -213,6 +213,11 @@ export interface PluginToolbarItem {
   icon?: string;
   /** Default true: the button waits for a loaded game. */
   requiresProject?: boolean;
+  /**
+   * API 3: the facts of the games whose strip shows this button; every game when absent. Its status
+   * can still bring it out on another game (`shown`).
+   */
+  facts?: string[];
   target: PluginToolbarTarget;
   /** Names a declared action without confirmation that returns a PluginToolbarStatus. */
   status?: string;
@@ -227,6 +232,8 @@ export interface PluginToolbarStatus {
   attention?: boolean;
   /** Draw the badge as a dot in its tone (ok green, warn amber, err red, info grey); its word moves to the tooltip. */
   dot?: boolean;
+  /** A button scoped to `facts` shows on this game anyway (its chat chose the engine before the project exists). */
+  shown?: boolean;
 }
 
 /**

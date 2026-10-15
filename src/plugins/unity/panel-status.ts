@@ -106,7 +106,11 @@ export async function panelStatus(deps: OpenDeps, game: PanelGame, signal?: Abor
 /** The quiet tone of a word that asks for nothing. */
 const MUTED = "info" as const satisfies PluginToolbarStatus["tone"];
 
-/** The toolbar button's word and tooltip at each step; a game with no Unity project carries no word. */
+/**
+ * The toolbar button's word and tooltip at each step, drawn as a dot (green once Ready, amber while
+ * Starting) whose word only screen readers hear; Stalled stays a word, as it asks for the person.
+ * The button shows only on a game with a Unity project, so the steps before one never reach it.
+ */
 const WORD: Record<PanelStep, (version: string) => PluginToolbarStatus> = {
   [PanelStep.GetUnity]: () => ({ badge: "Get", tone: MUTED, title: "Unity 6 isn't installed: see how to get it" }),
   [PanelStep.NoGame]: () => ({ tone: MUTED, title: "Open a game to use Unity" }),
@@ -114,17 +118,24 @@ const WORD: Record<PanelStep, (version: string) => PluginToolbarStatus> = {
   [PanelStep.OldProject]: (version) => ({
     badge: "Not set up",
     tone: MUTED,
+    dot: true,
     title: `This project was saved with Unity ${version}: Genex works with Unity 6 or later`,
   }),
-  [PanelStep.NotSetUp]: () => ({ badge: "Not set up", tone: MUTED, title: "Set up this game's Unity project" }),
+  [PanelStep.NotSetUp]: () => ({
+    badge: "Not set up",
+    tone: MUTED,
+    dot: true,
+    title: "Set up this game's Unity project",
+  }),
   [PanelStep.NoEditor]: (version) => ({
     badge: "Not open",
     tone: MUTED,
+    dot: true,
     title: `Unity ${version} isn't installed: this project was saved with it`,
   }),
-  [PanelStep.NotOpen]: () => ({ badge: "Not open", tone: MUTED, title: "Unity isn't open" }),
-  [PanelStep.Opening]: () => ({ badge: "Starting", tone: MUTED, title: "Unity is starting" }),
-  [PanelStep.Ready]: () => ({ badge: "Ready", tone: MUTED, title: "Unity is open and answers" }),
+  [PanelStep.NotOpen]: () => ({ badge: "Not open", tone: MUTED, dot: true, title: "Unity isn't open" }),
+  [PanelStep.Opening]: () => ({ badge: "Starting", tone: "warn", dot: true, title: "Unity is starting" }),
+  [PanelStep.Ready]: () => ({ badge: "Ready", tone: "ok", dot: true, title: "Unity is open and answers" }),
   [PanelStep.Stalled]: () => ({
     badge: "Stalled",
     tone: "warn",

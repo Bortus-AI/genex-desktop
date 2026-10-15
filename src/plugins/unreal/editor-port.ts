@@ -9,7 +9,7 @@
  */
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readdir, realpath } from "node:fs/promises";
+import { mkdir, readdir, realpath } from "node:fs/promises";
 import { connect, createServer } from "node:net";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -93,6 +93,8 @@ export const SetupStorage = {
   Starting: "starting.json",
   /** Each game's link, which the host keeps here (`<game>.json`). */
   Links: ENGINE_LINKS_FOLDER,
+  /** The games whose chats chose Unreal before their project could be made (`<game>.json`). */
+  Wants: "wants",
 } as const;
 
 const MESSAGE = {
@@ -471,6 +473,27 @@ export async function linkedProject(storage: string, game: string | undefined): 
   return isJsonObject(link) && link.kind === GameEngine.Unreal && isProjectPath(link.project)
     ? link.project
     : undefined;
+}
+
+/** Where `game`'s record that its chat chose Unreal lives, or undefined for an id that isn't a plain folder name. */
+const wantFile = (storage: string, game: string | undefined): string | undefined =>
+  game && GAME_ID.test(game) ? path.join(storage, SetupStorage.Wants, `${game}.json`) : undefined;
+
+/**
+ * Whether `game`'s chat chose Unreal before its project could be made (no Unreal Genex makes games
+ * with was installed): its stage strip shows the Unreal button, which shows how to get Unreal.
+ */
+export async function wantsUnreal(storage: string, game: string | undefined): Promise<boolean> {
+  const file = wantFile(storage, game);
+  return file ? isJsonObject(await readStoredJson(file)) : false;
+}
+
+/** Remembers that `game`'s chat chose Unreal; written once. */
+export async function rememberWant(storage: string, game: string | undefined, now: number): Promise<void> {
+  const file = wantFile(storage, game);
+  if (!file || (await wantsUnreal(storage, game))) return;
+  await mkdir(path.dirname(file), { recursive: true });
+  await atomicWriteJson(file, { at: new Date(now).toISOString() });
 }
 
 /** The suffix of each game's link record in the plugin's storage, `<game>.json`. */

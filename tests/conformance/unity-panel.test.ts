@@ -204,13 +204,29 @@ describe("The Unity panel", { skip }, () => {
     });
   }
 
-  it("names the game's project folder and its Unity, and outwaits the host's limit for an action that opens Unity", async () => {
+  it("names the game's project folder, where it stands and its Unity, and outwaits the host's limit for an action that opens Unity", async () => {
     const { computer } = await setUpGame([ready(), ...looks(look)]);
     const { tab, wire } = await open(computer);
     try {
-      assert.equal(await textOf(tab, "where"), `unity/ · Unity ${UNITY_6}`);
+      assert.equal(await textOf(tab, "where"), "unity/");
+      assert.equal(await textOf(tab, "version"), `Unity ${UNITY_6}`);
+      assert.equal(await textOf(tab, "state"), "Not open", "the strip button's own word");
+      assert.equal(await textOf(tab, "installed"), UNITY_6, "This computer names the Unity installed");
       await tab.locator("#primary").click();
       await tab.waitForFunction(() => document.getElementById("title")?.textContent === "Unity is ready");
+      const ready = await tab.evaluate(() => {
+        const word = document.getElementById("state-word");
+        return {
+          tone: document.getElementById("state")?.dataset.tone,
+          word: word?.textContent,
+          width: word?.getBoundingClientRect().width,
+        };
+      });
+      assert.deepEqual(
+        ready,
+        { tone: "ok", word: "Ready", width: 1 },
+        "Ready is the green dot alone, its word for screen readers",
+      );
       assert.deepEqual(wire.sent, [[UnityAction.OpenEditor, {}, 200_000]]);
       assert.ok(200_000 > PLUGIN_CALL_TIMEOUT_MS, "the host's own answer reaches the panel before its wait ends");
       assert.equal(computer.launches.length, 1);

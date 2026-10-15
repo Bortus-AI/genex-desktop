@@ -790,7 +790,7 @@ describe("Get Unreal Engine", () => {
 });
 
 describe("The Unreal toolbar button", () => {
-  it("is declared on the stage strip with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
+  it("is declared on the stage strip of Unreal games only, with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
     const manifest = validateManifest(JSON.parse(await readFile("src/plugins/unreal/plugin.json", "utf8")));
     assert.deepEqual(manifest.toolbar, [
       {
@@ -798,7 +798,7 @@ describe("The Unreal toolbar button", () => {
         label: "Unreal",
         ariaLabel: "Unreal Editor",
         icon: "unreal",
-        requiresProject: false,
+        facts: ["unreal-project", "unreal-plugin"],
         target: { kind: "panel", id: "setup" },
         status: "toolbar-status",
       },

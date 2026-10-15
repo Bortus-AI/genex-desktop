@@ -131,13 +131,15 @@ describe("the bundled Unity plugin", () => {
     ]);
   });
 
-  it("gives the person a toolbar button that opens its panel, and declares every action the panel sends", () => {
+  it("gives the person a toolbar button on Unity games only that opens its panel, and declares every action the panel sends", () => {
     const unity = bundledManifest();
     assert.deepEqual(unity.toolbar, [
       {
         id: "editor",
         label: "Unity",
         ariaLabel: "Unity Editor",
+        icon: "box",
+        facts: [CoreFact.UnityProject],
         target: { kind: "panel", id: "editor" },
         status: UnityAction.ToolbarStatus,
       },

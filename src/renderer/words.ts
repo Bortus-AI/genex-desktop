@@ -3510,7 +3510,7 @@ export const GENEX_WORDS = {
    * multiplayer with Genex; without the plugin it opens the setup dialog, in Publish's words.
    */
   multiplayer: {
-    button: "Multiplayer",
+    button: "Make multiplayer",
     buttonLabel: "Make this game multiplayer",
     hint: "Make this game multiplayer with Genex",
     /** What the press sends to the game's chat. */
