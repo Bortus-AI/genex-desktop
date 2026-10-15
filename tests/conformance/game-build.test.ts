@@ -63,6 +63,12 @@ const VITE_SHAPE: ProjectShape = {
   serve: "dist",
 };
 
+/**
+ * Real npm through a POSIX shell (`shellRunner`). What these runs prove is npm's own settings
+ * order, the same on every platform; Windows has no /bin/sh to run them with.
+ */
+const POSIX_NPM = { skip: process.platform === "win32" && "runs npm through /bin/sh, which Windows lacks" };
+
 /** A runner that runs the command for real, outside any sandbox: npm's own behavior is the point. */
 async function shellRunner(request: RunRequest): Promise<RunResult> {
   const started = Date.now();
@@ -767,7 +773,7 @@ describe("building a game the user owns", () => {
     ]);
   });
 
-  it("runs a guarded install with the system's git, whatever program the copy's .npmrc names", async () => {
+  it("runs a guarded install with the system's git, whatever program the copy's .npmrc names", POSIX_NPM, async () => {
     const work = await tmpDir("studio-git-dep-");
     // A package in a local repository: npm fetches a git dependency with the program its `git` names.
     const dep = path.join(work, "dep");
@@ -792,7 +798,7 @@ describe("building a game the user owns", () => {
     assert.ok((await stat(path.join(dir, "node_modules", "dep", "package.json"))).isFile());
   });
 
-  it("runs the guarded install without the copy's own scripts, whatever its .npmrc says", async () => {
+  it("runs the guarded install without the copy's own scripts, whatever its .npmrc says", POSIX_NPM, async () => {
     const dir = await gameRepo("planted-npmrc");
     await writeFile(
       path.join(dir, "package.json"),
