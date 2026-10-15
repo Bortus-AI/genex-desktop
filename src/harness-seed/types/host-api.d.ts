@@ -1446,8 +1446,19 @@ export interface ProjectShape {
 }
 // ↑ src/shared/game-project.ts
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
-export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
+/** The engines a game can be linked to a project of: every one but the web. */
+export type LinkedEngine = 'unreal' | 'godot';
+// ↑ src/shared/game-engine.ts
+
+/**
+ * A game linked to an engine project: its project file (absolute, real path: an Unreal
+ * `.uproject`, or a Godot project's `project.godot`), its engine, and when Genex linked it.
+ */
+export type EngineBinding = {
+  kind: LinkedEngine;
+  project: string;
+  linkedAt: string;
+};
 // ↑ src/shared/game-engine.ts
 
 export type FactSource = 'core' | 'link' | 'scaffold';

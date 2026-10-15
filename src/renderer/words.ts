@@ -1647,7 +1647,10 @@ export const PLUGIN_SUGGESTION_WORDS = {
 } as const;
 
 /** Each game engine as the chat names it. */
-export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal" } as const satisfies Record<GameEngine, string>;
+export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal", godot: "Godot" } as const satisfies Record<
+  GameEngine,
+  string
+>;
 
 /**
  * What the sidebar shows beside a project that isn't a game, by the core fact it holds; a fact
@@ -4100,12 +4103,22 @@ export const UNREAL_WORDS = {
   /** The latest play shot's alt text. */
   playShot: (project: string) => `${project} in play`,
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
-  rewindNote: (project: string) => `Rewind doesn’t undo changes made in Unreal: ${project} is outside the game folder.`,
+  rewindNote: (project: string) => ENGINE_LINK_WORDS.rewindNote("Unreal", project),
   /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (project: string | null, place: string) =>
+    ENGINE_LINK_WORDS.loopUnavailable("Unreal", project, place),
+} as const;
+
+/** A game linked to an engine project (Unreal, Godot) that lies outside its folder, in the engine's own name. */
+export const ENGINE_LINK_WORDS = {
+  /** What Rewind can't undo there. */
+  rewindNote: (engine: string, project: string) =>
+    `Rewind doesn’t undo changes made in ${engine}: ${project} is outside the game folder.`,
+  /** Mode's caption: where the project is, and the two ways to a Loop. */
+  loopUnavailable: (engine: string, project: string | null, place: string) =>
     project
-      ? `Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the Unreal button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
-      : "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
+      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
 } as const;
 
 // ── Genex account settings and avatars ─────────────────────────────────────────────────────

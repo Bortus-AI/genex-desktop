@@ -33,6 +33,7 @@ import {
   unrealWithoutPlugin,
 } from "./project-prompts.ts";
 import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
+import { godotWorkHere, godotWorkspaceRule } from "./linked-project-prompts.ts";
 import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
 import type { PluginKindOffer } from "../types/host-api.d.ts";
@@ -440,12 +441,23 @@ function factRules(
  * The rules every chat build follows after the game's own, in the voice of the engine that reads
  * them: a tool is named once, spelled the way this session can actually call it (M4.8b).
  */
+/** Where the game's work happens: its Unreal project, its linked Godot project, or this workspace. */
+function workspaceRule(game: GameBuild): string {
+  if (!servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject))
+    return unrealWorkspaceRule(game.engineProject, game.unrealFound);
+  const godot = linkedGodotProject(game);
+  return godot ? godotWorkspaceRule(godot) : WORKSPACE_RULE;
+}
+
+/** The `project.godot` a game is linked to, or null when it isn't linked to a Godot project. */
+const linkedGodotProject = (game: GameBuild): string | null =>
+  game.gameEngine === GameEngine.Godot ? game.engineProject : null;
+
 function contractorRules(engine: string | undefined, game: GameBuild): string[] {
-  const unrealWork = !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject);
   return [
     "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
-    unrealWork ? unrealWorkspaceRule(game.engineProject, game.unrealFound) : WORKSPACE_RULE,
+    workspaceRule(game),
     "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
     `When a sandbox blocks a step only the user's own Mac can do (an install or download that needs the network, such as brew or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
     // The Reload a checkpoint lights is the web preview's: any other kind is seen in its own app.
@@ -646,6 +658,8 @@ function engineQuestion(
  */
 function workHereLine(game: GameBuild, folderLabel: string): string {
   if (inUnreal(game)) return unrealWorkHere(game.engineProject, folderLabel, game.unrealFound);
+  const godot = linkedGodotProject(game);
+  if (godot) return godotWorkHere(godot, folderLabel);
   return folderLabel
     ? `The game's work stays in this workspace (folder \`${folderLabel}\`).`
     : "The game's work stays in this workspace.";

@@ -8,10 +8,12 @@
 import type { GameProject } from "../types/host-api.d.ts";
 
 /** The engines a game can build in, by their wire names. */
-export const GameEngine = { Web: "web", Unreal: "unreal" } as const;
+export const GameEngine = { Web: "web", Unreal: "unreal", Godot: "godot" } as const;
 export type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
 
-/** The engine a game descriptor says it builds in: Unreal only when the app linked it, else the web. */
+/** The engine a game descriptor says it builds in: the engine the app linked it to, else the web. */
 export function engineOfGame(game: Pick<GameProject, "engine"> | null | undefined): GameEngine {
-  return game?.engine?.kind === GameEngine.Unreal ? GameEngine.Unreal : GameEngine.Web;
+  const kind = game?.engine?.kind;
+  if (kind === GameEngine.Unreal || kind === GameEngine.Godot) return kind;
+  return GameEngine.Web;
 }

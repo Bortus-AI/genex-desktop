@@ -885,7 +885,7 @@ export class DelegationService {
     if (!own && !lead) return null;
     const folder = session.leads ?? target.workCwd;
     const neverTouch = await this.#neverTouch(p.project, [folder, game]);
-    const writeRoots = writableRoots(await this.#writeRoots(folder, chatThreadId), neverTouch);
+    const writeRoots = writableRoots(await this.#writeRoots(folder, chatThreadId, p.project), neverTouch);
     const owner = chatOrLeadJobOwner(p.project, chatThreadId, lead, session.chatTurn);
     return { folder, reach: { writeRoots, neverTouch, home, gameFolder: game }, owner };
   }
@@ -1405,10 +1405,20 @@ export class DelegationService {
     if (worker) return worker;
     const person = await this.#personSession(p, target, session);
     const asksAll = this.#core.engines.get(target.engineId).permissionPrompts === true;
+    // A game linked to a Godot project outside its folder works there: its folder is read (and, as
+    // the session's mode allows, written) like the game's own.
+    const linked = await this.#linkedFolders(p.project);
     if (person && asksAll) {
       const hostDirs = [grants.selfShotsDir, grants.playShotsDir];
-      const extraReads = await this.#x.permissions.chatReads(session.threadId, grants.extraReads, hostDirs);
-      return { person, lead: null, worker: null, extraReads, denyReads: [], reachesMac: true };
+      const recorded = await this.#x.permissions.chatReads(session.threadId, grants.extraReads, hostDirs);
+      return {
+        person,
+        lead: null,
+        worker: null,
+        extraReads: [...recorded, ...linked],
+        denyReads: [],
+        reachesMac: true,
+      };
     }
     const lead = person ? null : await this.#leadSession(p, target, grants, session, seat);
     // A lead in place on an engine that does not ask about every call: the chat's mode as it honours
@@ -1416,8 +1426,8 @@ export class DelegationService {
     const placed = person || lead ? null : await this.#placedLeadSession(p, target, grants, session, seat);
     if (placed) {
       const recorded = await this.#x.permissions.chatReads(session.threadId, p.extraReads ?? [], []);
-      const extraReads = [...grants.hostReads, ...recorded];
-      const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project)];
+      const extraReads = [...grants.hostReads, ...recorded, ...linked];
+      const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project), ...linked];
       const denyReads = await this.workspaceDenyReads(target.cwd, allowed);
       return { person: placed, lead: null, worker: null, extraReads, denyReads, reachesMac: false };
     }
@@ -1425,7 +1435,7 @@ export class DelegationService {
       // A folder it reads is one Accept edits (and Auto, inside its working folders) writes without
       // asking: the host's own folders and those the chat recorded, never a folder the brief names.
       const recorded = await this.#x.permissions.chatReads(session.threadId, p.extraReads ?? [], []);
-      const extraReads = [...grants.hostReads, ...recorded];
+      const extraReads = [...grants.hostReads, ...recorded, ...linked];
       return { person: null, lead, worker: null, extraReads, denyReads: [], reachesMac: true };
     }
     const allowed = [...grants.extraReads, this.#core.games.dirFor(p.project)];
@@ -1498,7 +1508,7 @@ export class DelegationService {
       id: found.id,
       title: found.title,
       mode: chat.mode,
-      writeRoots: writableRoots(await this.#writeRoots(target.workCwd, found.chatThreadId), neverTouch),
+      writeRoots: writableRoots(await this.#writeRoots(target.workCwd, found.chatThreadId, p.project), neverTouch),
       neverTouch,
       research: found.research,
       ...(chat.asks ? { asks: chat.asks } : {}),
@@ -1525,15 +1535,35 @@ export class DelegationService {
   }
 
   /**
-   * What a worker's box may let it write: its own folder, the folders the person granted the chat
-   * and the enabled plugins' folders for their engine programs, by their real paths. A folder that
-   * does not exist yet is left out until it does; the seat then drops any that is, holds or sits in
-   * a never-touch root (`writableRoots`), whatever granted it.
+   * What a worker's box may let it write: its own folder, the folders the person granted the chat,
+   * the enabled plugins' folders for their engine programs and the Godot project its game is linked
+   * to outside its folder, by their real paths. A folder that does not exist yet is left out until it
+   * does; the seat then drops any that is, holds or sits in a never-touch root (`writableRoots`),
+   * whatever granted it.
    */
-  async #writeRoots(cwd: string, chatThreadId: string): Promise<string[]> {
-    const asked = [cwd, ...this.#x.permissions.chatDirs(chatThreadId), ...this.#core.plugins.workerFolders()];
+  async #writeRoots(cwd: string, chatThreadId: string, project: string): Promise<string[]> {
+    const asked = [
+      cwd,
+      ...this.#x.permissions.chatDirs(chatThreadId),
+      ...this.#core.plugins.workerFolders(),
+      ...(await this.#linkedFolders(project)),
+    ];
     const real = await Promise.all(asked.map((dir) => realpath(dir).catch(() => null)));
     return [...new Set(real.filter((dir): dir is string => dir !== null))];
+  }
+
+  /**
+   * The folder of the Godot project a game is linked to, when it lies outside the game's folder (one
+   * inside is the game's already): Godot's agents change its scenes and scripts as files, where
+   * Unreal's change an outside project only through its editor. None for any other game.
+   */
+  async #linkedFolders(project: string): Promise<string[]> {
+    const dir = this.#core.games.dirFor(project);
+    const binding = await readEngineBinding(dir).catch(() => undefined);
+    if (binding?.kind !== GameEngine.Godot) return [];
+    const folder = path.dirname(binding.project);
+    const root = await realpath(dir).catch(() => path.resolve(dir));
+    return isInside(root, folder) ? [] : [folder];
   }
 
   /** The folders a worker keeps inside the never-touch list's roots: its own, its run's captures, its game's. */

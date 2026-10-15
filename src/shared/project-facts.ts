@@ -376,6 +376,7 @@ export function scopePaths(scope: readonly string[] | undefined, game: GameKind)
 export const ENGINE_FACT: Readonly<Record<GameEngine, CoreFact>> = {
   [GameEngine.Web]: CoreFact.WebGame,
   [GameEngine.Unreal]: CoreFact.UnrealProject,
+  [GameEngine.Godot]: CoreFact.GodotProject,
 };
 
 /** The facts an engine of the older vocabulary stands for: its fact at the game's root. */

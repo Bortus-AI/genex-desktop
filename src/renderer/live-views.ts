@@ -95,11 +95,12 @@ function unrealCards(facts: readonly FactRef[]): ObserverRef[] {
   }));
 }
 
-/** The folders of the Unreal projects the game's engine link names. */
-const linkedUnreal = (facts: readonly LiveFact[]): string[] =>
-  facts
-    .filter((fact) => fact.id === CoreFact.UnrealProject && fact.source === FactSource.Link)
-    .map((fact) => fact.path);
+/** The folders of the engine projects (Unreal, Godot) the game's engine link names. */
+const linkedFolders = (facts: readonly LiveFact[]): string[] =>
+  facts.filter((fact) => fact.source === FactSource.Link).map((fact) => fact.path);
+
+/** The views that are an engine's card: Genex's Unreal card and a plugin's own. */
+const CARDS: ReadonlySet<ObserverLive | null> = new Set([ObserverLive.UnrealCard, ObserverLive.Card]);
 
 /** Which views are one: of Genex's own, one per kind; a plugin's pictures or card, one per observer. */
 const viewIdentity = (ref: ObserverRef): string =>
@@ -118,8 +119,8 @@ export function liveViewsFor(game: LiveGame, plugins: readonly LivePlugin[]): Li
     .map(({ manifest, enabled }) => ({ id: manifest.id, enabled, manifest }));
   const facts = game.facts ?? [];
   const refs = [...observersFor(installed, { facts, holds: game.holds }), ...unrealCards(facts)].filter(counts);
-  const linked = new Set(linkedUnreal(facts));
-  const owned = (ref: ObserverRef) => Number(ref.live === ObserverLive.UnrealCard && linked.has(ref.at));
+  const linked = new Set(linkedFolders(facts));
+  const owned = (ref: ObserverRef) => Number(CARDS.has(ref.live) && linked.has(ref.at));
   const rank = (ref: ObserverRef) => VIEW_RANK[ref.live as ObserverLive];
   const order = (a: ObserverRef, b: ObserverRef) =>
     owned(b) - owned(a) || rootFirst(a.at, b.at) || rank(a) - rank(b) || a.at.localeCompare(b.at);

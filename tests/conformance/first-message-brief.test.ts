@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { directorBrief, singleWorkerBrief } from "../../src/harness-seed/loop/director/briefs.ts";
@@ -226,6 +227,26 @@ describe("the rules each kind gets", () => {
     assert.match(on.prompt, /a Godot project/);
     const off = await firstMessage(godot, { tools: [], kinds: [TOY_KIND] });
     assert.ok(off.prompt.includes(PLUGINS_FIND), "another plugin's kind covers nothing here");
+  });
+
+  it("a game linked to a Godot project outside its folder works in that project, its notes in the workspace", () => {
+    const brief = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      folderLabel: "AI Games/moon",
+      gameEngine: GameEngine.Godot,
+      engineProject: "/Users/me/Documents/Godot Projects/Void/project.godot",
+      facts: [fact(CoreFact.GodotProject, "/Users/me/Documents/Godot Projects/Void", "link")] as never,
+    });
+    assert.match(
+      brief,
+      /The game's work happens in its Godot project in `\/Users\/me\/Documents\/Godot Projects\/Void\/`/,
+    );
+    assert.match(
+      brief,
+      /The game's work lands in its Godot project in `[^`]+`; its notes stay in this workspace \(folder `AI Games\/moon`\)/,
+    );
+    assert.doesNotMatch(brief, /The game's work stays in this workspace/);
   });
 
   it("a plugin's web build in a folder is said once as a build, never handed the web game's rules", () => {

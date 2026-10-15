@@ -21,6 +21,7 @@ import {
   type FactRule,
   WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
+import { GameEngine } from "../../src/shared/game-engine.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { detectFacts, projectFiles } from "../../src/substrate/project-facts.ts";
@@ -427,5 +428,16 @@ describe("a listed game's facts", () => {
       [`${CoreFact.UnrealProject}@${elsewhere}:${FactSource.Link}`],
       "the link stands for the game's Unreal project; its own project's files are no second one",
     );
+  });
+
+  it("a link to a Godot project outside the game is one absolute Godot fact; the game's own godot/ is no second one", async () => {
+    const elsewhere = await realpath(await tmpDir("studio-outside-godot-"));
+    await writeFile(path.join(elsewhere, "project.godot"), "config_version=5\n");
+    const game = await lite.core.games.scaffold("godot-link");
+    await mkdir(path.join(game.dir, "godot"));
+    await writeFile(path.join(game.dir, "godot", "project.godot"), "config_version=5\n");
+    const { binding } = await writeEngineBinding(game.dir, path.join(elsewhere, "project.godot"));
+    assert.equal(binding.kind, GameEngine.Godot, "the file says which engine");
+    assert.deepEqual(await factsOf(game.name), [`${CoreFact.GodotProject}@${elsewhere}:${FactSource.Link}`]);
   });
 });
