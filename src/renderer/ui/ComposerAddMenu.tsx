@@ -19,7 +19,6 @@ import {
   addMenuEntries,
   type EntryActions,
   EntryScope,
-  IMAGES_OPTION,
   type MentionOption,
   mentionOptions,
   visibleConnectors,
@@ -31,7 +30,10 @@ import { Icon } from "./icons.tsx";
 import { PluginIcon } from "./PluginIcon.tsx";
 import { PLAN_MODE_WORDS, SKILLS_WORDS } from "../words.ts";
 import { RovingAxis, rovingTarget } from "./roving-focus.ts";
-import { Pending } from "./Pending.tsx";
+import type { MentionDoc } from "../../shared/prompt-mention.ts";
+import { gridTarget } from "./mention-grid.ts";
+import { mentionCards, MentionPanel } from "./MentionPanel.tsx";
+import { useMentionDocs } from "./use-mention-docs.ts";
 
 /** Shell navigation shared with the Plugins page. */
 export const OPEN_PLUGINS_EVENT = "studio:open-plugins";
@@ -147,14 +149,63 @@ export function mentionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, mentio
   return true;
 }
 
-/** The @ list's keys, handed to the composer's text box: arrows move, Enter or Tab picks, Escape closes. */
-function useMentionKeys(ref: Ref<AddMenuHandle> | undefined, mention: MentionState): void {
-  const { mentioning, matches, active } = mention;
-  useImperativeHandle(ref, () => ({ keyDown: (event) => mentionKeyDown(event, mention) }), [
+/** The @ picker's cards and rows, as the text box's keys walk them. */
+interface MentionGridState extends MentionState {
+  cards: number;
+  columns: number;
+}
+
+/** One key while the @ picker is up: all four arrows walk the cards' grid, then the rows. */
+function mentionGridKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, mention: MentionGridState): boolean {
+  if (!mention.mentioning) return false;
+  const shape = { cards: mention.cards, rows: mention.matches.length - mention.cards, columns: mention.columns };
+  const target = gridTarget(event.key, mention.active, shape);
+  if (target === null) return mentionKeyDown(event, mention);
+  event.preventDefault();
+  mention.setHighlight(target);
+  return true;
+}
+
+/** The @ picker's keys, handed to the composer's text box: arrows move, Enter or Tab picks, Escape closes. */
+function useMentionKeys(ref: Ref<AddMenuHandle> | undefined, mention: MentionGridState): void {
+  const { mentioning, matches, active, columns } = mention;
+  useImperativeHandle(ref, () => ({ keyDown: (event) => mentionGridKeyDown(event, mention) }), [
     mentioning,
     matches,
     active,
+    columns,
   ]);
+}
+
+/** Cards go three across in a composer this wide (the home screen's), else two. */
+const THREE_COLUMNS_PX = 560;
+const NO_TAGS: ReadonlySet<string> = new Set();
+
+/**
+ * The @ picker's cards for what was typed, laid out for the composer's width, each as a pick the
+ * text box's Enter can take. A card past the message's limit is listed but not taken.
+ */
+function useMentionPicker(input: {
+  open: boolean;
+  query: string;
+  project: string | null | undefined;
+  anchor: RefObject<HTMLDivElement | null>;
+  atCap: boolean;
+  tagged: ReadonlySet<string>;
+  onMentionDoc: ((doc: MentionDoc) => void) | undefined;
+}) {
+  const { docs, covers, state } = useMentionDocs(input.open, input.project);
+  const width = input.open ? (input.anchor.current?.offsetWidth ?? 0) : 0;
+  const columns = width >= THREE_COLUMNS_PX ? 3 : 2;
+  const groups = input.open ? mentionCards(docs, input.query) : [];
+  const cardPicks: MentionOption[] = groups
+    .flatMap((group) => group.docs)
+    .map((doc) => ({
+      id: `card-${doc.handle}`,
+      name: doc.title,
+      pick: input.atCap && !input.tagged.has(doc.handle) ? () => {} : () => input.onMentionDoc?.(doc),
+    }));
+  return { groups, cardPicks, columns, covers, state };
 }
 
 /**
@@ -281,51 +332,6 @@ export function PlanModeOff({ onOff, disabled = false }: { onOff: () => void; di
   );
 }
 
-/** The @ list: what matches the mention, with the highlighted option the text box points at. */
-function MentionList({
-  list,
-  matches,
-  read,
-  active,
-  optionId,
-  onHighlight,
-}: {
-  list: string;
-  matches: MentionOption[];
-  /** The plugins and servers have been read: an empty list is no match, not a read on its way. */
-  read: boolean;
-  active: number;
-  optionId: (index: number) => string;
-  onHighlight: (index: number) => void;
-}) {
-  return (
-    <div role="listbox" id={list} aria-label="Mention" data-mention-list>
-      {matches.length === 0 &&
-        (read ? (
-          <div className={`${pickerItem} text-ink-3`}>No matches</div>
-        ) : (
-          <Pending label="Loading plugins…" className={pickerItem} />
-        ))}
-      {matches.map((item, index) => (
-        <div
-          key={item.id}
-          id={optionId(index)}
-          role="option"
-          aria-selected={index === active}
-          data-highlighted={index === active || undefined}
-          className={`${pickerItem} cursor-pointer hover:bg-control-hover`}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={item.pick}
-          onMouseMove={() => onHighlight(index)}
-        >
-          <Icon name={item.id === IMAGES_OPTION ? "image" : "plugins"} className="text-icon-strong" />
-          <span className="min-w-0 truncate">{item.name}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /**
  * The full menu: Images and Plan mode, then the plugins and servers with their switches, then
  * Manage plugins.
@@ -422,6 +428,10 @@ export function ComposerAddMenu({
   onMention,
   onMentionClose,
   onActiveOption,
+  onMentionDoc,
+  tagged = NO_TAGS,
+  atCap = false,
+  mentionSide = "top",
   ref,
 }: {
   onReferences: () => void;
@@ -437,6 +447,13 @@ export function ComposerAddMenu({
   /** The @ list's id and its highlighted option, for the text box's aria-controls/activedescendant. */
   listId?: string;
   onActiveOption?: (id: string | null) => void;
+  /** A card picked in the @ picker; the composer puts its tag in the text. */
+  onMentionDoc?: (doc: MentionDoc) => void;
+  /** The handles already tagged in the message, and whether it holds as many as it may. */
+  tagged?: ReadonlySet<string>;
+  atCap?: boolean;
+  /** Where the @ picker opens: under the home screen's prompt bar, above a chat's. */
+  mentionSide?: "top" | "bottom";
   ref?: Ref<AddMenuHandle>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -478,9 +495,27 @@ export function ComposerAddMenu({
     onMention?.(null);
     onReferences();
   };
-  const matches = mentionOptions(mention, entries, pickImages, (name) => onMention?.(`@${name} `));
+  const rows = mentionOptions(mention, entries, pickImages, (name) => onMention?.(`@${name} `));
+  const picker = useMentionPicker({
+    open: mentioning,
+    query: mention ?? "",
+    project,
+    anchor,
+    atCap,
+    tagged,
+    onMentionDoc,
+  });
+  const matches = [...picker.cardPicks, ...rows];
   const active = Math.min(highlight, Math.max(0, matches.length - 1));
-  useMentionKeys(ref, { mentioning, matches, active, setHighlight, onClose: onMentionClose });
+  useMentionKeys(ref, {
+    mentioning,
+    matches,
+    active,
+    setHighlight,
+    onClose: onMentionClose,
+    cards: picker.cardPicks.length,
+    columns: picker.columns,
+  });
 
   const optionId = (index: number) => `${list}-${index}`;
   const activeOption = mentioning && matches.length ? optionId(active) : null;
@@ -513,16 +548,31 @@ export function ComposerAddMenu({
       </ComposerTip>
       <PopoverContent
         anchor={anchor}
-        side="top"
+        side={listMode ? mentionSide : "top"}
         align="start"
         sideOffset={8}
         initialFocus={!listMode}
         finalFocus={() => !viaMention.current}
-        className="picker-panel composer-add-panel w-(--anchor-width) max-h-(--available-height) overflow-y-auto p-1.5"
+        className={`picker-panel composer-add-panel w-(--anchor-width) overflow-y-auto p-1.5 ${listMode ? "max-h-[min(var(--available-height),440px)]" : "max-h-(--available-height)"}`}
         aria-label="Add"
       >
         {listMode ? (
-          <MentionList {...{ list, matches, active, optionId }} read={data.read} onHighlight={setHighlight} />
+          <MentionPanel
+            list={list}
+            query={mention ?? ""}
+            groups={picker.groups}
+            rows={rows}
+            columns={picker.columns}
+            catalog={picker.state}
+            rowsRead={data.read}
+            picked={tagged}
+            atCap={atCap}
+            covers={picker.covers}
+            active={active}
+            optionId={optionId}
+            onHighlight={setHighlight}
+            onPick={(doc) => onMentionDoc?.(doc)}
+          />
         ) : (
           <FullMenu
             entries={entries}

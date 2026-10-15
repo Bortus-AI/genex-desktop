@@ -1,6 +1,6 @@
 import { markPerformance } from "../performance.tsx";
 import { PerformanceMarkName } from "../../shared/performance.ts";
-import type { ClipboardEvent, DragEvent, JSX, Ref, RefObject } from "react";
+import type { ClipboardEvent, DragEvent, JSX, KeyboardEvent, Ref, RefObject } from "react";
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
 import { Shortcut } from "./Shortcut.tsx";
@@ -40,6 +40,16 @@ import {
   storedChatLoop,
 } from "../loop-setting.ts";
 import { parseModelKey } from "../model-key.ts";
+import {
+  atomicBackspaceRange,
+  insertMention as insertTag,
+  type MentionDoc,
+  type MentionRef,
+  mentionQueryAt,
+  mentionRef,
+  PROMPT_MENTION_MAX,
+  sentMentions,
+} from "../../shared/prompt-mention.ts";
 export { shortModelName };
 export type { ModelChoice, RoleGroup, RoleRecord, RoleRow };
 export interface AutopilotSend {
@@ -52,6 +62,8 @@ export interface ComposerExtras {
   autopilot?: AutopilotSend;
   reviewPlan?: boolean;
   frames?: PickedFrame[];
+  /** The games, tools and assets the message tags with @. */
+  mentions?: MentionRef[];
 }
 
 /** Adds pictures to a composer's attachments: `{conversationKey, frames}` (a rewound message's). */
@@ -152,7 +164,10 @@ function useLoopSettings(props: PromptBarProps) {
 
 type Mention = { query: string; start: number; end: number };
 
-/** @ at the caret opens Add as a mention list; the query is what follows it. */
+/**
+ * @ at the caret opens Add as the @ picker; the query is what follows it. A picked card puts its
+ * `@handle` in the text and joins `tagged`, the map the send and the painted tags read.
+ */
 function useMention(
   gameMode: boolean,
   draft: string,
@@ -161,30 +176,71 @@ function useMention(
 ) {
   const [mention, setMention] = useState<Mention | null>(null);
   const [mentionOption, setMentionOption] = useState<string | null>(null);
+  const [tagged, setTagged] = useState<ReadonlyMap<string, MentionDoc>>(() => new Map());
   const mentionListId = useId();
   const findMention = (text: string, caret: number | null): Mention | null => {
     if (!gameMode || caret === null) return null;
-    const match = /(^|\s)@([^\s@]*)$/.exec(text.slice(0, caret));
-    if (!match) return null;
-    const [, lead = "", query = ""] = match;
-    return { query, start: match.index + lead.length, end: caret };
+    const open = mentionQueryAt(text, caret);
+    return open ? { query: open.query, start: open.start, end: caret } : null;
+  };
+  const placeCaret = (caret: number): void => {
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(caret, caret);
+    });
   };
   const insertMention = (text: string | null): void => {
     if (!mention) return;
     const insert = text ?? "";
     setDraft(draft.slice(0, mention.start) + insert + draft.slice(mention.end));
     setMention(null);
-    const caret = mention.start + insert.length;
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange(caret, caret);
-    });
+    placeCaret(mention.start + insert.length);
+  };
+  const insertDoc = (doc: MentionDoc): void => {
+    const caret = mention?.end ?? inputRef.current?.selectionStart ?? draft.length;
+    const open = mention ? { start: mention.start, query: mention.query } : null;
+    const next = insertTag(draft, caret, doc.handle, open);
+    setTagged((current) => new Map(current).set(doc.handle, doc));
+    setDraft(next.value);
+    setMention(null);
+    placeCaret(next.caret);
   };
   // A draft replaced from outside (another chat, a prefill) leaves no @ to complete.
   useLayoutEffect(() => {
     if (mention && draft[mention.start] !== "@") setMention(null);
   }, [draft]);
-  return { mention, setMention, mentionOption, setMentionOption, mentionListId, findMention, insertMention };
+  const inText = useMemo(() => sentMentions(draft, tagged), [draft, tagged]);
+  const taggedNow = useMemo(() => new Set(inText.map((doc) => doc.handle)), [inText]);
+  return {
+    mention,
+    setMention,
+    mentionOption,
+    setMentionOption,
+    mentionListId,
+    findMention,
+    insertMention,
+    insertDoc,
+    tagged,
+    taggedNow,
+    atCap: inText.length >= PROMPT_MENTION_MAX,
+    refs: (): MentionRef[] => inText.map(mentionRef),
+  };
+}
+
+/** One Backspace right after a whole tag removes the tag; true when it did. */
+function backspaceTag(
+  event: KeyboardEvent<HTMLTextAreaElement>,
+  tagged: ReadonlyMap<string, MentionDoc>,
+  setDraft: (text: string) => void,
+): boolean {
+  if (event.key !== "Backspace" || event.altKey || event.metaKey || event.ctrlKey) return false;
+  const input = event.currentTarget;
+  const range = atomicBackspaceRange(input.value, input.selectionStart, input.selectionEnd, tagged);
+  if (!range) return false;
+  event.preventDefault();
+  setDraft(input.value.slice(0, range.start) + input.value.slice(range.end));
+  requestAnimationFrame(() => input.setSelectionRange(range.start, range.start));
+  return true;
 }
 
 /**
@@ -500,6 +556,8 @@ interface PromptBarProps {
   /** Controlled draft — ChatPanel keys this per thread so a half-written brief cannot follow you. */
   value?: string;
   onChange?: (text: string) => void;
+  /** Where the @ picker opens: under the prompt bar on the home screen, above it in a chat. */
+  mentionSide?: "top" | "bottom";
   /** Composer stays usable, but Enter/send starts sign-in instead of a turn. */
   blockSend?: boolean;
   onBlockedSend?: () => void;
@@ -525,6 +583,8 @@ function useComposerSend(
     board: ReturnType<typeof useBoardFrames>;
     inputRef: RefObject<HTMLTextAreaElement | null>;
     clearMention: () => void;
+    /** The tags in the draft, read at the moment it is sent. */
+    mentionRefs: () => MentionRef[];
   },
 ) {
   const ignoreStopUntil = useRef(0);
@@ -557,12 +617,16 @@ function useComposerSend(
     if (sentFrames.length) board.setFrames([]);
     // A failed send is already durable in the thread (main appends the error); catching here
     // only stops the same failure from surfacing twice as console noise.
-    const extras = composerExtras({
-      gameMode: props.gameMode ?? true,
-      view: loop.view,
-      reviewPlan: loop.reviewPlan,
-      frames: sentFrames,
-    });
+    const tags = composer.mentionRefs();
+    const extras = {
+      ...composerExtras({
+        gameMode: props.gameMode ?? true,
+        view: loop.view,
+        reviewPlan: loop.reviewPlan,
+        frames: sentFrames,
+      }),
+      ...(tags.length ? { mentions: tags } : {}),
+    };
     loop.setReviewPlan(false);
     void Promise.resolve(props.onSend(text, Object.keys(extras).length ? extras : undefined)).catch(() => {
       if (extras.reviewPlan) loop.setReviewPlan(true);
@@ -623,6 +687,7 @@ function PromptInput({
         markPerformance(PerformanceMarkName.Keydown);
         if (addMenuRef.current?.keyDown(event)) return;
         if (commandMenuRef.current?.keyDown(event)) return;
+        if (backspaceTag(event, mentions.tagged, setDraft)) return;
         const sends = event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing;
         if (sends) {
           event.preventDefault();
@@ -730,7 +795,15 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
   useAutosize(inputRef, draft, placeholderNow);
   const clearMention = (): void => mentions.setMention(null);
-  const composer = useComposerSend(props, { draft, setDraft, loop, board, inputRef, clearMention });
+  const composer = useComposerSend(props, {
+    draft,
+    setDraft,
+    loop,
+    board,
+    inputRef,
+    clearMention,
+    mentionRefs: mentions.refs,
+  });
 
   return (
     <div
@@ -790,6 +863,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           modelMenuRef={modelMenuRef}
           modelNudge={composer.modelNudge}
           mentions={mentions}
+          mentionSide={props.mentionSide ?? "top"}
           onPickImages={() => fileRef.current?.click()}
           onClosed={() => inputRef.current?.focus()}
           send={
@@ -886,6 +960,7 @@ interface ComposerToolbarProps {
   /** A blocked send's beat while Connect AI model is lit (`useModelNudge`), else null. */
   modelNudge: number | null;
   mentions: ReturnType<typeof useMention>;
+  mentionSide: "top" | "bottom";
   onPickImages: () => void;
   onClosed: () => void;
   send: JSX.Element;
@@ -938,6 +1013,7 @@ function AttachControl({
   panelRef,
   addMenuRef,
   mentions,
+  mentionSide,
   onPickImages,
 }: ComposerToolbarProps): JSX.Element {
   if (gameMode) {
@@ -954,6 +1030,10 @@ function AttachControl({
         onMention={mentions.insertMention}
         onMentionClose={() => mentions.setMention(null)}
         onActiveOption={mentions.setMentionOption}
+        onMentionDoc={mentions.insertDoc}
+        tagged={mentions.taggedNow}
+        atCap={mentions.atCap}
+        mentionSide={mentionSide}
       />
     );
   }

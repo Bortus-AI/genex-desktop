@@ -160,6 +160,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.feed": "playFeed",
   "studio:play.shelves": "playShelves",
   "studio:play.search": "playSearch",
+  "studio:play.catalog": "playCatalog",
   "studio:play.remix": "playRemix",
   "studio:play.online": "playOnline",
   "studio:play.open": "playOpen",
@@ -387,6 +388,7 @@ export interface StudioInvokePayloads {
   "studio:play.feed": Arg<"playFeed", 0>;
   "studio:play.shelves": undefined;
   "studio:play.search": { query: string; shelf: PlayShelf };
+  "studio:play.catalog": undefined;
   "studio:play.remix": { slug: string };
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string };

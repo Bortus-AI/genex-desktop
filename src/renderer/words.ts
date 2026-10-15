@@ -4297,3 +4297,21 @@ export const AVATAR_WORDS = {
     [AvatarGear.Scar]: "Scar",
   } satisfies Record<AvatarGear, string | null>,
 } as const;
+
+/** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
+export const MENTION_WORDS = {
+  listLabel: "Tag a game, tool or asset",
+  game: "Game",
+  tool: "Tool",
+  asset: "Asset",
+  yours: "Yours",
+  inMessage: "Already in your message",
+  yourGames: "Your games",
+  assets: "Assets",
+  tools: "Tools",
+  genexGames: "Games on Genex",
+  plugins: "Plugins",
+  reading: "Loading Genex games and assets…",
+  noMatches: "No matches",
+  atCap: "That's as many as one message can carry. Remove one to tag something else.",
+} as const;

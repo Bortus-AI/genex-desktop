@@ -134,6 +134,7 @@ function HomeScreen({
         value={draft}
         onChange={setDraft}
         onSend={send}
+        mentionSide="bottom"
       />
     </div>
   );

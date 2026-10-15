@@ -5698,6 +5698,132 @@ a:focus-visible {
   line-height: 16px;
   color: var(--ink-3);
 }
+/* The @ picker: cover cards on shelves, as on genex.games. Words on a card are white on a dark
+   scrim in both themes, because they sit on a picture. */
+.mention-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mention-shelf-label {
+  margin: 0;
+  padding: 8px 4px 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.mention-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--mention-columns, 2), minmax(0, 1fr));
+  gap: 6px;
+}
+.mention-card {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--control-quiet-edge);
+  background: #1a1b1e;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.mention-card:hover {
+  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--control-quiet-edge));
+}
+.mention-card[data-highlighted] {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+.mention-card[data-highlighted]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--accent-primary) 16%, transparent);
+  pointer-events: none;
+}
+.mention-card[aria-disabled] {
+  cursor: default;
+  opacity: 0.45;
+}
+.mention-card-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+.mention-card-cover[data-loaded] {
+  opacity: 1;
+}
+.mention-card-wash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #2b2c31, #1b1c20);
+}
+.mention-card-wash .mention-card-avatar {
+  width: 38%;
+  height: auto;
+  aspect-ratio: 1;
+  margin-bottom: 10%;
+}
+.mention-card-scrim {
+  position: absolute;
+  inset: auto 0 0;
+  height: 55%;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0.35) 55%, transparent);
+  pointer-events: none;
+}
+.mention-card-chips {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  gap: 4px;
+}
+.mention-card-chips > span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: rgb(255 255 255 / 0.9);
+  font-size: 11px;
+  line-height: 13px;
+  backdrop-filter: blur(2px);
+}
+.mention-card-picked {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+}
+.mention-card-title {
+  position: absolute;
+  inset: auto 8px 6px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-cap {
+  margin: 4px -6px -6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--prompt-bar-edge);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
 /* Row actions (Connect, Set up, Turn on) are filled, so they read as buttons before hover. */
 /* The one thing a row needs done (Connect, Retry): the accent fill with its white label, like the app's primary buttons. */
 .picker-action {

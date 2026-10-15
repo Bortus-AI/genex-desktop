@@ -7,6 +7,7 @@ import type {
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
+import type { GenexCatalogItem } from "./mention-corpus.ts";
 import type {
   AvatarStyle,
   FriendActionRequest,
@@ -445,6 +446,8 @@ export interface StudioApi {
   playShelves(): Promise<PlayShelves>;
   /** Play: what on one shelf of the catalog answers a search, best first. */
   playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
+  /** The whole catalog for the composer's @ picker: every shelf, who made each, whether it may be taken. */
+  playCatalog(): Promise<GenexCatalogItem[]>;
   /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
   playRemix(slug: string): Promise<string>;
   /** Play: players in each named game now; a game nobody counts is left out. */
