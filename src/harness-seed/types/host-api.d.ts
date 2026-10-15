@@ -1371,7 +1371,7 @@ export type ProjectKind =
 
 /**
  * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
- * grants, nor the editor, which the game's engine link decides.
+ * grants, nor the editor, which the game's matching engine plugin supplies.
  */
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts

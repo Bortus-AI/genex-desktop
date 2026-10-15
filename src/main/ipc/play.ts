@@ -1,11 +1,12 @@
 /** Play: genex.games' catalog for the dashboard, the full-screen viewer a game opens in, and people. */
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
-import { isPlayShelf, isPlaySlug, PlayShelf, readPlayPoint } from "../../shared/play.ts";
+import { isPlayShelf, isPlaySlug, PlayShelf, type PlayPoint, readPlayPoint } from "../../shared/play.ts";
 import { isAccountId, isAvatarStyle, isFriendAction, isPresenceVisibility } from "../../shared/play-people.ts";
 import { isStatsPeriod } from "../../shared/play-stats.ts";
 import type { CreatorStats } from "../play/creator-stats.ts";
 import type { GenexCredits } from "../play/credits.ts";
 import type { PlayGallery, PlayWorld } from "../play/gallery.ts";
+import { onWebsite } from "../play/origins.ts";
 import type { PlayPeople } from "../play/people.ts";
 import type { PlayViewer } from "../play/viewer.ts";
 import type { IpcHandle } from "./registrar.ts";
@@ -20,6 +21,7 @@ const MESSAGE = {
   badStyle: "not an avatar style",
   badVariant: "not an avatar variant",
   badPeriod: "not a stats period",
+  badShare: "not a page of the website Play links to",
 } as const;
 
 /** What Play's channels answer from. */
@@ -32,12 +34,22 @@ export interface PlayIpcDeps {
   people: PlayPeople;
   creators: CreatorStats;
   credits: GenexCredits;
+  /** The website Play links to: only its pages (an invite, a profile) go to the share menu. */
+  web: string;
+  /** Pop the Mac's share menu for `url` in the studio window, by `at` when it is known. */
+  share(url: string, at: PlayPoint | undefined): void;
 }
 
 /** Register Play's channels: the catalog's reads, Remix and the viewer. */
 export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
-  const { gallery, remix, viewer, people, creators, credits } = deps;
+  const { gallery, remix, viewer, people, creators, credits, web, share } = deps;
   registerPeopleIpc(handle, people);
+  // Share… hands the Mac's share menu a page of Play's website and nothing else.
+  handle("studio:play.share", async (payload) => {
+    const url = String(payload?.url ?? "");
+    if (!onWebsite(url, web)) throw new Error(MESSAGE.badShare);
+    share(url, readPlayPoint(payload?.at));
+  });
   handle("studio:play.stats", (payload) => {
     if (!isStatsPeriod(payload?.days)) throw new Error(MESSAGE.badPeriod);
     return creators.stats(payload.days);
@@ -98,4 +110,7 @@ function registerPeopleIpc(handle: IpcHandle, people: PlayPeople): void {
     if (!isPresenceVisibility(payload?.visibility)) throw new Error(MESSAGE.badVisibility);
     return people.setVisibility(payload.visibility);
   });
+  // A typed nickname's shape is judged again in `people`: nothing malformed reaches genex.games.
+  handle("studio:play.handle-check", (payload) => people.checkHandle(String(payload?.handle ?? "")));
+  handle("studio:play.handle", (payload) => people.setHandle(String(payload?.handle ?? "")));
 }

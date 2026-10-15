@@ -15,6 +15,8 @@ import { PeopleCarousel, PersonTile } from "./PeopleCarousel.tsx";
 import { formatCount } from "./play-model.ts";
 
 const WORDS = PLAY_WORDS.creators;
+/** A creator's avatar, with room for gear; a placeholder's face matches it in `people.css`. */
+const TILE_AVATAR = 68;
 /** Tiles drawn while the row loads: more than a wide window shows, so the row reads as full. */
 const PLACEHOLDER_TILES = 10;
 /** Holds a text line's height around a placeholder bar. */
@@ -42,6 +44,7 @@ export function TopCreators(): JSX.Element | null {
         <PersonTile
           key={creator.id}
           person={creator}
+          avatar={TILE_AVATAR}
           sub={WORDS.line(creator.games, formatCount(Math.round(creator.hours)))}
         />
       ))}

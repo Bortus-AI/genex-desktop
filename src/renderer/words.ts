@@ -36,6 +36,7 @@ import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
+import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
@@ -3790,12 +3791,29 @@ export const PLAY_WORDS = {
     joinLabel: (name: string, game: string) => `Join ${name} in ${game}`,
     invite: "Invite a friend",
     inviteFriends: "Invite friends",
-    inviteText: "Whoever joins Genex from your link becomes your friend.",
+    /** What an invite does, and what it earns while genex.games says (never a number typed here). */
+    inviteText: (bonus: number | null) =>
+      bonus === null
+        ? "They get the Genex download page with a card from you."
+        : `They get the Genex download page with a card from you. You get ${bonus} credits when they make their first game.`,
     inviteBonus: (credits: number) => `+${credits}`,
     inviteBonusLabel: (credits: number) => `${credits} credits for you when a friend starts creating`,
     inviteLinkLabel: "Your invite link",
     copy: "Copy",
     copied: "Copied",
+    /** Post on X and the Mac's share menu, under an invite link or a profile link. */
+    postOnX: "Post on X",
+    shareMenu: "Share…",
+    shareMenuLabel: "Share the link with Messages, Mail, AirDrop and more",
+    /** What a post on X says with the link. */
+    inviteXText: "Join me on Genex",
+    profileXText: "My games on Genex",
+    /** Share, beside the pencil on the account's own profile. */
+    shareProfile: "Share profile",
+    shareProfileTitle: "Share your profile",
+    shareProfileLink: "Your profile link",
+    /** The link preview's picture, read aloud. */
+    sharePreviewLabel: "How your profile link looks when shared",
     showPlaying: "Show friends what I’m playing",
     showPlayingOff: "Off: friends see your name only.",
     empty: "No friends yet — send your link and play together.",
@@ -4120,6 +4138,35 @@ export const ACCOUNT_WORDS = {
   offline: "Changes wait until you’re back online.",
 } as const;
 
+/**
+ * The nickname field, in the welcome and in Settings → Genex account: the words genex.games uses
+ * for the same field, so both read alike. A reserved handle reads as Taken, the account's own as Free.
+ */
+export const NICKNAME_WORDS = {
+  label: "Your nickname and profile link",
+  states: {
+    [HandleState.Free]: "Free",
+    [HandleState.Taken]: "Taken",
+    [HandleState.TooShort]: "Too short",
+    [HandleState.TooLong]: "Too long",
+    [HandleState.LatinOnly]: "Latin only",
+    [HandleState.DashEdge]: "No dash at the ends",
+  } satisfies Record<Exclude<HandleState, typeof HandleState.Yours | typeof HandleState.Reserved>, string>,
+  profileLink: "Your profile link.",
+  try: "Try",
+  tryLabel: (handle: string) => `Use ${handle}`,
+  length: `${HANDLE_LENGTH.min} to ${HANDLE_LENGTH.max} characters.`,
+  letters: "Letters a–z, digits and dashes.",
+  checkFailed: "Couldn’t check this nickname. Check your connection.",
+  tooManyChanges: "You’ve changed your nickname too often lately. Try again later.",
+  saveFailed: "Couldn’t save your nickname. Try again in a moment.",
+  /** Settings → Genex account's row. */
+  row: "Nickname",
+  none: "None yet",
+  edit: "Edit",
+  editLabel: "Edit your nickname",
+} as const;
+
 /** The avatar every Genex account gets, as people meet it: its parts' names and the first-sign-in dialog. */
 export const AVATAR_WORDS = {
   welcomeTitle: "Meet your Genex avatar",
@@ -4127,6 +4174,8 @@ export const AVATAR_WORDS = {
   mixLabel: "Your mix",
   continue: "Continue",
   welcomeNote: "You can change it in Settings",
+  /** Under Continue when the welcome asks for the nickname too. */
+  welcomeNoteBoth: "You can change both in Settings",
   bodies: {
     [AvatarBody.Vapor]: "Vaporwave sun",
     [AvatarBody.Crt]: "CRT dither",

@@ -2,8 +2,8 @@
  * Play's Friends page, the fourth row under Games, Tools and Assets: "Friends" with how many, a
  * search for people by name, then grids of cards in the order things need the account: requests
  * waiting for an answer, friends playing now (Join opens their game), every other friend, and
- * requests sent. Beside them, the invite card (its link, Copy, and the credits an invite earns) and
- * whether friends see the game the account is in. With nobody yet, the page is the invite. Offline
+ * requests sent. Beside them, the invite card (the credits an invite earns, its link with Copy, Post
+ * on X and the Mac's share menu) and whether friends see the game the account is in. With nobody yet, the page is the invite. Offline
  * it shows the page as last read, with nobody playing (nobody's status is known), the Offline mark
  * by the title, and search and every press waiting for the connection; back online it reads again.
  */
@@ -18,11 +18,11 @@ import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Toggle } from "../ui/Toggle.tsx";
 import { useOnline } from "../ui/use-online.ts";
-import { useCopy } from "../use-copy.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard } from "./CreditsShard.tsx";
 import { FriendCard, FriendCardKind } from "./FriendCard.tsx";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { LinkCopy, ShareRow } from "./ShareLinks.tsx";
 import { SignInNote } from "./SignInNote.tsx";
 import { OfflineChip, OfflineNotice } from "./PlayOffline.tsx";
 
@@ -164,21 +164,10 @@ function PeopleSearchField({
   );
 }
 
-/** The account's invite link and its Copy. */
-function InviteLink({ link }: { link: string }): JSX.Element {
-  const [copied, copy] = useCopy();
-  return (
-    <div className="people-invite-link">
-      <input readOnly value={link} aria-label={WORDS.inviteLinkLabel} onFocus={(event) => event.target.select()} />
-      <button type="button" className="people-button" data-tone="tint" data-copy-invite onClick={() => copy(link)}>
-        <Icon name={copied ? "check" : "copy"} size={15} />
-        {copied ? WORDS.copied : WORDS.copy}
-      </button>
-    </div>
-  );
-}
-
-/** The invite card: its title with the credits an invite earns, what it does, and the link. */
+/**
+ * The invite card: its title with the credits an invite earns, what it does (the download page with
+ * a card from the account), the link with Copy, then Post on X and Share….
+ */
 function InviteCard({ link, bonus }: { link: string; bonus: number | null }): JSX.Element {
   return (
     <section className="people-invite" aria-label={WORDS.invite} data-invite-card>
@@ -191,8 +180,9 @@ function InviteCard({ link, bonus }: { link: string; bonus: number | null }): JS
           </span>
         )}
       </div>
-      <p className="people-invite-text">{WORDS.inviteText}</p>
-      <InviteLink link={link} />
+      <p className="people-invite-text">{WORDS.inviteText(bonus)}</p>
+      <LinkCopy link={link} label={WORDS.inviteLinkLabel} copyHook={{ "data-copy-invite": "" }} />
+      <ShareRow link={link} xText={WORDS.inviteXText} />
     </section>
   );
 }

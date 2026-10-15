@@ -51,6 +51,8 @@ export interface PlayViewerDeps {
   /** Give the keyboard to the app's own page, where the header is (the game lets go of the mouse). */
   focusApp(): void;
   clipboard(text: string): void;
+  /** The website Play links to: Share and Invite copy the game's page there. */
+  web: string;
   /** Copy a game's public source into a new local game; answers its library name. */
   remix(world: PlayWorld): Promise<string>;
   emit(event: PlayViewerEvent): void;
@@ -163,7 +165,8 @@ async function copyInvite(ctx: ViewerContext): Promise<void> {
   // A code that can't be read leaves the page alone, as signed out.
   const code = await ctx.deps.gallery.inviteCode().catch(() => undefined);
   if (!ctx.current(s.epoch)) return;
-  ctx.deps.clipboard(code ? `${playPageUrl(s.slug)}?ref=${encodeURIComponent(code)}` : playPageUrl(s.slug));
+  const page = playPageUrl(ctx.deps.web, s.slug);
+  ctx.deps.clipboard(code ? `${page}?ref=${encodeURIComponent(code)}` : page);
   ctx.note(PlayNote.InviteCopied);
 }
 
@@ -261,7 +264,7 @@ function barActions(ctx: ViewerContext): Record<PlayControl, (at?: PlayPoint) =>
     [PlayControl.Share]: () => {
       const s = ctx.session();
       if (!s) return;
-      ctx.deps.clipboard(playPageUrl(s.slug));
+      ctx.deps.clipboard(playPageUrl(ctx.deps.web, s.slug));
       ctx.note(PlayNote.Copied);
     },
     [PlayControl.Invite]: () => void copyInvite(ctx),

@@ -336,8 +336,8 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
       engines.setState((state) => enginesLoaded(state, boot.engines), true);
       threads.setState((state) => openedThreads(state, boot), true);
       const welcome = shouldWelcome(boot.welcome, boot.games.length, safeStorage(storage));
-      const developer = boot.developer;
-      session.setState((state) => bootstrapReady(state, { welcome, developer }), true);
+      const { developer, playWebOrigin: playWeb } = boot;
+      session.setState((state) => bootstrapReady(state, { welcome, developer, playWeb }), true);
       void plugins.refresh();
       void plugins.refreshIndex();
       // An update downloaded before this window opened, or before a reload, still waits.

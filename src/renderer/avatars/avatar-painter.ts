@@ -52,6 +52,11 @@ export interface AvatarLook {
   full: boolean;
   /** A placeholder: its eyes drawn at half strength. */
   ghost: boolean;
+  /**
+   * Drawn the way genex.games' link previews draw it, with the body as a 2D still and never on the
+   * GPU: a preview of that picture must show the same face.
+   */
+  flat: boolean;
 }
 
 /** The three canvases an avatar is, stacked in its box. */
@@ -155,7 +160,7 @@ onBodyGpuLost(() => {
 /** The surface an entry's body draws on, made the first time it paints. */
 function bodySurface(entry: Entry, context: BodyGpu | null): BodySurface {
   if (entry.body) return entry.body;
-  const made = context ? gpuBodyCanvas(context, entry.layers.body) : null;
+  const made = context && !entry.look.flat ? gpuBodyCanvas(context, entry.layers.body) : null;
   if (made) entry.body = { gpu: made };
   else {
     const ctx = entry.layers.body.getContext("2d");

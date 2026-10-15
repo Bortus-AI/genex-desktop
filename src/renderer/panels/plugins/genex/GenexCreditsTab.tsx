@@ -10,13 +10,13 @@ import { useState } from "react";
 import {
   type CreditEntry,
   CreditKind,
-  CREDITS_PLANS_URL,
+  creditsPlansUrl,
   PRICED_KINDS,
   type PlayCredits,
 } from "../../../../shared/play-credits.ts";
 import { CreditsShard, ScrambleNumber } from "../../../play/CreditsShard.tsx";
 import { openPlayFriends } from "../../../play/open-play.ts";
-import { usePeople } from "../../../state/hooks.ts";
+import { usePeople, usePlayWeb } from "../../../state/hooks.ts";
 import { studio } from "../../../state/studio.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
@@ -113,6 +113,7 @@ function BalanceAmount({ credits }: { credits: PlayCredits }): JSX.Element {
 
 /** The balance band. */
 function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
+  const web = usePlayWeb();
   return (
     <div className="credits-band" data-credits-balance>
       <CreditsShard size={44} />
@@ -135,7 +136,7 @@ function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
           className="people-button"
           data-tone="primary"
           data-credits-get
-          onClick={() => void window.studio.openUrl(CREDITS_PLANS_URL)}
+          onClick={() => void window.studio.openUrl(creditsPlansUrl(web))}
         >
           {WORDS.getCredits}
         </button>

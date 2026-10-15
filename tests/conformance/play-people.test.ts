@@ -16,6 +16,8 @@ import {
 import { type GalleryAnswer, type GalleryRequest, PlayRoute, SignInNeeded } from "../../src/main/play/gallery.ts";
 import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { isAvatarWebp, PeopleRoute, playPeople, toPerson } from "../../src/main/play/people.ts";
+import { HandleSaveOutcome, HandleState } from "../../src/shared/handle.ts";
+import { PLAY_ORIGIN } from "../../src/shared/play.ts";
 import { AvatarStyle, FriendAction, FriendStatus, PresenceVisibility } from "../../src/shared/play-people.ts";
 
 const TOKEN = "genex-cli-token";
@@ -32,7 +34,10 @@ const ok = (body: unknown): GalleryAnswer => ({ status: 200, body });
 const status = (code: number): GalleryAnswer => ({ status: code, body: null });
 
 /** People over a scripted API: each call answers what `answers` says, and every call and upload is kept. */
-function rig(answers: (call: Call) => GalleryAnswer, options: { token?: string | undefined; upload?: number } = {}) {
+function rig(
+  answers: (call: Call) => GalleryAnswer,
+  options: { token?: string | undefined; upload?: number; web?: string } = {},
+) {
   const token = "token" in options ? options.token : TOKEN;
   const calls: Call[] = [];
   const refused: string[] = [];
@@ -52,6 +57,7 @@ function rig(answers: (call: Call) => GalleryAnswer, options: { token?: string |
       return options.upload ?? 200;
     },
     refused: (value) => refused.push(value),
+    web: options.web ?? PLAY_ORIGIN.web,
   });
   return { people, calls, uploads, refused, advance: (ms: number) => (clock += ms) };
 }
@@ -94,6 +100,7 @@ describe("the Genex account Play is signed in as", () => {
     assert.deepEqual(me, {
       id: "u1",
       name: "Rab Neba",
+      handle: null,
       imageUrl: null,
       avatarVariant: 0,
       pro: true,
@@ -101,6 +108,7 @@ describe("the Genex account Play is signed in as", () => {
       avatarStyle: null,
       photoUrl: null,
       avatarVariantKept: false,
+      handleChosen: null,
     });
     assert.ok(!JSON.stringify(me).includes("example.com"), "no email crosses");
     await people.me();
@@ -476,7 +484,16 @@ describe("people search", () => {
     assert.equal(calls.length, 0, "too short or too long sends nothing");
     const found = await people.search(" mi ");
     assert.deepEqual(found.people, [
-      { id: "u8", name: "Milo", imageUrl: null, avatarVariant: 0, pro: true, status: "outgoing", games: 7 },
+      {
+        id: "u8",
+        name: "Milo",
+        handle: null,
+        imageUrl: null,
+        avatarVariant: 0,
+        pro: true,
+        status: "outgoing",
+        games: 7,
+      },
     ]);
     assert.equal(calls[0]?.route, `${PeopleRoute.Search}?q=mi`);
   });
@@ -506,6 +523,7 @@ describe("the fixture launch's people", () => {
       token: async () => FIXTURE_ACCOUNT_TOKEN,
       now: () => 0,
       upload: async () => 200,
+      web: PLAY_ORIGIN.web,
     });
     assert.equal((await people.me())?.name, "Rab Neba");
     const page = await people.friends();
@@ -586,6 +604,7 @@ describe("the fixture accounts", () => {
         token: async () => fixtureAccountToken(FixtureAccount.Full),
         now: () => 0,
         upload: async () => 200,
+        web: PLAY_ORIGIN.web,
       });
     const chosen = await session().setAvatarVariant(917_204);
     assert.equal(chosen?.avatarVariant, 917_204, "the session that chose it reads it back");
@@ -611,5 +630,230 @@ describe("the fixture accounts", () => {
     assert.notEqual(account().name, "Renamed", "a refused write keeps the name too");
     assert.equal(account().avatarVariant, 917_204);
     assert.equal(patch({ avatarVariant: 0 }), 200);
+  });
+});
+
+describe("nicknames", () => {
+  /** `/api/me` with these extra fields on its user. */
+  const meWith = (fields: Record<string, unknown>) => (call: Call) =>
+    call.route === PeopleRoute.Me ? ok({ user: { id: "u1", name: "Rab Neba", ...fields } }) : accountApi(call);
+
+  it("reads a server without handles as one: no handle, and no welcome to ask for one", async () => {
+    const me = await rig(accountApi).people.me();
+    assert.equal(me?.handle, null);
+    assert.equal(me?.handleChosen, null, "absent is not false: nothing reopens the welcome");
+  });
+
+  it("reads the account's handle and whether it chose it, each only when well formed", async () => {
+    const chosen = await rig(meWith({ handle: "rabneba", handleChosen: true })).people.me();
+    assert.deepEqual([chosen?.handle, chosen?.handleChosen], ["rabneba", true]);
+    const backfilled = await rig(meWith({ handle: "rabneba", handleChosen: false })).people.me();
+    assert.deepEqual([backfilled?.handle, backfilled?.handleChosen], ["rabneba", false]);
+    const unreached = await rig(meWith({ handle: null, handleChosen: false })).people.me();
+    assert.deepEqual([unreached?.handle, unreached?.handleChosen], [null, false]);
+    for (const handle of ["RabNeba", "rab--neba", "../x", 7, ""]) {
+      const me = await rig(meWith({ handle, handleChosen: true })).people.me();
+      assert.equal(me?.handle, null, JSON.stringify(handle));
+    }
+    for (const handleChosen of ["yes", 1, null]) {
+      const me = await rig(meWith({ handle: "rabneba", handleChosen })).people.me();
+      assert.equal(me?.handleChosen, null, JSON.stringify(handleChosen));
+    }
+  });
+
+  it("gives every person the handle the API names, or none", () => {
+    assert.equal(toPerson({ id: "u2", name: "Mira", handle: "mira" })?.handle, "mira");
+    assert.equal(toPerson({ id: "u2", name: "Mira" })?.handle, null);
+    assert.equal(toPerson({ id: "u2", name: "Mira", handle: "Mira K" })?.handle, null);
+  });
+
+  it("judges a handle's shape and the account's own at once, asking genex.games only about the rest", async () => {
+    const { people, calls } = rig((call) =>
+      call.route.startsWith(PeopleRoute.HandleCheck)
+        ? ok({ handle: "rab", state: "taken", suggestions: ["rabneba2", "BAD", "rab-n", "rab3", "rab4"] })
+        : meWith({ handle: "rabneba", handleChosen: false })(call),
+    );
+    assert.deepEqual(await people.checkHandle("rn"), { handle: "rn", state: HandleState.TooShort, suggestions: [] });
+    assert.deepEqual(await people.checkHandle("@RabNeba"), {
+      handle: "rabneba",
+      state: HandleState.Yours,
+      suggestions: [],
+    });
+    assert.equal(calls.filter((c) => c.route.startsWith(PeopleRoute.HandleCheck)).length, 0);
+    const taken = await people.checkHandle(" Rab ");
+    assert.deepEqual(taken, { handle: "rab", state: HandleState.Taken, suggestions: ["rabneba2", "rab-n", "rab3"] });
+    const asked = calls.filter((c) => c.route.startsWith(PeopleRoute.HandleCheck));
+    assert.deepEqual(
+      asked.map((c) => [c.route, c.token]),
+      [[`${PeopleRoute.HandleCheck}?handle=rab`, TOKEN]],
+    );
+  });
+
+  it("reads a check that names no known state as a failed read, never as free", async () => {
+    for (const body of [{ state: "available" }, { state: null }, null, "free"]) {
+      const { people } = rig((call) => (call.route.startsWith(PeopleRoute.HandleCheck) ? ok(body) : accountApi(call)));
+      await assert.rejects(people.checkHandle("rabbit"), JSON.stringify(body));
+    }
+    const signedOut = rig(accountApi, { token: undefined });
+    await assert.rejects(signedOut.people.checkHandle("rabbit"), SignInNeeded);
+    assert.equal(signedOut.calls.length, 0);
+  });
+
+  it("saves a handle, then reads the account again", async () => {
+    let chosen = false;
+    const { people, calls } = rig((call) => {
+      if (call.method === "PATCH") {
+        chosen = true;
+        return ok({ user: { id: "u1", handle: "rab-neba", handleChosen: true } });
+      }
+      return meWith({ handle: chosen ? "rab-neba" : "rabneba", handleChosen: chosen })(call);
+    });
+    assert.equal((await people.me())?.handleChosen, false);
+    const saved = await people.setHandle(" @Rab-Neba ");
+    assert.deepEqual(
+      calls.filter((c) => c.method === "PATCH"),
+      [{ route: PeopleRoute.MyAccount, method: "PATCH", token: TOKEN, body: { handle: "rab-neba" } }],
+    );
+    assert.equal(saved.outcome, HandleSaveOutcome.Saved);
+    assert.deepEqual(
+      saved.outcome === HandleSaveOutcome.Saved ? [saved.me?.handle, saved.me?.handleChosen] : null,
+      ["rab-neba", true],
+      "the cached account is read again",
+    );
+  });
+
+  it("refuses a handle of the wrong shape before any call", async () => {
+    const { people, calls } = rig(accountApi);
+    assert.deepEqual(await people.setHandle("rab--neba"), {
+      outcome: HandleSaveOutcome.Refused,
+      check: { handle: "rab--neba", state: HandleState.DashEdge, suggestions: [] },
+    });
+    assert.equal(calls.length, 0);
+  });
+
+  it("reads genex.games' refusals into what the field shows", async () => {
+    const refusing = (answer: GalleryAnswer) => rig((call) => (call.method === "PATCH" ? answer : accountApi(call)));
+    const taken = await refusing({
+      status: 400,
+      body: { error: "handle_taken", suggestions: ["rab2", "rab-neba", "../x"] },
+    }).people.setHandle("rab");
+    assert.deepEqual(taken, {
+      outcome: HandleSaveOutcome.Refused,
+      check: { handle: "rab", state: HandleState.Taken, suggestions: ["rab2", "rab-neba"] },
+    });
+    const invalid = await refusing({
+      status: 400,
+      body: { error: "handle_invalid", problem: "too_long" },
+    }).people.setHandle("rabbit");
+    assert.deepEqual(invalid, {
+      outcome: HandleSaveOutcome.Refused,
+      check: { handle: "rabbit", state: HandleState.TooLong, suggestions: [] },
+    });
+    const often = await refusing({ status: 429, body: { error: "handle_changes_exhausted" } }).people.setHandle(
+      "rabbit",
+    );
+    assert.deepEqual(often, { outcome: HandleSaveOutcome.TooManyChanges });
+    // Only genex.games' own word for it: a plain rate limit is no verdict on the handle.
+    await assert.rejects(
+      refusing({ status: 429, body: { error: "Too many requests" } }).people.setHandle("rabbit"),
+      /429/,
+    );
+    // A refusal that names no shape problem ("yours", "free") must not read as one the field could pass.
+    for (const problem of ["yours", "free", "taken"]) {
+      await assert.rejects(
+        refusing({ status: 400, body: { error: "handle_invalid", problem } }).people.setHandle("rabbit"),
+        /400/,
+        problem,
+      );
+    }
+    await assert.rejects(
+      refusing({ status: 400, body: { error: "something else" } }).people.setHandle("rabbit"),
+      /400/,
+    );
+    await assert.rejects(refusing({ status: 500, body: null }).people.setHandle("rabbit"), /500/);
+    await assert.rejects(refusing(status(401)).people.setHandle("rabbit"), SignInNeeded);
+  });
+
+  it("hands on an invite link only on the website Play links to", async () => {
+    const referral = (link: string) => (call: Call) =>
+      call.route === PlayRoute.Referral ? ok({ code: "abc", link, inviterBonus: 100 }) : ok({});
+    const handleLink = "https://genex.games/@rabneba/invite?ref=k7x2abcd";
+    assert.equal((await rig(referral(handleLink)).people.friends()).inviteLink, handleLink, "its code kept");
+    const local = "http://localhost:5173/@rabneba/invite?ref=k7x2abcd";
+    assert.equal((await rig(referral(local), { web: "http://localhost:5173" }).people.friends()).inviteLink, local);
+    assert.equal(
+      (await rig(referral(handleLink), { web: "http://localhost:5173" }).people.friends()).inviteLink,
+      null,
+      "another website's link is not handed on",
+    );
+    assert.equal((await rig(referral(local)).people.friends()).inviteLink, null);
+  });
+});
+
+describe("the fixture accounts' nicknames", () => {
+  const catalog = { games: () => [] };
+  const session = (account: (typeof FixtureAccount)[keyof typeof FixtureAccount]) =>
+    playPeople({
+      request: fixturePlayRequest,
+      token: async () => fixtureAccountToken(account),
+      now: () => 0,
+      upload: async () => 200,
+      web: PLAY_ORIGIN.web,
+    });
+
+  it("give everyone a handle, and ask a new account and the nickname account to choose theirs", async () => {
+    const full = await session(FixtureAccount.Full).me();
+    assert.deepEqual([full?.handle, full?.handleChosen], ["rabneba", true]);
+    assert.equal((await session(FixtureAccount.New).me())?.handleChosen, false);
+    const unchosen = await session(FixtureAccount.Nickname).me();
+    assert.deepEqual([unchosen?.handle, unchosen?.handleChosen], ["rabneba", false]);
+    const friends = await session(FixtureAccount.Full).friends();
+    assert.ok(
+      friends.friends.every((f) => f.handle !== null),
+      "every friend has a handle",
+    );
+    assert.equal(friends.inviteLink, "https://genex.games/@rabneba/invite?ref=fixture1");
+  });
+
+  it("answer a check as genex.games would: a few names taken, Genex's own words kept, the account's own its", async () => {
+    const people = session(FixtureAccount.Full);
+    const states = async (handles: string[]) =>
+      Promise.all(handles.map(async (handle) => (await people.checkHandle(handle)).state));
+    assert.deepEqual(
+      await states(["rab", "max", "neo", "simeonm", "admin", "genex", "my-genex-games", "rabneba", "zebra"]),
+      [
+        HandleState.Taken,
+        HandleState.Taken,
+        HandleState.Taken,
+        HandleState.Taken,
+        HandleState.Reserved,
+        HandleState.Reserved,
+        HandleState.Reserved,
+        HandleState.Yours,
+        HandleState.Free,
+      ],
+    );
+    assert.deepEqual((await people.checkHandle("rab")).suggestions, ["rabneba", "rab-neba", "rab2"]);
+    assert.equal(
+      fixturePeopleAnswer(`${PeopleRoute.HandleCheck}?handle=rab`, { token: undefined }, catalog)?.status,
+      401,
+      "signed out, nothing is checked",
+    );
+  });
+
+  it("save a free handle for the launch, and refuse a taken one with handles to try", async () => {
+    const people = session(FixtureAccount.Nickname);
+    const refused = await people.setHandle("max");
+    assert.equal(refused.outcome, HandleSaveOutcome.Refused);
+    assert.equal((await people.me())?.handleChosen, false, "a refusal changes nothing");
+    const saved = await people.setHandle("rab-neba");
+    assert.equal(saved.outcome, HandleSaveOutcome.Saved);
+    const me = await session(FixtureAccount.Nickname).me();
+    assert.deepEqual([me?.handle, me?.handleChosen], ["rab-neba", true]);
+    assert.equal(
+      (await session(FixtureAccount.Full).friends()).inviteLink,
+      "https://genex.games/@rab-neba/invite?ref=fixture1",
+    );
+    await people.setHandle("rabneba");
   });
 });

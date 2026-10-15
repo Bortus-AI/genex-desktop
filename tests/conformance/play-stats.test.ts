@@ -204,6 +204,7 @@ describe("the people store's numbers", () => {
   const me: PlayMe = {
     id: "me",
     name: "Rab",
+    handle: null,
     imageUrl: null,
     avatarVariant: 0,
     pro: false,
@@ -211,6 +212,7 @@ describe("the people store's numbers", () => {
     avatarStyle: AvatarStyle.Generated,
     photoUrl: null,
     avatarVariantKept: false,
+    handleChosen: null,
   };
   /** A store over an API that answers what the test says. */
   function store(answers: { stats?: () => Promise<PlayStats | null>; creators?: () => Promise<null> } = {}) {
@@ -235,6 +237,7 @@ describe("the people store's numbers", () => {
         return (answers.creators ?? (async () => null))();
       },
       playCredits: async () => assert.fail("not read"),
+      playSetHandle: async () => assert.fail("no nickname saved"),
       genexAccount: async () => ({ status: GenexAccountStatus.SignedIn }),
       genexSignIn: async () => assert.fail("not signed in"),
       genexCancelSignIn: async () => assert.fail("not cancelled"),
@@ -303,6 +306,7 @@ describe("the sidebar's friends stack", () => {
   const friend = (id: string, playing = false): PlayFriend => ({
     id,
     name: id,
+    handle: null,
     imageUrl: null,
     avatarVariant: 0,
     pro: false,

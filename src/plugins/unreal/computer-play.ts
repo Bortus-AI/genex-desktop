@@ -128,6 +128,34 @@ interface PlaySession {
   started: boolean;
 }
 
+/** One session per game in one storage. */
+const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
+
+/** The mark that says a play is the agent's own, or none when the game has no folder. */
+function markerOf(storage: string, game: string, queueDeps: QueueDeps): AgentPlayMarker {
+  const folder = agentPlayFolder(storage, game);
+  return folder ? agentPlayMarker(folder, queueDeps.now) : NO_AGENT_PLAY;
+}
+
+/**
+ * Ends a play left running so a fresh one can start: an agent's (the session's own, or one its mark
+ * claims) is stopped; the person's is never touched. Null when nothing ran or it was stopped.
+ */
+async function endForFresh(
+  sessions: ReadonlyMap<string, PlaySession>,
+  storage: string,
+  game: string,
+  queueDeps: QueueDeps,
+  port: ReturnType<QueueDeps["editor"]>,
+): Promise<RestartRefusal | null> {
+  if (!(await playing(port))) return null;
+  const ours = sessions.get(keyOf(storage, game))?.started || (await agentPlaying(storage, game, queueDeps.now()));
+  if (!ours) return RestartRefusal.PersonPlaying;
+  await stopPlay(queueDeps, port);
+  await markerOf(storage, game, queueDeps).stopped();
+  return null;
+}
+
 /** The play tools over the queue's own editor port and clock. */
 export function createComputerPlay(deps: {
   queueDeps(storage: string): QueueDeps;
@@ -136,11 +164,6 @@ export function createComputerPlay(deps: {
 }) {
   const sessions = new Map<string, PlaySession>();
   let shots = 0;
-  const keyOf = (storage: string, game: string) => `${storage}\u0000${game}`;
-  const markerOf = (storage: string, game: string, queueDeps: QueueDeps): AgentPlayMarker => {
-    const folder = agentPlayFolder(storage, game);
-    return folder ? agentPlayMarker(folder, queueDeps.now) : NO_AGENT_PLAY;
-  };
   const portOf = (storage: string, context: PluginContext) => {
     const game = deps.game(context);
     const queueDeps = deps.queueDeps(storage);
@@ -152,7 +175,7 @@ export function createComputerPlay(deps: {
     if (deps.queue(storage).busy(game)) return refused(EnginePlayRefusal.Busy, MESSAGE.busy);
     if (!(await port.answering())) return refused(EnginePlayRefusal.NoEditor, MESSAGE.noEditor);
     const key = keyOf(storage, game);
-    const restarted = args.fresh === true ? await endForFresh(storage, game, queueDeps, port) : null;
+    const restarted = args.fresh === true ? await endForFresh(sessions, storage, game, queueDeps, port) : null;
     if (restarted === RestartRefusal.PersonPlaying)
       return refused(EnginePlayRefusal.PersonPlaying, MESSAGE.personPlaying);
     const joined = await playing(port);
@@ -171,24 +194,6 @@ export function createComputerPlay(deps: {
     sessions.set(key, { giveBack, started: (known?.started ?? false) || !joined || agents });
     const opened: EnginePlayOpened = { ...ENGINE_PLAY_VIEW, joined };
     return opened;
-  };
-
-  /**
-   * Ends a play left running so a fresh one can start: an agent's (the session's own, or one its mark
-   * claims) is stopped; the person's is never touched. Null when nothing ran or it was stopped.
-   */
-  const endForFresh = async (
-    storage: string,
-    game: string,
-    queueDeps: QueueDeps,
-    port: ReturnType<QueueDeps["editor"]>,
-  ): Promise<RestartRefusal | null> => {
-    if (!(await playing(port))) return null;
-    const ours = sessions.get(keyOf(storage, game))?.started || (await agentPlaying(storage, game, queueDeps.now()));
-    if (!ours) return RestartRefusal.PersonPlaying;
-    await stopPlay(queueDeps, port);
-    await markerOf(storage, game, queueDeps).stopped();
-    return null;
   };
 
   const input = async (args: Record<string, unknown>, context: PluginContext, storage: string) => {

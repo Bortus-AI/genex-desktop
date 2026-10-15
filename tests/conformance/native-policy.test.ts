@@ -203,3 +203,17 @@ test("fixture-safe channels run in fixtures and an unclassified one is refused t
   );
   assert.doesNotThrow(() => assertNativeActionAllowed(false, "studio:brand-new.native"));
 });
+test("a fixture profile checks and saves a nickname from its own people, and never pops the Mac's share menu", async () => {
+  assert.equal(classifyChannel("studio:play.handle-check"), "fixture-safe");
+  assert.equal(classifyChannel("studio:play.handle"), "fixture-safe");
+  assert.equal(classifyChannel("studio:play.share"), "native");
+  const { ipc, listeners } = recorder();
+  const handle = createIpcHandle(ipc, { fixture: true, isStudioUi });
+  let shared = 0;
+  handle("studio:play.share", () => {
+    shared++;
+  });
+  const answer = await listeners.get("studio:play.share")!(studio, { url: "https://genex.games/@rabneba" });
+  assert.equal(answer.ok, false);
+  assert.equal(shared, 0, "the menu never opened");
+});
