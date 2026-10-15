@@ -169,6 +169,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
 | `hooks[]` | 3 | Up to 32 `{on, tool, facts?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
+| `judges[]` | 3 | Beside `engine` only: up to 8 `{id, label, facts?, brief, players?, probe?}`, blind judges that play the engine's games in its editor; see [Judges](#judges) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
 | `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
@@ -1862,6 +1863,36 @@ Unreal's card, editor and words ask for Unreal by name. Its descriptor carries `
 (`{label, projectFiles, projectInFolder}`). With `projectInFolder` true and the project outside the
 game folder, Mode offers no Loop and Rewind says what it can't undo, both in the engine's label
 (`renderer/engine-game.ts`); with it false the Loop runs wherever the project is.
+
+### Judges
+
+An engine plugin may declare blind judges in `judges` (API 3, beside its `engine`;
+`substrate/plugins/judge-manifest.ts`, `PluginJudge` in `shared/plugins.ts`). A judge is data: it
+plays a game in the engine's editor through the play tools, never sees code, and answers from
+playing. The manifest is refused unless there are at most 8 and each has:
+
+- `id`, 2–40 lowercase letters, digits and dashes with a letter first, unique in the manifest, and
+  `label`, 1–40 characters on one line;
+- `facts`, when present, 1–8 fact ids: the games it judges (none: every game the plugin plays);
+- `brief`, a Markdown file in the package outside every dot folder. Installing reads it and refuses
+  a missing file, a folder, or more than `MAX_JUDGE_BRIEF_CHARS` (16 000) characters;
+- `players`, when present, a whole number from 1 to the engine's `play.players` (one when it
+  declares none);
+- `probe`, when present, one of the plugin's harness tools that asks nothing, runs no host program
+  and needs every lock `play-open` needs (`quietHarnessTool`).
+
+Unknown keys are dropped and the rest kept in a fixed order. The harness's `game.list` marks a game
+an engine plugin that is on plays in its editor `editorPlay`, with `judges` (`{id, label}`) that
+reach it by its facts (`withEditorPlay` in `main/core/editor-play-session.ts`); a web game, or one no
+plugin that is on plays, has neither. The chat's `judge_play` then takes `judge`, an id the host
+checks against the game's own (an unknown one is refused in plain words and nothing plays), and a
+judge's playtest grant names it. The host appends the judge's brief to the session's rubric (to its
+first answer in the harness's own loop), opens its players, and right after the play opens runs its
+probe once through the plugin's tool call, which holds the play's locks. The probe answers `{note,
+images}`: measurements and pictures, never source. They open the judge's first answer, and the
+pictures are kept in the game's captures folder and shown on the chat's judge line, only for the
+trace the host wrote (`judge-probe-pictures.ts`). A `play-open` that answers `liveData: true` adds
+the note that saved data there is the live game's and only the play's test players may be used.
 
 ## Panels and trusted approval
 

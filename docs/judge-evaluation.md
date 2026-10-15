@@ -58,6 +58,17 @@ the round waits, so a lapsed account leaves no verdicts, never ties or "no" answ
 Captures, judge verdicts and human labels stay in ignored evidence directories; only metrics-only
 baselines and per-release ledger exports under `evals/` are committed ([evals](evals.md)).
 
+## Engine plugins' judges
+
+An engine plugin may declare its own judges ([plugins](plugins.md#judges)): a brief, a number of
+players and a probe. They follow the blind rule of every judge: the brief states what to check in
+the player's words and never mentions code, and the probe answers measurements and pictures of the
+running play, never source. The host adds the brief to the rubric, so evaluate a plugin judge as a
+judge plus its brief: hold the brief file and the probe tool's version fixed in each comparison,
+record the judge id with the model and prompt version, and compare against the same game judged
+with no plugin judge. A probe's pictures are evidence the judge saw, not a verdict; keep them with
+the captures.
+
 ## Human review and metrics
 
 Have at least two reviewers label each pair independently before seeing the model's answer.

@@ -166,6 +166,14 @@ cannot do at all with `unsupported`: a pause is then asked once and the clock is
 Unreal answers it for more than one player. The toy engine fixture (`tests/fixtures/toy-engine-plugin`)
 plays three players this way.
 
+A judge's grant may name one of the judges the engine plugin declares (`judge`;
+[plugins](plugins.md#judges)): its session opens that judge's players, and `play-open`'s source runs
+one step right after the play first opens (`afterOpen`), the judge's probe, through the plugin's
+tool call under the play's locks. The first answer after that carries the probe's note and pictures,
+and a play that reaches the live game's saved data (`liveData: true` on `play-open`) says so there;
+later answers carry neither. A judge named for a game no engine plugin plays in its editor is
+refused.
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
