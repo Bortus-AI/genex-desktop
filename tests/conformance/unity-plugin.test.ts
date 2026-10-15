@@ -57,6 +57,8 @@ describe("the bundled Unity plugin", () => {
     const unity = bundledManifest();
     assert.equal(unity.id, "unity");
     assert.equal(unity.apiVersion, 3);
+    // An engine plugin: its page reads the editor's own state, and it may show its setup card in a chat.
+    assert.deepEqual(unity.capabilities, ["game-engine"]);
     const editor = unity.mcpServers?.find((server) => server.id === "editor");
     assert.deepEqual(editor?.facts, [CoreFact.UnityProject]);
     assert.deepEqual(editor?.needs, ["editor"]);
@@ -265,11 +267,23 @@ describe("the bundled Unity plugin", () => {
           .filter((name) => name.startsWith("unity__"));
       assert.deepEqual(
         unityTools(UNITY_GAME),
-        ["unity__new-game", "unity__setup", "unity__undo-setup", "unity__open-editor", "unity__restart-editor"],
+        [
+          "unity__new-game",
+          "unity__show-steps",
+          "unity__setup",
+          "unity__undo-setup",
+          "unity__open-editor",
+          "unity__restart-editor",
+        ],
         "a Unity project's sessions get its tools, and none of Genex's own (find-project, save-all, editor-state…)",
       );
-      assert.deepEqual(unityTools(WEB_GAME), ["unity__new-game"], "a web game can only be made a Unity game");
-      assert.deepEqual(unityTools(), ["unity__new-game"], "and so can a game with no kind yet");
+      // The setup card goes with making a Unity game: a game is made one only once Unity is installed.
+      assert.deepEqual(
+        unityTools(WEB_GAME),
+        ["unity__new-game", "unity__show-steps"],
+        "a web game can only be made a Unity game",
+      );
+      assert.deepEqual(unityTools(), ["unity__new-game", "unity__show-steps"], "and so can a game with no kind yet");
       const offered = registry.snapshot().kinds.filter((kind) => kind.plugin === "unity");
       assert.deepEqual(
         offered.map((kind) => [kind.label, kind.tool, kind.makes, kind.asksReady]),

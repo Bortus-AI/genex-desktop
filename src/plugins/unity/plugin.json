@@ -1,18 +1,26 @@
 {
   "apiVersion": 3,
   "id": "unity",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "name": "Unity",
   "publisher": "Genex",
   "description": "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.",
   "backend": "backend.mjs",
-  "capabilities": [],
+  "capabilities": ["game-engine"],
   "tools": [
     {
       "name": "new-game",
       "makes": ["unity-project"],
       "ready": "engine-status",
       "description": "Make this game's Unity project: an empty project in this game's folder as unity/, for the newest Unity 6 installed here, with Unity's Pipeline package, the standard built-in modules (physics, audio, animation, UI…) and the UI package. Genex opens it in Unity and waits until the editor answers, so the unity-editor tools reach it. Use it only when the user chose Unity for this game and it has no Unity project yet; a game that already holds one, or has something named unity, is refused. A first start takes a minute or two while Unity imports the project and downloads its packages.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "show-steps",
+      "description": "Show the user the Unity setup card in this game's chat: Genex installs Unity Hub and Unity 6 for them, and they only sign in to Unity. Use it when the user wants a Unity game and this computer has no Unity 6 yet (new-game refuses, or the engine question says Unity needs installing first); then tell them in one line and end your reply, and the chat tells you when Unity is ready. It does nothing when Unity 6 is installed and signed in.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -285,7 +293,12 @@
       "native": true,
       "confirmation": "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost."
     },
-    { "name": "get-unity", "label": "Get Unity", "native": true }
+    { "name": "get-unity", "label": "Get Unity", "native": true },
+    { "name": "steps", "label": "Unity setup" },
+    { "name": "get-hub", "label": "Get Unity Hub", "native": true },
+    { "name": "open-hub", "label": "Open Unity Hub", "native": true },
+    { "name": "install-unity", "label": "Install Unity 6", "native": true },
+    { "name": "set-up", "label": "Set up Unity for me", "native": true }
   ],
   "mcpServers": [
     {

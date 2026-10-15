@@ -1,0 +1,356 @@
+/**
+ * Installing Unity for the person, from the Unity setup card. Unity Hub comes from Unity's own
+ * download, is checked to be signed by Unity Technologies before it is copied into Applications,
+ * and then installs the editor through its own command line (`Unity Hub -- --headless install`),
+ * started on its own so it goes on while Genex restarts; its output is kept in the plugin's storage
+ * and read back for the card's progress. Signing in stays the person's: Genex only opens Hub. Do it
+ * for me runs every step in order and waits for the person's sign-in between them.
+ */
+import { execFile, spawn } from "node:child_process";
+import { createWriteStream } from "node:fs";
+import { mkdir, open, rm, statfs, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { setTimeout as sleep } from "node:timers/promises";
+import { promisify } from "node:util";
+import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import { atomicWriteJson, readJsonIfExists } from "../../substrate/fsx.ts";
+import { type EditorsEnv, compareVersions, findHub } from "./editors.ts";
+import { getUnityLaunch, type Launch } from "./editor-launch.ts";
+import { hasLicense, type InstallJob, JobKind, JobState, readFacts, UNITY_SIZE_GB } from "./setup-steps.ts";
+
+/** Unity's own download of Hub for each Mac processor. */
+const HUB_DMG: Record<string, string> = {
+  arm64: "https://public-cdn.cloud.unity3d.com/hub/prod/UnityHubSetup-arm64.dmg",
+  x64: "https://public-cdn.cloud.unity3d.com/hub/prod/UnityHubSetup-x64.dmg",
+};
+/** Unity Technologies' Apple team: the only signer whose Hub Genex installs. */
+export const UNITY_TEAM_ID = "9QW8UQUTAA";
+/** The app inside Hub's disk image, and Hub's program inside the app. */
+const HUB_APP = "Unity Hub.app";
+const HUB_PROGRAM = path.posix.join("Contents", "MacOS", "Unity Hub");
+/** The Unity release line Genex's Unity work was measured on; its newest final release is installed. */
+export const INSTALL_LINE = "6000.3";
+/** The plugin storage folder holding the install's record, its output and Hub's download. */
+const SETUP_FOLDER = "unity-setup";
+const EDITOR_RECORD = "editor.json";
+const EDITOR_LOG = "editor-install.log";
+/** How long Hub may take to list Unity's releases, and the most of its output read. */
+const RELEASES_MS = 2 * MINUTE_MS;
+const OUTPUT_MAX_BYTES = 4 * 1024 * 1024;
+/** How long copying Hub and checking its signature may take. */
+const COPY_MS = 5 * MINUTE_MS;
+/** How much of the install's output is read back for its progress. */
+const LOG_TAIL_BYTES = 64 * 1024;
+/** How long Do it for me waits for the person to sign in, and how often it looks. */
+const SIGN_IN_WAIT_MS = 30 * MINUTE_MS;
+const SIGN_IN_POLL_MS = 3 * SECOND_MS;
+const GIGABYTE = 1024 * 1024 * 1024;
+
+const MESSAGE = {
+  Download: (why: string) => `Couldn't download Unity Hub (${why}). Check your connection, then try again.`,
+  NotUnity: "This Unity Hub isn't signed by Unity, so Genex didn't install it.",
+  Copy: (why: string) => `Couldn't put Unity Hub in Applications (${why}).`,
+  NoHub: "Get Unity Hub first.",
+  NoRelease: "Unity Hub listed no Unity 6 to install. Open Unity Hub and install Unity 6 from Installs.",
+  Space: (free: number) =>
+    `Unity 6 needs about ${UNITY_SIZE_GB} GB; ${free.toFixed(1)} GB is free. Free up space, then try again.`,
+  Stopped: (line: string) =>
+    `Unity's install stopped${line ? `: ${line}` : ""}. Try again, or install it in Unity Hub.`,
+  OnlyMac: "Genex installs Unity Hub on a Mac only: get it from Unity's page.",
+} as const;
+
+/** The record of an editor install Genex started: the version, the program's id and when. */
+type EditorRecord = { version: string; pid: number; startedAt: string };
+
+/** What the installer reaches besides the files: the network, programs, processes, disks and the clock. */
+export interface InstallDeps {
+  env: EditorsEnv;
+  /** This Mac's processor as Unity names it: arm64 or x64. */
+  arch: string;
+  fetch: typeof fetch;
+  /** Runs a program and answers what it printed, and on its error stream; rejects when it fails. */
+  run: (command: string, args: string[], timeoutMs: number) => Promise<{ out: string; err: string }>;
+  /** Starts a program on its own, its output into `log`, and answers its process id. */
+  start: (command: string, args: string[], log: string) => Promise<number>;
+  alive: (pid: number) => boolean;
+  freeBytes: (folder: string) => Promise<number>;
+  open: (launch: Launch) => Promise<void>;
+  now: () => Date;
+  sleep: (ms: number) => Promise<unknown>;
+}
+
+const folderIn = (storage: string) => path.join(storage, SETUP_FOLDER);
+
+/** The newest final release of the line Genex was measured on, else the newest final Unity 6. */
+export function chooseRelease(versions: readonly string[]): string | undefined {
+  const finals = versions.filter((version) => /^6\d{3}\.\d+\.\d+f\d+$/.test(version)).sort(compareVersions);
+  return finals.find((version) => version.startsWith(`${INSTALL_LINE}.`)) ?? finals[0];
+}
+
+/** The versions in Hub's `editors --releases --json` answer, which may print other lines around it. */
+export function releasesIn(output: string): string[] {
+  const start = output.indexOf("[");
+  const end = output.lastIndexOf("]");
+  if (start < 0 || end < start) return [];
+  try {
+    const list: unknown = JSON.parse(output.slice(start, end + 1));
+    if (!Array.isArray(list)) return [];
+    return list
+      .map((item) => (item as { version?: unknown })?.version)
+      .filter((v): v is string => typeof v === "string");
+  } catch {
+    return [];
+  }
+}
+
+/** How far an install got from Hub's output: its last percentage, and its last line for a stop. */
+export function progressIn(log: string): { percent?: number; last: string } {
+  const lines = log
+    .split(/\r?\n|\r/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const percents = [...log.matchAll(/(\d{1,3}(?:\.\d+)?)\s?%/g)].map((match) => Number(match[1]));
+  const percent = percents.findLast((value) => value >= 0 && value <= 100);
+  return { ...(percent !== undefined ? { percent } : {}), last: (lines.at(-1) ?? "").slice(0, 200) };
+}
+
+/** Hub's own program inside its app. */
+const hubProgram = (hub: string) => path.posix.join(hub, HUB_PROGRAM);
+
+/** Whether an app is signed by Unity Technologies: Apple accepts its signature and names Unity's team. */
+async function signedByUnity(deps: InstallDeps, app: string): Promise<boolean> {
+  try {
+    await deps.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app], COPY_MS);
+    // codesign describes a signature on its error stream.
+    const described = await deps.run("/usr/bin/codesign", ["-dv", app], COPY_MS);
+    return described.err.split(/\r?\n/).includes(`TeamIdentifier=${UNITY_TEAM_ID}`);
+  } catch {
+    return false;
+  }
+}
+
+/** One installer's state: its programs, its storage, Hub's install (kept in memory) and Do it for me while it runs. */
+interface Installing {
+  deps: InstallDeps;
+  storage: () => Promise<string>;
+  hubJob: InstallJob | null;
+  driving: Promise<void> | null;
+}
+
+/** Downloads Hub's disk image into the storage, counting bytes for the card. */
+async function download(state: Installing, file: string): Promise<void> {
+  const url = HUB_DMG[state.deps.arch] ?? HUB_DMG.x64 ?? "";
+  const response = await state.deps.fetch(url).catch((error: unknown) => {
+    throw new Error(MESSAGE.Download(errorMessage(error)));
+  });
+  if (!response.ok || !response.body) throw new Error(MESSAGE.Download(`HTTP ${response.status}`));
+  const total = Number(response.headers.get("content-length")) || undefined;
+  const job: InstallJob = { kind: JobKind.Hub, state: JobState.Running, done: 0, ...(total ? { total } : {}) };
+  state.hubJob = job;
+  const body = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
+  body.on("data", (chunk: Buffer) => {
+    job.done = (job.done ?? 0) + chunk.length;
+  });
+  await pipeline(body, createWriteStream(file)).catch((error: unknown) => {
+    throw new Error(MESSAGE.Download(errorMessage(error)));
+  });
+  job.done = job.total ?? job.done;
+}
+
+/** Mounts the image, checks Unity signed its Hub, copies it into Applications and unmounts. */
+async function copyIn(deps: InstallDeps, image: string, mount: string): Promise<void> {
+  const attach = ["attach", "-nobrowse", "-readonly", "-quiet", "-mountpoint", mount, image];
+  await deps.run("/usr/bin/hdiutil", attach, COPY_MS);
+  try {
+    const app = path.join(mount, HUB_APP);
+    if (!(await signedByUnity(deps, app))) throw new Error(MESSAGE.NotUnity);
+    const target = path.join(deps.env.applications, HUB_APP);
+    await deps.run("/usr/bin/ditto", [app, target], COPY_MS).catch((error: unknown) => {
+      throw new Error(MESSAGE.Copy(errorMessage(error)));
+    });
+  } finally {
+    await deps.run("/usr/bin/hdiutil", ["detach", "-quiet", mount], COPY_MS).catch(() => undefined);
+  }
+}
+
+/** Gets Unity Hub: on a Mac Genex installs it; elsewhere Unity's page opens. */
+async function getHub(state: Installing): Promise<void> {
+  const { deps } = state;
+  if (await findHub(deps.env)) return;
+  if (deps.env.platform !== "darwin") {
+    await deps.open(getUnityLaunch(deps.env.platform, undefined));
+    throw new Error(MESSAGE.OnlyMac);
+  }
+  const folder = folderIn(await state.storage());
+  await mkdir(folder, { recursive: true });
+  const image = path.join(folder, "UnityHubSetup.dmg");
+  const mount = path.join(folder, "mount");
+  state.hubJob = { kind: JobKind.Hub, state: JobState.Running };
+  try {
+    await download(state, image);
+    await mkdir(mount, { recursive: true });
+    await copyIn(deps, image, mount);
+    state.hubJob = null;
+  } catch (error) {
+    state.hubJob = { kind: JobKind.Hub, state: JobState.Failed, why: errorMessage(error) };
+    throw error;
+  } finally {
+    await rm(image, { force: true });
+  }
+}
+
+/** The editor install Genex started, as the card reads it: running, stopped, or none. */
+async function editorJob(state: Installing): Promise<InstallJob | null> {
+  const folder = folderIn(await state.storage());
+  const record = await readJsonIfExists<EditorRecord>(path.join(folder, EDITOR_RECORD)).catch(() => null);
+  if (!record?.version || !Number.isInteger(record.pid)) return null;
+  const { percent, last } = progressIn(await tailOf(path.join(folder, EDITOR_LOG)));
+  const job = { kind: JobKind.Editor, version: record.version, ...(percent !== undefined ? { percent } : {}) };
+  if (state.deps.alive(record.pid)) return { ...job, state: JobState.Running };
+  if ((await readFacts(state.deps.env, null)).editor) return null;
+  return { ...job, state: JobState.Failed, why: MESSAGE.Stopped(last) };
+}
+
+/** Keeps an install that could not start as a stopped one, with why, for the card; then refuses with it. */
+async function failEditor(deps: InstallDeps, folder: string, why: string): Promise<never> {
+  await atomicWriteJson(path.join(folder, EDITOR_RECORD), {
+    version: "6",
+    pid: -1,
+    startedAt: deps.now().toISOString(),
+  });
+  await writeFile(path.join(folder, EDITOR_LOG), why);
+  throw new Error(why);
+}
+
+/** Starts Hub installing the newest Unity 6 of Genex's line, once there is room for it. */
+async function installEditor(state: Installing): Promise<void> {
+  const { deps } = state;
+  const hub = await findHub(deps.env);
+  if (!hub) throw new Error(MESSAGE.NoHub);
+  if ((await editorJob(state))?.state === JobState.Running) return;
+  const folder = folderIn(await state.storage());
+  await mkdir(folder, { recursive: true });
+  const free = (await deps.freeBytes(deps.env.applications)) / GIGABYTE;
+  if (free < UNITY_SIZE_GB) await failEditor(deps, folder, MESSAGE.Space(free));
+  const arch = archOf(deps.arch);
+  const listing = ["--", "--headless", "editors", "--releases", "--json", "--architecture", arch];
+  const version = chooseRelease(releasesIn((await deps.run(hubProgram(hub), listing, RELEASES_MS)).out));
+  if (!version) return failEditor(deps, folder, MESSAGE.NoRelease);
+  const args = ["--", "--headless", "install", "--version", version, "--architecture", arch];
+  const pid = await deps.start(hubProgram(hub), args, path.join(folder, EDITOR_LOG));
+  await atomicWriteJson(path.join(folder, EDITOR_RECORD), { version, pid, startedAt: deps.now().toISOString() });
+}
+
+/** Waits for the person to sign in to Hub, up to half an hour. */
+async function signedIn(deps: InstallDeps): Promise<boolean> {
+  const ends = deps.now().getTime() + SIGN_IN_WAIT_MS;
+  while (deps.now().getTime() < ends) {
+    if (await hasLicense(deps.env)) return true;
+    await deps.sleep(SIGN_IN_POLL_MS);
+  }
+  return false;
+}
+
+/** Opens Unity Hub for the person, where they sign in. */
+async function openHub(deps: InstallDeps): Promise<void> {
+  const hub = await findHub(deps.env);
+  if (!hub) throw new Error(MESSAGE.NoHub);
+  await deps.open(getUnityLaunch(deps.env.platform, hub));
+}
+
+/** Do it for me: Hub, then the person's sign-in, then the editor. */
+async function drive(state: Installing): Promise<void> {
+  const { deps } = state;
+  await getHub(state);
+  if (!(await hasLicense(deps.env))) {
+    await openHub(deps);
+    if (!(await signedIn(deps))) return;
+  }
+  if (!(await readFacts(deps.env, null)).editor) await installEditor(state);
+}
+
+/** The installer over one plugin storage: Hub's install in memory, the editor's on disk, and Do it for me. */
+export function createInstaller(deps: InstallDeps, storage: () => Promise<string>) {
+  const state: Installing = { deps, storage, hubJob: null, driving: null };
+  return {
+    /** The install the card shows: Hub's while it runs or after it stopped, else the editor's. */
+    job: async (): Promise<InstallJob | null> => state.hubJob ?? (await editorJob(state)),
+    getHub: () => getHub(state),
+    openHub: () => openHub(deps),
+    installEditor: () => installEditor(state),
+    /** Starts Do it for me and answers at once; the card follows it, and a stop shows on its row. */
+    setUp: (): void => {
+      state.driving ??= drive(state)
+        .catch(() => undefined)
+        .finally(() => {
+          state.driving = null;
+        });
+    },
+    /** Do it for me's run while it goes, for tests that wait it out. */
+    running: (): Promise<void> | null => state.driving,
+  };
+}
+
+export type Installer = ReturnType<typeof createInstaller>;
+
+/** Unity's name for a processor in Hub's command line. */
+const archOf = (arch: string) => (arch === "arm64" ? "arm64" : "x86_64");
+
+/** The end of a file, or nothing when there is none. */
+async function tailOf(file: string): Promise<string> {
+  const handle = await open(file, "r").catch(() => null);
+  if (!handle) return "";
+  try {
+    const { size } = await handle.stat();
+    const length = Math.min(size, LOG_TAIL_BYTES);
+    const buffer = Buffer.alloc(length);
+    await handle.read(buffer, 0, length, size - length);
+    return buffer.toString("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+const run = promisify(execFile);
+
+/** This Mac's own network, programs, processes, disks and clock. */
+export function systemInstallDeps(env: EditorsEnv, opener: (launch: Launch) => Promise<void>): InstallDeps {
+  return {
+    env,
+    arch: process.arch === "arm64" ? "arm64" : "x64",
+    fetch: globalThis.fetch,
+    run: async (command, args, timeoutMs) => {
+      const done = await run(command, args, { timeout: timeoutMs, maxBuffer: OUTPUT_MAX_BYTES, windowsHide: true });
+      return { out: done.stdout, err: done.stderr };
+    },
+    start: async (command, args, log) => {
+      const out = await open(log, "w");
+      const child = spawn(command, args, { detached: true, stdio: ["ignore", out.fd, out.fd], windowsHide: true });
+      await new Promise<void>((resolve, reject) => {
+        child.once("spawn", resolve);
+        child.once("error", reject);
+      }).finally(() => out.close());
+      child.unref();
+      return child.pid ?? -1;
+    },
+    alive: (pid) => {
+      if (pid <= 0) return false;
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    freeBytes: async (folder) => {
+      const disk = await statfs(folder);
+      return disk.bavail * disk.bsize;
+    },
+    open: opener,
+    now: () => new Date(),
+    sleep: (ms) => sleep(ms),
+  };
+}

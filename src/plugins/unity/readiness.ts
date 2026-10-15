@@ -1,8 +1,8 @@
 /**
  * Whether a new Unity game can be made on this computer, as `engine-status` answers before a new
  * game's first build: with a Unity 6 editor installed it can, and the engine question offers Unity
- * honestly; with only an older Unity, or none, the person installs one in Unity Hub first. It only
- * reads which editors are installed.
+ * honestly; with only an older Unity, or none, the setup card gets one first. It only reads which
+ * editors are installed.
  */
 import { compareVersions, isUnity6, type UnityEditor } from "./editors.ts";
 
@@ -10,11 +10,15 @@ import { compareVersions, isUnity6, type UnityEditor } from "./editors.ts";
 export const EngineReadiness = { Ready: "ready", OlderOnly: "older-only", None: "none" } as const;
 export type EngineReadiness = (typeof EngineReadiness)[keyof typeof EngineReadiness];
 
-/** The tool that makes a new Unity game, as the host serves it to agents. */
+/** The tools that make a new Unity game and show the Unity setup card, as the host serves them to agents. */
 const NEW_GAME = "unity__new-game";
+const SHOW_STEPS = "unity__show-steps";
 
-/** What to do when the user picks Unity before Genex can make its project: never new-game, Unity Hub instead. */
-const TO_HUB = `If the user picks it, don't call ${NEW_GAME}, which would refuse: tell them to install a Unity 6 editor with Unity Hub (Installs, then Install Editor) and to send a message once it is.`;
+/**
+ * What to do when the user picks Unity before Genex can make its project: never new-game, but the
+ * setup card, where Genex installs Hub and Unity 6 for them and they only sign in.
+ */
+const TO_HUB = `If the user picks it, don't call ${NEW_GAME}, which would refuse: call ${SHOW_STEPS}, which puts the Unity setup card in the chat (Genex installs Unity Hub and Unity 6 for them; they only sign in), say so in one line and end your reply. The chat tells you when Unity is ready.`;
 
 const NOTE = {
   [EngineReadiness.Ready]: (version: string) =>

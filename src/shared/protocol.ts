@@ -100,11 +100,14 @@ export interface AutopilotCommission {
 
 /**
  * Who wrote a message the chat sends when the words are not the user's: the chat reporting how a
- * command the user ran from a reply went. The agent reads it; the transcript never draws it.
- * Recorded with the queued message: never rename a value.
+ * command the user ran from a reply went, that the person turned on a plugin the agent suggested,
+ * or that an engine's setup card has nothing left to do. The agent reads it; the transcript never
+ * draws it. Recorded with the queued message: never rename a value.
  */
 export const MessageOrigin = {
   CommandResult: "command-result",
+  PluginTurnedOn: "plugin-turned-on",
+  SetupDone: "setup-done",
 } as const;
 export type MessageOrigin = (typeof MessageOrigin)[keyof typeof MessageOrigin];
 const MESSAGE_ORIGINS: ReadonlySet<unknown> = new Set(Object.values(MessageOrigin));

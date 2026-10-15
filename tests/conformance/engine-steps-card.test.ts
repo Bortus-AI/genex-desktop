@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseSteps, stepsOffer, stepsShown } from "../../src/renderer/chat/engine-steps.ts";
+import { finishedSays, parseSteps, stepsOffer, stepsShown } from "../../src/renderer/chat/engine-steps.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
 
 const event = (id: number, data: EventData): EventEnvelope => ({
@@ -80,5 +80,41 @@ describe("the plugin's steps", () => {
     assert.equal(parsed?.steps[3]?.action, undefined, "a malformed button is dropped, the row kept");
     assert.equal(parseSteps({ ...good, open: false })?.open, false);
     for (const bad of [null, "steps", [], { title: 1 }, { ...good, steps: "x" }]) assert.equal(parseSteps(bad), null);
+  });
+
+  it("keeps a step that needs the person, the card's own button and what the agent hears when it's done", () => {
+    const setup = {
+      title: "Unity setup",
+      intro: "Two steps before the agent can build in Unity.",
+      open: true,
+      steps: [
+        { id: "sign-in", label: "Sign in to Unity", detail: "Only you type your password.", done: false, you: true },
+        { id: "install", label: "Install Unity 6", detail: "", done: false, you: "yes" },
+      ],
+      primary: { name: "set-up", args: {}, label: "Do it for me" },
+      doneSays: "Unity 6 is ready.",
+    };
+    const parsed = parseSteps(setup);
+    assert.equal(parsed?.steps[0]?.you, true);
+    assert.equal(parsed?.steps[1]?.you, undefined, "only true marks a step as the person's");
+    assert.deepEqual(parsed?.primary, setup.primary);
+    assert.equal(parsed?.doneSays, "Unity 6 is ready.");
+    const plain = parseSteps({ ...setup, primary: { name: 1 }, doneSays: 5 });
+    assert.equal(plain?.primary, undefined, "a malformed card button is dropped");
+    assert.equal(plain?.doneSays, undefined);
+  });
+});
+
+describe("a setup card that finishes", () => {
+  const card = (open: boolean, doneSays?: string) =>
+    parseSteps({ title: "Unity setup", intro: "", open, steps: [], ...(doneSays ? { doneSays } : {}) });
+
+  it("tells the agent once, when the card it showed has nothing left open", () => {
+    assert.equal(finishedSays(card(true), card(false, "Unity 6 is ready.")), "Unity 6 is ready.");
+    assert.equal(finishedSays(card(true), card(true, "Unity 6 is ready.")), null, "still a step open");
+    assert.equal(finishedSays(card(false), card(false, "Unity 6 is ready.")), null, "it was never shown open");
+    assert.equal(finishedSays(null, card(false, "Unity 6 is ready.")), null, "nothing was read before");
+    assert.equal(finishedSays(card(true), card(false)), null, "a plugin that says nothing: the chat stays quiet");
+    assert.equal(finishedSays(card(true), null), null, "a failed read is no finish");
   });
 });

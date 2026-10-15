@@ -1636,9 +1636,12 @@ export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", co
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {
-  turnOn: "Turn on",
+  turnOn: (name: string) => `Turn on ${name}`,
   install: "Install…",
-  on: "On",
+  isOn: (name: string) => `${name} is on`,
+  /** The quiet button on a plugin that is on: its page in Plugins, where it turns off again. */
+  manage: "Plugins",
+  manageLabel: (name: string) => `Open ${name} in Plugins`,
   close: "Put this suggestion away",
   folders: (paths: string) => `Turning it on lets its programs write in: ${paths}`,
   /** A plugin loaded from a folder on this Mac: its code isn't sandboxed, and its tools ask first. */
@@ -3406,6 +3409,10 @@ export function commandResultWords(command: string, session: { exitCode?: number
   return `I ran this in the terminal:\n${command}\n\n${ended} ${tail}`;
 }
 
+/** What the chat tells the agent, unseen, when the person turned on the plugin it suggested. */
+export const pluginTurnedOnWords = (name: string): string =>
+  `I turned on the ${name} plugin from your card. Go on with what I asked.`;
+
 // ── Genex plugin ───────────────────────────────────────────────────────────────────────────
 
 /** The Genex promo after the welcome, the Genex plugin page and its generations. */
@@ -4153,6 +4160,12 @@ export const UNREAL_WORDS = {
   /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (project: string | null, place: string) =>
     ENGINE_LINK_WORDS.loopUnavailable("Unreal", project, place),
+} as const;
+
+/** The Unity plugin's words in Studio's own UI. */
+export const UNITY_WORDS = {
+  /** The plugin page's name and line for the Unity plugin's editor connection. */
+  connection: { title: "Editor", text: "Your open Unity editor, where agents build Unity games." },
 } as const;
 
 /** A game linked to an engine project (Unreal, Godot) that lies outside its folder, in the engine's own name. */

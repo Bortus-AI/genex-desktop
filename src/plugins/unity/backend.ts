@@ -21,6 +21,10 @@
  * (`panel-status.ts`); `open-editor`, `setup`, `undo-setup` and `restart-editor` do what the agent's
  * tools of those names do; `get-unity` opens Unity Hub, else Unity's download page. No action makes
  * a project: that changes what a game is, which Genex snapshots around an agent's `new-game`.
+ *
+ * While this computer can't make Unity games yet, the agent's `show-steps` puts the Unity setup card
+ * in the game's chat (`setup-steps.ts`): its `steps` action reads it, and its buttons get Unity Hub,
+ * open it for the person's sign-in, install Unity 6 through Hub, or do all of it (`unity-install.ts`).
  */
 import { realpath } from "node:fs/promises";
 import { MINUTE_MS } from "../../shared/duration.ts";
@@ -56,9 +60,11 @@ import {
 } from "./project-folder.ts";
 import { newestUnity6, readinessOf } from "./readiness.ts";
 import { pipelineVersionOf, SetupError, SetupRefusal, setUpProject, undoSetup } from "./setup.ts";
+import { readFacts, SetupAction, setupCard } from "./setup-steps.ts";
+import { createInstaller, type InstallDeps, type Installer, systemInstallDeps } from "./unity-install.ts";
 
 /** The host services this backend calls, by their public SDK names. */
-const HostService = { StorageRoot: "storage.root" } as const;
+const HostService = { StorageRoot: "storage.root", EngineSteps: "game.engine.steps" } as const;
 
 /** The plugin's tools, by the names its manifest declares. Wire values: never rename one. */
 export const UnityTool = {
@@ -76,6 +82,7 @@ export const UnityTool = {
   OpenForRun: "open-for-run",
   SceneShots: "scene-shots",
   EditorActivity: "editor-activity",
+  ShowSteps: "show-steps",
 } as const;
 export type UnityTool = (typeof UnityTool)[keyof typeof UnityTool];
 
@@ -90,13 +97,22 @@ export const UnityAction = {
   UndoSetup: "undo-setup",
   RestartEditor: "restart-editor",
   GetUnity: "get-unity",
+  Steps: SetupAction.Steps,
+  GetHub: SetupAction.GetHub,
+  OpenHub: SetupAction.OpenHub,
+  InstallUnity: SetupAction.InstallUnity,
+  SetUp: SetupAction.SetUp,
 } as const;
 export type UnityAction = (typeof UnityAction)[keyof typeof UnityAction];
 
 const isUnityAction = (name: string): name is UnityAction => (Object.values(UnityAction) as string[]).includes(name);
 
-/** What the backend reaches besides the host: the clock, the installed editors, the opener, the editor's network and the computer's processes. */
-export type UnityBackendDeps = MomentDeps;
+/**
+ * What the backend reaches besides the host: the clock, the installed editors, the opener, the
+ * editor's network and the computer's processes, and what installing Unity for the person reaches
+ * (this computer's own unless a test stands in).
+ */
+export type UnityBackendDeps = MomentDeps & { install?: InstallDeps };
 
 const HUB = "Unity Hub (Add, then Add project from disk)";
 /**
@@ -141,6 +157,10 @@ const MESSAGE = {
     "Unity has this project open: bring Unity to the front so it loads the package (ask the user to), then call unity-editor__list_commands.",
   NotEnded:
     "Unity could not be ended, so it was not opened again: ask the user to quit Unity, then call unity__open-editor.",
+  StepsShown:
+    "The Unity setup card is in the chat: Genex can install Unity Hub and Unity 6 for the user, who only signs in. Tell them in one line, then end your reply; the chat tells you when Unity is ready.",
+  StepsDone: "Unity 6 is installed and signed in here; there is no setup card to show. Call unity__new-game.",
+  StepsNoChat: "There is no chat to show the Unity setup card in.",
   SetAside: (folder: string) =>
     `Unity had kept backups of scenes that were unsaved when Unity last ended; so that it opens without asking to recover them, Genex moved them to ${folder}. Tell the user, in case that work is wanted.`,
 } as const;
@@ -397,9 +417,40 @@ async function getUnity(deps: UnityBackendDeps): Promise<{ opened: UnitySource }
   return { opened: hub ? UnitySource.Hub : UnitySource.Download };
 }
 
+/** The setup card for this computer now, with the install under way. */
+async function stepsOf(deps: UnityBackendDeps, installer: Installer) {
+  return setupCard(await readFacts(deps.editors, await installer.job()));
+}
+
+/** The agent's `show-steps`: the Unity setup card in the game's chat, while a step is open. */
+async function showSteps(deps: UnityBackendDeps, installer: Installer, context: PluginContext): Promise<string> {
+  await gameOf(context);
+  if (!(await stepsOf(deps, installer)).open) return MESSAGE.StepsDone;
+  return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
+}
+
+/** The setup card's buttons and its own reading, over one installer. */
+function setupActions(deps: UnityBackendDeps, installer: (context: PluginContext) => Promise<Installer>) {
+  return {
+    [UnityAction.Steps]: async (context: PluginContext) => stepsOf(deps, await installer(context)),
+    [UnityAction.GetHub]: async (context: PluginContext) => (await installer(context)).getHub(),
+    [UnityAction.OpenHub]: async (context: PluginContext) => (await installer(context)).openHub(),
+    [UnityAction.InstallUnity]: async (context: PluginContext) => (await installer(context)).installEditor(),
+    [UnityAction.SetUp]: async (context: PluginContext) => (await installer(context)).setUp(),
+  };
+}
+
 /** The backend over the clock, the installed editors, the opener, the editor's network and the processes a test may stand in for. */
 export function createUnityBackend(deps: UnityBackendDeps): PluginActivation {
   const play = createComputerPlay(deps);
+  let installing: Installer | undefined;
+  let storage = "";
+  // Unity's own install goes on across calls, kept in the plugin's storage, which every call names alike.
+  const installerOf = async (context: PluginContext): Promise<Installer> => {
+    storage = await storageOf(context);
+    installing ??= createInstaller(deps.install ?? systemInstallDeps(deps.editors, deps.open), async () => storage);
+    return installing;
+  };
   const atMoment =
     <T>(handler: (moment: Moment, momentDeps: MomentDeps) => Promise<T>) =>
     async (context: PluginContext) =>
@@ -419,6 +470,7 @@ export function createUnityBackend(deps: UnityBackendDeps): PluginActivation {
     [UnityTool.OpenForRun]: atMoment(openForRun),
     [UnityTool.SceneShots]: atMoment(sceneShots),
     [UnityTool.EditorActivity]: atMoment(editorActivity),
+    [UnityTool.ShowSteps]: async (context) => showSteps(deps, await installerOf(context), context),
   };
   // An action takes nothing from its arguments: the open game's own project is all it acts on.
   const actions: Record<UnityAction, (context: PluginContext) => Promise<unknown>> = {
@@ -429,6 +481,7 @@ export function createUnityBackend(deps: UnityBackendDeps): PluginActivation {
     [UnityAction.UndoSetup]: (context) => undoSetUp(deps, context, PANEL_MESSAGE),
     [UnityAction.RestartEditor]: (context) => endAndOpen(deps, context, PANEL_MESSAGE),
     [UnityAction.GetUnity]: () => getUnity(deps),
+    ...setupActions(deps, installerOf),
   };
   return {
     async tool(name, args, context) {

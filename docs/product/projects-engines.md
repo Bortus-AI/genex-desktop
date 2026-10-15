@@ -13,8 +13,8 @@ the web files as reference.
 ## Plugins on or off
 
 Engine buttons show only on their games. Asked for an engine whose plugin is off, the chat shows its
-card (**Turn on** or **Install…**; a cross puts it away), which only your click acts on. On your
-word agents continue without it: background jobs, `app_look` at its windows (never clicking), its
+card (**Turn on Unity** or **Install…**; a cross puts it away), which only your click acts on. Once
+on, it shrinks to "Unity is on" and the chat goes on by itself. On your word agents continue without it: background jobs, `app_look` at its windows (never clicking), its
 docs, or a plugin they write.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each tool
@@ -27,7 +27,9 @@ Except for web games at the folder's root (Blender files beside them allowed), t
 Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers and claims
 finish; a reviewer checks (three no's stop it). Plugins add reviewer pictures and editor locks:
 while you use an editor, agents wait. Unity makes, sets up and opens the project; agents and judges
-play through Pipeline, with Input System required for keyboard and mouse control.
+play through Pipeline, with Input System required for keyboard and mouse control. Without Unity 6,
+the **Unity setup** card gets Unity Hub, opens it for your sign-in and installs Unity 6 through it
+(**Do it for me** does all three); when it is done the chat goes on.
 
 ## Unreal
 

@@ -15,17 +15,31 @@ export type StepsOffer = { id: string; pluginId: string; project: string };
 
 /** A step's button: the plugin action it runs, with its arguments, and its label. */
 export type StepButton = { name: string; args: Record<string, string>; label: string };
-/** One row: a done step is ticked; an open one may have a button, or a line to run in Terminal. */
+/**
+ * One row: a done step is ticked; an open one may have a button, or a line to run in Terminal.
+ * `you` marks a step only the person can do (signing in), or one that stopped and waits for them.
+ */
 export type StepRow = {
   id: string;
   label: string;
   detail: string;
   done: boolean;
+  you?: true;
   action?: StepButton;
   command?: string;
 };
-/** The card as the plugin answers it. */
-export type StepsCard = { title: string; intro: string; open: boolean; steps: StepRow[] };
+/**
+ * The card as the plugin answers it. `primary` is the card's own button that does every step it
+ * can for the person (Do it for me); `doneSays` is what the agent is told once nothing is open.
+ */
+export type StepsCard = {
+  title: string;
+  intro: string;
+  open: boolean;
+  steps: StepRow[];
+  primary?: StepButton;
+  doneSays?: string;
+};
 
 /** The newest offer in a chat's log, or null. */
 export function stepsOffer(events: readonly EventEnvelope[]): StepsOffer | null {
@@ -64,6 +78,7 @@ function parseRow(raw: unknown): StepRow | undefined {
     label: raw.label,
     detail: isText(raw.detail) ? raw.detail : "",
     done: raw.done,
+    ...(raw.you === true ? { you: true as const } : {}),
     ...(action ? { action } : {}),
     ...(isText(raw.command) && raw.command ? { command: raw.command } : {}),
   };
@@ -73,5 +88,23 @@ function parseRow(raw: unknown): StepRow | undefined {
 export function parseSteps(raw: unknown): StepsCard | null {
   if (!isRecord(raw) || !isText(raw.title) || !isText(raw.intro) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(parseRow).filter((row): row is StepRow => row !== undefined);
-  return { title: raw.title, intro: raw.intro, open: raw.open === true, steps };
+  const primary = parseButton(raw.primary);
+  return {
+    title: raw.title,
+    intro: raw.intro,
+    open: raw.open === true,
+    steps,
+    ...(primary ? { primary } : {}),
+    ...(isText(raw.doneSays) && raw.doneSays ? { doneSays: raw.doneSays } : {}),
+  };
+}
+
+/**
+ * What the agent is told when a card it showed open has nothing left open (the person, or Genex for
+ * them, finished it), so the chat goes on by itself; null while a step is open, for a card never
+ * seen open, and for a plugin that names nothing to say.
+ */
+export function finishedSays(previous: StepsCard | null, next: StepsCard | null): string | null {
+  if (!previous?.open || !next || next.open) return null;
+  return next.doneSays ?? null;
 }
