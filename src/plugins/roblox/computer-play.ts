@@ -128,6 +128,8 @@ interface PlaySession {
   multi: boolean;
   started: boolean;
   view: { width: number; height: number };
+  /** Whether the play reaches the live game's saved data, as its open last found. */
+  liveData: boolean;
 }
 
 /** A Studio call's outcome: its text, a picture, and whether Studio refused it. */
@@ -356,7 +358,7 @@ async function openSolo(c: Ctx, edit: string, running: boolean): Promise<PlaySes
   }
   const view = viewOf(who);
   const started = !running || (await agentsPlay(c));
-  return { edit, server: edit, players: [edit], aims: [centre(view)], multi: false, started, view };
+  return { edit, server: edit, players: [edit], aims: [centre(view)], multi: false, started, view, liveData: false };
 }
 
 /** Ends a multiplayer test: the helper first, else from the test's own server. */
@@ -409,7 +411,7 @@ async function openTest(c: Ctx, edit: string, players: number): Promise<Opening>
   const view = map.view ?? { ...ENGINE_PLAY_VIEW };
   const aims = ids.map(() => centre(view));
   return {
-    session: { edit, server: map.server, players: ids, aims, multi: true, started, view },
+    session: { edit, server: map.server, players: ids, aims, multi: true, started, view, liveData: false },
     joined: start.joined,
   };
 }
@@ -417,6 +419,7 @@ async function openTest(c: Ctx, edit: string, players: number): Promise<Opening>
 /** The answer to an open, with the live-data check kept for the Set up panel. */
 async function opened(c: Ctx, session: PlaySession, joined: boolean): Promise<EnginePlayOpened> {
   const reachable = await liveData(c, session.server);
+  session.liveData = reachable;
   await writeLiveData(c.game.storage, c.game.game, { reachable, at: c.deps.now() }).catch(() => undefined);
   const players = session.players.length;
   return { ...session.view, joined, players, capabilities: { players }, liveData: reachable };
@@ -641,8 +644,18 @@ async function close(c: Ctx) {
 /** A play tool's handler: its arguments and the game the call is for. */
 export type PlayHandler = (args: Record<string, unknown>, game: PlayGame) => Promise<unknown>;
 
-/** The play tools over Studio's MCP server and the Genex helper. */
-export function createComputerPlay(deps: PlayDeps): { handlers: Record<EnginePlayTool, PlayHandler> } {
+/** A play a session holds, as the judges' probes read it: the server's Studio, each player's, and live data. */
+export interface PlayingView {
+  server: string;
+  players: readonly string[];
+  liveData: boolean;
+}
+
+/** The play tools over Studio's MCP server and the Genex helper, and the play each game holds now. */
+export function createComputerPlay(deps: PlayDeps): {
+  handlers: Record<EnginePlayTool, PlayHandler>;
+  playing(game: PlayGame): PlayingView | undefined;
+} {
   const book: PlayBook = { sessions: new Map(), captures: 0 };
   const on =
     (handler: (c: Ctx, args: Record<string, unknown>) => Promise<unknown>): PlayHandler =>
@@ -656,5 +669,9 @@ export function createComputerPlay(deps: PlayDeps): { handlers: Record<EnginePla
     [EnginePlayTool.Pause]: on(pause),
     [EnginePlayTool.Close]: on(close),
   } as const satisfies Record<EnginePlayTool, PlayHandler>;
-  return { handlers };
+  const playing = (game: PlayGame): PlayingView | undefined => {
+    const session = book.sessions.get(keyOf(game));
+    return session && { server: session.server, players: [...session.players], liveData: session.liveData };
+  };
+  return { handlers, playing };
 }

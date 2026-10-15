@@ -23,6 +23,8 @@
       "tests/conformance/roblox-setup.test.ts",
       "tests/conformance/roblox-backend.test.ts"
     ],
+    "src/plugins/roblox/judges/**": ["tests/conformance/roblox-probes.test.ts"],
+    "src/plugins/roblox/*.luau": ["tests/conformance/roblox-probes.test.ts"],
     "src/plugins/roblox/panel.html": [
       "tests/conformance/roblox-backend.test.ts",
       "tests/conformance/roblox-panel.test.ts"

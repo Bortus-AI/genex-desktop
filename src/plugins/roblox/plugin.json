@@ -250,6 +250,41 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "players-state",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's multiplayer judge only: once a play test opens, a picture from each player and what each player's client sees of every player (who is there, leaderstats and attributes) against what the server holds. Answers {note, images}.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "players": {
+            "type": "number",
+            "description": "How many players the play opened, 1 to 8."
+          }
+        }
+      }
+    },
+    {
+      "name": "cheat-remotes",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's cheater judge only: once a play test opens, sends every remote the player's client can reach hostile values from that client, and reads the server's leaderstats and attributes before and after each; sends nothing when the play can reach the live game's saved data. Answers {note, images}.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "phone-check",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex's phone judge only: once a play test opens, shows the game on a phone and a tablet, upright and sideways, through Studio's Device Simulator, with a picture of each, the interface that overlaps, runs off the screen or under the device's edges and Roblox's buttons, and the place's memory against a phone's budget; puts the simulated device back. Answers {note, images}.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "skills": [
@@ -299,6 +334,32 @@
       "summary": "Getting Roblox Studio connected through Genex's Roblox Studio button: what each status means, sign-in, the MCP server switch, choosing the place, and troubleshooting. Read when the Studio tools are missing or answer that Studio isn't open.",
       "file": "skills/get-started.md",
       "facts": ["roblox-project"]
+    }
+  ],
+  "judges": [
+    {
+      "id": "multiplayer",
+      "label": "Multiplayer",
+      "facts": ["roblox-project"],
+      "brief": "judges/multiplayer.md",
+      "players": 3,
+      "probe": "players-state"
+    },
+    {
+      "id": "cheater",
+      "label": "Cheater",
+      "facts": ["roblox-project"],
+      "brief": "judges/cheater.md",
+      "players": 1,
+      "probe": "cheat-remotes"
+    },
+    {
+      "id": "phone",
+      "label": "Phone",
+      "facts": ["roblox-project"],
+      "brief": "judges/phone.md",
+      "players": 1,
+      "probe": "phone-check"
     }
   ],
   "panels": [{ "id": "setup", "title": "Roblox Studio", "file": "panel.html", "placement": "settings" }],

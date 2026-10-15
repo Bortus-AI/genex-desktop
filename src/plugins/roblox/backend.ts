@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import type {
   Activate,
@@ -35,6 +36,7 @@ import {
 import { readLiveData } from "./live-data.ts";
 import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
 import { loadPendingPlace } from "./place-files.ts";
+import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
 import {
   createStudioWatch,
@@ -139,6 +141,9 @@ export const RobloxTool = {
   PlayState: EnginePlayTool.State,
   PlayPause: EnginePlayTool.Pause,
   PlayClose: EnginePlayTool.Close,
+  PlayersState: RobloxProbe.PlayersState,
+  CheatRemotes: RobloxProbe.CheatRemotes,
+  PhoneCheck: RobloxProbe.PhoneCheck,
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
@@ -225,7 +230,15 @@ export interface RobloxDeps extends PlaceActionDeps {
   moments?: MomentServices;
   /** Makes a play shot over 1 MB smaller; this computer's own by default. */
   shrink?: ShrinkShot;
+  /** A judge probe's Luau file; by default read beside this backend, in the plugin's package. */
+  probeLuau?(file: ProbeLuauFile): Promise<string>;
 }
+
+/** The folder the backend runs from: the plugin's package once built. */
+const PACKAGE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+/** A judge probe's Luau, read from the package beside the backend. */
+const packageLuau = (file: ProbeLuauFile) => readFile(path.join(PACKAGE_DIR, file), "utf8");
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
 export interface InstallStatus {
@@ -669,21 +682,42 @@ async function playGame(deps: RobloxDeps, services: MomentServices, context: Plu
   };
 }
 
+/** The play tools and the judges' probes, each over the game its call is for. */
+function playHandlers(deps: RobloxDeps, services: MomentServices) {
+  const shrink = deps.shrink ?? systemShrink(deps.platform, deps.env);
+  const studio = deps.studio ? { studio: deps.studio } : {};
+  const computer = createComputerPlay({ ...studio, shrink, now: deps.now, sleep: deps.sleep });
+  // The judges' probes measure the play the play tools hold for the game.
+  const probes = createProbes(
+    { ...studio, shrink, now: deps.now, luau: deps.probeLuau ?? packageLuau },
+    computer.playing,
+  );
+  const playing =
+    (tool: EnginePlayTool): Handler =>
+    async (args, context) =>
+      computer.handlers[tool](args, await playGame(deps, services, context));
+  const probing =
+    (probe: RobloxProbe): Handler =>
+    async (args, context) =>
+      probes[probe](args, await playGame(deps, services, context));
+  return {
+    [RobloxTool.PlayOpen]: playing(EnginePlayTool.Open),
+    [RobloxTool.PlayInput]: playing(EnginePlayTool.Input),
+    [RobloxTool.PlayShot]: playing(EnginePlayTool.Shot),
+    [RobloxTool.PlayState]: playing(EnginePlayTool.State),
+    [RobloxTool.PlayPause]: playing(EnginePlayTool.Pause),
+    [RobloxTool.PlayClose]: playing(EnginePlayTool.Close),
+    [RobloxTool.PlayersState]: probing(RobloxProbe.PlayersState),
+    [RobloxTool.CheatRemotes]: probing(RobloxProbe.CheatRemotes),
+    [RobloxTool.PhoneCheck]: probing(RobloxProbe.PhoneCheck),
+  } as const satisfies Partial<Record<RobloxTool, Handler>>;
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
   const scan: ScanCache = {};
   const services = deps.moments ?? noMomentServices(deps.now);
-  const play = createComputerPlay({
-    ...(deps.studio ? { studio: deps.studio } : {}),
-    shrink: deps.shrink ?? systemShrink(deps.platform, deps.env),
-    now: deps.now,
-    sleep: deps.sleep,
-  }).handlers;
-  const playing =
-    (tool: EnginePlayTool): Handler =>
-    async (args, context) =>
-      play[tool](args, await playGame(deps, services, context));
   // A moment's tool answers only at its moments: called any other way, it says nothing.
   const atMoment =
     (handler: MomentHandler): Handler =>
@@ -720,12 +754,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.StudioState]: atMoment((ops) => studioStateAt(ops)),
     [RobloxTool.StudioCrashNote]: async (_args, context) => (context.hook ? crashAnswer() : {}),
     [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
-    [RobloxTool.PlayOpen]: playing(EnginePlayTool.Open),
-    [RobloxTool.PlayInput]: playing(EnginePlayTool.Input),
-    [RobloxTool.PlayShot]: playing(EnginePlayTool.Shot),
-    [RobloxTool.PlayState]: playing(EnginePlayTool.State),
-    [RobloxTool.PlayPause]: playing(EnginePlayTool.Pause),
-    [RobloxTool.PlayClose]: playing(EnginePlayTool.Close),
+    ...playHandlers(deps, services),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {
@@ -886,7 +915,7 @@ export function systemDeps(): RobloxDeps {
     noteWritten: services.noteWritten,
     moments: services.moments,
     studio: client,
-    helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FILE),
+    helper: path.join(PACKAGE_DIR, HELPER_FILE),
     install: { fetch: globalThis.fetch, run: systemInstallRun, tempRoot: os.tmpdir() },
     open: systemOpener,
     sleep: (ms, signal) => sleep(ms, undefined, signal ? { signal } : {}),

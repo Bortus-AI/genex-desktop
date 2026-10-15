@@ -307,6 +307,10 @@ async function buildRoblox(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/roblox", file), path.join(roblox, file));
   await cp(path.join(root, "src/plugins/roblox/skills"), path.join(roblox, "skills"), { recursive: true });
+  // The judges' briefs, and their probes' Luau beside the backend that sends it to Studio.
+  await cp(path.join(root, "src/plugins/roblox/judges"), path.join(roblox, "judges"), { recursive: true });
+  for (const file of ["cheat-remotes.luau", "phone-check.luau"])
+    await cp(path.join(root, "src/plugins/roblox", file), path.join(roblox, file));
   // New Roblox game's Baseplate, beside the backend that writes it.
   await cp(path.join(root, "src/plugins/roblox/templates"), path.join(roblox, "templates"), { recursive: true });
   // The Genex helper Set up copies into Studio's Plugins folder.

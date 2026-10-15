@@ -441,8 +441,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     const needing = roblox.tools.filter((t) => t.needs?.includes("studio")).map((t) => t.name);
     assert.deepEqual(
       needing,
-      ["load-place", ...ENGINE_PLAY_TOOLS],
-      "only the load and the play lane wait on the person; reading and exporting never do",
+      ["load-place", ...ENGINE_PLAY_TOOLS, "players-state", "cheat-remotes", "phone-check"],
+      "only the load, the play lane and the judges' probes in it wait on the person; reading and exporting never do",
     );
     for (const name of [
       "open-for-run",

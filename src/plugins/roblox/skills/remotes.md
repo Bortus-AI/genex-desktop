@@ -5,7 +5,9 @@ RemoteFunction the place holds, at any rate, with any arguments, and can read ev
 value that reaches the device. So the client only asks; the server checks and decides.
 
 Genex's cheater judge plays exactly that: it fires every remote with wrong types, out-of-range
-values and floods, and fails the change if the server's state moves. Write every handler for it.
+values and floods, and fails the change if the server's state moves. It watches each player's
+leaderstats and attributes and ServerStorage's attributes, so keep money, counts and other guarded
+state where it can see them. Write every handler for it.
 
 ## Where remotes live
 
