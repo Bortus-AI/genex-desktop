@@ -8,8 +8,8 @@ unchanged. Where it disagrees with this preface, this preface wins.
 - Studio's preview is single-player. It opens a game that uses `@genex-ai/embed-sdk` in local
   test mode (`?genex_local_test=1`): the relay gets no credential there, so `connect()` and
   `matchmake()` fail by design. Rendering, controls and feel can still be checked in the preview.
-- Check prerequisites before building online features: a package-managed project, the pinned
-  SDKs, and an authorized hosted test route. Request both SDKs in one approval with
+- Check prerequisites before building online features: the pinned SDKs and an authorized hosted
+  test route. Request both SDKs in one approval with
   `genex__package {"package":"@genex-ai/multiplayer"}` (it includes embed-sdk). After approval,
   build the game; publish a draft with
   `genex__publish {"operation":"draft"}`; wait with `genex__publish-status`; then test on the draft
@@ -18,10 +18,18 @@ unchanged. Where it disagrees with this preface, this preface wins.
   say plainly that multiplayer was not exercised.
 - Studio installs the version it pins, which satisfies the card's `^0.16.0`. Never run
   `npm i` for these packages yourself.
-- A game made from Studio's template has no `package.json` (it loads three.js through an import
-  map), and Studio has no copy of the multiplayer package for it yet. Tell the user multiplayer
-  needs a game with its own package manager and build; never copy the SDK into the game by hand.
-  Player identity, saves and leaderboards do work there (`genex-threejs-embed-auth`).
+- A game made from Studio's template has no `package.json`: it loads three.js through an import
+  map, and the same `genex__package` call maps Studio's copies of both SDKs into that map and loads
+  Studio's connect module after it, with nothing downloaded. Studio connects the game: never call
+  `initEmbed()`, skip the card's Bootstrap step, `genex.config.ts` and "Config without `genex init`"
+  below, and never write a slug. Import the rest exactly as the card shows (`waitForPlayer`,
+  `getColyseusAuth` and `getColyseusUrls` from `"@genex-ai/embed-sdk"`), in plain JavaScript: the
+  template has no TypeScript build, so leave out the card's type annotations. Its settings go in
+  `genex.json` at the game's root (`{"matchmaking": {...}}`) wherever the card says package.json's
+  `genex` field. Never copy the SDK into the game by hand.
+- A game with its own build but no `package.json` needs one first: give it one, then call
+  `genex__package`. A game's shape is never a reason to refuse multiplayer: restructure what you
+  must, and keep its single-player play working.
 
 - If approval is declined or times out, or the hosted test route is unavailable, report the
   specific blocker. Preserve local play; do not retry without changed authorization or claim
@@ -31,7 +39,8 @@ unchanged. Where it disagrees with this preface, this preface wins.
 
 Studio never runs `genex init`, so the game starts without `src/genex.config.ts` or `.env`. After
 the first draft, `genex__publish-status` reports the game's `slug`. Write the config yourself,
-then publish a new draft:
+then publish a new draft (a template game: `src/genex.config.js`, the same object without
+`as const`, imported as `./genex.config.js`):
 
 ```ts
 // src/genex.config.ts

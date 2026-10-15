@@ -15,6 +15,8 @@ licenses and terms of included third-party software.
   `@modelcontextprotocol/sdk`, `@xterm/*`, `zod` and their dependencies) keep their license
   files in the packaged `node_modules`.
 - Electron supplies its own license and Chromium notices.
+- On macOS, cua-driver (MIT) keeps its license and cua's notices under `dist/resources/cua-driver`
+  ([Vendored Cua Driver](#vendored-cua-driver-cua-driver)).
 - The TypeScript 7 compiler (Apache-2.0), `@types/node` and `undici-types` (MIT) that the
   self-edit type gate runs keep their license and notice files under `dist/resources/tsc`.
 - The Genex asset CLI (`@genex-ai/cli-demo`, MIT) and its dependencies keep their license files
@@ -57,6 +59,16 @@ authors); its license ships as `dist/resources/vendor/three-LICENSE`. The copied
 tree includes third-party libraries under their own terms, listed with their licenses in
 [three.js add-on libraries](#threejs-add-on-libraries); the Assets viewer also copies the Draco and
 Basis Universal decoders to `dist/renderer/decoders`.
+
+## Vendored Cua Driver (cua-driver)
+
+On macOS, computer control runs cua-driver 0.35.2 from [trycua/cua](https://github.com/trycua/cua)
+(MIT, Copyright (c) 2025 Cua AI, Inc.), bundled as `dist/resources/cua-driver/cua-driver`: the
+executable from cua's release, thinned to the app's architecture and signed with the app's identity
+(`scripts/vendor-cua-driver.ts`). Its license and cua's third-party notices for that release
+(code derived from trope-cua, Interface-Agent, yabai, QuickJS-ng, rquickjs and T3 Code, all MIT)
+ship beside it as `LICENSE.md` and `THIRD_PARTY_NOTICES.md`, copied from `build/cua-driver/`. The
+bundled copy runs with cua's telemetry and update check turned off.
 
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 
@@ -103,14 +115,17 @@ SOFTWARE.
 
 Zalando Sans SemiExpanded, Geist and Geist Mono are used as published under the SIL Open Font
 License 1.1 (Geist Mono as its Google Fonts Latin subset). Their OFL texts ship beside them in
-`dist/renderer/fonts`. Copies with their OFL texts in `design/genex-promo-video/public/fonts`
-render the Genex promo film.
+`dist/renderer/fonts`. Copies with their OFL texts in `design/genex-promo-video/public/fonts` and
+`design/play-publish-video/public/fonts` render the promo films.
 
-## Promo film
+## Promo films
 
-The film in `src/renderer/media` is made by Genex with Remotion, which is not bundled, from
-recordings of genex.games. One clip, `village-game.mp4`, was generated through fal.ai with Nano
-Banana Pro and Seedance 2.5 (`design/genex-promo-video/README.md`).
+The films in `src/renderer/media` are made by Genex with Remotion, which is not bundled. The
+Genex promo film is made from recordings of genex.games; one clip, `village-game.mp4`, was
+generated through fal.ai with Nano Banana Pro and Seedance 2.5 (`design/genex-promo-video/README.md`).
+The Play film, `play-publish.mp4`, shows game covers from the public genex.games gallery
+(`design/play-publish-video/README.md`); its players and its desk were made with Genex image
+generation for the film.
 
 ## Components under other terms
 
@@ -222,6 +237,58 @@ SOFTWARE.
 ## Packages without a license file
 
 These npm packages ship in the app without a license file of their own; their notices follow.
+
+### @genex-ai/embed-sdk 0.30.0
+
+Bundled into `vendor/genex/`, the player-identity SDK a game made from Studio's template maps in its import
+map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
+without a license file. The MIT terms:
+
+Copyright (c) 2026 Genex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+### @genex-ai/multiplayer 0.16.1
+
+Bundled into `vendor/genex/`, the multiplayer SDK a game made from Studio's template maps in its import
+map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
+without a license file. The MIT terms:
+
+Copyright (c) 2026 Genex
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ### github-url-to-object 4.0.6
 

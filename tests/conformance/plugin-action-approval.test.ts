@@ -42,6 +42,8 @@ function channels(review: unknown) {
   const core = {
     plugins: {
       list: () => [{ manifest, enabled: true, removed: false, source: "bundled" }],
+      // The plugin is on: every action of its is the person's to run.
+      servesAction: () => true,
       review: async () => review,
       action: async (_id: string, name: string) => {
         reached.push(name);

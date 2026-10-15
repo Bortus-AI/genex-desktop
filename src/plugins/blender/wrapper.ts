@@ -12,7 +12,8 @@
  * script reads them as `ASSET_INPUTS[label]`.
  *
  * Output contract: one line on stdout, `STUDIO_BLENDER_RESULT {json}`, with `ok`, what is in
- * the file (`meshes: [{name, polygons, triangles, materials}]`, `materials: [names]`,
+ * the file (`meshes: [{name, polygons, triangles, materials, slots}]`, where `slots` holds each
+ * material slot's `{slot, material, polygons, triangles}`, `materials: [names]`,
  * `armatures: [{name, bones}]`, `actions: [names]`, `rig`), the totals (`polygons`,
  * `triangles`, `size`, `glbBytes`, `seconds`) and the two render paths, or `ok:false` and the
  * error. Anything else Blender prints is noise the studio clips.
@@ -114,7 +115,15 @@ for o in meshes:
     ev = o.evaluated_get(depsgraph)
     me = ev.to_mesh()
     polys = len(me.polygons)
-    tris = sum(max(0, len(p.vertices) - 2) for p in me.polygons)
+    # Faces and triangles per material slot: a slot that drew nothing, or drew the wrong part, shows.
+    per_slot = {}
+    tris = 0
+    for p in me.polygons:
+        t = max(0, p.loop_total - 2)
+        tris += t
+        counted = per_slot.setdefault(p.material_index, [0, 0])
+        counted[0] += 1
+        counted[1] += t
     bx, by, bz = [], [], []
     for v in me.vertices:
         w = ev.matrix_world @ v.co
@@ -136,11 +145,22 @@ for o in meshes:
     bounds = (min(bx), max(bx), min(by), max(by), min(bz), max(bz))
     xs += [bounds[0], bounds[1]]; ys += [bounds[2], bounds[3]]; zs += [bounds[4], bounds[5]]
     per_mesh.append((volume, bounds))
+    slot_names = [slot.material.name[:60] if slot.material else None for slot in o.material_slots]
+    slot_count = max([len(slot_names)] + [index + 1 for index in per_slot])
     detail.append({
         "name": o.name[:60],
         "polygons": polys,
         "triangles": tris,
         "materials": [m.name[:60] for m in o.data.materials if m],
+        "slots": [
+            {
+                "slot": index,
+                "material": slot_names[index] if index < len(slot_names) else None,
+                "polygons": per_slot.get(index, [0, 0])[0],
+                "triangles": per_slot.get(index, [0, 0])[1],
+            }
+            for index in range(slot_count)
+        ][:MAX_LISTED],
     })
 size = [max(xs) - min(xs), max(ys) - min(ys), max(zs) - min(zs)]
 polygons = sum(d["polygons"] for d in detail)

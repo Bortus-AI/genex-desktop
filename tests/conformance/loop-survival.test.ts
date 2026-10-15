@@ -167,6 +167,8 @@ describe("the run tools each lead is offered", () => {
       "worker_steer",
       "worker_stop",
       "worker_wait",
+      // Flipped: the user's ask to finish is recorded by the lead, quoting them.
+      "wrap_up",
     ]);
   });
 
@@ -175,6 +177,8 @@ describe("the run tools each lead is offered", () => {
       "critic",
       // Flipped: the lead claims the goal through finish, which a reviewer checks.
       "finish",
+      // Flipped: a blind judge plays the game for the lead (lead-judge.ts).
+      "judge_play",
       "milestone",
       "note",
       "rebuild_unreal",

@@ -32,7 +32,7 @@ export const WorkspaceStage = memo(function WorkspaceStage({
   const { activeThreadId, room, project, activeStatus } = threadsView;
   const { games, rootLabel, runsRoot } = useStageLibrary();
   const covered = useCoveredByHome();
-  const stageVisible = room === Room.Build && !chrome.pluginsOpen && !welcoming && !covered;
+  const stageVisible = room === Room.Build && !chrome.workspaceCovered && !welcoming && !covered;
   const { beside } = views;
   const countStaged = useCallback((count: number) => app.library.setState((s) => stagedCounted(s, count), true), [app]);
   return (

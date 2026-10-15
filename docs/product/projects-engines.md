@@ -29,15 +29,15 @@ Any folder but a web game at its root (Blender files beside it allowed), Blender
 the chat's session leads the Loop in place, on Claude Code, Codex or OpenCode (others refuse). The lead keeps save points,
 starts workers (of its plugins' types, if any) and claims finish; a reviewer checks (three no's
 stop it). Plugins add steps at Genex's moments, reviewer pictures and locks: while you work in a
-plugin's editor, agents wait. Unity's plugin makes, sets up and opens the project.
+plugin's editor, agents wait. Unity makes, sets up and opens the project.
 
 ## Unreal
 
 The lead works in the open editor through the Genex editor helper, one holder at a time; while you
-play there the chat reads “Waiting for you to finish in Unreal” (a build waits 10 minutes). A
-turn saves and snapshots unsaved editor work. Rewind saves, closes and reopens Unreal; if it can't,
-files stay and the chat says why. An **Unreal plugin** project is a host project with the
-plugin in `Plugins/`; its tools build, test headless and package it.
+play there the chat reads “Waiting for you to finish in Unreal”. A turn snapshots editor work;
+Rewind saves, closes and reopens Unreal. Agents and blind judges play it with keys and the
+mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**
+project is a host project with the plugin in `Plugins/`; its tools build, test and package it.
 
 ## Live's views
 

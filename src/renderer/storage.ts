@@ -37,6 +37,14 @@ export const STORAGE_KEYS = {
   welcomed: "studio.welcomed",
   /** The Genex promo after the welcome: queued, then settled (`genex-promo.ts` owns the values). */
   genexPromo: "studio.genexPromo",
+  /** The games last opened in Play, newest first (`play/play-model.ts` owns the format). */
+  playRecent: "studio.play.recent",
+  /** Play's Genex card in the sidebar: "done" once dismissed (`play/play-model.ts` owns the value). */
+  playPromo: "studio.play.promo",
+  /** The Genex account last signed in on this Mac, for an offline start (`state/people.ts` owns the format). */
+  genexMe: "studio.genex.me",
+  /** The Genex account's balance as last read, shown while genex.games can't be reached. */
+  genexCredits: "studio.genex.credits",
   /** The developer colour tweaker: open ("1") or not. */
   colorTweakerOpen: "studio.dev.colorTweaker.open",
   /** The developer colour tweaker's drafts and place (`appearance/tweaker/tweaker-memory.ts` owns the format). */
@@ -63,6 +71,8 @@ export const storageKeyFor = {
   engineStepsDismissed: (project: string): string => `studio.engineSteps.dismissed.${project}`,
   /** The Live view last chosen for a game whose folder has more than one, as its observer key (`live-views.ts`). */
   liveView: (project: string): string => `studio.liveView.${project}`,
+  /** Set ("1") once a Genex account has met its generated avatar (`play/AvatarWelcome.tsx`). */
+  avatarWelcomed: (accountId: string): string => `studio.genex.avatarWelcomed.${accountId}`,
 } as const;
 
 /** The IndexedDB database of cover sphere stills (`ui/cover-stills.ts` owns the format). */

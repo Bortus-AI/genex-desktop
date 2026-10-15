@@ -61,7 +61,8 @@ A plugin's missing account or required setting is a global setup requirement, so
 visible even before that project's transport has been opened.
 
 Disable/remove blocks further dispatch immediately, even while the current session holds an
-older tool list. Stop aborts local connector/plugin waiting associated with that conversation.
+older tool list. Genex is the exception for what is the person's: turned off, its account,
+sign-in and Publish actions keep running, and it can't be removed ([Play](play.md)). Stop aborts local connector/plugin waiting associated with that conversation.
 An accepted remote request may continue; local cancellation does not prove remote cancellation
 or a refund. Changes to unrelated sources do not wait behind another project's session.
 
@@ -165,7 +166,15 @@ reachable. `OPENCODE_CONFIG_CONTENT` sets every permission to allow or deny, nev
 fetch, skills and other folders to a build, and lets a read-only session run only the studio bridge
 (`node .studio/bridge/tool.mjs`), which carries the studio's tools as it does for Codex. On 2.x,
 which allows any tool it has no rule for, the rules open with a deny of everything and are repeated
-on the `build` agent so the person's own agent rules cannot widen them. Compact now is refused on
+on the `build` agent so the person's own agent rules cannot widen them.
+A session with live tools (the `computer`) also gets them as a local MCP server, `studio`
+([studio-mcp-shim.ts](../src/substrate/engines/studio-mcp-shim.ts)): OpenCode starts
+`node .studio/bridge/mcp.mjs` as its own child inside the same sandbox, the shim relays each call
+over the same bridge, and a picture comes back as MCP image content the model sees inline. Both
+dialects allow `studio_*` (1.18's `run` rejects any tool it would ask about; 2.x's rules deny
+everything first); 2.x declares it under `mcp.servers` with Code Mode off. The bridge command stays
+the fallback, and `mcpTools: false` turns the server off. A blind judge (`OpenCodeAccess.Blind`)
+reads no file on either dialect. Compact now is refused on
 both: OpenCode compacts its own sessions. A provider's HTTP status in an `error` event (1.18's
 `data.statusCode`, 2.x's `status`) decides the failure kind, as for OpenRouter; a 400 or 404 for a
 picked model ends the build saying which model the provider refused and to pick another; a 403 for
@@ -254,7 +263,7 @@ not proof that every provider's sign-in flow works.
 Genex Connect advances one account flow without an extra Studio confirmation: existing browser authorization
 when required, and host-owned completion polling. Closing its panel does not discard the flow.
 An already unlocked account is leased in memory to Genex's backend and declared MCP transports;
-restarting a child does not independently reread Keychain. A successful connection/unlock records host-owned remember intent. On app restart, enabled installed plugins with that intent restore the saved encrypted credential once. Explicit re-enable or reinstall also restores that saved authorization once, without browser sign-in. A refused OS unlock remains failed until another explicit action; duplicate enable requests and status polling never retry. Explicit disconnect clears remember intent before credential deletion. Older installations establish intent on their next successful Connect/Unlock.
+restarting a child does not independently reread Keychain. A successful connection/unlock records host-owned remember intent. On app restart, enabled installed plugins with that intent (and Genex, on or off) restore the saved encrypted credential once. Explicit re-enable or reinstall also restores that saved authorization once, without browser sign-in. A refused OS unlock remains failed until another explicit action; duplicate enable requests and status polling never retry. Explicit disconnect clears remember intent before credential deletion. Older installations establish intent on their next successful Connect/Unlock.
 Studio never resets Keychain. Legitimate OS consent remains possible. On Linux, non-KDE sessions
 use the Secret Service backend and KDE keeps KWallet; without OS-backed encryption the
 connection remains locked and credentials are never stored through Electron's `basic_text` fallback.
@@ -286,6 +295,21 @@ the host's attributed tool record supplies the source.
 Codex bridge instructions use JSON for numeric/boolean plugin arguments as well as nested MCP
 schemas. String-only tools retain simple flags; validation never silently coerces a string into
 an agent's numeric or boolean request.
+
+Codex dynamic tools are an opt-in alternative to the bridge
+(`CodexEngineOptions.codexDynamicTools`, off until a live spike confirms CLI 0.159's experimental
+`dynamicTools`). With it on, a new session with live tools on CLI 0.159.0 or later runs its turn
+on `codex app-server` (`substrate/engines/codex-turns.ts`): `initialize` opts into
+`experimentalApi`, `thread/start` declares every tool the bridge would carry as a function with
+its schema, and each `item/tool/call` goes to the bridge's handler, its pictures sent inline as
+data URLs (`codex-dynamic-tools.ts`: answers capped at 12 MiB; malformed calls, undeclared tools,
+another thread's calls and arguments over 1 MiB are refused in words). Notifications are
+rewritten as `codex exec --json` events, so the log and chat read the same, and the brief is told
+its bridge commands are function tools. The sandbox and approvals are the exec turn's, as `-c`
+config and typed `thread/start`/`turn/start` params; `-c mcp_servers={}` stands in for the
+missing `--ignore-user-config`. A handshake refusal falls back to exec and the bridge for that
+turn and the engine's lifetime; resumed sessions, older CLIs and the default keep exec. The
+session's `system/init` event records `tool_delivery` (`dynamic_tools` or `file_bridge`).
 
 A read-only follow-up that leaves the game's content unchanged does not reload the preview or
 warn about an untouched empty scaffold. The bounded content stamp includes Git-ignored runtime

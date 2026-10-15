@@ -5,6 +5,7 @@
  * page, the rows and buttons they share, and the page's state (`page.ts`).
  */
 import type { JSX, RefObject } from "react";
+import { usePeople } from "../state/hooks.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LOCAL_BLENDER_PLUGIN_ID } from "../../shared/local-blender.ts";
 import type { PluginIndexView, PluginInfo } from "../../shared/plugins.ts";
@@ -134,14 +135,19 @@ function useSetupPlugin(
 }
 
 /** The line under the page title: the skill's source, the plugin's description, or what the tab is for. */
-function pageIntro(nav: Navigation, detail: PluginInfo | undefined, plugins: PluginInfo[]): string | undefined {
+function pageIntro(
+  nav: Navigation,
+  detail: PluginInfo | undefined,
+  plugins: PluginInfo[],
+  accountName: string | null,
+): string | undefined {
   const { skill } = nav;
   if (skill) {
     if (skill.provider) return skill.provider;
     if (!skill.plugin) return SKILLS_WORDS.studioTitle;
     return plugins.find((p) => p.manifest.id === skill.plugin)?.manifest.name;
   }
-  return detail ? shownIntro(detail) : TAB_INTRO[nav.tab];
+  return detail ? shownIntro(detail, accountName) : TAB_INTRO[nav.tab];
 }
 
 /** A file skill's text, read from its plugin when its page opens; an inline skill already has it. */
@@ -366,6 +372,7 @@ function PageHeading({
   onBack: () => void;
 }): JSX.Element {
   const { skill } = nav;
+  const accountName = usePeople((s) => s.me?.name ?? null);
   const inside = Boolean(detail || skill);
   const shownPlugin = detail && !skill ? detail : null;
   return (
@@ -387,7 +394,7 @@ function PageHeading({
           </div>
         )}
       </div>
-      <p className="extensions-intro">{pageIntro(nav, detail, plugins)}</p>
+      <p className="extensions-intro">{pageIntro(nav, detail, plugins, accountName)}</p>
     </>
   );
 }

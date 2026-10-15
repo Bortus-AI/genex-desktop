@@ -40,8 +40,8 @@ export const MESSAGE = {
   NotCurrent: "That upload is no longer the current one",
   OnlyDraftUpdated: "Only the draft page was updated: the public version is unchanged. Publish again to update it.",
   AllowedNewUpload: "You checked the deployment page and allowed a new upload.",
-  ConnectFirst: "Connect Genex Tools first",
-  AuthorizationExpired: "Genex authorization expired. Reconnect Genex Tools before uploading.",
+  ConnectFirst: "Connect the Genex plugin first",
+  AuthorizationExpired: "Genex authorization expired. Reconnect the Genex plugin before uploading.",
   NoHostedProject: "Genex did not create a hosted project for this game",
   NoStagingIdentity: "Upload recorded; staging identity is not yet available",
   RevisionMismatch: "Hosted staging revision does not match this upload yet",
@@ -54,8 +54,6 @@ export const MESSAGE = {
     "Publishing needs git and git-lfs on this Mac (brew install git-lfs). Studio will not let the Genex CLI install software.",
   DraftFailedTest:
     "The new build did not pass its test on the draft page, so it was not made public. Players still get the previous version.",
-  SignInNotRecorded: (shipped: string, reported: string) =>
-    `Genex does not record this build's sign-in support (shipped ${shipped}, Genex reports ${reported})`,
 } as const;
 
 /** Genex's own record of a hosted game, read by slug. `missing`: there is no hosted project. */
@@ -165,14 +163,6 @@ export function workspaceManifest(
  */
 export function publishedConnection(meta: HostedMeta, api: string): GenexConnection {
   return { slug: String(meta.slug ?? ""), apiUrl: api, dashboardOrigins: [dashboardFor(meta)] };
-}
-
-/** The sign-in support Genex records for a build, when its answer names one: compared with what shipped. */
-export function signInRecorded(shipped: string | undefined, project: { embedSdkVersion?: unknown } | undefined) {
-  const reported = project?.embedSdkVersion;
-  if (!shipped || reported === undefined) return { ok: true } as const;
-  if (reported === shipped) return { ok: true } as const;
-  return { ok: false, reported: typeof reported === "string" ? reported : "none" } as const;
 }
 
 /** A running upload with no recorded outcome that no process here owns: a restart interrupted it. */

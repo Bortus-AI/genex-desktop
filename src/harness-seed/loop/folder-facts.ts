@@ -202,3 +202,8 @@ export async function startWebIfPending(
   if (!kindPending(game)) return;
   await host.call(HostMethod.GameStart, { project, starter: ProjectStarter.Web });
 }
+
+/** Whether the studio plays a game with these facts in its engine's editor, where a judge can play it: an Unreal game. */
+export function playedInEditor(facts: readonly FactRef[] | null | undefined): boolean {
+  return (facts ?? []).some((fact) => fact.id === CoreFact.UnrealProject);
+}

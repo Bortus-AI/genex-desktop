@@ -16,6 +16,7 @@
 import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { ignoreLine } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
@@ -131,6 +132,7 @@ import { makeBackdropShader } from "./core/backdrop-generation.ts";
 import { GENEX_PLUGIN_ID, GenexCliService, genexHostPreflight, genexHostTool } from "./core/genex-cli.ts";
 import { GenexPackageService } from "./core/genex-package.ts";
 import { assertPublishable } from "./core/genex-publish.ts";
+import { GENEX_ACCOUNT_ACTIONS } from "../shared/genex.ts";
 import { GameThreadService } from "./core/game-threads.ts";
 import {
   type CoreInternals,
@@ -172,6 +174,8 @@ import { jobsRpc } from "./harness-rpc/jobs.ts";
 import { optimizationRpc } from "./harness-rpc/optimization.ts";
 import { pluginsRpc } from "./harness-rpc/plugins.ts";
 import { previewRpc } from "./harness-rpc/preview.ts";
+import { desktopRpc } from "./harness-rpc/desktop.ts";
+import { judgeRpc } from "./harness-rpc/judge.ts";
 import { runsRpc } from "./harness-rpc/runs.ts";
 import { snapshotRpc } from "./harness-rpc/snapshot.ts";
 import { hooksRpc } from "./harness-rpc/hooks.ts";
@@ -312,6 +316,8 @@ export interface StudioPaths {
 
 export interface StudioCoreOptions {
   renderGameCover?: (surface: string, seed: number) => Promise<string>;
+  /** Computer control (`desktop-control.ts`): absent where no desktop driver can be reached, and in tests. */
+  desktop?: DesktopControl;
   /** Notes each boot step as it finishes (`main/performance.ts`); a launch without diagnostics passes nothing. */
   markBoot?: (step: string) => void;
   engines?: Engine[];
@@ -489,6 +495,7 @@ export class StudioCore {
     agentsMax: DEFAULT_POOL_MAX,
     blender: true,
     autoResume: true,
+    computerControl: false,
   };
   #assetCheckpointStore?: AssetCheckpoints;
   #planReviews?: PlanReviewController;
@@ -1009,6 +1016,8 @@ export class StudioCore {
     };
     // The Unreal and Unity editor bridges are early integrations: bundled, and off until the user turns them on.
     this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, unity: false };
+    // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
+    this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {
       this.emit(UiEvent.PluginsChanged, c);
       this.#connections.changed();
@@ -1671,7 +1680,12 @@ export class StudioCore {
       next.buildersMax = clampBuilders(next.buildersMax);
       next.agentsMax = next.buildersMax + LEAD_WINDOWS;
     }
+    // Only an explicit true turns the computer over; anything else the page sends reads as off.
+    next.computerControl = next.computerControl === true;
+    const computerOff = this.#settings.computerControl && !next.computerControl;
     this.#settings = next;
+    // Turning computer control off stops every desktop session's driver now, as ⌃⌥⌘Esc does.
+    if (computerOff) await this.options.desktop?.stopAll();
     // Atomic (CQ-3): a torn write would read back as defaults at the next start. The default goes
     // beside the settings so the next start can tell a worker count someone chose from one never touched.
     const saved: SavedSettings = { ...this.#settings, buildersDefault: DEFAULT_BUILDERS };
@@ -1706,6 +1720,8 @@ export class StudioCore {
         agentsMax: buildersMax + LEAD_WINDOWS,
         blender: parsed.blender !== false,
         autoResume: parsed.autoResume !== false,
+        // Off unless the person turned it on: a file from before the switch reads as off.
+        computerControl: parsed.computerControl === true,
       };
     } catch {
       /* first launch — defaults stand */
@@ -2045,6 +2061,8 @@ export class StudioCore {
       ...engineRpc(this, this.#x),
       ...studioRpc(this, this.#x),
       ...previewRpc(this, this.#x),
+      ...desktopRpc(this, this.#x),
+      ...judgeRpc(this),
     };
     return table;
   }
@@ -2402,6 +2420,11 @@ export class StudioCore {
     ...args: Parameters<DelegationService["_computerToolsFor"]>
   ): ReturnType<DelegationService["_computerToolsFor"]> {
     return this.#delegation._computerToolsFor(...args);
+  }
+
+  /** Whether the host's own records say this run is this game's (`preview.computer`'s run check). */
+  _runOfGame(project: string, runId: string): Promise<boolean> {
+    return this.#delegation.runOfGame(project, runId);
   }
 
   _directorToolsFor(

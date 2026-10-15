@@ -180,12 +180,28 @@ export const shownName = (p: PluginInfo): string => (isRouter(p) ? GENEX_WORDS.r
 /** A waiting update as the sidebar names it: the plugin's shown name and the version, "Local Blender 1.2.0". */
 export const shownRelease = (update: PluginUpdate): string => `${shownName(update.plugin)} ${update.version}`;
 
-/** The line under a plugin's name in its row: Genex names the tools it routes; any other its own description. */
-export const shownDescription = (p: PluginInfo): string =>
-  isRouter(p) ? GENEX_WORDS.router.description : p.manifest.description;
+/**
+ * Genex's row line, in two parts (the second quieter): on, the tools it gives the agent on the
+ * person's account; off, that the agent lost them and the account kept everything else.
+ */
+export const routerLine = (p: PluginInfo): { lead: string; tail: string } =>
+  isActive(p) ? GENEX_WORDS.router.rowOn : GENEX_WORDS.router.rowOff;
 
-/** The line under a plugin's page title: Genex says what the router does; any other its own description. */
-export const shownIntro = (p: PluginInfo): string => (isRouter(p) ? GENEX_WORDS.router.intro : p.manifest.description);
+/** The line under a plugin's name in its row: Genex says what its switch does; any other its own description. */
+export function shownDescription(p: PluginInfo): string {
+  if (!isRouter(p)) return p.manifest.description;
+  const { lead, tail } = routerLine(p);
+  return `${lead} ${tail}`;
+}
+
+/**
+ * The line under a plugin's page title: Genex is the game dev tools router, connected as the account
+ * when there is one; any other its own description.
+ */
+export function shownIntro(p: PluginInfo, accountName: string | null = null): string {
+  if (!isRouter(p)) return p.manifest.description;
+  return accountName ? GENEX_WORDS.router.connectedAs(accountName) : GENEX_WORDS.router.description;
+}
 
 /** What the Marketplace shows: what the catalog offers you, or that more is coming. */
 export const MoreView = { List: "list", Soon: "soon" } as const;

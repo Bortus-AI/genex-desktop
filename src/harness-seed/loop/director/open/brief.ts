@@ -8,7 +8,7 @@
  */
 import { readdir } from "node:fs/promises";
 import path from "node:path";
-import { CoreFact } from "../../folder-facts.ts";
+import { CoreFact, playedInEditor } from "../../folder-facts.ts";
 import { HookEvent, hooksOn } from "../../hooks.ts";
 import { workingGoal } from "../../goal-prompts.ts";
 import { loopSkills } from "../../loop-skills.ts";
@@ -58,6 +58,7 @@ async function briefBase(loopRun: LoopRun, startNotes: readonly string[]): Promi
     appSaved: hooksOn(game, HookEvent.CheckpointBefore),
     restart: restartsApp(game),
     cppRestart: (gameFacts ?? []).some((fact) => fact.id === CoreFact.UnrealProject),
+    judge: playedInEditor(gameFacts),
     savePoints: open?.journal.savePoints ?? [],
     untilFinish: !durationCommission(run),
     skills: await skillsFor(loopRun),

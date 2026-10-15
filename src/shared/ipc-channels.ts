@@ -16,6 +16,9 @@
  */
 import type { StudioApi } from "./studio-api.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
+import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
+import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
+import type { StatsPeriod } from "./play-stats.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
 
@@ -154,6 +157,31 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:codex-login.browser": "codexLoginOpenBrowser",
   "studio:codex-login.retry": "codexLoginRetry",
   "studio:open-url": "openUrl",
+  "studio:play.feed": "playFeed",
+  "studio:play.shelves": "playShelves",
+  "studio:play.search": "playSearch",
+  "studio:play.remix": "playRemix",
+  "studio:play.online": "playOnline",
+  "studio:play.open": "playOpen",
+  "studio:play.close": "playClose",
+  "studio:play.control": "playControl",
+  "studio:play.me": "playMe",
+  "studio:play.rename": "playRename",
+  "studio:play.avatar": "playAvatar",
+  "studio:play.profile": "playProfile",
+  "studio:play.friends": "playFriends",
+  "studio:play.friend": "playFriend",
+  "studio:play.people": "playPeople",
+  "studio:play.visibility": "playVisibility",
+  "studio:play.avatarStyle": "playAvatarStyle",
+  "studio:play.avatarVariant": "playAvatarVariant",
+  "studio:play.stats": "playStats",
+  "studio:play.creators": "playCreators",
+  "studio:play.credits": "playCredits",
+  "studio:genex-account.read": "genexAccount",
+  "studio:genex-account.sign-in": "genexSignIn",
+  "studio:genex-account.cancel": "genexCancelSignIn",
+  "studio:genex-account.sign-out": "genexSignOut",
   "studio:notify": "notify",
   "studio:badge": "setBadge",
   "studio:rollback": "rollback",
@@ -353,6 +381,31 @@ export interface StudioInvokePayloads {
   "studio:codex-login.browser": undefined;
   "studio:codex-login.retry": { method: Arg<"codexLoginRetry", 0> };
   "studio:open-url": { url: string };
+  "studio:play.feed": Arg<"playFeed", 0>;
+  "studio:play.shelves": undefined;
+  "studio:play.search": { query: string; shelf: PlayShelf };
+  "studio:play.remix": { slug: string };
+  "studio:play.online": { slugs: string[] };
+  "studio:play.open": { slug: string };
+  "studio:play.close": undefined;
+  "studio:play.control": { control: PlayControl; at?: PlayPoint };
+  "studio:play.me": undefined;
+  "studio:play.rename": { name: string };
+  "studio:play.avatar": { webp: Uint8Array };
+  "studio:play.profile": { userId: string };
+  "studio:play.friends": undefined;
+  "studio:play.friend": FriendActionRequest;
+  "studio:play.people": { query: string };
+  "studio:play.visibility": { visibility: PresenceVisibility };
+  "studio:play.avatarStyle": { style: AvatarStyle };
+  "studio:play.avatarVariant": { variant: number };
+  "studio:play.stats": { days: StatsPeriod };
+  "studio:play.creators": undefined;
+  "studio:play.credits": undefined;
+  "studio:genex-account.read": undefined;
+  "studio:genex-account.sign-in": undefined;
+  "studio:genex-account.cancel": undefined;
+  "studio:genex-account.sign-out": undefined;
   "studio:notify": Arg<"notify", 0>;
   "studio:badge": { count: number };
   "studio:rollback": { snapshotId: string };

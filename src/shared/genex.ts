@@ -3,7 +3,7 @@ import { type CaptureSource, type StillExposure, StillMimeType } from "./preview
 
 /** The bundled Genex plugin's id: the host's own Genex surfaces (its page, the promo) look it up by this. */
 export const GENEX_PLUGIN_ID = "genex";
-/** The Genex Tools skill that teaches an agent to write a Genex plugin (`plugins_find` names it). */
+/** The Genex plugin's skill that teaches an agent to write a Genex plugin (`plugins_find` names it). */
 export const GENEX_PLUGIN_AUTHOR_SKILL = "plugin-author";
 
 /**
@@ -26,6 +26,26 @@ export const GenexAction = {
   PublishOpen: "publish-open",
   PublishBadge: "publish-badge",
 } as const;
+export type GenexAction = (typeof GenexAction)[keyof typeof GenexAction];
+
+/**
+ * The Genex actions that belong to the person's account, not the agent's tools: signing in and
+ * out, the account's status and terms, and Publish. They run while the Genex plugin is off.
+ */
+export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
+  GenexAction.Status,
+  GenexAction.Unlock,
+  GenexAction.Connect,
+  GenexAction.Terms,
+  GenexAction.Disconnect,
+  GenexAction.CancelConnect,
+  GenexAction.PublishStatus,
+  GenexAction.PublishDraft,
+  GenexAction.PublishGallery,
+  GenexAction.PublishAllowUpload,
+  GenexAction.PublishOpen,
+  GenexAction.PublishBadge,
+];
 
 /**
  * The Genex SDK packages a game may add, each at the exact version Studio installs. The agent names
@@ -49,6 +69,51 @@ export const GENEX_EMBED_VENDOR = {
   Entry: "genex/embed-sdk/index.js",
   Connect: "genex/connect.js",
 } as const;
+
+/**
+ * Where Studio's copy of `@genex-ai/multiplayer` sits under the vendor folder: its entry and its
+ * schema entry, built together so both share one copy of Colyseus's schema (a state class defined
+ * with one is unknown to the other). A template game maps both in its import map.
+ */
+export const GENEX_MULTIPLAYER_VENDOR = {
+  Dir: "genex/multiplayer",
+  Entry: "genex/multiplayer/index.js",
+  Schema: "genex/multiplayer/schema.js",
+} as const;
+
+/**
+ * What a template game's import map maps for each package, at `/vendor`: the specifiers it imports
+ * and Studio's copy of each. Multiplayer always brings player identity (`genexPackageSet`).
+ */
+export const GENEX_STUDIO_IMPORTS = {
+  "@genex-ai/embed-sdk": { "@genex-ai/embed-sdk": `/vendor/${GENEX_EMBED_VENDOR.Entry}` },
+  "@genex-ai/multiplayer": {
+    "@genex-ai/multiplayer": `/vendor/${GENEX_MULTIPLAYER_VENDOR.Entry}`,
+    "@genex-ai/multiplayer/schema": `/vendor/${GENEX_MULTIPLAYER_VENDOR.Schema}`,
+  },
+} as const satisfies Record<GenexGamePackage, Readonly<Record<string, string>>>;
+
+/** The packages a request installs: multiplayer always brings its player-identity dependency. */
+export function genexPackageSet(name: GenexGamePackage): GenexGamePackage[] {
+  return name === "@genex-ai/multiplayer" ? [name, "@genex-ai/embed-sdk"] : [name];
+}
+
+/** The import-map entries a template game needs for `name`, its dependency included. */
+export function studioSdkImports(name: GenexGamePackage): Record<string, string> {
+  return Object.assign({}, ...genexPackageSet(name).map((pkg) => GENEX_STUDIO_IMPORTS[pkg]));
+}
+
+/**
+ * The packages an import map takes from Studio's copies: each whose specifiers all map exactly to
+ * Studio's files. A Genex name mapped anywhere else (a CDN, the game's own file) turns nothing on.
+ */
+export function studioSdkPackages(imports: Readonly<Record<string, unknown>>): GenexGamePackage[] {
+  return (Object.keys(GENEX_STUDIO_IMPORTS) as GenexGamePackage[]).filter((pkg) =>
+    Object.entries(GENEX_STUDIO_IMPORTS[pkg]).every(
+      ([specifier, url]) => Object.hasOwn(imports, specifier) && imports[specifier] === url,
+    ),
+  );
+}
 /** Whether a name is one of those packages: an own key, never an inherited one. */
 export function isGenexGamePackage(name: unknown): name is GenexGamePackage {
   return typeof name === "string" && Object.hasOwn(GENEX_GAME_PACKAGES, name);

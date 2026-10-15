@@ -34,7 +34,12 @@ import {
   systemOpener,
 } from "../../src/plugins/unreal/editor-launch.ts";
 import { hotLibraryLoaded } from "../../src/plugins/unreal/cpp-module.ts";
-import { editorHoldsLog, heldProjectNames, namesInLsof } from "../../src/plugins/unreal/editor-holds.ts";
+import {
+  crashReporterHolds,
+  editorHoldsLog,
+  heldProjectNames,
+  namesInLsof,
+} from "../../src/plugins/unreal/editor-holds.ts";
 import {
   type Engine,
   HelperState,
@@ -59,7 +64,7 @@ const SECOND = 1000;
 const MINUTE = 60 * SECOND;
 const HOUR = 60 * MINUTE;
 const DOWNLOAD = "https://www.unrealengine.com/download";
-/** The tone the toolbar draws in the muted text colour: the Unreal button's word is never amber or green. */
+/** The grey tone: the Unreal button's dot for every state but Starting (amber) and Ready (green). */
 const MUTED = "info";
 /** Sent only while the editor runs; the `tell` compiles inside `run script`, so a closed Unreal never starts. */
 const QUIT_SCRIPT = [
@@ -147,6 +152,8 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     openError?: Error;
     /** Ports another app listens on. */
     listening: Set<number>;
+    /** Ports Unreal's crash reporter holds after a crash (they listen too). */
+    crashReporter?: Set<number>;
     /** What the shown project's own Unreal log says, if it has one. */
     log?: EditorLog;
     /** What other projects' own logs say, by their real `.uproject`; a project not named here has `log`. */
@@ -176,6 +183,7 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     },
     heldProjects: async () => live.held ?? [],
     portListening: async (port) => live.listening.has(port),
+    crashReporterHolds: async (port) => live.crashReporter?.has(port) ?? false,
     editorAnswers: async (port, project) => {
       asked.push(port);
       return live.answering && (live.serving === undefined || live.serving === project);
@@ -406,14 +414,24 @@ describe("Open in Unreal while it starts", () => {
     const f = await launchFixture();
     await f.act("setup", { project: f.drift });
     await f.act("open-editor", { project: f.drift });
-    assert.deepEqual(await f.toolbar(), { badge: "Starting", tone: "info", title: "Opening Drift in Unreal… 0:00" });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Starting",
+      tone: "warn",
+      dot: true,
+      title: "Opening Drift in Unreal… 0:00",
+    });
     f.live.running = true;
     f.tick(2 * MINUTE + 10 * SECOND);
-    assert.deepEqual(await f.toolbar(), { badge: "Starting", tone: "info", title: "Opening Drift in Unreal… 2:10" });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Starting",
+      tone: "warn",
+      dot: true,
+      title: "Opening Drift in Unreal… 2:10",
+    });
     const status = await f.act("status");
     assert.deepEqual([status.connection, status.opening], ["starting", { at: START, elapsedMs: 130 * SECOND }]);
     f.live.answering = true;
-    assert.deepEqual(await f.toolbar(), { badge: "Ready", tone: "info", title: "Connected to Drift." });
+    assert.deepEqual(await f.toolbar(), { badge: "Ready", tone: "ok", dot: true, title: "Connected to Drift." });
     assert.deepEqual([(await f.act("status")).connection, (await f.act("status")).opening], ["ready", null]);
   });
 
@@ -430,7 +448,12 @@ describe("Open in Unreal while it starts", () => {
     f.tick(3 * MINUTE);
     const status = await f.act("status");
     assert.deepEqual([status.connection, status.next, status.opening], ["not-open", "open-when-free", null]);
-    assert.deepEqual(await f.toolbar(), { badge: "Not open", tone: "info", title: "Drift isn't open in Unreal." });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Not open",
+      tone: "info",
+      dot: true,
+      title: "Drift isn't open in Unreal.",
+    });
     assert.equal((await f.act("open-editor", { project: f.drift })).launched, true);
   });
 
@@ -456,6 +479,7 @@ describe("Open in Unreal while it starts", () => {
     assert.deepEqual(await f.toolbar(), {
       badge: "Not open",
       tone: "info",
+      dot: true,
       title: "Unreal is open, but Drift isn't answering.",
     });
   });
@@ -766,13 +790,14 @@ describe("Get Unreal Engine", () => {
 });
 
 describe("The Unreal toolbar button", () => {
-  it("is declared on the stage strip, opens the setup panel and asks a status action that needs no confirmation", async () => {
+  it("is declared on the stage strip with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
     const manifest = validateManifest(JSON.parse(await readFile("src/plugins/unreal/plugin.json", "utf8")));
     assert.deepEqual(manifest.toolbar, [
       {
         id: "editor",
         label: "Unreal",
         ariaLabel: "Unreal Editor",
+        icon: "unreal",
         requiresProject: false,
         target: { kind: "panel", id: "setup" },
         status: "toolbar-status",
@@ -785,7 +810,7 @@ describe("The Unreal toolbar button", () => {
     }
   });
 
-  it("says Set up, Not open, Starting or Ready, in words the toolbar shows as they are", async () => {
+  it("says Set up, Not open, Starting or Ready, as dots whose words the toolbar keeps as they are", async () => {
     const f = await launchFixture();
     const states: PluginToolbarStatus[] = [await f.toolbar()];
     await f.act("setup", { project: f.drift });
@@ -796,10 +821,10 @@ describe("The Unreal toolbar button", () => {
     f.live.answering = true;
     states.push(await f.toolbar());
     assert.deepEqual(states, [
-      { badge: "Not set up", tone: "info", title: "Set up an Unreal project for Genex." },
-      { badge: "Not open", tone: "info", title: "Drift isn't open in Unreal." },
-      { badge: "Starting", tone: "info", title: "Opening Drift in Unreal… 0:00" },
-      { badge: "Ready", tone: "info", title: "Connected to Drift." },
+      { badge: "Not set up", tone: "info", dot: true, title: "Set up an Unreal project for Genex." },
+      { badge: "Not open", tone: "info", dot: true, title: "Drift isn't open in Unreal." },
+      { badge: "Starting", tone: "warn", dot: true, title: "Opening Drift in Unreal… 0:00" },
+      { badge: "Ready", tone: "ok", dot: true, title: "Connected to Drift." },
     ]);
     for (const state of states) assert.deepEqual(toolbarStatusFrom(state), state, "nothing is clipped or dropped");
   });
@@ -820,7 +845,12 @@ describe("The Unreal toolbar button", () => {
     const f = await launchFixture();
     await f.act("setup", { project: f.drift });
     f.live.answering = true;
-    assert.deepEqual(await f.toolbar(), { badge: "Not open", tone: "info", title: "Drift isn't open in Unreal." });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Not open",
+      tone: "info",
+      dot: true,
+      title: "Drift isn't open in Unreal.",
+    });
     const status = await f.act("status");
     assert.deepEqual([status.connection, status.next], ["not-open", "open"]);
   });
@@ -830,20 +860,35 @@ describe("The Unreal toolbar button", () => {
     await f.act("setup", { project: f.drift });
     await f.act("open-editor", { project: f.drift });
     f.tick(30 * SECOND);
-    assert.deepEqual(await f.toolbar(), { badge: "Not open", tone: "info", title: "Drift isn't open in Unreal." });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Not open",
+      tone: "info",
+      dot: true,
+      title: "Drift isn't open in Unreal.",
+    });
     // An editor runs, but Drift's own log never opened: Unreal has another project.
     f.live.running = true;
     f.tick(25 * MINUTE);
-    assert.deepEqual(await f.toolbar(), { badge: "Not open", tone: "info", title: "Drift isn't open in Unreal." });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Not open",
+      tone: "info",
+      dot: true,
+      title: "Drift isn't open in Unreal.",
+    });
   });
 
   it("names a chosen project that isn't set up yet", async () => {
     const f = await launchFixture();
     await f.act("status", { project: f.drift });
-    assert.deepEqual(await f.toolbar(), { badge: "Not set up", tone: "info", title: "Set up Drift for Genex." });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Not set up",
+      tone: "info",
+      dot: true,
+      title: "Set up Drift for Genex.",
+    });
   });
 
-  it("writes every state in the muted tone, never amber or green", async () => {
+  it("draws Ready green, Starting amber and every other state grey, each as a dot", async () => {
     const f = await launchFixture();
     const states: PluginToolbarStatus[] = [await f.toolbar(), await f.toolbarOf("valley")];
     await f.act("setup", { project: f.drift });
@@ -856,10 +901,16 @@ describe("The Unreal toolbar button", () => {
     f.live.answering = true;
     states.push(await f.toolbarOf("valley"));
     assert.deepEqual(
-      states.map((s) => s.badge),
-      ["Not set up", undefined, "Not open", "Starting", "Starting", "Ready"],
+      states.map((s) => [s.badge, s.tone, s.dot]),
+      [
+        ["Not set up", MUTED, true],
+        [undefined, MUTED, undefined],
+        ["Not open", MUTED, true],
+        ["Starting", "warn", true],
+        ["Starting", "warn", true],
+        ["Ready", "ok", true],
+      ],
     );
-    for (const state of states) assert.equal(state.tone, MUTED, state.badge);
   });
 
   it("is cheap: no folder scan, no disk or Xcode check, one handshake on the chosen port, no writes", async () => {
@@ -897,6 +948,7 @@ describe("The Unreal toolbar button for the open game", () => {
     assert.deepEqual(await f.toolbarOf("valley"), {
       badge: "Not open",
       tone: MUTED,
+      dot: true,
       title: "Drift isn't open in Unreal.",
     });
     assert.match((await f.toolbar()).title ?? "", /Other/, "the panel's choice is still Other");
@@ -916,7 +968,12 @@ describe("The Unreal toolbar button for the open game", () => {
     f.live.running = true;
     f.live.answering = true;
     f.live.serving = other;
-    assert.deepEqual(await f.toolbarOf("valley"), { badge: "Ready", tone: MUTED, title: "Connected to Other." });
+    assert.deepEqual(await f.toolbarOf("valley"), {
+      badge: "Ready",
+      tone: "ok",
+      dot: true,
+      title: "Connected to Other.",
+    });
   });
 
   it("says Set up, naming the project, for a game linked to one that isn't set up", async () => {
@@ -925,6 +982,7 @@ describe("The Unreal toolbar button for the open game", () => {
     assert.deepEqual(await f.toolbarOf("valley"), {
       badge: "Not set up",
       tone: MUTED,
+      dot: true,
       title: "Set up Drift for Genex.",
     });
   });
@@ -1193,7 +1251,12 @@ describe("The Unreal panel's next step", () => {
     f.live.log = loadingLog(f, 90 * SECOND);
     const status = await f.act("status", { project: f.drift });
     assert.deepEqual([status.next, status.opening], ["starting", { at: START - 90 * SECOND, elapsedMs: 90 * SECOND }]);
-    assert.deepEqual(await f.toolbar(), { badge: "Starting", tone: "info", title: "Opening Drift in Unreal… 1:30" });
+    assert.deepEqual(await f.toolbar(), {
+      badge: "Starting",
+      tone: "warn",
+      dot: true,
+      title: "Opening Drift in Unreal… 1:30",
+    });
   });
 
   for (const [name, change, next] of [
@@ -1258,6 +1321,28 @@ describe("The Unreal panel's next step", () => {
     const moved = await f.act("setup", { project: f.drift });
     assert.notEqual(moved.port, set.port);
     assert.equal((await f.act("status", { project: f.drift })).next, "open");
+  });
+
+  // A crashed editor's crash reporter keeps the project's port: Unreal crashed, which setup would not fix.
+  it("set up, Unreal closed, its crash reporter on the port: Unreal crashed, never sent to setup", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.listening.add(set.port);
+    f.live.crashReporter = new Set([set.port]);
+    const status = await f.act("status", { project: f.drift });
+    assert.deepEqual([status.next, status.portTaken], ["crashed", false]);
+    f.live.listening.delete(set.port);
+    f.live.crashReporter.clear();
+    assert.equal((await f.act("status", { project: f.drift })).next, "open", "the report closed: open it again");
+  });
+
+  it("set up, Unreal reopened while its crash reporter holds the port: Unreal crashed, not a blocked port", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.running = true;
+    f.live.log = ownLog(25 * SECOND, { openedAt: START + 5 * SECOND, portBlocked: true });
+    f.live.crashReporter = new Set([set.port]);
+    assert.equal((await f.act("status", { project: f.drift })).next, "crashed");
   });
 
   it("set up, Unreal running with another project and its port held: opens once Unreal is free, never sent to setup", async () => {
@@ -2026,6 +2111,35 @@ describe("The projects Unreal has open, by the logs its editors hold", () => {
     });
 });
 
+// A crashed editor's crash reporter inherits its sockets and keeps the project's port until it is closed.
+describe("Unreal's crash reporter holding a project's port", () => {
+  const ASK = [LSOF, ["-w", "-n", "-P", "-t", "-a", "-c", "CrashRep", "-iTCP:18090", "-sTCP:LISTEN"]];
+
+  it("is asked of lsof by the reporter's name and the port, listening only", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "37769\n" });
+    assert.equal(await crashReporterHolds(18090, "darwin", runner), true);
+    assert.deepEqual(calls, [ASK]);
+  });
+
+  it("is false when lsof finds no reporter there, and unknown when lsof can't answer", async () => {
+    assert.equal(await crashReporterHolds(18090, "darwin", lsofStandIn({ exit: 1 }).runner), false);
+    for (const answer of [{ error: "ENOENT" }, { killed: true }, { exit: 2 }])
+      assert.equal(
+        await crashReporterHolds(18090, "darwin", lsofStandIn(answer).runner),
+        undefined,
+        JSON.stringify(answer),
+      );
+  });
+
+  it("asks nothing off a Mac, or for a port Unreal can't use", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "1\n" });
+    assert.equal(await crashReporterHolds(18090, "win32", runner), undefined);
+    for (const port of [0, -1, 1.5, 70_000, Number.NaN])
+      assert.equal(await crashReporterHolds(port, "darwin", runner), undefined, String(port));
+    assert.deepEqual(calls, []);
+  });
+});
+
 describe("A project's log naming it in another spelling", () => {
   /** Drift's real project, its open log naming `named(f)`, and a project Other beside it. */
   async function spelled(named: (f: { root: string; project: string; other: string }) => Promise<string>) {
@@ -2184,6 +2298,7 @@ describe("Unreal couldn't open Genex's connection", () => {
     assert.deepEqual(await f.toolbar(), {
       badge: "Not open",
       tone: "info",
+      dot: true,
       title: "Unreal couldn't use the port Genex gave Drift. Quit Unreal and open it again from the Unreal button.",
     });
     assert.deepEqual(new Set(f.logPorts), new Set([port]), "the log is read for the project's own port");

@@ -73,7 +73,7 @@ export interface LoopCommission {
 
 /**
  * Composer Autopilot on a chat turn. Hours are the optional "stop after N hours" cap — absent
- * means run until the critics are satisfied (A2). Frames are the mood board.
+ * means run until what was asked is verified and nothing blocks it (A2). Frames are the mood board.
  */
 /** Who plans, builds and judges — one model id per job; `undefined`/"default" is the engine's own default. */
 export interface RunRoles {
@@ -173,6 +173,22 @@ export type DispatchAction =
    * message id), forwarded to the harness's worker pool for that turn. Answers with the tool's result.
    */
   | { type: "worker_tool"; threadId: string; turn: string; name: string; args: Record<string, unknown> }
+  /**
+   * A judge that plays (`judge_play`), asked for by the chat's own session after a change: one blind
+   * judge plays the game in `root` (the game folder, as the host resolved it) on a hidden window and
+   * answers `ask`, held to `goalState` when given. Answers with the judge's outcome, never throws.
+   */
+  | {
+      type: "chat_judge";
+      threadId: string;
+      project: string;
+      root: string;
+      engine: string;
+      model?: string;
+      effort?: string;
+      ask: string;
+      goalState?: string;
+    }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };
 
@@ -191,6 +207,7 @@ export const DispatchActionType = {
   AutopilotResume: "autopilot_resume",
   DirectorTool: "director_tool",
   WorkerTool: "worker_tool",
+  ChatJudge: "chat_judge",
   SkilloptStart: "skillopt_start",
   BootNotice: "boot_notice",
 } as const satisfies Record<string, DispatchAction["type"]>;
@@ -224,6 +241,8 @@ export const HarnessCapability = {
   Workers: "workers",
   /** A build whose jobs cross to or from a completion-only local engine (`crossesCompletionEngine`). */
   LocalRoles: "local-roles",
+  /** The chat's own session may ask a blind judge to play its game: the harness answers `chat_judge`. */
+  ChatJudge: "chat-judge",
 } as const;
 export type HarnessCapability = (typeof HarnessCapability)[keyof typeof HarnessCapability];
 
@@ -346,7 +365,7 @@ export interface RunSpec {
   /** observationDelays: backoff (ms) before re-trying a blind camera — a test/ops knob. */
   budgets: {
     wallClockMs: number;
-    /** The composer's ∞: run until the judge is satisfied; `wallClockMs` is then only the safety ceiling. */
+    /** The composer's ∞: run until what was asked is verified and nothing blocks it; `wallClockMs` is then only the safety ceiling. */
     untilSatisfied?: boolean;
     /** Genex credits the run's paid jobs may commit; an open Loop records 600 when none is given. */
     creditCap?: number;

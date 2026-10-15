@@ -237,7 +237,8 @@ and must stay so.
 ## Renderer
 
 **State.** Zustand domain stores in [`src/renderer/state/`](../../src/renderer/state/) (engines,
-event log, layout, library, plugins, session, threads, toasts, agent screens, command runs) are wired once by
+event log, layout, library, plugins, session, threads, toasts, agent screens, command runs,
+Play/people) are wired once by
 `createStudio(api)` in `state/studio.ts`: one `onEvent` subscription, the log poll, the bootstrap
 and the commands that span stores. The app has one instance started before React mounts, so
 StrictMode cannot subscribe twice. Components read through the selector hooks in `state/hooks.ts`
@@ -807,9 +808,8 @@ only a page's own boot failure. `validateAt` answers `loaded`, `attached` or `mi
 **Worker windows and computer use.** Every building delegation and every looking read-only session
 gets one pooled preview window for the session
 ([`src/main/core/session-port.ts`](../../src/main/core/session-port.ts)). `capture` reloads and
-photographs; `computer` ([`src/substrate/computer-tool.ts`](../../src/substrate/computer-tool.ts)) is
-the studio's own computer use with Anthropic's action vocabulary plus `camera`, `state`, `reload`
-and `console`. Headless ports render offscreen. Native input is sent and synthetic copies withheld
+photographs; `computer` is the studio's own computer use: one tool, a session referee and
+swappable targets ([computer use](../computer-use.md)). Headless ports render offscreen. Native input is sent and synthetic copies withheld
 per event type once a trusted event is seen; a mousemove always sends its synthetic copy with the
 real delta, and `game-template/src/studio.js` de-duplicates. Two pool windows are never a worker's
 (`workerWindows(max)` = max − 2, at least 1). A lease the harness takes carries its boot as `owner`

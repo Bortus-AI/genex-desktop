@@ -7,6 +7,8 @@
  */
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import { HostMethod } from "../../host-methods.ts";
+import { playedInEditor } from "../../folder-facts.ts";
+import { askJudge, JUDGE_PLAY_TOOL } from "../../judge-play.ts";
 import { minutes } from "../../time.ts";
 import { WorkerIsolation, WorkerTool } from "../../workers/contract.ts";
 import type { LoopRun } from "../loop-run.ts";
@@ -19,6 +21,9 @@ import { OpenTool, restartsApp } from "./contract.ts";
 import { openFinish } from "./finish.ts";
 import { OPEN_WORDS } from "./prompts.ts";
 import { restartTool, rewindTool, savePointTool } from "./save-point.ts";
+import { turnRoomNote, waitWithinTurn } from "./turn-room.ts";
+import { finishAsked, wrapUp } from "../wrap-up.ts";
+import { WRAP_UP_WORDS } from "../wrap-up-prompts.ts";
 
 /** The longest note Genex keeps, and its plain sentence. */
 const NOTE_CHARS = 2_000;
@@ -39,14 +44,19 @@ const LOOP_ACTS: ReadonlySet<string> = new Set<string>([
   WorkerTool.Mark,
 ]);
 
-/** Why the lead's act is refused now (the Loop paused or closing; a worker from the cap on), or null. */
-function refusedAct(loopRun: LoopRun, name: string): string | null {
+/**
+ * Why the lead's act is refused now (the Loop paused or closing; a worker once anybody asked to
+ * finish, or from the cap on), or null.
+ */
+async function refusedAct(loopRun: LoopRun, name: string): Promise<string | null> {
   if (!LOOP_ACTS.has(name)) return null;
   if (loopRun.open?.halted) return OPEN_WORDS.paused;
   const { state } = loopRun;
   const closing = state.finished || Boolean(state.finish) || closeUnderWay(state);
   if (closing) return OPEN_WORDS.ending;
-  return name === WorkerTool.Start ? capRefusesWorker(loopRun, (loopRun.open?.clock ?? Date).now()) : null;
+  if (name !== WorkerTool.Start) return null;
+  if (await finishAsked(loopRun)) return WRAP_UP_WORDS.openNoWorkers;
+  return capRefusesWorker(loopRun, (loopRun.open?.clock ?? Date).now());
 }
 
 /** A decision card on the run's feed, kept in the journal too. */
@@ -91,14 +101,28 @@ export async function openStatus(loopRun: LoopRun): Promise<AnyRecord> {
   };
 }
 
-/** A worker tool's answer from the run's pool; a reader started now is the lead's fresh look. */
+/**
+ * A worker tool's answer from the run's pool; a reader started now is the lead's fresh look, and a
+ * wait returns before the lead's turn must end (`turn-room.ts`).
+ */
 async function workerAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<unknown> {
   const open = loopRun.open;
   if (!open?.pool) return OPEN_WORDS.unknownTool(name);
+  if (name === WorkerTool.Wait) {
+    const fitted = waitWithinTurn(loopRun, args, open.clock.now());
+    const waited = await open.pool.call(name, fitted.args);
+    return fitted.endsBy === null ? waited : `${waited}\n\n${turnRoomNote(fitted.endsBy, open.clock.now())}`;
+  }
   const answered = await open.pool.call(name, args);
   if (name === WorkerTool.Start && args.isolation === WorkerIsolation.Read)
     open.journal.lastReaderAt = open.clock.now();
   return answered;
+}
+
+/** A blind judge plays the game folder in its engine's editor and answers the lead's yes/no question. */
+function judgeTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
+  const now = () => (loopRun.open?.clock ?? Date).now();
+  return askJudge({ ctx: loopRun.ctx, run: loopRun.run, root: loopRun.projectDir, now }, args);
 }
 
 /** The Loop's save points, rewinds and restarts (a restart only where a plugin restarts the project's app); null for any other tool. */
@@ -111,14 +135,16 @@ function saveAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<st
 
 /** One tool call's answer: the pool's for a worker tool, else the Loop's own. */
 async function answer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<unknown> {
-  const refused = refusedAct(loopRun, name);
+  const refused = await refusedAct(loopRun, name);
   if (refused) return refused;
   if (WORKER_TOOLS.includes(name)) return workerAnswer(loopRun, name, args);
   const saved = saveAnswer(loopRun, name, args);
   if (saved) return saved;
   if (name === DirectorTool.Note) return noteTool(loopRun, args);
+  if (name === DirectorTool.WrapUp) return wrapUp(loopRun, args);
   if (name === DirectorTool.RunStatus) return JSON.stringify(await openStatus(loopRun));
   if (name === DirectorTool.Finish) return openFinish(loopRun, args);
+  if (name === JUDGE_PLAY_TOOL && playedInEditor(loopRun.gameFacts)) return judgeTool(loopRun, args);
   // The studio asking where the lead's build lives: the game folder itself.
   if (name === DirectorTool.ResolveRoot) return loopRun.projectDir;
   return OPEN_WORDS.unknownTool(name);

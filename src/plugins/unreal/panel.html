@@ -228,6 +228,9 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
   <p id="error" class="error" role="alert"></p>
 
   <footer id="facts" class="facts">
+    <section id="ray-tracing" hidden aria-label="Ray tracing">
+      <div class="xcode-row"><p id="ray-tracing-text"></p><div class="actions"><button type="button" id="ray-tracing-off"></button></div></div>
+    </section>
     <section id="xcode" hidden aria-label="Xcode">
       <div class="xcode-row"><p id="xcode-text"></p><div id="xcode-row" class="actions" hidden><button type="button" id="xcode-act" class="external"></button></div></div>
       <div id="xcode-command-row" class="command" hidden><code id="xcode-command"></code><button type="button" id="xcode-copy">Copy</button></div>
@@ -268,6 +271,7 @@ const Action = {
   GetUnreal: "get-unreal",
   UseProject: "use-project",
   GetXcode: "get-xcode",
+  RayTracingOff: "ray-tracing-off",
 };
 /** What Get Xcode opens, as the backend names it (XcodeStep). Wire values: never rename. */
 const XcodeStep = { Install: "install", Open: "open", Downloads: "downloads" };
@@ -283,6 +287,7 @@ const Step = {
   Switch: "switch",
   NotAnswering: "not-answering",
   PortBlocked: "port-blocked",
+  Crashed: "crashed",
   OpenWhenFree: "open-when-free",
 };
 /** How long the panel waits for an action that takes longer than most; the rest get the SDK's own wait. */
@@ -397,6 +402,7 @@ const WORDS = {
   switchTo: (name) => `Switch to ${name}`,
   notAnswering: (name) => `${name} isn't answering in Unreal.`,
   portBlocked: (name) => `Unreal couldn't use the port Genex gave ${name}.`,
+  crashed: (name) => `Unreal crashed. Close its crash report window, then open ${name} again.`,
   portBusy: (name) =>
     `Another app was still using the port Genex gave ${name} as Unreal opened. If it doesn't connect, this panel offers Restart Unreal.`,
   quitToUndo: "Quit Unreal to undo setup.",
@@ -413,6 +419,9 @@ const WORDS = {
         : `Unreal ${engine} builds with Xcode ${x.supported.min} to ${x.supported.max}; this Mac has Xcode ${x.version}.`,
   },
   xcodeVersion: (version) => `Xcode ${version}`,
+  rayTracing: (name) =>
+    `Ray tracing is on in ${name}. On this Mac, Unreal can crash while Genex plays the game in the background. Lighting stays on without it.`,
+  rayTracingOff: "Turn off ray tracing",
   useHere: "Use in this game",
   linkHere: (name) => `Use ${name} in this game`,
   outsideProject: (name) => `${name} is outside this game's folder: Loops and Rewind won't reach it.`,
@@ -799,6 +808,8 @@ function stepView(s) {
       return restartStep(s, notAnsweringWords(s));
     case Step.PortBlocked:
       return restartStep(s, WORDS.portBlocked(name));
+    case Step.Crashed:
+      return { say: WORDS.crashed(name) };
     case Step.OpenWhenFree:
       return { say: `${holderWords(s)} ${WORDS.openWhenFree(name)}`, ...openLater };
     default:
@@ -816,6 +827,7 @@ const STATE = {
   [Step.Connected]: [WORDS.state.ready, Tone.Ok],
   [Step.NotAnswering]: [WORDS.state.notAnswering, Tone.Warn],
   [Step.PortBlocked]: [WORDS.state.notConnected, Tone.Err],
+  [Step.Crashed]: [WORDS.state.notConnected, Tone.Err],
   [Step.OpenWhenFree]: [WORDS.state.busy, Tone.Warn],
 };
 
@@ -975,6 +987,16 @@ function renderXcode(s, view) {
   $("xcode-act").disabled = ui.busy;
 }
 
+/** On a Mac, a shown project that ray-traces, which Unreal 5.8 can crash on behind another app: what it means, and the switch. */
+function renderRayTracing(s, view) {
+  const show = view === View.Project && s.rayTracingRisk === true && Boolean(s.project);
+  $("ray-tracing").hidden = !show;
+  if (!show) return;
+  setText($("ray-tracing-text"), WORDS.rayTracing(s.project.name));
+  setText($("ray-tracing-off"), WORDS.rayTracingOff);
+  $("ray-tracing-off").disabled = ui.busy;
+}
+
 /** Where the computer's notes go: right above the action they bear on in each view. */
 function notesAnchor(view) {
   if (view === View.Get) return $("get-steps");
@@ -1012,6 +1034,7 @@ function render() {
   if (view === View.Pick) renderPick(s);
   if (view === View.New) renderNew(s);
   if (view === View.Project && s.project) renderProject(s);
+  renderRayTracing(s, view);
   renderXcode(s, view);
   // The facts at the end go once there is none to give: no engine (Get Unreal), and nothing about Xcode.
   $("facts").hidden = !s.engine && $("xcode").hidden && !$("xcode-version").textContent;
@@ -1276,6 +1299,7 @@ $("get-unreal").onclick = () => void getUnreal();
 $("unverified-get").onclick = () => void getUnreal();
 $("use-here").onclick = () => void run(Action.UseProject);
 $("xcode-act").onclick = () => void run(Action.GetXcode, { step: $("xcode-act").dataset.step });
+$("ray-tracing-off").onclick = () => void run(Action.RayTracingOff);
 $("xcode-copy").onclick = () => void copyCommand();
 /** What the project view's primary or second button sends: its action, or the panel's own sequence. */
 async function press(button) {

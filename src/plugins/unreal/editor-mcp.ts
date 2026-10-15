@@ -56,6 +56,11 @@ import { LOOP_TOOLSET } from "./editor-queue.ts";
 import {
   OBJECT_TOOLSET,
   ObjectTool,
+  CVarTool,
+  EDITOR_APP_TOOLSET,
+  mayLiftThrottle,
+  rayTracingArgs,
+  rayTracingIn,
   readThrottleArgs,
   throttleIn,
   tookValues,
@@ -564,6 +569,12 @@ async function readThrottle(session: EditorSession): Promise<boolean | undefined
   return throttleIn(returnValue(await session.call(read)));
 }
 
+/** Whether the editor ray-traces; undefined when it can't be read. */
+async function readRayTracing(session: EditorSession): Promise<boolean | undefined> {
+  const read = toolsetCall(EDITOR_APP_TOOLSET, CVarTool.Search, rayTracingArgs());
+  return rayTracingIn(returnValue(await session.call(read)));
+}
+
 /** Sets the throttle for the editor's current run; true when the editor took it. */
 async function writeThrottle(session: EditorSession, on: boolean): Promise<boolean> {
   const write = toolsetCall(OBJECT_TOOLSET, ObjectTool.SetProperties, writeThrottleArgs(on));
@@ -590,9 +601,10 @@ function playStep(params: CallParams): PlayStep | undefined {
  * A user who already turned it off is never touched; nothing here ever blocks the call itself. Each
  * editor gets back only what was taken from it, so a call that reaches another project's editor
  * never writes that one's setting. A crash ends the editor's run and the setting with it, so a
- * crashed editor is owed nothing and its next run is lifted afresh.
+ * crashed editor is owed nothing and its next run is lifted afresh. On a Mac only an editor that
+ * says it runs without ray tracing is lifted (`mayLiftThrottle`).
  */
-function throttleKeeper() {
+function throttleKeeper(platform: NodeJS.Platform) {
   /** The endpoints of the editors whose throttle the bridge turned off and still owes back. */
   const owed = new Set<string>();
   const forget = (session: EditorSession) => {
@@ -604,6 +616,7 @@ function throttleKeeper() {
   };
   const lift = async (session: EditorSession) => {
     if (owed.has(session.endpoint.href) || (await readThrottle(session).catch(() => undefined)) !== true) return;
+    if (!mayLiftThrottle(platform, await readRayTracing(session).catch(() => undefined))) return;
     if (await writeThrottle(session, false).catch(() => false)) owed.add(session.endpoint.href);
   };
   return {
@@ -775,7 +788,8 @@ function namesLoopToolset(args: Record<string, unknown>): boolean {
  * The bridge's MCP server: Epic's meta-tools listed by Studio, each call forwarded to the editor it
  * finds while `watchCrash` watches that editor for a crash; a chosen editor that `starts` says
  * Genex is starting is waited for (without one, nothing is ever starting). `agentPlay` marks the
- * agent's own play (without one, nothing is marked).
+ * agent's own play (without one, nothing is marked). `platform` is the editor's, which decides
+ * whether a play may run unthrottled.
  */
 export function createEditorMcp(
   findProjects: FindProjects,
@@ -783,8 +797,9 @@ export function createEditorMcp(
   watchCrash: CrashWatcher = logCrashWatcher(),
   starts: StartWait = NOTHING_STARTS,
   agentPlay: AgentPlayMarker = NO_AGENT_PLAY,
+  platform: NodeJS.Platform = process.platform,
 ) {
-  const keeper = throttleKeeper();
+  const keeper = throttleKeeper(platform);
   const bridge: Bridge = { findProjects, fetchImpl, watchCrash, starts, keeper, agentPlay };
   const server = new Server({ name: "unreal-editor", version: BRIDGE_VERSION }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));

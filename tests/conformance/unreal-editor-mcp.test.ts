@@ -163,10 +163,11 @@ async function connected(
   found: Found | Project[] = [DRIFT],
   watch?: CrashWatcher,
   starts?: StartWait,
+  platform?: NodeJS.Platform,
 ) {
   const projects = Array.isArray(found) ? { chosen: found[0], setUp: found } : found;
   const logs = watch ?? logCrashWatcher(await quietHome, "darwin", POLL_MS);
-  const bridge = createEditorMcp(async () => projects, fetchImpl, logs, starts);
+  const bridge = createEditorMcp(async () => projects, fetchImpl, logs, starts, undefined, platform);
   const [local, hosted] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "studio-test", version: "1" });
   await bridge.server.connect(hosted);
@@ -427,6 +428,8 @@ const PLAY_TOOLSET = "EditorToolset.EditorAppToolset";
 function throttledEditor(
   options: {
     throttle?: boolean;
+    /** Whether the editor ray-traces (`r.RayTracing`); off unless a test says so. */
+    rayTracing?: boolean;
     refuse?: string[];
     project?: string;
     /** The editor's crash on `tool`, if this call crashes it. */
@@ -445,6 +448,8 @@ function throttledEditor(
       settings.throttle = JSON.parse(args.values).bThrottleCPUWhenNotForeground;
       return { returnValue: true };
     }
+    if (tool === "SearchCVars")
+      return { returnValue: JSON.stringify({ "r.RayTracing": { help: "", value: options.rayTracing ? 1 : 0 } }) };
     return { returnValue: null };
   }, options.project);
   const calls = () => toolCalls(unreal).map((s) => s.body.params.arguments.tool_name);
@@ -462,7 +467,7 @@ test("a play test runs at full speed behind Genex, and the user's setting comes 
   const { client, close } = await connected(unreal.fetchImpl);
   try {
     await client.callTool(play("StartPIE"));
-    assert.deepEqual(unreal.calls(), ["get_properties", "set_properties", "StartPIE"]);
+    assert.deepEqual(unreal.calls(), ["get_properties", "SearchCVars", "set_properties", "StartPIE"]);
     assert.equal(unreal.settings.throttle, false, "a background editor would otherwise play at 3 frames/s");
     const lift = unreal.seen.find((s) => s.body?.params?.arguments?.tool_name === "set_properties");
     assert.deepEqual(lift?.body.params.arguments, {
@@ -473,11 +478,11 @@ test("a play test runs at full speed behind Genex, and the user's setting comes 
 
     await client.callTool(play("CaptureEditorImage"));
     await client.callTool(play("StopPIE"));
-    assert.deepEqual(unreal.calls().slice(3), ["CaptureEditorImage", "StopPIE", "set_properties"]);
+    assert.deepEqual(unreal.calls().slice(4), ["CaptureEditorImage", "StopPIE", "set_properties"]);
     assert.equal(unreal.settings.throttle, true);
 
     await client.callTool(play("StopPIE"));
-    assert.deepEqual(unreal.calls().slice(6), ["StopPIE"], "nothing left to put back");
+    assert.deepEqual(unreal.calls().slice(7), ["StopPIE"], "nothing left to put back");
   } finally {
     await close();
   }
@@ -502,7 +507,7 @@ test("a play start that fails, or the bridge closing mid-test, puts the user's s
   try {
     const result: any = await first.client.callTool(play("StartPIE"));
     assert.equal(result.isError, true);
-    assert.deepEqual(failed.calls(), ["get_properties", "set_properties", "StartPIE", "set_properties"]);
+    assert.deepEqual(failed.calls(), ["get_properties", "SearchCVars", "set_properties", "StartPIE", "set_properties"]);
     assert.equal(failed.settings.throttle, true);
   } finally {
     await first.close();
@@ -515,6 +520,24 @@ test("a play start that fails, or the bridge closing mid-test, puts the user's s
   await second.close();
   assert.equal(abandoned.settings.throttle, true);
   assert.equal(abandoned.calls().at(-1), "set_properties");
+});
+
+// UE 5.8 on a Mac hangs the GPU rendering a ray-traced level at full speed behind another app.
+test("on a Mac, the agent's play of a ray-traced editor keeps the user's throttle; elsewhere it is lifted", async () => {
+  for (const [platform, lifted] of [
+    ["darwin", false],
+    ["win32", true],
+  ] as const) {
+    const unreal = throttledEditor({ rayTracing: true });
+    const { client, close } = await connected(unreal.fetchImpl, [DRIFT], undefined, undefined, platform);
+    try {
+      await client.callTool(play("StartPIE"));
+      assert.equal(unreal.settings.throttle, !lifted, platform);
+      assert.equal(unreal.calls().at(-1), "StartPIE", `${platform}: the play still starts`);
+    } finally {
+      await close();
+    }
+  }
 });
 
 test("the throttle setting goes back only to the editor it was taken from", async () => {
@@ -1451,6 +1474,90 @@ test("a capture outside the project's captures folder, through a link, or never 
       );
       const text = result.content.map((part: any) => part.text ?? "").join("\n");
       assert.match(text, /no image/i, label);
+    } finally {
+      await close();
+    }
+  }
+});
+
+test("a character check's pictures reach the agent as one sheet with each shot's view, beside its numbers", async () => {
+  const { captures, project } = await captureProject();
+  const files = ["idle-front", "idle-side", "walk-0"].map((name) => path.join(captures, `character-1-${name}.png`));
+  const record = path.join(captures, "character-1.json");
+  const unreal = editor(async () => {
+    for (const file of files) await writeFile(file, frame(0));
+    const frames = [{ label: "idle front" }, { label: "idle side" }, { label: "walk 0.00 s" }];
+    await writeFile(record, JSON.stringify({ frames, files }));
+    const pictures = { record, files, waitS: 60 };
+    return { returnValue: JSON.stringify({ passed: false, reasons: ["idle: arms out"], pictures }) };
+  }, project.project);
+  const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+  try {
+    const call = captureCall("character_check", {
+      mesh: "/Game/Cast/SK_Hero",
+      idle: "",
+      walk: "",
+      driver: "",
+      pictures: true,
+    });
+    const result: any = await client.callTool(call);
+    const images = result.content.filter((part: any) => part.type === "image");
+    assert.equal(images.length, 1, "one sheet");
+    const text = result.content.map((part: any) => part.text ?? "").join("\n");
+    assert.match(text, /idle: arms out/, "the numbers stay in the answer");
+    assert.match(text, /shot 0: idle front/);
+    assert.match(text, /shot 2: walk 0\.00 s/);
+  } finally {
+    await close();
+  }
+});
+
+test("a character sheet whose record or shots lie outside the captures folder is never read", async () => {
+  const { root, captures, project } = await captureProject();
+  const outside = path.join(root, "outside.png");
+  const outsideRecord = path.join(root, "outside.json");
+  await writeFile(outside, frame(7));
+  await writeFile(outsideRecord, JSON.stringify({ frames: [{ label: "idle front" }], files: [outside] }));
+  await symlink(outsideRecord, path.join(captures, "linked.json"));
+  const pointingOut = path.join(captures, "character-2.json");
+  await writeFile(pointingOut, JSON.stringify({ frames: [{ label: "idle front" }], files: [outside] }));
+  const cases = {
+    "a record elsewhere": outsideRecord,
+    "a record linked out": path.join(captures, "linked.json"),
+    "a record climbing out": path.join(captures, "..", "..", "..", "..", "outside.json"),
+    "a record that names shots elsewhere": pointingOut,
+    "not a path": 42,
+  };
+  for (const [label, record] of Object.entries(cases)) {
+    const pictures = { record, files: [outside], waitS: 1 };
+    const unreal = editor(() => ({ returnValue: JSON.stringify({ passed: true, pictures }) }), project.project);
+    const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+    try {
+      const call = captureCall("character_check", { mesh: "x", idle: "", walk: "", driver: "", pictures: true });
+      const result: any = await client.callTool(call);
+      assert.deepEqual(
+        result.content.filter((part: any) => part.type === "image"),
+        [],
+        label,
+      );
+    } finally {
+      await close();
+    }
+  }
+});
+
+test("a character check without pictures, or one refused, gets no picture", async () => {
+  const { project } = await captureProject();
+  for (const answer of [{ passed: true, reasons: [] }, { error: "mesh must be a SkeletalMesh asset" }]) {
+    const unreal = editor(() => ({ returnValue: JSON.stringify(answer) }), project.project);
+    const { client, close } = await connected(unreal.fetchImpl, [project], undefined, stillClock());
+    try {
+      const call = captureCall("character_check", { mesh: "x", idle: "", walk: "", driver: "", pictures: false });
+      const result: any = await client.callTool(call);
+      assert.deepEqual(
+        result.content.filter((part: any) => part.type === "image"),
+        [],
+      );
     } finally {
       await close();
     }

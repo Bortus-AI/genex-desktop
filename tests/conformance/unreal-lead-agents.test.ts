@@ -315,6 +315,9 @@ describe("a lead's sub-agent, started", () => {
     };
     const blender = await activateBlender({ call: host as never });
     const ctx = { project: "game", directory: dir, signal: new AbortController().signal, callId: 1, host };
+    // The agent writes its script first: Local Blender runs only a script file in the game.
+    await mkdir(path.join(dir, "assets", "src"), { recursive: true });
+    await writeFile(path.join(dir, "assets", "src", "katana-lods.py"), "import bpy\n");
     const call = blender.tool?.("model", { name: "katana-lods", inputs: input }, ctx as never) as Promise<unknown>;
     await assert.rejects(call, /^Error: ran$/, "Local Blender accepts the path and runs");
   });

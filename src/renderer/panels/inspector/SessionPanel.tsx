@@ -4,6 +4,7 @@
  * works in the game.
  */
 import type { JSX } from "react";
+import type { ProjectAsset } from "../../../shared/game-assets.ts";
 import type { RunSummary, RunTask } from "../../../shared/run-summary.ts";
 import { runIdOf } from "../../run-graph.ts";
 import type { WorkerInfo } from "../../run-graph-workers.ts";
@@ -19,10 +20,11 @@ import {
   workerStopWords,
 } from "../../run-steps.ts";
 import { stoppedWords, verdictSentence, WORKER_WORDS } from "../../words.ts";
-import { useRoundStill } from "../run-stills.ts";
+import { useRoundStill, useWorkerStill } from "../run-stills.ts";
+import { AssetThumbnail } from "../AssetThumbnail.tsx";
 import { type DetailRow, Details, Panel, Para, Quote, Row, Rows } from "./chrome.tsx";
 import { capitalise } from "./format.ts";
-import { Single } from "./pictures.tsx";
+import { IMAGE_OUTLINE, Single } from "./pictures.tsx";
 import { LiveScreen, usePartScreen } from "./screen.tsx";
 import { Status } from "./tone.tsx";
 import type { StepPanelProps } from "./types.ts";
@@ -91,11 +93,37 @@ function WorkerAbout({ step, worker }: { step: Step; worker: WorkerInfo }): JSX.
   );
 }
 
+/** A worker's delivered model or image on its card, as the Assets stage draws its thumbnail. */
+function WorkerAssetPicture({ project, asset }: { project: string; asset: ProjectAsset }): JSX.Element {
+  return (
+    <div
+      className="relative aspect-video w-full overflow-hidden rounded-[10px] bg-inset"
+      style={{ boxShadow: IMAGE_OUTLINE }}
+    >
+      <AssetThumbnail project={project} asset={asset} companions={[]} fallback={null} quiet />
+    </div>
+  );
+}
+
+/** The card's picture when no agent's screen is live: a still, else the worker's delivered model, else why there is none. */
+function StillMedia({ props, src, asset }: { props: StepPanelProps; src: string | null; asset: ProjectAsset | null }) {
+  const { step, project } = props;
+  if (!src && project && asset) return <WorkerAssetPicture project={project} asset={asset} />;
+  return (
+    <Single
+      src={src}
+      label={step.name}
+      onOpen={src ? () => props.onLight([{ path: null, src, title: step.name, caption: "" }], 0) : undefined}
+    />
+  );
+}
+
 /** The card of a part built in one session. */
 export function SessionPanel(props: StepPanelProps): JSX.Element {
   const { graph, step } = props;
   const working = step.state === StepState.Building;
-  const src = useRoundStill(graph, step.facetId, 1, null, working && graph.active);
+  const round = useRoundStill(graph, step.facetId, 1, null, working && graph.active);
+  const worker = useWorkerStill(props.project, step.picture);
   const screen = usePartScreen(props.project, runIdOf(graph), step.facetId, working && graph.active);
   return (
     <Panel
@@ -117,11 +145,7 @@ export function SessionPanel(props: StepPanelProps): JSX.Element {
             onOpen={(shown, caption) => props.onLight([{ path: null, src: shown, title: step.name, caption }], 0)}
           />
         ) : (
-          <Single
-            src={src}
-            label={step.name}
-            onOpen={src ? () => props.onLight([{ path: null, src, title: step.name, caption: "" }], 0) : undefined}
-          />
+          <StillMedia props={props} src={round ?? worker.src} asset={worker.asset} />
         )
       }
     >

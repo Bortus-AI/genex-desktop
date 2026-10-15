@@ -5,6 +5,7 @@ import { stoppedTitle } from "../../asset-making.ts";
 import type { AssetInfo } from "../../run-graph.ts";
 import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
 import { Tone } from "../../run-steps.ts";
+import { ASSET_JOB_WORDS } from "../../words.ts";
 
 /** The largest side, in pixels, of a job's thumbnail still. */
 export const ASSET_THUMB_PX = 128;
@@ -57,17 +58,22 @@ export function stoppedGroups(jobs: AssetInfo[]): Array<[string, AssetInfo[]]> {
   });
 }
 
-/** Where the run's assets have got to, in one line: failures first, then work in hand, then the game. */
+/**
+ * Where the run's assets have got to, in one line: failures first, then work in hand, then work that
+ * stopped short, then (with nothing made) work the run ended before, then the game.
+ */
 export function assetsStatus(jobs: AssetInfo[]): { text: string; tone: Tone } {
   const made = jobs.filter((job) => job.state === AssetCardState.Delivered);
   const failed = jobs.filter((job) => job.state === AssetCardState.Failed).length;
   const making = jobs.filter(isMaking).length;
   const [stopped] = stoppedGroups(jobs);
+  const unfinished = jobs.filter((job) => job.state === AssetCardState.Unfinished).length;
   const inGame = made.filter((job) => job.inGame).length;
   const known = made.filter((job) => job.inGame !== undefined).length;
   if (failed) return { text: `${failed} failed`, tone: Tone.Red };
   if (making) return { text: `Making ${making}`, tone: Tone.Accent };
   if (stopped) return { text: `${stopped[1].length} ${stopped[0].toLowerCase()}`, tone: Tone.Orange };
+  if (unfinished && !made.length) return { text: ASSET_JOB_WORDS.notFinished(unfinished), tone: Tone.Muted };
   if (!known) return { text: `${made.length} delivered`, tone: Tone.Muted };
   if (inGame === made.length) return { text: `${inGame} in game`, tone: Tone.Green };
   if (inGame) return { text: `${inGame} of ${made.length} in game`, tone: Tone.Orange };
