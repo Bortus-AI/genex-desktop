@@ -12,10 +12,10 @@
  */
 import type { JSX } from "react";
 import { useState } from "react";
-import { ProjectAssetScope } from "../../shared/game-assets.ts";
 import { GENEX_PLUGIN_ID } from "../../shared/genex.ts";
 import type { GenexCoverEntry } from "../chat-entries.ts";
 import { openBeside } from "../open-beside.ts";
+import { readGenexShot } from "../panels/plugins/genex/genex-cover-shot.ts";
 import { coverCardPublish } from "../panels/plugins/genex/genex-publish-view.ts";
 import { useGenexPublishState } from "../panels/plugins/genex/use-genex-publishing.ts";
 import { openPluginSetup } from "../plugin-setup.ts";
@@ -44,12 +44,7 @@ function rememberShot(project: string, src: string | null): void {
   }
 }
 
-/** The kept shot as an image source, read at `maxPx` (or whole), or null when there is none. */
-async function readShot(project: string, maxPx?: number): Promise<string | null> {
-  const request = { project, scope: ProjectAssetScope.GenexCover, ...(maxPx ? { maxPx } : {}) };
-  const image = await window.studio.readProjectAsset(request).catch(() => null);
-  return image ? `data:${image.mimeType};base64,${image.data}` : null;
-}
+const readShot = readGenexShot;
 
 /**
  * The game's kept shot: undefined while it is first read, null when it cannot be. A card shows the

@@ -3526,37 +3526,41 @@ export const GENEX_WORDS = {
   /** The Publish dialog on the game's stage, drawn by Studio. */
   publish: {
     title: "Publish your game",
-    intro: "It goes on Play in Genex and gets a link anyone can play in a browser.",
-    published: "Your game is live. Anyone with the link can play it.",
+    /** The line under Publish. */
+    intro: "Anyone with the link can play it.",
     /** The stage strip's own Publish, when Genex adds none: the words of Genex's button. */
     button: "Publish",
     buttonLabel: "Publish game",
-    /** The name field: what the game is listed under, and what Genex paints on its cover. */
+    /** The name on the banner: what the game is listed under, and what players see. */
     name: "Name players will see",
-    /** The game's line under its name. */
-    statusNone: "Not online yet",
-    statusDraft: "Test version online",
-    statusLive: (when: string) => (when === "now" ? "Live · updated just now" : `Live · updated ${when} ago`),
-    statusLiveUndated: "Live",
-    statusPublishing: "Publishing…",
+    rename: "Rename the game",
+    /** The banner's chip: where the game is. */
+    chipNone: "Not published",
+    chipLive: (when: string) => (when === "now" ? "Live · just now" : `Live · ${when} ago`),
+    chipLiveUndated: "Live",
+    chipFailed: "Didn't publish",
     publish: "Publish",
     publishing: "Publishing…",
     updatePublic: "Publish update",
     tryAgain: "Try again",
-    openGame: "Open game",
+    publishAgain: "Publish again",
+    openGame: "Open",
+    openGameLabel: "Open the game on Genex",
     copyLink: "Copy",
     copyLinkLabel: "Copy the game's link",
     copied: "Copied",
-    /** Beside the busy Publish: closing the dialog does not stop it. */
-    keepsGoing: "Keeps going if you close this.",
-    /** The files Publish uploads, shown on request beside Publish. */
-    files: (count: number) => (count === 1 ? "1 file" : `${count} files`),
-    filesShow: "Files to upload",
-    filesLoading: "Listing files…",
-    filesLabel: "Files Publish uploads",
-    filesLeftOut: (count: number) => `${count} left out`,
+    /** Under the busy button: closing the dialog does not stop it. */
+    keepsGoing: "You can close this. It keeps going.",
+    /** Under the busy button, once the test runs longer than usual. */
+    slow: "Taking longer than usual.",
+    /** After the name on the banner, the one moment an attempt the dialog watched goes live. */
+    isLive: "is live!",
+    /** The press that lists a game renamed right after it went live under its new name. */
+    saveName: "Save name",
+    replay: "Play the celebration again",
+    changeCover: "Change cover",
     /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
-    coverNone: "No cover yet. Genex shows a real frame of your game.",
+    coverNone: "No cover yet.",
     coverAsk: "Ask for a cover",
     coverAskLabel: "Ask for a cover in this game's chat",
     /** What that press leaves in the game's composer, for the person to send. */
@@ -3565,15 +3569,16 @@ export const GENEX_WORDS = {
     coverCard: "Genex cover",
     coverCardAlt: "This game's Genex cover",
     coverCardPublishLabel: "Publish this game",
-    failedTitle: "It didn't go online this time",
-    failedText: "Your game is safe and nothing changed. Check your internet connection and try again.",
-    failedKept: "Your game is safe, and players still get the version they had. Try again in a moment.",
-    unresolvedTitle: "Still checking whether it went online",
-    unresolvedText: "Studio couldn’t tell whether the upload reached Genex. Check again before uploading again.",
-    copyDetails: "Copy details for support",
-    detailsCopied: "Details copied",
-    checkAgain: "Check again",
-    allowUpload: "I checked — allow a new upload",
+    /** A failed attempt's one line under the banner. */
+    failedText: "Nothing changed. Try again in a moment.",
+    failedKept: "The last version is still live.",
+    sendReport: "Send report",
+    sendReportLabel: "Send this problem and the app's logs to the Genex team",
+    reportSent: "Report sent",
+    reportFailed: "Couldn't send. Try again",
+    /** What Send report posts: the game and the raw reason. */
+    reportText: (title: string, project: string, details: string) =>
+      `Publishing "${title}" (${project}) didn't work.\n\n${details}`,
     reviewTerms: "Review Genex terms",
     termsNote: "Review the updated Genex terms in your browser before publishing.",
     /** With no account: why to sign in, under the account card. */
@@ -3589,20 +3594,21 @@ export const GENEX_WORDS = {
     installing: "Installing…",
     stillWorking: "Still working — Studio hasn’t answered yet.",
     progress: "Publish progress",
-    seconds: (count: number) => `${count}s`,
-    /** What the running step is doing, by `GenexPublishPhase`. */
+    /** The busy button once the test runs longer than usual, or the outcome is not known yet. */
+    stillTesting: "Still testing",
+    /** What the running step is doing, by `GenexPublishPhase`: the busy button's words. */
     phase: {
-      checking: "Preparing your game",
-      exporting: "Preparing your game",
-      "creating-project": "Preparing your game",
+      checking: "Preparing",
+      exporting: "Preparing",
+      "creating-project": "Preparing",
       uploading: "Uploading",
       promoting: "Going live",
       listing: "Going live",
       done: "Finished",
-      "verifying-deployment": "Making sure it plays",
+      "verifying-deployment": "Testing",
       ready: "Ready to play",
-      failed: "Didn't go online",
-      unresolved: "Still checking",
+      failed: "Didn't publish",
+      unresolved: "Still testing",
     } satisfies Record<GenexPublishPhase, string>,
     /** The steps under the progress bar, by `GenexPublishStep`. */
     step: {

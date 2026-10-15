@@ -283,12 +283,13 @@ describe("settling a Genex publish whose outcome is unknown", () => {
     assert.equal((await saved()).job?.state, "failed");
   });
 
-  it("the Publish panel's 'allow a new upload' is a confirmed plugin action that settles it", async () => {
+  it("the Publish dialog's Publish again is a plugin action that settles it in one press", async () => {
     const manifest = validateManifest(
       JSON.parse(await readFile(path.join(process.cwd(), "src/plugins/genex/plugin.json"), "utf8")),
     );
     const declared = manifest.actions.find((a) => a.name === "publish-allow-upload");
-    assert.ok(declared?.confirmation, "the host asks before a new upload is allowed");
+    assert.ok(declared, "the dialog's Publish again runs it");
+    assert.equal(declared.confirmation, undefined, "a newer build is all it puts online: nothing asks again");
 
     const { server } = await hosted({ answer: "down" });
     const { genex, saved } = await tools(server.url, {

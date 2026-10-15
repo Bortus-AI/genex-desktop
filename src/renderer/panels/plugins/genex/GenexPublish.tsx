@@ -9,44 +9,51 @@
  * game has no Genex cover to send, one quiet line offers to ask its chat for one.
  */
 import type { JSX, ReactNode, RefObject } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../../../shared/duration.ts";
+import type { FeedbackDraft } from "../../../../shared/feedback.ts";
+import { gameCoverUrl } from "../../../../shared/game-cover.ts";
 import {
   GENEX_PLUGIN_ID,
   GENEX_TITLE_MAX_CHARS,
   GenexAction,
   type GenexPublishState,
 } from "../../../../shared/genex.ts";
-import type { ExportReview, PluginInfo } from "../../../../shared/plugins.ts";
+import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { GenexAccountStatus } from "../../../../shared/genex-account.ts";
 import { chatPrompt, composeInChat } from "../../../compose-in-chat.ts";
 import { MakingDrawing } from "../../../making-art.ts";
+import { prefersReducedMotion } from "../../../ui/media-queries.ts";
 import { cancelGenexSignIn, signInToGenex, useGenexSignIn } from "../../../play/use-genex-sign-in.ts";
 import { useLibrary, usePeople } from "../../../state/hooks.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
-import { GameAvatar } from "../../../ui/GameAvatar.tsx";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
+import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
 import { ACCOUNT_WORDS, GENEX_WORDS, problemWords } from "../../../words.ts";
 import { MakingArt } from "../../MakingArt.tsx";
 import { PluginApproval } from "../../PluginApproval.tsx";
+import { readGenexShot } from "./genex-cover-shot.ts";
 import { GenexAccountKind, genexAccountView } from "./genex-view.ts";
 import {
+  clock,
   GenexSetup,
   genexSetup,
+  justPublished,
   offeredTitle,
   PublishGate,
-  PublishOutcome,
   PublishStage,
   type PublishView,
   publishGate,
+  publishReport,
   publishView,
   StepState,
   type StepView,
 } from "./genex-publish-view.ts";
+import { drawRocket, ROCKET_FPS, ROCKET_FRAMES, ROCKET_GRID, rocketScene } from "./publish-rocket.ts";
 import { useGenexStatus } from "./use-genex-status.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 
@@ -54,6 +61,10 @@ const WORDS = GENEX_WORDS.publish;
 const ACCOUNT = GENEX_WORDS.account;
 /** Where the publish-open action sends the browser (the plugin's `PublishLinkTarget`). */
 const LinkTarget = { Gallery: "gallery" } as const;
+/** The celebration's canvas: 4 px a cell, drawn at half that on screen for sharp pixels. */
+const ROCKET_CANVAS_PX = 128;
+/** The longest edge the banner's picture is read at: twice the dialog's width, for sharp pixels. */
+const BANNER_PICTURE_PX = 960;
 
 /** A cancelled review or approval is the person's choice, not an error to show. */
 const CANCELLED = /Cancelled/;
@@ -71,16 +82,11 @@ function useElapsed(startedAt: string | null): number | null {
   return Math.max(0, Math.floor((now - Date.parse(startedAt)) / SECOND_MS));
 }
 
-/** The running attempt: what it is doing, for how long, and its steps as one bar with their names. */
+/** The running attempt's steps as one bar with their names; amber while it takes longer than usual. */
 function Progress({ view }: { view: PublishView }): JSX.Element {
-  const elapsed = useElapsed(view.startedAt);
   const at = view.steps.findIndex((s) => s.state === StepState.Current);
   return (
-    <div className="genex-publish-progress" aria-live="polite">
-      <div className="genex-publish-phase">
-        <span>{view.phase}</span>
-        {elapsed ? <span className="genex-publish-elapsed">{WORDS.seconds(elapsed)}</span> : null}
-      </div>
+    <div className="genex-publish-progress" data-slow={view.slow || undefined}>
       <div
         className="genex-publish-bar"
         role="progressbar"
@@ -105,52 +111,151 @@ function Progress({ view }: { view: PublishView }): JSX.Element {
   );
 }
 
+/** The celebration's canvas: plays once as it mounts and again on a press; still under reduced motion. */
+function PublishRocket(): JSX.Element {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const [run, setRun] = useState(0);
+  useEffect(() => {
+    const ctx = canvas.current?.getContext("2d");
+    if (!canvas.current || !ctx) return;
+    const cell = canvas.current.width / ROCKET_GRID;
+    const color = getComputedStyle(canvas.current).color;
+    const scene = rocketScene();
+    if (prefersReducedMotion()) {
+      drawRocket(ctx, cell, 1, scene, color);
+      return;
+    }
+    let frameId = 0;
+    const start = performance.now();
+    const loop = (now: number) => {
+      const frame = Math.min(ROCKET_FRAMES - 1, Math.floor((now - start) / (SECOND_MS / ROCKET_FPS)));
+      drawRocket(ctx, cell, frame / (ROCKET_FRAMES - 1), scene, color);
+      if (frame < ROCKET_FRAMES - 1) frameId = requestAnimationFrame(loop);
+    };
+    loop(start);
+    return () => cancelAnimationFrame(frameId);
+  }, [run]);
+  return (
+    <button type="button" className="genex-publish-rocket" aria-label={WORDS.replay} onClick={() => setRun(run + 1)}>
+      <canvas ref={canvas} width={ROCKET_CANVAS_PX} height={ROCKET_CANVAS_PX} aria-hidden />
+    </button>
+  );
+}
+
+/** The game's kept Genex cover shot for the banner: null until read, or when it has none. */
+function useBannerShot(project: string, again: unknown): string | null {
+  const [src, setSrc] = useState<string | null>(null);
+  useAsyncEffect(
+    (alive) => {
+      void readGenexShot(project, BANNER_PICTURE_PX).then((read) => {
+        if (alive()) setSrc(read);
+      });
+      return undefined;
+    },
+    [project, again],
+  );
+  return src;
+}
+
+/** The name on the banner: a press to rename it, its field while renaming, plain words while publishing. */
+function BannerName({
+  title,
+  onTitle,
+  editable,
+  live,
+}: {
+  title: string;
+  onTitle: (title: string) => void;
+  editable: boolean;
+  /** It just went live: the name is followed by "is live!". */
+  live: boolean;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const suffix = live ? <span className="genex-publish-banner-live">{WORDS.isLive}</span> : null;
+  if (!editable)
+    return (
+      <span className="genex-publish-banner-line">
+        <span className="genex-publish-banner-name" title={title}>
+          <span>{title}</span>
+        </span>
+        {suffix}
+      </span>
+    );
+  if (editing)
+    return (
+      <input
+        className="genex-publish-banner-input"
+        aria-label={WORDS.name}
+        value={title}
+        maxLength={GENEX_TITLE_MAX_CHARS}
+        spellCheck={false}
+        // biome-ignore lint/a11y/noAutofocus: the field replaces the name the person just pressed.
+        autoFocus
+        onChange={(e) => onTitle(e.target.value)}
+        onBlur={() => setEditing(false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") setEditing(false);
+        }}
+      />
+    );
+  return (
+    <span className="genex-publish-banner-line">
+      <button
+        type="button"
+        className="genex-publish-banner-name"
+        title={title}
+        aria-label={WORDS.rename}
+        onClick={() => setEditing(true)}
+      >
+        <span>{title}</span>
+        <Icon name="rename" size={14} />
+      </button>
+      {suffix}
+    </span>
+  );
+}
+
 /**
- * The game: its cover, and while nothing runs the name players will see, editable; while it
- * publishes, that name as text. Under it, where the game is.
+ * The game's banner across the dialog's top: its Genex cover (else its sphere's picture, blurred),
+ * where it is on Genex in the corner, its name at the foot, and the rocket once it just went live.
  */
-function GameLine({
+function Banner({
   project,
   title,
   onTitle,
   view,
   publishing,
+  celebrate,
 }: {
   project: string;
   title: string;
   onTitle: (title: string) => void;
   view: PublishView;
   publishing: boolean;
+  celebrate: boolean;
 }): JSX.Element {
   const game = useLibrary((s) => s.games.find((g) => g.name === project));
-  const live = view.stage === PublishStage.Public && !publishing;
+  const shot = useBannerShot(project, view.outcome);
+  const fallback = useMemo(() => gameCoverUrl(game?.cover, project), [game?.cover, project]);
   return (
-    <div className="genex-publish-game">
-      <GameAvatar cover={game?.cover} gameKey={project} className="genex-publish-cover" />
-      <div className="genex-publish-game-text">
-        {publishing ? (
-          <span className="genex-publish-title">{title}</span>
-        ) : (
-          <label className="genex-publish-name">
-            <span>{WORDS.name}</span>
-            <input
-              value={title}
-              maxLength={GENEX_TITLE_MAX_CHARS}
-              spellCheck={false}
-              onChange={(e) => onTitle(e.target.value)}
-            />
-          </label>
-        )}
-        <span className="genex-publish-status" data-live={live || undefined}>
-          {publishing ? WORDS.statusPublishing : view.status}
+    <div className="genex-publish-banner" data-shot={shot ? true : undefined}>
+      <img src={shot ?? fallback} alt="" aria-hidden draggable={false} />
+      <span className="genex-publish-banner-shade" aria-hidden />
+      {view.chip && !publishing && (
+        <span className="genex-publish-chip" data-tone={view.chip.tone}>
+          {view.chip.text}
         </span>
+      )}
+      {celebrate && <PublishRocket />}
+      <div className="genex-publish-banner-foot">
+        <BannerName title={title} onTitle={onTitle} editable={!publishing} live={celebrate} />
       </div>
     </div>
   );
 }
 
-/** The link anyone can play, with the press that copies it. */
-function LinkField({ link }: { link: string }): JSX.Element {
+/** The link anyone can play, with Copy and Open. */
+function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void; opening: boolean }): JSX.Element {
   const [copied, copy] = useCopy();
   return (
     <div className="genex-publish-link-field">
@@ -159,16 +264,10 @@ function LinkField({ link }: { link: string }): JSX.Element {
         <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
         {copied ? WORDS.copied : WORDS.copyLink}
       </Button>
-    </div>
-  );
-}
-
-/** A failed or unknown attempt, calmly: what happened and what to do. */
-function Failure({ title, text }: { title: string; text: string }): JSX.Element {
-  return (
-    <div role="status" className="genex-publish-failure">
-      <p className="genex-publish-failure-title">{title}</p>
-      <p>{text}</p>
+      <Button aria-label={WORDS.openGameLabel} busy={opening} onClick={onOpen}>
+        {WORDS.openGame}
+        <Icon name="arrow-up-right" size={14} />
+      </Button>
     </div>
   );
 }
@@ -176,30 +275,16 @@ function Failure({ title, text }: { title: string; text: string }): JSX.Element 
 /** No Genex cover to send yet: one quiet line, and the press that leaves the ask in the game's chat. */
 function CoverAsk({ onAsk }: { onAsk: () => void }): JSX.Element {
   return (
-    <div className="genex-publish-cover-ask" data-genex-cover-ask>
-      <p>{WORDS.coverNone}</p>
-      <Button aria-label={WORDS.coverAskLabel} onClick={onAsk}>
+    <p className="genex-publish-hint" data-genex-cover-ask>
+      {WORDS.coverNone}{" "}
+      <TextButton aria-label={WORDS.coverAskLabel} onClick={onAsk}>
         {WORDS.coverAsk}
-      </Button>
-    </div>
+      </TextButton>
+    </p>
   );
 }
 
-/** The exact files a Publish press uploads, and how many the export leaves out. */
-function FileList({ files }: { files: ExportReview }): JSX.Element {
-  return (
-    <div className="genex-publish-files" data-export-review>
-      <ul aria-label={WORDS.filesLabel}>
-        {files.included.map((file) => (
-          <li key={file}>{file}</li>
-        ))}
-      </ul>
-      {files.excluded.length > 0 && <p>{WORDS.filesLeftOut(files.excluded.length)}</p>}
-    </div>
-  );
-}
-
-/** A quiet text press at the footer's leading edge. */
+/** A quiet text press inside a line. */
 function TextButton({ children, ...props }: { children: ReactNode } & JSX.IntrinsicElements["button"]): JSX.Element {
   return (
     <button type="button" className="genex-publish-text-button" {...props}>
@@ -208,10 +293,34 @@ function TextButton({ children, ...props }: { children: ReactNode } & JSX.Intrin
   );
 }
 
-/** Copy the attempt's raw detail for support; reads "Details copied" for a moment. */
-function CopyDetails({ details }: { details: string }): JSX.Element {
-  const [copied, copy] = useCopy();
-  return <TextButton onClick={() => copy(details)}>{copied ? WORDS.detailsCopied : WORDS.copyDetails}</TextButton>;
+/** Send report: posts the failed attempt and the app's logs to the team, then says it went. */
+function SendReport({ report }: { report: () => FeedbackDraft }): JSX.Element {
+  const [sent, setSent] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const send = async (): Promise<void> => {
+    setBusy(true);
+    try {
+      await window.studio.sendFeedback(report());
+      setSent(true);
+    } catch {
+      setSent(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Button
+      size="default"
+      aria-label={WORDS.sendReportLabel}
+      busy={busy}
+      disabled={sent === true}
+      data-genex-publish-report={sent === true || undefined}
+      onClick={() => void send()}
+    >
+      {sent === true && <Icon name="check" size={14} className="text-green" />}
+      {(sent === true && WORDS.reportSent) || (sent === false && WORDS.reportFailed) || WORDS.sendReport}
+    </Button>
+  );
 }
 
 /**
@@ -518,36 +627,6 @@ export function GenexSetupDialog({
   );
 }
 
-/** The footer's leading edge: the files to upload, that closing does not stop it, or the details for support. */
-function Lead({
-  view,
-  publishing,
-  failure,
-  filesOpen,
-  onFiles,
-  listing,
-  fileCount,
-}: {
-  view: PublishView;
-  publishing: boolean;
-  failure: { details: string } | null;
-  filesOpen: boolean;
-  onFiles: () => void;
-  listing: boolean;
-  fileCount: number | null;
-}): JSX.Element | null {
-  if (publishing) return <span className="genex-publish-note">{WORDS.keepsGoing}</span>;
-  if (failure?.details) return <CopyDetails details={failure.details} />;
-  if (view.stage === PublishStage.Public) return null;
-  const label = (listing && WORDS.filesLoading) || (fileCount === null ? WORDS.filesShow : WORDS.files(fileCount));
-  return (
-    <TextButton aria-expanded={filesOpen} aria-busy={listing || undefined} onClick={onFiles}>
-      {label}
-      <Icon name="chevron-down" size={12} className={filesOpen ? "rotate-180" : undefined} />
-    </TextButton>
-  );
-}
-
 /** The dialog over the stage, the Genex plugin on or off. */
 export function GenexPublishDialog({
   plugin,
@@ -575,30 +654,59 @@ export function GenexPublishDialog({
       </PublishFrame>
     );
   const view = state ? publishView(state) : null;
+  if (!view)
+    return (
+      <PublishFrame intro={WORDS.intro} state={state} onClose={onClose}>
+        {record.readError ? (
+          <p role="alert" className="genex-publish-problem">
+            {record.readError}
+          </p>
+        ) : (
+          <Pending label={ACCOUNT.checking} className="genex-checking" spinner />
+        )}
+      </PublishFrame>
+    );
   return (
-    <PublishFrame intro={view?.intro ?? WORDS.intro} state={state} onClose={onClose} returnFocus={returnFocus}>
-      {!view && record.readError && (
-        <p role="alert" className="genex-publish-problem">
-          {record.readError}
-        </p>
-      )}
-      {view && (
-        <PublishBody
-          view={view}
-          record={record}
-          project={project ?? ""}
-          // A cover is the Genex plugin's to make: with it off, nobody in the chat can.
-          onAskCover={plugin.enabled ? askForCover : null}
-        />
-      )}
+    <DialogSurface
+      title={WORDS.title}
+      description={WORDS.intro}
+      onDismiss={onClose}
+      size="lg"
+      testId="genex-publish"
+      returnFocus={returnFocus}
+      headerHidden
+      className="genex-publish-dialog"
+    >
+      <PublishBody
+        view={view}
+        record={record}
+        project={project ?? ""}
+        // A cover is the Genex plugin's to make: with it off, nobody in the chat can.
+        onAskCover={plugin.enabled ? askForCover : null}
+      />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
-    </PublishFrame>
+    </DialogSurface>
   );
 }
 
+/** Whether the dialog celebrates: an attempt it watched just went live; a new press ends it. */
+function useCelebration(view: PublishView, publishing: boolean): boolean {
+  const before = useRef<PublishView | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
+  useEffect(() => {
+    if (justPublished(before.current, view)) setCelebrate(true);
+    before.current = view;
+  }, [view]);
+  useEffect(() => {
+    if (publishing) setCelebrate(false);
+  }, [publishing]);
+  return celebrate;
+}
+
 /**
- * The read record: the game and its name, the cover ask while it has no cover to send, the running
- * attempt's progress, the live link or what went wrong, the files on request, and the footer's presses.
+ * The read record: the banner with the game's name and where it is, then what the moment needs:
+ * the running attempt's progress, the celebration and link once it just went live, the link of a
+ * live game, or a failed attempt's line, and the presses.
  */
 function PublishBody({
   view,
@@ -614,64 +722,132 @@ function PublishBody({
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
-  const [filesOpen, setFilesOpen] = useState(false);
   const name = title ?? offeredTitle(record.state, gameTitle, project);
   const publishing = record.pressing === Pressing.Publish || view.running;
-  const failure = record.error ? { title: WORDS.failedTitle, text: record.error, details: record.error } : view.failure;
-  const toggleFiles = () => {
-    if (!filesOpen && !record.files) void record.listFiles();
-    setFilesOpen(!filesOpen);
-  };
+  const celebrate = useCelebration(view, publishing);
+  // A name changed after it went live is listed again by Publish update ("Save name" while celebrating).
+  const renamed = title !== null && title.trim() !== (record.state?.title ?? "") && view.stage === PublishStage.Public;
+  const failure = record.error ? { text: record.error, details: record.error } : view.failure;
+  const open = () => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery });
+  const opening = record.pressing === Pressing.Action;
+  return (
+    <div
+      className="genex-publish-body"
+      data-genex-publish-status={view.stage}
+      data-connected={record.state?.connected}
+      data-celebrating={celebrate || undefined}
+    >
+      <Banner
+        project={project}
+        title={name}
+        onTitle={setTitle}
+        view={view}
+        publishing={publishing}
+        celebrate={celebrate}
+      />
+      <div className="genex-publish-content">
+        {view.problems.map((problem) => (
+          <p key={problem} role="alert" className="genex-publish-problem">
+            {problem}
+          </p>
+        ))}
+        {view.running && <Progress view={view} />}
+        {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
+        {view.link && !publishing && <LinkField link={view.link} onOpen={open} opening={opening} />}
+        {(!celebrate || renamed) && (
+          <Presses
+            view={view}
+            record={record}
+            name={name}
+            publishing={publishing}
+            project={project}
+            label={celebrate ? WORDS.saveName : undefined}
+          />
+        )}
+        <Hint
+          view={view}
+          publishing={publishing}
+          celebrate={celebrate}
+          onAskCover={onAskCover}
+          record={record}
+          name={name}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The quiet line at the foot: that closing does not stop it, the way out of a slow test, or who can play it. */
+function Hint({
+  view,
+  publishing,
+  celebrate,
+  onAskCover,
+  record,
+  name,
+}: {
+  view: PublishView;
+  publishing: boolean;
+  celebrate: boolean;
+  onAskCover: (() => void) | null;
+  record: ReturnType<typeof usePublishRecord>;
+  name: string;
+}): JSX.Element | null {
+  const again = view.again;
+  if (publishing && view.slow)
+    return (
+      <p className="genex-publish-hint">
+        {WORDS.slow}{" "}
+        {again && (
+          <TextButton aria-label={again.ariaLabel} onClick={() => void record.publishAgain(again, name)}>
+            {again.label}
+          </TextButton>
+        )}
+      </p>
+    );
+  if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;
+  if (celebrate && onAskCover)
+    return (
+      <p className="genex-publish-hint">
+        {WORDS.intro} <TextButton onClick={onAskCover}>{WORDS.changeCover}</TextButton>
+      </p>
+    );
+  if (view.coverAsk && onAskCover) return <CoverAsk onAsk={onAskCover} />;
+  if (view.stage === PublishStage.Public || view.failure) return null;
+  return <p className="genex-publish-hint">{WORDS.intro}</p>;
+}
+
+/** The busy button's words: the step at work and the attempt's clock. */
+function BusyLabel({ view }: { view: PublishView }): JSX.Element {
+  const elapsed = useElapsed(view.startedAt);
   return (
     <>
-      {view.problems.map((problem) => (
-        <p key={problem} role="alert" className="genex-publish-problem">
-          {problem}
-        </p>
-      ))}
-      <GameLine project={project} title={name} onTitle={setTitle} view={view} publishing={publishing} />
-      {view.coverAsk && !publishing && onAskCover && <CoverAsk onAsk={onAskCover} />}
-      {view.running && <Progress view={view} />}
-      {view.link && !publishing && <LinkField link={view.link} />}
-      {failure && !publishing && <Failure title={failure.title} text={failure.text} />}
-      {filesOpen && !publishing && record.files && <FileList files={record.files} />}
-      <div className="genex-publish-actions">
-        <div className="genex-publish-lead">
-          <Lead
-            view={view}
-            publishing={publishing}
-            failure={failure}
-            filesOpen={filesOpen}
-            onFiles={toggleFiles}
-            listing={record.pressing === Pressing.Files}
-            fileCount={record.files?.included.length ?? null}
-          />
-        </div>
-        <div className="genex-publish-presses">
-          <Presses view={view} record={record} name={name} publishing={publishing} />
-        </div>
-      </div>
+      {view.phase || WORDS.publishing}
+      {elapsed !== null && <span className="genex-publish-clock">· {clock(elapsed)}</span>}
     </>
   );
 }
 
 /**
- * The presses on the footer's trailing edge. One main button: Publish (busy while it publishes),
- * Try again after a failure, Open game once live with Publish update beside it, or, while an
- * upload's outcome is unknown, Check again and the person's own word.
+ * The presses: one main button (Publish, Publish update, Try again; while it publishes, the step
+ * and its clock), Review Genex terms while they wait, and Send report beside Try again.
  */
 function Presses({
   view,
   record,
   name,
   publishing,
+  project,
+  label,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   name: string;
   publishing: boolean;
+  project: string;
+  /** The main press's words in place of the view's (Save name, for a rename right after it went live). */
+  label?: string;
 }): JSX.Element {
-  const acting = record.pressing === Pressing.Action;
   if (view.terms) {
     const terms = view.terms;
     return (
@@ -680,7 +856,7 @@ function Presses({
         size="default"
         className="genex-publish-primary"
         aria-label={terms.ariaLabel}
-        busy={acting}
+        busy={record.pressing === Pressing.Action}
         onClick={() => void record.act(terms.action)}
       >
         {terms.label}
@@ -688,52 +864,24 @@ function Presses({
       </Button>
     );
   }
-  if (view.outcome === PublishOutcome.Unresolved)
-    return (
-      <>
-        {view.extra.map((button, index) => (
-          <Button
-            key={button.label}
-            size="default"
-            variant={index === 0 ? "default" : "secondary"}
-            aria-label={button.ariaLabel}
-            busy={acting && index === 0}
-            disabled={acting && index !== 0}
-            onClick={() => void record.act(button.action, button.args ?? {})}
-          >
-            {button.label}
-          </Button>
-        ))}
-      </>
-    );
   const publish = (
     <Button
-      variant={view.link && !publishing ? "secondary" : "default"}
+      variant={publishing ? "secondary" : "default"}
       size="default"
-      className={view.link && !publishing ? undefined : "genex-publish-primary"}
+      className="genex-publish-primary"
       aria-label={view.primary.ariaLabel}
-      busy={publishing}
-      disabled={!publishing && (!view.canPublish || record.pressing !== Pressing.None)}
+      aria-busy={publishing || undefined}
+      disabled={publishing || !view.canPublish || record.pressing !== Pressing.None}
       onClick={() => void record.publish(name)}
     >
-      {publishing ? WORDS.publishing : view.primary.label}
+      {publishing ? <BusyLabel view={view} /> : (label ?? view.primary.label)}
     </Button>
   );
-  if (!view.link || publishing || view.outcome === PublishOutcome.Failed) return publish;
+  if (!view.failure || publishing) return publish;
   return (
-    <>
+    <div className="genex-publish-pair">
+      <SendReport report={() => publishReport(project, name, view)} />
       {publish}
-      {/* Hugs its label. The arrow's glyph sits inset in its box, so the label side takes the wider padding. */}
-      <Button
-        variant="default"
-        size="default"
-        className="has-[>svg]:pl-4"
-        busy={acting}
-        onClick={() => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery })}
-      >
-        {WORDS.openGame}
-        <Icon name="arrow-up-right" size={14} />
-      </Button>
-    </>
+    </div>
   );
 }

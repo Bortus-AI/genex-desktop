@@ -600,99 +600,219 @@
   gap: 20px;
   min-width: 0;
 }
-/* The game: its cover sphere beside the name players will see and where it is. */
-.genex-publish-game {
+/* Publish: the game's banner across the dialog's top, then what the moment needs under it. */
+.genex-publish-dialog {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.genex-publish-dialog > button[aria-label="Close"] {
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.32);
+  color: #fff;
+}
+.genex-publish-dialog > button[aria-label="Close"]:hover {
+  background: rgb(0 0 0 / 0.5);
+  color: #fff;
+}
+.genex-publish-dialog .genex-publish-body {
+  gap: 0;
+}
+/* The banner: the Genex cover at 16:9 (else the sphere's picture, blurred), shaded at both edges for its words. */
+.genex-publish-banner {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--inset);
+  color: #fff;
+}
+.genex-publish-banner > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: blur(18px) saturate(1.2);
+  scale: 1.2;
+}
+.genex-publish-banner[data-shot] > img {
+  filter: none;
+  scale: 1;
+}
+.genex-publish-banner-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, transparent 28%, transparent 52%, rgb(0 0 0 / 0.62) 100%);
+  pointer-events: none;
+}
+/* Where the game is, in the banner's top corner, in the dashboard cards' mono. */
+.genex-publish-chip {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding-inline: 9px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.38);
+  font: 500 12px / 16px var(--font-family-mono);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.genex-publish-chip::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.65);
+}
+.genex-publish-chip[data-tone="live"]::before {
+  background: var(--green);
+}
+.genex-publish-chip[data-tone="failed"]::before {
+  background: var(--red);
+}
+.genex-publish-banner-foot {
+  position: absolute;
+  inset-inline: 14px;
+  bottom: 12px;
+  display: flex;
+  min-width: 0;
+}
+/* The name on its own dark plate with the rename glyph inside, one line, "…" when long; "is live!" after it. */
+.genex-publish-banner-line {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 8px;
+  max-width: 100%;
   min-width: 0;
+  color: #fff;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.016em;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.45);
 }
-.genex-publish-cover.game-avatar {
-  width: 48px;
-  height: 48px;
-}
-.genex-publish-game-text {
-  display: grid;
-  flex: 1;
-  gap: 4px;
+.genex-publish-banner-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  padding: 3px 10px;
+  border-radius: 10px;
+  background: rgb(0 0 0 / 0.42);
+  color: #fff;
+  font: inherit;
+  text-align: start;
 }
-.genex-publish-name {
-  display: grid;
-  gap: 6px;
-  color: var(--ink-3);
-  font-size: 13px;
-  line-height: 20px;
-}
-.genex-publish-name input {
-  height: 40px;
+.genex-publish-banner-name > span {
   min-width: 0;
-  padding-inline: 12px;
-  border-radius: var(--radius-control);
-  background: var(--field);
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 500;
-  outline: none;
-}
-.genex-publish-name input:focus-visible {
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-}
-.genex-publish-title {
   overflow: hidden;
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 22px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.genex-publish-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-3);
-  font-size: 13px;
-  line-height: 20px;
-}
-.genex-publish-status[data-live]::before {
-  content: "";
-  width: 6px;
-  height: 6px;
+.genex-publish-banner-live {
   flex: none;
-  border-radius: 999px;
-  background: var(--green);
 }
-/* No Genex cover to send yet: one quiet line, its press at the trailing edge. */
-.genex-publish-cover-ask {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+button.genex-publish-banner-name {
+  cursor: pointer;
+  transition: background var(--duration-quick);
+}
+button.genex-publish-banner-name:hover {
+  background: rgb(0 0 0 / 0.6);
+}
+.genex-publish-banner-name > svg {
+  flex: none;
+  opacity: 0.8;
+}
+.genex-publish-banner-name:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.genex-publish-banner-input {
+  width: 100%;
+  height: 34px;
+  padding-inline: 10px;
+  border-radius: var(--radius-control);
+  background: rgb(0 0 0 / 0.45);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  outline: 2px solid rgb(255 255 255 / 0.7);
+}
+/* The celebration flies over the banner, in white pixels. */
+.genex-publish-rocket {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  translate: -50% 0;
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+}
+.genex-publish-rocket canvas {
+  display: block;
+  width: 72px;
+  height: 72px;
+  image-rendering: pixelated;
+}
+.genex-publish-rocket:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+.genex-publish-content {
+  display: grid;
   gap: 12px;
-  color: var(--ink-3);
-  font-size: 13px;
-  line-height: 20px;
-}
-.genex-publish-cover-ask p {
+  padding: 16px 20px 18px;
   min-width: 0;
 }
-/* The running attempt: what it does now, its clock, and its steps as one bar with their names. */
+.genex-publish-content > * {
+  min-width: 0;
+}
+/* The quiet line at the foot: who can play it, that closing does not stop it, or a way out. */
+.genex-publish-hint {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+}
+.genex-publish-hint .genex-publish-text-button {
+  font-family: inherit;
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+}
+/* The busy button: the step at work, then its clock. */
+.genex-publish-clock {
+  margin-inline-start: 6px;
+  color: var(--ink-3);
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+/* While it publishes the main press is its status: readable, not greyed out. */
+.genex-publish-primary[aria-busy]:disabled {
+  opacity: 1;
+  color: var(--ink-2);
+}
+/* Send report beside Try again, at its height. */
+.genex-publish-pair {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+}
+.genex-publish-pair > button {
+  height: 40px;
+}
+/* The running attempt: its steps as one bar with their names; amber once it takes longer than usual. */
 .genex-publish-progress {
   display: grid;
   gap: 8px;
-}
-.genex-publish-phase {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 20px;
-}
-.genex-publish-elapsed {
-  color: var(--ink-3);
-  font: 12px / 20px var(--font-family-mono);
-  font-variant-numeric: tabular-nums;
 }
 .genex-publish-bar,
 .genex-publish-steps {
@@ -735,7 +855,13 @@
 .genex-publish-steps span[data-state="current"] {
   color: var(--ink);
 }
-/* The link anyone can play, in a field with its Copy. */
+.genex-publish-progress[data-slow] .genex-publish-bar span[data-state="current"] {
+  background: color-mix(in oklab, var(--orange) 45%, var(--line-strong));
+}
+.genex-publish-progress[data-slow] .genex-publish-bar span[data-state="current"]::after {
+  background: linear-gradient(90deg, transparent, var(--orange), transparent);
+}
+/* The link anyone can play, in a field with Copy and Open. */
 .genex-publish-link-field {
   display: flex;
   align-items: center;
@@ -744,6 +870,15 @@
   padding-inline: 14px 6px;
   border-radius: var(--radius-control);
   background: var(--field);
+}
+/* Copy and Open sit on their own fill, apart from the link. */
+.genex-publish-link-field > button {
+  flex: none;
+  height: 32px;
+  background: var(--hover);
+}
+.genex-publish-link-field > button:hover {
+  background: var(--hover-2);
 }
 .genex-publish-link-field > span {
   flex: 1;
@@ -754,37 +889,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* A failed or unknown attempt: plain words in ink, never an alarm. */
+/* A failed attempt: one line in ink, never an alarm. */
 .genex-publish-failure {
-  display: grid;
-  gap: 4px;
-  color: var(--ink-3);
+  overflow: hidden;
+  color: var(--ink-2);
   font-size: 14px;
   line-height: 20px;
-}
-.genex-publish-failure-title {
-  color: var(--ink);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 22px;
-}
-/* The files a Publish press uploads, on request. */
-.genex-publish-files {
-  display: grid;
-  gap: 6px;
-  color: var(--ink-3);
-  font-size: 12px;
-  line-height: 18px;
-}
-.genex-publish-files ul {
-  max-height: 160px;
-  overflow: auto;
-  padding: 8px 12px;
-  border-radius: 10px;
-  background: var(--inset);
-  color: var(--ink-2);
-  font-family: var(--font-family-mono);
-  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .genex-publish-ask,
 .genex-publish-problem,
@@ -898,9 +1010,10 @@
   gap: 8px;
   margin-inline-start: auto;
 }
-/* The main press keeps one width through Publish, Publishing… and Try again. */
+/* The main press spans the dialog through Publish, its busy steps and Try again. */
 .genex-publish-primary {
-  min-width: 148px;
+  width: 100%;
+  height: 40px;
 }
 .genex-publish-text-button {
   display: inline-flex;
