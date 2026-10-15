@@ -5873,18 +5873,22 @@ a:focus-visible {
 /* A plugin's card is a short tile: its picture small in the bottom right, its name at the left. */
 .mention-card[data-mention-option] {
   aspect-ratio: auto;
-  height: 64px;
+  height: 68px;
 }
 .mention-card[data-mention-option] .mention-card-icon {
-  place-items: end;
-  padding: 10px;
+  place-items: center end;
+  padding: 0 14px;
+}
+/* The name stops short of the picture, so the two never touch. */
+.mention-card[data-mention-option] .mention-card-title {
+  right: 68px;
 }
 .mention-card[data-mention-option] .mention-card-icon > * {
   margin: 0;
 }
 .mention-card-icon .extension-icon {
-  width: 26px;
-  height: 26px;
+  width: 40px;
+  height: 40px;
 }
 .mention-shelf-label {
   margin: 0;
