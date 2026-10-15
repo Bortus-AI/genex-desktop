@@ -44,7 +44,7 @@ const STACK_FACE = 24;
 const PLATE_FACE = 28;
 /** The placeholders' ids: each draws its own grey face. */
 const GHOSTS = ["ghost-a", "ghost-b"] as const;
-/** The signed-out plate's own face: a full-colour generated avatar with faint eyes, the same one every time. */
+/** The signed-out plate's own face: the Galaxy generated avatar, quiet (faint eyes, dim stars), the same one every time. */
 const SIGNED_OUT_FACE = avatarRecipe("sign-in");
 
 /** "July 2026": when an account was made, as a profile says it. */
@@ -185,7 +185,7 @@ function OfflineSlot(): JSX.Element {
 function FaceSlot({ waiting = false }: { waiting?: boolean }): JSX.Element {
   return (
     <span className="plate-slot" aria-hidden="true">
-      <GeneratedAvatar recipe={SIGNED_OUT_FACE} size={PLATE_FACE} full faint />
+      <GeneratedAvatar recipe={SIGNED_OUT_FACE} size={PLATE_FACE} full quiet />
       {waiting && <span className="plate-slot-spin" />}
     </span>
   );

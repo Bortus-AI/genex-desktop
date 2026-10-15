@@ -42,7 +42,7 @@ export function GeneratedAvatar({
   size,
   full,
   ghost = false,
-  faint = false,
+  quiet = false,
   flat = false,
   motion = AvatarMotion.Hover,
 }: {
@@ -50,8 +50,8 @@ export function GeneratedAvatar({
   size: number;
   full: boolean;
   ghost?: boolean;
-  /** Eyes in their own colour, nearly see-through (the painter's `faint`). */
-  faint?: boolean;
+  /** A face that stays in the background (the painter's `quiet`): faint eyes, dim stars. */
+  quiet?: boolean;
   /** Drawn as genex.games' link previews draw it: the body a 2D still, never on the GPU. */
   flat?: boolean;
   motion?: AvatarMotion;
@@ -61,7 +61,7 @@ export function GeneratedAvatar({
   const body = useRef<HTMLCanvasElement>(null);
   const front = useRef<HTMLCanvasElement>(null);
   const handle = useRef<AvatarHandle | null>(null);
-  const look = { recipe, size, full, ghost, faint, flat };
+  const look = { recipe, size, full, ghost, quiet, flat };
   const shown = useRef(look);
   shown.current = look;
   // The painter holds the canvases for the avatar's life; a change of look is a `set` below.
@@ -78,8 +78,8 @@ export function GeneratedAvatar({
     };
   }, [full, flat]);
   useEffect(() => {
-    handle.current?.set({ recipe, size, full, ghost, faint, flat });
-  }, [recipe, size, full, ghost, faint, flat]);
+    handle.current?.set({ recipe, size, full, ghost, quiet, flat });
+  }, [recipe, size, full, ghost, quiet, flat]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new `full` is a new handle to set going
   useEffect(() => {
     handle.current?.animate(motion === AvatarMotion.Live);

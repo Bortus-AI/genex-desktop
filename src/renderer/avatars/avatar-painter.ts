@@ -20,6 +20,7 @@ import {
   onBodyGpuLost,
   releaseBodyCanvas,
 } from "./body-gpu.ts";
+import { BRIGHT_STARS, type StarLook } from "./body-shader.ts";
 import { drawStillBody } from "./body-still.ts";
 import { type AvatarFrame, type Ctx2D, openness } from "./draw-kit.ts";
 import { drawEyes } from "./eyes.ts";
@@ -42,8 +43,10 @@ const MAX_BODY_PIXELS = 384;
 /** Where the body sits in a box with room for gear: 80% wide, a little low, so horns fit above. */
 const GEAR_BODY_SHARE = 0.4;
 const GEAR_BODY_DROP = 0.55;
-/** How strongly eyes show: in full, on a placeholder, and faint (there when you look for them). */
-const EYE_ALPHA = { Full: 1, Ghost: 0.5, Faint: 0.22 } as const;
+/** How strongly eyes show: in full, on a placeholder, and on a quiet face (there when you look for them). */
+const EYE_ALPHA = { Full: 1, Ghost: 0.5, Quiet: 0.22 } as const;
+/** A quiet galaxy's stars: dim, in the palette's blue. */
+const QUIET_STARS: StarLook = { strength: 0.4, tint: 1 };
 
 /** What an avatar draws. */
 export interface AvatarLook {
@@ -54,8 +57,11 @@ export interface AvatarLook {
   full: boolean;
   /** A placeholder: its eyes drawn at half strength. */
   ghost: boolean;
-  /** Eyes in their own colour but nearly see-through: a face that is there when you look for it. */
-  faint: boolean;
+  /**
+   * A face that stays in the background: eyes in their own colour but nearly see-through, and a
+   * galaxy's stars dimmed to its blue. It is there when you look for it.
+   */
+  quiet: boolean;
   /**
    * Drawn the way genex.games' link previews draw it, with the body as a 2D still and never on the
    * GPU: a preview of that picture must show the same face.
@@ -185,7 +191,7 @@ function fit(canvas: HTMLCanvasElement, pixels: number, css: number, at: { left:
 
 /** How strongly a look's eyes show. */
 function eyeAlpha(look: AvatarLook): number {
-  if (look.faint) return EYE_ALPHA.Faint;
+  if (look.quiet) return EYE_ALPHA.Quiet;
   return look.ghost ? EYE_ALPHA.Ghost : EYE_ALPHA.Full;
 }
 
@@ -221,7 +227,13 @@ function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
     drawStillBody(surface.ctx, look.recipe, bodyPixels);
     return null;
   }
-  return { canvas: surface.gpu, recipe: look.recipe, t, pixels: bodyPixels };
+  return {
+    canvas: surface.gpu,
+    recipe: look.recipe,
+    t,
+    pixels: bodyPixels,
+    stars: look.quiet ? QUIET_STARS : BRIGHT_STARS,
+  };
 }
 
 /** One frame: move the clocks of avatars that run, then paint this frame's share. */
