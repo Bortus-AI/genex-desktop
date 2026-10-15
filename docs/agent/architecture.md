@@ -143,11 +143,6 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
 - **A Genex CLI run opens `api.genex.games` to every sandboxed process** for its length, the
   same way. Other processes hold no Genex token (it reaches only the CLI's preload, on stdin), so
   they reach the API but not as the user.
-- **The asset adapter still runs the pinned CLI with the user's real `HOME`** (`adapter.ts`
-  asset commands). The CLI's legacy cleanup therefore deletes `genex-*` entries under
-  `~/.claude/skills`, `~/.codex/skills` and `~/.cursor/skills` (and two legacy `~/.claude` files)
-  on a `genex__asset` call. `genex__cli` and publishing already use a contained `HOME`; giving
-  asset runs one is a follow-up.
 - **Windows sandbox residuals** are listed in [Windows sandbox](../windows-sandbox.md#residual-risks).
 - **A command a reply offers runs outside the sandbox.** Run starts the agent-written line with the
   user's own permissions. Only one visible line without control characters is accepted; a
@@ -916,7 +911,9 @@ and stored `secret:` values as `secrets`, so the connection redacts them from wh
 **Genex.** The bundled Genex plugin
 ([`src/plugins/genex/`](../../src/plugins/genex/)) runs the restricted asset adapter (`adapter.ts`)
 in its backend; the pinned CLI owns quotes, locking, reservations and the credit ledger. Job state
-lives under `engine-homes/genex/projects/<project>`. Arguments are arrays; operations, inputs and
+lives under `engine-homes/genex/projects/<project>`, whose `home/` is the CLI's `HOME`: the CLI
+removes `genex-*` skills from the agent folders under its `HOME` before each command, so that is
+never the user's. Arguments are arrays; operations, inputs and
 destinations are validated; hosted initialization, domains and billing administration stay hidden.
 The CLI environment starts from scratch (`genexCliEnv`, telemetry off). The creator MCP
 (`creator-mcp.ts`) connects only to `https://mcp.genex.games/mcp`; `genex blender mcp` is the
