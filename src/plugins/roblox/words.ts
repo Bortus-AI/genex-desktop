@@ -9,6 +9,9 @@ export const shortVersion = (version: string) => version.split(".").slice(0, 2).
 /** How the steps card counts its open steps: in words, up to the five it holds. */
 const COUNT_WORDS = ["", "One", "Two", "Three", "Four", "Five"] as const;
 
+/** A count with its noun: "1 error", "3 errors". */
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+
 /** Where Studio's own MCP switch is, as the person clicks it. */
 export const MCP_SWITCH_CLICK_PATH = "Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
 
@@ -19,7 +22,59 @@ export const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Roblox Studio action: ${name}`,
   UnknownTool: (name: string) => `Unknown Roblox Studio tool: ${name}`,
   Checks: {
-    NotAdded: "Luau checks aren't added yet, so nothing was checked. Read your changes over against the luau skill.",
+    NotAdded:
+      "Luau checks aren't added yet, so nothing was checked: the person can add them with Add Luau checks in the Roblox Studio panel. Read your changes over against the luau skill meanwhile.",
+    NoGame: "check-scripts checks a game's scripts, and this call has no game.",
+    NoScripts: "This game has no .luau scripts under src/ to check.",
+    AllClean: "Every script under src/ passed its last check and hasn't changed since.",
+    /** What was found, the counts above zero only: "2 errors, 1 format difference". */
+    Counts: (errors: number, warnings: number, format: number) =>
+      [
+        errors > 0 ? plural(errors, "error") : "",
+        warnings > 0 ? plural(warnings, "warning") : "",
+        format > 0 ? plural(format, "format difference") : "",
+      ]
+        .filter(Boolean)
+        .join(", ") || "nothing to fix",
+    Summary: (files: number, counts: string) => `Luau checks of ${plural(files, "file")}: ${counts}.`,
+    Clean: (files: number) => `Luau checks of ${plural(files, "file")} found nothing to fix.`,
+    Format: (start: number, end: number) =>
+      start === end ? `StyLua lays out line ${start} differently` : `StyLua lays out lines ${start}–${end} differently`,
+    Missing: (tools: string[]) =>
+      `Not checked by ${tools.join(" or ")}: ${tools.length === 1 ? "it isn't" : "they aren't"} on this computer.`,
+    NoDefinitions:
+      "luau-lsp didn't run: Roblox's type definitions aren't added (Add Luau checks in the Roblox Studio panel adds them).",
+    Failed: (tool: string, why: string) => `${tool} didn't check: ${why}.`,
+    TimedOut: (seconds: number) => `it didn't finish within ${seconds} seconds`,
+    Cut: (megabytes: number) => `it printed more than ${megabytes} MB`,
+    Code: (code: number) => `it stopped with code ${code}`,
+    CouldNotStart: (why: string) => `it couldn't start (${why})`,
+    Stopped: "it was stopped",
+    Left: (files: number) =>
+      files === 1 ? "1 more file waits for the next check." : `${files} more files wait for the next check.`,
+    FinishHeld: (errors: number, first: string) =>
+      `The game's Luau has ${plural(errors, "error")}. First: ${first} Fix them (check-scripts lists them all), then finish again.`,
+    WorkerNote: (title: string, counts: string) => `Luau checks after ${title}: ${counts}.`,
+    AWorker: "a worker",
+  },
+  Luau: {
+    Confirm: (megabytes: number) =>
+      `Download luau-lsp, selene and StyLua from GitHub (about ${megabytes} MB) for checking this game's scripts?`,
+    Plan: "Genex downloads the pinned releases only, checks each file's size and fingerprint, and keeps them in its own storage. They run on this computer to check scripts, outside Genex's sandbox, as copies you installed yourself would.",
+    Added: "Luau checks are added: scripts are checked at each worker's end and before a build finishes.",
+    AlreadyAdded: "Luau checks are already on this computer.",
+    Refused: {
+      unsupported: "Genex has no Luau checks to add for this computer.",
+      "not-https": "A download wasn't over a secure link, so Genex stopped. Nothing was kept.",
+      "other-host": "A download pointed away from GitHub, so Genex stopped. Nothing was kept.",
+      "too-large": "A download was larger than the release Genex expects, so Genex stopped. Nothing was kept.",
+      mismatch: "A download didn't match the release Genex expects, so Genex stopped. Nothing was kept.",
+      "download-failed":
+        "Genex couldn't download the Luau checks. Check the connection and press Add Luau checks again.",
+      "unpack-failed": "A download couldn't be unpacked, so Genex stopped. Nothing was kept.",
+      linked: "Genex's folder for the Luau checks isn't a plain folder, so Genex wrote nothing.",
+      cancelled: "Stopped adding the Luau checks. Nothing was kept.",
+    },
   },
   Badge: {
     Get: "Not installed",

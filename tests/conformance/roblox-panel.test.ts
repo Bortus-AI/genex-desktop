@@ -291,6 +291,28 @@ describe("The Roblox Studio panel", { skip }, () => {
     }
   });
 
+  it("offers Add Luau checks under the steps once Studio is set up, and its press sends it", async () => {
+    const c = await computer({ game: true });
+    const tab = await open(c);
+    try {
+      assert.equal(await tab.isVisible("#luau"), true);
+      assert.equal(await tab.textContent("#luau"), "Add Luau checks");
+      await tab.click("#luau");
+      await sentOnce(tab, c, (names) => names.includes("add-luau-checks"));
+      assert.deepEqual(c.sent, [["add-luau-checks", {}]]);
+      await tab.waitForFunction(() => /Luau checks/.test(document.getElementById("setup-say")?.textContent ?? ""));
+    } finally {
+      await tab.close();
+    }
+    const before = await computer({ setUp: false, running: false });
+    const early = await open(before);
+    try {
+      assert.equal(await early.isVisible("#luau"), false, "nothing to add before Studio is set up");
+    } finally {
+      await early.close();
+    }
+  });
+
   it("the footer says Genex isn't Roblox's and is for people 18 and over", async () => {
     const c = await computer({});
     const tab = await open(c);

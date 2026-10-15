@@ -14,6 +14,7 @@ import {
 } from "../../src/plugins/unreal/editor-moments.ts";
 import { HERO_SHOTS_MAX_MS } from "../../src/plugins/unreal/loop-tools.ts";
 import * as robloxMoments from "../../src/plugins/roblox/studio-moments.ts";
+import { CHECK_MAX_MS } from "../../src/plugins/roblox/check-scripts.ts";
 import { CHAT_CHECKPOINT_WAIT_MS, MESSAGE_SNAPSHOT_ROOM_MS } from "../../src/main/core/rewind.ts";
 import { HookEvent, hookEventsOf, hookPlan, LockScope, messageCheckpointPlan } from "../../src/shared/plugin-hooks.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
@@ -426,6 +427,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
         { on: "restore.after", tool: "load-place", facts: ROBLOX_PROJECT },
         { on: "health", tool: "studio-state", facts: ROBLOX_PROJECT },
         { on: "crash", tool: "studio-crash-note", facts: ROBLOX_PROJECT },
+        { on: "worker.end", tool: "luau-note", facts: ROBLOX_PROJECT },
+        { on: "finish", tool: "luau-finish", facts: ROBLOX_PROJECT },
       ],
       "nothing hooks run.end: the person's Studio stays open when a run ends",
     );
@@ -452,6 +455,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
       "studio-state",
       "studio-crash-note",
       "team-note",
+      "luau-note",
+      "luau-finish",
     ])
       assert.equal(roblox.tools.find((t) => t.name === name)?.audience, "harness", `${name} is Genex's only`);
   });
@@ -465,6 +470,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
       [HookEvent.RestoreBefore, robloxMoments.SAVE_PLACE_RESTORE_MAX_MS, "save-place before a restore"],
       [HookEvent.RestoreAfter, robloxMoments.LOAD_PLACE_MAX_MS, "load-place"],
       [HookEvent.Health, robloxMoments.STUDIO_STATE_MAX_MS, "studio-state"],
+      [HookEvent.WorkerEnd, CHECK_MAX_MS, "luau-note"],
+      [HookEvent.Finish, CHECK_MAX_MS, "luau-finish"],
     ];
     for (const [on, maxMs, step] of longest)
       assert.ok(maxMs < HOOK_CALL_MS[on], `${step} answers in its own words before Genex's ceiling at ${on}`);

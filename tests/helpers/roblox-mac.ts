@@ -11,6 +11,7 @@ import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginContext, PluginEngineAssistAnswer } from "../../src/plugin-sdk/index.d.ts";
 import type { RobloxDeps } from "../../src/plugins/roblox/backend.ts";
+import { systemCheckRun } from "../../src/plugins/roblox/check-scripts.ts";
 import type { StudioClient, StudioToolResult } from "../../src/plugins/roblox/studio-client.ts";
 import type { Launch } from "../../src/plugins/roblox/studio-launch.ts";
 import { type LocateStat, STUDIO_MAC_APP, systemLocateFs } from "../../src/plugins/roblox/studio-locate.ts";
@@ -131,6 +132,17 @@ export async function robloxMac(options: RobloxMacOptions = {}) {
         throw new Error(`spawn ${file} ENOENT`);
       },
       tempRoot: path.join(root, "temp"),
+    },
+    // The Luau checks as on an Apple silicon Mac whatever runs the test, with no network.
+    luau: {
+      arch: "arm64",
+      run: systemCheckRun,
+      fetch: (async () => {
+        throw new TypeError("no network in this test");
+      }) as typeof fetch,
+      unpack: async (file) => {
+        throw new Error(`spawn ${file} ENOENT`);
+      },
     },
     open: async (launch) => {
       launches.push(launch);

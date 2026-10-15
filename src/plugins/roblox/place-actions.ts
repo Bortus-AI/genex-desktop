@@ -14,6 +14,7 @@ import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { writeCheckConfigs } from "./check-scripts.ts";
 import { createPlace, SHIPPED_TEMPLATE, suggestName } from "./create-place.ts";
 import { PLACE_PROMPTS } from "./place-prompts.ts";
 import { type PlaceDeps, placeOpenNow } from "./places.ts";
@@ -141,6 +142,8 @@ export async function createGame(
     await context.host(HostService.GameSnapshot, { reason: MESSAGE.Create.SnapshotReason });
   const file = await createPlace({ folder: home.folder, name, template: deps.template ?? SHIPPED_TEMPLATE });
   await ignoreLocks(home.folder, () => undefined);
+  // The Luau checks' settings a new game starts with; a game's own are never replaced.
+  await writeCheckConfigs(home.folder).catch(() => []);
   await writePlaceRecord(storage, home.game, { folder: home.folder, project: file });
   if (home.made) await deps.gameSeen?.(storage, home.game, home.folder);
   await context.host(HostService.EngineLink, { project: file, ...(home.made ? { game: home.game } : {}) });

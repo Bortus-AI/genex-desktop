@@ -8,7 +8,16 @@
   "description": "Agents build your game in Roblox Studio on this computer, through Studio's own MCP server and a small Genex helper. Needs Roblox Studio and a Roblox account. Not affiliated with Roblox Corporation. For people 18 and over.",
   "backend": "backend.mjs",
   "capabilities": ["network", "game-engine"],
-  "network": { "hosts": ["setup.rbxcdn.com", "127.0.0.1"] },
+  "network": {
+    "hosts": [
+      "setup.rbxcdn.com",
+      "127.0.0.1",
+      "github.com",
+      "release-assets.githubusercontent.com",
+      "objects.githubusercontent.com",
+      "raw.githubusercontent.com"
+    ]
+  },
   "detect": [{ "fact": "roblox-project", "files": ["**/*.rbxl", "**/*.rbxlx", "**/default.project.json"] }],
   "engine": {
     "id": "roblox",
@@ -23,7 +32,30 @@
     {
       "name": "check-scripts",
       "facts": ["roblox-project"],
-      "description": "Check the game's .luau files under src/ without Studio: types (luau-lsp with Roblox's definitions), lint (selene) and format (StyLua). Fix every problem it names and run it again. Until the person adds the Luau checks it answers that and checks nothing.",
+      "description": "Check the game's .luau files under src/ without Studio: types (luau-lsp with Roblox's definitions and a map of src/), lint (selene with Roblox's library) and format (StyLua). It checks the files changed since they last passed; all: true checks every file. Each problem comes back at its file and line: fix every error and warning, then run it again. Errors hold a build's finish back. Until the person adds the Luau checks it answers that and checks nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "boolean",
+            "description": "Check every .luau file under src/, not only the ones changed since they last passed."
+          }
+        }
+      }
+    },
+    {
+      "name": "luau-note",
+      "audience": "harness",
+      "description": "For Genex only: at a worker's end, the Luau checks over the scripts changed since they last passed, noted with each problem's file and line.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "luau-finish",
+      "audience": "harness",
+      "description": "For Genex only: before a build finishes, the Luau checks over every script; errors hold the finish back, warnings and format differences are notes.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -398,7 +430,13 @@
     { "name": "quit-studio", "label": "Quit Studio", "native": true },
     { "name": "places", "label": "Choose your place", "native": true },
     { "name": "use-place", "label": "Use in this game", "native": true },
-    { "name": "create", "label": "New Roblox game", "native": true }
+    { "name": "create", "label": "New Roblox game", "native": true },
+    {
+      "name": "add-luau-checks",
+      "label": "Add Luau checks",
+      "confirmation": "Download luau-lsp, selene and StyLua from GitHub (about 15 MB) to check this game's scripts? Genex keeps them in its own storage; they run on this computer, outside Genex's sandbox.",
+      "native": true
+    }
   ],
   "toolbar": [
     {
@@ -457,7 +495,9 @@
     { "on": "restore.before", "tool": "save-place", "facts": ["roblox-project"] },
     { "on": "restore.after", "tool": "load-place", "facts": ["roblox-project"] },
     { "on": "health", "tool": "studio-state", "facts": ["roblox-project"] },
-    { "on": "crash", "tool": "studio-crash-note", "facts": ["roblox-project"] }
+    { "on": "crash", "tool": "studio-crash-note", "facts": ["roblox-project"] },
+    { "on": "worker.end", "tool": "luau-note", "facts": ["roblox-project"] },
+    { "on": "finish", "tool": "luau-finish", "facts": ["roblox-project"] }
   ],
   "observers": [{ "id": "viewport", "facts": ["roblox-project"], "tool": "hero-shots", "live": "stills" }],
   "scaffolds": [{ "id": "game", "label": "Roblox game", "tool": "new-game" }]

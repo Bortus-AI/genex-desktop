@@ -34,6 +34,17 @@ import {
   robloxSteps,
 } from "./engine-steps.ts";
 import { readLiveData } from "./live-data.ts";
+import {
+  addLuauAction,
+  checkScriptsTool,
+  type LuauDeps,
+  type LuauStatus,
+  luauFinishAt,
+  luauNoteAt,
+  luauStatus,
+  reviewAddLuau,
+  systemLuau,
+} from "./luau-checks.ts";
 import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
 import { loadPendingPlace } from "./place-files.ts";
 import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
@@ -124,6 +135,8 @@ const isRobloxAction = (name: string): name is RobloxAction => ACTION_NAMES.has(
 export const RobloxTool = {
   StudioActivity: "studio-activity",
   CheckScripts: "check-scripts",
+  LuauNote: "luau-note",
+  LuauFinish: "luau-finish",
   UseProject: "use-project",
   ShowSteps: "show-steps",
   NewGame: "new-game",
@@ -147,6 +160,11 @@ export const RobloxTool = {
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
+/**
+ * The tools that may run in a worker's copy of the game: its folder is never the game's, so the
+ * script sync isn't told of it.
+ */
+const COPY_TOOLS: ReadonlySet<string> = new Set([RobloxTool.CheckScripts, RobloxTool.LuauNote, RobloxTool.LuauFinish]);
 const isRobloxTool = (name: string): name is RobloxTool => TOOL_NAMES.has(name);
 
 /** Where Studio stands for Genex, as the toolbar button and the panel name it. Wire values: never rename. */
@@ -232,6 +250,8 @@ export interface RobloxDeps extends PlaceActionDeps {
   shrink?: ShrinkShot;
   /** A judge probe's Luau file; by default read beside this backend, in the plugin's package. */
   probeLuau?(file: ProbeLuauFile): Promise<string>;
+  /** The Luau checks' runner, network and unpacker; this computer's by default. */
+  luau?: LuauDeps;
 }
 
 /** The folder the backend runs from: the plugin's package once built. */
@@ -292,6 +312,8 @@ export interface RobloxStatus {
   rows: RobloxRow[];
   /** The step that is next; absent once every step is done. */
   now?: RobloxStepId;
+  /** The Luau checks: all here, or Add Luau checks offered. */
+  luau?: LuauStatus;
 }
 
 /**
@@ -409,7 +431,12 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
   return { install, facts, rows, mcp, helper };
 }
 
-async function status(deps: RobloxDeps, context: PluginContext, job: InstallJob | undefined): Promise<RobloxStatus> {
+async function status(
+  deps: RobloxDeps,
+  context: PluginContext,
+  job: InstallJob | undefined,
+  luau: LuauDeps,
+): Promise<RobloxStatus> {
   const { install, facts, rows, mcp, helper } = await stepFacts(deps, context, job);
   const steps = {
     [PanelStep.Studio]: facts.installed,
@@ -422,6 +449,7 @@ async function status(deps: RobloxDeps, context: PluginContext, job: InstallJob 
   if (job) answer.install = installStatusOf(job);
   if (mcp) answer.mcp = mcp;
   if (helper) answer.helper = helper;
+  answer.luau = await luauStatus(deps, luau, context).catch(() => ({ added: false, offered: false }));
   const now = nowStep(rows);
   if (now) answer.now = now;
   return answer;
@@ -718,13 +746,14 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
   const scan: ScanCache = {};
   const services = deps.moments ?? noMomentServices(deps.now);
+  const luau = deps.luau ?? systemLuau(deps.install.fetch, deps.install.run);
   // A moment's tool answers only at its moments: called any other way, it says nothing.
   const atMoment =
     (handler: MomentHandler): Handler =>
     async (_args, context) =>
       context.hook ? handler(await momentOps(deps, services, context), context.hook) : {};
   const actions: Record<RobloxAction, Handler> = {
-    [RobloxAction.Status]: (_args, context) => status(deps, context, slot.job),
+    [RobloxAction.Status]: (_args, context) => status(deps, context, slot.job, luau),
     [RobloxAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [RobloxAction.Steps]: (_args, context) => steps(deps, context, slot.job),
     [RobloxAction.GetStudio]: (_args, context) => getStudio(deps, context, slot),
@@ -739,11 +768,14 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.UndoSetup]: (_args, context) => undoAction(deps, context),
     [RobloxAction.RestartStudio]: (_args, context) => restartStudio(deps, context),
     [RobloxAction.DoItForMe]: (_args, context) => doItForMe(context),
+    [RobloxAction.AddLuauChecks]: (_args, context) => addLuauAction(deps, luau, context),
   };
   const tools: Record<RobloxTool, Handler> = {
     [RobloxTool.StudioActivity]: async (_args, context) =>
       probeAnswer(await personActive(await momentOps(deps, services, context))),
-    [RobloxTool.CheckScripts]: async () => ({ checked: false, message: MESSAGE.Checks.NotAdded }),
+    [RobloxTool.CheckScripts]: (args, context) => checkScriptsTool(deps, luau, context, args),
+    [RobloxTool.LuauNote]: async (_args, context) => (context.hook ? luauNoteAt(deps, luau, context) : {}),
+    [RobloxTool.LuauFinish]: async (_args, context) => (context.hook ? luauFinishAt(deps, luau, context) : {}),
     [RobloxTool.UseProject]: async (args, context) => (await usePlaceNamed(deps, context, args.project)).message,
     [RobloxTool.ShowSteps]: async (_args, context) => showSteps(context, (await steps(deps, context, slot.job)).open),
     [RobloxTool.NewGame]: (_args, context) => newGameTool(deps, context),
@@ -772,11 +804,12 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     },
     async tool(name, args, context) {
       if (!isRobloxTool(name)) throw new Error(MESSAGE.UnknownTool(name));
-      await noteGame(deps, context).catch(() => undefined);
+      if (!COPY_TOOLS.has(name)) await noteGame(deps, context).catch(() => undefined);
       return tools[name](args, context);
     },
-    async review(name) {
+    async review(name, _args, context) {
       if (name === RobloxAction.GetStudio) return reviewGetStudio(deps);
+      if (name === RobloxAction.AddLuauChecks) return reviewAddLuau(deps, luau, context);
       return name === RobloxAction.Setup ? reviewSetup(deps) : {};
     },
   };

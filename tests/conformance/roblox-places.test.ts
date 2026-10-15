@@ -21,6 +21,7 @@ import { describe, it } from "node:test";
 import { engineChoiceRule } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import type { PluginContext, PluginScalar } from "../../src/plugin-sdk/index.d.ts";
 import { createRobloxBackend, type RobloxDeps } from "../../src/plugins/roblox/backend.ts";
+import { CHECK_CONFIGS } from "../../src/plugins/roblox/check-scripts.ts";
 import {
   MAX_PLACES,
   type PlacesAnswer,
@@ -347,6 +348,12 @@ describe("New Roblox game", () => {
     const ignore = await readFile(path.join(game.directory, ".gitignore"), "utf8");
     assert.match(ignore, /^\*\.rbxl\.lock$/m);
     assert.match(ignore, /^\*\.rbxlx\.lock$/m);
+    assert.equal(
+      await readFile(path.join(game.directory, "selene.toml"), "utf8"),
+      CHECK_CONFIGS["selene.toml"],
+      "a new game starts with the Luau checks' settings",
+    );
+    assert.equal(await readFile(path.join(game.directory, "stylua.toml"), "utf8"), CHECK_CONFIGS["stylua.toml"]);
   });
 
   it("once Studio lists the new place, the list marks it this game's and another game can't take it", async () => {

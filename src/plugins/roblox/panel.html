@@ -85,7 +85,7 @@ button svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke
   <div class="intro"><h2 id="title" tabindex="-1">Set up Roblox Studio</h2><p class="quiet" id="intro">Looking for Roblox Studio…</p></div>
   <p class="problem" id="problem" role="alert"></p>
   <ol class="steps" id="steps" aria-label="Setup steps"></ol>
-  <div class="actions" id="setup-more" hidden><button type="button" class="quiet" id="undo" data-action="undo-setup">Undo Set up</button></div>
+  <div class="actions" id="setup-more" hidden><button type="button" class="quiet" id="undo" data-action="undo-setup">Undo Set up</button><button type="button" class="quiet" id="luau" data-action="add-luau-checks" hidden>Add Luau checks</button></div>
   <p class="say quiet" id="setup-say" role="status"></p>
 </section>
 <section id="places" aria-labelledby="places-title" hidden>
@@ -110,7 +110,8 @@ const REFRESH_MS = 3 * SECOND_MS;
 /**
  * How long the panel waits for an action that takes longer than most: Restart Studio waits for
  * Studio to quit (the person may be saving), Do it for me for the person's answers to its cards,
- * and New Roblox game for Studio to open. The rest get the SDK's own wait.
+ * New Roblox game for Studio to open, and Add Luau checks for its downloads. The rest get the SDK's
+ * own wait.
  */
 const LONG_WAIT_MS = 4 * 60 * SECOND_MS;
 /** WCAG's minimum contrast for small text, and the least share of the text colour the quiet colour starts from. */
@@ -132,6 +133,7 @@ const Action = {
   Places: "places",
   UsePlace: "use-place",
   Create: "create",
+  AddLuauChecks: "add-luau-checks",
 };
 /** The rows' ids, as the backend names them (RobloxStepId). Wire values: never rename. */
 const Step = { Studio: "studio", SignIn: "sign-in", Helper: "helper", Mcp: "mcp", Place: "place" };
@@ -144,6 +146,7 @@ const WAITS = {
   [Action.DoItForMe]: { timeoutMs: LONG_WAIT_MS },
   [Action.Create]: { timeoutMs: LONG_WAIT_MS },
   [Action.UsePlace]: { timeoutMs: LONG_WAIT_MS },
+  [Action.AddLuauChecks]: { timeoutMs: LONG_WAIT_MS },
 };
 /** The panel's own words; each step's words come from the backend, as the chat's steps card shows them. */
 const WORDS = {
@@ -340,7 +343,7 @@ function stepItem(row, now) {
 function draw(force = false) {
   const status = ui.status;
   if (!status) return;
-  const key = JSON.stringify([status.rows, status.now, ui.game, ui.said, ui.pending]);
+  const key = JSON.stringify([status.rows, status.now, status.luau, ui.game, ui.said, ui.pending]);
   if (!force && key === ui.drawn) return;
   ui.drawn = key;
   const focused = document.activeElement?.dataset?.key;
@@ -351,6 +354,10 @@ function draw(force = false) {
   const undo = $("undo");
   if (ui.pending === "undo") undo.setAttribute("aria-disabled", "true");
   else undo.removeAttribute("aria-disabled");
+  const luau = $("luau");
+  luau.hidden = status.luau?.offered !== true;
+  if (ui.pending === "luau") luau.setAttribute("aria-disabled", "true");
+  else luau.removeAttribute("aria-disabled");
   $("setup-say").textContent = ui.said?.at === "setup" ? ui.said.text : "";
   if (!focused) return;
   // The control pressed may be gone (its step is done): the step that is next takes focus instead.
@@ -482,6 +489,11 @@ async function newGameFromPlaces() {
 $("places-back").onclick = () => showSetup(ui.status?.steps?.place ? "change-place" : "choose-place");
 $("places-file").onclick = () => void choosePlaceFile();
 $("places-new").onclick = () => void newGameFromPlaces();
+$("luau").dataset.key = "luau";
+$("luau").onclick = () => {
+  if (ui.pending) return;
+  void send(Action.AddLuauChecks, {}, { key: "luau", at: "setup" });
+};
 $("undo").dataset.key = "undo";
 $("undo").onclick = () => {
   if (ui.pending) return;

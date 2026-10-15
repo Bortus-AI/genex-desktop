@@ -33,7 +33,7 @@ const NATIVE = ["create", "open-editor", "quit-editor", "get-unreal", "get-xcode
 /**
  * Roblox's actions that quit, open or click in Studio, write its Plugins folder and settings,
  * download and run Roblox's installer, read the person's places (Documents, Studio's recent list,
- * the open Studios) or write and link a place.
+ * the open Studios), write and link a place, or download the Luau checks.
  */
 const ROBLOX_NATIVE = [
   "setup",
@@ -46,6 +46,7 @@ const ROBLOX_NATIVE = [
   "places",
   "use-place",
   "create",
+  "add-luau-checks",
 ];
 
 /** Main's `studio:plugins.action` over a bundled plugin's real manifest, with a core that records each call. */

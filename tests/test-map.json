@@ -34,6 +34,11 @@
       "tests/conformance/roblox-create-place.test.ts",
       "tests/conformance/roblox-places.test.ts"
     ],
+    "tests/fixtures/roblox-luau/**": [
+      "tests/conformance/roblox-check-scripts.test.ts",
+      "tests/conformance/roblox-luau-tools.test.ts"
+    ],
+    "tests/fixtures/fake-luau-tool.mjs": ["tests/conformance/roblox-check-scripts.test.ts"],
     "tests/fixtures/roblox-studio/**": [
       "tests/conformance/roblox-mcp-bridge.test.ts",
       "tests/conformance/roblox-helper-protocol.test.ts",

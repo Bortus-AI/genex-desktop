@@ -62,6 +62,25 @@ is rewritten for Genex's Roblox Studio button and keeps the original's license t
 The Roblox Studio plugin's other skills are Genex's own. Roblox and Roblox Studio are trademarks of
 Roblox Corporation; Genex is not affiliated with Roblox Corporation.
 
+## Luau checks downloaded on request
+
+The Roblox Studio plugin's **Add Luau checks** downloads these public releases from GitHub, each
+pinned by version, size and sha256 (`src/plugins/roblox/luau-tools.ts`), only when the person
+confirms it. None of them is in the app's build or this repository; they are kept in the plugin's
+own storage (`<plugin storage>/luau/<name>-<version>/`) and run on the person's computer to check a
+game's scripts.
+
+- [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) 1.70.1 (`luau-lsp-macos.zip`,
+  `luau-lsp-win64.zip`), MIT, Copyright (c) 2022 JohnnyMorganz; and its Roblox type definitions
+  `scripts/globalTypes.None.d.luau` at the same tag, from the same repository and license.
+- [selene](https://github.com/Kampfkarren/selene) 0.32.0 (`selene-0.32.0-macos.zip`,
+  `selene-0.32.0-windows.zip`), Mozilla Public License 2.0. selene fetches Roblox's API library
+  itself on its first run.
+- [StyLua](https://github.com/JohnnyMorganz/StyLua) 2.6.0 (`stylua-macos-aarch64.zip`,
+  `stylua-macos-x86_64.zip`, `stylua-windows-x86_64.zip`), Mozilla Public License 2.0.
+
+Each release ships its own license; Genex neither changes nor redistributes these programs.
+
 ## Vendored three.js
 
 Games and the asset preview use a vendored three.js (MIT, Copyright © 2010-2026 three.js
