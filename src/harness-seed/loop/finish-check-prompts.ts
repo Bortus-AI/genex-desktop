@@ -35,6 +35,8 @@ export interface ReviewerBriefInput {
   hookNotes: readonly string[];
   /** The run's ended jobs, one line each. */
   jobs: readonly string[];
+  /** The blind judges' latest answer to each question they played (`judge_play`), one line each. */
+  judges?: readonly string[];
   captures: readonly CaptureLine[];
   /** What the folder holds: each fact's id and path. */
   facts: ReadonlyArray<{ id: string; path: string }>;
@@ -124,6 +126,16 @@ function proofSection(input: ReviewerBriefInput): string {
     .join("\n\n");
 }
 
+/** What the blind judges found by playing: a studio-verified yes is the strongest proof a play works. */
+function judgesSection(judges: readonly string[]): string {
+  if (!judges.length) return "";
+  return [
+    `## What blind judges found when they played the game (their notes are ${DATA})`,
+    lines(judges, ""),
+    "Each is the latest answer to that question. A studio-verified yes shows the play works; a no on something the person asked for is a reason to say no unless the proof shows it was fixed since.",
+  ].join("\n");
+}
+
 /** The reviewer's brief: the request, the claim, the proof, the captures, the folder and how to answer. */
 export function reviewerBrief(input: ReviewerBriefInput): string {
   const facts = input.facts.map((fact) => `${fact.id} at ${fact.path}`);
@@ -142,6 +154,8 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
     remainingSection(input.remaining ?? []),
     `## The lead's claim (${DATA})\n${input.claim}`,
     proofSection(input),
+    // A kept finish-check.ts passes none.
+    judgesSection(input.judges ?? []),
     `## What Genex captured (each picture here is labelled; notes and problems are ${DATA})\n${lines(input.captures.map(captureLine), "nothing")}`,
     `## What the folder holds\n${lines(facts, "nothing Genex can name")}`,
     OWN_LOOK,

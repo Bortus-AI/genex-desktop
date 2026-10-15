@@ -90,6 +90,8 @@ async function computer(options: { game?: string } = {}) {
     serving?: string;
     log?: EditorLog;
     listening?: Set<number>;
+    /** Ports Unreal's crash reporter holds after a crash. */
+    crashReporter?: Set<number>;
     held?: string[];
   } = {
     running: false,
@@ -103,6 +105,7 @@ async function computer(options: { game?: string } = {}) {
     editorLog: async () => live.log,
     heldProjects: async () => live.held ?? [],
     portListening: async (port) => live.listening?.has(port) ?? false,
+    crashReporterHolds: async (port) => live.crashReporter?.has(port) ?? false,
     editorAnswers: async (_port, project) => live.answering && (live.serving === undefined || live.serving === project),
     xcode: async () => ({
       state: XcodeState.Ready,
@@ -246,6 +249,14 @@ const STEPS: Record<string, { arrange: (c: Computer) => Promise<string>; sends?:
     },
     sends: "quit-editor",
   },
+  [PanelStep.Crashed]: {
+    arrange: async (c) => {
+      const { port } = (await c.act("setup", { project: c.drift })) as { port: number };
+      c.live.listening = new Set([port]);
+      c.live.crashReporter = new Set([port]);
+      return c.drift;
+    },
+  },
 };
 /** Steps with a view of their own instead of the project view. */
 const OTHER_VIEWS: string[] = [PanelStep.GetUnreal, PanelStep.Choose];
@@ -346,6 +357,29 @@ describe("The Set up Unreal panel", { skip }, () => {
       assert.equal(say, "Unreal couldn't use the port Genex gave Drift.");
       // Restart quits Unreal, then opens the project again, as Switch does.
       assert.equal(await tab.evaluate(() => document.getElementById("primary")?.textContent), "Restart Unreal");
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("a project that ray-traces says what it risks on this Mac, and its button turns ray tracing off", async () => {
+    const c = await computer();
+    const file = await STEPS[PanelStep.Open].arrange(c);
+    const config = path.join(path.dirname(file), "Config", "DefaultEngine.ini");
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(config, "[/Script/Engine.RendererSettings]\nr.RayTracing=True\n");
+    await c.act("status", { project: file });
+    const tab = await open(c);
+    try {
+      await tab.waitForSelector("#ray-tracing:not([hidden])");
+      const text = await tab.evaluate(() => document.getElementById("ray-tracing-text")?.textContent ?? "");
+      assert.match(text, /^Ray tracing is on in Drift\./);
+      c.sent.length = 0;
+      await tab.click("#ray-tracing-off");
+      for (let i = 0; i < WAIT_TRIES && c.sent.length === 0; i++) await tab.waitForTimeout(WAIT_STEP_MS);
+      assert.equal(c.sent[0]?.[0], "ray-tracing-off");
+      await tab.waitForSelector("#ray-tracing[hidden]", { state: "attached" });
+      assert.match(await readFile(config, "utf8"), /r\.RayTracing=False/);
     } finally {
       await tab.close();
     }

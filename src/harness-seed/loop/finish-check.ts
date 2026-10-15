@@ -37,7 +37,7 @@ import {
   ObserverSource,
   PROOF_OBSERVER,
 } from "./finish-contract.ts";
-import { jobLines, type Proof, pictureType, proofNamesOf, readProof } from "./finish-proof.ts";
+import { jobLines, judgeLines, type Proof, pictureType, proofNamesOf, readProof } from "./finish-proof.ts";
 import { factsOfGame } from "./folder-facts.ts";
 import { HostMethod } from "./host-methods.ts";
 import { isPlainRecord } from "./json.ts";
@@ -299,6 +299,8 @@ interface Gathered {
   proofAt: Set<number>;
   proof: Proof;
   jobs: string[];
+  /** The blind judges' latest answer to each question of the run. */
+  judges: string[];
 }
 
 /** A finish hook's picture as a reviewer may be handed it: a PNG or a JPEG by its bytes, within the cap; else nothing. */
@@ -325,8 +327,9 @@ function hookCapture(images: readonly HookImage[]): Capture[] {
 }
 
 /**
- * Capture the game (bounded by `FINISH_OBSERVE_MS`), read the lead's proof and the run's job
- * results, and record the captures the harness made (the preview's, and the lead's pictures).
+ * Capture the game (bounded by `FINISH_OBSERVE_MS`), read the lead's proof, the run's job results
+ * and its blind judges' answers, and record the captures the harness made (the preview's, and the
+ * lead's pictures).
  */
 async function gather(scope: FinishScope, claim: FinishClaim): Promise<Gathered> {
   const { ctx, run, threadId } = scope;
@@ -334,7 +337,7 @@ async function gather(scope: FinishScope, claim: FinishClaim): Promise<Gathered>
   const observeScope = { run, threadId, game: scope.game, previewPass: scope.previewPass, clock };
   const observed = await observeGame(ctx, observeScope, scope.now() + observeMs(scope));
   const proof = await readProof(ctx, run, scope.leadFolder, claim.proof, MESSAGE.proofArtifacts(scope.tally.round));
-  const jobs = await jobLines(ctx, run);
+  const [jobs, judges] = await Promise.all([jobLines(ctx, run), judgeLines(ctx, run, threadId)]);
   const leads: Capture[] = proof.images.length
     ? [
         {
@@ -348,7 +351,7 @@ async function gather(scope: FinishScope, claim: FinishClaim): Promise<Gathered>
     : [];
   await recordCaptures(ctx, threadId, run.runId, [...observed, ...leads]);
   const proofAt = new Set(leads.map((_, n) => observed.length + n));
-  return { captures: [...observed, ...leads, ...hookCapture(claim.hookImages)], proofAt, proof, jobs };
+  return { captures: [...observed, ...leads, ...hookCapture(claim.hookImages)], proofAt, proof, jobs, judges };
 }
 
 /** A capture as the brief tells of it: what was taken, and how much of it the reviewer was handed. */
@@ -382,6 +385,7 @@ function briefFor(
     proof: gathered.proof,
     hookNotes,
     jobs: gathered.jobs,
+    judges: gathered.judges,
     captures: gathered.captures.map((capture, n) => captureLine(capture, told.attached[n])),
     facts: factsOfGame(scope.game),
     folder: scope.leadFolder,

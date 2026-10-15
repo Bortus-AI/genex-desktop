@@ -413,7 +413,8 @@ capabilities. Nothing else counts, so another app's MCP server on the port is ne
 Unreal. Epic's answer names no project, so the bridge and the status also ask the Genex editor
 helper's `project_file` which project the editor has open, and use the editor only when it names
 this project's real `.uproject`; another project's editor on the port gets no call and never
-shows Connected. The panel and toolbar status remember a project's last good answer for 10 s:
+shows Connected. Epic sends that tool's answer as an event stream it keeps open for about 15 s
+after the answer, so the check reads up to the first event and closes it. The panel and toolbar status remember a project's last good answer for 10 s:
 while it stands they say yes at once and ask the editor again in the background, so status stays
 fast with Unreal behind another app and one stalled request doesn't flip Connected; a failed ask
 is never remembered, so a stopped editor reads as not answering one refresh later. A record whose
@@ -914,7 +915,7 @@ use yet.
 one button (`whereItStands` is shared with `status`). `status` returns the engines, the list, the
 shown project and `next`, the panel's one primary step
 (`PanelStep`: get-unreal, choose, quit-first, set-up, update-helper, open, starting, connected,
-switch, not-answering, port-blocked, open-when-free). The shown project is, in order: the one the panel names,
+switch, not-answering, port-blocked, open-when-free, crashed). The shown project is, in order: the one the panel names,
 only ever a project the person picked there or the only one found (remembered in `chosen.json`);
 the open game's linked project (when that can't be read, its error over the list, never another
 game's project); the project chosen last; the newest. `chosen` is false for the newest and for a
@@ -961,7 +962,19 @@ panel never offers to quit a loading editor. Genex's own Starting record is drop
 project answers. `firstStart` is true until Unreal's recent list names the project before this
 start; the panel shows its first-start hints only then, and while a project starts it always says
 the panel may close (the Unreal button says Ready when it is done). With Unreal closed and another app on a
-set-up project's port, `next` is set-up again, which moves the port (not yet on Windows). Xcode
+set-up project's port, `next` is set-up again, which moves the port (not yet on Windows). When
+that app is Unreal's own crash reporter (lsof finds `CrashRep…` listening there on a Mac: a crashed
+editor's reporter inherits its sockets), `next` is crashed instead, closed or reopened alike: the
+panel and the Live card say Unreal crashed and to close its crash report window, then open the
+game again, and nothing moves the port. On a Mac, status's `rayTracingRisk` says the shown
+project's `Config/DefaultEngine.ini` turns hardware ray tracing on (`ray-tracing.ts`: the last
+`r.RayTracing` in the renderer settings): UE 5.8 rendering a ray-traced level behind another app
+hangs the GPU (on an M4 Max it crashed within a few plays, throttled ones too at startup), so the
+panel notes it with Turn off ray tracing (`ray-tracing-off`, confirmed first), which sets every
+such line to False, Lumen lighting the level in software from the next start. A new game made on a
+Mac is made without it (`create-project.ts`, after Epic's own values), and the bridge, the editor
+queue and the computer's play lift the background throttle on a Mac only for an editor that says
+`r.RayTracing` is 0 (`editor-throttle.ts`). Xcode
 is recommended to every Mac user, since without it Genex works in Blueprints only: status's `xcode`
 (`xcode.ts`) gives the panel an Xcode row, last and only under a shown project, that says to get
 Xcode, to open it once to finish its setup, to run one Terminal command (with Copy) when another

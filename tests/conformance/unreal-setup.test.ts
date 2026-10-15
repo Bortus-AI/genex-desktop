@@ -1029,6 +1029,35 @@ describe("the Unreal plugin's setup actions", () => {
     assert.deepEqual([status.lowDisk, status.lowMemory, status.xcode.state], [true, false, XcodeState.Missing]);
   });
 
+  /** The panel status's ray tracing warning for the fixture's project. */
+  const rayTracingRisk = async (b: Awaited<ReturnType<typeof backendFixture>>) => {
+    const status = (await b.backend.action?.("status", {}, b.context)) as { rayTracingRisk?: boolean } | undefined;
+    return status?.rayTracingRisk;
+  };
+
+  // UE 5.8 on a Mac hangs the GPU rendering a ray-traced level behind another app.
+  it("on a Mac, status warns of a project that ray-traces, and turning it off clears the warning", async () => {
+    const b = await backendFixture();
+    const config = path.join(b.project.directory, "Config", "DefaultEngine.ini");
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(config, "[/Script/Engine.RendererSettings]\nr.RayTracing=True\n");
+    const project = await realpath(b.project.file);
+    assert.equal(await rayTracingRisk(b), true);
+    const review = await b.backend.review?.("ray-tracing-off", { project }, b.context);
+    assert.match(String(review?.message), /Drift/);
+    await b.backend.action?.("ray-tracing-off", { project }, b.context);
+    assert.equal(await readFile(config, "utf8"), "[/Script/Engine.RendererSettings]\nr.RayTracing=False\n");
+    assert.equal(await rayTracingRisk(b), false);
+  });
+
+  it("never warns of ray tracing off a Mac", async () => {
+    const b = await backendFixture({ platform: "win32" });
+    const config = path.join(b.project.directory, "Config", "DefaultEngine.ini");
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(config, "[/Script/Engine.RendererSettings]\nr.RayTracing=True\n");
+    assert.equal(await rayTracingRisk(b), false);
+  });
+
   it("status says where Xcode stands on every Mac, C++ project or not, against the supported engine", async () => {
     const asked: Array<string | undefined> = [];
     const b = await backendFixture({
