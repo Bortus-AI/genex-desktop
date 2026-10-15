@@ -509,7 +509,11 @@ interface ChatDraft {
    * yet: main records a message's tags as it hands the message on, which can be before the queue
    * writes the message itself.
    */
-  tagged: { bubbles: Map<string, UserEntry>; cards: Map<string, MentionsEntry> };
+  tagged: {
+    queueIds: ReadonlyMap<string, string>;
+    bubbles: Map<string, UserEntry>;
+    cards: Map<string, MentionsEntry>;
+  };
   /** The chip group new tool rows join, until a line of narration closes it. */
   group: ToolsEntry | null;
   /** Each game's engine-link lines by the link's time, with the game's title, so Undo lands on its line. */
@@ -524,8 +528,13 @@ interface ChatDraft {
   finishLines: Map<string, { entry: SystemEntry; runId: string; checking: boolean }>;
 }
 
-export function toEntries(events: EventEnvelope[]): Entry[] {
-  const chat = newChatDraft(events);
+/**
+ * The chat's entries from its log. `queueIds` names each sent message's queue id by the event that
+ * wrote it (the queue's own record, read from the log in its written order); without it, a message
+ * is named by the queue record right after it.
+ */
+export function toEntries(events: EventEnvelope[], queueIds?: ReadonlyMap<string, string>): Entry[] {
+  const chat = newChatDraft(events, queueIds ?? queueIdsInOrder(events));
   for (const event of events) readEvent(chat, event);
   placeLastCoverCard(chat);
   for (const [runId, deliveries] of chat.runAssets) {
@@ -535,7 +544,18 @@ export function toEntries(events: EventEnvelope[]): Entry[] {
   return withUniqueIds(foldRoutine(chat.entries, chat.runResults));
 }
 
-function newChatDraft(events: EventEnvelope[]): ChatDraft {
+/** Each message's queue id by the event before its `coordinator_message_queued` record. */
+function queueIdsInOrder(events: readonly EventEnvelope[]): Map<string, string> {
+  const ids = new Map<string, string>();
+  for (const [index, event] of events.entries()) {
+    const queued = customPayload(event.data, CustomEvent.CoordinatorMessageQueued)?.messageId;
+    const before = events[index - 1];
+    if (queued && before) ids.set(before.id, queued);
+  }
+  return ids;
+}
+
+function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, string>): ChatDraft {
   return {
     signInReplies: new Set(
       events.flatMap((event, index) => {
@@ -569,7 +589,7 @@ function newChatDraft(events: EventEnvelope[]): ChatDraft {
     runAssets: new Map(),
     runResults: new Map(),
     waiting: new Set(),
-    tagged: { bubbles: new Map(), cards: new Map() },
+    tagged: { queueIds, bubbles: new Map(), cards: new Map() },
     group: null,
   };
 }
@@ -706,7 +726,9 @@ function readMessages(chat: ChatDraft, eventId: string, data: Extract<EventData,
     const messageId = `${eventId}-${messageIndex}`;
     if (message.role === "user") {
       for (const entry of chat.entries) if (awaitsAnswer(entry)) entry.pending = false;
-      chat.entries.push(userEntry(messageId, message.content));
+      const bubble = userEntry(messageId, message.content);
+      chat.entries.push(bubble);
+      placeTagCard(chat, chat.tagged.queueIds.get(eventId), bubble);
     } else if (message.role === "assistant") {
       readReply(chat, messageId, message, data.usage?.model);
     } else if (message.role === "system") {
@@ -1032,7 +1054,6 @@ function readQuiet(chat: ChatDraft, data: EventData): boolean {
   if (data.event_type.startsWith(COORDINATOR_PREFIX)) {
     const queued = customPayload(data, QUEUED_EVENTS)?.messageId;
     const settled = customPayload(data, SETTLED_EVENTS)?.messageId;
-    if (customPayload(data, CustomEvent.CoordinatorMessageQueued)?.messageId) placeTagCard(chat, queued);
     if (queued) chat.waiting.add(queued);
     else if (settled) chat.waiting.delete(settled);
     if (customPayload(data, CustomEvent.CoordinatorMessageDelivered)?.how === SteerDelivery.Interrupt)
@@ -1595,15 +1616,12 @@ function narrateMentions(chat: ChatDraft, event: EventEnvelope): void {
   if (bubble) putTagCard(chat, card, chat.entries.indexOf(bubble));
 }
 
-/** A sent message's queue record: its bubble is the latest one, and a card waiting for it goes under it. */
-function placeTagCard(chat: ChatDraft, messageId: string | undefined): void {
-  if (!messageId || chat.tagged.bubbles.has(messageId)) return;
-  const at = chat.entries.findLastIndex((entry) => entry.kind === EntryKind.User);
-  const bubble = chat.entries[at];
-  if (bubble?.kind !== EntryKind.User) return;
+/** A sent message's bubble, by its queue id: a card already waiting for it goes under it. */
+function placeTagCard(chat: ChatDraft, messageId: string | undefined, bubble: Entry): void {
+  if (!messageId || bubble.kind !== EntryKind.User) return;
   chat.tagged.bubbles.set(messageId, bubble);
   const card = chat.tagged.cards.get(messageId);
-  if (card && !chat.entries.includes(card)) putTagCard(chat, card, at);
+  if (card && !chat.entries.includes(card)) putTagCard(chat, card, chat.entries.indexOf(bubble));
 }
 
 /** The card under the bubble at `at` (at the end when there is none), and the bubble paints its tags. */

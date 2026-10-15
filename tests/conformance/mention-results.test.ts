@@ -192,6 +192,19 @@ describe("the result card in the chat", () => {
     assert.equal(cardUnder(entries, words).card?.kind, EntryKind.Mentions);
   });
 
+  it("finds its message by the queue's id when delivery order moved the message after it", () => {
+    // A message typed during work is shown where it was read, after its tags were recorded.
+    const moved = [
+      said(1, "user", "an earlier message"),
+      record(2, results),
+      said(3, "assistant", "Done."),
+      said(4, "user", words),
+    ];
+    const entries = toEntries(moved, new Map([[event(4, { type: "messages", messages: [] }).id, "q-1"]]));
+    assert.equal(cardUnder(entries, "an earlier message").card?.kind, EntryKind.Assistant);
+    assert.equal(cardUnder(entries, words).card?.kind, EntryKind.Mentions);
+  });
+
   it("a later record for the same message replaces each tag's result in place", () => {
     const entries = toEntries([...events, record(7, [outcome(neon, MentionResult.Copied)])]);
     const cards = entries.filter((entry) => entry.kind === EntryKind.Mentions);

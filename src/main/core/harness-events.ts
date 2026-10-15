@@ -7,7 +7,7 @@ import { takeVerified } from "./verified-traces.ts";
 
 const MESSAGE = {
   hostOnly:
-    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume, finish check and chat judge rows are written by the studio only",
+    "permission, consent, recovery, self-change, plugin suggestion, don't-wait, unsaved-file, job, app access, automatic resume, finish check, chat judge and tag result rows are written by the studio only",
 } as const;
 const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ToolPermission,
@@ -32,6 +32,9 @@ const HOST_CUSTOM_EVENTS: ReadonlySet<unknown> = new Set([
   CustomEvent.ChatJudgeResult,
   // The count of a run's automatic resumes bounds them (`core/auto-resume.ts`): only the host writes one.
   CustomEvent.RunAutoResumed,
+  // A message's @ tag results come from the host that resolved them (`core/mention-tags.ts`), and
+  // their card offers Try again.
+  CustomEvent.MentionTagged,
   // The reviewer's verdict is the app's, from the session it seated (`core/finish-review.ts`): the
   // harness asks for a check and settles it, but a yes it wrote itself would read as Done.
   CustomEvent.FinishCheck,

@@ -5786,6 +5786,7 @@ a:focus-visible {
 }
 .mention-result[data-failed] .mention-result-text span {
   color: color-mix(in oklab, var(--orange) 55%, var(--ink));
+  white-space: normal;
 }
 .mention-result-ok {
   display: inline-flex;
