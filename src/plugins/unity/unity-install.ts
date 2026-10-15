@@ -7,15 +7,20 @@
  * for me runs every step in order and waits for the person's sign-in between them.
  */
 import { execFile, spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
-import { mkdir, open, rename, rm, statfs, writeFile } from "node:fs/promises";
+import { mkdir, open, rm, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import {
+  APP_COPY_MS,
+  AppInstallError,
+  AppInstallProblem,
+  type AppRunner,
+  downloadFile,
+  placeApp,
+} from "../../substrate/app-install.ts";
 import { atomicWriteJson, readJsonIfExists } from "../../substrate/fsx.ts";
 import { type EditorsEnv, compareVersions, findHub } from "./editors.ts";
 import { getUnityLaunch, type Launch } from "./editor-launch.ts";
@@ -31,8 +36,6 @@ export const UNITY_TEAM_ID = "9QW8UQUTAA";
 /** The app inside Hub's disk image, and Hub's program inside the app. */
 const HUB_APP = "Unity Hub.app";
 const HUB_PROGRAM = path.posix.join("Contents", "MacOS", "Unity Hub");
-/** Hub's name in Applications while it is being copied there. */
-const PARTIAL_HUB = ".Unity Hub.genex-copy.app";
 /** The Unity release line Genex's Unity work was measured on; its newest final release is installed. */
 export const INSTALL_LINE = "6000.3";
 /** The plugin storage folder holding the install's record, its output and Hub's download. */
@@ -42,8 +45,6 @@ const EDITOR_LOG = "editor-install.log";
 /** How long Hub may take to list Unity's releases, and the most of its output read. */
 const RELEASES_MS = 2 * MINUTE_MS;
 const OUTPUT_MAX_BYTES = 4 * 1024 * 1024;
-/** How long copying Hub and checking its signature may take. */
-const COPY_MS = 5 * MINUTE_MS;
 /** How much of the install's output is read back for its progress. */
 const LOG_TAIL_BYTES = 64 * 1024;
 /** How long Do it for me waits for the person to sign in, and how often it looks. */
@@ -81,7 +82,7 @@ export interface InstallDeps {
   arch: string;
   fetch: typeof fetch;
   /** Runs a program and answers what it printed, and on its error stream; rejects when it fails. */
-  run: (command: string, args: string[], timeoutMs: number) => Promise<{ out: string; err: string }>;
+  run: AppRunner;
   /** Starts a program on its own, its output into `log`, and answers its process id. */
   start: (command: string, args: string[], log: string) => Promise<number>;
   alive: (pid: number) => boolean;
@@ -158,18 +159,6 @@ export function progressIn(log: string): { percent?: number; phase?: string; las
 /** Hub's own program inside its app. */
 const hubProgram = (hub: string) => path.posix.join(hub, HUB_PROGRAM);
 
-/** Whether an app is signed by Unity Technologies: Apple accepts its signature and names Unity's team. */
-async function signedByUnity(deps: InstallDeps, app: string): Promise<boolean> {
-  try {
-    await deps.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app], COPY_MS);
-    // codesign describes a signature on its error stream.
-    const described = await deps.run("/usr/bin/codesign", ["-dv", app], COPY_MS);
-    return described.err.split(/\r?\n/).includes(`TeamIdentifier=${UNITY_TEAM_ID}`);
-  } catch {
-    return false;
-  }
-}
-
 /**
  * One installer's state: its programs, its storage, Hub's install or the wait for the person's
  * sign-in (kept in memory), and Do it for me while it runs.
@@ -186,42 +175,31 @@ interface Installing {
 /** Downloads Hub's disk image into the storage, counting bytes for the card. */
 async function download(state: Installing, file: string): Promise<void> {
   const url = HUB_DMG[state.deps.arch] ?? HUB_DMG.x64 ?? "";
-  const response = await state.deps.fetch(url, { signal: state.stop.signal }).catch((error: unknown) => {
-    throw new Error(MESSAGE.Download(errorMessage(error)));
-  });
-  if (!response.ok || !response.body) throw new Error(MESSAGE.Download(`HTTP ${response.status}`));
-  const total = Number(response.headers.get("content-length")) || undefined;
-  const job: InstallJob = { kind: JobKind.Hub, state: JobState.Running, done: 0, ...(total ? { total } : {}) };
+  const job: InstallJob = { kind: JobKind.Hub, state: JobState.Running, done: 0 };
   state.hubJob = job;
-  const body = Readable.fromWeb(response.body as import("node:stream/web").ReadableStream);
-  body.on("data", (chunk: Buffer) => {
-    job.done = (job.done ?? 0) + chunk.length;
-  });
-  await pipeline(body, createWriteStream(file), { signal: state.stop.signal }).catch((error: unknown) => {
+  await downloadFile(state.deps.fetch, url, file, {
+    signal: state.stop.signal,
+    onBytes: (done, total) => {
+      job.done = done;
+      if (total) job.total = total;
+    },
+  }).catch((error: unknown) => {
     throw new Error(MESSAGE.Download(errorMessage(error)));
   });
-  job.done = job.total ?? job.done;
 }
 
 /** Mounts the image, checks Unity signed its Hub, copies it into Applications and unmounts. */
 async function copyIn(deps: InstallDeps, image: string, mount: string): Promise<void> {
   const attach = ["attach", "-nobrowse", "-readonly", "-quiet", "-mountpoint", mount, image];
-  await deps.run("/usr/bin/hdiutil", attach, COPY_MS);
+  await deps.run("/usr/bin/hdiutil", attach, APP_COPY_MS);
   try {
-    const app = path.join(mount, HUB_APP);
-    if (!(await signedByUnity(deps, app))) throw new Error(MESSAGE.NotUnity);
-    // Copied beside under another name, then renamed: a half-copied Hub never reads as installed.
-    const partial = path.join(deps.env.applications, PARTIAL_HUB);
-    await rm(partial, { recursive: true, force: true });
-    try {
-      await deps.run("/usr/bin/ditto", [app, partial], COPY_MS);
-      await rename(partial, path.join(deps.env.applications, HUB_APP));
-    } catch (error) {
-      await rm(partial, { recursive: true, force: true });
-      throw new Error(MESSAGE.Copy(errorMessage(error)));
-    }
+    const place = { applications: deps.env.applications, name: HUB_APP, team: UNITY_TEAM_ID };
+    await placeApp(deps.run, path.join(mount, HUB_APP), place).catch((error: unknown) => {
+      const notSigned = error instanceof AppInstallError && error.problem === AppInstallProblem.NotSigned;
+      throw new Error(notSigned ? MESSAGE.NotUnity : MESSAGE.Copy(errorMessage(error)));
+    });
   } finally {
-    await deps.run("/usr/bin/hdiutil", ["detach", "-quiet", mount], COPY_MS).catch(() => undefined);
+    await deps.run("/usr/bin/hdiutil", ["detach", "-quiet", mount], APP_COPY_MS).catch(() => undefined);
   }
 }
 

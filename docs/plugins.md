@@ -1899,7 +1899,7 @@ The plugin makes, sets up and opens that project itself (`backend.ts`), with no 
   goes on; when an install stops it tells the agent once (`stuckSays`): finish it in Unity Hub's
   own window with the `desktop` tool when computer control is on, else say what stopped (a stop
   only the person can fix, such as disk space, never asks for clicking). A development test points
-  the backend at a made-up Mac with `STUDIO_UNITY_TEST_ROOT` (its `Applications/` and `home/`),
+  the backend at a made-up Mac with `STUDIO_ENGINE_TEST_ROOT` (its `Applications/` and `home/`),
   which the host passes to the plugin's backend; the app never sets it.
 - `setup` and `undo-setup` (each with a `confirmation`) add the Pipeline package's line to an
   existing project's manifest, or take it back (`setup.ts`): the manifest is read by real path

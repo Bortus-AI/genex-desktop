@@ -185,10 +185,10 @@ describe("what the card reads on a Mac", () => {
 
 describe("a made-up Mac for testing the card in the real app", () => {
   it("looks for Hub, editors and the license under the test root, and only an absolute one", () => {
-    const env = systemEditorsEnv({ STUDIO_UNITY_TEST_ROOT: "/tmp/test-mac" }, "darwin");
+    const env = systemEditorsEnv({ STUDIO_ENGINE_TEST_ROOT: "/tmp/test-mac" }, "darwin");
     assert.equal(env.applications, "/tmp/test-mac/Applications");
     assert.equal(env.home, "/tmp/test-mac/home");
-    for (const ignored of [{}, { STUDIO_UNITY_TEST_ROOT: "relative/mac" }]) {
+    for (const ignored of [{}, { STUDIO_ENGINE_TEST_ROOT: "relative/mac" }]) {
       const real = systemEditorsEnv(ignored, "darwin");
       assert.equal(real.applications, "/Applications");
     }
