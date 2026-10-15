@@ -3,7 +3,7 @@
  * plugin's own answer, asked again every few seconds while it shows, so a step done outside Genex
  * (Xcode installed, opened once) is ticked by itself; with nothing left open it goes, and when the
  * plugin names words for that the agent is told, so the chat goes on. A card may carry its own
- * button that does every step it can for the person (Do it for me). Not now hides it for this
+ * button that does every step it can for the person (Do it for me). Hide puts it away for this
  * game until the agent offers it again.
  */
 import { type JSX, useEffect, useRef, useState } from "react";
@@ -160,7 +160,7 @@ function PrimaryButton({ button, onRun }: { button: StepButton; onRun: (button: 
   );
 }
 
-/** The card for the chat's newest offer, while a step is open and the person hasn't said Not now. */
+/** The card for the chat's newest offer, while a step is open and the person hasn't hidden it. */
 export function EngineStepsCard({
   offer,
   onNotice,
@@ -177,7 +177,7 @@ export function EngineStepsCard({
   const shown = stepsShown(offer, dismissed);
   const card = useSteps(offer, shown, onFinished);
   if (!shown || !card?.open) return null;
-  const notNow = () => {
+  const hide = () => {
     if (key) writeText(key, offer.id);
     setDismissed(offer.id);
   };
@@ -201,8 +201,8 @@ export function EngineStepsCard({
           ))}
         </ul>
         <div className="mt-1.5 flex items-center justify-end gap-2">
-          <Button size="sm" variant="ghost" onClick={notNow}>
-            {STEPS_WORDS.notNow}
+          <Button size="sm" variant="secondary" aria-label={STEPS_WORDS.hideLabel} onClick={hide}>
+            {STEPS_WORDS.hide}
           </Button>
           {card.primary ? <PrimaryButton button={card.primary} onRun={press} /> : null}
         </div>

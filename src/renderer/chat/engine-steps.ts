@@ -10,7 +10,7 @@ import type { EventEnvelope } from "../types.ts";
 /** The plugin action the card reads its rows from. */
 export const STEPS_ACTION = "steps";
 
-/** Where the card was last offered: the record's id (Not now remembers it), the plugin and the game. */
+/** Where the card was last offered: the record's id (Hide remembers it), the plugin and the game. */
 export type StepsOffer = { id: string; pluginId: string; project: string };
 
 /** A step's button: the plugin action it runs, with its arguments, and its label. */
@@ -59,7 +59,7 @@ export function stepsOffer(events: readonly EventEnvelope[]): StepsOffer | null 
   return null;
 }
 
-/** Whether an offer still shows: the person said Not now to an earlier one, or to none. */
+/** Whether an offer still shows: the person hid an earlier one, or none. */
 export const stepsShown = (offer: StepsOffer | null, dismissed: string | null): offer is StepsOffer =>
   offer !== null && offer.id !== dismissed;
 

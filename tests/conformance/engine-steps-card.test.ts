@@ -1,6 +1,6 @@
 /**
  * The steps card an engine plugin offers in a game's chat ("Steps for Unreal"): the newest offer in
- * the chat shows until the person says Not now, and a later offer (the agent's show-steps) shows it
+ * the chat shows until the person hides it, and a later offer (the agent's show-steps) shows it
  * again. Its rows come from the plugin, read live, so anything malformed is dropped, not drawn.
  */
 import assert from "node:assert/strict";
@@ -32,10 +32,10 @@ describe("the steps card's offer", () => {
     assert.equal(stepsOffer([offer(1, { project: "valley" })]), null, "no plugin: nothing to ask");
   });
 
-  it("shows until Not now, and a later offer shows again", () => {
+  it("shows until Hide, and a later offer shows again", () => {
     const first = stepsOffer([offer(1)]);
     assert.equal(stepsShown(first, null), true);
-    assert.equal(stepsShown(first, "000001"), false, "Not now on this offer");
+    assert.equal(stepsShown(first, "000001"), false, "Hide on this offer");
     const again = stepsOffer([offer(1), offer(5)]);
     assert.equal(stepsShown(again, "000001"), true, "the agent showed it again");
     assert.equal(stepsShown(null, null), false);

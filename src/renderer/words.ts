@@ -1632,7 +1632,14 @@ export const PLAN_WORDS = {
 export const A_PLUGIN = "A plugin";
 
 /** The steps card's own words; its rows are the plugin's. */
-export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", copied: "Copied" } as const;
+export const STEPS_WORDS = {
+  /** Puts the card away for this game until the agent shows it again. */
+  hide: "Hide",
+  hideLabel: "Hide this card until the agent shows it again",
+  done: "(done)",
+  copy: "Copy",
+  copied: "Copied",
+} as const;
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {

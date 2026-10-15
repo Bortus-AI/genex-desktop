@@ -1753,7 +1753,7 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 
 The steps card ("Unreal setup") sits above the composer while nothing else waits there. Its
 rows are the plugin's `steps` action, read every 5 s while it shows, so Xcode installed or opened
-outside Genex is ticked by itself; it goes when no step is open, and Not now hides it for that game
+outside Genex is ticked by itself; it goes when no step is open, and Hide puts it away for that game
 until the next offer. Unreal's rows: the project is set up, then Install Xcode (Open App Store) and
 Open Xcode once, or the one Terminal line for another developer folder, or Update Xcode for one too
 old for the engine, or Add Xcode N for one too new (Apple's developer downloads page; a second
