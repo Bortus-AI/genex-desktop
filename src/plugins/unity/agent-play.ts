@@ -45,8 +45,13 @@ export function agentPlayMarker(folder: string, now: () => number = Date.now): A
 }
 
 /** Where a game's connector keeps its marker, or null for an id that names no game. */
-const markerFile = (storage: string, game: string): string | null =>
-  GAME_ID.test(game) ? path.join(storage, CONNECTORS_FOLDER, game, AGENT_PLAY_FILE) : null;
+export const agentPlayFolder = (storage: string, game: string): string | null =>
+  GAME_ID.test(game) ? path.join(storage, CONNECTORS_FOLDER, game) : null;
+
+const markerFile = (storage: string, game: string): string | null => {
+  const folder = agentPlayFolder(storage, game);
+  return folder ? path.join(folder, AGENT_PLAY_FILE) : null;
+};
 
 /** Whether the agent's own play runs for this game: a marker written within the last half hour. */
 export async function agentPlaying(storage: string, game: string, now: number): Promise<boolean> {

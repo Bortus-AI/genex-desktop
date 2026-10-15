@@ -1865,6 +1865,15 @@ sign-in of its own:
   the new editor, not 150: ending the old one may take half a minute, and the host ends one plugin
   call at 190 s.
 
+The six harness-only `play-*` tools implement the shared editor computer contract
+([computer use](computer-use.md#game-engines-and-other-targets)). Each requires the `editor` lock
+and the `unity-project` fact, so chat agents and judges can play this folder's Unity game without
+an engine link. Pipeline carries Play mode, Game-view captures, pause and input; keyboard and
+mouse control require an installed, active Input System package. Genex never adds that dependency
+or changes the project's input settings implicitly. Unsupported input answers with the reason.
+Fixed host-owned Pipeline code supplies the game clock, player state and relative mouse events;
+agent-supplied C# remains subject to the connector's existing gate.
+
 Whether an editor has a project open is read from the computer's processes (`processes.ts`: a
 Unity editor whose command line names the project with `-projectPath`, in either spelling), and
 where they can't be listed from a descriptor whose process still runs. Unity's lock file

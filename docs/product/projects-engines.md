@@ -25,11 +25,11 @@ moments never ask.
 
 ## Loops in place
 
-Any folder but a web game at its root (Blender files beside it allowed), Blender alone included:
-the chat's session leads the Loop in place, on Claude Code, Codex or OpenCode (others refuse). The lead keeps save points,
-starts workers (of its plugins' types, if any) and claims finish; a reviewer checks (three no's
-stop it). Plugins add steps at Genex's moments, reviewer pictures and locks: while you work in a
-plugin's editor, agents wait. Unity makes, sets up and opens the project.
+Except for web games at the folder's root (Blender files beside them allowed), the chat leads the
+Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers and claims
+finish; a reviewer checks (three no's stop it). Plugins add reviewer pictures and editor locks:
+while you use an editor, agents wait. Unity makes, sets up and opens the project; agents and judges
+play through Pipeline, with Input System required for keyboard and mouse control.
 
 ## Unreal
 

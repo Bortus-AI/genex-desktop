@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unity",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "name": "Unity",
   "publisher": "Genex",
   "description": "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.",
@@ -142,6 +142,105 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "play-open",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: start this project's Unity Play mode or join its running play. Requires an active Input System package; no packages are installed or changed. Answers {width,height,joined}; fresh refuses a person's play.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "fresh": {
+            "type": "boolean",
+            "description": "True: start the play over from the game's start (a play an agent left running is ended first; the person's is never touched)."
+          }
+        }
+      },
+      "facts": ["unity-project"]
+    },
+    {
+      "name": "play-input",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: move the player's relative mouse or wheel for one frame, then hold keys or aimed mouse buttons together for game seconds and release them. Requires Unity's Input System; legacy input injection is not supported. Answers {held,gameSeconds}.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "keys": {
+            "type": "string",
+            "description": "Web key codes or mouse buttons (MouseLeft, MouseRight, MouseMiddle) held together, joined by commas: KeyW,ShiftLeft (empty: just let the game play)."
+          },
+          "seconds": {
+            "type": "number",
+            "description": "Game seconds to hold them, 0.05 to 10."
+          },
+          "dx": {
+            "type": "number",
+            "description": "Pixels of mouse motion to the right for one frame first (negative: left)."
+          },
+          "dy": {
+            "type": "number",
+            "description": "Pixels of mouse motion down the screen for one frame first (negative: up)."
+          },
+          "wheel": {
+            "type": "number",
+            "description": "Notches of the mouse wheel for one frame first, up positive."
+          }
+        },
+        "required": ["keys", "seconds"]
+      },
+      "facts": ["unity-project"]
+    },
+    {
+      "name": "play-shot",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: capture the running Game view, including its HUD, as {png (base64),width,height}.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "facts": ["unity-project"]
+    },
+    {
+      "name": "play-state",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: read the running game's clock and the Player-tagged object's transform, when present.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "facts": ["unity-project"]
+    },
+    {
+      "name": "play-pause",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: set paused true to freeze Unity Play mode, or false to resume it. Repeating the same value leaves it unchanged.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean",
+            "description": "True stands the game still; false lets it run."
+          }
+        },
+        "required": ["paused"]
+      },
+      "facts": ["unity-project"]
+    },
+    {
+      "name": "play-close",
+      "audience": "harness",
+      "needs": ["editor"],
+      "description": "For Genex's computer tool only: end the play this session started, or restore a joined play's original pause and runtime background settings. Answers {closed}.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "facts": ["unity-project"]
     }
   ],
   "skills": [

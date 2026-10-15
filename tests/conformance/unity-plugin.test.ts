@@ -14,6 +14,7 @@ import { createUnityBackend, systemBackendDeps, UnityAction, UnityTool } from ".
 import { rememberedProject } from "../../src/plugins/unity/project-folder.ts";
 import { HookEvent, LockScope } from "../../src/shared/plugin-hooks.ts";
 import { CoreFact, type FactRef } from "../../src/shared/project-facts.ts";
+import { ENGINE_PLAY_TOOLS } from "../../src/shared/engine-play.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -102,13 +103,21 @@ describe("the bundled Unity plugin", () => {
     const needing = unity.tools
       .filter((declared) => declared.needs?.includes("editor"))
       .map((declared) => declared.name);
-    assert.deepEqual(needing.sort(), [
-      UnityTool.EndEditor,
-      UnityTool.OpenForRun,
-      UnityTool.ReopenEditor,
-      UnityTool.SaveAll,
-      UnityTool.SceneShots,
-    ]);
+    assert.deepEqual(
+      needing.sort(),
+      [
+        ...ENGINE_PLAY_TOOLS,
+        UnityTool.EndEditor,
+        UnityTool.OpenForRun,
+        UnityTool.ReopenEditor,
+        UnityTool.SaveAll,
+        UnityTool.SceneShots,
+      ].sort(),
+    );
+    for (const name of ENGINE_PLAY_TOOLS) {
+      assert.equal(tool(name)?.audience, "harness");
+      assert.deepEqual(tool(name)?.facts, [CoreFact.UnityProject]);
+    }
     assert.equal(tool(UnityTool.EditorActivity)?.needs, undefined, "the probe asks without waiting for its own lock");
     assert.equal(tool(UnityTool.EditorState)?.needs, undefined, "a health check never waits for the editor");
     assert.ok(tool(UnityTool.RestartEditor)?.confirmation, "ending the person's editor is theirs to confirm");

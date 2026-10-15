@@ -25,8 +25,10 @@
 import { realpath } from "node:fs/promises";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { ENGINE_PLAY_TOOLS, type EnginePlayTool } from "../../shared/engine-play.ts";
 import type { Activate, PluginActivation, PluginContext } from "../../plugin-sdk/index.d.ts";
 import { getUnityLaunch, systemOpener, UnitySource } from "./editor-launch.ts";
+import { createComputerPlay } from "./computer-play.ts";
 import { endEditor, firstSetup } from "./editor-life.ts";
 import {
   editorActivity,
@@ -397,6 +399,7 @@ async function getUnity(deps: UnityBackendDeps): Promise<{ opened: UnitySource }
 
 /** The backend over the clock, the installed editors, the opener, the editor's network and the processes a test may stand in for. */
 export function createUnityBackend(deps: UnityBackendDeps): PluginActivation {
+  const play = createComputerPlay(deps);
   const atMoment =
     <T>(handler: (moment: Moment, momentDeps: MomentDeps) => Promise<T>) =>
     async (context: PluginContext) =>
@@ -428,7 +431,9 @@ export function createUnityBackend(deps: UnityBackendDeps): PluginActivation {
     [UnityAction.GetUnity]: () => getUnity(deps),
   };
   return {
-    async tool(name, _args, context) {
+    async tool(name, args, context) {
+      if ((ENGINE_PLAY_TOOLS as readonly string[]).includes(name))
+        return play(name as EnginePlayTool, args, context, await storageOf(context));
       if (!isUnityTool(name)) throw new Error(MESSAGE.UnknownTool(name));
       return tools[name](context);
     },
