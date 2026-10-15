@@ -2538,6 +2538,12 @@ export class StudioCore {
     return this.#conversation.sendUserMessage(...args);
   }
 
+  retryMention(
+    ...args: Parameters<ConversationService["retryMention"]>
+  ): ReturnType<ConversationService["retryMention"]> {
+    return this.#conversation.retryMention(...args);
+  }
+
   stopThread(...args: Parameters<ConversationService["stopThread"]>): ReturnType<ConversationService["stopThread"]> {
     this.#autoResume.userStopped(args[0]);
     return this.#conversation.stopThread(...args);

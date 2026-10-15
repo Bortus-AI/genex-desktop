@@ -149,7 +149,7 @@ import { registerSettingsIpc } from "./ipc/settings.ts";
 import { readLicenseTexts } from "./licenses.ts";
 import { registerSkillsIpc } from "./ipc/skills.ts";
 import { registerTerminalIpc } from "./ipc/terminal.ts";
-import { registerThreadsIpc } from "./ipc/threads.ts";
+import { registerMentionRetry, registerThreadsIpc } from "./ipc/threads.ts";
 import { KeepAwake } from "./keep-awake.ts";
 import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
@@ -1323,6 +1323,7 @@ function registerIpc(studio: StudioCore): void {
     developer: !app.isPackaged,
     playWeb: playOrigin.web,
   });
+  registerMentionRetry(handle, studio);
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
   registerStorageIpc(handle, { core: studio });
   registerJobsIpc(handle, { core: studio, openExternal: (url) => shell.openExternal(url) });

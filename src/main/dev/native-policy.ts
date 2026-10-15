@@ -140,6 +140,8 @@ const FIXTURE_SAFE = [
   "studio:bootstrap",
   "studio:performance.mark",
   "studio:send",
+  // A failed @ tag fetched again: a fixture launch's tag sources are its own stand-ins, as Remix's are.
+  "studio:mentions.retry",
   "studio:plan.answer",
   "studio:cancel",
   "studio:queue.message",

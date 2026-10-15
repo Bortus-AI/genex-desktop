@@ -5725,6 +5725,93 @@ a:focus-visible {
   color: transparent;
   caret-color: var(--ink);
 }
+/* The card under a message with @ tags: a row per tag; one that attached nothing is a warning
+   (orange, never the error red), with the one action that helps. */
+.mention-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-start: auto;
+  width: min(100%, 420px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.mention-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 18px;
+}
+.mention-result[data-failed] {
+  background: var(--orange-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--orange) 45%, transparent);
+}
+.mention-result-cover {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #1a1b1e;
+  object-fit: cover;
+}
+.mention-result-cover .mention-result-avatar {
+  width: 18px;
+  height: 18px;
+}
+.mention-result-text {
+  display: grid;
+  min-width: 0;
+}
+.mention-result-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-result-text b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.mention-result-text span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.mention-result[data-failed] .mention-result-text span {
+  color: color-mix(in oklab, var(--orange) 55%, var(--ink));
+}
+.mention-result-ok {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+  font-size: 12.5px;
+  color: var(--green);
+}
+.mention-result-action {
+  flex: none;
+  height: 28px;
+  margin-inline-start: auto;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mention-result-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
 /* The @ picker: cover cards on shelves, as on genex.games. Words on a card are white on a dark
    scrim in both themes, because they sit on a picture. */
 .mention-panel {

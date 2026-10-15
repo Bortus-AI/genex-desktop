@@ -19,6 +19,7 @@ import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
+import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
 
@@ -36,6 +37,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:update.about": "appAbout",
   "studio:bootstrap": "bootstrap",
   "studio:send": "send",
+  "studio:mentions.retry": "mentionRetry",
   "studio:plan.answer": "answerPlan",
   "studio:cancel": "cancelTurn",
   "studio:queue.message": "changeQueuedMessage",
@@ -258,6 +260,7 @@ export interface StudioInvokePayloads {
   "studio:update.about": undefined;
   "studio:bootstrap": undefined;
   "studio:send": { text: string } & NonNullable<Arg<"send", 1>>;
+  "studio:mentions.retry": { threadId: string; messageId: string; tag: MentionRef; action: MentionRetry };
   "studio:plan.answer": { threadId: string; id: string; approved: boolean };
   "studio:cancel": { threadId: string };
   "studio:queue.message": {

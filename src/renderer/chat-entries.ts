@@ -47,7 +47,7 @@ import { plainDefect, reportSummary } from "./run-graph.ts";
 import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
-import { MentionResult, withoutMentionContext } from "../shared/prompt-mention.ts";
+import { type MentionOutcome, mergeMentionResults, withoutMentionContext } from "../shared/prompt-mention.ts";
 import { GameEngine, isGameEngine } from "../shared/game-engine.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
 import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
@@ -90,7 +90,6 @@ import {
   snapshotWords,
   soundsLikeTrouble,
   TRANSCRIPT_WORDS,
-  mentionStepWords,
   toolActivityWords,
   toolWords,
   usingPluginWords,
@@ -117,6 +116,8 @@ export const EntryKind = {
   Compaction: "compaction",
   /** A session's card to turn a Genex plugin on or install it (`plugin_suggested`). */
   PluginSuggestion: "plugin-suggestion",
+  /** What a message's @ tags gave the agent (`mention_tagged`): one card under the message. */
+  Mentions: "mentions",
 } as const;
 export type EntryKind = (typeof EntryKind)[keyof typeof EntryKind];
 
@@ -166,6 +167,8 @@ export type Entry =
   | { kind: typeof EntryKind.Activity; id: string; rows: Array<{ text: string; tag?: string }> }
   /** The conversation was compacted: its own row, opening to the summary that replaced the messages. */
   | { kind: typeof EntryKind.Compaction; id: string; messages: number | null; summary: string | null }
+  /** A message's @ tags and their results; `messageId` is the queue's, for Try again. */
+  | { kind: typeof EntryKind.Mentions; id: string; messageId?: string; tags: MentionOutcome[] }
   /** The turn-it-on card a session showed: its button is read from the live plugin list. */
   | { kind: typeof EntryKind.PluginSuggestion; id: string; suggestion: PluginSuggestedPayload }
   /** One plain line about what Harness learned; `link` opens Activity. */
@@ -1555,38 +1558,29 @@ function openPluginRow(
 }
 
 /**
- * What a message's @ tags gave the agent, written right after the message: its words paint the
- * tags, each attached tag is a step in the work under it, and one that attached nothing is a line
- * of its own, so it is seen.
+ * What a message's @ tags gave the agent, written right after the message (and again when a tag is
+ * tried again or taken off): one card under the message, each tag's latest result, and the
+ * message's words paint the tags.
  */
 function narrateMentions(chat: ChatDraft, event: EventEnvelope): void {
   const tagged = customPayload(event.data, CustomEvent.MentionTagged);
   const tags = tagged?.tags ?? [];
   if (!tags.length) return;
-  const message = chat.entries
-    .slice(-3)
-    .reverse()
-    .find((entry) => entry.kind === EntryKind.User);
-  if (message?.kind === EntryKind.User) message.tags = tags.map((tag) => tag.handle);
-  for (const [index, tag] of tags.entries()) {
-    const key = `${event.id}-${index}`;
-    const words = mentionStepWords(tag);
-    if (tag.result === MentionResult.Unavailable) {
-      chat.entries.push({
-        id: key,
-        kind: EntryKind.Notice,
-        row: { key, icon: "game", label: words, state: ToolState.Failed, failed: true },
-      });
-      continue;
-    }
-    toolGroup(chat, event.id).rows.push({
-      key,
-      icon: tag.result === MentionResult.Added ? "write" : "read",
-      label: words,
-      state: ToolState.Succeeded,
-      ...(tag.path ? { detail: [{ text: tag.path }], detailMono: true } : {}),
-    });
+  const { messageId } = tagged ?? {};
+  const known = messageId
+    ? chat.entries.find((entry) => entry.kind === EntryKind.Mentions && entry.messageId === messageId)
+    : undefined;
+  if (known?.kind === EntryKind.Mentions) {
+    known.tags = mergeMentionResults(known.tags, tags);
+    return;
   }
+  const at = chat.entries.findLastIndex((entry) => entry.kind === EntryKind.User);
+  const message = chat.entries[at];
+  if (message?.kind === EntryKind.User) message.tags = tags.map((tag) => tag.handle);
+  const card: Entry = { kind: EntryKind.Mentions, id: event.id, ...(messageId ? { messageId } : {}), tags };
+  // Under its message, ahead of anything the turn has said since.
+  if (at < 0) chat.entries.push(card);
+  else chat.entries.splice(at + 1, 0, card);
 }
 
 function narrateDelivery(chat: ChatDraft, event: EventEnvelope): void {

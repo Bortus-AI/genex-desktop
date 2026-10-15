@@ -73,7 +73,7 @@ import {
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
-import { MentionMiss, type MentionOutcome, MentionResult } from "../shared/prompt-mention.ts";
+import { MentionMiss } from "../shared/prompt-mention.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4299,18 +4299,6 @@ export const AVATAR_WORDS = {
   } satisfies Record<AvatarGear, string | null>,
 } as const;
 
-/** One @ tag's step in the chat after its message: what it gave the agent, or why nothing. */
-export function mentionStepWords(tag: Pick<MentionOutcome, "title" | "result" | "miss">): string {
-  const { title } = tag;
-  if (tag.result === MentionResult.Read) return `Reading ${title}, your game`;
-  if (tag.result === MentionResult.Copied) return `Downloaded ${title} to read`;
-  if (tag.result === MentionResult.Added) return `Added ${title} to the game`;
-  if (tag.miss === MentionMiss.NotTakeable) return `Couldn't download ${title}: it's no longer public`;
-  if (tag.miss === MentionMiss.NotWebGame) return `Couldn't add ${title}: assets are for web games`;
-  if (tag.miss === MentionMiss.NotDownloaded) return `Couldn't download ${title}`;
-  return `Couldn't find ${title} any more`;
-}
-
 /** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
 export const MENTION_WORDS = {
   listLabel: "Tag a game, tool or asset",
@@ -4327,4 +4315,19 @@ export const MENTION_WORDS = {
   reading: "Loading Genex games and assets…",
   noMatches: "No matches",
   atCap: "That's as many as one message can carry. Remove one to tag something else.",
+  resultsLabel: "Tagged in this message",
+  ready: "Ready",
+  added: "Added",
+  read: "Your game · the agent can read it",
+  copied: "Downloaded for the agent to read",
+  addedTo: (path: string) => `Added to the game as ${path}`,
+  missed: {
+    [MentionMiss.NotDownloaded]: "Couldn't download it. Check your connection.",
+    [MentionMiss.NotTakeable]: "Its author no longer shares it.",
+    [MentionMiss.Gone]: "It's no longer there.",
+    [MentionMiss.NotWebGame]: "Assets are for web games.",
+  } satisfies Record<MentionMiss, string>,
+  tryAgain: "Try again",
+  removeTag: "Remove tag",
+  trying: "Trying…",
 } as const;

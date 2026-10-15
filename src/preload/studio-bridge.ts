@@ -76,6 +76,8 @@ function threadCalls(bridge: BridgeCalls) {
   return {
     bootstrap: () => invoke("studio:bootstrap"),
     send: (text, options) => invoke("studio:send", { text, ...options }),
+    mentionRetry: (threadId, messageId, tag, action) =>
+      invoke("studio:mentions.retry", { threadId, messageId, tag, action }),
     answerPlan: (threadId, id, approved) => invoke("studio:plan.answer", { threadId, id, approved }),
     cancelTurn: (threadId) => invoke("studio:cancel", { threadId }),
     changeQueuedMessage: (threadId, messageId, operation, text) =>

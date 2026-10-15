@@ -49,6 +49,8 @@ export interface MentionRef {
   title: string;
   game?: string;
   slug?: string;
+  /** A genex.games cover the chat shows beside the tag's result; display only. */
+  coverUrl?: string;
 }
 
 /** The part of a doc a message carries. */
@@ -60,7 +62,16 @@ export function mentionRef(doc: MentionDoc): MentionRef {
     title: doc.title,
     ...(doc.game === undefined ? {} : { game: doc.game }),
     ...(doc.slug === undefined ? {} : { slug: doc.slug }),
+    ...(isCoverUrl(doc.coverUrl) ? { coverUrl: doc.coverUrl } : {}),
   };
+}
+
+/** The longest cover address a tag keeps. */
+const COVER_URL_MAX = 600;
+
+/** A cover a tag may carry: an https address of reasonable length (never a data: picture). */
+export function isCoverUrl(value: unknown): value is string {
+  return typeof value === "string" && value.length <= COVER_URL_MAX && value.startsWith("https://");
 }
 
 /** A handle's letters, then any number of hyphenated runs. */
@@ -226,6 +237,8 @@ export const MentionResult = {
   Added: "added",
   /** Nothing could be attached; `miss` says why. */
   Unavailable: "unavailable",
+  /** The person took the tag off after it failed. */
+  Removed: "removed",
 } as const;
 export type MentionResult = (typeof MentionResult)[keyof typeof MentionResult];
 
@@ -242,16 +255,54 @@ export const MentionMiss = {
 } as const;
 export type MentionMiss = (typeof MentionMiss)[keyof typeof MentionMiss];
 
-/** One resolved tag, as the chat shows it after the message. */
+/** One resolved tag, as the chat shows it after the message, with what it takes to try it again. */
 export interface MentionOutcome {
   handle: string;
   title: string;
   kind: MentionKind;
   origin: MentionOrigin;
+  game?: string;
+  slug?: string;
+  coverUrl?: string;
   result: MentionResult;
   /** Where it landed, relative to the game (`src/assets/fireplace.ts`, `.studio/refs/neon-rush`). */
   path?: string;
   miss?: MentionMiss;
+}
+
+/** What the chat can do with a tag that attached nothing: fetch it again, or take it off. */
+export const MentionRetry = { Again: "again", Remove: "remove" } as const;
+export type MentionRetry = (typeof MentionRetry)[keyof typeof MentionRetry];
+
+/** Whether trying a failed tag again can help: only a download that did not arrive. */
+export function retriable(tag: Pick<MentionOutcome, "result" | "miss">): boolean {
+  return tag.result === MentionResult.Unavailable && tag.miss === MentionMiss.NotDownloaded;
+}
+
+/** The tag a result came from, to try it again. */
+export function refOf(tag: MentionOutcome): MentionRef {
+  return {
+    handle: tag.handle,
+    kind: tag.kind,
+    origin: tag.origin,
+    title: tag.title,
+    ...(tag.game ? { game: tag.game } : {}),
+    ...(tag.slug ? { slug: tag.slug } : {}),
+    ...(tag.coverUrl ? { coverUrl: tag.coverUrl } : {}),
+  };
+}
+
+/**
+ * Each tag's latest result for one message: records for the same message (a first send, then
+ * Try again or Remove) replace a tag's result by its handle and keep the first order.
+ */
+export function mergeMentionResults(
+  current: readonly MentionOutcome[],
+  next: readonly MentionOutcome[],
+): MentionOutcome[] {
+  const byHandle = new Map(current.map((tag) => [tag.handle, tag]));
+  for (const tag of next) byHandle.set(tag.handle, tag);
+  return [...byHandle.values()];
 }
 
 /** Thread custom event `mention_tagged`: what each tag of one message gave the agent. */
@@ -288,8 +339,8 @@ const tagText = (value: unknown): string | undefined =>
 function readMentionRef(item: unknown): MentionRef | null {
   if (typeof item !== "object" || item === null) return null;
   const read = (key: keyof MentionRef): unknown => Reflect.get(item, key);
-  const [handle, kind, origin, title, game, slug] = (
-    ["handle", "kind", "origin", "title", "game", "slug"] as const
+  const [handle, kind, origin, title, game, slug, coverUrl] = (
+    ["handle", "kind", "origin", "title", "game", "slug", "coverUrl"] as const
   ).map(read);
   const named = typeof handle === "string" && isHandle(handle) && typeof title === "string";
   if (!named || !isKind(kind) || !isOrigin(origin)) return null;
@@ -302,6 +353,7 @@ function readMentionRef(item: unknown): MentionRef | null {
     title: title.slice(0, TAG_TEXT_MAX),
     ...(gameName ? { game: gameName } : {}),
     ...(slugName ? { slug: slugName } : {}),
+    ...(isCoverUrl(coverUrl) ? { coverUrl } : {}),
   };
 }
 

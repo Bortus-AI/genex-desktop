@@ -27,6 +27,8 @@ import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
+import { MentionResults } from "./MentionResults.tsx";
+import type { MentionOutcome } from "../../shared/prompt-mention.ts";
 import { WorkLog } from "./WorkLog.tsx";
 
 /** A paused run while nothing else runs: its own card offers Resume. */
@@ -93,6 +95,8 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <GenexCoverCard entry={entry} project={context.project} />;
     case EntryKind.User:
       return <UserEntry key={entry.id} entry={entry} context={context} />;
+    case EntryKind.Mentions:
+      return <MentionsEntry entry={entry} context={context} />;
     case EntryKind.Assistant:
       return <AssistantEntry key={entry.id} entry={entry} commands={context.commands} />;
     case EntryKind.Notice:
@@ -192,6 +196,24 @@ function AssistantEntry({
     <div className="flex flex-col gap-1">
       <Markdown text={entry.text} {...(commands ? { renderCommand } : {})} />
     </div>
+  );
+}
+
+/** The card of what a message's @ tags gave the agent, with Try again and Remove tag in this chat. */
+function MentionsEntry({
+  entry,
+  context,
+}: {
+  entry: { tags: MentionOutcome[]; messageId?: string };
+  context: TranscriptContext;
+}) {
+  return (
+    <MentionResults
+      tags={entry.tags}
+      threadId={context.threadId}
+      messageId={entry.messageId}
+      onProblem={notifyProblem(context.onNotice)}
+    />
   );
 }
 

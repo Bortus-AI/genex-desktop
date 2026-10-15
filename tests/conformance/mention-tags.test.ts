@@ -102,6 +102,7 @@ describe("resolving @ tags", () => {
       title: "neon-rush",
       kind: MentionKind.Game,
       origin: MentionOrigin.Genex,
+      slug: "neon-rush",
       result: MentionResult.Copied,
       path: ".studio/refs/neon-rush",
     });

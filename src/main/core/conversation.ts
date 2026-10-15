@@ -29,6 +29,7 @@ import {
   DispatchActionType,
   HarnessCapability,
   HarnessState,
+  MessageOrigin,
   type DispatchAction,
   type ReferenceFrame,
 } from "../../shared/protocol.ts";
@@ -40,8 +41,20 @@ import { settleWithin } from "../app-lifecycle.ts";
 import { threadOr } from "./main-thread.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
 import { isQueueMessageId } from "./rewind.ts";
-import { type MentionSources, type MentionTarget, type ResolvedMentions, resolveMentions } from "./mention-tags.ts";
-import { readMentionRefs } from "../../shared/prompt-mention.ts";
+import {
+  type MentionSources,
+  type MentionTarget,
+  type ResolvedMentions,
+  resolveMentions,
+  tagOf,
+} from "./mention-tags.ts";
+import {
+  type MentionOutcome,
+  type MentionRef,
+  MentionResult,
+  MentionRetry,
+  readMentionRefs,
+} from "../../shared/prompt-mention.ts";
 
 /** A message with no tags. */
 const NO_TAGS: ResolvedMentions = { readRoots: [], context: "", outcomes: [] };
@@ -98,6 +111,8 @@ const THREAD_TITLE_CHARS = 56;
 
 /** User-facing copy of this module, and what the coordinator reads when a tool call is refused. */
 const MESSAGE = {
+  tagNoGame: "Tags belong to a game's chat",
+  tagRetried: (handle: string) => `@${handle} did not arrive with my last message; it is attached now.`,
   autopilotOutdated:
     "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the " +
     "studio has updated itself will start the build. (Its own loop code predates timed builds: the seed's " +
@@ -314,6 +329,32 @@ export class ConversationService {
         [customEventData(CustomEvent.MentionTagged, { ...(messageId ? { messageId } : {}), tags: tags.outcomes })],
         target.threadId,
       );
+  }
+
+  /**
+   * A failed tag of a sent message, tried again or taken off. Again resolves it as a send would
+   * and, when it now attaches, tells the agent in a line the chat leaves out; either way the
+   * message's result card shows the tag's new result.
+   */
+  async retryMention(threadId: string, messageId: string, ref: MentionRef, action: MentionRetry): Promise<void> {
+    const record = await this.#core.store.getRecord(threadId);
+    const meta = record.metadata as ThreadMeta;
+    const project = meta?.kind === ThreadKind.Game ? meta.project : undefined;
+    if (!project) throw new Error(MESSAGE.tagNoGame);
+    const recordTags = (tags: MentionOutcome[]) =>
+      this.#core.append([customEventData(CustomEvent.MentionTagged, { messageId, tags })], threadId);
+    if (action === MentionRetry.Remove) {
+      await recordTags([{ ...tagOf(ref), result: MentionResult.Removed }]);
+      return;
+    }
+    const target = { threadId, project, newProject: false, studioThread: false };
+    const tags = await this.#resolveTags(target, { mentions: [ref] });
+    await recordTags(tags.outcomes);
+    if (tags.outcomes.every((tag) => tag.result === MentionResult.Unavailable)) return;
+    await this.sendUserMessage(`${MESSAGE.tagRetried(ref.handle)}${tags.context}`, {
+      thread: threadId,
+      origin: MessageOrigin.TagRetry,
+    });
   }
 
   /** The message's @ tags made real for its game; none outside a game's chat. */

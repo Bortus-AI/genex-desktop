@@ -8,6 +8,7 @@ import type {
   PlayShelves,
 } from "./play.ts";
 import type { GenexCatalogItem } from "./mention-corpus.ts";
+import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
   AvatarStyle,
   FriendActionRequest,
@@ -271,6 +272,8 @@ export interface StudioApi {
   appAbout(): Promise<AppAbout>;
   bootstrap(): Promise<Bootstrap>;
   send(text: string, options?: ComposerSendOptions): Promise<boolean>;
+  /** A sent message's failed @ tag, fetched again or taken off; its result card shows the outcome. */
+  mentionRetry(threadId: string, messageId: string, tag: MentionRef, action: MentionRetry): Promise<void>;
   answerPlan(threadId: string, id: string, approved: boolean): Promise<boolean>;
   cancelTurn(threadId: string): Promise<boolean>;
   changeQueuedMessage(

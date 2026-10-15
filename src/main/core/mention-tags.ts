@@ -103,12 +103,21 @@ function dedupe(refs: readonly MentionRef[]): MentionRef[] {
   return [...byHandle.values()].slice(0, PROMPT_MENTION_MAX);
 }
 
-function base(ref: MentionRef): Omit<MentionOutcome, "result"> {
-  return { handle: ref.handle, title: ref.title, kind: ref.kind, origin: ref.origin };
+/** A tag's outcome before its result: the tag as the person picked it. */
+export function tagOf(ref: MentionRef): Omit<MentionOutcome, "result"> {
+  return {
+    handle: ref.handle,
+    title: ref.title,
+    kind: ref.kind,
+    origin: ref.origin,
+    ...(ref.game ? { game: ref.game } : {}),
+    ...(ref.slug ? { slug: ref.slug } : {}),
+    ...(ref.coverUrl ? { coverUrl: ref.coverUrl } : {}),
+  };
 }
 
 function miss(ref: MentionRef, why: MentionMiss): MentionOutcome {
-  return { ...base(ref), result: MentionResult.Unavailable, miss: why };
+  return { ...tagOf(ref), result: MentionResult.Unavailable, miss: why };
 }
 
 async function resolveOne(ref: MentionRef, target: MentionTarget, sources: MentionSources): Promise<Resolved> {
@@ -122,7 +131,7 @@ async function resolveOne(ref: MentionRef, target: MentionTarget, sources: Menti
 async function localGame(ref: MentionRef, target: MentionTarget): Promise<Resolved> {
   const folder = ref.game ? await target.libraryDir(ref.game) : null;
   if (!folder) return { outcome: miss(ref, MentionMiss.Gone) };
-  return { outcome: { ...base(ref), result: MentionResult.Read }, folder };
+  return { outcome: { ...tagOf(ref), result: MentionResult.Read }, folder };
 }
 
 /** A genex.games game or tool anyone may take (or the person's own): a fresh read-only copy. */
@@ -150,7 +159,7 @@ async function reference(
     return { outcome: miss(ref, MentionMiss.NotDownloaded) };
   }
   const relative = toPosixRelative(path.relative(target.gameDir, dest));
-  return { outcome: { ...base(ref), result: MentionResult.Copied, path: relative } };
+  return { outcome: { ...tagOf(ref), result: MentionResult.Copied, path: relative } };
 }
 
 /** An asset's module, written into the game under a name no file has yet. */
@@ -163,7 +172,7 @@ async function asset(ref: MentionRef, slug: string, target: MentionTarget, sourc
   const name = await freeName(dir, found.filename);
   await atomicWriteText(path.join(dir, name), ASSET_HEADER + found.code);
   return {
-    outcome: { ...base(ref), result: MentionResult.Added, path: `${ASSETS_DIR}/${name}` },
+    outcome: { ...tagOf(ref), result: MentionResult.Added, path: `${ASSETS_DIR}/${name}` },
     ...(found.usage ? { usage: found.usage } : {}),
   };
 }

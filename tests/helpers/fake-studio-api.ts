@@ -71,6 +71,7 @@ const METHODS = [
   "bootstrap",
   "performanceMark",
   "send",
+  "mentionRetry",
   "answerPlan",
   "cancelTurn",
   "changeQueuedMessage",
