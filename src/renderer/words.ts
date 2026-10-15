@@ -4134,7 +4134,7 @@ export const ACCOUNT_WORDS = {
  * for the same field, so both read alike. A reserved handle reads as Taken, the account's own as Free.
  */
 export const NICKNAME_WORDS = {
-  label: "Your nickname",
+  label: "Your nickname and profile link",
   states: {
     [HandleState.Free]: "Free",
     [HandleState.Taken]: "Taken",

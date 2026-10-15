@@ -1599,6 +1599,8 @@
   position: relative;
   width: 240px;
   height: 240px;
+  /* The stage's top is empty above the body's gear: the card starts closer to the avatar. */
+  margin-top: -18px;
 }
 .avatar-welcome-wire {
   position: absolute;

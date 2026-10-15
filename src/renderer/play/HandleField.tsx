@@ -143,12 +143,20 @@ function Suggestions({ handles, onPick }: { handles: string[]; onPick: (handle: 
   ));
 }
 
-/** The line under the field. */
-function HintLine({ view, onPick }: { view: HandleFieldView; onPick: (handle: string) => void }): JSX.Element {
+/** The line under the field. `linkInLabel`: the label already says it is the profile link. */
+function HintLine({
+  view,
+  onPick,
+  linkInLabel,
+}: {
+  view: HandleFieldView;
+  onPick: (handle: string) => void;
+  linkInLabel: boolean;
+}): JSX.Element {
   const offers = view.suggestions.length > 0;
   const said: Record<HandleHint, string | null> = {
     [HandleHint.None]: null,
-    [HandleHint.ProfileLink]: WORDS.profileLink,
+    [HandleHint.ProfileLink]: linkInLabel ? null : WORDS.profileLink,
     [HandleHint.Try]: null,
     [HandleHint.Length]: WORDS.length,
     [HandleHint.Letters]: WORDS.letters,
@@ -166,8 +174,9 @@ function HintLine({ view, onPick }: { view: HandleFieldView; onPick: (handle: st
 }
 
 /**
- * The field itself. `label` titles it (the welcome); without one, `labelledBy` names the element
- * that does (a Settings row's label). `inputRef` lets a dialog put its first focus in the box.
+ * The field itself. `label` titles it (the welcome, whose label also names the profile link, so
+ * nothing under the box repeats it); without one, `labelledBy` names the element that does (a
+ * Settings row's label). `inputRef` lets a dialog put its first focus in the box.
  */
 export function HandleField({
   id,
@@ -239,7 +248,7 @@ export function HandleField({
         {aside}
       </div>
       <div id={hintId} className="handle-hint" data-handle-hint={view.hint} aria-live="polite">
-        <HintLine view={view} onPick={pick} />
+        <HintLine view={view} onPick={pick} linkInLabel={label !== undefined} />
       </div>
     </div>
   );
