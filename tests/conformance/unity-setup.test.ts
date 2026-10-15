@@ -319,6 +319,15 @@ describe("installing Unity 6 through Hub", () => {
     assert.equal(stopped?.inHub, true, "Hub's own window may finish what its command line could not");
     assert.match(String(stopped?.why), /stopped: Error: the download was interrupted/);
 
+    // Hub says it is done, but put Unity somewhere Genex doesn't look (another install folder).
+    await writeFile(
+      mac.started[0]?.log ?? "",
+      "[Unity (6000.3.26f1)] installed successfully.\nAll Tasks Completed Successfully.\n",
+    );
+    const elsewhere = await mac.installer.job();
+    assert.match(String(elsewhere?.why), /says it installed Unity 6000\.3\.26f1/);
+    assert.doesNotMatch(String(elsewhere?.why), /stopped/);
+
     await fakeEditor(path.join(mac.env.applications, "Unity", "Hub", "Editor"), "6000.3.26f1");
     assert.equal(await mac.installer.job(), null, "an install that ended with Unity there is done");
   });

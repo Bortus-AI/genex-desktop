@@ -59,6 +59,8 @@ const MESSAGE = {
   NoRelease: "Unity Hub listed no Unity 6 to install. Open Unity Hub and install Unity 6 from Installs.",
   Space: (free: number) =>
     `Unity 6 needs about ${UNITY_SIZE_GB} GB; ${free.toFixed(1)} GB is free. Free up space, then try again.`,
+  Elsewhere: (version: string) =>
+    `Unity Hub says it installed Unity ${version}, but not where Genex looks for editors. Open Unity Hub, Installs, and check where it went.`,
   Stopped: (line: string) =>
     `Unity's install stopped${line ? `: ${line}` : ""}. Try again, or install it in Unity Hub.`,
   OnlyMac: "Genex installs Unity Hub on a Mac only: get it from Unity's page.",
@@ -111,6 +113,8 @@ export function releasesIn(output: string): string[] {
   }
 }
 
+/** Hub's last line once every task of an install went through. */
+const HUB_DONE = /all tasks completed successfully/i;
 /** A terminal escape Hub prints to redraw its progress, and a log line of Hub's own Chromium. */
 const TERMINAL_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
 const CHROMIUM_LOG = /^\[\d+:\d+\/\d+\.\d+:/;
@@ -250,7 +254,8 @@ async function editorJob(state: Installing): Promise<InstallJob | null> {
   if ((await readFacts(state.deps.env, null)).editor) return null;
   // An install that never started keeps its own words; one Hub ran and lost, Hub's window may finish.
   if (record.pid < 0) return { ...job, state: JobState.Failed, why: last, ...(record.inHub ? { inHub: true } : {}) };
-  return { ...job, state: JobState.Failed, why: MESSAGE.Stopped(last), inHub: true };
+  const why = HUB_DONE.test(last) ? MESSAGE.Elsewhere(record.version) : MESSAGE.Stopped(last);
+  return { ...job, state: JobState.Failed, why, inHub: true };
 }
 
 /** Keeps an install that could not start as a stopped one, with why, for the card; then refuses with it. */
