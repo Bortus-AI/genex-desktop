@@ -30,6 +30,8 @@ import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard } from "./CreditsShard.tsx";
 import { formatCount, PlateState, plateState } from "./play-model.ts";
+import { avatarRecipe } from "../../shared/avatar-recipe.ts";
+import { GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 import { GhostAvatar, PersonAvatar } from "./PersonAvatar.tsx";
 import { OfflineMark } from "./PlayOffline.tsx";
 import { SignOutDialog } from "./SignOutDialog.tsx";
@@ -42,8 +44,8 @@ const STACK_FACE = 24;
 const PLATE_FACE = 28;
 /** The placeholders' ids: each draws its own grey face. */
 const GHOSTS = ["ghost-a", "ghost-b"] as const;
-/** The signed-out plate's own face: a full-colour generated avatar, the same one every time. */
-const SIGNED_OUT_FACE = { id: "sign-in", imageUrl: null, avatarVariant: 0 } as const;
+/** The signed-out plate's own face: a full-colour generated avatar with faint eyes, the same one every time. */
+const SIGNED_OUT_FACE = avatarRecipe("sign-in");
 
 /** "July 2026": when an account was made, as a profile says it. */
 export const joinedWhen = (iso: string | null): string | null =>
@@ -183,7 +185,7 @@ function OfflineSlot(): JSX.Element {
 function FaceSlot({ waiting = false }: { waiting?: boolean }): JSX.Element {
   return (
     <span className="plate-slot" aria-hidden="true">
-      <PersonAvatar person={SIGNED_OUT_FACE} size={PLATE_FACE} />
+      <GeneratedAvatar recipe={SIGNED_OUT_FACE} size={PLATE_FACE} full faint />
       {waiting && <span className="plate-slot-spin" />}
     </span>
   );

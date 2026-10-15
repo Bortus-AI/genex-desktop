@@ -42,6 +42,8 @@ const MAX_BODY_PIXELS = 384;
 /** Where the body sits in a box with room for gear: 80% wide, a little low, so horns fit above. */
 const GEAR_BODY_SHARE = 0.4;
 const GEAR_BODY_DROP = 0.55;
+/** How strongly eyes show: in full, on a placeholder, and faint (there when you look for them). */
+const EYE_ALPHA = { Full: 1, Ghost: 0.5, Faint: 0.22 } as const;
 
 /** What an avatar draws. */
 export interface AvatarLook {
@@ -52,6 +54,8 @@ export interface AvatarLook {
   full: boolean;
   /** A placeholder: its eyes drawn at half strength. */
   ghost: boolean;
+  /** Eyes in their own colour but nearly see-through: a face that is there when you look for it. */
+  faint: boolean;
   /**
    * Drawn the way genex.games' link previews draw it, with the body as a 2D still and never on the
    * GPU: a preview of that picture must show the same face.
@@ -179,6 +183,12 @@ function fit(canvas: HTMLCanvasElement, pixels: number, css: number, at: { left:
   canvas.style.top = `${at.top}px`;
 }
 
+/** How strongly a look's eyes show. */
+function eyeAlpha(look: AvatarLook): number {
+  if (look.faint) return EYE_ALPHA.Faint;
+  return look.ghost ? EYE_ALPHA.Ghost : EYE_ALPHA.Full;
+}
+
 /** Paint one avatar's 2D layers and queue its body; returns the body to draw on the GPU, if any. */
 function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
   const { look, layers, t } = entry;
@@ -199,7 +209,7 @@ function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
     const drawn: AvatarFrame = { ctx: front, recipe: look.recipe, cx, cy, rad, t };
     front.clearRect(0, 0, pixels, pixels);
     drawSkinGear(drawn);
-    front.globalAlpha = look.ghost ? 0.5 : 1;
+    front.globalAlpha = eyeAlpha(look);
     drawEyes(drawn);
     front.globalAlpha = 1;
     if (!look.full) drawFrontGear(drawn);
