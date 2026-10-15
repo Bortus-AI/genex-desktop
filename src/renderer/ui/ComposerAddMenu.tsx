@@ -195,6 +195,11 @@ export interface MentionTagging {
   side: "top" | "bottom";
 }
 
+/** A plugin row as a tag, named by its plugin id. */
+function pluginTag(entry: AddMenuEntry): MentionDoc {
+  return pluginDoc({ ...entry, id: entry.pluginId ?? entry.id });
+}
+
 const NO_TAGGING: MentionTagging = { tagged: new Set(), atCap: false, onPick: () => {}, side: "top" };
 
 /**
@@ -550,7 +555,7 @@ export function ComposerAddMenu({
     onMention?.(null);
     onReferences();
   };
-  const rows = mentionOptions(mention, entries, pickImages, (entry) => tagging.onPick(pluginDoc(entry)));
+  const rows = mentionOptions(mention, entries, pickImages, (entry) => tagging.onPick(pluginTag(entry)));
   const picker = useMentionPicker({ open: mentioning, query: mention ?? "", project, anchor, tagging, rows });
   const { matches } = picker;
   const active = Math.min(highlight, Math.max(0, matches.length - 1));

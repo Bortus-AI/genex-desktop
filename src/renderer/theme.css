@@ -5772,6 +5772,15 @@ a:focus-visible {
   background: #1a1b1e;
   object-fit: cover;
 }
+/* A plugin's row shows the plugin's own logo, as its card in the picker does. */
+.mention-result-logo {
+  background: transparent;
+}
+.mention-result-logo .extension-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
 .mention-result-cover .mention-result-avatar {
   width: 18px;
   height: 18px;

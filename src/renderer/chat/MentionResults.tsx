@@ -14,7 +14,8 @@ import {
   refOf,
   retriable,
 } from "../../shared/prompt-mention.ts";
-import { useLibrary } from "../state/hooks.ts";
+import { useLibrary, usePlugins } from "../state/hooks.ts";
+import { PluginIcon } from "../ui/PluginIcon.tsx";
 import { GameAvatar } from "../ui/GameAvatar.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { MENTION_WORDS } from "../words.ts";
@@ -28,12 +29,13 @@ function rowWords(tag: MentionOutcome): string {
   return MENTION_WORDS.missed[tag.miss ?? MentionMiss.Gone];
 }
 
-/** A tag's small cover: its genex.games picture, a local game's own sphere, or a plain tile. */
+/** A tag's small cover: a plugin's own logo, its genex.games picture, a local game's sphere, or a plain tile. */
 function TagCover({ tag, cover }: { tag: MentionOutcome; cover: GameCover | undefined }): JSX.Element {
+  const plugin = usePlugins((s) => (tag.plugin ? s.list.find((entry) => entry.manifest.id === tag.plugin) : undefined));
   if (tag.kind === MentionKind.Plugin)
     return (
-      <span className="mention-result-cover" aria-hidden>
-        <Icon name="plugins" size={14} />
+      <span className="mention-result-cover mention-result-logo" aria-hidden>
+        <PluginIcon name={tag.title} src={plugin?.iconUrl} size="menu" />
       </span>
     );
   if (tag.coverUrl) return <img src={tag.coverUrl} alt="" className="mention-result-cover" draggable={false} />;

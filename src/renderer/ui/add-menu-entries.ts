@@ -31,6 +31,8 @@ export interface AddMenuEntry {
   toggle: (on: boolean) => void;
   /** The plugin's or server's own picture, when it has one. */
   icon?: string;
+  /** A plugin row's plugin id (the row's own id is namespaced by its kind). */
+  pluginId?: string;
 }
 
 /** What the menu's rows can do, bound by the menu to its studio calls. */
@@ -175,6 +177,7 @@ export function addMenuEntries(
       scope: EntryScope.AllGames,
       status: pluginStatus(plugin, owned, state, actions),
       toggle: (on) => actions.enablePlugin(plugin, on),
+      pluginId: plugin.manifest.id,
       ...(plugin.iconUrl ? { icon: plugin.iconUrl } : {}),
     };
   });
@@ -216,7 +219,7 @@ export function mentionOptions(
   mention: string | null,
   entries: AddMenuEntry[],
   pickImages: () => void,
-  mentionEntry: (entry: { id: string; name: string; icon?: string }) => void,
+  mentionEntry: (entry: AddMenuEntry) => void,
 ): MentionOption[] {
   const query = (mention ?? "").toLowerCase();
   const images = IMAGES_OPTION.includes(query) || "reference mood board".includes(query);
