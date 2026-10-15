@@ -101,7 +101,10 @@ export interface MentionToken {
  * The tags in `value`: each `@handle` that starts a word and is a known handle. A longer known
  * handle wins over a shorter one it begins with, and a trailing hyphen is never part of a tag.
  */
-export function scanMentionTokens(value: string, known: ReadonlySet<string> | ReadonlyMap<string, unknown>): MentionToken[] {
+export function scanMentionTokens(
+  value: string,
+  known: ReadonlySet<string> | ReadonlyMap<string, unknown>,
+): MentionToken[] {
   if (known.size === 0) return [];
   const tokens: MentionToken[] = [];
   for (const match of value.matchAll(TOKEN_PATTERN)) {
@@ -171,7 +174,12 @@ export interface MentionInsertion {
  * Replace the open `@query` (or insert at the caret) with `@handle ` and a space, which ends the
  * query so typing goes on; no second space when one already follows.
  */
-export function insertMention(value: string, caret: number, handle: string, open: MentionQuery | null): MentionInsertion {
+export function insertMention(
+  value: string,
+  caret: number,
+  handle: string,
+  open: MentionQuery | null,
+): MentionInsertion {
   const from = open ? open.start : caret;
   const before = value.slice(0, from);
   const after = value.slice(caret);
@@ -206,4 +214,102 @@ export function sentMentions<T>(value: string, picked: ReadonlyMap<string, T>): 
     if (out.length >= PROMPT_MENTION_MAX) break;
   }
   return out;
+}
+
+/** What a tag gave the agent once main had resolved it. Persisted: never rename a value. */
+export const MentionResult = {
+  /** A game on this Mac the agent may read. */
+  Read: "read",
+  /** A genex.games game or tool copied beside the game to read. */
+  Copied: "copied",
+  /** An asset's module added to the game. */
+  Added: "added",
+  /** Nothing could be attached; `miss` says why. */
+  Unavailable: "unavailable",
+} as const;
+export type MentionResult = (typeof MentionResult)[keyof typeof MentionResult];
+
+/** Why a tag attached nothing. Persisted: never rename a value. */
+export const MentionMiss = {
+  /** The game is no longer in the library, or no longer on genex.games. */
+  Gone: "gone",
+  /** genex.games no longer lets anyone take it. */
+  NotTakeable: "not-takeable",
+  /** Its download or its module did not arrive. */
+  NotDownloaded: "not-downloaded",
+  /** An asset is three.js code, and this game is not a web game. */
+  NotWebGame: "not-web-game",
+} as const;
+export type MentionMiss = (typeof MentionMiss)[keyof typeof MentionMiss];
+
+/** One resolved tag, as the chat shows it after the message. */
+export interface MentionOutcome {
+  handle: string;
+  title: string;
+  kind: MentionKind;
+  origin: MentionOrigin;
+  result: MentionResult;
+  /** Where it landed, relative to the game (`src/assets/fireplace.ts`, `.studio/refs/neon-rush`). */
+  path?: string;
+  miss?: MentionMiss;
+}
+
+/** Thread custom event `mention_tagged`: what each tag of one message gave the agent. */
+export interface MentionTaggedPayload {
+  /** The queue's id of the message the tags came with. */
+  messageId?: string;
+  tags?: MentionOutcome[];
+}
+
+/**
+ * What separates the person's words from the lines main adds about their tags in the text the
+ * agent reads. The chat shows only the words before it, and a rewind gives back only those.
+ */
+export const MENTION_CONTEXT_HEADING = "\n\nTagged in this message:\n";
+
+/** The person's own words of a sent message: everything before the tags' lines. */
+export function withoutMentionContext(text: string): string {
+  const at = text.indexOf(MENTION_CONTEXT_HEADING);
+  return at < 0 ? text : text.slice(0, at);
+}
+
+/** The longest title or name a tag carries. */
+const TAG_TEXT_MAX = 200;
+
+const KINDS: ReadonlySet<unknown> = new Set(Object.values(MentionKind));
+const ORIGINS: ReadonlySet<unknown> = new Set(Object.values(MentionOrigin));
+const isKind = (value: unknown): value is MentionKind => KINDS.has(value);
+const isOrigin = (value: unknown): value is MentionOrigin => ORIGINS.has(value);
+/** A non-empty string cut to the tag text limit, or undefined. */
+const tagText = (value: unknown): string | undefined =>
+  typeof value === "string" && value.length > 0 ? value.slice(0, TAG_TEXT_MAX) : undefined;
+
+/** One tag from untrusted input, or null when it is not well formed. */
+function readMentionRef(item: unknown): MentionRef | null {
+  if (typeof item !== "object" || item === null) return null;
+  const read = (key: keyof MentionRef): unknown => Reflect.get(item, key);
+  const [handle, kind, origin, title, game, slug] = (
+    ["handle", "kind", "origin", "title", "game", "slug"] as const
+  ).map(read);
+  const named = typeof handle === "string" && isHandle(handle) && typeof title === "string";
+  if (!named || !isKind(kind) || !isOrigin(origin)) return null;
+  const gameName = tagText(game);
+  const slugName = tagText(slug);
+  return {
+    handle,
+    kind,
+    origin,
+    title: title.slice(0, TAG_TEXT_MAX),
+    ...(gameName ? { game: gameName } : {}),
+    ...(slugName ? { slug: slugName } : {}),
+  };
+}
+
+/** The tags a send names, read from untrusted input: well-formed ones only, at most five. */
+export function readMentionRefs(value: unknown): MentionRef[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(readMentionRef)
+    .filter((ref): ref is MentionRef => ref !== null)
+    .slice(0, PROMPT_MENTION_MAX);
 }

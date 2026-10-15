@@ -200,7 +200,7 @@ function UserEntry({
   entry,
   context,
 }: {
-  entry: { id: string; text: string; about?: string };
+  entry: { id: string; text: string; about?: string; tags?: string[] };
   context: TranscriptContext;
 }) {
   const images = context.images.get(entry.id);
@@ -210,7 +210,15 @@ function UserEntry({
       : {};
   const { onRewind } = context;
   const rewind = onRewind && context.canRewind?.(entry.id) ? { rewindId: entry.id, onRewind } : {};
-  return <UserMessage text={entry.text} {...pictures} {...(entry.about ? { about: entry.about } : {})} {...rewind} />;
+  return (
+    <UserMessage
+      text={entry.text}
+      {...pictures}
+      {...(entry.about ? { about: entry.about } : {})}
+      {...(entry.tags ? { tags: entry.tags } : {})}
+      {...rewind}
+    />
+  );
 }
 
 /** The harness's system tags; UPDATE lines carry no heading. */

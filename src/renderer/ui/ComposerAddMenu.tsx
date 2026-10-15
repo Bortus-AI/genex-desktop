@@ -179,7 +179,19 @@ function useMentionKeys(ref: Ref<AddMenuHandle> | undefined, mention: MentionGri
 
 /** Cards go three across in a composer this wide (the home screen's), else two. */
 const THREE_COLUMNS_PX = 560;
-const NO_TAGS: ReadonlySet<string> = new Set();
+/** What the composer tells its @ picker about tagging. */
+export interface MentionTagging {
+  /** The handles already tagged in the message. */
+  tagged: ReadonlySet<string>;
+  /** The message holds as many tags as it may. */
+  atCap: boolean;
+  /** A card picked: the composer puts its tag in the text. */
+  onPick: (doc: MentionDoc) => void;
+  /** Where the picker opens: under the home screen's prompt bar, above a chat's. */
+  side: "top" | "bottom";
+}
+
+const NO_TAGGING: MentionTagging = { tagged: new Set(), atCap: false, onPick: () => {}, side: "top" };
 
 /**
  * The @ picker's cards for what was typed, laid out for the composer's width, each as a pick the
@@ -190,9 +202,7 @@ function useMentionPicker(input: {
   query: string;
   project: string | null | undefined;
   anchor: RefObject<HTMLDivElement | null>;
-  atCap: boolean;
-  tagged: ReadonlySet<string>;
-  onMentionDoc: ((doc: MentionDoc) => void) | undefined;
+  tagging: MentionTagging;
 }) {
   const { docs, covers, state } = useMentionDocs(input.open, input.project);
   const width = input.open ? (input.anchor.current?.offsetWidth ?? 0) : 0;
@@ -203,7 +213,7 @@ function useMentionPicker(input: {
     .map((doc) => ({
       id: `card-${doc.handle}`,
       name: doc.title,
-      pick: input.atCap && !input.tagged.has(doc.handle) ? () => {} : () => input.onMentionDoc?.(doc),
+      pick: input.tagging.atCap && !input.tagging.tagged.has(doc.handle) ? () => {} : () => input.tagging.onPick(doc),
     }));
   return { groups, cardPicks, columns, covers, state };
 }
@@ -414,6 +424,62 @@ function entryActions(
   };
 }
 
+/** Add's button, with its tip while the menu is closed. */
+function AddTrigger({ open, disabled }: { open: boolean; disabled: boolean }) {
+  return (
+    <ComposerTip
+      hidden={open}
+      align="start"
+      content={
+        <span className="flex items-center gap-2">
+          Add images and more <Shortcut>@</Shortcut>
+        </span>
+      }
+    >
+      <PopoverTrigger
+        render={<button type="button" />}
+        disabled={disabled}
+        aria-label="Add images and more"
+        className="composer-icon composer-add"
+      >
+        <Icon name="plus" />
+      </PopoverTrigger>
+    </ComposerTip>
+  );
+}
+
+/**
+ * The rows' entries and their actions, one at a time and each followed by a fresh read; Manage
+ * closes the menu (`close`) and opens the Plugins page.
+ */
+function useEntryActions(
+  data: ReturnType<typeof useAddMenuData>,
+  project: string | null | undefined,
+  close: () => void,
+) {
+  const [pending, setPending] = useState(false);
+  const act = async (fn: () => Promise<unknown>) => {
+    setPending(true);
+    data.setError("");
+    try {
+      await fn();
+      await data.refresh();
+    } catch (e) {
+      data.setError(String(e));
+    } finally {
+      setPending(false);
+    }
+  };
+  const manage = (plugin?: string) => {
+    close();
+    window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin } }));
+  };
+  const actions = entryActions(act, manage, project);
+  const visible = visibleConnectors(data.connectors, data.plugins, project);
+  const entries = addMenuEntries(data.plugins, visible, data.connections, actions);
+  return { pending, entries, manage };
+}
+
 /** Add: images and Plan mode, then plugins and MCP servers with their switches. Typing @ in the
  * composer opens the same list to mention one by name. A status appears only when something needs
  * doing, with the action that fixes it beside it. */
@@ -428,10 +494,7 @@ export function ComposerAddMenu({
   onMention,
   onMentionClose,
   onActiveOption,
-  onMentionDoc,
-  tagged = NO_TAGS,
-  atCap = false,
-  mentionSide = "top",
+  tagging = NO_TAGGING,
   ref,
 }: {
   onReferences: () => void;
@@ -447,17 +510,11 @@ export function ComposerAddMenu({
   /** The @ list's id and its highlighted option, for the text box's aria-controls/activedescendant. */
   listId?: string;
   onActiveOption?: (id: string | null) => void;
-  /** A card picked in the @ picker; the composer puts its tag in the text. */
-  onMentionDoc?: (doc: MentionDoc) => void;
-  /** The handles already tagged in the message, and whether it holds as many as it may. */
-  tagged?: ReadonlySet<string>;
-  atCap?: boolean;
-  /** Where the @ picker opens: under the home screen's prompt bar, above a chat's. */
-  mentionSide?: "top" | "bottom";
+  /** The @ picker's tags: what is tagged, the cap, a pick, and where it opens. */
+  tagging?: MentionTagging;
   ref?: Ref<AddMenuHandle>;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [pending, setPending] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const ownId = useId();
   const list = listId ?? ownId;
@@ -471,40 +528,16 @@ export function ComposerAddMenu({
   const listMode = viaMention.current;
   const data = useAddMenuData(open, project);
   useEffect(() => setHighlight(0), [mention]);
-  const act = async (fn: () => Promise<unknown>) => {
-    setPending(true);
-    data.setError("");
-    try {
-      await fn();
-      await data.refresh();
-    } catch (e) {
-      data.setError(String(e));
-    } finally {
-      setPending(false);
-    }
-  };
-  const manage = (plugin?: string) => {
+  const { pending, entries, manage } = useEntryActions(data, project, () => {
     setMenuOpen(false);
     onMentionClose?.();
-    window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin } }));
-  };
-  const actions = entryActions(act, manage, project);
-  const visible = visibleConnectors(data.connectors, data.plugins, project);
-  const entries = addMenuEntries(data.plugins, visible, data.connections, actions);
+  });
   const pickImages = () => {
     onMention?.(null);
     onReferences();
   };
   const rows = mentionOptions(mention, entries, pickImages, (name) => onMention?.(`@${name} `));
-  const picker = useMentionPicker({
-    open: mentioning,
-    query: mention ?? "",
-    project,
-    anchor,
-    atCap,
-    tagged,
-    onMentionDoc,
-  });
+  const picker = useMentionPicker({ open: mentioning, query: mention ?? "", project, anchor, tagging });
   const matches = [...picker.cardPicks, ...rows];
   const active = Math.min(highlight, Math.max(0, matches.length - 1));
   useMentionKeys(ref, {
@@ -528,27 +561,10 @@ export function ComposerAddMenu({
         setMenuOpen(next);
       }}
     >
-      <ComposerTip
-        hidden={open}
-        align="start"
-        content={
-          <span className="flex items-center gap-2">
-            Add images and more <Shortcut>@</Shortcut>
-          </span>
-        }
-      >
-        <PopoverTrigger
-          render={<button type="button" />}
-          disabled={disabled}
-          aria-label="Add images and more"
-          className="composer-icon composer-add"
-        >
-          <Icon name="plus" />
-        </PopoverTrigger>
-      </ComposerTip>
+      <AddTrigger open={open} disabled={disabled} />
       <PopoverContent
         anchor={anchor}
-        side={listMode ? mentionSide : "top"}
+        side={listMode ? tagging.side : "top"}
         align="start"
         sideOffset={8}
         initialFocus={!listMode}
@@ -565,13 +581,13 @@ export function ComposerAddMenu({
             columns={picker.columns}
             catalog={picker.state}
             rowsRead={data.read}
-            picked={tagged}
-            atCap={atCap}
+            picked={tagging.tagged}
+            atCap={tagging.atCap}
             covers={picker.covers}
             active={active}
             optionId={optionId}
             onHighlight={setHighlight}
-            onPick={(doc) => onMentionDoc?.(doc)}
+            onPick={tagging.onPick}
           />
         ) : (
           <FullMenu

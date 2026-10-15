@@ -32,7 +32,10 @@ const SHELF_LABEL: Record<MentionShelf, string> = {
 };
 
 /** The cards in the order the outline walks them, and the shelves they sit on. */
-export function mentionCards(docs: readonly MentionDoc[], query: string): { label: string | null; docs: MentionDoc[] }[] {
+export function mentionCards(
+  docs: readonly MentionDoc[],
+  query: string,
+): { label: string | null; docs: MentionDoc[] }[] {
   if (query.trim()) return [{ label: null, docs: searchMentions(docs, query) }];
   return mentionShelves(docs).map((group) => ({ label: SHELF_LABEL[group.shelf], docs: group.docs }));
 }

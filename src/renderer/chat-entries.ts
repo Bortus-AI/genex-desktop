@@ -47,6 +47,7 @@ import { plainDefect, reportSummary } from "./run-graph.ts";
 import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
+import { MentionResult, withoutMentionContext } from "../shared/prompt-mention.ts";
 import { GameEngine, isGameEngine } from "../shared/game-engine.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
 import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
@@ -89,6 +90,7 @@ import {
   snapshotWords,
   soundsLikeTrouble,
   TRANSCRIPT_WORDS,
+  mentionStepWords,
   toolActivityWords,
   toolWords,
   usingPluginWords,
@@ -149,6 +151,8 @@ export type Entry =
       contractor?: boolean;
       /** What a note sent to a build from its graph was about. */
       about?: string;
+      /** The @ tags the message carried, painted in its words. */
+      tags?: string[];
     }
   /**
    * A line of narration. `attention` marks one that reports trouble (a round stopped or broke
@@ -682,7 +686,8 @@ const NOTE_ABOUT = "Note to the build";
 /** A user bubble; a note sent to a build from its graph shows the words the user wrote, and what they were about. */
 function userEntry(id: string, content: string): Entry {
   const note = splitFeedback(content);
-  if (!note) return { id, kind: EntryKind.User, text: content };
+  // The lines about the message's @ tags are the agent's; the person sees their own words.
+  if (!note) return { id, kind: EntryKind.User, text: withoutMentionContext(content) };
   return { id, kind: EntryKind.User, text: note.text, about: NOTE_ABOUT };
 }
 
@@ -1549,6 +1554,41 @@ function openPluginRow(
   return row;
 }
 
+/**
+ * What a message's @ tags gave the agent, written right after the message: its words paint the
+ * tags, each attached tag is a step in the work under it, and one that attached nothing is a line
+ * of its own, so it is seen.
+ */
+function narrateMentions(chat: ChatDraft, event: EventEnvelope): void {
+  const tagged = customPayload(event.data, CustomEvent.MentionTagged);
+  const tags = tagged?.tags ?? [];
+  if (!tags.length) return;
+  const message = chat.entries
+    .slice(-3)
+    .reverse()
+    .find((entry) => entry.kind === EntryKind.User);
+  if (message?.kind === EntryKind.User) message.tags = tags.map((tag) => tag.handle);
+  for (const [index, tag] of tags.entries()) {
+    const key = `${event.id}-${index}`;
+    const words = mentionStepWords(tag);
+    if (tag.result === MentionResult.Unavailable) {
+      chat.entries.push({
+        id: key,
+        kind: EntryKind.Notice,
+        row: { key, icon: "game", label: words, state: ToolState.Failed, failed: true },
+      });
+      continue;
+    }
+    toolGroup(chat, event.id).rows.push({
+      key,
+      icon: tag.result === MentionResult.Added ? "write" : "read",
+      label: words,
+      state: ToolState.Succeeded,
+      ...(tag.path ? { detail: [{ text: tag.path }], detailMono: true } : {}),
+    });
+  }
+}
+
 function narrateDelivery(chat: ChatDraft, event: EventEnvelope): void {
   const delivery = customPayload(event.data, CustomEvent.AssetDelivered);
   if (!delivery || !isAssetDelivery(delivery)) return;
@@ -1957,6 +1997,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateMove,
   narrateModel,
   narratePluginCall,
+  narrateMentions,
   narrateDelivery,
   narrateConnector,
   narrateFix,

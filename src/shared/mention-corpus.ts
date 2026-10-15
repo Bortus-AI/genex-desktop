@@ -160,7 +160,10 @@ function docScore(doc: MentionDoc, words: readonly string[]): number {
 
 /** The best matches for a typed query, highest score first and then by plays. */
 export function searchMentions(docs: readonly MentionDoc[], query: string, limit = MENTION_RESULT_LIMIT): MentionDoc[] {
-  const words = query.toLowerCase().split(/[\s-]+/).filter(Boolean);
+  const words = query
+    .toLowerCase()
+    .split(/[\s-]+/)
+    .filter(Boolean);
   if (words.length === 0) return [];
   return docs
     .map((doc) => ({ doc, score: docScore(doc, words) }))

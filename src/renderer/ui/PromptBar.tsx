@@ -42,6 +42,7 @@ import {
 import { parseModelKey } from "../model-key.ts";
 import {
   atomicBackspaceRange,
+  splitMentions,
   insertMention as insertTag,
   type MentionDoc,
   type MentionRef,
@@ -663,8 +664,84 @@ function PromptInput({
   commandMenuRef: RefObject<AddMenuHandle | null>;
   onEnter: () => void;
 }): JSX.Element {
-  const { mention, setMention, findMention } = mentions;
   const list = listAria(mentions, commands);
+  const painted = useMemo(() => splitMentions(draft, mentions.tagged), [draft, mentions.tagged]);
+  const hasTags = painted.some((run) => run.handle);
+  const mirror = useRef<HTMLDivElement>(null);
+  return (
+    <div className="composer-input-wrap" data-painted={hasTags || undefined}>
+      {hasTags ? <PaintedDraft runs={painted} mirrorRef={mirror} /> : null}
+      <PromptTextarea
+        {...{
+          inputRef,
+          draft,
+          setDraft,
+          disabled,
+          placeholder,
+          mentions,
+          commands,
+          addMenuRef,
+          commandMenuRef,
+          onEnter,
+        }}
+        list={list}
+        onScroll={(top) => {
+          if (mirror.current) mirror.current.scrollTop = top;
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The draft's words drawn under a text box whose own glyphs are clear while it has tags, so a tag
+ * shows as a pill in the sentence. The layer has the text box's box and type, glyph for glyph.
+ */
+function PaintedDraft({
+  runs,
+  mirrorRef,
+}: {
+  runs: { text: string; handle: string | null }[];
+  mirrorRef: RefObject<HTMLDivElement | null>;
+}): JSX.Element {
+  return (
+    <div ref={mirrorRef} aria-hidden className={`${PROMPT_INPUT_CLASS} composer-input-paint`}>
+      {runs.map((run, index) =>
+        run.handle ? (
+          // biome-ignore lint/suspicious/noArrayIndexKey: runs are positional and rebuilt with the draft.
+          <span key={index} className="mention-pill">
+            {run.text}
+          </span>
+        ) : (
+          // biome-ignore lint/suspicious/noArrayIndexKey: runs are positional and rebuilt with the draft.
+          <span key={index}>{run.text}</span>
+        ),
+      )}
+      {/* A last empty line still takes its height, as in the text box. */}
+      {"\u200b"}
+    </div>
+  );
+}
+
+/** The text box: the draft, the @ and / lists' keys, and one Backspace per whole tag. */
+function PromptTextarea({
+  inputRef,
+  draft,
+  setDraft,
+  disabled,
+  placeholder,
+  mentions,
+  commands,
+  addMenuRef,
+  commandMenuRef,
+  onEnter,
+  list,
+  onScroll,
+}: Parameters<typeof PromptInput>[0] & {
+  list: { id: string; option: string | null } | null;
+  onScroll: (top: number) => void;
+}): JSX.Element {
+  const { mention, setMention, findMention } = mentions;
   return (
     <textarea
       ref={inputRef}
@@ -696,6 +773,7 @@ function PromptInput({
       }}
       placeholder={placeholder}
       aria-label="Prompt"
+      onScroll={(event) => onScroll(event.currentTarget.scrollTop)}
       {...(list
         ? {
             "aria-controls": list.id,
@@ -703,10 +781,14 @@ function PromptInput({
             "aria-activedescendant": list.option ?? undefined,
           }
         : {})}
-      className="composer-input min-h-[35px] w-full min-w-0 resize-none bg-transparent pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer text-ink outline-none [overflow-wrap:anywhere] placeholder:text-ink-3"
+      className={`${PROMPT_INPUT_CLASS} resize-none bg-transparent text-ink outline-none placeholder:text-ink-3`}
     />
   );
 }
+
+/** The text box's box and type, which the painted words under it share glyph for glyph. */
+const PROMPT_INPUT_CLASS =
+  "composer-input min-h-[35px] w-full min-w-0 pt-[6px] pr-2 pb-[9px] pl-[7px] text-composer [overflow-wrap:anywhere]";
 
 /** The / command list in a game's composer; the Harness chat has none. */
 function CommandList({
@@ -851,13 +933,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           coordinating={coordinating}
           project={props.project}
           loop={loop}
-          limits={{
-            contextUsage: props.contextUsage,
-            contexts: props.contexts,
-            onCompact: props.onCompact,
-            compacting: props.compacting,
-            compactBusy: props.compactBusy,
-          }}
+          limits={composerLimits(props)}
           panelRef={panelRef}
           addMenuRef={addMenuRef}
           modelMenuRef={modelMenuRef}
@@ -878,6 +954,12 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
       </div>
     </div>
   );
+}
+
+/** The context meter's inputs, as the chat passed them. */
+function composerLimits(props: PromptBarProps): ComposerLimitsInput {
+  const { contextUsage, contexts, onCompact, compacting, compactBusy } = props;
+  return { contextUsage, contexts, onCompact, compacting, compactBusy };
 }
 
 /** What the composer can do for the chat: focus, open the model menu, or take the welcome's idea. */
@@ -1030,10 +1112,7 @@ function AttachControl({
         onMention={mentions.insertMention}
         onMentionClose={() => mentions.setMention(null)}
         onActiveOption={mentions.setMentionOption}
-        onMentionDoc={mentions.insertDoc}
-        tagged={mentions.taggedNow}
-        atCap={mentions.atCap}
-        mentionSide={mentionSide}
+        tagging={{ tagged: mentions.taggedNow, atCap: mentions.atCap, onPick: mentions.insertDoc, side: mentionSide }}
       />
     );
   }

@@ -18,6 +18,7 @@ import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } fro
 import os from "node:os";
 import path from "node:path";
 import type { DesktopControl } from "./core/desktop-control.ts";
+import type { MentionSources } from "./core/mention-tags.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { deliveryFolderFor, ignoreLine, webFolderOf } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
@@ -414,6 +415,8 @@ export interface StudioCoreOptions {
   onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
+  /** Where a message's @ tags are fetched from: genex.games, the account and git (`core/mention-tags.ts`). */
+  mentionSources?: MentionSources;
 }
 
 export type { CoreInternals };

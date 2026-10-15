@@ -137,7 +137,8 @@ import {
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
-import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
+import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
+import type { MentionSources } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { wirePlayViewer } from "./play/viewer-view.ts";
@@ -689,8 +690,10 @@ async function createCore(userData: string): Promise<StudioCore> {
   desktop ??= createDesktopControl({ automated: isSmoke || isSelfTest, resources });
   // Smoke runs keep everything under their throwaway userData.
   const launch = launchCoreOptions();
-  const studio = new StudioCore({
+  const studio: StudioCore = new StudioCore({
     renderGameCover,
+    // Read at send time, once the core exists: Play's catalog and account hang off it.
+    mentionSources: mentionSourcesFor(() => studio),
     ...(desktop ? { desktop } : {}),
     paths: { userData, resources },
     ...appLookOptions(userData),
@@ -955,6 +958,16 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   const counted = { ...deps, request: refusingRequest(deps.request, deps.refused) };
   playAccount ??= { people: playPeople(deps), creators: creatorStats(counted), credits: genexCredits(counted) };
   return playAccount;
+}
+
+/** Where a message's @ tags come from: Play's catalog, the Genex account and git (a fixture's stand-ins). */
+function mentionSourcesFor(core: () => StudioCore): MentionSources {
+  return {
+    world: (slug) => playCatalogFor(core()).world(slug),
+    me: async () => (await playAccountFor(core()).people.me())?.id ?? null,
+    clone: fixtureNativePolicy ? fixtureClone : gitCloneCode,
+    assetManifest: (slug) => playCatalogFor(core()).assetManifest(slug),
+  };
 }
 
 /** A Play game's public source as a new game of the person's own; answers its library name. */
