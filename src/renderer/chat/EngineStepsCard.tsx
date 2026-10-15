@@ -132,15 +132,16 @@ function StepButtons({
 }
 
 /**
- * One step: its mark, its words (and the command to run), and its buttons, which sit beside the
- * words on a wide card and under them on a narrow one, so the words never squeeze into a column.
+ * One step in a box of its own: its mark, its words (and the command to run), and its buttons, which
+ * sit beside the words on a wide card and under them on a narrow one, so the words never squeeze
+ * into a column.
  */
 function StepLine({ row, onRun }: { row: StepRow; onRun: (row: StepRow) => void }): JSX.Element {
   const command = !row.done && row.command ? row.command : null;
   return (
     <li
       data-step={row.id}
-      className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1.5 py-1 @md:grid-cols-[1rem_minmax(0,1fr)_auto]"
+      className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1.5 rounded-[12px] border border-line-strong px-3 py-2.5 @md:grid-cols-[1rem_minmax(0,1fr)_auto]"
     >
       <StepMark done={row.done} you={row.you === true} working={row.working === true} clear />
       <StepText row={row} command={command} />
@@ -194,7 +195,7 @@ export function EngineStepsCard({
           {card.title}
         </h3>
         <p className="mt-0.5 text-chat-sub text-ink-3">{card.intro}</p>
-        <ul className="@container mt-2 flex min-w-0 flex-col">
+        <ul className="@container mt-3 flex min-w-0 flex-col gap-2">
           {card.steps.map((row) => (
             <StepLine key={row.id} row={row} onRun={run} />
           ))}
