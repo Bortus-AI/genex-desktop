@@ -1,9 +1,10 @@
 /**
  * The Genex plugin's Credits tab: the balance band (the shard, the balance, the Pro allowance and
  * when it comes, Invite a friend with what it earns, Get credits, which opens genex.games' plans in
- * the browser), what credits pay for with each kind's live price ("from N", never typed into the
- * app) and that building games costs nothing, and the recent spending: the last few spends and
- * refunds with their game. Both lists sit under a heading and a line, so their rows start level.
+ * the browser), what credits pay for (the tools' marks, then each kind's live price, "from N", never
+ * typed into the app), and the recent spending: the last few spends and refunds with their game.
+ * Both lists sit under a heading and a line (the tools' marks share the line's row), so their rows
+ * start level.
  */
 import type { JSX, ReactNode } from "react";
 import { useState } from "react";
@@ -19,11 +20,13 @@ import { openPlayFriends } from "../../../play/open-play.ts";
 import { usePeople, usePlayWeb } from "../../../state/hooks.ts";
 import { studio } from "../../../state/studio.ts";
 import { Button } from "../../../ui/Button.tsx";
-import { Icon, type IconName } from "../../../ui/icons.tsx";
+import { Icon } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { GENEX_WORDS } from "../../../words.ts";
+import { GenexTool } from "../../../../shared/asset-making.ts";
 import { accountCreditsOf, CreditsKind } from "./genex-view.ts";
+import { ICON_TOOLS, markIsLight, toolMark } from "./routed-tools.ts";
 
 const WORDS = GENEX_WORDS.creditsTab;
 /** Credits read with the reader's own digit grouping. */
@@ -31,19 +34,19 @@ const NUMBER = new Intl.NumberFormat();
 /** "Nov 1": when the Pro allowance comes. */
 const DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
 
-/** Each kind's mark in both lists. */
-const KIND_ICONS: Record<CreditKind, IconName> = {
-  [CreditKind.Model]: "box",
-  [CreditKind.Character]: "character",
-  [CreditKind.ModelAnimation]: "motion",
-  [CreditKind.Image]: "image",
-  [CreditKind.Texture]: "tiles",
-  [CreditKind.Video]: "video",
-  [CreditKind.Music]: "music",
-  [CreditKind.Sound]: "sound",
-  [CreditKind.Voice]: "mic",
-  [CreditKind.ModelRig]: "character",
-  [CreditKind.CoverRegenerate]: "image",
+/** The tool each kind is made with, whose logo marks its row in both lists (the first, when two share it). */
+const KIND_TOOLS: Record<CreditKind, GenexTool> = {
+  [CreditKind.Model]: GenexTool.Tripo,
+  [CreditKind.Character]: GenexTool.Meshy,
+  [CreditKind.ModelAnimation]: GenexTool.Tripo,
+  [CreditKind.Image]: GenexTool.GptImage,
+  [CreditKind.Texture]: GenexTool.NanoBanana,
+  [CreditKind.Video]: GenexTool.MiniMax,
+  [CreditKind.Music]: GenexTool.ElevenLabs,
+  [CreditKind.Sound]: GenexTool.ElevenLabs,
+  [CreditKind.Voice]: GenexTool.ElevenLabs,
+  [CreditKind.ModelRig]: GenexTool.Tripo,
+  [CreditKind.CoverRegenerate]: GenexTool.Publishing,
 };
 
 /** Where the tab's read stands, and whose credits it holds. */
@@ -79,12 +82,10 @@ function useCredits(accountId: string | null): Omit<CreditsRead, "account"> & { 
   };
 }
 
-/** The line under the balance: the Pro allowance and when it comes, and that one balance covers every tool. */
-function planLine(credits: PlayCredits): string {
-  if (!credits.plan) return WORDS.shared;
-  const when = credits.plan.resetsAt ? DAY.format(new Date(credits.plan.resetsAt)) : null;
-  const plan = when ? WORDS.plan(NUMBER.format(credits.plan.allowance), when) : null;
-  return [plan, WORDS.shared].filter(Boolean).join(" · ");
+/** The line under the balance: the Pro allowance and when it comes, or nothing without one. */
+function planLine(credits: PlayCredits): string | null {
+  if (!credits.plan?.resetsAt) return null;
+  return WORDS.plan(NUMBER.format(credits.plan.allowance), DAY.format(new Date(credits.plan.resetsAt)));
 }
 
 /** The balance itself: Unlimited, the count with its unit, or a dash when genex.games couldn't say. */
@@ -114,12 +115,13 @@ function BalanceAmount({ credits }: { credits: PlayCredits }): JSX.Element {
 /** The balance band. */
 function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
   const web = usePlayWeb();
+  const plan = planLine(credits);
   return (
     <div className="credits-band" data-credits-balance>
-      <CreditsShard size={44} />
+      <CreditsShard size={35} />
       <div className="credits-band-copy">
         <BalanceAmount credits={credits} />
-        <span className="credits-note">{planLine(credits)}</span>
+        {plan && <span className="credits-note">{plan}</span>}
       </div>
       <span className="credits-band-actions">
         <button type="button" className="people-button" data-tone="tint" data-credits-invite onClick={openPlayFriends}>
@@ -145,15 +147,15 @@ function Balance({ credits }: { credits: PlayCredits }): JSX.Element {
   );
 }
 
-/** One row of either list: the kind's mark, its name with a line under it, and credits at the end. */
+/** One row of either list: the tool's logo (a plain mark for a kind the app doesn't know), its name with a line under it, and credits at the end. */
 function CreditRow({
-  icon,
+  tool,
   name,
   sub,
   hook,
   children,
 }: {
-  icon: IconName;
+  tool: GenexTool | null;
   name: string;
   sub: string;
   hook: Record<`data-${string}`, string>;
@@ -161,8 +163,12 @@ function CreditRow({
 }): JSX.Element {
   return (
     <li className="credits-row" {...hook}>
-      <span className="credits-row-mark" aria-hidden="true">
-        <Icon name={icon} size={16} />
+      <span className="credits-row-mark" aria-hidden="true" data-logo={tool ? true : undefined}>
+        {tool ? (
+          <img src={toolMark(tool)} alt="" draggable={false} data-light-mark={markIsLight(tool) || undefined} />
+        ) : (
+          <Icon name="sparkle" size={16} />
+        )}
       </span>
       <span className="credits-row-name">
         {name}
@@ -173,28 +179,43 @@ function CreditRow({
   );
 }
 
-/**
- * What credits pay for: only assets, each kind with the tool Genex routes it to and its price from
- * genex.games; building the game itself runs on the person's own subscription and costs nothing.
- */
+/** The tools credits reach, their marks stacked, and that they are kept current and connected for you. */
+function ToolsStrip(): JSX.Element {
+  return (
+    <div className="credits-tools" data-credits-tools>
+      <span className="credits-tools-marks" aria-hidden="true">
+        {ICON_TOOLS.map((tool) => (
+          <img
+            key={tool}
+            className="credits-tools-mark"
+            src={toolMark(tool)}
+            alt=""
+            draggable={false}
+            data-light-mark={markIsLight(tool) || undefined}
+          />
+        ))}
+      </span>
+      <p className="credits-note">{WORDS.toolsLine}</p>
+    </div>
+  );
+}
+
+/** What credits pay for: assets, each kind with the tool Genex routes it to and its price from genex.games. */
 function PriceList({ credits }: { credits: PlayCredits }): JSX.Element {
   const priced = PRICED_KINDS.filter((kind) => credits.prices[kind] !== undefined);
   return (
     <section className="credits-column" aria-label={WORDS.payFor} data-credits-prices>
       <h2 className="credits-heading">{WORDS.payFor}</h2>
-      <p className="credits-note credits-subtitle">
-        <span>{WORDS.payForLine}</span>
-        <span data-credits-free>{WORDS.freeBuilding}</span>
-        <span>{WORDS.refunds}</span>
-        <span>{WORDS.outOfCredits}</span>
-      </p>
+      <div className="credits-subtitle">
+        <ToolsStrip />
+      </div>
       <div className="credits-body">
         {priced.length === 0 && <p className="credits-note">{WORDS.pricesUnavailable}</p>}
         <ul className="credits-rows">
           {priced.map((kind) => (
             <CreditRow
               key={kind}
-              icon={KIND_ICONS[kind]}
+              tool={KIND_TOOLS[kind]}
               name={WORDS.kinds[kind].name}
               sub={WORDS.kinds[kind].tool}
               hook={{ "data-credits-kind": kind }}
@@ -217,7 +238,7 @@ function RecentRow({ entry }: { entry: CreditEntry }): JSX.Element {
   const sub = [entry.game, entry.refund ? WORDS.refundedNote : null].filter(Boolean).join(" · ");
   return (
     <CreditRow
-      icon={entry.kind ? KIND_ICONS[entry.kind] : "sparkle"}
+      tool={entry.kind ? KIND_TOOLS[entry.kind] : null}
       name={entry.refund ? WORDS.failedKind(kind) : kind}
       sub={sub}
       hook={{ "data-credits-entry": entry.refund ? "refund" : "spend" }}
@@ -235,8 +256,13 @@ function RecentSpending({ credits }: { credits: PlayCredits }): JSX.Element {
   const none = credits.recent.length === 0;
   return (
     <section className="credits-column" aria-label={WORDS.recent} data-credits-recent>
-      <h2 className="credits-heading">{WORDS.recent}</h2>
-      <p className="credits-note credits-subtitle">{none ? WORDS.noRecent : WORDS.recentLine}</p>
+      {/* Its heading and line stand at the foot of the heading rows, just over its list. */}
+      <div className="credits-head-end">
+        <h2 className="credits-heading">{WORDS.recent}</h2>
+        <p className="credits-note credits-subtitle">
+          {[none ? WORDS.noRecent : WORDS.recentLine, WORDS.perCredit].join(" · ")}
+        </p>
+      </div>
       <div className="credits-body">
         {!none && (
           <ul className="credits-rows">
@@ -245,7 +271,6 @@ function RecentSpending({ credits }: { credits: PlayCredits }): JSX.Element {
             ))}
           </ul>
         )}
-        <span className="credits-note credits-cent">{WORDS.centNote}</span>
       </div>
     </section>
   );

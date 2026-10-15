@@ -248,6 +248,21 @@
   object-fit: contain;
   user-select: none;
 }
+/* A light theme draws Genex's picture and its tools' tiles light: a pale board, white tiles, and the
+   marks drawn light for a dark tile turned dark (`markIsLight`). */
+:root[data-theme="light"] .router-icon {
+  background: #ececef;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+:root[data-theme="light"] .router-tile,
+:root[data-theme="light"] .genex-tool-mark {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+}
+:root[data-theme="light"] .router-tile img[data-light-mark],
+:root[data-theme="light"] .genex-tool-mark img[data-light-mark] {
+  filter: invert(0.9);
+}
 .genex-jobs {
   display: flex;
   flex-direction: column;
@@ -1044,8 +1059,8 @@ button.genex-publish-banner-name:hover {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  padding: 18px 20px;
+  gap: 14px;
+  padding: 12px 18px;
   border-radius: 14px;
   background: linear-gradient(180deg, var(--credits-card), transparent);
   box-shadow: inset 0 0 0 1px var(--credits-card-edge);
@@ -1064,12 +1079,12 @@ button.genex-publish-banner-name:hover {
 }
 .credits-band-number {
   color: var(--ink);
-  font: 500 34px / 1 var(--font-family-mono);
+  font: 500 21px / 1 var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
 /* "Unlimited credits" is words, not a balance: it reads at a heading's size. */
 .credits-band-number[data-unlimited] {
-  font-size: 22px;
+  font-size: 17px;
 }
 .credits-band-actions {
   display: flex;
@@ -1115,6 +1130,14 @@ button.genex-publish-banner-name:hover {
   grid-template-rows: subgrid;
   min-width: 0;
 }
+/* A heading and its line that stand together at the foot of the two heading rows. */
+.credits-head-end {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  grid-row: span 2;
+  align-self: end;
+}
 .credits-heading {
   margin: 0;
   color: var(--ink);
@@ -1154,6 +1177,19 @@ button.genex-publish-banner-name:hover {
   background: color-mix(in srgb, var(--play-blue) 10%, transparent);
   color: var(--stats-line);
 }
+/* A tool's logo, bare as in the tools above, with the same small shadow. */
+.credits-row-mark[data-logo] {
+  background: transparent;
+}
+.credits-row-mark[data-logo] > img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1.5px var(--credits-mark-shadow));
+}
+:root[data-theme="light"] .credits-row-mark[data-logo] > img[data-light-mark] {
+  filter: invert(0.9) drop-shadow(0 1px 1.5px var(--credits-mark-shadow));
+}
 .credits-row-name {
   display: flex;
   flex-direction: column;
@@ -1181,9 +1217,31 @@ button.genex-publish-banner-name:hover {
   font-size: 13px;
   font-weight: 500;
 }
-.credits-row-amount[data-refund] b {
-  color: var(--stats-up);
+/* The tools credits reach, under the line about prices: their marks stacked, and a line under them. They share the subtitle's row, so both lists start level. */
+.credits-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-block-start: 2px;
 }
-.credits-cent {
-  margin-top: 10px;
+.credits-tools-marks {
+  display: flex;
+  flex: none;
+}
+/* Bare and close together, each lifted by its own small shadow. */
+.credits-tools-mark {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 1px 1.5px var(--credits-mark-shadow));
+}
+.credits-tools-mark + .credits-tools-mark {
+  margin-inline-start: 3px;
+}
+:root[data-theme="light"] .credits-tools-mark[data-light-mark] {
+  filter: invert(0.9) drop-shadow(0 1px 1.5px var(--credits-mark-shadow));
+}
+.credits-tools > .credits-note {
+  margin: 0;
+  max-width: 52ch;
 }
