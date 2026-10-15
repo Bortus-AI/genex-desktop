@@ -1,5 +1,6 @@
 import { validateDetect } from "./detect-manifest.ts";
 import { validateEngine } from "./engine-manifest.ts";
+import { inspectJudgeBriefs, validateJudges } from "./judge-manifest.ts";
 import { validateAssets, validateWorkspace } from "./workspace-manifest.ts";
 import { validateFolders, validateWorkerTypes } from "./worker-manifest.ts";
 import { validateScaffolds } from "./scaffold-manifest.ts";
@@ -581,10 +582,19 @@ function validateReachSections(m: PluginManifest, canonical: PluginManifest): vo
 }
 
 /**
+ * What the plugin shows of a game beside its moments (API 3): its observers, and its judges, whose
+ * probes are checked against the tools' canonical locks.
+ */
+function validateEvidenceSections(m: PluginManifest, canonical: PluginManifest): void {
+  if (m.observers !== undefined) canonical.observers = validateObservers(m, canonical);
+  if (m.judges !== undefined) canonical.judges = validateJudges({ ...m, engine: canonical.engine }, canonical.tools);
+}
+
+/**
  * The account flow (API 2), and the API 3 delivery limits, native declarations, project detection,
  * the engine a game-engine plugin declares, what a project's history leaves out and where its assets live, the plugin's worker types, its
- * scaffolds and the folders its engine programs write to, its locks and the handlers of Genex's moments, and its
- * observers.
+ * scaffolds and the folders its engine programs write to, its locks and the handlers of Genex's moments, its
+ * observers and its judges.
  */
 function validateHostSections(m: PluginManifest, canonical: PluginManifest): void {
   if (m.account !== undefined) canonical.account = validateAccount(m, canonical.actions);
@@ -597,7 +607,7 @@ function validateHostSections(m: PluginManifest, canonical: PluginManifest): voi
   if (m.scaffolds !== undefined) canonical.scaffolds = validateScaffolds({ ...m, tools: canonical.tools });
   if (m.folders !== undefined) canonical.folders = validateFolders(m);
   validateMomentSections(m, canonical);
-  if (m.observers !== undefined) canonical.observers = validateObservers(m, canonical);
+  validateEvidenceSections(m, canonical);
   if (m.nativeRuntimes !== undefined || m.nativeJobs !== undefined) {
     if (m.apiVersion !== 3 || !hasCapability(m, PluginCapability.NativeRuntime))
       throw new Error(MESSAGE.NativeNeedsApi3);
@@ -930,6 +940,7 @@ export async function inspectPackage(root: string): Promise<PluginManifest> {
   await containedReal(root, m.backend);
   for (const p of m.panels) await containedReal(root, p.file);
   await inspectSkillFiles(root, m);
+  await inspectJudgeBriefs(root, m);
   if (m.icon) await readPluginIcon(root, m.icon);
   return m;
 }

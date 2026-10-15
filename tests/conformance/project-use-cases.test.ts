@@ -1829,6 +1829,7 @@ describe("a Genex plugin for an engine Genex lacks: written, loaded by the perso
     { part: "assets", read: (m) => sectionOf(m, "assets") },
     { part: "workerTypes", read: (m) => sectionOf(m, "workerTypes") },
     { part: "scaffolds", read: (m) => sectionOf(m, "scaffolds") },
+    { part: "judges", read: (m) => sectionOf(m, "judges") },
     {
       part: "tools[].needs",
       read: (m) => toolOf(m, "build")?.needs,
