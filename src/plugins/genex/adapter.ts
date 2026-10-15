@@ -133,6 +133,7 @@ import {
   linkFor,
   linkTarget,
   listingLanded,
+  isOpen,
   markUnknownAfterRestart,
   MAX_UPLOADS,
   mergeMeta,
@@ -631,6 +632,8 @@ export class GenexTools {
       if (state.job.state !== GenexPublishJobState.Unresolved) return state;
       finishJob(state.job, GenexPublishJobState.Failed, new Date().toISOString());
       state.job.error = PUBLISH_MESSAGE.AllowedNewUpload;
+      delete state.job.checkError;
+      delete state.job.nextCheckAt;
       await this.#savePublishState(project, state);
       return state;
     });
@@ -1012,6 +1015,12 @@ export class GenexTools {
       job.state = next.foreground ? GenexPublishJobState.Running : GenexPublishJobState.Unresolved;
       job.phase = next.foreground ? GenexPublishPhase.VerifyingDeployment : GenexPublishPhase.Unresolved;
       job.nextCheckAt = next.at;
+    }
+    // The user may have settled this upload while Genex was being asked: their choice stands.
+    const latest = await this.#publishState(project);
+    if (latest.job?.id !== job.id || !isOpen(latest.job)) {
+      Object.assign(state, latest);
+      return;
     }
     await this.#savePublishState(project, state);
   }

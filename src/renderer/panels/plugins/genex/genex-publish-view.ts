@@ -20,13 +20,14 @@ import {
   GenexPublishJobState,
   GenexPublishKind,
   GenexPublishPhase,
-  GenexPublishStatusOperation,
   type GenexPublishJob,
   type GenexPublishState,
 } from "../../../../shared/genex.ts";
 import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin-toolbar.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { type FactRef, type FolderHolds, type GameKind, servedAsWebGame } from "../../../../shared/project-facts.ts";
+import { MINUTE_MS } from "../../../../shared/duration.ts";
+import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../../../../shared/feedback.ts";
 import { relativeTime } from "../../../chat-labels.ts";
 import { GENEX_WORDS } from "../../../words.ts";
 
@@ -45,16 +46,23 @@ export const GenexPublishStep = {
 } as const;
 export type GenexPublishStep = (typeof GenexPublishStep)[keyof typeof GenexPublishStep];
 
-/** Which step each phase belongs to; the finished phases belong to none. */
+/**
+ * Which step each phase belongs to; the finished phases belong to none. An upload whose outcome
+ * is not known yet is still being checked: it stands on the test.
+ */
 const PHASE_STEP: Partial<Record<GenexPublishPhase, GenexPublishStep>> = {
   [GenexPublishPhase.Checking]: GenexPublishStep.Prepare,
   [GenexPublishPhase.Exporting]: GenexPublishStep.Prepare,
   [GenexPublishPhase.CreatingProject]: GenexPublishStep.Prepare,
   [GenexPublishPhase.Uploading]: GenexPublishStep.Upload,
   [GenexPublishPhase.VerifyingDeployment]: GenexPublishStep.Test,
+  [GenexPublishPhase.Unresolved]: GenexPublishStep.Test,
   [GenexPublishPhase.Promoting]: GenexPublishStep.Live,
   [GenexPublishPhase.Listing]: GenexPublishStep.Live,
 };
+
+/** A test running longer than this is "Still testing": Genex usually serves a new build well within it. */
+export const SLOW_TEST_MS = 2 * MINUTE_MS;
 
 /** Where a step stands on the progress bar. */
 export const StepState = { Done: "done", Current: "current", Next: "next" } as const;
@@ -67,14 +75,17 @@ export interface StepView {
   state: StepState;
 }
 
-/** How the last attempt ended, as the dialog tells it: nothing to tell, working, done, failed, or not known yet. */
+/** How the last attempt ended, as the dialog tells it: nothing to tell, working, or failed. */
 export const PublishOutcome = {
   Idle: "idle",
   Running: "running",
   Failed: "failed",
-  Unresolved: "unresolved",
 } as const;
 export type PublishOutcome = (typeof PublishOutcome)[keyof typeof PublishOutcome];
+
+/** The banner's status chip: quiet while not published, green once live, red after a failed attempt. */
+export const ChipTone = { Quiet: "quiet", Live: "live", Failed: "failed" } as const;
+export type ChipTone = (typeof ChipTone)[keyof typeof ChipTone];
 
 /** A button the dialog offers: its words, the action it runs, and its aria-label (kept for smoke checks). */
 export interface PublishButton {
@@ -87,25 +98,31 @@ export interface PublishButton {
 /** Everything the dialog draws. */
 export interface PublishView {
   stage: PublishStage;
+  /** The line under Publish: who can play it. */
   intro: string;
   outcome: PublishOutcome;
+  /** An attempt is going, including one whose upload Studio is still checking. */
   running: boolean;
+  /** Studio does not know yet whether the upload reached Genex. */
   unresolved: boolean;
+  /** The test is taking longer than usual, or the outcome is not known yet: "Still testing". */
+  slow: boolean;
+  /** What the running attempt is doing, for the busy button. */
   phase: string;
   startedAt: string | null;
   steps: StepView[];
-  /** The game's line under its name: not online, a test version, live since…, publishing. */
-  status: string;
+  /** Where the game is, on the banner; none while an attempt runs (the button says it). */
+  chip: { tone: ChipTone; text: string } | null;
   primary: PublishButton;
-  /** Check again and allow a new upload, while an upload's outcome is unknown. */
-  extra: PublishButton[];
+  /** Publish again, while Studio cannot tell whether the last upload reached Genex. */
+  again: PublishButton | null;
   /** Review Genex's terms in the browser: the one press while they are not accepted. */
   terms: PublishButton | null;
   canPublish: boolean;
   /** Something the person must do first (accept Genex's terms); never a failed attempt's raw error. */
   problems: string[];
-  /** A failed or unknown attempt, said calmly, and the raw detail it keeps for support. */
-  failure: { title: string; text: string; details: string } | null;
+  /** A failed attempt in one line, and the raw detail its report carries. */
+  failure: { text: string; details: string } | null;
   /** The link anyone can play, once the game is public. */
   link: string | null;
   /** The game has no Genex cover to send and its owner chose none: offer to ask its chat for one. */
@@ -143,54 +160,44 @@ function stageOf(state: GenexPublishState): PublishStage {
   return state.slug ? PublishStage.Draft : PublishStage.None;
 }
 
-const INTRO: Record<PublishStage, string> = {
-  none: WORDS.intro,
-  draft: WORDS.intro,
-  public: WORDS.published,
-};
-
 /** How the record's last attempt ended, for the dialog. */
 function outcomeOf(job: GenexPublishJob | undefined, running: boolean): PublishOutcome {
   if (running) return PublishOutcome.Running;
-  if (job?.state === GenexPublishJobState.Unresolved) return PublishOutcome.Unresolved;
-  if (job?.state === GenexPublishJobState.Failed) return PublishOutcome.Failed;
-  return PublishOutcome.Idle;
+  return job?.state === GenexPublishJobState.Failed ? PublishOutcome.Failed : PublishOutcome.Idle;
 }
 
-/** The game's line under its name. */
-function statusLine(state: GenexPublishState, stage: PublishStage, running: boolean, now: number): string {
-  if (running) return WORDS.statusPublishing;
-  if (stage === PublishStage.Public)
-    return state.lastPublishAt ? WORDS.statusLive(relativeTime(state.lastPublishAt, now)) : WORDS.statusLiveUndated;
-  return stage === PublishStage.Draft ? WORDS.statusDraft : WORDS.statusNone;
+/** The banner's chip: where the game is, or that the last attempt failed; none while one runs. */
+function chipOf(state: GenexPublishState, outcome: PublishOutcome, now: number): PublishView["chip"] {
+  if (outcome === PublishOutcome.Running) return null;
+  if (outcome === PublishOutcome.Failed) return { tone: ChipTone.Failed, text: WORDS.chipFailed };
+  if (!isListed(state)) return { tone: ChipTone.Quiet, text: WORDS.chipNone };
+  const text = state.lastPublishAt ? WORDS.chipLive(relativeTime(state.lastPublishAt, now)) : WORDS.chipLiveUndated;
+  return { tone: ChipTone.Live, text };
 }
 
-/** Check again and allow a new upload, while an upload's outcome is unknown. */
-function unresolvedButtons(job: GenexPublishJob | undefined): PublishButton[] {
-  if (job?.phase !== GenexPublishPhase.Unresolved) return [];
-  return [
-    {
-      label: WORDS.checkAgain,
-      action: GenexAction.PublishStatus,
-      args: { operation: GenexPublishStatusOperation.Check },
-      ariaLabel: "Check deployment availability without uploading",
-    },
-    {
-      label: WORDS.allowUpload,
-      action: GenexAction.PublishAllowUpload,
-      args: { jobId: job.id },
-      ariaLabel: "Allow a new upload after checking the deployment page",
-    },
-  ];
+/** Whether the attempt is taking longer than usual: its outcome is unknown, or its test outran {@link SLOW_TEST_MS}. */
+function isSlow(job: GenexPublishJob | undefined, unresolved: boolean, now: number): boolean {
+  if (unresolved) return true;
+  const testing = job?.state === GenexPublishJobState.Running && PHASE_STEP[job.phase] === GenexPublishStep.Test;
+  return testing && now - Date.parse(job.startedAt) > SLOW_TEST_MS;
 }
 
-/** A failed or unknown attempt in plain words; the raw error and check stay as details for support. */
+/** Publish again, while Studio cannot tell whether the last upload reached Genex. */
+function againButton(job: GenexPublishJob | undefined, unresolved: boolean): PublishButton | null {
+  if (!job || !unresolved) return null;
+  return {
+    label: WORDS.publishAgain,
+    action: GenexAction.PublishAllowUpload,
+    args: { jobId: job.id },
+    ariaLabel: "Publish again without waiting for the last upload",
+  };
+}
+
+/** A failed attempt in one line; the raw error and check stay as details for its report. */
 function failureOf(outcome: PublishOutcome, state: GenexPublishState, job: GenexPublishJob | undefined) {
-  const details = [job?.error ?? state.lastError, job?.checkError].filter(Boolean).join("\n");
-  if (outcome === PublishOutcome.Unresolved)
-    return { title: WORDS.unresolvedTitle, text: WORDS.unresolvedText, details };
   if (outcome !== PublishOutcome.Failed) return null;
-  return { title: WORDS.failedTitle, text: isListed(state) ? WORDS.failedKept : WORDS.failedText, details };
+  const details = [job?.error ?? state.lastError, job?.checkError].filter(Boolean).join("\n");
+  return { text: isListed(state) ? WORDS.failedKept : WORDS.failedText, details };
 }
 
 /** Answers that mean the owner chose the game's cover on genex.games: that choice stands, so nobody asks for another. */
@@ -217,39 +224,59 @@ export function coverAsk(state: GenexPublishState): boolean {
 /** The dialog's view of a publish record, at `now`. */
 export function publishView(state: GenexPublishState, now = Date.now()): PublishView {
   const job = state.job;
-  const live = isLive(job);
+  const running = isLive(job);
   const unresolved = job?.phase === GenexPublishPhase.Unresolved;
-  const running = live && !unresolved;
+  const slow = running && isSlow(job, unresolved, now);
   const stage = stageOf(state);
   const listed = stage === PublishStage.Public;
   const outcome = outcomeOf(job, running);
   const failed = outcome === PublishOutcome.Failed;
   return {
     stage,
-    intro: INTRO[stage],
+    intro: WORDS.intro,
     outcome,
     running,
     unresolved,
-    phase: job && running ? WORDS.phase[job.phase] : "",
+    slow,
+    phase: job && running ? (slow && WORDS.stillTesting) || WORDS.phase[job.phase] : "",
     startedAt: running && job ? job.startedAt : null,
     steps: stepViews(job, running),
-    status: statusLine(state, stage, running, now),
+    chip: chipOf(state, outcome, now),
     primary: {
       label: (failed && WORDS.tryAgain) || (listed && WORDS.updatePublic) || WORDS.publish,
       action: GenexAction.PublishGallery,
       ariaLabel: "Publish this game on Genex",
     },
-    extra: unresolvedButtons(job),
+    again: againButton(job, unresolved),
     terms:
       state.terms?.accepted === false
         ? { label: WORDS.reviewTerms, action: GenexAction.Terms, ariaLabel: WORDS.reviewTerms }
         : null,
-    canPublish: state.connected && !live,
+    canPublish: state.connected && !running,
     problems: state.terms?.accepted === false ? [WORDS.termsNote] : [],
     failure: failureOf(outcome, state, job),
     link: listed ? (state.galleryUrl ?? null) : null,
     coverAsk: coverAsk(state),
   };
+}
+
+/** An attempt this dialog watched just went live: the one moment it says "Your game is live!". */
+export const justPublished = (before: PublishView | null, after: PublishView): boolean =>
+  Boolean(before?.running) &&
+  !after.running &&
+  after.outcome === PublishOutcome.Idle &&
+  after.stage === PublishStage.Public;
+
+/** Seconds as the busy button's clock: 0:24, 2:14. */
+export function clock(seconds: number): string {
+  const whole = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** The report Send report posts for a failed attempt: what failed and its raw detail, with the app's logs. */
+export function publishReport(project: string, title: string, view: PublishView): FeedbackDraft {
+  const text = WORDS.reportText(title, project, view.failure?.details ?? "");
+  return { text: text.slice(0, FEEDBACK_TEXT_MAX_CHARS), screen: FeedbackScreen.Chat, appLogs: true, chatId: null };
 }
 
 /** The name the dialog offers: the one the game is listed under, else Studio's title for it, else its folder. */

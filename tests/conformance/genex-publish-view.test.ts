@@ -1,14 +1,17 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  clock,
   coverAsk,
   coverCardPublish,
   GenexSetup,
   genexSetup,
   isGenexPublish,
+  justPublished,
   offeredTitle,
   PublishGate,
   publishGate,
+  publishReport,
   publishSteps,
   publishView,
   stripEntries,
@@ -221,11 +224,13 @@ test("a running attempt shows its steps: every publish tests the draft before it
   assert.deepEqual(publishSteps(job({ phase: "creating-project" })), ["prepare", "upload", "test", "live"]);
   assert.deepEqual(publishSteps(job({ kind: "draft", phase: "uploading" })), ["prepare", "upload", "test"]);
 
-  const testing = publishView(state({ slug: "g", job: job({ phase: "verifying-deployment" }) }));
+  const now = Date.parse("2026-09-30T10:00:30Z");
+  const testing = publishView(state({ slug: "g", job: job({ phase: "verifying-deployment" }) }), now);
   assert.equal(testing.running, true);
+  assert.equal(testing.slow, false);
   assert.equal(testing.canPublish, false, "nothing else starts while one runs");
-  assert.equal(testing.phase, "Making sure it plays");
-  assert.equal(testing.status, "Publishing…");
+  assert.equal(testing.phase, "Testing", "the busy button says the step");
+  assert.equal(testing.chip, null, "the banner says nothing while the button does");
   assert.deepEqual(
     testing.steps.map((s) => [s.step, s.state]),
     [
@@ -235,12 +240,23 @@ test("a running attempt shows its steps: every publish tests the draft before it
       ["live", "next"],
     ],
   );
-  const promoting = publishView(state({ slug: "g", status: "published", job: job({ phase: "promoting" }) }));
+  const promoting = publishView(state({ slug: "g", status: "published", job: job({ phase: "promoting" }) }), now);
   assert.equal(promoting.phase, "Going live");
   assert.equal(promoting.steps.at(-1)?.state, "current");
 });
 
-test("a live game shows its link and when it was updated", () => {
+test("a test running past two minutes is Still testing; an earlier step never is", () => {
+  const late = Date.parse("2026-09-30T10:02:01Z");
+  const testing = publishView(state({ slug: "g", job: job({ phase: "verifying-deployment" }) }), late);
+  assert.equal(testing.slow, true);
+  assert.equal(testing.phase, "Still testing");
+  assert.equal(testing.again, null, "an upload this Studio still runs is not published over");
+  const uploading = publishView(state({ slug: "g", job: job({ phase: "uploading" }) }), late);
+  assert.equal(uploading.slow, false);
+  assert.equal(uploading.phase, "Uploading");
+});
+
+test("a live game shows its link and when it was updated, on the banner", () => {
   const now = Date.parse("2026-10-06T12:00:00Z");
   const live = publishView(
     state({
@@ -253,54 +269,82 @@ test("a live game shows its link and when it was updated", () => {
     now,
   );
   assert.equal(live.link, "https://genex.games/g");
-  assert.equal(live.status, "Live · updated 2m ago");
+  assert.deepEqual(live.chip, { tone: "live", text: "Live · 2m ago" });
   assert.equal(live.failure, null);
   assert.equal(
     publishView(state({ slug: "g", galleryUrl: "https://genex.games/g" })).link,
     null,
     "a draft has no public link",
   );
+  assert.deepEqual(
+    publishView(state({ slug: "g", status: "draft" })).chip,
+    { tone: "quiet", text: "Not published" },
+    "a draft page alone is not published",
+  );
 });
 
-test("a failed attempt is said calmly, its raw error kept only as details for support", () => {
+test("the dialog celebrates only an attempt it watched go live", () => {
+  const running = publishView(state({ slug: "g", job: job({ phase: "promoting" }) }));
+  const live = publishView(
+    state({ slug: "g", status: "published", galleryUrl: "https://x/g", job: job({ state: "done", phase: "ready" }) }),
+  );
+  const failed = publishView(state({ slug: "g", job: job({ state: "failed", phase: "failed" }) }));
+  assert.equal(justPublished(running, live), true);
+  assert.equal(justPublished(null, live), false, "opening on a live game celebrates nothing");
+  assert.equal(justPublished(live, live), false);
+  assert.equal(justPublished(running, failed), false);
+});
+
+test("a failed attempt is one calm line, its raw error kept for the report Send report posts", () => {
   const failed = publishView(
     state({ job: job({ state: "failed", phase: "failed", error: "fixture: HTTP 502 at /api" }) }),
   );
   assert.equal(failed.outcome, "failed");
   assert.deepEqual(failed.problems, [], "the raw error is no problem line");
-  assert.equal(failed.failure?.title, "It didn't go online this time");
-  assert.match(failed.failure?.text ?? "", /Your game is safe and nothing changed/);
+  assert.deepEqual(failed.chip, { tone: "failed", text: "Didn't publish" });
+  assert.equal(failed.failure?.text, "Nothing changed. Try again in a moment.");
   assert.equal(failed.failure?.details, "fixture: HTTP 502 at /api");
   assert.equal(failed.primary.label, "Try again");
   assert.equal(failed.canPublish, true, "a failed attempt can be tried again");
 
+  const report = publishReport("game", "My Game", failed);
+  assert.equal(report.appLogs, true, "the report carries the app's logs");
+  assert.equal(report.chatId, null, "and no chat");
+  assert.match(report.text, /My Game/);
+  assert.match(report.text, /HTTP 502 at \/api/);
+
   const listedFailed = publishView(
     state({ slug: "g", status: "published", job: job({ state: "failed", phase: "failed", error: "x" }) }),
   );
-  assert.match(listedFailed.failure?.text ?? "", /players still get the version they had/);
+  assert.equal(listedFailed.failure?.text, "The last version is still live.");
 });
 
-test("an upload whose outcome is unknown offers Check again and the person's own word, never a silent retry", () => {
+test("an upload whose outcome is unknown is still testing, with Publish again as the one way out", () => {
   const unknown = publishView(
     state({ slug: "g", job: job({ state: "unresolved", phase: "unresolved", kind: "draft", error: "lost" }) }),
   );
-  assert.equal(unknown.running, false);
+  assert.equal(unknown.running, true);
   assert.equal(unknown.unresolved, true);
-  assert.equal(unknown.outcome, "unresolved");
+  assert.equal(unknown.slow, true);
+  assert.equal(unknown.phase, "Still testing");
+  assert.equal(unknown.failure, null, "nothing failed yet");
   assert.deepEqual(
-    unknown.extra.map((b) => [b.label, b.action]),
-    [
-      ["Check again", "publish-status"],
-      ["I checked — allow a new upload", "publish-allow-upload"],
-    ],
+    [unknown.again?.label, unknown.again?.action, unknown.again?.args],
+    ["Publish again", "publish-allow-upload", { jobId: "j1" }],
   );
-  assert.equal(unknown.canPublish, false);
-  assert.match(unknown.failure?.text ?? "", /couldn’t tell whether the upload reached Genex/);
+  assert.equal(unknown.canPublish, false, "Publish is never pressed over it by accident");
+  assert.equal(unknown.steps.find((s) => s.state === "current")?.step, "test");
 
   const terms = publishView(state({ terms: { accepted: false, acceptUrl: "https://x/terms" } }));
   assert.deepEqual(terms.problems, ["Review the updated Genex terms in your browser before publishing."]);
   assert.equal(terms.terms?.action, "terms", "the one press is reviewing them");
   assert.equal(publishView(state()).terms, null);
+});
+
+test("the busy button's clock reads minutes and seconds", () => {
+  assert.equal(clock(0), "0:00");
+  assert.equal(clock(24), "0:24");
+  assert.equal(clock(134), "2:14");
 });
 
 test("the name offered is the listed one, else Studio's title for the game, else its folder name as words", () => {
