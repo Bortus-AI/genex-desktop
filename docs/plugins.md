@@ -1330,7 +1330,11 @@ A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by
 session, and the plugins whose facts reach the folder shape it with no code in Genex: their hooks
 run at its moments, their observers feed its finish check and their worker types are its lead's
 ([the open Loop](harness-runtime.md)).
-`web` is `web-game` at the root.
+`web` is `web-game` at the root. A game New game made lists `awaitingFirstBuild` until an answer
+in any of its chats, or a run on it, ends with the folder holding a kind (`core/build-ends.ts`);
+it stays built after. `multiplayer` is set while the game's package.json names
+`@genex-ai/multiplayer` or its page maps Studio's copy (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
+Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`).
 
 ### Workspace rules
 

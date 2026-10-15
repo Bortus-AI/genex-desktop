@@ -31,8 +31,8 @@ host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-p
 connects SDK-less games for sign-in, tests the draft, goes public and sends the `genex-cover` demo
 frame as the Genex cover, not the sidebar sphere ([rules](../plugins.md#first-party-privileges));
 else Ask for a cover drafts it in chat. Agents check `genex__cover` before publishing; consented
-`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer asks chat (Genex
-off: turn it on); Publish needs only the account; both offer Update while older. Agents read
+`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer, shown once a game was built and while it
+loads no Genex multiplayer, asks chat (Genex off: turn it on); Publish needs only the account; both offer Update while older. Agents read
 Genex’s guide and cards via `genex__skill`, never from game files. Plugin MCPs connect on first use.
 
 The curated catalog (`plugins.genex.games`; reviewed releases in `genex-games/genex-plugins`) lists
