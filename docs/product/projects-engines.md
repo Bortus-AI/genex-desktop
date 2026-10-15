@@ -12,9 +12,10 @@ the web files as reference.
 
 ## Plugins on or off
 
-Asked for an engine whose plugin is off, the chat shows its card (**Turn on** or **Install…**; a
-cross puts it away), which only your click acts on. On your word agents continue without it:
-background jobs, `app_look` at its windows (never clicking), its docs, or a plugin they write.
+Engine buttons show only on their games. Asked for an engine whose plugin is off, the chat shows its
+card (**Turn on** or **Install…**; a cross puts it away), which only your click acts on. On your
+word agents continue without it: background jobs, `app_look` at its windows (never clicking), its
+docs, or a plugin they write.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each tool
 asks before it runs; Always allow lists it under **Runs without asking**, with **Ask every time**. New code or turning it off clears those; its steps at Genex's
@@ -30,7 +31,7 @@ play through Pipeline, with Input System required for keyboard and mouse control
 
 ## Unreal
 
-The lead works in the open editor through the Genex editor helper, one holder at a time; while you
+The lead works in the open editor through Genex's editor helper, one holder at a time; while you
 play there the chat reads “Waiting for you to finish in Unreal”. A turn snapshots editor work;
 Rewind saves, closes and reopens Unreal. Agents and blind judges play it with keys and the
 mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**

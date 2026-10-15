@@ -1,3 +1,4 @@
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -5,15 +6,19 @@ import {
   multiplayerPress,
   showsMultiplayer,
   shownToolbarStatus,
+  toolbarGlyph,
   toolbarItems,
   toolbarReaction,
   toolbarStatusFrom,
   toolbarTip,
   toolbarUpdateStatus,
+  visibleToolbarEntries,
 } from "../../src/shared/plugin-toolbar.ts";
 import { PLUGIN_TOOLBAR_WORDS } from "../../src/renderer/words.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
-import type { PluginInfo, PluginToolbarItem } from "../../src/shared/plugins.ts";
+import type { PluginInfo, PluginManifest, PluginToolbarItem } from "../../src/shared/plugins.ts";
+import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
+import type { GameKind } from "../../src/shared/project-facts.ts";
 
 const item = (over: Partial<PluginToolbarItem> = {}): PluginToolbarItem => ({
   id: "demo",
@@ -116,6 +121,18 @@ test("a change to the open game's own record re-asks the buttons; file writes an
   assert.equal(changed({ project: "valley" }, null), null, "no game open");
 });
 
+test("a finished turn in the open game's chat re-asks the buttons; another game's does not", () => {
+  const finished = (project: string, open: string | null) =>
+    toolbarReaction(
+      { type: UiEvent.DelegationFinished, payload: { project, engine: "claude", active: 0 } } as UiEvent,
+      [],
+      open,
+    );
+  assert.equal(finished("lantern", "lantern"), "refresh");
+  assert.equal(finished("harbor", "lantern"), null);
+  assert.equal(finished("lantern", null), null);
+});
+
 test("a plugin change re-asks every button; a plugin's toolbar event updates its own button", () => {
   const [entry] = toolbarItems([plugin("a", [item()])], "game");
   const event = (payload: unknown) => ({ type: UiEvent.PluginEvent, payload }) as UiEvent;
@@ -175,6 +192,64 @@ test("toolbarStatusFrom keeps attention as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ kind: "toolbar", item: "publish", attention: "yes" }), { attention: true });
   assert.deepEqual(toolbarStatusFrom({ badge: "Draft" }), { badge: "Draft" });
 });
+test("a button scoped to facts shows on a game served by one of them, elsewhere only while its plugin brings it out", () => {
+  const unreal: GameKind = { facts: [{ id: "unreal-project", path: "unreal" }] };
+  const web: GameKind = { facts: [{ id: "web-game", path: "." }] };
+  const noKindYet: GameKind = { facts: [], holds: "nothing" };
+  const plugins = [plugin("u", [item({ id: "editor", ariaLabel: "Editor", facts: ["unreal-project"] }), item()])];
+  const shown = (game: GameKind | undefined, project: string | null = "game", status = {}) =>
+    visibleToolbarEntries(toolbarItems(plugins, project, game), status).map((e) => e.key);
+  assert.deepEqual(shown(unreal), ["u:editor", "u:demo"]);
+  assert.deepEqual(shown(web), ["u:demo"]);
+  assert.deepEqual(shown(noKindYet), ["u:demo"], "a game with no kind yet is served as a web game");
+  assert.deepEqual(shown(undefined), ["u:demo"], "a game whose facts aren't known yet");
+  assert.deepEqual(
+    toolbarItems(plugins, "game", web).map((e) => e.key),
+    ["u:editor", "u:demo"],
+    "a scoped button out of its facts is still asked for its status",
+  );
+  assert.deepEqual(shown(web, "game", { "u:editor": { shown: true } }), ["u:editor", "u:demo"]);
+  assert.deepEqual(shown(web, "game", { "u:editor": { shown: false } }), ["u:demo"]);
+  assert.deepEqual(shown(unreal, null), [], "no game open: neither the scoped button nor one that needs a game");
+});
+
+test("every bundled plugin that makes a kind of project keeps its buttons off a web game and shows them on its own", () => {
+  const web: GameKind = { facts: [{ id: "web-game", path: "." }] };
+  const engines = readdirSync("src/plugins", { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => JSON.parse(readFileSync(`src/plugins/${entry.name}/plugin.json`, "utf8")) as PluginManifest)
+    .map((raw) => validateManifest(raw))
+    .filter((manifest) => (manifest.scaffolds?.length ?? 0) > 0 && (manifest.toolbar?.length ?? 0) > 0);
+  assert.ok(engines.length >= 2, "Unreal and Unity at least");
+  for (const manifest of engines) {
+    const plugins = [{ ...plugin(manifest.id, undefined), manifest }];
+    assert.deepEqual(visibleToolbarEntries(toolbarItems(plugins, "game", web), {}), [], `${manifest.id} on a web game`);
+    for (const button of manifest.toolbar ?? []) {
+      const own: GameKind = { facts: (button.facts ?? []).map((id) => ({ id, path: "." })) };
+      assert.ok(button.facts?.length, `${manifest.id}:${button.id} names the facts of its games`);
+      assert.ok(button.icon, `${manifest.id}:${button.id} has an icon to fold into`);
+      const keys = visibleToolbarEntries(toolbarItems(plugins, "game", own), {}).map((entry) => entry.key);
+      assert.ok(keys.includes(`${manifest.id}:${button.id}`), `${manifest.id}:${button.id} on its own game`);
+    }
+  }
+});
+
+test("a folded button is never blank: its icon, else its label's first letter; unfolded, an icon-less button has none", () => {
+  assert.equal(toolbarGlyph(item({ icon: "box" }), true), "box");
+  assert.equal(toolbarGlyph(item({ icon: "box" }), false), "box");
+  assert.equal(toolbarGlyph(item({ label: "example" }), true), "E");
+  assert.equal(toolbarGlyph(item({ label: "example" }), false), undefined);
+});
+
+test("toolbarStatusFrom keeps shown as a boolean", () => {
+  assert.deepEqual(toolbarStatusFrom({ shown: true }), { shown: true });
+  assert.deepEqual(toolbarStatusFrom({ shown: 0, title: "Make this game in Unreal" }), {
+    shown: false,
+    title: "Make this game in Unreal",
+  });
+  assert.deepEqual(toolbarStatusFrom({ badge: "Ready" }), { badge: "Ready" });
+});
+
 test("toolbarStatusFrom keeps dot as a boolean", () => {
   assert.deepEqual(toolbarStatusFrom({ badge: "Ready", tone: "ok", dot: true }), {
     badge: "Ready",
