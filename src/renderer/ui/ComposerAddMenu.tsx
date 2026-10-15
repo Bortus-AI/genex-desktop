@@ -224,7 +224,10 @@ function useMentionPicker(input: {
   // Images heads the list as a row; the cards follow, the plugins' cards last.
   const lead = input.rows.filter((row) => row.id === IMAGES_OPTION);
   const pluginCards = input.rows.filter((row) => row.id !== IMAGES_OPTION);
-  const matches = [...lead, ...cardPicks, ...pluginCards];
+  // A typed name reaches a plugin first: its tile leads the matches, as its shelf ends the panel.
+  const matches = input.query.trim()
+    ? [...lead, ...pluginCards, ...cardPicks]
+    : [...lead, ...cardPicks, ...pluginCards];
   const shape = { lead: lead.length, cards: cardPicks.length + pluginCards.length, columns };
   return { groups, matches, shape, columns, covers, state };
 }

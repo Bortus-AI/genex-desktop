@@ -239,13 +239,36 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
   const lead = props.rows.filter((row) => row.id === IMAGES_OPTION);
   const rows = props.rows.filter((row) => row.id !== IMAGES_OPTION);
   const cardCount = lead.length + groups.reduce((sum, group) => sum + group.docs.length, 0);
+  // A typed name reaches a plugin first: its tile leads the matches, as its shelf ends the panel.
+  const pluginsFirst = props.query.trim().length > 0;
+  const pluginStart = pluginsFirst ? lead.length : cardCount;
   const empty = cardCount === 0 && rows.length === 0;
   // The keys move the outline past the panel's edge: the outlined card scrolls into view.
   const activeId = optionId(active);
   useEffect(() => {
     document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
   }, [activeId]);
-  let index = lead.length;
+  const plugins =
+    rows.length > 0 ? (
+      <section className="mention-shelf">
+        {props.query ? null : <h4 className="mention-shelf-label">{MENTION_WORDS.plugins}</h4>}
+        <div className="mention-grid">
+          {rows.map((option, i) => {
+            const at = pluginStart + i;
+            return (
+              <OptionCard
+                key={option.id}
+                option={option}
+                id={optionId(at)}
+                active={at === active}
+                onHover={() => onHighlight(at)}
+              />
+            );
+          })}
+        </div>
+      </section>
+    ) : null;
+  let index = pluginsFirst ? lead.length + rows.length : lead.length;
   return (
     <div
       role="listbox"
@@ -264,6 +287,7 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
           onHover={() => onHighlight(at)}
         />
       ))}
+      {pluginsFirst ? plugins : null}
       {groups.map((group) => (
         <section key={group.label ?? "matches"} className="mention-shelf">
           {group.label ? <h4 className="mention-shelf-label">{group.label}</h4> : null}
@@ -289,25 +313,7 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
         </section>
       ))}
       {props.catalog === CatalogState.Reading ? <MentionSkeleton columns={props.columns} query={props.query} /> : null}
-      {rows.length > 0 ? (
-        <section className="mention-shelf">
-          {props.query ? null : <h4 className="mention-shelf-label">{MENTION_WORDS.plugins}</h4>}
-          <div className="mention-grid">
-            {rows.map((option, i) => {
-              const at = cardCount + i;
-              return (
-                <OptionCard
-                  key={option.id}
-                  option={option}
-                  id={optionId(at)}
-                  active={at === active}
-                  onHover={() => onHighlight(at)}
-                />
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
+      {pluginsFirst ? null : plugins}
       {empty && props.rowsRead && props.catalog !== CatalogState.Reading ? (
         <div className={`${pickerItem} text-ink-3`}>{MENTION_WORDS.noMatches}</div>
       ) : null}
