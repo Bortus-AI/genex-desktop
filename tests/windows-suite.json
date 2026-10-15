@@ -220,6 +220,7 @@
   "tests/conformance/roblox-model-import.test.ts",
   "tests/conformance/roblox-place-files.test.ts",
   "tests/conformance/roblox-probes.test.ts",
+  "tests/conformance/roblox-publish.test.ts",
   "tests/conformance/roblox-script-paths.test.ts",
   "tests/conformance/roblox-script-sync.test.ts",
   "tests/conformance/roblox-setup.test.ts",

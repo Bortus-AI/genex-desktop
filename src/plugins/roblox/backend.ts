@@ -49,6 +49,7 @@ import {
 import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
 import { loadPendingPlace } from "./place-files.ts";
 import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
+import { PublishAsker, type PublishPlace, publishUpdate, reviewPublish } from "./publish.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
 import {
   createStudioWatch,
@@ -173,12 +174,13 @@ export const RobloxTool = {
   InsertAsset: AskFirstTool.InsertAsset,
   CheckModel: "check-model",
   ImportModel: "import-model",
+  PublishUpdate: "publish-update",
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
 /**
  * The tools that may run in a worker's copy of the game: its folder is never the game's, so the
- * script sync isn't told of it. The ask-first and model tools need no folder but that of a file they read.
+ * script sync isn't told of it. The ask-first, model and publish tools need no folder but that of a file they read.
  */
 const COPY_TOOLS: ReadonlySet<string> = new Set([
   RobloxTool.CheckScripts,
@@ -187,6 +189,7 @@ const COPY_TOOLS: ReadonlySet<string> = new Set([
   ...Object.values(AskFirstTool),
   RobloxTool.CheckModel,
   RobloxTool.ImportModel,
+  RobloxTool.PublishUpdate,
 ]);
 const isRobloxTool = (name: string): name is RobloxTool => TOOL_NAMES.has(name);
 
@@ -337,6 +340,8 @@ export interface RobloxStatus {
   now?: RobloxStepId;
   /** The Luau checks: all here, or Add Luau checks offered. */
   luau?: LuauStatus;
+  /** The game's place, once linked: whether Roblox has it published, so Publish an update can update it. */
+  publish?: { published: boolean };
 }
 
 /**
@@ -417,13 +422,22 @@ async function mcpSwitch(deps: RobloxDeps): Promise<McpSwitchState | undefined> 
 }
 
 /** What the game's place adds to the rows: its name, the person's own Rojo project, and live saved data. */
-async function placeFacts(context: PluginContext, storage: string | undefined) {
+async function placeFacts(
+  context: PluginContext,
+  storage: string | undefined,
+): Promise<Pick<RobloxStepFacts, "linked" | "place" | "rojo" | "liveData"> & { published?: boolean }> {
   const link = await linkHere(context);
   if (!link || !storage || !context.project) return { linked: Boolean(link) };
   const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
   const place = await linkedPlace(storage, game, link);
   const live = await readLiveData(storage, context.project);
-  return { linked: true, place: place.name, rojo: place.rojo, liveData: live?.reachable === true };
+  return {
+    linked: true,
+    place: place.name,
+    rojo: place.rojo,
+    liveData: live?.reachable === true,
+    published: Boolean(link.remote),
+  };
 }
 
 /** Where Get Roblox Studio stands, as the rows read it: under way, or stopped and why. */
@@ -442,16 +456,17 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
   const running = facts.running || (facts.installed && (await studioRunning(deps)));
   const mcp = facts.installed ? await mcpSwitch(deps) : undefined;
   const helper = facts.setUp && storage ? await recordedHelper(storage) : undefined;
+  const { published, ...place } = await placeFacts(context, storage);
   const rows: RobloxStepFacts = {
     ...facts,
     running,
     ...(install?.version ? { version: install.version } : {}),
     ...installFacts(job),
-    ...(await placeFacts(context, storage)),
+    ...place,
     mac: deps.platform === "darwin",
     ...(mcp ? { mcpOn: mcp.on > 0 } : {}),
   };
-  return { install, facts, rows, mcp, helper };
+  return { install, facts, rows, mcp, helper, published };
 }
 
 async function status(
@@ -460,7 +475,7 @@ async function status(
   job: InstallJob | undefined,
   luau: LuauDeps,
 ): Promise<RobloxStatus> {
-  const { install, facts, rows, mcp, helper } = await stepFacts(deps, context, job);
+  const { install, facts, rows, mcp, helper, published } = await stepFacts(deps, context, job);
   const steps = {
     [PanelStep.Studio]: facts.installed,
     [PanelStep.Helper]: facts.setUp,
@@ -472,6 +487,7 @@ async function status(
   if (job) answer.install = installStatusOf(job);
   if (mcp) answer.mcp = mcp;
   if (helper) answer.helper = helper;
+  if (published !== undefined) answer.publish = { published };
   answer.luau = await luauStatus(deps, luau, context).catch(() => ({ added: false, offered: false }));
   const now = nowStep(rows);
   if (now) answer.now = now;
@@ -828,6 +844,33 @@ function playHandlers(deps: RobloxDeps, services: MomentServices) {
   } as const satisfies Partial<Record<RobloxTool, Handler>>;
 }
 
+/** The game's place as Publish an update sees it: its link, and its name as the panel shows it. */
+async function publishPlace(context: PluginContext): Promise<PublishPlace> {
+  const link = await linkHere(context);
+  if (!link || !context.project) return { link };
+  const storage = await context.host(HostService.StorageRoot);
+  const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
+  return { link, name: (await linkedPlace(storage, game, link)).name };
+}
+
+/**
+ * Publish an update, as the panel's action or the agent's confirmed tool: the game's chat is handed
+ * the task through Do it for me, after the game's changed script files reach Studio.
+ */
+function publishHandler(services: MomentServices, asker: PublishAsker): Handler {
+  return async (_args, context) => {
+    const game = context.project ?? "";
+    return publishUpdate(
+      await publishPlace(context),
+      {
+        assist: (task) => context.host(HostService.EngineAssist, { task }),
+        flush: () => services.flush(game),
+      },
+      asker,
+    );
+  };
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
@@ -856,6 +899,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.RestartStudio]: (_args, context) => restartStudio(deps, context),
     [RobloxAction.DoItForMe]: (_args, context) => doItForMe(context),
     [RobloxAction.AddLuauChecks]: (_args, context) => addLuauAction(deps, luau, context),
+    [RobloxAction.PublishUpdate]: publishHandler(services, PublishAsker.Person),
   };
   const tools: Record<RobloxTool, Handler> = {
     [RobloxTool.StudioActivity]: async (_args, context) =>
@@ -876,6 +920,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...playHandlers(deps, services),
     ...askFirstHandlers(deps, services),
     ...modelHandlers(deps, services),
+    [RobloxTool.PublishUpdate]: publishHandler(services, PublishAsker.Agent),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {
@@ -899,6 +944,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     async review(name, _args, context) {
       if (name === RobloxAction.GetStudio) return reviewGetStudio(deps);
       if (name === RobloxAction.AddLuauChecks) return reviewAddLuau(deps, luau, context);
+      if (name === RobloxAction.PublishUpdate) return reviewPublish(await publishPlace(context));
       return name === RobloxAction.Setup ? reviewSetup(deps) : {};
     },
   };

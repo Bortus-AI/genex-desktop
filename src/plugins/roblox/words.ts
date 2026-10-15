@@ -15,6 +15,9 @@ const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ?
 /** Where Studio's own MCP switch is, as the person clicks it. */
 export const MCP_SWITCH_CLICK_PATH = "Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
 
+/** Where Studio publishes the open place, as the person clicks it: an update, and a place's first publish too. */
+export const PUBLISH_CLICK_PATH = "File › Publish to Roblox";
+
 /** Where Studio's switch for a place's live saved data is, as the person clicks it to turn it off. */
 export const LIVE_DATA_CLICK_PATH = "Game Settings › Security › Enable Studio Access to API Services";
 
@@ -136,6 +139,18 @@ export const MESSAGE = {
     Declined: `Nothing was clicked. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
     NoChat: `Open a game first, so its chat can click it for you, or turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
     NotStarted: `Genex didn't click anything. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
+  },
+  Publish: {
+    /** The panel's card for a published place: its name, then what happens and whose account it is on. */
+    Confirm: (name: string) => `Publish an update of ${name} to Roblox?`,
+    Plan: `This game's chat clicks ${PUBLISH_CLICK_PATH} in Roblox Studio with computer control on this Mac. Everyone who plays the game gets the update, and it is published on your Roblox account.`,
+    Started: "This game's chat is publishing the update in Roblox Studio. Watch Studio.",
+    Unavailable: `Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
+    Declined: `Nothing was published. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
+    NoChat: `Open this game first, so its chat can publish it, or publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
+    NotStarted: `Genex didn't publish anything. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
+    FirstPublish: `This place isn't published to Roblox yet, and its first publish is yours: Roblox asks for the game's details and may ask for an age check. In Studio: ${PUBLISH_CLICK_PATH}. Then choose it again with Choose your place, so Genex can publish its updates.`,
+    NoPlace: "This game doesn't build in a Roblox place yet. Choose one with Choose your place first.",
   },
   Install: {
     /** Get Roblox Studio's question, for this computer's installer size. */

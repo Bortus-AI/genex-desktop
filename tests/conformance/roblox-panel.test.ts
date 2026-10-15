@@ -19,7 +19,8 @@ import type { PluginEngineAssistAnswer } from "../../src/plugin-sdk/index.d.ts";
 import { inlinePanelSdk } from "../../src/plugin-sdk/inline-panel-sdk.mjs";
 import { createRobloxBackend } from "../../src/plugins/roblox/backend.ts";
 import { writeLiveData } from "../../src/plugins/roblox/live-data.ts";
-import { LIVE_DATA_CLICK_PATH, MCP_SWITCH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
+import { publishTask } from "../../src/plugins/roblox/publish.ts";
+import { LIVE_DATA_CLICK_PATH, MCP_SWITCH_CLICK_PATH, PUBLISH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
 import {
   type Game,
   hostFor,
@@ -374,6 +375,48 @@ describe("The Roblox Studio panel", { skip }, () => {
       await tab.click("#places-new");
       await sentOnce(tab, c, (names) => names.includes("create"));
       assert.deepEqual(c.sent.at(-1), ["create", {}]);
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("once every step is done, a published place offers Publish an update, whose press hands the chat the task", async () => {
+    const studios: OpenStudio[] = [
+      { id: "studio-a", name: "Pet Valley", placeId: "7781440219", universeId: "2611231458" },
+    ];
+    const c = await computer({ game: true, studios });
+    assert.equal(((await c.act("use-place", { studio: "studio-a" })) as { linked: boolean }).linked, true);
+    const tab = await open(c);
+    try {
+      const place = '#steps [data-step="place"]';
+      assert.equal(await tab.locator(`${place} [data-first-publish]`).count(), 0);
+      const publish = tab.locator(`${place} button[data-action="publish-update"]`);
+      assert.equal(await publish.textContent(), "Publish an update");
+      await publish.click();
+      await sentOnce(tab, c, (names) => names.includes("publish-update"));
+      assert.deepEqual(c.sent.at(-1), ["publish-update", {}]);
+      await tab.waitForFunction(
+        (selector) => /publishing the update/.test(document.querySelector(`${selector} .say`)?.textContent ?? ""),
+        place,
+      );
+      assert.deepEqual(
+        c.assists.map((args) => (args as { task: string }).task),
+        [publishTask("Pet Valley")],
+      );
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("a place never published offers no Publish an update, only the first publish's clicks in Studio", async () => {
+    const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
+    assert.equal(((await c.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
+    const tab = await open(c);
+    try {
+      const place = '#steps [data-step="place"]';
+      assert.equal(await tab.locator(`${place} button[data-action="publish-update"]`).count(), 0);
+      const clicks = await tab.locator(`${place} [data-first-publish] .kbd`).allTextContents();
+      assert.deepEqual(clicks, PUBLISH_CLICK_PATH.split(" › "));
     } finally {
       await tab.close();
     }

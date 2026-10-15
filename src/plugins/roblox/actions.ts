@@ -15,5 +15,6 @@ export const RobloxAction = {
   UsePlace: "use-place",
   Create: "create",
   AddLuauChecks: "add-luau-checks",
+  PublishUpdate: "publish-update",
 } as const;
 export type RobloxAction = (typeof RobloxAction)[keyof typeof RobloxAction];

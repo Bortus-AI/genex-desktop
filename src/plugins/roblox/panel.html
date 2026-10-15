@@ -65,6 +65,7 @@ button svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke
 .notes p{display:flex;gap:10px;font-size:13px;line-height:18px}
 .notes p::before{content:"";width:16px;height:16px;flex:none;margin-top:1px;background:currentColor;-webkit-mask:var(--warning) center/contain no-repeat;mask:var(--warning) center/contain no-repeat}
 .notes .path-line{margin-inline-start:26px}
+.first-publish{display:grid;gap:4px;margin-top:6px}
 /* Places: each its own rounded block, its name and where it is, its button at the end. */
 .places{padding:0;list-style:none;display:grid;gap:8px}
 .place{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;padding:12px 14px;border-radius:14px;box-shadow:inset 0 0 0 1px var(--outline)}
@@ -109,9 +110,9 @@ const SECOND_MS = 1000;
 const REFRESH_MS = 3 * SECOND_MS;
 /**
  * How long the panel waits for an action that takes longer than most: Restart Studio waits for
- * Studio to quit (the person may be saving), Do it for me for the person's answers to its cards,
- * New Roblox game for Studio to open, and Add Luau checks for its downloads. The rest get the SDK's
- * own wait.
+ * Studio to quit (the person may be saving), Do it for me and Publish an update for the person's
+ * answers to their cards, New Roblox game for Studio to open, and Add Luau checks for its downloads.
+ * The rest get the SDK's own wait.
  */
 const LONG_WAIT_MS = 4 * 60 * SECOND_MS;
 /** WCAG's minimum contrast for small text, and the least share of the text colour the quiet colour starts from. */
@@ -134,6 +135,7 @@ const Action = {
   UsePlace: "use-place",
   Create: "create",
   AddLuauChecks: "add-luau-checks",
+  PublishUpdate: "publish-update",
 };
 /** The rows' ids, as the backend names them (RobloxStepId). Wire values: never rename. */
 const Step = { Studio: "studio", SignIn: "sign-in", Helper: "helper", Mcp: "mcp", Place: "place" };
@@ -147,6 +149,7 @@ const WAITS = {
   [Action.Create]: { timeoutMs: LONG_WAIT_MS },
   [Action.UsePlace]: { timeoutMs: LONG_WAIT_MS },
   [Action.AddLuauChecks]: { timeoutMs: LONG_WAIT_MS },
+  [Action.PublishUpdate]: { timeoutMs: LONG_WAIT_MS },
 };
 /** The panel's own words; each step's words come from the backend, as the chat's steps card shows them. */
 const WORDS = {
@@ -156,6 +159,8 @@ const WORDS = {
   orInStudio: "Or in Studio:",
   choosePlace: "Choose your place",
   chooseAnother: "Choose another place",
+  publish: "Publish an update",
+  firstPublish: "Not published to Roblox yet. Its first publish is yours, in Studio:",
   newGame: "New Roblox game",
   noGame: "Open a game first to use a place you already have, or start a new one.",
   use: "Use in this game",
@@ -249,6 +254,29 @@ function sayLine(at) {
   return line;
 }
 
+/** Studio's own clicks for publishing, as one path: "File › Publish to Roblox". */
+const PUBLISH_CLICKS = ["File", "Publish to Roblox"];
+
+/**
+ * A linked place's publishing, once every step is done: Publish an update leads the place's buttons
+ * for a place Roblox has; a place never published shows the first publish's clicks above them,
+ * because that publish stays the person's.
+ */
+function publishParts(actions, body) {
+  const publish = ui.status?.publish;
+  if (!ui.game || !publish || ui.status?.now) return;
+  if (publish.published) {
+    const run = () => send(Action.PublishUpdate, {}, { key: "publish", at: Step.Place });
+    actions.prepend(actionButton(WORDS.publish, run, { className: "primary", key: "publish", action: Action.PublishUpdate }));
+  } else {
+    const first = text("div", "first-publish");
+    first.dataset.firstPublish = "";
+    first.append(text("p", "small quiet", WORDS.firstPublish), pathLine(PUBLISH_CLICKS));
+    actions.before(first);
+  }
+  body.append(sayLine(Step.Place));
+}
+
 /** The place step's own buttons: Choose your place in a game, and New Roblox game anywhere. */
 function placeButtons(row) {
   const actions = text("div", "actions");
@@ -334,7 +362,11 @@ function stepItem(row, now) {
     notes.append(text("p", "", row.warning.text), pathLine(row.warning.clickPath));
     body.append(notes);
   }
-  if (row.done && row.id === Step.Place) body.append(placeButtons(row));
+  if (row.done && row.id === Step.Place) {
+    const actions = placeButtons(row);
+    body.append(actions);
+    publishParts(actions, body);
+  }
   item.append(mark, body);
   return item;
 }
@@ -343,7 +375,7 @@ function stepItem(row, now) {
 function draw(force = false) {
   const status = ui.status;
   if (!status) return;
-  const key = JSON.stringify([status.rows, status.now, status.luau, ui.game, ui.said, ui.pending]);
+  const key = JSON.stringify([status.rows, status.now, status.luau, status.publish, ui.game, ui.said, ui.pending]);
   if (!force && key === ui.drawn) return;
   ui.drawn = key;
   const focused = document.activeElement?.dataset?.key;

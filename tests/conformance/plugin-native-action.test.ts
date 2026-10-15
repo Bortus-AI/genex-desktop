@@ -47,6 +47,7 @@ const ROBLOX_NATIVE = [
   "use-place",
   "create",
   "add-luau-checks",
+  "publish-update",
 ];
 
 /** Main's `studio:plugins.action` over a bundled plugin's real manifest, with a core that records each call. */

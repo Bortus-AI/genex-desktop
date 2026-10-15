@@ -214,6 +214,7 @@ const ROBLOX_ONLY_TOOLS = [
   "roblox__insert-asset",
   "roblox__check-model",
   "roblox__import-model",
+  "roblox__publish-update",
 ];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */
