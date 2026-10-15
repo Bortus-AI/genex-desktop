@@ -30,6 +30,10 @@ import {
   rewindsOf,
   SkippedBy,
   type SkippedFile,
+  type UndoRewindResult,
+  UndoRewindRefusal,
+  undoRewindRefusal,
+  undoRewindRefusalWords,
   withoutRewound,
 } from "../../shared/chat-rewind.ts";
 import type { PlanReview } from "../../shared/composer.ts";
@@ -97,6 +101,17 @@ const REWIND_HELD = {
   [HookHold.Plan]: () => "The chat is in Plan mode, so nothing was rewound.",
 } as const satisfies Record<HookHold, (app: string) => string>;
 
+/** The same holds, when they kept the newer version a rewind replaced from coming back. */
+const UNDO_HELD = {
+  [HookHold.Busy]: (app: string) =>
+    `Something else is working in ${app} now, so the newer version didn't come back. Try again once it's done.`,
+  [HookHold.PersonFirst]: (app: string) =>
+    `You were using ${app}, so the newer version didn't come back. Try again once you're done there.`,
+  [HookHold.CantTell]: (app: string) =>
+    `Genex couldn't tell whether ${app} was free, so the newer version didn't come back. Try again in a moment.`,
+  [HookHold.Plan]: () => "The chat is in Plan mode, so the newer version didn't come back.",
+} as const satisfies Record<HookHold, (app: string) => string>;
+
 /** The app a hold names when its lock gave no label. */
 const THE_APP = "the game's app";
 
@@ -155,10 +170,11 @@ interface RemainingAction {
   eventId: string;
   action: RewoundAction;
 }
-/** Game files a rewind put back, the saved copy that undoes it, and files too large to put back. */
+/** Game files a rewind put back, the saved copy that undoes it (and its id), and files too large to put back. */
 interface RestoredFiles {
   files: number;
   saved: string;
+  rewindId: string;
   stayed?: string[];
 }
 /** Who left files too large to save, for the chat's line: a message's checkpoint, or a rewind. */
@@ -232,8 +248,13 @@ function withdrawnActions(rows: readonly EventEnvelope[], eventId: string): Rewo
     .map(actionOf);
 }
 
+/** A rewind that put files back offers to bring the newer version back by its saved copy's id. */
+const undoOf = (restored: RestoredFiles | null): string | null =>
+  restored && restored.files > 0 ? restored.rewindId : null;
+
 /** What the composer gets back to offer the message (and its waiting follow-ups) again. */
 function rewindResult(first: PlannedRewind, messageId: string, restored: RestoredFiles | null): RewindResult {
+  const rewindId = undoOf(restored);
   return {
     text: [first.text, ...first.held.map((held) => held.text)].filter((text) => text.trim()).join("\n\n"),
     messageId,
@@ -243,6 +264,7 @@ function rewindResult(first: PlannedRewind, messageId: string, restored: Restore
     held: first.held
       .filter((held) => held.pickedImages > 0)
       .map((held) => ({ messageId: held.messageId, pickedImages: held.pickedImages })),
+    ...(rewindId ? { undo: { rewindId } } : {}),
   };
 }
 
@@ -772,16 +794,26 @@ export class ChatRewindService {
   async #apply(request: RewindRequest): Promise<AppliedRewind> {
     const project = request.meta?.project;
     if (!(request.files && request.dir && project)) return this.#applyFiles(request);
+    return this.#forPerson(project, request.threadId, REWIND_HELD, () => this.#applyFiles(request));
+  }
+
+  /**
+   * The person's own change to the game files, between the game's plugins' restore steps: they
+   * never wait for the person or the plan. Genex's own hold is worded from its type and label for
+   * the person (`held`); a step's own block keeps its reason.
+   */
+  async #forPerson<T>(
+    project: string,
+    threadId: string,
+    held: Record<HookHold, (app: string) => string>,
+    run: () => Promise<T>,
+  ): Promise<T> {
     try {
-      return await this.#x.hooks.restoreWithHooks(project, () => this.#applyFiles(request), {
-        forPerson: true,
-        threadId: request.threadId,
-      });
+      return await this.#x.hooks.restoreWithHooks(project, run, { forPerson: true, threadId });
     } catch (error) {
-      // Genex's own hold is worded from its type and label; a step's own block keeps its reason.
       if (error instanceof HookBlockedError && error.hold) {
-        const held = { hold: error.hold, ...(error.label ? { label: error.label } : {}) };
-        throw new HookBlockedError(REWIND_HELD[error.hold](error.label ?? THE_APP), held);
+        const detail = { hold: error.hold, ...(error.label ? { label: error.label } : {}) };
+        throw new HookBlockedError(held[error.hold](error.label ?? THE_APP), detail);
       }
       throw error;
     }
@@ -869,9 +901,11 @@ export class ChatRewindService {
         (err: unknown) => this.#log(MESSAGE.tidyFailed(threadId, what, err)),
       );
     await tidy("clearing coordinator sessions", () => this.#clearCoordinatorSessions(threadId));
+    const rewindId = undoOf(applied.restored);
     const marker = customEventData(CustomEvent.ConversationRewound, {
       ...applied.planned.rewind,
       files: applied.restored?.files ?? null,
+      ...(rewindId ? { rewindId } : {}),
     });
     await tidy("recording the rewind", () => this.#core.append([marker], threadId));
     if (meta?.project) {
@@ -895,6 +929,57 @@ export class ChatRewindService {
     }
     this.#core.emit(UiEvent.ThreadUpdated, { threadId, project });
     this.#core.emit(UiEvent.ThreadRewound, { threadId });
+  }
+
+  // ── bringing back the newer version ──────────────────────────────────────────────────────
+  /**
+   * Bring back the game files the chat's newest rewind replaced, as they were just before it,
+   * between the game's restore steps (so an engine reloads them too); the conversation stays
+   * rewound. Offered once, and only until a message is sent after that rewind
+   * (`undoRewindRefusal`). Held as a rewind is: no message is taken meanwhile.
+   */
+  async undo(threadId: string, rewindId: string): Promise<UndoRewindResult> {
+    if (this.#rewinding.has(threadId)) throw new Error(MESSAGE.AlreadyRewinding);
+    this.#rewinding.add(threadId);
+    try {
+      return await this.#undoOnce(threadId, rewindId);
+    } finally {
+      this.#rewinding.delete(threadId);
+    }
+  }
+
+  async #undoOnce(threadId: string, rewindId: string): Promise<UndoRewindResult> {
+    const meta = await this.#meta(threadId);
+    if (meta?.kind !== ThreadKind.Game || !meta.project) throw new Error(MESSAGE.OnlyGameChat);
+    const project = meta.project;
+    const refusal = undoRewindRefusal(await this.#core.store.listEvents(threadId), rewindId);
+    if (refusal) throw new Error(undoRewindRefusalWords(refusal));
+    if (this.#chatBusy(threadId, project) || (await this.#runningBuild(threadId))) {
+      throw new Error(undoRewindRefusalWords(UndoRewindRefusal.Busy));
+    }
+    const dir = this.#core.games.dirFor(project);
+    await this.#core.assertProjectAllowed(dir);
+    const files = await this.#forPerson(project, threadId, UNDO_HELD, () => this.#bringBack(threadId, dir, rewindId));
+    void this.#x.previews.offerLive({ project, root: null }).catch(() => {});
+    this.#core.emit(UiEvent.GameChanged, { project });
+    this.#core.emit(UiEvent.ThreadUpdated, { threadId, project });
+    return { files };
+  }
+
+  /**
+   * The files back, then the chat's record of it (which ends the offer). Nothing half-done: when
+   * the record cannot be written, the files go back to how the undo found them.
+   */
+  async #bringBack(threadId: string, dir: string, rewindId: string): Promise<number> {
+    const restored = await this.checkpoints.restoreSaved(dir, threadId, rewindId);
+    const record = customEventData(CustomEvent.ConversationRewindUndone, { rewindId, files: restored.files });
+    try {
+      await this.#core.append([record], threadId);
+    } catch (err) {
+      await this.checkpoints.putBack(dir, restored.saved).catch((e) => this.#log(MESSAGE.putBackFailed(e)));
+      throw err;
+    }
+    return restored.files;
   }
 
   /** A run coordinator's saved session remembers the withdrawn turns: the next one starts fresh. */

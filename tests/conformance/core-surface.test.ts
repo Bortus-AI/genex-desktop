@@ -121,6 +121,7 @@ const METHODS = [
   "storageSpace",
   "threadForGame",
   "undoEngineLink",
+  "undoRewind",
   "undoSelfChange",
   "updateGame",
   "updateSettings",

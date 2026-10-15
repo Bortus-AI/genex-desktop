@@ -2541,6 +2541,11 @@ export class StudioCore {
     return this.#rewind.rewind(...args);
   }
 
+  /** Bring back the game files the chat's newest rewind replaced; the chat stays rewound (`core/rewind.ts`). */
+  undoRewind(...args: Parameters<ChatRewindService["undo"]>): ReturnType<ChatRewindService["undo"]> {
+    return this.#rewind.undo(...args);
+  }
+
   /** What freeing space deletes now, in `project` or in every game (`core/storage-space.ts`). */
   storageSpace(project?: string): Promise<StorageSpace> {
     return this.#storage.space(project);

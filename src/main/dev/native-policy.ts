@@ -141,9 +141,11 @@ const FIXTURE_SAFE = [
   "studio:plan.answer",
   "studio:cancel",
   "studio:queue.message",
-  // Rewind reads and rewrites only the chat's own log and its game folder's checkpoints.
+  // Rewind, and bringing back what it replaced, read and rewrite only the chat's own log and its
+  // game folder's checkpoints.
   "studio:chat.rewind.preview",
   "studio:chat.rewind",
+  "studio:chat.rewind.undo",
   "studio:events",
   "studio:chat.page",
   "studio:compact",

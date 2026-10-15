@@ -11,7 +11,7 @@
  * `customEvent` / `customPayload`, never `payload as`.
  */
 import type { ChatActivityPhase } from "./chat-activity.ts";
-import type { ChatRewind, CheckpointSkippedPayload } from "./chat-rewind.ts";
+import type { ChatRewind, CheckpointSkippedPayload, RewindUndonePayload } from "./chat-rewind.ts";
 import type { PlanReviewRecord } from "./composer.ts";
 import type { ContextMeasurement } from "./context.ts";
 import type { AssetDeliveredPayload, PluginToolFinishedPayload, PluginToolStartedPayload } from "./game-assets.ts";
@@ -151,6 +151,7 @@ export const CustomEvent = {
   ContractorHandoff: "contractor_handoff",
   ContractorSession: "contractor_session",
   ConversationCapabilitiesApplied: "conversation_capabilities_applied",
+  ConversationRewindUndone: "conversation_rewind_undone",
   ConversationRewound: "conversation_rewound",
   CoordinatorMessageDelivered: "coordinator_message_delivered",
   CoordinatorMessageHandled: "coordinator_message_handled",
@@ -640,8 +641,13 @@ export interface CustomEventMap {
   coordinator_message_steering: SteerPayload;
   coordinator_message_updated: CoordinatorPayload;
   delegation_incomplete: DelegationIncompletePayload;
-  /** A chat rewound to before a message (`shared/chat-rewind.ts`); `files`: game files put back, null when none were asked for. */
-  conversation_rewound: Partial<ChatRewind> & { files?: number | null };
+  /**
+   * A chat rewound to before a message (`shared/chat-rewind.ts`); `files`: game files put back, null
+   * when none were asked for; `rewindId`: the saved folder that brings the newer version back.
+   */
+  conversation_rewound: Partial<ChatRewind> & { files?: number | null; rewindId?: string };
+  /** The newer version a rewind replaced came back; the chat stayed rewound. */
+  conversation_rewind_undone: RewindUndonePayload;
   checkpoint_skipped: CheckpointSkippedPayload;
   director_show: RunScope & { target?: string; root?: string };
   director_verdict: RunScope & { pass?: string; because?: string; decision?: { kept?: boolean | null } };

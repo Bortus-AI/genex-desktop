@@ -84,6 +84,7 @@ function threadCalls(bridge: BridgeCalls) {
       invoke("studio:chat.rewind.preview", { threadId, eventId, messageId }),
     rewindChat: (threadId, eventId, messageId, files) =>
       invoke("studio:chat.rewind", { threadId, eventId, messageId, files }),
+    undoRewind: (threadId, rewindId) => invoke("studio:chat.rewind.undo", { threadId, rewindId }),
     events: (after) => invoke("studio:events", { after }),
     threadEvents: (threadId) => invoke("studio:thread.events", { threadId }),
     chatPage: (threadId, before) => invoke("studio:chat.page", { threadId, before }),

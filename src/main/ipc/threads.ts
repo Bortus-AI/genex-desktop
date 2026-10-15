@@ -165,4 +165,7 @@ function registerQueueIpc(handle: IpcHandle, core: StudioCore): void {
       files: payload?.files === true,
     }),
   );
+  handle("studio:chat.rewind.undo", async (payload) =>
+    core.undoRewind(String(payload?.threadId), String(payload?.rewindId)),
+  );
 }
