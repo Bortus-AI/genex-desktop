@@ -15,7 +15,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { RobloxAction } from "./actions.ts";
-import { startHelperLink } from "./helper-link.ts";
+import { type HelperLink, startHelperLink } from "./helper-link.ts";
+import type { ScriptChange } from "./helper-protocol.ts";
 import { type RobloxSteps, robloxSteps } from "./engine-steps.ts";
 import { readSwitches } from "./mcp-switch.ts";
 import {
@@ -29,6 +30,7 @@ import {
   undoSetup,
 } from "./setup.ts";
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
+import { createScriptSyncs, type ScriptSyncs, systemWatch } from "./script-sync.ts";
 import { createStudioClient, type StudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
 import {
   ALLOWED_HOST,
@@ -75,6 +77,7 @@ const isRobloxAction = (name: string): name is RobloxAction => ACTION_NAMES.has(
 /** The tools plugin.json declares. Wire values: never rename. */
 export const RobloxTool = {
   StudioActivity: "studio-activity",
+  CheckScripts: "check-scripts",
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
@@ -157,6 +160,11 @@ export interface RobloxDeps extends LaunchDeps {
    * only once Genex has set Studio up: before that no helper exists to connect.
    */
   helperLink?(storage: string): void;
+  /**
+   * A call for `game` came with its folder: the script sync keeps it, so the game's scripts are
+   * kept in step once its helper binds.
+   */
+  gameSeen?(storage: string, game: string, folder: string): Promise<void>;
 }
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
@@ -507,6 +515,13 @@ async function reviewSetup(deps: RobloxDeps): Promise<PluginReview> {
 
 type Handler = (args: Record<string, unknown>, context: PluginContext) => Promise<unknown>;
 
+/** Hands the script sync the folder of the game a call is for; a call with none is left alone. */
+async function noteGame(deps: RobloxDeps, context: PluginContext): Promise<void> {
+  if (!deps.gameSeen || !context.project || !context.directory) return;
+  const storage = await context.host(HostService.StorageRoot);
+  await deps.gameSeen(storage, context.project, context.directory);
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
@@ -525,14 +540,17 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const tools: Record<RobloxTool, Handler> = {
     // Nothing here watches Studio's own edits yet, so the person is never seen using it.
     [RobloxTool.StudioActivity]: async () => ({ personActive: false }),
+    [RobloxTool.CheckScripts]: async () => ({ checked: false, message: MESSAGE.Checks.NotAdded }),
   };
   return {
     async action(name, args, context) {
       if (!isRobloxAction(name)) throw new Error(MESSAGE.UnknownAction(name));
+      await noteGame(deps, context).catch(() => undefined);
       return actions[name](args, context);
     },
     async tool(name, args, context) {
       if (!isRobloxTool(name)) throw new Error(MESSAGE.UnknownTool(name));
+      await noteGame(deps, context).catch(() => undefined);
       return tools[name](args, context);
     },
     async review(name) {
@@ -542,19 +560,58 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   };
 }
 
+/** The helper link and the script sync on this computer, as the backend's process runs them. */
+interface HelperServices {
+  helperLink(storage: string): void;
+  gameSeen(storage: string, game: string, folder: string): Promise<void>;
+}
+
 /**
  * The helper link on this computer, started once: the Genex helper in Studio connects to it, and it
  * reads the helper's marker through the backend's own StudioMCP. A range with every port taken is
- * logged and left; the link starts again with the backend.
+ * logged and left; the link starts again with the backend. Each game's scripts are reconciled when
+ * its helper binds, before agents can reach that Studio, and kept in step while it stays bound.
  */
-function helperLinkOnce(client: StudioClient, stopped: AbortSignal): (storage: string) => void {
-  let started = false;
+function helperServices(client: StudioClient, stopped: AbortSignal): HelperServices {
+  let link: HelperLink | undefined;
+  let syncs: ScriptSyncs | undefined;
   const log = (line: string) => process.stderr.write(`${line}\n`);
-  return (storage) => {
-    if (started) return;
-    started = true;
-    const deps = { storage, studio: client, clock: SYSTEM_CLOCK, newSession: randomUUID, log };
-    startHelperLink(deps, { signal: stopped }).catch((error: unknown) => log(`helper link: ${errorMessage(error)}`));
+  const syncsIn = (storage: string) => {
+    syncs ??= createScriptSyncs({
+      storage,
+      ask: (game) => (type, body, options) =>
+        link ? link.request(game, type, body, options) : Promise.reject(new Error("The helper link isn't started")),
+      bound: (game) => link?.bound(game) !== undefined,
+      clock: SYSTEM_CLOCK,
+      watch: systemWatch(log),
+      log,
+    });
+    return syncs;
+  };
+  stopped.addEventListener("abort", () => syncs?.stop(), { once: true });
+  let started = false;
+  return {
+    helperLink(storage) {
+      if (started) return;
+      started = true;
+      const scripts = syncsIn(storage);
+      const deps = {
+        storage,
+        studio: client,
+        clock: SYSTEM_CLOCK,
+        newSession: randomUUID,
+        log,
+        beforeBind: (game: string) => scripts.bind(game),
+        sinks: { scriptsChanged: (game: string, change: ScriptChange) => scripts.changed(game, change) },
+      };
+      startHelperLink(deps, { signal: stopped }).then(
+        (running) => {
+          link = running.link;
+        },
+        (error: unknown) => log(`helper link: ${errorMessage(error)}`),
+      );
+    },
+    gameSeen: (storage, game, folder) => syncsIn(storage).seen(game, folder),
   };
 }
 
@@ -589,10 +646,12 @@ export function systemDeps(): RobloxDeps {
   );
   const gone = backendGone();
   gone.addEventListener("abort", () => void client.close(), { once: true });
+  const services = helperServices(client, gone);
   return {
     ...locate,
     answers: () => studioAnswers(client),
-    helperLink: helperLinkOnce(client, gone),
+    helperLink: services.helperLink,
+    gameSeen: services.gameSeen,
     helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FILE),
     install: { fetch: globalThis.fetch, run: systemInstallRun, tempRoot: os.tmpdir() },
     open: systemOpener,

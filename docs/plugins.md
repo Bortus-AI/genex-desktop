@@ -1184,8 +1184,8 @@ protocol version, ids that only grow (a repeated id is refused), a known type, e
 that type has, answers and data chunks only for requests the backend made, place parts that stay
 plain paths under `.genex/place/`, and sources up to 1 MB. A script is named as Studio holds it
 (the instance names from one of `SCRIPT_SERVICES` down, its class and a Script's run context); the
-backend maps that to a file under `src/` and resolves the file by real path (`scriptTarget`,
-refused through any link). Both sides hash bytes with `helperHash`, FNV-1a over 32 bits. Binding
+backend maps that to a file under `src/` (below) and resolves the file by real path
+(`scriptTarget`, refused through any link). Both sides hash bytes with `helperHash`, FNV-1a over 32 bits. Binding
 is exact: each connection gets a random session (`session.mark`), the helper puts the sessions of
 its connections (at most two Genex apps) in a non-archivable `GenexHelperSession` StringValue in
 CoreGui, and the backend reads that marker through `execute_luau` in Edit in every listed Studio;
@@ -1224,6 +1224,33 @@ eight players); pausing or ending a test acts in the play session's own data mod
 Edit helper's reach, so those answer `unsupported`. `activity` and `team` (who else is in a Team
 Create place) are sent on change and answered when asked; `device.set` and `gui.layout` drive the
 Device Simulator; `model.import` builds a checked mesh (`GXM1`) as a MeshPart.
+
+**Scripts as files.** A Roblox game's scripts are `.luau` files under its `src/<Service>/`, in
+Rojo's names (`script-paths.ts`): `Name.server.luau` a Script, `Name.client.luau` a LocalScript,
+`Name.luau` a ModuleScript, `Name.plugin.luau` and `Name.runcontext-server|client.luau` a Script
+with that run context, folders for the instances on the way, and `init.<kind>.luau` inside its own
+folder for a script with scripts below it. A character no file system keeps (separators,
+`: * ? " < > |`, controls, trailing dots and spaces, a Windows device name's first letter, a dot
+that would read as a kind, `%` itself) is written `%XX`; each name has one spelling, so a file
+spelled otherwise is no script of the game's, and a name past 200 characters gets no file. Two
+scripts of one name, or names differing only in letter case, get no file either. `script-sync.ts`
+keeps them in step with Studio, `Source` only (attributes and tags stay in the place export). Its
+record `.genex/roblox.json` holds each file's hash as of the last agreement and the files Genex
+wrote at the game's top. When a game's helper binds, before `studio.json` is written, every script
+is reconciled three ways (Studio's hash, the file's, the record's): the side that changed wins, a
+new script is copied, a deletion is copied only when the other side is as recorded (in Studio only
+while its hash still matches), and changed on both sides keeps Studio's version and moves the
+file's to `.genex/conflicts/<when>/`; an edit beats a deletion. While bound, a change under `src/`
+(watched, quiet for `SYNC_DEBOUNCE_MS`) is pushed with the record's hash as `base`, and Studio's
+`scripts.changed` is written to its file; each write is recorded first, so its echo matches the
+record. Scripts Studio's Script Sync keeps are skipped both ways; a `default.project.json` Genex
+didn't write is the person's Rojo project, and then Genex keeps no script in step. A `src/` that is
+a link is refused whole; writes stay in the game folder by real path and never go through a link;
+a source past Studio's 200,000 characters stays on disk with a log line. The sync also adds
+Studio's place lock files (`*.rbxl.lock`, `*.rbxlx.lock`) to the game's `.gitignore`. The backend
+learns each game's folder from the plugin calls that carry one (`games/<game>.json` in its
+storage). Script workers (`workerTypes` `scripts`, `isolation: copy`) check their files with
+`check-scripts`, which answers that the Luau checks aren't added until they are.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and

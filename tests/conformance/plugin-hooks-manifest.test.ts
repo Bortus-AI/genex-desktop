@@ -400,6 +400,11 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     assert.deepEqual(roblox.engine?.apps, { mac: ["com.Roblox.RobloxStudio"], windows: ["RobloxStudioBeta.exe"] });
     assert.equal("folders" in raw, false, "no worker or job may write Studio's Plugins folder");
     assert.equal(roblox.folders, undefined);
+    assert.deepEqual(
+      roblox.workerTypes?.map((type) => [type.id, type.tools, type.isolation]),
+      [["scripts", ["check-scripts"], "copy"]],
+      "script workers write .luau files in a copy and check them offline",
+    );
     assert.match(roblox.description, /Not affiliated with Roblox Corporation\. For people 18 and over\./);
   });
 

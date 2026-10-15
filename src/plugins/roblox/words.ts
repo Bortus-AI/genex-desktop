@@ -15,6 +15,9 @@ export const MCP_SWITCH_CLICK_PATH = "Assistant › ⋯ › Settings › MCP Ser
 export const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Roblox Studio action: ${name}`,
   UnknownTool: (name: string) => `Unknown Roblox Studio tool: ${name}`,
+  Checks: {
+    NotAdded: "Luau checks aren't added yet, so nothing was checked. Read your changes over against the luau skill.",
+  },
   Badge: {
     Get: "Not installed",
     SetUp: "Set up",

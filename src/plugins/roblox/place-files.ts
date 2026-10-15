@@ -107,7 +107,7 @@ export interface PlaceExported {
 const placeFolder = (game: string) => ensureDirBelow(game, PLACE_FOLDER);
 
 /** The folder `parts` names below `root` when every step is a real folder already; nothing is made. */
-async function existingFolder(root: string, parts: readonly string[]): Promise<string | undefined> {
+export async function existingFolder(root: string, parts: readonly string[]): Promise<string | undefined> {
   let dir = await realpath(root);
   for (const part of parts) {
     dir = path.join(dir, part);
@@ -149,7 +149,7 @@ export async function readManifest(game: string): Promise<PlaceManifest | undefi
 }
 
 /** Writes `data` as `name` in `folder` whole or not at all: a fresh file beside it, then a rename. */
-async function writeWhole(folder: string, name: string, data: Uint8Array | string): Promise<void> {
+export async function writeWhole(folder: string, name: string, data: Uint8Array | string): Promise<void> {
   const temp = `${TEMP_PREFIX}${process.pid}-${Math.random().toString(36).slice(2)}`;
   await createFileInDir(folder, temp, data);
   try {

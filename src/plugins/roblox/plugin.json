@@ -21,6 +21,15 @@
   },
   "tools": [
     {
+      "name": "check-scripts",
+      "facts": ["roblox-project"],
+      "description": "Check the game's .luau files under src/ without Studio: types (luau-lsp with Roblox's definitions), lint (selene) and format (StyLua). Fix every problem it names and run it again. Until the person adds the Luau checks it answers that and checks nothing.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "studio-activity",
       "audience": "harness",
       "description": "For Genex only: as the Roblox Studio lock's probe, whether the person is using Studio for this game (personActive), read before Genex's own calls to it.",
@@ -151,6 +160,14 @@
       "maxTools": 24,
       "callTimeoutMs": 330000,
       "description": "Roblox Studio, for this game's open place. The person's own Studio through its built-in MCP server: read the place (game tree, instances, scripts, console output, pictures) and change it with execute_luau, in Edit unless you name another data model. Genex picks this game's Studio itself, so studio_id is never yours to give. Scripts are the game's .luau files, play-testing goes through the computer tool and judge_play, and Roblox's AI tools, uploads and inserts ask the person first."
+    }
+  ],
+  "workerTypes": [
+    {
+      "id": "scripts",
+      "description": "Writes the game's Luau as .luau files under src/ in a copy and checks them with check-scripts",
+      "tools": ["check-scripts"],
+      "isolation": "copy"
     }
   ],
   "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }]

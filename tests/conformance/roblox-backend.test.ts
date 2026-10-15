@@ -225,6 +225,34 @@ describe("the Roblox Studio toolbar button's word", () => {
     assert.deepEqual(started, [STORAGE, STORAGE], "each read hands the storage over; the starter starts once");
   });
 
+  it("hands the script sync each game's folder from the calls that carry one", async () => {
+    const { deps } = fakeMac(CLOSED);
+    const seen: string[][] = [];
+    const backend = createRobloxBackend({
+      ...deps,
+      gameSeen: async (storage, game, folder) => void seen.push([storage, game, folder]),
+    });
+    await backend.action?.("toolbar-status", {}, context());
+    await backend.action?.("status", {}, { ...context(), project: "game-1", directory: "/games/game-1" });
+    await backend.tool?.("studio-activity", {}, { ...context(), project: "game-2", directory: "/games/game-2" });
+    assert.deepEqual(seen, [
+      [STORAGE, "game-1", "/games/game-1"],
+      [STORAGE, "game-2", "/games/game-2"],
+    ]);
+  });
+
+  it("answers check-scripts plainly while the Luau checks aren't added, checking nothing", async () => {
+    const { deps, ran } = fakeMac(READY);
+    const answer = (await createRobloxBackend(deps).tool?.("check-scripts", {}, context())) as {
+      checked: boolean;
+      message: string;
+    };
+    assert.equal(answer.checked, false);
+    assert.match(answer.message, /Luau checks aren't added yet/);
+    assert.doesNotMatch(answer.message, BANNED_WORDS);
+    assert.deepEqual(ran, []);
+  });
+
   it("orders the states: missing first, then setup, then open, then answering", () => {
     const facts = { installed: true, setUp: true, running: true, answering: true };
     assert.equal(studioStatusOf({ ...facts, installed: false }), StudioStatus.Get);

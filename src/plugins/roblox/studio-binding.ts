@@ -33,6 +33,8 @@ export const ROBLOX_ENGINE = "roblox";
 const SHARED_BRIDGE = "_shared";
 /** A game id as Genex names a game's folder: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
+/** Whether `value` is a game id as Genex names a game's folder: a plain folder name, never a path. */
+export const isGameId = (value: unknown): value is string => typeof value === "string" && GAME_ID.test(value);
 /** An id Studio or the helper gives: printable, no spaces, bounded. */
 const TOKEN = /^[\x21-\x7e]{1,200}$/;
 /** A published place's id, as the host stores it: decimal digits. */

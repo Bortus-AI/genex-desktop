@@ -19,6 +19,13 @@ Roblox's Script Sync use):
 - Folders are Folders; a script with children is a folder holding an `init.*.luau` file.
 - One script per file and one file per script. Don't create two files that differ only in letter
   case: Windows and macOS treat them as one.
+- A character a file name can't hold is written `%XX` (a name ending in a dot is `Name%2E.luau`);
+  keep the names Genex wrote as they are.
+- When a script changed in Studio and in its file at once, Studio's version is kept in both and the
+  file's goes to `.genex/conflicts/`: look there before redoing that work.
+- Scripts Studio's Script Sync keeps, and every script of a game with the person's own Rojo
+  project (`default.project.json`), are kept in step by that tool, not Genex: edit the files where
+  that project puts them.
 - Server-only code and modules go in ServerScriptService or ServerStorage. Code in
   ReplicatedStorage, StarterPlayer, StarterGui and Workspace is copied to every player's device,
   where a cheater can read it: never put secrets, admin lists or reward logic there.

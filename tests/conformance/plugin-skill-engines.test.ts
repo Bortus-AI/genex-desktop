@@ -198,8 +198,8 @@ const ROBLOX_SKILLS = [
 ];
 /** The skills a web game never gets: those of an engine's own project. */
 const ENGINE_ONLY_SKILLS = [...UNREAL_ONLY_SKILLS, ...ROBLOX_SKILLS];
-/** The Roblox plugin's agent tools: the reader of its file skills, which reach a Roblox game only. */
-const ROBLOX_ONLY_TOOLS = ["roblox__skill"];
+/** The Roblox plugin's agent tools (the reader of its file skills, check-scripts), which reach a Roblox game only. */
+const ROBLOX_ONLY_TOOLS = ["roblox__skill", "roblox__check-scripts"];
 /** The plugins a web game never takes part with: every one of their skills and tools is another engine's. */
 const ENGINE_ONLY_PLUGINS = ["roblox"];
 
