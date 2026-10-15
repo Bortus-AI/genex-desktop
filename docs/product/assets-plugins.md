@@ -18,7 +18,7 @@ The Add menu holds attachments, plugin and MCP switches, Connect and Manage.
 Enabled, connected, signed in and permitted differ.
 
 The Plugins page (Plugins/Skills, search, details) lists installed plugins, your servers, the
-Marketplace (Coming soon) and the plugin guide, with
+Community plugins and the plugin guide, with
 [icons](../plugins.md#icons). Install from GitHub pins a pasted link's latest release
 (else newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,

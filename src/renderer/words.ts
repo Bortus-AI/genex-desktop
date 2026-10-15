@@ -3195,14 +3195,40 @@ export const PLUGINS_WORDS = {
     create: "Create a plugin",
     local: "Load local plugin…",
   },
-  more: {
-    title: "More plugins",
+  /** The catalog's plugins Genex makes, that you don't have. */
+  ours: {
+    title: "Plugins",
   },
-  /** The Marketplace while the catalog has nothing you don't have yet. */
+  /** The catalog's plugins anyone else made, reviewed before they are listed. */
+  community: {
+    title: "Community plugins",
+    by: "by",
+    /** The publisher's GitHub name, a link to their profile. */
+    profile: (login: string) => `Open ${login} on GitHub`,
+  },
+  /** A catalog plugin's page before it is installed: how to start, what it can do, where it comes from. */
+  listing: {
+    install: "Install",
+    installLabel: (name: string) => `Install ${name}`,
+    open: (name: string) => `Open ${name}`,
+    steps: "How to start",
+    installStep: "Install it. Genex shows what it can reach and asks you first.",
+    connectStep: (name: string) => `Open ${name}'s page and connect your account or key.`,
+    readyStep: "It turns on when installed: agents in all your games can use it from your next message.",
+    installedStep: "Installed.",
+    connectAccount: "Connect its account with the button above.",
+    /** A tile's and a page's mark while the plugin waits on its person. */
+    needsSetup: "Needs setup",
+    developer: "Developer",
+    source: "Source",
+    guide: "Guide",
+    category: "Category",
+  },
+  /** Community plugins while the catalog has none you don't have yet. */
   marketplace: {
-    title: "Marketplace",
+    title: "Community plugins",
     soon: "Coming soon",
-    text: "Plugins from more game dev tools are on the way.",
+    text: "Anyone can make one. The first ones are on the way.",
   },
   /** The MCP servers section before anyone has added one. */
   servers: {
@@ -3210,8 +3236,8 @@ export const PLUGINS_WORDS = {
     emptyText: "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.",
   },
   own: {
-    title: "Make your own plugin",
-    text: "Local Blender and the Genex plugin are plugins too: one folder with a manifest, tools and panels.",
+    title: "Make a community plugin",
+    text: "Anyone can: one folder with a manifest, tools and panels, the same way Local Blender and Genex are made.",
     guide: "Read the guide",
   },
   /** A plugin row's account, by what it needs next. */

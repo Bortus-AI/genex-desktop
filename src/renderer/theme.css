@@ -2528,6 +2528,153 @@ button.chat-header-title:hover {
   outline: none;
   color: var(--color-icon);
 }
+/* Community plugins: a grid of open tiles, a dashed edge and no fill, like the make-your-own marks. */
+.community-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-block-start: 12px;
+}
+.community-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-card);
+}
+.community-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.community-tile .extension-icon-letter {
+  border: 1px dashed var(--line-strong);
+  outline: none;
+  background: transparent;
+}
+.community-tile-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+/* One line, cut with an ellipsis (full name in the tooltip), so the tiles' descriptions line up. */
+.community-tile-open {
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1.3;
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  cursor: pointer;
+}
+/* The name stretches over the whole tile, so the tile opens its page; the link and the control sit above it. */
+.community-tile {
+  position: relative;
+}
+.community-tile-open::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: "";
+}
+.community-tile-open:focus-visible {
+  outline: none;
+}
+.community-tile:has(.community-tile-open:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.community-tile:hover {
+  border-color: var(--ink-3);
+}
+.community-tile-control,
+.community-by .community-profile {
+  position: relative;
+  z-index: 1;
+}
+.community-tile-control {
+  flex-shrink: 0;
+}
+.community-by {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.community-by-page {
+  margin-block: 4px 0;
+  font-size: 13px;
+}
+.community-profile {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--icon-selected, var(--accent-ink));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.community-profile:hover {
+  text-decoration: underline;
+}
+.community-profile svg {
+  flex-shrink: 0;
+}
+.community-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-block-start: 12px;
+  padding-inline-start: 22px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.5;
+  list-style: decimal;
+}
+.community-steps li::marker {
+  color: var(--ink-3);
+}
+.community-steps li[data-step-done] {
+  color: var(--ink-3);
+}
+.community-step-check {
+  display: inline-block;
+  margin-inline-end: 6px;
+  vertical-align: -2px;
+  color: var(--green);
+}
+/* A plugin that waits on its person: a quiet amber word beside its switch. */
+.community-needs-setup {
+  color: var(--orange);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.community-tile-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.community-tile-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
 /* A section whose own card frames it needs no rule under its title (the Marketplace). */
 .extensions-section-heading-plain {
   padding-block-end: 0;
@@ -2952,6 +3099,11 @@ button.chat-header-title:hover {
   gap: 16px;
   padding-block-start: 24px;
 }
+@container (max-width: 1080px) {
+  .community-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 @container (max-width: 680px) {
   .extensions-content {
     padding: 24px 24px 64px;
@@ -2968,6 +3120,9 @@ button.chat-header-title:hover {
   }
   .extension-row {
     gap: 12px;
+  }
+  .community-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
   .extension-information {
     grid-template-columns: 96px minmax(0, 1fr);
