@@ -20,7 +20,7 @@
  * read from the reply (`repeatedBuildUsages`).
  */
 import { SessionActivityRole } from "../shared/chat-activity.ts";
-import { CustomEvent } from "../shared/custom-events.ts";
+import { CustomEvent, delegatedPayload } from "../shared/custom-events.ts";
 import { type ConversationRecord, EventKind, type EventEnvelope, ThreadKind } from "../shared/event-log.ts";
 import {
   type CallCounts,
@@ -40,6 +40,7 @@ import { DEFAULT_PERMISSION_MODE, PermissionMode } from "../shared/permissions.t
 import { EngineId } from "../shared/providers.ts";
 import { ExecutionStatus } from "../shared/run-state.ts";
 import { FIELD_MODEL_PATTERN, FIELD_STOP_CODE_PATTERN, type FieldRunFacts } from "../shared/run-sharing.ts";
+import { TOOL_USE_PART, classifyTool } from "../shared/tool-category.ts";
 import type { EventStore } from "../substrate/event-store.ts";
 import type { FinishedBuildRef } from "./run-sharing.ts";
 
@@ -277,10 +278,25 @@ function contextFacts(events: readonly EventEnvelope[]): FieldRunFacts["context"
   };
 }
 
-/** The chat's model calls and tool requests; tools are counted in total only, by no category yet. */
+/**
+ * The model calls, and the builders' tool calls as the evals count a lab run's: every `tool_use`
+ * part the delegated records mirror, once per call id, by the shared category table. The chat's own
+ * requests (a delegation, a launch) are not tool calls of the build.
+ */
 function callFacts(events: readonly EventEnvelope[], modelCalls: number): CallCounts {
-  const total = events.filter((e) => e.data.type === EventKind.ToolRequested).length;
-  return { modelCalls, tools: { total, byCategory: {} } };
+  const seen = new Set<string>();
+  const byCategory: CallCounts["tools"]["byCategory"] = {};
+  for (const { data } of events) {
+    const delegated = data.type === EventKind.Custom ? delegatedPayload(data) : null;
+    for (const part of delegated?.payload.data?.parts ?? []) {
+      if (part.type !== TOOL_USE_PART || !part.id || !part.name || seen.has(part.id)) continue;
+      seen.add(part.id);
+      const command = isRecord(part.input) && typeof part.input.command === "string" ? part.input.command : null;
+      const category = classifyTool(part.name, command);
+      byCategory[category] = (byCategory[category] ?? 0) + 1;
+    }
+  }
+  return { modelCalls, tools: { total: seen.size, byCategory } };
 }
 
 const NO_SIGNALS: FieldRunFacts["inApp"] = {
