@@ -495,6 +495,7 @@ export class StudioCore {
     agentsMax: DEFAULT_POOL_MAX,
     blender: true,
     autoResume: true,
+    computerControl: false,
   };
   #assetCheckpointStore?: AssetCheckpoints;
   #planReviews?: PlanReviewController;
@@ -1679,7 +1680,12 @@ export class StudioCore {
       next.buildersMax = clampBuilders(next.buildersMax);
       next.agentsMax = next.buildersMax + LEAD_WINDOWS;
     }
+    // Only an explicit true turns the computer over; anything else the page sends reads as off.
+    next.computerControl = next.computerControl === true;
+    const computerOff = this.#settings.computerControl && !next.computerControl;
     this.#settings = next;
+    // Turning computer control off stops every desktop session's driver now, as ⌃⌥⌘Esc does.
+    if (computerOff) await this.options.desktop?.stopAll();
     // Atomic (CQ-3): a torn write would read back as defaults at the next start. The default goes
     // beside the settings so the next start can tell a worker count someone chose from one never touched.
     const saved: SavedSettings = { ...this.#settings, buildersDefault: DEFAULT_BUILDERS };
@@ -1714,6 +1720,8 @@ export class StudioCore {
         agentsMax: buildersMax + LEAD_WINDOWS,
         blender: parsed.blender !== false,
         autoResume: parsed.autoResume !== false,
+        // Off unless the person turned it on: a file from before the switch reads as off.
+        computerControl: parsed.computerControl === true,
       };
     } catch {
       /* first launch — defaults stand */
