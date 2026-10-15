@@ -183,14 +183,18 @@ export function canForceSettle(job: GenexPublishJob | undefined, live: boolean, 
   return !live && force && job?.state === GenexPublishJobState.Unresolved && !job.uploadedAt;
 }
 
-/** An uploaded draft not yet verified live, whose next check is due (or forced). */
+/** A job whose outcome is still open: running here, or unknown. A finished or settled one is never checked again. */
+export const isOpen = (job: GenexPublishJob): boolean =>
+  job.state === GenexPublishJobState.Running || job.state === GenexPublishJobState.Unresolved;
+
+/** An uploaded draft not yet verified live and still open, whose next check is due (or forced). */
 export function deploymentCheckDue(
   job: GenexPublishJob | undefined,
   live: boolean,
   force: boolean,
   now = Date.now(),
 ): boolean {
-  if (live || !job?.uploadedAt || !checksDraftPage(job)) return false;
+  if (live || !job?.uploadedAt || !checksDraftPage(job) || !isOpen(job)) return false;
   if (job.phase === GenexPublishPhase.Ready) return false;
   return force || !job.nextCheckAt || Date.parse(job.nextCheckAt) <= now;
 }
