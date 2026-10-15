@@ -2,16 +2,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createHelperLink, type ScriptChangeAt } from "../../src/plugins/roblox/helper-link.ts";
+import { createHelperLink, scriptTarget } from "../../src/plugins/roblox/helper-link.ts";
 import {
   createHelperInbox,
   HELPER_PROTOCOL,
   HelperMessage,
   HelperRefusal,
+  helperHash,
+  isPartPath,
   isScriptPath,
   MAX_HELPER_FRAME_BYTES,
   MAX_SCRIPT_SOURCE_BYTES,
   type PendingType,
+  type ScriptChange,
 } from "../../src/plugins/roblox/helper-protocol.ts";
 import { BINDING_FILE } from "../../src/plugins/roblox/studio-binding.ts";
 import { fakeStudio, manualClock, memoryHelper } from "../helpers/roblox-helper.ts";
@@ -19,8 +22,10 @@ import { tmpDir } from "../helpers/tmp.ts";
 
 const NOTHING_PENDING: PendingType = () => undefined;
 const frame = (id: number, type: string, body: unknown) => JSON.stringify({ v: HELPER_PROTOCOL, id, type, body });
-const changed = (id: number, scriptPath: unknown, source: unknown = "print(1)") =>
-  frame(id, HelperMessage.ScriptsChanged, { path: scriptPath, source });
+const MAIN = { path: ["ServerScriptService", "Main"], class: "Script", runContext: "Server" };
+const SHARED = { path: ["ReplicatedStorage", "Shared"], class: "ModuleScript" };
+const changed = (id: number, ref: Record<string, unknown>, source: unknown = "print(1)") =>
+  frame(id, HelperMessage.ScriptsChanged, { ...ref, source });
 
 test("a hello, a script change and an answer to a pending request are read with every field typed", () => {
   const inbox = createHelperInbox();
@@ -36,11 +41,12 @@ test("a hello, a script change and an answer to a pending request are read with 
       event: { type: "hello", body: { helper: 1, place: { id: "0", name: "Place1" } } },
     },
   });
-  const change = inbox.read(changed(2, "ServerScriptService/Main.server.luau"), NOTHING_PENDING);
+  const change = inbox.read(changed(2, MAIN), NOTHING_PENDING);
   assert.ok(change.ok && change.message.kind === "event");
-  assert.deepEqual(change.message.event.body, { path: "ServerScriptService/Main.server.luau", source: "print(1)" });
-  const removed = inbox.read(changed(3, "ReplicatedStorage/Shared.luau", null), NOTHING_PENDING);
-  assert.ok(removed.ok);
+  assert.deepEqual(change.message.event.body, { ...MAIN, source: "print(1)" });
+  const removed = inbox.read(changed(3, SHARED, null), NOTHING_PENDING);
+  assert.ok(removed.ok && removed.message.kind === "event");
+  assert.deepEqual(removed.message.event.body, { ...SHARED, source: null });
   const pending: PendingType = (re) => (re === 7 ? HelperMessage.ScriptsList : undefined);
   const answer = JSON.stringify({
     v: HELPER_PROTOCOL,
@@ -48,7 +54,7 @@ test("a hello, a script change and an answer to a pending request are read with 
     type: "answer",
     re: 7,
     ok: true,
-    result: { scripts: [{ path: "ServerScriptService/Main.server.luau", hash: "abc123" }] },
+    result: { scripts: [{ ...MAIN, hash: "abc123", synced: false }] },
   });
   assert.deepEqual(inbox.read(answer, pending), {
     ok: true,
@@ -59,10 +65,74 @@ test("a hello, a script change and an answer to a pending request are read with 
       answer: {
         ok: true,
         type: "scripts.list",
-        result: { scripts: [{ path: "ServerScriptService/Main.server.luau", hash: "abc123" }] },
+        result: { scripts: [{ ...MAIN, hash: "abc123", synced: false }] },
       },
     },
   });
+});
+
+test("both sides hash bytes alike: FNV-1a over 32 bits, a string as its UTF-8 bytes", () => {
+  // The published FNV-1a test vectors, and the hash the helper in Studio gave this source.
+  assert.equal(helperHash(""), "811c9dc5");
+  assert.equal(helperHash("a"), "e40c292c");
+  assert.equal(helperHash("foobar"), "bf9cf968");
+  assert.equal(helperHash('return { answer = 42, word = "héllo ✓" }\n'), "60c8dacd");
+  assert.equal(helperHash(Buffer.from("foobar")), "bf9cf968");
+});
+
+const REF_ROWS: Array<{ name: string; ref: Record<string, unknown>; refusal: HelperRefusal }> = [
+  {
+    name: "a path that isn't a list",
+    ref: { ...SHARED, path: "ReplicatedStorage/Shared" },
+    refusal: HelperRefusal.BadPath,
+  },
+  { name: "a service alone", ref: { ...SHARED, path: ["ReplicatedStorage"] }, refusal: HelperRefusal.BadPath },
+  {
+    name: "a service the helper doesn't watch",
+    ref: { ...SHARED, path: ["CoreGui", "Shared"] },
+    refusal: HelperRefusal.BadPath,
+  },
+  { name: "an empty name", ref: { ...SHARED, path: ["ReplicatedStorage", ""] }, refusal: HelperRefusal.BadPath },
+  {
+    name: "a NUL in a name",
+    ref: { ...SHARED, path: ["ReplicatedStorage", "a\u0000b"] },
+    refusal: HelperRefusal.BadPath,
+  },
+  {
+    name: "a name past the cap",
+    ref: { ...SHARED, path: ["ReplicatedStorage", "x".repeat(1001)] },
+    refusal: HelperRefusal.BadPath,
+  },
+  {
+    name: "a path too deep",
+    ref: { ...SHARED, path: ["ReplicatedStorage", ...Array(64).fill("Folder")] },
+    refusal: HelperRefusal.BadPath,
+  },
+  {
+    name: "a name that isn't text",
+    ref: { ...SHARED, path: ["ReplicatedStorage", 7] },
+    refusal: HelperRefusal.BadPath,
+  },
+  { name: "another class", ref: { ...SHARED, class: "CoreScript" }, refusal: HelperRefusal.BadField },
+  {
+    name: "a ModuleScript with a run context",
+    ref: { ...SHARED, runContext: "Server" },
+    refusal: HelperRefusal.BadField,
+  },
+  { name: "a Script without one", ref: { path: MAIN.path, class: "Script" }, refusal: HelperRefusal.BadField },
+  { name: "an unknown run context", ref: { ...MAIN, runContext: "Everywhere" }, refusal: HelperRefusal.BadField },
+];
+
+test("a script the helper names is checked whole: its service, every name, its class and run context", () => {
+  for (const row of REF_ROWS) {
+    const read = createHelperInbox().read(changed(1, row.ref), NOTHING_PENDING);
+    assert.deepEqual(read, { ok: false, refusal: row.refusal }, row.name);
+  }
+  // Instance names are Studio's own: a slash, dots or a reserved word are names like any other.
+  const odd = { ...SHARED, path: ["ReplicatedStorage", "../a/b", "CON", "名前 ✓"] };
+  const read = createHelperInbox().read(changed(1, odd), NOTHING_PENDING);
+  assert.ok(read.ok && read.message.kind === "event");
+  assert.deepEqual(read.message.event.body, { ...odd, source: "print(1)" });
 });
 
 const PATH_ROWS: Array<{ name: string; path: unknown }> = [
@@ -81,12 +151,33 @@ const PATH_ROWS: Array<{ name: string; path: unknown }> = [
   { name: "not text", path: 42 },
 ];
 
-test("a script path that could leave src/ is refused by the reader", () => {
-  for (const row of PATH_ROWS) {
-    assert.equal(isScriptPath(row.path), false, row.name);
-    const read = createHelperInbox().read(changed(1, row.path), NOTHING_PENDING);
-    assert.deepEqual(read, { ok: false, refusal: HelperRefusal.BadPath }, row.name);
-  }
+test("a script file or place part path that could leave its folder is no path at all", () => {
+  for (const row of PATH_ROWS) assert.equal(isScriptPath(row.path), false, row.name);
+  const partRows = [
+    "../outside.rbxm",
+    "Workspace/../../x.rbxm",
+    "/etc/x.rbxm",
+    "C:/Windows/x.rbxm",
+    "Workspace\\x.rbxm",
+    "x\u0000.rbxm",
+    "Workspace//x.rbxm",
+    "./x.rbxm",
+    "Workspace/x.lua",
+    ".rbxm",
+    `${"a/".repeat(600)}x.rbxm`,
+    42,
+  ];
+  for (const part of partRows) assert.equal(isPartPath(part), false, String(part));
+  assert.equal(isPartPath("Workspace.split/Tower~2.rbxm"), true);
+  assert.equal(isPartPath("services.json"), true);
+  const chunk = frame(1, HelperMessage.DataChunk, { transfer: 3, part: "../x.rbxm", index: 0, count: 1, data: "AAAA" });
+  assert.deepEqual(
+    createHelperInbox().read(chunk, () => HelperMessage.PlaceExport),
+    {
+      ok: false,
+      refusal: HelperRefusal.BadPath,
+    },
+  );
 });
 
 const ROWS: Array<{ name: string; texts: string[]; refusal: HelperRefusal; pending?: PendingType }> = [
@@ -115,12 +206,12 @@ const ROWS: Array<{ name: string; texts: string[]; refusal: HelperRefusal; pendi
   },
   {
     name: "a repeated id",
-    texts: [frame(5, HelperMessage.Activity, { editing: true }), changed(5, "ServerScriptService/Main.server.luau")],
+    texts: [frame(5, HelperMessage.Activity, { editing: true }), changed(5, MAIN)],
     refusal: HelperRefusal.RepeatedId,
   },
   {
     name: "an older id",
-    texts: [frame(5, HelperMessage.Activity, { editing: true }), changed(4, "ServerScriptService/Main.server.luau")],
+    texts: [frame(5, HelperMessage.Activity, { editing: true }), changed(4, MAIN)],
     refusal: HelperRefusal.RepeatedId,
   },
   {
@@ -130,7 +221,7 @@ const ROWS: Array<{ name: string; texts: string[]; refusal: HelperRefusal; pendi
   },
   {
     name: "a chunk of no export",
-    texts: [frame(1, HelperMessage.DataChunk, { transfer: 3, index: 0, count: 1, data: "AAAA" })],
+    texts: [frame(1, HelperMessage.DataChunk, { transfer: 3, part: "a.rbxm", index: 0, count: 1, data: "AAAA" })],
     refusal: HelperRefusal.UnknownAnswer,
   },
   {
@@ -141,25 +232,21 @@ const ROWS: Array<{ name: string; texts: string[]; refusal: HelperRefusal; pendi
   },
   {
     name: "an extra field",
-    texts: [frame(1, HelperMessage.ScriptsChanged, { path: "a.luau", source: "", write: "/etc/hosts" })],
+    texts: [frame(1, HelperMessage.ScriptsChanged, { ...SHARED, source: "", write: "/etc/hosts" })],
     refusal: HelperRefusal.BadField,
   },
   {
     name: "a missing source",
-    texts: [frame(1, HelperMessage.ScriptsChanged, { path: "a.luau" })],
+    texts: [frame(1, HelperMessage.ScriptsChanged, SHARED)],
     refusal: HelperRefusal.BadField,
   },
   {
     name: "an oversize source",
-    texts: [changed(1, "ServerScriptService/Big.server.luau", "x".repeat(MAX_SCRIPT_SOURCE_BYTES + 1))],
+    texts: [changed(1, MAIN, "x".repeat(MAX_SCRIPT_SOURCE_BYTES + 1))],
     refusal: HelperRefusal.Oversize,
   },
   { name: "an oversize message", texts: [" ".repeat(MAX_HELPER_FRAME_BYTES + 1)], refusal: HelperRefusal.Oversize },
-  ...PATH_ROWS.map((row) => ({
-    name: `a script path with ${row.name}`,
-    texts: [changed(1, row.path)],
-    refusal: HelperRefusal.BadPath,
-  })),
+  ...REF_ROWS.map((row) => ({ name: `a script with ${row.name}`, texts: [changed(1, row.ref)], refusal: row.refusal })),
 ];
 
 test("hostile messages are refused by the reader, each for its own reason", () => {
@@ -186,17 +273,15 @@ async function boundGame() {
   const link = { kind: "roblox", project: path.join(game, "Place1.rbxl"), linkedAt: "2026-10-15T12:00:00.000Z" };
   await writeFile(path.join(storage, "links", "game-1.json"), JSON.stringify(link));
   const studio = fakeStudio([PLACE1]);
-  const written: ScriptChangeAt[] = [];
+  const written: ScriptChange[] = [];
   const helperLink = createHelperLink({
     storage,
     studio: studio.client,
     clock: manualClock(),
     newSession: () => "session-1",
-    scriptsRoot: async () => game,
     sinks: {
-      scriptsChanged: async (_game, change) => {
+      scriptsChanged: (_game, change) => {
         written.push(change);
-        await writeFile(change.target, change.source ?? "");
       },
     },
   });
@@ -244,11 +329,16 @@ test("hostile messages from a bound helper write no file and call nothing in Stu
     },
     {
       name: "an oversize source",
-      text: (id) => changed(id, "ServerScriptService/Big.server.luau", "x".repeat(MAX_SCRIPT_SOURCE_BYTES + 1)),
+      text: (id) => changed(id, MAIN, "x".repeat(MAX_SCRIPT_SOURCE_BYTES + 1)),
     },
-    ...PATH_ROWS.map((row) => ({
-      name: `a path with ${row.name}`,
-      text: (id: number) => changed(id, row.path, "pwned"),
+    {
+      name: "a chunk of no export",
+      text: (id) =>
+        frame(id, HelperMessage.DataChunk, { transfer: 1, part: "a.rbxm", index: 0, count: 1, data: "AAAA" }),
+    },
+    ...REF_ROWS.map((row) => ({
+      name: `a script with ${row.name}`,
+      text: (id: number) => changed(id, row.ref, "pwned"),
     })),
   ];
   for (const row of rows) {
@@ -259,20 +349,17 @@ test("hostile messages from a bound helper write no file and call nothing in Stu
   }
   // A repeated id: the same message twice, the second refused.
   const id = world.helper.nextId();
-  world.helper.raw(changed(id, "ServerScriptService/Once.server.luau", "once"));
-  world.helper.raw(changed(id, "ServerScriptService/Once.server.luau", "twice"));
+  world.helper.raw(changed(id, MAIN, "once"));
+  world.helper.raw(changed(id, MAIN, "twice"));
   await world.helperLink.idle();
-  assert.equal(world.written.length, 1, "only the first of two messages with one id is taken");
-  assert.equal(await readFile(path.join(world.game, "src", "ServerScriptService", "Once.server.luau"), "utf8"), "once");
-  const after = await tree(world.root);
-  delete after[path.join("games", "game-1", "src", "ServerScriptService", "Once.server.luau")];
+  assert.deepEqual(world.written, [{ ...MAIN, source: "once" }], "only the first of two messages with one id is taken");
   // The binding file is refreshed by time, and no time passed.
-  assert.deepEqual(after, before);
+  assert.deepEqual(await tree(world.root), before);
   assert.equal(world.studio.calls.length, callsBefore, "no call reached Studio");
   world.helperLink.close();
 });
 
-test("a script path through a link, or onto one, writes nothing anywhere", async (t) => {
+test("a script file through a link, or onto one, is no file the backend writes", async (t) => {
   const world = await boundGame();
   const fileLink = path.join(world.game, "src", "ServerScriptService", "Evil.server.luau");
   const folderLink = path.join(world.game, "src", "Linked");
@@ -281,41 +368,38 @@ test("a script path through a link, or onto one, writes nothing anywhere", async
     (await linkOrSkip(world.outside, folderLink, "dir"));
   if (skipped) return t.skip(skipped);
   const before = await tree(world.root);
-  world.helper.say(HelperMessage.ScriptsChanged, { path: "ServerScriptService/Evil.server.luau", source: "pwned" });
-  world.helper.say(HelperMessage.ScriptsChanged, { path: "Linked/victim.luau", source: "pwned" });
-  world.helper.say(HelperMessage.ScriptsChanged, { path: "Linked/new.server.luau", source: "pwned" });
-  await world.helperLink.idle();
-  assert.deepEqual(world.written, []);
+  for (const file of ["ServerScriptService/Evil.server.luau", "Linked/victim.luau", "Linked/new.server.luau"])
+    await assert.rejects(scriptTarget(world.game, file), file);
   assert.deepEqual(await tree(world.root), before);
   assert.equal(await readFile(path.join(world.outside, "victim.luau"), "utf8"), "untouched");
-  assert.equal(world.studio.otherCalls().length, 0);
   world.helperLink.close();
 });
 
-test("a src folder that is a link refuses every script path", async (t) => {
+test("a src folder that is a link refuses every script file", async (t) => {
   const world = await boundGame();
   const src = path.join(world.game, "src");
   const { rm } = await import("node:fs/promises");
   await rm(src, { recursive: true });
   const skipped = await linkOrSkip(world.outside, src, "dir");
   if (skipped) return t.skip(skipped);
-  world.helper.say(HelperMessage.ScriptsChanged, { path: "victim.luau", source: "pwned" });
-  await world.helperLink.idle();
-  assert.deepEqual(world.written, []);
+  await assert.rejects(scriptTarget(world.game, "victim.luau"));
   assert.equal(await readFile(path.join(world.outside, "victim.luau"), "utf8"), "untouched");
   world.helperLink.close();
 });
 
-test("a plain script change from the bound helper reaches the sink with its file under src/", async () => {
+test("a plain script change from the bound helper reaches the sink as Studio names it", async () => {
   const world = await boundGame();
-  world.helper.say(HelperMessage.ScriptsChanged, { path: "ServerScriptService/Main.server.luau", source: "print(2)" });
+  world.helper.say(HelperMessage.ScriptsChanged, { ...MAIN, source: "print(2)" });
+  world.helper.say(HelperMessage.ScriptsChanged, { ...SHARED, source: null });
   await world.helperLink.idle();
   assert.deepEqual(world.written, [
-    {
-      path: "ServerScriptService/Main.server.luau",
-      source: "print(2)",
-      target: path.join(world.game, "src", "ServerScriptService", "Main.server.luau"),
-    },
+    { ...MAIN, source: "print(2)" },
+    { ...SHARED, source: null },
   ]);
+  assert.equal(
+    await scriptTarget(world.game, "ServerScriptService/Main.server.luau"),
+    path.join(world.game, "src", "ServerScriptService", "Main.server.luau"),
+  );
   world.helperLink.close();
 });
+

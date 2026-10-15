@@ -36,7 +36,11 @@ export function fakeStudio(listed: StudioEntry[]) {
     client,
     calls,
     unreachable,
-    mark: (studioId: string, session: string) => markers.set(studioId, session),
+    /** The helper marks a session: beside the sessions of its other Genex apps' connections. */
+    mark: (studioId: string, session: string) => {
+      const held = markers.get(studioId);
+      markers.set(studioId, held ? `${held},${session}` : session);
+    },
     /** Studio restarted, quit or opened: the list StudioMCP gives from now on. */
     list: (next: StudioEntry[]) => {
       studios = [...next];

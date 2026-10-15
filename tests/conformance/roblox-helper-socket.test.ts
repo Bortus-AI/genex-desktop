@@ -1,7 +1,9 @@
 import { type TestContext, test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { connect, createServer, type Server, type Socket } from "node:net";
+import path from "node:path";
 import {
   HELPER_PATH,
   type HelperConnection,
@@ -269,6 +271,51 @@ test("a handshake from a browser, another host or a broken client is refused bef
   // A plain web request gets nothing either.
   const page = await fetch(`http://127.0.0.1:${server.port}${HELPER_PATH}`);
   assert.equal(page.status, 404);
+  await server.close();
+});
+
+/** Roblox Studio's own upgrade request, recorded: its headers in order, and no Origin among them. */
+const STUDIO_HANDSHAKE = JSON.parse(
+  await readFile(path.resolve(import.meta.dirname, "../fixtures/roblox-studio/studio-handshake.json"), "utf8"),
+) as { path: string; headers: Array<[string, string]> };
+
+/** Studio's recorded request sent byte for byte to `port`, with `extra` headers after its own. */
+async function studioHandshake(port: number, extra: Array<[string, string]> = []) {
+  const socket: Socket = connect(port, "127.0.0.1");
+  await new Promise<void>((resolve) => socket.once("connect", () => resolve()));
+  const lines = [...STUDIO_HANDSHAKE.headers, ...extra].map(([name, value]) =>
+    name === "Host" ? `${name}: 127.0.0.1:${port}` : `${name}: ${value}`,
+  );
+  let received = "";
+  socket.on("data", (chunk: Buffer) => {
+    received += chunk.toString("latin1");
+  });
+  socket.on("error", () => undefined);
+  socket.write(`GET ${STUDIO_HANDSHAKE.path} HTTP/1.1\r\n${lines.join("\r\n")}\r\n\r\n`);
+  for (let tries = 0; tries < 200 && !received.includes("\r\n\r\n"); tries++) await settle();
+  return { socket, response: received.slice(0, received.indexOf("\r\n\r\n")) };
+}
+
+test("Roblox Studio's own handshake, as recorded, is accepted: it carries no Origin, and any Origin is refused", async (t) => {
+  assert.equal(
+    STUDIO_HANDSHAKE.headers.some(([name]) => name.toLowerCase() === "origin"),
+    false,
+    "Studio sends no Origin header",
+  );
+  const { server, connections, messages } = await echoServer(t);
+  const studio = await studioHandshake(server.port);
+  const key = STUDIO_HANDSHAKE.headers.find(([name]) => name === "Sec-WebSocket-Key")?.[1] ?? "";
+  assert.match(studio.response, /^HTTP\/1\.1 101 /);
+  assert.ok(studio.response.includes(`Sec-WebSocket-Accept: ${websocketAccept(key)}`));
+  studio.socket.write(clientFrame(0x1, Buffer.from("hello from Studio")));
+  await settle();
+  assert.deepEqual(messages, ["hello from Studio"]);
+  assert.equal(connections.length, 1);
+  studio.socket.destroy();
+  const withOrigin = await studioHandshake(server.port, [["Origin", "null"]]);
+  assert.match(withOrigin.response, /^HTTP\/1\.1 403 /);
+  withOrigin.socket.destroy();
+  assert.equal(connections.length, 1, "the handshake with an Origin reached no connection");
   await server.close();
 });
 

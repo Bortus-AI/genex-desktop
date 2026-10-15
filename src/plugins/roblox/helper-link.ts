@@ -3,7 +3,8 @@
  * answers between the backend and that helper.
  *
  * Binding is exact. Each connection gets a random session id (`session.mark`); the helper puts it
- * in a non-archivable StringValue in Studio's CoreGui ({@link SESSION_MARKER}); the backend then
+ * in a non-archivable StringValue in Studio's CoreGui ({@link SESSION_MARKER}), the sessions of
+ * its connections joined by commas (a helper talks to at most two Genex backends); the backend then
  * reads that marker in every Studio StudioMCP lists, through `execute_luau` in Edit. The one Studio
  * whose marker holds the session is the connection's. Only when no listed Studio lets the marker
  * be read at all does the place the helper names stand in, and two Studios with that place are
@@ -17,9 +18,12 @@
  * written. The newest connection wins: for one Studio the older one is closed, for one game the
  * older one stops writing.
  *
- * A connection bound to no game is heard but obeyed in nothing: its events write nothing and call
- * nothing. A script path Studio reports is resolved under the game's `src/` by real path, and any
- * link on the way refuses it.
+ * Before a connection's game is first bound, `beforeBind` runs with that helper (a place load that
+ * waited for Studio, `place-files.ts`), so the binding file, which agents need to reach Studio,
+ * appears only after it.
+ *
+ * A connection bound to no game is heard but obeyed in nothing: its events reach no sink and call
+ * nothing. Data chunks reach only the request they belong to.
  */
 import { lstat, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -27,6 +31,8 @@ import { SECOND_MS } from "../../shared/duration.ts";
 import type { JobClock } from "../../substrate/job-process.ts";
 import { isBelow } from "../../substrate/paths.ts";
 import {
+  CHUNK_BYTES,
+  chunkFrame,
   createHelperInbox,
   type DataChunk,
   type HelloBody,
@@ -66,6 +72,8 @@ const CONNECTIONS_FOLDER = "mcp";
 /** The game folder's script root. */
 const SCRIPTS_FOLDER = "src";
 const MARKER_VALUE = "genex-marker:";
+/** Between the sessions a marker holds. */
+const SESSION_SEPARATOR = ",";
 const MARKER_UNREACHABLE = "genex-marker-unreachable";
 /** The marker's value in an answer: printable, no spaces. */
 const MARKER_IN_TEXT = new RegExp(`${MARKER_VALUE}([\\x21-\\x7e]*)`);
@@ -115,15 +123,34 @@ export class HelperLinkError extends Error {
   }
 }
 
-/** A script Studio changed, with the file it lands in: under the game's `src/`, no link on the way. */
-export type ScriptChangeAt = ScriptChange & { target: string };
-
 /** Where a bound helper's events go; each is given the game they belong to. */
 export interface HelperSinks {
-  scriptsChanged?(game: string, change: ScriptChangeAt): void | Promise<void>;
+  scriptsChanged?(game: string, change: ScriptChange): void | Promise<void>;
   activity?(game: string, body: { editing: boolean }): void;
   team?(game: string, body: { others: string[] }): void;
-  dataChunk?(game: string, chunk: DataChunk): void;
+}
+
+/** One game's helper, asked through the link: what `beforeBind` is given. */
+export type HelperAsk = <T extends HelperRequest>(
+  type: T,
+  body: HelperRequestBodies[T],
+  options?: RequestOptions,
+) => Promise<HelperResults[T]>;
+
+/** A part the backend sends ahead of its request, as raw bytes. */
+export interface Upload {
+  part: string;
+  data: Uint8Array;
+}
+
+/** How one request is sent and answered. */
+export interface RequestOptions {
+  /** The request's limit on the link's clock; never lengthened. */
+  timeoutMs?: number;
+  /** Gets each `data.chunk` the helper sends for this request, before its answer. */
+  onChunk?(chunk: DataChunk): void;
+  /** Parts sent as `data.chunk`s of this request's transfer just before it. */
+  upload?: Upload[];
 }
 
 /** What the link works with; tests hand in a fake Studio and clock. */
@@ -135,8 +162,12 @@ export interface HelperLinkDeps {
   clock: JobClock;
   /** A fresh random session id. */
   newSession(): string;
-  /** A game's folder, whose `src/` holds its scripts; undefined when it isn't known. */
-  scriptsRoot?(game: string): Promise<string | undefined>;
+  /**
+   * Runs once when a connection first takes a game, before its binding file is written: the
+   * helper can be asked already, agents can't reach the Studio yet. A failure is logged and the
+   * game is bound all the same.
+   */
+  beforeBind?(game: string, ask: HelperAsk): Promise<void>;
   sinks?: HelperSinks;
   log?(line: string): void;
 }
@@ -150,7 +181,7 @@ export interface HelperLink {
     game: string,
     type: T,
     body: HelperRequestBodies[T],
-    options?: { timeoutMs?: number },
+    options?: RequestOptions,
   ): Promise<HelperResults[T]>;
   /** The Studio a game's helper is bound to now. */
   bound(game: string): string | undefined;
@@ -161,6 +192,7 @@ export interface HelperLink {
 
 interface Pending {
   type: HelperRequest;
+  onChunk?(chunk: DataChunk): void;
   resolve(result: unknown): void;
   reject(error: HelperLinkError): void;
   timer: unknown;
@@ -181,6 +213,8 @@ interface Linked {
   /** Binding order: a later connection wins. */
   order: number;
   game?: string;
+  /** While `beforeBind` runs for the game: no binding file is written until it ends. */
+  preparing: boolean;
   closed: boolean;
 }
 
@@ -211,7 +245,8 @@ function namesPlace(hello: HelloBody | undefined, studio: StudioEntry): boolean 
 
 /**
  * The file a script path lands in: `<root>/src/<path>`, with no link and nothing but folders on the
- * way, and the file itself (when it exists) a plain file. Throws otherwise.
+ * way, and the file itself (when it exists) a plain file. Throws otherwise. The backend's mapping
+ * from a {@link ScriptChange} to its file name ends here before any write.
  */
 export async function scriptTarget(root: string, scriptPath: string): Promise<string> {
   const base = await realpath(root);
@@ -255,14 +290,29 @@ function track(link: LinkState, task: Promise<unknown>): void {
   void settled.finally(() => link.work.delete(settled));
 }
 
-/** Sends a request and waits for its answer until the deadline on the link's clock. */
+/** The chunk frames of `uploads` for the transfer `transfer`, each with the next id. */
+function uploadFrames(linked: Linked, transfer: number, uploads: readonly Upload[]): string[] {
+  const frames: string[] = [];
+  for (const upload of uploads) {
+    const count = Math.max(1, Math.ceil(upload.data.length / CHUNK_BYTES));
+    for (let index = 0; index < count; index++) {
+      const piece = upload.data.subarray(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES);
+      const data = Buffer.from(piece.buffer, piece.byteOffset, piece.length).toString("base64");
+      frames.push(chunkFrame(++linked.nextId, { transfer, part: upload.part, index, count, data }));
+    }
+  }
+  return frames;
+}
+
+/** Sends a request (after its uploads) and waits for its answer until the deadline on the link's clock. */
 function send<T extends HelperRequest>(
   link: LinkState,
   linked: Linked,
-  request: { type: T; body: HelperRequestBodies[T]; timeoutMs: number },
+  request: { type: T; body: HelperRequestBodies[T]; timeoutMs: number } & Omit<RequestOptions, "timeoutMs">,
 ): Promise<HelperResults[T]> {
   const id = ++linked.nextId;
   try {
+    for (const frame of uploadFrames(linked, id, request.upload ?? [])) linked.connection.send(frame);
     linked.connection.send(requestFrame(id, request.type, request.body));
   } catch {
     const error = linked.connection.open
@@ -275,7 +325,9 @@ function send<T extends HelperRequest>(
       if (!linked.pending.delete(id)) return;
       reject(new HelperLinkError(HelperLinkFailure.TimedOut, MESSAGE.TimedOut(request.type)));
     }, request.timeoutMs);
-    linked.pending.set(id, { type: request.type, resolve: resolve as (result: unknown) => void, reject, timer });
+    const pending: Pending = { type: request.type, resolve: resolve as (result: unknown) => void, reject, timer };
+    if (request.onChunk) pending.onChunk = request.onChunk;
+    linked.pending.set(id, pending);
   });
 }
 
@@ -298,7 +350,9 @@ async function findStudio(link: LinkState, linked: Linked): Promise<StudioEntry 
   const studios = await link.deps.studio.studios();
   const reads = await Promise.all(studios.map((studio) => readMarker(link, studio)));
   const holdsSession = (read: MarkerRead | undefined) =>
-    read !== undefined && "value" in read && read.value === linked.session;
+    read !== undefined &&
+    "value" in read &&
+    read.value.split(SESSION_SEPARATOR).some((held) => held === linked.session);
   const marked = studios.filter((_studio, index) => holdsSession(reads[index]));
   if (marked.length > 0) return marked.length === 1 ? marked[0] : undefined;
   const unreadable = studios.length > 0 && reads.every((read) => "unreachable" in read);
@@ -337,7 +391,7 @@ async function gameOf(link: LinkState, studio: StudioEntry): Promise<string | un
 /** Binds the connection to its Studio's game, unless a newer connection holds it, and writes its file. */
 async function claimGame(link: LinkState, linked: Linked): Promise<void> {
   const { studio, session } = linked;
-  if (!studio || !session || linked.closed) return;
+  if (!studio || !session || linked.closed || linked.preparing) return;
   const game = await gameOf(link, studio);
   if (linked.game && linked.game !== game) release(link, linked);
   if (!game || linked.closed) return;
@@ -345,9 +399,26 @@ async function claimGame(link: LinkState, linked: Linked): Promise<void> {
   if (owner && owner !== linked && owner.order > linked.order) return;
   if (owner && owner !== linked) owner.game = undefined;
   link.owners.set(game, linked);
+  const first = linked.game !== game;
   linked.game = game;
+  if (first) {
+    linked.preparing = true;
+    await runBeforeBind(link, linked, game).finally(() => {
+      linked.preparing = false;
+    });
+  }
+  if (linked.closed || link.owners.get(game) !== linked) return;
   const folder = path.join(link.deps.storage, CONNECTIONS_FOLDER, game);
   await writeBinding(folder, { studioId: studio.id, session }, link.deps.clock.now());
+}
+
+/** The game's `beforeBind`, asked through this connection; its failure is logged, never thrown. */
+async function runBeforeBind(link: LinkState, linked: Linked, game: string): Promise<void> {
+  const ask: HelperAsk = (type, body, options = {}) =>
+    send(link, linked, { ...options, type, body, timeoutMs: options.timeoutMs ?? HELPER_ANSWER_MS });
+  await link.deps
+    .beforeBind?.(game, ask)
+    .catch((error: unknown) => log(link, `helper link: before binding ${game}: ${String(error)}`));
 }
 
 /** Rewrites every bound game's file each refresh period while the link runs. */
@@ -390,31 +461,24 @@ async function start(link: LinkState, linked: Linked): Promise<void> {
   await bind(link, linked);
 }
 
-async function scriptChanged(link: LinkState, linked: Linked, game: string, change: ScriptChange): Promise<void> {
-  const root = await link.deps.scriptsRoot?.(game);
-  if (!root) return;
-  const target = await scriptTarget(root, change.path).catch(() => undefined);
-  if (!target) {
-    log(link, `helper link: refused the script path ${change.path}`);
-    return;
-  }
-  // The game may have changed hands while the path was checked.
-  if (linked.game === game) await link.deps.sinks?.scriptsChanged?.(game, { ...change, target });
-}
-
 /** A bound connection's event, handed to its sink with the connection's game. */
-function deliverEvent(link: LinkState, linked: Linked, game: string, event: HelperEvent): void {
+function deliverEvent(link: LinkState, game: string, event: HelperEvent): void {
   const sinks = link.deps.sinks;
-  if (event.type === HelperMessage.ScriptsChanged) track(link, scriptChanged(link, linked, game, event.body));
+  if (event.type === HelperMessage.ScriptsChanged)
+    track(link, Promise.resolve(sinks?.scriptsChanged?.(game, event.body)));
   else if (event.type === HelperMessage.Activity) sinks?.activity?.(game, event.body);
   else if (event.type === HelperMessage.Team) sinks?.team?.(game, event.body);
-  else if (event.type === HelperMessage.DataChunk) sinks?.dataChunk?.(game, event.body);
 }
 
 function onEvent(link: LinkState, linked: Linked, event: HelperEvent): void {
+  if (event.type === HelperMessage.DataChunk) {
+    // The reader let it through only for a request still waiting.
+    linked.pending.get(event.body.transfer)?.onChunk?.(event.body);
+    return;
+  }
   if (event.type !== HelperMessage.Hello) {
     // A connection bound to no game is obeyed in nothing.
-    if (linked.game) deliverEvent(link, linked, linked.game, event);
+    if (linked.game) deliverEvent(link, linked.game, event);
     return;
   }
   if (linked.hello) {
@@ -464,6 +528,7 @@ export function createHelperLink(deps: HelperLinkDeps): HelperLink {
         pending: new Map(),
         nextId: 0,
         order: 0,
+        preparing: false,
         closed: false,
       };
       link.connections.add(linked);
@@ -472,7 +537,7 @@ export function createHelperLink(deps: HelperLinkDeps): HelperLink {
     request(game, type, body, options = {}) {
       const owner = link.owners.get(game);
       if (!owner) return Promise.reject(new HelperLinkError(HelperLinkFailure.NotBound, MESSAGE.NotBound));
-      return send(link, owner, { type, body, timeoutMs: options.timeoutMs ?? HELPER_ANSWER_MS });
+      return send(link, owner, { ...options, type, body, timeoutMs: options.timeoutMs ?? HELPER_ANSWER_MS });
     },
     bound: (game) => link.owners.get(game)?.studio?.id,
     async idle() {

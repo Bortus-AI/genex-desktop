@@ -12,10 +12,15 @@ import {
   HelperLinkError,
   HelperLinkFailure,
   type HelperLinkDeps,
-  type ScriptChangeAt,
   startHelperLink,
 } from "../../src/plugins/roblox/helper-link.ts";
-import { HelperMessage } from "../../src/plugins/roblox/helper-protocol.ts";
+import {
+  CHUNK_BYTES,
+  type DataChunk,
+  HELPER_PROTOCOL,
+  HelperMessage,
+  type ScriptChange,
+} from "../../src/plugins/roblox/helper-protocol.ts";
 import {
   BINDING_FILE,
   BINDING_MAX_AGE_MS,
@@ -119,9 +124,8 @@ test("a helper is bound only once its session marker is read in a Studio, and th
 test("a helper whose marker is in no Studio is never bound, and its messages write and call nothing", async () => {
   const { storage, games } = await world();
   const studio = fakeStudio([PLACE1]);
-  const changes: ScriptChangeAt[] = [];
+  const changes: ScriptChange[] = [];
   const { link, clock } = linkOver(storage, studio, {
-    scriptsRoot: async () => path.join(games, "game-1"),
     sinks: { scriptsChanged: (_game, change) => void changes.push(change) },
   });
   const helper = memoryHelper(link, { studio, studioId: PLACE1.id, mark: false });
@@ -132,7 +136,12 @@ test("a helper whose marker is in no Studio is never bound, and its messages wri
     await link.idle();
   }
   assert.equal(clock.pending(), 0, "the search stops once its window has passed");
-  helper.say(HelperMessage.ScriptsChanged, { path: "ServerScriptService/Main.server.luau", source: "print(1)" });
+  helper.say(HelperMessage.ScriptsChanged, {
+    path: ["ServerScriptService", "Main"],
+    class: "Script",
+    runContext: "Server",
+    source: "print(1)",
+  });
   helper.say(HelperMessage.Activity, { editing: true });
   await link.idle();
   assert.equal((await readBound(storage, "game-1", clock.now())).state, BindingState.None);
@@ -311,6 +320,135 @@ test("a Studio whose place two games link binds neither game", async () => {
   await link.idle();
   assert.equal((await readBound(storage, "game-1", clock.now())).state, BindingState.None);
   assert.equal((await readBound(storage, "game-2", clock.now())).state, BindingState.None);
+  link.close();
+});
+
+test("a marker holding two Genex apps' sessions binds each app's connection to that Studio", async () => {
+  const { storage } = await world();
+  const studio = fakeStudio([OBBY, PLACE1]);
+  // Another Genex app's session is already in Place1's marker; this app's is added beside it.
+  studio.mark(PLACE1.id, "session-of-another-app");
+  const { link } = linkOver(storage, studio);
+  memoryHelper(link, { studio, studioId: PLACE1.id }).hello();
+  await link.idle();
+  assert.equal(link.bound("game-1"), PLACE1.id);
+  link.close();
+});
+
+/** A bound game's helper on an in-memory connection, and the frames it got. */
+async function boundHelper(extra: Partial<HelperLinkDeps> = {}) {
+  const { storage, games } = await world();
+  const studio = fakeStudio([PLACE1]);
+  const { link, clock } = linkOver(storage, studio, extra);
+  const helper = memoryHelper(link, { studio, studioId: PLACE1.id });
+  helper.hello();
+  await link.idle();
+  return { storage, games, studio, link, clock, helper };
+}
+
+const answerFrame = (id: number, re: number | undefined, result: unknown) =>
+  JSON.stringify({ v: HELPER_PROTOCOL, id, type: "answer", re, ok: true, result });
+
+test("a data chunk reaches only the request it belongs to, before that request's answer", async () => {
+  const { link, helper } = await boundHelper();
+  const chunks: DataChunk[] = [];
+  const exported = link.request(
+    "game-1",
+    HelperMessage.PlaceExport,
+    { full: true, known: [] },
+    { onChunk: (chunk) => chunks.push(chunk) },
+  );
+  const asked = helper.received.find((frame) => frame.type === HelperMessage.PlaceExport);
+  assert.ok(asked);
+  const chunk = (id: number, index: number, data: string) =>
+    JSON.stringify({
+      v: HELPER_PROTOCOL,
+      id,
+      type: HelperMessage.DataChunk,
+      body: { transfer: asked.id, part: "Workspace.rbxm", index, count: 2, data },
+    });
+  helper.raw(chunk(100, 0, "AAAA"));
+  helper.raw(chunk(101, 1, "BBBB"));
+  // A chunk for a transfer no request waits on is refused before anyone sees it.
+  helper.raw(chunk(102, 0, "CCCC").replace(`"transfer":${asked.id}`, '"transfer":999'));
+  const part = { name: "Workspace.rbxm", hash: "00000000", bytes: 6 };
+  helper.raw(answerFrame(103, asked.id, { parts: [part], sent: ["Workspace.rbxm"], ms: 5 }));
+  assert.deepEqual(await exported, { parts: [part], sent: ["Workspace.rbxm"], ms: 5 });
+  assert.deepEqual(
+    chunks.map((piece) => piece.data),
+    ["AAAA", "BBBB"],
+  );
+  link.close();
+});
+
+test("a part sent ahead of its request goes in chunks of the request's transfer, then the request", async () => {
+  const { link, helper } = await boundHelper();
+  const data = Buffer.alloc(CHUNK_BYTES * 2 + 10, 7);
+  const loaded = link.request(
+    "game-1",
+    HelperMessage.PlaceLoad,
+    { parts: [{ name: "Workspace.rbxm", hash: "00000000", bytes: data.length }] },
+    { upload: [{ part: "Workspace.rbxm", data }] },
+  );
+  const sent = helper.received.filter((frame) => frame.type !== HelperMessage.SessionMark);
+  const request = sent.at(-1);
+  assert.equal(request?.type, HelperMessage.PlaceLoad, "the request comes after its parts");
+  const pieces = sent.slice(0, -1);
+  assert.deepEqual(
+    pieces.map((frame) => [frame.type, frame.body?.transfer, frame.body?.index, frame.body?.count]),
+    [0, 1, 2].map((index) => [HelperMessage.DataChunk, request?.id, index, 3]),
+  );
+  const joined = Buffer.concat(pieces.map((frame) => Buffer.from(String(frame.body?.data), "base64")));
+  assert.deepEqual(joined, data);
+  helper.raw(answerFrame(200, request?.id, { loaded: 1 }));
+  assert.deepEqual(await loaded, { loaded: 1 });
+  link.close();
+});
+
+test("before a game is first bound its helper is asked first, and agents see no binding until that ends", async () => {
+  const asked: string[] = [];
+  let finish: () => void = () => undefined;
+  const { storage, studio } = await world().then(async (made) => ({ ...made, studio: fakeStudio([PLACE1]) }));
+  const { link, clock } = linkOver(storage, studio, {
+    beforeBind: async (game, ask) => {
+      asked.push(game);
+      const answered = ask(HelperMessage.Team, {});
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+      await answered;
+    },
+  });
+  const helper = memoryHelper(link, { studio, studioId: PLACE1.id });
+  helper.hello();
+  await new Promise((resolve) => setImmediate(resolve));
+  await until(async () => helper.received.some((frame) => frame.type === HelperMessage.Team));
+  assert.deepEqual(asked, ["game-1"]);
+  const team = helper.received.find((frame) => frame.type === HelperMessage.Team);
+  helper.raw(answerFrame(300, team?.id, { others: [] }));
+  // A refresh while the load runs writes nothing either.
+  clock.advance(BINDING_REFRESH_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal((await readBound(storage, "game-1", clock.now())).state, BindingState.None);
+  finish();
+  await link.idle();
+  assert.equal((await readBound(storage, "game-1", clock.now())).state, BindingState.Bound);
+  clock.advance(BINDING_REFRESH_MS);
+  await link.idle();
+  assert.deepEqual(asked, ["game-1"], "it runs once for the connection, not at every refresh");
+  link.close();
+});
+
+test("a failed step before binding is logged, and the game is bound all the same", async () => {
+  const lines: string[] = [];
+  const { storage, link, clock } = await boundHelper({
+    beforeBind: async () => {
+      throw new Error("Studio couldn't read the save point");
+    },
+    log: (line) => lines.push(line),
+  });
+  assert.equal((await readBound(storage, "game-1", clock.now())).state, BindingState.Bound);
+  assert.ok(lines.some((line) => line.includes("Studio couldn't read the save point")));
   link.close();
 });
 

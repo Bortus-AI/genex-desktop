@@ -6,9 +6,20 @@
  *   an id at or below one already seen is refused, so a message can't be replayed.
  * - The helper sends events (`hello`, `scripts.changed`, `activity`, `team`, `data.chunk`) and
  *   answers; the backend sends requests and reads each answer by the request it names (`re`).
+ *   `activity` and `team` are also requests: an event from a connection not yet bound to a game is
+ *   dropped, so the backend asks for the present state when it needs it.
  * - Every field is checked here, once: a message with an unknown type, a missing or extra field, a
- *   value of the wrong shape, an answer to nothing asked, or a script path that could leave the
- *   game's `src/` folder is refused before anything acts on it.
+ *   value of the wrong shape, an answer to nothing asked, or a place part that could leave the
+ *   game's `.genex/place/` folder is refused before anything acts on it.
+ * - A script is named the way Studio holds it: the instance names from its service down, its class
+ *   and, for a Script, its run context ({@link ScriptRef}). Which file under `src/` that is, is the
+ *   backend's own mapping; the helper never names a file.
+ * - Place parts and models travel as `data.chunk`s of base64, {@link CHUNK_BYTES} raw bytes each,
+ *   whose `transfer` is the id of the request they belong to. Both sides hash bytes with
+ *   {@link helperHash}, FNV-1a over 32 bits, which the helper computes in Luau.
+ *
+ * The helper (`src/plugins/roblox/helper/*.luau`) is built with these values: its `constants`
+ * module is generated from this file, so the two sides can't disagree on a port or a name.
  */
 
 /** The protocol both sides speak; the helper built from the same tree sends it as `v`. */
@@ -24,16 +35,62 @@ export const MAX_HELPER_FRAME_BYTES = 4 * 1024 * 1024;
 export const MAX_SCRIPT_SOURCE_BYTES = 1024 * 1024;
 /** The non-archivable StringValue in CoreGui through which the helper proves which Studio it is in. */
 export const SESSION_MARKER = "GenexHelperSession";
-/** The longest script or part path, and its longest segment. */
+/** The longest part path, and its longest segment. */
 const MAX_PATH_CHARS = 1024;
 const MAX_SEGMENT_CHARS = 255;
+/** The most instance names from a script's service down to the script. */
+const MAX_SCRIPT_DEPTH = 64;
+/** The longest instance name the link carries (Studio's own names are far shorter). */
+const MAX_INSTANCE_NAME_CHARS = 1_000;
 /** The most scripts one list or read carries. */
 const MAX_SCRIPTS = 10_000;
 /** The most parts a place export has. */
-const MAX_PARTS = 2_000;
-/** A chunk of a transfer: its base64 text, and the most chunks one transfer has. */
-const MAX_CHUNK_CHARS = 2 * 1024 * 1024;
-const MAX_CHUNKS = 1_024;
+export const MAX_PLACE_PARTS = 2_000;
+/** A chunk's base64 text at most, and the most chunks one part has. */
+export const MAX_CHUNK_CHARS = 2 * 1024 * 1024;
+export const MAX_CHUNKS = 1_024;
+/** The raw bytes in one chunk: base64 makes them {@link MAX_CHUNK_CHARS} characters. */
+export const CHUNK_BYTES = (MAX_CHUNK_CHARS / 4) * 3;
+/**
+ * The largest place part the helper writes as one file. A container whose children serialize past
+ * it is split into one part per child. It stays below the host's 50 MB checkpoint file cap, which
+ * leaves a larger file out of a save point and says so.
+ */
+export const PLACE_PART_MAX_BYTES = 40 * 1024 * 1024;
+/** The services whose scripts the helper lists and watches; a script's path starts with one. */
+export const SCRIPT_SERVICES = [
+  "Workspace",
+  "ReplicatedFirst",
+  "ReplicatedStorage",
+  "ServerScriptService",
+  "ServerStorage",
+  "StarterGui",
+  "StarterPack",
+  "StarterPlayer",
+] as const;
+/** The services a place export saves, each as one or more parts. */
+export const PLACE_SERVICES = [
+  "Workspace",
+  "Lighting",
+  "MaterialService",
+  "ReplicatedFirst",
+  "ReplicatedStorage",
+  "ServerScriptService",
+  "ServerStorage",
+  "StarterGui",
+  "StarterPack",
+  "StarterPlayer",
+  "Teams",
+  "SoundService",
+  "TextChatService",
+] as const;
+/** The place part that holds the services' own saved properties. */
+export const SERVICES_PART = "services.json";
+/** The place part that holds the terrain's voxels. */
+export const TERRAIN_PART = "terrain.rbxm";
+/** The part name a model's mesh travels under, and the mesh format's first four bytes. */
+export const MODEL_PART = "mesh.bin";
+export const MODEL_MAGIC = "GXM1";
 /** The most other people a Team Create note names, and the longest name. */
 const MAX_OTHERS = 50;
 const MAX_NAME_CHARS = 200;
@@ -54,6 +111,19 @@ const CONTROL = /[\u0000-\u001f\u007f]/;
 const UNSAFE_IN_PATH = /[\\:\u0000-\u001f\u007f]/;
 const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
 const HASH = /^[\x21-\x7e]+$/;
+const FNV_OFFSET = 0x811c9dc5;
+const FNV_PRIME = 0x01000193;
+
+/**
+ * The hash both sides give bytes: FNV-1a over 32 bits, as eight lowercase hex digits. A string is
+ * hashed as its UTF-8 bytes. It names content for echo checks and transfers; it is no defence.
+ */
+export function helperHash(data: Uint8Array | string): string {
+  const bytes = typeof data === "string" ? Buffer.from(data, "utf8") : data;
+  let hash = FNV_OFFSET;
+  for (const byte of bytes) hash = Math.imul(hash ^ byte, FNV_PRIME) >>> 0;
+  return hash.toString(16).padStart(8, "0");
+}
 
 /** Every message type on the link. Wire values: never rename. */
 export const HelperMessage = {
@@ -63,6 +133,7 @@ export const HelperMessage = {
   ScriptsList: "scripts.list",
   ScriptsRead: "scripts.read",
   ScriptsWrite: "scripts.write",
+  ScriptsRemove: "scripts.remove",
   ScriptsChanged: "scripts.changed",
   PlaceExport: "place.export",
   PlaceLoad: "place.load",
@@ -108,21 +179,53 @@ export const HelperErrorCode = {
   Refused: "refused",
   /** Studio is busy with something that can't be interrupted. */
   Busy: "busy",
+  /** The script isn't what the request expected: someone changed it in Studio since. */
+  Conflict: "conflict",
   Failed: "failed",
 } as const;
 export type HelperErrorCode = (typeof HelperErrorCode)[keyof typeof HelperErrorCode];
 
-/** A script as a path under the game's `src/` folder, and its source's hash. */
-export interface ScriptEntry {
-  path: string;
-  hash: string;
+/** The script classes the helper keeps in step. Wire values: never rename. */
+export const ScriptClass = {
+  Script: "Script",
+  LocalScript: "LocalScript",
+  ModuleScript: "ModuleScript",
+} as const;
+export type ScriptClass = (typeof ScriptClass)[keyof typeof ScriptClass];
+
+/** A Script's run context, by its Studio name. Wire values: never rename. */
+export const RunContext = {
+  Legacy: "Legacy",
+  Server: "Server",
+  Client: "Client",
+  Plugin: "Plugin",
+} as const;
+export type RunContext = (typeof RunContext)[keyof typeof RunContext];
+
+/**
+ * A script as Studio holds it: the instance names from its service (one of
+ * {@link SCRIPT_SERVICES}) down to the script, its class and, for a Script, its run context.
+ */
+export interface ScriptRef {
+  path: string[];
+  class: ScriptClass;
+  runContext?: RunContext;
 }
+
+/** A listed script: its source's hash, and whether Studio's Script Sync keeps it in a file of its own. */
+export type ScriptEntry = ScriptRef & { hash: string; synced: boolean };
 
 /** A place export's part: a path under `.genex/place/`, its hash and size. */
 export interface PlacePart {
   name: string;
   hash: string;
   bytes: number;
+}
+
+/** A part the backend already holds, by its name and hash. */
+export interface KnownPart {
+  name: string;
+  hash: string;
 }
 
 /** A GUI element's box on the device screen, for the phone judge. */
@@ -139,9 +242,16 @@ export interface GuiElement {
 export interface HelperRequestBodies {
   [HelperMessage.SessionMark]: { session: string };
   [HelperMessage.ScriptsList]: Record<string, never>;
-  [HelperMessage.ScriptsRead]: { paths: string[] };
-  [HelperMessage.ScriptsWrite]: { path: string; source: string };
-  [HelperMessage.PlaceExport]: { full: boolean };
+  [HelperMessage.ScriptsRead]: { scripts: ScriptRef[] };
+  /** `base`, when given, is the hash Studio's source must still have: otherwise a `conflict`. */
+  [HelperMessage.ScriptsWrite]: { script: ScriptRef; source: string; base?: string };
+  /** Removed only while Studio's source still has `hash`: otherwise a `conflict`. */
+  [HelperMessage.ScriptsRemove]: { script: ScriptRef; hash: string };
+  /**
+   * `known` is what the backend holds; the helper sends each part whose bytes differ from it, or
+   * every part when `full`.
+   */
+  [HelperMessage.PlaceExport]: { full: boolean; known: KnownPart[] };
   /** The parts were sent before as `data.chunk`s of this request's transfer. */
   [HelperMessage.PlaceLoad]: { parts: PlacePart[] };
   [HelperMessage.PlayMultiplayer]: { players: number };
@@ -149,6 +259,10 @@ export interface HelperRequestBodies {
   [HelperMessage.PlayEnd]: Record<string, never>;
   [HelperMessage.DeviceSet]: { device: string };
   [HelperMessage.GuiLayout]: Record<string, never>;
+  /** Whether the person is working in Studio now (the helper also says so unasked). */
+  [HelperMessage.Activity]: Record<string, never>;
+  /** Who else is in a Team Create place now (the helper also says so unasked). */
+  [HelperMessage.Team]: Record<string, never>;
   /** The model's checked file was sent before as `data.chunk`s of this request's transfer. */
   [HelperMessage.ModelImport]: { name: string; bytes: number };
 }
@@ -160,16 +274,22 @@ export type HelperRequest = keyof HelperRequestBodies;
 export interface HelperResults {
   [HelperMessage.SessionMark]: Record<string, never>;
   [HelperMessage.ScriptsList]: { scripts: ScriptEntry[] };
-  [HelperMessage.ScriptsRead]: { scripts: Array<{ path: string; source: string }> };
+  [HelperMessage.ScriptsRead]: { scripts: Array<ScriptRef & { source: string }> };
   [HelperMessage.ScriptsWrite]: { hash: string };
-  /** The parts arrive as `data.chunk`s of this request's id before the answer. */
-  [HelperMessage.PlaceExport]: { parts: PlacePart[] };
+  [HelperMessage.ScriptsRemove]: { removed: boolean };
+  /**
+   * Every part of the place now; those named in `sent` arrived as `data.chunk`s of this request's
+   * id before the answer, the rest are as the backend knows them. `ms` is how long Studio took.
+   */
+  [HelperMessage.PlaceExport]: { parts: PlacePart[]; sent: string[]; ms: number };
   [HelperMessage.PlaceLoad]: { loaded: number };
   [HelperMessage.PlayMultiplayer]: { players: number };
   [HelperMessage.PlayPause]: { paused: boolean };
   [HelperMessage.PlayEnd]: Record<string, never>;
   [HelperMessage.DeviceSet]: { device: string };
   [HelperMessage.GuiLayout]: { elements: GuiElement[] };
+  [HelperMessage.Activity]: { editing: boolean };
+  [HelperMessage.Team]: { others: string[] };
   [HelperMessage.ModelImport]: { instance: string };
 }
 
@@ -180,14 +300,12 @@ export interface HelloBody {
 }
 
 /** A script Studio changed: its new source, or null when it was removed. */
-export interface ScriptChange {
-  path: string;
-  source: string | null;
-}
+export type ScriptChange = ScriptRef & { source: string | null };
 
-/** A piece of a transfer the helper sends for a request (a place export). */
+/** A piece of one part of a transfer: the request's id, the part, and its place among the part's chunks. */
 export interface DataChunk {
   transfer: number;
+  part: string;
   index: number;
   count: number;
   data: string;
@@ -326,15 +444,45 @@ const SCRIPT_ENDINGS = [".luau"] as const;
 /** The file endings of a place export's part under `.genex/place/`. */
 const PART_ENDINGS = [".rbxm", ".json"] as const;
 
-/** Whether `value` is a script path the link accepts: a plain `.luau` path under the game's `src/`. */
+/** Whether `value` is a plain `.luau` path under a game's `src/`, as the backend names a script's file. */
 export const isScriptPath = (value: unknown): value is string => plainPath(value, SCRIPT_ENDINGS);
 
-const scriptPath: Check<string> = (value) => (isScriptPath(value) ? value : refuse(HelperRefusal.BadPath));
+/** Whether `value` is a place part's path under `.genex/place/`. */
+export const isPartPath = (value: unknown): value is string => plainPath(value, PART_ENDINGS);
 
-const partPath: Check<string> = (value) =>
-  plainPath(value, PART_ENDINGS) ? (value as string) : refuse(HelperRefusal.BadPath);
+const partPath: Check<string> = (value) => (isPartPath(value) ? value : refuse(HelperRefusal.BadPath));
 
 const placePart = record<PlacePart>({ name: partPath, hash, bytes: int(0, Number.MAX_SAFE_INTEGER) });
+
+/** An instance name: any text but NUL, within the cap. The backend escapes it into a file name. */
+const instanceName: Check<string> = (value) =>
+  typeof value === "string" && value.length > 0 && value.length <= MAX_INSTANCE_NAME_CHARS && !value.includes("\u0000")
+    ? value
+    : refuse(HelperRefusal.BadPath);
+
+/** A script's instance path: a service the helper watches, then the names down to the script. */
+const scriptPath: Check<string[]> = (value) => {
+  if (!Array.isArray(value) || value.length < 2 || value.length > MAX_SCRIPT_DEPTH)
+    return refuse(HelperRefusal.BadPath);
+  const names = value.map((name) => instanceName(name));
+  return (SCRIPT_SERVICES as readonly string[]).includes(names[0] ?? "") ? names : refuse(HelperRefusal.BadPath);
+};
+
+const SCRIPT_REF_SHAPE = {
+  path: scriptPath,
+  class: oneOf(Object.values(ScriptClass)),
+  runContext: oneOf(Object.values(RunContext)),
+};
+
+/** A script reference with these extra fields; only a Script carries a run context. */
+function scriptRecord<T extends ScriptRef>(extra: { [K in Exclude<keyof T, keyof ScriptRef>]: Check<T[K]> }): Check<T> {
+  const check = record<T>({ ...SCRIPT_REF_SHAPE, ...extra } as { [K in keyof T]: Check<T[K]> }, ["runContext"]);
+  return (value) => {
+    const ref = check(value);
+    const context = "runContext" in ref;
+    return context === (ref.class === ScriptClass.Script) ? ref : refuse();
+  };
+}
 
 const guiElement = record<GuiElement>({
   path: text(MAX_PATH_CHARS),
@@ -348,18 +496,27 @@ const guiElement = record<GuiElement>({
 /** How each answer's result is checked, by the request it answers. */
 const RESULTS: { [T in HelperRequest]: Check<HelperResults[T]> } = {
   [HelperMessage.SessionMark]: empty,
-  [HelperMessage.ScriptsList]: record({ scripts: list(record<ScriptEntry>({ path: scriptPath, hash }), MAX_SCRIPTS) }),
+  [HelperMessage.ScriptsList]: record({
+    scripts: list(scriptRecord<ScriptEntry>({ hash, synced: bool }), MAX_SCRIPTS),
+  }),
   [HelperMessage.ScriptsRead]: record({
-    scripts: list(record<{ path: string; source: string }>({ path: scriptPath, source }), MAX_SCRIPTS),
+    scripts: list(scriptRecord<ScriptRef & { source: string }>({ source }), MAX_SCRIPTS),
   }),
   [HelperMessage.ScriptsWrite]: record({ hash }),
-  [HelperMessage.PlaceExport]: record({ parts: list(placePart, MAX_PARTS) }),
-  [HelperMessage.PlaceLoad]: record({ loaded: int(0, MAX_PARTS) }),
+  [HelperMessage.ScriptsRemove]: record({ removed: bool }),
+  [HelperMessage.PlaceExport]: record({
+    parts: list(placePart, MAX_PLACE_PARTS),
+    sent: list(partPath, MAX_PLACE_PARTS),
+    ms: int(0, MAX_ID),
+  }),
+  [HelperMessage.PlaceLoad]: record({ loaded: int(0, MAX_PLACE_PARTS) }),
   [HelperMessage.PlayMultiplayer]: record({ players: int(1, MAX_PLAYERS) }),
   [HelperMessage.PlayPause]: record({ paused: bool }),
   [HelperMessage.PlayEnd]: empty,
   [HelperMessage.DeviceSet]: record({ device: text(MAX_NAME_CHARS) }),
   [HelperMessage.GuiLayout]: record({ elements: list(guiElement, MAX_GUI_ELEMENTS) }),
+  [HelperMessage.Activity]: record({ editing: bool }),
+  [HelperMessage.Team]: record({ others: list(text(MAX_NAME_CHARS), MAX_OTHERS) }),
   [HelperMessage.ModelImport]: record({ instance: text(MAX_PATH_CHARS) }),
 };
 
@@ -369,14 +526,14 @@ const EVENTS: { [T in HelperEventType]: Check<HelperEventBodies[T]> } = {
     helper: int(1, MAX_ID),
     place: record<HelloBody["place"]>({ id: placeId, name: text(MAX_NAME_CHARS) }),
   }),
-  [HelperMessage.ScriptsChanged]: record<ScriptChange>({
-    path: scriptPath,
+  [HelperMessage.ScriptsChanged]: scriptRecord<ScriptChange>({
     source: (value) => (value === null ? null : source(value)),
   }),
   [HelperMessage.Activity]: record({ editing: bool }),
   [HelperMessage.Team]: record({ others: list(text(MAX_NAME_CHARS), MAX_OTHERS) }),
   [HelperMessage.DataChunk]: record<DataChunk>({
     transfer: int(1, MAX_ID),
+    part: partPath,
     index: int(0, MAX_CHUNKS - 1),
     count: int(1, MAX_CHUNKS),
     data: base64,
@@ -475,7 +632,7 @@ export function requestFrame<T extends HelperRequest>(id: number, type: T, body:
   return JSON.stringify({ v: HELPER_PROTOCOL, id, type, body });
 }
 
-/** A data chunk the backend sends for one of its own requests (a place load or a model import). */
+/** A data chunk the backend sends ahead of one of its own requests (a place load or a model import). */
 export function chunkFrame(id: number, chunk: DataChunk): string {
   return JSON.stringify({ v: HELPER_PROTOCOL, id, type: HelperMessage.DataChunk, body: chunk });
 }
