@@ -82,7 +82,7 @@ function fakeClock() {
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** A viewer over recording fakes. */
-function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewerDeps["remix"] } = {}) {
+function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewerDeps["remix"]; web?: string } = {}) {
   const { clock, advance } = fakeClock();
   const log: string[] = [];
   const events: PlayViewerEvent[] = [];
@@ -110,6 +110,7 @@ function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewe
     },
     focusApp: () => log.push("app.focus"),
     clipboard: (text) => copied.push(text),
+    web: overrides.web ?? "https://genex.games",
     remix: overrides.remix ?? (async () => "lost-cathedral-remix"),
     emit: (event) => events.push(event),
     clock,
@@ -277,6 +278,16 @@ describe("Play viewer", () => {
     await settle();
     assert.deepEqual(copied, ["https://genex.games/lost-cathedral"]);
     assert.equal(bar()?.note, PlayNote.InviteCopied);
+  });
+
+  it("copies the game's page on the website Play links to, a development profile's too", async () => {
+    const { viewer, copied } = rig({ web: "http://localhost:5173" });
+    viewer.open("lost-cathedral");
+    await settle();
+    viewer.control(PlayControl.Share);
+    viewer.control(PlayControl.Invite);
+    await settle();
+    assert.deepEqual(copied, ["http://localhost:5173/lost-cathedral", "http://localhost:5173/lost-cathedral?ref=abc"]);
   });
 
   it("copies the game's page for Share and an invite with the referral code", async () => {

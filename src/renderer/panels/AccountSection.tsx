@@ -1,7 +1,8 @@
 /**
  * Settings → Genex account. Signed in: the account's avatar, Generated (made from its id, every
- * account has one, and Regenerate gives it another) or Photo (one it uploaded), its name, and its
- * credits with what they pay for. Each change applies everywhere at once, in the app and on
+ * account has one, and Regenerate gives it another) or Photo (one it uploaded), its name, its
+ * nickname (once genex.games knows nicknames; Edit opens the welcome's field) and its credits with
+ * what they pay for. Each change applies everywhere at once, in the app and on
  * genex.games; offline, changes wait for the connection. Sign out sits beside the title
  * (`AccountSignOut`). Signed out: the account card drawn as Assets draws what is being made, one
  * line and Sign in in browser. The account is the app's: the Genex plugin being off changes nothing.
@@ -10,23 +11,25 @@ import type { JSX } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
-import { CREDITS_PLANS_URL } from "../../shared/play-credits.ts";
+import { creditsPlansUrl } from "../../shared/play-credits.ts";
+import { handleBaseFromName } from "../../shared/handle.ts";
 import { AvatarStyle, PLAY_NAME_LENGTH, type PlayMe, playName } from "../../shared/play-people.ts";
 import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 import { MakingDrawing } from "../making-art.ts";
 import { GenexTab, openGenexPage } from "./plugins/genex/genex-tab.ts";
 import { avatarWebp } from "../play/avatar-image.ts";
 import { CreditsShard } from "../play/CreditsShard.tsx";
+import { HandleField, useNicknameEdit } from "../play/HandleField.tsx";
 import { SignOutDialog } from "../play/SignOutDialog.tsx";
 import { cancelGenexSignIn, useGenexSignIn } from "../play/use-genex-sign-in.ts";
 import { useRegenerateAvatar } from "../play/use-regenerate-avatar.ts";
-import { usePeople } from "../state/hooks.ts";
+import { usePeople, usePlayWeb } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { useOnline } from "../ui/use-online.ts";
-import { ACCOUNT_WORDS, PLAY_WORDS } from "../words.ts";
+import { ACCOUNT_WORDS, NICKNAME_WORDS, PLAY_WORDS } from "../words.ts";
 import { MakingArt } from "./MakingArt.tsx";
 
 const WORDS = ACCOUNT_WORDS;
@@ -264,6 +267,98 @@ function NameRow({ me, online }: { me: PlayMe; online: boolean }): JSX.Element {
   );
 }
 
+/** The nickname row's label id: the field inside it is named by it. */
+const NICKNAME_LABEL = "account-nickname-label";
+
+/** Editing the nickname: the welcome's field with Save beside it and Cancel; Escape cancels too. */
+function NicknameEditor({ me, online, onClose }: { me: PlayMe; online: boolean; onClose: () => void }) {
+  const nickname = useNicknameEdit(me.handle, me.handle ?? handleBaseFromName(me.name));
+  const input = useRef<HTMLInputElement>(null);
+  useEffect(() => input.current?.focus(), []);
+  const save = async (): Promise<void> => {
+    if (await nickname.save()) onClose();
+  };
+  const presses = (
+    <>
+      <Button
+        type="submit"
+        variant="default"
+        busy={nickname.saving}
+        disabled={!online || !nickname.view.keepable}
+        data-account-nickname-save
+      >
+        {nickname.saving ? PLAY_WORDS.people.saving : PLAY_WORDS.people.save}
+      </Button>
+      <button type="button" className="people-button" data-tone="quiet" onClick={onClose}>
+        {PLAY_WORDS.people.cancel}
+      </button>
+    </>
+  );
+  return (
+    <form
+      className="account-nickname-editor"
+      // Escape here cancels the edit (HandleField's onEscape); it must not close Settings first.
+      data-keeps-escape
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <HandleField
+        id="account-nickname"
+        value={nickname.value}
+        view={nickname.view}
+        labelledBy={NICKNAME_LABEL}
+        inputRef={input}
+        onChange={nickname.setValue}
+        onEscape={onClose}
+        aside={presses}
+      />
+    </form>
+  );
+}
+
+/** The nickname row: `@handle` and Edit, or the field while it is being edited. Offline, Edit waits. */
+function NicknameRow({ me, online }: { me: PlayMe; online: boolean }): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const edit = useRef<HTMLButtonElement>(null);
+  // The field goes away when the edit ends: the keyboard goes back to Edit.
+  const close = (): void => {
+    setEditing(false);
+    requestAnimationFrame(() => edit.current?.focus());
+  };
+  return (
+    <div className="account-row" data-account-nickname data-editing={editing || undefined}>
+      <span id={NICKNAME_LABEL} className="account-row-label">
+        {NICKNAME_WORDS.row}
+      </span>
+      <div className="account-row-body">
+        {editing ? (
+          <NicknameEditor me={me} online={online} onClose={close} />
+        ) : (
+          <span className="account-nickname-line">
+            <span className="account-handle" data-account-handle data-none={!me.handle || undefined}>
+              {me.handle ? `@${me.handle}` : NICKNAME_WORDS.none}
+            </span>
+            <button
+              ref={edit}
+              type="button"
+              className="people-button"
+              data-tone="quiet"
+              aria-label={NICKNAME_WORDS.editLabel}
+              disabled={!online}
+              data-account-nickname-edit
+              onClick={() => setEditing(true)}
+            >
+              {NICKNAME_WORDS.edit}
+            </button>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** "1,700 credits": the balance as last read, or nothing before it was. */
 function creditsWords(credits: { balance: number | null; unlimited: boolean } | null): string | null {
   if (credits?.unlimited) return WORDS.creditsUnlimited;
@@ -276,12 +371,13 @@ function creditsWords(credits: { balance: number | null; unlimited: boolean } | 
  */
 function CreditsRow(): JSX.Element {
   const amount = creditsWords(usePeople((s) => s.credits));
+  const web = usePlayWeb();
   useEffect(() => {
     void studio().people.loadCredits();
   }, []);
   const buy = (): void => {
     void studio()
-      .api.openUrl(CREDITS_PLANS_URL)
+      .api.openUrl(creditsPlansUrl(web))
       .catch(() => undefined);
   };
   const note = WORDS.creditsNote;
@@ -390,6 +486,7 @@ export function AccountSection(): JSX.Element {
     <div className="account-section" data-account-section>
       <AvatarRow me={me} online={online} />
       <NameRow me={me} online={online} />
+      {me.handleChosen !== null && <NicknameRow me={me} online={online} />}
       <CreditsRow />
     </div>
   );

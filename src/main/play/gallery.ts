@@ -82,7 +82,7 @@ const MESSAGE = {
   SignIn: "Connect Genex to do this",
 } as const;
 
-/** An answer from the API: its status and, for a 2xx, the parsed body. */
+/** An answer from the API: its status and its parsed JSON body (null when it had none). */
 export interface GalleryAnswer {
   status: number;
   body: unknown;
@@ -522,7 +522,10 @@ export function playGallery(deps: GalleryDeps) {
 /** Play's gallery as `playGallery` makes it. */
 export type PlayGallery = ReturnType<typeof playGallery>;
 
-/** The network request: JSON in and out, the token as a Bearer header, a bounded wait. */
+/**
+ * The network request: JSON in and out, the token as a Bearer header, a bounded wait. A refusal's
+ * body comes back too (a write says why it was refused there); one that is not JSON reads as none.
+ */
 export function networkRequest(
   fetchImpl: typeof fetch,
   origin: string,
@@ -539,7 +542,7 @@ export function networkRequest(
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       signal: AbortSignal.timeout(timeoutMs),
     });
-    const body: unknown = res.ok ? await res.json().catch(() => null) : null;
+    const body: unknown = await res.json().catch(() => null);
     return { status: res.status, body };
   };
 }

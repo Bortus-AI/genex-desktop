@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   type GalleryAnswer,
   type GalleryRequest,
+  networkRequest,
   PlayRoute,
   playGallery,
   SignInNeeded,
@@ -413,5 +414,39 @@ describe("Play gallery calls", () => {
     assert.equal(calls.length, 1);
     assert.equal(await rig(() => ok({ code: "a b&c" })).gallery.inviteCode(), undefined);
     assert.equal(await rig(() => ok({ code: "x" }), { token: undefined }).gallery.inviteCode(), undefined);
+  });
+});
+
+describe("Play's network request", () => {
+  /** A fetch that answers `status` with `text`, keeping what it was asked. */
+  const fetchAnswering = (status: number, text: string) => {
+    const asked: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      asked.push({ url, init });
+      return new Response(text, { status, headers: { "content-type": "application/json" } });
+    }) as typeof fetch;
+    return { fetchImpl, asked };
+  };
+
+  it("hands on the body of a refusal, so a write can say why it was refused", async () => {
+    const { fetchImpl, asked } = fetchAnswering(400, JSON.stringify({ error: "handle_taken", suggestions: ["rab2"] }));
+    const answer = await networkRequest(fetchImpl, "http://localhost:3000")("/api/users/me", {
+      method: "PATCH",
+      body: { handle: "rab" },
+      token: TOKEN,
+    });
+    assert.deepEqual(answer, { status: 400, body: { error: "handle_taken", suggestions: ["rab2"] } });
+    assert.equal(asked[0]?.url, "http://localhost:3000/api/users/me");
+    assert.equal(new Headers(asked[0]?.init?.headers).get("authorization"), `Bearer ${TOKEN}`);
+  });
+
+  it("reads a body that is not JSON as none, whatever the status", async () => {
+    for (const status of [200, 502]) {
+      const { fetchImpl } = fetchAnswering(status, "<html>gateway</html>");
+      assert.deepEqual(await networkRequest(fetchImpl, "https://api.genex.games")("/api/gallery", {}), {
+        status,
+        body: null,
+      });
+    }
   });
 });

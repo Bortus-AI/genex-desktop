@@ -73,6 +73,8 @@ export const storageKeyFor = {
   liveView: (project: string): string => `studio.liveView.${project}`,
   /** Set ("1") once a Genex account has met its generated avatar (`play/AvatarWelcome.tsx`). */
   avatarWelcomed: (accountId: string): string => `studio.genex.avatarWelcomed.${accountId}`,
+  /** The welcome asked this account for its nickname on this Mac (saved or closed): it never asks again here. */
+  nicknameWelcomed: (accountId: string): string => `studio.genex.nicknameWelcomed.${accountId}`,
 } as const;
 
 /** The IndexedDB database of cover sphere stills (`ui/cover-stills.ts` owns the format). */
