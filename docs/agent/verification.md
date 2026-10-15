@@ -92,11 +92,12 @@ execute from temporary copies.
 ## CI and platform checks
 
 Every PR and dev/main push runs independent Linux static checks and a test plan. The plan unions
-mandatory baseline files with affected L1 files, removes duplicates and assigns each to one of
-up to six jobs. Selected harness coverage runs in separate jobs, partitioned by complete root
-test groups; every group must appear exactly once. All jobs retain the Linux sandbox and
-child-process cleanup checks ([tests](../../tests/AGENTS.md#runner)). The `gate` aggregate fails
-on failed planning, missing/cancelled jobs or an unexpectedly skipped selected harness.
+mandatory baseline files with affected L1 files and removes duplicates. Regular files use up to
+six jobs; mandatory seed-upgrade cases use three separate jobs. Selected harness coverage uses
+up to six jobs: ordinary root groups stay whole, and the large incident group is divided into
+complete direct test subtrees. Every assigned group/case runs exactly once. Jobs retain the Linux
+sandbox and child-process cleanup checks ([tests](../../tests/AGENTS.md#runner)). `gate` requires
+successful planning, static checks, unit and seed jobs; only an explicitly unselected harness may skip.
 Changes to the exact shared runner/toolchain inputs listed in `ci-test-plan.mjs` select the
 entire fast inventory and harness, including deletion/rename of those inputs.
 The macOS fast group also uses up to six jobs behind its `fast` aggregate. Its existing events,

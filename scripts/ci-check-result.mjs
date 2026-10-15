@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 /** Requires every selected job to succeed, including all children of each matrix job. */
 export function assertCiResults(needs, lane) {
   if (lane !== "gate" && lane !== "fast") throw new Error(`Unknown CI result lane: ${lane}`);
-  const required = lane === "gate" ? ["plan", "static", "unit"] : ["plan", "fast-tests"];
+  const required = lane === "gate" ? ["plan", "static", "unit", "seed"] : ["plan", "fast-tests"];
   for (const name of required) if (needs?.[name]?.result !== "success") throw new Error(`${name} did not succeed`);
   if (lane === "fast") return;
   const selected = needs.plan.outputs?.harness_selected;

@@ -12,6 +12,9 @@ import {
   harnessCommands,
   harnessRoots,
   validateHarnessPlan,
+  createSeedPlan,
+  seedCommands,
+  validateSeedPlan,
 } from "../../scripts/ci-harness-shards.mjs";
 
 const repo = path.resolve(import.meta.dirname, "../..");
@@ -29,6 +32,7 @@ function fixture(t: TestContext) {
   write("src/harness-seed/loop/main.ts", "export const harness = 1;\n");
   write("tests/helpers/studio-rig.ts", "export const rig = 1;\n");
   for (const file of [...CI_BASELINE, ...HARNESS_GATE]) write(file, "export {};\n");
+  write(CI_BASELINE[0], "import { it } from 'node:test'; it('seed fixture', () => {});\n");
   write(
     HARNESS_GATE[0],
     "import { rig } from '../helpers/studio-rig.ts'; import { it } from 'node:test'; it('incident', () => { void rig; });\n",
@@ -56,10 +60,10 @@ function fixture(t: TestContext) {
 test("CI combines mandatory and affected tests once, then partitions every file exactly once", (t) => {
   const { root } = fixture(t);
   const plan = createCiPlan(root, { changed: ["src/behavior.ts"], shards: 6 });
-  assert.deepEqual(plan.unit.files, [...CI_BASELINE, "tests/conformance/behavior.test.ts"].sort());
+  assert.deepEqual(plan.unit.files, [...CI_BASELINE.slice(1), "tests/conformance/behavior.test.ts"].sort());
   assert.deepEqual(plan.unit.shards.flatMap((shard) => shard.files).sort(), plan.unit.files);
-  assert.equal(plan.unit.shards.filter((shard) => shard.files.includes(CI_BASELINE[0])).length, 1);
-  assert.deepEqual(plan.unit.shards[0].files, [CI_BASELINE[0]], "the long seed suite has its own worker");
+  assert.equal(plan.unit.shards.filter((shard) => shard.files.includes(CI_BASELINE[0])).length, 0);
+  assert.deepEqual(plan.seed.files, [CI_BASELINE[0]], "seed contracts have their own mandatory workers");
   assert.deepEqual(plan.harness.files, []);
   assert.ok(plan.fast.files.includes("tests/conformance/behavior.test.ts"));
   assert.ok(!plan.fast.files.includes(HARNESS_GATE[0]), "macOS fast still excludes rigs");
@@ -72,14 +76,17 @@ test("a harness change retains both mandatory gate files with no duplicate Linux
   const plan = createCiPlan(root, { changed: ["src/harness-seed/loop/main.ts", HARNESS_GATE[1]] });
   assert.deepEqual(plan.harness.files, [...HARNESS_GATE].sort());
   assert.ok(HARNESS_GATE.every((file) => !plan.unit.files.includes(file)));
-  assert.deepEqual(new Set([...plan.unit.files, ...plan.harness.files]), new Set([...CI_BASELINE, ...HARNESS_GATE]));
+  assert.deepEqual(
+    new Set([...plan.unit.files, ...plan.seed.files, ...plan.harness.files]),
+    new Set([...CI_BASELINE, ...HARNESS_GATE]),
+  );
 });
 
 test("a scoreboard-only L1 change does not activate the full L3 harness gate", (t) => {
   const { root } = fixture(t);
   const plan = createCiPlan(root, { changed: [HARNESS_GATE[1]] });
   assert.deepEqual(plan.harness.files, []);
-  assert.deepEqual(plan.unit.files, [...CI_BASELINE, HARNESS_GATE[1]].sort());
+  assert.deepEqual(plan.unit.files, [...CI_BASELINE.slice(1), HARNESS_GATE[1]].sort());
 });
 
 test("global runner, dependency and check inputs retain every fast test and the full harness gate", (t) => {
@@ -108,7 +115,7 @@ test("global runner, dependency and check inputs retain every fast test and the 
     assert.deepEqual(plan.globalChanges, [file]);
     assert.deepEqual(plan.harness.files, [...HARNESS_GATE].sort());
     assert.deepEqual(
-      new Set([...plan.unit.files, ...plan.harness.files]),
+      new Set([...plan.unit.files, ...plan.seed.files, ...plan.harness.files]),
       new Set([...plan.fast.files, ...HARNESS_GATE]),
     );
     assert.ok(
@@ -129,7 +136,7 @@ test("deleting a global input still selects full coverage while ordinary product
   const focused = createCiPlan(root, { changed: ["src/behavior.ts"] });
   assert.deepEqual(focused.globalChanges, []);
   assert.deepEqual(focused.harness.files, []);
-  assert.deepEqual(focused.unit.files, [...CI_BASELINE, "tests/conformance/behavior.test.ts"].sort());
+  assert.deepEqual(focused.unit.files, [...CI_BASELINE.slice(1), "tests/conformance/behavior.test.ts"].sort());
 });
 
 test("renaming a global runner still selects full coverage from the deleted old path", (t) => {
@@ -230,12 +237,13 @@ test("stable gate names fail closed on failed, cancelled, skipped or absent requ
     plan: { result: "success", outputs: { harness_selected: "true" } },
     static: { result: "success" },
     unit: { result: "success" },
+    seed: { result: "success" },
     harness: { result: "success" },
     "fast-tests": { result: "success" },
   };
   assert.doesNotThrow(() => assertCiResults(complete, "gate"));
   assert.doesNotThrow(() => assertCiResults(complete, "fast"));
-  for (const name of ["plan", "static", "unit", "harness"] as const) {
+  for (const name of ["plan", "static", "unit", "seed", "harness"] as const) {
     for (const result of ["failure", "cancelled", "skipped", undefined]) {
       assert.throws(() => assertCiResults({ ...complete, [name]: { result } }, "gate"));
     }
@@ -267,7 +275,7 @@ test("a worker receives only its planned files and an explicit concurrency, and 
   assert.notEqual(runCiShard(root, plan, "unit", 1), 0);
 });
 
-test("four harness workers execute every nested and parameterized case and its hooks exactly once", (t) => {
+test("bounded harness workers execute every nested and parameterized case and its hooks exactly once", (t) => {
   const { root, write } = fixture(t);
   write(
     HARNESS_GATE[0],
@@ -302,7 +310,7 @@ describe('fifth |', () => { it('e', () => record('fifth-e')); });
   assert.equal(expected.length, 11, "seven cases and four per-case hooks actually ran");
   fs.rmSync(ledger);
   const plan = createHarnessPlan(root, true);
-  assert.equal(plan.shards.length, 4);
+  assert.equal(plan.shards.length, 5);
   assert.doesNotThrow(() => validateHarnessPlan(root, plan));
   for (const shard of plan.shards)
     for (const args of harnessCommands(shard)) {
@@ -350,4 +358,100 @@ test("unsupported or ambiguous incident registration fails planning instead of o
     write(HARNESS_GATE[0], `import { describe, it } from 'node:test';\n${body}`);
     assert.throws(() => harnessRoots(root), Error, body);
   }
+});
+
+test("the known large harness group splits complete direct cases with per-case hooks and runtime subtests", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    HARNESS_GATE[0],
+    String.raw`import { describe, it, beforeEach, afterEach } from 'node:test';
+import fs from 'node:fs';
+const record = (text) => fs.appendFileSync('ledger.jsonl', text + '\n');
+describe('harness incidents', () => {
+  beforeEach(() => record('before incident'));
+  afterEach(() => record('after incident'));
+  it('first [x]', async (t) => { record('first'); await t.test('runtime child', () => record('runtime')); });
+  it('second |', () => record('second'));
+  it('third $', () => record('third'));
+});
+describe('other root', () => { for (const name of ['a', 'b']) it(name, () => record(name)); });
+it('fifth', () => record('fifth'));
+it('sixth', () => record('sixth'));
+`,
+  );
+  write(HARNESS_GATE[1], "import { it } from 'node:test'; it('scoreboard', () => {});");
+  const run = (args: string[]) =>
+    spawnSync(process.execPath, ["--test", ...args], { cwd: root, env: testEnv(), encoding: "utf8" });
+  assert.equal(run(["--test-concurrency=1", HARNESS_GATE[0]]).status, 0);
+  const ledger = path.join(root, "ledger.jsonl");
+  const expected = fs.readFileSync(ledger, "utf8").trim().split("\n").sort();
+  fs.rmSync(ledger);
+  const plan = createHarnessPlan(root, true);
+  assert.equal(plan.shards.length, 6);
+  assert.ok(!plan.roots.includes("harness incidents"));
+  assert.ok(plan.roots.includes("harness incidents first [x]"));
+  for (const shard of plan.shards)
+    for (const args of harnessCommands(shard)) {
+      const result = run(args);
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+    }
+  assert.deepEqual(fs.readFileSync(ledger, "utf8").trim().split("\n").sort(), expected);
+  for (const unsafe of [
+    "before(() => {}); it('one', () => {});",
+    "after(() => {}); it('one', () => {});",
+    "const shared = []; it('one', () => shared.push(1));",
+    "for (const n of ['one']) it(n, () => {});",
+  ]) {
+    write(
+      HARNESS_GATE[0],
+      `import { describe, it, before, after } from 'node:test'; describe('harness incidents', () => { ${unsafe} });`,
+    );
+    assert.throws(() => createHarnessPlan(root, true), Error, unsafe);
+  }
+});
+
+test("seed roots stay whole across three source-order shards including a prefix root's once hooks", (t) => {
+  const { root, write } = fixture(t);
+  write(
+    CI_BASELINE[0],
+    String.raw`import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
+import fs from 'node:fs';
+const record = (text) => fs.appendFileSync('seed-ledger.jsonl', text + '\n');
+describe('seed upgrade', () => {
+  before(() => record('before root'));
+  after(() => record('after root'));
+  beforeEach(() => record('before case'));
+  afterEach(() => record('after case'));
+  it('first [x]', async (t) => { record('first'); await t.test('runtime', () => record('runtime')); });
+  it('second $', () => record('second'));
+});
+describe('seed upgrade across a vintage', () => { it('links', () => record('vintage')); });
+describe('a third root', () => { for (const n of ['a', 'b']) it(n, () => record(n)); });
+it('a fourth root', () => record('fourth'));
+`,
+  );
+  const run = (args: string[]) =>
+    spawnSync(process.execPath, ["--test", ...args], { cwd: root, env: testEnv(), encoding: "utf8" });
+  const full = run(["--test-concurrency=1", CI_BASELINE[0]]);
+  assert.equal(full.status, 0, full.stdout + full.stderr);
+  const ledger = path.join(root, "seed-ledger.jsonl");
+  const expected = fs.readFileSync(ledger, "utf8").trim().split("\n").sort();
+  fs.rmSync(ledger);
+  const plan = createSeedPlan(root);
+  assert.equal(plan.shards.length, 3);
+  assert.deepEqual(plan.shards[0].names, ["seed upgrade", "a fourth root"]);
+  assert.doesNotThrow(() => validateSeedPlan(root, plan));
+  for (const shard of plan.shards) {
+    const result = run(seedCommands(root, shard)[0]);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  }
+  assert.deepEqual(fs.readFileSync(ledger, "utf8").trim().split("\n").sort(), expected);
+  const omitted = structuredClone(plan);
+  omitted.shards[0].names.pop();
+  assert.throws(() => validateSeedPlan(root, omitted));
+  write(
+    CI_BASELINE[0],
+    "import { describe, it } from 'node:test'; describe('seed upgrade', () => { it('across vintage', () => {}); }); describe('seed upgrade across vintage', () => { it('child', () => {}); });",
+  );
+  assert.throws(() => createSeedPlan(root), /Ambiguous/);
 });

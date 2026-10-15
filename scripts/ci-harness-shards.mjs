@@ -4,8 +4,14 @@ import ts from "@typescript/typescript6";
 
 /** @typedef {{ id: number, names: string[], scoreboard: boolean }} HarnessShard */
 /** @typedef {{ files: string[], roots: string[], shards: HarnessShard[] }} HarnessPlan */
+/** @typedef {{ id: number, names: string[] }} SeedShard */
+/** @typedef {{ files: string[], roots: string[], shards: SeedShard[] }} SeedPlan */
 
-const HARNESS_SHARDS = 4;
+const HARNESS_SHARDS = 6;
+const SEED_SHARDS = 3;
+const SEED_UPGRADE = "tests/conformance/seed-upgrade.test.ts";
+const SPLIT_INCIDENT_GROUP = "harness incidents";
+const PREFIX_SEED_GROUP = "seed upgrade";
 const INCIDENTS = "tests/conformance/harness-incidents.test.ts";
 const SCOREBOARD = "tests/conformance/scoreboard.test.ts";
 const REGISTRATIONS = new Set(["test", "it", "describe"]);
@@ -71,27 +77,76 @@ function validateRegistrationUses(source, bindings, roots) {
   visit(source);
 }
 
-/**
- * Finds complete top-level subtrees; unknown registration shapes fail instead of losing tests.
- * @param {string} root
- * @returns {{ name: string, weight: number }[]}
- */
-export function harnessRoots(root) {
-  const file = path.join(root, INCIDENTS);
+function readRoots(root, relative) {
+  const file = path.join(root, relative);
   const source = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
-  if (source.parseDiagnostics.length) throw new Error("Harness registration file does not parse");
+  if (source.parseDiagnostics.length) throw new Error("Test registration file does not parse");
   const bindings = testBindings(source);
   const roots = source.statements.map((node) => rootRegistration(node, bindings)).filter(Boolean);
-  if (!roots.length) throw new Error("Empty harness root inventory");
+  if (!roots.length) throw new Error("Empty test root inventory");
   validateRegistrationUses(source, bindings, roots);
-  const names = sorted(roots.map(({ name }) => name));
+  return { roots, bindings };
+}
+
+function assertUnambiguous(values) {
+  const names = sorted(values);
   for (let index = 1; index < names.length; index++) {
     const ambiguous = names
       .slice(0, index)
       .some((prior) => names[index] === prior || names[index].startsWith(`${prior} `));
-    if (ambiguous) throw new Error(`Ambiguous harness root name: ${names[index]}`);
+    if (ambiguous) throw new Error(`Ambiguous test selector: ${names[index]}`);
   }
-  return roots.map(({ name, weight }) => ({ name, weight }));
+}
+
+function directCase(statement, bindings, allowOnceHooks) {
+  const call =
+    ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression) ? statement.expression : undefined;
+  const binding = call && callBinding(call, bindings);
+  if (HOOKS.has(binding)) {
+    const unsafe = !allowOnceHooks && binding !== "beforeEach" && binding !== "afterEach";
+    if (unsafe) throw new Error("Partitioned suite cannot repeat once-only hooks");
+    return undefined;
+  }
+  const child = rootRegistration(statement, bindings);
+  if (!child || (binding !== "it" && binding !== "test"))
+    throw new Error("Partitioned suite requires direct literal cases without shared setup");
+  return child;
+}
+
+function directCases(parent, bindings, allowOnceHooks) {
+  const callback = parent.node.arguments.at(-1);
+  if (!callback.body || !ts.isBlock(callback.body)) throw new Error("Partitioned suite needs a block callback");
+  const children = callback.body.statements
+    .map((statement) => directCase(statement, bindings, allowOnceHooks))
+    .filter(Boolean);
+  if (!children.length) throw new Error("Empty partitioned suite inventory");
+  return children.map((child) => ({ ...child, name: `${parent.name} ${child.name}` }));
+}
+
+/**
+ * Finds complete incident subtrees, splitting only the known large group's independent cases.
+ * @param {string} root
+ * @returns {{ name: string, weight: number }[]}
+ */
+export function harnessRoots(root) {
+  const { roots, bindings } = readRoots(root, INCIDENTS);
+  const units = roots.flatMap((item) =>
+    item.name === SPLIT_INCIDENT_GROUP ? directCases(item, bindings, false) : [item],
+  );
+  assertUnambiguous(units.map(({ name }) => name));
+  return units.map(({ name, weight }) => ({ name, weight }));
+}
+
+function seedRoots(root) {
+  const { roots, bindings } = readRoots(root, SEED_UPGRADE);
+  const units = roots.map((item) => ({
+    name: item.name,
+    selectors:
+      item.name === PREFIX_SEED_GROUP ? directCases(item, bindings, true).map(({ name }) => name) : [item.name],
+  }));
+  if (new Set(units.map(({ name }) => name)).size !== units.length) throw new Error("Ambiguous seed root names");
+  assertUnambiguous(units.flatMap(({ selectors }) => selectors));
+  return units;
 }
 
 /**
@@ -166,4 +221,54 @@ export function harnessCommands(shard) {
   const commands = [["--test-concurrency=1", `--test-name-pattern=${harnessPattern(shard.names)}`, INCIDENTS]];
   if (shard.scoreboard) commands.push(["--test-concurrency=1", SCOREBOARD]);
   return commands;
+}
+
+/**
+ * Keeps seed roots whole and spreads adjacent vintage loops across three source-order workers.
+ * @param {string} root
+ * @returns {SeedPlan}
+ */
+export function createSeedPlan(root) {
+  const roots = seedRoots(root);
+  const count = Math.min(SEED_SHARDS, roots.length);
+  const shards = Array.from({ length: count }, (_, index) => ({ id: index + 1, names: [] }));
+  roots.forEach(({ name }, index) => shards[index % count].names.push(name));
+  return { files: [SEED_UPGRADE], roots: roots.map(({ name }) => name), shards };
+}
+
+/**
+ * Re-extracts every seed root and refuses missing, duplicate or empty assignments.
+ * @param {string} root
+ * @param {unknown} plan
+ */
+export function validateSeedPlan(root, plan) {
+  if (!plan || !same(plan.files, [SEED_UPGRADE]) || !Array.isArray(plan.roots) || !Array.isArray(plan.shards))
+    throw new Error("Invalid seed inventory");
+  const roots = seedRoots(root).map(({ name }) => name);
+  if (!same(plan.roots, roots)) throw new Error("Seed root inventory differs from current code");
+  const count = Math.min(SEED_SHARDS, roots.length);
+  if (plan.shards.length !== count) throw new Error("Incomplete seed shards");
+  const assigned = [];
+  const ids = new Set();
+  for (const shard of plan.shards) {
+    const validId = Number.isInteger(shard.id) && shard.id > 0 && shard.id <= count && !ids.has(shard.id);
+    if (!validId || !Array.isArray(shard.names) || !shard.names.length) throw new Error("Invalid seed shard");
+    ids.add(shard.id);
+    assigned.push(...shard.names);
+  }
+  if (!same(sorted(assigned), sorted(roots))) throw new Error("Incomplete or overlapping seed root assignments");
+}
+
+/**
+ * Filters only the short prefix root through its complete child list, all on the same worker.
+ * @param {string} root
+ * @param {SeedShard} shard
+ * @returns {string[][]}
+ */
+export function seedCommands(root, shard) {
+  const selected = new Set(shard.names);
+  const selectors = seedRoots(root)
+    .filter(({ name }) => selected.has(name))
+    .flatMap((item) => item.selectors);
+  return [["--test-concurrency=1", `--test-name-pattern=${harnessPattern(selectors)}`, SEED_UPGRADE]];
 }

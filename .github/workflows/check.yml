@@ -19,6 +19,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       unit_matrix: ${{ steps.plan.outputs.unit_matrix }}
+      seed_matrix: ${{ steps.plan.outputs.seed_matrix }}
       harness_matrix: ${{ steps.plan.outputs.harness_matrix }}
       harness_selected: ${{ steps.plan.outputs.harness_selected }}
       fast_matrix: ${{ steps.plan.outputs.fast_matrix }}
@@ -133,9 +134,38 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: node scripts/ci-test-plan.mjs run --plan .studio-dev/ci/plan.json --group harness --shard "$SHARD"
+  seed:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.seed_matrix) }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Linux process sandbox prerequisites
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap socat ripgrep
+      - run: npm ci --ignore-scripts
+      - name: Patch the sandbox runtime as postinstall does
+        run: node --input-type=module -e "await (await import('./scripts/patch-sandbox-runtime.mjs')).patchSandboxRuntime()"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: check-test-plan
+          path: .studio-dev/ci
+      - name: Mandatory seed upgrade contracts
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: node scripts/ci-test-plan.mjs run --plan .studio-dev/ci/plan.json --group seed --shard "$SHARD"
   gate:
     if: always()
-    needs: [plan, static, unit, harness]
+    needs: [plan, static, unit, seed, harness]
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     steps:

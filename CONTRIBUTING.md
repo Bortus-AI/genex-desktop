@@ -79,8 +79,8 @@ serially; use it at broad checkpoints. On Apple Silicon, `node -p process.arch` 
 ## Continuous integration
 
 - **Check** (`.github/workflows/check.yml`) runs on every pull request and dev/main push:
-  independent static checks, up to six jobs covering the union of baseline and affected L1
-  tests, and selected harness groups. The Linux `gate` aggregate requires all selected work
+  independent static checks, up to six jobs covering regular baseline/affected L1 files,
+  three mandatory seed-upgrade jobs, and selected harness groups. The Linux `gate` requires all selected work
   to pass. PR selection uses the target branch's exact base SHA. The macOS `fast` aggregate
   covers up to six non-rig shards only on PRs targeting `main`, pushes to `main`, and dispatches.
 - **Rig** (`rig.yml`) runs the serial rig group on pull requests labelled `full-tests` and on

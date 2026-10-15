@@ -17,9 +17,11 @@ hooks fails by name, instead of never exiting and holding a runner slot. Stop wh
 a core's `stop()` (or core-lite's `close()`), a `ProcessSandbox`'s `dispose()`. On Linux,
 sandbox-runtime's socat bridges run until the last sandbox is disposed.
 
-CI partitions incident tests by complete literal top-level `describe`/`it` groups with direct
-callbacks. Nested parameterized cases stay together. Root names must be unique and unambiguous;
-unsupported registration shapes fail planning instead of silently losing coverage.
+CI partitions literal test groups with direct callbacks. Ordinary groups stay whole; the large
+`harness incidents` suite is split into direct test subtrees, with each test's runtime descendants
+and per-case hooks intact. It may not gain once-only parent hooks or dynamic direct registration.
+Seed groups stay whole; their short `seed upgrade` root uses its direct case names to avoid matching
+other roots with the same prefix. Unsupported or ambiguous shapes fail planning instead of losing coverage.
 
 A test that runs the compiler spawns `packageBin('typescript', 'tsc')` from
 `scripts/package-bin.ts` (TypeScript 7), not a `node_modules` path; one that builds a program

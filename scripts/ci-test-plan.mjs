@@ -3,7 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { execFileSync, spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import { createHarnessPlan, harnessCommands, validateHarnessPlan } from "./ci-harness-shards.mjs";
+import {
+  createHarnessPlan,
+  harnessCommands,
+  validateHarnessPlan,
+  createSeedPlan,
+  seedCommands,
+  validateSeedPlan,
+} from "./ci-harness-shards.mjs";
 import {
   changedFiles,
   HARNESS_GATE,
@@ -25,6 +32,7 @@ import {
  * @property {string[]} unmatched
  * @property {CiFileGroup} unit
  * @property {import('./ci-harness-shards.mjs').HarnessPlan} harness
+ * @property {import('./ci-harness-shards.mjs').SeedPlan} seed
  * @property {CiFileGroup} fast
  */
 
@@ -55,10 +63,10 @@ const GLOBAL_INPUTS = new Set([
   "tests/helpers/processes.ts",
   "tests/test-map.json",
 ]);
-const PLAN_VERSION = 1;
+const PLAN_VERSION = 2;
 const DEFAULT_SHARDS = 6;
 const MAX_SHARDS = 16;
-const GROUPS = ["unit", "harness", "fast"];
+const GROUPS = ["unit", "harness", "seed", "fast"];
 const SEED_UPGRADE = CI_BASELINE[0];
 const unique = (files) => [...new Set(files)].sort();
 const revision = (root) =>
@@ -121,7 +129,10 @@ export function createCiPlan(root, { changed, base, shards = DEFAULT_SHARDS } = 
   const rigs = new Set(rigTests(root, graph, tests));
   const fast = tests.filter((file) => !rigs.has(file));
   const selectedUnits = globalChanges.length ? fast : selected.L1;
-  const units = unique([...CI_BASELINE, ...selectedUnits]).filter((file) => !harness.includes(file));
+  const units = unique([...CI_BASELINE, ...selectedUnits]).filter(
+    (file) => file !== SEED_UPGRADE && !harness.includes(file),
+  );
+  existingTest(root, SEED_UPGRADE);
   const plan = {
     version: PLAN_VERSION,
     revision: revision(root),
@@ -130,6 +141,7 @@ export function createCiPlan(root, { changed, base, shards = DEFAULT_SHARDS } = 
     unmatched: selected.unmatched,
     unit: group(root, units, shards),
     harness: createHarnessPlan(root, harnessSelected),
+    seed: createSeedPlan(root),
     fast: group(root, fast, shards),
   };
   validateCiPlan(root, plan);
@@ -161,7 +173,7 @@ function validateGlobalCoverage(plan) {
   const global = unique(plan.changed.filter((file) => GLOBAL_INPUTS.has(file)));
   if (JSON.stringify(global) !== JSON.stringify(plan.globalChanges)) throw new Error("Invalid global-input inventory");
   if (!global.length) return;
-  const actual = unique([...plan.unit.files, ...plan.harness.files]);
+  const actual = unique([...plan.unit.files, ...plan.seed.files, ...plan.harness.files]);
   const expected = unique([...CI_BASELINE, ...plan.fast.files, ...HARNESS_GATE]);
   if (!plan.harness.files.length || JSON.stringify(actual) !== JSON.stringify(expected))
     throw new Error("Global CI inputs require every fast test and the complete harness gate");
@@ -177,15 +189,24 @@ export function validateCiPlan(root, plan) {
   if (plan.revision !== revision(root)) throw new Error("CI plan revision does not match this checkout");
   for (const name of ["unit", "fast"]) validateGroup(root, name, plan[name]);
   validateHarnessPlan(root, plan.harness);
+  validateSeedPlan(root, plan.seed);
+  for (const file of plan.seed.files) existingTest(root, file);
   for (const file of plan.harness.files) existingTest(root, file);
   validateGlobalCoverage(plan);
   if (!plan.unit.files.length) throw new Error("CI plan has no mandatory tests");
-  const linux = new Set([...plan.unit.files, ...plan.harness.files]);
+  const linuxFiles = [...plan.unit.files, ...plan.seed.files, ...plan.harness.files];
+  const linux = new Set(linuxFiles);
+  if (linux.size !== linuxFiles.length) throw new Error("Overlapping Linux groups");
   if (CI_BASELINE.some((file) => !linux.has(file))) throw new Error("CI plan lost a mandatory baseline test");
-  if (plan.harness.files.some((file) => plan.unit.files.includes(file))) throw new Error("Overlapping Linux groups");
   const completeHarness = JSON.stringify([...HARNESS_GATE].sort());
   if (plan.harness.files.length && JSON.stringify(plan.harness.files) !== completeHarness)
     throw new Error("CI plan has an incomplete harness gate");
+}
+
+function commandsForShard(root, name, shard) {
+  if (name === "seed") return seedCommands(root, shard);
+  if (name === "harness") return harnessCommands(shard);
+  return [["--test-concurrency=2", ...shard.files]];
 }
 
 /**
@@ -201,7 +222,7 @@ export function runCiShard(root, plan, name, id) {
   if (!GROUPS.includes(name)) throw new Error(`Unknown CI group: ${name}`);
   const shard = plan[name].shards.find((item) => item.id === id);
   if (!shard) throw new Error(`Unknown or empty ${name} shard: ${id}`);
-  const commands = name === "harness" ? harnessCommands(shard) : [["--test-concurrency=2", ...shard.files]];
+  const commands = commandsForShard(root, name, shard);
   console.log(`${name} shard ${id}: ${commands.length} test batch(es)`);
   for (const args of commands) {
     const run = spawnSync(process.execPath, ["scripts/test.mjs", ...args], {
@@ -250,7 +271,7 @@ function writePlan(root, options) {
   }
   if (plan.globalChanges.length) console.log(`Full fast + harness coverage: ${plan.globalChanges.join(", ")}`);
   console.log(
-    `CI plan: ${plan.unit.files.length} Linux files in ${plan.unit.shards.length} shards; ${plan.harness.files.length} harness files; ${plan.fast.files.length} macOS fast files`,
+    `CI plan: ${plan.unit.files.length} Linux files in ${plan.unit.shards.length} shards; ${plan.seed.shards.length} seed shards; ${plan.harness.files.length} harness files; ${plan.fast.files.length} macOS fast files`,
   );
 }
 
