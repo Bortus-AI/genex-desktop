@@ -18,6 +18,7 @@
     ".claude/skills/**": ["tests/conformance/skills-sync.test.ts"],
     ".claude/settings.json": ["tests/conformance/agent-settings.test.ts"],
     "evals/**": ["tests/conformance/eval-contracts.test.ts"],
-    "src/plugins/roblox/panel.html": ["tests/conformance/roblox-backend.test.ts"]
+    "src/plugins/roblox/panel.html": ["tests/conformance/roblox-backend.test.ts"],
+    "src/plugins/roblox/skills/**": ["tests/conformance/plugin-skill-engines.test.ts"]
   }
 }
