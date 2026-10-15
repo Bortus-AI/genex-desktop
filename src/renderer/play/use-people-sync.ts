@@ -2,31 +2,27 @@
  * Keeps what the app knows of the Genex account current: who it is signed in as (read at start,
  * whenever plugins or connections change, when the window comes back to the front, when the Mac is
  * back online, and every few seconds while a sign-in waits in the browser) and, while signed in,
- * the Friends page, so the plate's count of waiting requests stays true. The Friends page reads more
- * often while it is open. The first sign-in retires Play's Genex card for good.
+ * the Friends page, so the friends under the games show the game each is in and the count of
+ * requests waiting stays true. The first sign-in retires Play's Genex card for good.
  */
 import { useEffect } from "react";
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
-import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
-import { usePeople, usePlay } from "../state/hooks.ts";
-import { PlayPage } from "../state/play.ts";
+import { usePeople } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { useBackOnline } from "../ui/use-online.ts";
 import { dismissPlayPromo, playPromoRetires } from "./play-model.ts";
 
-/** How often the Friends page is read again in the background, for the plate's count. */
-const FRIENDS_BACKGROUND_MS = 2 * MINUTE_MS;
-/** How often it is read while the Friends page is open: what genex.games itself polls at. */
-const FRIENDS_OPEN_MS = 20 * SECOND_MS;
+/** How often the Friends page is read again while the sidebar lists the friends: what genex.games itself polls at. */
+const FRIENDS_READ_MS = 20 * SECOND_MS;
 /** How often the account is read while a sign-in waits in the browser, so the plate fills in by itself. */
 const SIGN_IN_POLL_MS = 2 * SECOND_MS;
 
 /** Read the account and, while signed in, the Friends page; mounted once, by the sidebar. */
-export function usePeopleSync(playOpen: boolean): void {
+export function usePeopleSync(): void {
   const signedIn = usePeople((s) => s.me?.id ?? null);
   const account = usePeople((s) => s.account);
-  const friendsOpen = usePlay((s) => s.view.page === PlayPage.Friends) && playOpen;
   useEffect(() => {
     const people = studio().people;
     void people.loadMe();
@@ -57,10 +53,7 @@ export function usePeopleSync(playOpen: boolean): void {
     if (!signedIn) return;
     const people = studio().people;
     void people.loadFriends();
-    const timer = window.setInterval(
-      () => void people.loadFriends(),
-      friendsOpen ? FRIENDS_OPEN_MS : FRIENDS_BACKGROUND_MS,
-    );
+    const timer = window.setInterval(() => void people.loadFriends(), FRIENDS_READ_MS);
     return () => window.clearInterval(timer);
-  }, [signedIn, friendsOpen]);
+  }, [signedIn]);
 }
