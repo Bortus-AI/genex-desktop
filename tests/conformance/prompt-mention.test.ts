@@ -200,6 +200,15 @@ describe("picker keys", () => {
     assert.equal(gridTarget("ArrowLeft", 0, shape), 0);
   });
 
+  it("a row above the cards (Images) steps down into the first card and back up", () => {
+    const led = { lead: 1, cards: 4, rows: 0, columns: 2 };
+    assert.equal(gridTarget("ArrowDown", 0, led), 1);
+    assert.equal(gridTarget("ArrowUp", 1, led), 0);
+    assert.equal(gridTarget("ArrowUp", 2, led), 0);
+    assert.equal(gridTarget("ArrowDown", 1, led), 3);
+    assert.equal(gridTarget("ArrowUp", 0, led), 0);
+  });
+
   it("leaves other keys and an empty picker to the text box", () => {
     assert.equal(gridTarget("Enter", 0, shape), null);
     assert.equal(gridTarget("ArrowDown", 0, { cards: 0, rows: 0, columns: 2 }), null);

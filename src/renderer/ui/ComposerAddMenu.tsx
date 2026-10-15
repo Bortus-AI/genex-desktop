@@ -19,6 +19,7 @@ import {
   addMenuEntries,
   type EntryActions,
   EntryScope,
+  IMAGES_OPTION,
   type MentionOption,
   mentionOptions,
   visibleConnectors,
@@ -151,6 +152,8 @@ export function mentionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, mentio
 
 /** The @ picker's cards and rows, as the text box's keys walk them. */
 interface MentionGridState extends MentionState {
+  /** Rows above the cards (Images). */
+  lead: number;
   cards: number;
   columns: number;
 }
@@ -158,7 +161,8 @@ interface MentionGridState extends MentionState {
 /** One key while the @ picker is up: all four arrows walk the cards' grid, then the rows. */
 function mentionGridKeyDown(event: KeyboardEvent<HTMLTextAreaElement>, mention: MentionGridState): boolean {
   if (!mention.mentioning) return false;
-  const shape = { cards: mention.cards, rows: mention.matches.length - mention.cards, columns: mention.columns };
+  const { lead, cards, columns } = mention;
+  const shape = { lead, cards, rows: mention.matches.length - lead - cards, columns };
   const target = gridTarget(event.key, mention.active, shape);
   if (target === null) return mentionKeyDown(event, mention);
   event.preventDefault();
@@ -203,6 +207,8 @@ function useMentionPicker(input: {
   project: string | null | undefined;
   anchor: RefObject<HTMLDivElement | null>;
   tagging: MentionTagging;
+  /** Images and the plugins that are on, which the picker shows as a row and as cards. */
+  rows: MentionOption[];
 }) {
   const { docs, covers, state } = useMentionDocs(input.open, input.project);
   const width = input.open ? (input.anchor.current?.offsetWidth ?? 0) : 0;
@@ -215,7 +221,12 @@ function useMentionPicker(input: {
       name: doc.title,
       pick: input.tagging.atCap && !input.tagging.tagged.has(doc.handle) ? () => {} : () => input.tagging.onPick(doc),
     }));
-  return { groups, cardPicks, columns, covers, state };
+  // Images heads the list as a row; the cards follow, the plugins' cards last.
+  const lead = input.rows.filter((row) => row.id === IMAGES_OPTION);
+  const pluginCards = input.rows.filter((row) => row.id !== IMAGES_OPTION);
+  const matches = [...lead, ...cardPicks, ...pluginCards];
+  const shape = { lead: lead.length, cards: cardPicks.length + pluginCards.length, columns };
+  return { groups, matches, shape, columns, covers, state };
 }
 
 /**
@@ -537,8 +548,8 @@ export function ComposerAddMenu({
     onReferences();
   };
   const rows = mentionOptions(mention, entries, pickImages, (name) => onMention?.(`@${name} `));
-  const picker = useMentionPicker({ open: mentioning, query: mention ?? "", project, anchor, tagging });
-  const matches = [...picker.cardPicks, ...rows];
+  const picker = useMentionPicker({ open: mentioning, query: mention ?? "", project, anchor, tagging, rows });
+  const { matches } = picker;
   const active = Math.min(highlight, Math.max(0, matches.length - 1));
   useMentionKeys(ref, {
     mentioning,
@@ -546,11 +557,8 @@ export function ComposerAddMenu({
     active,
     setHighlight,
     onClose: onMentionClose,
-    // Images and the plugins are cards too: the whole list is one grid.
-    cards: matches.length,
-    columns: picker.columns,
+    ...picker.shape,
   });
-
   const optionId = (index: number) => `${list}-${index}`;
   const activeOption = mentioning && matches.length ? optionId(active) : null;
   useEffect(() => onActiveOption?.(activeOption), [activeOption]);

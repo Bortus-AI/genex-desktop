@@ -1,10 +1,12 @@
 /**
- * Moving the @ picker's outline with the arrow keys: cards sit in a grid of `columns`, and the
- * plugin rows under them form one column. Pure, so it is tested without a window.
+ * Moving the @ picker's outline with the arrow keys: rows at its top (Images) form one column, the
+ * cards under them a grid of `columns`, and rows after the cards one column again. Pure, so it is
+ * tested without a window.
  */
 
-/** The picker's shape: how many cards, how many rows after them, and the cards' columns. */
+/** The picker's shape: rows before the cards, the cards and their columns, rows after them. */
 export interface MentionGridShape {
+  lead?: number;
   cards: number;
   rows: number;
   columns: number;
@@ -15,12 +17,23 @@ export const GRID_KEYS: ReadonlySet<string> = new Set(["ArrowLeft", "ArrowRight"
 
 /** Where an arrow key moves the outline from `active`, clamped to the list; null for other keys. */
 export function gridTarget(key: string, active: number, shape: MentionGridShape): number | null {
-  const total = shape.cards + shape.rows;
+  const lead = shape.lead ?? 0;
+  const total = lead + shape.cards + shape.rows;
   if (!GRID_KEYS.has(key) || total === 0) return null;
   const last = total - 1;
-  const inCards = active < shape.cards;
   if (key === "ArrowLeft") return Math.max(0, active - 1);
   if (key === "ArrowRight") return Math.min(last, active + 1);
+  // In the rows above the cards, up and down go row by row, and down from the last one to the first card.
+  if (active < lead) return key === "ArrowDown" ? Math.min(last, active + 1) : Math.max(0, active - 1);
+  const target = gridMove(key, active - lead, shape);
+  if (target !== null) return lead + target;
+  return lead > 0 ? lead - 1 : active;
+}
+
+/** A vertical move inside the cards and the rows after them; null when Up leaves the cards' first line. */
+function gridMove(key: string, active: number, shape: MentionGridShape): number | null {
+  const last = shape.cards + shape.rows - 1;
+  const inCards = active < shape.cards;
   if (key === "ArrowDown") {
     if (!inCards) return Math.min(last, active + 1);
     const below = active + shape.columns;
@@ -29,7 +42,7 @@ export function gridTarget(key: string, active: number, shape: MentionGridShape)
     return shape.rows > 0 ? shape.cards : Math.min(last, below);
   }
   if (!inCards) return active === shape.cards ? lastLineStart(shape) : active - 1;
-  return active - shape.columns >= 0 ? active - shape.columns : active;
+  return active - shape.columns >= 0 ? active - shape.columns : null;
 }
 
 /** The first card of the cards' last line, where Up from the first row lands. */

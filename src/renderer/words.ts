@@ -4314,7 +4314,7 @@ export const MENTION_WORDS = {
   plugins: "Plugins",
   plugin: "Plugin",
   on: "On",
-  upload: "Upload",
+  imagesHint: "Reference or mood board",
   reading: "Loading Genex games and assets…",
   noMatches: "No matches",
   atCap: "That's as many as one message can carry. Remove one to tag something else.",

@@ -117,10 +117,38 @@ function MentionCard({
   );
 }
 
-/**
- * Images and the plugins that are on, as cards beside the others: a plugin's own picture on a plain
- * card, chipped Plugin and On; Images adds pictures to the message.
- */
+/** Images, at the panel's top as a plain row: it adds pictures to the message, it tags nothing. */
+function ImagesRow({
+  option,
+  id,
+  active,
+  onHover,
+}: {
+  option: MentionOption;
+  id: string;
+  active: boolean;
+  onHover: () => void;
+}): JSX.Element {
+  return (
+    <div
+      id={id}
+      role="option"
+      aria-selected={active}
+      data-mention-option={option.id}
+      data-highlighted={active || undefined}
+      className={`${pickerItem} cursor-pointer hover:bg-control-hover data-highlighted:bg-control-hover`}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={option.pick}
+      onMouseMove={onHover}
+    >
+      <Icon name="image" className="text-icon-strong" />
+      <span className="shrink-0">{option.name}</span>
+      <span className="picker-desc">{MENTION_WORDS.imagesHint}</span>
+    </div>
+  );
+}
+
+/** A plugin that is on, as a card beside the others: its own picture on a plain card, chipped Plugin and On. */
 function OptionCard({
   option,
   id,
@@ -132,7 +160,6 @@ function OptionCard({
   active: boolean;
   onHover: () => void;
 }): JSX.Element {
-  const images = option.id === IMAGES_OPTION;
   return (
     <div
       id={id}
@@ -147,12 +174,12 @@ function OptionCard({
       onMouseMove={onHover}
     >
       <span className="mention-card-wash mention-card-icon" aria-hidden>
-        {images ? <Icon name="image" size={28} /> : <PluginIcon name={option.name} src={option.icon} size="large" />}
+        <PluginIcon name={option.name} src={option.icon} size="large" />
       </span>
       <span className="mention-card-scrim" aria-hidden />
       <span className="mention-card-chips" aria-hidden>
-        <span>{images ? MENTION_WORDS.upload : MENTION_WORDS.plugin}</span>
-        {images ? null : <span>{MENTION_WORDS.on}</span>}
+        <span>{MENTION_WORDS.plugin}</span>
+        <span>{MENTION_WORDS.on}</span>
       </span>
       <span className="mention-card-title">{option.name}</span>
     </div>
@@ -180,15 +207,18 @@ export interface MentionPanelProps {
 
 /** The picker's body inside the composer's panel. */
 export function MentionPanel(props: MentionPanelProps): JSX.Element {
-  const { groups, rows, active, optionId, onHighlight } = props;
-  const cardCount = groups.reduce((sum, group) => sum + group.docs.length, 0);
+  const { groups, active, optionId, onHighlight } = props;
+  // Images heads the panel as a row; the plugins' cards come after the others.
+  const lead = props.rows.filter((row) => row.id === IMAGES_OPTION);
+  const rows = props.rows.filter((row) => row.id !== IMAGES_OPTION);
+  const cardCount = lead.length + groups.reduce((sum, group) => sum + group.docs.length, 0);
   const empty = cardCount === 0 && rows.length === 0;
   // The keys move the outline past the panel's edge: the outlined card scrolls into view.
   const activeId = optionId(active);
   useEffect(() => {
     document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
   }, [activeId]);
-  let index = 0;
+  let index = lead.length;
   return (
     <div
       role="listbox"
@@ -198,6 +228,15 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
       className="mention-panel"
       style={{ "--mention-columns": props.columns } as CSSProperties}
     >
+      {lead.map((option, at) => (
+        <ImagesRow
+          key={option.id}
+          option={option}
+          id={optionId(at)}
+          active={at === active}
+          onHover={() => onHighlight(at)}
+        />
+      ))}
       {groups.map((group) => (
         <section key={group.label ?? "matches"} className="mention-shelf">
           {group.label ? <h4 className="mention-shelf-label">{group.label}</h4> : null}
