@@ -6,12 +6,22 @@
  */
 import { type JSX, useEffect, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { isUserCancelled } from "../../shared/errors.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { StepMark } from "./StepMark.tsx";
 import { STEPS_WORDS } from "../words.ts";
-import { parseSteps, STEPS_ACTION, type StepRow, type StepsCard, type StepsOffer, stepsShown } from "./engine-steps.ts";
+import { usePlugins } from "../state/hooks.ts";
+import {
+  parseSteps,
+  runStep,
+  STEPS_ACTION,
+  type StepRow,
+  type StepsCard,
+  type StepsOffer,
+  stepsShown,
+} from "./engine-steps.ts";
 
 /** How often the card asks the plugin again while it shows. */
 const STEPS_REFRESH_MS = 5 * SECOND_MS;
@@ -136,16 +146,17 @@ export function EngineStepsCard({
   useEffect(() => setDismissed(key ? readText(key) : null), [key]);
   const shown = stepsShown(offer, dismissed);
   const card = useSteps(offer, shown);
+  const plugin = usePlugins((s) => s.list.find((p) => p.manifest.id === offer?.pluginId) ?? null);
   if (!shown || !card?.open) return null;
   const notNow = () => {
     if (key) writeText(key, offer.id);
     setDismissed(offer.id);
   };
+  // Saying no in the action's dialog is an answer, not a problem to show.
   const run = (row: StepRow) => {
-    if (!row.action) return;
-    void window.studio
-      .pluginAction(offer.pluginId, row.action.name, row.action.args, offer.project)
-      .catch(notifyProblem(onNotice));
+    void runStep(plugin, offer, row).catch((error: unknown) => {
+      if (!isUserCancelled(error)) notifyProblem(onNotice)(error);
+    });
   };
   return (
     <section data-engine-steps aria-labelledby="engine-steps-title" className="chat-question chat-waiting-card mb-2">

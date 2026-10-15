@@ -9,7 +9,11 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, it, test } from "node:test";
 import { PluginConsent } from "../../src/main/plugin-consent.ts";
+import { toEntries } from "../../src/renderer/chat-entries.ts";
+import { ConsentChoice, consentChoices, consentTitle } from "../../src/renderer/chat/consent-card.ts";
+import { COMPUTER_SETTING_CARD_WORDS } from "../../src/renderer/words.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
+import { STUDIO_CONSENT_NAMES, StudioConsentSource } from "../../src/shared/plugins.ts";
 import type { DelegateRequest, DelegateResult, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 
@@ -96,6 +100,48 @@ test("the turn's abort signal withdraws its question as a stop", async () => {
   already.abort();
   assert.deepEqual(await ask(consent, "c2", { signal: already.signal }), { approved: false, by: "stop" });
   assert.deepEqual(consent.pending(), []);
+});
+
+test("the studio's card that turns computer control on names its source and asks Turn on or Not now", () => {
+  assert.equal(STUDIO_CONSENT_NAMES[StudioConsentSource.ComputerSetting], "Computer control");
+  const payload = {
+    consentId: "c-setting",
+    pluginId: StudioConsentSource.ComputerSetting,
+    pluginName: STUDIO_CONSENT_NAMES[StudioConsentSource.ComputerSetting],
+    tool: `${StudioConsentSource.ComputerSetting}__computer_control`,
+    args: {},
+    project: "garden",
+    prompt: "Turn on computer control for every chat?",
+    state: "pending",
+  };
+  const [card] = toEntries([
+    {
+      id: "000001",
+      thread_id: "t1",
+      turn_id: "turn",
+      session_id: null,
+      created_at: new Date(1).toISOString(),
+      data: { type: "custom", event_type: "plugin_consent", payload },
+    },
+  ]) as Array<Parameters<typeof consentChoices>[0]>;
+  assert.ok(card);
+  assert.equal(card.consentSource, "Computer control");
+  assert.equal(consentTitle(card), COMPUTER_SETTING_CARD_WORDS.title);
+  assert.match(consentTitle(card), /every chat/);
+  assert.deepEqual(
+    consentChoices(card).map((choice) => [choice.id, choice.label]),
+    [
+      [ConsentChoice.Once, COMPUTER_SETTING_CARD_WORDS.turnOn.label],
+      [ConsentChoice.Decline, COMPUTER_SETTING_CARD_WORDS.notNow.label],
+    ],
+  );
+  // Any other card keeps its own words and Allow once / Don't allow.
+  const plugin = { ...card, consentSourceId: "genex", consentSource: "Genex", consentPrompt: "Publish?" };
+  assert.equal(consentTitle(plugin), "Publish?");
+  assert.deepEqual(
+    consentChoices(plugin).map((choice) => choice.label),
+    ["Allow once", "Don't allow"],
+  );
 });
 
 // ── the run's own consent ────────────────────────────────────────────────────────────────

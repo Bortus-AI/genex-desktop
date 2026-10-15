@@ -1623,7 +1623,14 @@ export const PLAN_WORDS = {
 export const A_PLUGIN = "A plugin";
 
 /** The steps card's own words; its rows are the plugin's. */
-export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", copied: "Copied" } as const;
+export const STEPS_WORDS = {
+  notNow: "Not now",
+  done: "(done)",
+  copy: "Copy",
+  copied: "Copied",
+  /** A step's button whose plugin is no longer installed. */
+  pluginGone: "This step's plugin isn't installed any more.",
+} as const;
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {
@@ -2598,6 +2605,16 @@ export const CONSENT_CHOICE_WORDS = {
     description: `Don't ask again for this action in ${source}.`,
   }),
   decline: { label: "Don't allow", description: "The agent carries on without it." },
+} as const;
+
+/**
+ * The studio's card that turns computer control on, asked when a plugin's Do it for me finds it
+ * off: it is one setting, so it says it is for every chat.
+ */
+export const COMPUTER_SETTING_CARD_WORDS = {
+  title: "Turn on computer control? Agents in every chat can then ask to use apps on this Mac, one app at a time.",
+  turnOn: { label: "Turn on", description: "You can turn it off in Settings → Permissions." },
+  notNow: { label: "Not now", description: "Computer control stays off, and nothing is clicked." },
 } as const;
 
 /** A waiting consent question's title when the plugin wrote no prompt of its own. */

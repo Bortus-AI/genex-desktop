@@ -1275,6 +1275,18 @@ Available services are capability checked and scoped to the calling plugin:
   plugin linked to a project, each as `{game, title, project}`; no bound game needed. The host asks
   nothing while no run holds the studio awake. The Unreal plugin reads it so it never offers to quit
   an editor a Loop is using.
+- `game.engine.assist {task}` (capability `game-engine`): Do it for me. Hands a setup task (one
+  plain line, at most 300 characters) to the bound game's chat, posted there verbatim as
+  "<plugin name> asks: <task>"; that chat's own session clicks it with the person's computer
+  control, on the Mac apps the plugin's `engine.apps` declares and no others. It answers
+  `{started, reason?}`, the reason one of `not-person` (neither an action the person pressed nor
+  a tool call whose own `confirmation` card they approved; the host marks such a call
+  `confirmed`, a Genex moment's or an observer's step never is), `no-chat`, `no-apps`,
+  `unavailable` (Windows, or a Mac with no desktop driver: show the click path instead) or
+  `declined`. A plugin that did not come with Genex shows the task on a card first, every time;
+  with computer control off, the studio's own card offers to turn it on for every chat. It is for
+  setup clicks and publishing the person approved, never for building or play-testing
+  ([computer use](computer-use.md#the-persons-computer)).
 - `credentials.read/write/clear`: plugin-scoped protected storage. Reserved account actions
   `unlock`, `connect`, `disconnect` authorize these operations; agents cannot invoke actions.
   Cache unlocked credentials only in the backend session. Background status must never unlock.
@@ -1751,7 +1763,9 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 `new-game`). `new-game` offers the plugin's steps card (`game.engine.steps` appends
 `engine_steps`) while a step is open.
 
-The steps card ("Unreal setup") sits above the composer while nothing else waits there. Its
+The steps card ("Unreal setup") sits above the composer while nothing else waits there. A row's
+button runs its plugin action as every surface does (`runPluginAction`): one that declares
+`confirmation` is reviewed and approved in the native dialog first. Its
 rows are the plugin's `steps` action, read every 5 s while it shows, so Xcode installed or opened
 outside Genex is ticked by itself; it goes when no step is open, and Not now hides it for that game
 until the next offer. Unreal's rows: the project is set up, then Install Xcode (Open App Store) and
@@ -1868,7 +1882,8 @@ Genex's code. Unreal's is `{"id": "unreal", "label": "Unreal", "projectFiles": [
   than one player takes `players` on `play-open` and `player` on its other play tools;
 - `apps`, when present, is `{mac?, windows?}`, each 1–4 distinct names: Mac bundle ids in
   reverse-DNS form and Windows `.exe` file names, never paths. They name the apps the editor runs
-  as, which computer use never drives to build or play.
+  as, which computer use never drives to build or play: while the plugin is on, the `desktop`
+  tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them.
 
 Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
 engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's

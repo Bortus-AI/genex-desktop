@@ -5,7 +5,10 @@
  * answer comes from plugin code, so only well-formed rows are drawn.
  */
 import { CustomEvent, customEvent } from "../../shared/custom-events.ts";
+import type { PluginInfo } from "../../shared/plugins.ts";
+import { runPluginAction } from "../plugin-actions.ts";
 import type { EventEnvelope } from "../types.ts";
+import { STEPS_WORDS } from "../words.ts";
 
 /** The plugin action the card reads its rows from. */
 export const STEPS_ACTION = "steps";
@@ -74,4 +77,22 @@ export function parseSteps(raw: unknown): StepsCard | null {
   if (!isRecord(raw) || !isText(raw.title) || !isText(raw.intro) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(parseRow).filter((row): row is StepRow => row !== undefined);
   return { title: raw.title, intro: raw.intro, open: raw.open === true, steps };
+}
+
+/**
+ * A step's button pressed: its plugin action, run as every surface runs one (`runPluginAction`),
+ * so an action that declares a confirmation is reviewed and approved in the native dialog first.
+ * The card shows no picture review, so a review that asks for one is cancelled.
+ */
+export async function runStep(plugin: PluginInfo | null, offer: StepsOffer, row: StepRow): Promise<unknown> {
+  const action = row.action;
+  if (!action) return undefined;
+  if (!plugin) throw new Error(STEPS_WORDS.pluginGone);
+  return runPluginAction({
+    plugin,
+    name: action.name,
+    args: action.args,
+    project: offer.project,
+    review: ({ resolve }) => resolve(false),
+  });
 }

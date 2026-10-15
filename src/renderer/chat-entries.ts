@@ -194,6 +194,8 @@ export type Entry =
       prefill?: string;
       /** action "consent": a plugin's question to the user — Approve/Decline while it is pending, its outcome after. */
       consentId?: string;
+      /** Whose card it is: the plugin's id, or the studio's own (`StudioConsentSource`). */
+      consentSourceId?: string;
       consentSource?: string;
       consentPrompt?: string;
       consentExport?: ExportReview;
@@ -1767,6 +1769,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     tag: SystemTag.Ask,
     action: EntryAction.Consent,
     consentId,
+    ...(consent.pluginId ? { consentSourceId: consent.pluginId } : {}),
     consentSource: consent.pluginName || A_PLUGIN,
     consentPrompt: consent.prompt || undefined,
     consentExport: consent.exportReview,
