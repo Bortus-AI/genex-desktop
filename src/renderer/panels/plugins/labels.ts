@@ -2,7 +2,6 @@
 import type { ConnectionSnapshot } from "../../../shared/connections.ts";
 import { SECOND_MS } from "../../../shared/duration.ts";
 import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
-import type { PluginUpdate } from "../../state/plugins.ts";
 import { GENEX_WORDS, PLUGINS_WORDS } from "../../words.ts";
 import {
   type PluginIndexView,
@@ -176,9 +175,6 @@ const isRouter = (p: PluginInfo): boolean => p.manifest.id === GENEX_PLUGIN_ID;
 
 /** The name a plugin's row and page show: Genex is the game dev tools router; any other its own name. */
 export const shownName = (p: PluginInfo): string => (isRouter(p) ? GENEX_WORDS.router.name : p.manifest.name);
-
-/** A waiting update as the sidebar names it: the plugin's shown name and the version, "Local Blender 1.2.0". */
-export const shownRelease = (update: PluginUpdate): string => `${shownName(update.plugin)} ${update.version}`;
 
 /**
  * Genex's row line, in two parts (the second quieter): on, the tools it gives the agent on the

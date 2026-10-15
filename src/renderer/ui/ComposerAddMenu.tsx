@@ -35,6 +35,11 @@ import { Pending } from "./Pending.tsx";
 
 /** Shell navigation shared with the Plugins page. */
 export const OPEN_PLUGINS_EVENT = "studio:open-plugins";
+
+/** Opens the Plugins page at one plugin, where it turns on or updates. */
+export const openPluginsAt = (id: string): void => {
+  window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin: id } }));
+};
 /** Lets the composer's text box steer the @ list while its own focus stays in the text. */
 export interface AddMenuHandle {
   keyDown(event: KeyboardEvent<HTMLTextAreaElement>): boolean;

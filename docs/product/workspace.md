@@ -4,7 +4,7 @@
 
 The sidebar holds Search, Notifications, Send feedback
 ([what it sends](../../PRIVACY.md#send-feedback)), the Play/Create switch, New game, Plugins,
-Harness, Settings, Games and, once updates wait, **Update plugins** and **Relaunch to update**
+Harness, Settings, Games and, once updates wait, **plugin updates** and **Relaunch to update**
 (Linux: **Download**); only games scroll. Pinned games lead, then recent activity. Every launch
 opens **home** (also the wordmark): one composer over an optional picture. A game opens its
 conversation beside the stage (Live, Builds once planned, Assets); Harness opens its conversation

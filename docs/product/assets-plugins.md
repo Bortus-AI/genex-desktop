@@ -49,9 +49,9 @@ native code.
 Connector tools ask before each call unless Settings holds an exact grant (a plugin's read-only
 tools never ask, its others not in Auto); server hints grant nothing. Plugin uploads show every
 included/excluded file for a second approval. Revoking stops future calls, not remote effects.
-Removal (never Genex's) keeps data, credentials and jobs; updates (a newer compatible release) also keep settings:
-rows offer **Update to x**, the sidebar **Update plugins** (all). Built-in plugins install and update
-without asking. Reusing a plugin's id from another source needs **Replace and erase data** (never a
+Removal (never Genex's) keeps data, credentials and jobs; updates (newer compatible releases) also keep
+settings: rows offer **Update to x**, the sidebar's **plugin updates** the ticked ones. Built-ins install and update
+unasked. Reusing a plugin's id from another source needs **Replace and erase data** (never a
 bundled id). Reinstall is explicit; local reinstall reviews a fresh snapshot. Host-managed secrets
 never enter composer text.
 

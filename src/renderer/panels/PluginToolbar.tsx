@@ -37,7 +37,7 @@ import { PLUGIN_SETUP_EVENT } from "../plugin-setup.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { cn } from "../ui/cn.ts";
-import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
+import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../ui/dialog.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
@@ -95,10 +95,6 @@ type ToolbarPanel = {
   document: PluginPanelDocument | null;
   drawn?: boolean;
 };
-
-/** Opens the Plugins page at one plugin, where it turns on or updates. */
-const openPluginsAt = (id: string) =>
-  window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin: id } }));
 
 /** Genex's Publish panel, which Studio draws in its own type and buttons instead of the plugin's frame. */
 const drawnByStudio = (plugin: PluginInfo, panelId: string): boolean =>
