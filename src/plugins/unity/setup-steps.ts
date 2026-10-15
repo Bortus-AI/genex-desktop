@@ -8,6 +8,7 @@
 import { stat } from "node:fs/promises";
 import path from "node:path";
 import { type EditorsEnv, findEditors, findHub, type UnityEditor } from "./editors.ts";
+import type { PluginSetupButton, PluginSetupCard, PluginSetupStep } from "../../plugin-sdk/index.d.ts";
 import { newestUnity6 } from "./readiness.ts";
 
 /** Each row's id on the card. Wire values: the chat keys its rows by them. */
@@ -67,29 +68,12 @@ export interface SetupFacts {
   job: InstallJob | null;
 }
 
-/** A row's button: the plugin action it runs and its label. */
-type Button = { name: SetupAction; args: Record<string, string>; label: string };
-/** One row as the chat's steps card reads it (`renderer/chat/engine-steps.ts`). */
-export type SetupRow = {
-  id: SetupStepId;
-  label: string;
-  detail: string;
-  done: boolean;
-  you?: true;
-  working?: true;
-  action?: Button;
-};
+/** A row's button: one of the setup actions, and its label. */
+type Button = PluginSetupButton & { name: SetupAction };
+/** One row as the chat's steps card reads it. */
+export type SetupRow = PluginSetupStep & { id: SetupStepId; action?: Button };
 /** The card as the chat reads it. */
-export type SetupCard = {
-  title: string;
-  intro: string;
-  open: boolean;
-  steps: SetupRow[];
-  primary?: Button;
-  secondary?: Button;
-  doneSays?: string;
-  stuckSays?: string;
-};
+export type SetupCard = PluginSetupCard & { steps: SetupRow[] };
 
 /** About how much room a Unity 6 editor takes once installed. */
 export const UNITY_SIZE_GB = 12;

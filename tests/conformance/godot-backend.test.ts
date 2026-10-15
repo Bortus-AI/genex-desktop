@@ -81,7 +81,7 @@ describe("making a Godot game", () => {
     assert.match(String(ready.note), /godot__new-game/);
     const none = await tool(await godotBackendFixture({ apps: [] }), GodotTool.EngineStatus);
     assert.equal(none.ready, false);
-    assert.match(String(none.note), /Godot button/);
+    assert.match(String(none.note), /godot__show-steps/, "the setup card installs Godot");
     assert.doesNotMatch(String(none.note), /call godot__new-game with/);
   });
 
@@ -335,7 +335,7 @@ describe("the panel and the toolbar", () => {
     assert.equal((await action(none, "toolbar-status")).shown, undefined, "nothing chosen yet");
     await assert.rejects(
       tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }),
-      /Godot button is now above the game/,
+      /godot__show-steps/,
     );
     assert.equal((await action(none, "toolbar-status")).shown, true, "the refused game keeps its button out");
     const other = await none.backend.action?.("toolbar-status", {}, none.context({ project: "another" }));

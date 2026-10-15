@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -16,6 +16,14 @@
     }
   ],
   "tools": [
+    {
+      "name": "show-steps",
+      "description": "Show the user the Godot setup card in this game's chat: Genex installs Godot 4 for them (Do it for me). Use it when the user wants a Godot game and this Mac has no Godot 4.3 or newer (new-game refuses, or the engine question says Godot needs installing first); then tell them in one line and end your reply, and the chat tells you when Godot is ready. It does nothing when Godot is installed.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
     {
       "name": "new-game",
       "description": "Make this game's Godot project from a template, in the game's godot/ folder: 2d (a player square that moves, a Camera2D) or 3d (a capsule player that walks and jumps, a floor, a sky and a hero camera). Use it once, when the user picks Godot for a game with no project yet. It needs Godot 4 installed; it refuses when the game already has a Godot project.",
@@ -245,7 +253,11 @@
     {
       "name": "use-project",
       "label": "Use this project"
-    }
+    },
+    { "name": "steps", "label": "Godot setup" },
+    { "name": "install-godot", "label": "Install Godot", "native": true },
+    { "name": "stop-install", "label": "Stop installing Godot", "native": true },
+    { "name": "skip", "label": "Don't use Godot", "native": true }
   ],
   "toolbar": [
     {

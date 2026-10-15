@@ -236,6 +236,48 @@ export interface PluginToolbarStatus {
   shown?: boolean;
 }
 
+/** A button on the setup card: the plugin action it runs (declared in `actions`), its arguments and its label. */
+export interface PluginSetupButton {
+  name: string;
+  args: Record<string, string>;
+  label: string;
+}
+
+/**
+ * One step of the setup card. `you` marks a step only the person can do (signing in) or one that
+ * stopped and waits for them, drawn with an orange ring; `working` one under way; `command` a line
+ * the person runs in Terminal themselves.
+ */
+export interface PluginSetupStep {
+  id: string;
+  label: string;
+  detail: string;
+  done: boolean;
+  you?: true;
+  working?: true;
+  action?: PluginSetupButton;
+  command?: string;
+}
+
+/**
+ * What a `game-engine` plugin's `steps` action answers: the setup card the chat shows above the
+ * composer while `open`, read again every few seconds (`game.engine.steps` shows it; the plugin's
+ * `show-steps` tool is how its agent asks for it). `primary` does every step it can for the person
+ * (Do it for me); `secondary` is the plugin's own way out in Hide's place (Don't use Unity, or Stop
+ * while it works); `doneSays` is what the agent is told once nothing is open, so the chat goes on,
+ * and `stuckSays` what it is told once when a step stopped. See "Setup in the chat" in the guide.
+ */
+export interface PluginSetupCard {
+  title: string;
+  intro: string;
+  open: boolean;
+  steps: PluginSetupStep[];
+  primary?: PluginSetupButton;
+  secondary?: PluginSetupButton;
+  doneSays?: string;
+  stuckSays?: string;
+}
+
 /**
  * Where one environment variable of a plugin's MCP server gets its value. The manifest names a
  * source, never a value: `setting:<key>` a declared setting, `secret:<name>` a value the user

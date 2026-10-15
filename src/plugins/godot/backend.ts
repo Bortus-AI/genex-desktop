@@ -7,9 +7,11 @@
  * and its reviewer get stills (`hero-shots`). The panel and the toolbar find Godot, make a game
  * and open it in the person's own Godot editor, which Genex never drives.
  */
-import { mkdir, readdir, realpath, stat } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { mkdir, readdir, realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
@@ -51,6 +53,13 @@ import {
   runCall,
 } from "./godot-run.ts";
 import { GAME_PROJECT_FOLDER, projectScene } from "./game-project.ts";
+import {
+  createGodotInstaller,
+  type GodotInstallDeps,
+  type GodotInstaller,
+  GodotSetupAction,
+  godotSetupCard,
+} from "./godot-setup.ts";
 import { linkProject, outsideGame, projectOf, requireProject } from "./project-link.ts";
 import { findProjects, readProject } from "./find-projects.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
@@ -59,7 +68,11 @@ import { frameAt, type KeyPress, keysEnd, MAX_PLAY_SECONDS, PLAY_FPS, readKeys, 
 import { MAX_STILLS, stillsAnswer, stillsForAgent, takeStills } from "./stills.ts";
 
 /** The host services this backend calls, by their public SDK names. */
-const HostService = { StorageRoot: "storage.root", GameCreate: "game.create" } as const;
+const HostService = {
+  StorageRoot: "storage.root",
+  GameCreate: "game.create",
+  EngineSteps: "game.engine.steps",
+} as const;
 
 /** The actions plugin.json declares. */
 const GodotAction = {
@@ -72,6 +85,10 @@ const GodotAction = {
   SetUp: "set-up",
   WebExport: "web-export",
   UseProject: "use-project",
+  Steps: GodotSetupAction.Steps,
+  InstallGodot: GodotSetupAction.Install,
+  StopInstall: GodotSetupAction.Stop,
+  Skip: GodotSetupAction.Skip,
 } as const;
 type GodotAction = (typeof GodotAction)[keyof typeof GodotAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(GodotAction));
@@ -92,6 +109,7 @@ export const GodotTool = {
   KeepWebBuild: "keep-web-build",
   HeroShots: "hero-shots",
   SetUp: "set-up",
+  ShowSteps: "show-steps",
 } as const;
 type GodotTool = (typeof GodotTool)[keyof typeof GodotTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(GodotTool));
@@ -118,6 +136,11 @@ const HERO_RECORDING_SECONDS = 6;
 const EXPORT_CLOCK_SLACK_MS = 2 * SECOND_MS;
 /** How many problems a checkpoint's note names. */
 const NOTED_PROBLEMS = 3;
+/** The plugin storage folder holding each game's Don't use Godot. */
+const SKIPPED_FOLDER = path.join("godot-setup", "skipped");
+/** The most a program Genex runs while installing Godot may print. */
+const RUN_OUTPUT_MAX_BYTES = 4 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 /** The agent's name for the new-game tool, as the engine question reads it. */
 const NEW_GAME = "godot__new-game";
 
@@ -125,7 +148,11 @@ const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Godot action: ${name}`,
   UnknownTool: (name: string) => `Unknown Godot tool: ${name}`,
   NoGodot:
-    "Godot 4 isn't installed on this Mac. The Godot button is now above the game: tell the user to press it, which opens Godot's download page, and to send a message once Godot is in Applications (Genex finds it there).",
+    "Godot 4 isn't installed on this Mac. Call godot__show-steps: it puts the Godot setup card in the chat, where Genex installs Godot for the user (Do it for me). Say so in one line and end your reply; the chat tells you when Godot is ready.",
+  StepsShown:
+    "The Godot setup card is in the chat: Genex installs Godot for the user with Do it for me. Tell them in one line, then end your reply; the chat tells you when Godot is ready.",
+  StepsDone: "Godot is installed here; there is no setup card to show. Call godot__new-game.",
+  StepsNoChat: "There is no chat to show the Godot setup card in.",
   NoGameOpen: "Open a game in Genex first: a Godot project is made in a game's folder.",
   NewGame: (template: string, version: string) =>
     `Made this game's Godot project in ${GAME_PROJECT_FOLDER}/ from the ${template.toUpperCase()} template, for Godot ${version}: main.tscn (a player that moves, and a HeroCamera in the genex_shot group) and player.gd. Build the game there in GDScript and scenes, never as a web page. After each change call godot__check; call godot__screenshot to see it. The person opens it in Godot from the Godot button.`,
@@ -199,6 +226,8 @@ const SET_UP_BADGE = "Set up";
  */
 export type GodotBackendDeps = {
   env: GodotEnv;
+  /** What installing Godot for the person reaches; this Mac's own unless a test stands in. */
+  install?: GodotInstallDeps;
   editor: EditorEnv;
   run: GodotRunner;
   scripts: string;
@@ -225,7 +254,7 @@ async function requireGodot(deps: GodotBackendDeps): Promise<GodotInstall> {
 /** The engine question's words for this Mac's Godot: ready to make a game with, or what it needs first. */
 function readinessNote(readiness: GodotReadiness, version: string | null): string {
   const toButton =
-    "If the user picks it, call godot__new-game anyway: it refuses until Godot is installed but brings the Godot button out above the game. Then tell them to press that button, which opens Godot's free download, and to send a message once Godot is in Applications.";
+    "If the user picks it, don't call godot__new-game, which would refuse: call godot__show-steps, which puts the Godot setup card in the chat (Genex installs Godot for them), say so in one line and end your reply. The chat tells you when Godot is ready.";
   if (readiness === GodotReadiness.None)
     return `Godot isn't installed on this Mac yet, so offer it as "Godot" with the description "Free and open source; needs Godot 4 installed first, about 150 MB". ${toButton}`;
   if (readiness !== GodotReadiness.Ready)
@@ -724,9 +753,64 @@ async function openInEditor(deps: GodotBackendDeps, context: PluginContext) {
   return { opened: project };
 }
 
+/** Where a game's Don't use Godot is kept: one empty file per game, in the plugin's storage. */
+async function skipFile(context: PluginContext): Promise<string> {
+  if (!context.project) throw new Error(MESSAGE.NoGameOpen);
+  return path.join(await storageOf(context), SKIPPED_FOLDER, encodeURIComponent(context.project));
+}
+
+/** Godot's setup card for this Mac now, the install under way, and the game's Don't use Godot. */
+async function setupSteps(deps: GodotBackendDeps, installer: GodotInstaller, context: PluginContext) {
+  const install = usableGodot(await findGodots(deps.env));
+  const skipped = await stat(await skipFile(context)).then(
+    () => true,
+    () => false,
+  );
+  return godotSetupCard(install, installer.job(), skipped);
+}
+
+/** The agent's `show-steps`: Godot's setup card in the game's chat while Godot is missing; it takes back Don't use Godot. */
+async function showSteps(deps: GodotBackendDeps, installer: GodotInstaller, context: PluginContext): Promise<string> {
+  await rm(await skipFile(context), { force: true });
+  if (!(await setupSteps(deps, installer, context)).open) return MESSAGE.StepsDone;
+  return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
+}
+
+/** Don't use Godot: stops an install under way and closes the card for this game, which tells the agent. */
+async function skip(installer: GodotInstaller, context: PluginContext): Promise<void> {
+  const file = await skipFile(context);
+  await installer.stop();
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFileNoFollow(file, "");
+}
+
+/** This Mac's own network and programs for installing Godot into its Applications. */
+function systemInstallDeps(env: GodotEnv): GodotInstallDeps {
+  return {
+    fetch: globalThis.fetch,
+    applications: env.applications,
+    run: async (command, args, timeoutMs) => {
+      const done = await execFileAsync(command, args, { timeout: timeoutMs, maxBuffer: RUN_OUTPUT_MAX_BYTES });
+      return { out: done.stdout, err: done.stderr };
+    },
+  };
+}
+
 /** The backend with the computer, runner and editor it is given; tests hand in fakes. */
 export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
+  let installing: GodotInstaller | undefined;
+  let storageRoot = "";
+  // The install goes on across calls; every call names the same plugin storage.
+  const installerOf = async (context: PluginContext): Promise<GodotInstaller> => {
+    storageRoot = await storageOf(context);
+    installing ??= createGodotInstaller(deps.install ?? systemInstallDeps(deps.env), async () => storageRoot);
+    return installing;
+  };
   const actions: Record<GodotAction, Handler> = {
+    [GodotAction.Steps]: async (_args, context) => setupSteps(deps, await installerOf(context), context),
+    [GodotAction.InstallGodot]: async (_args, context) => (await installerOf(context)).install(),
+    [GodotAction.StopInstall]: async (_args, context) => (await installerOf(context)).stop(),
+    [GodotAction.Skip]: async (_args, context) => skip(await installerOf(context), context),
     [GodotAction.Status]: (_args, context) => status(deps, context),
     [GodotAction.Create]: (args, context) => create(deps, args, context),
     [GodotAction.OpenEditor]: (_args, context) => openInEditor(deps, context),
@@ -760,6 +844,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
       await setUp(deps, context);
       return MESSAGE.SetUpDone;
     },
+    [GodotTool.ShowSteps]: async (_args, context) => showSteps(deps, await installerOf(context), context),
   };
   return {
     async action(name, args, context) {
