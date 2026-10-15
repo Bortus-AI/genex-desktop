@@ -57,12 +57,12 @@ function TagAction({ tag, act }: { tag: MentionOutcome; act: (action: MentionRet
   );
 }
 
-/** A tag that arrived: a green ✓ and Ready, or Added for an asset. */
+/** A tag that arrived: a green ✓ alone; its words name it for a screen reader. */
 function TagOk({ tag }: { tag: MentionOutcome }): JSX.Element {
+  const words = tag.result === MentionResult.Added ? MENTION_WORDS.added : MENTION_WORDS.ready;
   return (
-    <span className="mention-result-ok">
-      <Icon name="check" size={13} />
-      {tag.result === MentionResult.Added ? MENTION_WORDS.added : MENTION_WORDS.ready}
+    <span className="mention-result-ok" role="img" aria-label={words} title={words}>
+      <Icon name="check" size={15} />
     </span>
   );
 }
