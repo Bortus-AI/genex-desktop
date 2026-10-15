@@ -64,7 +64,10 @@ again.
 
 Each game in Genex uses one place, chosen in the panel: a new Roblox game, a place file, or a place
 already open in Studio. When several Studios are open, ask the person which place they mean by its
-name before changing anything; Genex then keeps this game's calls to that place.
+name before changing anything; Genex then keeps this game's calls to that place. A game with no
+place yet gets one from `new-game` (a Baseplate in the game's folder, opened in Studio); `use-project`
+switches to a place the person names, open in Studio or by its file. A place builds in one game
+only: one another game uses is refused.
 
 ## 5. Check
 

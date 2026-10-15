@@ -10,5 +10,9 @@ export const RobloxAction = {
   GetStudio: "get-studio",
   CancelGetStudio: "cancel-get-studio",
   OpenStudio: "open-studio",
+  QuitStudio: "quit-studio",
+  Places: "places",
+  UsePlace: "use-place",
+  Create: "create",
 } as const;
 export type RobloxAction = (typeof RobloxAction)[keyof typeof RobloxAction];

@@ -1252,6 +1252,32 @@ learns each game's folder from the plugin calls that carry one (`games/<game>.js
 storage). Script workers (`workerTypes` `scripts`, `isolation: copy`) check their files with
 `check-scripts`, which answers that the Luau checks aren't added until they are.
 
+**Places.** A Roblox game builds in one place (`places.ts`, `place-actions.ts`, all native).
+**Choose your place** (`places`) lists the Studios open now first, each asked in Edit for its
+`PlaceId` and `GameId` (two of one name are listed as "Place1" and "Place1 (2)"), then `.rbxl` and
+`.rbxlx` files from Studio's recent list (a Mac's exported Studio preferences, recent-file names
+only) and the top of `Documents/Roblox`: one row per real path, newest first, at most
+`MAX_PLACES` (12), the scan kept for `SCAN_KEEP_MS`. Only this press reads them; `status`,
+`toolbar-status` and `steps` never do. **Use in this game** (`use-place {file | studio}`) links a
+local place file where it is (by real path; a link, another extension or another system's path is
+refused); a published place through `default.project.json` in the game folder, listed in
+`.genex/roblox.json`'s `written` before it is written (the person's own Rojo project is linked as
+it is), with `remote {placeId, universeId}` as strings; a place never saved through that same file,
+found in Studio by its name, which the backend keeps in `places/<game>.json` in its storage beside
+each link (never in the game folder). A Studio of the same name refuses a link by name. A place
+another game builds in is refused ("Place1 already builds in Sky Race") while that game's folder
+still links it; once the game is gone the place is free. **New Roblox game** (`create`, and the
+agent's `new-game` with `makes: ["roblox-project"]`, `ready: "engine-status"`, scaffold
+`game` "Roblox game") writes `<game>.rbxlx` from `templates/baseplate.rbxlx` through a hidden file
+beside it (whole or not at all, never over a file), adds the lock lines to `.gitignore`, links it
+(with no game open, into a game `game.create` makes) and opens it with Studio's command line
+(`studio-launch.ts`): `--task EditFile --localPlaceFile`, or `--task EditPlace --placeId
+--universeId` for a published place (ids of digits only), each starting a Studio of its own, so
+**Open Studio** brings Studio forward instead when the game's place is already listed. **Quit
+Studio** is Studio's normal quit and is refused while a build uses Studio (`game.engine.runs`).
+`use-project` switches a game to an open place by its listed name or a file by path, never reading
+Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
+
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and
 `judge_play`, the desktop tool never builds or play-tests in Studio, Roblox's AI tools, uploads and

@@ -12,7 +12,9 @@
  * With no binding file at all, the connection matches the game's linked place against the names
  * `list_roblox_studios` gives (each holds its place's file name or id), and two matching Studios
  * are refused. The link is the host's record in the plugin's storage (`links/<game>.json`), which
- * agents can't write.
+ * agents can't write. A place never saved to a file is linked through a project file and found by
+ * its name in Studio, which the backend keeps beside the link in its own record
+ * (`places/<game>.json`), never in the game folder agents write.
  */
 import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -39,6 +41,8 @@ export const isGameId = (value: unknown): value is string => typeof value === "s
 const TOKEN = /^[\x21-\x7e]{1,200}$/;
 /** A published place's id, as the host stores it: decimal digits. */
 const PLACE_ID = /^[1-9]\d{0,19}$/;
+/** A place's name as Studio lists it: one line of printable text, bounded. */
+const TOKEN_NAME = /^[^\u0000-\u001f\u007f]{1,200}$/;
 const MAX_BINDING_BYTES = 4 * 1024;
 const MAX_LINK_BYTES = 64 * 1024;
 /** A link record's file name ending. */
@@ -114,10 +118,52 @@ export async function writeBinding(folder: string, bound: Omit<StudioBinding, "a
   await atomicWriteJson(path.join(folder, BINDING_FILE), { studioId: bound.studioId, session: bound.session, at: now });
 }
 
-/** The place a game is linked to: its project file, and the published place's id when it has one. */
+/** The place a game is linked to: its project file, the published place's id, or its name in Studio. */
 export interface PlaceLink {
   project: string;
   placeId?: string;
+  /** A place never saved to a file: the name Studio lists it by. */
+  name?: string;
+}
+
+/** The backend's own record of the place a game builds in, kept in the plugin's storage. */
+export const PLACE_RECORDS = "places";
+
+/** What the backend recorded when it linked a game: the game's folder, the project and how Studio names it. */
+export interface PlaceRecord {
+  folder: string;
+  project: string;
+  name?: string;
+  placeId?: string;
+  universeId?: string;
+}
+
+const placeRecordFile = (storage: string, game: string) => path.join(storage, PLACE_RECORDS, `${game}.json`);
+
+/** The backend's record for `game`, or undefined when it has none or it isn't one. */
+export async function readPlaceRecord(storage: string, game: string): Promise<PlaceRecord | undefined> {
+  if (!GAME_ID.test(game)) return undefined;
+  const value = await readRegularFile(placeRecordFile(storage, game), MAX_LINK_BYTES)
+    .then((bytes) => JSON.parse(bytes.toString("utf8")) as unknown)
+    .catch(() => undefined);
+  if (!isJsonObject(value)) return undefined;
+  const { folder, project, name, placeId, universeId } = value;
+  if (typeof folder !== "string" || !path.isAbsolute(folder)) return undefined;
+  if (typeof project !== "string" || !path.isAbsolute(project)) return undefined;
+  return {
+    folder,
+    project,
+    ...(typeof name === "string" && TOKEN_NAME.test(name) ? { name } : {}),
+    ...(typeof placeId === "string" && PLACE_ID.test(placeId) ? { placeId } : {}),
+    ...(typeof universeId === "string" && PLACE_ID.test(universeId) ? { universeId } : {}),
+  };
+}
+
+/** Records the place `game` builds in, in the plugin's storage. */
+export async function writePlaceRecord(storage: string, game: string, record: PlaceRecord): Promise<void> {
+  if (!GAME_ID.test(game)) throw new Error("Invalid game");
+  await mkdir(path.join(storage, PLACE_RECORDS), { recursive: true, mode: 0o700 });
+  await atomicWriteJson(placeRecordFile(storage, game), record);
 }
 
 /**
@@ -134,8 +180,11 @@ export async function readPlaceLink(storage: string, game: string | undefined): 
   if (!isJsonObject(record) || record.kind !== ROBLOX_ENGINE) return undefined;
   if (typeof record.project !== "string" || !path.isAbsolute(record.project)) return undefined;
   const placeId = isJsonObject(record.remote) ? record.remote.placeId : undefined;
-  return typeof placeId === "string" && PLACE_ID.test(placeId)
-    ? { project: record.project, placeId }
+  if (typeof placeId === "string" && PLACE_ID.test(placeId)) return { project: record.project, placeId };
+  // A place never saved is found by its name, recorded for exactly this project.
+  const own = await readPlaceRecord(storage, game);
+  return own?.name && own.project === record.project
+    ? { project: record.project, name: own.name }
     : { project: record.project };
 }
 
@@ -167,6 +216,10 @@ export function placeMatcher(link: PlaceLink): (studio: StudioEntry) => boolean 
   if (link.placeId) {
     const placeId = link.placeId;
     return (studio) => holdsNumber(studio.name, placeId);
+  }
+  if (link.name) {
+    const name = link.name;
+    return (studio) => studio.name === name;
   }
   const file = baseName(link.project);
   const stem = file.replace(/\.[^.]+$/, "");

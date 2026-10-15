@@ -307,6 +307,8 @@ async function buildRoblox(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/roblox", file), path.join(roblox, file));
   await cp(path.join(root, "src/plugins/roblox/skills"), path.join(roblox, "skills"), { recursive: true });
+  // New Roblox game's Baseplate, beside the backend that writes it.
+  await cp(path.join(root, "src/plugins/roblox/templates"), path.join(roblox, "templates"), { recursive: true });
   // The Genex helper Set up copies into Studio's Plugins folder.
   await buildRobloxHelper(root, roblox);
   const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/roblox/panel.html"), "utf8"), sdk);

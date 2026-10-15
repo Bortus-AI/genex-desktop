@@ -385,6 +385,18 @@ test("a person's own default.project.json turns Genex's sync off; one Genex wrot
   assert.equal(await read(genex.folder, SHARED_FILE), "return {}\n");
 });
 
+test("a project file Genex lists as its own while the sync runs keeps the sync on", async () => {
+  const world = await setUp({ studio: [{ ref: SHARED, source: "return {}\n" }] });
+  assert.equal(await world.sync.start(), ScriptSyncMode.On);
+  // Use in this game lists the file first, then writes it: the next pass still sees Genex's file.
+  await world.sync.written("default.project.json");
+  await writeFile(path.join(world.folder, "default.project.json"), "{}");
+  assert.equal(await world.sync.start(), ScriptSyncMode.On);
+  const record = JSON.parse(await read(world.folder, SCRIPT_RECORD.join("/")));
+  assert.deepEqual(record.written, ["default.project.json"]);
+  assert.ok(record.scripts["ReplicatedStorage/Shared.luau"], "the scripts' hashes are kept beside it");
+});
+
 test("Studio's lock files beside a place are kept out of save points", async () => {
   const world = await setUp({ files: { ".gitignore": "node_modules\n" } });
   await world.sync.start();

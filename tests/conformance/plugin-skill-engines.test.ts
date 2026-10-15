@@ -200,8 +200,6 @@ const ROBLOX_SKILLS = [
 const ENGINE_ONLY_SKILLS = [...UNREAL_ONLY_SKILLS, ...ROBLOX_SKILLS];
 /** The Roblox plugin's agent tools (the reader of its file skills, check-scripts), which reach a Roblox game only. */
 const ROBLOX_ONLY_TOOLS = ["roblox__skill", "roblox__check-scripts"];
-/** The plugins a web game never takes part with: every one of their skills and tools is another engine's. */
-const ENGINE_ONLY_PLUGINS = ["roblox"];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */
 function unscoped(manifest: PluginManifest): void {
@@ -247,7 +245,8 @@ test("the bundled plugins' web guidance is what it was before skills named engin
     assert.deepEqual(
       web.applied,
       {
-        plugins: was.applied.plugins.filter((plugin) => !ENGINE_ONLY_PLUGINS.includes(plugin)),
+        // Every bundled plugin takes part: Roblox's and Unreal's place tools (new-game, use-project) reach any game.
+        plugins: was.applied.plugins,
         skills: was.applied.skills.filter((skill) => !ENGINE_ONLY_SKILLS.includes(skill)),
       },
       "a web game's plugins and skills",

@@ -161,5 +161,44 @@ export const MESSAGE = {
     Opening: "Opening Roblox Studio.",
     AlreadyOpen: "Roblox Studio is already open.",
     NotInstalled: "Roblox Studio isn't on this computer. Press Get Roblox Studio first.",
+    OpeningPlace: (name: string) => `Opening ${name} in Roblox Studio.`,
+    PlaceAlreadyOpen: (name: string) => `${name} is already open in Roblox Studio.`,
+    NotSaved: (name: string) =>
+      `${name} was never saved to a file, so Genex can't open it. Open it in Roblox Studio, or choose another place.`,
+  },
+  Quit: {
+    Quitting: "Roblox Studio closed. It asked to save anything unsaved first.",
+    NotRunning: "Roblox Studio isn't open.",
+    StillOpen: "Roblox Studio is still open. If it asked to save your place, answer it, then press Quit Studio again.",
+    InUse: (title: string) => `A build of ${title} is using Roblox Studio, so Genex leaves it open.`,
+  },
+  Places: {
+    BadFile: (file: string) =>
+      file ? `${file} isn't a Roblox place file (.rbxl or .rbxlx) on this computer.` : "Choose a place first.",
+    NotPlace: (file: string) => `There's no place file at ${file}.`,
+    LinkedFile: (file: string) => `${file} is a link, so Genex leaves it. Choose the place file itself.`,
+    NotListed: "That Studio isn't open any more. Choose your place again.",
+    NotOpenNamed: (name: string) => `No Roblox Studio has a place named ${JSON.stringify(name)} open.`,
+    SameName: (name: string) =>
+      `Two open Studios have a place named ${name}, so Genex can't tell them apart. Save one under another name in Studio, then choose it again.`,
+    NoAnswer: (name: string) =>
+      `Roblox Studio didn't say what ${name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.`,
+    NoGame: "Open a game first, then choose the place it builds in.",
+    Taken: (name: string, title: string) => `${name} already builds in ${title}.`,
+    Guarded:
+      "That place is in a folder macOS asks about before Genex reads it. Ask the person to choose it in the Roblox Studio panel with Use in this game.",
+    ProjectInTheWay: "default.project.json in this game's folder is a link or not a file, so Genex leaves it.",
+    SnapshotReason: "Before linking a Roblox place",
+    Linked: (name: string) => `This game builds in ${name} now.`,
+    LinkedByName: (name: string) =>
+      `This game builds in ${name} now. It isn't saved to a file, so Genex finds it in Studio by its name; save points keep its scripts and parts in this game's folder.`,
+  },
+  Create: {
+    DefaultTitle: "Roblox game",
+    SnapshotReason: "Before New Roblox game",
+    Created: (name: string) => `Made ${name} in this game's folder and opened it in Roblox Studio.`,
+    CreatedNotOpened: (name: string, why: string) =>
+      `Made ${name} in this game's folder and linked it, but Roblox Studio didn't open: ${why}`,
+    Exists: "This game already builds in a Roblox place. Choose another in the Roblox Studio panel.",
   },
 } as const;

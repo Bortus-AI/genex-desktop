@@ -31,10 +31,22 @@ const { registerPluginsIpc } = await import("../../src/main/ipc/plugins.ts");
 const NATIVE = ["create", "open-editor", "quit-editor", "get-unreal", "get-xcode"];
 
 /**
- * Roblox's actions that quit, open or click in Studio, write its Plugins folder and settings, or
- * download and run Roblox's installer.
+ * Roblox's actions that quit, open or click in Studio, write its Plugins folder and settings,
+ * download and run Roblox's installer, read the person's places (Documents, Studio's recent list,
+ * the open Studios) or write and link a place.
  */
-const ROBLOX_NATIVE = ["setup", "undo-setup", "restart-studio", "do-it-for-me", "get-studio", "open-studio"];
+const ROBLOX_NATIVE = [
+  "setup",
+  "undo-setup",
+  "restart-studio",
+  "do-it-for-me",
+  "get-studio",
+  "open-studio",
+  "quit-studio",
+  "places",
+  "use-place",
+  "create",
+];
 
 /** Main's `studio:plugins.action` over a bundled plugin's real manifest, with a core that records each call. */
 async function actionChannel(fixture: boolean, id = "unreal") {

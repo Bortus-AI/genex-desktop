@@ -43,7 +43,17 @@ import {
   installStudio,
   systemInstallRun,
 } from "./studio-install.ts";
-import { type LaunchDeps, openLaunch, quitStudio, systemOpener } from "./studio-launch.ts";
+import {
+  createGame,
+  engineStatus,
+  newGameTool,
+  openStudio,
+  type PlaceActionDeps,
+  quitStudioAction,
+  showSteps,
+} from "./place-actions.ts";
+import { listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
+import { openLaunch, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import {
   type LocateDeps,
   locateStudio,
@@ -78,6 +88,10 @@ const isRobloxAction = (name: string): name is RobloxAction => ACTION_NAMES.has(
 export const RobloxTool = {
   StudioActivity: "studio-activity",
   CheckScripts: "check-scripts",
+  UseProject: "use-project",
+  ShowSteps: "show-steps",
+  NewGame: "new-game",
+  EngineStatus: "engine-status",
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
@@ -148,7 +162,7 @@ export interface AssistAnswer {
 }
 
 /** The computer the backend works on; tests hand in a fake one. */
-export interface RobloxDeps extends LaunchDeps {
+export interface RobloxDeps extends PlaceActionDeps {
   /** Whether the open Studio answers Genex. */
   answers(): Promise<boolean>;
   /** The shipped Genex helper file. */
@@ -160,11 +174,6 @@ export interface RobloxDeps extends LaunchDeps {
    * only once Genex has set Studio up: before that no helper exists to connect.
    */
   helperLink?(storage: string): void;
-  /**
-   * A call for `game` came with its folder: the script sync keeps it, so the game's scripts are
-   * kept in step once its helper binds.
-   */
-  gameSeen?(storage: string, game: string, folder: string): Promise<void>;
 }
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
@@ -255,7 +264,8 @@ async function readStudio(deps: RobloxDeps, context: PluginContext) {
   facts.setUp = await setUpIn(deps, storage);
   if (!facts.setUp) return { install, facts };
   deps.helperLink?.(storage);
-  facts.running = await studioRunning(deps);
+  // Studio Genex just opened counts as running (Starting) before its process is seen.
+  facts.running = (await studioRunning(deps)) || (await startingNow(storage, deps.now()));
   facts.answering = facts.running && (await deps.answers());
   return { install, facts };
 }
@@ -267,25 +277,25 @@ const installStatusOf = (job: InstallJob): InstallStatus => {
   return answer;
 };
 
+/** Whether the game this call is bound to builds in a Roblox place. */
+async function linkedHere(context: PluginContext): Promise<boolean> {
+  if (!context.project) return false;
+  const link = await context.host(HostService.EngineRead).catch(() => null);
+  return Boolean(link);
+}
+
 async function status(deps: RobloxDeps, context: PluginContext, job: InstallJob | undefined): Promise<RobloxStatus> {
   const { install, facts } = await readStudio(deps, context);
   const steps = {
     [PanelStep.Studio]: facts.installed,
     [PanelStep.Helper]: facts.setUp,
     [PanelStep.Mcp]: facts.answering,
-    [PanelStep.Place]: false,
+    [PanelStep.Place]: await linkedHere(context),
   };
   const answer: RobloxStatus = { studio: studioStatusOf(facts), steps };
   if (install?.version) answer.version = install.version;
   if (job) answer.install = installStatusOf(job);
   return answer;
-}
-
-/** Whether the game this call is bound to builds in a Roblox place. */
-async function linkedHere(context: PluginContext): Promise<boolean> {
-  if (!context.project) return false;
-  const link = await context.host(HostService.EngineRead).catch(() => null);
-  return Boolean(link);
 }
 
 /** The steps card, read now: a Studio already here is ticked with its version and never offered again. */
@@ -482,15 +492,6 @@ function cancelGetStudio(slot: InstallSlot): GetStudioAnswer {
   return { started: false, message: MESSAGE.Install.Stopped };
 }
 
-/** Opens the installed Studio, unless it is already open. */
-async function openStudio(deps: RobloxDeps): Promise<{ opened: boolean; message: string }> {
-  const location = await locateStudio(deps);
-  if (!location.installed) return { opened: false, message: MESSAGE.Open.NotInstalled };
-  if (await studioRunning(deps)) return { opened: false, message: MESSAGE.Open.AlreadyOpen };
-  await deps.open(openLaunch(deps.platform, location.install));
-  return { opened: true, message: MESSAGE.Open.Opening };
-}
-
 /** Get Roblox Studio's confirmation: this computer's download, where it comes from, and the sign-in. */
 function reviewGetStudio(deps: RobloxDeps): PluginReview {
   if (!(deps.platform in INSTALLER)) return {};
@@ -525,13 +526,19 @@ async function noteGame(deps: RobloxDeps, context: PluginContext): Promise<void>
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
+  const scan: ScanCache = {};
   const actions: Record<RobloxAction, Handler> = {
     [RobloxAction.Status]: (_args, context) => status(deps, context, slot.job),
     [RobloxAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [RobloxAction.Steps]: (_args, context) => steps(deps, context, slot.job),
     [RobloxAction.GetStudio]: (_args, context) => getStudio(deps, context, slot),
     [RobloxAction.CancelGetStudio]: async () => cancelGetStudio(slot),
-    [RobloxAction.OpenStudio]: () => openStudio(deps),
+    [RobloxAction.OpenStudio]: (_args, context) => openStudio(deps, context),
+    [RobloxAction.QuitStudio]: (_args, context) => quitStudioAction(deps, context),
+    [RobloxAction.Places]: (_args, context) => listPlaces(deps, context, scan),
+    [RobloxAction.UsePlace]: (args, context) => usePlace(deps, context, args, scan),
+    [RobloxAction.Create]: (args, context) =>
+      createGame(deps, context, { snapshot: true, ...(typeof args.title === "string" ? { title: args.title } : {}) }),
     [RobloxAction.Setup]: (_args, context) => setupAction(deps, context),
     [RobloxAction.UndoSetup]: (_args, context) => undoAction(deps, context),
     [RobloxAction.RestartStudio]: (_args, context) => restartStudio(deps, context),
@@ -541,6 +548,10 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     // Nothing here watches Studio's own edits yet, so the person is never seen using it.
     [RobloxTool.StudioActivity]: async () => ({ personActive: false }),
     [RobloxTool.CheckScripts]: async () => ({ checked: false, message: MESSAGE.Checks.NotAdded }),
+    [RobloxTool.UseProject]: async (args, context) => (await usePlaceNamed(deps, context, args.project)).message,
+    [RobloxTool.ShowSteps]: async (_args, context) => showSteps(context, (await steps(deps, context, slot.job)).open),
+    [RobloxTool.NewGame]: (_args, context) => newGameTool(deps, context),
+    [RobloxTool.EngineStatus]: () => engineStatus(deps),
   };
   return {
     async action(name, args, context) {
@@ -564,6 +575,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
 interface HelperServices {
   helperLink(storage: string): void;
   gameSeen(storage: string, game: string, folder: string): Promise<void>;
+  noteWritten(storage: string, game: string, folder: string, name: string): Promise<void>;
 }
 
 /**
@@ -612,6 +624,7 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
       );
     },
     gameSeen: (storage, game, folder) => syncsIn(storage).seen(game, folder),
+    noteWritten: (storage, game, folder, name) => syncsIn(storage).written(game, folder, name),
   };
 }
 
@@ -652,6 +665,8 @@ export function systemDeps(): RobloxDeps {
     answers: () => studioAnswers(client),
     helperLink: services.helperLink,
     gameSeen: services.gameSeen,
+    noteWritten: services.noteWritten,
+    studio: client,
     helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FILE),
     install: { fetch: globalThis.fetch, run: systemInstallRun, tempRoot: os.tmpdir() },
     open: systemOpener,

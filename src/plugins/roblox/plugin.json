@@ -37,6 +37,48 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "use-project",
+      "makes": ["roblox-project"],
+      "description": "Switch this game to another Roblox place the person has: one open in Roblox Studio, by its name as the Roblox Studio panel lists it (Place1, or Place1 (2) for a second Studio with that name), or a .rbxl or .rbxlx file by its full path. A place in Documents, Desktop or Downloads is the person's to choose in the panel with Use in this game. Later Roblox Studio calls in this game go to that place, and the chat shows the switch with Undo. A place another game builds in is refused. Use it only when the person asks for another place.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project": {
+            "type": "string",
+            "description": "The open place's name as the Roblox Studio panel lists it, or the place file's full path."
+          }
+        },
+        "required": ["project"]
+      }
+    },
+    {
+      "name": "show-steps",
+      "description": "Show the person the Roblox Studio setup card again: getting Studio, signing in, the Genex helper, Studio's MCP server and this game's place. Use it when the Roblox Studio tools are missing or answer that Studio isn't open; it does nothing when every step is done.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "new-game",
+      "makes": ["roblox-project"],
+      "ready": "engine-status",
+      "description": "Make this game's Roblox place from Genex's Baseplate (a baseplate, a spawn point and daylight) in this game's folder as <game>.rbxlx: Genex links this game to it and opens it in Roblox Studio, as New Roblox game in the Roblox Studio panel does. Use it only when the person chose Roblox for this game and it has no Roblox place yet; a game that already builds in one is refused. Studio takes a moment to start: once the Roblox Studio tools answer, build the game there.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "engine-status",
+      "audience": "harness",
+      "description": "For Genex's chat only: whether this computer has the Roblox Studio a new Roblox game is made with (ready), its version, and the engine question's words for Roblox.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "skills": [
@@ -120,7 +162,11 @@
       "native": true
     },
     { "name": "cancel-get-studio", "label": "Stop getting Roblox Studio" },
-    { "name": "open-studio", "label": "Open Studio", "native": true }
+    { "name": "open-studio", "label": "Open Studio", "native": true },
+    { "name": "quit-studio", "label": "Quit Studio", "native": true },
+    { "name": "places", "label": "Choose your place", "native": true },
+    { "name": "use-place", "label": "Use in this game", "native": true },
+    { "name": "create", "label": "New Roblox game", "native": true }
   ],
   "toolbar": [
     {
@@ -170,5 +216,6 @@
       "isolation": "copy"
     }
   ],
-  "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }]
+  "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }],
+  "scaffolds": [{ "id": "game", "label": "Roblox game", "tool": "new-game" }]
 }

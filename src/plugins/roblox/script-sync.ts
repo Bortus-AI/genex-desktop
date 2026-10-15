@@ -128,6 +128,8 @@ export interface ScriptSync {
   start(): Promise<ScriptSyncMode>;
   /** A script Studio changed, as the helper reports it. */
   changed(change: ScriptChange): Promise<void>;
+  /** Lists a file Genex wrote at the game's top in the record, after any pass under way. */
+  written(name: string): Promise<void>;
   mode(): ScriptSyncMode;
   /** Settles once every pass under way has finished. */
   idle(): Promise<void>;
@@ -168,6 +170,23 @@ async function writeRecord(folder: string, record: ScriptRecord): Promise<void> 
   await writeWhole(dir, SCRIPT_RECORD[1], `${JSON.stringify(record, null, 2)}\n`);
 }
 
+/** Whether `name` at the game's top is a file Genex wrote, as the record lists it. */
+export async function writtenByGenex(folder: string, name: string): Promise<boolean> {
+  return (await readRecord(folder)).written.includes(name);
+}
+
+/**
+ * Lists `name`, a file Genex writes at the game's top (a published place's project file), in the
+ * record's `written`, so the sync never takes it for the person's own Rojo project. Write it in the
+ * record before the file itself: a pass in between then still sees Genex's file.
+ */
+export async function recordWritten(folder: string, name: string): Promise<void> {
+  if (!isPlainName(name)) throw new Error(`Not a plain file name: ${name}`);
+  const record = await readRecord(folder);
+  if (record.written.includes(name)) return;
+  await writeRecord(folder, { ...record, written: [...record.written, name] });
+}
+
 const isMissing = (error: unknown) => (error as NodeJS.ErrnoException)?.code === "ENOENT";
 
 /** The game's `src/` by real path, made when missing; undefined when it is a link or not a folder. */
@@ -189,7 +208,7 @@ async function personsRojo(folder: string, record: ScriptRecord): Promise<boolea
 }
 
 /** Adds Studio's lock files to the game's `.gitignore` when they aren't there; a linked one is left. */
-async function ignoreLocks(folder: string, log: (line: string) => void): Promise<void> {
+export async function ignoreLocks(folder: string, log: (line: string) => void): Promise<void> {
   const base = await realpath(folder);
   let text = "";
   try {
@@ -340,6 +359,7 @@ class SyncState {
     return {
       start: () => this.enqueue(() => this.reconcile()).then(() => this.current),
       changed: (change) => this.enqueue(() => this.fromStudio(change)),
+      written: (name) => this.enqueue(() => this.noteWritten(name)),
       mode: () => this.current,
       idle: async () => {
         for (let seen: Promise<void> | undefined; seen !== this.queue; ) {
@@ -355,6 +375,11 @@ class SyncState {
     const run = this.queue.then(task).catch((error: unknown) => this.log(`script sync: ${String(error)}`));
     this.queue = run;
     return run;
+  }
+
+  async noteWritten(name: string): Promise<void> {
+    await recordWritten(this.deps.folder, name);
+    if (!this.record.written.includes(name)) this.record.written.push(name);
   }
 
   stop(): void {
@@ -650,6 +675,8 @@ export interface ScriptSyncs {
   /** The game's helper bound: its sync reconciles (when its folder is known). */
   bind(game: string): Promise<void>;
   changed(game: string, change: ScriptChange): Promise<void>;
+  /** Lists a file Genex wrote at the top of `game`'s folder in its record, in turn with its sync. */
+  written(game: string, folder: string, name: string): Promise<void>;
   mode(game: string): ScriptSyncMode;
   idle(): Promise<void>;
   stop(): void;
@@ -711,6 +738,11 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
     bind: (game) => (isGameId(game) ? bind(game) : Promise.resolve()),
     changed: async (game, change) => {
       await syncs.get(game)?.sync.changed(change);
+    },
+    async written(game, folder, name) {
+      const held = syncs.get(game);
+      if (held && held.folder === (await realpath(folder).catch(() => folder))) await held.sync.written(name);
+      else await recordWritten(folder, name);
     },
     mode: (game) => syncs.get(game)?.sync.mode() ?? ScriptSyncMode.Off,
     async idle() {
