@@ -7,6 +7,7 @@ import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   createStudioClient,
+  parseStudios,
   type SpawnStudioMcp,
   StudioClientError,
   StudioClientFailure,
@@ -332,4 +333,25 @@ test("a StudioMCP that never answers initialize is ended, not left running", asy
   } finally {
     await client.close();
   }
+});
+
+test("a nameless Studio (a play test's server or client, or one just opening) is listed with an empty name", () => {
+  const listed = (studios: unknown) => ({ content: [{ type: "text", text: JSON.stringify({ studios }) }] });
+  assert.deepEqual(
+    parseStudios(
+      listed([
+        { id: "server-1", name: null },
+        { id: "edit-1", name: "Place1" },
+        { id: "client-1" },
+        { id: 7, name: "not an id" },
+        { id: "", name: "no id" },
+        { id: "odd", name: 3 },
+      ]),
+    ),
+    [
+      { id: "server-1", name: "" },
+      { id: "edit-1", name: "Place1" },
+      { id: "client-1", name: "" },
+    ],
+  );
 });

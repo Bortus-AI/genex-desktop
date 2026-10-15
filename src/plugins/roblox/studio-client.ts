@@ -321,7 +321,11 @@ function toolResult(value: unknown): StudioToolResult {
   return value as StudioToolResult;
 }
 
-/** The Studios a `list_roblox_studios` answer names; entries without a string id and name are left out. */
+/**
+ * The Studios a `list_roblox_studios` answer names. A Studio with no name (a play test's server or
+ * client, or one still opening) is kept with an empty name; an entry without a string id, or with a
+ * name that is neither a string nor absent, is left out.
+ */
 export function parseStudios(result: StudioToolResult): StudioEntry[] {
   const text = result.content.find((part) => part.type === "text")?.text;
   let parsed: unknown;
@@ -334,7 +338,8 @@ export function parseStudios(result: StudioToolResult): StudioEntry[] {
   if (!Array.isArray(studios)) return [];
   return studios.flatMap((entry: unknown) => {
     const { id, name } = (entry ?? {}) as { id?: unknown; name?: unknown };
-    return typeof id === "string" && id && typeof name === "string" ? [{ id, name }] : [];
+    const named = typeof name === "string" || name === null || name === undefined;
+    return typeof id === "string" && id && named ? [{ id, name: name ?? "" }] : [];
   });
 }
 
