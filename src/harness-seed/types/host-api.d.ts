@@ -2487,7 +2487,7 @@ export interface AutopilotCommission {
 }
 // ↑ src/shared/protocol.ts
 
-export type MessageOrigin = 'command-result' | 'plugin-turned-on' | 'setup-done';
+export type MessageOrigin = 'command-result' | 'plugin-turned-on' | 'setup-card';
 // ↑ src/shared/protocol.ts
 
 export interface RunReference {

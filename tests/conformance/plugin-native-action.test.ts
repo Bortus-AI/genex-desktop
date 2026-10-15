@@ -28,7 +28,7 @@ const { createIpcHandle } = await import("../../src/main/ipc-handle.ts");
 const { registerPluginsIpc } = await import("../../src/main/ipc/plugins.ts");
 
 /** Get Xcode opens the App Store page or the Xcode app, so it is native too. */
-const NATIVE = ["create", "open-editor", "quit-editor", "get-unreal", "get-xcode"];
+const NATIVE = ["create", "open-editor", "quit-editor", "get-unreal", "skip", "get-xcode"];
 
 /** Main's `studio:plugins.action` over the Unreal plugin's real manifest, with a core that records each call. */
 async function actionChannel(fixture: boolean) {
