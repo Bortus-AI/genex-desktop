@@ -36,6 +36,7 @@ import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
+import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
@@ -1441,6 +1442,14 @@ export const AUTO_RESUME_SETTING_WORDS = {
   label: "Resume builds automatically",
   detail:
     "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
+} as const;
+
+/** Settings → Permissions: the switch that lets agents ask to control the person's Mac. */
+export const COMPUTER_CONTROL_SETTING_WORDS = {
+  section: "Computer control",
+  label: "Let agents control your computer",
+  detail:
+    "An agent can ask to see your screen, then click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. macOS only.",
 } as const;
 
 export function resumedWords(parts: number): string {
@@ -3528,7 +3537,7 @@ export const GENEX_WORDS = {
    * multiplayer with Genex; without the plugin it opens the setup dialog, in Publish's words.
    */
   multiplayer: {
-    button: "Multiplayer",
+    button: "Make multiplayer",
     buttonLabel: "Make this game multiplayer",
     hint: "Make this game multiplayer with Genex",
     /** What the press sends to the game's chat. */
@@ -3809,12 +3818,29 @@ export const PLAY_WORDS = {
     joinLabel: (name: string, game: string) => `Join ${name} in ${game}`,
     invite: "Invite a friend",
     inviteFriends: "Invite friends",
-    inviteText: "Whoever joins Genex from your link becomes your friend.",
+    /** What an invite does, and what it earns while genex.games says (never a number typed here). */
+    inviteText: (bonus: number | null) =>
+      bonus === null
+        ? "They get the Genex download page with a card from you."
+        : `They get the Genex download page with a card from you. You get ${bonus} credits when they make their first game.`,
     inviteBonus: (credits: number) => `+${credits}`,
     inviteBonusLabel: (credits: number) => `${credits} credits for you when a friend starts creating`,
     inviteLinkLabel: "Your invite link",
     copy: "Copy",
     copied: "Copied",
+    /** Post on X and the Mac's share menu, under an invite link or a profile link. */
+    postOnX: "Post on X",
+    shareMenu: "Share…",
+    shareMenuLabel: "Share the link with Messages, Mail, AirDrop and more",
+    /** What a post on X says with the link. */
+    inviteXText: "Join me on Genex",
+    profileXText: "My games on Genex",
+    /** Share, beside the pencil on the account's own profile. */
+    shareProfile: "Share profile",
+    shareProfileTitle: "Share your profile",
+    shareProfileLink: "Your profile link",
+    /** The link preview's picture, read aloud. */
+    sharePreviewLabel: "How your profile link looks when shared",
     showPlaying: "Show friends what I’m playing",
     showPlayingOff: "Off: friends see your name only.",
     empty: "No friends yet — send your link and play together.",
@@ -4092,6 +4118,7 @@ export const UNREAL_WORDS = {
     switchTo: (project: string) => `Switch to ${project}`,
     notAnswering: (project: string) => `${project} isn’t answering in Unreal.`,
     portBlocked: (project: string) => `Unreal couldn’t use the port Genex gave ${project}.`,
+    crashed: (project: string) => `Unreal crashed. Close its crash report window, then open ${project} again.`,
     restart: "Restart Unreal",
     quitFirst: (project: string) =>
       `${project} is open in Unreal. Quit Unreal to set it up; Unreal asks you to save first.`,
@@ -4159,6 +4186,35 @@ export const ACCOUNT_WORDS = {
   offline: "Changes wait until you’re back online.",
 } as const;
 
+/**
+ * The nickname field, in the welcome and in Settings → Genex account: the words genex.games uses
+ * for the same field, so both read alike. A reserved handle reads as Taken, the account's own as Free.
+ */
+export const NICKNAME_WORDS = {
+  label: "Your nickname and profile link",
+  states: {
+    [HandleState.Free]: "Free",
+    [HandleState.Taken]: "Taken",
+    [HandleState.TooShort]: "Too short",
+    [HandleState.TooLong]: "Too long",
+    [HandleState.LatinOnly]: "Latin only",
+    [HandleState.DashEdge]: "No dash at the ends",
+  } satisfies Record<Exclude<HandleState, typeof HandleState.Yours | typeof HandleState.Reserved>, string>,
+  profileLink: "Your profile link.",
+  try: "Try",
+  tryLabel: (handle: string) => `Use ${handle}`,
+  length: `${HANDLE_LENGTH.min} to ${HANDLE_LENGTH.max} characters.`,
+  letters: "Letters a–z, digits and dashes.",
+  checkFailed: "Couldn’t check this nickname. Check your connection.",
+  tooManyChanges: "You’ve changed your nickname too often lately. Try again later.",
+  saveFailed: "Couldn’t save your nickname. Try again in a moment.",
+  /** Settings → Genex account's row. */
+  row: "Nickname",
+  none: "None yet",
+  edit: "Edit",
+  editLabel: "Edit your nickname",
+} as const;
+
 /** The avatar every Genex account gets, as people meet it: its parts' names and the first-sign-in dialog. */
 export const AVATAR_WORDS = {
   welcomeTitle: "Meet your Genex avatar",
@@ -4166,6 +4222,8 @@ export const AVATAR_WORDS = {
   mixLabel: "Your mix",
   continue: "Continue",
   welcomeNote: "You can change it in Settings",
+  /** Under Continue when the welcome asks for the nickname too. */
+  welcomeNoteBoth: "You can change both in Settings",
   bodies: {
     [AvatarBody.Vapor]: "Vaporwave sun",
     [AvatarBody.Crt]: "CRT dither",

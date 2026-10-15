@@ -1,8 +1,8 @@
 /**
  * A profile in Play, centred and at most 1080px wide: the person's live avatar, their name with
- * PRO, and beside it a pencil on the account's own (which opens Settings → Genex account) or the
- * friend button on anyone else's; under it their games and players as chips, then when they
- * joined. Then their friends as a row (people the viewer knows first), the account's own last 7
+ * PRO, and beside it a pencil and Share on the account's own (the pencil opens Settings → Genex
+ * account, Share its link) or the friend button on anyone else's; under it their @handle, their
+ * games and players as chips, then when they joined. Then their friends as a row (people the viewer knows first), the account's own last 7
  * days (only it ever sees them), and their games as the dashboard's cards. Offline it shows what
  * was read last, and reads again once the Mac is back online.
  */
@@ -27,6 +27,7 @@ import { AddTone, FriendButton } from "./FriendButton.tsx";
 import { PeopleCarousel, PersonTile } from "./PeopleCarousel.tsx";
 import { PersonAvatar } from "./PersonAvatar.tsx";
 import { PlayPageFrame } from "./PlayPageFrame.tsx";
+import { ShareProfile } from "./ShareProfile.tsx";
 import { OfflineNotice } from "./PlayOffline.tsx";
 import { Grid, useCardRemix } from "./PlayRoom.tsx";
 import { formatCount } from "./play-model.ts";
@@ -35,7 +36,9 @@ import { StatsStrip } from "./StatsStrip.tsx";
 
 const WORDS = PLAY_WORDS.people;
 /** The header's avatar, with room for its gear. */
-const HEADER_AVATAR = 150;
+const HEADER_AVATAR = 123;
+/** A friend's avatar on the profile's row, with room for gear. */
+const FRIEND_TILE_AVATAR = 66;
 /** "Mar 2026": when two people became friends, as a tile says it. */
 const SINCE_FORMAT = new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" });
 
@@ -90,10 +93,16 @@ function ProfileHead({ profile, me }: { profile: Profile; me: PlayMe | null }): 
             <Icon name="rename" size={15} />
           </button>
         )}
+        {own && me && <ShareProfile me={me} profile={profile} />}
         {!own && me && profile.status !== FriendStatus.Self && (
           <FriendButton person={profile.person} status={profile.status} tone={AddTone.Primary} />
         )}
       </div>
+      {person.handle && (
+        <span className="profile-handle" data-profile-handle>
+          @{person.handle}
+        </span>
+      )}
       <ProfileFacts profile={profile} />
     </header>
   );
@@ -118,7 +127,7 @@ function ProfileFriends({ friends, name }: { friends: PlayProfileFriend[]; name:
     >
       {friends.map((friend) => {
         const { sub, live } = friendLine(friend);
-        return <PersonTile key={friend.id} person={friend} sub={sub} live={live} />;
+        return <PersonTile key={friend.id} person={friend} sub={sub} avatar={FRIEND_TILE_AVATAR} live={live} />;
       })}
     </PeopleCarousel>
   );

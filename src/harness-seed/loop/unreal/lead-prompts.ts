@@ -146,8 +146,8 @@ function lookFirstText(references: readonly string[]): string {
 
 function handsAndEyesText(): string {
   return `HANDS AND EYES (the toolset ${BUILD_TOOLSET}, through the Unreal tools):
-- Hands: run_script runs a Python file of yours in ${BUILD_SCRIPTS}/ with the full unreal module and the gx library, in one undo transaction. Keep one idempotent script per system (gx.scope(tag) clears what it made last time) and run it again after each edit. execute_tool_script is for small queries only. Repeated pieces are instanced (gx.instances), never placed one actor per call.
-- Eyes: capture_shot from a named camera, capture_play while the game plays, motion_strip for movement. Each answers the image, its tone numbers and the fps. Never judge by an editor window capture. Never save or say done about a change you haven't looked at.
+- Hands: run_script runs a Python file of yours in ${BUILD_SCRIPTS}/ with the full unreal module and the gx library, in one undo transaction. Keep one idempotent script per system (gx.scope(tag) clears what it made last time) and rerun it after each edit. execute_tool_script: small queries only. Instance repeated pieces (gx.instances), never one actor per call.
+- Eyes: capture_shot from a named camera, capture_play while the game plays, motion_strip for movement. Each answers the image, tone numbers and fps. Never judge by an editor window capture. Never save or say done about a change you haven't looked at.
 - An MCP timeout does not cancel an edit: look before you run it again.
 - ${PYTHON_TUPLES}
 - Never call the ${LOOP_TOOLSET} toolset: it is Genex's own.`;
@@ -180,7 +180,8 @@ function agentsText(engine: string | undefined, options: Pick<LeadBriefOptions, 
   const tool = (name: LeadTool) => runTool(engine, name);
   return `WORKERS: ${tool(LeadTool.WorkerStart)} with a type below starts one in a copy of the game while you keep building (at most ${MAX_RUNNING_AGENTS} at once). Its task is all it sees: what to make, its size in metres, style, pivot and where it goes. Genex lands its files in assets/agents/<id>/ with a manifest and the exact import call, and tells you; import and place it yourself, then ${tool(LeadTool.WorkerMark)} it used or rejected so the news stops. No type: a generic worker (isolation read, copy or lock). ${tool(LeadTool.WorkerStatus)} and ${tool(LeadTool.WorkerWait)} follow them.
 ${lines.join("\n")}
-- ${runTool(engine, LeadTool.Critic)}: fresh eyes beside the references and ART.md, at each milestone and every 45–60 minutes; show it the player's view and the player's character. It advises, but its REQUIRED items (a defect seen in two looks in a row) come before any new mechanic, space or feature.`;
+- ${runTool(engine, LeadTool.Critic)}: fresh eyes beside the references and ART.md, at each milestone and every 45–60 minutes; show it the player's view and character. It advises, but its REQUIRED items (a defect seen in two looks in a row) come before any new mechanic, space or feature.
+- ${runTool(engine, LeadTool.JudgePlay)}: a blind judge plays it and answers one yes/no.`;
 }
 
 function savingText(engine: string | undefined): string {
@@ -190,7 +191,6 @@ function savingText(engine: string | undefined): string {
 - ${tool(LeadTool.Milestone)} names what you work on now (a column on the owner's Builds graph): name one before your first save point and a new one for each new part of the game. ${tool(LeadTool.Rewind)} goes back to a save point between turns, your own undo.
 - ${tool(LeadTool.RebuildUnreal)} restarts Unreal between turns: after C++ changes in unreal/Source (never Live Coding), or when the editor renders differently from play.
 - Act on the owner's words right after the edit you are in.
-- NOTES.md in this folder is your memory across sessions: keep it current.
 - ${tool(LeadTool.Note)} leaves the owner one line.
 - When you believe the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, test reports). A reviewer who did none of the work checks it; a no comes back with reasons, and three in a row stop the Loop.
 - Your last words are honest: what you built, and what you did not test.`;

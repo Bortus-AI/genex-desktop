@@ -3,7 +3,7 @@
  * labelled — `control.ts` refuses an ambiguous selector at run time. The game's name and folder
  * live in the chat header; the rest of this strip drags the window.
  */
-import type { JSX } from "react";
+import { type JSX, useRef } from "react";
 import { SOUND_SHORTCUT } from "../../../shared/game-sound.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import type { FactRef } from "../../../shared/project-facts.ts";
@@ -21,6 +21,7 @@ import type { Notify } from "../../state/toasts.ts";
 import { PluginToolbar } from "../PluginToolbar.tsx";
 import { LiveRun } from "./live-run.ts";
 import { activeStageTab, type StageTab, type StageTabKey, stageTabs } from "./stage-tabs.ts";
+import { useStripFold } from "./strip-fold.ts";
 
 /** The facts of a game whose descriptor isn't loaded yet: none, served as a web game. */
 const NO_FACTS: readonly FactRef[] = [];
@@ -69,6 +70,17 @@ function ReloadButton({ behind, onReload }: { behind: LiveBehind | null; onReloa
 const STRIP_ICON_BUTTON =
   "surface-glass grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg text-foreground transition-colors duration-(--duration-quick) enabled:active:scale-[0.96] disabled:cursor-default disabled:opacity-50";
 
+/**
+ * Play/Stop's dress: the action's own colour on its tint (green to play, red to stop), and the
+ * plain glass while a start or stop is under way.
+ */
+const RUN_LOOK = {
+  [LiveRun.Running]: "border border-transparent bg-red-tint text-red",
+  [LiveRun.Stopping]: "surface-glass text-foreground",
+  [LiveRun.Stopped]: "border border-transparent bg-green-tint text-green",
+  [LiveRun.Starting]: "surface-glass text-foreground",
+} as const satisfies Record<LiveRun, string>;
+
 /** What Play/Stop says for each state of the game. */
 const RUN_LABEL = {
   [LiveRun.Running]: STAGE_WORDS.stop,
@@ -99,7 +111,7 @@ function RunButton({ run, onToggle }: { run: LiveRun; onToggle: () => void }): J
           aria-disabled={busy}
           data-stage-run={run}
           onClick={busy ? undefined : onToggle}
-          className={cn(STRIP_ICON_BUTTON, busy && "cursor-default")}
+          className={cn(STRIP_ICON_BUTTON, RUN_LOOK[run], busy && "cursor-default")}
         >
           {/* Keyed by state, so each glyph fades and grows in as it takes the last one's place. */}
           <span key={run} className="grid place-items-center animate-in fade-in-0 zoom-in-75 duration-150">
@@ -218,39 +230,52 @@ export function StageStrip({
   onNotice: Notify;
   onToolbarOpen: (open: boolean) => void;
 }): JSX.Element {
+  const strip = useRef<HTMLDivElement>(null);
+  const start = useRef<HTMLDivElement>(null);
+  const end = useRef<HTMLDivElement>(null);
+  // One row, always: once the labelled buttons would overflow it, they fold into icons together.
+  const folded = useStripFold(strip, [start, end]);
   return (
     <div
+      ref={strip}
       data-stage-strip=""
-      className="titlebar-drag window-controls-end flex min-h-12 max-h-30 shrink-0 flex-wrap items-center gap-2 overflow-auto border-b border-line bg-canvas ps-3 pe-2 py-1.5"
+      data-folded={folded ? "" : undefined}
+      className="titlebar-drag window-controls-end flex h-12 shrink-0 flex-nowrap items-center gap-2 overflow-x-auto overflow-y-hidden border-b border-line bg-canvas ps-3 pe-2 [scrollbar-width:none]"
     >
-      {/* One segmented group for every loaded game; Builds joins it once there is a build to
+      {/* Two groups the fold measures, neither of them no-drag: every gap between the strip's
+          controls still drags the window. */}
+      <div ref={start} className="flex shrink-0 items-center gap-2">
+        {/* One segmented group for every loaded game; Builds joins it once there is a build to
           draw, and Assets is always there — a game with no build still has files. Plugin buttons
           follow it as siblings, so they are there for a game with no build either. */}
-      {project ? (
-        <ViewSwitcher
-          className="no-drag shrink-0"
-          label="Game view"
-          dataAttribute="data-stage-action"
-          items={switcherItems(stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside }))}
-          active={activeStageTab(stageView, live.views, live.shown)}
-          onSelect={onTab}
-        />
-      ) : null}
-      {/* Siblings, not a group: every gap between the strip's controls drags the window. */}
-      {livePreview ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
-      {livePreview ? <ReloadButton behind={behind} onReload={onReload} /> : null}
+        {project ? (
+          <ViewSwitcher
+            className="no-drag shrink-0"
+            label="Game view"
+            dataAttribute="data-stage-action"
+            items={switcherItems(stageTabs({ views: live.views, plugins, hasBuilds, buildsLive, beside }))}
+            active={activeStageTab(stageView, live.views, live.shown)}
+            onSelect={onTab}
+          />
+        ) : null}
+        {livePreview ? <RunButton run={run.state} onToggle={run.toggle} /> : null}
+        {livePreview ? <ReloadButton behind={behind} onReload={onReload} /> : null}
+      </div>
       <span className="min-w-0 flex-1 self-stretch" />
-      {livePreview ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
-      {livePreview ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
-      <PluginToolbar
-        plugins={plugins}
-        project={project}
-        facts={loaded?.facts ?? NO_FACTS}
-        holds={loaded?.holds}
-        emptyGame={emptyGame}
-        onNotice={onNotice}
-        onOpenChange={onToolbarOpen}
-      />
+      <div ref={end} className="flex shrink-0 items-center gap-2">
+        {livePreview ? <SoundButton on={sound.on} onToggle={sound.toggle} /> : null}
+        {livePreview ? <FullScreenButton offered={fullScreen.offered} onEnter={fullScreen.enter} /> : null}
+        <PluginToolbar
+          plugins={plugins}
+          project={project}
+          facts={loaded?.facts ?? NO_FACTS}
+          holds={loaded?.holds}
+          emptyGame={emptyGame}
+          onNotice={onNotice}
+          onOpenChange={onToolbarOpen}
+          folded={folded}
+        />
+      </div>
     </div>
   );
 }

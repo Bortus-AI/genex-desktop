@@ -69,6 +69,8 @@ export interface PlayViewDeps {
   emit(event: PlayViewerEvent): void;
   /** A link the game asked for that is not its own: to the browser. */
   openExternal(url: string): void;
+  /** The website Play links to: Share and Invite copy the game's page there. */
+  web: string;
   /** Fixture launches: a local stand-in page instead of the network. */
   offline: { gamePage(slug: string): string } | null;
   /** The game view's preload (`dist/preload/play-mic.cjs`). */
@@ -293,6 +295,7 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
       if (!win.isDestroyed()) win.webContents.focus();
     },
     clipboard: (text) => clipboard.writeText(text),
+    web: deps.web,
     emit: deps.emit,
     clock: {
       setTimeout: (run, ms) => setTimeout(run, ms),

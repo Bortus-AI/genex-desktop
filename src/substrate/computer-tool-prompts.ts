@@ -48,6 +48,8 @@ const WHERE_IT_RUNS: Record<TargetRuntime, (view: { width: number; height: numbe
     `running live in its own hidden ${view.width}×${view.height} window (Chromium, the same one the judges use)`,
   [TargetRuntime.Bridge]: (view) =>
     `running as its own game process, seen through a ${view.width}×${view.height} view of what it draws`,
+  [TargetRuntime.Editor]: (view) =>
+    `running in its engine's editor (a play session in the editor), seen through a ${view.width}×${view.height} view of what the player sees; keys are held on the game's own time`,
   [TargetRuntime.Desktop]: (view) =>
     `its real screen, seen as a ${view.width}×${view.height} picture (input outside the allowed apps is refused, and the person can stop you at any moment)`,
   [TargetRuntime.Vm]: (view) => `a virtual machine's screen, seen as a ${view.width}×${view.height} picture`,
@@ -71,6 +73,10 @@ const UNHELD_CLOCK_LINE =
 const POINTER_LINES =
   "left_click | right_click | middle_click | double_click | triple_click coordinate=x,y (text=shift|ctrl+alt holds modifiers). " +
   "left_click_drag start_coordinate=x,y coordinate=x,y. mouse_move coordinate=x,y. left_mouse_down / left_mouse_up. ";
+
+/** The clicks of a target that presses its buttons where the view is aimed, with no point to give. */
+const AIMED_CLICK_LINE =
+  "left_click | right_click | middle_click | double_click: press that mouse button where the view is aimed (no coordinate; turn with look first). ";
 
 /** The web page sentences, for a target that drives pages by their structure. */
 const WEB_LINES =
@@ -131,9 +137,11 @@ export function computerToolDescription(options: {
     "Actions — screenshot: what the window shows now (the picture comes back with the answer). " +
     (caps.zoom ? "zoom region=x0,y0,x1,y1: that part of the last screenshot at full size. " : "") +
     (canPoint(caps) ? POINTER_LINES : "") +
+    (!canPoint(caps) && caps.aimedClicks ? AIMED_CLICK_LINE : "") +
     "scroll scroll_direction=up|down|left|right scroll_amount=<notches> [coordinate=x,y]. " +
     "type text=<literal text>. key text=<a key or +chord: w, i, Return, Escape, space, ctrl+s> [repeat=n]. hold_key text=w duration=<seconds> (walks, grinds). " +
-    "wait duration=<seconds>. cursor_position. " +
+    "wait duration=<seconds>. " +
+    (canPoint(caps) ? "cursor_position. " : "") +
     (caps.pointer !== PointerLevel.None ? "look dx=<pixels> dy=<pixels>: turn the view (mouse-look). " : "") +
     (caps.actions
       ? "act text=<action> [duration=<seconds>]: the game's own named action (jump, attack), pressed once or held. "

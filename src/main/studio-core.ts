@@ -495,6 +495,7 @@ export class StudioCore {
     agentsMax: DEFAULT_POOL_MAX,
     blender: true,
     autoResume: true,
+    computerControl: false,
   };
   #assetCheckpointStore?: AssetCheckpoints;
   #planReviews?: PlanReviewController;
@@ -1013,8 +1014,8 @@ export class StudioCore {
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };
-    // The Unreal Editor bridge is an early integration: bundled, and off until the user turns it on.
-    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false };
+    // The Unreal and Unity editor bridges are early integrations: bundled, and off until the user turns them on.
+    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, unity: false };
     // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
     this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {
@@ -1680,7 +1681,12 @@ export class StudioCore {
       next.buildersMax = clampBuilders(next.buildersMax);
       next.agentsMax = next.buildersMax + LEAD_WINDOWS;
     }
+    // Only an explicit true turns the computer over; anything else the page sends reads as off.
+    next.computerControl = next.computerControl === true;
+    const computerOff = this.#settings.computerControl && !next.computerControl;
     this.#settings = next;
+    // Turning computer control off stops every desktop session's driver now, as ⌃⌥⌘Esc does.
+    if (computerOff) await this.options.desktop?.stopAll();
     // Atomic (CQ-3): a torn write would read back as defaults at the next start. The default goes
     // beside the settings so the next start can tell a worker count someone chose from one never touched.
     const saved: SavedSettings = { ...this.#settings, buildersDefault: DEFAULT_BUILDERS };
@@ -1715,6 +1721,8 @@ export class StudioCore {
         agentsMax: buildersMax + LEAD_WINDOWS,
         blender: parsed.blender !== false,
         autoResume: parsed.autoResume !== false,
+        // Off unless the person turned it on: a file from before the switch reads as off.
+        computerControl: parsed.computerControl === true,
       };
     } catch {
       /* first launch — defaults stand */

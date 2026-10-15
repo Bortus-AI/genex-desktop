@@ -5,6 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { isInside } from "../../substrate/paths.ts";
+import { projectRayTracing, turnOffRayTracing } from "./ray-tracing.ts";
 import type {
   Activate,
   PluginActivation,
@@ -60,6 +61,7 @@ import {
   linkedToAGame,
   listSetUpProjects,
   rememberChoice,
+  rememberWant,
   sameProject,
 } from "./editor-port.ts";
 import { callProjectTool } from "./editor-mcp.ts";
@@ -76,7 +78,7 @@ import {
 } from "./game-folder.ts";
 import { isProjectPath, UPROJECT_EXTENSION } from "./project-file.ts";
 import { xcodeDownloadsLaunch } from "./xcode.ts";
-import { EditorWait, engineReadiness, waitForEditor } from "./editor-wait.ts";
+import { EditorWait, EngineReadiness, engineReadiness, waitForEditor } from "./editor-wait.ts";
 import { readinessAnswer } from "./hook-answers.ts";
 import {
   answersOrBlocked,
@@ -101,6 +103,7 @@ import {
   EngineMatch,
   engineMatch,
   findEngines,
+  installEngineVersion,
   HELPER_FOLDER,
   HelperState,
   helperNeedsInstall,
@@ -157,6 +160,7 @@ const UnrealAction = {
   Steps: "steps",
   GetXcode: "get-xcode",
   StageStatus: "stage-status",
+  RayTracingOff: "ray-tracing-off",
 } as const;
 type UnrealAction = (typeof UnrealAction)[keyof typeof UnrealAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(UnrealAction));
@@ -179,7 +183,8 @@ const isUnrealTool = (name: string): name is UnrealTool => TOOL_NAMES.has(name);
  * updates an older Genex editor helper), wait while it starts, use it, switch from another set-up
  * project Unreal has open, quit and reopen an editor that has the project open but doesn't answer
  * or whose own log says Epic's server couldn't listen on the project's port, or open it once Unreal
- * is free (`open-when-free`: Unreal has some other project open, which nothing here quits).
+ * is free (`open-when-free`: Unreal has some other project open, which nothing here quits), or
+ * close Unreal's crash report first (`crashed`: its reporter keeps the project's port).
  */
 export const PanelStep = {
   GetUnreal: "get-unreal",
@@ -193,6 +198,7 @@ export const PanelStep = {
   NotAnswering: "not-answering",
   PortBlocked: "port-blocked",
   OpenWhenFree: "open-when-free",
+  Crashed: "crashed",
 } as const;
 export type PanelStep = (typeof PanelStep)[keyof typeof PanelStep];
 
@@ -214,6 +220,9 @@ const MESSAGE = {
   SetupQuestion: (name: string) => `Set up ${name} for Genex?`,
   SetupIntro: (name: string, file: string) => `Genex will change ${name} (${file}):`,
   UndoQuestion: (name: string) => `Undo setup for ${name}?`,
+  RayTracingQuestion: (name: string) => `Turn off ray tracing in ${name}?`,
+  RayTracingDetail: (name: string) =>
+    `Genex will set r.RayTracing=False in ${name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.`,
   NoGame: "Open a game in Genex first: an Unreal project is used by a game.",
   NotSetUp: (name: string) => `${name} isn't set up for Genex yet. Set it up from the Unreal button first.`,
   NoSetUpProject: "No Unreal project is set up for Genex yet. Set one up from the Unreal button first.",
@@ -222,6 +231,8 @@ const MESSAGE = {
   Linked: (name: string, file: string) =>
     `This game now builds in ${name} (${file}). Later Unreal calls in this game go to it.`,
   StepsShown: "The Unreal setup card is in the chat.",
+  ButtonOut: (version: string) =>
+    `The Unreal button is now above the game. Ask the user to press it: it shows how to get Unreal Engine ${version} free from Epic and notices when it's installed. They send a message once it is.`,
   NewGame: (file: string) =>
     `Made this game's Unreal project, ${file}, set it up for Genex and linked this game to it. Unreal is opening it now; a first start can take several minutes while it prepares shaders. Don't wait for it and don't promise to check back later: end your reply now by telling the user what you will build first. Genex continues this chat by itself as soon as Unreal is ready, and from then on the Unreal tools reach this project.`,
   NewGameNotOpened: (file: string, why: string) =>
@@ -370,6 +381,8 @@ type StepFacts = {
   projectOpen: boolean;
   /** Its log never closed, and nothing could tell whether an editor holds it: it may be another project Unreal has open. */
   openUnsure: boolean;
+  /** Unreal crashed: its crash reporter holds the set-up project's port until the report is closed. */
+  crashed: boolean;
 };
 
 /** A set-up project Unreal has open: its name and real `.uproject`. */
@@ -423,6 +436,8 @@ function nextStep(facts: StepFacts): PanelStep {
   if (!engine) return PanelStep.GetUnreal;
   if (!state) return PanelStep.Choose;
   if (current === Connection.Ready) return PanelStep.Connected;
+  // Setup would move the port and a restart couldn't take it back: the report has to close first.
+  if (facts.crashed) return PanelStep.Crashed;
   if (current === Connection.Starting) return PanelStep.Starting;
   // Setup refuses only while Unreal has this project open; it moves a taken port and switches a project from an older Unreal.
   const needsSetup = current === Connection.SetUp || facts.portTaken || match === EngineMatch.TooOld;
@@ -495,6 +510,20 @@ function busyPortOf(state: ProjectState | undefined, editor: EditorFacts): numbe
   return own?.busyPort ?? null;
 }
 
+const MAC: NodeJS.Platform = "darwin";
+
+/** Whether the shown project ray-traces on a Mac, where UE 5.8 then crashes behind another app (`ray-tracing.ts`). */
+async function rayTracingRisk(env: SetupEnv, state: ProjectState | undefined): Promise<boolean> {
+  return env.platform === MAC && state !== undefined && (await projectRayTracing(realProjectFile(state)));
+}
+
+/** Turns hardware ray tracing off in a project Genex knows (`ray-tracing-off`). */
+async function rayTracingOff(file: string, options: SetupOptions): Promise<{ rayTracing: false }> {
+  const state = await inspectProject(file, options);
+  await turnOffRayTracing(realProjectFile(state));
+  return { rayTracing: false };
+}
+
 /** The steps that say what holds Unreal: set up beside it, switch from it, or open once it is free. */
 const HOLDER_STEPS: ReadonlySet<PanelStep> = new Set([PanelStep.SetUp, PanelStep.Switch, PanelStep.OpenWhenFree]);
 
@@ -517,6 +546,13 @@ async function holderOf(
   return names.find((name) => name.toLowerCase() !== shown) ?? null;
 }
 
+/** Whether Unreal's crash reporter holds the set-up project's port while its editor doesn't answer: Unreal crashed. */
+async function crashReporterOn(env: SetupEnv, state: ProjectState | undefined, editor: { answering: boolean }) {
+  const port = isSetUp(state) ? state.port : null;
+  if (port === null || editor.answering || !env.crashReporterHolds) return false;
+  return (await env.crashReporterHolds(port).catch(() => undefined)) === true;
+}
+
 /**
  * Where a project stands and the one step it needs, as the panel and the Live card both read it:
  * the editor's facts, the engine match, the connection, a taken or blocked port, another set-up
@@ -536,7 +572,9 @@ async function whereItStands(
   const engine = engines.find((e) => e.supported);
   const match = state ? engineMatch(state.engine, engines) : null;
   const where = connection(deps, state, editor);
-  const portTaken = port !== null && mayBePortTaken(state, editor, env.platform) && (await env.portListening(port));
+  const crashed = await crashReporterOn(env, state, editor);
+  const portTaken =
+    !crashed && port !== null && mayBePortTaken(state, editor, env.platform) && (await env.portListening(port));
   const portBlocked = editor.portBlocked === true;
   const elsewhere = isSetUp(state) && editor.running && !portBlocked && where.connection === Connection.NotOpen;
   const openProject = elsewhere ? await openElsewhere(storage, realProjectFile(state), env) : null;
@@ -552,6 +590,7 @@ async function whereItStands(
     portBlocked,
     projectOpen: editor.projectOpen,
     openUnsure: !editor.answering && editor.openUnsure === true,
+    crashed,
   });
   const holder = HOLDER_STEPS.has(next) ? await holderOf(env, state, editor, openProject) : null;
   return { port, editor, engine, match, where, portTaken, openProject, next, holder };
@@ -721,6 +760,8 @@ async function status(
     /** The port Genex found still held when it opened this project, while its editor runs unanswered; else null. */
     busyPort: busyPortOf(state, editor),
     next,
+    /** Whether to offer turning ray tracing off: the shown project ray-traces, on a Mac. */
+    rayTracingRisk: await rayTracingRisk(env, state),
     ...(await computerNotes(env, state, engine)),
   };
 }
@@ -947,9 +988,30 @@ async function waitEditor(deps: UnrealBackendDeps, args: Record<string, unknown>
   return { state, project: editor.name };
 }
 
-/** The agent's `show-steps`: the card in its chat while a step is open. */
+/** Whether this computer has an Unreal Genex makes new games with. */
+const canMakeGames = async (deps: UnrealBackendDeps): Promise<boolean> =>
+  engineReadiness(await findEngines(deps.env)).engine === EngineReadiness.Ready;
+
+/**
+ * Remembers that the calling game's chat chose Unreal while it can't be made here yet, so the
+ * game's stage strip shows the Unreal button (which shows how to get Unreal) from the turn's end.
+ */
+async function rememberChoiceOfUnreal(deps: UnrealBackendDeps, context: PluginContext): Promise<void> {
+  const storage = (await setupOptions(deps, context)).storage;
+  await rememberWant(storage, context.project, deps.launch.now());
+}
+
+/**
+ * The agent's `show-steps`: the card in its chat while a step is open. In a game with no Unreal
+ * project while no Unreal that makes games is installed, it brings the Unreal button out instead.
+ */
 async function showSteps(deps: UnrealBackendDeps, context: PluginContext): Promise<string> {
-  const steps = await stepsFor(deps.env, await gameProject(deps, context));
+  const project = await gameProject(deps, context);
+  if (!project && context.project && !(await canMakeGames(deps))) {
+    await rememberChoiceOfUnreal(deps, context);
+    return MESSAGE.ButtonOut(installEngineVersion());
+  }
+  const steps = await stepsFor(deps.env, project);
   if (!steps.open) return MESSAGE.StepsDone;
   return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
 }
@@ -1146,6 +1208,8 @@ function updateNote(opened: OpenResult): { note: string } | Record<string, never
  */
 async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   if (!gameFolderOf(context)) throw new Error(MESSAGE.NoGame);
+  // Refused below for want of Unreal: the game's strip still shows the Unreal button, which gets it.
+  if (!(await canMakeGames(deps))) await rememberChoiceOfUnreal(deps, context);
   const made = await create(deps, args, context);
   const opened = await openForUser(deps, made.project, context).then(
     () => undefined,
@@ -1168,6 +1232,7 @@ async function newGame(deps: UnrealBackendDeps, args: Record<string, unknown>, c
 async function newPlugin(deps: UnrealBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGame);
+  if (!(await canMakeGames(deps))) await rememberChoiceOfUnreal(deps, context);
   const engine = await creatingEngine(deps);
   const name = await assertPluginName(textArg(args, "name"), engine.directory);
   const template = await readPluginTemplate(engine.directory, args.template ?? PluginTemplate.Window);
@@ -1273,6 +1338,8 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealAction.Steps]: async (_args, context) => stepsFor(deps.env, await gameProject(deps, context)),
     [UnrealAction.GetXcode]: (args) => getXcode(deps, args),
     [UnrealAction.StageStatus]: (_args, context) => stageStatus(deps, context, scanned),
+    [UnrealAction.RayTracingOff]: async (args, context) =>
+      rayTracingOff(projectArg(args), await setupOptions(deps, context)),
   };
   const loop = loopTools(deps);
   const tools: Record<UnrealTool, ToolHandler> = {
@@ -1303,6 +1370,10 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
       if (name === UnrealAction.UndoSetup) {
         const project = (await inspectProject(projectArg(args), options)).name;
         return { message: MESSAGE.UndoQuestion(project), detail: MESSAGE.Undo(project) };
+      }
+      if (name === UnrealAction.RayTracingOff) {
+        const project = (await inspectProject(projectArg(args), options)).name;
+        return { message: MESSAGE.RayTracingQuestion(project), detail: MESSAGE.RayTracingDetail(project) };
       }
       return {};
     },

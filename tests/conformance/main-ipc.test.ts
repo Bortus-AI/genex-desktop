@@ -15,6 +15,7 @@ import { registerModelsIpc, type ModelsIpcDeps } from "../../src/main/ipc/models
 import { registerUpdateIpc } from "../../src/main/ipc/update.ts";
 import { registerStorageIpc } from "../../src/main/ipc/storage.ts";
 import { registerJobsIpc } from "../../src/main/ipc/jobs.ts";
+import { type PlayIpcDeps, registerPlayIpc } from "../../src/main/ipc/play.ts";
 import { createLoginControllers, type SubscriptionEngine } from "../../src/main/login-controllers.ts";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
@@ -978,5 +979,54 @@ describe("the in-window update prompt", () => {
     assert.deepEqual(await fixture.invoke("studio:update.check"), { ok: true, value: off });
     assert.equal((await fixture.invoke("studio:update.download")).ok, false);
     assert.deepEqual(fixture.restarts, []);
+  });
+});
+
+describe("Play's share menu", () => {
+  /** Play's channels with only Share… live: every menu it pops is kept. */
+  function shareRig(web: string) {
+    const { handle, invoke } = registrar();
+    const shared: Array<[string, unknown]> = [];
+    const unused = {} as unknown;
+    registerPlayIpc(handle, {
+      gallery: unused as PlayIpcDeps["gallery"],
+      remix: async () => "",
+      viewer: () => null,
+      people: unused as PlayIpcDeps["people"],
+      creators: unused as PlayIpcDeps["creators"],
+      credits: unused as PlayIpcDeps["credits"],
+      web,
+      share: (url, at) => shared.push([url, at]),
+    });
+    return { invoke, shared };
+  }
+
+  it("pops for a page of the website Play links to, by the button that asked", async () => {
+    const { invoke, shared } = shareRig("https://genex.games");
+    const answer = await invoke("studio:play.share", {
+      url: "https://genex.games/@rabneba/invite",
+      at: { x: 10, y: 20 },
+    });
+    assert.equal(answer.ok, true);
+    assert.deepEqual(shared, [["https://genex.games/@rabneba/invite", { x: 10, y: 20 }]]);
+  });
+
+  it("never pops for anything else", async () => {
+    const { invoke, shared } = shareRig("http://localhost:5173");
+    for (const url of [
+      "https://genex.games/@rabneba",
+      "http://localhost:5174/@rabneba",
+      "http://user@localhost:5173/@rabneba",
+      "file:///etc/passwd",
+      "javascript:alert(1)",
+      "",
+      7,
+    ]) {
+      const answer = await invoke("studio:play.share", { url });
+      assert.equal(answer.ok, false, String(url));
+    }
+    assert.deepEqual(shared, []);
+    await invoke("studio:play.share", { url: "http://localhost:5173/@rab", at: { x: -1, y: "top" } });
+    assert.deepEqual(shared, [["http://localhost:5173/@rab", undefined]], "a point off the window is no point");
   });
 });

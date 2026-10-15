@@ -38,6 +38,7 @@ export const UnrealStageStep = {
   NotAnswering: "not-answering",
   PortBlocked: "port-blocked",
   OpenWhenFree: "open-when-free",
+  Crashed: "crashed",
 } as const;
 export type UnrealStageStep = (typeof UnrealStageStep)[keyof typeof UnrealStageStep];
 

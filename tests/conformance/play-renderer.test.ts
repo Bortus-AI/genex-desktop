@@ -1096,6 +1096,7 @@ describe("the sidebar's account plate", () => {
   const who = {
     id: "u1",
     name: "Rab Neba",
+    handle: null,
     imageUrl: null,
     avatarVariant: 0,
     pro: true,
@@ -1103,6 +1104,7 @@ describe("the sidebar's account plate", () => {
     avatarStyle: null,
     photoUrl: null,
     avatarVariantKept: true,
+    handleChosen: null,
   };
   const shown = (people: Partial<Parameters<typeof plateState>[0]>, online = true) =>
     plateState({ me: null, account: null, ...people }, online);

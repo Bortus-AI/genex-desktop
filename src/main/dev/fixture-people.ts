@@ -1,16 +1,29 @@
 /**
  * Play's people in a fixture profile: the API's answers for the account, profiles (and their
- * friends), friends, requests and people search, made here in the shapes the API serves, so the
- * profile plate, the profile page and the Friends page can be checked with no socket and no Genex
- * account. A launch is signed out unless it asks for a fixture account
+ * friends), friends, requests, people search and nicknames, made here in the shapes the API serves,
+ * so the profile plate, the profile page, the Friends page and the nickname field can be checked
+ * with no socket and no Genex account. A launch is signed out unless it asks for a fixture account
  * (`STUDIO_FIXTURE_GENEX_ACCOUNT=1`, or `new`, `quiet` or `fresh` for a new account with no games and
- * nobody yet, with games nobody played this week, or with one game two days old, or `ended` for a
- * sign-in genex.games no longer takes); then every call carries that account's token. State lives for the launch: adding a friend, renaming the account or choosing an
- * avatar shows at once and is gone at the next launch.
+ * nobody yet, with games nobody played this week, or with one game two days old, `nickname` for the
+ * full account before it chose its nickname, or `ended` for a sign-in genex.games no longer takes);
+ * then every call carries that account's token. A new account and the nickname account have not
+ * chosen their nicknames, so the welcome asks. State lives for the launch: adding a friend,
+ * renaming the account, choosing an avatar or a nickname shows at once and is gone at the next launch.
  */
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
+import {
+  HANDLE_SUGGESTIONS_MAX,
+  HandleState,
+  handleBaseFromName,
+  handleKept,
+  handleProblem,
+  isHandle,
+  normalizeHandleInput,
+  shownAsTaken,
+} from "../../shared/handle.ts";
+import { PLAY_ORIGIN } from "../../shared/play.ts";
 import type { GalleryAnswer } from "../play/gallery.ts";
-import { PeopleRoute } from "../play/people.ts";
+import { HandleError, PeopleRoute } from "../play/people.ts";
 import {
   AvatarStyle,
   FriendStatus,
@@ -29,6 +42,8 @@ export const FixtureAccount = {
   Quiet: "quiet",
   /** One game, published two days ago. */
   Fresh: "fresh",
+  /** The full account before it chose its nickname: the welcome asks once, the handle prefilled. */
+  Nickname: "nickname",
   /** Signed in earlier, but genex.games no longer takes the token: every call of the account is a 401. */
   Ended: "ended",
 } as const;
@@ -54,6 +69,8 @@ export const isFixtureAccount = (value: unknown): value is FixtureAccount =>
 interface FixturePerson {
   id: string;
   name: string;
+  /** Their name run together in Latin letters, as genex.games backfills a handle. */
+  handle: string;
   image: null;
   pro: boolean;
   createdAt: string;
@@ -70,6 +87,7 @@ export const fixtureAuthorId = (name: string): string =>
 const person = (name: string, pro = false, createdAt = "2026-08-12T10:00:00.000Z"): FixturePerson => ({
   id: fixtureAuthorId(name),
   name,
+  handle: handleBaseFromName(name),
   image: null,
   pro,
   createdAt,
@@ -105,11 +123,35 @@ const FIXTURE_PHOTO = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(
 /** The launch's own settings, changed by the fixture account's writes. */
 const state = {
   name: ME.name,
+  handle: ME.handle,
+  /** The account confirmed its nickname during this launch. */
+  handleChosen: false,
+  /** How many times the handle changed during this launch. */
+  handleChanges: 0,
   photo: null as string | null,
   avatarStyle: AvatarStyle.Generated as AvatarStyle,
   avatarVariant: 0,
   visibility: PresenceVisibility.Game as PresenceVisibility,
 };
+
+/** How many handle changes the fixture takes before it answers as genex.games does past its limit. */
+const FIXTURE_HANDLE_CHANGES = 5;
+/** Handles the fixture's genex.games holds for others: a few short names, and every fixture person's. */
+const TAKEN_HANDLES: ReadonlySet<string> = new Set([
+  "rab",
+  "max",
+  "neo",
+  "alex",
+  "play",
+  ...PEOPLE.map((p) => p.handle),
+]);
+/** Words the fixture keeps for Genex itself, besides anything with "genex" in it. */
+const KEPT_HANDLES: ReadonlySet<string> = new Set(["admin", "support", "official", "staff", "mod"]);
+const BRAND = "genex";
+
+/** Whether a fixture account has chosen its nickname: a new account and the nickname account not until they do. */
+const handleChosen = (account: FixtureAccount): boolean =>
+  state.handleChosen || (account !== FixtureAccount.New && account !== FixtureAccount.Nickname);
 
 /** An account's friends and its requests both ways. */
 interface Circle {
@@ -151,8 +193,15 @@ const SINCE = "2026-09-02T12:00:00.000Z";
 
 const ok = (body: unknown): GalleryAnswer => ({ status: 200, body });
 const NOT_FOUND: GalleryAnswer = { status: 404, body: null };
-const slim = (p: FixturePerson) => ({ id: p.id, name: p.name, image: p.image, pro: p.pro, avatarStyle: p.avatarStyle });
-const me = (): FixturePerson => ({ ...ME, name: state.name });
+const slim = (p: FixturePerson) => ({
+  id: p.id,
+  name: p.name,
+  handle: p.handle,
+  image: p.image,
+  pro: p.pro,
+  avatarStyle: p.avatarStyle,
+});
+const me = (): FixturePerson => ({ ...ME, name: state.name, handle: state.handle });
 /** The account as others see it: its photo only when it chose the photo. */
 const meSlim = () => ({
   ...slim(me()),
@@ -287,20 +336,77 @@ function profileFriends(id: string, account: FixtureAccount, catalog: FixtureCat
   return ok({ friends });
 }
 
+/** What the fixture's genex.games says of a normalized handle. */
+function handleStateOf(handle: string): HandleState {
+  const problem = handleProblem(handle);
+  if (problem) return problem;
+  if (handle === state.handle) return HandleState.Yours;
+  if (KEPT_HANDLES.has(handle) || handle.includes(BRAND)) return HandleState.Reserved;
+  return TAKEN_HANDLES.has(handle) ? HandleState.Taken : HandleState.Free;
+}
+
+/** Up to three handles the account may have instead of `wanted`: its name run together and dashed, then `wanted` numbered. */
+function handleSuggestions(wanted: string): string[] {
+  const words = state.name.split(/\s+/).map(handleBaseFromName).filter(Boolean);
+  const numbered = [2, 3, 4, 5].map((n) => `${wanted}${n}`);
+  const candidates = [words.join(""), words.join("-"), ...numbered];
+  const offered = candidates.filter((handle) => handle !== wanted && handleKept(handleStateOf(handle)));
+  return [...new Set(offered)].slice(0, HANDLE_SUGGESTIONS_MAX);
+}
+
+/** A handle check, as genex.games answers it: the state, and handles to try where there are any. */
+function handleCheck(query: string): GalleryAnswer {
+  const handle = normalizeHandleInput(new URLSearchParams(query).get("handle") ?? "");
+  const checked = handleStateOf(handle);
+  const latin = handleBaseFromName(handle);
+  const latinOffer = checked === HandleState.LatinOnly && isHandle(latin) ? [latin] : [];
+  const suggestions = shownAsTaken(checked) ? handleSuggestions(handle) : latinOffer;
+  return ok({ handle, state: checked, suggestions });
+}
+
+/** Why a handle edit is refused, as genex.games answers it, or null when the handle may be the account's. */
+function handleRefusal(raw: unknown): GalleryAnswer | null {
+  const handle = typeof raw === "string" ? normalizeHandleInput(raw) : "";
+  const problem = handleProblem(handle);
+  if (problem) return { status: 400, body: { error: HandleError.Invalid, problem } };
+  if (shownAsTaken(handleStateOf(handle)))
+    return { status: 400, body: { error: HandleError.Taken, suggestions: handleSuggestions(handle) } };
+  const changesLeft = state.handleChanges < FIXTURE_HANDLE_CHANGES;
+  return handle === state.handle || changesLeft ? null : { status: 429, body: { error: HandleError.ChangesExhausted } };
+}
+
+/** The account's handle is `raw` now, confirmed even when it is the same one. */
+function keepHandle(raw: string): void {
+  const handle = normalizeHandleInput(raw);
+  if (handle !== state.handle) state.handleChanges++;
+  state.handle = handle;
+  state.handleChosen = true;
+}
+
+/** Why an own-profile edit is refused, or null when every field it names may be written. */
+function accountRefusal(body: {
+  avatarStyle?: unknown;
+  avatarVariant?: unknown;
+  handle?: unknown;
+}): GalleryAnswer | null {
+  if (body.avatarStyle === AvatarStyle.Photo && !state.photo)
+    return { status: 400, body: { error: "no photo uploaded" } };
+  if (body.avatarVariant !== undefined && !isAvatarVariant(body.avatarVariant))
+    return { status: 400, body: { error: "not an avatar variant" } };
+  return body.handle === undefined ? null : handleRefusal(body.handle);
+}
+
 /** An own-profile edit, refused whole as genex.games refuses it: nothing changes when one field is wrong. */
 function patchAccount(body: unknown): GalleryAnswer {
-  const { name, avatarStyle, avatarVariant } = (body ?? {}) as {
-    name?: unknown;
-    avatarStyle?: unknown;
-    avatarVariant?: unknown;
-  };
-  if (avatarStyle === AvatarStyle.Photo && !state.photo) return { status: 400, body: { error: "no photo uploaded" } };
-  if (avatarVariant !== undefined && !isAvatarVariant(avatarVariant))
-    return { status: 400, body: { error: "not an avatar variant" } };
+  const fields = (body ?? {}) as { name?: unknown; avatarStyle?: unknown; avatarVariant?: unknown; handle?: unknown };
+  const refusal = accountRefusal(fields);
+  if (refusal) return refusal;
+  const { name, avatarStyle, avatarVariant, handle } = fields;
   if (typeof name === "string") state.name = name;
   if (isAvatarStyle(avatarStyle)) state.avatarStyle = avatarStyle;
   if (isAvatarVariant(avatarVariant)) state.avatarVariant = avatarVariant;
-  return ok({ user: meSlim() });
+  if (typeof handle === "string") keepHandle(handle);
+  return ok({ user: { ...meSlim(), handleChosen: state.handleChosen } });
 }
 
 /** The account's own writes: its name, its avatar style and variant, and a photo "upload" that stays in memory. */
@@ -317,12 +423,16 @@ function accountWrite(method: string, pathname: string, body: unknown): GalleryA
 
 /** The routes under /api/users and /api/friends that need the account. */
 const needsAccount = (pathname: string): boolean =>
-  pathname === PeopleRoute.Me || pathname.startsWith("/api/friends") || pathname.startsWith("/api/users/me");
+  pathname === PeopleRoute.Me ||
+  pathname === PeopleRoute.HandleCheck ||
+  pathname.startsWith("/api/friends") ||
+  pathname.startsWith("/api/users/me");
 
 /** A public read under /api/users: a profile or a profile's friends. */
 function publicRead(pathname: string, account: FixtureAccount, catalog: FixtureCatalog): GalleryAnswer | null {
   const prefix = PeopleRoute.user("");
-  if (!pathname.startsWith(prefix) || pathname.startsWith(PeopleRoute.MyAccount)) return null;
+  const own = pathname.startsWith(PeopleRoute.MyAccount) || pathname === PeopleRoute.HandleCheck;
+  if (!pathname.startsWith(prefix) || own) return null;
   const rest = pathname.slice(prefix.length);
   if (rest.endsWith("/friends"))
     return profileFriends(decodeURIComponent(rest.slice(0, -"/friends".length)), account, catalog);
@@ -361,9 +471,11 @@ export function fixturePeopleAnswer(
         photo: state.photo,
         avatarStyle: state.avatarStyle,
         avatarVariant: state.avatarVariant,
+        handleChosen: handleChosen(account),
       },
       isAdmin: false,
     });
+  if (pathname === PeopleRoute.HandleCheck) return handleCheck(query);
   const write = accountWrite(method, pathname, init.body);
   if (write) return write;
   if (method === "GET") return peopleRead(pathname, query, account, catalog);
@@ -386,12 +498,19 @@ function peopleRead(pathname: string, query: string, account: FixtureAccount, ca
   return NOT_FOUND;
 }
 
-/** The fixture account's invite link, as `/api/referrals/me` answers it. */
-export const FIXTURE_REFERRAL = {
-  code: "fixture1",
-  link: "https://genex.games/?ref=fixture1",
+/** The fixture account's referral code: the inviter's proof its invite link carries. */
+const FIXTURE_REFERRAL_CODE = "fixture1";
+
+/**
+ * The fixture account's invite and profile links, as `/api/referrals/me` answers them: by its
+ * handle now, the invite with its code.
+ */
+export const fixtureReferral = () => ({
+  code: FIXTURE_REFERRAL_CODE,
+  link: `${PLAY_ORIGIN.web}/@${state.handle}/invite?${new URLSearchParams({ ref: FIXTURE_REFERRAL_CODE })}`,
+  profileLink: `${PLAY_ORIGIN.web}/@${state.handle}`,
   inviterBonus: 100,
-} as const;
+});
 
 /** The fixture account's own id, for the fixture's creator numbers. */
 export const FIXTURE_ME_ID = ME.id;

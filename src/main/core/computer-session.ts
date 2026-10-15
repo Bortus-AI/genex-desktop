@@ -13,7 +13,13 @@ import { appendFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
-import { ComputerPacing, canPause, InputRoute, type TargetCapabilities } from "../../shared/computer-target.ts";
+import {
+  ComputerPacing,
+  canPause,
+  canPoint,
+  InputRoute,
+  type TargetCapabilities,
+} from "../../shared/computer-target.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { CaptureSurface, type PreviewSetup, StillMimeType } from "../../shared/preview-contract.ts";
@@ -179,6 +185,13 @@ interface SessionHelpers {
   readonly observeByDefault: boolean;
 }
 
+/** Where the pointer is, for an answer; null on a target with no pointer at a point (a game turned by mouse-look). */
+function cursorAt(ctx: ActionContext): string | null {
+  if (!canPoint(ctx.target.caps)) return null;
+  const c = ctx.helpers.cursor(ctx.target, ctx.size);
+  return `cursor at ${c.x},${c.y}`;
+}
+
 async function look(ctx: ActionContext): Promise<LiveToolResult> {
   const { request, target, helpers } = ctx;
   const warning = request.action === "camera" ? await switchCamera(target, request.text) : "";
@@ -189,13 +202,13 @@ async function look(ctx: ActionContext): Promise<LiveToolResult> {
   const file = await helpers.saveFrame(jpeg, name, mimeType);
   ctx.record.frame = file;
   await helpers.frame(target, jpeg, ctx.caption, ctx.act);
-  const c = helpers.cursor(target, ctx.size);
+  const cursor = cursorAt(ctx);
   helpers.clearSetupNote();
   const took = surfaceWord(shot.surface);
   const tookText = took ? ` (${took})` : "";
   const measured = stats ? `, litFraction ${stats.litFraction.toFixed(2)}, meanLuma ${Math.round(stats.meanLuma)}` : "";
   return {
-    text: `${ctx.surfaceLine}${file} — ${ctx.size.width}×${ctx.size.height}${tookText}, cursor at ${c.x},${c.y}${measured}${warning}${ctx.noteLine}`,
+    text: `${ctx.surfaceLine}${file} — ${ctx.size.width}×${ctx.size.height}${tookText}${cursor ? `, ${cursor}` : ""}${measured}${warning}${ctx.noteLine}`,
     images: [{ mimeType, data: jpeg.toString("base64"), label: ctx.caption }],
   };
 }
@@ -320,8 +333,8 @@ async function batch(ctx: ActionContext): Promise<LiveToolResult> {
     }
   }
   ctx.record.simMs = simulated || null;
-  const c = ctx.helpers.cursor(ctx.target, ctx.size);
-  const head = `OK — ${steps.length} of ${steps.length} steps: ${ctx.caption}; cursor at ${c.x},${c.y}.`;
+  const cursor = cursorAt(ctx);
+  const head = `OK — ${steps.length} of ${steps.length} steps: ${ctx.caption}${cursor ? `; ${cursor}` : ""}.`;
   return observed(ctx, `${head} ${await ctx.helpers.afterMove(ctx)}${ctx.noteLine}`, true);
 }
 
@@ -431,7 +444,7 @@ async function input(ctx: ActionContext): Promise<LiveToolResult> {
   const outcome = await inputStep(ctx, ctx.request);
   tally(ctx.record, outcome);
   ctx.record.simMs = outcome.simMs;
-  const c = helpers.cursor(target, ctx.size);
+  const cursor = cursorAt(ctx);
   const state = await helpers.afterMove(ctx);
   const refused = target.refusals?.() ?? [];
   const why = refused.length ? COMPUTER_ARG_PROBLEM.refusedBecause(refused.map((r) => `${r.op}: ${r.message}`)) : "";
@@ -439,7 +452,7 @@ async function input(ctx: ActionContext): Promise<LiveToolResult> {
     outcome.taken < outcome.planned
       ? `${COMPUTER_ARG_PROBLEM.partlyTaken(caption, outcome.taken, outcome.planned)}${why}`
       : `OK — ${caption}`;
-  return observed(ctx, `${head}; cursor at ${c.x},${c.y}. ${state}${ctx.noteLine}`, true);
+  return observed(ctx, `${head}${cursor ? `; ${cursor}` : ""}. ${state}${ctx.noteLine}`, true);
 }
 
 /**

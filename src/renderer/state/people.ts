@@ -10,6 +10,7 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
 import { GenexAccountStatus, type GenexAccountView } from "../../shared/genex-account.ts";
+import { type HandleSave, HandleSaveOutcome, isHandle } from "../../shared/handle.ts";
 import type { PlayCredits } from "../../shared/play-credits.ts";
 import {
   type AvatarStyle,
@@ -152,7 +153,10 @@ export function accountRead(
   return { ...meRead(state, null), ...stands, ended, credits: null };
 }
 
-/** An account remembered on this Mac, as it was kept, or null for anything that isn't one. */
+/**
+ * An account remembered on this Mac, as it was kept, or null for anything that isn't one. One kept
+ * before nicknames has none, and does not know whether it chose one.
+ */
 function rememberedAccount(value: unknown): PlayMe | null {
   if (!value || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
@@ -169,7 +173,10 @@ function rememberedAccount(value: unknown): PlayMe | null {
     (v.joinedAt === null || typeof v.joinedAt === "string") &&
     (v.avatarStyle === null || isAvatarStyle(v.avatarStyle)) &&
     typeof v.avatarVariantKept === "boolean";
-  return valid ? (value as PlayMe) : null;
+  if (!valid) return null;
+  const handle = isHandle(v.handle) ? v.handle : null;
+  const handleChosen = typeof v.handleChosen === "boolean" ? v.handleChosen : null;
+  return { ...(value as PlayMe), handle, handleChosen };
 }
 
 /** A balance remembered on this Mac, as it was kept, or null for anything that isn't one. */
@@ -201,7 +208,8 @@ function rememberAccount(state: PeopleState, storage: KeyValueStorage | null): v
 function withOwnProfile(profiles: PeopleState["profiles"], me: PlayMe | null): PeopleState["profiles"] {
   const own = me ? profiles[me.id] : undefined;
   if (!me || !own?.profile) return profiles;
-  const person = { id: me.id, name: me.name, imageUrl: me.imageUrl, avatarVariant: me.avatarVariant, pro: me.pro };
+  const { id, name, handle, imageUrl, avatarVariant, pro } = me;
+  const person = { id, name, handle, imageUrl, avatarVariant, pro };
   return { ...profiles, [me.id]: { ...own, profile: { ...own.profile, person } } };
 }
 
@@ -217,6 +225,7 @@ export function pageAfter(page: PlayFriendsPage, person: PlayPerson, status: Fri
   const friend: PlayFriend = {
     id: person.id,
     name: person.name,
+    handle: person.handle,
     imageUrl: person.imageUrl,
     avatarVariant: person.avatarVariant,
     pro: person.pro,
@@ -307,6 +316,11 @@ export interface PeopleStore extends StoreApi<PeopleState> {
    * throws (and puts the old one back) when Genex refused.
    */
   setAvatarVariant(variant: number): Promise<void>;
+  /**
+   * Make a nickname the account's, everywhere it shows; a refusal (taken, its shape, too many
+   * changes) changes nothing and says why. Throws when genex.games could not be asked.
+   */
+  setHandle(handle: string): Promise<HandleSave>;
   /** Read the account's stats for a period (signed in only); `force` reads again one already read. */
   loadStats(days: StatsPeriod, options?: { force?: boolean }): Promise<void>;
   /** Read Top creators, once. */
@@ -330,6 +344,7 @@ type PeopleApi = Pick<
   | "playStats"
   | "playCreators"
   | "playCredits"
+  | "playSetHandle"
   | "genexAccount"
   | "genexSignIn"
   | "genexCancelSignIn"
@@ -561,16 +576,25 @@ export function createPeopleStore(api: PeopleApi, storage: KeyValueStorage | nul
     else await loadMe();
   };
 
+  const friends = friendCalls(store, set, api);
   return Object.assign(store, {
     loadMe,
     ...accountCalls(store, set, api),
     ...numberReads(store, set, api),
-    ...friendCalls(store, set, api),
+    ...friends,
     loadProfile: profileReads(store, set, api),
     rename: async (name: string) => accountAnswered(await api.playRename(name)),
     setAvatar: async (webp: Uint8Array) => accountAnswered(await api.playAvatar(webp)),
     setAvatarStyle: async (style: AvatarStyle) => accountAnswered(await api.playAvatarStyle(style)),
     setAvatarVariant: avatarVariantWrites(store, set, api, accountAnswered),
+    setHandle: async (handle: string): Promise<HandleSave> => {
+      const saved = await api.playSetHandle(handle);
+      if (saved.outcome !== HandleSaveOutcome.Saved) return saved;
+      await accountAnswered(saved.me);
+      // The invite link is the handle's (`/@<handle>/invite`): read the new one rather than hand out the old.
+      void friends.loadFriends();
+      return saved;
+    },
   });
 }
 
