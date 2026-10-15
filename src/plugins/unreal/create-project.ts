@@ -3,7 +3,8 @@
  * exactly as Unreal's New Project dialog does (GameProjectUtils::CreateProjectFromTemplate in UE
  * 5.8.3, followed step by step). Epic's dialog defaults apply: Desktop, Maximum quality, and no
  * variant unless the third-person template's Combat variant is chosen, whose shared pack is added
- * after the template's as the dialog's AddSharedContentToProject does.
+ * after the template's as the dialog's AddSharedContentToProject does. One step is Genex's own: on a
+ * Mac the game is made without hardware ray tracing ({@link MAC_VALUES}).
  * The project is built in a temporary sibling (its dot prefix hides it on a Mac, not on Windows)
  * and renamed into place only when complete, so a failure leaves nothing half made. Nothing here follows a link: a template, a shared pack or
  * a parent folder that is one is refused.
@@ -658,6 +659,15 @@ const value = (file: string, section: string, key: string, setting: string, repl
   replace,
 });
 
+/**
+ * What Genex sets after Epic's values in a game made on a Mac: hardware ray tracing off. UE 5.8
+ * rendering a ray-traced level behind another app hangs the GPU and crashes the editor (an M4 Max,
+ * within a few plays every time); Lumen still lights the level, tracing in software. It replaces
+ * the first `r.RayTracing` line, which is the one Epic's values added.
+ */
+const MAC_VALUES: readonly ConfigValue[] = [value(ENGINE_INI, Section.Renderer, "r.RayTracing", "False", true)];
+const MAC: NodeJS.Platform = "darwin";
+
 /** CreateProjectFromTemplate's config values: Epic's values for a Blueprint template at Desktop and Maximum, in Epic's order. */
 function configValues(template: string, name: string, isBlank: boolean, projectId: string): ConfigValue[] {
   const renderer = (key: string, setting: string, replace: boolean) =>
@@ -758,7 +768,9 @@ async function buildProject(request: CreateRequest, plan: CreatePlan, destinatio
   await mkdir(path.join(destination, "Content"), { recursive: true });
   await copyTemplate(plan, destination);
   const projectId = (request.newId ?? newProjectId)();
-  await saveConfigValues(destination, configValues(template, request.name, plan.defs.isBlank, projectId), eol);
+  const epic = configValues(template, request.name, plan.defs.isBlank, projectId);
+  const onMac = (request.platform ?? process.platform) === MAC;
+  await saveConfigValues(destination, onMac ? [...epic, ...MAC_VALUES] : epic, eol);
   await copyPacks(plan.packs, destination);
   const descriptor = projectDescriptorText(plan.descriptor, request.engine.version, eol);
   const file = path.join(destination, `${request.name}${UPROJECT_EXTENSION}`);

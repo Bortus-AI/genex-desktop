@@ -4,7 +4,8 @@
  * refusing what the target cannot do, pacing the clock, looking, input — is the generic
  * {@link computerSession}; this module is its browser source (`browser-preview-target.ts`), or,
  * for a game whose studio.json declares the `bridge` runtime, the Play Protocol source
- * (`game-bridge-target.ts`).
+ * (`game-bridge-target.ts`), or, for a game played in its engine's editor, the engine plugin's
+ * play tools (`editor-play-target.ts`).
  */
 import { type AgentScreen, type AgentScreenRole, ScreenDeed, ScreenRole } from "../../shared/agent-screen.ts";
 import {
@@ -32,6 +33,7 @@ import {
   type TargetSource,
 } from "./computer-session.ts";
 import { type EngineLauncher, gameBridgeSource } from "./game-bridge-target.ts";
+import { type EnginePlayCall, editorPlaySource } from "./editor-play-target.ts";
 import type { FramePort, PreviewService } from "./previews.ts";
 import { iterationDir } from "./run-shots.ts";
 import { markVerified } from "./verified-traces.ts";
@@ -150,14 +152,19 @@ export function targetFramePort(target: ComputerTarget): FramePort {
   };
 }
 
-/** What else a computer may need: a sandbox to start a Play Protocol game in, when the build is one. */
+/** What else a computer may need: a sandbox to start a Play Protocol game in, or the engine plugin's play tools. */
 export interface ComputerToolsOptions {
   /**
    * Set when the build's studio.json declares the `bridge` runtime: its game is started here, or by
    * `engine` when its play names an engine a plugin runs (an engine draws: a window and the GPU).
    */
   bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived">; engine?: EngineLauncher };
+  /** Set when the game is played in its engine's editor: the engine plugin's play tools. */
+  editor?: { call: EnginePlayCall };
 }
+
+/** The runtimes a computer is built for: those a game declares, and its engine's editor. */
+type ToolsRuntime = GameRuntime | typeof TargetRuntime.Editor;
 
 /** The tools over one session, whatever its target: the tool definition, its calls, its load and its trace. */
 function toolsOver<T extends ComputerTarget>(
@@ -233,6 +240,12 @@ function browserSource(
   };
 }
 
+/** Which runtime a computer is built for: the engine's editor, a Play Protocol game, or the browser window. */
+function toolsRuntime(options: ComputerToolsOptions): ToolsRuntime {
+  if (options.editor) return TargetRuntime.Editor;
+  return options.bridge ? TargetRuntime.Bridge : TargetRuntime.Browser;
+}
+
 /**
  * The computer on one session's window — the builder's worktree, the playtester's build under
  * test, the scout's live folder. Loaded once through the served entry, the setup script applied,
@@ -265,7 +278,7 @@ export function computerTools(
     screen,
     ...(sessionOptions.offer ? { offer: sessionOptions.offer } : {}),
   };
-  const runtime: GameRuntime = options.bridge ? TargetRuntime.Bridge : TargetRuntime.Browser;
+  const runtime = toolsRuntime(options);
   const deps: SourceDeps = { previews, grant, role, sessionPort, screen, options };
   return TARGET_SOURCES[runtime](deps, (source, parts) =>
     toolsOver(computerSession(source, initialRoot, sessionOptions), { ...shared, ...parts }),
@@ -293,7 +306,7 @@ type ToolsBuilder = <T extends ComputerTarget>(
  * runtime and a new row here; the desktop and a VM, which no game declares, are built by
  * `desktop-tools.ts` over the same session. The session, the tool and every engine stay as they are.
  */
-const TARGET_SOURCES: Record<GameRuntime, (deps: SourceDeps, build: ToolsBuilder) => ComputerTools> = {
+const TARGET_SOURCES: Record<ToolsRuntime, (deps: SourceDeps, build: ToolsBuilder) => ComputerTools> = {
   [TargetRuntime.Browser]: (deps, build) => {
     const source = browserSource(deps.previews, deps.grant, deps.role, deps.sessionPort, deps.screen);
     return build(source, { caps: source.caps, portOf: (target) => target.port, release: async () => {} });
@@ -305,6 +318,20 @@ const TARGET_SOURCES: Record<GameRuntime, (deps: SourceDeps, build: ToolsBuilder
     const source = gameBridgeSource({
       sandbox,
       ...(engine ? { engine } : {}),
+      frame: (target, jpeg, caption, act) => {
+        deps.previews.openScreen(deps.screen());
+        return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);
+      },
+    });
+    return build(source, { caps: source.caps, portOf: () => null, release: source.release });
+  },
+  [TargetRuntime.Editor]: (deps, build) => {
+    const editor = deps.options.editor;
+    if (!editor) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
+    const source = editorPlaySource({
+      ...editor,
+      // A judge or a playtester judges the game from its start, never from where another play left it.
+      fresh: PACED_ROLES.has(deps.role),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);

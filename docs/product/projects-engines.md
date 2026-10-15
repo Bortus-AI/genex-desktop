@@ -31,17 +31,16 @@ plugin's editor, agents wait.
 ## Unreal
 
 The lead works in the open editor through the Genex editor helper, one holder at a time; while you
-play there the chat reads “Waiting for you to finish in Unreal” (a build waits 10 minutes). A
-turn saves unsaved editor work. Rewind saves, closes and reopens Unreal; if it can't, files stay
-and the chat says why. An **Unreal plugin** project hosts the plugin in `Plugins/`, where its tools
-build, test headless and package it.
+play there the chat reads “Waiting for you to finish in Unreal”. A turn snapshots editor work;
+Rewind saves, closes and reopens Unreal. Agents and blind judges play it with keys and the
+mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**
+project is a host project with the plugin in `Plugins/`; its tools build, test and package it.
 
 ## Godot
 
-Off by default; needs Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, in
-`godot/`) and opens your editor, which saves before save points and reloads after Rewind. Agents
-check, run and shoot in a sandbox. **Export for the web** writes `web/`, played in Live and
-published.
+Off by default (Godot 4.3+). Its button gets Godot, makes a **New Godot game** (2D/3D, in
+`godot/`) and opens your editor, which saves before save points, reloads after Rewind. Agents
+work in a sandbox. **Export for the web** writes `web/` for Live and Publish.
 
 ## Live's views
 

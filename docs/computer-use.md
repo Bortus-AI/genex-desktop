@@ -123,6 +123,35 @@ the `ProcessSandbox`. The playtest shorthands are not offered there; its moves a
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
 conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
+
+A game played in its engine's editor is the `editor` runtime
+([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): the target calls its engine
+plugin's play tools ([`shared/engine-play.ts`](../src/shared/engine-play.ts): `play-open`,
+`play-input`, `play-shot`, `play-state`, `play-pause`, `play-close`, harness-only, each needing the
+plugin's editor lock for its call, the person first). Unreal provides them
+([`plugins/unreal/computer-play.ts`](../src/plugins/unreal/computer-play.ts)): Play In Editor through
+the Genex editor helper the editor queue already uses, keys held on the game's own clock (web key
+codes, named as Unreal names them: `KeyW` is `W`; the mouse buttons as `MouseLeft`… are
+`LeftMouseButton`…), one frame of the player's mouse for `look` and the wheel (Unreal's `Mouse2D` and
+`MouseWheelAxis`, held still a frame before they are let go, since letting go of a forced analog key
+injects its opposite), the player's view by `capture_play`, and `player_state` as the state goals
+are checked against. A session joins a play that already runs and ends only one it started; a play
+it starts warms up 2 game seconds before the first look and is marked as the agent's
+(`agent-play.ts`), so the lock's person-first probe does not read it as the person playing, and a
+session whose plugin restarted takes over the play that mark still claims. While the editor queue
+still has a part or a play-check of the game, a session is refused (`busy`). Capabilities
+(`EDITOR_CAPABILITIES`): a relative pointer (`look`, the clicks pressing where the view is aimed —
+`aimedClicks` — and the wheel; no point, drag or cursor), a clock the studio can stand still but not
+step (`Freeze`: the play's own pause, held between a judge's or playtester's moves, so a run never
+claims to replay), game state, input route `editor`. Who holds it: any session the studio hands a
+computer for a game an engine plugin that is on holds the link of and provides every play tool —
+the chat's own ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts)), and a judge's or
+playtester's through `_computerToolsFor`; `judge_play` is offered to such a chat, and the Unreal
+Loop's lead has its own (`loop/unreal/lead-judge.ts`). Nothing starts until the agent first uses it,
+and the session's end ends the play it started, never leaving a game paused. On a Mac, Unreal's
+background throttle is lifted only for an editor without hardware ray tracing (UE 5.8 hangs the GPU
+rendering a ray-traced level at full speed behind another app); see [plugins](plugins.md).
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
@@ -152,13 +181,21 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   with `GENEX_VENDOR_CUA_DRIVER=1`, else runs an installed driver (`~/.local/bin/cua-driver` and the
   usual paths), embedded the same way. Moving to a newer driver: change the pin and the notices, then
   verify the web and desktop scenarios live.
-- **Who holds it.** The chat's own session on every engine is handed a `desktop` tool (the computer
-  vocabulary under its own name, so it sits beside a game's `computer`), where a driver is
-  found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
+- **The setting.** Settings → Permissions → **Let agents control your computer** (`computerControl`
+  in the studio's `settings.json`) is off for every install, new or existing; only an explicit on
+  turns it on, and only macOS offers it. Off, no session is handed the `desktop` tool, no consent card
+  shows, the driver is never looked for or started, and `desktop.computer` answers that computer
+  control is off in Settings (an answer, never an error). Turning it off stops every running driver
+  (`stopAll`, as ⌃⌥⌘Esc) and a session already holding the tool reads the same answer on its next
+  call; turned on, the next call or session works as below.
+- **Who holds it.** With the setting on, the chat's own session on every engine is handed a `desktop`
+  tool (the computer vocabulary under its own name, so it sits beside a game's `computer`), where a
+  driver is found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
   `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
-  session's yes covers every app.
+  session's yes covers every app. A yes stands while the driver fails to connect (missing grants, no
+  driver): the next call retries without a new card. A stop ends it, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front

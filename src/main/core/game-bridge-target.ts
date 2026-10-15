@@ -16,7 +16,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
 import {
   ClockLevel,
-  canPause,
+  canStep,
   InputRoute,
   PointerLevel,
   StateLevel,
@@ -345,7 +345,7 @@ function bridgeClock(
     await client.call(PlayOp.Play, {});
     state.held = false;
   };
-  if (!canPause(caps)) return { pause, start };
+  if (!canStep(caps)) return { pause, start };
   const step = async (ms: number) => {
     try {
       const ran = await stepGame(client, ms);
@@ -402,7 +402,7 @@ export function gameBridgeTarget(
   const pause = options.sleep ?? ((ms: number) => sleep(ms).then(() => {}));
   // Inside an action a refused step is thrown, so the action counts as not applied.
   const hold = async (ms: number) => {
-    if (state.held && canPause(caps)) await stepGame(client, ms);
+    if (state.held && canStep(caps)) await stepGame(client, ms);
     else await pause(ms);
   };
   const ctx: InputContext = { client, view: hello.view, state, hold };

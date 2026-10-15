@@ -1112,6 +1112,8 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
+  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  computerControl?: boolean;
 }
 // ↑ src/shared/studio-api.ts
 
@@ -1191,7 +1193,7 @@ export interface CompleteResponse {
 }
 // ↑ src/shared/engine-requests.ts
 
-export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page';
+export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page' | 'editor';
 // ↑ src/shared/computer-target.ts
 
 /** What a finished computer session's trace adds up to, as a delegation's result carries it. */
@@ -1367,7 +1369,10 @@ export type ProjectKind =
   | "own-script";
 // ↑ src/shared/game-project.ts
 
-/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+/**
+ * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
+ * grants, nor the editor, which the game's engine link decides.
+ */
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts
 
@@ -2304,7 +2309,7 @@ export interface HarnessHostApi {
    * The `desktop` tool, run by the host for an engine whose tool loop is the harness's own
    * (Ollama): the person's computer, behind the consent asked on a card in `threadId`. `describe`
    * answers the tool's schema and starts the chat's session afresh; `unavailable` says why there is
-   * none (no desktop driver, no chat to ask in).
+   * none (computer control off in Settings, no desktop driver, no chat to ask in).
    */
   "desktop.computer": {
     params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
