@@ -4726,6 +4726,29 @@ describe("a provider lost mid-run", () => {
     assert.equal(w.state.limit?.retryAfterMs, null);
   });
 
+  // Live, 2026-10-15: a 2-hour Unreal Loop ended 6 minutes in when the Mac's network dropped, and
+  // its closing words said the time ran out.
+  it("D9b. a lead turn that couldn't reach the API (no network, no DNS) pauses the run like any outage", async () => {
+    const unreachable = [
+      "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)",
+      "API Error: connect ENETUNREACH 160.79.104.10:443",
+      "API Error: connect EHOSTUNREACH 160.79.104.10:443",
+      "API Error: getaddrinfo ENOTFOUND api.anthropic.com",
+      "API Error: ENETDOWN",
+    ];
+    for (const errorText of unreachable) {
+      const w = clockNight();
+      const { talk } = w.lead((turn) =>
+        turn === 1
+          ? { ok: true, sessionId: "lead-1" }
+          : { ok: false, stopReason: "error", errorText, sessionId: "lead-1" },
+      );
+      const outcome = await w.run(talk);
+      assert.equal(outcome.wrapCause, null, errorText);
+      assert.equal(w.state.limit?.kind, "unavailable", errorText);
+    }
+  });
+
   it("D10. a sign-in a judge lost while the lead slept pauses the run before the lead is woken", async () => {
     const w = clockNight();
     try {

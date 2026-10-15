@@ -11,6 +11,7 @@ import { FACT_ROOT, type FactRef, type FolderHolds } from "../../folder-facts.ts
 import { CLAIM_BEFORE_END_MINUTES } from "../../finish-check.ts";
 import { MAX_FINISH_REJECTIONS } from "../../finish-contract.ts";
 import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
+import { JUDGE_PLAY_TOOL } from "../../judge-play-prompts.ts";
 import { appIdentity } from "../../project-prompts.ts";
 import { MINUTE_MS, minutes } from "../../time.ts";
 import { JobTool } from "../../jobs/contract.ts";
@@ -72,6 +73,8 @@ export interface OpenBriefFacts {
   restart: boolean;
   /** Whether a restart also rebuilds the game's C++ (a project with an Unreal project in it). */
   cppRestart: boolean;
+  /** Whether the studio plays the game in its engine's editor, so the lead is offered `judge_play`. */
+  judge: boolean;
   savePoints: readonly OpenSavePoint[];
   now: number;
   softDeadline: number;
@@ -126,13 +129,17 @@ function workerWords(types: readonly WorkerType[]): string {
 }
 
 /** The save points paragraph: `save_point`, `rewind`, and `restart` when a plugin restarts the project's app. */
-function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart">): string {
+function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart" | "judge">): string {
   const lines = [
     `SAVE POINTS: ${OpenTool.SavePoint} keeps the folder as it is now in Genex's checkpoint (the project's plugins save their apps first); keep one after each step that works. ${OpenTool.Rewind} with a save point's label goes back to it when your turn ends.`,
   ];
   if (facts.restart)
     lines.push(`${OpenTool.Restart} closes and reopens the project's app when your turn ends; no file changes.`);
   if (facts.restart && facts.cppRestart) lines.push("After changing the game's C++ source, call restart: it rebuilds.");
+  if (facts.judge)
+    lines.push(
+      `${JUDGE_PLAY_TOOL}: a blind judge plays the game and answers one yes/no; ask it before you claim a mechanic works.`,
+    );
   return lines.join(" ");
 }
 

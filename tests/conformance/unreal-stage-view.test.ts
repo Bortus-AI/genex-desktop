@@ -72,6 +72,14 @@ describe("the Live card's Unreal step", () => {
     assert.match(other.button?.label ?? "", /Lantern/);
   });
 
+  it("says Unreal crashed while its crash report holds the port, and offers nothing until the report closes", () => {
+    const view = stageView(status(PanelStep.Crashed, { editors: 0 }), NAME);
+    assert.equal(view.button, null);
+    assert.match(view.line, /Unreal crashed/);
+    assert.match(view.line, /crash report/);
+    assert.match(view.line, /Lantern/);
+  });
+
   it("offers no Quit or Restart while two editors run, since one could reach the wrong project", () => {
     for (const next of [PanelStep.Switch, PanelStep.NotAnswering, PanelStep.PortBlocked, PanelStep.QuitFirst])
       assert.equal(stageView(status(next, { editors: 2, openProject: { name: "H", file: "/h" } }), NAME).button, null);

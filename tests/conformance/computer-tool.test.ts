@@ -472,6 +472,18 @@ describe("computer tool — mouse-look and named game actions, where the target 
     assert.doesNotMatch(computerToolDefinition().description, /act text=<action>/);
   });
 
+  it("on a target that clicks where its view aims, offers the clicks but never a position", () => {
+    const aimed = { ...BROWSER_CAPABILITIES, pointer: PointerLevel.Relative, aimedClicks: true };
+    const actions = computerActionsFor(aimed);
+    for (const kept of ["left_click", "right_click", "middle_click", "double_click", "look", "scroll"])
+      assert.ok(actions.includes(kept as never), `${kept} is offered`);
+    for (const missing of ["mouse_move", "left_click_drag", "left_mouse_down", "left_mouse_up", "cursor_position"])
+      assert.ok(!actions.includes(missing as never), `${missing} is not offered`);
+    const description = computerToolDefinition({ capabilities: aimed }).description;
+    assert.match(description, /where the view is aimed/);
+    assert.doesNotMatch(description, /left_click_drag/);
+  });
+
   it("reads look's deltas and act's name, and says what is missing", () => {
     const look = parseComputerArgs({ action: "look", dx: "40", dy: -10 });
     assert.equal(look.ok, true);

@@ -7,7 +7,8 @@
  * Nothing moves before the person says so: the first call asks whether the agent may see the
  * screen and use the computer this session, and each app it then reaches is asked for once
  * (`desktop-target.ts`). A no is the answer the model reads, never a failure. The driver starts
- * on the first call and stops with the session.
+ * on the first call and stops with the session. Computer control is a setting (Settings →
+ * Permissions, off by default): while it is off, every call answers so and nothing starts.
  */
 import type { ScreenAct } from "../../shared/agent-screen.ts";
 import { ScreenRole } from "../../shared/agent-screen.ts";
@@ -37,7 +38,11 @@ const MESSAGE = {
   noDriver: (why: string) => `computer control is not available: ${why}`,
   stopped:
     "the person stopped computer control (Stop, or Control-Option-Command-Escape) — nothing more moved; ask before using it again",
+  off: "computer control is off in Settings — nothing moved; the person can turn it on under Settings → Permissions",
 } as const;
+
+/** What a call answers while computer control is turned off in Settings. */
+export const DESKTOP_OFF_ANSWER = MESSAGE.off;
 
 /** What a desktop session is built from. */
 export interface DesktopToolsDeps {
@@ -57,6 +62,8 @@ export interface DesktopToolsDeps {
   /** A VM's desktop rather than this Mac's: its apps are all the VM's, so the session's yes covers them. */
   vm?: boolean;
   maxActions?: number;
+  /** Whether computer control is on in Settings now; asked before every call (on when absent). */
+  enabled?: () => boolean;
 }
 
 /** The desktop tool for one session, and how to stop it. */
@@ -66,6 +73,11 @@ export interface DesktopTools {
   trace: () => ComputerTraceSummary;
   /** Stop the driver; later calls start nothing until asked again. */
   release: () => Promise<void>;
+}
+
+/** Whether the person turned computer control off in Settings. */
+function turnedOff(deps: DesktopToolsDeps): boolean {
+  return deps.enabled?.() === false;
 }
 
 /** The apps the person allowed this session, asked for once each. */
@@ -87,7 +99,8 @@ function appAllowance(deps: DesktopToolsDeps) {
 function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { release(): Promise<void> } {
   let driver: DesktopDriver | null = null;
   let target: DesktopTarget | null = null;
-  let refusedSession = false;
+  // The session question is asked once: a yes stands while a connection fails and is retried.
+  let session: boolean | null = null;
   const allowApp = appAllowance(deps);
   const unusable = (problem: string) => ({
     target: desktopTarget({ driver: deadDriver(problem), allowApp: async () => false }),
@@ -99,11 +112,10 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
     caps: desktopTarget({ driver: deadDriver(""), allowApp: async () => false, vm: deps.vm === true }).caps,
     load: async () => {
       if (target) return { target, problem: null, note: null, fresh: false };
-      if (refusedSession) return unusable(MESSAGE.declined);
-      if (!(await deps.ask(DesktopQuestion.Session))) {
-        refusedSession = true;
-        return unusable(MESSAGE.declined);
-      }
+      session ??= await deps.ask(DesktopQuestion.Session);
+      if (!session) return unusable(MESSAGE.declined);
+      // Turned off while the card waited: the yes connects nothing.
+      if (turnedOff(deps)) return unusable(MESSAGE.off);
       const connected = await deps.connect().catch((error: unknown) => errorMessage(error));
       if (typeof connected === "string") return unusable(MESSAGE.noDriver(connected));
       driver = connected;
@@ -121,6 +133,8 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
       const open = driver;
       driver = null;
       target = null;
+      // A stop ends the session's yes: the next call asks again.
+      session = null;
       await open?.close().catch(() => {});
     },
   };
@@ -165,6 +179,7 @@ export function desktopTools(deps: DesktopToolsDeps): DesktopTools {
   return {
     liveTools: [tool],
     onLiveTool: async (name, args) => {
+      if (turnedOff(deps)) return MESSAGE.off;
       const before = stops;
       const answer = await session.run(name, args);
       return stops === before ? answer : MESSAGE.stopped;

@@ -1350,7 +1350,7 @@ up and land a build nobody could check. The engines call a revoked or disabled a
 failure (`auth`): Claude Code from the CLI's own error code on the reply (`authentication_failed`,
 `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or the access words both engines share
 (`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
-an outage the patience ladder could not outlast, a 529 the session returned included — pauses the
+an outage the patience ladder could not outlast, a 529 or an unreachable network (`ENOTFOUND`) the session returned included — pauses the
 run (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
 until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run
