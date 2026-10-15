@@ -195,7 +195,11 @@ to one (`PluginConsent.approveForMode`, `by: mode`). A connector's card ("Let th
 ask again for this action in <name>") and Don't allow; Always allow saves that exact tool (`McpRegistry.alwaysAllow`): the person's own connector
 in connectors.json, where its card's checkbox shows it, and a plugin's in `always-allowed.json`
 beside it, listed on the plugin's page under Connections with **Ask every time** to take it back.
-A plugin tool's own `confirmation` card never offers it. A local plugin's agent tool asks each call
+A plugin tool's own `confirmation` card never offers it, and no chat mode answers it, Bypass
+included: it asks every call. The Roblox Studio plugin puts Roblox's AI tools, uploads and Creator
+Store inserts behind such cards (`generate-mesh`, `upload-image`, `insert-asset` and the rest),
+because they run on the person's Roblox account, and its connection never offers Studio's own
+copies of them, whose cards Auto and Bypass would skip ([plugins](plugins.md)). A local plugin's agent tool asks each call
 too ("<Plugin> was loaded from a folder on this Mac and runs with your access"), and its card offers
 Always allow for that tool alone, kept until the plugin's code changes or it is turned off and listed
 on its page with **Ask every time**; Bypass and a run's own consent never answer it. A tool of a

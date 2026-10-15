@@ -1183,7 +1183,8 @@ tool the table doesn't know passes as a write. Hidden: the play-lane tools (play
 six play tools), `multi_edit` (scripts are the game's `.luau` files), `http_get` (Studio would
 fetch any address for the agent: a path for leaking data and for planted instructions) and
 `list_roblox_studios`; inserts, uploads and Roblox's AI tools are plugin tools that ask the person
-every time. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
+every time (Ask first, below), and a call to one through the connection names the plugin tool to
+use instead. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
 and refused in plain words when it can't be.
 
 The binding file comes from the helper link (`helper-link.ts`), which the backend starts once Studio
@@ -1320,6 +1321,29 @@ beside it (whole or not at all, never over a file), adds the lock lines to `.git
 Studio** is Studio's normal quit and is refused while a build uses Studio (`game.engine.runs`).
 `use-project` switches a game to an open place by its listed name or a file by path, never reading
 Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
+
+**Ask first.** Roblox's own AI tools, uploads and Creator Store inserts are plugin tools with a
+`confirmation` card (`ai-tools.ts`, `insert-asset.ts`, `AskFirstTool` in `studio-tools.ts`), so
+they ask the person every call in every chat mode, Bypass included: they run on the person's Roblox
+account, against its limits, and Roblox's moderation of what they make or upload lands on that
+account. Each card is at most 300 characters and says what goes to Roblox. `generate-mesh`,
+`generate-model` (Studio's `generate_procedural_model`, about 50 a day), `generate-texture`,
+`generate-material`, `segment-mesh`, `roblox-playtest` and `roblox-explore` (Studio's `subagent`
+types `playtest` and `explore`), `upload-image`, `store-image` and `insert-asset` each call one
+Studio tool in the game's own Studio as its helper is bound, `studio_id` filled by the backend.
+Lists (part names, pictures) arrive as one string, comma-separated or a JSON array, and are checked
+with every other argument before any call; what is refused reaches no Studio, and Studio's own
+refusals (such as the daily cap) reach the agent in its words. The tools that change or play the
+place hold the `studio` lock and run under the agent's marks (the playtest agent under the play
+mark). Pictures are `.png` or `.jpg` files of at most 5 MB in the game folder, read with no link on
+the way and checked by their first bytes, or `https` addresses on public names: `store-image` hands
+Studio a private copy in the storage, removed when it answers, and `upload-image` serves the game's
+pictures on 127.0.0.1 at random paths only for the call, answering each picture's `rbxassetid` by
+the name the agent gave. `insert-asset` takes an id of plain digits, reads the price first (Studio's
+`search_asset` for that id; one it doesn't find by its product info in Edit, free only when public
+or the signed-in person's own), refuses a paid asset with nothing inserted, and answers every
+script the asset brought, flagging `require` with an id, `loadstring`, `getfenv`, `HttpService` and
+`MarketplaceService`.
 
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
