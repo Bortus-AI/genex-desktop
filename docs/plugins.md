@@ -1943,7 +1943,7 @@ description come from the live plugin list when the plugin is installed: **Turn 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
 link and the host makes it (`substrate/plugins/engine-links.ts`), to a project of the engine the
 plugin declares ([The engine declaration](#the-engine-declaration)); a plugin that declares none is
-refused. `game.engine.link {project, remote?}` checks the project file by real path (absolute, no
+refused. `game.engine.link {project, remote?, name?}` checks the project file by real path (absolute, no
 `..`, at most 1,024 characters, one of the engine's `projectFiles`, a regular file once every link
 is resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
 linkedAt, remote?, previous}`, `kind` being the engine's id, which the plugin's MCP servers read and
@@ -1955,7 +1955,10 @@ builds in Unreal · Lantern" with Undo. `remote` keeps a published game's ids be
 still made. A record is believed only while its `kind` is an engine an installed plugin declares
 (`PluginRegistry.engines()`, on or off: turning a plugin off never turns its games into web games;
 removing it does) and its file is still of that engine's kind at that real path. A project's name
-is its file name without the engine's longest matching extension (`a.project.json` is `a`).
+is its file name without the engine's longest matching extension (`a.project.json` is `a`); a
+link's `name` (one plain line, at most 80 characters) names it in the chat's line and the answer
+instead, for a project known by another name (a Roblox place linked through
+`default.project.json`); any other shape is dropped.
 Linking the project a game already uses, with the same ids, changes nothing; other ids make a new
 link. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
 once the link has changed; it restores the project the link replaced, or leaves the game a web

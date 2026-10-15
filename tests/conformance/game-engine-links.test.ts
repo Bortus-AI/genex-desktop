@@ -539,6 +539,25 @@ test("a link keeps a published game's ids; new ids rewrite it, and ids of a bad 
   }
 });
 
+test("a link may name its project as people know it: the chat line says that name, else the file's", async () => {
+  const w = await world();
+  await w.makeGame("garden");
+  const project = await makeToy(w.root, "Garden");
+  const named = await w.links.link(TOY, w.binding("garden", "t1"), { project, name: "Front Yard" });
+  assert.equal(named.name, "Front Yard");
+  assert.equal(customEvent(envelope(w.appended[0].record), CustomEvent.EngineLinked)?.name, "Front Yard");
+  for (const bad of ["", " ", "two\nlines", "x".repeat(81), 7, null]) {
+    await w.makeGame("plain");
+    const made = await w.links.link(TOY, w.binding("plain", "t2"), { project, name: bad });
+    assert.equal(made.name, "Garden", `${JSON.stringify(bad)}: the file's name`);
+    const last = w.appended.at(-1);
+    assert.ok(last, "the link is told in the chat");
+    const line = customEvent(envelope(last.record), CustomEvent.EngineLinked);
+    assert.equal(line?.name, "Garden", `${JSON.stringify(bad)}: the chat line names the file`);
+    await w.links.undo(TOY, "plain", made.linkedAt);
+  }
+});
+
 test("a plugin that declares no engine can't link a game, and nothing changes", async () => {
   const w = await world();
   await w.makeGame("garden");

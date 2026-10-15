@@ -353,11 +353,15 @@ interface PlaceKey {
   project?: string;
   placeId?: string;
   name?: string;
+  /** The open Studio it is in: a game's link that this Studio's name matches is the same place. */
+  studio?: StudioEntry;
 }
 
 /** Whether a game's live link is the place `key` names. */
 function sameKey(live: LiveLink, key: PlaceKey): boolean {
   if (key.placeId) return live.link.placeId === key.placeId;
+  // Matched as the game's own connection finds its Studio: by file name, or by name for a place never saved.
+  if (key.studio && !live.link.placeId && placeMatcher(live.link)(key.studio)) return true;
   if (key.name) return !live.link.placeId && live.record.name === key.name;
   return key.project !== undefined && live.link.project === key.project;
 }
@@ -367,11 +371,12 @@ function holderOf(links: readonly LiveLink[], game: string | undefined, key: Pla
   return links.find((live) => live.game !== game && sameKey(live, key));
 }
 
-/** An open place's key: its ids when published, else its file name or Studio name. */
+/** An open place's key: its ids when published, else the Studio it is in, by its file or its name. */
 function openKey(place: OpenPlace, files: readonly FoundFile[], platform: NodeJS.Platform): PlaceKey {
   if (place.placeId) return { placeId: place.placeId };
+  const studio = { id: place.studio, name: place.name };
   const file = place.kind === PlaceKind.File ? fileNamed(files, place.name, platform) : undefined;
-  return file ? { project: file } : { name: place.name };
+  return file ? { project: file, studio } : { name: place.name, studio };
 }
 
 /** The one found file with this base name, or undefined when there is none or more than one. */
@@ -457,10 +462,10 @@ async function chosenFromEntry(
   if (twins) throw new PlaceError(PlaceRefusal.SameName, MESSAGE.Places.SameName(entry.name));
   if (isPlaceName(entry.name)) {
     const file = fileNamed(options.files ?? [], entry.name, deps.platform);
-    if (file) return { project: file, name: stemOf(file), key: { project: file } };
+    if (file) return { project: file, name: stemOf(file), key: { project: file, studio: entry } };
   }
   if (!ids) throw new PlaceError(PlaceRefusal.NoAnswer, MESSAGE.Places.NoAnswer(entry.name));
-  return { project, name: entry.name, key: { name: entry.name }, throughProject: true };
+  return { project, name: entry.name, key: { name: entry.name, studio: entry }, throughProject: true };
 }
 
 /** The game's project file for a place with no file, made when it is missing or Genex's own. */
@@ -520,6 +525,8 @@ async function linkChosen(deps: PlaceDeps, context: PluginContext, chosen: Chose
     await context.host(HostService.EngineLink, {
       project: chosen.project,
       ...(chosen.remote ? { remote: chosen.remote } : {}),
+      // The chat names the place, not the project file it is linked through.
+      ...(chosen.throughProject ? { name: chosen.name } : {}),
     });
   } catch (error) {
     throw new PlaceError(PlaceRefusal.Refused, error instanceof Error ? error.message : String(error));

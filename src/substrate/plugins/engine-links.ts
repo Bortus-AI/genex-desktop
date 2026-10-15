@@ -27,6 +27,9 @@ import { projectFileOf, restoreEngineBinding, stillThere, writeEngineBinding } f
 
 /** A game id as it names a link file: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
+/** The longest name a link may give its project for the chat's line. */
+const MAX_LINK_NAME = 80;
+const CONTROL = /[\u0000-\u001f\u007f]/;
 
 const MESSAGE = {
   GameRequired: "Project required",
@@ -134,24 +137,34 @@ async function gameTitle(dir: string): Promise<string | undefined> {
   return typeof meta?.title === "string" && meta.title.trim() ? meta.title.trim() : undefined;
 }
 
-const asLink = (binding: EngineBinding, engine: EngineDeclaration): EngineLink => ({
+const asLink = (binding: EngineBinding, engine: EngineDeclaration, name?: string): EngineLink => ({
   ...binding,
-  name: projectName(binding.project, engine.projectFiles),
+  name: name ?? projectName(binding.project, engine.projectFiles),
 });
+
+/** A name a link gives its project: one plain line of at most {@link MAX_LINK_NAME} characters, else none. */
+function linkName(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const name = value.trim();
+  return name && name.length <= MAX_LINK_NAME && !CONTROL.test(name) ? name : undefined;
+}
 
 /**
  * What a link call asks for: the project file (its shape checked here, its real path when the link
  * is written), the published game's ids (ids of any other shape are dropped and the link is still
- * made), and whether the first call made it.
+ * made), the project's name as people know it when the file's name isn't (any other shape is
+ * dropped), and whether the first call made it.
  */
-type LinkArgs = { project: string; remote?: EngineRemote; auto: boolean };
+type LinkArgs = { project: string; remote?: EngineRemote; name?: string; auto: boolean };
 
 function linkArgs(args: unknown): LinkArgs {
   const fields = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   const remote = parseEngineRemote(fields.remote);
+  const name = linkName(fields.name);
   return {
     project: typeof fields.project === "string" ? fields.project : "",
     ...(remote ? { remote } : {}),
+    ...(name ? { name } : {}),
     auto: fields.auto === true,
   };
 }
@@ -161,7 +174,7 @@ function linkedRecord(
   pluginId: string,
   game: string,
   linked: EngineBinding,
-  context: { engine: EngineDeclaration; title?: string; previous?: EngineBinding; auto: boolean },
+  context: { engine: EngineDeclaration; title?: string; previous?: EngineBinding; auto: boolean; name?: string },
 ): CustomEventRecord {
   const { engine, title, previous, auto } = context;
   return customEventData(CustomEvent.EngineLinked, {
@@ -171,7 +184,7 @@ function linkedRecord(
     engine: linked.kind,
     label: engine.label,
     file: linked.project,
-    name: projectName(linked.project, engine.projectFiles),
+    name: context.name ?? projectName(linked.project, engine.projectFiles),
     linkedAt: linked.linkedAt,
     ...(previous ? { previous: projectName(previous.project, engine.projectFiles) } : {}),
     ...(auto ? { auto } : {}),
@@ -196,7 +209,7 @@ export function createEngineLinks(deps: EngineLinkDeps) {
     const project = await projectFileOf(asked.project, engine);
     const before = await record(pluginId, game, engine);
     const same = await alreadyLinked(before?.link, project, asked.remote, engine);
-    if (same) return asLink(same, engine);
+    if (same) return asLink(same, engine, asked.name);
     const title = await gameTitle(deps.gameDir(game));
     const written = await writeEngineBinding(deps.gameDir(game), project, engine.id, deps.catalog(), {
       now: deps.now,
@@ -206,7 +219,13 @@ export function createEngineLinks(deps: EngineLinkDeps) {
     const previous = before?.link;
     try {
       await writeRecord(deps.root(pluginId), game, { link: linked, ...(previous ? { previous } : {}) });
-      const context = { engine, ...(title ? { title } : {}), ...(previous ? { previous } : {}), auto: asked.auto };
+      const context = {
+        engine,
+        ...(title ? { title } : {}),
+        ...(previous ? { previous } : {}),
+        ...(asked.name ? { name: asked.name } : {}),
+        auto: asked.auto,
+      };
       await deps.append(
         linkedRecord(pluginId, game, linked, context),
         binding?.threadId ?? (await deps.gameThread(game)),
@@ -217,7 +236,7 @@ export function createEngineLinks(deps: EngineLinkDeps) {
       throw error;
     }
     deps.changed(game);
-    return asLink(linked, engine);
+    return asLink(linked, engine, asked.name);
   }
 
   /** Puts a game's studio.json binding and its link record back as they were before a link that failed part-way. */

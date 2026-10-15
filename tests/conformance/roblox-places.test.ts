@@ -333,7 +333,7 @@ describe("Use in this game", () => {
     const project = path.join(game.directory, "default.project.json");
     assert.deepEqual(
       linkCalls(calls).map((call) => call.args),
-      [{ project, remote: { placeId: PLACE_ID, universeId: UNIVERSE_ID } }],
+      [{ project, remote: { placeId: PLACE_ID, universeId: UNIVERSE_ID }, name: `Obby ${PLACE_ID}` }],
     );
     const rojo = JSON.parse(await readFile(project, "utf8"));
     assert.equal(rojo.tree.$className, "DataModel");
@@ -352,7 +352,8 @@ describe("Use in this game", () => {
     const project = path.join(game.directory, "default.project.json");
     assert.deepEqual(
       linkCalls(calls).map((call) => call.args),
-      [{ project }],
+      [{ project, name: "Place1" }],
+      "the chat names the place, not its project file",
     );
     const link = await readPlaceLink(mac.storage, game.project);
     assert.deepEqual(link, { project, name: "Place1" });
@@ -539,6 +540,21 @@ describe("New Roblox game", () => {
     const ignore = await readFile(path.join(game.directory, ".gitignore"), "utf8");
     assert.match(ignore, /^\*\.rbxl\.lock$/m);
     assert.match(ignore, /^\*\.rbxlx\.lock$/m);
+  });
+
+  it("once Studio lists the new place, the list marks it this game's and another game can't take it", async () => {
+    const mac = await robloxMac({ running: false });
+    const game = await makeGame(mac, "sky-race", "Sky Race");
+    await action(mac, "create", {}, hostFor(mac, game).context);
+    // Studio lists a saved local place by its file name; the new file is in no recent list yet.
+    mac.state.studios = [{ id: "studio-new", name: "sky-race.rbxlx" }];
+    const own = await action<PlacesAnswer>(mac, "places", {}, hostFor(mac, game).context);
+    assert.equal(own.open[0]?.here, true);
+    const other = await makeGame(mac, "rally", "Rally");
+    const theirs = await action<PlacesAnswer>(mac, "places", {}, hostFor(mac, other).context);
+    assert.equal(theirs.open[0]?.linkedTo, "Sky Race");
+    const taken = await action<UsePlaceAnswer>(mac, "use-place", { studio: "studio-new" }, hostFor(mac, other).context);
+    assert.equal(taken.reason, PlaceRefusal.Taken);
   });
 
   it("with no game open makes a Genex game for it and links the place there", async () => {

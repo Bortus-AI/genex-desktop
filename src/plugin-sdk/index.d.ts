@@ -531,13 +531,15 @@ export interface PluginHostCall {
    * (`engine.projectFiles`, checked by real path); a plugin that declares no engine is refused.
    * `remote` keeps the published game's ids beside the link (ids of any other shape are dropped and
    * the link is still made); linking the same file with other ids makes a new link. The chat it was
-   * called from shows one line with Undo; `auto` says the link was made by the game's first call
-   * rather than asked for. From outside any game, `game` names one this plugin made with
-   * `game.create`; any other game is refused.
+   * called from shows one line with Undo, naming the project by `name` when you give one (one plain
+   * line, at most 80 characters: the project as people know it, when its file's name isn't), else
+   * by its file's name; `auto` says the link was made by the game's first call rather than asked
+   * for. From outside any game, `game` names one this plugin made with `game.create`; any other
+   * game is refused.
    */
   (
     method: "game.engine.link",
-    args: { project: string; remote?: PluginEngineRemote; auto?: boolean; game?: string },
+    args: { project: string; remote?: PluginEngineRemote; name?: string; auto?: boolean; game?: string },
   ): Promise<PluginEngineLink>;
   /** `game-engine`: the bound game's link, or null while it has none that still holds. */
   (method: "game.engine.read"): Promise<PluginEngineLink | null>;
