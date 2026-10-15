@@ -83,6 +83,9 @@ describe("the Unity setup card", () => {
     const downloading = { ...running, phase: "downloading" };
     const card2 = setupCard(facts({ hub, signedIn: true, job: downloading }));
     assert.equal(row(card2, SetupStepId.InstallUnity)?.detail, "Downloading · 42%");
+    const installing = { kind: JobKind.Editor, state: JobState.Running, version: "6000.3.26f1", phase: "installing" };
+    const card3 = setupCard(facts({ hub, signedIn: true, job: installing }));
+    assert.equal(row(card3, SetupStepId.InstallUnity)?.detail, "Installing…");
     assert.equal(install?.action, undefined);
 
     const download = { kind: JobKind.Hub, state: JobState.Running, done: 40 * 1024 ** 2, total: 160 * 1024 ** 2 };
@@ -207,6 +210,9 @@ describe("choosing what to install", () => {
       last: "[Unity (6000.3.26f1)] installing 40.5%",
     });
     assert.deepEqual(progressIn("Error: disk full\n"), { last: "Error: disk full" });
+    // After the download Hub validates and installs with no percentage: the phase alone.
+    const after = `${hub}\n[Unity (6000.3.26f1)] downloading 99.00%\n[Unity (6000.3.26f1)] installing...`;
+    assert.deepEqual(progressIn(after), { phase: "installing", last: "[Unity (6000.3.26f1)] installing..." });
   });
 });
 

@@ -117,6 +117,7 @@ const WORDS = {
   Install: "Install",
   Installing: (version: string) => `Installing Unity ${version}`,
   Percent: (percent: number) => `${Math.round(percent)}%`,
+  PhaseOnly: (phase: string) => `${phase.charAt(0).toLocaleUpperCase()}${phase.slice(1)}…`,
   Phase: (phase: string, percent: number) =>
     `${phase.charAt(0).toLocaleUpperCase()}${phase.slice(1)} · ${Math.round(percent)}%`,
   Starting: "Starting…",
@@ -138,6 +139,7 @@ function progressOf(job: InstallJob): string {
   if (job.done !== undefined && job.total) return WORDS.Megabytes(job.done, job.total);
   if (job.percent !== undefined && job.phase) return WORDS.Phase(job.phase, job.percent);
   if (job.percent !== undefined) return WORDS.Percent(job.percent);
+  if (job.phase) return WORDS.PhaseOnly(job.phase);
   return WORDS.Starting;
 }
 

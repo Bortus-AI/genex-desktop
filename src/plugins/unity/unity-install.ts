@@ -114,8 +114,8 @@ export function releasesIn(output: string): string[] {
 /** A terminal escape Hub prints to redraw its progress, and a log line of Hub's own Chromium. */
 const TERMINAL_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
 const CHROMIUM_LOG = /^\[\d+:\d+\/\d+\.\d+:/;
-/** One of Hub's progress lines: `[Unity (6000.3.26f1)] downloading 12.00%`. */
-const PROGRESS = /\]\s+([a-z]+)\s+(\d{1,3}(?:\.\d+)?)\s?%/i;
+/** One of Hub's progress lines: `[Unity (6000.3.26f1)] downloading 12.00%`, or `installing...` with none. */
+const PROGRESS = /\]\s+([a-z]+)(?:\s+(\d{1,3}(?:\.\d+)?)\s?%|\s*[a-z ]*\.\.\.)/i;
 
 /**
  * How far an install got from Hub's output: its phase and percentage from its last progress line
@@ -130,7 +130,10 @@ export function progressIn(log: string): { percent?: number; phase?: string; las
     .filter((line) => line && !CHROMIUM_LOG.test(line));
   const last = (lines.at(-1) ?? "").slice(0, 200);
   const progress = lines.map((line) => PROGRESS.exec(line)).findLast((match) => match !== null);
-  if (progress) return { percent: Number(progress[2]), phase: (progress[1] ?? "").toLowerCase(), last };
+  if (progress) {
+    const phase = (progress[1] ?? "").toLowerCase();
+    return progress[2] === undefined ? { phase, last } : { percent: Number(progress[2]), phase, last };
+  }
   const percent = [...log.matchAll(/(\d{1,3}(?:\.\d+)?)\s?%/g)]
     .map((match) => Number(match[1]))
     .findLast((v) => v <= 100);
