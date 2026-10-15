@@ -5792,7 +5792,7 @@ a:focus-visible {
   background: linear-gradient(135deg, #2b2c31, #1b1c20);
 }
 .mention-card-wash .mention-card-avatar {
-  width: 38%;
+  width: 26%;
   height: auto;
   aspect-ratio: 1;
   margin-bottom: 10%;

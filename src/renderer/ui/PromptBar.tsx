@@ -23,7 +23,13 @@ import { ComposerPermissionMenu } from "./ComposerPermissionMenu.tsx";
 import type { PermissionMode } from "../../shared/permissions.ts";
 import { ComposerAddMenu, type AddMenuHandle, PlanModeOff } from "./ComposerAddMenu.tsx";
 import { ComposerLimits, type ContextUsage } from "./ComposerLimits.tsx";
-import { ComposerCommandMenu, compactCommand, useComposerCommands } from "./ComposerCommandMenu.tsx";
+import {
+  ComposerCommandMenu,
+  compactCommand,
+  type PluginCommand,
+  useComposerCommands,
+} from "./ComposerCommandMenu.tsx";
+import { useAsyncEffect } from "../use-async-effect.ts";
 import { selectedCompact } from "../chat/compact-control.ts";
 import { useToolbarFit } from "./toolbar-fit.ts";
 import { composerPlaceholder, PLAN_PLACEHOLDER } from "../composer-placeholder.ts";
@@ -802,18 +808,43 @@ function CommandList({
   anchor: RefObject<HTMLDivElement | null>;
   menuRef: RefObject<AddMenuHandle | null>;
 }): JSX.Element | null {
+  const plugins = usePluginCommands(commands.query !== null, commands.tagPlugin);
   if (props.gameMode === false) return null;
   return (
     <ComposerCommandMenu
       ref={menuRef}
       query={commands.query}
       options={compactCommand(composerCompact(props), props.onCompact && commands.runner(props.onCompact))}
+      plugins={plugins}
       anchor={anchor}
       listId={commands.listId}
       onClose={() => commands.setQuery(null)}
       onActiveOption={commands.setActiveOption}
     />
   );
+}
+
+/**
+ * The plugins that are on, for the / list, read when it opens; picking one tags it in the message
+ * as @ does. A failed read offers none.
+ */
+function usePluginCommands(open: boolean, tag: (name: string) => void): PluginCommand[] {
+  const [names, setNames] = useState<{ id: string; name: string }[]>([]);
+  useAsyncEffect(
+    (alive) => {
+      if (!open) return;
+      window.studio.pluginsList().then(
+        (plugins) => {
+          if (!alive()) return;
+          const on = plugins.filter((plugin) => plugin.enabled && !plugin.removed && !plugin.unlisted);
+          setNames(on.map((plugin) => ({ id: plugin.manifest.id, name: plugin.manifest.name })));
+        },
+        () => {},
+      );
+    },
+    [open],
+  );
+  return names.map((plugin) => ({ ...plugin, pick: () => tag(plugin.name) }));
 }
 
 /** Compact now as this composer's selected model and its work allow it. */

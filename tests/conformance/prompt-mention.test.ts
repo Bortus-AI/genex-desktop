@@ -15,6 +15,7 @@ import {
   splitMentions,
 } from "../../src/shared/prompt-mention.ts";
 import { PlayShelf } from "../../src/shared/play.ts";
+import { gridTarget } from "../../src/renderer/ui/mention-grid.ts";
 import {
   type GenexCatalogItem,
   mentionCorpus,
@@ -178,5 +179,34 @@ describe("picker corpus", () => {
     );
     assert.deepEqual(searchMentions(docs, "stone zebra"), []);
     assert.deepEqual(searchMentions(docs, "  "), []);
+  });
+});
+
+describe("picker keys", () => {
+  // Five cards two across, then two rows: [0 1] [2 3] [4] then rows 5, 6.
+  const shape = { cards: 5, rows: 2, columns: 2 };
+
+  it("walks the cards' grid and steps into the rows below it", () => {
+    assert.equal(gridTarget("ArrowRight", 0, shape), 1);
+    assert.equal(gridTarget("ArrowDown", 1, shape), 3);
+    assert.equal(gridTarget("ArrowDown", 3, shape), 5);
+    assert.equal(gridTarget("ArrowDown", 4, shape), 5);
+    assert.equal(gridTarget("ArrowDown", 5, shape), 6);
+    assert.equal(gridTarget("ArrowDown", 6, shape), 6);
+    assert.equal(gridTarget("ArrowUp", 5, shape), 4);
+    assert.equal(gridTarget("ArrowUp", 6, shape), 5);
+    assert.equal(gridTarget("ArrowUp", 3, shape), 1);
+    assert.equal(gridTarget("ArrowUp", 1, shape), 1);
+    assert.equal(gridTarget("ArrowLeft", 0, shape), 0);
+  });
+
+  it("leaves other keys and an empty picker to the text box", () => {
+    assert.equal(gridTarget("Enter", 0, shape), null);
+    assert.equal(gridTarget("ArrowDown", 0, { cards: 0, rows: 0, columns: 2 }), null);
+  });
+
+  it("with no rows, down from the last line stays on the cards", () => {
+    assert.equal(gridTarget("ArrowDown", 3, { cards: 5, rows: 0, columns: 2 }), 4);
+    assert.equal(gridTarget("ArrowDown", 4, { cards: 5, rows: 0, columns: 2 }), 4);
   });
 });
