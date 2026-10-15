@@ -219,6 +219,15 @@ describe("choosing what to install", () => {
   });
 });
 
+/** A promise the test settles itself. */
+function gate() {
+  let resolve: () => void = () => undefined;
+  const promise = new Promise<void>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
 /** A Mac where Genex installs: downloads, programs, processes, disk and clock the test decides. */
 async function installMac(options: { team?: string; freeGb?: number; signedIn?: boolean; hub?: boolean } = {}) {
   const { team = UNITY_TEAM_ID, freeGb = 200, signedIn = true, hub = false } = options;
@@ -337,8 +346,8 @@ describe("installing Unity 6 through Hub", () => {
 
   it("shows the install as started while Hub lists its releases, and says why when listing fails", async () => {
     const mac = await installMac({ hub: true });
-    const listed = Promise.withResolvers<void>();
-    const asked = Promise.withResolvers<void>();
+    const listed = gate();
+    const asked = gate();
     const run = mac.deps.run;
     mac.deps.run = async (command, args, timeoutMs) => {
       if (args.includes("--releases")) {
