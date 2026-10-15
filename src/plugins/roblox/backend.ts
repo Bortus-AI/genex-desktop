@@ -9,6 +9,7 @@ import {
   systemLocateFs,
   systemRun,
 } from "./studio-locate.ts";
+import { createStudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
 import { MESSAGE } from "./words.ts";
 
 /**
@@ -180,16 +181,26 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   };
 }
 
-/** This computer, as the backend's process sees it. Until a Studio client exists, nothing answers. */
+/**
+ * This computer, as the backend's process sees it. Studio answers when its own MCP server lists it,
+ * asked through one StudioMCP the backend keeps for its life (StudioMCP ends with its stdin, so it
+ * ends with the backend). It starts only once Studio is set up and running.
+ */
 export function systemDeps(): RobloxDeps {
-  return {
+  const locate: LocateDeps = {
     platform: process.platform,
     env: process.env,
     home: os.userInfo().homedir,
     fs: systemLocateFs,
     run: systemRun,
-    answers: async () => false,
   };
+  const client = createStudioClient(
+    systemStudioClientDeps(async () => {
+      const location = await locateStudio(locate);
+      return location.installed ? location.install.mcp : undefined;
+    }),
+  );
+  return { ...locate, answers: () => studioAnswers(client) };
 }
 
 export const activate: Activate = () => createRobloxBackend(systemDeps());
