@@ -439,7 +439,7 @@
       "name": "play-open",
       "audience": "harness",
       "needs": ["editor"],
-      "description": "For Genex's computer tool only: start play in this game's editor (Play In Editor), or join the play already running. Answers {width, height, joined}, or {refused, message} (busy while the Loop plays a build, no-editor when Unreal is not open).",
+      "description": "For Genex's computer tool only: start play in this game's editor (Play In Editor), or join the play already running. Answers {width, height, joined}, or {refused, message} (busy while the Loop plays a build, no-editor when Unreal is not open, unsupported for more than one player).",
       "parameters": { "type": "object", "properties": {} }
     },
     {
@@ -472,7 +472,7 @@
       "name": "play-shot",
       "audience": "harness",
       "needs": ["editor"],
-      "description": "For Genex's computer tool only: a picture of what the player sees in the running play (no on-screen UI). Answers {png (base64), width, height}, or {refused, message}.",
+      "description": "For Genex's computer tool only: a picture of what the player sees in the running play (no on-screen UI). Answers {data (base64), mime (image/png), png (the same data), width, height}, or {refused, message}.",
       "parameters": { "type": "object", "properties": {} }
     },
     {

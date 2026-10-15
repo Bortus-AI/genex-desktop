@@ -9,6 +9,9 @@
  * the lock's person-first probe does not read it as the person playing; a session whose plugin
  * restarted takes over the play that mark still claims, and ends it. While the editor queue still has a part or a play-check of the game to run,
  * the editor is the queue's: a session is refused (`busy`) rather than playing over it.
+ *
+ * Unreal plays one player: a play of more players, or a call for any player but the first, is
+ * refused as `unsupported` before anything reaches the editor.
  */
 import {
   ENGINE_PLAY_VIEW,
@@ -20,8 +23,10 @@ import {
   EnginePlayTool,
   MAX_PLAY_INPUT_SECONDS,
   MouseButtonCode,
+  playerArg,
   playInputKeys,
 } from "../../shared/engine-play.ts";
+import { StillMimeType } from "../../shared/preview-contract.ts";
 import type { PluginContext } from "../../plugin-sdk/index.d.ts";
 import { type AgentPlayMarker, agentPlayFolder, agentPlayMarker, agentPlaying, NO_AGENT_PLAY } from "./agent-play.ts";
 import {
@@ -97,6 +102,7 @@ const MESSAGE = {
   noEditor: "This game's Unreal Editor is not open or does not answer; open it (the Unreal button) and try again.",
   notPlaying: "No play is running in Unreal (it ended, or the person stopped it); look again to start one.",
   unknownKey: (keys: string[]) => `Unreal has no key for ${keys.join(", ")}.`,
+  onePlayer: "Unreal plays one player here; play with one.",
 } as const;
 
 /** Unreal's name for a web key code, or null when Unreal has none. */
@@ -110,6 +116,23 @@ export function unrealKey(code: string): string | null {
 }
 
 const refused = (code: EnginePlayRefusal, message: string): EnginePlayRefused => ({ refused: code, message });
+
+/** Whether a call asks for more than Unreal's one player: more players to open, or another player than the first. */
+function beyondOnePlayer(args: Record<string, unknown>, name: "players" | "player"): boolean {
+  return args[name] !== undefined && playerArg(args[name]) !== 1;
+}
+
+/** A play tool's handler: its arguments, the call's context and the plugin's storage. */
+type PlayHandler = (args: Record<string, unknown>, context: PluginContext, storage: string) => Promise<unknown>;
+
+/** A handler that refuses, as unsupported, a call beyond Unreal's one player before anything reaches the editor. */
+function onePlayerOnly(name: "players" | "player", handler: PlayHandler): PlayHandler {
+  // Not an async wrapper: an allowed call starts in the same tick, as the handler alone would.
+  return (args, context, storage) =>
+    beyondOnePlayer(args, name)
+      ? Promise.resolve(refused(EnginePlayRefusal.Unsupported, MESSAGE.onePlayer))
+      : handler(args, context, storage);
+}
 
 /** A finite number argument, else 0. */
 const numberArg = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
@@ -189,7 +212,8 @@ export function createComputerPlay(deps: {
     if (!(await playing(port))) return refused(EnginePlayRefusal.NotPlaying, MESSAGE.notPlaying);
     shots += 1;
     const taken = await shoot(queueDeps, port, `${SHOT_PREFIX}-${shots}`);
-    const answer: EnginePlayShot = { png: taken.data, ...ENGINE_PLAY_VIEW };
+    // The helper captures PNG; `png` stays beside `data` for a studio that reads only the older name.
+    const answer: EnginePlayShot = { data: taken.data, mime: StillMimeType.Png, png: taken.data, ...ENGINE_PLAY_VIEW };
     return answer;
   };
 
@@ -223,15 +247,12 @@ export function createComputerPlay(deps: {
   };
 
   const handlers = {
-    [EnginePlayTool.Open]: open,
-    [EnginePlayTool.Input]: input,
-    [EnginePlayTool.Shot]: shot,
-    [EnginePlayTool.State]: state,
+    [EnginePlayTool.Open]: onePlayerOnly("players", open),
+    [EnginePlayTool.Input]: onePlayerOnly("player", input),
+    [EnginePlayTool.Shot]: onePlayerOnly("player", shot),
+    [EnginePlayTool.State]: onePlayerOnly("player", state),
     [EnginePlayTool.Pause]: pause,
     [EnginePlayTool.Close]: close,
-  } as const satisfies Record<
-    EnginePlayTool,
-    (args: Record<string, unknown>, context: PluginContext, storage: string) => Promise<unknown>
-  >;
+  } as const satisfies Record<EnginePlayTool, PlayHandler>;
   return { handlers };
 }
