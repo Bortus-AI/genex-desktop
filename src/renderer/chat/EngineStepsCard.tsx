@@ -17,6 +17,7 @@ import { Icon } from "../ui/icons.tsx";
 import {
   finishedSays,
   parseSteps,
+  stuckSays,
   STEPS_ACTION,
   type StepButton,
   type StepRow,
@@ -32,7 +33,7 @@ const COPIED_MS = 2 * SECOND_MS;
 
 /**
  * The plugin's rows for an offer, asked now and every few seconds while `live`; `onFinished` hears
- * what the agent is told when the card it showed open has nothing left open.
+ * what the agent is told when the card it showed open has nothing left open, or a step stopped.
  */
 function useSteps(offer: StepsOffer | null, live: boolean, onFinished: (says: string) => void): StepsCard | null {
   const [card, setCard] = useState<StepsCard | null>(null);
@@ -47,7 +48,7 @@ function useSteps(offer: StepsOffer | null, live: boolean, onFinished: (says: st
     let previous: StepsCard | null = null;
     const read = (next: StepsCard | null) => {
       if (stopped) return;
-      const says = finishedSays(previous, next);
+      const says = finishedSays(previous, next) ?? stuckSays(previous, next);
       previous = next;
       setCard(next);
       if (says) finished.current(says);
@@ -141,7 +142,7 @@ function StepLine({ row, onRun }: { row: StepRow; onRun: (row: StepRow) => void 
       data-step={row.id}
       className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1.5 py-1 @md:grid-cols-[1rem_minmax(0,1fr)_auto]"
     >
-      <StepMark done={row.done} you={row.you === true} />
+      <StepMark done={row.done} you={row.you === true} working={row.working === true} clear />
       <StepText row={row} command={command} />
       <StepButtons row={row} command={command} onRun={onRun} />
     </li>
@@ -166,7 +167,7 @@ export function EngineStepsCard({
 }: {
   offer: StepsOffer | null;
   onNotice: Notify;
-  /** Tell the agent the card is done, in the plugin's words, so the chat goes on. */
+  /** Tell the agent the card is done, or a step stopped, in the plugin's words, so the chat goes on. */
   onFinished: (says: string) => void;
 }): JSX.Element | null {
   const key = offer ? storageKeyFor.engineStepsDismissed(offer.project) : null;

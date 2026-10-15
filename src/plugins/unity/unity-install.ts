@@ -8,7 +8,7 @@
  */
 import { execFile, spawn } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { mkdir, open, rm, statfs, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, rm, statfs, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -31,6 +31,8 @@ export const UNITY_TEAM_ID = "9QW8UQUTAA";
 /** The app inside Hub's disk image, and Hub's program inside the app. */
 const HUB_APP = "Unity Hub.app";
 const HUB_PROGRAM = path.posix.join("Contents", "MacOS", "Unity Hub");
+/** Hub's name in Applications while it is being copied there. */
+const PARTIAL_HUB = ".Unity Hub.genex-copy.app";
 /** The Unity release line Genex's Unity work was measured on; its newest final release is installed. */
 export const INSTALL_LINE = "6000.3";
 /** The plugin storage folder holding the install's record, its output and Hub's download. */
@@ -62,8 +64,11 @@ const MESSAGE = {
   OnlyMac: "Genex installs Unity Hub on a Mac only: get it from Unity's page.",
 } as const;
 
-/** The record of an editor install Genex started: the version, the program's id and when. */
-type EditorRecord = { version: string; pid: number; startedAt: string };
+/**
+ * The record of an editor install Genex started: the version, the program's id and when; an
+ * install that could not start keeps -1 and whether Hub's own window may still get past it.
+ */
+type EditorRecord = { version: string; pid: number; startedAt: string; inHub?: true };
 
 /** What the installer reaches besides the files: the network, programs, processes, disks and the clock. */
 export interface InstallDeps {
@@ -106,15 +111,30 @@ export function releasesIn(output: string): string[] {
   }
 }
 
-/** How far an install got from Hub's output: its last percentage, and its last line for a stop. */
-export function progressIn(log: string): { percent?: number; last: string } {
+/** A terminal escape Hub prints to redraw its progress, and a log line of Hub's own Chromium. */
+const TERMINAL_ESCAPE = /\u001b\[[0-9;]*[A-Za-z]/g;
+const CHROMIUM_LOG = /^\[\d+:\d+\/\d+\.\d+:/;
+/** One of Hub's progress lines: `[Unity (6000.3.26f1)] downloading 12.00%`. */
+const PROGRESS = /\]\s+([a-z]+)\s+(\d{1,3}(?:\.\d+)?)\s?%/i;
+
+/**
+ * How far an install got from Hub's output: its phase and percentage from its last progress line
+ * (a bare percentage when it prints no phase), and its last line of its own for a stop, past the
+ * terminal escapes and Chromium's log lines Hub prints between.
+ */
+export function progressIn(log: string): { percent?: number; phase?: string; last: string } {
   const lines = log
+    .replace(TERMINAL_ESCAPE, "")
     .split(/\r?\n|\r/)
     .map((line) => line.trim())
-    .filter(Boolean);
-  const percents = [...log.matchAll(/(\d{1,3}(?:\.\d+)?)\s?%/g)].map((match) => Number(match[1]));
-  const percent = percents.findLast((value) => value >= 0 && value <= 100);
-  return { ...(percent !== undefined ? { percent } : {}), last: (lines.at(-1) ?? "").slice(0, 200) };
+    .filter((line) => line && !CHROMIUM_LOG.test(line));
+  const last = (lines.at(-1) ?? "").slice(0, 200);
+  const progress = lines.map((line) => PROGRESS.exec(line)).findLast((match) => match !== null);
+  if (progress) return { percent: Number(progress[2]), phase: (progress[1] ?? "").toLowerCase(), last };
+  const percent = [...log.matchAll(/(\d{1,3}(?:\.\d+)?)\s?%/g)]
+    .map((match) => Number(match[1]))
+    .findLast((v) => v <= 100);
+  return { ...(percent !== undefined ? { percent } : {}), last };
 }
 
 /** Hub's own program inside its app. */
@@ -132,7 +152,10 @@ async function signedByUnity(deps: InstallDeps, app: string): Promise<boolean> {
   }
 }
 
-/** One installer's state: its programs, its storage, Hub's install (kept in memory) and Do it for me while it runs. */
+/**
+ * One installer's state: its programs, its storage, Hub's install or the wait for the person's
+ * sign-in (kept in memory), and Do it for me while it runs.
+ */
 interface Installing {
   deps: InstallDeps;
   storage: () => Promise<string>;
@@ -167,10 +190,16 @@ async function copyIn(deps: InstallDeps, image: string, mount: string): Promise<
   try {
     const app = path.join(mount, HUB_APP);
     if (!(await signedByUnity(deps, app))) throw new Error(MESSAGE.NotUnity);
-    const target = path.join(deps.env.applications, HUB_APP);
-    await deps.run("/usr/bin/ditto", [app, target], COPY_MS).catch((error: unknown) => {
+    // Copied beside under another name, then renamed: a half-copied Hub never reads as installed.
+    const partial = path.join(deps.env.applications, PARTIAL_HUB);
+    await rm(partial, { recursive: true, force: true });
+    try {
+      await deps.run("/usr/bin/ditto", [app, partial], COPY_MS);
+      await rename(partial, path.join(deps.env.applications, HUB_APP));
+    } catch (error) {
+      await rm(partial, { recursive: true, force: true });
       throw new Error(MESSAGE.Copy(errorMessage(error)));
-    });
+    }
   } finally {
     await deps.run("/usr/bin/hdiutil", ["detach", "-quiet", mount], COPY_MS).catch(() => undefined);
   }
@@ -207,20 +236,24 @@ async function editorJob(state: Installing): Promise<InstallJob | null> {
   const folder = folderIn(await state.storage());
   const record = await readJsonIfExists<EditorRecord>(path.join(folder, EDITOR_RECORD)).catch(() => null);
   if (!record?.version || !Number.isInteger(record.pid)) return null;
-  const { percent, last } = progressIn(await tailOf(path.join(folder, EDITOR_LOG)));
-  const job = { kind: JobKind.Editor, version: record.version, ...(percent !== undefined ? { percent } : {}) };
+  const { percent, phase, last } = progressIn(await tailOf(path.join(folder, EDITOR_LOG)));
+  const job = {
+    kind: JobKind.Editor,
+    version: record.version,
+    ...(percent !== undefined ? { percent } : {}),
+    ...(phase ? { phase } : {}),
+  };
   if (state.deps.alive(record.pid)) return { ...job, state: JobState.Running };
   if ((await readFacts(state.deps.env, null)).editor) return null;
-  return { ...job, state: JobState.Failed, why: MESSAGE.Stopped(last) };
+  // An install that never started keeps its own words; one Hub ran and lost, Hub's window may finish.
+  if (record.pid < 0) return { ...job, state: JobState.Failed, why: last, ...(record.inHub ? { inHub: true } : {}) };
+  return { ...job, state: JobState.Failed, why: MESSAGE.Stopped(last), inHub: true };
 }
 
 /** Keeps an install that could not start as a stopped one, with why, for the card; then refuses with it. */
-async function failEditor(deps: InstallDeps, folder: string, why: string): Promise<never> {
-  await atomicWriteJson(path.join(folder, EDITOR_RECORD), {
-    version: "6",
-    pid: -1,
-    startedAt: deps.now().toISOString(),
-  });
+async function failEditor(deps: InstallDeps, folder: string, why: string, inHub = false): Promise<never> {
+  const record: EditorRecord = { version: "6", pid: -1, startedAt: deps.now().toISOString() };
+  await atomicWriteJson(path.join(folder, EDITOR_RECORD), inHub ? { ...record, inHub: true } : record);
   await writeFile(path.join(folder, EDITOR_LOG), why);
   throw new Error(why);
 }
@@ -238,7 +271,7 @@ async function installEditor(state: Installing): Promise<void> {
   const arch = archOf(deps.arch);
   const listing = ["--", "--headless", "editors", "--releases", "--json", "--architecture", arch];
   const version = chooseRelease(releasesIn((await deps.run(hubProgram(hub), listing, RELEASES_MS)).out));
-  if (!version) return failEditor(deps, folder, MESSAGE.NoRelease);
+  if (!version) return failEditor(deps, folder, MESSAGE.NoRelease, true);
   const args = ["--", "--headless", "install", "--version", version, "--architecture", arch];
   const pid = await deps.start(hubProgram(hub), args, path.join(folder, EDITOR_LOG));
   await atomicWriteJson(path.join(folder, EDITOR_RECORD), { version, pid, startedAt: deps.now().toISOString() });
@@ -267,7 +300,11 @@ async function drive(state: Installing): Promise<void> {
   await getHub(state);
   if (!(await hasLicense(deps.env))) {
     await openHub(deps);
-    if (!(await signedIn(deps))) return;
+    state.hubJob = { kind: JobKind.SignIn, state: JobState.Running };
+    const inTime = await signedIn(deps).finally(() => {
+      state.hubJob = null;
+    });
+    if (!inTime) return;
   }
   if (!(await readFacts(deps.env, null)).editor) await installEditor(state);
 }

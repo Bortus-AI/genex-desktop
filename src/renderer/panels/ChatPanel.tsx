@@ -111,7 +111,7 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
             offer={stepsOffer(chat.threadEvents)}
             onNotice={parts.props.onNotice}
             onFinished={(says) =>
-              void parts.report(says, MessageOrigin.SetupDone).catch(notifyProblem(parts.props.onNotice))
+              void parts.report(says, MessageOrigin.SetupCard).catch(notifyProblem(parts.props.onNotice))
             }
           />
         )

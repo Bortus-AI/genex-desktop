@@ -24,8 +24,11 @@ export const SetupAction = {
 } as const;
 export type SetupAction = (typeof SetupAction)[keyof typeof SetupAction];
 
-/** What Genex is installing for the person: Unity Hub, or a Unity editor through Hub. Wire values. */
-export const JobKind = { Hub: "hub", Editor: "editor" } as const;
+/**
+ * What Genex is doing for the person: installing Unity Hub, waiting for their sign-in in Hub (Do it
+ * for me), or installing a Unity editor through Hub. Wire values.
+ */
+export const JobKind = { Hub: "hub", SignIn: "sign-in", Editor: "editor" } as const;
 export type JobKind = (typeof JobKind)[keyof typeof JobKind];
 
 /** Where an install stands. Wire values: kept in the plugin's storage. */
@@ -41,8 +44,12 @@ export interface InstallJob {
   done?: number;
   total?: number;
   percent?: number;
+  /** What Hub says it is doing (downloading, installing…), in its own word. */
+  phase?: string;
   /** Why it stopped, in the person's words. */
   why?: string;
+  /** A stop that Unity Hub's own window may still get past (the agent can, with computer control). */
+  inHub?: true;
 }
 
 /** What the card reads about this computer. */
@@ -65,6 +72,7 @@ export type SetupRow = {
   detail: string;
   done: boolean;
   you?: true;
+  working?: true;
   action?: Button;
 };
 /** The card as the chat reads it. */
@@ -75,6 +83,7 @@ export type SetupCard = {
   steps: SetupRow[];
   primary?: Button;
   doneSays?: string;
+  stuckSays?: string;
 };
 
 /** About how much room a Unity 6 editor takes once installed. */
@@ -99,15 +108,25 @@ const WORDS = {
   SignInDetail: "In Unity Hub, sign in and add the free Personal license. Only you type your password.",
   SignedIn: "Signed in to Unity",
   OpenHub: "Open Unity Hub",
+  YourTurn: "Sign in to Unity Hub",
+  YourTurnDetail:
+    "Type your email and password in the Unity Hub window and add the free Personal license. Genex goes on by itself once you're in.",
+  ShowHub: "Show Unity Hub",
   InstallUnity: "Install Unity 6",
   InstallDetail: `About ${UNITY_SIZE_GB} GB. Genex installs it through Unity Hub.`,
   Install: "Install",
   Installing: (version: string) => `Installing Unity ${version}`,
   Percent: (percent: number) => `${Math.round(percent)}%`,
+  Phase: (phase: string, percent: number) =>
+    `${phase.charAt(0).toLocaleUpperCase()}${phase.slice(1)} · ${Math.round(percent)}%`,
   Starting: "Starting…",
   Installed: (version: string) => `Unity ${version} is installed`,
   TryAgain: "Try again",
   DoItForMe: "Do it for me",
+  Stuck: (why: string) => `Genex's install of Unity for the person stopped: ${why}`,
+  InHub: (version: string) =>
+    ` If you have the desktop tool (computer control), finish it in Unity Hub's own window: open Unity Hub, go to Installs, choose Install Editor and install Unity ${version}, then wait while Hub installs it; the setup card notices when it is done. Otherwise tell the person in one line what stopped and that Try again is on the card.`,
+  PersonOnly: " Tell the person in one line what stopped and that Try again is on the card once it is fixed.",
   Done: (version: string) =>
     `Unity ${version} is installed on this Mac and the person is signed in. Go on with their game in Unity: call unity__new-game if it has no Unity project yet.`,
 } as const;
@@ -117,6 +136,7 @@ const button = (name: SetupAction, label: string): Button => ({ name, args: {}, 
 /** How far a running install got, in one line. */
 function progressOf(job: InstallJob): string {
   if (job.done !== undefined && job.total) return WORDS.Megabytes(job.done, job.total);
+  if (job.percent !== undefined && job.phase) return WORDS.Phase(job.phase, job.percent);
   if (job.percent !== undefined) return WORDS.Percent(job.percent);
   return WORDS.Starting;
 }
@@ -133,7 +153,7 @@ function hubRow(facts: SetupFacts): SetupRow {
   if (job?.state === JobState.Running) {
     const downloading = job.total !== undefined && (job.done ?? 0) < job.total;
     const label = downloading ? WORDS.DownloadingHub : WORDS.InstallingHub;
-    return { id, label, detail: downloading ? progressOf(job) : "", done: false };
+    return { id, label, detail: downloading ? progressOf(job) : "", done: false, working: true };
   }
   if (job?.state === JobState.Failed)
     return {
@@ -157,6 +177,15 @@ function hubRow(facts: SetupFacts): SetupRow {
 function signInRow(facts: SetupFacts): SetupRow {
   const id = SetupStepId.SignIn;
   if (facts.signedIn) return { id, label: WORDS.SignedIn, detail: "", done: true };
+  if (jobOf(facts, JobKind.SignIn)?.state === JobState.Running)
+    return {
+      id,
+      label: WORDS.YourTurn,
+      detail: WORDS.YourTurnDetail,
+      done: false,
+      you: true,
+      action: button(SetupAction.OpenHub, WORDS.ShowHub),
+    };
   const open = facts.hub ? { action: button(SetupAction.OpenHub, WORDS.OpenHub) } : {};
   return { id, label: WORDS.SignIn, detail: WORDS.SignInDetail, done: false, you: true, ...open };
 }
@@ -168,11 +197,19 @@ function editorRow(facts: SetupFacts): SetupRow {
   const job = jobOf(facts, JobKind.Editor);
   const version = job?.version ?? "6";
   if (job?.state === JobState.Running)
-    return { id, label: WORDS.Installing(version), detail: progressOf(job), done: false };
+    return { id, label: WORDS.Installing(version), detail: progressOf(job), done: false, working: true };
   const action = facts.hub ? { action: button(SetupAction.InstallUnity, job ? WORDS.TryAgain : WORDS.Install) } : {};
   if (job?.state === JobState.Failed)
     return { id, label: WORDS.InstallUnity, detail: job.why ?? "", done: false, you: true, ...action };
   return { id, label: WORDS.InstallUnity, detail: WORDS.InstallDetail, done: false, ...action };
+}
+
+/** What the agent is told about an install that stopped: finish it in Hub with computer control, or tell the person. */
+function stuckOf(job: InstallJob | null): { stuckSays?: string } {
+  if (job?.state !== JobState.Failed) return {};
+  const version = job.version && job.version !== "6" ? job.version : "6 (the newest final 6000.3 release)";
+  const next = job.inHub ? WORDS.InHub(version) : WORDS.PersonOnly;
+  return { stuckSays: `${WORDS.Stuck(job.why ?? "")}${next}` };
 }
 
 /**
@@ -191,6 +228,7 @@ export function setupCard(facts: SetupFacts): SetupCard {
     steps,
     ...(left > 0 && !running ? { primary: button(SetupAction.SetUp, WORDS.DoItForMe) } : {}),
     ...doneSays,
+    ...stuckOf(facts.job),
   };
 }
 

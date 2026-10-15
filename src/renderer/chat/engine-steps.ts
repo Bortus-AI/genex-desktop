@@ -17,7 +17,8 @@ export type StepsOffer = { id: string; pluginId: string; project: string };
 export type StepButton = { name: string; args: Record<string, string>; label: string };
 /**
  * One row: a done step is ticked; an open one may have a button, or a line to run in Terminal.
- * `you` marks a step only the person can do (signing in), or one that stopped and waits for them.
+ * `you` marks a step only the person can do (signing in), or one that stopped and waits for them;
+ * `working` one Genex is doing now.
  */
 export type StepRow = {
   id: string;
@@ -25,12 +26,15 @@ export type StepRow = {
   detail: string;
   done: boolean;
   you?: true;
+  working?: true;
   action?: StepButton;
   command?: string;
 };
 /**
  * The card as the plugin answers it. `primary` is the card's own button that does every step it
- * can for the person (Do it for me); `doneSays` is what the agent is told once nothing is open.
+ * can for the person (Do it for me); `doneSays` is what the agent is told once nothing is open, and
+ * `stuckSays` what it is told when a step Genex ran for the person stopped, so it can finish it
+ * another way (with computer control) or tell the person.
  */
 export type StepsCard = {
   title: string;
@@ -39,6 +43,7 @@ export type StepsCard = {
   steps: StepRow[];
   primary?: StepButton;
   doneSays?: string;
+  stuckSays?: string;
 };
 
 /** The newest offer in a chat's log, or null. */
@@ -79,6 +84,7 @@ function parseRow(raw: unknown): StepRow | undefined {
     detail: isText(raw.detail) ? raw.detail : "",
     done: raw.done,
     ...(raw.you === true ? { you: true as const } : {}),
+    ...(raw.working === true ? { working: true as const } : {}),
     ...(action ? { action } : {}),
     ...(isText(raw.command) && raw.command ? { command: raw.command } : {}),
   };
@@ -96,6 +102,7 @@ export function parseSteps(raw: unknown): StepsCard | null {
     steps,
     ...(primary ? { primary } : {}),
     ...(isText(raw.doneSays) && raw.doneSays ? { doneSays: raw.doneSays } : {}),
+    ...(isText(raw.stuckSays) && raw.stuckSays ? { stuckSays: raw.stuckSays } : {}),
   };
 }
 
@@ -107,4 +114,13 @@ export function parseSteps(raw: unknown): StepsCard | null {
 export function finishedSays(previous: StepsCard | null, next: StepsCard | null): string | null {
   if (!previous?.open || !next || next.open) return null;
   return next.doneSays ?? null;
+}
+
+/**
+ * What the agent is told when a step the card showed going stopped while the chat looked on: once
+ * per stop, never for a stop from before the chat opened (it was told then), and null otherwise.
+ */
+export function stuckSays(previous: StepsCard | null, next: StepsCard | null): string | null {
+  if (!previous || !next?.stuckSays || next.stuckSays === previous.stuckSays) return null;
+  return next.stuckSays;
 }

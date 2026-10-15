@@ -40,15 +40,33 @@ export interface EditorsEnv {
   appData: string;
 }
 
-/** This computer's own folders. */
-export function systemEditorsEnv(): EditorsEnv {
+/**
+ * A made-up Mac a development test points the plugin at (its `Applications` and `home`), so the
+ * Unity setup card can be tried in the real app on a computer that has Unity; the host passes it
+ * to the backend (`substrate/plugins/process.ts`). Never set for a person.
+ */
+export const UNITY_TEST_ROOT = "STUDIO_UNITY_TEST_ROOT";
+
+/** This computer's own folders, or the made-up Mac's under {@link UNITY_TEST_ROOT}. */
+export function systemEditorsEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): EditorsEnv {
+  const root = env[UNITY_TEST_ROOT];
+  if (root && path.posix.isAbsolute(root) && platform === "darwin")
+    return {
+      platform,
+      home: path.posix.join(root, "home"),
+      applications: path.posix.join(root, "Applications"),
+      appData: path.posix.join(root, "home", "AppData"),
+    };
   const home = os.homedir();
-  const windows = process.platform === "win32";
+  const windows = platform === "win32";
   return {
-    platform: process.platform,
+    platform,
     home,
-    applications: windows ? (process.env.ProgramFiles ?? "C:\\Program Files") : "/Applications",
-    appData: process.env.APPDATA ?? path.join(home, "AppData", "Roaming"),
+    applications: windows ? (env.ProgramFiles ?? "C:\\Program Files") : "/Applications",
+    appData: env.APPDATA ?? path.join(home, "AppData", "Roaming"),
   };
 }
 

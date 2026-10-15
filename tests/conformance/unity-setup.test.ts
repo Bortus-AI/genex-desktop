@@ -12,7 +12,7 @@ import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { createUnityBackend, UnityAction, UnityTool } from "../../src/plugins/unity/backend.ts";
 import type { Launch } from "../../src/plugins/unity/editor-launch.ts";
-import type { EditorsEnv } from "../../src/plugins/unity/editors.ts";
+import { type EditorsEnv, systemEditorsEnv } from "../../src/plugins/unity/editors.ts";
 import {
   hasLicense,
   JobKind,
@@ -78,11 +78,26 @@ describe("the Unity setup card", () => {
     assert.match(card.intro, /Genex is doing this/);
     const install = row(card, SetupStepId.InstallUnity);
     assert.equal(install?.label, "Installing Unity 6000.3.26f1");
+    assert.equal(install?.working, true);
     assert.equal(install?.detail, "42%");
+    const downloading = { ...running, phase: "downloading" };
+    const card2 = setupCard(facts({ hub, signedIn: true, job: downloading }));
+    assert.equal(row(card2, SetupStepId.InstallUnity)?.detail, "Downloading · 42%");
     assert.equal(install?.action, undefined);
 
     const download = { kind: JobKind.Hub, state: JobState.Running, done: 40 * 1024 ** 2, total: 160 * 1024 ** 2 };
     assert.equal(row(setupCard(facts({ job: download })), SetupStepId.GetHub)?.detail, "40 of 160 MB");
+  });
+
+  it("asks only for the person's sign-in while Do it for me waits for it", () => {
+    const waiting = { kind: JobKind.SignIn, state: JobState.Running };
+    const card = setupCard(facts({ hub: "/H.app", job: waiting }));
+    assert.equal(card.primary, undefined, "Do it for me is already going");
+    assert.match(card.intro, /Genex is doing this/);
+    const signIn = row(card, SetupStepId.SignIn);
+    assert.equal(signIn?.you, true);
+    assert.match(String(signIn?.detail), /Unity Hub window/);
+    assert.equal(signIn?.action?.label, "Show Unity Hub");
   });
 
   it("marks a stopped install for the person, with why and Try again", () => {
@@ -92,6 +107,28 @@ describe("the Unity setup card", () => {
     assert.equal(install?.you, true);
     assert.equal(install?.detail, why);
     assert.equal(install?.action?.label, "Try again");
+  });
+
+  it("tells the agent to finish a stopped install in Unity Hub with computer control, unless only the person can fix it", () => {
+    const hub = "/H.app";
+    const stopped = {
+      kind: JobKind.Editor,
+      state: JobState.Failed,
+      version: "6000.3.26f1",
+      why: "It stopped.",
+      inHub: true as const,
+    };
+    const said = String(setupCard(facts({ hub, signedIn: true, job: stopped })).stuckSays);
+    assert.match(said, /It stopped\./);
+    assert.match(said, /desktop tool/);
+    assert.match(said, /Install Editor/);
+    assert.match(said, /6000\.3\.26f1/);
+    const { inHub: _inHub, ...noHub } = stopped;
+    const full = { ...noHub, why: "Unity 6 needs about 12 GB; 4.1 GB is free." };
+    const fullSaid = String(setupCard(facts({ hub, signedIn: true, job: full })).stuckSays);
+    assert.match(fullSaid, /4\.1 GB is free/);
+    assert.doesNotMatch(fullSaid, /desktop tool/, "no clicking frees disk space: the person is told");
+    assert.equal(setupCard(facts({ hub, signedIn: true })).stuckSays, undefined, "nothing stopped");
   });
 
   it("closes once all is done, with what the agent is told", () => {
@@ -128,6 +165,18 @@ describe("what the card reads on a Mac", () => {
   });
 });
 
+describe("a made-up Mac for testing the card in the real app", () => {
+  it("looks for Hub, editors and the license under the test root, and only an absolute one", () => {
+    const env = systemEditorsEnv({ STUDIO_UNITY_TEST_ROOT: "/tmp/test-mac" }, "darwin");
+    assert.equal(env.applications, "/tmp/test-mac/Applications");
+    assert.equal(env.home, "/tmp/test-mac/home");
+    for (const ignored of [{}, { STUDIO_UNITY_TEST_ROOT: "relative/mac" }]) {
+      const real = systemEditorsEnv(ignored, "darwin");
+      assert.equal(real.applications, "/Applications");
+    }
+  });
+});
+
 describe("choosing what to install", () => {
   it("takes the newest final release of the measured line, else the newest final Unity 6", () => {
     const listed = ["7000.0.0a10", "6000.7.0b5", "6000.3.26f1", "6000.3.9f1", "6000.0.85f1", "6000.6.6f1"];
@@ -142,10 +191,20 @@ describe("choosing what to install", () => {
     for (const nothing of ["", "no list", "[not json]", "{}"]) assert.deepEqual(releasesIn(nothing), []);
   });
 
-  it("reads an install's last percentage and its last line", () => {
-    assert.deepEqual(progressIn("Downloading 12%\rDownloading 40.5%\nInstalling\n"), {
+  it("reads an install's phase, its last percentage and its last line, through Hub's own noise", () => {
+    // As Hub 3.22 prints it: terminal escapes, its progress lines, and Chromium's log lines between.
+    const hub = [
+      "\u001b[2A\u001b[0JProgress:",
+      "[Unity (6000.3.26f1)] downloading 12.00%",
+      "[19294:1015/223654.598386:ERROR:content/browser/indexed_db/backing_store.cc:237] Failed to open LevelDB database",
+      "\u001b[2A\u001b[0JProgress:",
+      "[Unity (6000.3.26f1)] installing 40.5%",
+      "[19294:1015/223655.626403:ERROR:content/browser/indexed_db/backing_store.cc:237] Failed to open LevelDB database",
+    ].join("\n");
+    assert.deepEqual(progressIn(hub), {
       percent: 40.5,
-      last: "Installing",
+      phase: "installing",
+      last: "[Unity (6000.3.26f1)] installing 40.5%",
     });
     assert.deepEqual(progressIn("Error: disk full\n"), { last: "Error: disk full" });
   });
@@ -210,7 +269,10 @@ describe("installing Unity Hub for the person", () => {
     );
     assert.deepEqual(mac.ran[1]?.slice(1, 4), ["--verify", "--deep", "--strict"]);
     assert.equal(mac.ran[4]?.[1], "detach");
-    assert.equal(mac.ran[3]?.[2], path.join(mac.env.applications, "Unity Hub.app"), "into Applications");
+    // Copied beside under another name and renamed into place: a half-copied Hub never reads as installed.
+    assert.notEqual(mac.ran[3]?.[2], path.join(mac.env.applications, "Unity Hub.app"));
+    assert.equal(path.dirname(mac.ran[3]?.[2] ?? ""), mac.env.applications);
+    assert.deepEqual(await readdir(mac.env.applications), ["Unity Hub.app"], "in Applications, and nothing else left");
     assert.equal(await mac.installer.job(), null);
     assert.deepEqual(await readdir(path.join(mac.storage, "unity-setup")), ["mount"], "the disk image is gone");
   });
@@ -248,6 +310,7 @@ describe("installing Unity 6 through Hub", () => {
     mac.living.clear();
     const stopped = await mac.installer.job();
     assert.equal(stopped?.state, JobState.Failed);
+    assert.equal(stopped?.inHub, true, "Hub's own window may finish what its command line could not");
     assert.match(String(stopped?.why), /stopped: Error: the download was interrupted/);
 
     await fakeEditor(path.join(mac.env.applications, "Unity", "Hub", "Editor"), "6000.3.26f1");
@@ -258,14 +321,18 @@ describe("installing Unity 6 through Hub", () => {
     const mac = await installMac({ hub: true, freeGb: 4.1 });
     await assert.rejects(mac.installer.installEditor(), /needs about 12 GB; 4\.1 GB is free/);
     assert.deepEqual(mac.started, []);
-    assert.match(String((await mac.installer.job())?.why), /4\.1 GB is free/);
+    const full = await mac.installer.job();
+    assert.match(String(full?.why), /4\.1 GB is free/);
+    assert.equal(full?.inHub, undefined, "only the person frees space");
   });
 });
 
 describe("Do it for me", () => {
   it("installs Hub, opens it for the person's sign-in, waits for it, then installs Unity 6", async () => {
     const mac = await installMac({ signedIn: false });
+    const seen: unknown[] = [];
     mac.deps.sleep = async () => {
+      seen.push(await mac.installer.job());
       await mac.signIn();
     };
     mac.installer.setUp();
@@ -273,6 +340,7 @@ describe("Do it for me", () => {
     assert.deepEqual(mac.opened, [
       { command: "/usr/bin/open", args: ["-a", path.join(mac.env.applications, "Unity Hub.app")], detached: false },
     ]);
+    assert.deepEqual(seen, [{ kind: JobKind.SignIn, state: JobState.Running }], "the card waits on the sign-in");
     assert.equal(mac.started.length, 1, "Unity 6's install started once the person signed in");
   });
 
