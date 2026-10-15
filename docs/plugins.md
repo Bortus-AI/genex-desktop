@@ -1090,7 +1090,9 @@ description and panel say "Not affiliated with Roblox Corporation. For people 18
 declares the engine `roblox` (label "Roblox Studio", project files `.rbxl`, `.rbxlx` and
 `.project.json`, fact `roblox-project`, `projectInFolder: false`, play for up to 8 players, and the
 editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the `network` capability (hosts
-`setup.rbxcdn.com` for Studio's installer and `127.0.0.1` for the helper link), the per-game lock
+`setup.rbxcdn.com` for Studio's installer, `127.0.0.1` for the helper link, and GitHub's
+`github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` and
+`raw.githubusercontent.com` for the Luau checks), the per-game lock
 `studio` with its probe `studio-activity`, and no `folders`: a write root there would let any worker drop a
 plugin into Studio's Plugins folder. `studio-locate.ts` finds Studio on a Mac at
 `/Applications/RobloxStudio.app` (a link only while it stays inside /Applications; its version
@@ -1261,7 +1263,37 @@ a source past Studio's 200,000 characters stays on disk with a log line. The syn
 Studio's place lock files (`*.rbxl.lock`, `*.rbxlx.lock`) to the game's `.gitignore`. The backend
 learns each game's folder from the plugin calls that carry one (`games/<game>.json` in its
 storage). Script workers (`workerTypes` `scripts`, `isolation: copy`) check their files with
-`check-scripts`, which answers that the Luau checks aren't added until they are.
+`check-scripts`.
+
+**Luau checks.** `check-scripts` (agent tool, no card, reads only; `all: true` for every file)
+runs, side by side from the game folder by full path with argument lists, `luau-lsp analyze
+--formatter=gnu --platform=roblox` with luau-lsp's Roblox definitions and a sourcemap,
+`selene --display-style=Json2` (the game's `selene.toml`, else Genex's with `std = "roblox"`) and
+`stylua --check --output-format=json`, each within `CHECK_TOOL_MAX_MS` (90, 60 and 30 s) and
+`MAX_CHECK_OUTPUT_BYTES` (2 MB) a stream, on at most `MAX_CHECK_FILES` (300) files
+(`check-scripts.ts`). The sourcemap is `src/` in Rojo's format (`sourcemap.ts`: the script sync's
+names, `Folder`s on the way, `StarterPlayerScripts` and `StarterCharacterScripts` by class, never
+through a link), written in the plugin's storage for each check and removed after it; a game with
+its own `sourcemap.json` (a Rojo project) uses that. Findings come back as plain lines at a file
+and line (`TypeError` and `SyntaxError`, selene's `Error` and StyLua's parse errors are errors;
+lints are warnings; StyLua's layout differences are format). A program that hangs, prints past the
+cap, can't start or exits with another code is named and never counts as a clean check. A file
+every program found clean is remembered with its sha256 and the programs that checked it
+(`luau/clean/<game>.json`) and checked again only once it changes. The programs are found where
+the person keeps them (PATH, then `~/.rokit/bin`, `~/.aftman/bin`, `~/.foreman/bin`), then in the
+plugin's storage (`luau-tools.ts`); the definitions only in the storage. **Add Luau checks**
+(`add-luau-checks`, native, a quiet button under the panel's steps once Studio is set up, its card
+naming this computer's download size) downloads only what is missing of the `PINNED` releases
+(luau-lsp 1.70.1, selene 0.32.0, StyLua 2.6.0 and luau-lsp's `globalTypes.None.d.luau` at the same
+tag; Mac arm64 and x64, Windows x64; selene has no Intel Mac build): HTTPS, each redirect checked
+to stay on GitHub's hosts, no larger than its pin and matching its sha256, all fetched into a
+private folder in the storage before `ditto` (Mac) or Windows' own `tar` unpacks any, then moved
+to `luau/<asset>-<version>/` together or not at all. Genex's own selene runs with its home in the
+storage, where it caches Roblox's library (fetched by selene itself on its first run, which Add
+Luau checks starts); on Windows selene keeps that cache in the person's local app data. The
+programs run outside ProcessSandbox, as the person's own copies would; nothing is vendored into the
+app. New Roblox game writes `selene.toml` and `stylua.toml` defaults into a game that has none.
+A call bound to a worker's copy checks the copy and never hands its folder to the script sync.
 
 **Places.** A Roblox game builds in one place (`places.ts`, `place-actions.ts`, all native).
 **Choose your place** (`places`) lists the Studios open now first, each asked in Edit for its
@@ -1304,6 +1336,8 @@ so the person's Studio stays open when a run ends.
 | `load-place` at `restore.after` | the helper loads the restored export, then the script sync reconciles `src/`; with Studio not connected, `pending-load.json` waits and the helper's next connection loads it before the scripts are compared; never blocks | same |
 | `studio-state` at `health` | quiet while the helper answers a ping within `STUDIO_PING_MS` (5 s) and Studio's MCP server lists the Studio; pending while Studio starts, its helper reconnects (`RECONNECT_WAIT_MS`), it doesn't answer ("a dialog may be open in Studio", with the hint to look with `app_look`, look only, on a Mac) or isn't listed; blocks when Studio is gone, open without the place past the reconnect wait, unlinked or not set up | same |
 | `studio-crash-note` at `crash` | asks the person to reopen Studio with Open Studio; Genex never closes or kills it | same |
+| `luau-note` at `worker.end` | the Luau checks over the scripts changed since they last passed, in the folder the call is bound to; a note of each finding, nothing when clean or not added | same |
+| `luau-finish` at `finish` | the Luau checks over every script; errors hold the finish back, naming the first; warnings, format differences and missing checks are notes | — |
 
 A helper that answers `unsupported` to an export (Studio with no way to serialize the place) never
 blocks: the note says save points hold the scripts only. A part larger than the host's 50 MB file

@@ -82,5 +82,11 @@ Roblox's Script Sync use):
 ## Checks
 
 Write code that passes `luau-lsp analyze` in strict mode with Roblox's API types, selene's
-`roblox` standard library, and StyLua's default style (tabs, 120 columns, double quotes). Fix a
-warning rather than silencing it; a `-- selene: allow(...)` comment names its reason.
+`roblox` standard library, and StyLua's style (the game's `stylua.toml`: tabs, 120 columns, double
+quotes). Fix a warning rather than silencing it; a `-- selene: allow(...)` comment names its reason.
+
+Run `check-scripts` after changing scripts: it checks the files changed since they last passed
+(`all: true` checks every file) and answers each problem at its file and line. Fix every error and
+warning, then run it again. Genex runs the same checks at each worker's end, and errors hold a
+build's finish back. When it answers that the Luau checks aren't added, the person adds them with
+Add Luau checks in the Roblox Studio panel; until then, read your changes over against this page.
