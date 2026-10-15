@@ -39,9 +39,9 @@ project is a host project with the plugin in `Plugins/`; its tools build, test a
 
 ## Godot
 
-Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, in `godot/`) and opens your
-editor, which saves for save points and reloads after Rewind. **Change project** links one
-anywhere (outside: no Loops or Rewind). **Export for the web** writes `web/`.
+Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, `godot/`) and opens your
+editor, which saves for save points, reloads after Rewind. **Change project** links one
+anywhere (outside: no Loops or Rewind). Its `web/` build, redone each turn, plays in Live.
 
 ## Live's views
 

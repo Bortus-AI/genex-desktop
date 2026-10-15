@@ -5,10 +5,11 @@
  * and nothing written through a link.
  */
 import assert from "node:assert/strict";
-import { lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
+import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { parseVersion } from "../../src/plugins/godot/find-godot.ts";
 import { type GodotCall, GodotJob } from "../../src/plugins/godot/godot-run.ts";
 import { templateVersion, WEB_PRESET, withWebPreset } from "../../src/plugins/godot/web-export.ts";
@@ -110,6 +111,38 @@ describe("a Godot game's web export", () => {
     const failing = 'ERROR: Cannot export project with preset "Genex Web" due to configuration errors.\n';
     const game = await gameToExport({ answers: { [GodotJob.Export]: failing } });
     await assert.rejects(game.exportGame(), /web export didn't finish: ERROR: Cannot export project/);
+  });
+
+  it("keeps the web build as the game is: after a turn or a restore that changed the project, never otherwise", async () => {
+    const game = await gameToExport();
+    const at = async (on: HookEvent) =>
+      (await game.backend.tool?.(GodotTool.KeepWebBuild, {}, game.context({ hook: { on } }))) as Record<
+        string,
+        unknown
+      >;
+    assert.deepEqual(await at(HookEvent.TurnEnd), {});
+    assert.equal(game.jobs.filter((j) => j.call.job === GodotJob.Export).length, 1, "the first turn's end makes it");
+    assert.deepEqual(await at(HookEvent.TurnEnd), {});
+    assert.equal(game.jobs.filter((j) => j.call.job === GodotJob.Export).length, 1, "nothing changed: not again");
+    assert.deepEqual(await at(HookEvent.CheckpointAfter), {}, "only at a turn's end or after a restore");
+    const later = new Date(Date.now() + 60_000);
+    await utimes(path.join(game.project, "main.tscn"), later, later);
+    assert.deepEqual(await at(HookEvent.RestoreAfter), {});
+    assert.equal(game.jobs.filter((j) => j.call.job === GodotJob.Export).length, 2, "a changed project: again");
+  });
+
+  it("keeps no web build without the Web template, and a failed one is a note, never a block", async () => {
+    const none = await gameToExport({ template: false });
+    const at = async (fixture: typeof none) =>
+      (await fixture.backend.tool?.(
+        GodotTool.KeepWebBuild,
+        {},
+        fixture.context({ hook: { on: HookEvent.TurnEnd } }),
+      )) as Record<string, unknown>;
+    assert.deepEqual(await at(none), {});
+    assert.deepEqual(none.jobs, []);
+    const failing = await gameToExport({ answers: { [GodotJob.Export]: "ERROR: Cannot export project.\n" } });
+    assert.match(String((await at(failing)).note), /web build in web\/ wasn't refreshed/);
   });
 
   it("writes nothing through a link", async () => {

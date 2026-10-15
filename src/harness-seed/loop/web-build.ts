@@ -26,6 +26,20 @@ export function pluginWebBuilds(facts: readonly (FactRef & { source?: string })[
   return new Set(claimed.map((fact) => fact.path));
 }
 
+/**
+ * What a game is, as a key that a plugin's web build doesn't change: its facts as `id@path`, sorted,
+ * the facts at a folder a plugin's web build fills left out. A plugin exporting its game for the web
+ * leaves the game the kind it was.
+ */
+export function kindKey(facts: readonly (FactRef & { source?: string })[]): string {
+  const builds = pluginWebBuilds(facts);
+  return facts
+    .filter((fact) => !builds.has(fact.path))
+    .map((fact) => `${fact.id}@${fact.path}`)
+    .sort()
+    .join("\n");
+}
+
 /** The one rule of a plugin's web build: played and published as it is, made again from the project, never edited. */
 export function webBuildLine(path: string): string {
   const where = path === ROOT ? "at its root" : `in \`${path}/\``;

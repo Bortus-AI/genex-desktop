@@ -57,6 +57,8 @@ describe("the Godot manifest", () => {
         [HookEvent.CheckpointAfter, GodotTool.HeroShots],
         [HookEvent.RestoreBefore, GodotTool.SaveAll],
         [HookEvent.RestoreAfter, GodotTool.ReloadEditor],
+        [HookEvent.TurnEnd, GodotTool.KeepWebBuild],
+        [HookEvent.RestoreAfter, GodotTool.KeepWebBuild],
       ],
     );
     assert.deepEqual(

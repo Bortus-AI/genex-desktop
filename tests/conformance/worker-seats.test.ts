@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
+import { UiEvent } from "../../src/shared/ui-events.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { normalGamesElsewhere } from "../../src/main/core/never-touch-list.ts";
 import { NeverTouchKind, pathVerdict } from "../../src/substrate/engines/never-touch.ts";
@@ -133,6 +134,29 @@ describe("the host's worker seat", () => {
     const roots = seen.at(-1)?.worker?.writeRoots ?? [];
     const otherGame = await realpath(other.dir);
     assert.ok(!roots.some((root) => root.startsWith(otherGame)), JSON.stringify(roots));
+  });
+
+  it("a session that changed its game's facts (a project it made, a web build) tells the app's game list at its end", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, project, threadId, delegate, runWorker, whileRunning } = await workerChat();
+    const changed: unknown[] = [];
+    const emit = core.emit.bind(core);
+    core.emit = ((type: string, payload: unknown) => {
+      if (type === UiEvent.GameChanged) changed.push(payload);
+      return emit(type as never, payload as never);
+    }) as typeof core.emit;
+    await core.setPermissionMode(threadId, PermissionMode.Auto);
+    whileRunning(async () => {
+      await mkdir(path.join(project.dir, "godot"), { recursive: true });
+      await writeFile(path.join(project.dir, "godot", "project.godot"), "config_version=5\n");
+    });
+    await delegate(runWorker());
+    assert.deepEqual(changed, [{ project: project.name }]);
+    changed.length = 0;
+    whileRunning(async () => {});
+    await delegate(runWorker());
+    assert.deepEqual(changed, [], "a session that changed nothing says nothing");
   });
 
   it("a run worker reads the folders of its own run its harness hands it, and no other run's", {

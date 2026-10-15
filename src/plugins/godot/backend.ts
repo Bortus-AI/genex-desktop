@@ -89,6 +89,7 @@ export const GodotTool = {
   WebExport: "web-export",
   SaveAll: "save-all",
   ReloadEditor: "reload-editor",
+  KeepWebBuild: "keep-web-build",
   HeroShots: "hero-shots",
   SetUp: "set-up",
 } as const;
@@ -143,6 +144,7 @@ const MESSAGE = {
       `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
     TimedOut: "Godot's web export didn't finish in time and was stopped.",
     Exported: "Exported for the web into web/: Live's Web game tab plays it, and Publish puts it online.",
+    NotKept: (why: string) => `Godot's web build in web/ wasn't refreshed (${why}); it plays the game as it was.`,
     Done: (files: number) =>
       `Exported the game for the web into ${WEB_EXPORT_FOLDER}/ (${files} files): Live's Web game tab plays it and Publish puts it online. It is Godot's build: never edit its files; export again after changing the project.`,
   },
@@ -363,6 +365,51 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   const errors = readProblems(result.output).filter(isError);
   if (!written) throw new Error(MESSAGE.Web.Failed(problemLines(errors.slice(0, NOTED_PROBLEMS))));
   return (await readdir(folder)).filter((name) => !name.startsWith(".")).length;
+}
+
+/** The most of a project's files `keep-web-build` looks at for the newest change. */
+const NEWEST_SCAN_FILES = 5000;
+
+/** When the project's own files last changed (ms), Godot's `.godot` cache and hidden files left out; looks at no more than {@link NEWEST_SCAN_FILES}. */
+async function newestChange(project: string): Promise<number> {
+  let newest = 0;
+  let seen = 0;
+  const folders = [project];
+  while (folders.length > 0 && seen < NEWEST_SCAN_FILES) {
+    const folder = folders.pop() ?? project;
+    for (const entry of await readdir(folder, { withFileTypes: true }).catch(() => [])) {
+      if (entry.name.startsWith(".")) continue;
+      const where = path.join(folder, entry.name);
+      if (entry.isDirectory()) folders.push(where);
+      if (!entry.isFile()) continue;
+      seen += 1;
+      newest = Math.max(newest, (await stat(where).catch(() => null))?.mtimeMs ?? 0);
+    }
+  }
+  return newest;
+}
+
+/**
+ * `keep-web-build` at the end of each turn and after a restore: Godot's web build in `web/` made
+ * again when the project changed since the last one, so Live's Web game tab and Publish always have
+ * the game as it is. Nothing without a project, a usable Godot or its Web template; a failure is a
+ * note, never a block.
+ */
+async function keepWebBuild(deps: GodotBackendDeps, context: PluginContext): Promise<HookAnswer> {
+  const on = context.hook?.on;
+  if (on !== HookEvent.TurnEnd && on !== HookEvent.RestoreAfter) return {};
+  const game = gameFolderOf(context);
+  const project = game ? await projectOf(context) : null;
+  const install = usableGodot(await findGodots(deps.env));
+  if (!game || !project || !install || !(await hasWebTemplate(deps.env.home, install))) return {};
+  const pack = await stat(path.join(game, WEB_EXPORT_FOLDER, WEB_PACK)).catch(() => null);
+  if (pack && pack.mtimeMs >= (await newestChange(project))) return {};
+  try {
+    await webExport(deps, context);
+    return {};
+  } catch (error) {
+    return { note: MESSAGE.Web.NotKept(errorMessage(error)) };
+  }
 }
 
 /** The seconds a run asks for: a whole number from 1 to {@link MAX_RUN_SECONDS}, or the default when absent. */
@@ -706,6 +753,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotTool.CheckpointCheck]: (_args, context) => checkAtMoment(deps, context),
     [GodotTool.WebExport]: async (_args, context) => MESSAGE.Web.Done(await webExport(deps, context)),
     [GodotTool.SaveAll]: (_args, context) => saveAll(deps, context),
+    [GodotTool.KeepWebBuild]: (_args, context) => keepWebBuild(deps, context),
     [GodotTool.ReloadEditor]: (_args, context) => reloadEditor(deps, context),
     [GodotTool.HeroShots]: (_args, context) => heroShots(deps, context),
     [GodotTool.SetUp]: async (_args, context) => {

@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -168,6 +168,15 @@
       }
     },
     {
+      "name": "keep-web-build",
+      "audience": "harness",
+      "description": "At the end of each turn and after a restore, Godot's web build in web/ made again when the project changed since the last one, so Live's Web game tab and Publish have the game as it is. Needs Godot's Web template; a failure is a note.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "hero-shots",
       "audience": "harness",
       "description": "Stills of the game's main scene from its genex_shot cameras: a run's save point thumbnails, and the viewport observer's pictures.",
@@ -276,6 +285,16 @@
     {
       "on": "restore.after",
       "tool": "reload-editor",
+      "facts": ["godot-project"]
+    },
+    {
+      "on": "turn.end",
+      "tool": "keep-web-build",
+      "facts": ["godot-project"]
+    },
+    {
+      "on": "restore.after",
+      "tool": "keep-web-build",
       "facts": ["godot-project"]
     }
   ],

@@ -14985,3 +14985,18 @@ describe("the close's sentence of an open Loop", () => {
     );
   });
 });
+
+describe("a plugin's web build and the chat's turn", () => {
+  it("WB1. a turn whose only change is a plugin's web build (Godot's export in web/) leaves the game's kind as it was: no new-kind continuation", async () => {
+    const { kindKey } = await import("../../src/harness-seed/loop/web-build.ts");
+    const before = [{ id: "godot-project", path: "godot" }];
+    const exported = [
+      ...before,
+      { id: "web-game", path: "web" },
+      { id: "godot-web-export", path: "web", source: "plugin:godot" },
+    ];
+    assert.equal(kindKey(exported), kindKey(before), "the build is no new kind");
+    const site = [...before, { id: "web-game", path: "site" }];
+    assert.notEqual(kindKey(site), kindKey(before), "a web game no plugin claims is one");
+  });
+});

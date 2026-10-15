@@ -35,9 +35,9 @@ import {
   kindPending,
   playsThroughBridge,
   servedAsWeb,
-  servedFactsKey,
   servedFactsOf,
 } from "./folder-facts.ts";
+import { kindKey } from "./web-build.ts";
 import { factsReadyPrompt } from "./project-prompts.ts";
 import { toolCall } from "./model-roles.ts";
 import { effortCap } from "./effort-cap.ts";
@@ -378,7 +378,8 @@ async function continueOnNewFacts(
   const game = await gameAtTurnEnd(ctx, handoff);
   // Still no facts (files of its own that no rule knows give no kind): nothing new to go on with.
   if (factsOfGame(game).length === 0) return turn.outcome;
-  if (servedFactsKey(handoff.descriptor) === servedFactsKey(game)) return turn.outcome;
+  // A plugin's web build (Godot exporting its game for the web) leaves the game the kind it was.
+  if (kindKey(servedFactsOf(handoff.descriptor)) === kindKey(servedFactsOf(game))) return turn.outcome;
   const next = await withFactsNow(ctx, handoff, game);
   const waited = linkedAnew(handoff.descriptor, game) ? await waitUntilReady(ctx, options, next) : ReadyWait.Ready;
   if (waited === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };

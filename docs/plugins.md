@@ -2514,8 +2514,13 @@ at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads
 `export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that
 version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`, installed by
 Godot's Export Template Manager) linked read-only into the job's private home; without it the tool
-is refused before Godot runs. The plugin's `detect` names the folder `godot-web-export` (a folder
-with `index.pck`). A game with no web game at its root plays and publishes its first web game in a
+is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+whenever the project changed since the last build (its `.pck` older than the project's newest file,
+`.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
+nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder
+with `index.pck`); a plugin's web build is no new kind (the seed's `web-build.ts` `kindKey`), so a
+turn that only exported never continues as one for a new kind, and the session's end tells the app's
+game list its facts changed (`delegation.ts` `#announceKindTaken`). A game with no web game at its root plays and publishes its first web game in a
 folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
 `index.html`, and Publish uploads the folder in the root's place; Multiplayer stays off for it, as
 the chat never edits a build. Godot writes the exported settings through its own temporary name

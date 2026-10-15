@@ -563,6 +563,13 @@ function honouredDirector(p: DelegateParams, cwd: string, seat: DelegationSeat):
  * elsewhere (the Unreal runner's). Never read from the folder's facts now: a read failure or the
  * run's own work may change those mid-run.
  */
+/** A game's facts as one comparable key: each `id@path`, sorted. */
+const factsKey = (facts: readonly { id: string; path: string }[]): string =>
+  facts
+    .map((fact) => `${fact.id}@${fact.path}`)
+    .sort()
+    .join("\n");
+
 const directorWindowed = (seat: DelegationSeat): boolean => !seat.leadsInPlace && seat.engine === GameEngine.Web;
 
 /**
@@ -1365,15 +1372,18 @@ export class DelegationService {
   }
 
   /**
-   * A game with no kind when the session started that has one now, from files the session wrote
-   * itself (no `start_web_game`, no port, which announce it): the app's game list hears it, so Live
-   * stops showing the first-idea state over a page that is there. Anything announced since the
-   * start (`announced`, the game's `GameChanged` count then) already told it.
+   * A game whose facts changed during the session from files it wrote itself (no `start_web_game`,
+   * no port, which announce it): a game with no kind that took one, or one that gained a project or
+   * a web build (Godot's export in `web/`). The app's game list hears it, so Live stops showing the
+   * first-idea state over a page that is there and offers the views the game has now. Anything
+   * announced since the start (`announced`, the game's `GameChanged` count then) already told it.
    */
   async #announceKindTaken(project: string, seat: DelegationSeat, announced: number): Promise<void> {
-    if (!kindPending(seat) || (this.#x.gameChanges.get(project) ?? 0) !== announced) return;
+    if ((this.#x.gameChanges.get(project) ?? 0) !== announced) return;
     const now = await this.#core.games.kindOf(project).catch(() => null);
-    if (now && !kindPending(now)) this.#core.emit(UiEvent.GameChanged, { project });
+    if (!now || kindPending(now)) return;
+    if (kindPending(seat) || factsKey(seat.facts) !== factsKey(now.facts))
+      this.#core.emit(UiEvent.GameChanged, { project });
   }
 
   /** A cleanup step that failed after a delegation: logged, never allowed to stop the rest. */
