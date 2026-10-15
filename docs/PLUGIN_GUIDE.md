@@ -233,7 +233,9 @@ editor, the agents' work in it waits. Hooks run your harness tools at Genex's mo
 `context.hook` (`{ on, runId?, worker?, … }`, absent when called directly) and answers `{ block?,
 note?, pending?, images? }`. A handler that throws blocks a moment that can be blocked, so answer
 `note` for trouble that should not stop the work. It never changes another call's arguments, and
-git stays Genex's. An agent tool that `makes` a kind
+git stays Genex's. A quick `checkpoint.before` save may add `"messages": true` to run before each
+chat message's checkpoint too, so a Rewind brings back what it saved ([Before each chat
+message](plugins.md#before-each-chat-message)). An agent tool that `makes` a kind
 may name a harness tool in `ready` that answers `{ ready, note }`. See
 [Hooks](plugins.md#hooks-genexs-moments) and [Locks](plugins.md#locks-the-person-comes-first).
 

@@ -577,7 +577,11 @@ through the queue and return to the composer with the message. The harness `rewi
 
 Before each processed message main saves the game folder: `events.append` starts the checkpoint
 and `turn.begin` waits for it (30 s at most; a late one is not kept), so the queue lock is never
-held, and the folder after each answer is saved too. `chat-checkpoints.ts` reads the folder
+held, and the folder after each answer is saved too. First, the game's plugin steps that ask to run
+for each message (`checkpoint.before` hooks with `messages: true`) save the engine's state into the
+folder within that wait, less 5 s kept for the snapshot; Plan mode, a lock not given or no time left
+skips them, and the folder is saved whatever they answered ([plugins](plugins.md#before-each-chat-message)).
+The folder after an answer runs no step. `chat-checkpoints.ts` reads the folder
 through a private index with executable Git configuration disabled, first copied from the
 repository's with its times (read before the copy, rounded down to the second, so the copy is
 never dated later than its content), so a same-size edit in the second Git last read the file is

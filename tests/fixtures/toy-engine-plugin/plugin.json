@@ -287,7 +287,8 @@
     },
     {
       "on": "checkpoint.before",
-      "tool": "save-scenes"
+      "tool": "save-scenes",
+      "messages": true
     },
     {
       "on": "checkpoint.after",

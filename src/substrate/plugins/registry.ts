@@ -22,6 +22,7 @@ import {
   hookEventsOf,
   hookPlan,
   LockScope,
+  messageCheckpointPlan,
   outlivesHarness,
   type PluginLock,
 } from "../../shared/plugin-hooks.ts";
@@ -1268,6 +1269,10 @@ export class PluginRegistry {
    */
   hookPlan(on: HookEvent, game: GameKind, own?: string): HookStep[] {
     return hookPlan(this.#hooked(), on, game, own);
+  }
+  /** The handlers a chat message's checkpoint runs for a game (`shared/plugin-hooks.ts` `messageCheckpointPlan`). */
+  messageCheckpointPlan(game: GameKind): HookStep[] {
+    return messageCheckpointPlan(this.#hooked(), game);
   }
   /** The moments some enabled plugin has a handler at for a game: what its descriptor lists. */
   hookEvents(game: GameKind): HookEvent[] {

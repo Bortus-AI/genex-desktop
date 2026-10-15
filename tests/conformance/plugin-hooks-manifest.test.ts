@@ -13,7 +13,7 @@ import {
   RESTORE_SAVE_MAX_MS,
 } from "../../src/plugins/unreal/editor-moments.ts";
 import { HERO_SHOTS_MAX_MS } from "../../src/plugins/unreal/loop-tools.ts";
-import { HookEvent, hookEventsOf, hookPlan, LockScope } from "../../src/shared/plugin-hooks.ts";
+import { HookEvent, hookEventsOf, hookPlan, LockScope, messageCheckpointPlan } from "../../src/shared/plugin-hooks.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { FolderHolds, type GameKind } from "../../src/shared/project-facts.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
@@ -116,6 +116,24 @@ const hostile: Array<[string, RegExp, Record<string, unknown>, Parameters<typeof
     { hooks: [hook(HookEvent.Health, "save"), hook(HookEvent.Health, "save")] },
   ],
   ["an unknown key in a hook", /hooks/, { hooks: [{ ...hook(HookEvent.Health, "save"), args: { all: true } }] }],
+  ...[
+    HookEvent.CheckpointAfter,
+    HookEvent.RestoreBefore,
+    HookEvent.RestoreAfter,
+    HookEvent.RunPrepare,
+    HookEvent.TurnStart,
+    HookEvent.Health,
+    HookEvent.ToolBefore,
+  ].map((on): [string, RegExp, Record<string, unknown>] => [
+    `a hook at ${on} run for each chat message`,
+    /hooks/,
+    { hooks: [hook(on, "save", { messages: true })] },
+  ]),
+  [
+    "a hook run for each chat message by a word, not true or false",
+    /hooks/,
+    { hooks: [hook(HookEvent.CheckpointBefore, "save", { messages: "yes" })] },
+  ],
   ["33 hooks", /hooks/, { hooks: Array.from({ length: 33 }, () => hook(HookEvent.Health, "save")) }],
   ["hooks that are no list", /hooks/, { hooks: hook(HookEvent.Health, "save") }],
   ["a lock id that is a path", /locks/, { locks: [lock({ id: "../x" })] }],
@@ -164,7 +182,7 @@ function plansByFactsAndOrder() {
     manifest: {
       tools: [harnessTool("save", { needs: ["bench"] }), harnessTool("audit")],
       hooks: [
-        hook(HookEvent.CheckpointBefore, "save", { facts: ["toy-project"] }),
+        hook(HookEvent.CheckpointBefore, "save", { facts: ["toy-project"], messages: true }),
         hook(HookEvent.ToolBefore, "audit"),
       ],
     } as Pick<PluginManifest, "hooks" | "tools">,
@@ -189,6 +207,12 @@ function plansByFactsAndOrder() {
   assert.deepEqual(hookPlan([a, b], HookEvent.ToolBefore, toyKind, "b"), [], "never around another plugin's tool");
   assert.deepEqual(hookPlan([a, b], HookEvent.ToolBefore, toyKind), [], "nor around a tool of no plugin");
 
+  // A chat message's checkpoint runs only the checkpoint.before steps that ask for it, by the same facts.
+  assert.deepEqual(messageCheckpointPlan([a, b], toyKind), [save], "only the hook that asks for each message");
+  assert.deepEqual(messageCheckpointPlan([b, a], toyKind), [save]);
+  assert.deepEqual(messageCheckpointPlan([a, b], webKind), [], "by its facts, as at any checkpoint");
+  assert.deepEqual(messageCheckpointPlan([b], toyKind), [], "no hook asks: no step");
+
   assert.deepEqual(hookEventsOf([a, b], toyKind), [HookEvent.CheckpointBefore, HookEvent.ToolBefore]);
   assert.deepEqual(hookEventsOf([a, b], webKind), [HookEvent.CheckpointBefore, HookEvent.ToolBefore]);
   assert.deepEqual(hookEventsOf([a], webKind), [HookEvent.ToolBefore]);
@@ -200,6 +224,7 @@ async function registryPlansPluginsThatAreOn() {
   const registry = await toyRegistry();
   await registry.setEnabled(TOY_PLUGIN_ID, false);
   assert.deepEqual(registry.hookPlan(HookEvent.CheckpointBefore, toyKind), []);
+  assert.deepEqual(registry.messageCheckpointPlan(toyKind), []);
   assert.deepEqual(registry.hookEvents(toyKind), []);
   assert.deepEqual(registry.locksFor(toyKind), []);
   assert.deepEqual(registry.needsOf(`${TOY_PLUGIN_ID}__build`), []);
@@ -209,6 +234,16 @@ async function registryPlansPluginsThatAreOn() {
   assert.deepEqual(registry.hookPlan(HookEvent.CheckpointBefore, toyKind), [
     { plugin: TOY_PLUGIN_ID, tool: "save-scenes", needs: [] },
   ]);
+  assert.deepEqual(
+    registry.messageCheckpointPlan(toyKind),
+    [{ plugin: TOY_PLUGIN_ID, tool: "save-scenes", needs: [] }],
+    "the toy saves its scenes before each chat message too",
+  );
+  assert.deepEqual(
+    registry.messageCheckpointPlan(webKind),
+    registry.messageCheckpointPlan(toyKind),
+    "its hooks name no facts",
+  );
   assert.deepEqual(
     [...registry.hookEvents(toyKind)].sort(),
     [
@@ -242,7 +277,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
             lock({ id: "kiln", label: "Kiln" }),
           ],
           hooks: [
-            hook(HookEvent.CheckpointBefore, "save", { facts: ["toy-project"] }),
+            hook(HookEvent.CheckpointBefore, "save", { messages: true, facts: ["toy-project"] }),
+            hook(HookEvent.CheckpointBefore, "status", { messages: false }),
             hook(HookEvent.ToolBefore, "status"),
           ],
           mcpServers: [server({ needs: ["bench"] })],
@@ -260,9 +296,15 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
       JSON.stringify({ id: "bench", label: "Bench", per: "app", personFirst: "probe" }),
     );
     assert.deepEqual(kept.hooks, [
-      { on: "checkpoint.before", tool: "save", facts: ["toy-project"] },
+      { on: "checkpoint.before", tool: "save", facts: ["toy-project"], messages: true },
+      { on: "checkpoint.before", tool: "status" },
       { on: "tool.before", tool: "status" },
     ]);
+    assert.equal(
+      JSON.stringify(kept.hooks?.[0]),
+      JSON.stringify({ on: "checkpoint.before", tool: "save", facts: ["toy-project"], messages: true }),
+      "a hook run for each chat message says so last; one that is not says nothing",
+    );
     const tool = (name: string) => kept.tools.find((t) => t.name === name);
     assert.deepEqual(tool("paint")?.needs, ["bench", "kiln"]);
     assert.equal(tool("build")?.ready, "status");
@@ -325,6 +367,10 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
       ].map(([on, tool]) => ({ on, tool, facts: UNREAL_PROJECT })),
       "its moments, each for Unreal projects only; nothing ends the person's editor when a run ends",
     );
+    const unrealKind: GameKind = { facts: [{ id: "unreal-project", path: "." }] };
+    const plugins = [{ id: "unreal", manifest: unreal }];
+    assert.equal(hookPlan(plugins, HookEvent.CheckpointBefore, unrealKind).length, 2, "it saves at every checkpoint");
+    assert.deepEqual(messageCheckpointPlan(plugins, unrealKind), [], "but never before each chat message");
   });
 
   it("gives the Unreal plugin's save before a restore longer than it waits for a busy editor", () => {

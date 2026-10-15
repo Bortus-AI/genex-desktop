@@ -167,7 +167,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `folders[]` | 3 | Up to 8 `{path, why}`: folders outside the game the plugin's engine programs write to, workers' write roots; see [Folders](#folders) |
 | `locks[]` | 3 | Up to 8 `{id, label, per, personFirst?}`: what one holder at a time may use, giving way to the person; see [Locks](#locks-the-person-comes-first) |
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
-| `hooks[]` | 3 | Up to 32 `{on, tool, facts?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
+| `hooks[]` | 3 | Up to 32 `{on, tool, facts?, messages?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
 | `judges[]` | 3 | Beside `engine` only: up to 8 `{id, label, facts?, brief, players?, probe?}`, blind judges that play the engine's games in its editor; see [Judges](#judges) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
@@ -1421,11 +1421,13 @@ and `/private/tmp/.dotnet`.
 ### Hooks: Genex's moments
 
 `hooks` (API 3, `substrate/plugins/hook-manifest.ts`; vocabulary in `shared/plugin-hooks.ts`) names
-the plugin's harness tools Genex runs at its moments: up to 32 `{on, tool, facts?}`, each `(on,
-tool)` once. `tool` is one of the plugin's own tools with `audience: "harness"`, no `confirmation`
+the plugin's harness tools Genex runs at its moments: up to 32 `{on, tool, facts?, messages?}`, each
+`(on, tool)` once. `tool` is one of the plugin's own tools with `audience: "harness"`, no `confirmation`
 and no `host`; `facts` (1–8 fact ids, each once) narrows it to the games they reach ([Scope by
 facts](#scope-by-facts)). Another plugin's tool, an agent tool or an unknown moment refuses the
-manifest.
+manifest. `messages: true`, only on `checkpoint.before` (a boolean anywhere, or on any other moment,
+refuses the manifest; `false` is dropped), runs that step before each chat message's checkpoint too
+([Before each chat message](#before-each-chat-message)).
 
 | Moment | When | A `block` |
 | --- | --- | --- |
@@ -1513,6 +1515,23 @@ short (`STOP_OUTLIVING_HOOK_EVENTS`); nor does the harness's end, or the Stop of
 harness sends as it shuts down, cut a step of the person's own Rewind (`outlivesHarness`). A Stop during a restore's before steps runs none; a Stop during a
 checkpoint's after steps keeps its snapshot, with a note that they were stopped.
 `GameProject.hookEvents` lists a game's moments; absent, no plugin hooks it and nothing runs.
+
+#### Before each chat message
+
+A game chat saves the game folder before each message is answered, so Rewind can bring it back
+([the conversation coordinator](conversation-coordinator.md)). An engine whose state lives in its
+app and reaches the folder only when exported opts in with `messages: true` on that
+`checkpoint.before` step; the host then runs those steps, and only those
+(`registry.messageCheckpointPlan(game)`, `HookService.prepareMessageCheckpoint`), right before the
+message's snapshot, under their locks, told `{on: "checkpoint.before"}`. A `checkpoint.after` step
+never runs for a message, so no pictures are posted at every message. The steps live inside the
+message's own wait (`CHAT_CHECKPOINT_WAIT_MS`, 30 s, in `main/core/rewind.ts`), not the plugin call
+ceiling (`HOOK_CALL_MS`): the lock wait and the steps' shared limit are what is left of it, less 5 s
+kept for the snapshot. Plan mode, a lock not given in time or no time left skips the steps; a step
+cut short, a failure or a `block` is a log line. In every case the files are still saved: a block
+never stops a message's checkpoint. A message answered again after a restart keeps its first
+checkpoint and runs no step. A step that opts in must be quick; Unreal does not opt in, so its
+editor is saved at save points only.
 
 ### Locks: the person comes first
 

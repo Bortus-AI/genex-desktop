@@ -58,7 +58,12 @@ import { HookBlockedError } from "./plugin-hooks.ts";
 import { HookHold } from "../../shared/plugin-hooks.ts";
 
 /** How long a message's answer waits for the game checkpoint before going ahead without it. */
-const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
+export const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
+/**
+ * What a message's checkpoint keeps of its wait for the snapshot itself: the engine's steps that
+ * save first (`PluginHook.messages`) end this long before the wait does.
+ */
+const MESSAGE_SNAPSHOT_ROOM_MS = 5 * SECOND_MS;
 /** How long a rewind waits for the harness to take back the mood board; it never waits for more. */
 const REWIND_NOTICE_TIMEOUT_MS = 3 * SECOND_MS;
 /**
@@ -108,6 +113,8 @@ const MESSAGE = {
     `[core] the game checkpoint before ${messageId} took too long; that message can rewind the chat, not its files`,
   checkpointFailed: (phase: CheckpointPhase, messageId: string, err: unknown) =>
     `[core] no game checkpoint ${phase} ${messageId}: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
+  stepsFailed: (messageId: string, err: unknown) =>
+    `[core] the engine steps before ${messageId} failed; its files are still saved: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
   rulesFailed: (err: unknown) =>
     `[core] a game checkpoint went on without the folder's ignore rules: ${errorMessage(err).slice(0, LOG_DETAIL_CHARS)}`,
   skippedNotReported: (threadId: string, err: unknown) =>
@@ -408,6 +415,7 @@ export class ChatRewindService {
     )
       return;
     const before = phase === CheckpointPhase.Before;
+    if (before) await this.#saveEngineFirst(dir, meta.project, threadId, messageId, deadline);
     const taken = await this.checkpoints.take(dir, threadId, messageId, phase, before ? deadline : undefined);
     if (!taken) {
       this.#log(MESSAGE.checkpointLate(messageId));
@@ -418,6 +426,25 @@ export class ChatRewindService {
       messageId,
       by: SkippedBy.Checkpoint,
     });
+  }
+
+  /**
+   * Before a message's first checkpoint, the game's engine saves what it holds (its steps that ask
+   * to run for each message), so a Rewind brings that back too. They end before the snapshot's own
+   * room in the message's wait; whatever they answer, or if they fail, the folder is saved next.
+   */
+  async #saveEngineFirst(dir: string, project: string, threadId: string, messageId: string, deadline: number) {
+    try {
+      // A message answered again after a restart keeps its first checkpoint: nothing to save for it.
+      if (await this.checkpoints.has(dir, threadId, messageId)) return;
+      await this.#x.hooks.prepareMessageCheckpoint({
+        project,
+        threadId,
+        deadline: deadline - MESSAGE_SNAPSHOT_ROOM_MS,
+      });
+    } catch (err) {
+      this.#log(MESSAGE.stepsFailed(messageId, err));
+    }
   }
 
   /**
