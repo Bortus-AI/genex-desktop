@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -239,7 +239,8 @@
       "id": "editor",
       "label": "Godot",
       "ariaLabel": "Godot editor",
-      "requiresProject": false,
+      "icon": "godot",
+      "facts": ["godot-project"],
       "target": {
         "kind": "panel",
         "id": "setup"

@@ -328,6 +328,18 @@ describe("the panel and the toolbar", () => {
     assert.equal((status.godot as { version: string }).version, "4.6.1");
   });
 
+  it("a game whose chat chose Godot before Godot was here shows the Godot button, and no other game does", async () => {
+    const none = await godotBackendFixture({ apps: [] });
+    assert.equal((await action(none, "toolbar-status")).shown, undefined, "nothing chosen yet");
+    await assert.rejects(
+      tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }),
+      /Godot button is now above the game/,
+    );
+    assert.equal((await action(none, "toolbar-status")).shown, true, "the refused game keeps its button out");
+    const other = await none.backend.action?.("toolbar-status", {}, none.context({ project: "another" }));
+    assert.equal((other as Answer).shown, undefined, "another game's strip stays as it was");
+  });
+
   it("tells Live's card where the game stands in Godot, with the one step it needs", async () => {
     const actions = new Set(MANIFEST.actions.map((a) => a.name));
     const card = async (fixture: Awaited<ReturnType<typeof godotBackendFixture>>) =>

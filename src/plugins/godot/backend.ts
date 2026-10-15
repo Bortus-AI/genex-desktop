@@ -7,11 +7,12 @@
  * and its reviewer get stills (`hero-shots`). The panel and the toolbar find Godot, make a game
  * and open it in the person's own Godot editor, which Genex never drives.
  */
-import { readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type HookAnswer, HookEvent, HOOK_RECORDING_MAX } from "../../shared/plugin-hooks.ts";
 import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
 import type { Activate, PluginActivation, PluginContext, PluginReview } from "../../plugin-sdk/index.d.ts";
@@ -120,7 +121,7 @@ const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Godot action: ${name}`,
   UnknownTool: (name: string) => `Unknown Godot tool: ${name}`,
   NoGodot:
-    "Godot 4 isn't installed on this Mac. Tell the user to press the Godot button above the game: it opens Godot's download page, and Genex finds Godot once it is in Applications.",
+    "Godot 4 isn't installed on this Mac. The Godot button is now above the game: tell the user to press it, which opens Godot's download page, and to send a message once Godot is in Applications (Genex finds it there).",
   NoGameOpen: "Open a game in Genex first: a Godot project is made in a game's folder.",
   NewGame: (template: string, version: string) =>
     `Made this game's Godot project in ${GAME_PROJECT_FOLDER}/ from the ${template.toUpperCase()} template, for Godot ${version}: main.tscn (a player that moves, and a HeroCamera in the genex_shot group) and player.gd. Build the game there in GDScript and scenes, never as a web page. After each change call godot__check; call godot__screenshot to see it. The person opens it in Godot from the Godot button.`,
@@ -219,7 +220,7 @@ async function requireGodot(deps: GodotBackendDeps): Promise<GodotInstall> {
 /** The engine question's words for this Mac's Godot: ready to make a game with, or what it needs first. */
 function readinessNote(readiness: GodotReadiness, version: string | null): string {
   const toButton =
-    "If the user picks it, don't call godot__new-game, which would refuse: tell them to press the Godot button above the game, which opens Godot's free download, and to send a message once Godot is in Applications.";
+    "If the user picks it, call godot__new-game anyway: it refuses until Godot is installed but brings the Godot button out above the game. Then tell them to press that button, which opens Godot's free download, and to send a message once Godot is in Applications.";
   if (readiness === GodotReadiness.None)
     return `Godot isn't installed on this Mac yet, so offer it as "Godot" with the description "Free and open source; needs Godot 4 installed first, about 150 MB". ${toButton}`;
   if (readiness !== GodotReadiness.Ready)
@@ -252,6 +253,8 @@ async function firstImport(deps: GodotBackendDeps, install: GodotInstall, projec
 async function newGame(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const game = gameFolderOf(context);
   if (!game) throw new Error(MESSAGE.NoGameOpen);
+  // Refused for want of Godot: the game's strip still shows the Godot button, which gets it.
+  if (!usableGodot(await findGodots(deps.env))) await rememberWant(context);
   const install = await requireGodot(deps);
   const template = textArg(args, "template") || GodotTemplate.ThreeD;
   const project = await createProject(game, { template, name: textArg(args, "name") }, deps.templates);
@@ -523,8 +526,42 @@ async function describeSetUp(context: PluginContext): Promise<PluginReview> {
   return { message: MESSAGE.SetUpQuestion, detail: MESSAGE.SetUpDetail(where) };
 }
 
-/** The toolbar button's word: get Godot, too old, or its version and whether it has this game open. */
+/** The folder in the plugin's storage where a game whose chat chose Godot before it could be made is remembered. */
+const WANTS_FOLDER = "wants";
+/** A game id as it names a file: a plain folder name, never a path. */
+const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
+
+/** The calling game's want record, or undefined outside a game (or for a name that isn't plain). */
+async function wantFile(context: PluginContext): Promise<string | undefined> {
+  if (!context.project || !GAME_ID.test(context.project)) return undefined;
+  return path.join(await storageOf(context), WANTS_FOLDER, `${context.project}.json`);
+}
+
+/** Remembers that the calling game's chat chose Godot before it could be made here; written once. */
+async function rememberWant(context: PluginContext): Promise<void> {
+  const file = await wantFile(context);
+  if (!file || (await stat(file).catch(() => null))) return;
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFileNoFollow(file, `${JSON.stringify({ at: new Date().toISOString() })}\n`);
+}
+
+/** Whether the calling game's chat chose Godot before it could be made (its strip shows the Godot button). */
+async function wantsGodot(context: PluginContext): Promise<boolean> {
+  const file = await wantFile(context);
+  return file ? (await stat(file).catch(() => null))?.isFile() === true : false;
+}
+
+/**
+ * The Godot toolbar button's status, `shown` on a game whose chat chose Godot before its project
+ * could be made (the button is scoped to Godot projects): see {@link buttonStatus}.
+ */
 async function toolbarStatus(deps: GodotBackendDeps, context: PluginContext) {
+  const [status, wanted] = await Promise.all([buttonStatus(deps, context), wantsGodot(context)]);
+  return wanted ? { ...status, shown: true } : status;
+}
+
+/** The toolbar button's word: get Godot, too old, or its version and whether it has this game open. */
+async function buttonStatus(deps: GodotBackendDeps, context: PluginContext) {
   const installs = await findGodots(deps.env);
   const install = usableGodot(installs);
   if (!install) {
