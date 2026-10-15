@@ -15,9 +15,9 @@ import { SIDEBAR_TOGGLE } from "../shell/use-shell-chrome.ts";
 import { feedOf } from "../state/play.ts";
 import { usePlay, useShallow } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
-import { ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
+import { withViewTransition } from "../ui/view-transition.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { useBackOnline, useOnline } from "../ui/use-online.ts";
 import { PlayCard, PlayCardPlaceholder } from "./PlayCard.tsx";
@@ -190,41 +190,22 @@ function MoreMarker({
   return <div ref={marker} className="play-more" aria-hidden="true" />;
 }
 
-/** Remix from a card: the copy is made in main, then opens in Create. */
-export function useCardRemix(onRemixed: (name: string) => void) {
-  const [remixing, setRemixing] = useState<ReadonlySet<string>>(new Set());
-  const remix = useCallback(
-    (game: PlayGame) => {
-      setRemixing((current) => new Set(current).add(game.slug));
-      const app = studio();
-      app.play
-        .remix(game)
-        .then(onRemixed, () => app.notify(WORDS.remixFailed, ToastTone.Error))
-        .finally(() =>
-          setRemixing((current) => {
-            const next = new Set(current);
-            next.delete(game.slug);
-            return next;
-          }),
-        );
-    },
-    [onRemixed],
-  );
-  return { remixing, remix };
+/** Remix from a card: Create shows the copy being made in main, and opens it (`usePlayRemixes`). */
+export function useCardRemix(): (game: PlayGame) => void {
+  // One change on screen: the card's Play turns into Create's remix (`usePlayRemixes`).
+  return useCallback((game: PlayGame) => withViewTransition(() => void studio().play.remix(game)), []);
 }
 
 /** The grid of cards, with the shapes of the ones still coming. */
 export function Grid({
   games,
   placeholders,
-  remixing,
   onRemix,
   showAuthor = true,
   marquee = false,
 }: {
   games: readonly PlayGame[];
   placeholders: number;
-  remixing: ReadonlySet<string>;
   onRemix: (game: PlayGame) => void;
   /** Whether cards say who made them. */
   showAuthor?: boolean;
@@ -238,15 +219,7 @@ export function Grid({
   return (
     <div className="play-grid">
       {games.map((game) => (
-        <PlayCard
-          key={game.id}
-          game={game}
-          remixing={remixing.has(game.slug)}
-          onPlay={play}
-          onRemix={onRemix}
-          showAuthor={showAuthor}
-          marquee={marquee}
-        />
+        <PlayCard key={game.id} game={game} onPlay={play} onRemix={onRemix} showAuthor={showAuthor} marquee={marquee} />
       ))}
       {Array.from({ length: placeholders }, (_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: placeholders are identical and only counted
@@ -296,14 +269,12 @@ function FeedBody({
   category,
   shelf,
   online,
-  remixing,
   onRemix,
   scroller,
 }: {
   category: PlayCategory;
   shelf: PlayShelf;
   online: boolean;
-  remixing: ReadonlySet<string>;
   onRemix: (game: PlayGame) => void;
   scroller: RefObject<HTMLDivElement | null>;
 }): JSX.Element {
@@ -319,18 +290,13 @@ function FeedBody({
   if (feed.status === FeedStatus.Loading && feed.games.length === 0)
     return (
       <div role="status" aria-busy="true" aria-label={WORDS.loading(noun)}>
-        <Grid games={[]} placeholders={PLACEHOLDERS} remixing={remixing} onRemix={onRemix} />
+        <Grid games={[]} placeholders={PLACEHOLDERS} onRemix={onRemix} />
       </div>
     );
   if (feed.games.length === 0) return <Notice text={WORDS.empty(noun)} />;
   return (
     <>
-      <Grid
-        games={feed.games}
-        placeholders={feed.loadingMore ? PLACEHOLDERS / 2 : 0}
-        remixing={remixing}
-        onRemix={onRemix}
-      />
+      <Grid games={feed.games} placeholders={feed.loadingMore ? PLACEHOLDERS / 2 : 0} onRemix={onRemix} />
       {feed.moreFailed && <MoreFailed noun={noun} online={online} onRetry={more} />}
       {/* Made afresh for each page: a page too short to move the marker out of the look-ahead still reads the next. */}
       {feed.nextCursor && <MoreMarker key={feed.nextCursor} onNear={more} scroller={scroller} />}
@@ -349,14 +315,12 @@ function SearchBody({
   noun,
   online,
   onRetry,
-  remixing,
   onRemix,
 }: {
   search: SearchState;
   noun: string;
   online: boolean;
   onRetry: () => void;
-  remixing: ReadonlySet<string>;
   onRemix: (game: PlayGame) => void;
 }): JSX.Element {
   if (search.status === FeedStatus.Failed && !online)
@@ -367,7 +331,7 @@ function SearchBody({
   const waiting = search.status === FeedStatus.Loading && search.games.length === 0;
   return (
     <div aria-busy={search.status === FeedStatus.Loading}>
-      <Grid games={search.games} placeholders={waiting ? PLACEHOLDERS : 0} remixing={remixing} onRemix={onRemix} />
+      <Grid games={search.games} placeholders={waiting ? PLACEHOLDERS : 0} onRemix={onRemix} />
     </div>
   );
 }
@@ -425,12 +389,9 @@ function useReloadsWhenBack(shown: PlayCategory, search: SearchState | null, ret
 export function PlayRoom({
   sidebarHidden,
   onToggleSidebar,
-  onRemixed,
 }: {
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
-  /** A card's remix was made: open it in Create. */
-  onRemixed: (name: string) => void;
 }): JSX.Element {
   const shelf = usePlay((s) => s.shelf);
   const categories = usePlay(useShallow((s) => s.categories));
@@ -444,7 +405,7 @@ export function PlayRoom({
     setQuery("");
   }
   const { search, retry } = useSearch(query, shelf);
-  const { remixing, remix } = useCardRemix(onRemixed);
+  const remix = useCardRemix();
   const { bar, lead, scrolled, hidden, onScroll } = useBarScroll(shelf);
   const online = useOnline();
   const scroll = useRef<HTMLDivElement>(null);
@@ -493,23 +454,9 @@ export function PlayRoom({
         </header>
         <div className="play-content">
           {search ? (
-            <SearchBody
-              search={search}
-              noun={noun}
-              online={online}
-              onRetry={retry}
-              remixing={remixing}
-              onRemix={remix}
-            />
+            <SearchBody search={search} noun={noun} online={online} onRetry={retry} onRemix={remix} />
           ) : (
-            <FeedBody
-              category={shown}
-              shelf={shelf}
-              online={online}
-              remixing={remixing}
-              onRemix={remix}
-              scroller={scroll}
-            />
+            <FeedBody category={shown} shelf={shelf} online={online} onRemix={remix} scroller={scroll} />
           )}
         </div>
       </div>

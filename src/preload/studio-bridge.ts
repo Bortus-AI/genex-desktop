@@ -137,7 +137,8 @@ function gameCalls(bridge: BridgeCalls) {
     projectModelRigs: (p) => invoke("studio:game.asset.rigs", p),
     projectAssets: (project) => invoke("studio:game.assets", { project }),
     readProjectAsset: (p) => invoke("studio:game.asset.still", p),
-    installPackages: (project) => invoke("studio:packages.install", { project }),
+    installPackages: (project, options) =>
+      invoke("studio:packages.install", { project, scripts: options?.scripts === true }),
   } satisfies Partial<StudioApi>;
 }
 

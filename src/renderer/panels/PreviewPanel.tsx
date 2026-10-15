@@ -154,6 +154,7 @@ function StageBanners({ trouble }: { trouble: ReturnType<typeof useBuildProblem>
       installing={trouble.installing}
       installLines={trouble.installLines}
       onInstall={trouble.installPackages}
+      onRunScripts={trouble.runSetupScripts}
       onReload={() => void window.studio.reloadPreview({ retry: true }).catch(() => {})}
     />
   );

@@ -1344,6 +1344,10 @@
   flex-direction: column;
   view-transition-name: launch-stage;
 }
+/* One stage may carry the name: a remix shown over a launching home is the one on screen. */
+.studio-shell:has([data-remix-layer]) [data-home] .home-launch-stage {
+  view-transition-name: none;
+}
 /* Home ⇄ game (ui/view-transition.ts): the composer glides to its new place and the rest crossfades.
    Only one composer may carry the name, so the chat's has it only while home is not up. */
 .home-composer [data-promptbar],
@@ -6331,6 +6335,123 @@ p.usage-divider {
     animation: none;
   }
   .app-loader-shine {
+    animation: none;
+  }
+}
+
+/* ── Step bar (ui/StepBar.tsx): a few named steps as one bar, for the Genex publish and a Play remix ── */
+.step-bar-group {
+  display: grid;
+  gap: 8px;
+}
+.step-bar,
+.step-bar-labels {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 4px;
+}
+.step-bar span {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+/* A place showing the bar may tone it with --step-done (filled segments, the light) and --step-name. */
+.step-bar span[data-state="done"] {
+  background: var(--step-done, var(--ink));
+}
+/* The step at work carries a light that crosses it, so a long upload never looks stuck. */
+.step-bar span[data-state="current"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--step-done, var(--ink)), transparent);
+  animation: step-bar-sweep 1.4s var(--ease-smooth-out) infinite;
+}
+@keyframes step-bar-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.step-bar-labels {
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+}
+.step-bar-labels span[data-state="current"] {
+  color: var(--step-name, var(--ink));
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-bar span[data-state="current"]::after {
+    animation: none;
+  }
+  .step-bar span[data-state="current"] {
+    background: var(--ink-3);
+  }
+}
+
+/* ── A Play remix being made (shell/RemixLayer.tsx): its sidebar row's ring and the stage's step bar ── */
+@property --remix-share {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+.remix-avatar {
+  position: relative;
+  display: block;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: conic-gradient(var(--ink) calc(var(--remix-share) * 1turn), var(--line-strong) 0);
+  transition: --remix-share var(--duration-medium) var(--ease-smooth-out);
+}
+.remix-avatar > img,
+.remix-avatar > span {
+  position: absolute;
+  inset: 2.5px;
+  display: block;
+  width: calc(100% - 5px);
+  height: calc(100% - 5px);
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--hover);
+}
+.remix-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  animation: fade-in var(--duration-fast) var(--ease-smooth-out);
+}
+/* The drawing's box at its own size; the empty band above and below the mark and its beam is
+   taken back, so the mark, the line and the bar sit together in the middle of the stage. */
+.remix-art {
+  width: 160px;
+  height: 112px;
+  max-width: 100%;
+  margin-block: -36px -20px;
+}
+.remix-steps {
+  --step-done: var(--ink-3);
+  --step-name: var(--ink-2);
+  width: 320px;
+  max-width: 100%;
+  margin-top: 4px;
+}
+.remix-steps .step-bar-labels {
+  text-align: center;
+}
+@media (prefers-reduced-motion: reduce) {
+  .remix-avatar {
+    transition: none;
+  }
+  .remix-stage {
     animation: none;
   }
 }

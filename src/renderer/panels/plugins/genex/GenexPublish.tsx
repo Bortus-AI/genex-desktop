@@ -31,6 +31,7 @@ import { OPEN_PLUGINS_EVENT } from "../../../ui/ComposerAddMenu.tsx";
 import { DialogSurface } from "../../../ui/dialog.tsx";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
+import { StepBar } from "../../../ui/StepBar.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
 import { ACCOUNT_WORDS, GENEX_WORDS, problemWords } from "../../../words.ts";
@@ -50,7 +51,6 @@ import {
   publishGate,
   publishReport,
   publishView,
-  StepState,
   type StepView,
 } from "./genex-publish-view.ts";
 import { drawRocket, ROCKET_FPS, ROCKET_FRAMES, ROCKET_GRID, rocketScene } from "./publish-rocket.ts";
@@ -84,29 +84,13 @@ function useElapsed(startedAt: string | null): number | null {
 
 /** The running attempt's steps as one bar with their names; amber while it takes longer than usual. */
 function Progress({ view }: { view: PublishView }): JSX.Element {
-  const at = view.steps.findIndex((s) => s.state === StepState.Current);
   return (
     <div className="genex-publish-progress" data-slow={view.slow || undefined}>
-      <div
-        className="genex-publish-bar"
-        role="progressbar"
-        aria-label={WORDS.progress}
-        aria-valuemin={0}
-        aria-valuemax={view.steps.length}
-        aria-valuenow={Math.max(at, 0)}
-        aria-valuetext={view.phase}
-      >
-        {view.steps.map((step: StepView) => (
-          <span key={step.step} data-state={step.state} />
-        ))}
-      </div>
-      <div className="genex-publish-steps" aria-hidden>
-        {view.steps.map((step: StepView) => (
-          <span key={step.step} data-state={step.state}>
-            {step.label}
-          </span>
-        ))}
-      </div>
+      <StepBar
+        steps={view.steps.map((step: StepView) => ({ key: step.step, label: step.label, state: step.state }))}
+        label={WORDS.progress}
+        valueText={view.phase}
+      />
     </div>
   );
 }

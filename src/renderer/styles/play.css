@@ -925,14 +925,6 @@
   opacity: 1;
   filter: none;
 }
-.play-viewer-bar-pill[data-note="busy"] .play-bar-label[data-shown] > span {
-  animation: play-bar-busy 1.1s ease-in-out infinite alternate;
-}
-@keyframes play-bar-busy {
-  to {
-    opacity: 0.5;
-  }
-}
 .play-viewer-bar-remix {
   background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 12%, transparent);
   box-shadow: inset 0 0 0 1px

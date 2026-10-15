@@ -1075,7 +1075,8 @@ export class StudioCore {
   #genexPackages(): GenexPackageService {
     return new GenexPackageService({
       // The builds are made after the plugins; a tool call only ever comes later.
-      addPackages: (source, names) => this.builds.addPackages(source, names),
+      addPackages: async (source, names) =>
+        this.builds.addPackages({ ...source, guarded: await this.scriptsGuarded(source.project) }, names),
       gameDir: (project) => this.games.dirFor(project),
       scratch: this.layout.scratch,
     });
@@ -2333,6 +2334,11 @@ export class StudioCore {
     ...args: Parameters<PreviewService["installPackages"]>
   ): ReturnType<PreviewService["installPackages"]> {
     return this.#previews.installPackages(...args);
+  }
+
+  /** Whether `project` is someone else's game whose setup scripts the person has not trusted (`guardScripts`). */
+  async scriptsGuarded(project: string): Promise<boolean> {
+    return (await this.games.presentation(project)).guardScripts === true;
   }
 
   async buildPreview(request: BuildPreviewRequest) {

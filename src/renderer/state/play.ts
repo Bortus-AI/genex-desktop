@@ -16,6 +16,8 @@ import {
   type PlayShelves,
   type PlayViewerEvent,
   PlayViewerPhase,
+  type RemixProgress,
+  RemixStep,
 } from "../../shared/play.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
 import {
@@ -57,6 +59,27 @@ export type PlayView =
 const SHELF_VIEW: PlayView = { page: PlayPage.Shelf };
 const FRIENDS_VIEW: PlayView = { page: PlayPage.Friends };
 
+/**
+ * Where a remix being made is: shown over Create, set aside while the person is elsewhere (its
+ * sidebar row brings it back), or its new game opening under it.
+ */
+export const RemixView = { Shown: "shown", Aside: "aside", Opening: "opening" } as const;
+export type RemixView = (typeof RemixView)[keyof typeof RemixView];
+
+/** A remix being made: Create shows it, its step and its bytes, until the shell opens the new game. */
+export interface RemixUnderway {
+  slug: string;
+  /** The game it copies, by its title. */
+  title: string;
+  coverUrl: string | null;
+  step: RemixStep;
+  done: number | null;
+  total: number | null;
+  /** The new game's library name, once the shell is opening it: its own sidebar row takes over. */
+  name: string | null;
+  view: RemixView;
+}
+
 /** What Play holds between visits. */
 export interface PlayState {
   /** The page shown: the chosen shelf's dashboard until Friends or a profile is opened. */
@@ -71,9 +94,11 @@ export interface PlayState {
   recent: PlayRecentEntry[];
   /** The game the viewer shows, or null. */
   viewer: ViewerShown | null;
-  /** A remix made from the viewer, waiting for the shell to open it in Create. */
+  /** The remix being made, shown in Create from the press until the new game opens; one at a time. */
+  making: RemixUnderway | null;
+  /** A finished remix's library name, waiting for the shell to open it in Create. */
   remixed: string | null;
-  /** A remix failed after its viewer had closed: the shell says so once. */
+  /** A remix failed: the shell says so once. */
   remixFailed: boolean;
   /** The viewer's guest card asked to sign in: the shell signs in to Genex once (`useGuestSignIn`). */
   installAsked: boolean;
@@ -88,6 +113,7 @@ export const initialPlay = (recent: PlayRecentEntry[] = []): PlayState => ({
   feeds: {},
   recent,
   viewer: null,
+  making: null,
   remixed: null,
   remixFailed: false,
   installAsked: false,
@@ -191,21 +217,12 @@ export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
   };
 }
 
-/**
- * Main's news about the viewer; a finished remix, a late remix's failure, or the guest card's
- * Sign in waits for the shell.
- */
+/** Main's news about the viewer; the guest card's Sign in waits for the shell. */
 export function viewerReported(state: PlayState, event: PlayViewerEvent): PlayState {
   const viewer = viewerAfter(state.viewer, event);
-  const remixed = event.remixed ?? state.remixed;
-  const remixFailed = state.remixFailed || event.remixFailed === true;
   const installAsked = state.installAsked || event.install === true;
-  const same =
-    viewer === state.viewer &&
-    remixed === state.remixed &&
-    remixFailed === state.remixFailed &&
-    installAsked === state.installAsked;
-  return same ? state : { ...state, viewer, remixed, remixFailed, installAsked };
+  const same = viewer === state.viewer && installAsked === state.installAsked;
+  return same ? state : { ...state, viewer, installAsked };
 }
 
 /** Main never answered the opening shown: its cover says it failed, with Try again. */
@@ -223,13 +240,57 @@ export function unansweredClosed(state: PlayState): PlayState {
   return state.viewer?.openId === null ? { ...state, viewer: null } : state;
 }
 
-/** The shell opened the remix in Create. */
-export const remixOpened = (state: PlayState): PlayState =>
-  state.remixed === null ? state : { ...state, remixed: null };
+/** A remix was pressed: Create shows it at its first step. A second waits for the first to end. */
+export function remixStarted(state: PlayState, game: PlayRecentEntry): PlayState {
+  if (state.making) return state;
+  const { slug, title, coverUrl } = game;
+  const making = { slug, title, coverUrl, step: RemixStep.Copy, done: null, total: null, name: null };
+  return { ...state, making: { ...making, view: RemixView.Shown } };
+}
 
-/** The shell told a late remix's failure. */
+/** Main's news of the remix being made: its step and bytes. News of any other, or after the end, changes nothing. */
+export function remixProgressed(state: PlayState, progress: RemixProgress): PlayState {
+  const making = state.making;
+  if (making?.slug !== progress.slug) return state;
+  const { step, done, total } = progress;
+  const name = progress.name ?? making.name;
+  const same = making.step === step && making.done === done && making.total === total && making.name === name;
+  return same ? state : { ...state, making: { ...making, step, done, total, name } };
+}
+
+/** A card's remix was made: its name waits for the shell. */
+const remixAnswered = (state: PlayState, name: string): PlayState => ({ ...state, remixed: name });
+
+/** A remix failed: the shell says so once. */
+const remixRefused = (state: PlayState): PlayState => ({ ...state, remixFailed: true });
+
+/** The new game is open in Create: nothing shows the remix being made any more. */
+export const remixEnded = (state: PlayState): PlayState => (state.making === null ? state : { ...state, making: null });
+
+/** The shell is opening the remix in Create: the copy being made stays over it, with its name, until it is open. */
+export function remixOpened(state: PlayState): PlayState {
+  const { remixed: name, making } = state;
+  if (name === null) return state;
+  return { ...state, remixed: null, making: making && { ...making, name, view: RemixView.Opening } };
+}
+
+/** The person went elsewhere while the remix is made: it goes on in its sidebar row. Not once its game is opening. */
+export function remixSetAside(state: PlayState): PlayState {
+  const making = state.making;
+  if (making?.view !== RemixView.Shown) return state;
+  return { ...state, making: { ...making, view: RemixView.Aside } };
+}
+
+/** The person came back to the remix from its sidebar row. */
+export function remixReturnedTo(state: PlayState): PlayState {
+  const making = state.making;
+  if (making?.view !== RemixView.Aside) return state;
+  return { ...state, making: { ...making, view: RemixView.Shown } };
+}
+
+/** The shell told a remix's failure; nothing shows it being made any more. */
 export const remixFailureTold = (state: PlayState): PlayState =>
-  state.remixFailed ? { ...state, remixFailed: false } : state;
+  state.remixFailed ? { ...state, remixFailed: false, making: null } : state;
 
 /** The shell ran the guest card's Sign in. */
 export const installAnswered = (state: PlayState): PlayState =>
@@ -257,8 +318,10 @@ export interface PlayStore extends StoreApi<PlayState> {
   open(game: PlayRecentEntry): Promise<void>;
   close(): Promise<void>;
   retry(): Promise<void>;
-  /** Copy a card's game into a new game of the person's own; answers its library name. */
-  remix(game: PlayGame): Promise<string>;
+  /** Copy a card's game into a new game of the person's own; its name or its failure waits for the shell. */
+  remix(game: PlayGame): Promise<void>;
+  /** Copy the viewer's game as a card's is: the viewer closes at once. */
+  remixViewed(): Promise<void>;
 }
 
 type PlayApi = Pick<StudioApi, "playFeed" | "playShelves" | "playOnline" | "playOpen" | "playClose" | "playRemix">;
@@ -334,6 +397,23 @@ export function createPlayStore(
     }
   };
 
+  const close = async (): Promise<void> => {
+    set(unansweredClosed);
+    await api.playClose();
+  };
+
+  /** Make a game a new one of the person's own: shown from the press, its name or its failure kept for the shell. */
+  const remix = async (game: PlayRecentEntry): Promise<void> => {
+    if (store.getState().making) return;
+    set((state) => remixStarted(state, game));
+    try {
+      const name = await api.playRemix(game.slug);
+      set((state) => remixAnswered(state, name));
+    } catch {
+      set(remixRefused);
+    }
+  };
+
   return Object.assign(store, {
     loadShelves,
     chooseShelf: (shelf: PlayShelf) => set((state) => shelfChosen(state, shelf)),
@@ -344,14 +424,19 @@ export function createPlayStore(
     loadFeed,
     countOnline,
     open,
-    close: async () => {
-      set(unansweredClosed);
-      await api.playClose();
-    },
+    close,
     retry: async () => {
       const shown = store.getState().viewer;
       if (shown) await open(shown);
     },
-    remix: (game: PlayGame) => api.playRemix(game.slug),
+    remix,
+    remixViewed: async () => {
+      const shown = store.getState().viewer;
+      if (!shown || store.getState().making) return;
+      const made = remix(shown);
+      // The viewer gives way at once: Create shows the copy being made.
+      await close().catch(() => {});
+      await made;
+    },
   });
 }

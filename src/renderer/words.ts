@@ -33,7 +33,7 @@ import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
 import type { GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
-import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
+import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
@@ -2405,6 +2405,33 @@ export const TOAST_WORDS = {
   packagesFailed: "The packages could not be installed — the details are on the stage.",
 } as const;
 
+/** How many packages the setup-scripts window names before it counts the rest. */
+const SCRIPTS_NAMED = 4;
+
+/** "This game, sharp and esbuild": who brought the setup scripts a remix's install skipped. */
+function scriptOwners(own: boolean, packages: readonly string[]): string {
+  const names = [...(own ? ["This game"] : []), ...packages.slice(0, SCRIPTS_NAMED)];
+  const rest = packages.length - Math.min(packages.length, SCRIPTS_NAMED);
+  if (rest > 0) names.push(`${rest} more`);
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/** A remix's setup scripts its script-free install skipped: the stage's offer and the window that runs them. */
+export const SETUP_SCRIPTS_WORDS = {
+  trouble: "It may need the setup scripts its packages came with, which didn’t run.",
+  button: "Run setup scripts",
+  buttonTitle: "Run the setup scripts this game’s packages came with",
+  running: "Running…",
+  title: "Run this game’s setup scripts?",
+  body: (own: boolean, packages: readonly string[]) =>
+    `${scriptOwners(own, packages)} came with setup scripts written by their authors. Genex skipped them when it made your copy, and the game may need them to build. Run them only if you trust this game.`,
+  notNow: "Not now",
+  notNowDetail: "The game stays as it is. You can run them later from here.",
+  run: "Run setup scripts",
+  runDetail: "They run in Genex’s sandbox and can’t change your other games.",
+} as const;
+
 // ── the Builds tab's progress line ────────────────────────────────────────────────────────
 
 /** The fixed titles and sentences of the Builds tab's progress line (`build-progress.ts`). */
@@ -3938,6 +3965,29 @@ export const PLAY_WORDS = {
   remixing: "Remixing…",
   remixLabel: (title: string) => `Remix ${title}`,
   remixFailed: "Couldn’t make a copy of that game.",
+  /** Create while a remix is made (`RemixLayer`): the step bar's names, the line under the loader. */
+  making: {
+    steps: {
+      [RemixStep.Copy]: "Files",
+      [RemixStep.Models]: "Models",
+      [RemixStep.Packages]: "Packages",
+      [RemixStep.Build]: "Build",
+    } satisfies Record<RemixStep, string>,
+    line: {
+      [RemixStep.Copy]: "Copying files",
+      [RemixStep.Models]: "Downloading models",
+      [RemixStep.Packages]: "Installing packages",
+      [RemixStep.Build]: "Building the game",
+    } satisfies Record<RemixStep, string>,
+    measured: (line: string, bytes: string) => `${line} · ${bytes}`,
+    megabytes: (done: number) => `${done} MB`,
+    megabytesOf: (done: number, total: number) => `${done} of ${total} MB`,
+    progress: "Remix progress",
+    row: "Making your remix",
+    chat: (title: string) => `Remixing ${title}`,
+    /** A remix finished while the person was elsewhere: its game is in the sidebar. */
+    ready: (title: string) => `${title} is ready`,
+  },
   loading: (noun: string) => `Loading ${noun}…`,
   loadingMore: "Loading more…",
   failed: (noun: string) => `Couldn’t load ${noun}. Check your connection and try again.`,
@@ -3979,8 +4029,6 @@ export const PLAY_WORDS = {
       [PlayNote.InviteCopied]: "Invite link copied",
       [PlayNote.SignIn]: "Sign in to Genex to like games",
       [PlayNote.LikeFailed]: "Couldn’t save your like",
-      [PlayNote.Remixing]: "Making your copy…",
-      [PlayNote.RemixFailed]: "Couldn’t make a copy",
       [PlayNote.MicBlocked]: "Allow the mic in Settings",
       [PlayNote.MicMissing]: "No microphone",
       [PlayNote.MicFailed]: "Mic didn’t start",

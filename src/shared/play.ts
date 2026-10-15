@@ -198,8 +198,6 @@ export const PlayNote = {
   InviteCopied: "invite-copied",
   SignIn: "sign-in",
   LikeFailed: "like-failed",
-  Remixing: "remixing",
-  RemixFailed: "remix-failed",
   /** The system refuses the microphone: it is allowed in its settings. */
   MicBlocked: "mic-blocked",
   MicMissing: "mic-missing",
@@ -248,14 +246,31 @@ export interface PlayBarState {
   /** The game may be remixed: the header shows Remix. */
   remixable: boolean;
   note: PlayNote | null;
-  /** A remix is being made: the header's actions wait. */
-  busy: boolean;
   /** The header offers a signed-out guest the Genex plugin. */
   guestCard: boolean;
   /** Null until the game's page facts are read. */
   facts: PlayFacts | null;
   /** Null until the game asks for a microphone: then the header has a mic switch and its menu. */
   mic: PlayMicBar | null;
+}
+
+/** A remix's name in the library, from the game it copies: what main adopts it as and Create shows while it is made. */
+export const remixTitle = (title: string): string => `${title} remix`;
+
+/** A remix's steps, in order: its files, its models (Git LFS), its packages, its first build. */
+export const RemixStep = { Copy: "copy", Models: "models", Packages: "packages", Build: "build" } as const;
+export type RemixStep = (typeof RemixStep)[keyof typeof RemixStep];
+
+/** How far a remix has come (`UiEvent.PlayRemix`): the step it is on, and its bytes when it has any. */
+export interface RemixProgress {
+  slug: string;
+  step: RemixStep;
+  /** Bytes of the step done so far: the models downloaded. Null when the step is not measured. */
+  done: number | null;
+  /** Bytes the step comes to; null when it is not measured or not known. */
+  total: number | null;
+  /** The new game's library name, from the step after it was adopted; null before. */
+  name: string | null;
 }
 
 /** What main tells the renderer about the viewer (`UiEvent.PlayViewer`). */
@@ -268,10 +283,6 @@ export interface PlayViewerEvent {
   bar?: PlayBarState;
   /** An Esc held in the game: the keyboard is the header's now. */
   focusBar?: boolean;
-  /** A remix finished: the new game's library name, to open in Create. */
-  remixed?: string;
-  /** A remix finished after its viewer had closed, and failed: there is no header left to say so. */
-  remixFailed?: boolean;
   /** The guest card's Install plugin closed the viewer: the app runs Play's Install plugin. */
   install?: boolean;
 }

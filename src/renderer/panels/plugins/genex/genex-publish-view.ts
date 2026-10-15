@@ -30,6 +30,7 @@ import { publishesAsWebGame } from "../../../../shared/project-workspace.ts";
 import { MINUTE_MS } from "../../../../shared/duration.ts";
 import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../../../../shared/feedback.ts";
 import { relativeTime } from "../../../chat-labels.ts";
+import { type StepState, stepStateAt } from "../../../ui/step-bar.ts";
 import { GENEX_WORDS } from "../../../words.ts";
 
 const WORDS = GENEX_WORDS.publish;
@@ -64,10 +65,6 @@ const PHASE_STEP: Partial<Record<GenexPublishPhase, GenexPublishStep>> = {
 
 /** A test running longer than this is "Still testing": Genex usually serves a new build well within it. */
 export const SLOW_TEST_MS = 2 * MINUTE_MS;
-
-/** Where a step stands on the progress bar. */
-export const StepState = { Done: "done", Current: "current", Next: "next" } as const;
-export type StepState = (typeof StepState)[keyof typeof StepState];
 
 /** One step on the progress bar. */
 export interface StepView {
@@ -151,7 +148,7 @@ function stepViews(job: GenexPublishJob | undefined, running: boolean): StepView
   return steps.map((step, index) => ({
     step,
     label: WORDS.step[step],
-    state: (index < at && StepState.Done) || (index === at && StepState.Current) || StepState.Next,
+    state: stepStateAt(index, at),
   }));
 }
 

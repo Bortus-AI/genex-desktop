@@ -99,6 +99,7 @@ describe("the making drawing", () => {
       MakingDrawing.Sound,
       MakingDrawing.Account,
       MakingDrawing.Multiplayer,
+      MakingDrawing.Remix,
     ])
       assert.ok(makingFrame(drawing, 1, false).face.length >= 2, `${drawing}'s face has its inner outlines`);
   });
