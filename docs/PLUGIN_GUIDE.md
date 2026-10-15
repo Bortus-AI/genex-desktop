@@ -125,7 +125,7 @@ undeclared method is a compile error.
 | `runtime.install` / `runtime.cancelInstall` | `native-runtime`, API 3 | Fixed pinned installation through a real declared user action; installation requires its confirmation |
 | `native.run` / `native.jobs` / `native.result` | `native-runtime`, API 3 | Project-bound fixed job recipes, cancellation and durable results; no automatic replay |
 | `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an engine project file, an Unreal `.uproject` or a Godot `project.godot` (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
-| `game.engine.steps` | `game-engine` | Show your steps card (your `steps` action's answer, read live) in the calling chat. Rows are `{id, label, detail, done, you?, working?, action?, command?}` (`you`: a step only the person can do, an orange ring; `working`: one under way); the card may add `primary` (its own button, drawn with a screen: Do it for me), `doneSays` (told to the agent once nothing is open, so the chat goes on) and `stuckSays` (told once when a step stops) |
+| `game.engine.steps` | `game-engine` | Show your setup card (your `steps` action's answer, read live) in the calling chat; see [Setup in the chat](#setup-in-the-chat) |
 | `game.snapshot` | `game-engine` | `{reason}` → `{snapshotId}`: a game snapshot of the bound game, listed in Rewind under `reason` (one plain line, at most 200 characters), before you change files there |
 | `game.engine.runs` | `game-engine` | `{game, title, project}[]`: the games whose run (a Loop) is going now that your plugin linked to a project, with that project file; needs no bound game. Read it before you offer to quit an editor a run may be using |
 | `game.create` | `game-engine` | `{title}` → `{project, directory}`: a new Genex game (title one plain line, at most 80 characters) for an engine project made with no game open; link it with `game.engine.link {project, game}`, which accepts only a game your plugin made, from outside any game |
@@ -256,6 +256,39 @@ at its start, its save points, rewinds, restarts, health checks and its end, its
 worker types, and your observers feed the reviewer who checks its finish. The toy engine plugin in
 Genex's tests (`tests/fixtures/toy-engine-plugin/`) runs such a Loop, and so does a copy of it with
 every tool renamed. See [the open Loop](harness-runtime.md).
+
+### Setup in the chat
+
+When your engine (or anything else your plugin needs on the person's computer) is missing, don't
+answer the agent with instructions to pass on: show the **setup card** in the chat and let Genex do
+what it can. Unity, Godot and Unreal all follow this one model:
+
+1. **The agent asks for it.** Declare an agent tool `show-steps`. While a step is open it calls the
+   host's `game.engine.steps`, which puts your card above the chat's composer, and answers the
+   agent in words that say to tell the person in one line and end its reply. Point to it from every
+   refusal of a tool that needs the missing piece (`new-game`) and from your `engine-status` note.
+2. **The card reads itself.** Declare a `steps` action (no `native`, no confirmation): Genex asks it
+   every few seconds while the card shows, so a step done outside Genex ticks by itself. It answers
+   a `PluginSetupCard` (`plugin-sdk/index.d.ts`): rows `{id, label, detail, done}`, with `you` on a
+   step only the person can do (signing in), `working` on one under way (its `detail` says how far:
+   "40 of 170 MB", "Downloading · 42%"), and a row `action` for that step's own button.
+3. **Do it for me.** `primary` names the action that does every step it can (download, check the
+   maker's signature with `codesign`, copy into Applications, then any installer the vendor ships
+   with a command line), started in the background and answered at once; the card follows it.
+   Stop where only the person's hands will do (an account sign-in, a license), mark that row `you`
+   and open the vendor's app for them. Never handle passwords.
+4. **A way out.** `secondary` takes Hide's place: **Don't use …** while idle (close the card for that
+   game and tell the agent to offer a web game), **Stop** while something runs (end it; it shows as
+   stopped, with Try again, and the agent is told nothing).
+5. **The chat goes on.** Once nothing is open the card's `doneSays` reaches the agent, unseen, and
+   the chat continues (say which tool to call next). When a step Genex ran stops, `stuckSays` reaches
+   it once: say what stopped and, where the vendor's own window could finish it, that the agent may
+   do so with the `desktop` tool when computer control is on.
+
+Turning on a plugin the agent suggested also continues the chat by itself, so a setup that starts
+with **Turn on** needs no message from the person. `STUDIO_ENGINE_TEST_ROOT` points a development
+profile at a made-up Mac (its `Applications/` and `home/`), so you can try your card on a computer
+that already has the engine.
 
 ## 3. Panels
 

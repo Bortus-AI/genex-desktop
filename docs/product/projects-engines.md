@@ -26,8 +26,7 @@ Except for web games at the folder's root (Blender files beside them allowed), t
 Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers and claims
 finish; a reviewer checks (three no's stop it). Plugins add reviewer pictures and editor locks:
 while you use an editor, agents wait. Unity makes, sets up and opens the project; agents and judges
-play through Pipeline (keys and mouse need Input System). Without Unity 6, **Unity setup**
-installs it; you only sign in.
+play through Pipeline (keys and mouse need Input System). A missing engine gets a setup card.
 
 ## Unreal
 

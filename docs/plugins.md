@@ -1751,6 +1751,12 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 `new-game`). `new-game` offers the plugin's steps card (`game.engine.steps` appends
 `engine_steps`) while a step is open.
 
+On a Mac without the Unreal Genex makes games with, `show-steps` brings the Unreal button out and
+shows the install card instead (`unrealInstallCard`): Get the Epic Games Launcher (Epic's download
+page; ticked once the launcher is in Applications), then Install Unreal 5.8 in it, the person's own
+step (Epic's sign-in), with Open the Epic Games Launcher; Don't use Unreal (`skip`) in Hide's place;
+once Unreal is found in a game whose chat chose it, the card closes and tells the agent.
+
 The steps card ("Unreal setup") sits above the composer while nothing else waits there. Its
 rows are the plugin's `steps` action, read every 5 s while it shows, so Xcode installed or opened
 outside Genex is ticked by itself; it goes when no step is open, and Hide puts it away for that game
@@ -2514,6 +2520,12 @@ only the project (Godot's `.godot/` cache) and the job's own folder, gets a priv
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
 (`gpu`). Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
+On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
+question's note, which point to it) puts the Godot setup card in the chat (`godot-setup.ts`): one
+step, with Do it for me (`install-godot`: the newest stable Godot 4 universal Mac zip from Godot's
+GitHub releases, unpacked in the plugin's storage, `Godot.app` copied into Applications only when
+`codesign` accepts it and names Godot's team, `6K46PWY5DM`), Stop (`stop-install`) and Don't use
+Godot (`skip`) in Hide's place, and `doneSays` once Godot is found.
 Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
 `[editor_plugins]` in `project.godot`). Its hooks reach the person's open editor through files in the
 project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a heartbeat each second
