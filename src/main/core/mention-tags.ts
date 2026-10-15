@@ -112,6 +112,7 @@ export function tagOf(ref: MentionRef): Omit<MentionOutcome, "result"> {
     origin: ref.origin,
     ...(ref.game ? { game: ref.game } : {}),
     ...(ref.slug ? { slug: ref.slug } : {}),
+    ...(ref.plugin ? { plugin: ref.plugin } : {}),
     ...(ref.coverUrl ? { coverUrl: ref.coverUrl } : {}),
   };
 }
@@ -121,6 +122,8 @@ function miss(ref: MentionRef, why: MentionMiss): MentionOutcome {
 }
 
 async function resolveOne(ref: MentionRef, target: MentionTarget, sources: MentionSources): Promise<Resolved> {
+  // A plugin is on already: the tag only names it to the agent.
+  if (ref.kind === MentionKind.Plugin) return { outcome: { ...tagOf(ref), result: MentionResult.Read } };
   if (ref.origin === MentionOrigin.Local) return localGame(ref, target);
   if (!isPlaySlug(ref.slug)) return { outcome: miss(ref, MentionMiss.Gone) };
   if (ref.kind === MentionKind.Asset) return asset(ref, ref.slug, target, sources);

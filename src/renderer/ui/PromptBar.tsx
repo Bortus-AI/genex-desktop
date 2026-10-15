@@ -54,6 +54,7 @@ import {
   type MentionRef,
   mentionQueryAt,
   mentionRef,
+  pluginDoc,
   PROMPT_MENTION_MAX,
   sentMentions,
 } from "../../shared/prompt-mention.ts";
@@ -203,6 +204,14 @@ function useMention(
     setMention(null);
     placeCaret(mention.start + insert.length);
   };
+  /** The draft becomes this tag alone, ready for the words after it (a pick from the / list). */
+  const startWith = (doc: MentionDoc): void => {
+    const value = `@${doc.handle} `;
+    setTagged((current) => new Map(current).set(doc.handle, doc));
+    setDraft(value);
+    setMention(null);
+    placeCaret(value.length);
+  };
   const insertDoc = (doc: MentionDoc): void => {
     const caret = mention?.end ?? inputRef.current?.selectionStart ?? draft.length;
     const open = mention ? { start: mention.start, query: mention.query } : null;
@@ -227,6 +236,7 @@ function useMention(
     findMention,
     insertMention,
     insertDoc,
+    startWith,
     tagged,
     taggedNow,
     atCap: inText.length >= PROMPT_MENTION_MAX,
@@ -589,9 +599,8 @@ function useComposerSend(
     loop: ReturnType<typeof useLoopSettings>;
     board: ReturnType<typeof useBoardFrames>;
     inputRef: RefObject<HTMLTextAreaElement | null>;
-    clearMention: () => void;
-    /** The tags in the draft, read at the moment it is sent. */
-    mentionRefs: () => MentionRef[];
+    /** The @ query to close on send, and the tags in the draft, read at the moment it is sent. */
+    mentions: Pick<ReturnType<typeof useMention>, "setMention" | "refs">;
   },
 ) {
   const ignoreStopUntil = useRef(0);
@@ -618,13 +627,13 @@ function useComposerSend(
     const text = draft.trim();
     const sentFrames = board.frames;
     setDraft("");
-    composer.clearMention();
+    composer.mentions.setMention(null);
     // The board goes with the message — a chip that lingers after send reads as "not sent".
     // The harness keeps the board attached for the rest of the interview on its side.
     if (sentFrames.length) board.setFrames([]);
     // A failed send is already durable in the thread (main appends the error); catching here
     // only stops the same failure from surfacing twice as console noise.
-    const tags = composer.mentionRefs();
+    const tags = composer.mentions.refs();
     const extras = {
       ...composerExtras({
         gameMode: props.gameMode ?? true,
@@ -802,13 +811,20 @@ function CommandList({
   commands,
   anchor,
   menuRef,
+  onPlugin,
 }: {
   props: PromptBarProps;
   commands: ReturnType<typeof useComposerCommands>;
   anchor: RefObject<HTMLDivElement | null>;
   menuRef: RefObject<AddMenuHandle | null>;
+  /** A plugin picked from the list: the draft becomes its tag. */
+  onPlugin: (doc: MentionDoc) => void;
 }): JSX.Element | null {
-  const plugins = usePluginCommands(commands.query !== null, commands.tagPlugin);
+  // A plugin picked from the / list: the message becomes its @ tag, ready for the words after it.
+  const plugins = usePluginCommands(commands.query !== null, (plugin) => {
+    commands.setQuery(null);
+    onPlugin(pluginDoc(plugin));
+  });
   if (props.gameMode === false) return null;
   return (
     <ComposerCommandMenu
@@ -828,7 +844,7 @@ function CommandList({
  * The plugins that are on, for the / list, read when it opens; picking one tags it in the message
  * as @ does. A failed read offers none.
  */
-function usePluginCommands(open: boolean, tag: (name: string) => void): PluginCommand[] {
+function usePluginCommands(open: boolean, tag: (plugin: { id: string; name: string }) => void): PluginCommand[] {
   const [names, setNames] = useState<{ id: string; name: string }[]>([]);
   useAsyncEffect(
     (alive) => {
@@ -844,7 +860,7 @@ function usePluginCommands(open: boolean, tag: (name: string) => void): PluginCo
     },
     [open],
   );
-  return names.map((plugin) => ({ ...plugin, pick: () => tag(plugin.name) }));
+  return names.map((plugin) => ({ ...plugin, pick: () => tag(plugin) }));
 }
 
 /** Compact now as this composer's selected model and its work allow it. */
@@ -907,16 +923,7 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   const contextual = loop.planOn ? PLAN_PLACEHOLDER : (props.placeholder ?? DEFAULT_PLACEHOLDER);
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
   useAutosize(inputRef, draft, placeholderNow);
-  const clearMention = (): void => mentions.setMention(null);
-  const composer = useComposerSend(props, {
-    draft,
-    setDraft,
-    loop,
-    board,
-    inputRef,
-    clearMention,
-    mentionRefs: mentions.refs,
-  });
+  const composer = useComposerSend(props, { draft, setDraft, loop, board, inputRef, mentions });
 
   return (
     <div
@@ -954,7 +961,12 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
           commandMenuRef={commandMenuRef}
           onEnter={composer.send}
         />
-        <CommandList props={props} commands={commands} anchor={panelRef} menuRef={commandMenuRef} />
+        <CommandList
+          {...{ props, commands }}
+          anchor={panelRef}
+          menuRef={commandMenuRef}
+          onPlugin={mentions.startWith}
+        />
         <ImagePicker fileRef={fileRef} onFiles={board.addFiles} />
         <ComposerToolbar
           model={props.model}

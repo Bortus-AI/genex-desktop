@@ -42,12 +42,7 @@ export function useComposerCommands(draft: string, setDraft: (text: string) => v
     setQuery(null);
     run();
   };
-  /** A plugin picked from the list: the message becomes its @ tag, ready for the words after it. */
-  const tagPlugin = (name: string): void => {
-    setDraft(`@${name} `);
-    setQuery(null);
-  };
-  return { query, setQuery, track, listId, activeOption, setActiveOption, runner, tagPlugin };
+  return { query, setQuery, track, listId, activeOption, setActiveOption, runner };
 }
 
 /** The /compact option, when the chat's model can be compacted. */

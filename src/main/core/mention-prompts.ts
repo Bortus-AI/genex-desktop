@@ -22,11 +22,14 @@ const KIND_WORDS: Record<MentionKind, string> = {
   [MentionKind.Game]: "game",
   [MentionKind.Tool]: "tool",
   [MentionKind.Asset]: "asset",
+  [MentionKind.Plugin]: "plugin",
 };
 
 /** One tag's line; `folder` is a local game's folder, `usage` an asset's own usage notes. */
 export function mentionLine(tag: MentionOutcome, extra: { folder?: string; usage?: string } = {}): string {
   const name = `@${tag.handle} (${KIND_WORDS[tag.kind]} "${tag.title}")`;
+  if (tag.kind === MentionKind.Plugin && tag.result === MentionResult.Read)
+    return `- ${name}: a plugin that is on in this chat. Use its tools for this where they help.`;
   if (tag.result === MentionResult.Read)
     return `- ${name}: the person's own game, read-only at ${extra.folder ?? "its folder"}. Read what helps; never edit it.`;
   if (tag.result === MentionResult.Copied)

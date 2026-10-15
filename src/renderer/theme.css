@@ -5870,9 +5870,21 @@ a:focus-visible {
 .mention-card-icon > * {
   margin-bottom: 12%;
 }
+/* A plugin's card is a short tile: its picture small in the bottom right, its name at the left. */
+.mention-card[data-mention-option] {
+  aspect-ratio: auto;
+  height: 64px;
+}
+.mention-card[data-mention-option] .mention-card-icon {
+  place-items: end;
+  padding: 10px;
+}
+.mention-card[data-mention-option] .mention-card-icon > * {
+  margin: 0;
+}
 .mention-card-icon .extension-icon {
-  width: 40px;
-  height: 40px;
+  width: 26px;
+  height: 26px;
 }
 .mention-shelf-label {
   margin: 0;

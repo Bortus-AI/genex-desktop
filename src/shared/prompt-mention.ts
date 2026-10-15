@@ -11,7 +11,7 @@
  */
 
 /** What a tagged thing is, as the picker's chip names it. */
-export const MentionKind = { Game: "game", Tool: "tool", Asset: "asset" } as const;
+export const MentionKind = { Game: "game", Tool: "tool", Asset: "asset", Plugin: "plugin" } as const;
 export type MentionKind = (typeof MentionKind)[keyof typeof MentionKind];
 
 /** Where a tagged thing comes from: a game folder on this Mac, or genex.games. */
@@ -37,6 +37,8 @@ export interface MentionDoc {
   game?: string;
   /** genex.games: the project's slug. */
   slug?: string;
+  /** A plugin that is on: its id. */
+  plugin?: string;
   /** genex.games: plays, which break ties in the ranking. */
   plays: number;
 }
@@ -49,6 +51,7 @@ export interface MentionRef {
   title: string;
   game?: string;
   slug?: string;
+  plugin?: string;
   /** A genex.games cover the chat shows beside the tag's result; display only. */
   coverUrl?: string;
 }
@@ -62,7 +65,23 @@ export function mentionRef(doc: MentionDoc): MentionRef {
     title: doc.title,
     ...(doc.game === undefined ? {} : { game: doc.game }),
     ...(doc.slug === undefined ? {} : { slug: doc.slug }),
+    ...(doc.plugin === undefined ? {} : { plugin: doc.plugin }),
     ...(isCoverUrl(doc.coverUrl) ? { coverUrl: doc.coverUrl } : {}),
+  };
+}
+
+/** A plugin that is on, as a tag: its name folded to a handle, so it paints like the others. */
+export function pluginDoc(plugin: { id: string; name: string; icon?: string }): MentionDoc {
+  return {
+    handle: handleOf(plugin.name),
+    kind: MentionKind.Plugin,
+    origin: MentionOrigin.Local,
+    title: plugin.name,
+    description: "",
+    coverUrl: plugin.icon ?? null,
+    own: false,
+    plugin: plugin.id,
+    plays: 0,
   };
 }
 
@@ -263,6 +282,7 @@ export interface MentionOutcome {
   origin: MentionOrigin;
   game?: string;
   slug?: string;
+  plugin?: string;
   coverUrl?: string;
   result: MentionResult;
   /** Where it landed, relative to the game (`src/assets/fireplace.ts`, `.studio/refs/neon-rush`). */
@@ -288,6 +308,7 @@ export function refOf(tag: MentionOutcome): MentionRef {
     title: tag.title,
     ...(tag.game ? { game: tag.game } : {}),
     ...(tag.slug ? { slug: tag.slug } : {}),
+    ...(tag.plugin ? { plugin: tag.plugin } : {}),
     ...(tag.coverUrl ? { coverUrl: tag.coverUrl } : {}),
   };
 }
@@ -339,13 +360,14 @@ const tagText = (value: unknown): string | undefined =>
 function readMentionRef(item: unknown): MentionRef | null {
   if (typeof item !== "object" || item === null) return null;
   const read = (key: keyof MentionRef): unknown => Reflect.get(item, key);
-  const [handle, kind, origin, title, game, slug, coverUrl] = (
-    ["handle", "kind", "origin", "title", "game", "slug", "coverUrl"] as const
+  const [handle, kind, origin, title, game, slug, plugin, coverUrl] = (
+    ["handle", "kind", "origin", "title", "game", "slug", "plugin", "coverUrl"] as const
   ).map(read);
   const named = typeof handle === "string" && isHandle(handle) && typeof title === "string";
   if (!named || !isKind(kind) || !isOrigin(origin)) return null;
   const gameName = tagText(game);
   const slugName = tagText(slug);
+  const pluginId = tagText(plugin);
   return {
     handle,
     kind,
@@ -353,6 +375,7 @@ function readMentionRef(item: unknown): MentionRef | null {
     title: title.slice(0, TAG_TEXT_MAX),
     ...(gameName ? { game: gameName } : {}),
     ...(slugName ? { slug: slugName } : {}),
+    ...(pluginId ? { plugin: pluginId } : {}),
     ...(isCoverUrl(coverUrl) ? { coverUrl } : {}),
   };
 }

@@ -6,6 +6,7 @@
 import { type JSX, useState } from "react";
 import type { GameCover } from "../../shared/game-library.ts";
 import {
+  MentionKind,
   type MentionOutcome,
   MentionMiss,
   MentionResult,
@@ -20,6 +21,7 @@ import { MENTION_WORDS } from "../words.ts";
 
 /** What a tag's row says under its title. */
 function rowWords(tag: MentionOutcome): string {
+  if (tag.kind === MentionKind.Plugin) return MENTION_WORDS.pluginRead;
   if (tag.result === MentionResult.Read) return MENTION_WORDS.read;
   if (tag.result === MentionResult.Copied) return MENTION_WORDS.copied;
   if (tag.result === MentionResult.Added) return tag.path ? MENTION_WORDS.addedTo(tag.path) : MENTION_WORDS.added;
@@ -28,6 +30,12 @@ function rowWords(tag: MentionOutcome): string {
 
 /** A tag's small cover: its genex.games picture, a local game's own sphere, or a plain tile. */
 function TagCover({ tag, cover }: { tag: MentionOutcome; cover: GameCover | undefined }): JSX.Element {
+  if (tag.kind === MentionKind.Plugin)
+    return (
+      <span className="mention-result-cover" aria-hidden>
+        <Icon name="plugins" size={14} />
+      </span>
+    );
   if (tag.coverUrl) return <img src={tag.coverUrl} alt="" className="mention-result-cover" draggable={false} />;
   return (
     <span className="mention-result-cover" aria-hidden>

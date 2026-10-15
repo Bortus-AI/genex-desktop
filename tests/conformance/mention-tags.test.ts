@@ -21,6 +21,8 @@ import {
   MentionOrigin,
   type MentionRef,
   MentionResult,
+  mentionRef,
+  pluginDoc,
   readMentionRefs,
   withoutMentionContext,
 } from "../../src/shared/prompt-mention.ts";
@@ -194,6 +196,21 @@ describe("resolving @ tags", () => {
         () => {},
       );
     }
+  });
+
+  it("a plugin tag names the plugin to the agent and fetches nothing", async () => {
+    const { target } = await game();
+    const tag = pluginDoc({ id: "local-blender", name: "Local Blender" });
+    assert.equal(tag.handle, "local-blender");
+    const tags = await resolveMentions(
+      [mentionRef(tag)],
+      target,
+      sources({ clone: () => Promise.reject(new Error("no")) }),
+    );
+    assert.equal(tags.outcomes[0]?.result, MentionResult.Read);
+    assert.equal(tags.outcomes[0]?.plugin, "local-blender");
+    assert.deepEqual(tags.readRoots, []);
+    assert.match(tags.context, /@local-blender \(plugin "Local Blender"\): a plugin that is on/);
   });
 
   it("a message with no tags adds nothing", async () => {

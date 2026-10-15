@@ -4322,6 +4322,7 @@ export const MENTION_WORDS = {
   ready: "Ready",
   added: "Added",
   read: "Your game · the agent can read it",
+  pluginRead: "Plugin · the agent will use it",
   copied: "Downloaded for the agent to read",
   addedTo: (path: string) => `Added to the game as ${path}`,
   missed: {

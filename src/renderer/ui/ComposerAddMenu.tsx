@@ -31,7 +31,7 @@ import { Icon } from "./icons.tsx";
 import { PluginIcon } from "./PluginIcon.tsx";
 import { PLAN_MODE_WORDS, SKILLS_WORDS } from "../words.ts";
 import { RovingAxis, rovingTarget } from "./roving-focus.ts";
-import type { MentionDoc } from "../../shared/prompt-mention.ts";
+import { type MentionDoc, pluginDoc } from "../../shared/prompt-mention.ts";
 import { gridTarget } from "./mention-grid.ts";
 import { mentionCards, MentionPanel } from "./MentionPanel.tsx";
 import { useMentionDocs } from "./use-mention-docs.ts";
@@ -547,7 +547,7 @@ export function ComposerAddMenu({
     onMention?.(null);
     onReferences();
   };
-  const rows = mentionOptions(mention, entries, pickImages, (name) => onMention?.(`@${name} `));
+  const rows = mentionOptions(mention, entries, pickImages, (entry) => tagging.onPick(pluginDoc(entry)));
   const picker = useMentionPicker({ open: mentioning, query: mention ?? "", project, anchor, tagging, rows });
   const { matches } = picker;
   const active = Math.min(highlight, Math.max(0, matches.length - 1));

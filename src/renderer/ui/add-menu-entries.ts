@@ -216,7 +216,7 @@ export function mentionOptions(
   mention: string | null,
   entries: AddMenuEntry[],
   pickImages: () => void,
-  mentionEntry: (name: string) => void,
+  mentionEntry: (entry: { id: string; name: string; icon?: string }) => void,
 ): MentionOption[] {
   const query = (mention ?? "").toLowerCase();
   const images = IMAGES_OPTION.includes(query) || "reference mood board".includes(query);
@@ -224,6 +224,6 @@ export function mentionOptions(
     ...(images ? [{ id: IMAGES_OPTION, name: "Images", pick: pickImages }] : []),
     ...entries
       .filter((e) => e.on && e.name.toLowerCase().includes(query))
-      .map((e) => ({ id: e.id, name: e.name, pick: () => mentionEntry(e.name), ...(e.icon ? { icon: e.icon } : {}) })),
+      .map((e) => ({ id: e.id, name: e.name, pick: () => mentionEntry(e), ...(e.icon ? { icon: e.icon } : {}) })),
   ];
 }

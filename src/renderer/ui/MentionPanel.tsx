@@ -21,6 +21,7 @@ const KIND_CHIP: Record<MentionKind, string> = {
   [MentionKind.Game]: MENTION_WORDS.game,
   [MentionKind.Tool]: MENTION_WORDS.tool,
   [MentionKind.Asset]: MENTION_WORDS.asset,
+  [MentionKind.Plugin]: MENTION_WORDS.plugin,
 };
 
 /** Each shelf's heading. */

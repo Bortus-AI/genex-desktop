@@ -47,7 +47,7 @@ export const SHELF_CAPS: Record<MentionShelf, number> = { yours: 6, assets: 6, t
 export const MENTION_RESULT_LIMIT = 8;
 
 /** Ranking multipliers: the short asset and tool shelves and the person's own work come first. */
-const KIND_BOOST: Record<MentionKind, number> = { asset: 1.4, tool: 1.4, game: 1 };
+const KIND_BOOST: Record<MentionKind, number> = { asset: 1.4, tool: 1.4, game: 1, plugin: 1 };
 const OWN_BOOST = 1.5;
 
 /** A genex.games project's kind, from its Play shelf. */
