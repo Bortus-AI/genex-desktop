@@ -134,7 +134,10 @@ interface Outcome {
   called: boolean;
 }
 
-/** A local plugin with one MCP server (`editor`, echoing), with the capabilities it is granted. */
+/**
+ * A local plugin with one MCP server (`editor`, echoing), with the capabilities it is granted; one
+ * with `game-engine` declares an engine of its own whose projects are Unreal project files.
+ */
 async function connectorPackage(id: string, capabilities: string[]): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), `studio-${id}-`));
   const manifest = {
@@ -146,6 +149,17 @@ async function connectorPackage(id: string, capabilities: string[]): Promise<str
     description: "An editor connector.",
     backend: "backend.mjs",
     capabilities,
+    ...(capabilities.includes(GAME_ENGINE)
+      ? {
+          engine: {
+            id,
+            label: `Demo ${id}`,
+            projectFiles: [".uproject"],
+            fact: "unreal-project",
+            projectInFolder: true,
+          },
+        }
+      : {}),
     tools: [],
     skills: [],
     panels: [],

@@ -175,11 +175,15 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       export const hostToSdk: SdkHost = sharedHost;
     `,
     "engine.ts": `
-      import type { PluginEngineDeclaration as SdkEngine } from ${quote(sdk)};
-      import type { EngineDeclaration as SharedEngine } from ${quote(path.resolve("src/shared/game-engine.ts"))};
+      import type { PluginEngineDeclaration as SdkEngine, PluginEngineLink as SdkLink } from ${quote(sdk)};
+      import type { EngineDeclaration as SharedEngine, EngineBinding } from ${quote(path.resolve("src/shared/game-engine.ts"))};
       declare const sdkEngine: SdkEngine; declare const sharedEngine: SharedEngine;
       export const engineToShared: SharedEngine = sdkEngine;
       export const engineToSdk: SdkEngine = sharedEngine;
+      type SharedLink = EngineBinding & { name: string };
+      declare const sdkLink: SdkLink; declare const sharedLink: SharedLink;
+      export const linkToShared: SharedLink = sdkLink;
+      export const linkToSdk: SdkLink = sharedLink;
     `,
   });
   assert.equal(diagnostics.length, 0, report(diagnostics));

@@ -9250,13 +9250,14 @@ describe("an Unreal game is never checked as a web page", () => {
     reply: Record<string, unknown> = {},
   ): Promise<{ rig: Rig; prompts: string[]; requests: DelegateRequest[] }> {
     const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const { ENGINES, UNREAL_ENGINE } = await import("../helpers/engines.ts");
     const { tmpDir } = await import("../helpers/tmp.ts");
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const game = await rig.core.games.scaffold(GAME, { title: "Tower Game" });
     const uproject = path.join(await tmpDir("unreal-project-"), "Tower.uproject");
     await writeFile(uproject, "{}\n");
-    await writeEngineBinding(game.dir, uproject);
+    await writeEngineBinding(game.dir, uproject, UNREAL_ENGINE.id, ENGINES);
     rig.preview.pixelStatsNext = { ...rig.preview.pixelStatsNext, meanLuma: 0.4, litFraction: 0 };
     const prompts: string[] = [];
     const requests: DelegateRequest[] = [];
@@ -9592,6 +9593,7 @@ describe("a game New game made is asked its engine on its chat's first ask", () 
 describe("a game linked to Unreal during its turn", () => {
   it("a game linked to Unreal during its turn got the web health pass and a black-screen line: no preview load, no build_observation, the builder's report alone", async () => {
     const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const { ENGINES, UNREAL_ENGINE } = await import("../helpers/engines.ts");
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const game = await rig.core.games.scaffold("city-circuit", { title: "City Circuit" });
@@ -9610,7 +9612,7 @@ describe("a game linked to Unreal during its turn", () => {
         const uproject = path.join(game.dir, "unreal", "CityCircuit.uproject");
         await mkdir(path.dirname(uproject), { recursive: true });
         await writeFile(uproject, "{}\n");
-        await writeEngineBinding(game.dir, uproject);
+        await writeEngineBinding(game.dir, uproject, UNREAL_ENGINE.id, ENGINES);
         await writeFile(path.join(request.cwd, "NOTES.md"), "# City Circuit\n");
         return { ok: true, engine: "vendor", sessionId: "cc-1", turns: 9, usage: {}, summary: report };
       },

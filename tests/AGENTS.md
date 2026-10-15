@@ -51,6 +51,8 @@ through the JS API imports `@typescript/typescript6`.
   copies one into a test's folder and adds the files its engine writes while it runs), reads of a
   listed game's facts, a fake harness `ctx` whose `game.*` calls reach a `coreLite`, and a plugin
   registry with the toy engine plugin (`fixtures/toy-engine-plugin/`) installed.
+- `engines.ts`: the Unreal plugin's and the toy engine's `engine` declarations, read from their
+  manifests, and a catalog of both (what `PluginRegistry.engines()` answers), for linking games.
 - `plugin-author.ts`: the Genex plugin's plugin-author skill read as an agent reads it (`genex__skill`,
   page by page) and its example plugin written into a project where the skill says.
 - `worker-chat.ts`: a game chat with a run started in it, fake engines (two delegated, one local)

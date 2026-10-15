@@ -541,6 +541,8 @@ export class StudioCore {
       workspaceSections: () => this.plugins?.workspaceSections() ?? [],
       // Likewise: until the registry exists no plugin hooks a moment.
       hookEvents: (game) => this.plugins?.hookEvents(game) ?? [],
+      // Likewise: until the registry exists no engine is declared, so no link holds.
+      engines: () => this.plugins?.engines() ?? new Map(),
     });
     // Every save point and rescue snapshot of a game follows the rules for what it holds then,
     // and a restore never cleans away what those rules ignore.
@@ -977,6 +979,7 @@ export class StudioCore {
       changed: (project) => this.emit(UiEvent.GameChanged, { project }),
       gameThread: (project) => this.threadForGame(project),
       now: () => new Date(),
+      catalog: () => this.plugins.engines(),
     });
     this.pluginServices.engineLinks = this.engineLinks;
     // `game.snapshot`: an ordinary game snapshot, in Rewind under the plugin's reason.

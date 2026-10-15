@@ -75,7 +75,7 @@ import {
   customPayload,
 } from "../../src/shared/custom-events.ts";
 import * as duration from "../../src/shared/duration.ts";
-import { GameEngine } from "../../src/shared/game-engine.ts";
+import { ENGINE_ID, engineOf, GameEngine } from "../../src/shared/game-engine.ts";
 import { ToolPermissionState } from "../../src/shared/permissions.ts";
 import {
   CoreFact,
@@ -516,6 +516,13 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
     assert.equal(seedGameEngine.engineOfGame(undefined), GameEngine.Web);
     const linked = { engine: { kind: GameEngine.Unreal, project: "/p/A.uproject", linkedAt: "" } } as const;
     assert.equal(seedGameEngine.engineOfGame(linked), GameEngine.Unreal);
+    // Any engine an installed plugin declares is the game's engine, by its id, as the app's `engineOf`.
+    const toy = { kind: "toy-engine", project: "/p/A.toyproj", linkedAt: "" };
+    assert.equal(seedGameEngine.engineOfGame({ engine: toy }), engineOf(toy));
+    assert.equal(seedGameEngine.engineOfGame({ engine: toy }), "toy-engine");
+    assert.equal(seedGameEngine.ENGINE_ID.source, ENGINE_ID.source);
+    const misspelt = { kind: "Toy Engine", project: "/p/A.toyproj", linkedAt: "" };
+    assert.equal(seedGameEngine.engineOfGame({ engine: misspelt }), GameEngine.Web, "a kind no engine id spells");
   });
   it("reads why the host held a plugin call back as the host answers it", () => {
     assert.deepEqual(seedPluginCallBlocker, PluginCallBlocker);

@@ -90,7 +90,7 @@ import { ShotKind, iterationDir, runDir, runShotsDir, safePathSegment } from "./
 import type { SessionPort } from "./session-port.ts";
 import { isBelow, isInside, toPosixRelative } from "../../substrate/paths.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { engineOf, GameEngine } from "../../shared/game-engine.ts";
+import { type EngineId, engineOf, GameEngine } from "../../shared/game-engine.ts";
 import { readEngineBinding } from "../../substrate/game-engine-binding.ts";
 import { FolderHolds, kindPending, type ProjectFact } from "../../shared/project-facts.ts";
 import { CapabilityAudience } from "../planning-capabilities.ts";
@@ -531,7 +531,7 @@ interface DelegationSeat {
   /** It sits in its game's own folder: no build worktree, no coordinator home, no candidate. */
   gameFolder: boolean;
   /** The engine its game's record links it to: whether a chat's checkpoint without a hook is a snapshot. */
-  engine: GameEngine;
+  engine: EngineId;
   /**
    * What its game's folder holds (`games.kindOf`): which plugin tools, skills and connectors the
    * session is handed. A game whose facts can't be read has none and is unreadable (`holds`),
@@ -1812,8 +1812,9 @@ export class DelegationService {
   }
 
   /** The engine the delegation's game builds in; a game whose record can't be read is a web game. */
-  async #gameEngine(project: string): Promise<GameEngine> {
-    return engineOf(await readEngineBinding(this.#core.games.dirFor(project)).catch(() => undefined));
+  async #gameEngine(project: string): Promise<EngineId> {
+    const directory = this.#core.games.dirFor(project);
+    return engineOf(await readEngineBinding(directory, this.#core.plugins.engines()).catch(() => undefined));
   }
 
   /**
@@ -2849,7 +2850,7 @@ export class DelegationService {
     const manifest = this.#core.plugins.list().find((p) => p.manifest.id === owner)?.manifest;
     if (!owner || !manifest?.capabilities.includes(PluginCapability.GameEngine)) return false;
     const directory = this.#core.games.dirFor(project);
-    const bound = await readEngineBinding(directory).catch(() => undefined);
+    const bound = await readEngineBinding(directory, this.#core.plugins.engines()).catch(() => undefined);
     if (!bound) return false;
     const link = await this.#core.engineLinks.read(owner, { project, directory }).catch(() => null);
     return link?.project === bound.project;

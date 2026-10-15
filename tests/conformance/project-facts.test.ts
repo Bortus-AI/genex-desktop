@@ -21,7 +21,9 @@ import {
   type FactRule,
   WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
+import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
+import { ENGINES, TOY_ENGINE, UNREAL_ENGINE } from "../helpers/engines.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { detectFacts, projectFiles } from "../../src/substrate/project-facts.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
@@ -384,7 +386,7 @@ describe("a listed game's facts", () => {
     await mkdir(path.join(linked.dir, "unreal"));
     const uproject = path.join(linked.dir, "unreal", "X.uproject");
     await writeFile(uproject, "{}\n");
-    await writeEngineBinding(linked.dir, uproject);
+    await writeEngineBinding(linked.dir, uproject, UNREAL_ENGINE.id, ENGINES);
     assert.deepEqual(
       await factsOf(linked.name),
       [`${CoreFact.UnrealProject}@unreal:${FactSource.Link}`],
@@ -406,7 +408,7 @@ describe("a listed game's facts", () => {
     await writeFile(outside, "{}\n");
 
     const far = await lite.core.games.scaffold("far-link");
-    await writeEngineBinding(far.dir, outside);
+    await writeEngineBinding(far.dir, outside, UNREAL_ENGINE.id, ENGINES);
     assert.deepEqual(
       await factsOf(far.name),
       [`${CoreFact.UnrealProject}@${elsewhere}:${FactSource.Link}`],
@@ -420,12 +422,26 @@ describe("a listed game's facts", () => {
     await mkdir(path.join(switched.dir, "unreal"));
     const own = path.join(switched.dir, "unreal", "A.uproject");
     await writeFile(own, "{}\n");
-    await writeEngineBinding(switched.dir, own);
-    await writeEngineBinding(switched.dir, outside);
+    await writeEngineBinding(switched.dir, own, UNREAL_ENGINE.id, ENGINES);
+    await writeEngineBinding(switched.dir, outside, UNREAL_ENGINE.id, ENGINES);
     assert.deepEqual(
       await factsOf(switched.name),
       [`${CoreFact.UnrealProject}@${elsewhere}:${FactSource.Link}`],
       "the link stands for the game's Unreal project; its own project's files are no second one",
+    );
+  });
+
+  it("a link to another engine's project is that engine's fact, not Unreal's", async () => {
+    await lite.core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    const garden = await lite.core.games.scaffold("toy-link");
+    await mkdir(path.join(garden.dir, "garden"));
+    const toyproj = path.join(garden.dir, "garden", "Garden.toyproj");
+    await writeFile(toyproj, "toy\n");
+    await writeEngineBinding(garden.dir, toyproj, TOY_ENGINE.id, ENGINES);
+    assert.deepEqual(
+      await factsOf(garden.name),
+      [`toy-project@garden:${FactSource.Link}`],
+      "the toy engine's fact at its project's folder, and the template beside it no web game",
     );
   });
 });

@@ -7,7 +7,7 @@
  */
 import type { Host } from "../types/harness.d.ts";
 import type { GameProject, ProjectFact } from "../types/host-api.d.ts";
-import { engineOfGame, GameEngine } from "./game-engine.ts";
+import { type EngineId, engineOfGame, GameEngine } from "./game-engine.ts";
 import { HostMethod } from "./host-methods.ts";
 
 /** Fact ids Genex itself knows; a plugin's `detect` may add others. Written in records: never rename a value. */
@@ -76,8 +76,12 @@ export type FactsOfDescriptor =
 
 const ROOT = FACT_ROOT;
 
-/** The facts an engine of the older vocabulary stands for: its fact at the game's root (the app's `factsOfEngine`). */
-export function factsOfEngine(engine: GameEngine): FactRef[] {
+/**
+ * The facts an engine of the older vocabulary stands for: its fact at the game's root (the app's
+ * `factsOfEngine`). Only an older caller, which names no other engine, reads a game this way; any
+ * other id reads as the web's.
+ */
+export function factsOfEngine(engine: EngineId): FactRef[] {
   return [{ id: engine === GameEngine.Unreal ? CoreFact.UnrealProject : CoreFact.WebGame, path: ROOT }];
 }
 

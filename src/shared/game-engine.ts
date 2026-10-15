@@ -85,11 +85,16 @@ export function parseEngineRemote(raw: unknown): EngineRemote | undefined {
   return { placeId, universeId };
 }
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
+/**
+ * A game linked to an engine project: the engine (an installed plugin's `engine.id`), the project
+ * file (absolute, real path, of a kind that engine declares), when Genex linked it, and the
+ * published game's ids when the project lives at the engine's service.
+ */
 export type EngineBinding = {
-  kind: typeof GameEngine.Unreal;
+  kind: EngineId;
   project: string;
   linkedAt: string;
+  remote?: EngineRemote;
 };
 
 /** The longest project path Genex records; Unreal itself refuses far shorter ones. */
@@ -112,32 +117,45 @@ export function isProjectPath(value: unknown, extensions: readonly string[] = [U
 }
 
 /**
- * The binding a studio.json records, by shape only: the Unreal kind, a plain absolute `.uproject`
- * path and a date. Anything else, including a record for an engine Genex does not know, is no
- * binding: the game stays a web game.
+ * The binding a studio.json records, by shape: an engine `catalog` declares (the installed
+ * plugins'), a plain absolute path to a project file of that engine's kind, a date, and the
+ * published game's ids when they parse (ids of any other shape are dropped, the link stays).
+ * Anything else, including a record for an engine no installed plugin declares, is no binding: the
+ * game stays a web game.
  */
-export function parseEngineBinding(raw: unknown): EngineBinding | undefined {
+export function parseEngineBinding(raw: unknown, catalog: EngineCatalog): EngineBinding | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
-  if (record.kind !== GameEngine.Unreal || !isProjectPath(record.project)) return undefined;
+  const engine = isEngineId(record.kind) ? catalog.get(record.kind) : undefined;
+  if (!engine || !isProjectPath(record.project, engine.projectFiles)) return undefined;
   const linkedAt =
     typeof record.linkedAt === "string" && !Number.isNaN(Date.parse(record.linkedAt)) ? record.linkedAt : "";
-  return { kind: GameEngine.Unreal, project: record.project, linkedAt };
+  const remote = parseEngineRemote(record.remote);
+  return { kind: engine.id, project: record.project, linkedAt, ...(remote ? { remote } : {}) };
 }
 
-/** The engine a game builds in: its binding's, else the web. */
-export const engineOf = (binding: EngineBinding | undefined | null): GameEngine => binding?.kind ?? GameEngine.Web;
+/** Whether two links name the same published game: both name none, or both the same ids. */
+export const sameRemote = (a: EngineRemote | undefined, b: EngineRemote | undefined): boolean =>
+  a?.placeId === b?.placeId && a?.universeId === b?.universeId;
 
-/** The project's name as Unreal shows it: the `.uproject` file name without its extension. */
-export function projectName(project: string): string {
+/** The engine a game builds in: its binding's, else the web. */
+export const engineOf = (binding: EngineBinding | undefined | null): EngineId => binding?.kind ?? GameEngine.Web;
+
+/**
+ * The project's name as its engine shows it: the file name without the longest of `extensions`
+ * (its engine's project files; Unreal's `.uproject` when none are given) it ends with, in any case.
+ */
+export function projectName(project: string, extensions: readonly string[] = [UPROJECT_EXTENSION]): string {
   const file = project.split(/[\\/]/).pop() ?? project;
-  return file.slice(0, file.length - UPROJECT_EXTENSION.length);
+  const lower = file.toLowerCase();
+  const own = extensions.filter((extension) => lower.endsWith(extension)).sort((a, b) => b.length - a.length)[0];
+  return own ? file.slice(0, file.length - own.length) : file;
 }
 
 /**
  * The chat's record that a game now builds in an engine project ("Lantern now builds in Unreal ·
- * Lantern", with Undo): the plugin that linked it, the game, the project file and its
- * name, when, and the project it replaced. `auto` marks a link the plugin made by itself rather
+ * Lantern", with Undo): the plugin that linked it, the game, the engine and its label, the project
+ * file and its name, when, and the project it replaced. `auto` marks a link the plugin made by itself rather
  * than at the person's word (older hosts linked a game at its first call; none does now).
  */
 export type EngineLinkedPayload = {
@@ -145,7 +163,10 @@ export type EngineLinkedPayload = {
   project?: string;
   /** The game's title as studio.json named it then. */
   title?: string;
-  engine?: GameEngine;
+  /** The engine's id (`EngineBinding.kind`); none in records from before engines were declared, all Unreal's. */
+  engine?: EngineId;
+  /** The engine's name as its plugin declares it ("Unreal"). */
+  label?: string;
   file?: string;
   name?: string;
   linkedAt?: string;

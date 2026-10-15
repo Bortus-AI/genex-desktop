@@ -6,7 +6,7 @@
  */
 import { launchRules, RESUME_LOOP_CHAT, type LaunchGrant } from "./launch-prompts.ts";
 import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
-import { GameEngine } from "./game-engine.ts";
+import { type EngineId, GameEngine } from "./game-engine.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
 import { toolCall } from "./model-roles.ts";
 import { EventKind, InterviewMode, RunEvent } from "./run-events.ts";
@@ -332,7 +332,7 @@ const WORKSPACE_RULE =
  * facts stand for that engine.
  */
 interface GameBuild {
-  gameEngine: GameEngine;
+  gameEngine: EngineId;
   /** Each fact with its source when the caller said it (a plugin's detect, a scaffold's record). */
   facts: SourcedFact[];
   /** With no facts, what the folder holds (`game.list`'s `holds`); null: not said, read as nothing. */
@@ -366,7 +366,7 @@ function gameBuild(
     engineProject,
     pluginsOff,
     holds,
-  }: { gameEngine: GameEngine; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
+  }: { gameEngine: EngineId; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
 ): GameBuild {
   const legacy = !Array.isArray(facts);
   const known: SourcedFact[] = legacy ? factsOfEngine(gameEngine) : facts.map(sourcedFact);
@@ -380,7 +380,7 @@ function gameBuild(
  * project's look first, by its fact) and the Loop's profile (the one Loop in place, unless it is a
  * web game).
  */
-function loopOfGame(game: GameBuild): [GameEngine, LoopProfile] {
+function loopOfGame(game: GameBuild): [EngineId, LoopProfile] {
   const engine = hasFact(game.facts, CoreFact.UnrealProject) ? GameEngine.Unreal : game.gameEngine;
   return [engine, loopProfileOf(game)];
 }
@@ -481,7 +481,7 @@ const RESUME_BUILD =
  *   ownShape?: boolean,
  *   contractMissing?: boolean,
  *   engine?: string,
- *   gameEngine?: GameEngine,
+ *   gameEngine?: EngineId,
  *   engineProject?: string | null,
  *   launch?: LaunchGrant | null,
  *   afterLoopRun?: string | null,
@@ -543,7 +543,7 @@ export function buildContractorBrief({
   ownShape?: boolean;
   contractMissing?: boolean;
   engine?: string;
-  gameEngine?: GameEngine;
+  gameEngine?: EngineId;
   engineProject?: string | null;
   launch?: LaunchGrant | null;
   afterLoopRun?: string | null;

@@ -438,15 +438,27 @@ export interface PluginEvent {
 }
 
 /**
- * A game's link to an engine project (`game-engine`): the project file's real path, its name, and
- * when it was linked. The host keeps it in the plugin's storage as `links/<game>.json`, where the
- * plugin's MCP servers may read it, and mirrors it into the game's `studio.json`.
+ * A published game's ids at its engine's service, kept beside a link when the project lives there:
+ * positive decimal strings of at most 20 digits, never numbers, which would lose digits.
+ */
+export interface PluginEngineRemote {
+  placeId: string;
+  universeId: string;
+}
+
+/**
+ * A game's link to an engine project (`game-engine`): the engine (your `engine.id`), the project
+ * file's real path, its name (the file name without its declared extension), when it was linked,
+ * and the published game's ids when you linked them. The host keeps it in the plugin's storage as
+ * `links/<game>.json`, where the plugin's MCP servers may read it, and mirrors it into the game's
+ * `studio.json`.
  */
 export interface PluginEngineLink {
-  kind: "unreal";
+  kind: string;
   project: string;
   name: string;
   linkedAt: string;
+  remote?: PluginEngineRemote;
 }
 
 /**
@@ -493,12 +505,18 @@ export interface PluginHostCall {
   (method: "credentials.write", args: { token: string }): Promise<void>;
   (method: "credentials.clear"): Promise<void>;
   /**
-   * `game-engine`: links the bound game to an Unreal project file (`.uproject`, checked by real
-   * path). The chat it was called from shows one line with Undo; `auto` says the link was made by
-   * the game's first call rather than asked for. From outside any game, `game` names one this
-   * plugin made with `game.create`; any other game is refused.
+   * `game-engine`: links the bound game to a project file of the engine your manifest declares
+   * (`engine.projectFiles`, checked by real path); a plugin that declares no engine is refused.
+   * `remote` keeps the published game's ids beside the link (ids of any other shape are dropped and
+   * the link is still made); linking the same file with other ids makes a new link. The chat it was
+   * called from shows one line with Undo; `auto` says the link was made by the game's first call
+   * rather than asked for. From outside any game, `game` names one this plugin made with
+   * `game.create`; any other game is refused.
    */
-  (method: "game.engine.link", args: { project: string; auto?: boolean; game?: string }): Promise<PluginEngineLink>;
+  (
+    method: "game.engine.link",
+    args: { project: string; remote?: PluginEngineRemote; auto?: boolean; game?: string },
+  ): Promise<PluginEngineLink>;
   /** `game-engine`: the bound game's link, or null while it has none that still holds. */
   (method: "game.engine.read"): Promise<PluginEngineLink | null>;
   /** `game-engine`: shows the plugin's steps card (its `steps` action's answer) in the chat the call came from. */

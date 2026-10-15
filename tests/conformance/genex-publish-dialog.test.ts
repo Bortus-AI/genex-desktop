@@ -23,6 +23,7 @@ import { HostMethod } from "../../src/shared/harness-api.ts";
 import { type ExportReview, type PluginBinding, PluginService, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { UiEvent, type UiEventMap } from "../../src/shared/ui-events.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
+import { ENGINES, UNREAL_ENGINE } from "../helpers/engines.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 
 const GAME = "publish-me";
@@ -86,7 +87,7 @@ async function addUnrealGame(rig: Awaited<ReturnType<typeof dialogRig>>) {
   const project = path.join(game.dir, "unreal", "DirtTrack.uproject");
   await mkdir(path.dirname(project), { recursive: true });
   await writeFile(project, "{}");
-  await writeEngineBinding(game.dir, project);
+  await writeEngineBinding(game.dir, project, UNREAL_ENGINE.id, ENGINES);
   return game;
 }
 

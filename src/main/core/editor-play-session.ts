@@ -50,7 +50,7 @@ export interface EditorPlayPlace extends EditorPlayGame {
  */
 export async function editorPlayPlugin(core: StudioCore, project: string): Promise<string | null> {
   const directory = core.games.dirFor(project);
-  const bound = await readEngineBinding(directory).catch(() => undefined);
+  const bound = await readEngineBinding(directory, core.plugins.engines()).catch(() => undefined);
   if (!bound) return null;
   for (const { manifest } of core.plugins.list()) {
     const engine = manifest.capabilities.includes(PluginCapability.GameEngine);

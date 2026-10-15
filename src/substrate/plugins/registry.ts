@@ -3,7 +3,7 @@ import { watch as watchPath } from "node:fs";
 import { mkdir, readFile, readdir, cp, rm, stat } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { isPluginId } from "../../shared/plugin-id.ts";
-import type { GameEngine } from "../../shared/game-engine.ts";
+import type { EngineCatalog, GameEngine } from "../../shared/game-engine.ts";
 import {
   type FactRef,
   type GameKind,
@@ -26,6 +26,7 @@ import {
   type PluginLock,
 } from "../../shared/plugin-hooks.ts";
 import {
+  engineCatalog,
   isAgentTool,
   isFileSkill,
   PLUGIN_SKILL_TOOL,
@@ -1162,6 +1163,15 @@ export class PluginRegistry {
   }
   enabled(id: string) {
     return isLive(this.#installed.get(id));
+  }
+  /**
+   * The engines the installed plugins declare (`engine` in a `game-engine` plugin's manifest), on or
+   * off: a game an engine plugin linked keeps building in that engine while the plugin is turned
+   * off, and reads as a web game again only once the plugin is removed.
+   */
+  engines(): EngineCatalog {
+    const installed = [...this.#installed.values()].filter((p) => !p.removed);
+    return engineCatalog(installed.map((p) => p.manifest));
   }
   #live(): PluginInfo[] {
     return this.list().filter(isLive);

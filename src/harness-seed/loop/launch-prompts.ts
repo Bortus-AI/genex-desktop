@@ -8,7 +8,7 @@
 import { MAX_RUN_HOURS } from "./config.ts";
 import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
 import { LoopProfile } from "./folder-facts.ts";
-import { GameEngine } from "./game-engine.ts";
+import { type EngineId, GameEngine } from "./game-engine.ts";
 import { askUser } from "./interview-question.ts";
 import { toolCall } from "./model-roles.ts";
 import { NARROW_TO_THE_ASK } from "./narrow-prompts.ts";
@@ -72,14 +72,14 @@ function unrealBudgetWords(hours: number | null | undefined): string {
 }
 
 /** What a build is, as a Loop chat is told: the web Loop, or the Unreal Loop in the user's open editor. */
-function buildWords(gameEngine: GameEngine, hours: number | null | undefined): string {
+function buildWords(gameEngine: EngineId, hours: number | null | undefined): string {
   if (gameEngine === GameEngine.Unreal)
     return `the Unreal Loop — one lead builds the whole game itself in the open Unreal editor, judging its own captures and saving as it goes, while small helpers make models, characters, sounds and textures in copies of the game (${unrealBudgetWords(hours)})`;
   return `builders working in parallel and judges checking their work (${budgetWords(hours)})`;
 }
 
 /** What a build is and how a quick one reads, for the Loop a project gets: the web Loop, the Unreal Loop, or the one Loop in place. */
-function buildOf(gameEngine: GameEngine, profile: LoopProfile | undefined, hours: number | null | undefined) {
+function buildOf(gameEngine: EngineId, profile: LoopProfile | undefined, hours: number | null | undefined) {
   if (profile === LoopProfile.Open) return { words: openBuildWords(hours), quick: OPEN_QUICK_IS_A_BUILD };
   const quick = gameEngine === GameEngine.Unreal ? QUICK_IS_AN_UNREAL_BUILD : QUICK_IS_A_BUILD;
   return { words: buildWords(gameEngine, hours), quick };
@@ -101,7 +101,7 @@ function stillsWords(frames: number, profile: LoopProfile | undefined): string {
 export function launchRules(
   engine: string | undefined,
   grant: LaunchGrant,
-  gameEngine: GameEngine = GameEngine.Web,
+  gameEngine: EngineId = GameEngine.Web,
   profile?: LoopProfile,
 ): string[] {
   const launch = toolCall(engine, grant.toolName);

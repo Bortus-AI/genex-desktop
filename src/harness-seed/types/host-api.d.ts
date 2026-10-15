@@ -1432,8 +1432,30 @@ export interface ProjectShape {
 }
 // ↑ src/shared/game-project.ts
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
-export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
+export type EngineId = string;
+// ↑ src/shared/game-engine.ts
+
+/**
+ * A published game's ids at its engine's service, kept beside a link when the project lives there
+ * rather than in a file on this computer: decimal strings, never numbers, which would lose digits.
+ */
+export interface EngineRemote {
+  placeId: string;
+  universeId: string;
+}
+// ↑ src/shared/game-engine.ts
+
+/**
+ * A game linked to an engine project: the engine (an installed plugin's `engine.id`), the project
+ * file (absolute, real path, of a kind that engine declares), when Genex linked it, and the
+ * published game's ids when the project lives at the engine's service.
+ */
+export type EngineBinding = {
+  kind: EngineId;
+  project: string;
+  linkedAt: string;
+  remote?: EngineRemote;
+};
 // ↑ src/shared/game-engine.ts
 
 export type FactSource = 'core' | 'link' | 'scaffold';
