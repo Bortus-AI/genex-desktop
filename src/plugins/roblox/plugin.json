@@ -79,6 +79,70 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "name": "open-for-run",
+      "audience": "harness",
+      "description": "For Genex only: at a Loop's start, Roblox Studio connected for this game's place, the place opened in Studio when it isn't; blocks with the setup step when Studio can't be.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "save-place",
+      "audience": "harness",
+      "description": "For Genex only: before a checkpoint (each chat message's too) and before a restore, sends the scripts still on their way to Studio, then has the Genex helper export what changed of the place into the game folder, beside the scripts.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "hero-shots",
+      "audience": "harness",
+      "description": "For Genex only: Roblox Studio's viewport as a picture, for a Loop's save points and its viewport observer.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "load-place",
+      "audience": "harness",
+      "needs": ["studio"],
+      "description": "For Genex only: after a restore, has the Genex helper load the restored place into Roblox Studio and brings Studio's scripts in step with src/; leaves the load waiting when Studio isn't connected.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "studio-state",
+      "audience": "harness",
+      "description": "For Genex only: whether Roblox Studio is connected for this game and answers (a dialog may be open when it doesn't), and its MCP server lists it.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "studio-crash-note",
+      "audience": "harness",
+      "description": "For Genex only: when Roblox Studio closed under a run, asks the person to reopen it. Genex never closes or force-quits Studio.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "team-note",
+      "audience": "harness",
+      "description": "For Genex only: at a turn's start, who else is in this place in Team Create, when that changed.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
     }
   ],
   "skills": [
@@ -217,5 +281,16 @@
     }
   ],
   "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }],
+  "hooks": [
+    { "on": "run.prepare", "tool": "open-for-run", "facts": ["roblox-project"] },
+    { "on": "turn.start", "tool": "team-note", "facts": ["roblox-project"] },
+    { "on": "checkpoint.before", "tool": "save-place", "facts": ["roblox-project"], "messages": true },
+    { "on": "checkpoint.after", "tool": "hero-shots", "facts": ["roblox-project"] },
+    { "on": "restore.before", "tool": "save-place", "facts": ["roblox-project"] },
+    { "on": "restore.after", "tool": "load-place", "facts": ["roblox-project"] },
+    { "on": "health", "tool": "studio-state", "facts": ["roblox-project"] },
+    { "on": "crash", "tool": "studio-crash-note", "facts": ["roblox-project"] }
+  ],
+  "observers": [{ "id": "viewport", "facts": ["roblox-project"], "tool": "hero-shots", "live": "stills" }],
   "scaffolds": [{ "id": "game", "label": "Roblox game", "tool": "new-game" }]
 }

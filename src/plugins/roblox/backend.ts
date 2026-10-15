@@ -13,10 +13,12 @@ import type {
   PluginToolbarStatus,
 } from "../../plugin-sdk/index.d.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { OBSERVE_CALL_MS } from "../../shared/observers.ts";
+import type { HookAnswer, HookContext } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { RobloxAction } from "./actions.ts";
-import { type HelperLink, startHelperLink } from "./helper-link.ts";
+import { type HelperAsk, type HelperLink, startHelperLink } from "./helper-link.ts";
 import type { ScriptChange } from "./helper-protocol.ts";
 import {
   nowStep,
@@ -28,6 +30,21 @@ import {
   robloxSteps,
 } from "./engine-steps.ts";
 import { readLiveData } from "./live-data.ts";
+import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
+import { loadPendingPlace } from "./place-files.ts";
+import { crashAnswer, probeAnswer } from "./hook-answers.ts";
+import {
+  createStudioWatch,
+  heroShotsAt,
+  loadPlaceAt,
+  type MomentOps,
+  openForRun,
+  personActive,
+  savePlaceAt,
+  studioStateAt,
+  teamNoteAt,
+  viewportStill,
+} from "./studio-moments.ts";
 import { planSwitches, readSwitches } from "./mcp-switch.ts";
 import {
   HELPER_FILE,
@@ -81,7 +98,9 @@ import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
  * (`studio-activity`). It reads where Studio is, whether Genex set it up (a record in the plugin's
  * own storage) and whether it runs; never the person's Documents folder, which macOS guards with
  * a prompt that only the person's own press may raise. Once Studio is set up it also serves the
- * helper link (`helper-link.ts`), which tells each game's connection which Studio is the game's.
+ * helper link (`helper-link.ts`), which tells each game's connection which Studio is the game's,
+ * and Genex's moments (`studio-moments.ts`): the place saved and loaded around checkpoints and
+ * restores, health, the crash note, Team Create notes and the viewport's picture.
  */
 
 /** The host services this backend calls, by their public SDK names. */
@@ -103,6 +122,13 @@ export const RobloxTool = {
   ShowSteps: "show-steps",
   NewGame: "new-game",
   EngineStatus: "engine-status",
+  OpenForRun: "open-for-run",
+  SavePlace: "save-place",
+  HeroShots: "hero-shots",
+  LoadPlace: "load-place",
+  StudioState: "studio-state",
+  StudioCrashNote: "studio-crash-note",
+  TeamNote: "team-note",
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
@@ -185,6 +211,8 @@ export interface RobloxDeps extends PlaceActionDeps {
    * only once Genex has set Studio up: before that no helper exists to connect.
    */
   helperLink?(storage: string): void;
+  /** The helper link and the script sync, for Genex's moments; without them no helper is ever connected. */
+  moments?: MomentServices;
 }
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
@@ -590,10 +618,31 @@ async function noteGame(deps: RobloxDeps, context: PluginContext): Promise<void>
   await deps.gameSeen(storage, context.project, context.directory);
 }
 
+/** A moment's handler over the bound game's Studio operations and the moment it runs at. */
+type MomentHandler = (ops: MomentOps, hook: HookContext) => Promise<HookAnswer>;
+
+/** The Studio operations of the game a call is bound to; the helper link starts once Studio is set up. */
+async function momentOps(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<MomentOps> {
+  const storage = await context.host(HostService.StorageRoot);
+  const setUp = async () => {
+    const done = (await locateStudio(deps)).installed && (await setUpIn(deps, storage));
+    if (done) deps.helperLink?.(storage);
+    return done;
+  };
+  await setUp();
+  return momentOpsFor(deps, services, context, { storage, setUp });
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
   const scan: ScanCache = {};
+  const services = deps.moments ?? noMomentServices(deps.now);
+  // A moment's tool answers only at its moments: called any other way, it says nothing.
+  const atMoment =
+    (handler: MomentHandler): Handler =>
+    async (_args, context) =>
+      context.hook ? handler(await momentOps(deps, services, context), context.hook) : {};
   const actions: Record<RobloxAction, Handler> = {
     [RobloxAction.Status]: (_args, context) => status(deps, context, slot.job),
     [RobloxAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
@@ -612,13 +661,27 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.DoItForMe]: (_args, context) => doItForMe(context),
   };
   const tools: Record<RobloxTool, Handler> = {
-    // Nothing here watches Studio's own edits yet, so the person is never seen using it.
-    [RobloxTool.StudioActivity]: async () => ({ personActive: false }),
+    [RobloxTool.StudioActivity]: async (_args, context) =>
+      probeAnswer(await personActive(await momentOps(deps, services, context))),
     [RobloxTool.CheckScripts]: async () => ({ checked: false, message: MESSAGE.Checks.NotAdded }),
     [RobloxTool.UseProject]: async (args, context) => (await usePlaceNamed(deps, context, args.project)).message,
     [RobloxTool.ShowSteps]: async (_args, context) => showSteps(context, (await steps(deps, context, slot.job)).open),
     [RobloxTool.NewGame]: (_args, context) => newGameTool(deps, context),
     [RobloxTool.EngineStatus]: () => engineStatus(deps),
+    [RobloxTool.OpenForRun]: atMoment((ops) => openForRun(ops)),
+    [RobloxTool.SavePlace]: atMoment(savePlaceAt),
+    [RobloxTool.LoadPlace]: atMoment((ops) => loadPlaceAt(ops)),
+    [RobloxTool.StudioState]: atMoment((ops) => studioStateAt(ops)),
+    [RobloxTool.StudioCrashNote]: async (_args, context) => (context.hook ? crashAnswer() : {}),
+    [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
+    [RobloxTool.HeroShots]: async (_args, context) => {
+      // As the viewport observer: the picture within the time Genex gives.
+      if (context.observe) {
+        const ops = await momentOps(deps, services, context);
+        return viewportStill(ops, context.observe.withinMs ?? OBSERVE_CALL_MS);
+      }
+      return context.hook ? heroShotsAt(await momentOps(deps, services, context), context.hook) : {};
+    },
   };
   return {
     async action(name, args, context) {
@@ -638,11 +701,28 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   };
 }
 
+/**
+ * What runs when a game's helper connects, before agents can reach that Studio: a load a restore
+ * left waiting (`pending-load.json`) first, then the scripts compared with the folder. A failed
+ * load is logged and keeps its wait for the next connection; the scripts are compared all the same.
+ */
+export function pendingThenScripts(
+  scripts: Pick<ScriptSyncs, "folder" | "bind">,
+  log: (line: string) => void,
+): (game: string, ask: HelperAsk) => Promise<void> {
+  return async (game, ask) => {
+    const folder = await scripts.folder(game);
+    if (folder) await loadPendingPlace(ask, folder).catch((error) => log(`pending load: ${errorMessage(error)}`));
+    await scripts.bind(game);
+  };
+}
+
 /** The helper link and the script sync on this computer, as the backend's process runs them. */
 interface HelperServices {
   helperLink(storage: string): void;
   gameSeen(storage: string, game: string, folder: string): Promise<void>;
   noteWritten(storage: string, game: string, folder: string, name: string): Promise<void>;
+  moments: MomentServices;
 }
 
 /**
@@ -655,11 +735,15 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
   let link: HelperLink | undefined;
   let syncs: ScriptSyncs | undefined;
   const log = (line: string) => process.stderr.write(`${line}\n`);
+  const watch = createStudioWatch(SYSTEM_CLOCK.now);
+  const askFor =
+    (game: string): HelperAsk =>
+    (type, body, options) =>
+      link ? link.request(game, type, body, options) : Promise.reject(new Error("The helper link isn't started"));
   const syncsIn = (storage: string) => {
     syncs ??= createScriptSyncs({
       storage,
-      ask: (game) => (type, body, options) =>
-        link ? link.request(game, type, body, options) : Promise.reject(new Error("The helper link isn't started")),
+      ask: askFor,
       bound: (game) => link?.bound(game) !== undefined,
       clock: SYSTEM_CLOCK,
       watch: systemWatch(log),
@@ -680,8 +764,12 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
         clock: SYSTEM_CLOCK,
         newSession: randomUUID,
         log,
-        beforeBind: (game: string) => scripts.bind(game),
-        sinks: { scriptsChanged: (game: string, change: ScriptChange) => scripts.changed(game, change) },
+        beforeBind: pendingThenScripts(scripts, log),
+        sinks: {
+          scriptsChanged: (game: string, change: ScriptChange) => scripts.changed(game, change),
+          activity: (game: string, body: { editing: boolean }) => watch.activity(game, body.editing),
+          team: (game: string, body: { others: string[] }) => watch.team(game, body.others),
+        },
       };
       startHelperLink(deps, { signal: stopped }).then(
         (running) => {
@@ -692,6 +780,17 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
     },
     gameSeen: (storage, game, folder) => syncsIn(storage).seen(game, folder),
     noteWritten: (storage, game, folder, name) => syncsIn(storage).written(game, folder, name),
+    moments: {
+      ask: askFor,
+      bound: (game) => link?.bound(game),
+      flush: async (game) => {
+        await syncs?.flush(game);
+      },
+      reapply: async (game) => {
+        await syncs?.bind(game);
+      },
+      watch,
+    },
   };
 }
 
@@ -733,11 +832,12 @@ export function systemDeps(): RobloxDeps {
     helperLink: services.helperLink,
     gameSeen: services.gameSeen,
     noteWritten: services.noteWritten,
+    moments: services.moments,
     studio: client,
     helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FILE),
     install: { fetch: globalThis.fetch, run: systemInstallRun, tempRoot: os.tmpdir() },
     open: systemOpener,
-    sleep: (ms) => sleep(ms),
+    sleep: (ms, signal) => sleep(ms, undefined, signal ? { signal } : {}),
     now: () => Date.now(),
   };
 }

@@ -1289,6 +1289,34 @@ Studio** is Studio's normal quit and is refused while a build uses Studio (`game
 `use-project` switches a game to an open place by its listed name or a file by path, never reading
 Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
 
+**Moments, the person first and pictures.** The handlers answer in hook terms when
+`context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
+`hook-answers.ts`), each hooked for games with the `roblox-project` fact; nothing hooks `run.end`,
+so the person's Studio stays open when a run ends.
+
+| Handler at its moment | In a run | In a chat |
+| --- | --- | --- |
+| `open-for-run` at `run.prepare` | quiet once the helper is connected and answers; opens the place (`open-studio`'s way) and waits up to `OPEN_WAIT_MS` (3 minutes) for its helper (a note names the place); blocks with the step when Studio isn't set up, the game has no place, the helper doesn't answer (a dialog may be open) or never connects | — |
+| `team-note` at `turn.start` | notes who else is in a Team Create place, only when that changed | same |
+| `save-place` at `checkpoint.before` (`messages: true`) | sends the script sync's pending file changes, then has the helper export what changed into `.genex/place/` (up to 2 minutes); blocks while Studio isn't connected or the export fails | the same within the message's wait (`SAVE_PLACE_CHAT_MAX_MS`: the flush and `PLACE_EXPORT_MAX_MS`); never blocks, notes what it saved or why the checkpoint holds the scripts only |
+| `hero-shots` at `checkpoint.after` | Studio's `screen_capture` of the game's Studio as one `viewport` picture | nothing |
+| `save-place` at `restore.before` | the same export, so the newer state is saved first (Bring back newer version); blocks when it fails; notes that going back undoes the edits of others in Team Create | same |
+| `load-place` at `restore.after` | the helper loads the restored export, then the script sync reconciles `src/`; with Studio not connected, `pending-load.json` waits and the helper's next connection loads it before the scripts are compared; never blocks | same |
+| `studio-state` at `health` | quiet while the helper answers a ping within `STUDIO_PING_MS` (5 s) and Studio's MCP server lists the Studio; pending while Studio starts, its helper reconnects (`RECONNECT_WAIT_MS`), it doesn't answer ("a dialog may be open in Studio", with the hint to look with `app_look`, look only, on a Mac) or isn't listed; blocks when Studio is gone, open without the place past the reconnect wait, unlinked or not set up | same |
+| `studio-crash-note` at `crash` | asks the person to reopen Studio with Open Studio; Genex never closes or kills it | same |
+
+A helper that answers `unsupported` to an export (Studio with no way to serialize the place) never
+blocks: the note says save points hold the scripts only. A part larger than the host's 50 MB file
+cap is named in the note, and the host's checkpoint leaves it out and names it too. Only
+`load-place` needs the `studio` lock: exporting and pictures read the place, so a message's
+checkpoint never waits on the person. The lock's probe `studio-activity` answers `personActive`
+from the helper's `activity` reports in the last `PERSON_ACTIVE_MS` (15 s), leaving out what the
+agent's marks cover (`agent-marks.ts` in `<storage>/mcp/<game>`: `agent-busy.json` around the
+connection's writes, 3 s after it included, since Studio records `execute_luau` runs as edits;
+`agent-play.json` during the agent's play test; Genex's own load and reconcile run under the busy
+mark too; a mark older than 30 minutes or dated ahead is not believed); it claims nothing unsaved.
+The `viewport` [observer](#observers) runs `hero-shots` and shows Live's `stills`.
+
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and
 `judge_play`, the desktop tool never builds or play-tests in Studio, Roblox's AI tools, uploads and
@@ -1758,7 +1786,8 @@ kept for the snapshot. Plan mode, a lock not given in time or no time left skips
 cut short, a failure or a `block` is a log line. In every case the files are still saved: a block
 never stops a message's checkpoint. A message answered again after a restart keeps its first
 checkpoint and runs no step. A step that opts in must be quick; Unreal does not opt in, so its
-editor is saved at save points only.
+editor is saved at save points only. Roblox's `save-place` opts in: its incremental export
+(`SAVE_PLACE_CHAT_MAX_MS`) ends within the message's 25 s.
 
 ### Locks: the person comes first
 
@@ -1805,6 +1834,11 @@ in the background (the Unreal plugin's `add-cpp-module`, `reopen-editor`, `run-p
 still closes, reopens or plays it. This is a known gap in "editor work waits its turn"; the Unreal
 runner covers adding C++ with its own wait (`whileAdding`).
 
+The bundled locks: Unreal's `editor` (probe `editor-activity`: a play neither the agent nor the
+plugin's queue started) and Roblox Studio's `studio` (probe `studio-activity`: the person's
+selections, undo and redo, their own recordings and typing in Studio within 15 s, the agent's own
+marks left out), each named under its plugin above.
+
 ### Observers
 
 `observers` (API 3, `substrate/plugins/observer-manifest.ts`; vocabulary in `shared/observers.ts`)
@@ -1821,7 +1855,7 @@ these keys are kept. `observersFor` (`registry.observers(game)`) lists a game's
 observers: each plugin's in plugin order, one per folder its facts reach (the hooks' rule), then
 Genex's own `preview` of each folder served as a web game (a game with no kind yet at its root). Only
 a plugin that is on captures (`registry.observerTool(key)` answers null otherwise). The bundled Unreal
-plugin's `viewport` observer runs `hero-shots` and shows the Unreal card.
+plugin's `viewport` observer runs `hero-shots` and shows the Unreal card. The bundled Roblox plugin's `viewport` observer runs its `hero-shots` (Studio's viewport) as a `stills` view.
 
 How Genex runs one (`main/core/observers.ts` `ObserverService`, host call `observers.capture`
 [in the harness runtime](harness-runtime.md)): only inside a run of the game, each observer of a

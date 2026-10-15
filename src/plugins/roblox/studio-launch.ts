@@ -85,7 +85,8 @@ export type Opener = (launch: Launch) => Promise<void>;
 /** What quitting Studio needs: the locator's computer, a starter, and time. */
 export interface LaunchDeps extends LocateDeps {
   open: Opener;
-  sleep(ms: number): Promise<unknown>;
+  /** Waits `ms`; ends early (and may reject) once `signal` aborts. */
+  sleep(ms: number, signal?: AbortSignal): Promise<unknown>;
   now(): number;
 }
 

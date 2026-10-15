@@ -13,6 +13,8 @@ import {
   RESTORE_SAVE_MAX_MS,
 } from "../../src/plugins/unreal/editor-moments.ts";
 import { HERO_SHOTS_MAX_MS } from "../../src/plugins/unreal/loop-tools.ts";
+import * as robloxMoments from "../../src/plugins/roblox/studio-moments.ts";
+import { CHAT_CHECKPOINT_WAIT_MS, MESSAGE_SNAPSHOT_ROOM_MS } from "../../src/main/core/rewind.ts";
 import { HookEvent, hookEventsOf, hookPlan, LockScope, messageCheckpointPlan } from "../../src/shared/plugin-hooks.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
 import { FolderHolds, type GameKind } from "../../src/shared/project-facts.ts";
@@ -406,6 +408,70 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
       "script workers write .luau files in a copy and check them offline",
     );
     assert.match(roblox.description, /Not affiliated with Roblox Corporation\. For people 18 and over\./);
+  });
+
+  it("the Roblox plugin's moments: each for Roblox places only, the place saved before each chat message too", () => {
+    const roblox = validateManifest(
+      JSON.parse(readFileSync("src/plugins/roblox/plugin.json", "utf8")) as PluginManifest,
+    );
+    const ROBLOX_PROJECT = ["roblox-project"];
+    assert.deepEqual(
+      roblox.hooks,
+      [
+        { on: "run.prepare", tool: "open-for-run", facts: ROBLOX_PROJECT },
+        { on: "turn.start", tool: "team-note", facts: ROBLOX_PROJECT },
+        { on: "checkpoint.before", tool: "save-place", facts: ROBLOX_PROJECT, messages: true },
+        { on: "checkpoint.after", tool: "hero-shots", facts: ROBLOX_PROJECT },
+        { on: "restore.before", tool: "save-place", facts: ROBLOX_PROJECT },
+        { on: "restore.after", tool: "load-place", facts: ROBLOX_PROJECT },
+        { on: "health", tool: "studio-state", facts: ROBLOX_PROJECT },
+        { on: "crash", tool: "studio-crash-note", facts: ROBLOX_PROJECT },
+      ],
+      "nothing hooks run.end: the person's Studio stays open when a run ends",
+    );
+    const robloxKind: GameKind = { facts: [{ id: "roblox-project", path: "." }] };
+    const plugins = [{ id: "roblox", manifest: roblox }];
+    assert.deepEqual(
+      messageCheckpointPlan(plugins, robloxKind).map((step) => step.tool),
+      ["save-place"],
+      "only save-place runs before each chat message",
+    );
+    assert.deepEqual(hookPlan(plugins, HookEvent.CheckpointBefore, { facts: [] }), [], "a web game runs none of them");
+    assert.deepEqual(roblox.observers, [{ id: "viewport", facts: ROBLOX_PROJECT, tool: "hero-shots", live: "stills" }]);
+    const needing = roblox.tools.filter((t) => t.needs?.includes("studio")).map((t) => t.name);
+    assert.deepEqual(
+      needing,
+      ["load-place"],
+      "only the load changes the place; reading and exporting never wait on the person",
+    );
+    for (const name of [
+      "open-for-run",
+      "save-place",
+      "hero-shots",
+      "load-place",
+      "studio-state",
+      "studio-crash-note",
+      "team-note",
+    ])
+      assert.equal(roblox.tools.find((t) => t.name === name)?.audience, "harness", `${name} is Genex's only`);
+  });
+
+  it("gives each Roblox step longer than its slowest path, and the save before a chat message room within the message's wait", () => {
+    const longest: Array<[HookEvent, number, string]> = [
+      [HookEvent.RunPrepare, robloxMoments.OPEN_FOR_RUN_MAX_MS, "open-for-run"],
+      [HookEvent.TurnStart, robloxMoments.TEAM_NOTE_MAX_MS, "team-note"],
+      [HookEvent.CheckpointBefore, robloxMoments.SAVE_PLACE_RUN_MAX_MS, "save-place at a run's save point"],
+      [HookEvent.CheckpointAfter, robloxMoments.HERO_SHOTS_MAX_MS, "hero-shots"],
+      [HookEvent.RestoreBefore, robloxMoments.SAVE_PLACE_RESTORE_MAX_MS, "save-place before a restore"],
+      [HookEvent.RestoreAfter, robloxMoments.LOAD_PLACE_MAX_MS, "load-place"],
+      [HookEvent.Health, robloxMoments.STUDIO_STATE_MAX_MS, "studio-state"],
+    ];
+    for (const [on, maxMs, step] of longest)
+      assert.ok(maxMs < HOOK_CALL_MS[on], `${step} answers in its own words before Genex's ceiling at ${on}`);
+    assert.ok(
+      robloxMoments.SAVE_PLACE_CHAT_MAX_MS < CHAT_CHECKPOINT_WAIT_MS - MESSAGE_SNAPSHOT_ROOM_MS,
+      "the incremental save before a chat message ends before its checkpoint must be taken",
+    );
   });
 
   it("gives the Unreal plugin's save before a restore longer than it waits for a busy editor", () => {

@@ -67,7 +67,7 @@ export const CHAT_CHECKPOINT_WAIT_MS = 30 * SECOND_MS;
  * What a message's checkpoint keeps of its wait for the snapshot itself: the engine's steps that
  * save first (`PluginHook.messages`) end this long before the wait does.
  */
-const MESSAGE_SNAPSHOT_ROOM_MS = 5 * SECOND_MS;
+export const MESSAGE_SNAPSHOT_ROOM_MS = 5 * SECOND_MS;
 /** How long a rewind waits for the harness to take back the mood board; it never waits for more. */
 const REWIND_NOTICE_TIMEOUT_MS = 3 * SECOND_MS;
 /**

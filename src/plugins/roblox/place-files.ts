@@ -51,8 +51,9 @@ export const PENDING_LOAD = "pending-load.json";
 export const PLACE_EXPORT_MAX_MS = 20 * SECOND_MS;
 /** The longest a place load may take, from the first part sent to Studio's answer. */
 export const PLACE_LOAD_MAX_MS = 30 * SECOND_MS;
-/** The largest part read back from the folder: the host's checkpoint file cap. */
-const PART_READ_MAX_BYTES = 50 * 1024 * 1024;
+/** The host's checkpoint file cap: a part larger than this is left out of save points (and never read back). */
+export const SAVE_POINT_FILE_MAX_BYTES = 50 * 1024 * 1024;
+const PART_READ_MAX_BYTES = SAVE_POINT_FILE_MAX_BYTES;
 /** The largest manifest read back. */
 const MANIFEST_MAX_BYTES = 1024 * 1024;
 const TEMP_PREFIX = ".genex-part-";
@@ -282,6 +283,12 @@ export async function hasPendingLoad(game: string): Promise<boolean> {
   if (!folder) return false;
   const info = await lstat(path.join(folder, PENDING_LOAD)).catch(() => undefined);
   return info?.isFile() === true;
+}
+
+/** Clears a load left waiting: the place was loaded since. */
+export async function clearPendingLoad(game: string): Promise<void> {
+  const folder = await foundPlaceFolder(game);
+  if (folder) await unlink(path.join(folder, PENDING_LOAD)).catch(() => undefined);
 }
 
 /**

@@ -130,6 +130,8 @@ export interface ScriptSync {
   changed(change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the game's top in the record, after any pass under way. */
   written(name: string): Promise<void>;
+  /** Sends file changes still waiting out the quiet spell to Studio now, then settles. */
+  flush(): Promise<void>;
   mode(): ScriptSyncMode;
   /** Settles once every pass under way has finished. */
   idle(): Promise<void>;
@@ -360,6 +362,11 @@ class SyncState {
       start: () => this.enqueue(() => this.reconcile()).then(() => this.current),
       changed: (change) => this.enqueue(() => this.fromStudio(change)),
       written: (name) => this.enqueue(() => this.noteWritten(name)),
+      flush: async () => {
+        if (this.current !== ScriptSyncMode.On) return;
+        this.deps.clock.clearTimeout(this.timer);
+        await this.enqueue(() => this.fromDisk());
+      },
       mode: () => this.current,
       idle: async () => {
         for (let seen: Promise<void> | undefined; seen !== this.queue; ) {
@@ -677,6 +684,10 @@ export interface ScriptSyncs {
   changed(game: string, change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the top of `game`'s folder in its record, in turn with its sync. */
   written(game: string, folder: string, name: string): Promise<void>;
+  /** Sends `game`'s file changes still on their way to Studio now; nothing when its sync isn't on. */
+  flush(game: string): Promise<void>;
+  /** The folder kept for `game`, when it is still a folder. */
+  folder(game: string): Promise<string | undefined>;
   mode(game: string): ScriptSyncMode;
   idle(): Promise<void>;
   stop(): void;
@@ -744,6 +755,10 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       if (held && held.folder === (await realpath(folder).catch(() => folder))) await held.sync.written(name);
       else await recordWritten(folder, name);
     },
+    flush: async (game) => {
+      await syncs.get(game)?.sync.flush();
+    },
+    folder: folderOf,
     mode: (game) => syncs.get(game)?.sync.mode() ?? ScriptSyncMode.Off,
     async idle() {
       await Promise.all([...syncs.values()].map((held) => held.sync.idle()));
