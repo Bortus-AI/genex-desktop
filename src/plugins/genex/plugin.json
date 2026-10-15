@@ -327,8 +327,7 @@
     },
     {
       "name": "publish-allow-upload",
-      "label": "Allow a new upload",
-      "confirmation": "Studio does not know whether the last upload reached Genex. Allow a new upload only after you have checked the deployment page: if the last one did land, the new upload replaces it."
+      "label": "Publish again"
     },
     {
       "name": "publish-open",
