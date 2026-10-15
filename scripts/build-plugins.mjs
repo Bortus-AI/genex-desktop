@@ -174,6 +174,24 @@ async function buildUnreal(root, resources, sdk) {
   });
 }
 
+async function buildGodot(root, resources, sdk) {
+  const source = path.join(root, "src/plugins/godot");
+  const godot = path.join(resources, "plugins/godot");
+  await mkdir(godot, { recursive: true });
+  for (const file of ["plugin.json", "icon.svg"]) await cp(path.join(source, file), path.join(godot, file));
+  const panel = await inlinePanelSdk(await readFile(path.join(source, "panel.html"), "utf8"), sdk);
+  await writeFile(path.join(godot, "panel.html"), await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")));
+  // Genex's own GDScript (the check and the plays), the new-game templates and the addon a set-up
+  // game carries (the Play Protocol autoload), read beside the backend.
+  for (const folder of ["scripts", "templates", "addon"])
+    await cp(path.join(source, folder), path.join(godot, folder), { recursive: true });
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(source, "backend.ts")],
+    outfile: path.join(godot, "backend.mjs"),
+  });
+}
+
 async function buildUnity(root, resources, sdk) {
   const unity = path.join(resources, "plugins/unity");
   await mkdir(unity, { recursive: true });
@@ -201,6 +219,7 @@ export async function buildPlugins(root, resources, { dependencies = true } = {}
   const sdk = path.join(root, "src/plugin-sdk");
   await buildBlender(root, resources, sdk);
   await buildUnreal(root, resources, sdk);
+  await buildGodot(root, resources, sdk);
   await buildUnity(root, resources, sdk);
   await mkdir(path.join(resources, "examples"), { recursive: true });
   await cp(path.join(root, "src/plugins/example"), path.join(resources, "examples/example"), { recursive: true });

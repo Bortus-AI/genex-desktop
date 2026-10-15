@@ -28,7 +28,7 @@ import { loopAvailableFor } from "../loop-setting.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
-import { unrealLoopGate, unrealRewindNote } from "../unreal-game.ts";
+import { linkLoopGate, linkRewindNote } from "../linked-project.ts";
 
 export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const { loading } = props;
@@ -65,7 +65,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             <RewindDialog
               key={rewind.target.eventId}
               {...rewind.target}
-              engineNote={unrealRewindNote(chat.folder)}
+              engineNote={linkRewindNote(chat.folder)}
               returnFocus={rewind.returnFocus}
               onRewound={(result) => rewind.target && rewind.rewound(rewind.target, result)}
               onDismiss={rewind.dismiss}
@@ -113,7 +113,7 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
         ref={composerRef}
         project={chat.meta.project}
         loopAvailable={loopAvailableFor(chat.folder)}
-        loopGate={unrealLoopGate(chat.folder)}
+        loopGate={linkLoopGate(chat.folder)}
         conversationKey={threadId}
         build={composer.build}
         about={

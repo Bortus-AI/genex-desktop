@@ -267,7 +267,10 @@ Its seat (`WorkerSeat`, `#workerReach`) carries:
   stays read-only);
 - its write roots: its working folder, the folders the person granted the chat
   (`ChatPermissionService.chatDirs`) and the enabled plugins' `folders`
-  (`PluginRegistry.workerFolders`), by their real paths; a folder that does not exist yet is left
+  (`PluginRegistry.workerFolders`), and the folder of the Godot project the game is linked to when it
+  lies outside the game (`DelegationService.#linkedFolders`: Godot's agents change scenes and scripts
+  as files; the chat's own session and leads read, and as their mode allows write, the same folder),
+  by their real paths; a folder that does not exist yet is left
   out, and so is one that is, holds or sits in a never-touch root (`writableRoots`);
 - the never-touch list ([`never-touch-list.ts`](../src/main/core/never-touch-list.ts)): the sign-ins
   (each coding CLI's whole home, the stores every agent's box denies (`baseDenyRead`: `~/.ssh`,

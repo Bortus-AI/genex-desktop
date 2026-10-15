@@ -21,7 +21,7 @@ import {
   writeText,
 } from "./storage.ts";
 import { MAX_LOOP_HOURS, MIN_LOOP_HOURS } from "./ui/loop-duration.ts";
-import { unrealProjectInFolder } from "./unreal-game.ts";
+import { linkedProjectInFolder } from "./linked-project.ts";
 import type { ComposerExtras, RoleRecord } from "./ui/PromptBar.tsx";
 
 /** The composer's Loop: on or off, and its hours, where `null` means ∞ (until satisfied). */
@@ -52,7 +52,7 @@ export interface ComposerLoopView {
  * it. No game (a draft chat) is a web game.
  */
 export const loopAvailableFor = (game: Pick<GameProject, "engine" | "dir"> | null | undefined): boolean =>
-  engineOf(game?.engine) !== GameEngine.Unreal || unrealProjectInFolder(game);
+  engineOf(game?.engine) === GameEngine.Web || linkedProjectInFolder(game);
 
 /** A composer answering a running build it was not told about still sends it no commission. */
 export const RUNNING_BUILD: ComposerBuild = { state: RunState.Running, loop: null };

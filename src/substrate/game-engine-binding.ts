@@ -7,7 +7,7 @@
  */
 import { lstat, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { type EngineBinding, GameEngine, isProjectPath, parseEngineBinding } from "../shared/game-engine.ts";
+import { type EngineBinding, engineOfProjectFile, isProjectPath, parseEngineBinding } from "../shared/game-engine.ts";
 import { readJsonForUpdate, readJsonIfExists } from "./fsx.ts";
 
 const STUDIO_JSON = "studio.json";
@@ -21,7 +21,8 @@ export const EngineLinkErrorCode = {
 export type EngineLinkErrorCode = (typeof EngineLinkErrorCode)[keyof typeof EngineLinkErrorCode];
 
 const MESSAGE = {
-  [EngineLinkErrorCode.NotProject]: (file: string) => `${file} is not an Unreal project file (.uproject).`,
+  [EngineLinkErrorCode.NotProject]: (file: string) =>
+    `${file} is not an engine project file (an Unreal .uproject, or a Godot project's project.godot).`,
   [EngineLinkErrorCode.Missing]: (file: string) => `${file} does not exist.`,
   [EngineLinkErrorCode.NotFile]: (file: string) => `${file} is not a regular file.`,
 } as const satisfies Record<EngineLinkErrorCode, (file: string) => string>;
@@ -78,7 +79,9 @@ export async function writeEngineBinding(
   const file = path.join(dir, STUDIO_JSON);
   const current = (await readJsonForUpdate<Record<string, unknown>>(file)) ?? {};
   const previous = parseEngineBinding(current.engine);
-  const binding: EngineBinding = { kind: GameEngine.Unreal, project: real, linkedAt: now().toISOString() };
+  const kind = engineOfProjectFile(real);
+  if (!kind) throw new EngineLinkError(EngineLinkErrorCode.NotProject, project);
+  const binding: EngineBinding = { kind, project: real, linkedAt: now().toISOString() };
   await writeFile(file, `${JSON.stringify({ ...current, engine: binding }, null, 2)}\n`);
   return { binding, ...(previous ? { previous } : {}) };
 }

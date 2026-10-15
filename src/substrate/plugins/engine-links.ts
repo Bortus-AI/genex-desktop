@@ -9,7 +9,7 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { CustomEvent, type CustomEventRecord, customEventData } from "../../shared/custom-events.ts";
-import { type EngineBinding, GameEngine, parseEngineBinding, projectName } from "../../shared/game-engine.ts";
+import { type EngineBinding, parseEngineBinding, projectName } from "../../shared/game-engine.ts";
 import { ENGINE_LINKS_FOLDER, type PluginBinding } from "../../shared/plugins.ts";
 import { atomicWriteJson, readJsonIfExists } from "../fsx.ts";
 import { projectFileOf, restoreEngineBinding, writeEngineBinding } from "../game-engine-binding.ts";
@@ -116,7 +116,7 @@ function linkedRecord(
     pluginId,
     project: game,
     ...(title ? { title } : {}),
-    engine: GameEngine.Unreal,
+    engine: linked.kind,
     file: linked.project,
     name: projectName(linked.project),
     linkedAt: linked.linkedAt,

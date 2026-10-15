@@ -2,26 +2,23 @@
 
 ## What a folder holds
 
-A project is any folder: a web game, an Unreal game or plugin, Godot, Unity, Blender assets or a
-plugin's kind, several at once. These facts suggest; the first message or the person decides.
+A project is any folder, several kinds at once: a web game, an Unreal game or plugin, Godot, Unity,
+Blender assets or a plugin's kind. These facts suggest; the first message or the person decides.
 The sidebar names a non-game's kind (**Unreal plugin**, **Blender assets**).
 
 New game makes an empty folder; the first message picks its kind. A vague ask builds a web game;
-with an engine plugin on, a game with no kind asks which engine until picked. A port (an Unreal
-game from a web folder) snapshots first, keeping the web files as reference; the chat continues in
-the new kind.
+with an engine plugin on, a game with no kind asks which engine. A port snapshots first, keeping
+the web files as reference.
 
 ## Plugins on or off
 
 Engine buttons show only on their games. Asked for an engine whose plugin is off, the chat shows its
 card (**Turn on** or **Install…**; a cross puts it away), which only your click acts on. On your
-word agents continue without it, as for Godot: the lead and workers run its programs as background
-jobs in the chat's mode, look at its windows with `app_look` (never clicking), read its docs, or
-write you a plugin.
+word agents continue without it: background jobs, `app_look` at its windows (never clicking), its
+docs, or a plugin they write.
 
 A plugin loaded from a folder on this Mac starts off and runs with your access. Each tool
-asks before an agent runs it; Always allow lists that tool on its page under **Runs without
-asking**, with **Ask every time**. New code or turning it off clears those; its steps at Genex's
+asks before it runs; Always allow lists it under **Runs without asking**, with **Ask every time**. New code or turning it off clears those; its steps at Genex's
 moments never ask.
 
 ## Loops in place
@@ -40,12 +37,18 @@ Rewind saves, closes and reopens Unreal. Agents and blind judges play it with ke
 mouse. Mac games skip hardware ray tracing (it hung the GPU). An **Unreal plugin**
 project is a host project with the plugin in `Plugins/`; its tools build, test and package it.
 
+## Godot
+
+Godot 4.3+. Its button gets Godot, makes a **New Godot game** (2D/3D, `godot/`) and opens your
+editor, which saves for save points, reloads after Rewind. **Change project** links one
+anywhere (outside: no Loops or Rewind). Its `web/` build, redone each turn, plays in Live.
+
 ## Live's views
 
-Live shows what the folder holds: the web preview, the Unreal card (setup step, latest shot,
-**Open in Unreal**) or a run's pictures; only the preview has web controls. A web game plus Unreal
-project gets **Web game** and **Unreal** tabs, the last chosen remembered per game; a web build
-shown from the chat brings Web game forward.
+Live shows the web preview, an engine's card (latest shot and one step, such as **Open in
+Godot**) or run pictures; only the preview has web controls. A web game
+plus an engine project gets a tab each, the last chosen kept per game; a chat's web build brings
+Web game forward.
 
 ## Where to work
 

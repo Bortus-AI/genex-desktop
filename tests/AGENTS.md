@@ -42,6 +42,9 @@ through the JS API imports `@typescript/typescript6`.
   `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
   templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
   a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
+- `godot-fake-engine.ts`: a fake Mac with Godot apps where the test puts them, a runner that
+  records each Godot job and answers with Godot's recorded words (`fixtures/godot-cli/`), and the
+  Godot plugin's backend on both in an open game, its host calls recorded.
 - `unity-editor-stand-in.ts`: a Unity project folder, the descriptor Unity's Pipeline package
   keeps in it while an editor has it open, and a stand-in for that editor's HTTP server (scripted
   answers, every request recorded, a clock only `sleep` moves) as the Unity plugin's `PipelineDeps`;
@@ -124,6 +127,7 @@ file from the list for it. The informational fast-group report (a Windows dispat
 
 Tests that read local projects or open the network are skipped unless opted in:
 `STUDIO_LOCAL_FIXTURES=1` for local projects, `STUDIO_NETWORK_TESTS=1` for real network and
-local Ollama probes. Never make a default test depend on this machine. `STUDIO_RIG_UNSANDBOXED=1`
+local Ollama probes, `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
+(`godot-live.test.ts`). Never make a default test depend on this machine. `STUDIO_RIG_UNSANDBOXED=1`
 runs rigs without the process sandbox, for a container where it cannot start (no user
 namespaces); containment cases prove nothing there, and CI keeps the sandbox.

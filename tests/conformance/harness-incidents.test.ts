@@ -14959,3 +14959,44 @@ describe("a worker waiting on its provider when the user asks to finish", () => 
     assert.equal(stopped?.by, "user");
   });
 });
+
+describe("the close's sentence of an open Loop", () => {
+  it('SP1. a save point the lead gave no summary closes as its label alone, never with an empty "()" or ":"', async () => {
+    const { openCloseOf } = await import("../../src/harness-seed/loop/director/open/graph.ts");
+    const { newOpenJournal } = await import("../../src/harness-seed/loop/director/open/contract.ts");
+    const point = (label: string, summary: string) => ({
+      label,
+      summary,
+      snapshotId: "s",
+      auto: false,
+      at: 0,
+      notes: [],
+    });
+    const journal = (...savePoints: ReturnType<typeof point>[]) => ({ ...newOpenJournal(), savePoints });
+    assert.equal(openCloseOf(journal(point("Ship flies", "")), false).summary, "One save point: Ship flies.");
+    assert.equal(
+      openCloseOf(journal(point("Ship flies", ""), point("Rocks fall", "  ")), false).summary,
+      "2 save points; the last, Rocks fall.",
+    );
+    assert.equal(
+      openCloseOf(journal(point("Ship flies", "It turns and thrusts.")), false).summary,
+      "One save point: Ship flies (It turns and thrusts).",
+      "a summary's own full stop is not doubled",
+    );
+  });
+});
+
+describe("a plugin's web build and the chat's turn", () => {
+  it("WB1. a turn whose only change is a plugin's web build (Godot's export in web/) leaves the game's kind as it was: no new-kind continuation", async () => {
+    const { kindKey } = await import("../../src/harness-seed/loop/web-build.ts");
+    const before = [{ id: "godot-project", path: "godot" }];
+    const exported = [
+      ...before,
+      { id: "web-game", path: "web" },
+      { id: "godot-web-export", path: "web", source: "plugin:godot" },
+    ];
+    assert.equal(kindKey(exported), kindKey(before), "the build is no new kind");
+    const site = [...before, { id: "web-game", path: "site" }];
+    assert.notEqual(kindKey(site), kindKey(before), "a web game no plugin claims is one");
+  });
+});

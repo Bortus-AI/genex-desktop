@@ -10,22 +10,40 @@
  */
 
 /** The engines a game can build in, by their wire names. */
-export const GameEngine = { Web: "web", Unreal: "unreal" } as const;
+export const GameEngine = { Web: "web", Unreal: "unreal", Godot: "godot" } as const;
 export type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
 
+/** The engines a game can be linked to a project of: every one but the web. */
+export type LinkedEngine = Exclude<GameEngine, typeof GameEngine.Web>;
+
+const ENGINES: ReadonlySet<unknown> = new Set(Object.values(GameEngine));
+
 /** Whether `value` names an engine Genex knows. */
-export const isGameEngine = (value: unknown): value is GameEngine =>
-  value === GameEngine.Web || value === GameEngine.Unreal;
+export const isGameEngine = (value: unknown): value is GameEngine => ENGINES.has(value);
 
 /** The extension of an Unreal project file. */
 export const UPROJECT_EXTENSION = ".uproject";
+/** The file that makes a folder a Godot project; a Godot link records it. */
+export const GODOT_PROJECT_FILE = "project.godot";
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
+/**
+ * A game linked to an engine project: its project file (absolute, real path: an Unreal
+ * `.uproject`, or a Godot project's `project.godot`), its engine, and when Genex linked it.
+ */
 export type EngineBinding = {
-  kind: typeof GameEngine.Unreal;
+  kind: LinkedEngine;
   project: string;
   linkedAt: string;
 };
+
+/** The last part of a path, by either separator. */
+const baseName = (value: string) => value.split(/[\\/]/).pop() ?? value;
+
+/** The engine a project file belongs to by its name: `*.uproject` is Unreal's, `project.godot` Godot's; else none. */
+export function engineOfProjectFile(file: string): LinkedEngine | undefined {
+  if (file.toLowerCase().endsWith(UPROJECT_EXTENSION)) return GameEngine.Unreal;
+  return baseName(file) === GODOT_PROJECT_FILE ? GameEngine.Godot : undefined;
+}
 
 /** The longest project path Genex records; Unreal itself refuses far shorter ones. */
 const MAX_PROJECT_PATH = 1024;
@@ -34,34 +52,41 @@ const isAbsolute = (value: string) => value.startsWith("/") || /^[A-Za-z]:[\\/]/
 // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused.
 const CONTROL = /[\0-\x1f\x7f]/;
 
-/** Whether `value` is an absolute `.uproject` path spelled plainly: no `..` part, no control characters. */
+/** Whether `value` is an absolute project file path (`.uproject` or `project.godot`) spelled plainly: no `..` part, no control characters. */
 export function isProjectPath(value: unknown): value is string {
   if (typeof value !== "string" || !value || value.length > MAX_PROJECT_PATH) return false;
   if (!isAbsolute(value) || CONTROL.test(value)) return false;
-  if (!value.toLowerCase().endsWith(UPROJECT_EXTENSION)) return false;
+  if (!engineOfProjectFile(value)) return false;
   return !value.split(/[\\/]/).some((part) => part === "..");
 }
 
 /**
- * The binding a studio.json records, by shape only: the Unreal kind, a plain absolute `.uproject`
- * path and a date. Anything else, including a record for an engine Genex does not know, is no
- * binding: the game stays a web game.
+ * The binding a studio.json records, by shape only: a plain absolute project file path, the
+ * engine that file belongs to, and a date. Anything else, including a record for an engine Genex
+ * does not know or one whose kind isn't its file's, is no binding: the game stays a web game.
  */
 export function parseEngineBinding(raw: unknown): EngineBinding | undefined {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const record = raw as Record<string, unknown>;
-  if (record.kind !== GameEngine.Unreal || !isProjectPath(record.project)) return undefined;
+  if (!isProjectPath(record.project)) return undefined;
+  const kind = engineOfProjectFile(record.project);
+  if (!kind || record.kind !== kind) return undefined;
   const linkedAt =
     typeof record.linkedAt === "string" && !Number.isNaN(Date.parse(record.linkedAt)) ? record.linkedAt : "";
-  return { kind: GameEngine.Unreal, project: record.project, linkedAt };
+  return { kind, project: record.project, linkedAt };
 }
 
 /** The engine a game builds in: its binding's, else the web. */
 export const engineOf = (binding: EngineBinding | undefined | null): GameEngine => binding?.kind ?? GameEngine.Web;
 
-/** The project's name as Unreal shows it: the `.uproject` file name without its extension. */
+/**
+ * The project's name as its engine's project list shows it at a glance: an Unreal `.uproject`'s file
+ * name without its extension, a Godot project's folder name.
+ */
 export function projectName(project: string): string {
-  const file = project.split(/[\\/]/).pop() ?? project;
+  const parts = project.split(/[\\/]/).filter(Boolean);
+  const file = parts.at(-1) ?? project;
+  if (engineOfProjectFile(project) === GameEngine.Godot) return parts.at(-2) ?? file;
   return file.slice(0, file.length - UPROJECT_EXTENSION.length);
 }
 

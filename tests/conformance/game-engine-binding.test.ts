@@ -124,6 +124,12 @@ test("records an agent wrote by hand only count when their shape is right", () =
     { kind: "unreal", project: "/a/../b.uproject" },
     { kind: "unreal", project: "/a/b.umap" },
     { kind: "unreal", project: 42 },
+    { kind: "unreal", project: "/a/Moon/project.godot" },
+    { kind: "godot", project: "/a/Moon" },
+    { kind: "godot", project: "/a/Moon/project.godot.bak" },
+    { kind: "godot", project: "/a/Moon/Project.godot" },
+    { kind: "godot", project: "Moon/project.godot" },
+    { kind: "godot", project: "/a/../Moon/project.godot" },
   ];
   for (const raw of cases) assert.equal(parseEngineBinding(raw), undefined, JSON.stringify(raw));
   assert.deepEqual(parseEngineBinding({ kind: "unreal", project: "/a/B.uproject", linkedAt: "nonsense" }), {
@@ -131,6 +137,11 @@ test("records an agent wrote by hand only count when their shape is right", () =
     project: "/a/B.uproject",
     linkedAt: "",
   });
+  assert.deepEqual(
+    parseEngineBinding({ kind: "godot", project: "/a/Moon/project.godot", linkedAt: "2026-10-15T00:00:00.000Z" }),
+    { kind: GameEngine.Godot, project: "/a/Moon/project.godot", linkedAt: "2026-10-15T00:00:00.000Z" },
+    "a Godot project's project.godot, kind godot",
+  );
 });
 
 test("Undo puts back the record a link replaced, or none", async () => {

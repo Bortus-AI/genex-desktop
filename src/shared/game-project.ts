@@ -132,6 +132,19 @@ export interface ProjectShape {
 export interface PlayCommand {
   command: string;
   args: string[];
+  /**
+   * An engine an enabled plugin runs for the game instead (a Godot game's own Godot): the plugin's
+   * declared native runtime, by its id, and its arguments. The studio finds the runtime where the
+   * plugin says it is and starts it in its native-job sandbox with a window and the GPU, which an
+   * engine needs to draw; the command stays for a person to run. Absent when unusable.
+   */
+  engine?: PlayEngine;
+}
+
+/** An engine runtime a plugin declares, by id, and the arguments the studio starts it with. */
+export interface PlayEngine {
+  runtime: string;
+  args: string[];
 }
 
 /** What the served page does with the contract the judge reads — a word, not a sentence. Wire values: never rename one. */

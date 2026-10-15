@@ -113,6 +113,7 @@ const METHODS = [
   "showBuild",
   "snapshot",
   "start",
+  "startEngine",
   "stop",
   "stopJob",
   "stopLive",

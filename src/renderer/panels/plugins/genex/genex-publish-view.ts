@@ -25,7 +25,8 @@ import {
 } from "../../../../shared/genex.ts";
 import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin-toolbar.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
-import { type FactRef, type FolderHolds, type GameKind, servedAsWebGame } from "../../../../shared/project-facts.ts";
+import type { FactRef, FolderHolds, GameKind } from "../../../../shared/project-facts.ts";
+import { publishesAsWebGame } from "../../../../shared/project-workspace.ts";
 import { MINUTE_MS } from "../../../../shared/duration.ts";
 import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../../../../shared/feedback.ts";
 import { relativeTime } from "../../../chat-labels.ts";
@@ -317,12 +318,13 @@ export const isGenexPublish = (entry: PluginToolbarEntry): boolean =>
 
 /**
  * Whether Publish can put a game holding these facts (and, with none, `holds`) on Genex. Publish uploads the game folder as a
- * web game, so only a game served as one at its root has Publish; an Unreal game's folder holds an
+ * web game, so only a game served as one at its root, or with its web game in a folder of it (an
+ * engine's web export), has Publish; an Unreal game's folder holds an
  * Unreal project and no web build, and any other kind of project none either. The host refuses the
  * same games (`main/core/genex-publish.ts`).
  */
 const publishable = (facts: readonly FactRef[], holds: FolderHolds | undefined): boolean =>
-  servedAsWebGame({ facts, holds });
+  publishesAsWebGame({ facts, holds });
 
 /** Whether a plugin is the Genex plugin, installed but switched off. */
 const isGenexOff = (plugin: PluginInfo): boolean =>

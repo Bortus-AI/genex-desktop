@@ -246,10 +246,11 @@ notes is told to read them first); with an engine plugin's kind on offer (`plugi
 `kinds`) every fresh brief until it has a kind asks with the question card, and a brief without the
 card (a local turn's too) names each kind's tool for a request that names that engine. A folder of its own files of a kind no
 rule knows is told to look through them first. Each kind gets its own rules, named by folder when
-there are several. A kind no plugin covers (Godot, Unity, Blender, an Unreal plugin, an Unreal project
-with the plugin off, an unknown one) calls `plugins_find` first, shows the card with
+there are several. A kind no plugin that is on covers (Unity, Blender, an Unreal plugin, a Godot or
+Unreal project with its plugin off, an unknown one) calls `plugins_find` first, shows the card with
 `plugins_suggest` and ends its reply, offers to write a plugin when none fits, and goes on with its
-files and the shell only on the person's word (`pluginFirstRule`). An Unreal project the game is not
+files and the shell only on the person's word (`pluginFirstRule`); a kind a plugin that is on makes
+(one of `kinds` names it, as Godot's plugin does Genex's own `godot-project`) skips that. An Unreal project the game is not
 linked to is never worked on through the Unreal tools: they reach the Unreal panel's project until
 `use-project` links it. A local turn's
 operating rules are split: `prompts/operating-rules.md` for every turn and
@@ -704,7 +705,7 @@ resume of a run that runner wrote, to the Unreal runner (`loop/loop-switch.ts`) 
 Loop passes on the one Loop. Through the real studio (`one-loop-projects.test.ts`), a Loop on the toy
 plugin's project, and on a copy of that plugin with every tool renamed, runs the plugin's steps at its
 moments, its worker type and its observer, and ends on the reviewer's yes with no seed change; a Loop
-on a Godot folder with no plugin runs with Genex's own tools, lends no window and writes no web file.
+on a Godot folder with its plugin off runs with Genex's own tools, lends no window and writes no web file.
 
 One seam per worker. In a game the user brought, a worker is given a path, a folder or a glob to
 own (`*` and `?` stop at a slash, `**` crosses them; a glob must be quoted in the tool call), and

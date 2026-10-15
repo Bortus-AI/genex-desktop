@@ -75,6 +75,7 @@ import {
   customPayload,
 } from "../../src/shared/custom-events.ts";
 import * as duration from "../../src/shared/duration.ts";
+import { TargetRuntime } from "../../src/shared/computer-target.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
 import { ToolPermissionState } from "../../src/shared/permissions.ts";
 import {
@@ -513,6 +514,8 @@ describe("vocabularies (src/shared ↔ the seed's copies)", () => {
 
   it("names the same game engines as the app's engine record", () => {
     assert.deepEqual(seedGameEngine.GameEngine, GameEngine);
+    // The runtimes a game's studio.json may name, as the seed spells them (folder-facts.ts).
+    assert.deepEqual(seedFolderFacts.GameRuntime, { Browser: TargetRuntime.Browser, Bridge: TargetRuntime.Bridge });
     assert.equal(seedGameEngine.engineOfGame(undefined), GameEngine.Web);
     const linked = { engine: { kind: GameEngine.Unreal, project: "/p/A.uproject", linkedAt: "" } } as const;
     assert.equal(seedGameEngine.engineOfGame(linked), GameEngine.Unreal);

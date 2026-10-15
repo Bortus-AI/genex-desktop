@@ -1249,8 +1249,10 @@ Available services are capability checked and scoped to the calling plugin:
 - `storage.root`: plugin-owned durable storage, outside games and exports.
 - `project.read` / `project.write`: relative files in the bound worktree; private/internal paths
   and traversal are refused. Existing parent directories are required for writes.
-- `assets.deliver`: copy plugin-owned output into a unique project asset directory, refusing
-  symlinks and overwrites; requires `project.write`. Studio records each delivery in the project's
+- `assets.deliver`: copy plugin-owned output into a unique project asset directory
+  (`assets/<plugin>/<job>/`: under `public/` for a web game with a build, under a Godot project's
+  folder when the game has no web game at its root, `deliveryFolderFor` in
+  `shared/project-workspace.ts`), refusing symlinks and overwrites; requires `project.write`. Studio records each delivery in the project's
   log as a host-owned `asset_delivered` event (plugin id, job id, files, sizes, kinds) and shows it
   on the Assets stage tab; plugins do not need to emit anything for that, and a ledger failure
   never fails the delivery.
@@ -1281,7 +1283,8 @@ Available services are capability checked and scoped to the calling plugin:
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
   `genex` settings), read only when that file lives inside the game.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
-  the bound game to an Unreal project file, read its link, or show the plugin's steps card in the
+  the bound game to an engine project file (an Unreal `.uproject`, or a Godot project's
+  `project.godot`: the file names the link's `kind`), read its link, or show the plugin's steps card in the
   calling chat (see "A game's engine" below).
 - `game.snapshot {reason}` (capability `game-engine`): an ordinary game snapshot of the bound game,
   listed in Rewind under `reason`, taken before the plugin changes files there (the Unreal plugin,
@@ -1579,11 +1582,12 @@ runner covers adding C++ with its own wait (`whileAdding`).
 
 `observers` (API 3, `substrate/plugins/observer-manifest.ts`; vocabulary in `shared/observers.ts`)
 names what Genex can capture of a project, as evidence a reviewer reads: up to 8 `{id, facts, tool,
-live?, label?}`. `id` is a slug (`^[a-z][a-z0-9-]{0,39}$`, unique in the manifest), never `preview` or
+live?, label?, status?}`. `id` is a slug (`^[a-z][a-z0-9-]{0,39}$`, unique in the manifest), never `preview` or
 `proof`, which are Genex's own; `facts` is 1–8 fact ids, each once; `tool` is one of the manifest's
 tools as a hook's is chosen (only the harness calls it, it asks nothing and runs no host program);
-`live` is the Live view Genex draws for it: `stills` (any plugin) or `unreal-card` (only the bundled
-Unreal plugin); `label` names that view's tab when a folder has more than one view (1–24 printable
+`live` is the Live view Genex draws for it: `stills` or `card` (any plugin), or `unreal-card` (only
+the bundled Unreal plugin); `status` (a `card` only, which needs it) names an action of the manifest
+that asks nothing; `label` names that view's tab when a folder has more than one view (1–24 printable
 characters on one line, not blank; shown as plain text), else the tab takes the plugin's `name`. A
 label that repeats, in any case, a name the stage strip already shows (a reserved toolbar label such
 as `Live`, `Builds` or `Assets`, or Genex's own `Web game` and `Unreal`) is refused. Only
@@ -1617,18 +1621,25 @@ was kept; the checkpoint's own answer is unchanged; a chat's checkpoint keeps no
 as `images` when Unreal answers, and nothing when it doesn't.
 
 Live's views of a game come from these observers (`renderer/live-views.ts` `liveViewsFor`), one per
-kind of view and one per `stills` observer, ordered: the Unreal project the game's engine link names first, then the game's root,
-then by view (the Unreal card, Genex's preview, a plugin's `stills`), then by folder. The first is the
+kind of view and one per `stills` or `card` observer, ordered: the Unreal project the game's engine link names first, then the game's root,
+then by view (the Unreal card or a plugin's `card`, Genex's preview, a plugin's `stills`), then by folder. The first is the
 default. A folder with one view keeps the strip's Live tab; one with more (a web game and an Unreal
 project) gets a tab per view in Live's place (`panels/stage/stage-tabs.ts`): "Web game", "Unreal", or
-a `stills` observer's `label`; the default's tab keeps `data-stage-action="live"`, the others
-`live-<view>` (`live-unreal-card`), a `stills` view's with its observer key (`live-stills-<plugin>/<observer>`). The last one chosen is remembered per game
+a plugin observer's `label`; the default's tab keeps `data-stage-action="live"`, the others
+`live-<view>` (`live-unreal-card`), a plugin view's with its observer key (`live-stills-<plugin>/<observer>`, `live-card-<plugin>/<observer>`). The last one chosen is remembered per game
 (`studio.liveView.<game>`), and a web build put on the stage brings the Web game view forward. `unreal-card` is the Unreal card (where the project stands, and the
 newest viewport capture as its shot, else the newest save point's still); Genex draws it for any
 Unreal project fact, whatever the plugin list says (off, removed, older, not read yet). `preview` is
 the web preview, also for a game with no kind yet; no plugin's `stills` take it over. A plugin's
-`stills` count only while the plugin is on, never from an unlisted package. A folder no observer
-draws (Godot, Blender, files of its own) shows the newest capture's pictures of the run the stage
+`stills` and `card` count only while the plugin is on, never from an unlisted package. A `card`
+(`panels/stage/PluginCardStage.tsx`, `[data-stage-plugin-card="<plugin>/<observer>"]`) is drawn as
+the Unreal card is: the observer's newest capture as its shot, else the newest save point's still,
+the game's name, and the answer of its `status` action, asked every 3 s while it shows and read by
+`shared/plugin-stage-card.ts` `stageCardFrom`: `{line, hint?, button?}`, each one printable line (160
+characters, a label 40), the button `{label, action}` naming an action the manifest declares (run as
+the panel runs it, a confirmed one asking natively) or `{label, panel: true}` opening the plugin's
+toolbar panel; anything else is dropped, and no `line` shows the game's name and "Plays in <plugin>.". A folder no observer
+draws (Godot with its plugin off, Blender, files of its own) shows the newest capture's pictures of the run the stage
 shows, or of the newest earlier run that kept some (`data-live-view="stills"`), else a sentence.
 Run, Reload, Sound and Full screen show, and Live probes a page, only while the view is the preview.
 A `stills` observer's view shows its own newest capture the same way.
@@ -1723,7 +1734,8 @@ description come from the live plugin list when the plugin is installed: **Turn 
 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
 link and the host makes it (`substrate/plugins/engine-links.ts`). `game.engine.link {project}`
-checks the `.uproject` by real path (absolute, no `..`, a regular file once every link is
+checks the project file (a `.uproject`, kind `unreal`, or a `project.godot`, kind `godot`;
+`shared/game-engine.ts` `engineOfProjectFile`) by real path (absolute, no `..`, a regular file once every link is
 resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
 linkedAt, previous}`, which the plugin's MCP servers read and agents can't write), mirrors it into
 the game's `studio.json` as `engine` (`substrate/game-engine-binding.ts`; believed only while the
@@ -2458,6 +2470,10 @@ each opened without following links and checked by device and inode (`copyDeclar
 link, a hard-linked file or a file swapped during delivery is refused. A pinned `.dmg` runtime is
 copied with its relative links kept (`copyRuntimeTree`; a link out of the runtime is refused) and
 probed after the image is detached.
+A runtime's version is `x.y.z` or `x.y` (read as `x.y.0`). An enabled plugin's runtime also starts a
+bridge game whose `studio.json` play names it as its `engine` (docs/play-protocol.md): the studio
+detects it as above and runs it long-lived in the same profile with the GPU, its stdio open.
+
 `native.jobs` / `native.result` read recorded jobs and never replay an interrupted operation.
 The backend then calls `assets.deliver`, stores the reference and verifies actual preview use.
 Raw host output roots and process logs should stay in the trusted setup UI, not agent results.
@@ -2465,6 +2481,52 @@ Raw host output roots and process logs should stay in the trusted setup UI, not 
 files must match the saved result byte-for-byte; changed files and symlinks fail without being
 overwritten. Missing files can be restored, and only new bytes count against the remaining
 project allowance. Retrieving a native result never reruns its generation recipe.
+
+The bundled Godot plugin (`src/plugins/godot`) starts Godot from its backend through the same
+sandbox (`runNativeProcess` in `godot-run.ts`) rather than `native.run`, because a check, a run or a
+still needs the whole project, not staged inputs: each job reads Genex's shipped GDScript, writes
+only the project (Godot's `.godot/` cache) and the job's own folder, gets a private home (a game's
+`user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
+(`gpu`). Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
+it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
+Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
+`[editor_plugins]` in `project.godot`). Its hooks reach the person's open editor through files in the
+project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a heartbeat each second
+(fresh for 5 s), Genex leaves `ask-<id>.json` (`save` or `reload`) and the editor answers
+`answer-<id>.json` within 15 s, every file written whole and none through a link. `save-all` at
+`checkpoint.before` saves the open scenes and the changed scripts whose text Godot holds, noting
+scripts left unsaved or an editor that didn't answer; at `restore.before` either one blocks, so a
+restore never replaces work the editor still holds. `reload-editor` at `restore.after` rescans and
+reloads the open scenes. With no editor beating, each answers nothing.
+Its panel is an engine panel (design README): This game's project (state, the step: Set up for
+Genex or Open in Godot, Change project, ⋯ Export for the web) and This computer (Godot, the Web
+template), and Choose a project behind Change project: New project on top, then the person's Godot
+projects (`find-projects.ts`: Godot's own `projects.cfg` and Documents › Godot Projects or
+GodotProjects one level down, each once by real path, at most 12) tagged In use or Outside game,
+and Choose a project.godot…. `use-project {folder}` links the game to that project
+(`game.engine.link`, kind `godot`); every tool, hook and the observer then work in the project the
+link names (`project-link.ts` `projectOf`), else in the game's own. A game linked outside its
+folder gets no Loop and a Rewind note (`renderer/linked-project.ts`), its brief says the work
+happens there, Set up installs the addon there (bin/play naming it by its path), and the chat's
+session, leads, workers and Genex's play engine reach that folder.
+`web-export` (agent tool, and the panel's Export for the web) writes Godot's Web export into `web/`
+at the game's root (`web-export.ts`): Genex's own `Genex Web` preset (no threads) added to
+`export_presets.cfg` beside the person's, `web/.gdignore`, and the person's Web template for that
+version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`, installed by
+Godot's Export Template Manager) linked read-only into the job's private home; without it the tool
+is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+whenever the project changed since the last build (its `.pck` older than the project's newest file,
+`.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
+nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder
+with `index.pck`); a plugin's web build is no new kind (the seed's `web-build.ts` `kindKey`), so a
+turn that only exported never continues as one for a new kind, and the session's end tells the app's
+game list its facts changed (`delegation.ts` `#announceKindTaken`). A game with no web game at its root plays and publishes its first web game in a
+folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
+`index.html`, and Publish uploads the folder in the root's place; Multiplayer stays off for it, as
+the chat never edits a build. Godot writes the exported settings through its own temporary name
+(`tmpproject.binary-*`) in macOS's per-user temporary folder, the one place outside the project an
+export may write (`writePrefixes` in the native profile: one name's prefix, never a folder). A web game a plugin's fact also
+claims is told to chats as a web build, never with the web template's rules.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted
 executable code, as disclosed at installation. The isolated custom panel has no Node or IPC.

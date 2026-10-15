@@ -115,8 +115,9 @@ CLI refuses a feature flag it does not know; a listing that fails is asked for a
 A game engine joins through the Genex Play Protocol ([play-protocol.md](play-protocol.md)): a small
 plugin inside the game answers about a dozen JSON commands (hello, screenshot, pointer, key, type,
 look, act, pause, play, step, reset, state). A project declares it in `studio.json`
-(`"runtime": "bridge"`, `"play": {"command", "args"}`, the command resolved by real path inside the
-project); the delegation then gives every role a `GameBridgeTarget`
+(`"runtime": "bridge"`, `"play": {"command", "args", "engine"?}`, the command resolved by real path
+inside the project, the engine a runtime an enabled plugin declares and the studio starts in its
+native-job sandbox with the GPU, as Godot needs to draw); the delegation then gives every role a `GameBridgeTarget`
 ([`src/main/core/game-bridge-target.ts`](../src/main/core/game-bridge-target.ts)) whose game runs in
 the `ProcessSandbox`. The playtest shorthands are not offered there; its moves are drawn on the
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared

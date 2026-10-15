@@ -1376,6 +1376,13 @@ export type ProjectKind =
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts
 
+/** An engine runtime a plugin declares, by id, and the arguments the studio starts it with. */
+export interface PlayEngine {
+  runtime: string;
+  args: string[];
+}
+// ↑ src/shared/game-project.ts
+
 /**
  * The command that starts a Play Protocol game, as studio.json declares it: a plain path inside
  * the project (resolved by real path before it runs) and its arguments, each passed as one word.
@@ -1383,6 +1390,13 @@ export type GameRuntime = 'browser' | 'bridge';
 export interface PlayCommand {
   command: string;
   args: string[];
+  /**
+   * An engine an enabled plugin runs for the game instead (a Godot game's own Godot): the plugin's
+   * declared native runtime, by its id, and its arguments. The studio finds the runtime where the
+   * plugin says it is and starts it in its native-job sandbox with a window and the GPU, which an
+   * engine needs to draw; the command stays for a person to run. Absent when unusable.
+   */
+  engine?: PlayEngine;
 }
 // ↑ src/shared/game-project.ts
 
@@ -1432,8 +1446,19 @@ export interface ProjectShape {
 }
 // ↑ src/shared/game-project.ts
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
-export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
+/** The engines a game can be linked to a project of: every one but the web. */
+export type LinkedEngine = 'unreal' | 'godot';
+// ↑ src/shared/game-engine.ts
+
+/**
+ * A game linked to an engine project: its project file (absolute, real path: an Unreal
+ * `.uproject`, or a Godot project's `project.godot`), its engine, and when Genex linked it.
+ */
+export type EngineBinding = {
+  kind: LinkedEngine;
+  project: string;
+  linkedAt: string;
+};
 // ↑ src/shared/game-engine.ts
 
 export type FactSource = 'core' | 'link' | 'scaffold';

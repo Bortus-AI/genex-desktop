@@ -78,8 +78,15 @@ const ROOT = FACT_ROOT;
 
 /** The facts an engine of the older vocabulary stands for: its fact at the game's root (the app's `factsOfEngine`). */
 export function factsOfEngine(engine: GameEngine): FactRef[] {
-  return [{ id: engine === GameEngine.Unreal ? CoreFact.UnrealProject : CoreFact.WebGame, path: ROOT }];
+  return [{ id: ENGINE_FACT[engine], path: ROOT }];
 }
+
+/** The fact each engine stands for (the app's `ENGINE_FACT`). */
+const ENGINE_FACT: Readonly<Record<GameEngine, string>> = {
+  [GameEngine.Web]: CoreFact.WebGame,
+  [GameEngine.Unreal]: CoreFact.UnrealProject,
+  [GameEngine.Godot]: CoreFact.GodotProject,
+};
 
 /**
  * The facts of a game descriptor: the ones it carries. One from a host that predates facts reads by
@@ -135,6 +142,18 @@ export function servedFactsKey(game: FactsOfDescriptor): string {
     .map((fact) => `${fact.id}@${fact.path}`)
     .sort()
     .join("\n");
+}
+
+/** How a game runs, as its studio.json declares it: the app's `TargetRuntime` a game may name (held to it by seed-contracts). */
+export const GameRuntime = { Browser: "browser", Bridge: "bridge" } as const;
+export type GameRuntime = (typeof GameRuntime)[keyof typeof GameRuntime];
+
+/**
+ * Whether the game is its own process Genex starts and plays through the Play Protocol: its
+ * studio.json declares the bridge runtime and a play command (a Godot game Genex set up does).
+ */
+export function playsThroughBridge(game: Pick<GameProject, "shape"> | null | undefined): boolean {
+  return game?.shape?.runtime === GameRuntime.Bridge && Boolean(game.shape.play);
 }
 
 /**

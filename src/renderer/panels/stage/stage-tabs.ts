@@ -21,7 +21,8 @@ const TAB_NAME_TAIL = 10;
 
 /**
  * What starts the key of a Live view's tab other than the default's: `live-unreal-card`,
- * `live-preview`, and for a plugin's pictures its observer key too, `live-stills-<plugin>/<observer>`.
+ * `live-preview`, and for a plugin's pictures or card its observer key too,
+ * `live-stills-<plugin>/<observer>`, `live-card-<plugin>/<observer>`.
  */
 const LIVE_TAB_PREFIX = `${StageView.Live}-`;
 
@@ -32,7 +33,7 @@ const PLAIN_VIEWS: readonly StageView[] = [StageView.Builds, StageView.Assets, S
 export type StageTabKey =
   | StageView
   | `${typeof StageView.Live}-${ObserverLive}`
-  | `${typeof StageView.Live}-${typeof ObserverLive.Stills}-${string}`;
+  | `${typeof StageView.Live}-${typeof ObserverLive.Stills | typeof ObserverLive.Card}-${string}`;
 
 /** One tab of the strip's view switcher: its key, its name and, for a file opened beside, its glyph. */
 export interface StageTab {
@@ -51,11 +52,13 @@ function shortName(name: string): string {
 
 /**
  * A Live view's tab key: Live's own for the default view (the first), else Live's with the view's
- * kind, and for a plugin's pictures (one view per observer) with its observer key as well.
+ * kind, and for a plugin's pictures or card (one view per observer) with its observer key as well.
  */
 function liveTabKey(view: LiveView, index: number): StageTabKey {
   if (index === 0) return StageView.Live;
-  if (view.live === ObserverLive.Stills && view.observer) return `${StageView.Live}-${view.live}-${view.observer}`;
+  if (!view.observer) return `${StageView.Live}-${view.live}`;
+  if (view.live === ObserverLive.Stills || view.live === ObserverLive.Card)
+    return `${StageView.Live}-${view.live}-${view.observer}`;
   return `${StageView.Live}-${view.live}`;
 }
 

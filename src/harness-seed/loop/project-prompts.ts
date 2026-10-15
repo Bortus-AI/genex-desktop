@@ -7,6 +7,7 @@
 import type { PluginKindOffer } from "../types/host-api.d.ts";
 import { CoreFact, type FactRef, FolderHolds, PLUGIN_FACT_SOURCE_PREFIX, ProjectTool } from "./folder-facts.ts";
 import { toolCall } from "./model-roles.ts";
+import { pluginWebBuilds, WEB_BUILD_WORDS } from "./web-build.ts";
 // A kept older `unreal-prompts.ts` exports only what it did: new names live here, never there.
 import { engineChoiceRule, UNREAL_NEW_GAME_TOOL } from "./unreal-prompts.ts";
 
@@ -67,7 +68,16 @@ const NO_FACT_WORDS = {
 /** What the folder holds, in words: each kind and where, or what a folder with no facts holds. */
 function holdsWords(facts: readonly FactRef[], holds?: FolderHolds | null): string {
   if (facts.length === 0) return NO_FACT_WORDS[holds ?? FolderHolds.Nothing];
-  return facts.map((fact) => `${factWords(fact.id)} ${whereWords(fact.path)}`).join(", ");
+  // A plugin's web build is one thing in its folder: the web page, named as the build it is.
+  const builds = pluginWebBuilds(facts);
+  return facts
+    .filter((fact) => !builds.has(fact.path) || fact.id === CoreFact.WebGame)
+    .map((fact) =>
+      builds.has(fact.path)
+        ? `${WEB_BUILD_WORDS} ${whereWords(fact.path)}`
+        : `${factWords(fact.id)} ${whereWords(fact.path)}`,
+    )
+    .join(", ");
 }
 
 /**
@@ -167,10 +177,12 @@ const detectedByPlugin = (fact: FactRef & { source?: string }) =>
 /**
  * The rules of a kind Genex has no rules of its own for: for one of Genex's own kinds, or a plugin's
  * kind its plugin's `detect` didn't find (held by a scaffold's record), a plugin is looked for first
- * (`pluginFirstRule`); one an enabled plugin detected has that plugin on already.
+ * (`pluginFirstRule`); one an enabled plugin detected, or one a plugin that is on makes (`made`: a
+ * kind on offer names it, as the bundled Godot plugin does Genex's own Godot project), has that
+ * plugin on already.
  */
-export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }): string[] {
-  if (!isCoreFact(fact.id) && detectedByPlugin(fact)) return [factLine(fact)];
+export function ownKindRules(engine: string | undefined, fact: FactRef & { source?: string }, made = false): string[] {
+  if (made || (!isCoreFact(fact.id) && detectedByPlugin(fact))) return [factLine(fact)];
   return [pluginFirstRule(engine, `the fact "${fact.id}"`), factLine(fact)];
 }
 

@@ -42,6 +42,7 @@ import type {
 import type { EngineBinding } from "../shared/game-engine.ts";
 import {
   CoreFact,
+  ENGINE_FACT,
   FactSource,
   FolderHolds,
   type GameKind,
@@ -377,15 +378,16 @@ const scaffoldRules = (scaffold: ScaffoldRecord | null): SourcedFactRule[] =>
   (scaffold?.facts ?? []).map((rule) => ({ rule, source: FactSource.Scaffold }));
 
 /**
- * The engine link as a fact: `unreal-project` at the linked `.uproject`'s folder, relative to the
- * game (`.` for its root), or absolute when the project lies outside it.
+ * The engine link as a fact: its engine's project (`unreal-project`, `godot-project`) at the linked
+ * project file's folder, relative to the game (`.` for its root), or absolute when the project lies
+ * outside it.
  */
 async function linkFact(dir: string, engine: EngineBinding): Promise<ProjectFact> {
   const root = await realpath(dir).catch(() => dir);
   const folder = path.dirname(engine.project);
   const inside = isInside(root, folder);
   const at = inside ? toPosixRelative(path.relative(root, folder)) || "." : folder;
-  return { id: CoreFact.UnrealProject, path: at, source: FactSource.Link };
+  return { id: ENGINE_FACT[engine.kind], path: at, source: FactSource.Link };
 }
 
 /** A cover the user (or a render they asked for) chose: a custom shader, or a recipe that is not a placeholder. */
@@ -1049,9 +1051,9 @@ export class GameWorkspaces {
     const recorded = scaffold ?? (await readScaffold(dir));
     const detected = await detectFacts(dir, [...this.#factRules(), ...scaffoldRules(recorded)]);
     if (!engine) return detected;
-    // The link stands for the game's Unreal project: a project file it holds besides (one the game
-    // made before it was switched to another) is no second one, and its files are the link's own.
-    const others = detected.filter((fact) => fact.id !== CoreFact.UnrealProject);
+    // The link stands for the game's project of its engine: a project file it holds besides (one the
+    // game made before it was switched to another) is no second one, and its files are the link's own.
+    const others = detected.filter((fact) => fact.id !== ENGINE_FACT[engine.kind]);
     return settleFacts([await linkFact(dir, engine), ...others]);
   }
 

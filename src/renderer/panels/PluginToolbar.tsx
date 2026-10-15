@@ -11,7 +11,7 @@ import type { Dispatch, JSX, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { GENEX_PLUGIN_ID, GENEX_PUBLISH_PANEL } from "../../shared/genex.ts";
-import type { FactRef, FolderHolds } from "../../shared/project-facts.ts";
+import type { FactRef, FolderHolds, GameKind } from "../../shared/project-facts.ts";
 import {
   type PluginToolbarEntry,
   shownToolbarStatus,
@@ -43,6 +43,7 @@ import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
 import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
+import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PanelSurface } from "./panel-bridge.ts";
@@ -502,6 +503,10 @@ function StudioPublishButton({ onPress, folded }: { onPress: () => void; folded:
   );
 }
 
+/** Whether Multiplayer stands on the strip for this game (`showsMultiplayer`): never on an engine's web export. */
+const multiplayerOn = (publish: boolean, emptyGame: boolean, game: GameKind): boolean =>
+  showsMultiplayer({ publish, emptyGame, webExport: webFolderOf(game) !== null });
+
 export function PluginToolbar({
   plugins,
   project,
@@ -531,7 +536,7 @@ export function PluginToolbar({
   }, [entries, panel]);
   const genexPublish = entries.find(isGenexPublish);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
-  const multiplayerShown = showsMultiplayer(Boolean(genexPublish) || studioPublish.shown, emptyGame);
+  const multiplayerShown = multiplayerOn(Boolean(genexPublish) || studioPublish.shown, emptyGame, { facts, holds });
   // Multiplayer is the plugin's: its Publish shows while it is off, but only an on Genex makes a game multiplayer.
   const multiplayer = useMultiplayer(
     project,
