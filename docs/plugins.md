@@ -271,7 +271,8 @@ tools (`delegation-prompts.ts`).
   `Close <title>`); the native game view is hidden while it is open.
 - `requiresProject` (default `true`) hides the button until a game is loaded.
 - `facts` (API 3, 1–8 fact ids) shows the button only on a game served by one of them (an
-  engine's project); absent, every game. Out of its facts the button is still
+  engine's project); absent, every game. An engine plugin's button always names them and an `icon`,
+  and its panel follows [Engine panels](../design/genex/README.md#engine-panels). Out of its facts the button is still
   asked for its status and shows while that status says `shown: true` (its chat chose the engine
   before the project exists); `visibleToolbarEntries` in `shared/plugin-toolbar.ts` decides.
 - Buttons render as `button[data-plugin-toolbar="<plugin>:<item>"]` immediately after the
@@ -1901,8 +1902,11 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 
 #### The panel and the toolbar button
 
-The toolbar button (`unity:editor`, labelled Unity, only on a game with a Unity project: `facts`) opens the plugin's
-one panel (`panel.html`, also on the plugin's page). The button's status action `toolbar-status`
+The toolbar button (`unity:editor`, labelled Unity with the `box` icon, only on a game with a Unity
+project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
+[engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
+in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
+newest Unity installed). The button's status action `toolbar-status`
 and the panel's `status` answer the same look (`panel-status.ts`), which only reads: the installed
 editors, the project the game's folder holds and whether its manifest asks for the Pipeline
 package, whether an editor has it open, and one `GET /api/editor_status`. It sends the editor no

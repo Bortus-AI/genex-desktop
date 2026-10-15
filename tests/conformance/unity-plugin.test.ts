@@ -138,6 +138,7 @@ describe("the bundled Unity plugin", () => {
         id: "editor",
         label: "Unity",
         ariaLabel: "Unity Editor",
+        icon: "box",
         facts: [CoreFact.UnityProject],
         target: { kind: "panel", id: "editor" },
         status: UnityAction.ToolbarStatus,

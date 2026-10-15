@@ -15,6 +15,7 @@ import type { FactRef, FolderHolds } from "../../shared/project-facts.ts";
 import {
   type PluginToolbarEntry,
   shownToolbarStatus,
+  toolbarGlyph,
   toolbarReaction,
   toolbarStatusFrom,
   MultiplayerPress,
@@ -305,7 +306,7 @@ function ToolbarButton({
         disabled={disabled}
         onClick={press}
       >
-        <ToolbarIcon icon={entry.item.icon} />
+        <ToolbarIcon icon={toolbarGlyph(entry.item, folded)} />
         <span className={folded ? "sr-only" : undefined}>{entry.item.label}</span>
         <ToolbarBadge id={badgeId} update={Boolean(update)} status={status} folded={folded} />
       </Button>

@@ -458,7 +458,10 @@ quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both fac
 [engine panel](#engine-panels): the project block's head carries its state in the toolbar's words
 and tone (Not set up, Not open, Starting, Ready as the green dot alone, Unreal busy, Not answering,
 Not connected), its foot one primary (held, not hidden, while Unreal is busy), Change project and a
-⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. While Live or Builds loads, a 52×36
+⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. The Unity
+panel is the same: its project block (cube tile, `unity/`, state in the button's words, the step,
+Engine, one primary and a quiet action at the foot's end) and This computer (the newest Unity, ticked
+once it is Unity 6); its strip button folds to the cube. While Live or Builds loads, a 52×36
 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
 at least 0.6s and fades out (150ms) before the native view is uncovered.
 

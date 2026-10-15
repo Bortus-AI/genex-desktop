@@ -255,6 +255,7 @@
       "id": "editor",
       "label": "Unity",
       "ariaLabel": "Unity Editor",
+      "icon": "box",
       "facts": ["unity-project"],
       "target": { "kind": "panel", "id": "editor" },
       "status": "toolbar-status"
