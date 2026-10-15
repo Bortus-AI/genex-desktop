@@ -165,10 +165,10 @@ export interface PluginManifestTool extends PluginTool {
 
 /**
  * An engine a game builds in: `web` (three.js in the browser, every game unless Genex linked it to
- * an engine project) or `unreal`. A skill that names engines (non-empty, each once) reaches only
+ * an engine project), `unreal` or `godot`. A skill that names engines (non-empty, each once) reaches only
  * those games' briefs, so web-only advice never reaches an Unreal game.
  */
-export type PluginGameEngine = "web" | "unreal";
+export type PluginGameEngine = "web" | "unreal" | "godot";
 
 /** A skill whose text sits in the manifest (1–16 000 characters); agents get all of it in their brief. */
 export interface PluginInlineSkill {
