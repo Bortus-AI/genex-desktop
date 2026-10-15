@@ -504,6 +504,12 @@ interface ChatDraft {
   runResults: Map<string, MorningEntry>;
   /** Follow-ups typed during work and not yet delivered: a Stop with one waiting hands over to it. */
   waiting: Set<string>;
+  /**
+   * Each sent message's bubble by its queue id, and the @ tag cards whose message has not shown
+   * yet: main records a message's tags as it hands the message on, which can be before the queue
+   * writes the message itself.
+   */
+  tagged: { bubbles: Map<string, UserEntry>; cards: Map<string, MentionsEntry> };
   /** The chip group new tool rows join, until a line of narration closes it. */
   group: ToolsEntry | null;
   /** Each game's engine-link lines by the link's time, with the game's title, so Undo lands on its line. */
@@ -563,6 +569,7 @@ function newChatDraft(events: EventEnvelope[]): ChatDraft {
     runAssets: new Map(),
     runResults: new Map(),
     waiting: new Set(),
+    tagged: { bubbles: new Map(), cards: new Map() },
     group: null,
   };
 }
@@ -1025,6 +1032,7 @@ function readQuiet(chat: ChatDraft, data: EventData): boolean {
   if (data.event_type.startsWith(COORDINATOR_PREFIX)) {
     const queued = customPayload(data, QUEUED_EVENTS)?.messageId;
     const settled = customPayload(data, SETTLED_EVENTS)?.messageId;
+    if (customPayload(data, CustomEvent.CoordinatorMessageQueued)?.messageId) placeTagCard(chat, queued);
     if (queued) chat.waiting.add(queued);
     else if (settled) chat.waiting.delete(settled);
     if (customPayload(data, CustomEvent.CoordinatorMessageDelivered)?.how === SteerDelivery.Interrupt)
@@ -1557,27 +1565,51 @@ function openPluginRow(
   return row;
 }
 
+/** A bubble: the user's, or the assistant's (one entry shape holds both). */
+type UserEntry = Extract<Entry, { kind: typeof EntryKind.User | typeof EntryKind.Assistant }>;
+type MentionsEntry = Extract<Entry, { kind: typeof EntryKind.Mentions }>;
+
 /**
- * What a message's @ tags gave the agent, written right after the message (and again when a tag is
- * tried again or taken off): one card under the message, each tag's latest result, and the
- * message's words paint the tags.
+ * What a message's @ tags gave the agent (and again when a tag is tried again or taken off): one
+ * card under the message, each tag's latest result, and the message's words paint the tags. The
+ * card waits for its message when the tags were recorded first.
  */
 function narrateMentions(chat: ChatDraft, event: EventEnvelope): void {
   const tagged = customPayload(event.data, CustomEvent.MentionTagged);
   const tags = tagged?.tags ?? [];
   if (!tags.length) return;
-  const { messageId } = tagged ?? {};
-  const known = messageId
-    ? chat.entries.find((entry) => entry.kind === EntryKind.Mentions && entry.messageId === messageId)
-    : undefined;
-  if (known?.kind === EntryKind.Mentions) {
+  const messageId = tagged?.messageId;
+  const known = messageId ? chat.tagged.cards.get(messageId) : undefined;
+  if (known) {
     known.tags = mergeMentionResults(known.tags, tags);
     return;
   }
+  const card: MentionsEntry = { kind: EntryKind.Mentions, id: event.id, ...(messageId ? { messageId } : {}), tags };
+  if (!messageId) {
+    const at = chat.entries.findLastIndex((entry) => entry.kind === EntryKind.User);
+    putTagCard(chat, card, at);
+    return;
+  }
+  chat.tagged.cards.set(messageId, card);
+  const bubble = chat.tagged.bubbles.get(messageId);
+  if (bubble) putTagCard(chat, card, chat.entries.indexOf(bubble));
+}
+
+/** A sent message's queue record: its bubble is the latest one, and a card waiting for it goes under it. */
+function placeTagCard(chat: ChatDraft, messageId: string | undefined): void {
+  if (!messageId || chat.tagged.bubbles.has(messageId)) return;
   const at = chat.entries.findLastIndex((entry) => entry.kind === EntryKind.User);
-  const message = chat.entries[at];
-  if (message?.kind === EntryKind.User) message.tags = tags.map((tag) => tag.handle);
-  const card: Entry = { kind: EntryKind.Mentions, id: event.id, ...(messageId ? { messageId } : {}), tags };
+  const bubble = chat.entries[at];
+  if (bubble?.kind !== EntryKind.User) return;
+  chat.tagged.bubbles.set(messageId, bubble);
+  const card = chat.tagged.cards.get(messageId);
+  if (card && !chat.entries.includes(card)) putTagCard(chat, card, at);
+}
+
+/** The card under the bubble at `at` (at the end when there is none), and the bubble paints its tags. */
+function putTagCard(chat: ChatDraft, card: MentionsEntry, at: number): void {
+  const bubble = chat.entries[at];
+  if (bubble?.kind === EntryKind.User) bubble.tags = card.tags.map((tag) => tag.handle);
   // Under its message, ahead of anything the turn has said since.
   if (at < 0) chat.entries.push(card);
   else chat.entries.splice(at + 1, 0, card);

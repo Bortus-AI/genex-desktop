@@ -146,31 +146,54 @@ const outcome = (ref: MentionRef, result: MentionOutcome["result"], miss?: Menti
 const record = (id: number, tags: MentionOutcome[]) =>
   event(id, { type: "custom", event_type: CustomEvent.MentionTagged, payload: { messageId: "q-1", tags } });
 
+const queued = (id: number, messageId: string) =>
+  event(id, { type: "custom", event_type: CustomEvent.CoordinatorMessageQueued, payload: { messageId } });
+const said = (id: number, role: "user" | "assistant", content: string) =>
+  event(id, { type: "messages", messages: [{ role, content }] });
+
 describe("the result card in the chat", () => {
   const words = "mix @other-game with @neon-rush";
+  const results = [
+    outcome(other, MentionResult.Read),
+    outcome(neon, MentionResult.Unavailable, MentionMiss.NotDownloaded),
+  ];
   const events = [
-    event(1, { type: "messages", messages: [{ role: "user", content: `${words}${MENTION_CONTEXT_HEADING}- lines` }] }),
-    event(2, { type: "messages", messages: [{ role: "assistant", content: "On it." }] }),
-    record(3, [
-      outcome(other, MentionResult.Read),
-      outcome(neon, MentionResult.Unavailable, MentionMiss.NotDownloaded),
-    ]),
+    said(1, "user", "an earlier message"),
+    queued(2, "q-0"),
+    said(3, "user", `${words}${MENTION_CONTEXT_HEADING}- lines`),
+    queued(4, "q-1"),
+    said(5, "assistant", "On it."),
+    record(6, results),
   ];
 
+  const cardUnder = (entries: ReturnType<typeof toEntries>, text: string) => {
+    const at = entries.findIndex((entry) => entry.kind === EntryKind.User && entry.text === text);
+    return { user: entries[at], card: entries[at + 1] };
+  };
+
   it("sits right under its message, which shows only the words with its tags", () => {
-    const entries = toEntries(events);
-    const at = entries.findIndex((entry) => entry.kind === EntryKind.User);
-    const user = entries[at];
+    const { user, card } = cardUnder(toEntries(events), words);
     assert.ok(user?.kind === EntryKind.User);
-    assert.equal(user.text, words);
     assert.deepEqual(user.tags, ["other-game", "neon-rush"]);
-    const card = entries[at + 1];
     assert.ok(card?.kind === EntryKind.Mentions);
     assert.equal(card.messageId, "q-1");
   });
 
+  it("waits for its message when the tags were recorded before the queue wrote it", () => {
+    const early = [
+      said(1, "user", "an earlier message"),
+      queued(2, "q-0"),
+      record(3, results),
+      said(4, "user", words),
+      queued(5, "q-1"),
+    ];
+    const entries = toEntries(early);
+    assert.equal(cardUnder(entries, "an earlier message").card?.kind, EntryKind.User);
+    assert.equal(cardUnder(entries, words).card?.kind, EntryKind.Mentions);
+  });
+
   it("a later record for the same message replaces each tag's result in place", () => {
-    const entries = toEntries([...events, record(4, [outcome(neon, MentionResult.Copied)])]);
+    const entries = toEntries([...events, record(7, [outcome(neon, MentionResult.Copied)])]);
     const cards = entries.filter((entry) => entry.kind === EntryKind.Mentions);
     assert.equal(cards.length, 1);
     assert.deepEqual(cards[0]?.kind === EntryKind.Mentions && cards[0].tags.map((tag) => [tag.handle, tag.result]), [
