@@ -70,6 +70,21 @@ describe("the Unity setup card", () => {
     assert.equal(row(card, SetupStepId.SignIn)?.label, "Signed in to Unity");
   });
 
+  it("offers Don't use Unity while idle and Stop while Genex is at it, in Hide's place", () => {
+    assert.deepEqual(setupCard(facts()).secondary, { name: SetupAction.Skip, args: {}, label: "Don't use Unity" });
+    const running = { kind: JobKind.Hub, state: JobState.Running };
+    assert.deepEqual(setupCard(facts({ job: running })).secondary, { name: SetupAction.Stop, args: {}, label: "Stop" });
+    const stopped = {
+      kind: JobKind.Editor,
+      state: JobState.Failed,
+      why: "You stopped the install.",
+      stopped: true as const,
+    };
+    const card = setupCard(facts({ hub: "/H.app", signedIn: true, job: stopped }));
+    assert.equal(card.stuckSays, undefined, "a stop the person asked for is no reason to click through Hub");
+    assert.equal(row(card, SetupStepId.InstallUnity)?.action?.label, "Try again");
+  });
+
   it("says how far an install got while it runs, and offers no Do it for me then", () => {
     const hub = "/Applications/Unity Hub.app";
     const running = { kind: JobKind.Editor, state: JobState.Running, version: "6000.3.26f1", percent: 41.6 };
@@ -263,6 +278,7 @@ async function installMac(options: { team?: string; freeGb?: number; signedIn?: 
       return 77;
     },
     alive: (pid) => living.has(pid),
+    kill: () => undefined,
     freeBytes: async () => freeGb * GB,
     open: async (launch) => {
       opened.push(launch);
@@ -385,6 +401,39 @@ describe("installing Unity 6 through Hub", () => {
   });
 });
 
+describe("stopping what Genex is doing", () => {
+  it("ends Hub's install by its process group and shows it stopped, for Try again", async () => {
+    const mac = await installMac({ hub: true });
+    const signalled: [number, string][] = [];
+    mac.deps.kill = (pid, signal) => {
+      signalled.push([pid, signal]);
+      mac.living.delete(Math.abs(pid));
+    };
+    await mac.installer.installEditor();
+    await mac.installer.stop();
+    assert.deepEqual(signalled, [[-77, "SIGTERM"]]);
+    const job = await mac.installer.job();
+    assert.equal(job?.state, JobState.Failed);
+    assert.equal(job?.stopped, true);
+    assert.match(String(job?.why), /You stopped/);
+  });
+
+  it("stops Do it for me while it waits for the sign-in, and starts nothing after", async () => {
+    const mac = await installMac({ signedIn: false, hub: true });
+    let stopping: Promise<void> | undefined;
+    mac.deps.sleep = async () => {
+      // The person presses Stop while Genex waits; the press itself waits for Do it for me to end.
+      stopping ??= mac.installer.stop();
+    };
+    mac.installer.setUp();
+    await mac.installer.running();
+    await stopping;
+    await mac.signIn();
+    assert.deepEqual(mac.started, [], "no install once stopped");
+    assert.equal((await mac.installer.job())?.stopped, true);
+  });
+});
+
 describe("Do it for me", () => {
   it("installs Hub, opens it for the person's sign-in, waits for it, then installs Unity 6", async () => {
     const mac = await installMac({ signedIn: false });
@@ -425,6 +474,29 @@ describe("the agent's show-steps", () => {
       }) as PluginContext["host"],
     };
   }
+
+  it("closes the card on Don't use Unity, telling the agent to offer a web game, until the agent shows it again", async () => {
+    const mac = await installMac({ hub: true });
+    const game = await realTmp("unity-game-");
+    const backend = createUnityBackend({
+      now: mac.deps.now,
+      editors: mac.env,
+      open: mac.deps.open,
+      pipeline: undefined as never,
+      processes: undefined as never,
+      idleMs: async () => undefined,
+      install: mac.deps,
+    });
+    const context = contextShowing(mac.storage, game, { count: 0 });
+    const steps = async () => (await backend.action?.(UnityAction.Steps, {}, context)) as ReturnType<typeof setupCard>;
+    assert.equal((await steps()).open, true);
+    await backend.action?.(UnityAction.Skip, {}, context);
+    const skipped = await steps();
+    assert.equal(skipped.open, false);
+    assert.match(String(skipped.doneSays), /web game/);
+    await backend.tool?.(UnityTool.ShowSteps, {}, context);
+    assert.equal((await steps()).open, true, "the person changed their mind");
+  });
 
   it("puts the card in the chat while a step is open, and says Unity is ready when none is", async () => {
     const mac = await installMac({ hub: true });

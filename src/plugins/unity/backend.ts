@@ -26,7 +26,8 @@
  * in the game's chat (`setup-steps.ts`): its `steps` action reads it, and its buttons get Unity Hub,
  * open it for the person's sign-in, install Unity 6 through Hub, or do all of it (`unity-install.ts`).
  */
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ENGINE_PLAY_TOOLS, type EnginePlayTool } from "../../shared/engine-play.ts";
@@ -60,7 +61,7 @@ import {
 } from "./project-folder.ts";
 import { newestUnity6, readinessOf } from "./readiness.ts";
 import { pipelineVersionOf, SetupError, SetupRefusal, setUpProject, undoSetup } from "./setup.ts";
-import { readFacts, SetupAction, setupCard } from "./setup-steps.ts";
+import { readFacts, SetupAction, setupCard, skippedCard } from "./setup-steps.ts";
 import { createInstaller, type InstallDeps, type Installer, systemInstallDeps } from "./unity-install.ts";
 
 /** The host services this backend calls, by their public SDK names. */
@@ -98,6 +99,8 @@ export const UnityAction = {
   RestartEditor: "restart-editor",
   GetUnity: "get-unity",
   Steps: SetupAction.Steps,
+  Stop: SetupAction.Stop,
+  Skip: SetupAction.Skip,
   GetHub: SetupAction.GetHub,
   OpenHub: SetupAction.OpenHub,
   InstallUnity: SetupAction.InstallUnity,
@@ -121,6 +124,8 @@ const HUB = "Unity Hub (Add, then Add project from disk)";
  * at 190 s: the whole restart stays under that, so it never reads as failed while Unity starts.
  */
 const RESTART_OPEN_WAIT_MS = 2 * MINUTE_MS;
+/** The plugin storage folder holding each game's Don't use Unity. */
+const SKIPPED_FOLDER = path.join("unity-setup", "skipped");
 
 const MESSAGE = {
   UnknownTool: (name: string) => `Unknown Unity tool ${name}`,
@@ -417,26 +422,47 @@ async function getUnity(deps: UnityBackendDeps): Promise<{ opened: UnitySource }
   return { opened: hub ? UnitySource.Hub : UnitySource.Download };
 }
 
-/** The setup card for this computer now, with the install under way. */
-async function stepsOf(deps: UnityBackendDeps, installer: Installer) {
-  return setupCard(await readFacts(deps.editors, await installer.job()));
+/** Where a game's Don't use Unity is kept: one empty file per game, in the plugin's storage. */
+async function skipFile(context: PluginContext): Promise<string> {
+  const { id } = await gameOf(context);
+  return path.join(await storageOf(context), SKIPPED_FOLDER, encodeURIComponent(id));
 }
 
-/** The agent's `show-steps`: the Unity setup card in the game's chat, while a step is open. */
+/** The setup card for this computer now, with the install under way; closed once the person chose Don't use Unity here. */
+async function stepsOf(deps: UnityBackendDeps, installer: Installer, context: PluginContext) {
+  const card = setupCard(await readFacts(deps.editors, await installer.job()));
+  const skipped = await stat(await skipFile(context)).then(
+    () => true,
+    () => false,
+  );
+  return skipped && card.open ? skippedCard(card) : card;
+}
+
+/** The agent's `show-steps`: the Unity setup card in the game's chat, while a step is open; it takes back Don't use Unity. */
 async function showSteps(deps: UnityBackendDeps, installer: Installer, context: PluginContext): Promise<string> {
-  await gameOf(context);
-  if (!(await stepsOf(deps, installer)).open) return MESSAGE.StepsDone;
+  await rm(await skipFile(context), { force: true });
+  if (!(await stepsOf(deps, installer, context)).open) return MESSAGE.StepsDone;
   return (await context.host(HostService.EngineSteps)) ? MESSAGE.StepsShown : MESSAGE.StepsNoChat;
+}
+
+/** Don't use Unity: stops what Genex is doing and closes the card for this game, which tells the agent. */
+async function skip(installer: Installer, context: PluginContext): Promise<void> {
+  const file = await skipFile(context);
+  await installer.stop();
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "");
 }
 
 /** The setup card's buttons and its own reading, over one installer. */
 function setupActions(deps: UnityBackendDeps, installer: (context: PluginContext) => Promise<Installer>) {
   return {
-    [UnityAction.Steps]: async (context: PluginContext) => stepsOf(deps, await installer(context)),
+    [UnityAction.Steps]: async (context: PluginContext) => stepsOf(deps, await installer(context), context),
     [UnityAction.GetHub]: async (context: PluginContext) => (await installer(context)).getHub(),
     [UnityAction.OpenHub]: async (context: PluginContext) => (await installer(context)).openHub(),
     [UnityAction.InstallUnity]: async (context: PluginContext) => (await installer(context)).installEditor(),
     [UnityAction.SetUp]: async (context: PluginContext) => (await installer(context)).setUp(),
+    [UnityAction.Stop]: async (context: PluginContext) => (await installer(context)).stop(),
+    [UnityAction.Skip]: async (context: PluginContext) => skip(await installer(context), context),
   };
 }
 

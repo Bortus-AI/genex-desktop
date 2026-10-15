@@ -42,6 +42,8 @@ export type StepsCard = {
   open: boolean;
   steps: StepRow[];
   primary?: StepButton;
+  /** The plugin's own way out in Hide's place (Don't use Unity, or Stop while it works). */
+  secondary?: StepButton;
   doneSays?: string;
   stuckSays?: string;
 };
@@ -95,12 +97,14 @@ export function parseSteps(raw: unknown): StepsCard | null {
   if (!isRecord(raw) || !isText(raw.title) || !isText(raw.intro) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(parseRow).filter((row): row is StepRow => row !== undefined);
   const primary = parseButton(raw.primary);
+  const secondary = parseButton(raw.secondary);
   return {
     title: raw.title,
     intro: raw.intro,
     open: raw.open === true,
     steps,
     ...(primary ? { primary } : {}),
+    ...(secondary ? { secondary } : {}),
     ...(isText(raw.doneSays) && raw.doneSays ? { doneSays: raw.doneSays } : {}),
     ...(isText(raw.stuckSays) && raw.stuckSays ? { stuckSays: raw.stuckSays } : {}),
   };

@@ -3,8 +3,8 @@
  * plugin's own answer, asked again every few seconds while it shows, so a step done outside Genex
  * (Xcode installed, opened once) is ticked by itself; with nothing left open it goes, and when the
  * plugin names words for that the agent is told, so the chat goes on. A card may carry its own
- * button that does every step it can for the person (Do it for me). Hide puts it away for this
- * game until the agent offers it again.
+ * button that does every step it can for the person (Do it for me), and its own way out in Hide's
+ * place (Don't use Unity); otherwise Hide puts it away for this game until the agent offers it again.
  */
 import { type JSX, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -188,6 +188,7 @@ export function EngineStepsCard({
   const run = (row: StepRow) => {
     if (row.action) press(row.action);
   };
+  const wayOut = card.secondary;
   return (
     <section data-engine-steps aria-labelledby="engine-steps-title" className="chat-question chat-waiting-card mb-2">
       <div className="min-h-0 overflow-y-auto px-4 py-3">
@@ -201,9 +202,15 @@ export function EngineStepsCard({
           ))}
         </ul>
         <div className="mt-1.5 flex items-center justify-end gap-2">
-          <Button size="sm" variant="secondary" aria-label={STEPS_WORDS.hideLabel} onClick={hide}>
-            {STEPS_WORDS.hide}
-          </Button>
+          {wayOut ? (
+            <Button size="sm" variant="secondary" onClick={() => press(wayOut)}>
+              {wayOut.label}
+            </Button>
+          ) : (
+            <Button size="sm" variant="secondary" aria-label={STEPS_WORDS.hideLabel} onClick={hide}>
+              {STEPS_WORDS.hide}
+            </Button>
+          )}
           {card.primary ? <PrimaryButton button={card.primary} onRun={press} /> : null}
         </div>
       </div>

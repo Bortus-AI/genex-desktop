@@ -1889,7 +1889,10 @@ The plugin makes, sets up and opens that project itself (`backend.ts`), with no 
   newest final release of the line Genex was measured on (`INSTALL_LINE`, else the newest final
   Unity 6) and starts `-- --headless install` on its own, its output kept in
   `unity-setup/editor-install.log` and read back for the row's percentage or why it stopped.
-  `set-up` (the card's Do it for me) runs these in order, its sign-in row waiting on the person for
+  `stop` (the card's Stop while Genex works) ends the download, the sign-in wait and Hub's install
+  (its process group) and keeps it as stopped for Try again, telling the agent nothing; `skip`
+  (**Don't use Unity**, in Hide's place) stops too and closes the card for that game, so the agent
+  offers a web game, until it shows the card again. `set-up` (the card's Do it for me) runs these in order, its sign-in row waiting on the person for
   up to 30 minutes. Hub is copied into Applications under another name and renamed, so a half copy
   never reads as installed; the row reads Hub's phase and percentage past its terminal escapes and
   Chromium's log lines. Once nothing is open the card tells the agent (`doneSays`) and the chat

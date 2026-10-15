@@ -60,6 +60,7 @@ const MESSAGE = {
   NoRelease: "Unity Hub listed no Unity 6 to install. Open Unity Hub and install Unity 6 from Installs.",
   Space: (free: number) =>
     `Unity 6 needs about ${UNITY_SIZE_GB} GB; ${free.toFixed(1)} GB is free. Free up space, then try again.`,
+  YouStopped: "You stopped it. Try again when you want Unity.",
   Elsewhere: (version: string) =>
     `Unity Hub says it installed Unity ${version}, but not where Genex looks for editors. Open Unity Hub, Installs, and check where it went.`,
   Stopped: (line: string) =>
@@ -71,7 +72,7 @@ const MESSAGE = {
  * The record of an editor install Genex started: the version, the program's id and when; an
  * install that could not start keeps -1 and whether Hub's own window may still get past it.
  */
-type EditorRecord = { version: string; pid: number; startedAt: string; inHub?: true };
+type EditorRecord = { version: string; pid: number; startedAt: string; inHub?: true; stopped?: true };
 
 /** What the installer reaches besides the files: the network, programs, processes, disks and the clock. */
 export interface InstallDeps {
@@ -84,6 +85,8 @@ export interface InstallDeps {
   /** Starts a program on its own, its output into `log`, and answers its process id. */
   start: (command: string, args: string[], log: string) => Promise<number>;
   alive: (pid: number) => boolean;
+  /** Sends a signal to a process, or to its group with a negative id; a gone one is no error. */
+  kill: (pid: number, signal: NodeJS.Signals) => void;
   freeBytes: (folder: string) => Promise<number>;
   open: (launch: Launch) => Promise<void>;
   now: () => Date;
@@ -176,12 +179,14 @@ interface Installing {
   storage: () => Promise<string>;
   hubJob: InstallJob | null;
   driving: Promise<void> | null;
+  /** Stops Hub's download when the person presses Stop; a new one for each Do it for me. */
+  stop: AbortController;
 }
 
 /** Downloads Hub's disk image into the storage, counting bytes for the card. */
 async function download(state: Installing, file: string): Promise<void> {
   const url = HUB_DMG[state.deps.arch] ?? HUB_DMG.x64 ?? "";
-  const response = await state.deps.fetch(url).catch((error: unknown) => {
+  const response = await state.deps.fetch(url, { signal: state.stop.signal }).catch((error: unknown) => {
     throw new Error(MESSAGE.Download(errorMessage(error)));
   });
   if (!response.ok || !response.body) throw new Error(MESSAGE.Download(`HTTP ${response.status}`));
@@ -192,7 +197,7 @@ async function download(state: Installing, file: string): Promise<void> {
   body.on("data", (chunk: Buffer) => {
     job.done = (job.done ?? 0) + chunk.length;
   });
-  await pipeline(body, createWriteStream(file)).catch((error: unknown) => {
+  await pipeline(body, createWriteStream(file), { signal: state.stop.signal }).catch((error: unknown) => {
     throw new Error(MESSAGE.Download(errorMessage(error)));
   });
   job.done = job.total ?? job.done;
@@ -239,7 +244,9 @@ async function getHub(state: Installing): Promise<void> {
     await copyIn(deps, image, mount);
     state.hubJob = null;
   } catch (error) {
-    state.hubJob = { kind: JobKind.Hub, state: JobState.Failed, why: errorMessage(error) };
+    // A download the person stopped keeps Stop's own words.
+    if (!state.stop.signal.aborted)
+      state.hubJob = { kind: JobKind.Hub, state: JobState.Failed, why: errorMessage(error) };
     throw error;
   } finally {
     await rm(image, { force: true });
@@ -258,6 +265,7 @@ async function editorJob(state: Installing): Promise<InstallJob | null> {
     ...(percent !== undefined ? { percent } : {}),
     ...(phase ? { phase } : {}),
   };
+  if (record.stopped) return { ...job, state: JobState.Failed, why: MESSAGE.YouStopped, stopped: true };
   if (state.deps.alive(record.pid)) return { ...job, state: JobState.Running };
   if ((await readFacts(state.deps.env, null)).editor) return null;
   // An install that never started keeps its own words; one Hub ran and lost, Hub's window may finish.
@@ -305,14 +313,14 @@ async function installEditor(state: Installing): Promise<void> {
   try {
     await startEditor(deps, hub, folder);
   } finally {
-    state.hubJob = null;
+    if (state.hubJob?.state === JobState.Running) state.hubJob = null;
   }
 }
 
 /** Waits for the person to sign in to Hub, up to half an hour. */
-async function signedIn(deps: InstallDeps): Promise<boolean> {
+async function signedIn(deps: InstallDeps, stop: AbortSignal): Promise<boolean> {
   const ends = deps.now().getTime() + SIGN_IN_WAIT_MS;
-  while (deps.now().getTime() < ends) {
+  while (deps.now().getTime() < ends && !stop.aborted) {
     if (await hasLicense(deps.env)) return true;
     await deps.sleep(SIGN_IN_POLL_MS);
   }
@@ -333,17 +341,36 @@ async function drive(state: Installing): Promise<void> {
   if (!(await hasLicense(deps.env))) {
     await openHub(deps);
     state.hubJob = { kind: JobKind.SignIn, state: JobState.Running };
-    const inTime = await signedIn(deps).finally(() => {
-      state.hubJob = null;
+    const inTime = await signedIn(deps, state.stop.signal).finally(() => {
+      if (state.hubJob?.kind === JobKind.SignIn) state.hubJob = null;
     });
     if (!inTime) return;
   }
+  if (state.stop.signal.aborted) return;
   if (!(await readFacts(deps.env, null)).editor) await installEditor(state);
+}
+
+/**
+ * Stop: ends Do it for me, Hub's download and Hub's install of the editor (its whole process group,
+ * which Hub's helpers belong to), and keeps the install as one the person stopped, for Try again.
+ */
+async function stopAll(state: Installing): Promise<void> {
+  state.stop.abort();
+  const stopped: InstallJob = { kind: JobKind.Editor, state: JobState.Failed, why: MESSAGE.YouStopped, stopped: true };
+  const folder = folderIn(await state.storage());
+  const file = path.join(folder, EDITOR_RECORD);
+  const record = await readJsonIfExists<EditorRecord>(file).catch(() => null);
+  if (record && record.pid > 0 && state.deps.alive(record.pid)) {
+    state.deps.kill(-record.pid, "SIGTERM");
+    await atomicWriteJson(file, { ...record, stopped: true });
+  }
+  state.hubJob = state.hubJob?.kind === JobKind.Hub ? { ...stopped, kind: JobKind.Hub } : stopped;
+  await state.driving?.catch(() => undefined);
 }
 
 /** The installer over one plugin storage: Hub's install in memory, the editor's on disk, and Do it for me. */
 export function createInstaller(deps: InstallDeps, storage: () => Promise<string>) {
-  const state: Installing = { deps, storage, hubJob: null, driving: null };
+  const state: Installing = { deps, storage, hubJob: null, driving: null, stop: new AbortController() };
   return {
     /** The install the card shows: Hub's while it runs or after it stopped, else the editor's. */
     job: async (): Promise<InstallJob | null> => state.hubJob ?? (await editorJob(state)),
@@ -351,8 +378,11 @@ export function createInstaller(deps: InstallDeps, storage: () => Promise<string
     openHub: () => openHub(deps),
     installEditor: () => installEditor(state),
     /** Starts Do it for me and answers at once; the card follows it, and a stop shows on its row. */
+    stop: () => stopAll(state),
     setUp: (): void => {
-      state.driving ??= drive(state)
+      if (state.driving) return;
+      state.stop = new AbortController();
+      state.driving = drive(state)
         .catch((error: unknown) => {
           // A step that failed says so on its own row; anything else shows on the install's.
           state.hubJob ??= { kind: JobKind.Editor, state: JobState.Failed, why: errorMessage(error) };
@@ -415,6 +445,13 @@ export function systemInstallDeps(env: EditorsEnv, opener: (launch: Launch) => P
         return true;
       } catch {
         return false;
+      }
+    },
+    kill: (pid, signal) => {
+      try {
+        process.kill(pid, signal);
+      } catch {
+        // Already gone.
       }
     },
     freeBytes: async (folder) => {

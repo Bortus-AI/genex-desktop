@@ -21,6 +21,8 @@ export const SetupAction = {
   OpenHub: "open-hub",
   InstallUnity: "install-unity",
   SetUp: "set-up",
+  Stop: "stop",
+  Skip: "skip",
 } as const;
 export type SetupAction = (typeof SetupAction)[keyof typeof SetupAction];
 
@@ -50,6 +52,8 @@ export interface InstallJob {
   why?: string;
   /** A stop that Unity Hub's own window may still get past (the agent can, with computer control). */
   inHub?: true;
+  /** The person stopped it themselves: nothing to tell the agent. */
+  stopped?: true;
 }
 
 /** What the card reads about this computer. */
@@ -82,6 +86,7 @@ export type SetupCard = {
   open: boolean;
   steps: SetupRow[];
   primary?: Button;
+  secondary?: Button;
   doneSays?: string;
   stuckSays?: string;
 };
@@ -124,6 +129,10 @@ const WORDS = {
   Installed: (version: string) => `Unity ${version} is installed`,
   TryAgain: "Try again",
   DoItForMe: "Do it for me",
+  Stop: "Stop",
+  Skip: "Don't use Unity",
+  Skipped:
+    "The person chose not to use Unity for now (Don't use Unity on the setup card). Offer in one line to build the game as a web game that plays in Genex instead, and do it if they agree.",
   Stuck: (why: string) => `Genex's install of Unity for the person stopped: ${why}`,
   InHub: (version: string) =>
     ` If you have the desktop tool (computer control), finish it in Unity Hub's own window: open Unity Hub, go to Installs, choose Install Editor and install Unity ${version}, then wait while Hub installs it; the setup card notices when it is done. Otherwise tell the person in one line what stopped and that Try again is on the card.`,
@@ -208,7 +217,7 @@ function editorRow(facts: SetupFacts): SetupRow {
 
 /** What the agent is told about an install that stopped: finish it in Hub with computer control, or tell the person. */
 function stuckOf(job: InstallJob | null): { stuckSays?: string } {
-  if (job?.state !== JobState.Failed) return {};
+  if (job?.state !== JobState.Failed || job.stopped) return {};
   const version = job.version && job.version !== "6" ? job.version : "6 (the newest final 6000.3 release)";
   const next = job.inHub ? WORDS.InHub(version) : WORDS.PersonOnly;
   return { stuckSays: `${WORDS.Stuck(job.why ?? "")}${next}` };
@@ -229,6 +238,9 @@ export function setupCard(facts: SetupFacts): SetupCard {
     open: left > 0,
     steps,
     ...(left > 0 && !running ? { primary: button(SetupAction.SetUp, WORDS.DoItForMe) } : {}),
+    ...(left > 0
+      ? { secondary: running ? button(SetupAction.Stop, WORDS.Stop) : button(SetupAction.Skip, WORDS.Skip) }
+      : {}),
     ...doneSays,
     ...stuckOf(facts.job),
   };
@@ -259,4 +271,10 @@ export async function hasLicense(env: EditorsEnv): Promise<boolean> {
 export async function readFacts(env: EditorsEnv, job: InstallJob | null): Promise<SetupFacts> {
   const [hub, signedIn, editors] = await Promise.all([findHub(env), hasLicense(env), findEditors(env)]);
   return { hub, signedIn, editor: newestUnity6(editors), job };
+}
+
+/** The card once the person chose Don't use Unity: closed, with what the agent is told. */
+export function skippedCard(card: SetupCard): SetupCard {
+  const { primary: _primary, secondary: _secondary, stuckSays: _stuck, ...rest } = card;
+  return { ...rest, open: false, doneSays: WORDS.Skipped };
 }

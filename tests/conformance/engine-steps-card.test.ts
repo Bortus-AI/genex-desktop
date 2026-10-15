@@ -101,7 +101,14 @@ describe("the plugin's steps", () => {
     assert.equal(parsed?.steps[0]?.working, undefined);
     assert.deepEqual(parsed?.primary, setup.primary);
     assert.equal(parsed?.doneSays, "Unity 6 is ready.");
-    const plain = parseSteps({ ...setup, primary: { name: 1 }, doneSays: 5 });
+    const skip = { name: "skip", args: {}, label: "Don't use Unity" };
+    assert.deepEqual(
+      parseSteps({ ...setup, secondary: skip })?.secondary,
+      skip,
+      "the plugin's own way out, in Hide's place",
+    );
+    const plain = parseSteps({ ...setup, primary: { name: 1 }, doneSays: 5, secondary: { label: 2 } });
+    assert.equal(plain?.secondary, undefined);
     assert.equal(plain?.primary, undefined, "a malformed card button is dropped");
     assert.equal(plain?.doneSays, undefined);
   });
