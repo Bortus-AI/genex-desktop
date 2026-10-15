@@ -1,10 +1,10 @@
 /**
  * Playing a game inside its engine's editor (`TargetRuntime.Editor`): the harness tools an engine
- * plugin (capability `game-engine`) provides so the studio's `computer` tool can play its games the
+ * plugin provides so the studio's `computer` tool can play its games the
  * way it plays a web game — a picture of what the player sees, keys held on the game's own clock,
  * and the game's state the studio checks goals against. The tools are the plugin's, by these names
  * after `<plugin>__`; the studio's target (`main/core/editor-play-target.ts`) stays engine-agnostic.
- * Unreal's are in `plugins/unreal/computer-play.ts` (Play In Editor, through the Genex editor helper).
+ * Unreal's use its engine link and editor helper; Unity's use explicit project facts and Pipeline.
  *
  * Every tool is a harness step (`audience: "harness"`) that needs the plugin's editor lock for its
  * call: the person first, any other caller in turn.

@@ -192,6 +192,26 @@ async function buildGodot(root, resources, sdk) {
   });
 }
 
+async function buildUnity(root, resources, sdk) {
+  const unity = path.join(resources, "plugins/unity");
+  await mkdir(unity, { recursive: true });
+  await cp(path.join(root, "src/plugins/unity/plugin.json"), path.join(unity, "plugin.json"));
+  // Genex's own type goes in as data: a panel can load no font from anywhere else.
+  const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/unity/panel.html"), "utf8"), sdk);
+  await writeFile(path.join(unity, "panel.html"), await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")));
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(root, "src/plugins/unity/backend.ts")],
+    outfile: path.join(unity, "backend.mjs"),
+  });
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(root, "src/plugins/unity/editor-mcp-entry.ts")],
+    outfile: path.join(unity, "editor-mcp.mjs"),
+    banner: { js: "import {createRequire} from 'node:module'; const require = createRequire(import.meta.url);" },
+  });
+}
+
 /** Copies the SDK and builds the bundled plugins (and the example) into the app's resources. */
 export async function buildPlugins(root, resources, { dependencies = true } = {}) {
   await cp(path.join(root, "src/plugin-sdk"), path.join(resources, "plugin-sdk"), { recursive: true });
@@ -200,6 +220,7 @@ export async function buildPlugins(root, resources, { dependencies = true } = {}
   await buildBlender(root, resources, sdk);
   await buildUnreal(root, resources, sdk);
   await buildGodot(root, resources, sdk);
+  await buildUnity(root, resources, sdk);
   await mkdir(path.join(resources, "examples"), { recursive: true });
   await cp(path.join(root, "src/plugins/example"), path.join(resources, "examples/example"), { recursive: true });
   const examplePanel = path.join(resources, "examples/example/panel.html");

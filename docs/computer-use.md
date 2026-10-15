@@ -144,13 +144,26 @@ still has a part or a play-check of the game, a session is refused (`busy`). Cap
 `aimedClicks` — and the wheel; no point, drag or cursor), a clock the studio can stand still but not
 step (`Freeze`: the play's own pause, held between a judge's or playtester's moves, so a run never
 claims to replay), game state, input route `editor`. Who holds it: any session the studio hands a
-computer for a game an engine plugin that is on holds the link of and provides every play tool —
+computer for a game whose enabled engine plugin provides every play tool and matches its link or facts —
 the chat's own ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts)), and a judge's or
 playtester's through `_computerToolsFor`; `judge_play` is offered to such a chat, and the Unreal
 Loop's lead has its own (`loop/unreal/lead-judge.ts`). Nothing starts until the agent first uses it,
 and the session's end ends the play it started, never leaving a game paused. On a Mac, Unreal's
 background throttle is lifted only for an editor without hardware ray tracing (UE 5.8 hangs the GPU
 rendering a ray-traced level at full speed behind another app); see [plugins](plugins.md).
+
+Unity provides the same six play tools through its Pipeline package
+([`plugins/unity/computer-play.ts`](../src/plugins/unity/computer-play.ts)). Its project stays inside
+the game's folder: no Unreal-style engine link is needed. Without an engine binding, the host
+selects a single enabled plugin whose six harness play tools each explicitly match the game's
+facts (`unity-project` for Unity); missing or ambiguous matches expose no editor computer.
+The chat, judges and playtesters then use the same editor target and `judge_play` path.
+Unity captures the Game view, including its HUD, and waits for Play mode to finish starting before
+playing. Keyboard and mouse input require the installed, active Unity Input System; legacy
+`UnityEngine.Input` is unsupported, and this integration installs no packages. Fixed host-owned
+Pipeline code supplies relative mouse input and reads the game clock and player state. Pausing is
+idempotent, input is released after each move, and closing a session ends only agent-owned play.
+A fresh judge play never restarts a game the person started.
 
 ## The person's computer
 
