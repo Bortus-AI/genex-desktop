@@ -3,7 +3,7 @@
  * or the best matches for what was typed, then Images and the plugins as rows. Focus stays in the
  * text box, which hands the panel its keys (`mention-grid.ts`).
  */
-import { type CSSProperties, type JSX, useState } from "react";
+import { type CSSProperties, type JSX, useEffect, useState } from "react";
 import { MentionShelf, mentionShelves, searchMentions } from "../../shared/mention-corpus.ts";
 import type { GameCover } from "../../shared/game-library.ts";
 import { type MentionDoc, MentionKind } from "../../shared/prompt-mention.ts";
@@ -13,6 +13,7 @@ import { IMAGES_OPTION } from "./add-menu-entries.ts";
 import { GameAvatar } from "./GameAvatar.tsx";
 import { Icon } from "./icons.tsx";
 import { pickerItem } from "./PickerPanel.tsx";
+import { PluginIcon } from "./PluginIcon.tsx";
 import { Pending } from "./Pending.tsx";
 import { CatalogState } from "./use-mention-docs.ts";
 
@@ -116,8 +117,11 @@ function MentionCard({
   );
 }
 
-/** Images and the plugins, as the @ list has always offered them. */
-function OptionRow({
+/**
+ * Images and the plugins that are on, as cards beside the others: a plugin's own picture on a plain
+ * card, chipped Plugin and On; Images adds pictures to the message.
+ */
+function OptionCard({
   option,
   id,
   active,
@@ -128,19 +132,29 @@ function OptionRow({
   active: boolean;
   onHover: () => void;
 }): JSX.Element {
+  const images = option.id === IMAGES_OPTION;
   return (
     <div
       id={id}
       role="option"
       aria-selected={active}
+      aria-label={option.name}
+      data-mention-option={option.id}
       data-highlighted={active || undefined}
-      className={`${pickerItem} cursor-pointer hover:bg-control-hover`}
+      className="mention-card"
       onMouseDown={(event) => event.preventDefault()}
       onClick={option.pick}
       onMouseMove={onHover}
     >
-      <Icon name={option.id === IMAGES_OPTION ? "image" : "plugins"} className="text-icon-strong" />
-      <span className="min-w-0 truncate">{option.name}</span>
+      <span className="mention-card-wash mention-card-icon" aria-hidden>
+        {images ? <Icon name="image" size={28} /> : <PluginIcon name={option.name} src={option.icon} size="large" />}
+      </span>
+      <span className="mention-card-scrim" aria-hidden />
+      <span className="mention-card-chips" aria-hidden>
+        <span>{images ? MENTION_WORDS.upload : MENTION_WORDS.plugin}</span>
+        {images ? null : <span>{MENTION_WORDS.on}</span>}
+      </span>
+      <span className="mention-card-title">{option.name}</span>
     </div>
   );
 }
@@ -169,6 +183,11 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
   const { groups, rows, active, optionId, onHighlight } = props;
   const cardCount = groups.reduce((sum, group) => sum + group.docs.length, 0);
   const empty = cardCount === 0 && rows.length === 0;
+  // The keys move the outline past the panel's edge: the outlined card scrolls into view.
+  const activeId = optionId(active);
+  useEffect(() => {
+    document.getElementById(activeId)?.scrollIntoView({ block: "nearest" });
+  }, [activeId]);
   let index = 0;
   return (
     <div
@@ -207,18 +226,20 @@ export function MentionPanel(props: MentionPanelProps): JSX.Element {
       {rows.length > 0 ? (
         <section className="mention-shelf">
           {props.query ? null : <h4 className="mention-shelf-label">{MENTION_WORDS.plugins}</h4>}
-          {rows.map((option, i) => {
-            const at = cardCount + i;
-            return (
-              <OptionRow
-                key={option.id}
-                option={option}
-                id={optionId(at)}
-                active={at === active}
-                onHover={() => onHighlight(at)}
-              />
-            );
-          })}
+          <div className="mention-grid">
+            {rows.map((option, i) => {
+              const at = cardCount + i;
+              return (
+                <OptionCard
+                  key={option.id}
+                  option={option}
+                  id={optionId(at)}
+                  active={at === active}
+                  onHover={() => onHighlight(at)}
+                />
+              );
+            })}
+          </div>
         </section>
       ) : null}
       {empty && props.rowsRead && props.catalog !== CatalogState.Reading ? (

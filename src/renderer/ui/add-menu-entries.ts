@@ -204,6 +204,8 @@ export interface MentionOption {
   id: string;
   name: string;
   pick: () => void;
+  /** A plugin's own picture, for its card. */
+  icon?: string;
 }
 
 /** The option that adds images; it answers to "images" and to "reference mood board". */
@@ -222,6 +224,6 @@ export function mentionOptions(
     ...(images ? [{ id: IMAGES_OPTION, name: "Images", pick: pickImages }] : []),
     ...entries
       .filter((e) => e.on && e.name.toLowerCase().includes(query))
-      .map((e) => ({ id: e.id, name: e.name, pick: () => mentionEntry(e.name) })),
+      .map((e) => ({ id: e.id, name: e.name, pick: () => mentionEntry(e.name), ...(e.icon ? { icon: e.icon } : {}) })),
   ];
 }

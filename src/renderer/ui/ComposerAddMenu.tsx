@@ -546,7 +546,8 @@ export function ComposerAddMenu({
     active,
     setHighlight,
     onClose: onMentionClose,
-    cards: picker.cardPicks.length,
+    // Images and the plugins are cards too: the whole list is one grid.
+    cards: matches.length,
     columns: picker.columns,
   });
 

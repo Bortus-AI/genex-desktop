@@ -5725,6 +5725,15 @@ a:focus-visible {
   color: transparent;
   caret-color: var(--ink);
 }
+/* The painted words show through a see-through selection; the text box's own stay clear, so nothing doubles. */
+.composer-input-wrap[data-painted] textarea::selection {
+  background: color-mix(in oklab, var(--accent-fill) 40%, transparent);
+  color: transparent;
+}
+/* A tag in the composer wraps exactly where the text box wraps it, or the two layers drift apart. */
+.composer-input-paint .mention-pill {
+  white-space: pre-wrap;
+}
 /* The card under a message with @ tags: a row per tag; one that attached nothing is a warning
    (orange, never the error red), with the one action that helps. */
 .mention-results {
@@ -5819,6 +5828,18 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  padding-bottom: 4px;
+}
+/* A plugin's or Images' card: its picture in the middle of the plain card, above the title. */
+.mention-card-icon {
+  color: rgb(255 255 255 / 0.85);
+}
+.mention-card-icon > * {
+  margin-bottom: 12%;
+}
+.mention-card-icon .extension-icon {
+  width: 40px;
+  height: 40px;
 }
 .mention-shelf-label {
   margin: 0;
