@@ -1854,6 +1854,13 @@ ids at its engine's service (`{placeId, universeId}`, decimal strings of at most
 numbers), and `isProjectPath(value, extensions)` checks a project path against an engine's
 extensions. A `game-engine` plugin without `engine` still loads.
 
+A game linked to any declared engine is an engine game (`isEngineGame`, with the harness's copy in
+`loop/engine-game.ts`): it gets no web rules, preview check, web Live view or web Loop, and only
+Unreal's card, editor and words ask for Unreal by name. Its descriptor carries `linkedEngine`
+(`{label, projectFiles, projectInFolder}`). With `projectInFolder` true and the project outside the
+game folder, Mode offers no Loop and Rewind says what it can't undo, both in the engine's label
+(`renderer/engine-game.ts`); with it false the Loop runs wherever the project is.
+
 ## Panels and trusted approval
 
 Panels register `settings` or `project` placements. They are opaque-origin sandboxed frames
