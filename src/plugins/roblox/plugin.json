@@ -83,6 +83,7 @@
   "actions": [
     { "name": "status", "label": "Roblox Studio status" },
     { "name": "toolbar-status", "label": "Roblox Studio connection" },
+    { "name": "steps", "label": "Roblox Studio setup steps" },
     {
       "name": "setup",
       "label": "Set up",
@@ -101,7 +102,15 @@
       "confirmation": "Quit Roblox Studio, set it up for Genex while it is closed, and open it again? Studio asks you to save your place first, as it always does.",
       "native": true
     },
-    { "name": "do-it-for-me", "label": "Do it for me", "native": true }
+    { "name": "do-it-for-me", "label": "Do it for me", "native": true },
+    {
+      "name": "get-studio",
+      "label": "Get Roblox Studio",
+      "confirmation": "Download Roblox Studio from Roblox (about 11 MB on Mac, 14 MB on Windows), check that Roblox signed it, and install it?",
+      "native": true
+    },
+    { "name": "cancel-get-studio", "label": "Stop getting Roblox Studio" },
+    { "name": "open-studio", "label": "Open Studio", "native": true }
   ],
   "toolbar": [
     {

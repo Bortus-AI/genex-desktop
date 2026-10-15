@@ -1127,6 +1127,28 @@ Assistant Settings is a window of Studio's own process, so `engine.apps` names S
 setup actions are `native`: they write outside the plugin's storage or quit and open Studio, so a
 fixture profile never runs them.
 
+**Get Roblox Studio** (`studio-install.ts`, native, after its card) installs Studio for a person
+who has none, in the order Roblox's installer sets. It downloads Roblox's own installer for the
+system (`https://setup.rbxcdn.com/mac/RobloxStudio.dmg`, `…/RobloxStudioInstaller.exe`) over HTTPS
+only, following a redirect only when it stays on exactly `setup.rbxcdn.com`, and stops past
+`MAX_INSTALLER_BYTES` (64 MB). Roblox changes its installers with every release, so nothing pins a
+hash: the signature is the check, and Node's downloads carry no quarantine mark. On a Mac
+`codesign --verify --strict` must accept the DMG and the `RobloxStudioInstaller.app` on it, each
+with Roblox's `TeamIdentifier` `2CFABCH843`; the DMG is attached read-only and unbrowsed in a
+private temporary folder and always detached. On Windows Authenticode must call the installer
+`Valid` with Roblox Corporation as the signer's CN or O; PowerShell reads the path from its own
+environment, never from the command text. A failed check runs nothing, and the temporary folder is
+always removed. The installer and Studio run outside the process sandbox, as argument lists: the
+install is the point, and Studio's sign-in must work. After the installer Genex waits for Studio,
+lets the person sign in in the Studio the installer opens (it closes by itself after; Genex never
+closes it and never sees the password), runs Set up while it is closed (the helper always; the
+switch when a settings file exists), and opens Studio once. The action answers at once; `status`
+carries the phase (`install`) and `install/state.json` in storage keeps the last one, and **Stop**
+(`cancel-get-studio`) ends a download or a wait. The `steps` action is the chat's steps card: rows
+for Studio (ticked with its version, so Get Roblox Studio is never offered with Studio here), signing
+in, the helper, the MCP server and the game's place. The install has not been run live; it is
+proven with fakes.
+
 Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
 is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
 `<storage>/mcp/<game>`) starts `StudioMCP` itself through `studio-client.ts`: on a Mac

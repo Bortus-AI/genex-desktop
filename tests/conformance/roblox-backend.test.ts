@@ -6,9 +6,10 @@
  * "Roblox Studio" button with the box glyph and a status word once turned on.
  */
 import assert from "node:assert/strict";
-import { access, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { setTimeout as wait } from "node:timers/promises";
 import type {
   PluginContext,
   PluginEngineAssistAnswer,
@@ -21,11 +22,14 @@ import {
   createRobloxBackend,
   PanelStep,
   type RobloxDeps,
+  type RobloxStatus,
   type SetupAnswer,
   StudioStatus,
   studioStatusOf,
 } from "../../src/plugins/roblox/backend.ts";
+import type { StepsCard } from "../../src/renderer/chat/engine-steps.ts";
 import { HELPER_FILE } from "../../src/plugins/roblox/setup.ts";
+import type { InstallDeps } from "../../src/plugins/roblox/studio-install.ts";
 import { type Launch, QUIT_WAIT_MS } from "../../src/plugins/roblox/studio-launch.ts";
 import { MCP_SWITCH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
 import type { LocateStat, Run } from "../../src/plugins/roblox/studio-locate.ts";
@@ -54,6 +58,19 @@ interface Mac {
   quitCloses?: boolean;
 }
 
+/** No network in these tests unless one hands the backend its own. */
+const NO_INSTALL: InstallDeps = {
+  platform: "darwin",
+  env: {},
+  fetch: (async () => {
+    throw new TypeError("no network in this test");
+  }) as typeof fetch,
+  run: async (file) => {
+    throw new Error(`spawn ${file} ENOENT`);
+  },
+  tempRoot: "/nonexistent-temp",
+};
+
 function fakeMac(given: Mac, home = HOME) {
   const state = { ...given };
   const touched: string[] = [];
@@ -61,8 +78,18 @@ function fakeMac(given: Mac, home = HOME) {
   const calls: Launch[] = [];
   const opened: Launch[] = [];
   let clock = 0;
+  /** When the open Studio closes by itself (the installer's Studio after sign-in). */
+  let closesAt: number | undefined;
   const dirs = new Set(["/Applications", ...(state.installed ? [STUDIO_MAC_APP] : [])]);
   const files = new Set([...(state.installed ? STUDIO_FILES : []), ...(state.setUp ? [SETUP_RECORD] : [])]);
+  /** Roblox's installer puts Studio in Applications and opens it; it closes by itself after `runsFor`. */
+  const installStudio = (runsFor: number) => {
+    dirs.add(STUDIO_MAC_APP);
+    for (const file of STUDIO_FILES) files.add(file);
+    state.installed = true;
+    state.running = true;
+    closesAt = clock + runsFor;
+  };
   const run: Run = async (file, args) => {
     ran.push(file);
     calls.push({ file, args: [...args] });
@@ -97,15 +124,21 @@ function fakeMac(given: Mac, home = HOME) {
     },
     answers: async () => state.answering,
     helper: path.resolve("src/plugins/roblox/helper", HELPER_FILE),
+    install: { fetch: NO_INSTALL.fetch, run: NO_INSTALL.run, tempRoot: NO_INSTALL.tempRoot },
     open: async (launch) => {
       opened.push(launch);
+      state.running = true;
     },
     sleep: async (ms) => {
       clock += ms;
+      if (closesAt !== undefined && clock >= closesAt) {
+        state.running = false;
+        closesAt = undefined;
+      }
     },
     now: () => clock,
   };
-  return { deps, touched, ran, calls, opened };
+  return { deps, touched, ran, calls, opened, installStudio };
 }
 
 /** A plugin call's context: the plugin's storage, and the host's answer to Do it for me. */
@@ -322,6 +355,183 @@ describe("Set up, Restart Studio and Do it for me from the panel", () => {
     )) as PluginReview;
     assert.match(review.message ?? "", /Genex helper/);
     assert.match(review.detail ?? "", /macOS may ask to let Genex use your Documents folder/);
+  });
+});
+
+/** The status once Get Roblox Studio has finished, or failed, polled as the panel polls it. */
+async function finished(backend: ReturnType<typeof createRobloxBackend>, storage: string) {
+  for (let tries = 0; tries < 400; tries++) {
+    const answer = (await backend.action?.("status", {}, context(storage))) as RobloxStatus;
+    if (answer.install && ["done", "failed"].includes(answer.install.phase)) return answer;
+    await wait(5);
+  }
+  assert.fail("Get Roblox Studio never finished");
+}
+
+/** The steps card the chat draws, for the game the call is bound to. */
+async function stepsCard(mac: Mac, linked = false) {
+  const backend = createRobloxBackend(fakeMac(mac).deps);
+  const host = (async (method: string) => {
+    if (method === "storage.root") return STORAGE;
+    if (method === "game.engine.read") return linked ? { kind: "roblox", project: "place.rbxl", name: "place" } : null;
+    throw new Error(`No ${method} here`);
+  }) as PluginContext["host"];
+  const bound: PluginContext = { signal: new AbortController().signal, callId: 1, host, project: "game-1" };
+  return (await backend.action?.("steps", {}, bound)) as StepsCard;
+}
+
+describe("Get Roblox Studio and the steps card", () => {
+  it("on a computer with Studio, the Studio row ticks itself with the version and Get Roblox Studio isn't offered", async () => {
+    const card = await stepsCard(CLOSED);
+    const studio = card.steps.find((row) => row.id === "studio");
+    assert.equal(studio?.done, true);
+    assert.match(studio?.label ?? "", /Roblox Studio 0\.743 is on this computer/);
+    assert.ok(!card.steps.some((row) => row.action?.name === "get-studio"), "no Get Roblox Studio");
+    assert.deepEqual(
+      card.steps.map((row) => row.id),
+      ["studio", "sign-in", "helper", "mcp", "place"],
+    );
+  });
+
+  it("without Studio, the Studio row offers Get Roblox Studio and sign-in stays the person's step", async () => {
+    const card = await stepsCard(MISSING);
+    const studio = card.steps.find((row) => row.id === "studio");
+    assert.deepEqual(studio?.action, { name: "get-studio", args: {}, label: "Get Roblox Studio" });
+    const signIn = card.steps.find((row) => row.id === "sign-in");
+    assert.equal(signIn?.detail, "Studio asks you to sign in when it opens. Genex never sees your password.");
+    assert.equal(signIn?.action, undefined, "Genex never signs in");
+    assert.equal(card.open, true);
+    for (const row of card.steps) assert.doesNotMatch(`${row.label} ${row.detail}`, BANNED_WORDS);
+  });
+
+  it("offers Open Studio only while Studio is closed, set up or not", async () => {
+    const offersOpen = (card: StepsCard) => card.steps.some((row) => row.action?.name === "open-studio");
+    assert.equal(offersOpen(await stepsCard(NOT_SET_UP)), false, "Studio runs, though Genex hasn't set it up");
+    assert.equal(offersOpen(await stepsCard(STARTING)), false);
+    assert.equal(offersOpen(await stepsCard(CLOSED)), true);
+    assert.equal(offersOpen(await stepsCard({ ...NOT_SET_UP, running: false })), true);
+  });
+
+  it("ticks every row once Studio answers and the game builds in a place", async () => {
+    const card = await stepsCard(READY, true);
+    assert.deepEqual(
+      card.steps.map((row) => [row.id, row.done]),
+      [
+        ["studio", true],
+        ["sign-in", true],
+        ["helper", true],
+        ["mcp", true],
+        ["place", true],
+      ],
+    );
+    assert.equal(card.open, false);
+  });
+
+  it("Get Roblox Studio's confirmation names Roblox, this computer's download size, and the sign-in", async () => {
+    const review = (await createRobloxBackend(fakeMac(MISSING).deps).review?.(
+      "get-studio",
+      {},
+      context(),
+    )) as PluginReview;
+    assert.equal(
+      review.message,
+      "Download Roblox Studio from Roblox (about 11 MB), check that Roblox signed it, and install it?",
+    );
+    assert.match(review.detail ?? "", /setup\.rbxcdn\.com/);
+    assert.match(review.detail ?? "", /Genex never sees your password/);
+    assert.doesNotMatch(`${review.message} ${review.detail}`, BANNED_WORDS);
+  });
+
+  it("is not run again when Studio is already here: nothing is downloaded", async () => {
+    const mac = fakeMac(CLOSED);
+    const answer = (await createRobloxBackend(mac.deps).action?.("get-studio", {}, context())) as {
+      started: boolean;
+      message: string;
+    };
+    assert.equal(answer.started, false);
+    assert.match(answer.message, /Roblox Studio 0\.743 is already on this computer/);
+  });
+
+  it("from nothing on a Mac: installs, waits for sign-in, sets up while Studio is closed, and opens it once", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const root = await tmpDir("roblox-get-studio-");
+    const home = path.join(root, "home");
+    await mkdir(path.join(home, "Documents", "Roblox"), { recursive: true });
+    const settings = path.join(home, "Library", "Roblox", "AssistantSettings");
+    await mkdir(settings, { recursive: true });
+    await writeFile(path.join(settings, "1.json"), '{"mcp-server": {"enabled": false}}');
+    const storage = path.join(root, "storage");
+    const tempRoot = path.join(root, "temp");
+    await mkdir(tempRoot);
+    const mac = fakeMac(MISSING, home);
+    const fetched: string[] = [];
+    mac.deps.install = {
+      fetch: (async (url: string) => {
+        fetched.push(String(url));
+        return new Response(Buffer.from("roblox dmg"));
+      }) as typeof fetch,
+      run: async (file, args) => {
+        if (file === "/usr/bin/codesign" && !args.includes("--verify"))
+          return { code: 0, stdout: "", stderr: "TeamIdentifier=2CFABCH843\n" };
+        if (file === "/usr/bin/hdiutil" && args[0] === "attach")
+          await mkdir(path.join(args[args.indexOf("-mountpoint") + 1] ?? "", "RobloxStudioInstaller.app"));
+        // Roblox's installer: Studio lands in Applications and opens for the person to sign in.
+        if (file === "/usr/bin/open") mac.installStudio(60_000);
+        return { code: 0, stdout: "", stderr: "" };
+      },
+      tempRoot,
+    };
+    const backend = createRobloxBackend(mac.deps);
+    const started = (await backend.action?.("get-studio", {}, context(storage))) as { started: boolean };
+    assert.equal(started.started, true);
+    const status = await finished(backend, storage);
+    assert.equal(status.install?.phase, "done", status.install?.message);
+    assert.deepEqual(fetched, ["https://setup.rbxcdn.com/mac/RobloxStudio.dmg"]);
+    assert.deepEqual(
+      mac.opened,
+      [{ file: "/usr/bin/open", args: ["-a", STUDIO_MAC_APP] }],
+      "opened once, after Set up",
+    );
+    assert.ok((await lstat(path.join(home, "Documents", "Roblox", "Plugins", HELPER_FILE))).isFile());
+    assert.equal(JSON.parse(await readFile(path.join(settings, "1.json"), "utf8"))["mcp-server"].enabled, true);
+    assert.equal(JSON.parse(await readFile(path.join(storage, "install", "state.json"), "utf8")).phase, "done");
+    assert.deepEqual(await readdir(tempRoot), [], "the download is gone");
+  });
+
+  it("Stop ends a download under way, runs nothing and keeps no download", async () => {
+    const root = await tmpDir("roblox-stop-get-");
+    const tempRoot = path.join(root, "temp");
+    await mkdir(tempRoot);
+    const mac = fakeMac(MISSING);
+    const ran: string[] = [];
+    mac.deps.install = {
+      fetch: (async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              stream.enqueue(new Uint8Array(1024));
+            },
+          }),
+        )) as typeof fetch,
+      run: async (file) => {
+        ran.push(file);
+        return { code: 0, stdout: "", stderr: "" };
+      },
+      tempRoot,
+    };
+    const backend = createRobloxBackend(mac.deps);
+    const storage = path.join(root, "storage");
+    await backend.action?.("get-studio", {}, context(storage));
+    const again = (await backend.action?.("get-studio", {}, context(storage))) as { started: boolean; message: string };
+    assert.deepEqual([again.started, again.message], [false, "Genex is already getting Roblox Studio."]);
+    await backend.action?.("cancel-get-studio", {}, context(storage));
+    const status = await finished(backend, storage);
+    assert.equal(status.install?.phase, "failed");
+    assert.equal(status.install?.reason, "cancelled");
+    assert.deepEqual(ran, [], "nothing ran");
+    assert.deepEqual(await readdir(tempRoot), []);
+    assert.deepEqual(mac.opened, []);
   });
 });
 
