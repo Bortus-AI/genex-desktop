@@ -7,7 +7,6 @@ import type { JSX } from "react";
 import { SOUND_SHORTCUT } from "../../../shared/game-sound.ts";
 import type { PluginInfo } from "../../../shared/plugins.ts";
 import type { FactRef } from "../../../shared/project-facts.ts";
-import { kindChip } from "../../../shared/shape-words.ts";
 import type { LiveView } from "../../live-views.ts";
 import type { BesideTarget } from "../../open-beside.ts";
 import type { LiveBehind, StageView } from "../../stage.ts";
@@ -224,17 +223,6 @@ export function StageStrip({
       data-stage-strip=""
       className="titlebar-drag window-controls-end flex min-h-12 max-h-30 shrink-0 flex-wrap items-center gap-2 overflow-auto border-b border-line bg-canvas ps-3 pe-2 py-1.5"
     >
-      {/* What this folder is, from its own evidence — so nobody has to guess why the stage is
-          showing a built page, and an engine export says so before a run is asked for. */}
-      {loaded?.built ? (
-        <span
-          data-stage-kind={loaded.shape.kind}
-          title={`The studio found this and keeps it as it is: ${loaded.shape.main}`}
-          className="no-drag shrink-0 rounded-control bg-inset px-1.5 py-0.5 text-micro text-ink-3"
-        >
-          {kindChip(loaded.shape.kind)}
-        </span>
-      ) : null}
       {/* One segmented group for every loaded game; Builds joins it once there is a build to
           draw, and Assets is always there — a game with no build still has files. Plugin buttons
           follow it as siblings, so they are there for a game with no build either. */}

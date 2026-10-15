@@ -10,6 +10,7 @@ import { activeThread as activeThreadOf, personFirstLabel, threadMeta } from "..
 import { notifyProblem } from "../state/toasts.ts";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { HomeLayer, useCoveredByHome } from "./HomeScreen.tsx";
+import { RemixLayer, useCoveredByRemix } from "./RemixLayer.tsx";
 import type { WorkspaceProps } from "./use-shell.ts";
 import { WorkspaceStage } from "./WorkspaceStage.tsx";
 
@@ -19,7 +20,9 @@ export const Workspace = memo(function Workspace(props: WorkspaceProps): JSX.Ele
   // Plugins or Play is up in its place.
   const away = chrome.workspaceCovered;
   const activeThread = useThreads(activeThreadOf);
-  const covered = useCoveredByHome();
+  const underHome = useCoveredByHome();
+  const underRemix = useCoveredByRemix();
+  const covered = underHome || underRemix;
   return (
     <div
       className="studio-workspace absolute inset-0"
@@ -50,7 +53,8 @@ export const Workspace = memo(function Workspace(props: WorkspaceProps): JSX.Ele
         <ChatResizeHandle />
       </div>
       <WorkspaceStage app={props.app} chrome={chrome} navigation={props.navigation} views={props.views} />
-      <HomeLayer app={props.app} dialogs={props.dialogs} chrome={chrome} handoff={props.handoff} />
+      <HomeLayer app={props.app} dialogs={props.dialogs} chrome={chrome} handoff={props.handoff} under={underRemix} />
+      <RemixLayer sidebarHidden={chrome.sidebarHidden} onToggleSidebar={chrome.toggleSidebar} />
     </div>
   );
 });

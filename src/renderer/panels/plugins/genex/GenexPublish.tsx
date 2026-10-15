@@ -29,6 +29,7 @@ import { DialogSurface } from "../../../ui/dialog.tsx";
 import { GameAvatar } from "../../../ui/GameAvatar.tsx";
 import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
+import { StepBar } from "../../../ui/StepBar.tsx";
 import { useCopy } from "../../../use-copy.ts";
 import { ACCOUNT_WORDS, GENEX_WORDS, problemWords } from "../../../words.ts";
 import { MakingArt } from "../../MakingArt.tsx";
@@ -44,7 +45,6 @@ import {
   type PublishView,
   publishGate,
   publishView,
-  StepState,
   type StepView,
 } from "./genex-publish-view.ts";
 import { useGenexStatus } from "./use-genex-status.ts";
@@ -74,33 +74,17 @@ function useElapsed(startedAt: string | null): number | null {
 /** The running attempt: what it is doing, for how long, and its steps as one bar with their names. */
 function Progress({ view }: { view: PublishView }): JSX.Element {
   const elapsed = useElapsed(view.startedAt);
-  const at = view.steps.findIndex((s) => s.state === StepState.Current);
   return (
     <div className="genex-publish-progress" aria-live="polite">
       <div className="genex-publish-phase">
         <span>{view.phase}</span>
         {elapsed ? <span className="genex-publish-elapsed">{WORDS.seconds(elapsed)}</span> : null}
       </div>
-      <div
-        className="genex-publish-bar"
-        role="progressbar"
-        aria-label={WORDS.progress}
-        aria-valuemin={0}
-        aria-valuemax={view.steps.length}
-        aria-valuenow={Math.max(at, 0)}
-        aria-valuetext={view.phase}
-      >
-        {view.steps.map((step: StepView) => (
-          <span key={step.step} data-state={step.state} />
-        ))}
-      </div>
-      <div className="genex-publish-steps" aria-hidden>
-        {view.steps.map((step: StepView) => (
-          <span key={step.step} data-state={step.state}>
-            {step.label}
-          </span>
-        ))}
-      </div>
+      <StepBar
+        steps={view.steps.map((step: StepView) => ({ key: step.step, label: step.label, state: step.state }))}
+        label={WORDS.progress}
+        valueText={view.phase}
+      />
     </div>
   );
 }

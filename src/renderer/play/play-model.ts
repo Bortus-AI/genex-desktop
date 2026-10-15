@@ -314,8 +314,8 @@ export const nativeViewsUp = (viewer: ViewerShown | null): boolean => viewer?.ph
 export const escapeLeaves = (viewer: ViewerShown | null): boolean =>
   viewer !== null && viewer.phase !== PlayViewerPhase.Playing;
 
-/** How a header button wears a note in place of its label: confirming (a check), at work, or just saying it. */
-export const NoteLook = { Done: "done", Busy: "busy", Said: "said" } as const;
+/** How a header button wears a note in place of its label: confirming (a check), or just saying it. */
+export const NoteLook = { Done: "done", Said: "said" } as const;
 export type NoteLook = (typeof NoteLook)[keyof typeof NoteLook];
 
 /** Which button each note is about, and how that button wears it. */
@@ -324,8 +324,6 @@ const NOTE_PLACE = {
   [PlayNote.InviteCopied]: { control: PlayControl.Invite, look: NoteLook.Done },
   [PlayNote.SignIn]: { control: PlayControl.Like, look: NoteLook.Said },
   [PlayNote.LikeFailed]: { control: PlayControl.Like, look: NoteLook.Said },
-  [PlayNote.Remixing]: { control: PlayControl.Remix, look: NoteLook.Busy },
-  [PlayNote.RemixFailed]: { control: PlayControl.Remix, look: NoteLook.Said },
   [PlayNote.MicBlocked]: { control: PlayControl.Mic, look: NoteLook.Said },
   [PlayNote.MicMissing]: { control: PlayControl.Mic, look: NoteLook.Said },
   [PlayNote.MicFailed]: { control: PlayControl.Mic, look: NoteLook.Said },

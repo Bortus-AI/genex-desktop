@@ -434,7 +434,7 @@ export interface StudioInvokePayloads {
   "studio:preview.state": undefined;
   "studio:preview.live": undefined;
   "studio:build.problem": { project: string };
-  "studio:packages.install": { project: string };
+  "studio:packages.install": { project: string; scripts?: boolean };
   "studio:run.start": Arg<"startRun", 0>;
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };

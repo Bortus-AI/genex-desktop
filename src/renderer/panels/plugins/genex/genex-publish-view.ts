@@ -28,6 +28,7 @@ import { type PluginToolbarEntry, toolbarItems } from "../../../../shared/plugin
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { type FactRef, type FolderHolds, servedAsWebGame } from "../../../../shared/project-facts.ts";
 import { relativeTime } from "../../../chat-labels.ts";
+import { type StepState, stepStateAt } from "../../../ui/step-bar.ts";
 import { GENEX_WORDS } from "../../../words.ts";
 
 const WORDS = GENEX_WORDS.publish;
@@ -55,10 +56,6 @@ const PHASE_STEP: Partial<Record<GenexPublishPhase, GenexPublishStep>> = {
   [GenexPublishPhase.Promoting]: GenexPublishStep.Live,
   [GenexPublishPhase.Listing]: GenexPublishStep.Live,
 };
-
-/** Where a step stands on the progress bar. */
-export const StepState = { Done: "done", Current: "current", Next: "next" } as const;
-export type StepState = (typeof StepState)[keyof typeof StepState];
 
 /** One step on the progress bar. */
 export interface StepView {
@@ -133,7 +130,7 @@ function stepViews(job: GenexPublishJob | undefined, running: boolean): StepView
   return steps.map((step, index) => ({
     step,
     label: WORDS.step[step],
-    state: (index < at && StepState.Done) || (index === at && StepState.Current) || StepState.Next,
+    state: stepStateAt(index, at),
   }));
 }
 

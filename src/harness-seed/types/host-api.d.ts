@@ -1339,6 +1339,11 @@ export interface GameLibraryEntry {
   removed?: boolean;
   /** Folder trust is host metadata; project files cannot grant it. */
   trustProjectSettings?: boolean;
+  /**
+   * A copy of someone else's game (a Play remix) whose setup scripts the person has not trusted:
+   * its packages install with none of them. Host metadata, like the trust above.
+   */
+  guardScripts?: boolean;
   cover?: GameCover;
   primaryThreadId?: string;
   /** The folder's content stamp as New game made it (`GameProject.scaffoldStamp`). */

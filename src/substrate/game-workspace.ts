@@ -188,6 +188,8 @@ function templateKeep(shape: ProjectShape, options: { template?: boolean }): Set
 export interface AdoptOptions {
   /** Allow project configuration only after the person explicitly trusts this folder. */
   trustProjectSettings?: boolean;
+  /** Someone else's game (a Play remix): its setup scripts run only once the person trusts them. */
+  guardScripts?: boolean;
   title?: string;
   /**
    * The game to open inside the picked folder — a `rel` from `inspect`, one folder down.
@@ -919,6 +921,7 @@ export class GameWorkspaces {
       await this.touch(existing.name);
       await this.#ensurePlayable(existing.dir, existing.name, options.title ?? existing.title, options);
       await this.#rememberTrust(existing.dir, options.trustProjectSettings === true);
+      if (options.guardScripts) await this.#guardScripts(existing.dir, true);
       return this.#describe(existing.name, existing.dir);
     }
 
@@ -932,9 +935,25 @@ export class GameWorkspaces {
     const title = options.title ?? path.basename(resolved);
     await this.#ensurePlayable(resolved, name, title, options);
     await this.#rememberTrust(resolved, options.trustProjectSettings === true);
+    if (options.guardScripts) await this.#guardScripts(resolved, true);
     await this.#saveIndex();
     await this.touch(name);
     return this.#describe(name, resolved);
+  }
+
+  /** The person trusts this game's setup scripts: its installs run them from now on. */
+  async trustScripts(name: string): Promise<void> {
+    await this.loadIndex();
+    await this.#guardScripts(this.dirFor(name), false);
+  }
+
+  async #guardScripts(dir: string, guarded: boolean): Promise<void> {
+    const key = await presentationPath(dir);
+    const entry = { ...this.#presentation.get(key) };
+    if (guarded) entry.guardScripts = true;
+    else delete entry.guardScripts;
+    this.#presentation.set(key, entry);
+    await this.#saveIndex();
   }
 
   async #rememberTrust(dir: string, trusted: boolean): Promise<void> {

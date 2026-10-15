@@ -45,6 +45,15 @@ import {
 } from "../../src/renderer/play/play-model.ts";
 import { BAYER_8, DEVELOP_DONE_MS, ditherSource, drawDevelop, revealAt } from "../../src/renderer/play/dither.ts";
 import {
+  besideRemix,
+  remixCovers,
+  remixLine,
+  remixSegments,
+  remixShare,
+  stillWithRemix,
+} from "../../src/renderer/play/remix-model.ts";
+import { StepState } from "../../src/renderer/ui/step-bar.ts";
+import {
   createPlayStore,
   FEED_STALE_MS,
   feedFailed,
@@ -54,8 +63,15 @@ import {
   initialPlay,
   installAnswered,
   onlineCounted,
+  remixEnded,
   remixFailureTold,
   remixOpened,
+  remixProgressed,
+  remixReturnedTo,
+  remixSetAside,
+  remixStarted,
+  type RemixUnderway,
+  RemixView,
   shelfChosen,
   shelvesLoaded,
   viewerReported,
@@ -71,6 +87,7 @@ import {
   PlayShelf,
   type PlayShelves,
   PlayViewerPhase,
+  RemixStep,
 } from "../../src/shared/play.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 
@@ -142,7 +159,14 @@ function deferred<T>() {
 
 /** A play API that records every call and answers with the handlers given (an empty page otherwise). */
 function fakeApi(handlers: Partial<PlayApi> = {}) {
-  const calls = { feed: [] as PlayFeedRequest[], shelves: 0, online: [] as string[][], open: [] as string[] };
+  const calls = {
+    feed: [] as PlayFeedRequest[],
+    shelves: 0,
+    online: [] as string[][],
+    open: [] as string[],
+    remix: [] as string[],
+    close: 0,
+  };
   const api: PlayApi = {
     playFeed: (request) => {
       calls.feed.push(request);
@@ -160,8 +184,14 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
       calls.open.push(slug);
       return handlers.playOpen ? handlers.playOpen(slug) : Promise.resolve();
     },
-    playClose: () => Promise.resolve(),
-    playRemix: (slug) => Promise.resolve(`${slug}-copy`),
+    playClose: () => {
+      calls.close += 1;
+      return Promise.resolve();
+    },
+    playRemix: (slug) => {
+      calls.remix.push(slug);
+      return handlers.playRemix ? handlers.playRemix(slug) : Promise.resolve(`${slug}-copy`);
+    },
   };
   return { api, calls };
 }
@@ -388,7 +418,6 @@ describe("Play's viewer cover", () => {
       likes: 3,
       remixable: true,
       note: null,
-      busy: false,
       guestCard: false,
       facts: null,
       mic: null,
@@ -491,7 +520,6 @@ describe("Play's loader and header", () => {
       likes: 3,
       remixable: true,
       note: null,
-      busy: false,
       guestCard: false,
       facts: null,
       mic: null,
@@ -506,8 +534,6 @@ describe("Play's loader and header", () => {
     assert.equal(noteOn({ ...bar, note: PlayNote.InviteCopied }, PlayControl.Invite)?.look, NoteLook.Done);
     assert.equal(noteOn({ ...bar, note: PlayNote.SignIn }, PlayControl.Like)?.look, NoteLook.Said);
     assert.equal(noteOn({ ...bar, note: PlayNote.LikeFailed }, PlayControl.Like)?.look, NoteLook.Said);
-    assert.equal(noteOn({ ...bar, note: PlayNote.Remixing }, PlayControl.Remix)?.look, NoteLook.Busy);
-    assert.equal(noteOn({ ...bar, note: PlayNote.RemixFailed }, PlayControl.Remix)?.look, NoteLook.Said);
     for (const note of [PlayNote.MicBlocked, PlayNote.MicMissing, PlayNote.MicFailed]) {
       assert.deepEqual(noteOn({ ...bar, note }, PlayControl.Mic), { note, look: NoteLook.Said }, note);
       assert.equal(noteOn({ ...bar, note }, PlayControl.MicDevices), null, "worn by the switch, not its menu");
@@ -520,7 +546,6 @@ describe("Play's loader and header", () => {
       likes: 3,
       remixable: true,
       note: null,
-      busy: false,
       guestCard: false,
       facts: null,
       mic: null,
@@ -625,13 +650,9 @@ describe("Play state actions", () => {
   });
 
   it("holds a finished remix for the shell until it is opened", () => {
-    const opened = gameOpened(initialPlay(), entry("a"));
-    const named = viewerReported(opened, { slug: "a", openId: 1, phase: PlayViewerPhase.Loading });
-    const remixed = viewerReported(named, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed, remixed: "a-copy" });
-    assert.equal(remixed.viewer, null);
-    assert.equal(remixed.remixed, "a-copy");
-    const later = viewerReported(remixed, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed });
-    assert.equal(later, remixed, "news without a remix keeps the one waiting");
+    const remixed = { ...initialPlay(), remixed: "a-copy" };
+    const closed = viewerReported(remixed, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed });
+    assert.equal(closed.remixed, "a-copy", "the viewer's news keeps the one waiting");
     const done = remixOpened(remixed);
     assert.equal(done.remixed, null);
     assert.equal(remixOpened(done), done, "nothing waiting: the same state");
@@ -651,17 +672,184 @@ describe("Play state actions", () => {
     assert.equal(later.installAsked, false, "a later closing asks nothing again");
   });
 
-  it("holds a late remix's failure until the shell has told it", () => {
-    const failed = viewerReported(initialPlay(), {
-      slug: "a",
-      openId: 4,
-      phase: PlayViewerPhase.Closed,
-      remixFailed: true,
-    });
-    assert.equal(failed.remixFailed, true);
+  it("holds a remix's failure until the shell has told it", () => {
+    const failed = { ...initialPlay(), remixFailed: true };
     const told = remixFailureTold(failed);
     assert.equal(told.remixFailed, false);
     assert.equal(remixFailureTold(told), told);
+  });
+});
+
+describe("Play: a remix shown in Create while it is made", () => {
+  const progress = (
+    slug: string,
+    step: RemixStep,
+    done: number | null = null,
+    total: number | null = null,
+    name: string | null = null,
+  ) => ({ slug, step, done, total, name });
+
+  it("starts at its first step, follows main's steps for its own game only, and ends once", () => {
+    const started = remixStarted(initialPlay(), { slug: "a", title: "A", coverUrl: "https://c/a.webp" });
+    assert.deepEqual(started.making, {
+      slug: "a",
+      title: "A",
+      coverUrl: "https://c/a.webp",
+      step: RemixStep.Copy,
+      done: null,
+      total: null,
+      name: null,
+      view: RemixView.Shown,
+    });
+    assert.equal(remixStarted(started, entry("b")), started, "one remix at a time");
+    const models = remixProgressed(started, progress("a", RemixStep.Models, 10, 52));
+    assert.deepEqual([models.making?.step, models.making?.done, models.making?.total], [RemixStep.Models, 10, 52]);
+    assert.equal(remixProgressed(models, progress("b", RemixStep.Build)), models, "another game's news");
+    assert.equal(remixProgressed(models, progress("a", RemixStep.Models, 10, 52)), models, "nothing new");
+    const ended = remixEnded(models);
+    assert.equal(ended.making, null);
+    assert.equal(remixProgressed(ended, progress("a", RemixStep.Build)), ended, "news after the end starts nothing");
+    assert.equal(remixEnded(ended), ended);
+  });
+
+  it("keeps the new game's name from the step that adopted it, and lists the game once beside it", () => {
+    const started = remixStarted(initialPlay(), entry("a"));
+    const adopted = remixProgressed(started, progress("a", RemixStep.Build, null, null, "a-remix"));
+    assert.equal(adopted.making?.name, "a-remix");
+    const games = [{ name: "a-remix" }, { name: "other" }];
+    assert.deepEqual(
+      besideRemix(games, adopted.making?.name ?? null).map((game) => game.name),
+      ["other"],
+    );
+    assert.equal(besideRemix(games, null), games, "no remix: every game");
+    assert.equal(besideRemix(games, started.making?.name ?? null), games, "not adopted yet: every game");
+  });
+
+  it("ends with the told failure of a remix", () => {
+    const started = remixStarted(initialPlay(), entry("a"));
+    const told = remixFailureTold({ ...started, remixFailed: true });
+    assert.equal(told.making, null);
+    assert.equal(told.remixFailed, false);
+  });
+
+  it("makes a card's remix from the press: shown at once, then its name or its failure waits for the shell", async () => {
+    const answer = deferred<string>();
+    const { api, calls } = fakeApi({ playRemix: () => answer.promise });
+    const store = createPlayStore(api, memory(), manualClock().now);
+    const made = store.remix(game("a", { remixable: true }));
+    assert.equal(store.getState().making?.slug, "a", "shown before main has answered");
+    void store.remix(game("b", { remixable: true }));
+    assert.deepEqual(calls.remix, ["a"], "a second press waits for the first remix");
+    answer.resolve("a-remix");
+    await made;
+    assert.equal(store.getState().remixed, "a-remix");
+    assert.equal(store.getState().making?.slug, "a", "still shown until the shell opens it");
+
+    const refused = createPlayStore(fakeApi({ playRemix: () => Promise.reject(new Error("no")) }).api, memory());
+    await refused.remix(game("c", { remixable: true }));
+    assert.equal(refused.getState().remixFailed, true);
+  });
+
+  it("makes the viewer's remix as a card's: the viewer gives way, and main always answers", async () => {
+    const { api, calls } = fakeApi();
+    const store = createPlayStore(api, memory(), manualClock().now);
+    await store.open(entry("a"));
+    await store.remixViewed();
+    assert.equal(calls.close, 1, "the viewer gives way at once");
+    assert.deepEqual(calls.remix, ["a"]);
+    assert.equal(store.getState().remixed, "a-copy");
+    assert.equal(store.getState().making?.slug, "a", "still shown until the shell opens it");
+
+    // A remix main refuses still ends: nothing stays on screen waiting for news that never comes.
+    const refused = createPlayStore(fakeApi({ playRemix: () => Promise.reject(new Error("no")) }).api, memory());
+    await refused.open(entry("b"));
+    await refused.remixViewed();
+    assert.equal(refused.getState().remixFailed, true);
+  });
+});
+
+describe("Play: a remix set aside while the person is elsewhere", () => {
+  it("goes aside when the person goes elsewhere, comes back from its row, and stays while its game opens", () => {
+    const started = remixStarted(initialPlay(), entry("a"));
+    assert.equal(remixCovers(started.making), true);
+    const aside = remixSetAside(started);
+    assert.equal(aside.making?.view, RemixView.Aside);
+    assert.equal(remixCovers(aside.making), false, "what the person went to is on screen");
+    assert.equal(remixSetAside(aside), aside);
+    const back = remixReturnedTo(aside);
+    assert.equal(remixCovers(back.making), true);
+    assert.equal(remixReturnedTo(back), back);
+    // The shell's own opening of the new game is a navigation too: it never sets the remix aside.
+    const opening = remixOpened({ ...back, remixed: "a-remix" });
+    assert.equal(opening.making?.view, RemixView.Opening);
+    assert.equal(remixSetAside(opening), opening);
+    assert.equal(remixCovers(opening.making), true, "on screen until its game is open under it");
+    assert.equal(remixSetAside(initialPlay()).making, null, "no remix: nothing to set aside");
+  });
+
+  it("opens the finished game for a person still with it, and only for them", () => {
+    const shown = remixStarted(initialPlay(), entry("a")).making;
+    assert.equal(stillWithRemix(shown, false), true);
+    assert.equal(stillWithRemix(shown, true), false, "Play or Plugins over Create: they stay there");
+    assert.equal(stillWithRemix(remixSetAside(remixStarted(initialPlay(), entry("a"))).making, false), false);
+    assert.equal(stillWithRemix(null, false), false);
+  });
+});
+
+describe("Play: how a remix being made reads", () => {
+  const MB = 1024 * 1024;
+  const making = (step: RemixStep, done: number | null = null, total: number | null = null): RemixUnderway => ({
+    slug: "a",
+    title: "A",
+    coverUrl: null,
+    step,
+    done,
+    total,
+    name: null,
+    view: RemixView.Shown,
+  });
+
+  it("says the step it is on, the models with their megabytes", () => {
+    assert.equal(remixLine(making(RemixStep.Copy)), "Copying files");
+    assert.equal(remixLine(making(RemixStep.Models, 31 * MB, 52 * MB)), "Downloading models · 31 of 52 MB");
+    assert.equal(remixLine(making(RemixStep.Models, 4 * MB, null)), "Downloading models · 4 MB");
+    assert.equal(remixLine(making(RemixStep.Models)), "Downloading models");
+    assert.equal(remixLine(making(RemixStep.Models, 0, 0)), "Downloading models · 0 MB", "no total to count to");
+    assert.equal(remixLine(making(RemixStep.Packages)), "Installing packages");
+    assert.equal(remixLine(making(RemixStep.Build)), "Building the game");
+  });
+
+  it("draws the steps before its own done, its own under way, the rest to come", () => {
+    assert.deepEqual(
+      remixSegments(making(RemixStep.Packages)).map((step) => [step.label, step.state]),
+      [
+        ["Files", StepState.Done],
+        ["Models", StepState.Done],
+        ["Packages", StepState.Current],
+        ["Build", StepState.Next],
+      ],
+    );
+  });
+
+  it("goes round its ring only forward, the models by their bytes", () => {
+    const shares = [
+      remixShare(making(RemixStep.Copy)),
+      remixShare(making(RemixStep.Models, 0, 52 * MB)),
+      remixShare(making(RemixStep.Models, 26 * MB, 52 * MB)),
+      remixShare(making(RemixStep.Models, 52 * MB, 52 * MB)),
+      remixShare(making(RemixStep.Packages)),
+      remixShare(making(RemixStep.Build)),
+    ];
+    for (const [i, share] of shares.entries()) assert.ok(i === 0 || share >= (shares[i - 1] ?? 1), `${shares}`);
+    const [first = 0, last = 1] = [shares[0], shares.at(-1)];
+    assert.ok(first > 0 && last < 1, "under way, never empty, never full");
+  });
+
+  it("keeps the new game's name once the shell opens it, so its own row takes over", () => {
+    const started = remixStarted(initialPlay(), entry("a"));
+    const opened = remixOpened({ ...started, remixed: "a-remix" });
+    assert.equal(opened.remixed, null);
+    assert.equal(opened.making?.name, "a-remix");
   });
 });
 

@@ -935,8 +935,17 @@ function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
     gamesRoot: () => studio.layout.gamesRoot,
     // A fixture launch never reaches the network: its copy is a local stand-in.
     clone: fixtureNativePolicy ? fixtureClone : gitClone,
+    install: async (dir) => {
+      await studio.builds.installGuarded({ project: world.slug, dir });
+    },
     adopt: async (dir, title) =>
-      (await studio.adoptProject(dir, { title, template: false, trustProjectSettings: false })).name,
+      (await studio.adoptProject(dir, { title, template: false, trustProjectSettings: false, guardScripts: true }))
+        .name,
+    build: async (name) => {
+      const game = (await studio.games.list()).find((listed) => listed.name === name);
+      if (game) await studio.builds.ensure({ project: name, dir: game.dir, shape: game.shape, guarded: true });
+    },
+    progress: (progress) => pushUiEvent({ type: UiEvent.PlayRemix, payload: { slug: world.slug, ...progress } }),
   });
 }
 
@@ -945,7 +954,6 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
     gallery: playCatalogFor(studio),
-    remix: (world) => remixPlayGame(studio, world),
     emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
     openExternal: (url) => {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);

@@ -51,8 +51,6 @@ export interface PlayViewerDeps {
   /** Give the keyboard to the app's own page, where the header is (the game lets go of the mouse). */
   focusApp(): void;
   clipboard(text: string): void;
-  /** Copy a game's public source into a new local game; answers its library name. */
-  remix(world: PlayWorld): Promise<string>;
   emit(event: PlayViewerEvent): void;
   clock: { setTimeout(run: () => void, ms: number): unknown; clearTimeout(handle: unknown): void };
   /** The game's voice chat: the system, the page's microphone, the menu and what is remembered. */
@@ -78,7 +76,6 @@ const IDLE_STATE: PlayBarState = {
   likes: 0,
   remixable: false,
   note: null,
-  busy: false,
   guestCard: false,
   facts: null,
   mic: null,
@@ -111,8 +108,8 @@ function heldEscape(clock: Clock, onHeld: () => void) {
   };
 }
 
-/** What a closing tells the app beyond the closing itself: a remix to open, or Genex to install. */
-type ClosedNews = Pick<PlayViewerEvent, "remixed" | "install">;
+/** What a closing tells the app beyond the closing itself: Genex to install. */
+type ClosedNews = Pick<PlayViewerEvent, "install">;
 
 /** What the header's actions share: the session they act for and how they report back. */
 interface ViewerContext {
@@ -122,22 +119,14 @@ interface ViewerContext {
   current(epoch: number): Session | null;
   /** Tell the app how the header looks now. */
   draw(): void;
-  note(value: PlayNote | null, busy?: boolean): void;
+  note(value: PlayNote | null): void;
   close(news?: ClosedNews): void;
 }
-
-/** News of a remix whose viewer has already closed: the copy still opens, or its failure is still told. */
-const lateRemix = (s: Session, outcome: { remixed: string } | { remixFailed: true }): PlayViewerEvent => ({
-  slug: s.slug,
-  openId: s.epoch,
-  phase: PlayViewerPhase.Closed,
-  ...outcome,
-});
 
 /** Like or unlike at once, keep what the server answers, and take it back with a note when it cannot be saved. */
 async function toggleLike(ctx: ViewerContext): Promise<void> {
   const s = ctx.session();
-  if (!s?.world || s.state.busy || s.liking) return;
+  if (!s?.world || s.liking) return;
   const before = s.state;
   const liked = !before.liked;
   s.liking = true;
@@ -165,24 +154,6 @@ async function copyInvite(ctx: ViewerContext): Promise<void> {
   if (!ctx.current(s.epoch)) return;
   ctx.deps.clipboard(code ? `${playPageUrl(s.slug)}?ref=${encodeURIComponent(code)}` : playPageUrl(s.slug));
   ctx.note(PlayNote.InviteCopied);
-}
-
-/**
- * Make the game a new one of the player's own; the viewer closes into it. A viewer closed while the
- * copy was being made still hears how it went, so the copy opens (or its failure is told) anyway.
- */
-async function remixShown(ctx: ViewerContext): Promise<void> {
-  const s = ctx.session();
-  if (!s?.world?.remixable || s.state.busy) return;
-  ctx.note(PlayNote.Remixing, true);
-  try {
-    const name = await ctx.deps.remix(s.world);
-    if (ctx.current(s.epoch)) ctx.close({ remixed: name });
-    else ctx.deps.emit(lateRemix(s, { remixed: name }));
-  } catch {
-    if (ctx.current(s.epoch)) ctx.note(PlayNote.RemixFailed);
-    else ctx.deps.emit(lateRemix(s, { remixFailed: true }));
-  }
 }
 
 /** The header's state once the game's page facts are read. */
@@ -265,7 +236,8 @@ function barActions(ctx: ViewerContext): Record<PlayControl, (at?: PlayPoint) =>
       ctx.note(PlayNote.Copied);
     },
     [PlayControl.Invite]: () => void copyInvite(ctx),
-    [PlayControl.Remix]: () => void remixShown(ctx),
+    // The app makes the copy, as a card's (`studio:play.remix`); the viewer gives way to it.
+    [PlayControl.Remix]: () => ctx.close(),
     [PlayControl.Install]: () => {
       if (ctx.session()?.signedOut) ctx.close({ install: true });
     },
@@ -330,12 +302,12 @@ export function playViewer(deps: PlayViewerDeps) {
     draw: () => {
       if (session) deps.emit({ slug: session.slug, openId: session.epoch, phase: session.phase, bar: session.state });
     },
-    note: (value, busy = false) => {
+    note: (value) => {
       if (!session) return;
       noteTimer = stop(clock, noteTimer);
-      session.state = { ...session.state, note: value, busy };
+      session.state = { ...session.state, note: value };
       ctx.draw();
-      if (value && !busy) noteTimer = clock.setTimeout(() => ctx.note(null), NOTE_MS);
+      if (value) noteTimer = clock.setTimeout(() => ctx.note(null), NOTE_MS);
     },
     close,
   };

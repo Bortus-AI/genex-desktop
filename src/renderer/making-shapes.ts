@@ -675,6 +675,38 @@ function person(x: number, y: number, size: number, k = 1): MarkShape[] {
   ];
 }
 
+/** A ring: an outline with a hole `width` wide, for the even-odd face. */
+function ring(cx: number, cy: number, r: number, width: number): MarkShape[] {
+  return [
+    { points: disc(cx, cy, r), face: true },
+    { points: disc(cx, cy, r - width).reverse(), face: true },
+  ];
+}
+
+/** Remix: the Remix button's fork, three rings joined by a U and its stem, one game two ways on. */
+export function remixMark(): MarkShape[] {
+  const pipe: Vec2[] = [
+    [-8.2, 3.3],
+    [-8.2, -1.2],
+    [-1.2, -1.2],
+    [-1.2, -4.4],
+    [1.2, -4.4],
+    [1.2, -1.2],
+    [8.2, -1.2],
+    [8.2, 3.3],
+    [5.8, 3.3],
+    [5.8, 1.2],
+    [-5.8, 1.2],
+    [-5.8, 3.3],
+  ];
+  return [
+    { points: rounded(pipe, [0.2, 2.6, 0.5, 0.2, 0.2, 0.5, 2.6, 0.2, 0.2, 0.9, 0.9, 0.2]), face: true },
+    ...ring(-7, 5.9, 2.6, 1.25),
+    ...ring(7, 5.9, 2.6, 1.25),
+    ...ring(0, -7, 2.6, 1.25),
+  ];
+}
+
 /** Multiplayer: a room, drawn as the account card's sibling, with two players on it. */
 export function multiplayerMark(): MarkShape[] {
   return [

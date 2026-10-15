@@ -694,47 +694,6 @@
   font: 12px / 20px var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
-.genex-publish-bar,
-.genex-publish-steps {
-  display: grid;
-  grid-auto-columns: minmax(0, 1fr);
-  grid-auto-flow: column;
-  gap: 4px;
-}
-.genex-publish-bar span {
-  position: relative;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: var(--line-strong);
-}
-.genex-publish-bar span[data-state="done"] {
-  background: var(--ink);
-}
-/* The step at work carries a light that crosses it, so a long upload never looks stuck. */
-.genex-publish-bar span[data-state="current"]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, var(--ink), transparent);
-  animation: genex-publish-sweep 1.4s var(--ease-smooth-out) infinite;
-}
-@keyframes genex-publish-sweep {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(100%);
-  }
-}
-.genex-publish-steps {
-  color: var(--ink-3);
-  font-size: 12px;
-  line-height: 16px;
-}
-.genex-publish-steps span[data-state="current"] {
-  color: var(--ink);
-}
 /* The link anyone can play, in a field with its Copy. */
 .genex-publish-link-field {
   display: flex;
@@ -931,14 +890,6 @@
 }
 .genex-publish-plugin:hover {
   text-decoration-color: currentColor;
-}
-@media (prefers-reduced-motion: reduce) {
-  .genex-publish-bar span[data-state="current"]::after {
-    animation: none;
-  }
-  .genex-publish-bar span[data-state="current"] {
-    background: var(--ink-3);
-  }
 }
 
 /* ── The Genex plugin page's tabs: Tools and Credits, in the Play / Create switch's colours (play.css) ── */

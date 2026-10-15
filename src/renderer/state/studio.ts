@@ -67,7 +67,7 @@ import {
   type LibraryStore,
 } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
-import { createPlayStore, type PlayStore, viewerReported } from "./play.ts";
+import { createPlayStore, type PlayStore, remixProgressed, viewerReported } from "./play.ts";
 import { createPeopleStore, type PeopleStore } from "./people.ts";
 import {
   bootstrapFailed,
@@ -362,6 +362,9 @@ function applyUiEvent({ agentScreens, threads, layout, library, update, play }: 
   switch (event.type) {
     case UiEvent.PlayViewer:
       play.setState((state) => viewerReported(state, event.payload), true);
+      break;
+    case UiEvent.PlayRemix:
+      play.setState((state) => remixProgressed(state, event.payload), true);
       break;
     case UiEvent.PreviewFrame:
       agentScreens.setState((state) => frameReceived(state, event.payload), true);

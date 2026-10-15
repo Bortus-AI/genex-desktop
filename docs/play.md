@@ -53,7 +53,17 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   Main lets the page open the microphone only right after it asked it to, and only on the game's
   own origin.
 - Remix clones the game's public source from Genex's git (https only, no hooks or filters, its Git
-  LFS files from the same repository) into a new game, adopted without trusting its settings.
+  LFS files from the same repository; a download fails only once it stalls for a minute) into a
+  hidden folder, installs its packages with npm without running any of their scripts (a stale or
+  another manager's lockfile: from package.json), moves it to `<slug>-remix`, adopts it without trusting its settings and builds it
+  once, so it opens playing. One remix at a time. Remix (a card's, or the viewer's, which closes
+  the viewer) switches to Create at once: a sidebar row with the cover in a ring (the adopted game
+  stays off the list until it opens) and, over the workspace, the chat it will have (title, status
+  line, a composer that takes nothing yet) beside the stage's loader with the step and a step bar
+  (`UiEvent.PlayRemix`, the models with their bytes), fading out when the new game opens. Going
+  elsewhere sets it aside and its row brings it back; one finished meanwhile is a toast, and its
+  game takes the row. A failure is a toast, and Play comes back for a person still with it. A remix
+  keeps its scripts off until a build fails and the person trusts it: the stage's Run setup scripts.
 
 ## Where to work
 

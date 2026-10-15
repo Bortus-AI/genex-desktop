@@ -573,8 +573,11 @@ export interface StudioApi {
   }>;
   /** Why the stage cannot show this game's own build; null when the last build was fine. */
   buildProblem(project: string): Promise<BuildProblem | null>;
-  /** Install this game's packages — the one action that reaches the network, on the user's press. */
-  installPackages(project: string): Promise<InstallResult>;
+  /**
+   * Install this game's packages — the one action that reaches the network, on the user's press.
+   * `scripts`: the person trusts a remix's setup scripts, which then run (and from then on).
+   */
+  installPackages(project: string, options?: { scripts?: boolean }): Promise<InstallResult>;
   startRun(spec: {
     project: string;
     goal: string;

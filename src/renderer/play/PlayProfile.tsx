@@ -125,16 +125,8 @@ function ProfileFriends({ friends, name }: { friends: PlayProfileFriend[]; name:
 }
 
 /** The profile's games, as the dashboard draws them. */
-function ProfileGames({
-  profile,
-  own,
-  onRemixed,
-}: {
-  profile: Profile;
-  own: boolean;
-  onRemixed: (name: string) => void;
-}) {
-  const { remixing, remix } = useCardRemix(onRemixed);
+function ProfileGames({ profile, own }: { profile: Profile; own: boolean }) {
+  const remix = useCardRemix();
   const title = own ? WORDS.myGames : PLAY_WORDS.shelves.games;
   return (
     <section
@@ -147,7 +139,7 @@ function ProfileGames({
         {profile.games.length > 0 && <span className="profile-section-count">{profile.games.length}</span>}
       </div>
       {profile.games.length > 0 ? (
-        <Grid games={profile.games} placeholders={0} remixing={remixing} onRemix={remix} marquee />
+        <Grid games={profile.games} placeholders={0} onRemix={remix} marquee />
       ) : (
         <p className="people-note">{own ? WORDS.noGamesOwn : WORDS.noGames}</p>
       )}
@@ -160,13 +152,11 @@ export function PlayProfile({
   userId,
   sidebarHidden,
   onToggleSidebar,
-  onRemixed,
   onNewGame,
 }: {
   userId: string;
   sidebarHidden: boolean;
   onToggleSidebar: () => void;
-  onRemixed: (name: string) => void;
   onNewGame: () => void;
 }): JSX.Element {
   const entry = usePeople((s) => s.profiles[userId]);
@@ -203,7 +193,7 @@ export function PlayProfile({
             <ProfileFriends friends={profile.friends} name={own ? null : profile.person.name} />
           )}
           {own && <StatsStrip games={profile.games} onNewGame={onNewGame} />}
-          <ProfileGames profile={profile} own={own} onRemixed={onRemixed} />
+          <ProfileGames profile={profile} own={own} />
         </div>
       )}
     </PlayPageFrame>
