@@ -370,10 +370,13 @@ function connectionOf(conn: Conn, id: number): HelperConnection {
   return connection;
 }
 
-/** Serves one accepted socket: frames in, frames out, pings, and the close. */
+/**
+ * Serves one accepted socket: frames in (starting with `head`, any bytes that came with the
+ * handshake), frames out, pings, and the close.
+ */
 function serveConnection(
   socket: Socket,
-  id: number,
+  connection: { id: number; head: Buffer },
   limits: Limits,
   accept: HelperSocketOptions["accept"],
 ): HelperConnection {
@@ -390,12 +393,13 @@ function serveConnection(
     ping: undefined,
     cut: undefined,
   };
-  const connection = connectionOf(conn, id);
-  conn.handlers = accept(connection);
-  socket.on("data", (chunk: Buffer) => {
+  const served = connectionOf(conn, connection.id);
+  conn.handlers = accept(served);
+  const feed = (chunk: Buffer) => {
     conn.buffer = conn.buffer.length ? Buffer.concat([conn.buffer, chunk]) : chunk;
     drain(conn);
-  });
+  };
+  socket.on("data", feed);
   socket.on("error", () => socket.destroy());
   socket.once("close", () => {
     conn.ended = true;
@@ -404,7 +408,8 @@ function serveConnection(
     conn.handlers.closed();
   });
   schedulePing(conn);
-  return connection;
+  if (connection.head.length) feed(connection.head);
+  return served;
 }
 
 /** Listens on `port` of this computer only; rejects with the listen error. */
@@ -444,10 +449,9 @@ export async function startHelperSocket(options: HelperSocketOptions): Promise<H
       socket.setNoDelay(true);
       sockets.add(socket);
       socket.once("close", () => sockets.delete(socket));
-      const connection = serveConnection(socket, ++nextId, limits, options.accept);
+      const connection = serveConnection(socket, { id: ++nextId, head }, limits, options.accept);
       connections.add(connection);
       socket.once("close", () => connections.delete(connection));
-      if (head.length) socket.emit("data", head);
     });
     try {
       await listenOn(server, port);
