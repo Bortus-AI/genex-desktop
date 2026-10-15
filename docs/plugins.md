@@ -1345,6 +1345,22 @@ or the signed-in person's own), refuses a paid asset with nothing inserted, and 
 script the asset brought, flagging `require` with an id, `loadstring`, `getfenv`, `HttpService` and
 `MarketplaceService`.
 
+**Models.** `check-model` (no card, no lock) runs the asset gate (`asset-gate.ts`) over a `.glb` or
+`.gltf` in the game folder: at most 20,000 triangles, closed (every edge, once vertices at the same
+place are welded, shared by exactly two triangles), one material, at most 4 bone influences per
+vertex, the scene's roots at the origin, and textures at most 1024 by 1024 (`textureSide` asks for
+less), their sizes read by hand from the PNG `IHDR` or the JPEG frame marker. The file is read as
+hostile input: a plain path inside the game folder with no link on the way, a size cap checked
+before any read, a GLB read stage by stage so nothing past a broken header is read; a `.gltf`'s
+buffers and pictures follow the same rules or come inline as `data:` addresses. An FBX is answered
+with how to export `.glb`, and a Draco or meshopt export with how to export one uncompressed.
+`import-model` (a card; the `studio` lock) runs the gate and sends only a model that passes to the
+helper's `model.import` (`model-import.ts`), as the helper's own mesh (`GXM1`) converted from
+glTF's metres to studs, under the agent's busy mark; the helper builds an anchored MeshPart at the
+origin, and the mesh is uploaded to the person's account only when they publish. Only the shape
+comes in. When Studio can't add it, the answer names the checked file and Studio's own File ›
+Import 3D.
+
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
 `hook-answers.ts`), each hooked for games with the `roblox-project` fact; nothing hooks `run.end`,

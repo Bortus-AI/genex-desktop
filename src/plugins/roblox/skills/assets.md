@@ -18,8 +18,21 @@ chat, and an asset is checked before it is offered.
   one animation per `.fbx`.
 - The model's origin sits where it should stand or pivot, at real scale (1 stud is about 28 cm;
   a door is about 7 studs tall).
-- Formats: `.fbx`, `.gltf`/`.glb` or `.obj`. Prefer `.glb`: it carries the hierarchy and the PBR
-  textures in one file.
+- Export `.glb` (Blender: File › Export › glTF 2.0, format glTF Binary, compression off): it carries
+  the hierarchy and the PBR textures in one file, and it is the format Genex checks and imports.
+
+## Checking and importing a model
+
+- `roblox__check-model` checks a `.glb` or `.gltf` in the game folder against the rules above:
+  triangles, closed, one material, 4 influences, the root at the origin, and textures at most
+  1024 by 1024 (`textureSide` asks for less). Nothing leaves the computer; run it after each export
+  and fix what it names. It doesn't read FBX: export `.glb` instead.
+- `roblox__import-model` runs the same check, then adds the model to the place as an anchored
+  MeshPart at the origin, converted from glTF's metres to studs. Only its shape comes in: give it
+  a `SurfaceAppearance` for its textures. The person approves each import on a card, because the
+  model is uploaded to their Roblox account when they publish the place.
+- If Studio can't add it, the answer says so: the person can add the checked file themselves with
+  File › Import 3D.
 
 ## Textures
 
