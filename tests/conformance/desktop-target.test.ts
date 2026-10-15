@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { InputRoute, TargetRuntime } from "../../src/shared/computer-target.ts";
-import { desktopTarget, driverKey } from "../../src/main/core/desktop-target.ts";
+import { desktopTarget, driverKey, engineAppRefusal } from "../../src/main/core/desktop-target.ts";
 import type { DesktopApp, DesktopDriver, DesktopFocus } from "../../src/substrate/desktop-driver.ts";
 import type { PreviewInputAction } from "../../src/substrate/preview-input.ts";
 
@@ -209,5 +209,76 @@ describe("desktop target", () => {
     const { target } = await targetOver(fake);
     const state = (await target.state?.()) as Record<string, unknown>;
     assert.equal("tree" in state, false);
+  });
+});
+
+/**
+ * The engine-app guard: computer use never builds or play-tests in an engine's editor. The apps an
+ * enabled engine plugin declares (`engine.apps`) are refused outside that plugin's setup assist; in
+ * an assist, only the apps it was granted are driven, and the apps the studio never drives stay
+ * refused whatever the grant names.
+ */
+describe("the engine-app guard", () => {
+  const TOY_EDITOR: DesktopApp = { name: "Toy Editor", bundleId: "com.example.toy", pid: 31 };
+  const declared = new Set(["com.example.toy"]);
+
+  /** A target whose guard reads the declared apps and the chat's live assist grant (null: none). */
+  async function guarded(under: DesktopApp, granted: ReadonlySet<string> | null) {
+    const fake = fakeDriver({ under });
+    const asked: string[] = [];
+    const target = desktopTarget({
+      driver: fake.driver,
+      allowApp: async (app) => {
+        asked.push(app.name);
+        return true;
+      },
+      ownApp: (app) => app.bundleId === STUDIO.bundleId,
+      engineApps: (app) => engineAppRefusal(app, { declared, granted }),
+    });
+    await target.screenshot({ quality: 80, surface: "auto" as never });
+    const done = await target.input([{ type: "click", x: 10, y: 10, px: true }]);
+    return { done, calls: fake.calls, asked, refused: target.refusals?.() ?? [] };
+  }
+
+  it("refuses an engine's editor outside a setup assist, before the person is asked about it", async () => {
+    const { done, calls, asked, refused } = await guarded(TOY_EDITOR, null);
+    assert.equal(done.applied, 0);
+    assert.deepEqual(calls, []);
+    assert.deepEqual(asked, [], "a refused app is never put to the person");
+    assert.match(refused[0]!.message, /Toy Editor is a game engine's editor/);
+    assert.match(refused[0]!.message, /use the engine's own tools/);
+  });
+
+  it("drives an engine's editor inside an assist that was granted it", async () => {
+    const { done, calls, asked } = await guarded(TOY_EDITOR, new Set(["com.example.toy"]));
+    assert.equal(done.applied, 1);
+    assert.deepEqual(calls, ["click 5,5 left×1"]);
+    assert.deepEqual(asked, ["Toy Editor"], "the person's per-app card still asks");
+  });
+
+  it("refuses every app outside the grant while an assist runs", async () => {
+    const { done, calls, refused } = await guarded(EDITOR, new Set(["com.example.toy"]));
+    assert.equal(done.applied, 0);
+    assert.deepEqual(calls, []);
+    assert.match(refused[0]!.message, /TextEdit is not one of the apps this setup step may use/);
+  });
+
+  it("still never drives the studio or system settings, even when a grant names them", async () => {
+    for (const app of [STUDIO, { name: "System Settings", bundleId: "com.apple.systempreferences", pid: 4 }]) {
+      const { done, calls, refused } = await guarded(app, new Set([app.bundleId!, "com.example.toy"]));
+      assert.equal(done.applied, 0, app.name);
+      assert.deepEqual(calls, []);
+      assert.match(refused[0]!.message, /never driven/);
+    }
+  });
+
+  it("leaves apps no engine declares alone outside an assist", async () => {
+    assert.equal(engineAppRefusal(EDITOR, { declared, granted: null }), null);
+    assert.equal(engineAppRefusal({ name: "Nameless", bundleId: null, pid: 1 }, { declared, granted: null }), null);
+    assert.match(
+      String(engineAppRefusal({ name: "Nameless", bundleId: null, pid: 1 }, { declared, granted: declared })),
+      /not one of the apps/,
+      "an app with no bundle id is never inside a grant",
+    );
   });
 });

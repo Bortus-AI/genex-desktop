@@ -222,6 +222,21 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front
 window's tree). A refusal ends the plan and its reason is the answer.
+- **Never building or play-testing.** The apps an enabled engine plugin declares
+  (`engine.apps.mac`, its editor) are refused in plain words ("use the engine's own tools") before
+  the person is asked about them, unless the chat holds that plugin's setup assist; the tool's own
+  description says so too. While an assist holds the chat, every app outside its grant is refused.
+  The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`).
+- **Do it for me** ([`desktop-assist.ts`](../src/main/core/desktop-assist.ts), the plugin service
+  `game.engine.assist`). Setup clicks and publishing the person approved, only: a switch or dialog
+  only the engine's window offers. Only the person starts one, by a plugin action they pressed or a
+  tool call whose own card they approved (`confirmed` on the call, set by the host); a plugin from a
+  folder or the marketplace shows the task on a card first, and with the setting off the studio's
+  card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
+  <task>" to the game's chat and grants that chat the plugin's declared apps until the turn
+  answering the message ends (the turn it started, or the running turn it was steered into), and
+  never past 20 minutes. That chat's own session then works as below, with its session and app
+  cards. Windows and a Mac with no driver answer `unavailable`.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in

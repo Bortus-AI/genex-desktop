@@ -83,7 +83,7 @@ import type { PluginWorkspace } from "../../shared/project-workspace.ts";
 import { canonicalSourceRepo } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
-import { PluginCallCutOff, PluginProcess } from "./process.ts";
+import { PluginCallCutOff, type PluginInvocation, PluginProcess } from "./process.ts";
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 
@@ -251,7 +251,8 @@ function capabilityFor(method: string): PluginCapability | undefined {
 }
 /**
  * The services that link a game to an engine project, snapshot the game before the plugin changes
- * it, make a game for a project, and name the games whose run is going.
+ * it, make a game for a project, name the games whose run is going, and hand a setup task to the
+ * game's chat (Do it for me).
  */
 const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineLink,
@@ -260,6 +261,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameSnapshot,
   PluginService.GameCreate,
   PluginService.GameEngineRuns,
+  PluginService.GameEngineAssist,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
@@ -748,7 +750,14 @@ export class PluginRegistry {
    */
   appAccount: { id: string; actions: readonly string[] } | undefined;
   readonly bootstrap: string;
-  readonly service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>;
+  /** The host services, told which call each request is made on behalf of (absent for the host's own). */
+  readonly service: (
+    id: string,
+    method: string,
+    args: any,
+    binding?: PluginBinding,
+    invocation?: PluginInvocation,
+  ) => Promise<unknown>;
   /** One source for the `plugins.changed` UI event; the host sets it. A throwing hook never fails a mutation. */
   onChange: ((change: PluginChange) => void) | undefined;
   /**
@@ -788,7 +797,13 @@ export class PluginRegistry {
     root: string,
     seeds: string,
     bootstrap: string,
-    service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>,
+    service: (
+      id: string,
+      method: string,
+      args: any,
+      binding?: PluginBinding,
+      invocation?: PluginInvocation,
+    ) => Promise<unknown>,
   ) {
     this.root = root;
     this.seeds = seeds;
@@ -1814,7 +1829,7 @@ export class PluginRegistry {
       if (!capability || !hasCapability(p, capability)) throw new Error(MESSAGE.CapabilityDenied);
       if (capability === PluginCapability.Credentials && isCredentialService(method))
         return this.#credentialService(id, p, method, args);
-      return this.service(id, method, args, binding);
+      return this.service(id, method, args, binding, invocation);
     };
   }
   /** The plugin's backend child, started on first use: an agent's tool reaches it only while the plugin is on. */
@@ -1893,12 +1908,14 @@ export class PluginRegistry {
     const host = declaration.host;
     if (host) this.#assertHostTool(p);
     // A local plugin's agent tool asks with Genex's words first, its own question after them.
+    // `confirmed`: the person approved this call's own card, the tool's declared question.
+    let confirmed = false;
     if (localAgentCall(p, declaration, caller)) {
       if (asksEachCall(p, declaration, caller))
-        await this.#localConsented(id, p, name, declaration, args, binding, signal);
+        confirmed = await this.#localConsented(id, p, name, declaration, args, binding, signal);
     } else if (declaration.confirmation) {
       const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
-      await this.#consented(id, name, declaration, shown, binding, signal);
+      confirmed = await this.#consented(id, name, declaration, shown, binding, signal);
     }
     // The plugin may have been turned off while the call waited its turn: each call checks again.
     if (host)
@@ -1910,10 +1927,13 @@ export class PluginRegistry {
     const ceiling = Math.max(PLUGIN_CALL_TIMEOUT_MS, timeoutMs, ...nativeJobTimeouts);
     return async () => {
       this.#active(id);
-      return this.#process(id).call("tool", tool, args, binding, signal, ceiling);
+      return this.#process(id).call("tool", tool, args, binding, signal, ceiling, { confirmed });
     };
   }
-  /** Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must still be live after. */
+  /**
+   * Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must
+   * still be live after. True when the person's own click approved it.
+   */
   async #consented(
     id: string,
     name: string,
@@ -1921,16 +1941,18 @@ export class PluginRegistry {
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
     const { approved, by } = await this.consent(id, declaration, args, binding, signal);
     if (!approved) throw new PluginConsentDeclined(name, by);
     this.#active(id);
+    return by === "user";
   }
   /**
    * Asks the person before a local plugin's agent tool runs, offering Always allow; a no is thrown,
    * and an Always allow lets that tool run without asking until its code changes or it is turned off.
    * A tool with its own question asks it after Genex's words, every call, with no Always allow.
+   * True when the person's own click approved that question: Genex's words alone confirm nothing.
    */
   async #localConsented(
     id: string,
@@ -1940,7 +1962,7 @@ export class PluginRegistry {
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
     const own = declaration.confirmation;
     const confirmation = own
@@ -1955,6 +1977,7 @@ export class PluginRegistry {
     this.#stillAsked(id, p);
     if (always && !own) await this.#allow(id, p, declaration.name);
     this.#stillAsked(id, p);
+    return Boolean(own) && by === "user";
   }
   /** Throws unless `p` is still the plugin's live record: the one the person was asked about. */
   #stillAsked(id: string, p: Installed): void {

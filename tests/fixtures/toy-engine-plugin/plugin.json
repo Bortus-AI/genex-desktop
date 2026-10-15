@@ -32,6 +32,14 @@
       "players": 3,
       "clock": "none",
       "pointer": true
+    },
+    "apps": {
+      "mac": [
+        "com.example.toy"
+      ],
+      "windows": [
+        "ToyEditor.exe"
+      ]
     }
   },
   "tools": [

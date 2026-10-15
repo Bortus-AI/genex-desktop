@@ -560,6 +560,32 @@ export interface PluginHostCall {
    * Needs no bound game.
    */
   (method: "game.engine.runs"): Promise<PluginEngineRun[]>;
+  /**
+   * `game-engine`: Do it for me. Hands a setup task (one plain line, at most 300 characters) to the
+   * bound game's chat, shown there verbatim as "<your plugin's name> asks: <task>"; that chat's
+   * agent clicks it with the person's computer control, on the apps your `engine.apps` declares
+   * and no others. Only for setup clicks and publishing the person approved, never to build or
+   * play-test. The person must have asked: call it from an action they pressed, or from a tool
+   * that declares `confirmation` whose card they approved; any other call answers `not-person`.
+   * A plugin that did not come with Genex shows the task on a card first; computer control that
+   * is off is offered on a card for every chat. Windows, or a Mac with no driver, answers
+   * `unavailable`: show the click path instead.
+   */
+  (method: "game.engine.assist", args: PluginEngineAssistArgs): Promise<PluginEngineAssistAnswer>;
+}
+
+/** `game.engine.assist`'s task: what the chat is asked to click, in plain words. */
+export interface PluginEngineAssistArgs {
+  task: string;
+}
+
+/** Why `game.engine.assist` started nothing. */
+export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps";
+
+/** `game.engine.assist`'s answer: whether the chat's turn started, and why not. */
+export interface PluginEngineAssistAnswer {
+  started: boolean;
+  reason?: PluginEngineAssistRefusal;
 }
 
 /** A game whose run is going, as `game.engine.runs` names it: its name, its title and its linked project file. */

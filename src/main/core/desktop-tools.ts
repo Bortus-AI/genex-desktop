@@ -52,6 +52,8 @@ export interface DesktopToolsDeps {
   ask: (question: DesktopQuestion, app?: DesktopApp) => Promise<boolean>;
   /** Whether an app is the studio itself, which no agent ever drives. */
   ownApp: (app: DesktopApp) => boolean;
+  /** The engine-app guard: why this app is refused now (an engine's editor outside its assist), or null. */
+  engineApps?: (app: DesktopApp) => string | null;
   /** The folder the session's frames and trace go into. */
   frameDir: string;
   /** Show a frame on the agent's screen. */
@@ -124,6 +126,7 @@ function desktopSource(deps: DesktopToolsDeps): TargetSource<DesktopTarget> & { 
         allowApp,
         ownApp: deps.ownApp,
         vm: deps.vm === true,
+        ...(deps.engineApps ? { engineApps: deps.engineApps } : {}),
         ...(deps.downscale ? { downscale: deps.downscale } : {}),
       });
       return { target, problem: null, note: null, fresh: true };

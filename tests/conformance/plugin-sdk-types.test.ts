@@ -185,6 +185,16 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       export const linkToShared: SharedLink = sdkLink;
       export const linkToSdk: SdkLink = sharedLink;
     `,
+    "assist.ts": `
+      import type { PluginEngineAssistAnswer as SdkAnswer, PluginEngineAssistArgs as SdkArgs } from ${quote(sdk)};
+      import type { EngineAssistAnswer as SharedAnswer, EngineAssistArgs as SharedArgs } from ${quote(shared)};
+      declare const sdkAnswer: SdkAnswer; declare const sharedAnswer: SharedAnswer;
+      export const answerToShared: SharedAnswer = sdkAnswer;
+      export const answerToSdk: SdkAnswer = sharedAnswer;
+      declare const sdkArgs: SdkArgs; declare const sharedArgs: SharedArgs;
+      export const argsToShared: SharedArgs = sdkArgs;
+      export const argsToSdk: SdkArgs = sharedArgs;
+    `,
     "judge.ts": `
       import type { PluginJudge as SdkJudge } from ${quote(sdk)};
       import type { PluginJudge as SharedJudge } from ${quote(shared)};

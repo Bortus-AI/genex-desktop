@@ -5,6 +5,7 @@
  */
 import { ScreenRole } from "../../shared/agent-screen.ts";
 import type { DesktopTools } from "./desktop-tools.ts";
+import { assistGrants } from "./desktop-assist.ts";
 import { desktopSessionTools } from "./desktop-session.ts";
 import {
   editorPlayComputer,
@@ -2363,6 +2364,7 @@ export class DelegationService {
     return desktopSessionTools(this.#core, this.#x, {
       binding,
       threadId: session.threadId,
+      ...(session.chatTurn ? { turn: session.chatTurn } : {}),
       signal: session.abort.signal,
     });
   }
@@ -2604,7 +2606,10 @@ export class DelegationService {
       const { chatTurn } = session;
       const { id } = event.payload;
       const chatsOwn = chatTurn && !session.leadTurn;
-      if (chatsOwn && typeof id === "string") recordSteerDelivered(this.#core, session.threadId, chatTurn, id);
+      if (!chatsOwn || typeof id !== "string") return;
+      recordSteerDelivered(this.#core, session.threadId, chatTurn, id);
+      // A setup assist's message read by this running turn: its grant ends with this turn.
+      assistGrants(this.#core).steered(session.threadId, chatTurn, id);
     };
   }
 

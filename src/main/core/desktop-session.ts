@@ -12,6 +12,8 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
+import { assistGrants, declaredEngineApps } from "./desktop-assist.ts";
+import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
 /** What the person reads on the consent card and the agent screen. */
@@ -43,6 +45,8 @@ export interface DesktopSessionPlace {
   binding: PluginBinding;
   /** The chat the consent card lands in, and the screen's identity. */
   threadId: string;
+  /** The chat turn this session answers (its message's queue id): a setup assist's grant ends with it. */
+  turn?: string;
   signal?: AbortSignal;
 }
 
@@ -79,8 +83,16 @@ export async function desktopSessionTools(
     const answer = await x.pluginTools.requestConsent(DESKTOP_CONSENT_SOURCE, tool, asked, place.binding, place.signal);
     return answer.approved;
   };
-  return desktop.toolsFor({
+  const grants = assistGrants(core);
+  // An engine's editor is driven only by its plugin's setup assist, read afresh on every action.
+  const engineApps = (app: DesktopApp) =>
+    engineAppRefusal(app, {
+      declared: declaredEngineApps(core.plugins.list()),
+      granted: grants.live(place.threadId)?.apps ?? null,
+    });
+  const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
+    engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,
     frame: async (shown, jpeg, caption, act) => {
@@ -88,4 +100,13 @@ export async function desktopSessionTools(
       await x.previews.frame(targetFramePort(shown), screen, jpeg, caption, act);
     },
   });
+  const { turn } = place;
+  if (!turn) return tools;
+  return {
+    ...tools,
+    release: async () => {
+      grants.turnEnded(place.threadId, turn);
+      await tools.release();
+    },
+  };
 }

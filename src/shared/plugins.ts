@@ -873,12 +873,17 @@ export type GithubLookup =
  * Consent cards the studio itself asks with, not a plugin: their source id, and the name the card
  * shows for it. Persisted in every log: never rename an id.
  */
-export const StudioConsentSource = { Desktop: "studio-desktop" } as const;
+export const StudioConsentSource = {
+  Desktop: "studio-desktop",
+  /** Turning computer control on for every chat, asked when a plugin's Do it for me finds it off. */
+  ComputerSetting: "studio-computer-setting",
+} as const;
 export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof StudioConsentSource];
 
 /** The name a studio consent card shows. */
 export const STUDIO_CONSENT_NAMES: Readonly<Record<StudioConsentSource, string>> = {
   [StudioConsentSource.Desktop]: "Computer control",
+  [StudioConsentSource.ComputerSetting]: "Computer control",
 };
 
 export interface PluginBinding {
@@ -937,8 +942,42 @@ export const PluginService = {
   GameCreate: "game.create",
   /** `game-engine`: the games whose run is going now, each with the project this plugin linked it to. */
   GameEngineRuns: "game.engine.runs",
+  /**
+   * `game-engine`: Do it for me. Hands a setup task to the bound game's chat, whose own session
+   * clicks it with computer control, limited to the apps the plugin's `engine.apps` declares.
+   */
+  GameEngineAssist: "game.engine.assist",
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
+
+/** The longest task a plugin may hand to the chat with `game.engine.assist`. */
+export const ENGINE_ASSIST_TASK_MAX_CHARS = 300;
+
+/** Why `game.engine.assist` started nothing. */
+export const EngineAssistRefusal = {
+  /** No computer control on this computer: Windows, or a Mac with no desktop driver. */
+  Unavailable: "unavailable",
+  /** The person said no to the task's card or to turning computer control on. */
+  Declined: "declined",
+  /** The call names no game, so there is no chat to hand the task to. */
+  NoChat: "no-chat",
+  /** Not the person's: neither an action they pressed nor a tool call whose card they approved. */
+  NotPerson: "not-person",
+  /** The plugin's engine declares no apps for this computer, so there is nothing it may click. */
+  NoApps: "no-apps",
+} as const;
+export type EngineAssistRefusal = (typeof EngineAssistRefusal)[keyof typeof EngineAssistRefusal];
+
+/** `game.engine.assist`'s arguments: the task, one plain line of at most {@link ENGINE_ASSIST_TASK_MAX_CHARS} characters. */
+export interface EngineAssistArgs {
+  task: string;
+}
+
+/** `game.engine.assist`'s answer: whether the task's turn was started, and why not. */
+export interface EngineAssistAnswer {
+  started: boolean;
+  reason?: EngineAssistRefusal;
+}
 
 /** The folder in a `game-engine` plugin's storage where the host keeps each game's link, `<game>.json`. */
 export const ENGINE_LINKS_FOLDER = "links";

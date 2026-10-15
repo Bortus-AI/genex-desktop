@@ -1,7 +1,9 @@
 // The toy engine does nothing: every tool answers which tool ran, for which project (its editor
 // with nobody at it). Its play tools stand in for a play of up to three players, each with its own
 // picture and state, and its judges' probe measures the play that is open. A game folder holding
-// `live-data.txt` stands in for a game whose play reaches the live game's saved data.
+// `live-data.txt` stands in for a game whose play reaches the live game's saved data. A test's copy
+// that declares the Do it for me action and tools below gets the host's answer to
+// `game.engine.assist` (a setup click handed to the game's chat) back from each.
 
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -13,6 +15,14 @@ const VIEW = { width: 1280, height: 720 };
 const LIVE_DATA_MARK = "live-data.txt";
 /** A stand-in JPEG long enough to be read as one (start of image, an APP0 marker, end of image), base64. */
 const PROBE_PICTURE = "/9j/4AAAAAAAAAAA/9k=";
+
+/** The setup tasks the toy hands to the chat, by the action or tool that asks. */
+const ASSIST_TASKS = {
+  "do-it-for-me": "Turn on the toy editor's server: Toy › Settings › Server",
+  "publish-toy": "Publish the toy game: File › Publish",
+  "assist-quietly": "Turn on the toy editor's server: Toy › Settings › Server",
+  "assist-unasked": "Turn on the toy editor's server: Toy › Settings › Server",
+};
 
 /** A player's number from a call's arguments: player 1 when none is named. */
 const playerOf = (args) => (typeof args?.player === "number" ? args.player : 1);
@@ -65,9 +75,14 @@ export async function activate() {
   return {
     async tool(name, args, ctx) {
       if (Object.hasOwn(play, name)) return play[name](args, ctx);
+      if (Object.hasOwn(ASSIST_TASKS, name)) return ctx.host("game.engine.assist", { task: ASSIST_TASKS[name] });
       // Nobody uses the toy editor: its lock's person-first probe never waits on the person.
       if (name === "editor-state") return { tool: name, project: ctx.project, personActive: false };
       return { tool: name, project: ctx.project };
+    },
+    async action(name, _args, ctx) {
+      if (Object.hasOwn(ASSIST_TASKS, name)) return ctx.host("game.engine.assist", { task: ASSIST_TASKS[name] });
+      return null;
     },
   };
 }

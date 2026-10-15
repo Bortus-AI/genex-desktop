@@ -16,6 +16,7 @@
 import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { ignoreLine } from "../shared/project-workspace.ts";
@@ -993,11 +994,14 @@ export class StudioCore {
     };
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
+    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
+    this.pluginServices.engineAssist = (pluginId, binding, task, signal) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...(signal ? { signal } : {}) });
     this.plugins = new PluginRegistry(
       path.join(this.layout.engineHomes, "plugins"),
       path.join(this.options.paths.resources, "plugins"),
       path.join(this.options.paths.resources, "plugin-sdk/backend.mjs"),
-      (id, method, args, binding) => this.pluginServices.call(id, method, args, binding),
+      (id, method, args, binding, invocation) => this.pluginServices.call(id, method, args, binding, invocation),
     );
     const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
     this.plugins.nativeService = (manifest, directory, method, args, binding, invocation) =>
