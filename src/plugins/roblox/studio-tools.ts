@@ -143,6 +143,50 @@ export function passesThrough(kind: StudioToolClass): boolean {
   return kind === StudioToolClass.Read || kind === StudioToolClass.Write;
 }
 
+/**
+ * The Roblox Studio plugin's own tools that ask the person first (a card in the chat, every call, in
+ * every mode), each standing for one Studio tool the connection hides. Wire values: never rename.
+ */
+export const AskFirstTool = {
+  GenerateMesh: "generate-mesh",
+  GenerateModel: "generate-model",
+  GenerateTexture: "generate-texture",
+  GenerateMaterial: "generate-material",
+  SegmentMesh: "segment-mesh",
+  RobloxPlaytest: "roblox-playtest",
+  RobloxExplore: "roblox-explore",
+  UploadImage: "upload-image",
+  StoreImage: "store-image",
+  InsertAsset: "insert-asset",
+} as const;
+export type AskFirstTool = (typeof AskFirstTool)[keyof typeof AskFirstTool];
+
+const A = AskFirstTool;
+
+/** The Studio tool each ask-first plugin tool calls; Studio's `subagent` stands behind two of them. */
+export const ASK_FIRST_STUDIO_TOOL = {
+  [A.GenerateMesh]: T.GenerateMesh,
+  [A.GenerateModel]: T.GenerateProceduralModel,
+  [A.GenerateTexture]: T.GenerateTexture,
+  [A.GenerateMaterial]: T.GenerateMaterial,
+  [A.SegmentMesh]: T.SegmentMesh,
+  [A.RobloxPlaytest]: T.Subagent,
+  [A.RobloxExplore]: T.Subagent,
+  [A.UploadImage]: T.UploadImage,
+  [A.StoreImage]: T.StoreImage,
+  [A.InsertAsset]: T.InsertAsset,
+} as const satisfies Record<AskFirstTool, StudioTool>;
+
+/** How an agent names this plugin's tools: `roblox__<tool>`. */
+const PLUGIN_TOOL_PREFIX = "roblox__";
+
+/** The plugin's ask-first tools, by the names agents call them, that stand for a Studio tool; none for any other. */
+export function askFirstToolsFor(studioTool: string): string[] {
+  return (Object.entries(ASK_FIRST_STUDIO_TOOL) as Array<[AskFirstTool, StudioTool]>)
+    .filter(([, studio]) => studio === studioTool)
+    .map(([tool]) => `${PLUGIN_TOOL_PREFIX}${tool}`);
+}
+
 /** The read tools by name, as the manifest's `reads` lists them. */
 export const READ_TOOLS: readonly StudioTool[] = (Object.keys(STUDIO_TOOLS) as StudioTool[]).filter(
   (name) => STUDIO_TOOLS[name].class === StudioToolClass.Read,

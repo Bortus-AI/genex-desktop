@@ -33,6 +33,7 @@ import {
 } from "./studio-client.ts";
 import type { ShrinkShot } from "./studio-shot.ts";
 import {
+  askFirstToolsFor,
   CAPTURE_ID_ARG,
   classOf,
   DATAMODEL_ARG,
@@ -78,11 +79,11 @@ const MESSAGE = {
     [StudioToolClass.Bridge]: (name: string) =>
       `${name} isn't offered here: this connection already reaches this game's own Studio.`,
     [StudioToolClass.ConfirmedInsert]: (name: string) =>
-      `${name} isn't offered here: inserts ask the person first, through the Roblox Studio plugin's own tool.`,
+      `${name} isn't offered here: inserts ask the person first. Use ${askFirstToolsFor(name).join(" or ")}.`,
     [StudioToolClass.ConfirmedAi]: (name: string) =>
-      `${name} isn't offered here: Roblox's AI tools run on the person's account and ask them first, through the Roblox Studio plugin's own tools.`,
+      `${name} isn't offered here: Roblox's AI tools run on the person's account and ask them first. Use ${askFirstToolsFor(name).join(" or ")}.`,
     [StudioToolClass.ConfirmedUpload]: (name: string) =>
-      `${name} isn't offered here: uploads go to the person's account and ask them first, through the Roblox Studio plugin's own tools.`,
+      `${name} isn't offered here: uploads go to the person's account and ask them first. Use ${askFirstToolsFor(name).join(" or ")}.`,
   },
 } as const;
 

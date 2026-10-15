@@ -444,8 +444,21 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
     const needing = roblox.tools.filter((t) => t.needs?.includes("studio")).map((t) => t.name);
     assert.deepEqual(
       needing,
-      ["load-place", ...ENGINE_PLAY_TOOLS, "players-state", "cheat-remotes", "phone-check"],
-      "only the load, the play lane and the judges' probes in it wait on the person; reading and exporting never do",
+      [
+        "generate-mesh",
+        "generate-model",
+        "generate-texture",
+        "generate-material",
+        "segment-mesh",
+        "roblox-playtest",
+        "insert-asset",
+        "load-place",
+        ...ENGINE_PLAY_TOOLS,
+        "players-state",
+        "cheat-remotes",
+        "phone-check",
+      ],
+      "only what changes or plays the place waits on the person (Roblox's AI tools and inserts, the load, the play lane and the judges' probes in it); reading, exporting and sending pictures never do",
     );
     for (const name of [
       "open-for-run",

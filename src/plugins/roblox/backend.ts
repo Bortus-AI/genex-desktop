@@ -21,6 +21,7 @@ import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { EnginePlayTool } from "../../shared/engine-play.ts";
 import { RobloxAction } from "./actions.ts";
 import { agentFolder } from "./agent-marks.ts";
+import { type AiTool, type AskFirstGame, createAiTools } from "./ai-tools.ts";
 import { createComputerPlay, type PlayGame } from "./computer-play.ts";
 import { type HelperAsk, type HelperLink, startHelperLink } from "./helper-link.ts";
 import type { ScriptChange } from "./helper-protocol.ts";
@@ -97,6 +98,7 @@ import {
   quitStudioAction,
   showSteps,
 } from "./place-actions.ts";
+import { insertAsset } from "./insert-asset.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { openLaunch, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import {
@@ -107,6 +109,7 @@ import {
   systemLocateFs,
   systemRun,
 } from "./studio-locate.ts";
+import { AskFirstTool } from "./studio-tools.ts";
 import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
 
 /**
@@ -157,14 +160,29 @@ export const RobloxTool = {
   PlayersState: RobloxProbe.PlayersState,
   CheatRemotes: RobloxProbe.CheatRemotes,
   PhoneCheck: RobloxProbe.PhoneCheck,
+  GenerateMesh: AskFirstTool.GenerateMesh,
+  GenerateModel: AskFirstTool.GenerateModel,
+  GenerateTexture: AskFirstTool.GenerateTexture,
+  GenerateMaterial: AskFirstTool.GenerateMaterial,
+  SegmentMesh: AskFirstTool.SegmentMesh,
+  RobloxPlaytest: AskFirstTool.RobloxPlaytest,
+  RobloxExplore: AskFirstTool.RobloxExplore,
+  UploadImage: AskFirstTool.UploadImage,
+  StoreImage: AskFirstTool.StoreImage,
+  InsertAsset: AskFirstTool.InsertAsset,
 } as const;
 export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
 /**
  * The tools that may run in a worker's copy of the game: its folder is never the game's, so the
- * script sync isn't told of it.
+ * script sync isn't told of it. The ask-first tools need no folder but a picture's.
  */
-const COPY_TOOLS: ReadonlySet<string> = new Set([RobloxTool.CheckScripts, RobloxTool.LuauNote, RobloxTool.LuauFinish]);
+const COPY_TOOLS: ReadonlySet<string> = new Set([
+  RobloxTool.CheckScripts,
+  RobloxTool.LuauNote,
+  RobloxTool.LuauFinish,
+  ...Object.values(AskFirstTool),
+]);
 const isRobloxTool = (name: string): name is RobloxTool => TOOL_NAMES.has(name);
 
 /** Where Studio stands for Genex, as the toolbar button and the panel name it. Wire values: never rename. */
@@ -686,6 +704,53 @@ async function momentOps(deps: RobloxDeps, services: MomentServices, context: Pl
   return momentOpsFor(deps, services, context, { storage, setUp });
 }
 
+/** Starts the helper link for a game that isn't bound yet, once Studio is set up: bound means it already runs. */
+async function linkFor(deps: RobloxDeps, services: MomentServices, storage: string, game: string): Promise<void> {
+  if (services.bound(game) !== undefined) return;
+  if ((await locateStudio(deps)).installed && (await setUpIn(deps, storage))) deps.helperLink?.(storage);
+}
+
+/**
+ * The game an ask-first tool's call is for: its Studio as the helper link has it bound, the folder
+ * a picture is read from, the plugin's storage and the agent's marks.
+ */
+async function askFirstGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<AskFirstGame> {
+  const storage = await context.host(HostService.StorageRoot);
+  const game = context.project ?? "";
+  await linkFor(deps, services, storage, game);
+  const marks = agentFolder(storage, game);
+  return {
+    studio: () => services.bound(game),
+    storage,
+    ...(context.directory ? { folder: context.directory } : {}),
+    ...(marks ? { marks } : {}),
+    ...(context.signal ? { signal: context.signal } : {}),
+  };
+}
+
+/** Roblox's AI tools, uploads and the Creator Store insert, each over the game its call is for. */
+function askFirstHandlers(deps: RobloxDeps, services: MomentServices) {
+  const own = { ...(deps.studio ? { studio: deps.studio } : {}), now: deps.now };
+  const ai = createAiTools(own);
+  const over =
+    (tool: AiTool): Handler =>
+    async (args, context) =>
+      ai[tool](args, await askFirstGame(deps, services, context));
+  return {
+    [RobloxTool.GenerateMesh]: over(AskFirstTool.GenerateMesh),
+    [RobloxTool.GenerateModel]: over(AskFirstTool.GenerateModel),
+    [RobloxTool.GenerateTexture]: over(AskFirstTool.GenerateTexture),
+    [RobloxTool.GenerateMaterial]: over(AskFirstTool.GenerateMaterial),
+    [RobloxTool.SegmentMesh]: over(AskFirstTool.SegmentMesh),
+    [RobloxTool.RobloxPlaytest]: over(AskFirstTool.RobloxPlaytest),
+    [RobloxTool.RobloxExplore]: over(AskFirstTool.RobloxExplore),
+    [RobloxTool.UploadImage]: over(AskFirstTool.UploadImage),
+    [RobloxTool.StoreImage]: over(AskFirstTool.StoreImage),
+    [RobloxTool.InsertAsset]: async (args, context) =>
+      insertAsset(own, args, await askFirstGame(deps, services, context)),
+  } as const satisfies Partial<Record<RobloxTool, Handler>>;
+}
+
 /**
  * The game a play tool's call is for: its Studio as the helper link has it bound, the helper, the
  * agent's marks and whether its link names a published place. The helper link starts once Studio
@@ -694,9 +759,7 @@ async function momentOps(deps: RobloxDeps, services: MomentServices, context: Pl
 async function playGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<PlayGame> {
   const storage = await context.host(HostService.StorageRoot);
   const game = context.project ?? "";
-  // Bound means the link already runs; only an unbound game needs it started.
-  const unbound = services.bound(game) === undefined;
-  if (unbound && (await locateStudio(deps)).installed && (await setUpIn(deps, storage))) deps.helperLink?.(storage);
+  await linkFor(deps, services, storage, game);
   const link = await linkHere(context);
   const marks = agentFolder(storage, game);
   return {
@@ -787,6 +850,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxTool.StudioCrashNote]: async (_args, context) => (context.hook ? crashAnswer() : {}),
     [RobloxTool.TeamNote]: atMoment((ops) => teamNoteAt(ops)),
     ...playHandlers(deps, services),
+    ...askFirstHandlers(deps, services),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {

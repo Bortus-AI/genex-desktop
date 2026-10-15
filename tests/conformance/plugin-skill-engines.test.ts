@@ -199,7 +199,20 @@ const ROBLOX_SKILLS = [
 /** The skills a web game never gets: those of an engine's own project. */
 const ENGINE_ONLY_SKILLS = [...UNREAL_ONLY_SKILLS, ...ROBLOX_SKILLS];
 /** The Roblox plugin's agent tools (the reader of its file skills, check-scripts), which reach a Roblox game only. */
-const ROBLOX_ONLY_TOOLS = ["roblox__skill", "roblox__check-scripts"];
+const ROBLOX_ONLY_TOOLS = [
+  "roblox__skill",
+  "roblox__check-scripts",
+  "roblox__generate-mesh",
+  "roblox__generate-model",
+  "roblox__generate-texture",
+  "roblox__generate-material",
+  "roblox__segment-mesh",
+  "roblox__roblox-playtest",
+  "roblox__roblox-explore",
+  "roblox__upload-image",
+  "roblox__store-image",
+  "roblox__insert-asset",
+];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */
 function unscoped(manifest: PluginManifest): void {

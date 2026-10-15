@@ -46,12 +46,28 @@ chat, and an asset is checked before it is offered.
   when the account is ID-verified), so upload sound only when it is needed.
 - Use Roblox's own free sound library (through `search_asset`) before uploading anything.
 
+## Roblox's AI tools and uploads
+
+- Roblox's generators are the plugin's tools: `roblox__generate-mesh` (a textured mesh),
+  `roblox__generate-model` (a model of simple parts with attributes; about 50 a day),
+  `roblox__generate-texture`, `roblox__generate-material` and `roblox__segment-mesh`. Each shows
+  the person a card first. Use them only for what the person asked for, and keep prompts plain.
+- Long generations: pass `background: true`, then wait with the connection's `wait_job_finished`.
+- `roblox__store-image` turns a picture in the game folder into an `IMAGEID_…` for
+  `generate-model`'s `image`. `roblox__upload-image` uploads pictures (game-folder files or https
+  addresses) as image assets and answers each one's `rbxassetid`.
+- Lists (part names, pictures) are one string: `head, body, tail` or `["head", "body", "tail"]`.
+- When the person declines a card, don't ask again for the same thing in that turn.
+
 ## Inserting from the Creator Store
 
-- Insert only free assets, only after the person's OK (the card names the asset id).
-- A model from the store can carry scripts. After an insert, read every script it brought; delete
-  any you don't understand, and every one that uses `require` with a number, `loadstring`,
-  `getfenv`, `HttpService` or `MarketplaceService`: those are how backdoors hide.
+- Find the asset with the connection's `search_asset`, then insert it with `roblox__insert-asset`
+  (its id, name and type from the search). Genex refuses paid assets, and the person approves each
+  insert on a card.
+- A model from the store can carry scripts. The insert's answer lists every script it brought;
+  read each one; delete any you don't understand, and every one flagged for `require` with a
+  number, `loadstring`, `getfenv`, `HttpService` or `MarketplaceService`: those are how backdoors
+  hide.
 - Credit the creator where the person wants credits shown.
 
 ## Ownership

@@ -44,6 +44,225 @@
       }
     },
     {
+      "name": "generate-mesh",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Make a textured 3D mesh with Roblox's own AI from a prompt and add it to this game's place in Roblox Studio. It runs on the person's Roblox account, against its limits, and Roblox moderates what it makes on that account, so the person approves each call on a card. Use it for props and scenery the person asked for; keep it under 20,000 triangles (see the assets skill).",
+      "confirmation": "Make a 3D mesh with Roblox's AI? The prompt goes to Roblox, and it runs on your Roblox account, against its limits. The mesh is added to this game's place, and Roblox moderates what it makes on your Roblox account.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "What to make, in the person's words." },
+          "parts": {
+            "type": "string",
+            "description": "Part names to split it into, comma-separated or a JSON array of names (at most 8). Leave out to let Roblox pick."
+          },
+          "segmentation": {
+            "type": "string",
+            "description": "auto (Roblox picks the parts, the default), none (one piece) or explicit (the names in parts)."
+          },
+          "triangles": { "type": "number", "description": "At most this many triangles, from 12 to 20000." },
+          "width": {
+            "type": "number",
+            "description": "The box it fits in, in studs: width, height and depth go together."
+          },
+          "height": { "type": "number", "description": "The box's height in studs." },
+          "depth": { "type": "number", "description": "The box's depth in studs." },
+          "background": {
+            "type": "boolean",
+            "description": "true answers a job id at once while Roblox works; wait for it with the Roblox Studio connection's wait_job_finished. Leave out to wait for the result."
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "generate-model",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Build a model from simple parts (blocks, spheres, cylinders, wedges) with Roblox's own AI, with attributes the person can tune afterwards, and add it to this game's place. It runs on the person's Roblox account (Roblox allows about 50 a day), so the person approves each call on a card. A reference picture goes in image, from store-image.",
+      "confirmation": "Build a model with Roblox's AI? The prompt, and a picture if one is given, go to Roblox, and it runs on your Roblox account (about 50 a day). The model is added to this game's place, and Roblox moderates what it makes on your Roblox account.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "What to build and which attributes to expose, in the person's words. May be empty when image is given."
+          },
+          "image": { "type": "string", "description": "A reference picture: the IMAGEID_… that store-image answered." },
+          "parts": {
+            "type": "string",
+            "description": "Part names to split it into, comma-separated or a JSON array of names (at most 8). Leave out to let Roblox pick."
+          },
+          "segmentation": {
+            "type": "string",
+            "description": "auto (Roblox picks the parts, the default), none (one piece) or explicit (the names in parts)."
+          },
+          "background": {
+            "type": "boolean",
+            "description": "true answers a job id at once while Roblox works; wait for it with the Roblox Studio connection's wait_job_finished. Leave out to wait for the result."
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "generate-texture",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Give a mesh in this game's place a new texture with Roblox's own AI, from a prompt. The new texture replaces the mesh's own. It runs on the person's Roblox account, so the person approves each call on a card. Keep textures plain: no text, logos or faces.",
+      "confirmation": "Retexture a mesh with Roblox's AI? The prompt and the mesh go to Roblox, and it runs on your Roblox account. The new texture replaces the mesh's own in this game's place, and Roblox moderates it on your Roblox account.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "prompt": { "type": "string", "description": "The look to give it, such as rusty metal." },
+          "instance": {
+            "type": "string",
+            "description": "The Studio path of the MeshPart or Model, such as Workspace.Barrel. Leave out to use the one selected in Studio."
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "name": "generate-material",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Make a material (a MaterialVariant) with Roblox's own AI and add it to this game's place. Use it by setting a part's Material to the base and its MaterialVariant to the name. It runs on the person's Roblox account, so the person approves each call on a card.",
+      "confirmation": "Make a material with Roblox's AI? The description goes to Roblox, and it runs on your Roblox account. The material is added to this game's place, and Roblox moderates it on your Roblox account.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The material's name: letters, digits, spaces, _ or -, at most 50 characters."
+          },
+          "base": {
+            "type": "string",
+            "description": "The base material it builds on, such as Brick, Wood, Metal, Grass or Concrete (Roblox's Enum.Material names)."
+          },
+          "pattern": { "type": "string", "description": "Regular (tiles evenly) or Organic (natural, uneven)." },
+          "description": { "type": "string", "description": "How it looks." },
+          "background": {
+            "type": "boolean",
+            "description": "true answers a job id at once while Roblox works; wait for it with the Roblox Studio connection's wait_job_finished. Leave out to wait for the result."
+          }
+        },
+        "required": ["name", "base", "pattern", "description"]
+      }
+    },
+    {
+      "name": "segment-mesh",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Split a mesh in this game's place into named parts with Roblox's own AI; the parts are added as a new Model next to it. It runs on the person's Roblox account, so the person approves each call on a card.",
+      "confirmation": "Split a mesh into parts with Roblox's AI? The mesh and the part names go to Roblox, and it runs on your Roblox account. The parts are added to this game's place next to the mesh.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "parts": {
+            "type": "string",
+            "description": "The part names, comma-separated or a JSON array (at most 5), such as head, body, tail."
+          },
+          "instance": {
+            "type": "string",
+            "description": "The Studio path of the MeshPart or Model, such as Workspace.Barrel. Leave out to use the one selected in Studio."
+          }
+        },
+        "required": ["parts"]
+      }
+    },
+    {
+      "name": "roblox-playtest",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Hand a play-testing task to Roblox's own playtest agent, which plays the game in Studio and reports back. It runs on the person's Roblox account against a daily limit, needs Studio's Playtest Agent beta (File › Beta Features), and the person approves each call on a card. Genex's own play tests (the computer tool and judge_play) come first; use this only when the person asks for Roblox's agent.",
+      "confirmation": "Let Roblox's playtest agent play this game? The task and what it sees of the place go to Roblox, and it runs on your Roblox account, against its daily limit. It plays in Roblox Studio and reports back.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": { "type": "string", "description": "What to test and what to report, in detail." },
+          "title": {
+            "type": "string",
+            "description": "A short title Studio shows while it works, such as Testing the obby."
+          }
+        },
+        "required": ["task"]
+      }
+    },
+    {
+      "name": "roblox-explore",
+      "facts": ["roblox-project"],
+      "description": "Hand a question about this game's place to Roblox's own explore agent, which reads the place and its scripts and answers. It runs on the person's Roblox account, so the person approves each call on a card. The Roblox Studio connection's read tools and the game's .luau files answer most questions without it.",
+      "confirmation": "Let Roblox's explore agent look through this game's place? The task and the parts and scripts it reads go to Roblox, and it runs on your Roblox account. It only reads, and reports back.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task": { "type": "string", "description": "What to find out, in detail." },
+          "title": {
+            "type": "string",
+            "description": "A short title Studio shows while it works, such as Finding coin scripts."
+          }
+        },
+        "required": ["task"]
+      }
+    },
+    {
+      "name": "upload-image",
+      "facts": ["roblox-project"],
+      "description": "Upload pictures to the person's Roblox account as image assets this game can use (decals, textures, UI). Each picture is a .png or .jpg file in the game folder (at most 5 MB) or an https address; the answer gives each one's rbxassetid. Roblox moderates every upload on the person's account, so the person approves each call on a card. No text, logos or faces.",
+      "confirmation": "Upload pictures to your Roblox account? The pictures go to Roblox as your assets, and Roblox moderates them: a refused picture counts against your Roblox account. Each comes back as an asset id this game can use.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "images": {
+            "type": "string",
+            "description": "The pictures, comma-separated or a JSON array (at most 10): paths in the game folder such as art/coin.png, or https addresses."
+          }
+        },
+        "required": ["images"]
+      }
+    },
+    {
+      "name": "store-image",
+      "facts": ["roblox-project"],
+      "description": "Send one picture from the game folder to Roblox so its AI tools can use it as a reference (generate-model's image). It answers an IMAGEID_… for that. The picture is a .png or .jpg file of at most 5 MB. The person approves each call on a card.",
+      "confirmation": "Send a picture to Roblox for its AI tools? The picture goes to Roblox under your Roblox account, so its AI tools can use it as a reference.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "description": "The picture's path in the game folder, such as art/reference.png."
+          }
+        },
+        "required": ["file"]
+      }
+    },
+    {
+      "name": "insert-asset",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "description": "Insert a free Creator Store asset (a model, mesh, image, sound) into this game's place by its id, which the connection's search_asset finds. Genex checks the price first and refuses paid assets. The answer lists every script the asset brought, flagged where it uses require with an id, loadstring, getfenv, HttpService or MarketplaceService: read each one and delete what you don't understand. The person approves each insert on a card.",
+      "confirmation": "Insert a free Creator Store asset into this game's place? Its id goes to Roblox, and Studio fetches it on your Roblox account. Genex refuses paid assets and lists any scripts it brings, since they run when the game plays.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "The asset's id: plain digits, such as 580221169." },
+          "name": { "type": "string", "description": "The name it gets in the place; give the search result's name." },
+          "type": {
+            "type": "string",
+            "description": "The asset's type from the search: Model, Package, Mesh, MeshPart, Image, Decal, Audio, Video or Animation."
+          },
+          "parent": {
+            "type": "string",
+            "description": "Where it goes, such as Workspace.Scenery. Leave out for Workspace."
+          }
+        },
+        "required": ["id"]
+      }
+    },
+    {
       "name": "luau-note",
       "audience": "harness",
       "description": "For Genex only: at a worker's end, the Luau checks over the scripts changed since they last passed, noted with each problem's file and line.",
