@@ -1,20 +1,19 @@
 /**
  * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
- * Signed in: its avatar, its name (and Pro), and beside it the friends themselves: up to two faces,
- * people playing first in a green ring, with the count of requests waiting on their corner (two grey
- * placeholders and a "+" while there are no friends). The name opens a menu: Profile, Friends,
- * Credits, Account settings and Sign out. Offline it shows the account as last time, the Offline
- * mark where the friends were. Signed out it signs in in the browser; while that waits it says so,
+ * Signed in: its avatar, its name (and Pro), and beside it the credits, which open Credits (the
+ * friends are listed under the games). The name opens a menu: Profile, Friends, Credits, Account
+ * settings and Sign out. Offline it shows the account as last time, the Offline mark where the
+ * credits were. Signed out it signs in in the browser; while that waits it says so,
  * with a way to cancel; and once genex.games ends a sign-in it shows the account dimmed, to sign in
  * again. The account is the app's: the Genex plugin being on or off changes nothing here.
  */
 import type { JSX } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PlayMe } from "../../shared/play-people.ts";
 import { GenexTab, openGenexPage } from "../panels/plugins/genex/genex-tab.ts";
 import { openSettings, SettingsSection } from "../settings-navigation.ts";
-import { usePeople, useShallow } from "../state/hooks.ts";
-import { stackFaces, waitingRequests } from "../state/people.ts";
+import { usePeople } from "../state/hooks.ts";
+import { waitingRequests } from "../state/people.ts";
 import { PlayPage } from "../state/play.ts";
 import { studio } from "../state/studio.ts";
 import {
@@ -28,22 +27,18 @@ import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
-import { CreditsShard } from "./CreditsShard.tsx";
+import { CreditsShard, ScrambleNumber } from "./CreditsShard.tsx";
 import { formatCount, PlateState, plateState } from "./play-model.ts";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
 import { GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
-import { GhostAvatar, PersonAvatar } from "./PersonAvatar.tsx";
+import { PersonAvatar } from "./PersonAvatar.tsx";
 import { OfflineMark } from "./PlayOffline.tsx";
 import { SignOutDialog } from "./SignOutDialog.tsx";
 import { cancelGenexSignIn, useGenexSignIn } from "./use-genex-sign-in.ts";
 
 const WORDS = PLAY_WORDS.people;
-/** The size of the stack's faces. */
-const STACK_FACE = 24;
 /** The size of the plate's own face. */
 const PLATE_FACE = 28;
-/** The placeholders' ids: each draws its own grey face. */
-const GHOSTS = ["ghost-a", "ghost-b"] as const;
 /** The signed-out plate's own face: the Galaxy generated avatar, quiet (faint eyes, dim stars), the same one every time. */
 const SIGNED_OUT_FACE = avatarRecipe("sign-in");
 
@@ -120,59 +115,35 @@ function PlateMenu({
   );
 }
 
-/** The friends beside the name: their faces and the requests waiting; it opens Friends. */
-function FriendsStack({ onOpen }: { onOpen: () => void }): JSX.Element {
-  const friends = usePeople(useShallow((s) => s.friends?.friends ?? []));
-  const waiting = usePeople(waitingRequests);
-  const faces = stackFaces(friends);
-  const playing = friends.filter((friend) => friend.playing).length;
-  const summary =
-    friends.length > 0 ? WORDS.stackSummary({ friends: friends.length, playing, waiting }) : WORDS.noFriendsYet;
+/** The credits beside the name, as last read; they open the Genex plugin's Credits tab, as the menu's Credits does. */
+function PlateCredits(): JSX.Element | null {
+  const amount = creditsWords(usePeople((s) => s.credits));
+  if (amount === null) return null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          className="friends-stack"
-          data-profile-friends
-          data-avatar-host
-          aria-label={summary}
-          onClick={onOpen}
+          className="plate-end plate-credits"
+          data-profile-credits
+          aria-label={WORDS.creditsLabel(amount)}
+          onClick={() => openGenexPage(GenexTab.Credits)}
         >
-          {faces.map((friend) => (
-            <span key={friend.id} className="friends-stack-face" data-live={friend.playing ? true : undefined}>
-              <PersonAvatar person={friend} size={STACK_FACE} />
-            </span>
-          ))}
-          {faces.length === 0 &&
-            GHOSTS.map((id) => (
-              <span key={id} className="friends-stack-face">
-                <GhostAvatar id={id} size={STACK_FACE} />
-              </span>
-            ))}
-          {faces.length === 0 && (
-            <span className="friends-stack-plus" aria-hidden="true">
-              <Icon name="plus" size={12} strokeWidth={2} />
-            </span>
-          )}
-          {waiting > 0 && (
-            <span className="friends-stack-count" aria-hidden="true">
-              {waiting}
-            </span>
-          )}
+          <CreditsShard size={12} />
+          <ScrambleNumber text={amount} />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="top">{summary}</TooltipContent>
+      <TooltipContent side="top">{WORDS.credits}</TooltipContent>
     </Tooltip>
   );
 }
 
-/** Offline, in the friends' place: nobody's status is known, so the Offline signal stands there. */
+/** Offline, in the credits' place: the balance and friends' games are not current, so the Offline signal stands there. */
 function OfflineSlot(): JSX.Element {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className="friends-stack plate-offline" role="img" aria-label={WORDS.offlineFriends} tabIndex={0}>
+        <span className="plate-end plate-offline" role="img" aria-label={WORDS.offlineFriends} tabIndex={0}>
           <OfflineMark />
         </span>
       </TooltipTrigger>
@@ -203,6 +174,11 @@ function AccountPlate({
 }): JSX.Element {
   const waiting = usePeople(waitingRequests);
   const [signingOut, setSigningOut] = useState(false);
+  // The balance beside the name reads with the account, and again whenever the menu opens.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: another account reads its own balance
+  useEffect(() => {
+    void studio().people.loadCredits();
+  }, [me.id]);
   const open = (page: typeof PlayPage.Profile | typeof PlayPage.Friends): void => {
     onPlayMode(true);
     if (page === PlayPage.Friends) studio().play.showFriends();
@@ -227,7 +203,7 @@ function AccountPlate({
         </DropdownMenuTrigger>
         <PlateMenu me={me} waiting={waiting} onOpen={open} onSignOut={() => setSigningOut(true)} />
       </DropdownMenu>
-      {offline ? <OfflineSlot /> : <FriendsStack onOpen={() => open(PlayPage.Friends)} />}
+      {offline ? <OfflineSlot /> : <PlateCredits />}
       {signingOut && <SignOutDialog onDismiss={() => setSigningOut(false)} />}
     </>
   );

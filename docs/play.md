@@ -19,9 +19,14 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, Pro, friends stack), offline (the last account
-  with the offline mark), ended (dimmed, Sign in again). Its menu: Profile, Friends, Credits (the
+  browser (× cancels), signed in (avatar, name, Pro, credits opening Credits), offline (the last
+  account with the offline mark), ended (dimmed, Sign in again). Its menu: Profile, Friends, Credits (the
   Genex plugin page's Credits tab), Account settings, Sign out.
+- The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
+  (the Friends page, with the requests waiting) and each friend in the API's order, their game on
+  one green line while they play (no online or offline). A row opens the profile; hovering a friend
+  in a game offers Join. About 4½ rows show, then they scroll; the page is read every 20 seconds,
+  as genex.games polls. Offline nobody is playing.
 - Settings › Genex account: avatar (generated or photo, Regenerate), name, nickname (`@handle` and
   Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.

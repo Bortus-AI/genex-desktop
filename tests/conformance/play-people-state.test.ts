@@ -30,6 +30,7 @@ import {
   pageAfter,
   primaryAction,
   relationshipChanged,
+  sidebarFriends,
   waitingRequests,
   withoutPresence,
 } from "../../src/renderer/state/people.ts";
@@ -590,6 +591,28 @@ describe("the Friends page offline", () => {
     assert.equal(online.friends[0]?.playing?.slug, "stick-steel", "the page as read is kept for when it is back");
     const quiet = page({ friends: [{ ...person("bo"), playing: null, games: 0 }] });
     assert.equal(withoutPresence(quiet), quiet, "nobody playing: the same page");
+  });
+});
+
+describe("the sidebar's Friends", () => {
+  it("shows nobody signed out, the heading alone until the page is read, then the friends in the API's order", () => {
+    assert.equal(sidebarFriends(initialPeople(), true), null, "signed out: no Friends block");
+    const signedIn = meRead(initialPeople(), me("a"));
+    assert.deepEqual(sidebarFriends(signedIn, true), [], "signed in, nobody read yet: the heading alone");
+    const read = page({
+      friends: [
+        { ...person("ann"), playing: { slug: "stick-steel", title: "Stick & Steel" }, games: 2 },
+        { ...person("bo"), playing: null, games: 0 },
+      ],
+    });
+    assert.deepEqual(ids(sidebarFriends({ ...signedIn, friends: read }, true) ?? []), ["ann", "bo"]);
+    assert.deepEqual(sidebarFriends({ ...signedIn, friends: page({ friends: [] }) }, true), [], "requests only");
+  });
+
+  it("shows nobody playing offline, as the Friends page does", () => {
+    const signedIn = { ...meRead(initialPeople(), me("a")), friends: page() };
+    assert.equal(sidebarFriends(signedIn, true)?.[0]?.playing?.title, "Stick & Steel");
+    assert.equal(sidebarFriends(signedIn, false)?.[0]?.playing, null);
   });
 });
 
