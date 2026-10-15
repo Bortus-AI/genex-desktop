@@ -349,7 +349,10 @@ describe("the toolbar with no Unreal installed", () => {
     const shown = async (game?: string) =>
       ((game ? await c.actFor(game, "toolbar-status") : await c.act("toolbar-status")) as PluginToolbarStatus).shown;
     assert.equal(await shown(), undefined, "a game whose chat never asked for Unreal");
-    assert.match(String(await c.tool("show-steps")), /Unreal button is now above the game/);
+    assert.match(
+      String(await c.tool("show-steps")),
+      /Unreal setup card is in the chat, and the Unreal button is above the game/,
+    );
     assert.equal(await shown(), true);
     assert.equal(await shown("harbor-night"), undefined, "another game's strip stays as it was");
     await assert.rejects(
@@ -357,6 +360,27 @@ describe("the toolbar with no Unreal installed", () => {
       /isn't on this computer/,
     );
     assert.equal(await shown("harbor-night"), true, "a new game refused for want of Unreal brings it out too");
+  });
+});
+
+describe("the Unreal setup card on a Mac without Unreal", () => {
+  it("shows getting Unreal while it's missing, and closes on Don't use Unreal until the agent shows it again", async () => {
+    const c = await computer({ engines: [] });
+    type Card = { open: boolean; steps: { id: string }[]; doneSays?: string };
+    const card = async () => (await c.act("steps")) as Card;
+    await c.tool("show-steps");
+    const missing = await card();
+    assert.equal(missing.open, true);
+    assert.deepEqual(
+      missing.steps.map((step) => step.id),
+      ["get-launcher", "install-engine"],
+    );
+    await c.act("skip");
+    const skipped = await card();
+    assert.equal(skipped.open, false);
+    assert.match(String(skipped.doneSays), /web game/);
+    await c.tool("show-steps");
+    assert.equal((await card()).open, true, "the person changed their mind");
   });
 });
 

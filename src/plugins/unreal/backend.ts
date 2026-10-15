@@ -1,4 +1,4 @@
-import { realpath } from "node:fs/promises";
+import { mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -63,11 +63,12 @@ import {
   rememberChoice,
   rememberWant,
   sameProject,
+  wantsUnreal,
 } from "./editor-port.ts";
 import { callProjectTool } from "./editor-mcp.ts";
 import { type ProcessEnv, systemProcesses } from "./editor-reopen.ts";
 import { type AnyLoopTool, createLoopTools, type LoopToolsDeps, TOOLSET_OF } from "./loop-tools.ts";
-import { type UnrealSteps, unrealSteps, XcodeStep } from "./engine-steps.ts";
+import { type UnrealSteps, unrealInstallCard, unrealSteps, XcodeStep } from "./engine-steps.ts";
 import {
   assertGameFolderFree,
   GAME_PROJECT_FOLDER,
@@ -161,6 +162,7 @@ const UnrealAction = {
   GetXcode: "get-xcode",
   StageStatus: "stage-status",
   RayTracingOff: "ray-tracing-off",
+  Skip: "skip",
 } as const;
 type UnrealAction = (typeof UnrealAction)[keyof typeof UnrealAction];
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(UnrealAction));
@@ -203,6 +205,8 @@ export const PanelStep = {
 export type PanelStep = (typeof PanelStep)[keyof typeof PanelStep];
 
 const GIB = 1024 ** 3;
+/** The plugin storage folder holding each game's Don't use Unreal. */
+const SKIPPED_FOLDER = path.join("engine-setup", "skipped");
 /** Below this much free disk an Unreal project soon runs out of room (shaders, caches, builds). */
 const LOW_DISK_BYTES = 20 * GIB;
 /** Epic's 5.8 install size, as the Get Unreal view's step 2 says. */
@@ -231,6 +235,8 @@ const MESSAGE = {
   Linked: (name: string, file: string) =>
     `This game now builds in ${name} (${file}). Later Unreal calls in this game go to it.`,
   StepsShown: "The Unreal setup card is in the chat.",
+  InstallCardShown: (version: string) =>
+    `The Unreal setup card is in the chat, and the Unreal button is above the game: it gets Epic's launcher, and the user installs Unreal ${version} in it (only they can sign in to Epic). Tell them in one line, then end your reply; the chat tells you when Unreal is installed.`,
   ButtonOut: (version: string) =>
     `The Unreal button is now above the game. Ask the user to press it: it shows how to get Unreal Engine ${version} free from Epic and notices when it's installed. They send a message once it is.`,
   NewGame: (file: string) =>
@@ -1001,15 +1007,51 @@ async function rememberChoiceOfUnreal(deps: UnrealBackendDeps, context: PluginCo
   await rememberWant(storage, context.project, deps.launch.now());
 }
 
+/** Where a game's Don't use Unreal is kept: one empty file per game, in the plugin's storage. */
+async function skipFile(deps: UnrealBackendDeps, context: PluginContext): Promise<string> {
+  if (!context.project) throw new Error(MESSAGE.NoGame);
+  const { storage } = await setupOptions(deps, context);
+  return path.join(storage, SKIPPED_FOLDER, encodeURIComponent(context.project));
+}
+
+/**
+ * The card the chat reads: in a game with no Unreal project, the install card while no Unreal that
+ * makes games is here (or once it came, when this game's chat chose Unreal: closed, so the agent is
+ * told); otherwise the Xcode card.
+ */
+async function cardFor(deps: UnrealBackendDeps, context: PluginContext): Promise<UnrealSteps> {
+  const project = await gameProject(deps, context);
+  if (project || !context.project) return stepsFor(deps.env, project);
+  const installed = await canMakeGames(deps);
+  const { storage } = await setupOptions(deps, context);
+  if (installed && !(await wantsUnreal(storage, context.project))) return stepsFor(deps.env, project);
+  const launcher = Boolean(await findLauncher(deps.env.platform, deps.launch.applications));
+  const skipped = await stat(await skipFile(deps, context)).then(
+    () => true,
+    () => false,
+  );
+  return unrealInstallCard({ launcher, version: installEngineVersion(), installed, skipped });
+}
+
+/** Don't use Unreal: closes the install card for this game, which tells the agent. */
+async function skip(deps: UnrealBackendDeps, context: PluginContext): Promise<void> {
+  const file = await skipFile(deps, context);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "");
+}
+
 /**
  * The agent's `show-steps`: the card in its chat while a step is open. In a game with no Unreal
- * project while no Unreal that makes games is installed, it brings the Unreal button out instead.
+ * project while no Unreal that makes games is installed, it shows the install card and brings the
+ * Unreal button out too, taking back the game's Don't use Unreal.
  */
 async function showSteps(deps: UnrealBackendDeps, context: PluginContext): Promise<string> {
   const project = await gameProject(deps, context);
   if (!project && context.project && !(await canMakeGames(deps))) {
     await rememberChoiceOfUnreal(deps, context);
-    return MESSAGE.ButtonOut(installEngineVersion());
+    await rm(await skipFile(deps, context), { force: true });
+    const shown = await context.host(HostService.EngineSteps);
+    return shown ? MESSAGE.InstallCardShown(installEngineVersion()) : MESSAGE.ButtonOut(installEngineVersion());
   }
   const steps = await stepsFor(deps.env, project);
   if (!steps.open) return MESSAGE.StepsDone;
@@ -1335,7 +1377,8 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
     [UnrealAction.ToolbarStatus]: async (_args, context) =>
       toolbarStatus(deps.env, (await setupOptions(deps, context)).storage, deps.launch.now(), context.project),
     [UnrealAction.UseProject]: (args, context) => linkGame(deps, projectArg(args), context),
-    [UnrealAction.Steps]: async (_args, context) => stepsFor(deps.env, await gameProject(deps, context)),
+    [UnrealAction.Steps]: async (_args, context) => cardFor(deps, context),
+    [UnrealAction.Skip]: async (_args, context) => skip(deps, context),
     [UnrealAction.GetXcode]: (args) => getXcode(deps, args),
     [UnrealAction.StageStatus]: (_args, context) => stageStatus(deps, context, scanned),
     [UnrealAction.RayTracingOff]: async (args, context) =>
