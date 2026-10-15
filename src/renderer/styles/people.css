@@ -169,7 +169,8 @@
 .friend-card-open:focus-visible,
 .person-tile:focus-visible,
 .friends-stack:focus-visible,
-.profile-edit:focus-visible {
+.profile-edit:focus-visible,
+.handle-suggestion:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: 2px;
 }
@@ -455,16 +456,17 @@
   gap: 22px;
   min-width: 0;
 }
-/* The aside never grows with its content: Copy turning into Copied takes its width from the link. */
+/* The aside never grows with its content: Copy turning into Copied takes its width from the link.
+   It is wide enough for a whole invite link (`genex.games/@<handle>/invite`) beside Copy. */
 .people-aside {
   position: sticky;
   top: 64px;
   display: flex;
-  flex: 1 1 280px;
+  flex: 1 1 330px;
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  max-width: 320px;
+  max-width: 340px;
 }
 .people-title {
   margin: 0;
@@ -602,6 +604,20 @@
   box-shadow: inset 0 0 0 1px var(--people-invite-edge);
   color: var(--ink-2);
   font: 12px / 16px var(--font-family-mono);
+  text-overflow: ellipsis;
+}
+/* Post on X and Share…, side by side under a link; alone, Post on X takes the row. */
+.share-row {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 6px;
+}
+.share-row-button {
+  height: 30px;
+  gap: 6px;
+  padding-inline: 10px;
+  font-size: 12px;
 }
 .people-visibility {
   display: flex;
@@ -818,6 +834,11 @@
 .profile-edit:hover {
   filter: brightness(1.08);
 }
+/* The @handle under the name, quiet: it is also the profile's address on genex.games. */
+.profile-handle {
+  color: var(--ink-3);
+  font: 13px / 18px var(--font-family-mono);
+}
 .profile-joined {
   margin-inline: 4px;
   color: var(--ink-3);
@@ -835,8 +856,8 @@
   gap: 10px;
 }
 .profile-placeholder-avatar {
-  width: 150px;
-  height: 150px;
+  width: 123px;
+  height: 123px;
 }
 
 /* A profile's card titles that do not fit scroll back and forth; Reduce Motion leaves them cut off. */
@@ -1353,6 +1374,218 @@
   letter-spacing: 0.04em;
 }
 
+/* Nickname: the row shows the @handle and Edit; editing, the welcome's field with Save and Cancel. */
+.account-nickname-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 32px;
+}
+.account-handle {
+  color: var(--ink);
+  font: 14px / 20px var(--font-family-mono);
+}
+.account-handle[data-none] {
+  color: var(--ink-3);
+}
+.account-nickname-editor {
+  width: 100%;
+}
+/* Editing, the label sits level with the taller box's text. */
+.account-row[data-editing] > .account-row-label {
+  padding-top: 11px;
+}
+
+/* ── The nickname field: the profile's address fixed in the box, the state at its right end ── */
+.handle-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: start;
+}
+.handle-field-label {
+  color: var(--ink-2);
+  font: 12px / 16px var(--font-family-mono);
+}
+.handle-field-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.handle-box {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  min-width: 0;
+  height: 42px;
+  padding-inline: 12px;
+  border-radius: 10px;
+  background: var(--field);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  font: 14px / 1 var(--font-family-mono);
+  cursor: text;
+}
+.handle-box:focus-within {
+  box-shadow: inset 0 0 0 1px var(--focus-edge);
+}
+.handle-box-prefix {
+  flex: none;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+/* No width of its own: an input's intrinsic one would widen a narrow dialog past its edge. */
+.handle-box-input {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.handle-box-state {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  padding-inline-start: 8px;
+  font: 12px / 1 var(--font-family-mono);
+  white-space: nowrap;
+}
+.handle-box-state[data-tone="ok"] {
+  color: var(--people-live-ink);
+}
+.handle-box-state[data-tone="bad"] {
+  color: var(--red);
+}
+.handle-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  color: var(--ink-3);
+  font: 12px / 18px var(--font-family-mono);
+}
+.handle-suggestion {
+  padding: 1px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--people-quiet);
+  color: var(--ink);
+  font: 12px / 18px var(--font-family-mono);
+  cursor: pointer;
+}
+.handle-suggestion:hover {
+  background: var(--hover);
+}
+
+/* ── Share your profile: the link preview at a glance, then the link and the ways to pass it on ── */
+.share-popover {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 372px;
+  padding: 16px;
+}
+.share-popover-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.share-preview {
+  flex: none;
+  width: 340px;
+  height: 178px;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px var(--line);
+}
+/* genex.games draws the preview dark in either theme, so its colours are its own, not the theme's. */
+.share-card {
+  --ink: #eef0f4;
+  --ink-3: #7c808b;
+  --people-pro: #8d9bff;
+  --people-chip-top: color-mix(in srgb, var(--people-chip-color) 22%, transparent);
+  --people-chip-bottom: color-mix(in srgb, var(--people-chip-color) 10%, transparent);
+  --people-chip-edge: color-mix(in srgb, color-mix(in srgb, var(--people-chip-color) 75%, #ffffff) 40%, transparent);
+  --people-chip-shine: rgb(255 255 255 / 0.06);
+  --people-chip-ink: #9fb0ff;
+  --people-chip-number: #d3dbff;
+  position: relative;
+  width: 600px;
+  height: 315px;
+  /* 340 / 600: the 1200 × 630 picture at the popover's width. */
+  transform: scale(0.5667);
+  transform-origin: 0 0;
+  background: #0b0b0e;
+  color: var(--ink);
+}
+.share-card-word {
+  position: absolute;
+  top: 22px;
+  left: 26px;
+  font-size: 14px;
+  letter-spacing: 0.16em;
+}
+.share-card-url {
+  position: absolute;
+  top: 22px;
+  right: 26px;
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+}
+.share-card-body {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: center;
+  gap: 22px;
+  height: 100%;
+  padding-inline: 30px;
+}
+.share-card-who {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.share-card-name {
+  overflow: hidden;
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-card-name .profile-pro {
+  font-size: 13px;
+  vertical-align: 10px;
+}
+.share-card-chips {
+  display: flex;
+  gap: 6px;
+}
+.share-card-covers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 10px;
+}
+.share-card-cover {
+  aspect-ratio: 16 / 9;
+  border-radius: 6px;
+  background-color: #1b1b20;
+  background-position: center;
+  background-size: cover;
+}
+
 /* ── First sign-in: the avatar built under a beam over its wireframe ── */
 .avatar-welcome-body {
   display: flex;
@@ -1480,7 +1713,7 @@
   align-items: center;
   -webkit-app-region: drag;
 }
-/* A creator's tile while the row loads: a 64px face in the 80px box a ringed avatar takes, and a
+/* A creator's tile while the row loads: a 54px face in the 68px box a ringed avatar takes, and a
    bar on each of the two text lines, so the row keeps its height when people arrive. */
 .person-tile-placeholder {
   cursor: default;
@@ -1490,9 +1723,9 @@
   background: transparent;
 }
 .person-tile-placeholder .people-placeholder-avatar {
-  width: 64px;
-  height: 64px;
-  margin: 8px;
+  width: 54px;
+  height: 54px;
+  margin: 7px;
 }
 .person-tile-placeholder .play-bar {
   display: inline-block;

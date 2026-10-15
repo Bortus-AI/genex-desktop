@@ -87,10 +87,10 @@ one, the game plays as a guest), to read a game's likes including yours, to save
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
 only copy a genex.games link to the clipboard.
 
-Signed in, the app also reads, with that token, who the account is (its name,
-picture, Pro and join date; the email the API returns never leaves the app's main process) and the
-Friends page: your friends with the game each is in when they share it, requests both ways, whether
-friends see the game you are in, and your invite link. Who the account is is read at launch, when
+Signed in, the app also reads, with that token, who the account is (its name, nickname, whether
+you chose it, picture, Pro and join date; the email the API returns never leaves the app's main
+process) and the Friends page: your friends with the game each is in when they share it, requests
+both ways, whether friends see the game you are in, and your invite link. Who the account is is read at launch, when
 the window comes to the front, when the Mac is back online, when plugins change and, while a sign-in
 waits in your browser, every 2 seconds; the Friends page at launch, every 2 minutes
 for the sidebar's count of waiting requests, every 20 seconds while Friends is open and after each
@@ -98,7 +98,11 @@ change you make there. A profile reads that account's public profile (name, pict
 published games) and, signed in, how you stand with them. Adding, accepting, declining, cancelling
 and removing a friend, changing who sees your game, renaming your account and a new picture (made
 into a 512-pixel WebP in the app, then uploaded to the address Genex hands back) are sent with the
-token; people search sends what you type (2 to 40 characters). A profile also reads that person's
+token; people search sends what you type (2 to 40 characters). A nickname you type is sent, with
+the token, a moment after your last key to ask whether it is free (unless the app can tell at once
+that it is malformed or already yours), and once more when you save it. Post on X opens X's post
+page in your browser with your link filled in, and Share… hands the link to the Mac's share menu:
+neither sends anything until you post or choose an app there. A profile also reads that person's
 friends (yours first) and how many people played their games. Your own stats (plays and players
 per game per day, and who plays now) are read with the token only while your profile or the Stats
 page shows them, and only you see them. Top creators are read without a sign-in. Choosing your
@@ -107,9 +111,9 @@ the generated avatar itself is drawn in the app from your account id and that nu
 nothing. The Genex plugin's Credits tab reads, with the token,
 your balance, Pro allowance, invite bonus and last few spends, and the public price list; Get
 credits opens genex.games/plans in your browser. That an account has seen its avatar's welcome
-stays in the app profile, as do the account last signed in (its id, name, picture addresses, Pro,
-join date and avatar choice) and its last balance, so the app shows them while offline; signing
-out removes them. Signing in happens in your browser, on genex.games; signing out forgets the
+(and been asked for its nickname) stays in the app profile, as do the account last signed in (its
+id, name, nickname, picture addresses, Pro, join date and avatar choice) and its last balance, so
+the app shows them while offline; signing out removes them. Signing in happens in your browser, on genex.games; signing out forgets the
 account on this Mac; turning the Genex plugin off signs nothing out.
 
 Remix clones the game's public source over https from git.genex.games into a new folder in your

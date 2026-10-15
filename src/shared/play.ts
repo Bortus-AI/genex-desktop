@@ -4,8 +4,20 @@
  * view main owns. These are the shapes and names both sides share.
  */
 
-/** Where Play's games and pages live. */
-export const PLAY_ORIGIN = { api: "https://api.genex.games", web: "https://genex.games" } as const;
+/** Where Play talks to genex.games: the API main calls and the website the app links to. */
+export interface PlayOrigins {
+  api: string;
+  web: string;
+}
+
+/**
+ * genex.games' own origins, which every release uses. A development profile may point Play
+ * elsewhere (`main/play/origins.ts`); the renderer learns the website it links to at bootstrap.
+ */
+export const PLAY_ORIGIN = {
+  api: "https://api.genex.games",
+  web: "https://genex.games",
+} as const satisfies PlayOrigins;
 /** The host every published game is served under: `https://<slug>.genex.technology/`. */
 export const PLAY_GAMES_DOMAIN = "genex.technology";
 
@@ -133,8 +145,11 @@ export const isPlaySlug = (value: unknown): value is string => typeof value === 
 /** The game itself, served on its own subdomain. */
 export const playGameUrl = (slug: string): string => `https://${slug}.${PLAY_GAMES_DOMAIN}/`;
 
-/** The game's page on genex.games: what Share hands out. */
-export const playPageUrl = (slug: string): string => `${PLAY_ORIGIN.web}/${slug}`;
+/** The game's page on the website at `web` (genex.games' unless a development profile says): what Share hands out. */
+export const playPageUrl = (web: string, slug: string): string => `${web}/${slug}`;
+
+/** The website's page of what Genex gives a game and its maker: where Learn goes. */
+export const playToolsUrl = (web: string): string => `${web}/tools`;
 
 /** Where a game's viewer stands. Wire values: never rename one. */
 export const PlayViewerPhase = {

@@ -21,7 +21,11 @@ export function playAddress(slug: string, ticket: string | undefined): string {
   return `${playGameUrl(slug)}?genex_r=1#${fragment}`;
 }
 
-/** Whether a game's page may go to `raw`: a Genex game's address, or Genex's guest sign-in hop. */
+/**
+ * Whether a game's page may go to `raw`: a Genex game's address, or Genex's guest sign-in hop. The
+ * hop is genex.games' own even when a development profile points Play at another website: a game
+ * is served from Genex's game hosts, and its page hops to the website those hosts belong to.
+ */
 export function playNavigationAllowed(raw: string, offline: boolean): boolean {
   if (offline) return raw.startsWith("data:text/html");
   try {

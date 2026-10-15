@@ -17,8 +17,8 @@ The bell keeps unanswered questions, plans and permission requests, then build e
 sign-outs, each opening where answered; unfocused, macOS notifications and the Dock badge carry
 them.
 
-**Play** shows genex.games' games, the Genex account (kept with the plugin off, offline),
-**Friends**, profiles and **Stats** ([Play](../play.md)).
+**Play** shows genex.games' games, the Genex account and nickname (kept offline), **Friends**
+with invites, profiles and **Stats** ([Play](../play.md)).
 
 ## First launch
 

@@ -97,6 +97,7 @@ function rig(options: { access?: boolean; on?: string[]; device?: string | null 
     game: { open: () => {}, show: () => {}, hide: () => {}, focus: () => {}, close: () => {} },
     focusApp: () => {},
     clipboard: () => {},
+    web: "https://genex.games",
     remix: async () => "copy",
     emit: (event) => events.push(event),
     clock: { setTimeout: () => 0, clearTimeout: () => {} },

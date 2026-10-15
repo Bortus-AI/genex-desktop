@@ -18,11 +18,14 @@ export function PersonAvatar({
   person,
   size,
   gear = false,
+  flat = false,
   motion = AvatarMotion.Hover,
 }: {
   person: Pick<PlayPerson, "id" | "imageUrl" | "avatarVariant">;
   size: number;
   gear?: boolean;
+  /** Drawn as genex.games' link previews draw it (`GeneratedAvatar`'s `flat`). */
+  flat?: boolean;
   motion?: AvatarMotion;
 }): JSX.Element {
   const [failed, setFailed] = useState<string | null>(null);
@@ -34,7 +37,7 @@ export function PersonAvatar({
         <img src={src} alt="" draggable={false} onError={() => setFailed(src)} />
       </span>
     );
-  return <GeneratedAvatar recipe={recipe} size={size} full={!gear} motion={motion} />;
+  return <GeneratedAvatar recipe={recipe} size={size} full={!gear} flat={flat} motion={motion} />;
 }
 
 /** A grey placeholder where a person will be (no friends yet). */
