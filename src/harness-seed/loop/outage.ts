@@ -90,9 +90,13 @@ export function limitWords(kind: unknown): string {
 /** Waits between retries, in order; the run's `budgets.outageDelays` overrides them (tests). */
 export const OUTAGE_DELAYS = [MINUTE_MS, 2 * MINUTE_MS, 5 * MINUTE_MS, 10 * MINUTE_MS, 15 * MINUTE_MS];
 
-/** Words of a provider that is briefly down: an overloaded or failing gateway, a dropped connection. */
+/**
+ * Words of a provider that is briefly down: an overloaded or failing gateway, a dropped connection,
+ * or no network at all (a lookup that found nothing, a network that is down or can't reach the
+ * host: the CLI's "Can't reach the API server … (ENOTFOUND)").
+ */
 const TRANSIENT =
-  /\b(529|502|503|504|500)\b|overloaded|internal server error|bad gateway|service unavailable|gateway time-?out|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed|network error|temporarily unavailable|try again in a moment/i;
+  /\b(529|502|503|504|500)\b|overloaded|internal server error|bad gateway|service unavailable|gateway time-?out|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|ENETUNREACH|EHOSTUNREACH|ENETDOWN|socket hang up|fetch failed|network error|temporarily unavailable|try again in a moment/i;
 /** Words of a cap or a sign-in, which no wait fixes even when the rest reads like an outage. */
 const NEVER_TRANSIENT =
   /weekly limit|usage limit|hit your limit|out of usage|resets? (at|on)\b|unauthori[sz]ed|forbidden|\b401\b|\b403\b|invalid api key|not logged in|sign in|session expired/i;
