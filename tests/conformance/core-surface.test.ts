@@ -98,6 +98,7 @@ const METHODS = [
   "resolveConsent",
   "resumeAutopilot",
   "retainedAssetFile",
+  "retryMention",
   "rewindChat",
   "rewindPreview",
   "rollbackTo",
