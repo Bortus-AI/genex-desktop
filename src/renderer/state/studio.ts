@@ -495,7 +495,11 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
   const { launch } = stores;
   if (launch.getState().launch) return;
   const id = `launch-${++launches}`;
-  launch.setState((state) => launchStarted(state, { id, text: input.text, extras: input.extras, at: ctx.now() }), true);
+  const known = stores.library.getState().games.map((game) => game.name);
+  launch.setState(
+    (state) => launchStarted(state, { id, text: input.text, extras: input.extras, at: ctx.now(), known }),
+    true,
+  );
   const { title, provisional, limited } = await launchName(api, input);
   // The picked model cannot take the game's first turn: no game waits empty for it, and the words go back home.
   if (limited) {
