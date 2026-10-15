@@ -6,17 +6,28 @@
  * "Roblox Studio" button with the box glyph and a status word once turned on.
  */
 import assert from "node:assert/strict";
-import { access, readFile } from "node:fs/promises";
+import { access, lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import type { PluginContext, PluginToolbarStatus } from "../../src/plugin-sdk/index.d.ts";
+import type {
+  PluginContext,
+  PluginEngineAssistAnswer,
+  PluginEngineAssistRefusal,
+  PluginReview,
+  PluginToolbarStatus,
+} from "../../src/plugin-sdk/index.d.ts";
 import {
+  type AssistAnswer,
   createRobloxBackend,
   PanelStep,
   type RobloxDeps,
+  type SetupAnswer,
   StudioStatus,
   studioStatusOf,
 } from "../../src/plugins/roblox/backend.ts";
+import { HELPER_FILE } from "../../src/plugins/roblox/setup.ts";
+import { type Launch, QUIT_WAIT_MS } from "../../src/plugins/roblox/studio-launch.ts";
+import { MCP_SWITCH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
 import type { LocateStat, Run } from "../../src/plugins/roblox/studio-locate.ts";
 import { STUDIO_MAC_APP } from "../../src/plugins/roblox/studio-locate.ts";
 import { toolbarItems } from "../../src/shared/plugin-toolbar.ts";
@@ -39,23 +50,34 @@ interface Mac {
   setUp: boolean;
   running: boolean;
   answering: boolean;
+  /** Studio closes when asked to quit (else it stays open, as when the person keeps it). */
+  quitCloses?: boolean;
 }
 
-function fakeMac(state: Mac) {
+function fakeMac(given: Mac, home = HOME) {
+  const state = { ...given };
   const touched: string[] = [];
   const ran: string[] = [];
+  const calls: Launch[] = [];
+  const opened: Launch[] = [];
+  let clock = 0;
   const dirs = new Set(["/Applications", ...(state.installed ? [STUDIO_MAC_APP] : [])]);
   const files = new Set([...(state.installed ? STUDIO_FILES : []), ...(state.setUp ? [SETUP_RECORD] : [])]);
-  const run: Run = async (file) => {
+  const run: Run = async (file, args) => {
     ran.push(file);
+    calls.push({ file, args: [...args] });
+    if (file === "/usr/bin/osascript") {
+      if (state.quitCloses) state.running = false;
+      return { code: 0, stdout: "" };
+    }
     if (file === "/usr/bin/plutil") return { code: 0, stdout: "0.743.0.7431133\n" };
     if (file === "/usr/bin/pgrep") return state.running ? { code: 0, stdout: "4530\n" } : { code: 1, stdout: "" };
     throw new Error(`spawn ${file} ENOENT`);
   };
   const deps: RobloxDeps = {
     platform: "darwin",
-    env: { HOME },
-    home: HOME,
+    env: { HOME: home },
+    home,
     run,
     fs: {
       async lstat(file): Promise<LocateStat | undefined> {
@@ -74,13 +96,26 @@ function fakeMac(state: Mac) {
       },
     },
     answers: async () => state.answering,
+    helper: path.resolve("src/plugins/roblox/helper", HELPER_FILE),
+    open: async (launch) => {
+      opened.push(launch);
+    },
+    sleep: async (ms) => {
+      clock += ms;
+    },
+    now: () => clock,
   };
-  return { deps, touched, ran };
+  return { deps, touched, ran, calls, opened };
 }
 
-function context(): PluginContext {
-  const host = (async (method: string) => {
-    if (method === "storage.root") return STORAGE;
+/** A plugin call's context: the plugin's storage, and the host's answer to Do it for me. */
+function context(
+  storage = STORAGE,
+  assist: (args: unknown) => PluginEngineAssistAnswer = () => ({ started: false, reason: "unavailable" }),
+): PluginContext {
+  const host = (async (method: string, args: unknown) => {
+    if (method === "storage.root") return storage;
+    if (method === "game.engine.assist") return assist(args);
     throw new Error(`No ${method} here`);
   }) as PluginContext["host"];
   return { signal: new AbortController().signal, callId: 1, host };
@@ -173,11 +208,128 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
   });
 });
 
+describe("Set up, Restart Studio and Do it for me from the panel", () => {
+  const TASK = "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
+
+  it("Set up refuses while Studio runs, reading nothing, and offers Restart Studio, Do it for me and the click path", async () => {
+    const mac = fakeMac(NOT_SET_UP);
+    const answer = (await createRobloxBackend(mac.deps).action?.("setup", {}, context())) as SetupAnswer;
+    assert.equal(answer.done, false);
+    assert.equal(answer.reason, "studio-running");
+    assert.deepEqual(
+      answer.choices?.map((choice) => [choice.action, choice.label]),
+      [
+        ["restart-studio", "Restart Studio"],
+        ["do-it-for-me", "Do it for me"],
+      ],
+    );
+    assert.equal(answer.clickPath, MCP_SWITCH_CLICK_PATH);
+    assert.doesNotMatch(answer.message, BANNED_WORDS);
+    assert.deepEqual(
+      mac.touched.filter((file) => file.includes("/Documents")),
+      [],
+    );
+    await assert.rejects(lstat(HOME), "the fake home was never made");
+  });
+
+  it("Do it for me hands the host the exact task, and starts the chat's turn when it can", async () => {
+    const asked: unknown[] = [];
+    const backend = createRobloxBackend(fakeMac(READY).deps);
+    const started = (await backend.action?.(
+      "do-it-for-me",
+      {},
+      context(STORAGE, (args) => {
+        asked.push(args);
+        return { started: true };
+      }),
+    )) as AssistAnswer;
+    assert.deepEqual(asked, [{ task: TASK }]);
+    assert.equal(started.started, true);
+    assert.equal(started.clickPath, undefined);
+  });
+
+  const refusals: PluginEngineAssistRefusal[] = ["unavailable", "declined", "no-chat", "not-person", "no-apps"];
+  for (const reason of refusals)
+    it(`Do it for me answered ${reason} shows Studio's own click path`, async () => {
+      const backend = createRobloxBackend(fakeMac(READY).deps);
+      const answer = (await backend.action?.(
+        "do-it-for-me",
+        {},
+        context(STORAGE, () => ({ started: false, reason })),
+      )) as AssistAnswer;
+      assert.equal(answer.started, false);
+      assert.equal(answer.reason, reason);
+      assert.equal(answer.clickPath, MCP_SWITCH_CLICK_PATH);
+      assert.ok(answer.message.includes(MCP_SWITCH_CLICK_PATH), answer.message);
+      assert.doesNotMatch(answer.message, BANNED_WORDS);
+    });
+
+  /** A Mac home with Roblox's folders and one account's settings, the switch off. */
+  async function robloxHome() {
+    const root = await tmpDir("roblox-restart-");
+    const home = path.join(root, "home");
+    await mkdir(path.join(home, "Documents", "Roblox"), { recursive: true });
+    const settings = path.join(home, "Library", "Roblox", "AssistantSettings");
+    await mkdir(settings, { recursive: true });
+    await writeFile(path.join(settings, "1.json"), '{"mcp-server": {"enabled": false}}');
+    return { home, storage: path.join(root, "storage"), settings: path.join(settings, "1.json") };
+  }
+
+  it("Restart Studio quits normally, sets up while Studio is closed and opens it once", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const { home, storage, settings } = await robloxHome();
+    const mac = fakeMac({ ...NOT_SET_UP, quitCloses: true }, home);
+    const answer = (await createRobloxBackend(mac.deps).action?.(
+      "restart-studio",
+      {},
+      context(storage),
+    )) as SetupAnswer;
+    assert.equal(answer.done, true, answer.message);
+    assert.equal(answer.reopened, true);
+    const quits = mac.calls.filter((call) => call.file === "/usr/bin/osascript");
+    assert.equal(quits.length, 1, "one quit");
+    assert.match(quits[0]?.args.join(" ") ?? "", /to quit/);
+    assert.doesNotMatch(quits[0]?.args.join(" ") ?? "", /kill|-9|force/i, "never forced");
+    assert.deepEqual(mac.opened, [{ file: "/usr/bin/open", args: ["-a", STUDIO_MAC_APP] }]);
+    assert.ok((await lstat(path.join(home, "Documents", "Roblox", "Plugins", HELPER_FILE))).isFile());
+    assert.equal(JSON.parse(await readFile(settings, "utf8"))["mcp-server"].enabled, true);
+  });
+
+  it("Restart Studio leaves Studio and every file alone when Studio stays open", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const { home, storage, settings } = await robloxHome();
+    const mac = fakeMac({ ...NOT_SET_UP, quitCloses: false }, home);
+    const answer = (await createRobloxBackend(mac.deps).action?.(
+      "restart-studio",
+      {},
+      context(storage),
+    )) as SetupAnswer;
+    assert.equal(answer.done, false);
+    assert.equal(answer.reason, "still-open");
+    assert.deepEqual(mac.opened, [], "Studio was never closed, so it is not opened again");
+    assert.ok(mac.deps.now() >= QUIT_WAIT_MS, "it waited the whole quit wait");
+    await assert.rejects(lstat(path.join(home, "Documents", "Roblox", "Plugins")));
+    assert.equal(await readFile(settings, "utf8"), '{"mcp-server": {"enabled": false}}');
+  });
+
+  it("Set up's confirmation says what it does, naming the Documents prompt on a Mac", async () => {
+    const review = (await createRobloxBackend(fakeMac(NOT_SET_UP).deps).review?.(
+      "setup",
+      {},
+      context(),
+    )) as PluginReview;
+    assert.match(review.message ?? "", /Genex helper/);
+    assert.match(review.detail ?? "", /macOS may ask to let Genex use your Documents folder/);
+  });
+});
+
 describe("the built Roblox Studio plugin", () => {
   it("builds its backend, manifest, icon and panel with the panel SDK inlined", async () => {
     const resources = await makeResources({ tsc: false });
     const roblox = path.join(resources, "plugins", "roblox");
-    for (const file of ["plugin.json", "icon.svg", "backend.mjs", "panel.html"])
+    for (const file of ["plugin.json", "icon.svg", "backend.mjs", "panel.html", HELPER_FILE])
       await access(path.join(roblox, file)).catch(() => assert.fail(`the package has ${file}`));
     const panel = await readFile(path.join(roblox, "panel.html"), "utf8");
     assert.doesNotMatch(panel, /<!-- STUDIO_PANEL_(SDK|FONTS) -->/, "the panel SDK and fonts are inlined");

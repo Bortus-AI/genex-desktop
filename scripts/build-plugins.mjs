@@ -180,6 +180,11 @@ async function buildRoblox(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/roblox", file), path.join(roblox, file));
   await cp(path.join(root, "src/plugins/roblox/skills"), path.join(roblox, "skills"), { recursive: true });
+  // The Genex helper Set up copies into Studio's Plugins folder.
+  await cp(
+    path.join(root, "src/plugins/roblox/helper/GenexStudioHelper.rbxmx"),
+    path.join(roblox, "GenexStudioHelper.rbxmx"),
+  );
   const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/roblox/panel.html"), "utf8"), sdk);
   await writeFile(
     path.join(roblox, "panel.html"),

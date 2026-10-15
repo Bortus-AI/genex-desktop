@@ -1104,6 +1104,29 @@ server lists an open Studio, asked through the one StudioMCP the backend keeps o
 panel's `status` reads `~/Documents`, where macOS asks the person first; the Mac Plugins folder
 (`~/Documents/Roblox/Plugins`) is only named there.
 
+Set up (`setup.ts`, `mcp-switch.ts`) runs only from the person's press and only while Studio is
+closed, because Studio rewrites its settings while it runs. It adds the Genex helper
+`GenexStudioHelper.rbxmx` to Studio's Plugins folder (`~/Documents/Roblox/Plugins` on a Mac,
+`%LOCALAPPDATA%\Roblox\Plugins` on Windows), making that folder inside the real Roblox folder when
+Studio hasn't yet, and turns Studio's MCP server on (`"mcp-server": {"enabled": true}`) in every
+account's settings file named by digits in `AssistantSettings` (`~/Library/Roblox` on a Mac; on
+Windows presumed under `%LOCALAPPDATA%\Roblox`, not yet run there). The switch is edited in the
+file's own text, so every other key keeps its bytes. Genex never makes a settings file or guesses
+an account: with none, the panel offers Do it for me and Studio's click path. A link, something
+other than a folder or file where one belongs, an unreadable or oversize settings file, or a
+running Studio refuses the whole step before anything is written. Set up's confirmation says macOS
+may ask to let Genex use the Documents folder, where Roblox keeps its plugins. The record
+`setup/record.json` lists each write with its bytes' hash or the switch value it replaced, and keeps
+a copy of a helper file that was there before; Undo Set up takes back only what still holds Genex's
+bytes, and the Plugins folder only when Genex made it and it is empty. The helper carries
+`GENEX_HELPER_VERSION`: an older or unmarked one is replaced, a newer one is kept. With Studio open,
+Set up offers **Restart Studio** (a normal quit, so Studio asks to save as always; Set up; Studio
+opened again), **Do it for me** (`game.engine.assist` with the task "Turn on Studio's MCP server:
+Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server") and that click path.
+Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone. The
+setup actions are `native`: they write outside the plugin's storage or quit and open Studio, so a
+fixture profile never runs them.
+
 Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
 is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
 `<storage>/mcp/<game>`) starts `StudioMCP` itself through `studio-client.ts`: on a Mac

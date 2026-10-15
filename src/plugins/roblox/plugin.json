@@ -82,7 +82,26 @@
   "settings": [],
   "actions": [
     { "name": "status", "label": "Roblox Studio status" },
-    { "name": "toolbar-status", "label": "Roblox Studio connection" }
+    { "name": "toolbar-status", "label": "Roblox Studio connection" },
+    {
+      "name": "setup",
+      "label": "Set up",
+      "confirmation": "Add the Genex helper to Roblox Studio's Plugins folder and turn on Studio's MCP server?",
+      "native": true
+    },
+    {
+      "name": "undo-setup",
+      "label": "Undo Set up",
+      "confirmation": "Take back what Genex set up in Roblox Studio: the Genex helper in its Plugins folder (and that folder, if Genex made it) and the MCP server switch Genex turned on. Anything changed since stays as it is.",
+      "native": true
+    },
+    {
+      "name": "restart-studio",
+      "label": "Restart Studio",
+      "confirmation": "Quit Roblox Studio, set it up for Genex while it is closed, and open it again? Studio asks you to save your place first, as it always does.",
+      "native": true
+    },
+    { "name": "do-it-for-me", "label": "Do it for me", "native": true }
   ],
   "toolbar": [
     {
