@@ -8,6 +8,7 @@ import type {
   PluginActivation,
   PluginContext,
   PluginEngineAssistRefusal,
+  PluginEngineLink,
   PluginReview,
   PluginToolbarStatus,
 } from "../../plugin-sdk/index.d.ts";
@@ -17,12 +18,22 @@ import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { RobloxAction } from "./actions.ts";
 import { type HelperLink, startHelperLink } from "./helper-link.ts";
 import type { ScriptChange } from "./helper-protocol.ts";
-import { type RobloxSteps, robloxSteps } from "./engine-steps.ts";
-import { readSwitches } from "./mcp-switch.ts";
+import {
+  nowStep,
+  type RobloxRow,
+  type RobloxStepFacts,
+  type RobloxStepId,
+  type RobloxSteps,
+  robloxRows,
+  robloxSteps,
+} from "./engine-steps.ts";
+import { readLiveData } from "./live-data.ts";
+import { planSwitches, readSwitches } from "./mcp-switch.ts";
 import {
   HELPER_FILE,
   HelperChange,
   planSetup,
+  recordedHelper,
   type SetupDone,
   type SetupOptions,
   setUp,
@@ -52,7 +63,7 @@ import {
   quitStudioAction,
   showSteps,
 } from "./place-actions.ts";
-import { listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
+import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
 import { openLaunch, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import {
   type LocateDeps,
@@ -207,6 +218,12 @@ export interface StudioFacts {
   answering: boolean;
 }
 
+/** Studio's MCP switch in its settings: how many accounts' settings files there are, and how many have it on. */
+export interface McpSwitchState {
+  settings: number;
+  on: number;
+}
+
 /** The panel's answer to `status`. */
 export interface RobloxStatus {
   studio: StudioStatus;
@@ -214,6 +231,14 @@ export interface RobloxStatus {
   steps: Record<PanelStep, boolean>;
   /** Get Roblox Studio, while it runs and after it has finished. */
   install?: InstallStatus;
+  /** Studio's MCP switch, read from its settings (never Documents); absent when they can't be read. */
+  mcp?: McpSwitchState;
+  /** The helper Genex's record says it added. */
+  helper?: { version: number; current: boolean };
+  /** The panel's rows: the chat's steps card's, with the panel's extras on the step that is next. */
+  rows: RobloxRow[];
+  /** The step that is next; absent once every step is done. */
+  now?: RobloxStepId;
 }
 
 /**
@@ -262,12 +287,12 @@ async function readStudio(deps: RobloxDeps, context: PluginContext) {
   if (!install) return { install, facts };
   const storage = await context.host(HostService.StorageRoot);
   facts.setUp = await setUpIn(deps, storage);
-  if (!facts.setUp) return { install, facts };
+  if (!facts.setUp) return { install, facts, storage };
   deps.helperLink?.(storage);
   // Studio Genex just opened counts as running (Starting) before its process is seen.
   facts.running = (await studioRunning(deps)) || (await startingNow(storage, deps.now()));
   facts.answering = facts.running && (await deps.answers());
-  return { install, facts };
+  return { install, facts, storage };
 }
 
 /** What the panel shows of a Get Roblox Studio job. */
@@ -277,39 +302,81 @@ const installStatusOf = (job: InstallJob): InstallStatus => {
   return answer;
 };
 
-/** Whether the game this call is bound to builds in a Roblox place. */
-async function linkedHere(context: PluginContext): Promise<boolean> {
-  if (!context.project) return false;
-  const link = await context.host(HostService.EngineRead).catch(() => null);
-  return Boolean(link);
+/** The link of the game this call is bound to, or null when it builds in no Roblox place. */
+async function linkHere(context: PluginContext): Promise<PluginEngineLink | null> {
+  if (!context.project) return null;
+  return context.host(HostService.EngineRead).catch(() => null);
+}
+
+/** Studio's MCP switch across the accounts' settings files; undefined when they can't be read. */
+async function mcpSwitch(deps: RobloxDeps): Promise<McpSwitchState | undefined> {
+  try {
+    const plan = await planSwitches(setupPaths(deps.platform, deps.env, deps.home).settings);
+    return { settings: plan.files, on: plan.alreadyOn };
+  } catch {
+    return undefined;
+  }
+}
+
+/** What the game's place adds to the rows: its name, the person's own Rojo project, and live saved data. */
+async function placeFacts(context: PluginContext, storage: string | undefined) {
+  const link = await linkHere(context);
+  if (!link || !storage || !context.project) return { linked: Boolean(link) };
+  const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
+  const place = await linkedPlace(storage, game, link);
+  const live = await readLiveData(storage, context.project);
+  return { linked: true, place: place.name, rojo: place.rojo, liveData: live?.reachable === true };
+}
+
+/** Where Get Roblox Studio stands, as the rows read it: under way, or stopped and why. */
+function installFacts(job: InstallJob | undefined): Pick<RobloxStepFacts, "getting" | "failed"> {
+  if (!job) return {};
+  if (!isFinished(job)) return { getting: { detail: job.message } };
+  return job.phase === InstallPhase.Failed ? { failed: { detail: job.message } } : {};
+}
+
+/**
+ * Everything the rows are read from, now. Unlike the toolbar, the rows ask whether Studio runs
+ * before setup too: Set up waits for Studio to close, and Open Studio is offered only while it is.
+ */
+async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJob | undefined) {
+  const { install, facts, storage } = await readStudio(deps, context);
+  const running = facts.running || (facts.installed && (await studioRunning(deps)));
+  const mcp = facts.installed ? await mcpSwitch(deps) : undefined;
+  const helper = facts.setUp && storage ? await recordedHelper(storage) : undefined;
+  const rows: RobloxStepFacts = {
+    ...facts,
+    running,
+    ...(install?.version ? { version: install.version } : {}),
+    ...installFacts(job),
+    ...(await placeFacts(context, storage)),
+    mac: deps.platform === "darwin",
+    ...(mcp ? { mcpOn: mcp.on > 0 } : {}),
+  };
+  return { install, facts, rows, mcp, helper };
 }
 
 async function status(deps: RobloxDeps, context: PluginContext, job: InstallJob | undefined): Promise<RobloxStatus> {
-  const { install, facts } = await readStudio(deps, context);
+  const { install, facts, rows, mcp, helper } = await stepFacts(deps, context, job);
   const steps = {
     [PanelStep.Studio]: facts.installed,
     [PanelStep.Helper]: facts.setUp,
     [PanelStep.Mcp]: facts.answering,
-    [PanelStep.Place]: await linkedHere(context),
+    [PanelStep.Place]: rows.linked,
   };
-  const answer: RobloxStatus = { studio: studioStatusOf(facts), steps };
+  const answer: RobloxStatus = { studio: studioStatusOf(facts), steps, rows: robloxRows(rows) };
   if (install?.version) answer.version = install.version;
   if (job) answer.install = installStatusOf(job);
+  if (mcp) answer.mcp = mcp;
+  if (helper) answer.helper = helper;
+  const now = nowStep(rows);
+  if (now) answer.now = now;
   return answer;
 }
 
-/** The steps card, read now: a Studio already here is ticked with its version and never offered again. */
+/** The steps card, read now: the panel's rows, so a Studio already here is ticked with its version. */
 async function steps(deps: RobloxDeps, context: PluginContext, job: InstallJob | undefined): Promise<RobloxSteps> {
-  const { install, facts } = await readStudio(deps, context);
-  // The status skips the process check before setup; the card's Open Studio needs it either way.
-  const running = facts.running || (facts.installed && (await studioRunning(deps)));
-  return robloxSteps({
-    ...facts,
-    running,
-    ...(install?.version ? { version: install.version } : {}),
-    ...(job && !isFinished(job) ? { getting: { detail: job.message } } : {}),
-    linked: await linkedHere(context),
-  });
+  return robloxSteps((await stepFacts(deps, context, job)).rows);
 }
 
 async function toolbarStatus(deps: RobloxDeps, context: PluginContext): Promise<PluginToolbarStatus> {

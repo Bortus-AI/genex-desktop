@@ -248,6 +248,15 @@ async function readRecord(storage: string): Promise<SetupRecord | null> {
   return record;
 }
 
+/**
+ * The helper Genex's record says it added: its version, and whether it is this Genex's own or an
+ * older one. Read from the plugin's storage only, never from the Plugins folder.
+ */
+export async function recordedHelper(storage: string): Promise<{ version: number; current: boolean } | undefined> {
+  const helper = (await readRecord(storage))?.helper;
+  return helper ? { version: helper.version, current: helper.version >= HELPER_VERSION } : undefined;
+}
+
 /** Writes `bytes` to `file` whole or not at all, never through a link at that name; `mode` for a new file. */
 async function writeWhole(file: string, bytes: Uint8Array, mode?: number): Promise<void> {
   const temporary = path.join(path.dirname(file), `.genex-${process.pid}-${randomBytes(6).toString("hex")}`);

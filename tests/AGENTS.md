@@ -54,6 +54,9 @@ through the JS API imports `@typescript/typescript6`.
 - `roblox-helper.ts`: stand-ins for the Roblox plugin's helper link: Roblox Studio as StudioMCP lists
   it (each Studio with the helper's session marker), a clock the test moves by hand, and the Genex
   helper over an in-memory connection or a real WebSocket.
+- `roblox-mac.ts`: a fake Mac for the Roblox plugin's backend (Studio's app a stand-in; home, storage
+  and games real temporary folders; Studio's running, answering and open places set by the test)
+  and `hostFor`, Genex's side of a plugin call in one game, keeping links as the host does.
 - `engines.ts`: the Unreal plugin's and the toy engine's `engine` declarations, read from their
   manifests, and a catalog of both (what `PluginRegistry.engines()` answers), for linking games.
 - `plugin-author.ts`: the Genex plugin's plugin-author skill read as an agent reads it (`genex__skill`,

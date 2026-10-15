@@ -19,9 +19,9 @@
  */
 import { lstat, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
-import type { PluginContext } from "../../plugin-sdk/index.d.ts";
+import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { isJsonObject } from "../../substrate/fsx.ts";
+import { isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
 import { writeWhole } from "./place-files.ts";
 import { ROJO_PROJECT, recordWritten, writtenByGenex } from "./script-sync.ts";
 import {
@@ -588,4 +588,48 @@ export async function usePlaceNamed(deps: PlaceDeps, context: PluginContext, pla
 /** Whether a Studio has the game's linked place open now, matched as the game's connection matches it. */
 export async function placeOpenNow(deps: PlaceDeps, link: PlaceLink): Promise<boolean> {
   return (await listedStudios(deps)).some(placeMatcher(link));
+}
+
+/** The largest project file Genex reads a place's name from. */
+const MAX_PROJECT_BYTES = 64 * 1024;
+/** The longest place name the panel shows. */
+const MAX_NAME_CHARS = 100;
+
+/** The game's place as the panel names it, and whether the person's own Rojo project keeps its scripts. */
+export interface LinkedPlaceView {
+  name: string;
+  rojo: boolean;
+}
+
+/** The name a project file gives its place, when it is a plain file with a one-line name. */
+async function projectName(file: string): Promise<string | undefined> {
+  const value = await readRegularFile(file, MAX_PROJECT_BYTES)
+    .then((bytes) => JSON.parse(bytes.toString("utf8")) as unknown)
+    .catch(() => undefined);
+  if (!isJsonObject(value) || typeof value.name !== "string") return undefined;
+  const name = value.name.trim();
+  return name && name.length <= MAX_NAME_CHARS && !CONTROL.test(name) ? name : undefined;
+}
+
+/**
+ * The place a linked game builds in, named as Studio names it: a place never saved by its name in
+ * Studio, a place linked through the game's project file by the name that file gives it, a place
+ * file by its file name. Reads only the plugin's storage and the game's own folder.
+ */
+export async function linkedPlace(
+  storage: string,
+  game: { project: string; directory?: string },
+  link: PluginEngineLink,
+): Promise<LinkedPlaceView> {
+  const own = await readPlaceRecord(storage, game.project);
+  const throughProject = path.basename(link.project) === ROJO_PROJECT;
+  const named = own?.name ?? (throughProject ? await projectName(link.project) : undefined);
+  const rojo = game.directory ? await personsRojo(game.directory) : false;
+  return { name: named ?? (throughProject ? link.name : stemOf(link.project)), rojo };
+}
+
+/** Whether the game's folder holds a Rojo project the person wrote, not Genex. */
+async function personsRojo(folder: string): Promise<boolean> {
+  const info = await lstat(path.join(folder, ROJO_PROJECT)).catch(() => undefined);
+  return Boolean(info?.isFile()) && !(await writtenByGenex(folder, ROJO_PROJECT).catch(() => false));
 }

@@ -214,6 +214,7 @@
   "tests/conformance/roblox-script-paths.test.ts",
   "tests/conformance/roblox-script-sync.test.ts",
   "tests/conformance/roblox-setup.test.ts",
+  "tests/conformance/roblox-steps.test.ts",
   "tests/conformance/roblox-studio-client.test.ts",
   "tests/conformance/roblox-studio-install.test.ts",
   "tests/conformance/roblox-studio-launch.test.ts",

@@ -12,6 +12,9 @@ const COUNT_WORDS = ["", "One", "Two", "Three", "Four", "Five"] as const;
 /** Where Studio's own MCP switch is, as the person clicks it. */
 export const MCP_SWITCH_CLICK_PATH = "Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
 
+/** Where Studio's switch for a place's live saved data is, as the person clicks it to turn it off. */
+export const LIVE_DATA_CLICK_PATH = "Game Settings › Security › Enable Studio Access to API Services";
+
 export const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Roblox Studio action: ${name}`,
   UnknownTool: (name: string) => `Unknown Roblox Studio tool: ${name}`,
@@ -148,14 +151,30 @@ export const MESSAGE = {
     OpenStudio: "Open Studio",
     Helper: "Add the Genex helper",
     HelperDetail: "Set up adds it to Studio's Plugins folder and turns on Studio's MCP server while Studio is closed.",
+    HelperStudioOpen:
+      "Roblox Studio is open, and Genex adds its helper only while Studio is closed. Restart Studio closes it, sets it up and opens it again.",
     HelperDone: "The Genex helper is in Studio",
+    HelperDoneDetail:
+      "It keeps your scripts as files in this game's folder and tells Genex which Studio is this game's.",
     SetUp: "Set up",
     Mcp: "Turn on Studio's MCP server",
-    McpDetail: `In Studio: ${MCP_SWITCH_CLICK_PATH}.`,
+    McpLater: "Set up turns it on while Studio is closed.",
+    McpWhenOpen: "Studio answers Genex once it's open.",
+    McpOff: "Studio was already open, so Genex couldn't switch it on by itself.",
+    McpOnWaiting: "It's switched on in Studio's settings. Studio answers once it has finished opening.",
     McpDone: "Studio's MCP server is on and answering Genex",
+    McpDoneDetail: "Agents work in your open place through it.",
+    Waiting: "Waiting for Studio to answer",
+    /** The card's line for a step the panel shows Studio's own clicks for. */
+    OrInStudio: (clicks: string) => `Or in Studio: ${clicks}.`,
     Place: "Choose this game's place",
-    PlaceDetail: "Pick the place this game builds in from the Roblox Studio panel.",
+    PlaceDetail: "A place open in Roblox Studio, or a new one. Choose it with the Roblox Studio button.",
     PlaceDone: "This game builds in a Roblox place",
+    PlaceDoneNamed: (name: string) => `This game builds in ${name}`,
+    PlaceDoneDetail: "Agents build in it in your Studio, and its scripts are files in this game's folder.",
+    PlaceRojo: "Rojo keeps your scripts in step, so Genex leaves them to it.",
+    LiveData:
+      "Studio can reach this game's live saved data, so play tests here read and write what real players saved. To test without it, turn this off in Studio:",
   },
   Open: {
     Opening: "Opening Roblox Studio.",

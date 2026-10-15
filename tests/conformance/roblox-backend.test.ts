@@ -269,18 +269,60 @@ describe("the Roblox Studio toolbar button's word", () => {
 });
 
 describe("the Roblox Studio panel's status and the lock's probe", () => {
-  it("answers the status, the version and which panel steps are done", async () => {
+  it("answers the status, the version, which panel steps are done, the rows and the step that is next", async () => {
     const backend = createRobloxBackend(fakeMac(STARTING).deps);
-    assert.deepEqual(await backend.action?.("status", {}, context()), {
-      studio: StudioStatus.Starting,
-      version: "0.743.0.7431133",
-      steps: { [PanelStep.Studio]: true, [PanelStep.Helper]: true, [PanelStep.Mcp]: false, [PanelStep.Place]: false },
-    });
-    const missing = createRobloxBackend(fakeMac(MISSING).deps);
-    assert.deepEqual(await missing.action?.("status", {}, context()), {
-      studio: StudioStatus.Get,
-      steps: { [PanelStep.Studio]: false, [PanelStep.Helper]: false, [PanelStep.Mcp]: false, [PanelStep.Place]: false },
-    });
+    const starting = (await backend.action?.("status", {}, context())) as RobloxStatus;
+    assert.deepEqual(
+      { studio: starting.studio, version: starting.version, steps: starting.steps, now: starting.now },
+      {
+        studio: StudioStatus.Starting,
+        version: "0.743.0.7431133",
+        steps: { [PanelStep.Studio]: true, [PanelStep.Helper]: true, [PanelStep.Mcp]: false, [PanelStep.Place]: false },
+        now: "mcp",
+      },
+    );
+    assert.deepEqual(
+      starting.rows.map((row) => [row.id, row.done]),
+      [
+        ["studio", true],
+        ["sign-in", false],
+        ["helper", true],
+        ["mcp", false],
+        ["place", false],
+      ],
+    );
+    assert.deepEqual(starting.mcp, { settings: 0, on: 0 }, "no settings file in this home");
+    const missing = (await createRobloxBackend(fakeMac(MISSING).deps).action?.(
+      "status",
+      {},
+      context(),
+    )) as RobloxStatus;
+    assert.deepEqual(
+      { studio: missing.studio, steps: missing.steps, now: missing.now, mcp: missing.mcp },
+      {
+        studio: StudioStatus.Get,
+        steps: {
+          [PanelStep.Studio]: false,
+          [PanelStep.Helper]: false,
+          [PanelStep.Mcp]: false,
+          [PanelStep.Place]: false,
+        },
+        now: "studio",
+        mcp: undefined,
+      },
+    );
+  });
+
+  it("the steps card shows the panel's rows: same ids, words, ticks and buttons", async () => {
+    for (const mac of [MISSING, NOT_SET_UP, CLOSED, STARTING, READY]) {
+      const backend = createRobloxBackend(fakeMac(mac).deps);
+      const panel = (await backend.action?.("status", {}, context())) as RobloxStatus;
+      const card = (await backend.action?.("steps", {}, context())) as StepsCard;
+      assert.deepEqual(
+        card.steps.map(({ id, label, done, action }) => ({ id, label, done, action })),
+        panel.rows.map(({ id, label, done, action }) => ({ id, label, done, action })),
+      );
+    }
   });
 
   it("the probe sees nobody using Studio, and an unknown action or tool is refused", async () => {
