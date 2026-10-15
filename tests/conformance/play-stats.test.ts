@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { avatarRecipe, AvatarEyes, AvatarGear, type AvatarRecipe } from "../../src/shared/avatar-recipe.ts";
-import { AvatarStyle, type PlayFriend, type PlayMe } from "../../src/shared/play-people.ts";
+import { AvatarStyle, type PlayMe } from "../../src/shared/play-people.ts";
 import type { PlayGame } from "../../src/shared/play.ts";
 import {
   ChangeKind,
@@ -28,7 +28,7 @@ import { mixOf } from "../../src/renderer/play/avatar-mix.ts";
 import { SCRAMBLE_FRAMES, SHARD_CELLS, scrambled } from "../../src/renderer/play/credits-shard.ts";
 import { dayAt, labelledDays, niceMax } from "../../src/renderer/play/stats-chart.ts";
 import { StripKind, stripView } from "../../src/renderer/play/stats-view.ts";
-import { createPeopleStore, LoadStatus, stackFaces, type StatsEntry } from "../../src/renderer/state/people.ts";
+import { createPeopleStore, LoadStatus, type StatsEntry } from "../../src/renderer/state/people.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import { backFromProfile, initialPlay, PlayPage, profileShown, statsShown } from "../../src/renderer/state/play.ts";
 
@@ -299,27 +299,6 @@ describe("the stats page among Play's pages", () => {
   it("only opens from a profile", () => {
     const shelf = initialPlay();
     assert.equal(statsShown(shelf), shelf);
-  });
-});
-
-describe("the sidebar's friends stack", () => {
-  const friend = (id: string, playing = false): PlayFriend => ({
-    id,
-    name: id,
-    handle: null,
-    imageUrl: null,
-    avatarVariant: 0,
-    pro: false,
-    playing: playing ? { slug: "s", title: "S" } : null,
-    games: null,
-  });
-
-  it("shows two faces, people playing now first", () => {
-    assert.deepEqual(
-      stackFaces([friend("ann"), friend("bo"), friend("cy", true)]).map((f) => f.id),
-      ["cy", "ann"],
-    );
-    assert.deepEqual(stackFaces([]), []);
   });
 });
 
