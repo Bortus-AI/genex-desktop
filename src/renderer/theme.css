@@ -5832,7 +5832,8 @@ a:focus-visible {
 }
 /* The shelves genex.games will fill, standing in while it answers: quiet cards with a slow sweep. */
 .mention-skeleton-label,
-.mention-skeleton-card {
+.mention-skeleton-card,
+.mention-card:has(.mention-card-cover:not([data-loaded])) {
   display: block;
   background: linear-gradient(
       100deg,
@@ -5857,7 +5858,8 @@ a:focus-visible {
 }
 @media (prefers-reduced-motion: reduce) {
   .mention-skeleton-label,
-  .mention-skeleton-card {
+  .mention-skeleton-card,
+  .mention-card:has(.mention-card-cover:not([data-loaded])) {
     animation: none;
   }
 }
