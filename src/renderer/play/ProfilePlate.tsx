@@ -29,8 +29,9 @@ import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { CreditsShard, ScrambleNumber } from "./CreditsShard.tsx";
 import { formatCount, PlateState, plateState } from "./play-model.ts";
-import { AvatarMotion } from "../avatars/GeneratedAvatar.tsx";
-import { GhostAvatar, PersonAvatar } from "./PersonAvatar.tsx";
+import { avatarRecipe } from "../../shared/avatar-recipe.ts";
+import { GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
+import { PersonAvatar } from "./PersonAvatar.tsx";
 import { OfflineMark } from "./PlayOffline.tsx";
 import { SignOutDialog } from "./SignOutDialog.tsx";
 import { cancelGenexSignIn, useGenexSignIn } from "./use-genex-sign-in.ts";
@@ -38,8 +39,8 @@ import { cancelGenexSignIn, useGenexSignIn } from "./use-genex-sign-in.ts";
 const WORDS = PLAY_WORDS.people;
 /** The size of the plate's own face. */
 const PLATE_FACE = 28;
-/** The signed-out plate's own grey face: the same one every time. */
-const SIGNED_OUT_GHOST = "signed-out";
+/** The signed-out plate's own face: the Galaxy generated avatar, quiet (faint eyes, dim stars), the same one every time. */
+const SIGNED_OUT_FACE = avatarRecipe("sign-in");
 
 /** "July 2026": when an account was made, as a profile says it. */
 export const joinedWhen = (iso: string | null): string | null =>
@@ -151,11 +152,11 @@ function OfflineSlot(): JSX.Element {
   );
 }
 
-/** Where a face goes while nobody is signed in: a grey generated face; `waiting` rings it while the browser has the sign-in. */
+/** Where a face goes while nobody is signed in: a generated face; `waiting` rings it while the browser has the sign-in. */
 function FaceSlot({ waiting = false }: { waiting?: boolean }): JSX.Element {
   return (
     <span className="plate-slot" aria-hidden="true">
-      <GhostAvatar id={SIGNED_OUT_GHOST} size={PLATE_FACE} motion={AvatarMotion.Hover} />
+      <GeneratedAvatar recipe={SIGNED_OUT_FACE} size={PLATE_FACE} full quiet />
       {waiting && <span className="plate-slot-spin" />}
     </span>
   );
