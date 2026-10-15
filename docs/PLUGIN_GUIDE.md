@@ -194,7 +194,7 @@ web, Unreal, Godot, Unity and Blender folders itself ([Project facts](plugins.md
 
 A plugin that is an engine, with capability `game-engine`, declares it in `engine`, under your
 plugin's own id:
-`"engine": { "id": "toy-engine", "label": "Toy", "projectFiles": [".toyproj"], "fact": "toy-project", "projectInFolder": false }`.
+`"engine": { "id": "toy-engine", "label": "Toy", "projectFiles": [".toyproj"], "fact": "toy-project", "projectInFolder": false, "play": { "players": 3, "clock": "none", "pointer": true } }`.
 `label` is the engine's name as people read it; `projectFiles` lists 1–4 extensions a project file
 has (one or two dotted parts, such as `.project.json`); `fact` is one your `detect` declares;
 `projectInFolder` is true when the project must sit inside the game folder for save points to hold

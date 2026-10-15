@@ -1843,7 +1843,9 @@ Genex's code. Unreal's is `{"id": "unreal", "label": "Unreal", "projectFiles": [
   because its save points hold it;
 - `play`, when present, is `{players?, clock?, pointer?, state?}`: at most `players` players (1–8)
   in one play, a `ClockLevel`, and whether the mouse aims as a player's does and the game's state
-  can be read;
+  can be read. The `computer` tool on the engine's games is built from it before play opens
+  ([computer use](computer-use.md#game-engines-and-other-targets)); a plugin with a `play` of more
+  than one player takes `players` on `play-open` and `player` on its other play tools;
 - `apps`, when present, is `{mac?, windows?}`, each 1–4 distinct names: Mac bundle ids in
   reverse-DNS form and Windows `.exe` file names, never paths. They name the apps the editor runs
   as, which computer use never drives to build or play.

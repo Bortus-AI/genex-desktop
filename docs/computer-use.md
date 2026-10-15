@@ -151,6 +151,21 @@ and the session's end ends the play it started, never leaving a game paused. On 
 background throttle is lifted only for an editor without hardware ray tracing (UE 5.8 hangs the GPU
 rendering a ray-traced level at full speed behind another app); see [plugins](plugins.md).
 
+What an editor play can do is its engine's declaration (`engine.play` in the plugin's manifest, read
+by `editorCapabilities`): `players` 1–8, `clock` (at most `freeze`: the play tools pause, never
+step), `pointer` and `state`. Unreal declares none and keeps `EDITOR_CAPABILITIES`. The declaration
+is known before play opens, so the tool is described from it; `play-open`'s answer (`players` joined,
+`capabilities` in the declaration's shape) can only narrow it. A session opens the players its grant
+asks for (`players` on a playtest or judge grant; one when absent, never more than declared). With
+more than one the tool offers `player=<n>`, which addresses that player's view, keys and state from
+then on (`selectPlayer`), and the target sends `player` to `play-input`, `play-shot` and
+`play-state` only above 1, so a one-player engine sees the wire it always did. `play-shot` answers
+base64 `data` with its `mime` (`image/jpeg` or `image/png`; anything else is read as PNG, and `png`
+is still read), refused in plain words over `MAX_PLAY_SHOT_BYTES` (1 MB). An engine refuses what it
+cannot do at all with `unsupported`: a pause is then asked once and the clock is known to run on;
+Unreal answers it for more than one player. The toy engine fixture (`tests/fixtures/toy-engine-plugin`)
+plays three players this way.
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
