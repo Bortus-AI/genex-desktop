@@ -113,12 +113,12 @@ const missing = (miss: StudioMiss): StudioLocation => ({ installed: false, miss 
 const climbs = (segments: readonly string[]) => segments.includes("..");
 
 /** A full Mac path with no backslash and no step up. */
-function isMacPath(value: string): boolean {
+export function isMacPath(value: string): boolean {
   return path.posix.isAbsolute(value) && !value.includes("\\") && !climbs(value.split("/"));
 }
 
 /** A full Windows path on a drive with no step up. */
-function isWindowsPath(value: string): boolean {
+export function isWindowsPath(value: string): boolean {
   return WINDOWS_DRIVE_PATH.test(value) && !climbs(value.split(/[\\/]/));
 }
 

@@ -205,6 +205,7 @@
   "tests/conformance/roblox-backend.test.ts",
   "tests/conformance/roblox-locate.test.ts",
   "tests/conformance/roblox-mcp-bridge.test.ts",
+  "tests/conformance/roblox-setup.test.ts",
   "tests/conformance/roblox-studio-client.test.ts",
   "tests/conformance/roving-focus.test.ts",
   "tests/conformance/rpc-authority.test.ts",
