@@ -930,9 +930,9 @@ reconciliation reuses request and generation ids. A public export (Export, the h
 `game.export`, the Genex publish stage) refuses a file holding any `knownSecretValues()` value,
 naming the file, never the value. `inspect_use` and `verify_use`
 (`genex-outcomes.ts`, `audio-observation.ts`) record observed use of a captured version, not proof.
-Publishing verifies the upload against the hosted staging revision; an unresolved upload is never
-retried automatically, only settled by **Check again** or `publish-allow-upload`. Neither readiness nor an
-upload certifies gameplay.
+Publishing verifies the upload against the hosted revision and every file; an unknown upload is
+never retried, only settled by Genex's record or **Publish again**. Neither readiness nor upload
+certifies gameplay.
 
 Genex account rules: `status` returns the operation catalog for every provider path; Studio uses
 the pinned CLI's no-project-allowance mode (its `allowance.enforced` is authoritative) and Genex
