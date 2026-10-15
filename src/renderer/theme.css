@@ -326,7 +326,8 @@
     transform: scale(1.2);
   }
 }
-[data-graph-node][data-working="true"]::after {
+/* The start node has no card, so its halo pulses on the ring around its words, not on them. */
+:is([data-graph-node], [data-graph-ring])[data-working="true"]::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -353,7 +354,7 @@
   .loader-grid > span,
   [style*="infinite"]
 ),
-:root[data-motion="rest"] :is([data-graph-node], .graph-shimmer)::after {
+:root[data-motion="rest"] :is([data-graph-node], [data-graph-ring], .graph-shimmer)::after {
   animation-play-state: paused !important;
 }
 /* A selected node opening into its card over the zoomed canvas. */
@@ -2028,9 +2029,6 @@ button.chat-header-title:hover {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--field);
-  box-shadow: inset 0 0 0 1px var(--line-strong);
-  color: var(--ink-3);
 }
 .plate-slot-spin {
   position: absolute;
