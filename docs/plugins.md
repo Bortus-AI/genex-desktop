@@ -1264,8 +1264,8 @@ Available services are capability checked and scoped to the calling plugin:
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
   `genex` settings), read only when that file lives inside the game.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
-  the bound game to an Unreal project file, read its link, or show the plugin's steps card in the
-  calling chat (see "A game's engine" below).
+  the bound game to a project file of the engine the plugin declares, read its link, or show the
+  plugin's steps card in the calling chat (see "A game's engine" below).
 - `game.snapshot {reason}` (capability `game-engine`): an ordinary game snapshot of the bound game,
   listed in Rewind under `reason`, taken before the plugin changes files there (the Unreal plugin,
   before it updates the editor helper in the game's project). Refused without a bound game; a
@@ -1298,9 +1298,9 @@ engines write while they run) matched against the core table (`web-game` by `ind
 output and vendored folders, `unreal-project`, `unreal-plugin` outside a `Plugins/` folder,
 `godot-project`, `unity-project`, `blender-assets`) and the `detect` rules of the **enabled**
 plugins (an installed plugin that is off detects nothing; source `plugin:<id>`). A fact below a
-folder that already has the same one is dropped. The engine link reads as `unreal-project` at its
-`.uproject`'s folder (source `link`) and stands for the game's Unreal project: another `.uproject`
-the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
+folder that already has the same one is dropped. The engine link reads as its engine's declared
+`fact` (`unreal-project` for Unreal) at the project file's folder (source `link`) and stands for the
+game's project in that engine: another project of that engine the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
 `scaffold`, see [Scaffolds](#scaffolds)). Never counted: the web template beside an older engine link,
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
 New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). New game
@@ -1705,14 +1705,23 @@ description come from the live plugin list when the plugin is installed: **Turn 
 ## A game's engine
 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
-link and the host makes it (`substrate/plugins/engine-links.ts`). `game.engine.link {project}`
-checks the `.uproject` by real path (absolute, no `..`, a regular file once every link is
-resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
-linkedAt, previous}`, which the plugin's MCP servers read and agents can't write), mirrors it into
-the game's `studio.json` as `engine` (`substrate/game-engine-binding.ts`; believed only while the
-file is still at that real path), and appends `engine_linked` to the calling chat (the game's own
-chat for a link made in the panel): "Lantern Run now builds in Unreal · Lantern" with Undo. Linking the project a game already uses changes
-nothing. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
+link and the host makes it (`substrate/plugins/engine-links.ts`), to a project of the engine the
+plugin declares ([The engine declaration](#the-engine-declaration)); a plugin that declares none is
+refused. `game.engine.link {project, remote?}` checks the project file by real path (absolute, no
+`..`, at most 1,024 characters, one of the engine's `projectFiles`, a regular file once every link
+is resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
+linkedAt, remote?, previous}`, `kind` being the engine's id, which the plugin's MCP servers read and
+agents can't write), mirrors it into the game's `studio.json` as `engine`
+(`substrate/game-engine-binding.ts`), and appends `engine_linked` (with the engine's id and
+`label`) to the calling chat (the game's own chat for a link made in the panel): "Lantern Run now
+builds in Unreal · Lantern" with Undo. `remote` keeps a published game's ids beside the link
+(`{placeId, universeId}`, `parseEngineRemote`); ids of any other shape are dropped and the link is
+still made. A record is believed only while its `kind` is an engine an installed plugin declares
+(`PluginRegistry.engines()`, on or off: turning a plugin off never turns its games into web games;
+removing it does) and its file is still of that engine's kind at that real path. A project's name
+is its file name without the engine's longest matching extension (`a.project.json` is `a`).
+Linking the project a game already uses, with the same ids, changes nothing; other ids make a new
+link. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
 once the link has changed; it restores the project the link replaced, or leaves the game a web
 game that stays unlinked (`{unlinkedAt}`), and appends `engine_link_undone`. A refused link
 changes nothing on disk.
