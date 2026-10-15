@@ -208,6 +208,7 @@
   "tests/conformance/roblox-check-scripts.test.ts",
   "tests/conformance/roblox-computer-play.test.ts",
   "tests/conformance/roblox-create-place.test.ts",
+  "tests/conformance/roblox-game-fixture.test.ts",
   "tests/conformance/roblox-helper-build.test.ts",
   "tests/conformance/roblox-helper-link.test.ts",
   "tests/conformance/roblox-helper-protocol.test.ts",
