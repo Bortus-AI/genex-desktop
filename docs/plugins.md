@@ -1089,8 +1089,9 @@ it on (`seedEnabled.roblox = false`): it needs Roblox Studio and a Roblox accoun
 description and panel say "Not affiliated with Roblox Corporation. For people 18 and over." It
 declares the engine `roblox` (label "Roblox Studio", project files `.rbxl`, `.rbxlx` and
 `.project.json`, fact `roblox-project`, `projectInFolder: false`, play for up to 8 players, and the
-editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the per-game lock `studio` with
-its probe `studio-activity`, and no `folders`: a write root there would let any worker drop a
+editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the `network` capability (hosts
+`setup.rbxcdn.com` for Studio's installer and `127.0.0.1` for the helper link), the per-game lock
+`studio` with its probe `studio-activity`, and no `folders`: a write root there would let any worker drop a
 plugin into Studio's Plugins folder. `studio-locate.ts` finds Studio on a Mac at
 `/Applications/RobloxStudio.app` (a link only while it stays inside /Applications; its version
 from Info.plist through `plutil`) with `Contents/MacOS/StudioMCP`, and on Windows as the newest
@@ -1171,6 +1172,27 @@ fetch any address for the agent: a path for leaking data and for planted instruc
 `list_roblox_studios`; inserts, uploads and Roblox's AI tools are plugin tools that ask the person
 every time. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
 and refused in plain words when it can't be.
+
+The binding file comes from the helper link (`helper-link.ts`), which the backend starts once Studio
+is set up. It is a hand-written RFC 6455 server (`helper-socket.ts`, no dependency) on 127.0.0.1
+only, on the first free port of `HELPER_PORTS` (47301–47304, which the helper tries in the same
+order), path `/genex-helper`. It refuses any handshake carrying an `Origin` (every browser sends
+one) or another Host, takes masked text frames only up to `MAX_HELPER_FRAME_BYTES` (4 MB), and
+closes on anything else; it pings every `HELPER_PING_MS` and ends a connection silent for a whole
+period. `helper-protocol.ts` checks every message once: protocol version, ids that only grow (a
+repeated id is refused), a known type, exactly the fields that type has, answers only to requests
+the backend made, and script paths that stay plain `.luau` paths under `src/` (no `..`, absolute
+path, backslash, colon or control character; sources up to 1 MB). Binding is exact: each
+connection gets a random session (`session.mark`), the helper puts it in a non-archivable
+`GenexHelperSession` StringValue in CoreGui, and the backend reads that marker through
+`execute_luau` in Edit in every listed Studio; the one that holds it is the connection's. Only when
+no Studio lets CoreGui be read does the place the helper names stand in, and two such Studios are
+refused. The game is the one whose linked place that Studio has open (none when two games link it);
+its `studio.json` is written at once and refreshed every `BINDING_REFRESH_MS`, and after a Studio
+restart the helper's new connection rebinds the game to the new Studio's id. The newest connection
+wins. A connection bound to no game writes and calls nothing, and a script path is resolved under
+the game's `src/` by real path, refused through any link. This stops games and profiles crossing
+wires; it does not stop a local process that already holds StudioMCP.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and

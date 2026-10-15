@@ -7,7 +7,8 @@
   "publisher": "Genex",
   "description": "Agents build your game in Roblox Studio on this computer, through Studio's own MCP server and a small Genex helper. Needs Roblox Studio and a Roblox account. Not affiliated with Roblox Corporation. For people 18 and over.",
   "backend": "backend.mjs",
-  "capabilities": ["game-engine"],
+  "capabilities": ["network", "game-engine"],
+  "network": { "hosts": ["setup.rbxcdn.com", "127.0.0.1"] },
   "detect": [{ "fact": "roblox-project", "files": ["**/*.rbxl", "**/*.rbxlx", "**/default.project.json"] }],
   "engine": {
     "id": "roblox",

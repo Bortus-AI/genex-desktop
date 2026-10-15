@@ -203,6 +203,25 @@ describe("the Roblox Studio toolbar button's word", () => {
     assert.ok(!notSetUp.ran.includes("/usr/bin/pgrep"), "whether Studio runs doesn't matter before setup");
   });
 
+  it("starts the helper link in the plugin's storage once Genex has set Studio up, never before", async () => {
+    for (const mac of [MISSING, NOT_SET_UP]) {
+      const { deps } = fakeMac(mac);
+      const started: string[] = [];
+      await createRobloxBackend({ ...deps, helperLink: (storage) => void started.push(storage) }).action?.(
+        "toolbar-status",
+        {},
+        context(),
+      );
+      assert.deepEqual(started, [], "no helper can connect before setup added it");
+    }
+    const { deps } = fakeMac(CLOSED);
+    const started: string[] = [];
+    const backend = createRobloxBackend({ ...deps, helperLink: (storage) => void started.push(storage) });
+    await backend.action?.("toolbar-status", {}, context());
+    await backend.action?.("status", {}, context());
+    assert.deepEqual(started, [STORAGE, STORAGE], "each read hands the storage over; the starter starts once");
+  });
+
   it("orders the states: missing first, then setup, then open, then answering", () => {
     const facts = { installed: true, setUp: true, running: true, answering: true };
     assert.equal(studioStatusOf({ ...facts, installed: false }), StudioStatus.Get);

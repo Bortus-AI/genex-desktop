@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,8 +11,11 @@ import type {
   PluginReview,
   PluginToolbarStatus,
 } from "../../plugin-sdk/index.d.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
+import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { RobloxAction } from "./actions.ts";
+import { startHelperLink } from "./helper-link.ts";
 import { type RobloxSteps, robloxSteps } from "./engine-steps.ts";
 import { readSwitches } from "./mcp-switch.ts";
 import {
@@ -25,7 +29,7 @@ import {
   undoSetup,
 } from "./setup.ts";
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
-import { createStudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
+import { createStudioClient, type StudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
 import {
   ALLOWED_HOST,
   afterInstall,
@@ -53,7 +57,8 @@ import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
  * (`toolbar-status`), the panel's status (`status`), and the Studio lock's probe
  * (`studio-activity`). It reads where Studio is, whether Genex set it up (a record in the plugin's
  * own storage) and whether it runs; never the person's Documents folder, which macOS guards with
- * a prompt that only the person's own press may raise.
+ * a prompt that only the person's own press may raise. Once Studio is set up it also serves the
+ * helper link (`helper-link.ts`), which tells each game's connection which Studio is the game's.
  */
 
 /** The host services this backend calls, by their public SDK names. */
@@ -147,6 +152,11 @@ export interface RobloxDeps extends LaunchDeps {
   helper: string;
   /** The network, the programs and the temporary folder Get Roblox Studio uses. */
   install: Pick<InstallDeps, "fetch" | "run" | "tempRoot">;
+  /**
+   * Starts the helper link in the plugin's storage, once however often it is called. It is called
+   * only once Genex has set Studio up: before that no helper exists to connect.
+   */
+  helperLink?(storage: string): void;
 }
 
 /** Get Roblox Studio as the panel shows it: where it stands, in plain words, and why it stopped. */
@@ -233,8 +243,10 @@ async function readStudio(deps: RobloxDeps, context: PluginContext) {
   const install = location.installed ? location.install : undefined;
   const facts: StudioFacts = { installed: location.installed, setUp: false, running: false, answering: false };
   if (!install) return { install, facts };
-  facts.setUp = await setUpIn(deps, await context.host(HostService.StorageRoot));
+  const storage = await context.host(HostService.StorageRoot);
+  facts.setUp = await setUpIn(deps, storage);
   if (!facts.setUp) return { install, facts };
+  deps.helperLink?.(storage);
   facts.running = await studioRunning(deps);
   facts.answering = facts.running && (await deps.answers());
   return { install, facts };
@@ -531,6 +543,32 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
 }
 
 /**
+ * The helper link on this computer, started once: the Genex helper in Studio connects to it, and it
+ * reads the helper's marker through the backend's own StudioMCP. A range with every port taken is
+ * logged and left; the link starts again with the backend.
+ */
+function helperLinkOnce(client: StudioClient, stopped: AbortSignal): (storage: string) => void {
+  let started = false;
+  const log = (line: string) => process.stderr.write(`${line}\n`);
+  return (storage) => {
+    if (started) return;
+    started = true;
+    const deps = { storage, studio: client, clock: SYSTEM_CLOCK, newSession: randomUUID, log };
+    startHelperLink(deps, { signal: stopped }).catch((error: unknown) => log(`helper link: ${errorMessage(error)}`));
+  };
+}
+
+/**
+ * Aborts when Genex lets go of this backend (its IPC channel closes: Genex quit or ended). The
+ * helper link and the backend's StudioMCP then end, so nothing keeps the process, or the port.
+ */
+function backendGone(): AbortSignal {
+  const gone = new AbortController();
+  process.once("disconnect", () => gone.abort());
+  return gone.signal;
+}
+
+/**
  * This computer, as the backend's process sees it. Studio answers when its own MCP server lists it,
  * asked through one StudioMCP the backend keeps for its life (StudioMCP ends with its stdin, so it
  * ends with the backend). It starts only once Studio is set up and running.
@@ -549,9 +587,12 @@ export function systemDeps(): RobloxDeps {
       return location.installed ? location.install.mcp : undefined;
     }),
   );
+  const gone = backendGone();
+  gone.addEventListener("abort", () => void client.close(), { once: true });
   return {
     ...locate,
     answers: () => studioAnswers(client),
+    helperLink: helperLinkOnce(client, gone),
     helper: path.join(path.dirname(fileURLToPath(import.meta.url)), HELPER_FILE),
     install: { fetch: globalThis.fetch, run: systemInstallRun, tempRoot: os.tmpdir() },
     open: systemOpener,
