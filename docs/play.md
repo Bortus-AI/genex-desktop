@@ -18,7 +18,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Only genex.games refusing the token (a 401 on any account call) ends a sign-in. Offline is never
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
-- The sidebar plate: signed out (a grey generated face, Sign in to Genex), finishing in the
+- The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
   browser (× cancels), signed in (avatar, name, Pro, credits opening Credits), offline (the last
   account with the offline mark), ended (dimmed, Sign in again). Its menu: Profile, Friends, Credits (the
   Genex plugin page's Credits tab), Account settings, Sign out.

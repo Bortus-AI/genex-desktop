@@ -6,7 +6,7 @@
  */
 import type { JSX } from "react";
 import { useMemo, useState } from "react";
-import { avatarRecipe, ghostRecipe } from "../../shared/avatar-recipe.ts";
+import { avatarRecipe } from "../../shared/avatar-recipe.ts";
 import type { PlayPerson } from "../../shared/play-people.ts";
 import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 
@@ -38,18 +38,4 @@ export function PersonAvatar({
       </span>
     );
   return <GeneratedAvatar recipe={recipe} size={size} full={!gear} flat={flat} motion={motion} />;
-}
-
-/** A grey placeholder where a person will be (no friends yet, or nobody signed in). Still unless asked. */
-export function GhostAvatar({
-  id,
-  size,
-  motion = AvatarMotion.Still,
-}: {
-  id: string;
-  size: number;
-  motion?: AvatarMotion;
-}): JSX.Element {
-  const recipe = useMemo(() => ghostRecipe(id), [id]);
-  return <GeneratedAvatar recipe={recipe} size={size} full ghost motion={motion} />;
 }

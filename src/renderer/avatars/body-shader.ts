@@ -22,7 +22,20 @@ export const BodyUniform = {
   Turn: 20,
   /** How many cells across the pixel-art bodies (CRT, glitch rows, halftone) use. */
   Cells: 21,
+  /** How bright a galaxy's stars are, 0..1. */
+  Stars: 22,
+  /** A galaxy's star colour: 0 white, 1 the palette's second colour. */
+  StarTint: 23,
 } as const;
+
+/** How a galaxy's stars show: their brightness and how far they lean from white to the palette's blue. */
+export interface StarLook {
+  strength: number;
+  tint: number;
+}
+
+/** Stars as every galaxy avatar has them: bright white. */
+export const BRIGHT_STARS: StarLook = { strength: 1, tint: 0 };
 
 /** The shader: `vs_main` covers the canvas, `fs_main` draws the body. */
 export const BODY_SHADER = /* wgsl */ `
@@ -37,8 +50,8 @@ struct Body {
   px: f32,
   turn: f32,
   cells: f32,
-  pad0: f32,
-  pad1: f32,
+  stars: f32,
+  star_tint: f32,
 }
 @group(0) @binding(0) var<uniform> u: Body;
 
@@ -283,7 +296,8 @@ fn galaxy(s: Sphere) -> vec3f {
   var col = u.c0.rgb + u.c1.rgb * smoothstep(0.42, 0.8, neb) * 0.95 + u.c2.rgb * smoothstep(0.55, 0.85, neb2) * 0.75;
   let sc = floor(s.p * 28.0);
   let st = h21(sc.xy * 1.3 + sc.z * 3.7 + u.seed);
-  col += vec3f(1.0) * step(0.955, st) * (0.55 + 0.45 * sin(t * 2.0 + st * 50.0));
+  let star = mix(vec3f(1.0), u.c1.rgb, u.star_tint) * u.stars;
+  col += star * step(0.955, st) * (0.55 + 0.45 * sin(t * 2.0 + st * 50.0));
   col += u.c3.rgb * s.fres * 0.85;
   return col + vec3f(pow(max(dot(s.n, normalize(s.light + vec3f(0.0, 0.0, 1.0))), 0.0), 40.0)) * 0.45;
 }
@@ -352,7 +366,12 @@ fn body(q: vec2f) -> vec4f {
 `;
 
 /** The uniform block for one body at `t` seconds of its own clock, drawn `pixels` across. */
-export function bodyUniforms(recipe: AvatarRecipe, t: number, pixels: number): Float32Array<ArrayBuffer> {
+export function bodyUniforms(
+  recipe: AvatarRecipe,
+  t: number,
+  pixels: number,
+  stars: StarLook = BRIGHT_STARS,
+): Float32Array<ArrayBuffer> {
   const data = new Float32Array(BODY_UNIFORM_BYTES / 4);
   for (const [slot, hex] of recipe.palette.entries()) data.set(rgb(hex), BodyUniform.Colors + slot * 4);
   data[BodyUniform.Time] = t + recipe.seed * 3.1 + 1.7;
@@ -361,5 +380,7 @@ export function bodyUniforms(recipe: AvatarRecipe, t: number, pixels: number): F
   data[BodyUniform.Pixel] = 2 / pixels;
   data[BodyUniform.Turn] = recipe.turn;
   data[BodyUniform.Cells] = cellsAcross(pixels);
+  data[BodyUniform.Stars] = stars.strength;
+  data[BodyUniform.StarTint] = stars.tint;
   return data;
 }
