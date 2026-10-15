@@ -6,8 +6,9 @@ in [verification](../docs/agent/verification.md#test-layers).
 ## Runner
 
 `node --test` on Node 24, which strips TypeScript types, so tests and sources use erasable syntax
-only (no `enum`, `namespace` or parameter properties). `npm test -- <files>` runs named files;
-bare `npm test` runs everything sequentially. `conformance/` holds behavior suites, `property/`
+only (no `enum`, `namespace` or parameter properties). `npm test -- <files>` runs named files
+without building the affected graph. Bare `npm test` runs all non-rig files with two workers,
+then all rig files serially, including after non-rig failures. `conformance/` holds behavior suites, `property/`
 holds fast-check suites with fixed seeds, `e2e/` holds Electron runners.
 
 `scripts/test.mjs` and `scripts/affected-tests.mjs` preload `helpers/leftover-children.ts` into
@@ -15,6 +16,12 @@ every test file's process: a file that still has a child process running after i
 hooks fails by name, instead of never exiting and holding a runner slot. Stop what a test starts:
 a core's `stop()` (or core-lite's `close()`), a `ProcessSandbox`'s `dispose()`. On Linux,
 sandbox-runtime's socat bridges run until the last sandbox is disposed.
+
+CI partitions literal test groups with direct callbacks. Ordinary groups stay whole; the large
+`harness incidents` suite is split into direct test subtrees, with each test's runtime descendants
+and per-case hooks intact. It may not gain once-only parent hooks or dynamic direct registration.
+Seed groups stay whole; their short `seed upgrade` root uses its direct case names to avoid matching
+other roots with the same prefix. Unsupported or ambiguous shapes fail planning instead of losing coverage.
 
 A test that runs the compiler spawns `packageBin('typescript', 'tsc')` from
 `scripts/package-bin.ts` (TypeScript 7), not a `node_modules` path; one that builds a program
@@ -27,6 +34,8 @@ through the JS API imports `@typescript/typescript6`.
   (macOS `/var` → `/private/var`), so a test passing its own `gamesRoot` hands it a `realpath`.
 - `resources.ts`: the read-only resources folder a core needs. Import it, not `studio-rig.ts`,
   when you only need resources: anything that reaches the rig runs in the serial rig group.
+  `sharedResources()` assembles one read-only tree per test process for rig/core-lite defaults;
+  `makeResources()` always creates a fresh mutable tree, including compiler-off fixtures.
 - `studio-rig.ts`: the full rig with the harness loop; slow and sequential (L3).
 - `ctx-recorder.ts`: a fake harness `ctx` that records `ctx.call` sequences
   (`conformance/loop-sequences.test.ts`). Like the real host it refuses an unknown method
@@ -83,6 +92,8 @@ through the JS API imports `@typescript/typescript6`.
   sandboxed test file's srt-win entries re-propagate through all of `%TEMP%` and hold each folder
   open while they do, and a bare removal then fails with `EBUSY`. `removeTree` waits such a hold
   out.
+- `seed-upgrade-fixture.ts`: a per-process initialized snapshot for immutable vintage inputs;
+  each upgrade case gets independent physical workspace and manifest copies and unique import paths.
 - `claude-rules.ts`: whether Claude Code would deny a path by an absolute rule, matched as CLI
   2.1.281 does (node-ignore, case-blind) for the shapes `claude-permissions.ts` writes.
 - `leftover-children.ts`: the runners' per-file check for child processes left running (above).
