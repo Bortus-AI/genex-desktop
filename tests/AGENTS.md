@@ -51,6 +51,9 @@ through the JS API imports `@typescript/typescript6`.
   copies one into a test's folder and adds the files its engine writes while it runs), reads of a
   listed game's facts, a fake harness `ctx` whose `game.*` calls reach a `coreLite`, and a plugin
   registry with the toy engine plugin (`fixtures/toy-engine-plugin/`) installed.
+- `roblox-helper.ts`: stand-ins for the Roblox plugin's helper link: Roblox Studio as StudioMCP lists
+  it (each Studio with the helper's session marker), a clock the test moves by hand, and the Genex
+  helper over an in-memory connection or a real WebSocket.
 - `engines.ts`: the Unreal plugin's and the toy engine's `engine` declarations, read from their
   manifests, and a catalog of both (what `PluginRegistry.engines()` answers), for linking games.
 - `plugin-author.ts`: the Genex plugin's plugin-author skill read as an agent reads it (`genex__skill`,

@@ -14,7 +14,7 @@
  * are refused. The link is the host's record in the plugin's storage (`links/<game>.json`), which
  * agents can't write.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { ENGINE_LINKS_FOLDER } from "../../shared/plugins.ts";
@@ -39,6 +39,8 @@ const TOKEN = /^[\x21-\x7e]{1,200}$/;
 const PLACE_ID = /^[1-9]\d{0,19}$/;
 const MAX_BINDING_BYTES = 4 * 1024;
 const MAX_LINK_BYTES = 64 * 1024;
+/** A link record's file name ending. */
+const LINK_SUFFIX = ".json";
 
 /** A game's bound Studio, as the backend writes it. */
 export interface StudioBinding {
@@ -116,20 +118,37 @@ export interface PlaceLink {
   placeId?: string;
 }
 
-/** The place the host linked `game` to, or undefined when it has none or the record isn't one. */
+/**
+ * The place the host linked `game` to, or undefined when it has none or the record isn't one. The
+ * host writes the link's own fields at the record's top (`kind`, `project`, `linkedAt`, `remote?`),
+ * the link it replaced under `previous`, and only `unlinkedAt` once Undo left the game unlinked.
+ */
 export async function readPlaceLink(storage: string, game: string | undefined): Promise<PlaceLink | undefined> {
   if (!game || !GAME_ID.test(game)) return undefined;
   const file = path.join(storage, ENGINE_LINKS_FOLDER, `${game}.json`);
   const record = await readRegularFile(file, MAX_LINK_BYTES)
     .then((bytes) => JSON.parse(bytes.toString("utf8")) as unknown)
     .catch(() => undefined);
-  const link = isJsonObject(record) ? record.link : undefined;
-  if (!isJsonObject(link) || link.kind !== ROBLOX_ENGINE) return undefined;
-  if (typeof link.project !== "string" || !path.isAbsolute(link.project)) return undefined;
-  const placeId = isJsonObject(link.remote) ? link.remote.placeId : undefined;
+  if (!isJsonObject(record) || record.kind !== ROBLOX_ENGINE) return undefined;
+  if (typeof record.project !== "string" || !path.isAbsolute(record.project)) return undefined;
+  const placeId = isJsonObject(record.remote) ? record.remote.placeId : undefined;
   return typeof placeId === "string" && PLACE_ID.test(placeId)
-    ? { project: link.project, placeId }
-    : { project: link.project };
+    ? { project: record.project, placeId }
+    : { project: record.project };
+}
+
+/** A game the host linked to a Roblox place, and that place. */
+export interface LinkedPlace {
+  game: string;
+  link: PlaceLink;
+}
+
+/** Every game the host linked to a Roblox place, read from the plugin's storage. */
+export async function readPlaceLinks(storage: string): Promise<LinkedPlace[]> {
+  const names = await readdir(path.join(storage, ENGINE_LINKS_FOLDER)).catch(() => [] as string[]);
+  const games = names.filter((name) => name.endsWith(LINK_SUFFIX)).map((name) => name.slice(0, -LINK_SUFFIX.length));
+  const read = await Promise.all(games.map(async (game) => ({ game, link: await readPlaceLink(storage, game) })));
+  return read.flatMap(({ game, link }) => (link ? [{ game, link }] : []));
 }
 
 /** A whole number standing alone in `text`. */
