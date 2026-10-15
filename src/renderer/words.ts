@@ -2118,6 +2118,25 @@ export const MODEL_PICKER_WORDS = {
   free: "Free",
 } as const;
 
+/** A subscription's accounts, in Model Providers and the composer's usage panel (`subscription-accounts.ts`). */
+export const PROVIDER_ACCOUNT_WORDS = {
+  terminal: "Terminal login",
+  studio: "Studio account",
+  numbered: (n: number) => `Account ${n}`,
+  add: "Add account",
+  tabs: (provider: string) => `${provider} accounts`,
+  signOut: (account: string) => `Sign out of ${account}`,
+  signOutLine: "Studio forgets this account",
+  switchTo: (account: string) => `Use ${account}`,
+  waiting: "Waiting for your browser…",
+  openPage: "Open page",
+  haveCode: "Have a code?",
+  showTerminal: "Show terminal",
+  verifying: "Checking the sign-in…",
+  inTerminal: "Finish signing in in Studio's terminal.",
+  modelProviders: "Model providers",
+} as const;
+
 /** Settings → Model Providers: the metered rows, OpenCode and OpenRouter (`panels/MeteredProviders.tsx`). */
 export const METERED_PROVIDER_WORDS = {
   connected: "Connected",

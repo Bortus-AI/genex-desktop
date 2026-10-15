@@ -346,6 +346,7 @@
 :root[data-motion="rest"]
 :is(
   .chat-status-shimmer,
+  .usage-skeleton,
   .app-loader-shine,
   .home-backdrop-glint,
   .animate-ping,
@@ -4634,6 +4635,19 @@ a:focus-visible {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
 }
+/* A sign-in under way in a provider card: the step it waits on and its small helps, on a soft well. */
+.sign-in-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--field);
+  font-size: 13px;
+  line-height: 18px;
+}
 /* A card that is a list: its rows reach nearly to its edge and carry their own padding. */
 .settings-card[data-list] {
   padding: 4px;
@@ -6079,6 +6093,21 @@ a:focus-visible {
   box-shadow: 0 1px 2px #00000040;
   transition: left 180ms var(--ease-smooth-out);
 }
+/* A free model's tag, right after its name in the model list. */
+.model-free-tag {
+  flex: none;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+}
+.usage-limit-head:has(> .usage-skeleton) {
+  min-height: 20px;
+  align-items: center;
+}
 /* Plan limits under the context: one block per signed-in subscription. */
 /* The Genex block: this game's spend, then the balance every game shares. */
 .usage-credits {
@@ -6226,6 +6255,83 @@ a:focus-visible {
 }
 p.usage-divider {
   padding-bottom: 6px;
+}
+/* A plan's usage while it is read: bars the size of the text they stand in for, swept by the same
+   soft light as current work (`chat-status-shimmer`), still under reduced motion. */
+.usage-skeleton {
+  --skeleton: var(--hover);
+  --skeleton-light: color-mix(in oklab, var(--hover) 82%, var(--ink));
+  display: inline-block;
+  height: 10px;
+  border-radius: 999px;
+  vertical-align: middle;
+  background: linear-gradient(100deg, var(--skeleton) 35%, var(--skeleton-light) 50%, var(--skeleton) 65%)
+    var(--skeleton);
+  background-size: 300% 100%;
+  animation: shimmer-sweep 2.1s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+}
+.usage-limit-head .usage-skeleton {
+  align-self: center;
+}
+.usage-skeleton-sub {
+  height: 9px;
+}
+.usage-skeleton.usage-skeleton-meter {
+  display: block;
+  height: 4px;
+  margin-top: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .usage-skeleton {
+    animation: none;
+  }
+}
+/* A plan's account under its name; clicked, the others to switch to follow it. */
+.usage-plan-accounts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: -2px 0 2px;
+}
+.usage-plan-account {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-inline: -6px;
+  padding: 2px 6px;
+  border-radius: 7px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.usage-plan-account:is(:hover, :focus-visible) {
+  background: var(--control-hover, var(--hover));
+  color: var(--ink);
+}
+/* The panel's last row: Model Providers in Settings, quiet like a menu's last item. */
+.usage-footer {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 18px;
+  transition:
+    background-color 120ms,
+    color 120ms;
+}
+.usage-footer:is(:hover, :focus-visible) {
+  background: var(--control-hover, var(--hover));
+  color: var(--ink);
 }
 [data-mention-list] [data-highlighted] {
   background: var(--control-hover, var(--hover));

@@ -87,6 +87,23 @@ under Genex's launch policy. Settings can update the selected CLI; provider oper
 are mutually exclusive. The app never silently installs a different executable or auto-updates.
 A sign-in event names its own provider; its adjacent harness reply replaces duplicate narration.
 
+### Several accounts per subscription
+
+Claude Code and Codex each run on one account at a time: the Terminal login (the CLI's own home),
+Studio's first login (`engine-homes/<engine>`) or an added one (`engine-homes/accounts/<engine>/account-N`),
+listed by `SubscriptionAccounts` (`substrate/engines/subscription-accounts.ts`), which keeps the
+choice and the emails in `accounts.json` beside the added homes. A chosen account runs whether or
+not it is signed in, never another one silently; with no choice the old order holds (environment,
+Studio's own, Terminal). A finished sign-in remembers its account and chooses it
+(`settleSignIn`); `studio:subscription.signin` takes `account` (an id, or `new` for a fresh home),
+and Codex never signs in to `~/.codex`. `studio:subscription.accounts` lists them for the renderer
+only, asking each CLI for its email once a run (`claude auth status --json`, Codex `account/read`);
+emails never reach `engine.describe` or plan usage. `studio:subscription.use-account` switches from
+the next message on (Codex refuses while work is in flight); a resumed session another account made
+starts fresh. Settings shows the accounts as tabs under the provider with + to add one, and the
+usage panel names a plan's account when there are several; a switch to a signed-out account starts
+its web sign-in. Signing out deletes only that Studio-owned home and runs the next signed-in account.
+
 ## Install a coding CLI
 
 Install (Update for a CLI too old) in Settings → Model Providers and the chat's sign-in card, and
@@ -452,7 +469,9 @@ names windows by length and scopes non-default buckets. Claude sessions at work 
 usage (see Native context telemetry). Each engine reuses a reading under a
 minute old, shares an in-flight read and falls
 back to its last reading on failure; a Recheck clears it. The composer asks when its ring panel
-opens or the ring is hovered, and every minute while open. Fixture engines report fixed limits.
+opens or the ring is hovered, and every minute while open; until the first reading it draws each
+plan this setup uses at full size with shimmering bars for its limits. Its last row opens Settings →
+Model Providers. Fixture engines report fixed limits.
 `promptbar-redesign.test.ts` covers both normalizers; account access is proven only against a
 real login.
 

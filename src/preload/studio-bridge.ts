@@ -303,8 +303,13 @@ function accountCalls(bridge: BridgeCalls) {
     recheckEngines: (engine) => invoke("studio:engines.recheck", engine ? { engine } : {}),
     // One grammar for both subscriptions: which login, sign me in, forget the studio's account.
     subscriptionSignIn: (opts) => invoke("studio:subscription.signin", opts ?? {}),
-    subscriptionForgetStudioLogin: (engine) =>
-      invoke("studio:subscription.forget-studio-login", engine ? { engine } : {}),
+    subscriptionForgetStudioLogin: (engine, account) =>
+      invoke("studio:subscription.forget-studio-login", {
+        ...(engine ? { engine } : {}),
+        ...(account ? { account } : {}),
+      }),
+    subscriptionAccounts: (engine) => invoke("studio:subscription.accounts", { engine }),
+    subscriptionUseAccount: (engine, account) => invoke("studio:subscription.use-account", { engine, account }),
     claudeLoginState: () => invoke("studio:claude-login.state"),
     claudeLoginCode: (code) => invoke("studio:claude-login.code", { code }),
     claudeLoginOpenBrowser: () => invoke("studio:claude-login.browser"),
