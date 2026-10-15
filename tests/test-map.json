@@ -19,6 +19,7 @@
     ".claude/settings.json": ["tests/conformance/agent-settings.test.ts"],
     "evals/**": ["tests/conformance/eval-contracts.test.ts"],
     "src/plugins/roblox/helper/**": [
+      "tests/conformance/roblox-helper-build.test.ts",
       "tests/conformance/roblox-setup.test.ts",
       "tests/conformance/roblox-backend.test.ts"
     ],
@@ -26,6 +27,7 @@
     "src/plugins/roblox/skills/**": ["tests/conformance/plugin-skill-engines.test.ts"],
     "tests/fixtures/roblox-studio/**": [
       "tests/conformance/roblox-mcp-bridge.test.ts",
+      "tests/conformance/roblox-helper-protocol.test.ts",
       "tests/conformance/roblox-helper-socket.test.ts"
     ]
   }

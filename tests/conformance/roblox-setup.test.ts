@@ -27,9 +27,10 @@ import {
   updateHelper,
 } from "../../src/plugins/roblox/setup.ts";
 import { RobloxSetupError, SetupRefusal } from "../../src/plugins/roblox/setup-refusal.ts";
+import { shippedHelper } from "../helpers/roblox-helper.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
 
-const SHIPPED_HELPER = path.resolve("src/plugins/roblox/helper", HELPER_FILE);
+const SHIPPED_HELPER = await shippedHelper();
 const ACCOUNT = "9172881962";
 const OTHER_ACCOUNT = "9173494966";
 

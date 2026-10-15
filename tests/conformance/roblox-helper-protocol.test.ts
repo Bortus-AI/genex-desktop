@@ -16,6 +16,7 @@ import {
   type PendingType,
   type ScriptChange,
 } from "../../src/plugins/roblox/helper-protocol.ts";
+import { HELPER_VERSION } from "../../src/plugins/roblox/setup.ts";
 import { BINDING_FILE } from "../../src/plugins/roblox/studio-binding.ts";
 import { fakeStudio, manualClock, memoryHelper } from "../helpers/roblox-helper.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -403,3 +404,66 @@ test("a plain script change from the bound helper reaches the sink as Studio nam
   world.helperLink.close();
 });
 
+/** What the real helper in Studio sent on Genex's socket, and what it was asked. */
+const RECORDED = JSON.parse(
+  await readFile(path.resolve(import.meta.dirname, "../fixtures/roblox-studio/helper-recorded.json"), "utf8"),
+) as { frames: Array<{ from?: "helper"; text?: string; to?: "helper"; id?: number; type?: string }> };
+
+test("everything the real helper sent replays through the reader: its hello, answers, chunks and refusals", () => {
+  const asked = new Map<number, string>();
+  for (const frame of RECORDED.frames)
+    if (frame.to && frame.type !== HelperMessage.DataChunk) asked.set(frame.id as number, frame.type as string);
+  const inbox = createHelperInbox();
+  const reads = RECORDED.frames
+    .filter((frame) => frame.from === "helper")
+    .map((frame) => inbox.read(frame.text as string, (re) => asked.get(re) as never));
+  for (const read of reads) assert.ok(read.ok, JSON.stringify(read));
+  const messages = reads.flatMap((read) => (read.ok ? [read.message] : []));
+  const hello = messages[0];
+  assert.ok(hello?.kind === "event" && hello.event.type === HelperMessage.Hello);
+  assert.deepEqual(hello.event.body, { helper: HELPER_VERSION, place: { id: "0", name: "p16-s9b.rbxlx" } });
+  const answers = messages.flatMap((message) => (message.kind === "answer" ? [message.answer] : []));
+  assert.deepEqual(
+    answers.map((answer) => (answer.ok ? answer.type : answer.error.code)),
+    [
+      HelperMessage.SessionMark,
+      HelperMessage.ScriptsWrite,
+      HelperMessage.ScriptsList,
+      HelperMessage.ScriptsRead,
+      HelperMessage.PlaceExport,
+      HelperMessage.Activity,
+      HelperMessage.Team,
+      HelperMessage.ModelImport,
+      "conflict",
+    ],
+  );
+});
+
+test("the real helper's export arrives whole: each part's chunks join to its size and hash, as Luau computed them", () => {
+  const inbox = createHelperInbox();
+  const exportId = RECORDED.frames.find((frame) => frame.type === HelperMessage.PlaceExport)?.id;
+  const pending: PendingType = (re) => (re === exportId ? HelperMessage.PlaceExport : HelperMessage.SessionMark);
+  const chunks = new Map<string, Buffer[]>();
+  let parts: Array<{ name: string; hash: string; bytes: number }> = [];
+  for (const frame of RECORDED.frames.filter((entry) => entry.from === "helper")) {
+    const read = inbox.read(frame.text as string, pending);
+    if (!read.ok) continue;
+    const message = read.message;
+    if (message.kind === "event" && message.event.type === HelperMessage.DataChunk) {
+      const body = message.event.body;
+      chunks.set(body.part, [...(chunks.get(body.part) ?? []), Buffer.from(body.data, "base64")]);
+    }
+    if (message.kind === "answer" && message.re === exportId && message.answer.ok)
+      parts = (message.answer.result as { parts: typeof parts }).parts;
+  }
+  assert.ok(parts.length > 0);
+  assert.ok(
+    parts.some((part) => part.bytes > 0),
+    "the place has a part with bytes in it",
+  );
+  for (const part of parts) {
+    const bytes = Buffer.concat(chunks.get(part.name) ?? []);
+    assert.equal(bytes.length, part.bytes, part.name);
+    assert.equal(helperHash(bytes), part.hash, part.name);
+  }
+});

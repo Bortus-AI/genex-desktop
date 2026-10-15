@@ -1177,22 +1177,53 @@ The binding file comes from the helper link (`helper-link.ts`), which the backen
 is set up. It is a hand-written RFC 6455 server (`helper-socket.ts`, no dependency) on 127.0.0.1
 only, on the first free port of `HELPER_PORTS` (47301–47304, which the helper tries in the same
 order), path `/genex-helper`. It refuses any handshake carrying an `Origin` (every browser sends
-one) or another Host, takes masked text frames only up to `MAX_HELPER_FRAME_BYTES` (4 MB), and
-closes on anything else; it pings every `HELPER_PING_MS` and ends a connection silent for a whole
-period. `helper-protocol.ts` checks every message once: protocol version, ids that only grow (a
-repeated id is refused), a known type, exactly the fields that type has, answers only to requests
-the backend made, and script paths that stay plain `.luau` paths under `src/` (no `..`, absolute
-path, backslash, colon or control character; sources up to 1 MB). Binding is exact: each
-connection gets a random session (`session.mark`), the helper puts it in a non-archivable
-`GenexHelperSession` StringValue in CoreGui, and the backend reads that marker through
-`execute_luau` in Edit in every listed Studio; the one that holds it is the connection's. Only when
-no Studio lets CoreGui be read does the place the helper names stand in, and two such Studios are
-refused. The game is the one whose linked place that Studio has open (none when two games link it);
-its `studio.json` is written at once and refreshed every `BINDING_REFRESH_MS`, and after a Studio
-restart the helper's new connection rebinds the game to the new Studio's id. The newest connection
-wins. A connection bound to no game writes and calls nothing, and a script path is resolved under
-the game's `src/` by real path, refused through any link. This stops games and profiles crossing
-wires; it does not stop a local process that already holds StudioMCP.
+one; Studio's `CreateWebStreamClient` sends none) or another Host, takes masked text frames only up
+to `MAX_HELPER_FRAME_BYTES` (4 MB), and closes on anything else; it pings every `HELPER_PING_MS`
+and ends a connection silent for a whole period. `helper-protocol.ts` checks every message once:
+protocol version, ids that only grow (a repeated id is refused), a known type, exactly the fields
+that type has, answers and data chunks only for requests the backend made, place parts that stay
+plain paths under `.genex/place/`, and sources up to 1 MB. A script is named as Studio holds it
+(the instance names from one of `SCRIPT_SERVICES` down, its class and a Script's run context); the
+backend maps that to a file under `src/` and resolves the file by real path (`scriptTarget`,
+refused through any link). Both sides hash bytes with `helperHash`, FNV-1a over 32 bits. Binding
+is exact: each connection gets a random session (`session.mark`), the helper puts the sessions of
+its connections (at most two Genex apps) in a non-archivable `GenexHelperSession` StringValue in
+CoreGui, and the backend reads that marker through `execute_luau` in Edit in every listed Studio;
+the one that holds the session is the connection's. Only when no Studio lets CoreGui be read does
+the place the helper names stand in, and two such Studios are refused. The game is the one whose
+linked place that Studio has open (none when two games link it). Before a connection's game is
+first bound, `beforeBind` asks that helper (a save point's place waiting to load), and only then is
+`studio.json` written, so agents reach that Studio after it; it is refreshed every
+`BINDING_REFRESH_MS`, and after a Studio restart the helper's new connection rebinds the game to
+the new Studio's id. The newest connection wins. A connection bound to no game is obeyed in
+nothing. This stops games and profiles crossing wires; it does not stop a local process that
+already holds StudioMCP.
+
+The helper itself is readable Luau in `src/plugins/roblox/helper/` (one module per file, each
+saying what it does at its top, and `VERSION`), which `scripts/build-plugins.mjs`
+(`robloxHelperModel`) assembles into `GenexStudioHelper.rbxmx`: the entry Script (`init.luau`, run
+context Plugin) holding a ModuleScript per module and a `constants` module generated from the
+plugin's TypeScript (protocol, ports, names, limits, message and error vocabularies), the same
+bytes for the same tree. The build refuses a `VERSION` other than `HELPER_VERSION`. Studio loads it
+into each place opened after it is added. It returns at once outside the Edit data model, so the
+copies in a play session's server and clients never connect, and it never raises an error in Studio
+for a missing API: a request it can't serve answers `unsupported`. It lists, reads, writes (inside
+a ChangeHistoryService recording, through `ScriptEditorService:UpdateSourceAsync`, refused as a
+`conflict` when the source changed since `base`) and removes scripts (only while the hash still
+matches), skips writing what Studio's Script Sync keeps, and sends `scripts.changed` for edits made
+in Studio, never for its own writes or a place load. `place.export` serializes each saved service's
+children with `SerializationService` (a child that can't be created is a container of its own, such
+as `StarterPlayer/StarterPlayerScripts`), splits a container past `PLACE_PART_MAX_BYTES` (40 MB)
+into one part per child under `<container>.split/`, adds `services.json` and `terrain.rbxm`, and
+serializes again only the containers whose children changed; `place-files.ts` writes the parts
+that differ from `.genex/place/manifest.json` whole or not at all, removes parts the place no longer
+has, and loads a save point's parts back (`place.load`), each checked against the manifest first.
+`pending-load.json` waits for a Studio that wasn't reachable and loads before the next binding.
+`play.multiplayer` starts `StudioTestService:ExecuteMultiplayerTestAsync` (one session, at most
+eight players); pausing or ending a test acts in the play session's own data models, out of the
+Edit helper's reach, so those answer `unsupported`. `activity` and `team` (who else is in a Team
+Create place) are sent on change and answered when asked; `device.set` and `gui.layout` drive the
+Device Simulator; `model.import` builds a checked mesh (`GXM1`) as a MeshPart.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and

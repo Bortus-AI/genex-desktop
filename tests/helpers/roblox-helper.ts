@@ -1,8 +1,10 @@
 /**
  * Stand-ins for the Roblox plugin's helper link tests: Roblox Studio as StudioMCP shows it (listed
  * Studios, each with the session marker the Genex helper set in its CoreGui), a clock the test moves
- * by hand, and the Genex helper itself, over an in-memory connection or a real WebSocket.
+ * by hand, and the Genex helper itself, over an in-memory connection or a real WebSocket; and the
+ * real helper file as the build ships it.
  */
+import path from "node:path";
 import type { HelperConnection, HelperHandlers } from "../../src/plugins/roblox/helper-socket.ts";
 import { HELPER_PATH, WsClose } from "../../src/plugins/roblox/helper-socket.ts";
 import { HELPER_PROTOCOL, HelperMessage } from "../../src/plugins/roblox/helper-protocol.ts";
@@ -176,4 +178,25 @@ export async function socketHelper(port: number, options: MarkOptions & { place?
       await closed;
     },
   };
+}
+
+let shipped: Promise<string> | undefined;
+
+/**
+ * The Genex helper as the build ships it (`GenexStudioHelper.rbxmx`, assembled from
+ * `src/plugins/roblox/helper/`), written once per test file to a temporary folder.
+ */
+export function shippedHelper(): Promise<string> {
+  shipped ??= (async () => {
+    const [{ robloxHelperModel }, { writeFile }, { tmpDir }, { HELPER_FILE }] = await Promise.all([
+      import("../../scripts/build-plugins.mjs"),
+      import("node:fs/promises"),
+      import("./tmp.ts"),
+      import("../../src/plugins/roblox/setup.ts"),
+    ]);
+    const file = path.join(await tmpDir("roblox-shipped-helper-"), HELPER_FILE);
+    await writeFile(file, await robloxHelperModel(path.resolve(import.meta.dirname, "..", "..")));
+    return file;
+  })();
+  return shipped;
 }

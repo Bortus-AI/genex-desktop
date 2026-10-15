@@ -38,7 +38,10 @@ import { toolbarItems } from "../../src/shared/plugin-toolbar.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 import { makeResources } from "../helpers/resources.ts";
+import { shippedHelper } from "../helpers/roblox-helper.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+
+const SHIPPED_HELPER = await shippedHelper();
 
 const HOME = "/Users/maker";
 const STORAGE = "/Genex/plugins/roblox/storage";
@@ -123,7 +126,7 @@ function fakeMac(given: Mac, home = HOME) {
       },
     },
     answers: async () => state.answering,
-    helper: path.resolve("src/plugins/roblox/helper", HELPER_FILE),
+    helper: SHIPPED_HELPER,
     install: { fetch: NO_INSTALL.fetch, run: NO_INSTALL.run, tempRoot: NO_INSTALL.tempRoot },
     open: async (launch) => {
       opened.push(launch);

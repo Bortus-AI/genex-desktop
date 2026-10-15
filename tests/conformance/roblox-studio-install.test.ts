@@ -29,6 +29,7 @@ import {
   MAX_INSTALLER_BYTES,
   SIGN_IN_WAIT_MS,
 } from "../../src/plugins/roblox/studio-install.ts";
+import { shippedHelper } from "../helpers/roblox-helper.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const BANNED_WORDS = /overnight|night|morning|tonight|Unreal/i;
@@ -496,7 +497,7 @@ describe("after Roblox's installer: sign-in, Set up while Studio is closed, Stud
     const after = afterDeps({ installedAt: 0, firstStudio: { from: 0, to: 10_000 } }, async (running) => {
       done = await setUp({
         paths: setupPaths("darwin", { HOME: home }, home),
-        helper: path.resolve("src/plugins/roblox/helper", HELPER_FILE),
+        helper: await shippedHelper(),
         storage: path.join(root, "storage"),
         running: async () => running,
         now: () => 0,
