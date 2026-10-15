@@ -19,6 +19,7 @@
     ".claude/settings.json": ["tests/conformance/agent-settings.test.ts"],
     "evals/**": ["tests/conformance/eval-contracts.test.ts"],
     "src/plugins/roblox/panel.html": ["tests/conformance/roblox-backend.test.ts"],
-    "src/plugins/roblox/skills/**": ["tests/conformance/plugin-skill-engines.test.ts"]
+    "src/plugins/roblox/skills/**": ["tests/conformance/plugin-skill-engines.test.ts"],
+    "tests/fixtures/roblox-studio/**": ["tests/conformance/roblox-mcp-bridge.test.ts"]
   }
 }

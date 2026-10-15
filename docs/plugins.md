@@ -1099,9 +1099,33 @@ links out of those folders and a home or LOCALAPPDATA of the other system. Wheth
 `pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox Studio"
 after the host's `box` glyph, `requiresProject: false`) opens the panel; its `toolbar-status` is a
 dot: Not installed and Not open `info`, Set up and Starting `warn`, Ready `ok`. Set up holds until
-Genex's setup record (`setup/record.json` in plugin storage) exists. Neither the button nor the
+Genex's setup record (`setup/record.json` in plugin storage) exists; Ready means Studio's own MCP
+server lists an open Studio, asked through the one StudioMCP the backend keeps once Studio runs. Neither the button nor the
 panel's `status` reads `~/Documents`, where macOS asks the person first; the Mac Plugins folder
 (`~/Documents/Roblox/Plugins`) is only named there.
+
+Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
+is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
+`<storage>/mcp/<game>`) starts `StudioMCP` itself through `studio-client.ts`: on a Mac
+`/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` with the person's real home from the
+system's user record (the host points HOME at the connection's own folder, and StudioMCP keeps its
+connection token in the real one, which Genex never reads); on Windows `%LOCALAPPDATA%\Roblox\mcp.bat`
+through `commandLaunch`'s cmd.exe line, from its real path inside that folder, refusing anything
+cmd.exe would rewrite. Neither runs in Genex's process sandbox: Studio's own connection and the
+person's sign-in must work. Studio joins a fresh StudioMCP a moment after it starts, so a call asks
+`list_roblox_studios` until the game's Studio is listed (`STUDIO_JOIN_MS`). Every call is pinned
+to that Studio: `studio_id` is filled from the binding file `studio.json` the backend keeps in the
+connection's folder (`{studioId, session, at}`, believed for `BINDING_MAX_AGE_MS`), or with no file
+yet from the game's linked place matched by name; two matching Studios, a stale binding and a call
+naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
+30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
+write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, and a
+tool the table doesn't know passes as a write. Hidden: the play-lane tools (play goes through the
+six play tools), `multi_edit` (scripts are the game's `.luau` files), `http_get` (Studio would
+fetch any address for the agent: a path for leaking data and for planted instructions) and
+`list_roblox_studios`; inserts, uploads and Roblox's AI tools are plugin tools that ask the person
+every time. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
+and refused in plain words when it can't be.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
 `engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and

@@ -6,6 +6,9 @@
 /** Studio's version as people read it: its first two parts (0.743 of 0.743.0.7431133). */
 export const shortVersion = (version: string) => version.split(".").slice(0, 2).join(".");
 
+/** Where Studio's own MCP switch is, as the person clicks it. */
+export const MCP_SWITCH_CLICK_PATH = "Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
+
 export const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Roblox Studio action: ${name}`,
   UnknownTool: (name: string) => `Unknown Roblox Studio tool: ${name}`,

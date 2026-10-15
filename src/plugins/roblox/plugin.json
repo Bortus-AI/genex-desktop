@@ -95,5 +95,34 @@
       "status": "toolbar-status"
     }
   ],
+  "mcpServers": [
+    {
+      "id": "studio",
+      "facts": ["roblox-project"],
+      "needs": ["studio"],
+      "transport": "stdio",
+      "command": "node",
+      "args": ["studio-mcp.mjs"],
+      "cwd": "storage:project",
+      "reads": [
+        "search_game_tree",
+        "inspect_instance",
+        "script_read",
+        "script_search",
+        "script_grep",
+        "get_console_output",
+        "get_studio_state",
+        "screen_capture",
+        "list_plugin_guis",
+        "capture_plugin_gui",
+        "search_asset",
+        "skill",
+        "wait_job_finished"
+      ],
+      "maxTools": 24,
+      "callTimeoutMs": 330000,
+      "description": "Roblox Studio, for this game's open place. The person's own Studio through its built-in MCP server: read the place (game tree, instances, scripts, console output, pictures) and change it with execute_luau, in Edit unless you name another data model. Genex picks this game's Studio itself, so studio_id is never yours to give. Scripts are the game's .luau files, play-testing goes through the computer tool and judge_play, and Roblox's AI tools, uploads and inserts ask the person first."
+    }
+  ],
   "locks": [{ "id": "studio", "label": "Roblox Studio", "per": "project", "personFirst": "studio-activity" }]
 }

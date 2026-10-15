@@ -190,6 +190,14 @@ async function buildRoblox(root, resources, sdk) {
     entryPoints: [path.join(root, "src/plugins/roblox/backend.ts")],
     outfile: path.join(roblox, "backend.mjs"),
   });
+  // The Roblox Studio connection: a copied package can't reach the repository's node_modules, so
+  // the MCP SDK is bundled in.
+  await build({
+    ...NODE_BACKEND,
+    entryPoints: [path.join(root, "src/plugins/roblox/studio-mcp-entry.ts")],
+    outfile: path.join(roblox, "studio-mcp.mjs"),
+    banner: { js: "import {createRequire} from 'node:module'; const require = createRequire(import.meta.url);" },
+  });
 }
 
 /** Copies the SDK and builds the bundled plugins (and the example) into the app's resources. */
