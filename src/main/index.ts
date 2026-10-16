@@ -125,7 +125,7 @@ import { devStandAccountPort } from "./dev/dev-stand-account.ts";
 import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
-import { isFixtureAccount } from "./dev/fixture-people.ts";
+import { launchFixtureAccount } from "./dev/fixture-people.ts";
 import {
   fixtureUpload,
   networkUpload,
@@ -424,9 +424,7 @@ let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCre
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
-const fixtureGenexAccount = isFixtureAccount(process.env.STUDIO_FIXTURE_GENEX_ACCOUNT)
-  ? process.env.STUDIO_FIXTURE_GENEX_ACCOUNT
-  : null;
+const fixtureGenexAccount = launchFixtureAccount(process.env.STUDIO_FIXTURE_GENEX_ACCOUNT, dev?.fixture);
 /** Play's game viewer in the current window. */
 let playView: PlayViewer | null = null;
 /** Where startup stands for the window: Ready, or the sandbox setup screen with its Retry. */

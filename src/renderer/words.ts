@@ -2366,6 +2366,14 @@ export const UPDATE_WORDS = {
 } as const;
 
 /** The sidebar's plugin updates line and its list, while installed plugins have newer versions waiting (`state/plugins.ts`). */
+/** Genex's updated terms waiting for the person, in the sidebar and under a Genex call in the chat. */
+export const GENEX_TERMS_WORDS = {
+  line: "Genex terms updated",
+  /** Opens genex.games' terms page in the browser. */
+  review: "Review",
+  reviewLabel: "Review Genex terms on genex.games",
+} as const;
+
 export const PLUGIN_UPDATE_WORDS = {
   /** The line's name for what waits: it opens the list. */
   count: (count: number) => (count === 1 ? "1 plugin update" : `${count} plugin updates`),

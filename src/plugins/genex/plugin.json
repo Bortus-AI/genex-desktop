@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.12",
+  "version": "1.10.13",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -311,6 +311,10 @@
     {
       "name": "terms",
       "label": "Review Genex terms"
+    },
+    {
+      "name": "terms-status",
+      "label": "Genex terms"
     },
     {
       "name": "publish-status",
