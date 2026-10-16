@@ -437,7 +437,7 @@ export class ChatRewindService {
     )
       return;
     const before = phase === CheckpointPhase.Before;
-    if (before) await this.#saveEngineFirst(dir, meta.project, threadId, messageId, deadline);
+    await this.#saveEngineFirst(dir, meta.project, { threadId, messageId, phase }, deadline);
     const taken = await this.checkpoints.take(dir, threadId, messageId, phase, before ? deadline : undefined);
     if (!taken) {
       this.#log(MESSAGE.checkpointLate(messageId));
@@ -451,14 +451,22 @@ export class ChatRewindService {
   }
 
   /**
-   * Before a message's first checkpoint, the game's engine saves what it holds (its steps that ask
-   * to run for each message), so a Rewind brings that back too. They end before the snapshot's own
-   * room in the message's wait; whatever they answer, or if they fail, the folder is saved next.
+   * Before each of a message's checkpoints, the one before its answer and the one after, the
+   * game's engine saves what it holds (its steps that ask to run for each message), so what an
+   * answer changed only in the engine lands inside its own pair and a Rewind brings it back too.
+   * They end before the snapshot's own room in the message's wait; whatever they answer, or if
+   * they fail, the folder is saved next.
    */
-  async #saveEngineFirst(dir: string, project: string, threadId: string, messageId: string, deadline: number) {
+  async #saveEngineFirst(
+    dir: string,
+    project: string,
+    at: { threadId: string; messageId: string; phase: CheckpointPhase },
+    deadline: number,
+  ) {
+    const { threadId, messageId, phase } = at;
     try {
       // A message answered again after a restart keeps its first checkpoint: nothing to save for it.
-      if (await this.checkpoints.has(dir, threadId, messageId)) return;
+      if (await this.checkpoints.has(dir, threadId, messageId, phase)) return;
       await this.#x.hooks.prepareMessageCheckpoint({
         project,
         threadId,

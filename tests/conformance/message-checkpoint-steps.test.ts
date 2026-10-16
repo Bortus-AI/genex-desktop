@@ -9,13 +9,14 @@
  * message, and the hook test plugin `hk`, whose checkpoint steps do not ask.
  */
 import assert from "node:assert/strict";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
 import { after, before, describe, it } from "node:test";
 import { CheckpointPhase, chatCheckpointRef } from "../../src/main/chat-checkpoints.ts";
-import { CHAT_CHECKPOINT_WAIT_MS } from "../../src/main/core/rewind.ts";
+import { CHAT_CHECKPOINT_WAIT_MS, MESSAGE_SNAPSHOT_ROOM_MS } from "../../src/main/core/rewind.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
+import { EventKind } from "../../src/shared/event-log.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
 import { PermissionMode } from "../../src/shared/permissions.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
@@ -56,6 +57,11 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
   let spent = 0;
   /** A save-scenes that never answers until its call is cut, when set. */
   let hangs = false;
+  /**
+   * The toy editor's unsaved state, by game folder: save-scenes writes it to `scenes.txt` there,
+   * as an engine's save writes what its editor holds into the game's files.
+   */
+  const editor = new Map<string, string>();
   /** The checkpoint the next step is checked against. */
   let watching: { dir: string; ref: string } | null = null;
   let messages = 0;
@@ -80,14 +86,30 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
   }
 
   /**
-   * The queue starts answering one message, and its answer begins (which waits for the checkpoint);
-   * then the message is handled and the after checkpoint lands. Answers the message's id.
+   * The queue starts answering one message, and its answer begins (which waits for the checkpoint)
+   * and does `answer`; then the message is handled and the after checkpoint lands. Answers the
+   * message's id.
    */
-  async function sendMessage(chat: { dir: string; threadId: string }): Promise<string> {
+  async function sendMessage(
+    chat: { dir: string; threadId: string },
+    answer: () => Promise<void> = async () => {},
+  ): Promise<string> {
     messages += 1;
     const messageId = `msg_steps_${messages}`;
     watching = { dir: chat.dir, ref: chatCheckpointRef(chat.threadId, messageId) };
-    const record = (type: string) => ({ type: "custom", event_type: type, payload: { messageId } });
+    const record = (type: string, extra: object = {}) => ({
+      type: "custom",
+      event_type: type,
+      payload: { messageId, ...extra },
+    });
+    const text = `Message ${messages}`;
+    await call(HostMethod.EventsAppend, {
+      threadId: chat.threadId,
+      batch: [
+        { type: EventKind.Messages, messages: [{ role: "user", content: text }] },
+        record(CustomEvent.CoordinatorMessageQueued, { action: { text } }),
+      ],
+    });
     await call(HostMethod.EventsAppend, {
       threadId: chat.threadId,
       batch: [record(CustomEvent.CoordinatorMessageProcessing)],
@@ -95,6 +117,7 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
     const { turnId } = (await call(HostMethod.TurnBegin, { threadId: chat.threadId })) as { turnId: string };
     assert.ok(await refOf(chat.dir, watching.ref), "the folder before the answer was saved once its turn began");
     called.push({ name: "<answer>", on: undefined, checkpointStood: true });
+    await answer();
     await call(HostMethod.TurnEnd, { turnId });
     await call(HostMethod.EventsAppend, {
       threadId: chat.threadId,
@@ -136,6 +159,9 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
     core.plugins.tool = (async (name, args, binding: PluginBinding, signal, ...rest) => {
       const stood = watching ? Boolean(await refOf(watching.dir, watching.ref)) : false;
       called.push({ name, on: binding.hook?.on, checkpointStood: stood });
+      const state = editor.get(binding.directory);
+      if (name === SAVE_SCENES && state !== undefined && !hangs)
+        await writeFile(path.join(binding.directory, "scenes.txt"), state);
       if (name === SAVE_SCENES && hangs) {
         // Cut already (its limit ended while this step was being called), or once it is.
         await new Promise((_, reject) => {
@@ -152,7 +178,7 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
     await lite.close();
   });
 
-  it("runs the toy's save-scenes once before the folder is saved, and no step after it or after the answer", async () => {
+  it("runs the toy's save-scenes before the folder is saved, before and after the answer, and never a checkpoint.after step", async () => {
     const projects = await realpath(await tmpDir("message-steps-toyproj-"));
     const file = path.join(projects, "Garden", "Garden.toyproj");
     await mkdir(path.dirname(file), { recursive: true });
@@ -160,11 +186,45 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
     const chat = await chatOn("garden");
     await lite.core.engineLinks.link(TOY_PLUGIN_ID, { project: "garden", directory: chat.dir }, { project: file });
     const from = called.length;
+    const asked = limits.length;
     await sendMessage(chat);
-    assert.deepEqual(trail(from), [`${HookEvent.CheckpointBefore} ${SAVE_SCENES}`, "<answer>"]);
+    // Flipped: save-scenes also runs before the folder after the answer is saved, so the answer's
+    // changes in the engine land in its own before/after pair.
+    assert.deepEqual(trail(from), [
+      `${HookEvent.CheckpointBefore} ${SAVE_SCENES}`,
+      "<answer>",
+      `${HookEvent.CheckpointBefore} ${SAVE_SCENES}`,
+    ]);
     assert.equal(called[from]?.checkpointStood, false, "save-scenes ran before the snapshot");
     assert.ok(!called.some((c) => c.name === CAPTURE), "a checkpoint.after step never runs for a message");
-    assert.ok(limits.at(-1)!.ms <= CHAT_CHECKPOINT_WAIT_MS, "the step runs within the message's wait");
+    for (const limit of limits.slice(asked))
+      assert.ok(
+        limit.ms <= CHAT_CHECKPOINT_WAIT_MS - MESSAGE_SNAPSHOT_ROOM_MS,
+        `the step ends before the snapshot's own room in the message's wait: ${limit.ms}`,
+      );
+  });
+
+  it("saves what the answer changed only in the engine inside its own pair, so a Rewind of the last message restores it", async () => {
+    const projects = await realpath(await tmpDir("message-steps-toyproj-"));
+    const file = path.join(projects, "Meadow", "Meadow.toyproj");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "toy\n");
+    const chat = await chatOn("meadow");
+    await lite.core.engineLinks.link(TOY_PLUGIN_ID, { project: "meadow", directory: chat.dir }, { project: file });
+    editor.set(chat.dir, "spring\n");
+    // The answer changes the editor alone, as an agent's execute_luau changes a place.
+    const messageId = await sendMessage(chat, async () => {
+      editor.set(chat.dir, "autumn\n");
+    });
+    assert.equal(await readFile(path.join(chat.dir, "scenes.txt"), "utf8"), "autumn\n");
+    const saved = (phase: CheckpointPhase) =>
+      git(chat.dir, ["show", `${chatCheckpointRef(chat.threadId, messageId, phase)}:scenes.txt`]);
+    assert.equal(await saved(CheckpointPhase.Before), "spring\n", "the folder before the answer");
+    assert.equal(
+      await saved(CheckpointPhase.After),
+      "autumn\n",
+      "the folder after the answer holds its engine change: a Rewind of this message finds it as the chat's own",
+    );
   });
 
   it("runs none of a plugin's checkpoint steps that do not ask for each message", async () => {
@@ -195,11 +255,17 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
         `the limit is what is left of the wait: ${limit.ms}`,
       );
       limit.end();
+      // Only the step before the answer hangs; the one before the folder after it answers.
+      hangs = false;
       await sent;
     } finally {
       hangs = false;
     }
-    assert.deepEqual(trail(from), [`${HookEvent.CheckpointBefore} ${SAVE_SCENES}`, "<answer>"]);
+    assert.deepEqual(trail(from), [
+      `${HookEvent.CheckpointBefore} ${SAVE_SCENES}`,
+      "<answer>",
+      `${HookEvent.CheckpointBefore} ${SAVE_SCENES}`,
+    ]);
     assert.ok(
       logged.some((line) => line.includes("slow-garden") && line.includes("didn't answer in time")),
       logged.join("\n"),
@@ -220,6 +286,37 @@ describe("a chat message's checkpoint and the engine's steps that save first", (
       logged.some((line) => line.includes("late-garden") && /skipped/.test(line)),
       logged.join("\n"),
     );
+  });
+
+  it("runs no step once only the snapshot's own room is left of the message's wait", async () => {
+    const chat = await chatOn("room-garden");
+    const from = called.length;
+    spent = CHAT_CHECKPOINT_WAIT_MS - MESSAGE_SNAPSHOT_ROOM_MS + 1;
+    try {
+      await sendMessage(chat);
+    } finally {
+      spent = 0;
+    }
+    assert.ok(
+      !trail(from).slice(0, 1).includes(`${HookEvent.CheckpointBefore} ${SAVE_SCENES}`),
+      trail(from).join("\n"),
+    );
+    assert.equal(trail(from)[0], "<answer>", "the folder was saved with no step before it");
+  });
+
+  it("runs no step for a message answered again whose checkpoint already stands", async () => {
+    const chat = await chatOn("again-garden");
+    const messageId = await sendMessage(chat);
+    const from = called.length;
+    const record = (type: string) => ({ type: "custom", event_type: type, payload: { messageId } });
+    // A restart's retry: the same message is processed once more.
+    await call(HostMethod.EventsAppend, {
+      threadId: chat.threadId,
+      batch: [record(CustomEvent.CoordinatorMessageProcessing)],
+    });
+    const { turnId } = (await call(HostMethod.TurnBegin, { threadId: chat.threadId })) as { turnId: string };
+    await call(HostMethod.TurnEnd, { turnId });
+    assert.deepEqual(trail(from), [], "save-scenes didn't run for its checkpoint a second time");
   });
 
   it("in Plan mode runs no step, logs it, and still saves the folder", async () => {

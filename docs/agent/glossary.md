@@ -151,7 +151,7 @@ Every project's Loop is the director's wake loop, in one of two profiles (`LoopP
   the play once it opens and adds its note and pictures to the judge's first answer
   (`src/main/core/editor-play-session.ts`).
 - **Message checkpoint steps**: `checkpoint.before` hooks that opt in with `messages: true`, run
-  before each chat message's checkpoint inside its 30-second wait so Rewind brings back the
+  before each chat message's two checkpoints inside their 30-second wait so Rewind brings back the
   engine's state too (`HookService.prepareMessageCheckpoint`, `src/main/core/rewind.ts`).
 - **Bring back newer version**: the undo of a Rewind that put game files back: the files, and
   through the restore steps the engine's state, as they were just before it; the chat stays

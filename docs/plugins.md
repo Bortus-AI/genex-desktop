@@ -1774,8 +1774,8 @@ the plugin's harness tools Genex runs at its moments: up to 32 `{on, tool, facts
 and no `host`; `facts` (1–8 fact ids, each once) narrows it to the games they reach ([Scope by
 facts](#scope-by-facts)). Another plugin's tool, an agent tool or an unknown moment refuses the
 manifest. `messages: true`, only on `checkpoint.before` (a boolean anywhere, or on any other moment,
-refuses the manifest; `false` is dropped), runs that step before each chat message's checkpoint too
-([Before each chat message](#before-each-chat-message)).
+refuses the manifest; `false` is dropped), runs that step before each chat message's checkpoints too,
+the one before its answer and the one after ([Before each chat message](#before-each-chat-message)).
 
 | Moment | When | A `block` |
 | --- | --- | --- |
@@ -1870,15 +1870,17 @@ A game chat saves the game folder before each message is answered, so Rewind can
 ([the conversation coordinator](conversation-coordinator.md)). An engine whose state lives in its
 app and reaches the folder only when exported opts in with `messages: true` on that
 `checkpoint.before` step; the host then runs those steps, and only those
-(`registry.messageCheckpointPlan(game)`, `HookService.prepareMessageCheckpoint`), right before the
-message's snapshot, under their locks, told `{on: "checkpoint.before"}`. A `checkpoint.after` step
+(`registry.messageCheckpointPlan(game)`, `HookService.prepareMessageCheckpoint`), right before each
+of the message's two snapshots (before its answer and after it, so what an answer changed only in
+the engine lands inside its own pair and Rewind finds it as the chat's own), under their locks, told
+`{on: "checkpoint.before"}`. A `checkpoint.after` step
 never runs for a message, so no pictures are posted at every message. The steps live inside the
 message's own wait (`CHAT_CHECKPOINT_WAIT_MS`, 30 s, in `main/core/rewind.ts`), not the plugin call
 ceiling (`HOOK_CALL_MS`): the lock wait and the steps' shared limit are what is left of it, less 5 s
 kept for the snapshot. Plan mode, a lock not given in time or no time left skips the steps; a step
 cut short, a failure or a `block` is a log line. In every case the files are still saved: a block
 never stops a message's checkpoint. A message answered again after a restart keeps its first
-checkpoint and runs no step. A step that opts in must be quick; Unreal does not opt in, so its
+checkpoint and runs no step for it. A step that opts in must be quick; Unreal does not opt in, so its
 editor is saved at save points only. Roblox's `save-place` opts in: its incremental export
 (`SAVE_PLACE_CHAT_MAX_MS`) ends within the message's 25 s.
 

@@ -528,9 +528,14 @@ export class ChatCheckpoints {
     return { nested, skipped };
   }
 
-  /** Was the folder saved before this message was answered (and is that copy still kept)? */
-  async has(dir: string, threadId: string, messageId: string): Promise<boolean> {
-    return (await commitAt(dir, chatCheckpointRef(threadId, messageId))) !== null;
+  /** Was the folder saved before this message was answered, or after with `phase` (and is that copy still kept)? */
+  async has(
+    dir: string,
+    threadId: string,
+    messageId: string,
+    phase: CheckpointPhase = CheckpointPhase.Before,
+  ): Promise<boolean> {
+    return (await commitAt(dir, chatCheckpointRef(threadId, messageId, phase))) !== null;
   }
 
   /** Undo a restore: the folder as it was when the rewind began. */
