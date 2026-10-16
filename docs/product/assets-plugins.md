@@ -24,6 +24,7 @@ Community plugins and the plugin guide, with
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
 unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
 Game spend is in the usage panel, prices in Genex's Credits tab. Enabled Genex suggests assets in planning.
+Generations wait for unaccepted terms (Review: sidebar, chat).
 
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and

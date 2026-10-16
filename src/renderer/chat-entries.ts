@@ -1561,6 +1561,7 @@ function narratePluginCall(chat: ChatDraft, event: EventEnvelope): void {
   row.failed = row.state === ToolState.Failed;
   row.detail = [{ text }, ...(raw.result ? [{ text: String(raw.result) }] : [])];
   if (payload.making) row.making = { ids: makingIds(payload) };
+  if ("blocked" in payload && payload.blocked) row.blocked = payload.blocked;
   if (row.state === ToolState.Succeeded && keptGenexCover(payload)) holdCoverCard(chat, event, payload);
 }
 

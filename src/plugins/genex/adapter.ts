@@ -17,6 +17,7 @@ import {
   defaultGenexTitle,
   GENEX_COVERS_DIR,
   GenexCoverOrigin,
+  GenexBlocked,
   GenexCoverOutcome,
   type GenexCoverSent,
   ownerChoseCover,
@@ -188,6 +189,10 @@ const PUBLISH_WAIT_MS = 150_000;
 const MIN_PUBLISH_WAIT_MS = SECOND_MS;
 /** How long a verified sign-in is trusted before status asks Genex again. */
 const SESSION_CACHE_MS = 2 * MINUTE_MS;
+/** How long a generation waits for the person to accept Genex's updated terms: as long as the CLI waits. */
+const TERMS_WAIT_MS = 100 * SECOND_MS;
+/** How often a generation waiting on the terms asks Genex again. */
+const TERMS_POLL_MS = 3 * SECOND_MS;
 /** The workspace folder name: letters, digits, `_` and `-` only, so it can never be a path. */
 const PROJECT_NAME = /^[a-zA-Z0-9_-]+$/;
 const DEVICE_LABEL = "AI Game Studio";
@@ -218,7 +223,21 @@ const MESSAGE = {
   ApprovalNotPending: "Approval is no longer pending",
   ChooseCandidate: "Choose candidate 1, 2, or 3",
   CredentialsUninitialized: "Genex credentials are not initialized",
+  TermsPending:
+    "Genex's terms changed and the user has not accepted them yet, so nothing was submitted or charged. Studio shows them Review in the chat and in the sidebar: ask them to accept the terms, then make this request again.",
 } as const;
+
+/** What a generation tells the app while it runs: the account's terms began or stopped waiting for the person. */
+export interface GenexExecuteHooks {
+  termsPending?: (pending: boolean) => Promise<void>;
+}
+
+/** A generation waited for the terms and the person did not accept them in time. */
+class GenexTermsPending extends Error {
+  constructor() {
+    super(MESSAGE.TermsPending);
+  }
+}
 
 /** `genex cover` exits 0 for a frame set or outranked and 1 for any other answer: both are answers. */
 const COVER_ANSWER_EXIT_CODES = [0, 1] as const;
@@ -369,6 +388,7 @@ export class GenexTools {
   readonly #now: () => number;
   /** The folder of the browser SDK a published game that brings none of its own is connected with. */
   readonly #embedSdk: string | undefined;
+  readonly #termsWait: { waitMs: number; pollMs: number };
   constructor(
     root: string,
     api = "https://api.genex.games",
@@ -382,6 +402,8 @@ export class GenexTools {
       now?: () => number;
       /** Where the build put the SDK's browser files beside the backend; else the installed package's. */
       embedSdk?: string;
+      /** How long a generation waits for the person to accept Genex's terms, and how often it asks. */
+      termsWait?: { waitMs: number; pollMs: number };
     } = {},
   ) {
     this.root = root;
@@ -393,6 +415,7 @@ export class GenexTools {
       viewMs: options.coverTimeouts?.viewMs ?? COVER_VIEW_TIMEOUT_MS,
     };
     this.#now = options.now ?? Date.now;
+    this.#termsWait = options.termsWait ?? { waitMs: TERMS_WAIT_MS, pollMs: TERMS_POLL_MS };
     this.#embedSdk = options.embedSdk;
     this.#credentials = options.credentials;
     this.#observe = options.observe;
@@ -1698,6 +1721,7 @@ export class GenexTools {
     signal?: AbortSignal,
     approved = false,
     threadId?: string,
+    hooks: GenexExecuteHooks = {},
   ): Promise<GenexJob | unknown> {
     const controller = new AbortController();
     this.#controllers.set(controller, { project, threadId });
@@ -1705,11 +1729,34 @@ export class GenexTools {
     signal?.addEventListener("abort", stop, { once: true });
     if (signal?.aborted) stop();
     try {
-      return await this.#execute(project, root, request, controller.signal, approved);
+      return await this.#execute(project, root, request, controller.signal, approved, hooks);
     } finally {
       signal?.removeEventListener("abort", stop);
       this.#controllers.delete(controller);
     }
+  }
+  /** Whether the signed-in account still has Genex's updated terms to accept. */
+  async termsStatus(signal?: AbortSignal): Promise<{ pending: boolean }> {
+    const legal = await this.#fetch(GenexRoute.LegalStatus, withSignal(signal));
+    return { pending: legal?.accepted === false };
+  }
+  /**
+   * Before a generation reaches Genex: while the account's terms wait for the person, say so and ask
+   * again until they accept or the wait runs out. Accepted terms cost one question and say nothing;
+   * a question Genex does not answer stops nothing (the CLI meets any refusal itself).
+   */
+  async #waitForTerms(signal: AbortSignal, hooks: GenexExecuteHooks): Promise<void> {
+    const pending = async () => (await this.termsStatus(signal).catch(() => ({ pending: false }))).pending;
+    if (!(await pending())) return;
+    await hooks.termsPending?.(true);
+    const deadline = this.#now() + this.#termsWait.waitMs;
+    while (this.#now() < deadline) {
+      await sleep(this.#termsWait.pollMs, undefined, { signal });
+      if (await pending()) continue;
+      await hooks.termsPending?.(false);
+      return;
+    }
+    throw new GenexTermsPending();
   }
   /** Status as the agent sees it: approval images stay in Studio. */
   async #statusForAgent(project: string, signal: AbortSignal) {
@@ -1738,6 +1785,7 @@ export class GenexTools {
     request: GenexRequest,
     signal: AbortSignal,
     approved: boolean,
+    hooks: GenexExecuteHooks,
   ): Promise<unknown> {
     if (signal?.aborted) throw new Error(MESSAGE.StoppedBeforeSubmission);
     if (request.operation === GenexOperation.Status) return this.#statusForAgent(project, signal);
@@ -1761,6 +1809,7 @@ export class GenexTools {
     await atomicWriteJson(path.join(dir, "request.json"), { root, request });
     await save();
     try {
+      if (!READ_OPERATIONS.has(request.operation)) await this.#waitForTerms(signal, hooks);
       if (APPROVAL_OPERATIONS.has(request.operation) && !approved) {
         job.approval = await this.#approvalReview(cwd, request, signal);
         job.status = GenexJobStatus.ApprovalRequired;
@@ -1777,6 +1826,7 @@ export class GenexTools {
     } catch (e) {
       job.status = failedJobStatus(job, signal.aborted);
       job.error = (e as Error).message;
+      if (e instanceof GenexTermsPending) job.blocked = GenexBlocked.Terms;
       await this.#reconcileJob(cwd, job);
       job.status = settledFailureStatus(job, READ_OPERATIONS.has(request.operation), () => signal.aborted);
       await save();

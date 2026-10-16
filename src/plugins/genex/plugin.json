@@ -313,6 +313,10 @@
       "label": "Review Genex terms"
     },
     {
+      "name": "terms-status",
+      "label": "Genex terms"
+    },
+    {
       "name": "publish-status",
       "label": "Publishing state"
     },

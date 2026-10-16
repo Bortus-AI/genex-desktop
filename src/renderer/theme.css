@@ -1955,8 +1955,9 @@ button.chat-header-title:hover {
   background: linear-gradient(transparent, var(--sidebar));
   pointer-events: none;
 }
-/* What waits to be installed, at the foot of the list: the plugin updates line while plugin releases
- * wait, Relaunch to update while a downloaded version does. */
+/* What waits for the person, at the foot of the list: Genex's updated terms while they wait to be
+ * accepted, the plugin updates line while plugin releases wait, Relaunch to update while a downloaded
+ * version does. */
 .sidebar-footer {
   display: flex;
   flex-direction: column;
@@ -2177,6 +2178,38 @@ button.chat-header-title:hover {
 }
 .sidebar-plugin-updates[aria-busy="true"] .gi .a-spin {
   animation: gi-spin 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+/* Genex's updated terms (`panels/plugins/genex/GenexTermsLine.tsx`): the plugin updates line's dress,
+ * a page icon and the words, then Review. In the chat it is as wide as its words. */
+.genex-terms-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding-inline: 4px;
+  border-radius: var(--radius-control);
+  background: var(--field);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
+}
+.genex-terms-line-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding-inline: 5px 4px;
+}
+.genex-terms-line-label .gi {
+  color: color-mix(in oklab, var(--accent-primary) 55%, var(--ink));
+}
+.chat-genex-terms {
+  width: fit-content;
+  max-width: 100%;
+}
+.chat-genex-terms .genex-terms-line-label {
+  padding-inline-end: 8px;
 }
 /* Install what is ticked, on the line and in its list: the accent as a soft tint, its label a
  * lighter blue on dark and a deeper one on light. */
