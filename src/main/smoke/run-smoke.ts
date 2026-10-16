@@ -231,7 +231,9 @@ async function checkRenderedWindow(smoke: Smoke): Promise<void> {
   const rendered = (await wc.executeJavaScript(
     `JSON.stringify({
          columns: document.querySelectorAll(".column").length,
-         modes: [...document.querySelectorAll("[data-mode]")].map((t) => t.textContent),
+         // The retired Build/Review tabs; the Play/Create switch and the composer's permission
+         // button carry data-mode for their own state and are not that switch.
+         modes: [...document.querySelectorAll("[data-mode]:not(.play-switch):not(.composer-permission)")].map((t) => t.textContent),
          brand: document.querySelector(".brand")?.textContent ?? "",
          sidebarFooter: !!document.querySelector(".sidebar-footer"),
          composer: !!document.querySelector(".composer textarea"),
