@@ -4,13 +4,13 @@ import type { AppDialogs as Dialogs } from "../panels/AppDialogs.tsx";
 import { feedbackAbout } from "../feedback-about.ts";
 import { BootstrapGate } from "../panels/BootstrapGate.tsx";
 import { Sidebar } from "../panels/Sidebar.tsx";
-import { shownRelease } from "../panels/plugins/labels.ts";
-import { useLaunch, usePlugins, useShallow, useSidebarLibrary, useThreadsView, useUpdate } from "../state/hooks.ts";
+import { useLaunch, usePlugins, useSidebarLibrary, useThreadsView, useUpdate } from "../state/hooks.ts";
 import { launchInSidebar } from "../state/launch.ts";
 import { pluginUpdates } from "../state/plugins.ts";
 import type { Studio } from "../state/studio.ts";
 import { busyThreadIds, Room } from "../state/threads.ts";
 import { notifyProblem, ToastTone } from "../state/toasts.ts";
+import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import type { Notifications } from "../use-notifications.ts";
 import { problemWords } from "../words.ts";
@@ -46,8 +46,9 @@ export function AppSidebar({
   // A game home is starting has one row: a placeholder until it is made and listed, then its own.
   const launching = useMemo(() => launchInSidebar(launch, games), [launch, games]);
   const update = useUpdate((s) => s.ready);
-  // Strings, compared one by one: the sidebar re-renders when a release comes or goes, not on every plugin read.
-  const pluginReleases = usePlugins(useShallow((s) => pluginUpdates(s.list, s.index).map(shownRelease)));
+  const pluginList = usePlugins((s) => s.list);
+  const pluginIndex = usePlugins((s) => s.index);
+  const waitingUpdates = useMemo(() => pluginUpdates(pluginList, pluginIndex), [pluginList, pluginIndex]);
   const updatingPlugins = usePlugins((s) => s.updating);
   const busyThreads = useMemo(() => busyThreadIds(threadStatus), [threadStatus]);
   const { pluginsOpen } = chrome;
@@ -64,9 +65,9 @@ export function AppSidebar({
   const downloadUpdate = (): void => {
     void app.api.openUpdateDownload().catch(notifyFailure);
   };
-  const updatePlugins = (): void => {
+  const updatePlugins = (skipped: ReadonlySet<string>): void => {
     // One cause (no connection) refuses every update alike: it is said once.
-    void app.plugins.updateAll().then((failures) => {
+    void app.plugins.updateAll(skipped).then((failures) => {
       for (const words of new Set(failures.map(problemWords))) app.notify(words, ToastTone.Error);
     });
   };
@@ -125,9 +126,10 @@ export function AppSidebar({
           update={update}
           onRestartToUpdate={restartToUpdate}
           onDownloadUpdate={downloadUpdate}
-          pluginUpdates={pluginReleases}
+          pluginUpdates={waitingUpdates}
           updatingPlugins={updatingPlugins}
           onUpdatePlugins={updatePlugins}
+          onOpenPlugin={openPluginsAt}
         />
       </BootstrapGate>
     </aside>
