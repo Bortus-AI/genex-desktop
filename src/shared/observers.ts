@@ -32,6 +32,8 @@ export const PLUGIN_OBSERVER_LIVE: ReadonlySet<ObserverLive> = new Set([
 
 /** The bundled Unreal plugin's id (`src/plugins/unreal/plugin.json`): the only manifest that may name the Unreal card. */
 export const UNREAL_PLUGIN_ID = "unreal";
+/** The bundled Unity plugin's id. */
+export const UNITY_PLUGIN_ID = "unity";
 
 /** The bundled Unreal plugin's viewport observer (`<plugin>/<id>`): the Unreal card's shots, and Genex's own card's key. */
 export const UNREAL_VIEWPORT_OBSERVER = `${UNREAL_PLUGIN_ID}/viewport`;

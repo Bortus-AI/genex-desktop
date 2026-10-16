@@ -11,6 +11,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { engineTestMac } from "../../substrate/app-install.ts";
 
 const exec = promisify(execFile);
 
@@ -63,14 +64,19 @@ export type GodotEnv = {
   userTemp(): Promise<string | null>;
 };
 
-/** The computer's own: its platform, home, PATH, and each binary asked for real. */
+/**
+ * The computer's own: its platform, home, PATH, and each binary asked for real; or, for a
+ * development test, a made-up Mac's Applications and home with no PATH or package managers
+ * (`substrate/app-install.ts`).
+ */
 export function systemGodotEnv(): GodotEnv {
+  const testMac = engineTestMac(process.env, process.platform);
   return {
     platform: process.platform,
-    home: os.homedir(),
-    pathDirs: (process.env.PATH ?? "").split(path.delimiter).filter(Boolean),
-    applications: SYSTEM_APPLICATIONS,
-    binaries: [...FIXED_BINARIES],
+    home: testMac?.home ?? os.homedir(),
+    pathDirs: testMac ? [] : (process.env.PATH ?? "").split(path.delimiter).filter(Boolean),
+    applications: testMac?.applications ?? SYSTEM_APPLICATIONS,
+    binaries: testMac ? [] : [...FIXED_BINARIES],
     version: async (binary) => {
       const { stdout } = await exec(binary, ["--version"], { timeout: VERSION_TIMEOUT_MS }).catch(() => ({
         stdout: "",

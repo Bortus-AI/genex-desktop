@@ -51,6 +51,8 @@ export interface TranscriptContext {
   onShowAssets?: () => void;
   onOpenStudio?: () => void;
   onNotice: Notify;
+  /** The person turned on the plugin a card suggested: tell the agent, so the chat goes on. */
+  onPluginTurnedOn: (name: string) => void;
   /** A held build plan's "Approve plan": answer it with "go", keeping the draft. */
   onApprovePlan: () => Promise<void>;
   /** "Make changes": start the reply in the composer. */
@@ -152,7 +154,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     case EntryKind.Compaction:
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
     case EntryKind.PluginSuggestion:
-      return <PluginSuggestionCard entry={entry} onNotice={onNotice} />;
+      return <PluginSuggestionCard entry={entry} onNotice={onNotice} onTurnedOn={context.onPluginTurnedOn} />;
     default:
       return null;
   }

@@ -8,6 +8,7 @@
 import { lstat, readdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { engineTestMac } from "../../substrate/app-install.ts";
 import { isJsonObject, readJsonIfExists } from "../../substrate/fsx.ts";
 
 /** The first Unity 6 release line: the oldest editors Unity's Pipeline package runs in. */
@@ -40,15 +41,20 @@ export interface EditorsEnv {
   appData: string;
 }
 
-/** This computer's own folders. */
-export function systemEditorsEnv(): EditorsEnv {
+/** This computer's own folders, or a development test's made-up Mac (`substrate/app-install.ts`). */
+export function systemEditorsEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): EditorsEnv {
+  const testMac = engineTestMac(env, platform);
+  if (testMac) return { platform, ...testMac, appData: path.posix.join(testMac.home, "AppData") };
   const home = os.homedir();
-  const windows = process.platform === "win32";
+  const windows = platform === "win32";
   return {
-    platform: process.platform,
+    platform,
     home,
-    applications: windows ? (process.env.ProgramFiles ?? "C:\\Program Files") : "/Applications",
-    appData: process.env.APPDATA ?? path.join(home, "AppData", "Roaming"),
+    applications: windows ? (env.ProgramFiles ?? "C:\\Program Files") : "/Applications",
+    appData: env.APPDATA ?? path.join(home, "AppData", "Roaming"),
   };
 }
 

@@ -398,6 +398,13 @@ const glyphs = {
       <path d="M14.5 6.5a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.1-3.1a5.5 5.5 0 0 1-7.3 7.3l-6.6 6.6a2.05 2.05 0 0 1-2.9-2.9l6.6-6.6a5.5 5.5 0 0 1 7.3-7.3z" />
     </g>
   ),
+  /** A screen on its stand: Genex does the work on this computer. */
+  computer: (
+    <g>
+      <rect x="3.5" y="4.5" width="17" height="11.5" rx="2" />
+      <path d="M9 20h6M12 16v4" />
+    </g>
+  ),
   box: (
     <g className="a-lift">
       <path d="M12 3.5l7.5 4.2v8.6L12 20.5l-7.5-4.2V7.7z" />

@@ -1,11 +1,18 @@
 /**
  * The steps card an engine plugin offers in a game's chat ("Steps for Unreal"): the newest offer in
- * the chat shows until the person says Not now, and a later offer (the agent's show-steps) shows it
+ * the chat shows until the person hides it, and a later offer (the agent's show-steps) shows it
  * again. Its rows come from the plugin, read live, so anything malformed is dropped, not drawn.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseSteps, runStep, stepsOffer, stepsShown } from "../../src/renderer/chat/engine-steps.ts";
+import {
+  finishedSays,
+  parseSteps,
+  runStep,
+  stepsOffer,
+  stepsShown,
+  stuckSays,
+} from "../../src/renderer/chat/engine-steps.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
 
@@ -33,10 +40,10 @@ describe("the steps card's offer", () => {
     assert.equal(stepsOffer([offer(1, { project: "valley" })]), null, "no plugin: nothing to ask");
   });
 
-  it("shows until Not now, and a later offer shows again", () => {
+  it("shows until Hide, and a later offer shows again", () => {
     const first = stepsOffer([offer(1)]);
     assert.equal(stepsShown(first, null), true);
-    assert.equal(stepsShown(first, "000001"), false, "Not now on this offer");
+    assert.equal(stepsShown(first, "000001"), false, "Hide on this offer");
     const again = stepsOffer([offer(1), offer(5)]);
     assert.equal(stepsShown(again, "000001"), true, "the agent showed it again");
     assert.equal(stepsShown(null, null), false);
@@ -81,6 +88,74 @@ describe("the plugin's steps", () => {
     assert.equal(parsed?.steps[3]?.action, undefined, "a malformed button is dropped, the row kept");
     assert.equal(parseSteps({ ...good, open: false })?.open, false);
     for (const bad of [null, "steps", [], { title: 1 }, { ...good, steps: "x" }]) assert.equal(parseSteps(bad), null);
+  });
+
+  it("keeps a step that needs the person, the card's own button and what the agent hears when it's done", () => {
+    const setup = {
+      title: "Unity setup",
+      intro: "Two steps before the agent can build in Unity.",
+      open: true,
+      steps: [
+        { id: "sign-in", label: "Sign in to Unity", detail: "Only you type your password.", done: false, you: true },
+        { id: "install", label: "Install Unity 6", detail: "", done: false, you: "yes", working: true },
+      ],
+      primary: { name: "set-up", args: {}, label: "Do it for me" },
+      doneSays: "Unity 6 is ready.",
+    };
+    const parsed = parseSteps(setup);
+    assert.equal(parsed?.steps[0]?.you, true);
+    assert.equal(parsed?.steps[1]?.you, undefined, "only true marks a step as the person's");
+    assert.equal(parsed?.steps[1]?.working, true, "a step Genex is doing now");
+    assert.equal(parsed?.steps[0]?.working, undefined);
+    assert.deepEqual(parsed?.primary, setup.primary);
+    assert.equal(parsed?.doneSays, "Unity 6 is ready.");
+    const skip = { name: "skip", args: {}, label: "Don't use Unity" };
+    assert.deepEqual(
+      parseSteps({ ...setup, secondary: skip })?.secondary,
+      skip,
+      "the plugin's own way out, in Hide's place",
+    );
+    const plain = parseSteps({ ...setup, primary: { name: 1 }, doneSays: 5, secondary: { label: 2 } });
+    assert.equal(plain?.secondary, undefined);
+    assert.equal(plain?.primary, undefined, "a malformed card button is dropped");
+    assert.equal(plain?.doneSays, undefined);
+  });
+});
+
+describe("a setup card that finishes", () => {
+  const card = (open: boolean, doneSays?: string) =>
+    parseSteps({ title: "Unity setup", intro: "", open, steps: [], ...(doneSays ? { doneSays } : {}) });
+
+  it("tells the agent once, when the card it showed has nothing left open", () => {
+    assert.equal(finishedSays(card(true), card(false, "Unity 6 is ready.")), "Unity 6 is ready.");
+    assert.equal(finishedSays(card(true), card(true, "Unity 6 is ready.")), null, "still a step open");
+    assert.equal(finishedSays(card(false), card(false, "Unity 6 is ready.")), null, "it was never shown open");
+    assert.equal(finishedSays(null, card(false, "Unity 6 is ready.")), null, "nothing was read before");
+    assert.equal(finishedSays(card(true), card(false)), null, "a plugin that says nothing: the chat stays quiet");
+    assert.equal(finishedSays(card(true), null), null, "a failed read is no finish");
+  });
+});
+
+describe("a setup card whose step stops", () => {
+  const card = (stuck?: string) =>
+    parseSteps({ title: "Unity setup", intro: "", open: true, steps: [], ...(stuck ? { stuckSays: stuck } : {}) });
+
+  it("tells the agent once what stopped, so it can finish the step another way", () => {
+    assert.equal(parseSteps({ title: "T", intro: "", open: true, steps: [], stuckSays: 3 })?.stuckSays, undefined);
+    assert.equal(stuckSays(card(), card("Unity's install stopped.")), "Unity's install stopped.");
+    assert.equal(
+      stuckSays(null, card("Unity's install stopped.")),
+      null,
+      "a stop from before the chat opened was told then",
+    );
+    assert.equal(stuckSays(card("Unity's install stopped."), card("Unity's install stopped.")), null, "said once");
+    assert.equal(
+      stuckSays(card("Hub stopped."), card("Unity's install stopped.")),
+      "Unity's install stopped.",
+      "a new stop",
+    );
+    assert.equal(stuckSays(card("Unity's install stopped."), card()), null, "nothing stopped now");
+    assert.equal(stuckSays(card(), null), null);
   });
 });
 

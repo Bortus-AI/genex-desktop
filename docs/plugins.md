@@ -2167,11 +2167,17 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 `new-game`). `new-game` offers the plugin's steps card (`game.engine.steps` appends
 `engine_steps`) while a step is open.
 
+On a Mac without the Unreal Genex makes games with, `show-steps` brings the Unreal button out and
+shows the install card instead (`unrealInstallCard`): Get the Epic Games Launcher (Epic's download
+page; ticked once the launcher is in Applications), then Install Unreal 5.8 in it, the person's own
+step (Epic's sign-in), with Open the Epic Games Launcher; Don't use Unreal (`skip`) in Hide's place;
+once Unreal is found in a game whose chat chose it, the card closes and tells the agent.
+
 The steps card ("Unreal setup") sits above the composer while nothing else waits there. A row's
 button runs its plugin action as every surface does (`runPluginAction`): one that declares
 `confirmation` is reviewed and approved in the native dialog first. Its
 rows are the plugin's `steps` action, read every 5 s while it shows, so Xcode installed or opened
-outside Genex is ticked by itself; it goes when no step is open, and Not now hides it for that game
+outside Genex is ticked by itself; it goes when no step is open, and Hide puts it away for that game
 until the next offer. Unreal's rows: the project is set up, then Install Xcode (Open App Store) and
 Open Xcode once, or the one Terminal line for another developer folder, or Update Xcode for one too
 old for the engine, or Add Xcode N for one too new (Apple's developer downloads page; a second
@@ -2354,7 +2360,8 @@ The Roblox Studio plugin declares `multiplayer` (3 players, probe `players-state
 
 ### The bundled Unity plugin
 
-Unity (`src/plugins/unity`, id `unity`, off until turned on) reaches the person's open Unity editor
+Unity (`src/plugins/unity`, id `unity`, off until turned on, `game-engine` for its setup card and
+its page's Editor state) reaches the person's open Unity editor
 through Unity's Pipeline package (`com.unity.pipeline`), the HTTP server an editor runs on
 127.0.0.1 while a project holding the package is open in it. It asks for no engine link: a game's
 Unity project is the one in the game's own folder, found with the walk and the rule the host finds
@@ -2367,8 +2374,7 @@ it keeps the real paths of the project and of the game's folder in the plugin's 
 its folder `mcp/<game>`) and believes only while that folder is still a Unity project at exactly
 that path. The handler's trouble is a note, never a block.
 
-The plugin makes, sets up and opens that project itself (`backend.ts`), with no Unity CLI and no
-sign-in of its own:
+The plugin makes, sets up and opens that project itself (`backend.ts`), with no sign-in of its own:
 
 - `new-game` (`makes: ["unity-project"]`, `ready: "engine-status"`, the scaffold `Unity game`)
   writes an empty project into the game's folder as `unity/` (`new-project.ts`): `Assets/`,
@@ -2382,8 +2388,32 @@ sign-in of its own:
   windows) and replaces the untitled scene a new project opens with by a saved
   `Assets/Scenes/Main.unity` holding a camera and a light, so no later save has a file name to ask
   for (`editor-life.ts` `firstSetup`). The harness tool `engine-status` answers the engine
-  question's `{ready, note}`: ready with a Unity 6 installed, else that the person installs one in
-  Unity Hub.
+  question's `{ready, note}`: ready with a Unity 6 installed, else that the agent calls
+  `show-steps` and ends its reply.
+- `show-steps` puts the Unity setup card in the game's chat (`game.engine.steps`) while a step is
+  open. Its `steps` action answers the rows (`setup-steps.ts`): Unity Hub (`/Applications/Unity
+  Hub.app`), the person's sign-in (a license file exists: `~/Library/Unity/licenses/
+  UnityEntitlementLicense.xml` or `/Library/Application Support/Unity/Unity_lic.ulf`; never read)
+  and a Unity 6 editor. `get-hub` downloads Unity's own `UnityHubSetup-<arch>.dmg`, mounts it
+  read-only, copies `Unity Hub.app` into Applications only when `codesign` accepts it and names
+  Unity's team (`9QW8UQUTAA`), and unmounts it; elsewhere than a Mac it opens Unity's page.
+  `open-hub` opens Hub for the sign-in, which stays the person's. `install-unity` checks for about
+  12 GB free, asks Hub for its releases (`-- --headless editors --releases --json`), picks the
+  newest final release of the line Genex was measured on (`INSTALL_LINE`, else the newest final
+  Unity 6) and starts `-- --headless install` on its own, its output kept in
+  `unity-setup/editor-install.log` and read back for the row's percentage or why it stopped.
+  `stop` (the card's Stop while Genex works) ends the download, the sign-in wait and Hub's install
+  (its process group) and keeps it as stopped for Try again, telling the agent nothing; `skip`
+  (**Don't use Unity**, in Hide's place) stops too and closes the card for that game, so the agent
+  offers a web game, until it shows the card again. `set-up` (the card's Do it for me) runs these in order, its sign-in row waiting on the person for
+  up to 30 minutes. Hub is copied into Applications under another name and renamed, so a half copy
+  never reads as installed; the row reads Hub's phase and percentage past its terminal escapes and
+  Chromium's log lines. Once nothing is open the card tells the agent (`doneSays`) and the chat
+  goes on; when an install stops it tells the agent once (`stuckSays`): finish it in Unity Hub's
+  own window with the `desktop` tool when computer control is on, else say what stopped (a stop
+  only the person can fix, such as disk space, never asks for clicking). A development test points
+  the backend at a made-up Mac with `STUDIO_ENGINE_TEST_ROOT` (its `Applications/` and `home/`),
+  which the host passes to the plugin's backend; the app never sets it.
 - `setup` and `undo-setup` (each with a `confirmation`) add the Pipeline package's line to an
   existing project's manifest, or take it back (`setup.ts`): the manifest is read by real path
   inside the project, never through a link out of it; a copy is kept in the plugin's storage before
@@ -2433,7 +2463,7 @@ command, so the toolbar may ask as often as it does.
 
 | Step (`PanelStep`) | When | Badge | The panel offers |
 | --- | --- | --- | --- |
-| `get-unity` | No Unity 6 is installed and the game has no project to open | Get | Get Unity |
+| `get-unity` | No Unity 6 is installed and the game has no project to open | Not installed | Get Unity |
 | `no-game`, `no-project` | No game is open, or its folder holds no Unity project | none | Words only |
 | `old-project` | The project was saved with a Unity older than 6 | Not set up | Open Unity Hub |
 | `not-set-up` | Its manifest does not ask for the Pipeline package | Not set up | Set up |
@@ -2444,15 +2474,16 @@ command, so the toolbar may ask as often as it does.
 | `stalled` | Its server is there and its main thread runs nothing | Stalled, `warn`, `attention` | Restart Unity |
 
 Every badge but Stalled is a `dot` (grey, amber while Starting, green once Ready). The first three
-steps never reach the button, which a game without a Unity project doesn't show.
+steps never reach the button, which a game without a Unity project doesn't show; the plugin page's
+Editor connection reads the same word, so it never says Ready without Unity.
 
 The actions take nothing from their arguments: each acts on the open game's own project.
 `open-editor`, `setup`, `undo-setup` and `restart-editor` run the steps of the agent's tools of
 those names and answer in codes the panel words itself (an `Opening`, `{changed, version, opening}`,
 `{changed}`, `{ended, opening?}`); a refusal is worded for the person, not for an agent.
 `get-unity` opens Unity Hub where its installer puts it (`/Applications/Unity Hub.app`, a folder
-that is no link), else `https://unity.com/download`. These five are `native`, so a fixture profile
-refuses them; `setup`, `undo-setup` and `restart-editor` carry a `confirmation`. No action makes a
+that is no link), else `https://unity.com/download`. These five and the setup card's four buttons
+are `native`, so a fixture profile refuses them; `setup`, `undo-setup` and `restart-editor` carry a `confirmation`. No action makes a
 project: that changes what a game is, which Genex snapshots around a tool that declares `makes`,
 so a game without a project is sent to the chat. The panel asks `status` every 3 s while it is in
 view and waits 200 s for an action that opens Unity, past the host's limit for one call, so the
@@ -2996,6 +3027,12 @@ only the project (Godot's `.godot/` cache) and the job's own folder, gets a priv
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
 (`gpu`). Its observer is a `card` whose `stage-status` says where the game stands (get Godot, set
 it up for Genex's play, open it, or open in the person's Godot) and its manifest has no lock: it never drives the person's editor.
+On a Mac without Godot 4.3 or newer, `show-steps` (and the refusals of `new-game` and the engine
+question's note, which point to it) puts the Godot setup card in the chat (`godot-setup.ts`): one
+step, with Do it for me (`install-godot`: the newest stable Godot 4 universal Mac zip from Godot's
+GitHub releases, unpacked in the plugin's storage, `Godot.app` copied into Applications only when
+`codesign` accepts it and names Godot's team, `6K46PWY5DM`), Stop (`stop-install`) and Don't use
+Godot (`skip`) in Hide's place, and `doneSays` once Godot is found.
 Set up (and New Godot game) also turns on the addon's editor plugin (`addons/genex/editor_bridge.gd`,
 `[editor_plugins]` in `project.godot`). Its hooks reach the person's open editor through files in the
 project's `.godot/genex/` (`editor-bridge.ts`; no port): the editor writes a heartbeat each second

@@ -13,22 +13,43 @@ import { STEPS_WORDS } from "../words.ts";
 /** The plugin action the card reads its rows from. */
 export const STEPS_ACTION = "steps";
 
-/** Where the card was last offered: the record's id (Not now remembers it), the plugin and the game. */
+/** Where the card was last offered: the record's id (Hide remembers it), the plugin and the game. */
 export type StepsOffer = { id: string; pluginId: string; project: string };
 
 /** A step's button: the plugin action it runs, with its arguments, and its label. */
 export type StepButton = { name: string; args: Record<string, string>; label: string };
-/** One row: a done step is ticked; an open one may have a button, or a line to run in Terminal. */
+/**
+ * One row: a done step is ticked; an open one may have a button, or a line to run in Terminal.
+ * `you` marks a step only the person can do (signing in), or one that stopped and waits for them;
+ * `working` one Genex is doing now.
+ */
 export type StepRow = {
   id: string;
   label: string;
   detail: string;
   done: boolean;
+  you?: true;
+  working?: true;
   action?: StepButton;
   command?: string;
 };
-/** The card as the plugin answers it. */
-export type StepsCard = { title: string; intro: string; open: boolean; steps: StepRow[] };
+/**
+ * The card as the plugin answers it. `primary` is the card's own button that does every step it
+ * can for the person (Do it for me); `doneSays` is what the agent is told once nothing is open, and
+ * `stuckSays` what it is told when a step Genex ran for the person stopped, so it can finish it
+ * another way (with computer control) or tell the person.
+ */
+export type StepsCard = {
+  title: string;
+  intro: string;
+  open: boolean;
+  steps: StepRow[];
+  primary?: StepButton;
+  /** The plugin's own way out in Hide's place (Don't use Unity, or Stop while it works). */
+  secondary?: StepButton;
+  doneSays?: string;
+  stuckSays?: string;
+};
 
 /** The newest offer in a chat's log, or null. */
 export function stepsOffer(events: readonly EventEnvelope[]): StepsOffer | null {
@@ -43,7 +64,7 @@ export function stepsOffer(events: readonly EventEnvelope[]): StepsOffer | null 
   return null;
 }
 
-/** Whether an offer still shows: the person said Not now to an earlier one, or to none. */
+/** Whether an offer still shows: the person hid an earlier one, or none. */
 export const stepsShown = (offer: StepsOffer | null, dismissed: string | null): offer is StepsOffer =>
   offer !== null && offer.id !== dismissed;
 
@@ -67,6 +88,8 @@ function parseRow(raw: unknown): StepRow | undefined {
     label: raw.label,
     detail: isText(raw.detail) ? raw.detail : "",
     done: raw.done,
+    ...(raw.you === true ? { you: true as const } : {}),
+    ...(raw.working === true ? { working: true as const } : {}),
     ...(action ? { action } : {}),
     ...(isText(raw.command) && raw.command ? { command: raw.command } : {}),
   };
@@ -76,7 +99,37 @@ function parseRow(raw: unknown): StepRow | undefined {
 export function parseSteps(raw: unknown): StepsCard | null {
   if (!isRecord(raw) || !isText(raw.title) || !isText(raw.intro) || !Array.isArray(raw.steps)) return null;
   const steps = raw.steps.map(parseRow).filter((row): row is StepRow => row !== undefined);
-  return { title: raw.title, intro: raw.intro, open: raw.open === true, steps };
+  const primary = parseButton(raw.primary);
+  const secondary = parseButton(raw.secondary);
+  return {
+    title: raw.title,
+    intro: raw.intro,
+    open: raw.open === true,
+    steps,
+    ...(primary ? { primary } : {}),
+    ...(secondary ? { secondary } : {}),
+    ...(isText(raw.doneSays) && raw.doneSays ? { doneSays: raw.doneSays } : {}),
+    ...(isText(raw.stuckSays) && raw.stuckSays ? { stuckSays: raw.stuckSays } : {}),
+  };
+}
+
+/**
+ * What the agent is told when a card it showed open has nothing left open (the person, or Genex for
+ * them, finished it), so the chat goes on by itself; null while a step is open, for a card never
+ * seen open, and for a plugin that names nothing to say.
+ */
+export function finishedSays(previous: StepsCard | null, next: StepsCard | null): string | null {
+  if (!previous?.open || !next || next.open) return null;
+  return next.doneSays ?? null;
+}
+
+/**
+ * What the agent is told when a step the card showed going stopped while the chat looked on: once
+ * per stop, never for a stop from before the chat opened (it was told then), and null otherwise.
+ */
+export function stuckSays(previous: StepsCard | null, next: StepsCard | null): string | null {
+  if (!previous || !next?.stuckSays || next.stuckSays === previous.stuckSays) return null;
+  return next.stuckSays;
 }
 
 /**
@@ -85,7 +138,15 @@ export function parseSteps(raw: unknown): StepsCard | null {
  * The card shows no picture review, so a review that asks for one is cancelled.
  */
 export async function runStep(plugin: PluginInfo | null, offer: StepsOffer, row: StepRow): Promise<unknown> {
-  const action = row.action;
+  return runButton(plugin, offer, row.action);
+}
+
+/** One of the card's buttons pressed (a step's, Do it for me, or the plugin's own way out), run as `runStep` runs one. */
+export async function runButton(
+  plugin: PluginInfo | null,
+  offer: StepsOffer,
+  action: StepButton | undefined,
+): Promise<unknown> {
   if (!action) return undefined;
   if (!plugin) throw new Error(STEPS_WORDS.pluginGone);
   return runPluginAction({

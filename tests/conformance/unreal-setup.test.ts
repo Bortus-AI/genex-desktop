@@ -24,7 +24,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { createUnrealBackend, PanelStep } from "../../src/plugins/unreal/backend.ts";
 import { type Launch, type LaunchEnv, systemLaunchEnv } from "../../src/plugins/unreal/editor-launch.ts";
-import { UnrealStepId, unrealSteps, XcodeStep } from "../../src/plugins/unreal/engine-steps.ts";
+import { UnrealStepId, unrealInstallCard, unrealSteps, XcodeStep } from "../../src/plugins/unreal/engine-steps.ts";
 import type { PluginEngineLink } from "../../src/plugin-sdk/index.d.ts";
 import { pluginBackendEnv } from "../../src/substrate/plugins/process.ts";
 import { editorLogPath, readEditorLog } from "../../src/plugins/unreal/editor-log.ts";
@@ -1785,4 +1785,35 @@ describe("Updating the Genex editor helper refuses, writing nothing,", () => {
         witness,
       );
     });
+});
+
+describe("The Unreal setup card for a Mac without Unreal", () => {
+  it("asks for Epic's launcher, then the person's install of Unreal in it, with Don't use Unreal", () => {
+    const none = unrealInstallCard({ launcher: false, version: "5.8", installed: false, skipped: false });
+    assert.equal(none.open, true);
+    assert.deepEqual(
+      none.steps.map((step) => [step.id, step.done]),
+      [
+        [UnrealStepId.GetLauncher, false],
+        [UnrealStepId.InstallEngine, false],
+      ],
+    );
+    assert.equal(none.steps[0]?.action?.name, "get-unreal");
+    assert.equal(none.steps[1]?.you, true, "only the person signs in to Epic and installs in its launcher");
+    assert.equal(none.steps[1]?.action, undefined, "no launcher to open yet");
+    assert.deepEqual(none.secondary, { name: "skip", args: {}, label: "Don't use Unreal" });
+    const launcher = unrealInstallCard({ launcher: true, version: "5.8", installed: false, skipped: false });
+    assert.equal(launcher.steps[0]?.done, true);
+    assert.equal(launcher.steps[1]?.action?.label, "Open the Epic Games Launcher");
+  });
+
+  it("closes with what the agent is told: Unreal is there, or the person chose not to use it", () => {
+    const ready = unrealInstallCard({ launcher: true, version: "5.8", installed: true, skipped: false });
+    assert.equal(ready.open, false);
+    assert.match(String(ready.doneSays), /Unreal 5\.8 is installed/);
+    assert.match(String(ready.doneSays), /unreal__new-game/);
+    const skipped = unrealInstallCard({ launcher: false, version: "5.8", installed: false, skipped: true });
+    assert.equal(skipped.open, false);
+    assert.match(String(skipped.doneSays), /web game/);
+  });
 });

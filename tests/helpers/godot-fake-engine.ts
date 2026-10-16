@@ -11,6 +11,7 @@ import { createGodotBackend } from "../../src/plugins/godot/backend.ts";
 import type { EditorEnv, Launch } from "../../src/plugins/godot/editor.ts";
 import { BRIDGE_FOLDER } from "../../src/plugins/godot/editor-bridge.ts";
 import type { GodotEnv } from "../../src/plugins/godot/find-godot.ts";
+import type { GodotInstallDeps } from "../../src/plugins/godot/godot-setup.ts";
 import { type GodotCall, GodotJob, type GodotResult, type GodotRunner } from "../../src/plugins/godot/godot-run.ts";
 import { tmpDir } from "./tmp.ts";
 
@@ -180,7 +181,13 @@ export type HostCall = { method: string; args: unknown };
  * with `game: null`; the host keeps storage in `storage/` and makes a game `made/` when asked.
  */
 export async function godotBackendFixture(
-  options: { apps?: FakeApp[]; answers?: JobAnswers; game?: string | null; editorLines?: string[] } = {},
+  options: {
+    apps?: FakeApp[];
+    answers?: JobAnswers;
+    game?: string | null;
+    editorLines?: string[];
+    install?: GodotInstallDeps;
+  } = {},
 ) {
   const mac = await fakeMac(options.apps);
   const storage = path.join(mac.root, "storage");
@@ -197,6 +204,7 @@ export async function godotBackendFixture(
     scripts: SCRIPTS,
     templates: TEMPLATES,
     addon: ADDON,
+    ...(options.install ? { install: options.install } : {}),
   });
   const hostCalls: HostCall[] = [];
   /** The game's engine link as the host keeps it (`game.engine.link` / `game.engine.read`). */
@@ -205,6 +213,7 @@ export async function godotBackendFixture(
     hostCalls.push({ method, args });
     if (method === "storage.root") return storage;
     if (method === "game.engine.read") return link;
+    if (method === "game.engine.steps") return true;
     if (method === "game.engine.link") {
       const project = typeof args === "object" && args !== null && "project" in args ? String(args.project) : "";
       link = { kind: "godot", project, name: path.basename(path.dirname(project)), linkedAt: "2026-10-15T00:00:00Z" };

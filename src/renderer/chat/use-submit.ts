@@ -90,7 +90,10 @@ export function useSubmit(
  * plain chat message, with no bubble, no draft change and no reply-about note. It carries the chat's
  * Loop only before the chat's first build, and never reopens one (`reportCommissions`).
  */
-export function useReport(props: ChatPanelProps, chat: ChatThread, composer: ChatComposerState) {
+/** Sends words the chat wrote itself, marked with who wrote them. */
+export type Report = (text: string, origin: MessageOrigin) => Promise<void>;
+
+export function useReport(props: ChatPanelProps, chat: ChatThread, composer: ChatComposerState): Report {
   const { model } = composer;
   const { threadId, run } = chat;
   return async (text: string, origin: MessageOrigin): Promise<void> => {

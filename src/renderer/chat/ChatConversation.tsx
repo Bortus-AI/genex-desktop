@@ -8,10 +8,11 @@ import { PerformanceComponent } from "../../shared/performance.ts";
 import { QueueState } from "../../shared/message-queue.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { QueuedMessage, SendingMessage } from "../panels/QueuedMessage.tsx";
-import type { Notify } from "../state/toasts.ts";
+import { MessageOrigin } from "../../shared/protocol.ts";
+import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
-import { PLAN_WORDS } from "../words.ts";
+import { PLAN_WORDS, pluginTurnedOnWords } from "../words.ts";
 import type { ChatHistory } from "./chat-panel-props.ts";
 import { ChatWork } from "./ChatWork.tsx";
 import { type ConversationEntry, entrySize } from "./conversation-entries.ts";
@@ -40,6 +41,10 @@ function useTranscriptContext(parts: ChatParts): TranscriptContext {
         const { composer, focusComposer } = latest.current;
         if (!composer.drafts.draft) composer.drafts.setDraft(PLAN_WORDS.changePrefill);
         focusComposer();
+      },
+      onPluginTurnedOn: (name: string) => {
+        const { report, props } = latest.current;
+        void report(pluginTurnedOnWords(name), MessageOrigin.PluginTurnedOn).catch(notifyProblem(props.onNotice));
       },
     }),
     [],
