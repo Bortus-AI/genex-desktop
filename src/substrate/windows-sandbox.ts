@@ -32,6 +32,7 @@ import { promisify } from "node:util";
 import type { SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { SECOND_MS } from "../shared/duration.ts";
 import { StudioPlatform } from "../shared/boot.ts";
+import { ROBLOX_WINDOWS_SIGN_IN_STORES } from "./credential-homes.ts";
 import { errorMessage } from "../shared/errors.ts";
 import {
   editFolderAces,
@@ -243,7 +244,8 @@ export function writeDeniesBeyondRead(denyWrite: readonly string[], denyRead: re
 /**
  * Paths no agent process may read on Windows, under `home` and the roaming and local app-data
  * folders: SSH and cloud credentials, Git and GitHub CLI tokens, the Windows credential and DPAPI
- * stores, and browser profiles. The coding CLIs' homes come from `credentialHomes()`.
+ * stores, browser profiles and Roblox's sign-ins. The coding CLIs' homes come from
+ * `credentialHomes()`.
  */
 export function windowsDenyRead(home: string, env: Record<string, string | undefined> = process.env): string[] {
   const appData = env.APPDATA ?? path.join(home, "AppData", "Roaming");
@@ -268,6 +270,7 @@ export function windowsDenyRead(home: string, env: Record<string, string | undef
     path.join(localAppData, "Google", "Chrome", "User Data"),
     path.join(localAppData, "Microsoft", "Edge", "User Data"),
     path.join(localAppData, "BraveSoftware", "Brave-Browser", "User Data"),
+    ...ROBLOX_WINDOWS_SIGN_IN_STORES.map((parts) => path.join(localAppData, ...parts)),
   ];
 }
 

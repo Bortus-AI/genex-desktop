@@ -46,6 +46,7 @@ import {
   credentialHomes,
   HOME_SIGN_IN_STORES,
   openCodeServicePassword,
+  ROBLOX_ASSISTANT_SETTINGS,
   sandboxedCliHomes,
 } from "./credential-homes.ts";
 import { isInside } from "./paths.ts";
@@ -348,6 +349,23 @@ export function baseDenyRead(
   ];
 }
 
+/**
+ * Paths no agent process may write on `platform`, on top of the caller's list: the coding CLIs'
+ * sign-in homes and Roblox Studio's Assistant settings (which switch its MCP server).
+ */
+export function baseDenyWrite(
+  home = os.homedir(),
+  platform: NodeJS.Platform = process.platform,
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  const localAppData = env.LOCALAPPDATA ?? path.join(home, "AppData", "Local");
+  const assistant =
+    platform === StudioPlatform.Windows
+      ? path.join(localAppData, ...ROBLOX_ASSISTANT_SETTINGS.windows)
+      : path.join(home, ...ROBLOX_ASSISTANT_SETTINGS.mac);
+  return [...credentialHomes(), assistant];
+}
+
 /** `.claude` in any case, as a sandbox glob: macOS's file system does not tell the cases apart. */
 const CLAUDE_FOLDER_GLOB = "[.][cC][lL][aA][uU][dD][eE]";
 /** What {@link literalGlob} rewrites character by character. */
@@ -450,7 +468,11 @@ export class ProcessSandbox {
       allowWrite: [...options.writableRoots, scratchDir, ...own],
       allowRead: options.readableRoots ?? [],
       denyRead: [...baseDenyRead(os.homedir(), platform).filter(notOwn), ...options.secretPaths],
-      denyWrite: [...credentialHomes().filter(notOwn), ...options.secretPaths, ...(options.denyWrite ?? [])],
+      denyWrite: [
+        ...baseDenyWrite(os.homedir(), platform).filter(notOwn),
+        ...options.secretPaths,
+        ...(options.denyWrite ?? []),
+      ],
     };
     const sandbox = new ProcessSandbox(policy, options.enabled ?? true, scratchDir, platform);
     sandbox.#toolPath = options.toolPath ?? null;

@@ -1757,7 +1757,8 @@ in: …") name them first. A manifest is
 refused when a folder is `/`, the home folder or a folder holding it, `~/Library`,
 `~/Library/Application Support`, `~/Documents`, `~/Desktop` or `~/Downloads`, or is, holds or sits
 inside a login or Genex's own data (`~/.claude`, `~/.codex`, `~/.genex`, `~/.ssh`, `~/.aws`,
-`~/Library/Keychains`, `~/Library/Application Support/Genex`), compared case-blind. The Unreal
+`~/Library/Keychains`, `~/Library/HTTPStorages`, `~/Library/Roblox`,
+`~/Library/Application Support/Genex`), compared case-blind. The Unreal
 plugin names the two its build tool writes: `~/Library/Application Support/Epic/UnrealBuildTool`
 and `/private/tmp/.dotnet`.
 

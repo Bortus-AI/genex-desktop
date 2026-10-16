@@ -275,7 +275,8 @@ Its seat (`WorkerSeat`, `#workerReach`) carries:
   out, and so is one that is, holds or sits in a never-touch root (`writableRoots`);
 - the never-touch list ([`never-touch-list.ts`](../src/main/core/never-touch-list.ts)): the sign-ins
   (each coding CLI's whole home, the stores every agent's box denies (`baseDenyRead`: `~/.ssh`,
-  `~/.aws`, `~/.config/gh`, `~/.netrc`, `~/Library/Keychains`), `~/.genex`, Genex's secrets and
+  `~/.aws`, `~/.config/gh`, `~/.netrc`, `~/Library/Keychains`, `~/Library/HTTPStorages`,
+  `~/Library/Roblox`), `~/.genex`, Genex's secrets and
   engine homes), Genex's own data (this profile's data folder and the other profiles the app names
   at start, `StudioCoreOptions.neverTouch`: the normal profile's and a developer build's
   `.studio-dev/profiles`), and every other game's folder (the normal profile's `~/AI Games` too when
