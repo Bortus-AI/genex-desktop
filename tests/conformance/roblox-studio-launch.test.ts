@@ -164,6 +164,25 @@ describe("quitting Roblox Studio", () => {
 });
 
 describe("starting a program", () => {
+  it("never hides Studio's window: a detached app that stays opens its own", async () => {
+    const seen: Array<{ windowsHide?: boolean; detached?: boolean }> = [];
+    const spawner = (
+      _file: string,
+      _args: readonly string[],
+      options: { windowsHide?: boolean; detached?: boolean },
+    ) => {
+      seen.push(options);
+      return {
+        once: (event: string, listener: () => void) => (event === "spawn" ? listener() : undefined),
+        unref() {},
+      };
+    };
+    await systemOpener({ file: "C:\\Roblox\\RobloxStudioBeta.exe", args: [] }, spawner);
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]?.detached, true);
+    assert.equal(seen[0]?.windowsHide, undefined, "Windows would open Studio's main window hidden");
+  });
+
   it("passes every argument as it is, through no shell", async () => {
     const dir = await tmpDir("roblox-launch-");
     // A shell would run these in the test's working folder; the name holds no folder of its own.

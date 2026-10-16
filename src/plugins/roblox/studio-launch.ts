@@ -191,10 +191,21 @@ export async function quitStudio(deps: LaunchDeps, waitMs = QUIT_WAIT_MS): Promi
   return false;
 }
 
-/** Starts a program detached from the backend, with no window of its own on Windows and no shell. */
-export const systemOpener: Opener = (launch) =>
+/** How the opener starts a program: `spawn`'s shape, as far as it uses it. */
+export type OpenerSpawn = (
+  file: string,
+  args: readonly string[],
+  options: { detached: boolean; stdio: "ignore" },
+) => { once(event: string, listener: (...args: never[]) => void): unknown; unref(): void };
+
+/**
+ * Starts a program detached from the backend, through no shell. Never hidden: Studio and the
+ * `open` it goes through are apps that stay, and on Windows a hidden start opens the app's own main
+ * window hidden too (its save questions and sign-in then can't be answered).
+ */
+export const systemOpener = (launch: Launch, start: OpenerSpawn = spawn): Promise<void> =>
   new Promise((resolve, reject) => {
-    const child = spawn(launch.file, launch.args, { detached: true, stdio: "ignore", windowsHide: true });
+    const child = start(launch.file, launch.args, { detached: true, stdio: "ignore" });
     child.once("error", reject);
     child.once("spawn", () => {
       child.unref();
