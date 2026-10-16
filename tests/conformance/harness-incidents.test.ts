@@ -15075,6 +15075,21 @@ describe("a game its engine plugin plays in its editor, with judges", () => {
     assert.match(host.prompts()[1] ?? "", /No judge played save point "One": the Loop's working time is nearly over/);
   });
 
+  it("EJ7. a round whose working time runs out while a judge plays starts no further judge, and the lead hears which didn't play", async () => {
+    const host = await toyLoop([savesOne, finishes]);
+    host.judging = () => {
+      // The first judge plays past the Loop's working time.
+      host.pass(3 * 60 * 60_000);
+      return undefined;
+    };
+    await host.start();
+    assert.deepEqual(judgesPlayed(host), ["crowd"]);
+    assert.match(
+      host.prompts()[1] ?? "",
+      /The judges' round after save point "One" stopped before the Plain judge played: the Loop's working time is over/,
+    );
+  });
+
   it("EJ6. the chat's judge_play plays as the judge it names; a kept older judge that can't is refused, playing nothing", async () => {
     const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
     const { servesEngineJudges } = await import("../../src/harness-seed/loop/engine-judges.ts");

@@ -35,4 +35,7 @@ export const ENGINE_JUDGE_WORDS = {
   /** Why the round stopped before a judge played: the Loop is stopping or held. */
   cut: (label: string, unplayed: readonly JudgeRef[]) =>
     `The judges' round after save point "${label}" stopped before ${unplayed.map((judge) => `the ${judge.label} judge`).join(" and ")} played: the Loop is stopping.`,
+  /** Why the round stopped before a judge played: the Loop's working time ran out during the round. */
+  timeUp: (label: string, unplayed: readonly JudgeRef[]) =>
+    `The judges' round after save point "${label}" stopped before ${unplayed.map((judge) => `the ${judge.label} judge`).join(" and ")} played: the Loop's working time is over.`,
 } as const;

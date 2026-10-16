@@ -57,17 +57,25 @@ const carry = (open: OpenLoop, line: string): void => {
   open.journal.carried.push(line);
 };
 
-/** Each judge in turn on the save point; the ones a stop left unplayed. */
-async function playEach(loopRun: LoopRun, open: OpenLoop, point: OpenSavePoint, play: JudgePlay): Promise<JudgeRef[]> {
+/** Why a round left judges unplayed: a stop, or the working time running out. */
+const RoundEnd = { Stopped: "stopped", TimeUp: "time-up" } as const;
+type RoundEnd = (typeof RoundEnd)[keyof typeof RoundEnd];
+
+/** The judges a round left unplayed, and why. */
+type RoundCut = { unplayed: JudgeRef[]; why: RoundEnd };
+
+/** Each judge in turn on the save point, none once the working time is over; the ones left unplayed, and why. */
+async function playEach(loopRun: LoopRun, open: OpenLoop, point: OpenSavePoint, play: JudgePlay): Promise<RoundCut> {
   const judges = loopJudges(loopRun);
   const asker = { ...leadAsker(loopRun), until: loopRun.softDeadline };
   for (const [i, judge] of judges.entries()) {
-    if (stopped(loopRun, open)) return judges.slice(i);
+    if (stopped(loopRun, open)) return { unplayed: judges.slice(i), why: RoundEnd.Stopped };
+    if (open.clock.now() >= loopRun.softDeadline) return { unplayed: judges.slice(i), why: RoundEnd.TimeUp };
     const ask = ENGINE_JUDGE_WORDS.roundAsk(judge, point);
     const answer = await askJudge(asker, { ask, judge: judge.id }, play);
     carry(open, ENGINE_JUDGE_WORDS.played(judge, point.label, answer));
   }
-  return [];
+  return { unplayed: [], why: RoundEnd.Stopped };
 }
 
 /**
@@ -81,7 +89,10 @@ export async function judgeRound(loopRun: LoopRun, open: OpenLoop, play: JudgePl
     carry(open, ENGINE_JUDGE_WORDS.noTime(point.label));
     return;
   }
-  const unplayed = await playEach(loopRun, open, point, play);
-  if (unplayed.length) carry(open, ENGINE_JUDGE_WORDS.cut(point.label, unplayed));
+  const { unplayed, why } = await playEach(loopRun, open, point, play);
+  if (unplayed.length) {
+    const words = why === RoundEnd.TimeUp ? ENGINE_JUDGE_WORDS.timeUp : ENGINE_JUDGE_WORDS.cut;
+    carry(open, words(point.label, unplayed));
+  }
   await loopRun.saveJournal().catch(() => {});
 }
