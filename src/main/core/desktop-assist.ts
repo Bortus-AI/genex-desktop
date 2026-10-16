@@ -13,8 +13,8 @@
  *   Genex asks nothing more; any other shows the task on a card first, every time.
  * - **Computer control off.** A card offers to turn it on, for every chat (it is one setting).
  * - **Apps.** The turn may drive only the Mac apps the plugin's `engine.apps` declares; a call
- *   cannot widen them. The grant lasts until the turn that answers the task ends, and never past
- *   {@link ASSIST_GRANT_MAX_MS}.
+ *   cannot widen them. Only the turn that answers the task holds the grant (never another turn of
+ *   the chat running beside it), until it ends and never past {@link ASSIST_GRANT_MAX_MS}.
  * - **Where it can't run.** Windows, or a Mac with no desktop driver: `unavailable`, and the
  *   plugin shows its click path instead.
  */
@@ -98,6 +98,18 @@ export class AssistGrants {
       return null;
     }
     return { pluginId: held.pluginId, apps: held.apps, messageId: held.messageId };
+  }
+  /**
+   * The chat's grant for one session: only the turn that answers its message (the turn the message
+   * started, or the running turn it was steered into) holds it, so a build turn running beside the
+   * assist never drives the engine's editor. A session with no turn the host can follow (the
+   * harness's own loop) holds it within {@link ASSIST_GRANT_MAX_MS}.
+   */
+  forTurn(threadId: string, turn: string | undefined): AssistGrant | null {
+    const grant = this.live(threadId);
+    if (!grant || turn === undefined) return grant;
+    const into = this.#held.get(threadId)?.into ?? null;
+    return turn === grant.messageId || turn === into ? grant : null;
   }
   /** A message was steered into the running turn `into`: if it is the grant's, that turn answers it. */
   steered(threadId: string, into: string, messageId: string): void {

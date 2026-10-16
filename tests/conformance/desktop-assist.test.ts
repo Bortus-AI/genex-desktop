@@ -195,6 +195,17 @@ describe("an assist's grant", () => {
     assert.equal(grants.live("chat-1"), null);
   });
 
+  it("drives the engine's app only in the turn that answers its message, never in a build turn running beside it", () => {
+    const grants = new AssistGrants(() => 0);
+    grants.record("chat-1", grant);
+    assert.equal(grants.forTurn("chat-1", "msg_running"), null, "a turn still building is refused Studio");
+    assert.ok(grants.forTurn("chat-1", "msg_a"), "the turn its message started");
+    grants.steered("chat-1", "msg_running", "msg_a");
+    assert.ok(grants.forTurn("chat-1", "msg_running"), "the running turn once its message was steered into it");
+    assert.equal(grants.forTurn("chat-2", "msg_a"), null, "another chat never holds it");
+    assert.ok(grants.forTurn("chat-1", undefined), "a session the host can't follow gets it within its limit");
+  });
+
   it("never outlasts its limit, whatever the host could not see", () => {
     let now = 1_000;
     const grants = new AssistGrants(() => now);

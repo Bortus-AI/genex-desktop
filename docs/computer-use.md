@@ -269,9 +269,10 @@ window's tree). A refusal ends the plan and its reason is the answer.
   tool call whose own card they approved (`confirmed` on the call, set by the host); a plugin from a
   folder or the marketplace shows the task on a card first, and with the setting off the studio's
   card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
-  <task>" to the game's chat and grants that chat the plugin's declared apps until the turn
-  answering the message ends (the turn it started, or the running turn it was steered into), and
-  never past 20 minutes. That chat's own session then works as below, with its session and app
+  <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
+  running turn it was steered into; never another turn of the chat building beside it) the
+  plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
+  can follow holds it for those 20 minutes. That chat's own session then works as below, with its session and app
   cards. Windows and a Mac with no driver answer `unavailable`. Roblox Studio's **Publish an
   update** is the one assist that is not a setup click ([plugins](plugins.md)): the
   person presses it or approves the agent's `publish-update` card, and the chat clicks File ›

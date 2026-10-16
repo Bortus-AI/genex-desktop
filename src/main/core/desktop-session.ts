@@ -84,11 +84,12 @@ export async function desktopSessionTools(
     return answer.approved;
   };
   const grants = assistGrants(core);
-  // An engine's editor is driven only by its plugin's setup assist, read afresh on every action.
+  // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
+  // read afresh on every action.
   const engineApps = (app: DesktopApp) =>
     engineAppRefusal(app, {
       declared: declaredEngineApps(core.plugins.list()),
-      granted: grants.live(place.threadId)?.apps ?? null,
+      granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
     });
   const tools = desktop.toolsFor({
     enabled: () => computerControlOn(core),
