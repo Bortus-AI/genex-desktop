@@ -147,6 +147,8 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
 .error{color:var(--err);white-space:pre-wrap;overflow-wrap:anywhere}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 @media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:none}.orb{animation:none}}
+/* On a dialog's card the dialog holds the heading and the padding: the page keeps a thin edge for focus rings. */
+:root[data-surface="card"] body{padding:4px}
 /* Last, so it wins over every class that sets a display. */
 [hidden]{display:none}
 </style></head><body>
@@ -154,16 +156,16 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
   <p id="checking" class="quiet" role="status">Looking for Godot…</p>
 
   <section id="get" hidden aria-labelledby="get-title">
-    <div class="intro"><h2 id="get-title" class="title" tabindex="-1">Get Godot</h2><p id="get-why" class="quiet"></p></div>
+    <div class="intro" data-panel-head><h2 id="get-title" class="title" tabindex="-1">Get Godot</h2><p id="get-why" class="quiet"></p></div>
     <div class="block">
       <div class="pad"><p>Download Godot 4 from godotengine.org, then put Godot in Applications. It's free and open source, about 150 MB.</p></div>
-      <div class="foot"><button type="button" id="get-godot" class="primary external">Get Godot</button><button type="button" id="recheck" class="quiet">Check again</button></div>
+      <div class="foot"><button type="button" id="get-godot" class="primary external">Get Godot</button><button type="button" id="recheck">Check again</button></div>
     </div>
     <p class="waiting"><span class="orb" aria-hidden="true"></span>Waiting for Godot in Applications. This page moves on by itself.</p>
   </section>
 
   <section id="pick" hidden aria-labelledby="pick-title">
-    <div class="view-head"><button type="button" id="back" class="icon" aria-label="Back" hidden><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><h2 id="pick-title" class="title" tabindex="-1">Choose a project</h2></div>
+    <div class="view-head" data-panel-head><button type="button" id="back" class="icon" aria-label="Back" data-panel-back hidden><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><h2 id="pick-title" class="title" tabindex="-1">Choose a project</h2></div>
     <div class="block"><div class="new-row">
       <span class="tile small new" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
       <div class="row-text"><span class="row-name">New Godot project</span><span id="pick-new-text" class="quiet small"></span></div>
@@ -176,13 +178,13 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
       </div>
       <ul id="projects" class="block list" aria-labelledby="pick-have"></ul>
       <p id="no-projects" class="quiet small" hidden>No Godot projects in Documents › Godot Projects or Godot's own list yet.</p>
-      <div class="actions"><button type="button" id="choose" class="quiet"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Choose a project.godot…</button></div>
+      <div class="actions"><button type="button" id="choose"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Choose a project.godot…</button></div>
       <p id="outside-note" class="quiet small" hidden>Outside game: chats use it, Rewind and Loops can't reach it.</p>
     </div>
   </section>
 
   <section id="new" hidden aria-labelledby="new-title">
-    <div class="intro"><h2 id="new-title" class="title" tabindex="-1">New Godot project</h2><p id="new-where" class="quiet"></p></div>
+    <div class="intro" data-panel-head><h2 id="new-title" class="title" tabindex="-1">New Godot project</h2><p id="new-where" class="quiet"></p></div>
     <fieldset id="cards" class="cards"><legend class="sr-only">Template</legend>
       <label class="card"><input type="radio" name="template" value="3d" checked><span class="blank" aria-hidden="true">3D</span><span><strong>3D</strong> · a player that walks and jumps under a sky</span></label>
       <label class="card"><input type="radio" name="template" value="2d"><span class="blank" aria-hidden="true">2D</span><span><strong>2D</strong> · a player that moves around the screen</span></label>
@@ -210,7 +212,7 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
         <div class="foot">
           <button type="button" id="primary" class="primary" hidden></button>
           <div class="end">
-            <button type="button" id="change" class="quiet">Change project</button>
+            <button type="button" id="change">Change project</button>
             <details id="more" class="menu">
               <summary aria-label="More"><svg class="dots" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg></summary>
               <div class="menu-body">

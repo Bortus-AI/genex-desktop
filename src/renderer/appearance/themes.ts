@@ -880,6 +880,9 @@ export function themeVariables(p: Palette, contrast = DEFAULT_CONTRAST): Record<
     "--border": edge,
     "--input": controlBorder,
     "--line-strong": controlBorder,
+    // A box inside a card (a setup step): as quiet as the card's own edge where light, which a
+    // dark card would swallow, so there it takes the control edge.
+    "--line-soft": luminance(p.background) > LIGHT_BACKGROUND ? edge : controlBorder,
     "--accent-primary": p.accent,
     "--accent-primary-dark": p.accent,
     "--accent-ink": accentInk,

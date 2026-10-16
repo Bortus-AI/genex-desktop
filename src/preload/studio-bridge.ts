@@ -281,8 +281,13 @@ function pluginCalls(bridge: BridgeCalls) {
     pluginUpdate: (id) => invoke("studio:plugins.update", { id }),
     pluginWatch: (id, enabled) => invoke("studio:plugins.watch", { id, enabled }),
     pluginForgetAllowed: (id) => invoke("studio:plugins.forget-allowed", { id }),
-    pluginConsent: (consentId, approved, always) =>
-      invoke("studio:plugins.consent", { consentId, approved, ...(always ? { always } : {}) }),
+    pluginConsent: (consentId, approved, always, input) =>
+      invoke("studio:plugins.consent", {
+        consentId,
+        approved,
+        ...(always ? { always } : {}),
+        ...(input !== undefined ? { input } : {}),
+      }),
     permissions: () => invoke("studio:permissions.get"),
     setPermissionMode: (threadId, mode) => invoke("studio:permissions.mode", { threadId, mode }),
     answerPermission: (requestId, answer) => invoke("studio:permissions.answer", { requestId, answer }),

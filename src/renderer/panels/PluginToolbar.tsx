@@ -38,7 +38,6 @@ import { type Notify, ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { cn } from "../ui/cn.ts";
 import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
-import { DialogSurface } from "../ui/dialog.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
@@ -46,8 +45,7 @@ import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plu
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
-import { PanelSurface } from "./panel-bridge.ts";
-import { PluginPanelHost } from "./PluginPanelHost.tsx";
+import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 
 /** Status refreshes coalesce: a burst of change events wakes each plugin's process once. */
 const STATUS_DEBOUNCE_MS = SECOND_MS;
@@ -612,24 +610,17 @@ export function PluginToolbar({
         <GenexPublishDialog plugin={livePanelPlugin} project={project} onClose={() => setPanel(null)} />
       ) : null}
       {panel?.document && livePanelPlugin ? (
-        <DialogSurface
+        <PluginPanelDialog
+          plugin={livePanelPlugin}
+          document={panel.document}
           title={panel.title}
-          size="2xl"
-          className="h-[min(680px,calc(100dvh-2rem))] grid-rows-[auto_1fr]"
+          project={project}
           onDismiss={() => {
             setPanel(null);
             // What the panel just did (a setup, an Open) shows on the button now, not at the next tick.
             refreshRef.current();
           }}
-        >
-          <PluginPanelHost
-            plugin={livePanelPlugin}
-            document={panel.document}
-            project={project}
-            surface={PanelSurface.Card}
-            className="h-full min-h-0 w-full rounded-control border-0"
-          />
-        </DialogSurface>
+        />
       ) : null}
       {review ? <PluginApproval review={review} onClose={() => setReview(null)} /> : null}
     </>

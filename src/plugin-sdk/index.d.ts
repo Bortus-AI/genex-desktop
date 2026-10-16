@@ -159,6 +159,12 @@ export interface PluginManifestTool extends PluginTool {
   host?: PluginHostTool;
   /** API 3: who may call the tool; agents when absent. */
   audience?: PluginToolAudience;
+  /**
+   * API 3, with `confirmation`: one of the tool's string parameters the person may edit on its card,
+   * shown under the question in a field labelled `label` (one plain line, at most 60 characters).
+   * Their Allow runs the call with what the field holds (one plain line, 1–200 characters).
+   */
+  confirmationInput?: { parameter: string; label: string };
   /** API 3, agent tools only: the kind of asset a call makes. */
   asset?: PluginToolAsset;
 }
@@ -623,12 +629,21 @@ export interface PluginHostCall {
    * agent clicks it with the person's computer control, on the apps your `engine.apps` declares
    * and no others. Only for setup clicks and publishing the person approved, never to build or
    * play-test. The person must have asked: call it from an action they pressed, or from a tool
-   * that declares `confirmation` whose card they approved; any other call answers `not-person`.
+   * that declares `confirmation` whose card they approved; any other call answers `not-person`
+   * (a plugin that came with Genex may also call it from its own tools, never from a moment; while
+   * the chat's own assist is under way, such a call answers `in-assist` and posts nothing).
    * A plugin that did not come with Genex shows the task on a card first; computer control that
    * is off is offered on a card for every chat. Windows, or a Mac with no driver, answers
    * `unavailable`: show the click path instead.
    */
   (method: "game.engine.assist", args: PluginEngineAssistArgs): Promise<PluginEngineAssistAnswer>;
+  /**
+   * `game-engine`: whether Do it for me can run for your plugin on this computer: computer control
+   * has a desktop and its driver, and your `engine.apps` names apps here. Computer control that is
+   * off still counts (its card offers to turn it on). Asks the person nothing; false on Windows.
+   * Offer Do it for me only when it answers true, and the click path otherwise.
+   */
+  (method: "game.engine.canAssist"): Promise<boolean>;
 }
 
 /** `game.engine.assist`'s task: what the chat is asked to click, in plain words. */
@@ -637,7 +652,7 @@ export interface PluginEngineAssistArgs {
 }
 
 /** Why `game.engine.assist` started nothing. */
-export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps";
+export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps" | "in-assist";
 
 /** `game.engine.assist`'s answer: whether the chat's turn started, and why not. */
 export interface PluginEngineAssistAnswer {
@@ -785,6 +800,14 @@ export interface PluginPanelContext {
     /** A primary button's fill while hovered, still readable under `accentForeground`. */
     accentHover?: string;
   };
+  /**
+   * What the frame sits on: `"page"` (the plugin's page) or `"card"` (a dialog). In a dialog the SDK
+   * marks the document `data-surface="card"`, shows the panel's visible `[data-panel-head]` (its
+   * heading and the line under it) as the dialog's title, sizes the frame to the panel's height so
+   * the dialog scrolls once, and lets the dialog's Back arrow press the visible `[data-panel-back]`.
+   * Absent from older hosts.
+   */
+  surface?: "page" | "card";
 }
 
 /**

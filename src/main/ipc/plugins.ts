@@ -87,9 +87,10 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
   // channel, and the core's RPC table has no equivalent, so no agent can approve its own request.
   handle("studio:plugins.consent", async (p) => {
     const always = p?.always ?? false;
-    if (typeof p?.consentId !== "string" || typeof p.approved !== "boolean" || typeof always !== "boolean")
-      throw new Error(MESSAGE.invalidConsent);
-    return { resolved: core.resolveConsent(p.consentId, p.approved, always) };
+    const input = p?.input;
+    const answer = typeof p?.consentId === "string" && typeof p.approved === "boolean" && typeof always === "boolean";
+    if (!answer || (input !== undefined && typeof input !== "string")) throw new Error(MESSAGE.invalidConsent);
+    return { resolved: core.resolveConsent(p.consentId, p.approved, always, input) };
   });
   handle("studio:plugins.list", async () => core.plugins.list());
   handle("studio:plugins.catalog", async () => core.plugins.catalog());

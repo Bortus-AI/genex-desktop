@@ -21,6 +21,7 @@ import {
   missingAssets,
 } from "./luau-tools.ts";
 import type { InstallRun } from "./studio-install.ts";
+import { SETUP_PROMPTS } from "./setup-prompts.ts";
 import { MESSAGE } from "./words.ts";
 
 /** The computer the checks work on: the processor, the program runner, the network and the unpacker. */
@@ -87,7 +88,7 @@ export async function checkScriptsTool(
   args: Record<string, unknown>,
 ): Promise<CheckScriptsAnswer> {
   const { tools } = await toolsFor(home, context);
-  if (Object.keys(tools.programs).length === 0) return { checked: false, message: MESSAGE.Checks.NotAdded };
+  if (Object.keys(tools.programs).length === 0) return { checked: false, message: SETUP_PROMPTS.ChecksNotAdded };
   if (!context.directory) return { checked: false, message: MESSAGE.Checks.NoGame };
   const done = await check(home, luau, context, { folder: context.directory, all: args.all === true });
   const counts = { errors: done.errors, warnings: done.warnings, format: done.format };

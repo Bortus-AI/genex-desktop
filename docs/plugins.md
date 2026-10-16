@@ -149,6 +149,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` and `game-engine` |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
+| `tools[].confirmationInput` | 3 | `{parameter, label}`, with `confirmation`: one of the tool's string parameters the person may edit on the card, under a one-line label of at most 60 characters; see the consent model below |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
 | `tools[].facts`, `tools[].makes` | 3 | The facts of the games whose sessions get the tool, and (agent tools) the facts it makes in a game's folder; see [Scope by facts](#scope-by-facts) |
 | `skills[]` | 1 | Guidance for agents while the plugin is enabled: inline `{name, text}`, or (API 3) a file skill `{name, summary, file, references?}`, either (API 3) with `facts` (or the older `engines`) and `tools`; see [Skills](#skills) |
@@ -275,8 +276,9 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
-  the stage (`role="dialog"`, labelled with the panel title, closed by a button reading
-  `Close <title>`); the native game view is hidden while it is open.
+  the stage (`role="dialog"`, titled with the panel's own visible `data-panel-head` heading, else
+  the panel title; one scroll, the frame as tall as the panel); the native game view is hidden while
+  it is open.
 - `requiresProject` (default `true`) hides the button until a game is loaded.
 - `facts` (API 3, 1–8 fact ids) shows the button only on a game served by one of them (an
   engine's project); absent, every game. An engine plugin's button always names them and an `icon`,
@@ -1191,7 +1193,8 @@ Studio closed, then opening Studio, its MCP server and the place), the MCP switc
 Studio's settings and the helper version Genex's record names, without reading `~/Documents`. On
 the next step the panel adds Restart Studio beside Do it for me, Studio's click path, what Genex
 waits for, and on a Mac before Set up the Documents note. Do it for me is offered only where Genex
-can click (`canClick`: a Mac) and only while the switch is off; while Studio doesn't answer, the MCP
+can click (`canClick`, the host's `game.engine.canAssist`: a Mac with computer control's driver;
+elsewhere Restart Studio and Studio's click path) and only while the switch is off; while Studio doesn't answer, the MCP
 row first says to sign in on Studio's sign-in screen, and with no place open, the place step's
 buttons show beside it. Restart Studio reopens the game's own place. Answers are said in one
 persistent live region; Do it for me and Publish an update first say a question may wait in the
@@ -1363,9 +1366,29 @@ beside it (whole or not at all, never over a file), adds the lock lines to `.git
 (`studio-launch.ts`): `--task EditFile --localPlaceFile`, or `--task EditPlace --placeId
 --universeId` for a published place (ids of digits only), each starting a Studio of its own, so
 **Open Studio** brings Studio forward instead when the game's place is already listed. **Quit
-Studio** is Studio's normal quit and is refused while a build uses Studio (`game.engine.runs`).
-`use-project` switches a game to an open place by its listed name or a file by path, never reading
-Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
+Studio** and **Restart Studio** use Studio's normal quit and are refused while a build uses Studio
+(`game.engine.runs`). `use-project` links a game to an open place by its label from `places` or a
+file by path (the agent's own call when the game has no place or lost it; another place only when
+the person asks), never reading Documents, Desktop or Downloads: a file there is linked by its label
+once open in Studio. `show-steps` puts the steps card in the chat.
+
+**Every press is also the agent's** (`tools.ts`, `setup-prompts.ts`). Setup is the agent's job, so
+each press of the panel is an agent tool under the action's own name: `setup`, `undo-setup`,
+`restart-studio`, `get-studio` and `add-luau-checks` (each with its press's card), `quit-studio`
+(a card, though its press has none: an agent never closes Studio unasked), `do-it-for-me`,
+`open-studio`, `cancel-get-studio` and `places` (no card; `places` lists open Studios and Studio's
+recent files, never Documents), beside `use-project`, `new-game`, `publish-update` and
+`first-publish`. Their answers, the connection's refusals ("isn't open for this game", "isn't
+answering", "isn't linked") and the engine question's words name the tool for the next step,
+never a click for the person; only signing in, macOS's own prompts and Studio's or Roblox's own
+questions stay theirs. `do-it-for-me` starts the MCP switch's click itself when Studio is open,
+set up and silent with its switch off, and otherwise answers which tool does the step that is
+missing (`get-studio`, `restart-studio`, `open-studio`); a plugin that came with Genex may start
+its setup assist from its own tool with no card of its own, computer control's card asking only
+while the setting is off. The turn that answers the assist's message clicks it itself: its own
+`do-it-for-me` answers `in-assist` and posts nothing. Where Genex can't click and Studio has no
+settings file yet, `restart-studio` can't switch the MCP server on either, so that one click is the
+person's and the answers give its path.
 
 **Ask first.** Roblox's own AI tools, uploads and Creator Store inserts are plugin tools with a
 `confirmation` card (`ai-tools.ts`, `insert-asset.ts`, `AskFirstTool` in `studio-tools.ts`), so
@@ -1406,18 +1429,40 @@ origin, and the mesh is uploaded to the person's account only when they publish.
 comes in. When Studio can't add it, the answer names the checked file and Studio's own File ›
 Import 3D.
 
-**Publish an update** (`publish.ts`). No Studio or plugin API publishes a place, and Open Cloud's
-place publishing takes API keys Genex never asks for, so publishing is a Do it for me: the panel's
-`publish-update` action (native, after its card, which names the place) and the agent's
-`publish-update` tool (a card every call; no lock) send the game's changed script files to Studio,
-then hand the game's chat "Publish <place> to Roblox: File › Publish to Roblox in its Roblox Studio
-window…" through `game.engine.assist`, which accepts only the pressed action or the approved card.
-It updates a place that is already published (its link has `remote` ids): the panel offers it in
-the place block once every step is done. A place never published gets the first publish's click
-path and no assist, because Roblox asks for the game's details and an age check there; the person
-then presses Choose another place and links the published place again. Computer control is a Mac's
-only: on Windows the place block shows Studio's click path instead of the button, and with no
-driver the answer gives it.
+**Publishing** (`publish.ts`, the `publish` skill). No Studio or plugin API publishes a place, and
+Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me
+that the person approves on a card: the game's changed script files go to Studio first, then the
+game's chat is handed the task through `game.engine.assist`, and the turn that answers it (the
+agent's own turn when the message joins it) clicks File › Publish to Roblox in Studio itself, as
+the `publish` skill says. A place never published gets **Publish to
+Roblox** (the panel's `first-publish`, native, with a name field filled with the game's title, its
+card naming the name; the agent's `first-publish {name}`, whose card shows the name in a field the
+person may edit, `confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
+keeping Studio's privacy and settings and an empty description, stopping at any age, ID, two-step,
+terms or payment question. The name is one plain line of at most 50 characters (the game's title,
+else the place's name); the agent's `name` is required, and one Roblox wouldn't take as the card
+showed it (empty, longer, double quotes) clicks nothing and asks for one that fits, never
+publishing under another. A published place gets **Publish an update** (`publish-update`, which
+first links a place just published by hand): "Publish <place> to Roblox: File › Publish to Roblox
+in its Roblox Studio window…". Each answers the other's case with the right tool, clicking nothing.
+The place block keeps Studio's click path under either button, and where Genex can't click (no
+driver, Windows, or the person said no), the answer and the block give it instead.
+
+**After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
+reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no
+longer matches. A first publish leaves a note (`publish/<game>.json`: the name, the linked
+project, the Studio the game was bound to and the places already published in the open Studios)
+for `PUBLISH_NOTE_MS` (30 minutes), whether the chat clicks it or the person does; where Genex
+can't click, the panel's status leaves it once when it shows Studio's clicks. The panel's status,
+every Genex moment and each publish call then ask the Studios that could be the game's whether
+Roblox has their place now: the noted Studio, the one bound now, and, once no open Studio still
+holds the game's own unpublished place, one whose place carries the noted name. With no note, the
+Studio the game's helper was last connected from is asked within `LOST_STUDIO_MS` (10 minutes) of
+losing it while its place carries the game's own name or title, or while connected when a publish
+call asks. Exactly one place published after the note that no other game builds in is linked with
+its `remote` ids and its published name, keeping the link's project; the chat shows it with Undo,
+and Use in this game is never needed. Two candidates, a place published before, a place another
+game holds, or an old note link nothing.
 
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
@@ -1555,6 +1600,12 @@ acts beyond the game folder. The host — never the plugin, never the agent — 
   chat folds onto one ASK card with Approve and Decline. The card's own channel,
   `studio:plugins.consent`, is Studio-UI only: it keeps the main-frame guard and the core's RPC
   table has no equivalent method, so nothing an agent can call answers a card.
+- A card with a field (`confirmationInput`, API 3) shows the agent's value for that parameter under
+  its question, in a field with the declared label. The person's own Allow sends what the field
+  holds (`studio:plugins.consent {input}`), and the call runs with it as that parameter when it is
+  one plain line of 1–200 characters; otherwise the agent's value stands. The answered card records
+  the value the call ran with. A yes from a mode never edits. The Roblox plugin's `first-publish`
+  uses it for the game's name on Roblox.
 - A local plugin's agent tools ask too, each call, even with no `confirmation`: the card says the
   plugin was loaded from a folder on this Mac and runs with your access, and offers **Always
   allow** for that one tool. The grant (`PluginInfo.allowedTools`) goes when the plugin's code
@@ -1658,14 +1709,20 @@ Available services are capability checked and scoped to the calling plugin:
   plain line, at most 300 characters) to the bound game's chat, posted there verbatim as
   "<plugin name> asks: <task>"; that chat's own session clicks it with the person's computer
   control, on the Mac apps the plugin's `engine.apps` declares and no others. It answers
-  `{started, reason?}`, the reason one of `not-person` (neither an action the person pressed nor
-  a tool call whose own `confirmation` card they approved; the host marks such a call
-  `confirmed`, a Genex moment's or an observer's step never is), `no-chat`, `no-apps`,
+  `{started, reason?}`, the reason one of `not-person` (a Genex moment's or an observer's step, or,
+  from a plugin that did not come with Genex, neither an action the person pressed nor a tool call
+  whose own `confirmation` card they approved; the host marks such a call `confirmed`; a plugin that
+  came with Genex may start one from its own tools), `in-assist` (such an unasked one while the
+  chat's own assist is under way: the turn answering it clicks), `no-chat`, `no-apps`,
   `unavailable` (Windows, or a Mac with no desktop driver: show the click path instead) or
   `declined`. A plugin that did not come with Genex shows the task on a card first, every time;
   with computer control off, the studio's own card offers to turn it on for every chat. It is for
   setup clicks and publishing the person approved, never for building or play-testing
   ([computer use](computer-use.md#the-persons-computer)).
+- `game.engine.canAssist` (capability `game-engine`): whether Do it for me can run for the plugin
+  on this computer: a desktop with its driver, and apps its `engine.apps` declares here (computer
+  control that is off still counts, since its card offers to turn it on). It asks nothing and
+  needs no bound game; offer Do it for me only when it answers true, and the click path otherwise.
 - `credentials.read/write/clear`: plugin-scoped protected storage. Reserved account actions
   `unlock`, `connect`, `disconnect` authorize these operations; agents cannot invoke actions.
   Cache unlocked credentials only in the backend session. Background status must never unlock.

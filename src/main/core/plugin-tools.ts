@@ -12,12 +12,15 @@ import { finishedPayload, roleOf, startedPayload } from "../plugin-activity.ts";
 import type { PluginToolStartedPayload } from "../../shared/game-assets.ts";
 import {
   CallCutOff,
+  CONFIRMATION_INPUT_MAX_CHARS,
+  confirmationInputValue,
   type PluginBinding,
   PluginCallBlocker,
   type PluginConsentBy,
   type PluginConsentEvent,
   type PluginInfo,
   type PluginManifest,
+  type PluginManifestTool,
   type PluginMcpServer,
   PLUGIN_SKILL_TOOL,
   PluginSourceKind,
@@ -323,7 +326,7 @@ export class PluginToolService {
    */
   async requestConsent(
     pluginId: string,
-    tool: PluginTool,
+    tool: PluginTool & Pick<PluginManifestTool, "confirmationInput">,
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
@@ -338,7 +341,7 @@ export class PluginToolService {
        */
       afresh?: boolean;
     } = {},
-  ): Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean }> {
+  ): Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean; input?: string }> {
     const consentId = shortId("consent");
     const attribution = this.#x.pluginCallAttribution.get(binding);
     const threadId = await consentAudience(this.#core, binding, attribution?.runId);
@@ -357,8 +360,10 @@ export class PluginToolService {
       ...(exportReview ? { exportReview } : {}),
       ...(options.offerAlways ? { alwaysOffered: true } : {}),
     };
+    const field = cardField(tool, args);
     const asked: PluginConsentEvent = {
       ...base,
+      ...field,
       state: "pending",
       expiresAt: Date.now() + (this.#core.options.consentTimeoutMs ?? CONSENT_TIMEOUT_MS),
     };
@@ -387,22 +392,33 @@ export class PluginToolService {
       await waiting;
       throw error;
     }
-    const result = await waiting;
+    const { input: sent, ...result } = await waiting;
+    const { edited, shown } = cardEdit(field, result, sent);
+    await this.#recordAnswer({ ...base, ...shown }, result, performance.now() - waitStarted, threadId);
+    return edited ? { ...result, input: edited } : result;
+  }
+
+  /** A card's answer, logged beside its question and announced to the chat. */
+  async #recordAnswer(
+    card: Omit<PluginConsentEvent, "state">,
+    result: { approved: boolean; by: PluginConsentBy; always?: boolean },
+    durationMs: number,
+    threadId: string,
+  ): Promise<void> {
     const answered: PluginConsentEvent = {
-      ...base,
+      ...card,
       state: result.approved ? "approved" : "declined",
       by: result.by,
       ...(result.always ? { always: true } : {}),
-      durationMs: performance.now() - waitStarted,
+      durationMs,
     };
     await this.#core.append([customEventData(CustomEvent.PluginConsent, { ...answered })], threadId);
     this.#core.emit(UiEvent.PluginConsent, {
-      consentId,
+      consentId: card.consentId,
       threadId,
-      project: binding.project,
+      project: card.project,
       state: answered.state,
     });
-    return result;
   }
 
   /**
@@ -1280,6 +1296,35 @@ export function consentArgsDigest(args: Record<string, unknown>): Record<string,
     left -= key.length + Math.min(text.length, room);
   }
   return digest;
+}
+
+/** A card's field as its event carries it: none, or its label and the value it holds. */
+type CardField = Pick<PluginConsentEvent, "input">;
+
+/**
+ * The field a tool's card shows (`confirmationInput`): its label, and the agent's value for that
+ * parameter, cut to what a field sends; nothing for a card with none.
+ */
+function cardField(tool: Pick<PluginManifestTool, "confirmationInput">, args: Record<string, unknown>): CardField {
+  const declared = tool.confirmationInput;
+  if (!declared) return {};
+  const value = args[declared.parameter];
+  const shown = typeof value === "string" ? value.slice(0, CONFIRMATION_INPUT_MAX_CHARS) : "";
+  return { input: { label: declared.label, value: shown } };
+}
+
+/**
+ * What an answer did to a card's field: only the person's own Allow edits, and only a card that
+ * has a field, with one plain line. The field as the answered card shows it, and the edit if any.
+ */
+function cardEdit(
+  field: CardField,
+  result: { approved: boolean; by: PluginConsentBy },
+  sent: string | undefined,
+): { edited?: string; shown: CardField } {
+  if (!field.input || !result.approved || result.by !== "user") return { shown: field };
+  const edited = confirmationInputValue(sent);
+  return edited ? { edited, shown: { input: { ...field.input, value: edited } } } : { shown: field };
 }
 
 /** The run session a call works for, or null for a chat's own call. */

@@ -1,9 +1,10 @@
 /**
  * Do it for me (`game.engine.assist`): an engine plugin hands a setup task to the game's chat,
  * whose own session then clicks it with the person's computer control, limited to the apps the
- * plugin's manifest declares (`engine.apps`). Only the person may start one: a plugin action they
- * pressed, or a tool call whose card they approved. A plugin that did not come with Genex shows the
- * task on a card first, and with computer control off a card offers to turn it on for every chat.
+ * plugin's manifest declares (`engine.apps`). The person starts one: a plugin action they pressed,
+ * or a tool call whose card they approved; a plugin that came with Genex may also start one from its
+ * own tools, for the setup it knows. A plugin that did not come with Genex shows the task on a card
+ * first, and with computer control off a card offers to turn it on for every chat.
  *
  * First the service on a fake host (every refusal, and nothing happening on one), then the grant's
  * life, then the toy engine plugin through a real core: its own action, its confirmed tool, and the
@@ -19,6 +20,7 @@ import {
   AssistCardKind,
   AssistGrants,
   type AssistHost,
+  assistAvailable,
   assistGrants,
   declaredEngineApps,
   declaredPlayerApps,
@@ -91,7 +93,7 @@ function fakeHost(
 }
 
 const assist = (host: AssistHost, binding: PluginBinding = BINDING) =>
-  engineAssist(host, { pluginId: "toy-engine", binding, task: TASK });
+  engineAssist(host, { pluginId: "toy-engine", binding, task: TASK, asked: true });
 
 describe("game.engine.assist", () => {
   it("with computer control off, asks to turn it on; a yes turns it on and posts the task to the chat", async () => {
@@ -161,15 +163,92 @@ describe("game.engine.assist", () => {
   it("answers no-apps for an engine that declares no apps, and no-chat with no game, asking nothing", async () => {
     const noApps = fakeHost({ apps: [], answers: [true] });
     assert.deepEqual(await assist(noApps.host), { started: false, reason: EngineAssistRefusal.NoApps });
-    const unknown = await engineAssist(noApps.host, { pluginId: "someone-else", binding: BINDING, task: TASK });
+    const unknown = await engineAssist(noApps.host, {
+      pluginId: "someone-else",
+      binding: BINDING,
+      task: TASK,
+      asked: true,
+    });
     assert.deepEqual(unknown, { started: false, reason: EngineAssistRefusal.NoApps });
     const noChat = fakeHost({ answers: [true] });
-    const unbound = await engineAssist(noChat.host, { pluginId: "toy-engine", binding: undefined, task: TASK });
+    const unbound = await engineAssist(noChat.host, {
+      pluginId: "toy-engine",
+      binding: undefined,
+      task: TASK,
+      asked: true,
+    });
     assert.deepEqual(unbound, { started: false, reason: EngineAssistRefusal.NoChat });
     for (const fake of [noApps, noChat]) {
       assert.deepEqual(fake.seen.cards, []);
       assert.deepEqual(fake.seen.posted, []);
     }
+  });
+
+  it("a plugin that came with Genex may start its setup task from its own tool, unasked: no task card", async () => {
+    const fake = fakeHost({ control: true });
+    const answer = await engineAssist(fake.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(answer, { started: true });
+    assert.deepEqual(fake.seen.cards, []);
+    assert.equal(fake.seen.posted[0]?.text, `Toy Engine asks: ${TASK}`);
+    // With computer control off, its own card still asks first.
+    const off = fakeHost({ control: false, answers: [false] });
+    const declined = await engineAssist(off.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(declined, { started: false, reason: EngineAssistRefusal.Declined });
+    assert.deepEqual(off.seen.cards, [{ kind: AssistCardKind.ComputerSetting }]);
+  });
+
+  it("while the chat's assist is under way, an unasked one from the same plugin posts nothing and keeps the grant", async () => {
+    const fake = fakeHost({ control: true });
+    const unasked = { pluginId: "toy-engine", binding: BINDING, task: TASK, asked: false };
+    assert.deepEqual(await engineAssist(fake.host, unasked), { started: true });
+    const grant = fake.grants.live("chat-1");
+    // The turn that answers it calls the plugin's tool again instead of clicking.
+    assert.deepEqual(await engineAssist(fake.host, unasked), { started: false, reason: EngineAssistRefusal.InAssist });
+    assert.equal(fake.seen.posted.length, 1, "nothing more was posted");
+    assert.deepEqual(fake.grants.live("chat-1"), grant, "the grant is the first one's");
+    // The person's own press still starts one.
+    assert.deepEqual(await assist(fake.host), { started: true });
+    assert.equal(fake.seen.posted.length, 2);
+  });
+
+  it("any other plugin's call the person didn't make is refused before any card", async () => {
+    const fake = fakeHost({ bundled: false, control: true, answers: [true, true] });
+    const answer = await engineAssist(fake.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(answer, { started: false, reason: EngineAssistRefusal.NotPerson });
+    assert.deepEqual(fake.seen.cards, []);
+    assert.deepEqual(fake.seen.posted, []);
+  });
+
+  it("says whether it can run here: a desktop with its driver, and apps the engine declares; asking nothing", async () => {
+    assert.equal(await assistAvailable(fakeHost().host, "toy-engine"), true);
+    assert.equal(
+      await assistAvailable(fakeHost({ control: false }).host, "toy-engine"),
+      true,
+      "the setting is offered",
+    );
+    assert.equal(await assistAvailable(fakeHost({ desktop: false }).host, "toy-engine"), false, "no driver here");
+    assert.equal(await assistAvailable(fakeHost({ apps: [] }).host, "toy-engine"), false, "nothing it may click");
+    assert.equal(await assistAvailable(fakeHost().host, "someone-else"), false, "not an enabled plugin");
+    const fake = fakeHost({ answers: [true] });
+    await assistAvailable(fake.host, "toy-engine");
+    assert.deepEqual(fake.seen.cards, []);
+    assert.deepEqual(fake.seen.posted, []);
+    assert.equal(fake.control(), false);
   });
 });
 
@@ -257,6 +336,7 @@ const ASSIST_DECLARATIONS = {
     },
     { name: "assist-quietly", audience: "harness", description: "A step of Genex's own.", parameters: NO_ARGS },
     { name: "assist-unasked", description: "A tool with no card of the toy's own.", parameters: NO_ARGS },
+    { name: "can-assist", audience: "harness", description: "Whether Do it for me can run here.", parameters: NO_ARGS },
   ],
 };
 
@@ -393,6 +473,20 @@ describe("the toy engine's Do it for me, through a real core", () => {
     approve = true;
   });
 
+  it("the toy learns from the host whether Do it for me can run here, asking nothing", async () => {
+    const { core } = lite;
+    const cardsBefore = (await cardsSince(0)).length;
+    const can = await core.plugins.tool(
+      `${TOY_PLUGIN_ID}__can-assist`,
+      {},
+      binding,
+      undefined,
+      PluginToolAudience.Harness,
+    );
+    assert.equal(can, true, "a driver is found and the toy declares its editor");
+    assert.equal((await cardsSince(cardsBefore)).length, 0);
+  });
+
   it("a harness step, a hook and an agent tool without its own card are not the person: nothing happens", async () => {
     const { core } = lite;
     const before = posted.length;
@@ -418,5 +512,66 @@ describe("the toy engine's Do it for me, through a real core", () => {
     const unasked = await core.plugins.tool(`${TOY_PLUGIN_ID}__assist-unasked`, {}, binding);
     assert.deepEqual(unasked, { started: false, reason: EngineAssistRefusal.NotPerson });
     assert.equal(posted.length, before, "nothing was posted");
+  });
+});
+
+describe("a plugin that came with Genex starts its setup from its own tool, through a real core", () => {
+  let lite: CoreLite;
+  let binding: PluginBinding;
+  let threadId: string;
+  const posted: string[] = [];
+
+  before(async () => {
+    lite = await coreLite({
+      desktop: desktopControl({
+        findDriver: async () => "/fake/cua-driver",
+        connect: async () => quietDriver(),
+        ownApp: () => false,
+      }),
+      onUiEvent: (event: UiEventData) => {
+        if (event.type !== UiEvent.PluginConsent) return;
+        const payload = event.payload as { consentId: string; state: string };
+        if (payload.state === "pending")
+          void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, true));
+      },
+    });
+    const { core } = lite;
+    await core.plugins.installLocal(await toyWithAssist(), PluginSourceKind.Bundled, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    const dir = (await core.games.scaffold("orchard")).dir;
+    threadId = await core.threadForGame("orchard");
+    binding = { project: "orchard", directory: dir, threadId };
+    core.sendUserMessage = async (text) => {
+      posted.push(text);
+    };
+  });
+
+  after(async () => {
+    lite.core.plugins.cancel();
+    await lite.close();
+  });
+
+  it("an agent tool with no card of its own starts the task; only computer control's own card asks", async () => {
+    const { core } = lite;
+    const answer = await core.plugins.tool(`${TOY_PLUGIN_ID}__assist-unasked`, {}, binding);
+    assert.deepEqual(answer, { started: true });
+    const cards = (await core.store.listEvents(threadId))
+      .filter((event) => event.data.type === "custom" && event.data.event_type === "plugin_consent")
+      .map((event) => (event.data as { payload: { pluginId: string; state: string } }).payload.pluginId);
+    assert.deepEqual(cards, [StudioConsentSource.ComputerSetting, StudioConsentSource.ComputerSetting]);
+    assert.deepEqual(posted, ["Toy Engine asks: Turn on the toy editor's server: Toy › Settings › Server"]);
+  });
+
+  it("a Genex moment's step is still never one: nothing happens", async () => {
+    const { core } = lite;
+    const hooked = await core.plugins.tool(
+      `${TOY_PLUGIN_ID}__assist-quietly`,
+      {},
+      { ...binding, hook: { on: HookEvent.TurnStart } },
+      undefined,
+      PluginToolAudience.Harness,
+    );
+    assert.deepEqual(hooked, { started: false, reason: EngineAssistRefusal.NotPerson });
+    assert.equal(posted.length, 1);
   });
 });

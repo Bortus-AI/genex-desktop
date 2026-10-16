@@ -79,7 +79,7 @@ const MESSAGE = {
   secureField: "the focused field is a password field: the studio never types into one",
   noApp: "no app could be found under that point or in front",
   engineApp: (app: string) =>
-    `${app} is a game engine's editor: computer use never builds or play-tests there — use the engine's own tools`,
+    `${app} is a game engine's editor: computer use never builds or play-tests there — use the engine's own tools. A setup click or a publish there goes through its plugin's tool (such as Do it for me or Publish), and only the turn that answers the task it posts may click it`,
   playerApp: (app: string) =>
     `${app} is where an engine's games are played by everyone: computer use never plays there, not even for setup`,
   outsideAssist: (app: string) => `${app} is not one of the apps this setup step may use`,

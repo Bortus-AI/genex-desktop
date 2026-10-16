@@ -115,13 +115,13 @@ describe("the Loop and Rewind for an engine game", () => {
       assert.equal(engineRewindNote(inside), null);
       assert.equal(
         engineLoopGate(outside),
-        "Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; Valley is in Documents › Unreal Projects. Make a new one from the Unreal button, or move Valley into this game’s folder and choose it there. Each message runs one turn.",
+        "Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; Valley is in Documents › Unreal Projects. Make a new one from the Unreal button, or move Valley into this game’s folder and choose it there. Until then, it does what you ask, then stops.",
       );
       assert.equal(engineLoopGate(outside), unrealLoopGate(outside));
     }
     assert.equal(
       UNREAL_WORDS.loopUnavailable(null, ""),
-      "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+      "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Until then, it does what you ask, then stops.",
     );
   });
 
