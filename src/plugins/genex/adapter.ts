@@ -461,10 +461,16 @@ export class GenexTools {
     if (!(await this.#token())) return { badge: "Connect", tone: "warn", title: MESSAGE.ConnectBadge };
     return {};
   }
+  /**
+   * A project's tools workspace, where the asset commands run. `home/` is the CLI's HOME: the CLI
+   * removes `genex-*` skills from the agent folders under its HOME before every command, so the
+   * user's own must never be that HOME.
+   */
   async #workspace(project: string) {
     if (!PROJECT_NAME.test(project)) throw new Error(PUBLISH_MESSAGE.InvalidProject);
     const cwd = path.join(this.root, "projects", project);
     await mkdir(path.join(cwd, ".genex"), { recursive: true });
+    await mkdir(path.join(cwd, "home"), { recursive: true, mode: 0o700 });
     await atomicWriteJson(path.join(cwd, ".genex/workspace.json"), { mode: "tools", version: 1 });
     return cwd;
   }
@@ -1335,9 +1341,13 @@ export class GenexTools {
       return { kind: GenexCoverOutcome.Failed, message: timedOut ? COVER_MESSAGE.SendTimedOut : errorMessage(error) };
     }
   }
-  /** Asset commands: structured output, the asset timeout, the user's own HOME. */
+  /** Asset commands: structured output, the asset timeout, the workspace's contained HOME. */
   async #cli(cwd: string, args: string[], signal?: AbortSignal): Promise<any> {
-    return this.#spawnCli(cwd, args, signal, { timeoutMs: ASSET_TIMEOUT_MS, parse: true });
+    return this.#spawnCli(cwd, args, signal, {
+      timeoutMs: ASSET_TIMEOUT_MS,
+      parse: true,
+      home: path.join(cwd, "home"),
+    });
   }
   /** Publish commands: plain logs (preview/publish/promote ignore `--json`), a long timeout, a contained HOME. */
   async #cliText(cwd: string, args: string[], signal: AbortSignal | undefined, home: string): Promise<{ out: string }> {
@@ -1349,7 +1359,7 @@ export class GenexTools {
     cwd: string,
     args: string[],
     signal: AbortSignal | undefined,
-    options: { timeoutMs: number; parse: boolean; home?: string; answerExitCodes?: readonly number[] },
+    options: { timeoutMs: number; parse: boolean; home: string; answerExitCodes?: readonly number[] },
   ) {
     const cli = genexCliPath();
     const authEpoch = this.#authEpoch;
