@@ -685,7 +685,10 @@ too), says nothing and keeps no journal; the teardown waits for it a while (`set
 closing Loop's lead hears no more news. While a turn works, `open/news.ts` steers (`interrupt: false`, once each) a pool
 worker's end and question (`NoteKind.WorkerAsks`), a job's end, the app's crash
 (`NoteKind.AppCrashed`) and a reminder `SAVE_REMINDER_MS` after the last save point; a line the
-session read (`DelegateResult.steered`) is not told again, one it never read rides the next digest.
+session read (`DelegateResult.steered`) is not told again, one it never read rides the next digest:
+an engine that can't read mid-turn (Codex, Bonsai) hears news only when its turn ends, at most
+`OPEN_TURN_MS` later. The person's words do cut such a turn, its first included
+([hearing it](conversation-coordinator.md#live-chat-during-a-build)).
 
 One Loop for every project. Run dispatch (`conductRun`) takes the game from the list it already
 read and its profile (`loopProfileOf`): a web game keeps the director on an engine that keeps a

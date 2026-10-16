@@ -252,12 +252,18 @@ server the person runs without a password stays reachable.
 
 ## MCP setup
 
-Studio supports stdio, streamable HTTP and SSE. A stdio command uses argument arrays; each
-argument has its own row so spaces survive editing/import. Studio resolves its launch environment
-through the user's login-shell PATH. A changed launch command requires renewed user trust.
-Imports from Claude Code/Codex configuration are reviewed before installation; unsupported
-fields are reported rather than silently treated as working configuration.
-Save and connect completes setup in one Studio flow. A connected row shows its tool count;
+Add server opens one window: a paste box, then On this Mac or From a URL, a name, the command
+or URL, secret rows (environment variables or headers) and More options (only in this game, see
+this game's folder, start-in folder). Pasting JSON, Codex TOML, a URL, a command line or a
+`claude`/`codex mcp add` line fills the form (`shared/mcp-import.ts` `parseMcpInput`); inline
+values become secrets and unsupported fields are reported. The command is one line split like a
+shell without expansion (`shared/command-line.ts`) and saved as an argument array, quoted back
+when edited. The id comes from the name (`github`, `github-2`) and never changes after saving.
+A URL saves as streamable HTTP and falls back to SSE when the server refuses it; an existing SSE
+server stays SSE. A URL server signs in through the browser when it asks, unless an
+Authorization header is given. Studio resolves its launch environment through the user's
+login-shell PATH. A changed launch command requires renewed user trust.
+Connect completes setup in one Studio flow. A connected row shows its tool count;
 Connect is offered for recovery, not as an extra required step after a successful connection.
 
 Folder roots are opt-in. A server receives only the host-bound project's root when the user

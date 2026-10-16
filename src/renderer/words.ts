@@ -3243,7 +3243,6 @@ export const PLUGINS_WORDS = {
   add: {
     github: "Install from GitHub…",
     server: "Add MCP server…",
-    importConfig: "Import MCP configuration…",
     create: "Create a plugin",
     local: "Load local plugin…",
   },

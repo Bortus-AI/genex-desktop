@@ -1282,6 +1282,7 @@ async function patientSession(
  * turn has none to resume (a fresh one that met the engine's limit before it began). A failure on
  * the first turn is the run's (the crash close); on a later one it is a failed turn — and so is a
  * first turn the host kept refusing because its lock stayed busy: the run closes on its own terms.
+ * A first turn cut short for the user's words is no failure at all (`lineWatchedSession`).
  */
 async function sessionOrFresh(
   loopRun: LoopRun,
@@ -1557,14 +1558,17 @@ async function askAgain(loopRun: LoopRun, wake: WakeState, asked: string): Promi
 }
 
 /**
- * A later turn with a session to resume may be cut short for the user's words: never the first
- * (its brief), the wrap-up, a turn whose run is already over (its `finish` may be under way), or
- * one inside a tool call — cut there, the lead never gets the call's answer (tools.ts counts them).
+ * A turn with a session to resume may be cut short for the user's words — the first too, whose
+ * session has read its brief or is asked it again (`askAgain`): an engine that cannot read input
+ * mid-turn would otherwise hear nothing for a whole open Loop turn. Never one with no session yet
+ * (a fresh lead's first: a cut would leave nothing to resume), the wrap-up, a turn whose run is
+ * already over (its `finish` may be under way), or one inside a tool call — cut there, the lead
+ * never gets the call's answer (tools.ts counts them).
  */
 function mayCut(loopRun: LoopRun, wake: WakeState, kit: TurnKit): boolean {
-  const later = wake.turns > 1 && Boolean(kit.talk.sessionId);
+  const resumable = Boolean(kit.talk.sessionId);
   const inCall = (loopRun.toolsInFlight ?? 0) > 0;
-  return later && !inCall && !wake.wrapping && !loopRunOver(loopRun);
+  return resumable && !inCall && !wake.wrapping && !loopRunOver(loopRun);
 }
 
 /**
@@ -1672,6 +1676,14 @@ async function lineWatchedSession(
   let result: Partial<DelegateResult> | undefined;
   try {
     result = await sessionOrFresh(loopRun, wake, kit, turn);
+    return result;
+  } catch (err) {
+    // A first turn's failure is the run's (`sessionOrFresh`) — unless it was cut short for the
+    // user's words before its session began: then it is asked again (`takeTurn`). The watch settles
+    // first, since the host's answer to the cut may come after the failure the cut caused.
+    await watch.stop();
+    if (!wake.cut) throw err;
+    result = failedTurn(err);
     return result;
   } finally {
     await watch.stop();
