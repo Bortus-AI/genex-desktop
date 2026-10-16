@@ -207,6 +207,20 @@ describe("game.engine.assist", () => {
     assert.deepEqual(off.seen.cards, [{ kind: AssistCardKind.ComputerSetting }]);
   });
 
+  it("while the chat's assist is under way, an unasked one from the same plugin posts nothing and keeps the grant", async () => {
+    const fake = fakeHost({ control: true });
+    const unasked = { pluginId: "toy-engine", binding: BINDING, task: TASK, asked: false };
+    assert.deepEqual(await engineAssist(fake.host, unasked), { started: true });
+    const grant = fake.grants.live("chat-1");
+    // The turn that answers it calls the plugin's tool again instead of clicking.
+    assert.deepEqual(await engineAssist(fake.host, unasked), { started: false, reason: EngineAssistRefusal.InAssist });
+    assert.equal(fake.seen.posted.length, 1, "nothing more was posted");
+    assert.deepEqual(fake.grants.live("chat-1"), grant, "the grant is the first one's");
+    // The person's own press still starts one.
+    assert.deepEqual(await assist(fake.host), { started: true });
+    assert.equal(fake.seen.posted.length, 2);
+  });
+
   it("any other plugin's call the person didn't make is refused before any card", async () => {
     const fake = fakeHost({ bundled: false, control: true, answers: [true, true] });
     const answer = await engineAssist(fake.host, {

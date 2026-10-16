@@ -94,7 +94,9 @@ describe("after a first publish, Genex links the game to the published place by 
     const host = hostFor(mac, game, { assist: () => ({ started: false, reason: "unavailable" }) });
     const backend = createRobloxBackend(mac.deps);
     await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
-    const answer = (await backend.tool?.(RobloxTool.FirstPublish, {}, host.context)) as { started: boolean };
+    const answer = (await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Race" }, host.context)) as {
+      started: boolean;
+    };
     assert.equal(answer.started, false);
     mac.state.studios = [reopened("Sky Race")];
     await backend.action?.(RobloxAction.Status, {}, host.context);
@@ -129,6 +131,34 @@ describe("nothing is linked without one free place to follow", onMacWorld, () =>
     assert.equal((await linkOf(mac.storage, game)).remote, undefined);
   });
 
+  it("a published place already open when the publish was handed over is never taken for the game's", async () => {
+    // The person's own game of the same name, open in another Studio, and a publish nobody clicked.
+    const other: OpenStudio = { id: "studio-o", name: "Sky Race (placeId: 999)", placeId: "999", universeId: "9" };
+    const mac = await robloxMac({ studios: [{ id: "studio-a", name: "sky-race.rbxlx" }, other] });
+    const game = await makeGame(mac, "sky-race", "Sky Race");
+    const file = path.join(game.directory, "sky-race.rbxlx");
+    await writeFile(file, "<roblox/>");
+    const host = hostFor(mac, game, { assist: () => ({ started: false, reason: "declined" }) });
+    const backend = createRobloxBackend(mac.deps);
+    await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
+    await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Race" }, host.context);
+    mac.state.studios = [other];
+    await backend.action?.(RobloxAction.Status, {}, host.context);
+    assert.equal((await linkOf(mac.storage, game)).remote, undefined);
+  });
+
+  it("a published place of that name opened while the game's own place is still unpublished is left alone", async () => {
+    const { mac, game, host, backend } = await linkedGame();
+    await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Race" }, host.context);
+    // The click never happened: the game's place is still open, and the person opens their other game.
+    mac.state.studios = [
+      { id: "studio-a", name: "sky-race.rbxlx" },
+      { id: "studio-o", name: "Sky Race (placeId: 111)", placeId: "111", universeId: "1" },
+    ];
+    await backend.action?.(RobloxAction.Status, {}, host.context);
+    assert.equal((await linkOf(mac.storage, game)).remote, undefined);
+  });
+
   it("a publish note older than its limit is no longer followed", async () => {
     const { mac, game, host, backend } = await linkedGame();
     await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Racers" }, host.context);
@@ -148,12 +178,34 @@ describe("a publish by hand in the game's own Studio", onMacWorld, () => {
     await writeFile(path.join(folder, BINDING_FILE), JSON.stringify(binding));
   }
 
-  it("is linked once Genex lost that Studio, within the limit", async () => {
+  // Flipped: a lost Studio is followed only while its place carries the game's own name.
+  it("is linked once Genex lost that Studio, within the limit, under the game's own name", async () => {
     const { mac, game, host, backend } = await linkedGame();
     await boundAgo(mac, game, 2 * 60_000);
-    mac.state.studios = [{ id: "studio-a", name: "Sky Racers", ...PUBLISHED }];
+    mac.state.studios = [{ id: "studio-a", name: "Sky Race", ...PUBLISHED }];
     await backend.action?.(RobloxAction.Status, {}, host.context);
     assert.deepEqual((await linkOf(mac.storage, game)).remote, PUBLISHED);
+  });
+
+  it("is not, once that lost Studio shows a place of another name", async () => {
+    const { mac, game, host, backend } = await linkedGame();
+    await boundAgo(mac, game, 2 * 60_000);
+    mac.state.studios = [{ id: "studio-a", name: "Obby (placeId: 129143288655360)", ...PUBLISHED }];
+    await backend.action?.(RobloxAction.Status, {}, host.context);
+    assert.equal((await linkOf(mac.storage, game)).remote, undefined);
+  });
+
+  it("publish-update looks for it first: the update starts, with no first publish asked for", async () => {
+    const { mac, game, host, backend } = await linkedGame();
+    await boundAgo(mac, game, 1000);
+    mac.state.studios = [{ id: "studio-a", name: "Sky Racers", ...PUBLISHED }];
+    const answer = (await backend.tool?.(RobloxTool.PublishUpdate, {}, host.context)) as {
+      started: boolean;
+      reason?: string;
+    };
+    assert.deepEqual((await linkOf(mac.storage, game)).remote, PUBLISHED);
+    assert.equal(answer.reason, undefined);
+    assert.equal(answer.started, true);
   });
 
   it("is not, past the limit", async () => {
@@ -170,11 +222,30 @@ describe("a publish by hand in the game's own Studio", onMacWorld, () => {
     mac.state.studios = [{ id: "studio-a", name: "Sky Racers", ...PUBLISHED }];
     await backend.action?.(RobloxAction.Status, {}, host.context);
     assert.equal((await linkOf(mac.storage, game)).remote, undefined, "a look leaves a connected Studio alone");
-    const answer = (await backend.tool?.(RobloxTool.FirstPublish, {}, host.context)) as {
+    const answer = (await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Racers" }, host.context)) as {
       started: boolean;
       reason?: string;
     };
     assert.deepEqual((await linkOf(mac.storage, game)).remote, PUBLISHED);
     assert.equal(answer.reason, "published", "it is on Roblox already: an update, not a first publish");
+  });
+});
+
+describe("where Genex can't click, the person's own first publish", onMacWorld, () => {
+  it("is followed from the panel's look, so Studio reopening it later elsewhere is linked", async () => {
+    const mac = await robloxMac({ studios: [{ id: "studio-a", name: "sky-race.rbxlx" }], canClick: false });
+    const game = await makeGame(mac, "sky-race", "Sky Race");
+    const file = path.join(game.directory, "sky-race.rbxlx");
+    await writeFile(file, "<roblox/>");
+    const host = hostFor(mac, game);
+    const backend = createRobloxBackend(mac.deps);
+    await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
+    const shown = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
+    assert.deepEqual(shown.publish, { published: false, canClick: false, name: "Sky Race" });
+    // Later than a lost Studio is followed, in a Studio Genex never saw.
+    mac.advance(LOST_STUDIO_MS + 60_000);
+    mac.state.studios = [reopened("Sky Race", "studio-z")];
+    await backend.action?.(RobloxAction.Status, {}, host.context);
+    assert.deepEqual((await linkOf(mac.storage, game)).remote, PUBLISHED);
   });
 });

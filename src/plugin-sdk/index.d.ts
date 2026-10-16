@@ -588,7 +588,8 @@ export interface PluginHostCall {
    * and no others. Only for setup clicks and publishing the person approved, never to build or
    * play-test. The person must have asked: call it from an action they pressed, or from a tool
    * that declares `confirmation` whose card they approved; any other call answers `not-person`
-   * (a plugin that came with Genex may also call it from its own tools, never from a moment).
+   * (a plugin that came with Genex may also call it from its own tools, never from a moment; while
+   * the chat's own assist is under way, such a call answers `in-assist` and posts nothing).
    * A plugin that did not come with Genex shows the task on a card first; computer control that
    * is off is offered on a card for every chat. Windows, or a Mac with no driver, answers
    * `unavailable`: show the click path instead.
@@ -609,7 +610,7 @@ export interface PluginEngineAssistArgs {
 }
 
 /** Why `game.engine.assist` started nothing. */
-export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps";
+export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps" | "in-assist";
 
 /** `game.engine.assist`'s answer: whether the chat's turn started, and why not. */
 export interface PluginEngineAssistAnswer {

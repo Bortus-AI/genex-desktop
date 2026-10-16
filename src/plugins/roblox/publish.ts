@@ -2,8 +2,9 @@
  * Publishing to Roblox: a place's first publish, and its updates. No Studio or plugin API publishes a
  * place, and Open Cloud's place publishing takes API keys Genex never asks for, so the person's own
  * computer control clicks File › Publish to Roblox in their Studio: Genex hands the game's chat that
- * task through `game.engine.assist`. Only the person starts one, by the panel's press or by an
- * agent's call whose card they approved; the host refuses anything else.
+ * task through `game.engine.assist`. The person approves every publish: the panel's press, or the
+ * card the manifest declares on the agent's `first-publish` and `publish-update`, which the host
+ * asks before the plugin runs.
  *
  * - **First publish** (`first-publish`): a place never published (its link has no `remote` ids)
  *   becomes a new game on Roblox under the name the person approved (the Genex game's title unless
@@ -49,6 +50,8 @@ export const PublishMiss = {
   FirstPublish: "first-publish",
   /** A first publish of a place Roblox already has: it needs an update. */
   Published: "published",
+  /** An agent's first publish under a name Roblox wouldn't take as it is (empty, too long, changed). */
+  Name: "name",
 } as const;
 export type PublishMiss = (typeof PublishMiss)[keyof typeof PublishMiss];
 
@@ -97,6 +100,24 @@ function plainName(name: string | undefined, max = MAX_TASK_NAME_CHARS): string 
 /** A game's name as Roblox takes it: one plain line of at most {@link MAX_GAME_NAME_CHARS}, no double quotes. */
 const gameName = (name: string | undefined) => plainName(name?.replaceAll('"', "'"), MAX_GAME_NAME_CHARS);
 
+/**
+ * An agent's first publish under a name the card showed but Roblox wouldn't take as it is: empty,
+ * longer than {@link MAX_GAME_NAME_CHARS}, or changed by making it one plain line. Never published
+ * under another name than the card showed: the answer asks for a name that fits. Undefined when
+ * the name fits, or the place isn't one to publish the first time.
+ */
+export function unfitName(place: PublishPlace, requested: string | undefined): PublishAnswer | undefined {
+  if (!place.link || place.link.remote) return undefined;
+  const asked = requested?.trim() ?? "";
+  const fits = gameName(asked);
+  if (asked && fits === asked) return undefined;
+  return {
+    started: false,
+    message: PUBLISH_PROMPTS.NameUnfit(fits || firstPublishName(place)),
+    reason: PublishMiss.Name,
+  };
+}
+
 /** The name a first publish uses: the one asked for, else the Genex game's title, else the place's. */
 export function firstPublishName(place: PublishPlace, requested?: string): string {
   return gameName(requested) || gameName(place.title) || gameName(place.name) || MESSAGE.Publish.DefaultName;
@@ -108,15 +129,16 @@ export function firstPublishName(place: PublishPlace, requested?: string): strin
  */
 export function publishTask(name: string | undefined): string {
   const place = plainName(name) || "this place";
-  return `Publish ${place} to Roblox: ${PUBLISH_CLICK_PATH} in its Roblox Studio window. If Roblox asks for the game's details, an age check or a sign-in, stop and tell the person.`;
+  return `Publish ${place} to Roblox: ${PUBLISH_CLICK_PATH} in its Roblox Studio window, now, with the desktop tool (not publish-update). If Roblox asks for the game's details, an age check or a sign-in, stop and tell the person.`;
 }
 
 /**
  * A first publish's task, shown verbatim in the chat: a new game under `name`, Studio's own clicks
- * and settings, and where the turn stops. The publish skill has the dialog's steps.
+ * done by this turn itself, Studio's settings, and where the turn stops. The publish skill (which the
+ * roblox-studio skill sends a publishing turn to) has the dialog's steps.
  */
 export function firstPublishTask(name: string): string {
-  return `Publish this place to Roblox as a new game named "${gameName(name)}": ${PUBLISH_CLICK_PATH} in its Studio window (steps: publish skill). Keep Studio's privacy and settings, the description empty. Stop at any age, ID, two-step, terms or payment question.`;
+  return `Publish to Roblox as a new game named "${gameName(name)}": ${PUBLISH_CLICK_PATH} in Studio, now, with the desktop tool (not first-publish). Keep Studio's privacy and settings, the description empty. Stop at any age, ID, two-step, terms or payment question.`;
 }
 
 /** Each asker's words for each answer. */
@@ -166,7 +188,8 @@ export async function publishUpdate(
 ): Promise<PublishAnswer> {
   const words = WORDS[asker];
   if (!place.link) return { started: false, message: words.NoPlace, reason: PublishMiss.NoPlace };
-  if (!place.link.remote) return { started: false, message: words.FirstPublish, reason: PublishMiss.FirstPublish };
+  if (!place.link.remote)
+    return { started: false, message: words.FirstPublish(firstPublishName(place)), reason: PublishMiss.FirstPublish };
   const answer = await handOver(deps, publishTask(place.name));
   return answer.started ? { started: true, message: words.Started } : refusedAnswer(answer, words);
 }

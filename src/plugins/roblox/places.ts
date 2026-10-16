@@ -25,6 +25,7 @@ import { isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
 import { PluginService } from "../../shared/plugins.ts";
 import { asAgentInStudio } from "./agent-marks.ts";
 import { writeWhole } from "./place-files.ts";
+import { PLACE_PROMPTS } from "./place-prompts.ts";
 import { ROJO_PROJECT, recordWritten, writtenByGenex } from "./script-sync.ts";
 import {
   type PlaceLink,
@@ -591,7 +592,7 @@ export async function usePlaceNamed(deps: PlaceDeps, context: PluginContext, pla
   try {
     const named = typeof place === "string" ? place.trim() : "";
     if (named && fullPath(deps.platform, named)) {
-      if (guarded(deps, named)) throw new PlaceError(PlaceRefusal.Guarded, MESSAGE.Places.Guarded);
+      if (guarded(deps, named)) throw new PlaceError(PlaceRefusal.Guarded, PLACE_PROMPTS.Guarded);
       return await linkChosen(deps, context, await chosenFile(deps, named));
     }
     const { folder } = await boundGame(context);

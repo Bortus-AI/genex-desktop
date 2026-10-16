@@ -3,7 +3,8 @@
 Use this in the turn that answers "Roblox Studio asks: Publish …". That turn holds Genex's
 computer control over Roblox Studio for this task only: it clicks Studio's own publish dialog,
 because no Studio or plugin API publishes a place and Genex never asks for Roblox API keys. The
-person already approved the publish on a card; don't ask them again.
+person already approved the publish on a card; don't ask them again. This turn does the clicking
+itself with the desktop tool: never call `first-publish`, `publish-update` or `do-it-for-me` here.
 
 ## Rules
 

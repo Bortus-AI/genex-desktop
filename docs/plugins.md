@@ -1359,9 +1359,11 @@ beside it (whole or not at all, never over a file), adds the lock lines to `.git
 (`studio-launch.ts`): `--task EditFile --localPlaceFile`, or `--task EditPlace --placeId
 --universeId` for a published place (ids of digits only), each starting a Studio of its own, so
 **Open Studio** brings Studio forward instead when the game's place is already listed. **Quit
-Studio** is Studio's normal quit and is refused while a build uses Studio (`game.engine.runs`).
-`use-project` switches a game to an open place by its listed name or a file by path, never reading
-Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
+Studio** and **Restart Studio** use Studio's normal quit and are refused while a build uses Studio
+(`game.engine.runs`). `use-project` links a game to an open place by its label from `places` or a
+file by path (the agent's own call when the game has no place or lost it; another place only when
+the person asks), never reading Documents, Desktop or Downloads: a file there is linked by its label
+once open in Studio. `show-steps` puts the steps card in the chat.
 
 **Every press is also the agent's** (`tools.ts`, `setup-prompts.ts`). Setup is the agent's job, so
 each press of the panel is an agent tool under the action's own name: `setup`, `undo-setup`,
@@ -1376,7 +1378,10 @@ questions stay theirs. `do-it-for-me` starts the MCP switch's click itself when 
 set up and silent with its switch off, and otherwise answers which tool does the step that is
 missing (`get-studio`, `restart-studio`, `open-studio`); a plugin that came with Genex may start
 its setup assist from its own tool with no card of its own, computer control's card asking only
-while the setting is off.
+while the setting is off. The turn that answers the assist's message clicks it itself: its own
+`do-it-for-me` answers `in-assist` and posts nothing. Where Genex can't click and Studio has no
+settings file yet, `restart-studio` can't switch the MCP server on either, so that one click is the
+person's and the answers give its path.
 
 **Ask first.** Roblox's own AI tools, uploads and Creator Store inserts are plugin tools with a
 `confirmation` card (`ai-tools.ts`, `insert-asset.ts`, `AskFirstTool` in `studio-tools.ts`), so
@@ -1420,30 +1425,37 @@ Import 3D.
 **Publishing** (`publish.ts`, the `publish` skill). No Studio or plugin API publishes a place, and
 Open Cloud's place publishing takes API keys Genex never asks for, so publishing is a Do it for me
 that the person approves on a card: the game's changed script files go to Studio first, then the
-game's chat is handed the task through `game.engine.assist`, and its next turn clicks File ›
-Publish to Roblox in Studio, as the `publish` skill says. A place never published gets **Publish to
+game's chat is handed the task through `game.engine.assist`, and the turn that answers it (the
+agent's own turn when the message joins it) clicks File › Publish to Roblox in Studio itself, as
+the `publish` skill says. A place never published gets **Publish to
 Roblox** (the panel's `first-publish`, native, with a name field filled with the game's title, its
 card naming the name; the agent's `first-publish {name}`, whose card shows the name in a field the
 person may edit, `confirmationInput`): "Publish this place to Roblox as a new game named "<name>"…",
 keeping Studio's privacy and settings and an empty description, stopping at any age, ID, two-step,
 terms or payment question. The name is one plain line of at most 50 characters (the game's title,
-else the place's name). A published place gets **Publish an update** (`publish-update`): "Publish
-<place> to Roblox: File › Publish to Roblox in its Roblox Studio window…". Each answers the other's
-case with the right tool, clicking nothing. Where Genex can't click (no driver, Windows, or the
-person said no), the answer and the place block give Studio's click path.
+else the place's name); the agent's `name` is required, and one Roblox wouldn't take as the card
+showed it (empty, longer, double quotes) clicks nothing and asks for one that fits, never
+publishing under another. A published place gets **Publish an update** (`publish-update`, which
+first links a place just published by hand): "Publish <place> to Roblox: File › Publish to Roblox
+in its Roblox Studio window…". Each answers the other's case with the right tool, clicking nothing.
+The place block keeps Studio's click path under either button, and where Genex can't click (no
+driver, Windows, or the person said no), the answer and the block give it instead.
 
 **After a publish** (`relink.ts`) Genex links the game to the published place by itself: Studio
 reopens a newly published place under its name ("<name> (placeId: N)"), which the game's link no
 longer matches. A first publish leaves a note (`publish/<game>.json`: the name, the linked
-project, the Studio the game was bound to) for `PUBLISH_NOTE_MS` (30 minutes), whether the chat
-clicks it or the person does. The panel's status, every Genex moment and each publish call then ask
-the Studios that could be the game's whether Roblox has their place now (the noted Studio, the one
-bound now, or one whose place carries the noted name); with no note, the Studio the game's helper
-was last connected from, within `LOST_STUDIO_MS` (10 minutes) of losing it, or while connected
-when a publish call asks. Exactly one published place that no other game builds in is linked with
+project, the Studio the game was bound to and the places already published in the open Studios)
+for `PUBLISH_NOTE_MS` (30 minutes), whether the chat clicks it or the person does; where Genex
+can't click, the panel's status leaves it once when it shows Studio's clicks. The panel's status,
+every Genex moment and each publish call then ask the Studios that could be the game's whether
+Roblox has their place now: the noted Studio, the one bound now, and, once no open Studio still
+holds the game's own unpublished place, one whose place carries the noted name. With no note, the
+Studio the game's helper was last connected from is asked within `LOST_STUDIO_MS` (10 minutes) of
+losing it while its place carries the game's own name or title, or while connected when a publish
+call asks. Exactly one place published after the note that no other game builds in is linked with
 its `remote` ids and its published name, keeping the link's project; the chat shows it with Undo,
-and Use in this game is never needed. Two candidates, a place another game holds, or an old note
-link nothing.
+and Use in this game is never needed. Two candidates, a place published before, a place another
+game holds, or an old note link nothing.
 
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
@@ -1693,7 +1705,8 @@ Available services are capability checked and scoped to the calling plugin:
   `{started, reason?}`, the reason one of `not-person` (a Genex moment's or an observer's step, or,
   from a plugin that did not come with Genex, neither an action the person pressed nor a tool call
   whose own `confirmation` card they approved; the host marks such a call `confirmed`; a plugin that
-  came with Genex may start one from its own tools), `no-chat`, `no-apps`,
+  came with Genex may start one from its own tools), `in-assist` (such an unasked one while the
+  chat's own assist is under way: the turn answering it clicks), `no-chat`, `no-apps`,
   `unavailable` (Windows, or a Mac with no desktop driver: show the click path instead) or
   `declined`. A plugin that did not come with Genex shows the task on a card first, every time;
   with computer control off, the studio's own card offers to turn it on for every chat. It is for

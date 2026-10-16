@@ -164,6 +164,13 @@ function context(
   return { signal: new AbortController().signal, callId: 1, host };
 }
 
+/** A call's context whose host names the games whose run is going. */
+function withRuns(base: PluginContext, runs: unknown[]): PluginContext {
+  const host = (async (method: string, args: unknown) =>
+    method === "game.engine.runs" ? runs : base.host(method as never, args as never)) as PluginContext["host"];
+  return { ...base, host };
+}
+
 const MISSING: Mac = { installed: false, setUp: false, running: false, answering: false };
 const NOT_SET_UP: Mac = { installed: true, setUp: false, running: true, answering: false };
 const CLOSED: Mac = { installed: true, setUp: true, running: false, answering: false };
@@ -359,9 +366,10 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
 });
 
 describe("Set up, Restart Studio and Do it for me from the panel", () => {
-  // Flipped: the task now also says to click only its path and stop at any other dialog.
+  // Flipped: the task now also says to click only its path and stop at any other dialog, and that
+  // the turn answering it clicks it itself with the desktop tool, never handing it on again.
   const TASK =
-    "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server. Click only that path. If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.";
+    "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server. Click only that path, now, with the desktop tool (not do-it-for-me). If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.";
 
   it("Set up refuses while Studio runs, reading nothing, and offers Restart Studio, Do it for me and the click path", async () => {
     const mac = fakeMac(NOT_SET_UP);
@@ -481,6 +489,47 @@ describe("Set up, Restart Studio and Do it for me from the panel", () => {
     assert.ok(mac.deps.now() >= QUIT_WAIT_MS, "it waited the whole quit wait");
     await assert.rejects(lstat(path.join(home, "Documents", "Roblox", "Plugins")));
     assert.equal(await readFile(settings, "utf8"), '{"mcp-server": {"enabled": false}}');
+  });
+
+  it("Restart Studio leaves Studio and every file alone while a build uses it, as Quit Studio does", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const { home, storage, settings } = await robloxHome();
+    const mac = fakeMac({ ...NOT_SET_UP, quitCloses: true }, home);
+    const backend = createRobloxBackend(mac.deps);
+    const busy = withRuns(context(storage), [{ game: "tower", title: "Tower", project: "/games/tower/tower.rbxlx" }]);
+    const pressed = (await backend.action?.("restart-studio", {}, busy)) as SetupAnswer;
+    assert.equal(pressed.done, false);
+    assert.equal(pressed.reason, "in-use");
+    assert.match(pressed.message, /Tower/);
+    const called = String(await backend.tool?.("restart-studio", {}, busy));
+    assert.match(called, /Tower/);
+    assert.equal(mac.calls.filter((call) => call.file === "/usr/bin/osascript").length, 0, "never asked to quit");
+    assert.deepEqual(mac.opened, []);
+    await assert.rejects(lstat(path.join(home, "Documents", "Roblox", "Plugins")));
+    assert.equal(await readFile(settings, "utf8"), '{"mcp-server": {"enabled": false}}');
+  });
+
+  it("where Genex can't click and Studio has no settings file yet, the agent is given the person's one click", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const root = await tmpDir("roblox-no-settings-");
+    const home = path.join(root, "home");
+    await mkdir(path.join(home, "Documents", "Roblox"), { recursive: true });
+    const nowhere = context(path.join(root, "storage"), undefined, false);
+    const restarted = String(
+      await createRobloxBackend(fakeMac({ ...NOT_SET_UP, quitCloses: true }, home).deps).tool?.(
+        "restart-studio",
+        {},
+        nowhere,
+      ),
+    );
+    assert.ok(restarted.includes(MCP_SWITCH_CLICK_PATH), restarted);
+    assert.doesNotMatch(restarted, /roblox__do-it-for-me/, "no tool to go round to");
+    // Do it for me refused here names the same click, for when Restart Studio can't switch it on.
+    const refused = context(STORAGE, undefined, false);
+    const clicked = String(await createRobloxBackend(fakeMac(STARTING).deps).tool?.("do-it-for-me", {}, refused));
+    assert.ok(clicked.includes(MCP_SWITCH_CLICK_PATH), clicked);
   });
 
   it("Set up's confirmation says what it does, naming the Documents prompt on a Mac", async () => {
@@ -724,7 +773,9 @@ describe("every panel action the person can press is also an agent tool", () => 
     const { ctx, tasks } = agentContext();
     const answer = String(await backend.tool?.("do-it-for-me", {}, ctx));
     assert.deepEqual(tasks, [MESSAGE.Assist.Task]);
-    assert.match(answer, /End this turn/);
+    // Flipped: the answer also says to click now when the task joined this very turn.
+    assert.match(answer, /end this turn/i);
+    assert.match(answer, /in front of you in this turn/);
     assert.doesNotMatch(answer, HANDS_A_CLICK);
   });
 
@@ -752,6 +803,15 @@ describe("every panel action the person can press is also an agent tool", () => 
       if (reason !== "no-chat") assert.match(answer, /roblox__restart-studio/);
       assert.doesNotMatch(answer, HANDS_A_CLICK);
     });
+
+  it("do-it-for-me in the turn that holds the chat's assist tells it to click now, never to call again", async () => {
+    const backend = createRobloxBackend(fakeMac(STARTING).deps);
+    const { ctx } = agentContext({ started: false, reason: "in-assist" });
+    const answer = String(await backend.tool?.("do-it-for-me", {}, ctx));
+    assert.match(answer, /desktop tool/);
+    assert.doesNotMatch(answer, /roblox__restart-studio|roblox__do-it-for-me/);
+    assert.doesNotMatch(answer, HANDS_A_CLICK);
+  });
 
   it("setup with Studio open names restart-studio and do-it-for-me; with no Studio, get-studio; reading no Documents", async () => {
     const open = fakeMac(NOT_SET_UP);

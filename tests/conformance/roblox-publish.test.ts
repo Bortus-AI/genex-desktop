@@ -123,6 +123,7 @@ describe("publish-update hands the task to the game's chat", () => {
     assert.equal(answer.reason, PublishMiss.FirstPublish);
     assert.equal(answer.clickPath, undefined);
     assert.match(answer.message, /roblox__first-publish/);
+    assert.match(answer.message, /"Sky Race"/, "the name to pass");
   });
 
   it("asked by the person, a place never published points at Publish to Roblox, clicking nothing", async () => {
@@ -362,8 +363,37 @@ describe("through the backend", () => {
       const called = (await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Racers" }, host.context)) as
         | { message: string }
         | undefined;
-      assert.match(String(called?.message), /End this turn/);
+      // Flipped: the answer also says to click now when the task joined this very turn.
+      assert.match(String(called?.message), /end this turn/i);
+      assert.match(String(called?.message), /in front of you in this turn/);
       assert.deepEqual(tasks, [firstPublishTask("Sky Race"), firstPublishTask("Sky Racers")]);
+    },
+  );
+
+  it(
+    "first-publish needs a name Roblox takes as it is: an empty, too long or changed one clicks nothing",
+    onMacWorld,
+    async () => {
+      const manifest = validateManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
+      const declared = manifest.tools.find((entry) => entry.name === RobloxTool.FirstPublish);
+      assert.deepEqual(declared?.parameters.required, ["name"]);
+      const mac = await robloxMac();
+      const game = await makeGame(mac, "sky-race", "Sky Race");
+      const file = path.join(game.directory, "sky-race.rbxlx");
+      await writeFile(file, "<roblox/>");
+      const host = hostFor(mac, game, { assist: () => ({ started: true }) });
+      const backend = createRobloxBackend(mac.deps);
+      await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
+      for (const name of ["  ", "x".repeat(70), 'Sky "Race"']) {
+        const answer = (await backend.tool?.(RobloxTool.FirstPublish, { name }, host.context)) as {
+          started: boolean;
+          message: string;
+        };
+        assert.equal(answer.started, false, name);
+        assert.match(answer.message, /Nothing was clicked/);
+        assert.match(answer.message, /roblox__first-publish/);
+      }
+      assert.ok(!host.calls.some((call) => call.method === "game.engine.assist"), "nothing was handed over");
     },
   );
 

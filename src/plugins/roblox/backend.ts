@@ -59,6 +59,7 @@ import {
   publishUpdate,
   reviewFirstPublish,
   reviewPublish,
+  unfitName,
 } from "./publish.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
 import {
@@ -85,7 +86,7 @@ import {
   setupPaths,
   undoSetup,
 } from "./setup.ts";
-import { notePublish, type RelinkDeps, relinkPublished } from "./relink.ts";
+import { hasPublishNote, notePublish, type RelinkDeps, relinkPublished } from "./relink.ts";
 import { SETUP_PROMPTS } from "./setup-prompts.ts";
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
 import { createScriptSyncs, type ScriptSyncs, systemWatch } from "./script-sync.ts";
@@ -193,6 +194,8 @@ export const SetupMiss = {
   NotInstalled: "not-installed",
   /** Restart Studio asked Studio to quit, and it was still open at the end of the wait. */
   StillOpen: "still-open",
+  /** Restart Studio left Studio open: a build is using it. */
+  InUse: "in-use",
 } as const;
 export type SetupMiss = (typeof SetupMiss)[keyof typeof SetupMiss];
 
@@ -215,6 +218,8 @@ export interface SetupAnswer {
   kept?: string[];
   /** Restart Studio opened Studio again. */
   reopened?: boolean;
+  /** Restart Studio left Studio open: the title of the game whose build uses it. */
+  inUse?: string;
 }
 
 /** The answer to Do it for me: whether the game's chat took the click, else why not and the click path. */
@@ -559,13 +564,23 @@ async function undoAction(deps: RobloxDeps, context: PluginContext): Promise<Set
   }
 }
 
+/** The title of a game whose run is using Studio now, if one is. */
+async function buildUsingStudio(context: PluginContext): Promise<string | undefined> {
+  const runs = await context.host(PluginService.GameEngineRuns).catch(() => []);
+  const busy = Array.isArray(runs) ? runs.find((run) => typeof run?.title === "string") : undefined;
+  return busy?.title;
+}
+
 /**
  * Restart Studio: a normal quit (Studio asks the person to save, as it always does), Set up while
- * it is closed, then Studio opened again, whatever Set up answered: Genex closed it.
+ * it is closed, then Studio opened again, whatever Set up answered: Genex closed it. Never while a
+ * build uses Studio, as Quit Studio.
  */
 async function restartStudio(deps: RobloxDeps, context: PluginContext): Promise<SetupAnswer> {
   const location = await locateStudio(deps);
   if (!location.installed) return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled };
+  const inUse = await buildUsingStudio(context);
+  if (inUse) return { done: false, reason: SetupMiss.InUse, message: MESSAGE.Quit.InUse(inUse), inUse };
   if (!(await quitStudio(deps))) return { done: false, reason: SetupMiss.StillOpen, message: MESSAGE.Setup.StillOpen };
   const answer = await runSetup(deps, context);
   // The game's own place, when it has one: Studio on its start page has no MCP server to answer.
@@ -860,12 +875,34 @@ function publishDeps(deps: RobloxDeps, services: MomentServices, context: Plugin
   };
   const project = place.link?.project;
   if (!project) return answer;
-  const noted = async (name: string) => {
-    const studioId = services.bound(game);
-    const note = { at: deps.now(), project, name, ...(studioId ? { studioId } : {}) };
-    await notePublish(await context.host(PluginService.StorageRoot), game, note);
-  };
+  const noted = (name: string) => noteFirstPublish(deps, services, context, project, name);
   return { ...answer, noted };
+}
+
+/** Notes a first publish of the game a call is bound to under `name`, from the Studio it is bound to. */
+async function noteFirstPublish(
+  deps: RobloxDeps,
+  services: MomentServices,
+  context: PluginContext,
+  project: string,
+  name: string,
+): Promise<void> {
+  const game = context.project ?? "";
+  const studioId = services.bound(game);
+  const note = { at: deps.now(), project, name, ...(studioId ? { studioId } : {}) };
+  await notePublish(deps, await context.host(PluginService.StorageRoot), game, note);
+}
+
+/**
+ * Where Genex can't click, the panel shows the person Studio's own clicks for a first publish: noted
+ * under the name it shows, once, so the game is linked to the place they publish by hand.
+ */
+async function noteHandPublish(deps: RobloxDeps, services: MomentServices, context: PluginContext, name: string) {
+  const link = await linkHere(context);
+  if (!link || link.remote || !context.project) return;
+  const storage = await context.host(PluginService.StorageRoot);
+  if (await hasPublishNote(storage, context.project, link.project, deps.now())) return;
+  await noteFirstPublish(deps, services, context, link.project, name);
 }
 
 /** What relinking asks of the computer and of the helper link. */
@@ -886,6 +923,8 @@ async function relinkQuietly(deps: RobloxDeps, services: MomentServices, context
  */
 function publishHandler(deps: RobloxDeps, services: MomentServices, asker: PublishAsker): Handler {
   return async (_args, context) => {
+    // A place just published by hand is linked first, so it gets its update and not a first publish.
+    await relinkQuietly(deps, services, context, true);
     const place = await publishPlace(context);
     return publishUpdate(place, publishDeps(deps, services, context, place), asker);
   };
@@ -900,7 +939,10 @@ function firstPublishHandler(deps: RobloxDeps, services: MomentServices, asker: 
   return async (args, context) => {
     await relinkQuietly(deps, services, context, true);
     const place = await publishPlace(context);
-    return firstPublish(place, publishDeps(deps, services, context, place), asker, requestedName(args));
+    const requested = requestedName(args);
+    // The agent's card showed its name: a name Roblox would take otherwise is asked again, never changed.
+    const unfit = asker === PublishAsker.Agent ? unfitName(place, requested) : undefined;
+    return unfit ?? firstPublish(place, publishDeps(deps, services, context, place), asker, requested);
   };
 }
 
@@ -909,6 +951,7 @@ const ASSIST_PROMPTS: Partial<Record<PluginEngineAssistRefusal, string>> = {
   unavailable: SETUP_PROMPTS.AssistUnavailable,
   declined: SETUP_PROMPTS.AssistDeclined,
   "no-chat": SETUP_PROMPTS.AssistNoChat,
+  "in-assist": SETUP_PROMPTS.InAssist,
 };
 
 /** Why Do it for me has nothing to click now, in the agent's words; undefined when the switch is to click. */
@@ -936,14 +979,20 @@ async function doItForMeTool(deps: RobloxDeps, context: PluginContext): Promise<
   return (answer.reason && ASSIST_PROMPTS[answer.reason]) || SETUP_PROMPTS.AssistNotStarted;
 }
 
-/** Set up's answer in the agent's words: done, or the tool that does the step in the way. */
-function setupWords(answer: SetupAnswer): string {
+/**
+ * Set up's answer in the agent's words: done, or the tool that does the step in the way. With no
+ * settings file to switch on, Do it for me clicks it where Genex can click; elsewhere that one click
+ * is the person's.
+ */
+function setupWords(answer: SetupAnswer, canClick: boolean): string {
   if (answer.reason === SetupMiss.NotInstalled) return SETUP_PROMPTS.NotInstalled;
   if (answer.reason === SetupMiss.StillOpen) return SETUP_PROMPTS.StillOpen;
+  if (answer.reason === SetupMiss.InUse) return SETUP_PROMPTS.QuitInUse(answer.inUse ?? "");
   if (answer.reason === SetupRefusal.StudioRunning) return SETUP_PROMPTS.SetupStudioOpen;
   if (answer.reason === SetupRefusal.NoRobloxFolder) return SETUP_PROMPTS.NoRobloxFolder;
   if (!answer.done) return SETUP_PROMPTS.SetupStopped(answer.message);
-  if (answer.setup?.switches.files === 0) return SETUP_PROMPTS.SetupNoSettings;
+  if (answer.setup?.switches.files === 0)
+    return canClick ? SETUP_PROMPTS.SetupNoSettings : SETUP_PROMPTS.SetupNoSettingsNoClick;
   return SETUP_PROMPTS.SetupDone(answer.message);
 }
 
@@ -967,10 +1016,11 @@ async function installedThen(deps: RobloxDeps, then: () => Promise<string>): Pro
 function pressHandlers(deps: RobloxDeps, slot: InstallSlot, luau: LuauDeps) {
   return {
     [RobloxTool.DoItForMe]: (_args, context) => doItForMeTool(deps, context),
-    [RobloxTool.Setup]: async (_args, context) => setupWords(await setupAction(deps, context)),
+    [RobloxTool.Setup]: async (_args, context) =>
+      setupWords(await setupAction(deps, context), await canClickHere(deps, context)),
     [RobloxTool.RestartStudio]: async (_args, context) => {
       const answer = await restartStudio(deps, context);
-      const words = setupWords(answer);
+      const words = setupWords(answer, await canClickHere(deps, context));
       return answer.reopened ? SETUP_PROMPTS.Restarted(words) : words;
     },
     [RobloxTool.UndoSetup]: async (_args, context) => (await undoAction(deps, context)).message,
@@ -1007,7 +1057,11 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const actions: Record<RobloxAction, Handler> = {
     [RobloxAction.Status]: async (_args, context) => {
       await relinkQuietly(deps, services, context);
-      return status(deps, context, slot.job, luau);
+      const answer = await status(deps, context, slot.job, luau);
+      const shown = answer.publish;
+      if (shown && !shown.published && !shown.canClick && shown.name)
+        await noteHandPublish(deps, services, context, shown.name).catch(() => undefined);
+      return answer;
     },
     [RobloxAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [RobloxAction.Steps]: (_args, context) => steps(deps, context, slot.job),

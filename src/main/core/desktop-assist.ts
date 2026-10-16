@@ -11,6 +11,8 @@
  *   approved (`asked`). A plugin that came with Genex may also start one from its own tools, for the
  *   setup it knows (its task is its own code's, never an agent's words). A Genex moment's or an
  *   observer's step never asks (the plugin services refuse it first); any other call is `not-person`.
+ *   An unasked one while the chat's assist is under way is `in-assist`: the turn answering that
+ *   assist is the one that clicks, so it never hands its own task on again.
  * - **Trust.** The task is posted verbatim as "<plugin> asks: <task>". A plugin that came with
  *   Genex asks nothing more; any other shows the task on a card first, every time.
  * - **Computer control off.** A card offers to turn it on, for every chat (it is one setting).
@@ -206,6 +208,7 @@ export async function engineAssist(host: AssistHost, request: AssistRequest): Pr
   if (!request.asked && !plugin.bundled) return refused(EngineAssistRefusal.NotPerson);
   if (!(await host.desktopAvailable())) return refused(EngineAssistRefusal.Unavailable);
   const threadId = binding.threadId ?? (await host.gameChat(binding.project));
+  if (!request.asked && host.grants.live(threadId)) return refused(EngineAssistRefusal.InAssist);
   const asked = { ...binding, threadId };
   const card: AssistCard = { kind: AssistCardKind.Task, pluginId, pluginName: plugin.name, task };
   if (!plugin.bundled && !(await host.ask(card, asked, signal))) return refused(EngineAssistRefusal.Declined);

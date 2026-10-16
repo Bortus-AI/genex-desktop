@@ -131,7 +131,7 @@ export const MESSAGE = {
   },
   Assist: {
     /** The task the game's chat is asked to click, verbatim in the chat: plain words, then Studio's own click path. */
-    Task: `Turn on Studio's MCP server: ${MCP_SWITCH_CLICK_PATH}. Click only that path. If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.`,
+    Task: `Turn on Studio's MCP server: ${MCP_SWITCH_CLICK_PATH}. Click only that path, now, with the desktop tool (not do-it-for-me). If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.`,
     Started:
       "This game's chat is turning on Studio's MCP server. If Genex asks you something first, answer it in this game's chat, then watch Roblox Studio.",
     Unavailable: `Genex can't click in Roblox Studio on this computer. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
@@ -149,7 +149,8 @@ export const MESSAGE = {
     Declined: `Nothing was published. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NoChat: `Open this game first, so its chat can publish it, or publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NotStarted: `Genex didn't publish anything. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
-    FirstPublish: "This place isn't on Roblox yet: press Publish to Roblox to publish it the first time.",
+    FirstPublish: (name: string) =>
+      `This place isn't on Roblox yet: press Publish to Roblox to publish it the first time, as ${name}.`,
     NoPlace: "This game doesn't build in a Roblox place yet. Choose one with Choose your place first.",
     /** A first publish's card: the name the game gets on Roblox. */
     ConfirmFirst: (name: string) => `Publish ${name} to Roblox as a new game?`,
@@ -289,8 +290,6 @@ export const MESSAGE = {
       `Roblox Studio didn't say what ${name} is. If a play test or a dialog is open in Studio, finish it, then choose the place again.`,
     NoGame: "Open a game first, then choose the place it builds in.",
     Taken: (name: string, title: string) => `${name} already builds in ${title}.`,
-    Guarded:
-      "That place is in a folder macOS asks about before Genex reads it. Ask the person to choose it in the Roblox Studio panel with Use in this game.",
     ProjectInTheWay: "default.project.json in this game's folder is a link or not a file, so Genex leaves it.",
     SnapshotReason: "Before linking a Roblox place",
     Linked: (name: string) => `This game builds in ${name} now.`,

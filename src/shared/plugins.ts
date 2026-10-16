@@ -1026,6 +1026,11 @@ export const EngineAssistRefusal = {
   NotPerson: "not-person",
   /** The plugin's engine declares no apps for this computer, so there is nothing it may click. */
   NoApps: "no-apps",
+  /**
+   * An assist the person didn't ask for, while the chat's own assist is under way: the turn that
+   * answers it does the clicking, so nothing more is posted.
+   */
+  InAssist: "in-assist",
 } as const;
 export type EngineAssistRefusal = (typeof EngineAssistRefusal)[keyof typeof EngineAssistRefusal];
 

@@ -20,10 +20,11 @@ panel is also a tool of this plugin (`roblox__<name>`), and you call them yourse
   age check, ID, a two-step code, terms or a payment. Say exactly which one and where.
 - **Never close or force-quit Studio unasked.** `restart-studio` and `quit-studio` use Studio's
   normal quit, which asks the person to save first, and both ask on a card.
-- **Switches only Studio's window offers** are clicked by `do-it-for-me`, which hands this chat's
-  next turn the click with Genex's computer control (Genex asks once on a card when computer
-  control is off). End your turn once it has started. Never drive Studio with the desktop tool for
-  anything else.
+- **Switches only Studio's window offers** are clicked by `do-it-for-me`, which posts the click as
+  "Roblox Studio asks: …" to this chat, for the turn that answers that message, with Genex's
+  computer control (Genex asks once on a card when computer control is off). That turn clicks it
+  itself with the desktop tool and never calls `do-it-for-me` again; any other turn ends once it
+  has started. Never drive Studio with the desktop tool for anything else.
 - If a step fails, say which step and what you saw, then check the table below.
 
 ## 1. Read where Studio stands
@@ -52,7 +53,8 @@ Genex turns Studio's MCP server on during `setup` while Studio is closed. If Stu
 the switch is still off, call `do-it-for-me`: it clicks **Assistant** (the toolbar icon at the top
 right of Studio, shown only with a place open) › **⋯** › **Settings** › **MCP Servers** › **Enable
 Studio as MCP server**. Where Genex can't click (no computer control here, or the person said no),
-`restart-studio` turns it on while Studio is closed instead.
+`restart-studio` turns it on while Studio is closed instead. Only when it answers that Studio has
+no settings file yet is that one click the person's: tell them the path above.
 
 The switch is kept per Roblox account: after signing in with another account it may need turning on
 again.
@@ -61,10 +63,12 @@ again.
 
 Each game in Genex uses one place. `places` lists the places open in Studio and the files Studio
 opened lately; `use-project` links this game to one by its label or its file's full path, and
-`new-game` makes a new one (a Baseplate in the game's folder, opened in Studio). When several could
-be the person's, ask them which by its name before linking. A place builds in one game only: one
-another game uses is refused. A place file in Documents that Studio didn't open lately is the
-person's to choose in the panel, since macOS asks them before Genex reads that folder.
+`new-game` makes a new one (a Baseplate in the game's folder, opened in Studio). Link it yourself
+when the game has no place or Genex lost it; switch a linked game to another place only when the
+person asks. When several could be the person's, ask them which by its name before linking. A
+place builds in one game only: one another game uses is refused. A place file in Documents that
+Studio didn't open lately is linked by its label once it is open in Studio, since macOS asks the
+person before Genex reads that folder.
 
 ## 5. Check
 
@@ -75,7 +79,8 @@ them for Roblox-specific questions.
 
 ## Troubleshooting
 
-Match the symptom, give the person the single fix, then check again from step 1.
+Match the symptom, do the single fix yourself (the person's only for what is theirs: the rules
+above), then check again from step 1.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |

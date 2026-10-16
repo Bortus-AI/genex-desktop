@@ -397,6 +397,8 @@ describe("The Roblox Studio panel", { skip }, () => {
       assert.equal(await tab.locator(`${place} [data-first-publish]`).count(), 0);
       const publish = tab.locator(`${place} button[data-action="publish-update"]`);
       assert.equal(await publish.textContent(), "Publish an update");
+      const orClicks = await tab.locator(`${place} [data-or-in-studio] .kbd`).allTextContents();
+      assert.deepEqual(orClicks, PUBLISH_CLICK_PATH.split(" › "), "Studio's own clicks, under the button");
       await publish.click();
       await sentOnce(tab, c, (names) => names.includes("publish-update"));
       assert.deepEqual(c.sent.at(-1), ["publish-update", {}]);
@@ -423,6 +425,10 @@ describe("The Roblox Studio panel", { skip }, () => {
       const place = '#steps [data-step="place"]';
       assert.equal(await tab.locator(`${place} button[data-action="publish-update"]`).count(), 0);
       assert.equal(await tab.locator(`${place} [data-first-publish] .kbd`).count(), 0, "no clicks for the person");
+      // Flipped: a small "Or in Studio" line keeps Studio's own clicks under the button, for a Mac
+      // whose macOS permissions computer control lacks.
+      const orClicks = await tab.locator(`${place} [data-or-in-studio] .kbd`).allTextContents();
+      assert.deepEqual(orClicks, PUBLISH_CLICK_PATH.split(" › "));
       const field = tab.getByLabel("Name on Roblox");
       assert.equal(await field.inputValue(), "Sky Race");
       await field.fill("Sky Racers");
