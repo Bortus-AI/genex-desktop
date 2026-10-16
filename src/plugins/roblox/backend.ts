@@ -85,6 +85,7 @@ import {
   setupPaths,
   undoSetup,
 } from "./setup.ts";
+import { notePublish, type RelinkDeps, relinkPublished } from "./relink.ts";
 import { SETUP_PROMPTS } from "./setup-prompts.ts";
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
 import { createScriptSyncs, type ScriptSyncs, systemWatch } from "./script-sync.ts";
@@ -704,8 +705,12 @@ async function noteGame(deps: RobloxDeps, context: PluginContext): Promise<void>
 /** A moment's handler over the bound game's Studio operations and the moment it runs at. */
 type MomentHandler = (ops: MomentOps, hook: HookContext) => Promise<HookAnswer>;
 
-/** The Studio operations of the game a call is bound to; the helper link starts once Studio is set up. */
+/**
+ * The Studio operations of the game a call is bound to; the helper link starts once Studio is set up.
+ * A publish that has just finished is linked first, so the moment finds the game's Studio.
+ */
 async function momentOps(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<MomentOps> {
+  await relinkQuietly(deps, services, context);
   const storage = await context.host(PluginService.StorageRoot);
   const setUp = async () => {
     const done = (await locateStudio(deps)).installed && (await setUpIn(deps, storage));
@@ -847,26 +852,56 @@ async function publishPlace(context: PluginContext): Promise<PublishPlace> {
 const requestedName = (args: Record<string, unknown>) => (typeof args.name === "string" ? args.name : undefined);
 
 /** What publishing asks of the host and of the game's helper, for the game a call is bound to. */
-function publishDeps(services: MomentServices, context: PluginContext): PublishDeps {
+function publishDeps(deps: RobloxDeps, services: MomentServices, context: PluginContext, place: PublishPlace) {
   const game = context.project ?? "";
-  return {
+  const answer: PublishDeps = {
     assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
     flush: () => services.flush(game),
   };
+  const project = place.link?.project;
+  if (!project) return answer;
+  const noted = async (name: string) => {
+    const studioId = services.bound(game);
+    const note = { at: deps.now(), project, name, ...(studioId ? { studioId } : {}) };
+    await notePublish(await context.host(PluginService.StorageRoot), game, note);
+  };
+  return { ...answer, noted };
+}
+
+/** What relinking asks of the computer and of the helper link. */
+const relinkDeps = (deps: RobloxDeps, services: MomentServices): RelinkDeps => ({
+  ...deps,
+  bound: (game) => services.bound(game),
+});
+
+/** Links the game to the place Roblox has now after a publish; a look that fails links nothing. */
+async function relinkQuietly(deps: RobloxDeps, services: MomentServices, context: PluginContext, askBound = false) {
+  if (!context.project) return;
+  await relinkPublished(relinkDeps(deps, services), context, { askBound }).catch(() => undefined);
 }
 
 /**
  * Publish an update, as the panel's action or the agent's confirmed tool: the game's chat is handed
  * the task through Do it for me, after the game's changed script files reach Studio.
  */
-function publishHandler(services: MomentServices, asker: PublishAsker): Handler {
-  return async (_args, context) => publishUpdate(await publishPlace(context), publishDeps(services, context), asker);
+function publishHandler(deps: RobloxDeps, services: MomentServices, asker: PublishAsker): Handler {
+  return async (_args, context) => {
+    const place = await publishPlace(context);
+    return publishUpdate(place, publishDeps(deps, services, context, place), asker);
+  };
 }
 
-/** A first publish, as the panel's Publish to Roblox or the agent's confirmed `first-publish`, under the name asked for. */
-function firstPublishHandler(services: MomentServices, asker: PublishAsker): Handler {
-  return async (args, context) =>
-    firstPublish(await publishPlace(context), publishDeps(services, context), asker, requestedName(args));
+/**
+ * A first publish, as the panel's Publish to Roblox or the agent's confirmed `first-publish`, under
+ * the name asked for. A place Roblox already has (published by hand) is linked first, and answered
+ * as one to update.
+ */
+function firstPublishHandler(deps: RobloxDeps, services: MomentServices, asker: PublishAsker): Handler {
+  return async (args, context) => {
+    await relinkQuietly(deps, services, context, true);
+    const place = await publishPlace(context);
+    return firstPublish(place, publishDeps(deps, services, context, place), asker, requestedName(args));
+  };
 }
 
 /** Do it for me's refusals in the agent's words; any other is "nothing was clicked". */
@@ -970,7 +1005,10 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     async (_args, context) =>
       context.hook ? handler(await momentOps(deps, services, context), context.hook) : {};
   const actions: Record<RobloxAction, Handler> = {
-    [RobloxAction.Status]: (_args, context) => status(deps, context, slot.job, luau),
+    [RobloxAction.Status]: async (_args, context) => {
+      await relinkQuietly(deps, services, context);
+      return status(deps, context, slot.job, luau);
+    },
     [RobloxAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
     [RobloxAction.Steps]: (_args, context) => steps(deps, context, slot.job),
     [RobloxAction.GetStudio]: (_args, context) => getStudio(deps, context, slot),
@@ -986,8 +1024,8 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.RestartStudio]: (_args, context) => restartStudio(deps, context),
     [RobloxAction.DoItForMe]: (_args, context) => doItForMe(context),
     [RobloxAction.AddLuauChecks]: (_args, context) => addLuauAction(deps, luau, context),
-    [RobloxAction.PublishUpdate]: publishHandler(services, PublishAsker.Person),
-    [RobloxAction.FirstPublish]: firstPublishHandler(services, PublishAsker.Person),
+    [RobloxAction.PublishUpdate]: publishHandler(deps, services, PublishAsker.Person),
+    [RobloxAction.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Person),
   };
   const tools: Record<RobloxTool, Handler> = {
     [RobloxTool.StudioActivity]: async (_args, context) =>
@@ -1008,8 +1046,8 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...playHandlers(deps, services),
     ...askFirstHandlers(deps, services),
     ...modelHandlers(deps, services),
-    [RobloxTool.PublishUpdate]: publishHandler(services, PublishAsker.Agent),
-    [RobloxTool.FirstPublish]: firstPublishHandler(services, PublishAsker.Agent),
+    [RobloxTool.PublishUpdate]: publishHandler(deps, services, PublishAsker.Agent),
+    [RobloxTool.FirstPublish]: firstPublishHandler(deps, services, PublishAsker.Agent),
     ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.

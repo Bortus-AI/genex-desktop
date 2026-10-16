@@ -274,7 +274,7 @@ async function keptScan(deps: PlaceDeps, cache: ScanCache): Promise<FoundFile[]>
  * What an open Studio says of its place: its ids, or undefined when it didn't answer. Asked under
  * the busy mark of the game bound to that Studio, so its helper never reports the ask as the person's.
  */
-async function askPlace(
+export async function askPlace(
   deps: PlaceDeps,
   storage: string,
   entry: StudioEntry,
@@ -291,7 +291,7 @@ async function askPlace(
 }
 
 /** The Studios open now, by StudioMCP; none when it isn't there. */
-async function listedStudios(deps: PlaceDeps): Promise<StudioEntry[]> {
+export async function listedStudios(deps: PlaceDeps): Promise<StudioEntry[]> {
   const studios = (await deps.studio?.studios({ timeoutMs: PLACE_ASK_MS }).catch(() => [])) ?? [];
   return studios.filter((entry) => entry.name.trim().length > 0);
 }
@@ -388,6 +388,11 @@ function openKey(place: OpenPlace, files: readonly FoundFile[], platform: NodeJS
 function fileNamed(files: readonly FoundFile[], name: string, platform: NodeJS.Platform): string | undefined {
   const named = files.filter((found) => baseOf(platform, found.file) === name);
   return named.length === 1 ? named[0]?.file : undefined;
+}
+
+/** The title of the live game other than `game` that builds in the published place `placeId`, if one does. */
+export async function placeHeldBy(storage: string, game: string, placeId: string): Promise<string | undefined> {
+  return holderOf(await liveLinks(storage), game, { placeId })?.title;
 }
 
 /** Who builds in a place: another game's title, or this game. */

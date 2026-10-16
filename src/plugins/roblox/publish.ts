@@ -64,8 +64,11 @@ export interface PublishDeps {
   assist(task: string): Promise<PluginEngineAssistAnswer>;
   /** Sends the script files changed and not yet in Studio, so the publish holds them. */
   flush?(): Promise<void>;
-  /** Notes that a publish was handed to the chat, under this name, so Genex links the game to it afterwards. */
-  started?(name: string): Promise<void>;
+  /**
+   * Notes a first publish under this name, handed to the chat or left to the person's own clicks, so
+   * Genex links the game to the published place afterwards (`relink.ts`).
+   */
+  noted?(name: string): Promise<void>;
 }
 
 /** A publish's answer: handed to the chat, or why not and Studio's own click path. */
@@ -146,12 +149,10 @@ function refusedAnswer(answer: PluginEngineAssistAnswer, words: PublishWords): P
 }
 
 /** Hands the chat a publish's task, once the game's changed script files are in Studio. */
-async function handOver(deps: PublishDeps, task: string, name: string): Promise<PluginEngineAssistAnswer> {
+async function handOver(deps: PublishDeps, task: string): Promise<PluginEngineAssistAnswer> {
   // Studio holds the scripts it last had when a send fails; the publish goes on with those.
   await deps.flush?.().catch(() => undefined);
-  const answer = await deps.assist(task);
-  if (answer.started) await deps.started?.(name).catch(() => undefined);
-  return answer;
+  return deps.assist(task);
 }
 
 /**
@@ -166,8 +167,7 @@ export async function publishUpdate(
   const words = WORDS[asker];
   if (!place.link) return { started: false, message: words.NoPlace, reason: PublishMiss.NoPlace };
   if (!place.link.remote) return { started: false, message: words.FirstPublish, reason: PublishMiss.FirstPublish };
-  const name = plainName(place.name) || plainName(place.link.name);
-  const answer = await handOver(deps, publishTask(place.name), name);
+  const answer = await handOver(deps, publishTask(place.name));
   return answer.started ? { started: true, message: words.Started } : refusedAnswer(answer, words);
 }
 
@@ -186,7 +186,9 @@ export async function firstPublish(
   if (!place.link) return { started: false, message: words.NoPlace, reason: PublishMiss.NoPlace };
   if (place.link.remote) return { started: false, message: words.AlreadyPublished, reason: PublishMiss.Published };
   const name = firstPublishName(place, requested);
-  const answer = await handOver(deps, firstPublishTask(name), name);
+  const answer = await handOver(deps, firstPublishTask(name));
+  // Followed whether the chat clicks it or the person does: either way Genex links the published place.
+  await deps.noted?.(name).catch(() => undefined);
   if (answer.started) return { started: true, message: words.FirstStarted(name), name };
   return { ...refusedAnswer(answer, words), name };
 }
