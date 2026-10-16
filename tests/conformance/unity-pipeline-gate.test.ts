@@ -29,8 +29,12 @@ const CATALOGUE: PipelineCommand[] = [
   command("batch", { operations: "List`1", transactional: "Boolean" }),
   command("eval", { code: "String" }),
   command("run_script", { file: "String" }),
-  command("package_add", { name: "String" }),
+  command("package_add", { identifier: "String", confirm: "Boolean" }),
+  command("package_remove", { name: "String", confirm: "Boolean" }),
   command("package_list", { scope: "String" }),
+  command("build", { target: "String", outputPath: "String", scenes: "String[]", confirm: "Boolean" }),
+  command("switch_build_target", { target: "String", confirm: "Boolean" }),
+  command("menu", { path: "String" }),
 ];
 
 /** A game folder with its Unity project in `unity/`, a file of the game beside it, and a folder outside. */
@@ -49,7 +53,7 @@ async function place(): Promise<GatePlace & { outside: string }> {
 const gate = (at: GatePlace, name: unknown, parameters?: unknown) => gateCall(at, CATALOGUE, name, parameters);
 
 describe("the gate on Unity's Pipeline commands", () => {
-  it("lets the editor's ordinary commands through, project settings and the build's scenes included", () => {
+  it("lets through what a person does in Unity: packages, builds, the build target and menu items", () => {
     const allowed = [
       "editor_play",
       "editor_stop",
@@ -66,28 +70,29 @@ describe("the gate on Unity's Pipeline commands", () => {
       "package_list",
       "package_search",
       "package_status",
-    ];
-    for (const name of allowed) assert.equal(commandAllowed(name), true, name);
-  });
-
-  it("refuses the commands that run code text, end or rebuild the editor, or change what the project depends on", () => {
-    const denied = [
-      "eval",
-      "eval_file",
-      "menu",
-      "quit",
-      "build",
-      "switch_build_target",
-      "set_authoring_root",
-      "set_runtime_pipeline_settings",
       "package_add",
       "package_remove",
       "package_resolve",
       "package_embed",
+      "build",
+      "build_status",
+      "switch_build_target",
+      "menu",
+    ];
+    for (const name of allowed) assert.equal(commandAllowed(name), true, name);
+  });
+
+  it("refuses the commands that run code text, end the editor or loosen Genex's own hold on it", () => {
+    const denied = [
+      "eval",
+      "eval_file",
+      "quit",
+      "set_authoring_root",
+      "set_runtime_pipeline_settings",
       "add_package",
       "remove_package",
       "EVAL",
-      "Package_Add",
+      "Quit",
     ];
     for (const name of denied) assert.equal(commandAllowed(name), false, name);
   });
@@ -107,7 +112,7 @@ describe("the gate on Unity's Pipeline commands", () => {
       parameters: { path: "Assets/Scenes/Main.unity", additive: false },
     });
     assert.deepEqual(await gate(at, "editor_play", undefined), { ok: true, command: "editor_play", parameters: {} });
-    for (const name of ["eval", "package_add"])
+    for (const name of ["eval", "quit"])
       assert.deepEqual(await gate(at, name, {}), { ok: false, refusal: GateRefusal.Denied, command: name }, name);
     assert.equal((await gate(at, "package_list", { scope: "installed" })).ok, true);
     for (const parameters of [7, "x", [1], null])
@@ -178,6 +183,58 @@ describe("the gate on Unity's Pipeline commands", () => {
     });
   });
 
+  it("adds packages from the registry or a repository, and from a folder only inside the game", async () => {
+    const at = await place();
+    const add = (identifier: unknown) => gate(at, "package_add", { identifier, confirm: true });
+    const allowed = [
+      "com.unity.render-pipelines.high-definition@17.3.0",
+      "com.unity.inputsystem",
+      "https://github.com/example/tool.git#v1.2.0",
+      "file:../../assets/local-package",
+      "file:LocalPackage",
+    ];
+    for (const identifier of allowed) assert.equal((await add(identifier)).ok, true, identifier);
+    const outside = { ok: false, refusal: GateRefusal.PathOutside, parameter: "identifier" };
+    const hostile = ["file:../../../outside", `file:${at.outside}`, "file:/etc", "file:", "FILE:/etc", "file:a\u0000b"];
+    for (const identifier of hostile) assert.deepEqual(await add(identifier), outside, identifier);
+    assert.equal((await gate(at, "package_remove", { name: "com.unity.inputsystem", confirm: true })).ok, true);
+  });
+
+  it("builds a player only into a folder inside the game, named by the call", async () => {
+    const at = await place();
+    const build = (parameters: Record<string, unknown>) =>
+      gate(at, "build", { target: "StandaloneOSX", ...parameters });
+    assert.equal((await build({ outputPath: "Builds/Mac/Game.app", confirm: true })).ok, true);
+    assert.equal((await build({ outputPath: "Builds/Mac/Game.app", dry_run: true })).ok, true);
+    const outside = { ok: false, refusal: GateRefusal.PathOutside, parameter: "outputPath" };
+    assert.deepEqual(await build({ confirm: true }), outside, "Unity's last build folder may be anywhere");
+    assert.deepEqual(await build({ outputPath: "/Applications/Game.app", confirm: true }), outside);
+    assert.deepEqual(await build({ outputPath: "../../Game.app", confirm: true }), outside);
+    assert.equal((await gate(at, "switch_build_target", { target: "StandaloneOSX", confirm: true })).ok, true);
+  });
+
+  it("runs menu items, except those that end the editor or open another project in it", async () => {
+    const at = await place();
+    const menu = (item: string) => gate(at, "menu", { path: item });
+    for (const item of [
+      "Window/Package Manager",
+      "Assets/Reimport All",
+      "Edit/Project Settings...",
+      "GameObject/3D Object/Cube",
+    ])
+      assert.equal((await menu(item)).ok, true, item);
+    for (const item of [
+      "File/Exit",
+      "Unity/Quit",
+      "Unity/Quit Unity",
+      "File/Open Project...",
+      "File/New Project...",
+      "File/Open Recent/Game",
+      "file/exit",
+    ])
+      assert.deepEqual(await menu(item), { ok: false, refusal: GateRefusal.Denied, command: "menu" }, item);
+  });
+
   it("holds every operation of a batch to the same rules", async () => {
     const at = await place();
     const batch = (operations: unknown) => gate(at, "batch", { operations, transactional: false });
@@ -197,7 +254,12 @@ describe("the gate on Unity's Pipeline commands", () => {
     const malformed = { refusal: GateRefusal.NotParameters };
     const refused: Array<[string, unknown, object]> = [
       ["a denied command", [{ command: "editor_play" }, { command: "eval", params: { code: "1" } }], denied("eval")],
-      ["a package change", [{ command: "package_add", params: { name: "x" } }], denied("package_add")],
+      [
+        "a package from a folder outside the game",
+        [{ command: "package_add", params: { identifier: "file:../../../outside", confirm: true } }],
+        outside("identifier"),
+      ],
+      ["a menu item that ends the editor", [{ command: "menu", params: { path: "File/Exit" } }], denied("menu")],
       ["a command the editor lacks", [{ command: "fly_away" }], { refusal: GateRefusal.NotACommand }],
       [
         "a file outside the game",

@@ -61,6 +61,9 @@ export function genexGameManifest(pkg: unknown): GenexGameManifest | undefined {
   return genex ? { dependencies, genex } : { dependencies };
 }
 
+/** The package a multiplayer game loads. */
+const MULTIPLAYER_PACKAGE: GenexGamePackage = "@genex-ai/multiplayer";
+
 /** The package Studio connects a template game with, and names itself when it publishes one. */
 const STUDIO_CONNECTED: GenexGamePackage = "@genex-ai/embed-sdk";
 
@@ -110,4 +113,10 @@ export async function readGenexGameManifest(dir: string): Promise<GenexGameManif
   const html = await readOwnFile(dir, "index.html");
   if (html === null) return undefined;
   return templateGenexManifest(html, parsedJson(await readOwnFile(dir, TEMPLATE_GENEX_SETTINGS)));
+}
+
+/** Whether the game in `dir` loads Genex's multiplayer, by the manifest a publish would send. */
+export async function usesGenexMultiplayer(dir: string): Promise<boolean> {
+  const manifest = await readGenexGameManifest(dir);
+  return manifest?.dependencies[MULTIPLAYER_PACKAGE] !== undefined;
 }

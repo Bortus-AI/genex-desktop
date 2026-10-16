@@ -7,6 +7,8 @@ import type {
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
+import type { GenexCatalogItem } from "./mention-corpus.ts";
+import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
   AvatarStyle,
   FriendActionRequest,
@@ -273,6 +275,8 @@ export interface StudioApi {
   appAbout(): Promise<AppAbout>;
   bootstrap(): Promise<Bootstrap>;
   send(text: string, options?: ComposerSendOptions): Promise<boolean>;
+  /** A sent message's failed @ tag, fetched again or taken off; its result card shows the outcome. */
+  mentionRetry(threadId: string, messageId: string, tag: MentionRef, action: MentionRetry): Promise<void>;
   answerPlan(threadId: string, id: string, approved: boolean): Promise<boolean>;
   cancelTurn(threadId: string): Promise<boolean>;
   changeQueuedMessage(
@@ -390,7 +394,13 @@ export interface StudioApi {
   subscriptionSignIn(opts?: {
     engine?: string;
     separate?: boolean;
+    /** The account to sign in to (`SubscriptionAccountView.id`), or `NEW_ACCOUNT` for one more. */
+    account?: string;
   }): Promise<{ started: boolean; missingCli?: boolean; error?: string }>;
+  /** A subscription's accounts: the Terminal login, Studio's own and any added ones. */
+  subscriptionAccounts(engine: string): Promise<import("./subscription-accounts.ts").SubscriptionAccountView[]>;
+  /** Run a subscription on one of its accounts from the next message on; answers its status. */
+  subscriptionUseAccount(engine: string, account: string): Promise<import("./engine-descriptor.ts").EngineStatus>;
   /** The Claude sign-in as the card shows it: which phase, and the code box when one is wanted. */
   claudeLoginState(): Promise<ClaudeLoginState>;
   claudeLoginCode(code: string): Promise<ClaudeLoginState>;
@@ -446,7 +456,8 @@ export interface StudioApi {
   codexLoginOpenBrowser(): Promise<unknown>;
   codexLoginRetry(method: "browser" | "device"): Promise<CodexLoginState>;
   onCodexLogin(listener: (state: CodexLoginState) => void): () => void;
-  subscriptionForgetStudioLogin(engine?: string): Promise<boolean>;
+  /** Sign Studio out of one of its own accounts (Studio's first when `account` is unset). */
+  subscriptionForgetStudioLogin(engine?: string, account?: string): Promise<boolean>;
   openUrl(url: string): Promise<boolean>;
   /** Play: one page of a tab of genex.games' catalog. */
   playFeed(request: PlayFeedRequest): Promise<PlayFeedPage>;
@@ -454,6 +465,8 @@ export interface StudioApi {
   playShelves(): Promise<PlayShelves>;
   /** Play: what on one shelf of the catalog answers a search, best first. */
   playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
+  /** The whole catalog for the composer's @ picker: every shelf, who made each, whether it may be taken. */
+  playCatalog(): Promise<GenexCatalogItem[]>;
   /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
   playRemix(slug: string): Promise<string>;
   /** Play: players in each named game now; a game nobody counts is left out. */

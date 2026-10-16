@@ -19,6 +19,7 @@ import os from "node:os";
 import path from "node:path";
 import { assistAvailable, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
+import type { MentionSources } from "./core/mention-tags.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { deliveryFolderFor, ignoreLine, webFolderOf } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
@@ -191,6 +192,8 @@ import { studioRpc } from "./harness-rpc/studio.ts";
 import type { PlanReviewController } from "./plan-review.ts";
 import { PluginConsent } from "./plugin-consent.ts";
 import { assertOwnedProject } from "./project-policy.ts";
+import { type BuildEndDeps, gameOfThread, noteBuildEnd } from "./core/build-ends.ts";
+import { usesGenexMultiplayer } from "../substrate/genex-game-manifest.ts";
 import { seedUpgradedPayload } from "./seed-upgrade-notice.ts";
 import { SeedUpgradeMode } from "../substrate/seed-upgrade.ts";
 
@@ -415,6 +418,8 @@ export interface StudioCoreOptions {
   onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
+  /** Where a message's @ tags are fetched from: genex.games, the account and git (`core/mention-tags.ts`). */
+  mentionSources?: MentionSources;
 }
 
 export type { CoreInternals };
@@ -1535,8 +1540,21 @@ export class StudioCore {
     }
     for (const runId of changedRuns) this.emit(UiEvent.RunSummaryChanged, { runId });
     this.#autoResume.observe(threadId, result.events);
+    // Off the append's path: reading the game's folder never holds up the log.
+    void noteBuildEnd(this.#buildEnds, threadId, result.events).catch(() => {});
     return result.latestEventId;
   }
+
+  /** How `append` tells the game list what a build's end changed (`core/build-ends.ts`). */
+  readonly #buildEnds: BuildEndDeps = {
+    gameOf: async (threadId) => gameOfThread((await this.store.getRecord(threadId).catch(() => null))?.metadata),
+    awaiting: async (project) => (await this.games.presentation(project)).awaitingFirstBuild === true,
+    kindOf: (project) => this.games.kindOf(project),
+    markBuilt: (project) => this.games.markBuilt(project),
+    multiplayer: (project) => usesGenexMultiplayer(this.games.dirFor(project)),
+    toldMultiplayer: new Map(),
+    changed: (project) => this.emit(UiEvent.GameChanged, { project }),
+  };
 
   #indexEvent(event: EventEnvelope): void {
     if (event.data.type === EventKind.SnapshotCreated) {
@@ -2549,6 +2567,12 @@ export class StudioCore {
     ...args: Parameters<ConversationService["sendUserMessage"]>
   ): ReturnType<ConversationService["sendUserMessage"]> {
     return this.#conversation.sendUserMessage(...args);
+  }
+
+  retryMention(
+    ...args: Parameters<ConversationService["retryMention"]>
+  ): ReturnType<ConversationService["retryMention"]> {
+    return this.#conversation.retryMention(...args);
   }
 
   stopThread(...args: Parameters<ConversationService["stopThread"]>): ReturnType<ConversationService["stopThread"]> {

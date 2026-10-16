@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "blender",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "name": "Local Blender",
   "publisher": "Studio",
   "description": "Model 3D assets with Blender on this Mac. No account or credits.",
@@ -12,7 +12,7 @@
   "tools": [
     {
       "name": "status",
-      "description": "Inspect local Blender readiness and recorded jobs; no account or paid generation.",
+      "description": "Inspect local Blender readiness and recorded jobs; no account or paid generation. When Blender can't run on this Mac, the answer says what to tell the user and how it is fixed.",
       "parameters": {
         "type": "object",
         "properties": {}
@@ -48,6 +48,15 @@
         "required": ["name"]
       },
       "asset": { "kind": "model", "prompt": "name" }
+    },
+    {
+      "name": "install",
+      "description": "Download the Blender Genex pins (about 350 MB) into Genex's own storage, once the user confirms it on a card, when blender__status says Blender is missing or too old. The user's own Blender stays as it is. It answers as the download starts; call blender__status until its runtime reads ready, a few minutes later.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      },
+      "confirmation": "Download Blender 5.2.1 (about 346 MB) into Genex's Local Blender storage, so agents can model with it. Genex verifies its digest, and your own Blender stays as it is."
     },
     {
       "name": "retrieve",

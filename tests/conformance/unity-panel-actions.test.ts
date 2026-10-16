@@ -42,7 +42,9 @@ describe("where a game's Unity stands, for the panel and the toolbar button", ()
     assert.deepEqual(await statusOf(none), { step: PanelStep.GetUnity, installed: [] });
     assert.deepEqual(await statusOf(none, NO_GAME), { step: PanelStep.GetUnity, installed: [] });
     const word = await wordOf(none);
-    assert.equal(word.badge, "Get");
+    // The plugin page's Editor row reads this word, so it says what is true, never Ready.
+    assert.equal(word.badge, "Not installed");
+    assert.equal(word.tone, "info");
     assert.match(String(word.title), /Unity 6 isn't installed/);
 
     const older = await backendOn(["2022.3.13f1"]);

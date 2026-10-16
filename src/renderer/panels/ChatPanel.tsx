@@ -11,6 +11,7 @@
  * the composer.
  */
 import type { JSX, RefObject } from "react";
+import { MessageOrigin } from "../../shared/protocol.ts";
 import { RunState } from "../../shared/run-state.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { ChatFilesScope, useChatFilesRecheck } from "../chat-files.ts";
@@ -25,6 +26,7 @@ import { RewindDialog } from "../chat/RewindDialog.tsx";
 import { type ChatParts, useChatPanel } from "../chat/use-chat-panel.ts";
 import { chatPlaceholder } from "../composer-placeholder.ts";
 import { loopAvailableFor } from "../loop-setting.ts";
+import { notifyProblem } from "../state/toasts.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
@@ -105,7 +107,13 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
       planModes={composer.permissions.planModes}
       steps={
         chat.isStudioThread ? null : (
-          <EngineStepsCard offer={stepsOffer(chat.threadEvents)} onNotice={parts.props.onNotice} />
+          <EngineStepsCard
+            offer={stepsOffer(chat.threadEvents)}
+            onNotice={parts.props.onNotice}
+            onFinished={(says) =>
+              void parts.report(says, MessageOrigin.SetupCard).catch(notifyProblem(parts.props.onNotice))
+            }
+          />
         )
       }
     >

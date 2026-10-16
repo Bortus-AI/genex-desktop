@@ -19,6 +19,7 @@ import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
+import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 
 type Arg<M extends keyof StudioApi, I extends number> = Parameters<StudioApi[M]>[I];
 
@@ -36,6 +37,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:update.about": "appAbout",
   "studio:bootstrap": "bootstrap",
   "studio:send": "send",
+  "studio:mentions.retry": "mentionRetry",
   "studio:plan.answer": "answerPlan",
   "studio:cancel": "cancelTurn",
   "studio:queue.message": "changeQueuedMessage",
@@ -128,6 +130,8 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:cli.update": "cliUpdate",
   "studio:subscription.signin": "subscriptionSignIn",
   "studio:subscription.forget-studio-login": "subscriptionForgetStudioLogin",
+  "studio:subscription.accounts": "subscriptionAccounts",
+  "studio:subscription.use-account": "subscriptionUseAccount",
   "studio:claude-login.state": "claudeLoginState",
   "studio:claude-login.code": "claudeLoginCode",
   "studio:claude-login.browser": "claudeLoginOpenBrowser",
@@ -161,6 +165,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.feed": "playFeed",
   "studio:play.shelves": "playShelves",
   "studio:play.search": "playSearch",
+  "studio:play.catalog": "playCatalog",
   "studio:play.remix": "playRemix",
   "studio:play.online": "playOnline",
   "studio:play.open": "playOpen",
@@ -258,6 +263,7 @@ export interface StudioInvokePayloads {
   "studio:update.about": undefined;
   "studio:bootstrap": undefined;
   "studio:send": { text: string } & NonNullable<Arg<"send", 1>>;
+  "studio:mentions.retry": { threadId: string; messageId: string; tag: MentionRef; action: MentionRetry };
   "studio:plan.answer": { threadId: string; id: string; approved: boolean };
   "studio:cancel": { threadId: string };
   "studio:queue.message": {
@@ -355,7 +361,9 @@ export interface StudioInvokePayloads {
   "studio:models.refresh": { provider: string };
   "studio:cli.update": { provider: string };
   "studio:subscription.signin": NonNullable<Arg<"subscriptionSignIn", 0>>;
-  "studio:subscription.forget-studio-login": { engine?: string };
+  "studio:subscription.forget-studio-login": { engine?: string; account?: string };
+  "studio:subscription.accounts": { engine: string };
+  "studio:subscription.use-account": { engine: string; account: string };
   "studio:claude-login.state": undefined;
   "studio:claude-login.code": { code: string };
   "studio:claude-login.browser": undefined;
@@ -389,6 +397,7 @@ export interface StudioInvokePayloads {
   "studio:play.feed": Arg<"playFeed", 0>;
   "studio:play.shelves": undefined;
   "studio:play.search": { query: string; shelf: PlayShelf };
+  "studio:play.catalog": undefined;
   "studio:play.remix": { slug: string };
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string };

@@ -13,9 +13,8 @@ the web files as reference.
 ## Plugins on or off
 
 Engine buttons show only on their games. Asked for an engine whose plugin is off, the chat shows its
-card (**Turn on** or **Install…**; a cross puts it away), acted on only by your click. On your word
-agents continue without it: background jobs, `app_look` at its windows (never clicking), its docs,
-or a plugin they write.
+card (**Turn on Unity** or **Install…**; × hides it); your click turns it on, then the chat goes
+on. A missing engine gets a setup card. Told to, agents go on without: jobs, `app_look`, docs.
 
 A plugin from a folder on this Mac starts off and runs with your access. Each tool asks first;
 Always allow lists it under **Runs without asking** until new code or turning it off; its steps at
@@ -24,9 +23,9 @@ Genex's moments never ask.
 ## Loops in place
 
 Except for web games at the folder's root (Blender files beside them allowed), the chat leads the
-Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers and claims
-finish; a reviewer checks (three no's stop it). Plugins add steps, reviewer pictures and editor
-locks: while you use an editor, agents wait. A linked engine game is no web game; Unreal and Godot
+Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers, pauses if
+blocked and claims finish; a reviewer checks (three no's stop it). Plugins add steps, reviewer
+pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web game; Unreal and Godot
 projects outside the game get no Loop or Rewind.
 
 ## Unreal
@@ -43,8 +42,8 @@ editor, which saves at save points, reloads after Rewind; **Change project** lin
 Its `web/` build plays in Live.
 
 **Roblox Studio** sets up your Studio; **New Roblox game** writes a Baseplate place, **Use in this
-game** links one per game. Unity sets up and opens its project; agents play through Pipeline (keys
-and mouse need Input System).
+game** links one per game. Unity sets up and opens its project; agents add packages, build and
+play (keys and mouse need Input System).
 
 ## Live's views
 

@@ -109,10 +109,16 @@ const MUTED = "info" as const satisfies PluginToolbarStatus["tone"];
 /**
  * The toolbar button's word and tooltip at each step, drawn as a dot (green once Ready, amber while
  * Starting) whose word only screen readers hear; Stalled stays a word, as it asks for the person.
- * The button shows only on a game with a Unity project, so the steps before one never reach it.
+ * The button shows only on a game with a Unity project, so the steps before one never reach it;
+ * the plugin page's Editor row reads the same word.
  */
 const WORD: Record<PanelStep, (version: string) => PluginToolbarStatus> = {
-  [PanelStep.GetUnity]: () => ({ badge: "Get", tone: MUTED, title: "Unity 6 isn't installed: see how to get it" }),
+  [PanelStep.GetUnity]: () => ({
+    badge: "Not installed",
+    tone: MUTED,
+    dot: true,
+    title: "Unity 6 isn't installed: see how to get it",
+  }),
   [PanelStep.NoGame]: () => ({ tone: MUTED, title: "Open a game to use Unity" }),
   [PanelStep.NoProject]: () => ({ tone: MUTED, title: "This game has no Unity project" }),
   [PanelStep.OldProject]: (version) => ({

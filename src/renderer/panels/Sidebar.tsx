@@ -6,7 +6,7 @@ import type { ComponentPropsWithRef, CSSProperties, JSX, ReactNode, RefObject } 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { type ReadyUpdate, UpdateAction } from "../../shared/app-update.ts";
 import { ThreadKind } from "../../shared/event-log.ts";
-import { FEEDBACK_WORDS, PLUGIN_UPDATE_WORDS, statusWords, UPDATE_WORDS } from "../words.ts";
+import { FEEDBACK_WORDS, statusWords, UPDATE_WORDS } from "../words.ts";
 import type { ConversationRecord, GameProject, ThreadMeta } from "../types.ts";
 import { Dot, IconButton } from "../ui/kit.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
@@ -23,6 +23,8 @@ import {
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu.tsx";
 import { NotificationsMenu } from "./NotificationsMenu.tsx";
+import { SidebarPluginUpdates } from "./SidebarPluginUpdates.tsx";
+import type { PluginUpdate } from "../state/plugins.ts";
 import type { Notice } from "../notifications.ts";
 import type { LaunchInSidebar } from "../state/launch.ts";
 import { sidebarGames } from "../state/threads.ts";
@@ -85,12 +87,14 @@ interface Props {
   onRestartToUpdate: () => Promise<boolean>;
   /** Open the waiting release's download page (Linux). */
   onDownloadUpdate: () => void;
-  /** The plugin releases waiting to be installed, as the tooltip names them ("Local Blender 1.2.0"). */
-  pluginUpdates: readonly string[];
+  /** The plugin updates waiting to be installed (`pluginUpdates`). */
+  pluginUpdates: readonly PluginUpdate[];
   /** Update plugins is installing them. */
   updatingPlugins: boolean;
-  /** Install every waiting plugin update, one after another. */
-  onUpdatePlugins: () => void;
+  /** Install every waiting plugin update but the unticked ones (`updateKey`), one after another. */
+  onUpdatePlugins: (skipped: ReadonlySet<string>) => void;
+  /** Open Plugins at one plugin's page. */
+  onOpenPlugin: (id: string) => void;
 }
 const meta = (thread: ConversationRecord) => (thread.metadata ?? {}) as ThreadMeta;
 
@@ -262,8 +266,8 @@ function LaunchRow({ title }: { title: string | null }): JSX.Element {
 }
 
 /**
- * What waits to be installed, over the foot of the game list: Update plugins above the app's own
- * Relaunch to update or Download.
+ * What waits to be installed, over the foot of the game list: the plugin updates line above the
+ * app's own Relaunch to update or Download.
  */
 function SidebarFooter({
   update,
@@ -272,46 +276,25 @@ function SidebarFooter({
   pluginUpdates,
   updatingPlugins,
   onUpdatePlugins,
+  onPlugins,
+  onOpenPlugin,
 }: Props): JSX.Element | null {
   const pluginsWait = pluginUpdates.length > 0 || updatingPlugins;
   if (!update && !pluginsWait) return null;
   return (
     <div className="sidebar-footer">
       {pluginsWait && (
-        <SidebarPluginUpdates releases={pluginUpdates} updating={updatingPlugins} onUpdate={onUpdatePlugins} />
+        <SidebarPluginUpdates
+          updates={pluginUpdates}
+          updating={updatingPlugins}
+          onUpdate={onUpdatePlugins}
+          onOpenPlugins={onPlugins}
+          onOpenPlugin={onOpenPlugin}
+        />
       )}
       {update?.action === UpdateAction.Download && <SidebarDownload update={update} onDownload={onDownloadUpdate} />}
       {update?.action === UpdateAction.Restart && <SidebarUpdate update={update} onRestart={onRestartToUpdate} />}
     </div>
-  );
-}
-
-/** Update plugins: installs every waiting plugin update, each after its own approval. */
-function SidebarPluginUpdates({
-  releases,
-  updating,
-  onUpdate,
-}: {
-  releases: readonly string[];
-  updating: boolean;
-  onUpdate: () => void;
-}): JSX.Element {
-  // The last release installs before the run ends: nothing is left to name then.
-  const hint = releases.length > 0 ? PLUGIN_UPDATE_WORDS.hint(releases) : PLUGIN_UPDATE_WORDS.updating;
-  return (
-    <Hint label={hint} side="top">
-      <button
-        type="button"
-        className="sidebar-update"
-        data-plugins-update
-        aria-busy={updating}
-        disabled={updating}
-        onClick={onUpdate}
-      >
-        <span>{updating ? PLUGIN_UPDATE_WORDS.updating : PLUGIN_UPDATE_WORDS.update(releases.length)}</span>
-        <Icon name="reload" size={16} />
-      </button>
-    </Hint>
   );
 }
 

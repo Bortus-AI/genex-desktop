@@ -105,7 +105,8 @@ export const PLUGIN_CHECK_ANSWER = {
 
 /** What `plugins_suggest` answers. */
 export const PLUGINS_SUGGEST_ANSWER = {
-  shown: "Shown to the person as a card. End your reply now; they turn it on, or tell you to go on without it.",
+  shown:
+    "Shown to the person as a card. End your reply now, and don't ask them to tell you once it's on: turning it on continues this chat by itself. They may also tell you to go on without it.",
   refused: (plugin: string) =>
     `No card was shown: "${plugin}" is not a Genex plugin that is off or in Genex's catalog. Call plugins_find to see which are.`,
   noChat: "No card was shown: there is no chat to show it in.",

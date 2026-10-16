@@ -73,6 +73,7 @@ import {
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
+import { MentionMiss } from "../shared/prompt-mention.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -1633,7 +1634,9 @@ export const A_PLUGIN = "A plugin";
 
 /** The steps card's own words; its rows are the plugin's. */
 export const STEPS_WORDS = {
-  notNow: "Not now",
+  /** Puts the card away for this game until the agent shows it again. */
+  hide: "Hide",
+  hideLabel: "Hide this card until the agent shows it again",
   done: "(done)",
   copy: "Copy",
   copied: "Copied",
@@ -1643,9 +1646,12 @@ export const STEPS_WORDS = {
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {
-  turnOn: "Turn on",
+  turnOn: (name: string) => `Turn on ${name}`,
   install: "Install…",
-  on: "On",
+  isOn: (name: string) => `${name} is on`,
+  /** The quiet button on a plugin that is on: its page in Plugins, where it turns off again. */
+  manage: "Plugins",
+  manageLabel: (name: string) => `Open ${name} in Plugins`,
   close: "Put this suggestion away",
   folders: (paths: string) => `Turning it on lets its programs write in: ${paths}`,
   /** A plugin loaded from a folder on this Mac: its code isn't sandboxed, and its tools ask first. */
@@ -2129,6 +2135,25 @@ export const MODEL_PICKER_WORDS = {
   free: "Free",
 } as const;
 
+/** A subscription's accounts, in Model Providers and the composer's usage panel (`subscription-accounts.ts`). */
+export const PROVIDER_ACCOUNT_WORDS = {
+  terminal: "Terminal login",
+  studio: "Studio account",
+  numbered: (n: number) => `Account ${n}`,
+  add: "Add account",
+  tabs: (provider: string) => `${provider} accounts`,
+  signOut: (account: string) => `Sign out of ${account}`,
+  signOutLine: "Studio forgets this account",
+  switchTo: (account: string) => `Use ${account}`,
+  waiting: "Waiting for your browser…",
+  openPage: "Open page",
+  haveCode: "Have a code?",
+  showTerminal: "Show terminal",
+  verifying: "Checking the sign-in…",
+  inTerminal: "Finish signing in in Studio's terminal.",
+  modelProviders: "Model providers",
+} as const;
+
 /** Settings → Model Providers: the metered rows, OpenCode and OpenRouter (`panels/MeteredProviders.tsx`). */
 export const METERED_PROVIDER_WORDS = {
   connected: "Connected",
@@ -2340,19 +2365,25 @@ export const UPDATE_WORDS = {
   downloadHint: "Opens the release page",
 } as const;
 
-/** How many waiting releases the Update plugins tooltip names before it counts them instead. */
-const PLUGIN_RELEASES_NAMED = 3;
-const RELEASE_LIST = new Intl.ListFormat("en", { style: "long", type: "conjunction" });
-
-/** The sidebar's Update plugins, while installed plugins have newer versions waiting (`state/plugins.ts`). */
+/** The sidebar's plugin updates line and its list, while installed plugins have newer versions waiting (`state/plugins.ts`). */
 export const PLUGIN_UPDATE_WORDS = {
-  update: (count: number) => (count === 1 ? "Update plugin" : `Update ${count} plugins`),
+  /** The line's name for what waits: it opens the list. */
+  count: (count: number) => (count === 1 ? "1 plugin update" : `${count} plugin updates`),
+  /** Install what is ticked: every update, or only some of them. */
+  update: (chosen: number, total: number) => {
+    if (chosen < total) return `Update ${chosen}`;
+    return total === 1 ? "Update" : "Update all";
+  },
   updating: "Updating plugins…",
-  /** The button's tooltip: the releases it installs ("Local Blender 1.2.0"), each after its own approval. */
-  hint: (releases: readonly string[]) =>
-    releases.length > PLUGIN_RELEASES_NAMED
-      ? `Installs ${releases.length} plugin updates`
-      : `Installs ${RELEASE_LIST.format(releases)}`,
+  heading: "Plugin updates",
+  /** Beside the heading while some updates are unticked. */
+  chosen: (chosen: number, total: number) => `${chosen} of ${total}`,
+  chooseAll: "Choose every update",
+  openPlugins: "Open Plugins",
+  /** A row's arrow: that plugin's own page. */
+  openPlugin: (name: string) => `Open ${name}`,
+  /** A row's versions, for a screen reader: "from 0.3.0 to 0.4.2". */
+  versions: (from: string, to: string) => `from ${from} to ${to}`,
 } as const;
 
 /** Send feedback, from the bug button at the top of the sidebar (`panels/FeedbackDialog.tsx`). */
@@ -3216,14 +3247,40 @@ export const PLUGINS_WORDS = {
     create: "Create a plugin",
     local: "Load local plugin…",
   },
-  more: {
-    title: "More plugins",
+  /** The catalog's plugins Genex makes, that you don't have. */
+  ours: {
+    title: "Plugins",
   },
-  /** The Marketplace while the catalog has nothing you don't have yet. */
+  /** The catalog's plugins anyone else made, reviewed before they are listed. */
+  community: {
+    title: "Community plugins",
+    by: "by",
+    /** The publisher's GitHub name, a link to their profile. */
+    profile: (login: string) => `Open ${login} on GitHub`,
+  },
+  /** A catalog plugin's page before it is installed: how to start, what it can do, where it comes from. */
+  listing: {
+    install: "Install",
+    installLabel: (name: string) => `Install ${name}`,
+    open: (name: string) => `Open ${name}`,
+    steps: "How to start",
+    installStep: "Install it. Genex shows what it can reach and asks you first.",
+    connectStep: (name: string) => `Open ${name}'s page and connect your account or key.`,
+    readyStep: "It turns on when installed: agents in all your games can use it from your next message.",
+    installedStep: "Installed.",
+    connectAccount: "Connect its account with the button above.",
+    /** A tile's and a page's mark while the plugin waits on its person. */
+    needsSetup: "Needs setup",
+    developer: "Developer",
+    source: "Source",
+    guide: "Guide",
+    category: "Category",
+  },
+  /** Community plugins while the catalog has none you don't have yet. */
   marketplace: {
-    title: "Marketplace",
+    title: "Community plugins",
     soon: "Coming soon",
-    text: "Plugins from more game dev tools are on the way.",
+    text: "Anyone can make one. The first ones are on the way.",
   },
   /** The MCP servers section before anyone has added one. */
   servers: {
@@ -3231,8 +3288,8 @@ export const PLUGINS_WORDS = {
     emptyText: "A command on this Mac, or a URL with browser sign-in. Agents in every game can use its tools.",
   },
   own: {
-    title: "Make your own plugin",
-    text: "Local Blender and the Genex plugin are plugins too: one folder with a manifest, tools and panels.",
+    title: "Make a community plugin",
+    text: "Anyone can: one folder with a manifest, tools and panels, the same way Local Blender and Genex are made.",
     guide: "Read the guide",
   },
   /** A plugin row's account, by what it needs next. */
@@ -3426,6 +3483,10 @@ export function commandResultWords(command: string, session: { exitCode?: number
   const tail = output.length ? `The last lines it printed:\n${output.join("\n")}` : "It printed nothing.";
   return `I ran this in the terminal:\n${command}\n\n${ended} ${tail}`;
 }
+
+/** What the chat tells the agent, unseen, when the person turned on the plugin it suggested. */
+export const pluginTurnedOnWords = (name: string): string =>
+  `I turned on the ${name} plugin from your card. Go on with what I asked.`;
 
 // ── Genex plugin ───────────────────────────────────────────────────────────────────────────
 
@@ -4193,6 +4254,12 @@ export const UNREAL_WORDS = {
     ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
+/** The Unity plugin's words in Studio's own UI. */
+export const UNITY_WORDS = {
+  /** The plugin page's name and line for the Unity plugin's editor connection. */
+  connection: { title: "Editor", text: "Your open Unity editor, where agents build Unity games." },
+} as const;
+
 // ── Genex account settings and avatars ─────────────────────────────────────────────────────
 
 /** Settings → Genex account: the avatar (generated or a photo) and the name, used everywhere on Genex. */
@@ -4314,4 +4381,41 @@ export const AVATAR_WORDS = {
     [AvatarGear.Sigil]: "Sigil",
     [AvatarGear.Scar]: "Scar",
   } satisfies Record<AvatarGear, string | null>,
+} as const;
+
+/** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
+export const MENTION_WORDS = {
+  listLabel: "Tag a game, tool or asset",
+  game: "Game",
+  tool: "Tool",
+  asset: "Asset",
+  yours: "Yours",
+  inMessage: "Already in your message",
+  yourGames: "Your games",
+  assets: "Assets",
+  tools: "Tools",
+  genexGames: "Games on Genex",
+  plugins: "Plugins",
+  plugin: "Plugin",
+  on: "On",
+  imagesHint: "Reference or mood board",
+  reading: "Loading Genex games and assets…",
+  noMatches: "No matches",
+  atCap: "That's as many as one message can carry. Remove one to tag something else.",
+  resultsLabel: "Tagged in this message",
+  ready: "Ready",
+  added: "Added",
+  read: "Your game · the agent can read it",
+  pluginRead: "Plugin · the agent will use it",
+  copied: "Downloaded for the agent to read",
+  addedTo: (path: string) => `Added to the game as ${path}`,
+  missed: {
+    [MentionMiss.NotDownloaded]: "Couldn't download it. Check your connection.",
+    [MentionMiss.NotTakeable]: "Its author no longer shares it.",
+    [MentionMiss.Gone]: "It's no longer there.",
+    [MentionMiss.NotWebGame]: "Assets are for web games.",
+  } satisfies Record<MentionMiss, string>,
+  tryAgain: "Try again",
+  removeTag: "Remove tag",
+  trying: "Trying…",
 } as const;

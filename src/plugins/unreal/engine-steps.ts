@@ -15,6 +15,9 @@ export const UnrealStepId = {
   SelectXcode: "select-xcode",
   UpdateXcode: "update-xcode",
   AddXcode: "add-xcode",
+  /** A Mac without the Unreal Genex makes games with: Epic's launcher, then the engine installed in it. */
+  GetLauncher: "get-launcher",
+  InstallEngine: "install-engine",
 } as const;
 export type UnrealStepId = (typeof UnrealStepId)[keyof typeof UnrealStepId];
 
@@ -32,6 +35,7 @@ export const GET_XCODE_ACTION = "get-xcode";
 export type StepAction = { name: string; args: Record<string, string>; label: string };
 /** One row of the card; `command` is a line the user runs in Terminal themselves. */
 export type UnrealStep = {
+  you?: true;
   id: UnrealStepId;
   label: string;
   detail: string;
@@ -40,7 +44,14 @@ export type UnrealStep = {
   command?: string;
 };
 /** The card: its heading, one line under it, its rows, and whether any step is still open. */
-export type UnrealSteps = { title: string; intro: string; steps: UnrealStep[]; open: boolean };
+export type UnrealSteps = {
+  title: string;
+  intro: string;
+  steps: UnrealStep[];
+  open: boolean;
+  secondary?: StepAction;
+  doneSays?: string;
+};
 
 /** How the intro counts the open steps: in words up to three, which is all the card ever holds. */
 const COUNT_WORDS = ["", "One", "Two", "Three"] as const;
@@ -160,4 +171,65 @@ export function unrealSteps(project: string | null, engine: string, xcode: Xcode
   const steps = [...setUp, ...xcodeSteps(xcode, engine)];
   const open = steps.filter((step) => !step.done).length;
   return { title: WORDS.Title, intro: open ? WORDS.Intro(open) : WORDS.AllDone, steps, open: open > 0 };
+}
+
+/** The plugin actions the install card's buttons run. Wire values: the manifest declares them. */
+export const InstallCardAction = { GetUnreal: "get-unreal", Skip: "skip" } as const;
+
+const INSTALL_WORDS = {
+  Intro: "Two steps before the agent can build in Unreal.",
+  GetLauncher: "Get the Epic Games Launcher",
+  GetLauncherDetail: "Epic's free app that installs Unreal. Genex opens Epic's download page.",
+  LauncherReady: "The Epic Games Launcher is installed",
+  Download: "Download",
+  Install: (version: string) => `Install Unreal ${version}`,
+  InstallDetail: (version: string) =>
+    `In the launcher, sign in, then Library, + beside Engine Versions, ${version}, Install. About 45 GB. Only you can sign in to Epic.`,
+  OpenLauncher: "Open the Epic Games Launcher",
+  Installed: (version: string) => `Unreal ${version} is installed`,
+  Skip: "Don't use Unreal",
+  Done: (version: string) =>
+    `Unreal ${version} is installed on this Mac. Go on with the person's game in Unreal: call unreal__new-game if it has no Unreal project yet.`,
+  Skipped:
+    "The person chose not to use Unreal for now (Don't use Unreal on the setup card). Offer in one line to build the game as a web game that plays in Genex instead, and do it if they agree.",
+} as const;
+
+/**
+ * The setup card on a Mac without the Unreal Genex makes games with: Epic's launcher (Genex opens
+ * Epic's download page), then Unreal installed in it, which only the person can do (it asks for
+ * their Epic account). Closed, with what the agent is told, once Unreal is there or the person chose
+ * Don't use Unreal.
+ */
+export function unrealInstallCard(state: {
+  launcher: boolean;
+  version: string;
+  installed: boolean;
+  skipped: boolean;
+}): UnrealSteps {
+  const { version } = state;
+  const launcher: UnrealStep = state.launcher
+    ? { id: UnrealStepId.GetLauncher, label: INSTALL_WORDS.LauncherReady, detail: "", done: true }
+    : {
+        id: UnrealStepId.GetLauncher,
+        label: INSTALL_WORDS.GetLauncher,
+        detail: INSTALL_WORDS.GetLauncherDetail,
+        done: false,
+        action: { name: InstallCardAction.GetUnreal, args: {}, label: INSTALL_WORDS.Download },
+      };
+  const engine: UnrealStep = state.installed
+    ? { id: UnrealStepId.InstallEngine, label: INSTALL_WORDS.Installed(version), detail: "", done: true }
+    : {
+        id: UnrealStepId.InstallEngine,
+        label: INSTALL_WORDS.Install(version),
+        detail: INSTALL_WORDS.InstallDetail(version),
+        done: false,
+        you: true,
+        ...(state.launcher
+          ? { action: { name: InstallCardAction.GetUnreal, args: {}, label: INSTALL_WORDS.OpenLauncher } }
+          : {}),
+      };
+  const card = { title: WORDS.Title, intro: INSTALL_WORDS.Intro, steps: [launcher, engine] };
+  if (state.installed) return { ...card, open: false, doneSays: INSTALL_WORDS.Done(version) };
+  if (state.skipped) return { ...card, open: false, doneSays: INSTALL_WORDS.Skipped };
+  return { ...card, open: true, secondary: { name: InstallCardAction.Skip, args: {}, label: INSTALL_WORDS.Skip } };
 }

@@ -47,6 +47,7 @@ import { plainDefect, reportSummary } from "./run-graph.ts";
 import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
+import { type MentionOutcome, mergeMentionResults, withoutMentionContext } from "../shared/prompt-mention.ts";
 import { type EngineLinkedPayload, GameEngine, isEngineId, isGameEngine } from "../shared/game-engine.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
 import { offeredRewindUndo } from "../shared/chat-rewind.ts";
@@ -116,6 +117,8 @@ export const EntryKind = {
   Compaction: "compaction",
   /** A session's card to turn a Genex plugin on or install it (`plugin_suggested`). */
   PluginSuggestion: "plugin-suggestion",
+  /** What a message's @ tags gave the agent (`mention_tagged`): one card under the message. */
+  Mentions: "mentions",
 } as const;
 export type EntryKind = (typeof EntryKind)[keyof typeof EntryKind];
 
@@ -152,6 +155,8 @@ export type Entry =
       contractor?: boolean;
       /** What a note sent to a build from its graph was about. */
       about?: string;
+      /** The @ tags the message carried, painted in its words. */
+      tags?: string[];
     }
   /**
    * A line of narration. `attention` marks one that reports trouble (a round stopped or broke
@@ -165,6 +170,8 @@ export type Entry =
   | { kind: typeof EntryKind.Activity; id: string; rows: Array<{ text: string; tag?: string }> }
   /** The conversation was compacted: its own row, opening to the summary that replaced the messages. */
   | { kind: typeof EntryKind.Compaction; id: string; messages: number | null; summary: string | null }
+  /** A message's @ tags and their results; `messageId` is the queue's, for Try again. */
+  | { kind: typeof EntryKind.Mentions; id: string; messageId?: string; tags: MentionOutcome[] }
   /** The turn-it-on card a session showed: its button is read from the live plugin list. */
   | { kind: typeof EntryKind.PluginSuggestion; id: string; suggestion: PluginSuggestedPayload }
   /** One plain line about what Harness learned; `link` opens Activity. */
@@ -506,6 +513,16 @@ interface ChatDraft {
   runResults: Map<string, MorningEntry>;
   /** Follow-ups typed during work and not yet delivered: a Stop with one waiting hands over to it. */
   waiting: Set<string>;
+  /**
+   * Each sent message's bubble by its queue id, and the @ tag cards whose message has not shown
+   * yet: main records a message's tags as it hands the message on, which can be before the queue
+   * writes the message itself.
+   */
+  tagged: {
+    queueIds: ReadonlyMap<string, string>;
+    bubbles: Map<string, UserEntry>;
+    cards: Map<string, MentionsEntry>;
+  };
   /** The chip group new tool rows join, until a line of narration closes it. */
   group: ToolsEntry | null;
   /** Each game's engine-link lines by the link's time, with the game's title, so Undo lands on its line. */
@@ -522,8 +539,13 @@ interface ChatDraft {
   finishLines: Map<string, { entry: SystemEntry; runId: string; checking: boolean }>;
 }
 
-export function toEntries(events: EventEnvelope[]): Entry[] {
-  const chat = newChatDraft(events);
+/**
+ * The chat's entries from its log. `queueIds` names each sent message's queue id by the event that
+ * wrote it (the queue's own record, read from the log in its written order); without it, a message
+ * is named by the queue record right after it.
+ */
+export function toEntries(events: EventEnvelope[], queueIds?: ReadonlyMap<string, string>): Entry[] {
+  const chat = newChatDraft(events, queueIds ?? queueIdsInOrder(events));
   for (const event of events) readEvent(chat, event);
   keepOfferedRewind(chat, events);
   placeLastCoverCard(chat);
@@ -534,7 +556,18 @@ export function toEntries(events: EventEnvelope[]): Entry[] {
   return withUniqueIds(foldRoutine(chat.entries, chat.runResults));
 }
 
-function newChatDraft(events: EventEnvelope[]): ChatDraft {
+/** Each message's queue id by the event before its `coordinator_message_queued` record. */
+function queueIdsInOrder(events: readonly EventEnvelope[]): Map<string, string> {
+  const ids = new Map<string, string>();
+  for (const [index, event] of events.entries()) {
+    const queued = customPayload(event.data, CustomEvent.CoordinatorMessageQueued)?.messageId;
+    const before = events[index - 1];
+    if (queued && before) ids.set(before.id, queued);
+  }
+  return ids;
+}
+
+function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, string>): ChatDraft {
   return {
     signInReplies: new Set(
       events.flatMap((event, index) => {
@@ -569,6 +602,7 @@ function newChatDraft(events: EventEnvelope[]): ChatDraft {
     runAssets: new Map(),
     runResults: new Map(),
     waiting: new Set(),
+    tagged: { queueIds, bubbles: new Map(), cards: new Map() },
     group: null,
   };
 }
@@ -695,7 +729,8 @@ const NOTE_ABOUT = "Note to the build";
 /** A user bubble; a note sent to a build from its graph shows the words the user wrote, and what they were about. */
 function userEntry(id: string, content: string): Entry {
   const note = splitFeedback(content);
-  if (!note) return { id, kind: EntryKind.User, text: content };
+  // The lines about the message's @ tags are the agent's; the person sees their own words.
+  if (!note) return { id, kind: EntryKind.User, text: withoutMentionContext(content) };
   return { id, kind: EntryKind.User, text: note.text, about: NOTE_ABOUT };
 }
 
@@ -704,7 +739,9 @@ function readMessages(chat: ChatDraft, eventId: string, data: Extract<EventData,
     const messageId = `${eventId}-${messageIndex}`;
     if (message.role === "user") {
       for (const entry of chat.entries) if (awaitsAnswer(entry)) entry.pending = false;
-      chat.entries.push(userEntry(messageId, message.content));
+      const bubble = userEntry(messageId, message.content);
+      chat.entries.push(bubble);
+      placeTagCard(chat, chat.tagged.queueIds.get(eventId), bubble);
     } else if (message.role === "assistant") {
       readReply(chat, messageId, message, data.usage?.model);
     } else if (message.role === "system") {
@@ -1605,6 +1642,53 @@ function openPluginRow(
   return row;
 }
 
+/** A bubble: the user's, or the assistant's (one entry shape holds both). */
+type UserEntry = Extract<Entry, { kind: typeof EntryKind.User | typeof EntryKind.Assistant }>;
+type MentionsEntry = Extract<Entry, { kind: typeof EntryKind.Mentions }>;
+
+/**
+ * What a message's @ tags gave the agent (and again when a tag is tried again or taken off): one
+ * card under the message, each tag's latest result, and the message's words paint the tags. The
+ * card waits for its message when the tags were recorded first.
+ */
+function narrateMentions(chat: ChatDraft, event: EventEnvelope): void {
+  const tagged = customPayload(event.data, CustomEvent.MentionTagged);
+  const tags = tagged?.tags ?? [];
+  if (!tags.length) return;
+  const messageId = tagged?.messageId;
+  const known = messageId ? chat.tagged.cards.get(messageId) : undefined;
+  if (known) {
+    known.tags = mergeMentionResults(known.tags, tags);
+    return;
+  }
+  const card: MentionsEntry = { kind: EntryKind.Mentions, id: event.id, ...(messageId ? { messageId } : {}), tags };
+  if (!messageId) {
+    const at = chat.entries.findLastIndex((entry) => entry.kind === EntryKind.User);
+    putTagCard(chat, card, at);
+    return;
+  }
+  chat.tagged.cards.set(messageId, card);
+  const bubble = chat.tagged.bubbles.get(messageId);
+  if (bubble) putTagCard(chat, card, chat.entries.indexOf(bubble));
+}
+
+/** A sent message's bubble, by its queue id: a card already waiting for it goes under it. */
+function placeTagCard(chat: ChatDraft, messageId: string | undefined, bubble: Entry): void {
+  if (!messageId || bubble.kind !== EntryKind.User) return;
+  chat.tagged.bubbles.set(messageId, bubble);
+  const card = chat.tagged.cards.get(messageId);
+  if (card && !chat.entries.includes(card)) putTagCard(chat, card, chat.entries.indexOf(bubble));
+}
+
+/** The card under the bubble at `at` (at the end when there is none), and the bubble paints its tags. */
+function putTagCard(chat: ChatDraft, card: MentionsEntry, at: number): void {
+  const bubble = chat.entries[at];
+  if (bubble?.kind === EntryKind.User) bubble.tags = card.tags.map((tag) => tag.handle);
+  // Under its message, ahead of anything the turn has said since.
+  if (at < 0) chat.entries.push(card);
+  else chat.entries.splice(at + 1, 0, card);
+}
+
 function narrateDelivery(chat: ChatDraft, event: EventEnvelope): void {
   const delivery = customPayload(event.data, CustomEvent.AssetDelivered);
   if (!delivery || !isAssetDelivery(delivery)) return;
@@ -2017,6 +2101,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateMove,
   narrateModel,
   narratePluginCall,
+  narrateMentions,
   narrateDelivery,
   narrateConnector,
   narrateFix,

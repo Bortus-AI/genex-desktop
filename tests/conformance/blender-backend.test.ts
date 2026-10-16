@@ -47,7 +47,14 @@ async function game(): Promise<string> {
 
 /** A host that records every call and answers like Studio's for one completed job. */
 async function recordingHost(
-  options: { studio?: unknown; made?: Record<string, unknown>; delivered?: string[]; godot?: string } = {},
+  options: {
+    studio?: unknown;
+    made?: Record<string, unknown>;
+    delivered?: string[];
+    godot?: string;
+    unity?: string;
+    runtime?: Record<string, unknown>;
+  } = {},
 ) {
   const calls: Call[] = [];
   const output = await tmpDir("blender-backend-output-");
@@ -70,6 +77,10 @@ async function recordingHost(
     if (method === "assets.deliver")
       return options.delivered ?? ["assets/blender/job-1/model.glb", "assets/blender/job-1/render.png"];
     if (method === "project.read" && args.path === options.godot) return "config_version=5\n";
+    if (method === "project.read" && args.path === options.unity) return "m_EditorVersion: 6000.3.10f1\n";
+    if (method === "runtime.detect") return options.runtime;
+    if (method === "runtime.install") return { started: true };
+    if (method === "native.jobs") return [];
     if (method === "jobs.write") return true;
     if (method === "project.read" && args.path === "studio.json" && options.studio !== undefined)
       return JSON.stringify(options.studio);
@@ -78,8 +89,9 @@ async function recordingHost(
   return { calls, host };
 }
 
-/** Call `blender__model` the way Studio does, in `directory`. */
-async function callModel(
+/** Call one of the plugin's tools the way Studio does, in `directory`. */
+async function callTool(
+  tool: string,
   directory: string,
   args: Record<string, PluginScalar>,
   options: Parameters<typeof recordingHost>[0] = {},
@@ -87,9 +99,16 @@ async function callModel(
   const { calls, host } = await recordingHost(options);
   const activation = await activate({ call: host as never });
   const ctx = { project: "game", directory, signal: new AbortController().signal, callId: 1, host } as PluginContext;
-  const run = activation.tool?.("model", args, ctx) as Promise<Record<string, any>>;
+  const run = activation.tool?.(tool, args, ctx) as Promise<Record<string, any>>;
   return { calls, run };
 }
+
+/** Call `blender__model` the way Studio does, in `directory`. */
+const callModel = (
+  directory: string,
+  args: Record<string, PluginScalar>,
+  options: Parameters<typeof recordingHost>[0] = {},
+) => callTool("model", directory, args, options);
 
 const nativeRun = (calls: Call[]) => calls.find((c) => c.method === "native.run")?.args as Record<string, any>;
 
@@ -335,5 +354,49 @@ describe("Local Blender model calls", () => {
     assert.doesNotMatch(guidance, /GLTFLoader/);
     const elsewhere = await callModel(dir, { name: "panel" }, { delivered });
     assert.match(String((await elsewhere.run).guidance), /GLTFLoader/, "no project.godot there: a web game's words");
+  });
+
+  it("guides a Unity game to glTFast and the editor's import, never to a web loader", async () => {
+    const dir = await game();
+    const unity = await callModel(dir, { name: "panel" }, { unity: "unity/ProjectSettings/ProjectVersion.txt" });
+    const guidance = String((await unity.run).guidance);
+    assert.match(guidance, /com\.unity\.cloud\.gltfast/);
+    assert.match(guidance, /import_asset/);
+    assert.doesNotMatch(guidance, /GLTFLoader/);
+    const own = await callModel(dir, { name: "panel" }, { unity: "ProjectSettings/ProjectVersion.txt" });
+    assert.match(String((await own.run).guidance), /import_asset/, "a game that is itself the Unity project");
+  });
+});
+
+describe("Local Blender when this Mac's Blender can't run", () => {
+  const TOO_OLD = {
+    state: "incompatible",
+    path: "/Applications/Blender.app/Contents/MacOS/Blender",
+    version: "4.1.1",
+    detail: "Blender 4.1.1; requires 4.2.0 or newer.",
+  };
+
+  it("says in its status what the user is told and how it is fixed", async () => {
+    const dir = await game();
+    for (const runtime of [TOO_OLD, { state: "missing", detail: "Blender is not installed." }]) {
+      const status = await (await callTool("status", dir, {}, { runtime })).run;
+      assert.equal(status.runtime, runtime);
+      assert.match(String(status.next), /tell the user/i, runtime.state);
+      assert.match(String(status.next), /blender__install/, runtime.state);
+    }
+    const ready = { state: "ready", path: "/Applications/Blender.app/Contents/MacOS/Blender", version: "5.2.1" };
+    assert.equal((await (await callTool("status", dir, {}, { runtime: ready })).run).next, undefined);
+  });
+
+  it("starts the pinned download on install, once the user confirms it, and says how to follow it", async () => {
+    const dir = await game();
+    const { calls, run } = await callTool("install", dir, {}, { runtime: TOO_OLD });
+    const answer = await run;
+    assert.deepEqual(
+      calls.map((call) => call.method),
+      ["runtime.install"],
+    );
+    assert.deepEqual(calls[0]?.args, { runtime: "blender" });
+    assert.match(String(answer.next), /blender__status/);
   });
 });

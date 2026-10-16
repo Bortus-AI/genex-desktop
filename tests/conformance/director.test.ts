@@ -3589,6 +3589,8 @@ describe("a director's run through the real core and harness", () => {
       [
         // Flipped: a lead may look at an app window (look-only, in every mode).
         "app_look",
+        // Flipped: Local Blender asks the person on a card to download its pinned Blender.
+        "blender__install",
         "blender__model",
         "blender__retrieve",
         "blender__status",

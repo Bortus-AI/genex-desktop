@@ -7,7 +7,7 @@
   --tick:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
   --warning:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10.3 4.8 3.4 17a2 2 0 0 0 1.7 3h13.8a2 2 0 0 0 1.7-3L13.7 4.8a2 2 0 0 0-3.4 0z'/%3E%3Cpath d='M12 10v3.5M12 16.6v.1'/%3E%3C/svg%3E")}
 /* Chosen for at least 4.5:1 on every light theme's background. */
-:root[data-scheme="light"]{--warn:#95570b;--err:#b3303d;--outline:color-mix(in srgb,var(--fg) 16%,var(--bg));color-scheme:light}
+:root[data-scheme="light"]{--warn:#95570b;--err:#b3303d;--outline:rgb(0 0 0/.1);color-scheme:light}
 *{box-sizing:border-box}
 body{margin:0;padding:24px 28px 22px;font:14px/20px var(--sans);color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
 @media (max-width:480px){body{padding:20px 16px}}
@@ -85,28 +85,33 @@ button svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke
 .problem{color:var(--err);white-space:pre-wrap;overflow-wrap:anywhere}
 .problem:empty{display:none}
 @media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:none}.orb{animation:none}}
+/* On a dialog's card the dialog holds the heading and the padding: the page keeps a thin edge for focus rings. */
+:root[data-surface="card"] body{padding:4px}
+/* A rare action for the whole page: words with a line under them, no padding, no fill. */
+button.link{min-height:0;padding:0;border-radius:4px;background:none;color:var(--quiet);font:13px/18px var(--sans);letter-spacing:0;text-decoration:underline;text-decoration-color:color-mix(in srgb,currentColor 40%,transparent);text-underline-offset:3px}
+button.link:hover,button.link:disabled:hover{background:none;color:var(--fg);text-decoration-color:currentColor}
 /* Last, so it wins over every class that sets a display. */
 [hidden]{display:none}
 </style></head><body>
 <main id="app" aria-busy="true">
 <section id="setup" aria-labelledby="title">
-  <div class="intro"><h2 id="title" tabindex="-1">Set up Roblox Studio</h2><p class="quiet" id="intro">Looking for Roblox Studio…</p></div>
+  <div class="intro" data-panel-head><h2 id="title" tabindex="-1">Set up Roblox Studio</h2><p class="quiet" id="intro">Looking for Roblox Studio…</p></div>
   <p class="problem" id="problem" role="alert"></p>
   <ol class="steps" id="steps" aria-label="Setup steps"></ol>
-  <div class="actions" id="setup-more" hidden><button type="button" class="quiet" id="undo" data-action="undo-setup">Undo Set up</button><button type="button" class="quiet" id="luau" data-action="add-luau-checks" hidden>Add Luau checks</button></div>
+  <div class="actions" id="setup-more" hidden><button type="button" class="link" id="undo" data-action="undo-setup">Undo Set up</button><button type="button" class="link" id="luau" data-action="add-luau-checks" hidden>Add Luau checks</button></div>
   <p class="say quiet" id="setup-say" role="status"></p>
 </section>
 <section id="places" aria-labelledby="places-title" hidden>
-  <div class="intro"><h2 id="places-title" tabindex="-1">Choose your place</h2><p class="quiet">Places open in Studio right now.</p></div>
+  <div class="intro" data-panel-head><h2 id="places-title" tabindex="-1">Choose your place</h2><p class="quiet">Places open in Studio right now.</p></div>
   <p class="waiting" id="places-loading"><span class="orb" aria-hidden="true"></span>Looking for places</p>
   <p class="quiet" id="places-none" hidden>No place is open in Roblox Studio.</p>
   <ul class="places" id="open-places" aria-label="Places open in Studio"></ul>
   <p class="sub-h" id="files-title" hidden>Place files on this computer</p>
   <ul class="places" id="file-places" aria-labelledby="files-title" hidden></ul>
   <p class="sub-h" id="places-start">Or start one</p>
-  <div class="actions"><button type="button" id="places-new" data-action="create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New Roblox game</button><button type="button" class="quiet" id="places-file">Open a place file…</button></div>
+  <div class="actions"><button type="button" id="places-new" data-action="create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New Roblox game</button><button type="button" id="places-file">Open a place file…</button></div>
   <p class="say" id="places-say" role="status"></p>
-  <div class="actions"><button type="button" class="quiet" id="places-back">Back</button></div>
+  <div class="actions"><button type="button" class="link" id="places-back" data-panel-back>Back</button></div>
 </section>
 <p class="sr-only" id="announce" role="status"></p>
 <footer class="legal">Not affiliated with Roblox Corporation. For people 18 and over.</footer>
@@ -366,7 +371,7 @@ function publishParts(actions, body) {
 function placeButtons(row) {
   const actions = text("div", "actions");
   if (row.done) {
-    if (ui.game) actions.append(actionButton(WORDS.chooseAnother, showPlaces, { className: "quiet", key: "change-place" }));
+    if (ui.game) actions.append(actionButton(WORDS.chooseAnother, showPlaces, { key: "change-place" }));
     return actions;
   }
   if (ui.game)

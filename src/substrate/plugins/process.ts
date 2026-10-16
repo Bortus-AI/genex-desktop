@@ -65,7 +65,8 @@ export class PluginCallNotSent extends Error {
 /**
  * A plugin backend's whole environment, built from scratch: PATH, HOME, TMPDIR, the credential
  * opt-out and, on Windows, what any program needs to start there plus ProgramData and Program
- * Files (x86). Nothing else of Studio's.
+ * Files (x86), and the made-up Mac a development test of an engine plugin names. Nothing else of
+ * Studio's.
  * `toolPath` is the user's login PATH when known: an app started from the Finder has a bare one,
  * on which a backend finds none of the user's tools (Genex's publish needs git-lfs from Homebrew).
  */
@@ -81,6 +82,7 @@ export function pluginBackendEnv(
     TMPDIR: parent.TMPDIR,
     ELECTRON_RUN_AS_NODE: "1",
     STUDIO_DISABLE_OS_CREDENTIALS: parent.STUDIO_DISABLE_OS_CREDENTIALS,
+    STUDIO_ENGINE_TEST_ROOT: parent.STUDIO_ENGINE_TEST_ROOT,
     // Where Windows keeps shared app data and 32-bit programs, which a plugin may need to find an
     // installed app (Epic's launcher keeps its list of engines there); neither is secret.
     ...(platform === "win32"

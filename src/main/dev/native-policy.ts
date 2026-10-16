@@ -22,6 +22,10 @@ const NATIVE_CHANNELS = [
   "studio:plugins.genex-publish",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
+  // A subscription's accounts: listing asks each account's CLI for its email; choosing one changes
+  // the account every run signs in with.
+  "studio:subscription.accounts",
+  "studio:subscription.use-account",
   // OpenCode's sign-in runs its CLI in a terminal and reaches the provider the person picks.
   "studio:opencode.signin",
   // Opens the sign-in page a terminal printed in the person's browser.
@@ -140,6 +144,8 @@ const FIXTURE_SAFE = [
   "studio:bootstrap",
   "studio:performance.mark",
   "studio:send",
+  // A failed @ tag fetched again: a fixture launch's tag sources are its own stand-ins, as Remix's are.
+  "studio:mentions.retry",
   "studio:plan.answer",
   "studio:cancel",
   "studio:queue.message",
@@ -272,6 +278,7 @@ const FIXTURE_SAFE = [
   "studio:play.feed",
   "studio:play.shelves",
   "studio:play.search",
+  "studio:play.catalog",
   // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
   // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
   "studio:play.remix",

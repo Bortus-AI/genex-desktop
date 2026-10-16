@@ -81,7 +81,7 @@ describe("making a Godot game", () => {
     assert.match(String(ready.note), /godot__new-game/);
     const none = await tool(await godotBackendFixture({ apps: [] }), GodotTool.EngineStatus);
     assert.equal(none.ready, false);
-    assert.match(String(none.note), /Godot button/);
+    assert.match(String(none.note), /godot__show-steps/, "the setup card installs Godot");
     assert.doesNotMatch(String(none.note), /call godot__new-game with/);
   });
 
@@ -304,9 +304,11 @@ describe("Genex's moments in a Godot game", () => {
 
 describe("the panel and the toolbar", () => {
   it("says to get Godot, names its version, asks to set a game up, and shows when Godot has it open", async () => {
+    // The same word as Unity's and Unreal's: what is true, in grey; the setup card is where to get it.
     assert.deepEqual(await action(await godotBackendFixture({ apps: [] }), "toolbar-status"), {
-      badge: "Get",
-      tone: "warn",
+      badge: "Not installed",
+      tone: "info",
+      dot: true,
       title: "Get Godot 4",
     });
     const fixture = await withProject();
@@ -333,10 +335,7 @@ describe("the panel and the toolbar", () => {
   it("a game whose chat chose Godot before Godot was here shows the Godot button, and no other game does", async () => {
     const none = await godotBackendFixture({ apps: [] });
     assert.equal((await action(none, "toolbar-status")).shown, undefined, "nothing chosen yet");
-    await assert.rejects(
-      tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }),
-      /Godot button is now above the game/,
-    );
+    await assert.rejects(tool(none, GodotTool.NewGame, { template: "2d", name: "Moon" }), /godot__show-steps/);
     assert.equal((await action(none, "toolbar-status")).shown, true, "the refused game keeps its button out");
     const other = await none.backend.action?.("toolbar-status", {}, none.context({ project: "another" }));
     assert.equal((other as Answer).shown, undefined, "another game's strip stays as it was");

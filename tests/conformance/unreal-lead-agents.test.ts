@@ -204,6 +204,15 @@ async function leadOn(options: { offers?: Lead["offers"]; cpp?: Lead["cpp"]; dir
 
 const KATANA = { kind: "blender_model", title: "Katana", brief: "A katana, 96 cm long, the grip wrapped in red." };
 
+/** How many event-loop turns a test waits at most for the host to see a sub-agent's turn begin. */
+const TURN_START_TICKS = 200;
+
+/** Waits until the host has been asked for `count` sub-agent turns in all (each agent's copy is made first). */
+async function turnsBegun(rec: CtxRecorder, count: number): Promise<void> {
+  for (let i = 0; rec.paramsOf("engine.delegate").length < count && i < TURN_START_TICKS; i++) await tick();
+  assert.equal(rec.paramsOf("engine.delegate").length, count, "the sub-agents' turns began");
+}
+
 /** Starts one sub-agent and waits until its turn has ended and its delivery is in. */
 async function deliver(lead: Lead, args: Record<string, string> = KATANA): Promise<AgentRecord> {
   const answer = await startAgent(lead, args);
@@ -411,7 +420,7 @@ describe("a lead's sub-agent, started", () => {
     await startAgent(lead, { ...KATANA, title: "Scabbard" });
     const third = await startAgent(lead, { ...KATANA, title: "Guard" });
     assert.match(third, /at most 2 workers work at once/);
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, 2);
     assert.equal(rec.paramsOf("engine.delegate").length, 2);
     await settleAgents(lead);
   });
@@ -880,10 +889,11 @@ describe("the close of a run with sub-agents", () => {
   it("stops the ones at work and keeps every delivered file; one that wrote its manifest lands", async () => {
     const { lead, host, rec } = await leadOn();
     await deliver(lead);
+    const delivered = rec.paramsOf("engine.delegate").length;
     host.turns = ["hangs", "hangs"];
     await startAgent(lead, { kind: "sound", title: "Wind", brief: "A low wind." });
     await startAgent(lead, { ...KATANA, title: "Scabbard" });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, delivered + 2);
     host.tree = [];
     await settleAgents(lead);
     assert.equal(rec.paramsOf("engine.abort").length, 2, "both turns are aborted");
@@ -896,10 +906,10 @@ describe("the close of a run with sub-agents", () => {
   });
 
   it("lands a delivery whose manifest was written as the run closed", async () => {
-    const { lead, host } = await leadOn();
+    const { lead, host, rec } = await leadOn();
     host.turns = ["hangs"];
     await startAgent(lead, KATANA);
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, 1);
     await settleAgents(lead);
     const [agent] = lead.journal.agents;
     assert.equal(agent?.state, AgentState.Done);
@@ -971,7 +981,7 @@ describe("the lead's workers, in Genex's one worker model", () => {
     host.turns = ["hangs"];
     const call = leadToolHandler(lead);
     await call("worker_start", { type: "blender_model", title: "Katana", task: "A katana." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, 1);
     assert.match(String(await call("worker_steer", { id: "blender_model-1", text: "longer" })), /cannot be steered/);
     assert.match(String(await call("worker_stop", { id: "blender_model-1" })), /^Stopping blender_model-1/);
     const aborted = rec.paramsOf("engine.abort");
@@ -985,7 +995,7 @@ describe("the lead's workers, in Genex's one worker model", () => {
     bare.host.tree = [];
     const stop = leadToolHandler(bare.lead);
     await stop("worker_start", { type: "sound", title: "Wind", task: "A low wind." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(bare.rec, 1);
     await stop("worker_stop", { id: "sound-1" });
     const [wind] = bare.lead.journal.agents;
     assert.equal(wind?.state, AgentState.Stopped, "nothing delivered: it ends as stopped");
@@ -1010,14 +1020,14 @@ describe("the lead's workers, in Genex's one worker model", () => {
     stopped.host.tree = [];
     const call = leadToolHandler(stopped.lead);
     await call("worker_start", { type: "sound", title: "Wind", task: "A low wind." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(stopped.rec, 1);
     await call("worker_stop", { id: "sound-1" });
     assert.deepEqual(stopCodeOf(stopped.rec, "agent-sound-1"), [["stopped", "stopped_by_lead"]]);
 
     const closed = await leadOn();
     closed.host.turns = ["hangs"];
     await startAgent(closed.lead, { kind: "sound", title: "Wind", brief: "A low wind." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(closed.rec, 1);
     closed.host.tree = [];
     await settleAgents(closed.lead);
     assert.deepEqual(stopCodeOf(closed.rec, "agent-sound-1"), [["stopped", "run_ended"]]);
@@ -1097,7 +1107,7 @@ describe("the lead's workers, in Genex's one worker model", () => {
     });
     const call = leadToolHandler(lead);
     await call("worker_start", { type: "blender_model", title: "Katana", task: "A katana." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, 1);
     const row = (id: string, state: string) => ({
       id,
       data: {
@@ -1177,7 +1187,7 @@ describe("the lead's workers, in Genex's one worker model", () => {
     });
     const call = leadToolHandler(lead);
     await call("worker_start", { type: "sound", title: "Wind", task: "A low wind." });
-    for (let i = 0; i < 5; i++) await tick();
+    await turnsBegun(rec, 1);
     await call("worker_stop", { id: "sound-1" });
     assert.equal(rec.paramsOf("engine.abort").length, 2, "sent again once nothing was found");
     const [wind] = lead.journal.agents;

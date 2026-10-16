@@ -261,6 +261,28 @@ describe("claude code delegated engine", () => {
     assert.equal(toolUse.parts[0]?.name, "Write");
   });
 
+  it("runs on the account chosen in Settings: an added one in its own home, the Terminal login in the CLI's", async () => {
+    const root = await tmpDir("studio-engine-accounts-");
+    const home = path.join(root, "claude-home");
+    const systemHome = path.join(root, "dot-claude");
+    for (const dir of [home, systemHome]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, ".credentials.json"), "{}");
+    }
+    const { fn, seen } = fakeQuery(successRun);
+    const engine = new ClaudeCodeEngine({ resolveCli: fixtureCodingCli, engineHome: home, systemHome, queryFn: fn });
+    const added = await engine.accounts.newAccount();
+    await writeFile(path.join(added.home, ".credentials.json"), "{}");
+    await engine.accounts.remember(added.id, { email: "work@example.com" });
+    await engine.accounts.choose(added.id);
+    await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
+    await engine.accounts.choose("terminal");
+    await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
+    const envs = seen.map((call) => (call as { env: Record<string, string> }).env.CLAUDE_CONFIG_DIR);
+    assert.deepEqual(envs, [added.home, undefined]);
+    assert.deepEqual(await engine.resolveLogin(), { source: "system", home: systemHome });
+  });
+
   it("turns a subscription throttle into a recoverable engine error", async () => {
     const root = await tmpDir("studio-engine-");
     const { fn } = fakeQuery([], { throwOn: new Error("Claude usage limit reached; resets at 5pm") });

@@ -69,6 +69,7 @@ import {
   type PluginWorkspace,
 } from "../shared/project-workspace.ts";
 import { readEngineBinding } from "./game-engine-binding.ts";
+import { usesGenexMultiplayer } from "./genex-game-manifest.ts";
 import { exportPublicGame, type ExportOptions, type ExportResult } from "./game-export.ts";
 import { ownNotes, ownRules, REFERENCES_README } from "./game-workspace-prompts.ts";
 import { type GameValidation, validateGameDir } from "./game-validation.ts";
@@ -851,18 +852,34 @@ export class GameWorkspaces {
   /**
    * Remember the folder's content as New game just made it (`GameProject.scaffoldStamp`): a later
    * turn reads "nothing built yet" from the folder still matching it. The stamp lists files through
-   * git, so the folder's repository must exist; a folder that cannot be stamped records nothing.
+   * git, so the folder's repository must exist; a folder that cannot be stamped records no stamp.
+   * Either way the game waits for its first build (`GameProject.awaitingFirstBuild`).
    */
   async rememberScaffold(name: string): Promise<GameProject> {
     await this.loadIndex();
     const dir = this.dirFor(name);
     const stamp = await workspaceContentStamp(dir);
-    if (stamp) {
-      const key = await presentationPath(dir);
-      this.#presentation.set(key, { ...this.#presentation.get(key), scaffoldStamp: stamp });
-      await this.#saveIndex();
-    }
+    const key = await presentationPath(dir);
+    const stamped = stamp ? { scaffoldStamp: stamp } : {};
+    this.#presentation.set(key, { ...this.#presentation.get(key), ...stamped, awaitingFirstBuild: true });
+    await this.#saveIndex();
     return this.#describe(name, dir);
+  }
+
+  /**
+   * Record that an answer ended with the game built (`GameProject.awaitingFirstBuild`): once, as it
+   * stays built whatever comes after. True when this call recorded it.
+   */
+  async markBuilt(name: string): Promise<boolean> {
+    await this.loadIndex();
+    const key = await presentationPath(this.dirFor(name));
+    const entry = this.#presentation.get(key);
+    if (!entry?.awaitingFirstBuild) return false;
+    const built: GameLibraryEntry = { ...entry };
+    delete built.awaitingFirstBuild;
+    this.#presentation.set(key, built);
+    await this.#saveIndex();
+    return true;
   }
 
   async update(name: string, patch: GameUpdate): Promise<GameProject> {
@@ -1019,7 +1036,6 @@ export class GameWorkspaces {
       pinned: presentation?.pinned ?? false,
       cover: presentation?.cover,
       lastOpenedAt: this.#recents.find((row) => row.name === name)?.openedAt,
-      ...(presentation?.provisional ? { provisional: true } : {}),
       createdAt: parsed.createdAt ?? "",
       pathLabel: this.pathLabel(dir),
       library: isInside(this.root, dir),
@@ -1033,7 +1049,8 @@ export class GameWorkspaces {
       ...(portedFrom.length > 0 ? { portedFrom } : {}),
       ...(scaffold ? { scaffold: { plugin: scaffold.plugin, id: scaffold.id, label: scaffold.label } } : {}),
       web: hasFact(facts, CoreFact.WebGame, "."),
-      ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
+      ...presentationFlags(presentation),
+      ...((await usesGenexMultiplayer(dir)) ? { multiplayer: true } : {}),
     };
   }
 
@@ -1605,4 +1622,15 @@ async function mergeCopy(from: string, to: string, keep: Set<string> = new Set()
     if (entry.isDirectory()) await mergeCopy(src, dest, keep, relative);
     else if (!there) await cp(src, dest);
   }
+}
+
+/** The listing's flags a game's library entry carries, each only when set. */
+function presentationFlags(
+  presentation: GameLibraryEntry | undefined,
+): Pick<GameProject, "provisional" | "scaffoldStamp" | "awaitingFirstBuild"> {
+  return {
+    ...(presentation?.provisional ? { provisional: true } : {}),
+    ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
+    ...(presentation?.awaitingFirstBuild ? { awaitingFirstBuild: true } : {}),
+  };
 }

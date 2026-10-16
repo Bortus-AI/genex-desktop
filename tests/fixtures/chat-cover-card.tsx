@@ -298,6 +298,7 @@ function render(events: EventEnvelope[]) {
               project={GAME}
               facts={WEB_GAME}
               emptyGame={false}
+              game={{ builtOnce: true, multiplayer: false }}
               onNotice={noop}
               onOpenChange={noop}
             />

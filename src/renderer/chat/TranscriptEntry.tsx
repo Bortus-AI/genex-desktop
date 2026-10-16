@@ -28,6 +28,8 @@ import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
+import { MentionResults } from "./MentionResults.tsx";
+import type { MentionOutcome } from "../../shared/prompt-mention.ts";
 import { WorkLog } from "./WorkLog.tsx";
 
 /** A paused run while nothing else runs: its own card offers Resume. */
@@ -49,6 +51,8 @@ export interface TranscriptContext {
   onShowAssets?: () => void;
   onOpenStudio?: () => void;
   onNotice: Notify;
+  /** The person turned on the plugin a card suggested: tell the agent, so the chat goes on. */
+  onPluginTurnedOn: (name: string) => void;
   /** A held build plan's "Approve plan": answer it with "go", keeping the draft. */
   onApprovePlan: () => Promise<void>;
   /** "Make changes": start the reply in the composer. */
@@ -94,6 +98,8 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <GenexCoverCard entry={entry} project={context.project} />;
     case EntryKind.User:
       return <UserEntry key={entry.id} entry={entry} context={context} />;
+    case EntryKind.Mentions:
+      return <MentionsEntry entry={entry} context={context} />;
     case EntryKind.Assistant:
       return <AssistantEntry key={entry.id} entry={entry} commands={context.commands} />;
     case EntryKind.Notice:
@@ -148,7 +154,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
     case EntryKind.Compaction:
       return <CompactionEntry messages={entry.messages} summary={entry.summary} />;
     case EntryKind.PluginSuggestion:
-      return <PluginSuggestionCard entry={entry} onNotice={onNotice} />;
+      return <PluginSuggestionCard entry={entry} onNotice={onNotice} onTurnedOn={context.onPluginTurnedOn} />;
     default:
       return null;
   }
@@ -196,12 +202,30 @@ function AssistantEntry({
   );
 }
 
+/** The card of what a message's @ tags gave the agent, with Try again and Remove tag in this chat. */
+function MentionsEntry({
+  entry,
+  context,
+}: {
+  entry: { tags: MentionOutcome[]; messageId?: string };
+  context: TranscriptContext;
+}) {
+  return (
+    <MentionResults
+      tags={entry.tags}
+      threadId={context.threadId}
+      messageId={entry.messageId}
+      onProblem={notifyProblem(context.onNotice)}
+    />
+  );
+}
+
 /** A message the user sent, with the pictures sent with it. */
 function UserEntry({
   entry,
   context,
 }: {
-  entry: { id: string; text: string; about?: string };
+  entry: { id: string; text: string; about?: string; tags?: string[] };
   context: TranscriptContext;
 }) {
   const images = context.images.get(entry.id);
@@ -211,7 +235,15 @@ function UserEntry({
       : {};
   const { onRewind } = context;
   const rewind = onRewind && context.canRewind?.(entry.id) ? { rewindId: entry.id, onRewind } : {};
-  return <UserMessage text={entry.text} {...pictures} {...(entry.about ? { about: entry.about } : {})} {...rewind} />;
+  return (
+    <UserMessage
+      text={entry.text}
+      {...pictures}
+      {...(entry.about ? { about: entry.about } : {})}
+      {...(entry.tags ? { tags: entry.tags } : {})}
+      {...rewind}
+    />
+  );
 }
 
 /** The harness's system tags; UPDATE lines carry no heading. */

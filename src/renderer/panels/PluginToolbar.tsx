@@ -37,8 +37,7 @@ import { PLUGIN_SETUP_EVENT } from "../plugin-setup.ts";
 import { type Notify, ToastTone } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { cn } from "../ui/cn.ts";
-import { OPEN_PLUGINS_EVENT } from "../ui/ComposerAddMenu.tsx";
-import { DialogSurface } from "../ui/dialog.tsx";
+import { openPluginsAt } from "../ui/ComposerAddMenu.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip.tsx";
 import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
@@ -46,8 +45,7 @@ import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plu
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
-import { PanelSurface } from "./panel-bridge.ts";
-import { PluginPanelHost } from "./PluginPanelHost.tsx";
+import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 
 /** Status refreshes coalesce: a burst of change events wakes each plugin's process once. */
 const STATUS_DEBOUNCE_MS = SECOND_MS;
@@ -80,6 +78,8 @@ interface Props {
   holds?: FolderHolds | undefined;
   /** The game has nothing in it yet: no button's action can be due, so none takes the accent. */
   emptyGame: boolean;
+  /** What Multiplayer needs to know of the game: built at least once, and multiplayer already. */
+  game: GameMultiplayer;
   onNotice: Notify;
   /** A panel dialog is on screen — the stage zeroes the native view while it is. */
   onOpenChange: (open: boolean) => void;
@@ -95,10 +95,6 @@ type ToolbarPanel = {
   document: PluginPanelDocument | null;
   drawn?: boolean;
 };
-
-/** Opens the Plugins page at one plugin, where it turns on or updates. */
-const openPluginsAt = (id: string) =>
-  window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin: id } }));
 
 /** Genex's Publish panel, which Studio draws in its own type and buttons instead of the plugin's frame. */
 const drawnByStudio = (plugin: PluginInfo, panelId: string): boolean =>
@@ -503,9 +499,15 @@ function StudioPublishButton({ onPress, folded }: { onPress: () => void; folded:
   );
 }
 
+/** What Multiplayer needs to know of the open game (`GameProject.awaitingFirstBuild`, `.multiplayer`). */
+export interface GameMultiplayer {
+  builtOnce: boolean;
+  multiplayer: boolean;
+}
+
 /** Whether Multiplayer stands on the strip for this game (`showsMultiplayer`): never on an engine's web export. */
-const multiplayerOn = (publish: boolean, emptyGame: boolean, game: GameKind): boolean =>
-  showsMultiplayer({ publish, emptyGame, webExport: webFolderOf(game) !== null });
+const multiplayerOn = (publish: boolean, emptyGame: boolean, game: GameMultiplayer, kind: GameKind): boolean =>
+  showsMultiplayer({ publish, emptyGame, ...game, webExport: webFolderOf(kind) !== null });
 
 export function PluginToolbar({
   plugins,
@@ -513,6 +515,7 @@ export function PluginToolbar({
   facts,
   holds,
   emptyGame,
+  game,
   onNotice,
   onOpenChange,
   folded = false,
@@ -536,7 +539,8 @@ export function PluginToolbar({
   }, [entries, panel]);
   const genexPublish = entries.find(isGenexPublish);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
-  const multiplayerShown = multiplayerOn(Boolean(genexPublish) || studioPublish.shown, emptyGame, { facts, holds });
+  const publish = Boolean(genexPublish) || studioPublish.shown;
+  const multiplayerShown = multiplayerOn(publish, emptyGame, game, { facts, holds });
   // Multiplayer is the plugin's: its Publish shows while it is off, but only an on Genex makes a game multiplayer.
   const multiplayer = useMultiplayer(
     project,
@@ -606,24 +610,17 @@ export function PluginToolbar({
         <GenexPublishDialog plugin={livePanelPlugin} project={project} onClose={() => setPanel(null)} />
       ) : null}
       {panel?.document && livePanelPlugin ? (
-        <DialogSurface
+        <PluginPanelDialog
+          plugin={livePanelPlugin}
+          document={panel.document}
           title={panel.title}
-          size="2xl"
-          className="h-[min(680px,calc(100dvh-2rem))] grid-rows-[auto_1fr]"
+          project={project}
           onDismiss={() => {
             setPanel(null);
             // What the panel just did (a setup, an Open) shows on the button now, not at the next tick.
             refreshRef.current();
           }}
-        >
-          <PluginPanelHost
-            plugin={livePanelPlugin}
-            document={panel.document}
-            project={project}
-            surface={PanelSurface.Card}
-            className="h-full min-h-0 w-full rounded-control border-0"
-          />
-        </DialogSurface>
+        />
       ) : null}
       {review ? <PluginApproval review={review} onClose={() => setReview(null)} /> : null}
     </>
