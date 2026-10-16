@@ -8,11 +8,12 @@ import type { JSX, RefObject } from "react";
 import { usePeople } from "../state/hooks.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LOCAL_BLENDER_PLUGIN_ID } from "../../shared/local-blender.ts";
-import type { PluginIndexView, PluginInfo } from "../../shared/plugins.ts";
+import type { PluginIndexEntry, PluginIndexView, PluginInfo } from "../../shared/plugins.ts";
 import { pluginUpdates } from "../state/plugins.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { IconButton } from "../ui/kit.tsx";
+import { PluginIcon } from "../ui/PluginIcon.tsx";
 import type { ConnectorActions } from "./ConnectorsCard.tsx";
 import { PluginsToolbar } from "./plugins/header.tsx";
 import {
@@ -20,7 +21,9 @@ import {
   hasOwnPage,
   isActive,
   isOffList,
+  needsSetup,
   PLUGIN_GUIDE_URL,
+  pluginAccount,
   SEARCH_LABEL,
   shownIntro,
   shownName,
@@ -34,6 +37,7 @@ import {
   usePluginsPageData,
   useProviderSkills,
 } from "./plugins/page.ts";
+import { CatalogDetail, CatalogInstall, NeedsSetup } from "./plugins/CatalogDetail.tsx";
 import { MoreActions } from "./plugins/detail-parts.tsx";
 import { PluginDetail, type SettingValues } from "./plugins/PluginDetail.tsx";
 import { PluginsBrowse } from "./plugins/PluginsBrowse.tsx";
@@ -284,6 +288,8 @@ export function PluginsPanel({
   const afterMenu = useRef<(() => void) | null>(null);
   const { heading, scroll } = usePageTop(nav);
   const detail = plugins.find((p) => p.manifest.id === nav.detailId);
+  // A catalog plugin you don't have opens its listing page: how to start, and Install.
+  const listing = detail ? undefined : index?.entries.find((e) => e.id === nav.detailId);
   // Genex's page shows the failure inside its account card instead of above it.
   const ownPage = detail !== undefined && hasOwnPage(detail);
   const selectedPlugin = useOpenPanelPlugin(nav, plugins);
@@ -318,8 +324,16 @@ export function PluginsPanel({
         add={toolbar.add}
       />
       <div ref={scroll} className="extensions-scroll">
-        <div className={`extensions-content ${detail || nav.skill ? "extensions-content-detail" : ""}`}>
-          <PageHeading nav={nav} detail={detail} plugins={plugins} page={page} heading={heading} onBack={onBack} />
+        <div className={`extensions-content ${detail || listing || nav.skill ? "extensions-content-detail" : ""}`}>
+          <PageHeading
+            nav={nav}
+            detail={detail}
+            listing={listing && index ? { entry: listing, index } : undefined}
+            plugins={plugins}
+            page={page}
+            heading={heading}
+            onBack={onBack}
+          />
           {error && !ownPage && (
             <p role="alert" className="extensions-error">
               {error}
@@ -329,6 +343,7 @@ export function PluginsPanel({
             nav={nav}
             page={page}
             detail={detail}
+            listing={listing}
             plugins={plugins}
             selectedPlugin={selectedPlugin}
             settings={settings}
@@ -355,10 +370,37 @@ export function PluginsPanel({
   );
 }
 
+/** The title's controls: an installed plugin's menu and switch, or a catalog plugin's Install. */
+function TitleActions({
+  plugin,
+  listing,
+  page,
+}: {
+  plugin: PluginInfo | null;
+  listing: { entry: PluginIndexEntry; index: PluginIndexView } | null;
+  page: PluginsPage;
+}): JSX.Element | null {
+  if (plugin && !isOffList(plugin))
+    return (
+      <div className="extensions-title-actions">
+        {needsSetup(plugin, pluginAccount(page.connections, plugin.manifest.id)) && <NeedsSetup />}
+        <MoreActions detail={plugin} page={page} />
+        <PluginToggle plugin={plugin} page={page} />
+      </div>
+    );
+  if (!listing) return null;
+  return (
+    <div className="extensions-title-actions">
+      <CatalogInstall entry={listing.entry} index={listing.index} page={page} />
+    </div>
+  );
+}
+
 /** The back button, the mark, the title with the plugin's switch, and the intro line. */
 function PageHeading({
   nav,
   detail,
+  listing,
   plugins,
   page,
   heading,
@@ -366,6 +408,7 @@ function PageHeading({
 }: {
   nav: Navigation;
   detail: PluginInfo | undefined;
+  listing: { entry: PluginIndexEntry; index: PluginIndexView } | undefined;
   plugins: PluginInfo[];
   page: PluginsPage;
   heading: RefObject<HTMLHeadingElement | null>;
@@ -373,8 +416,9 @@ function PageHeading({
 }): JSX.Element {
   const { skill } = nav;
   const accountName = usePeople((s) => s.me?.name ?? null);
-  const inside = Boolean(detail || skill);
+  const inside = Boolean(detail || listing || skill);
   const shownPlugin = detail && !skill ? detail : null;
+  const shownListing = listing && !skill ? listing : null;
   return (
     <>
       <Button className="extensions-back" onClick={inside ? nav.browse : onBack}>
@@ -382,19 +426,17 @@ function PageHeading({
         {inside ? TAB_LABEL[nav.tab] : PLUGINS_WORDS.back}
       </Button>
       {shownPlugin && <PluginPicture plugin={shownPlugin} size="large" />}
+      {shownListing && <PluginIcon name={shownListing.entry.name} size="large" />}
       {skill && <Mark large kind="box" />}
       <div className="extensions-title-row">
         <h1 ref={heading} tabIndex={-1}>
-          {skill?.name ?? (detail ? shownName(detail) : TAB_LABEL[nav.tab])}
+          {skill?.name ?? (detail ? shownName(detail) : (shownListing?.entry.name ?? TAB_LABEL[nav.tab]))}
         </h1>
-        {shownPlugin && !isOffList(shownPlugin) && (
-          <div className="extensions-title-actions">
-            <MoreActions detail={shownPlugin} page={page} />
-            <PluginToggle plugin={shownPlugin} page={page} />
-          </div>
-        )}
+        <TitleActions plugin={shownPlugin} listing={shownListing} page={page} />
       </div>
-      <p className="extensions-intro">{pageIntro(nav, detail, plugins, accountName)}</p>
+      <p className="extensions-intro">
+        {shownListing ? shownListing.entry.description : pageIntro(nav, detail, plugins, accountName)}
+      </p>
     </>
   );
 }
@@ -404,6 +446,7 @@ function PageBody({
   nav,
   page,
   detail,
+  listing,
   plugins,
   selectedPlugin,
   settings,
@@ -416,6 +459,7 @@ function PageBody({
   nav: Navigation;
   page: PluginsPage;
   detail: PluginInfo | undefined;
+  listing: PluginIndexEntry | undefined;
   plugins: PluginInfo[];
   selectedPlugin: PluginInfo | undefined;
   settings: Record<string, SettingValues>;
@@ -449,6 +493,7 @@ function PageBody({
       />
     );
   }
+  if (listing) return <CatalogDetail entry={listing} />;
   return (
     <>
       <SearchField nav={nav} />

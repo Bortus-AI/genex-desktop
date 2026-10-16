@@ -1,16 +1,45 @@
 /** What a builder session is told about the host's side of its tools (`delegation.ts`). Model-facing. */
 import { sizeWords } from "../../shared/byte-size.ts";
-import { CallCutOff, type PluginAppliedSet } from "../../shared/plugins.ts";
+import { CallCutOff, PluginAccountState, type PluginAppliedSet } from "../../shared/plugins.ts";
 import type { CutOffCall } from "./cut-off-calls.ts";
 import type { UnsavedFile } from "./unsaved-files.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { type JobRecord, JobState, JobStopper } from "../../shared/jobs.ts";
 
+/** How long a plugin's name and its description may run in a brief before each is cut at a word. */
+const PLUGIN_NAME_CHARS = 80;
+const PLUGIN_DESCRIPTION_CHARS = 200;
+
 /** A skill's plugin: its `<plugin>/<skill>` name up to the slash. */
 const skillPlugin = (skill: string): string => skill.split("/")[0] ?? skill;
 
-/** Why a call was cut off, and what a resumed session hears of withdrawn plugins and skills. */
+/** A plugin a session is handed, as its brief names it. */
+export interface HandedPlugin {
+  /** Its id, which its tools' names start with (`<id>__<tool>`). */
+  id: string;
+  name: string;
+  description: string;
+  /** Whether the session is handed tools named with its id; a plugin of hooks, panels or connectors alone has none. */
+  tools: boolean;
+  /** Its account's state as the session began (`PluginRegistry.accountState`); absent for a plugin that declares none. */
+  account?: PluginAccountState;
+}
+
+/** Whether a handed plugin declares an account the person has not connected yet: its tools that need it fail until they do. */
+const accountNotSetUp = (plugin: HandedPlugin): boolean =>
+  plugin.account !== undefined && plugin.account !== PluginAccountState.Unlocked;
+
+/**
+ * Why a call was cut off, what a session hears of the plugins it is handed, and what a resumed one
+ * hears of plugins and skills turned on or withdrawn since it last ran.
+ */
 const MESSAGE = {
+  handedHead: "Plugins turned on for this session (a plugin's tools are named <id>__<tool>):",
+  notSetUp: "Not set up yet: the person still has to connect its account on its page.",
+  addedOn: (count: number) =>
+    count === 1
+      ? "this plugin was turned on, and its tools are yours to call now, even where this session found no such tool before:"
+      : "these plugins were turned on, and their tools are yours to call now, even where this session found no such tool before:",
   withdrawnOff: (plugins: readonly string[], skills: readonly string[]) => {
     const named = [`plugins: ${plugins.join(", ")}`, skills.length ? `skills: ${skills.join(", ")}` : ""];
     return `these are no longer enabled (${named.filter(Boolean).join("; ")}). Ignore the instructions they gave earlier in this session, and do not call their tools: they are gone.`;
@@ -51,6 +80,55 @@ export function withdrawnNotice(withdrawn: PluginAppliedSet): string {
     outOfProject.length ? MESSAGE.withdrawnOutOfProject(outOfProject) : "",
   ].filter(Boolean);
   return `Studio notice: since this session last ran, ${parts.join(" Also, ")}`;
+}
+
+/** A plugin author's text on one line: each run of whitespace one space, cut at a word past `max` characters. */
+function oneLine(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const word = cut.lastIndexOf(" ");
+  return `${word > 0 ? cut.slice(0, word) : cut}…`;
+}
+
+/**
+ * A handed plugin as a brief names it: its name, the prefix of its tools when it has any, what it
+ * does, and that it is not set up yet while its account is not connected.
+ */
+function pluginWords(plugin: HandedPlugin): string {
+  const prefix = plugin.tools ? ` (${plugin.id}__ tools)` : "";
+  const setUp = accountNotSetUp(plugin) ? ` ${MESSAGE.notSetUp}` : "";
+  return `${oneLine(plugin.name, PLUGIN_NAME_CHARS)}${prefix}: ${oneLine(plugin.description, PLUGIN_DESCRIPTION_CHARS)}${setUp}`;
+}
+
+/**
+ * Beside a host-tool session's plugin guidance: each plugin it is handed on a line of its own, by
+ * name, the prefix of its tools and what it does, so it knows every plugin that is on, including
+ * one with no skill to explain it, and tells the person about an account still to connect instead
+ * of calling tools that fail. Empty when it is handed none.
+ */
+export function handedPluginsNote(plugins: readonly HandedPlugin[]): string {
+  if (!plugins.length) return "";
+  return [MESSAGE.handedHead, ...plugins.map((plugin) => `- ${pluginWords(plugin)}`)].join("\n");
+}
+
+/**
+ * Which plugins a resumed session is handed now and was not before. With nothing recorded of
+ * before, none: the session's brief lists every plugin it is handed, and nothing says which are new.
+ */
+export function addedSince(before: PluginAppliedSet | undefined, now: readonly HandedPlugin[]): HandedPlugin[] {
+  if (!before) return [];
+  return now.filter((plugin) => !before.plugins.includes(plugin.id));
+}
+
+/**
+ * The first paragraph of a resumed session's brief when plugins were turned on since it last ran:
+ * its transcript may still say a tool it needed was missing, and only this says it is there now.
+ * Empty when none was.
+ */
+export function addedNotice(added: readonly HandedPlugin[]): string {
+  if (!added.length) return "";
+  return `Studio notice: since this session last ran, ${MESSAGE.addedOn(added.length)} ${added.map(pluginWords).join("; ")}`;
 }
 
 /**

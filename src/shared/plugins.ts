@@ -526,6 +526,8 @@ export interface PluginManifest {
    * package, square, full-bleed (Studio rounds the corners). Without one Studio shows its initial.
    */
   icon?: string;
+  /** What to do to start using it, for its page: plain one-line steps Genex draws ({@link isPluginSetup}). */
+  setup?: string[];
 }
 
 /** The most judges one manifest declares. */
@@ -754,6 +756,28 @@ export type PluginTier = (typeof PluginTier)[keyof typeof PluginTier];
  * guide links, and what `plugin:new` points an author and their coding agent at.
  */
 export const PLUGIN_GUIDE_URL = "https://github.com/genex-games/genex-desktop/blob/dev/docs/PLUGIN_GUIDE.md";
+/** How many setup steps a plugin's page shows, and how long each may be. */
+export const PLUGIN_SETUP_STEPS = 6;
+export const PLUGIN_SETUP_STEP_CHARS = 200;
+/** Control characters, line breaks and text direction overrides or isolates: none belongs in a step. */
+const UNSAFE_STEP_CHARACTER = /[\u0000-\u001f\u007f-\u009f\u200e\u200f\u202a-\u202e\u2066-\u2069]/;
+
+/**
+ * Whether a value is a plugin page's setup steps: one to six short lines of plain text the author
+ * writes and Genex draws itself, as text, never as markup. The catalog's validator
+ * (`marketplace/template/scripts/check-catalog.mjs`) applies the same rule.
+ */
+export function isPluginSetup(value: unknown): value is string[] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > PLUGIN_SETUP_STEPS) return false;
+  return value.every(isSetupStep);
+}
+
+const isSetupStep = (step: unknown): boolean =>
+  typeof step === "string" &&
+  step.trim() !== "" &&
+  step.length <= PLUGIN_SETUP_STEP_CHARS &&
+  !UNSAFE_STEP_CHARACTER.test(step);
+
 export const PLUGIN_CATEGORIES = ["assets", "publishing", "tools", "analytics", "other"] as const;
 export type PluginCategory = (typeof PLUGIN_CATEGORIES)[number];
 export interface PluginIndexEntry {
@@ -772,6 +796,8 @@ export interface PluginIndexEntry {
   capabilities: string[];
   minStudioVersion?: string;
   docsUrl?: string;
+  /** The steps its page shows before it is installed, copied from its manifest ({@link isPluginSetup}). */
+  setup?: string[];
   artifact?: { url: string; sha256: string };
 }
 export interface PluginIndex {
