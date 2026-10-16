@@ -3,20 +3,26 @@
 You are building inside AI Game Studio. Below the upstream marker is Genex's multiplayer card,
 unchanged. Where it disagrees with this preface, this preface wins.
 
-## Multiplayer works only on the published Genex draft
+## Multiplayer runs on the Genex draft link, with two different players
 
 - Studio's preview is single-player. It opens a game that uses `@genex-ai/embed-sdk` in local
   test mode (`?genex_local_test=1`): the relay gets no credential there, so `connect()` and
   `matchmake()` fail by design. Rendering, controls and feel can still be checked in the preview.
+- The draft link is multiplayer. A draft plays in rooms of its own, apart from the live game, so
+  testers on the draft link meet each other and never real players. Anyone with the link can join,
+  as a guest or signed in, before the game is published to the gallery.
 - Check prerequisites before building online features: the pinned SDKs and an authorized hosted
   test route. Request both SDKs in one approval with
   `genex__package {"package":"@genex-ai/multiplayer"}` (it includes embed-sdk). After approval,
   build the game; publish a draft with
   `genex__publish {"operation":"draft"}`; wait with `genex__publish-status`; then test on the draft
-  link. Only the owner can open a draft, so hand the link to the user to try in two tabs; a friend
-  can join only once the game is published to the gallery. Until someone has played the draft,
-  say plainly that multiplayer was not exercised.
-- Studio installs the version it pins, which satisfies the card's `^0.16.0`. Never run
+  link as TWO DIFFERENT players. Hand the user the link and tell them exactly how: open it in a
+  normal window and an incognito window (the incognito one plays as a guest), or send it to a
+  friend. Two tabs on one account are one player: the newer tab takes the seat. Until two players
+  have played the draft, say plainly that multiplayer was not exercised.
+- A draft player cannot save or buy, so test saves and purchases on the owner's own account or
+  after publishing.
+- Studio installs the version it pins, which satisfies the card's `^0.17.0`. Never run
   `npm i` for these packages yourself.
 - A game made from Studio's template has no `package.json`: it loads three.js through an import
   map, and the same `genex__package` call maps Studio's copies of both SDKs into that map and loads
@@ -37,7 +43,12 @@ unchanged. Where it disagrees with this preface, this preface wins.
 
 ## Config without `genex init`
 
-Studio never runs `genex init`, so the game starts without `src/genex.config.ts` or `.env`. After
+A remixed game already has a `src/genex.config.*` (and maybe a `.env`) naming the game it was
+copied from. Change that slug to this game's, the one `genex__publish-status` reports, before the
+first draft: a config naming another game signs every player into that other game, and Genex
+refuses to deploy it.
+
+Studio never runs `genex init`, so a new game starts without `src/genex.config.ts` or `.env`. After
 the first draft, `genex__publish-status` reports the game's `slug`. Write the config yourself,
 then publish a new draft (a template game: `src/genex.config.js`, the same object without
 `as const`, imported as `./genex.config.js`):

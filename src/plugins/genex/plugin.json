@@ -181,7 +181,7 @@
     {
       "name": "genex-threejs-multiplayer",
       "engines": ["web"],
-      "summary": "Realtime multiplayer for Three.js games with @genex-ai/multiplayer: movement sync, shared objects, host authority, matchmaking. MANDATORY before networking code. Works only on the published Genex draft; Studio's preview stays single-player.",
+      "summary": "Realtime multiplayer for Three.js games with @genex-ai/multiplayer: movement sync, shared objects, host authority, matchmaking. MANDATORY before networking code. Test it on the Genex draft link with two different players; Studio's preview stays single-player.",
       "file": "skills/genex-threejs-multiplayer/SKILL.md",
       "references": [
         "skills/genex-threejs-multiplayer/references/realtime-patterns.md",
