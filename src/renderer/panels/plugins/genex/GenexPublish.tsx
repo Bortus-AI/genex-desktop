@@ -244,7 +244,7 @@ function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void
   return (
     <div className="genex-publish-link-field" data-public>
       <Icon name="globe" size={15} />
-      <em>{WORDS.publicLink}</em>
+      <span className="genex-publish-link-label">{WORDS.publicLink}</span>
       <span title={link}>{link.replace(/^https?:\/\//, "")}</span>
       <Button aria-label={WORDS.copyLinkLabel} onClick={() => copy(link)}>
         <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
@@ -276,7 +276,7 @@ function TestLinkField({
   return (
     <div className="genex-publish-test">
       <div className="genex-publish-link-field" data-test>
-        <em>{WORDS.testLink}</em>
+        <span className="genex-publish-link-label">{WORDS.testLink}</span>
         <span title={link}>{link.replace(/^https?:\/\//, "")}</span>
         <Button aria-label={WORDS.copyTestLinkLabel} onClick={() => copy(link)}>
           <Icon name={copied ? "check" : "copy"} size={14} className={copied ? "text-green" : undefined} />
@@ -808,7 +808,7 @@ function Hint({
   name,
   testShown = false,
 }: {
-  /** The test link's own line stands in for the default intro, so the foot never holds two. */
+  /** The test link's own line stands in for the default intro, so the two never both show. */
   testShown?: boolean;
   view: PublishView;
   publishing: boolean;

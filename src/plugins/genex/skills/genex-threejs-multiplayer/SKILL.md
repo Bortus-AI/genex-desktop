@@ -20,8 +20,8 @@ unchanged. Where it disagrees with this preface, this preface wins.
   normal window and an incognito window (the incognito one plays as a guest), or send it to a
   friend. Two tabs on one account are one player: the newer tab takes the seat. Until two players
   have played the draft, say plainly that multiplayer was not exercised.
-- A draft player cannot save or buy, so test saves and purchases on the owner's own account or
-  after publishing.
+- Nobody can save or buy on the draft link, the owner included. Test saves and purchases after
+  publishing.
 - Studio installs the version it pins, which satisfies the card's `^0.17.0`. Never run
   `npm i` for these packages yourself.
 - A game made from Studio's template has no `package.json`: it loads three.js through an import
@@ -44,9 +44,9 @@ unchanged. Where it disagrees with this preface, this preface wins.
 ## Config without `genex init`
 
 A remixed game already has a `src/genex.config.*` (and maybe a `.env`) naming the game it was
-copied from. Change that slug to this game's, the one `genex__publish-status` reports, before the
-first draft: a config naming another game signs every player into that other game, and Genex
-refuses to deploy it.
+copied from. A config naming another game signs every player into that other game, so Genex
+refuses to deploy it. Publish a draft; when it is refused for naming another game, read this game's
+slug from `genex__publish-status`, set it in the config, and publish the draft again.
 
 Studio never runs `genex init`, so a new game starts without `src/genex.config.ts` or `.env`. After
 the first draft, `genex__publish-status` reports the game's `slug`. Write the config yourself,

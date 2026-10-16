@@ -855,7 +855,7 @@ button.genex-publish-banner-name:hover {
 .genex-publish-link-field > button:hover {
   background: var(--hover-2);
 }
-.genex-publish-link-field > span {
+.genex-publish-link-field > span:not(.genex-publish-link-label) {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -880,11 +880,10 @@ button.genex-publish-banner-name:hover {
   background: color-mix(in srgb, var(--accent) 36%, var(--hover));
 }
 /* The field's label before its address, in the quiet ink. */
-.genex-publish-link-field > em {
+.genex-publish-link-field > .genex-publish-link-label {
   flex: none;
   color: var(--ink-3);
   font: 13px / 20px var(--font-family-sans);
-  font-style: normal;
 }
 /* The test link: quieter than the public one (a hairline, no fill), its line right under it. */
 .genex-publish-test {
@@ -898,7 +897,7 @@ button.genex-publish-banner-name:hover {
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-.genex-publish-link-field[data-test] > span {
+.genex-publish-link-field[data-test] > span:not(.genex-publish-link-label) {
   color: var(--ink-2);
 }
 /* A failed attempt: one line in ink, never an alarm. */

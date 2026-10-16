@@ -488,6 +488,21 @@ test("the test link shows only while it holds a build players do not have", () =
     ),
     null,
   );
+  // A later attempt that uploaded and then failed its test: the address now serves that untested build.
+  const failedLater = job({ kind: "draft", state: "failed", phase: "ready", uploadedAt: "2026-10-06T12:20:00Z" });
+  assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready, job: failedLater })).testLink, null);
+  assert.equal(
+    publishView(
+      state({
+        slug: "g",
+        status: "draft",
+        readyDraft: ready,
+        job: { ...failedLater, uploadedAt: "2026-10-06T12:05:00Z" },
+      }),
+    ).testLink,
+    ready.url,
+    "a failure that uploaded before the tested draft leaves the tested draft in place",
+  );
   // While an attempt runs, the window shows its progress, not links.
   assert.equal(publishView(state({ slug: "g", status: "draft", readyDraft: ready, job: job() })).testLink, null);
 });

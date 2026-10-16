@@ -268,10 +268,19 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
  * `lastPublishAt` when it finishes, so a fresh publish hides the link; the revision check covers a
  * publish settled later by Genex's record. Display only: nothing here changes what Publish does.
  */
+/** A failed attempt that uploaded after `verifiedAt`: the draft address now serves its untested build. */
+function failedAfter(job: GenexPublishJob | undefined, verifiedAt: string): boolean {
+  if (job?.state !== GenexPublishJobState.Failed || !job.uploadedAt) return false;
+  return Date.parse(job.uploadedAt) > Date.parse(verifiedAt);
+}
+
 export function testLinkOf(state: GenexPublishState, listed: boolean): string | null {
   const ready = state.readyDraft;
   // While an attempt runs the dialog shows its progress, never a link that is about to change.
   if (!ready?.url || isLive(state.job)) return null;
+  // The address is the draft's, not the tested revision's: a later upload that then failed its
+  // test serves that untested build there, so it is no link to hand a friend.
+  if (failedAfter(state.job, ready.verifiedAt)) return null;
   if (!listed) return ready.url;
   const tested = Date.parse(ready.verifiedAt);
   const published = Date.parse(state.lastPublishAt ?? "");
