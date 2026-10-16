@@ -195,6 +195,7 @@ const ROBLOX_SKILLS = [
   "roblox/ui-scale",
   "roblox/assets",
   "roblox/get-started",
+  "roblox/publish",
 ];
 /** The skills a web game never gets: those of an engine's own project. */
 const ENGINE_ONLY_SKILLS = [...UNREAL_ONLY_SKILLS, ...ROBLOX_SKILLS];
@@ -215,6 +216,9 @@ const ROBLOX_ONLY_TOOLS = [
   "roblox__check-model",
   "roblox__import-model",
   "roblox__publish-update",
+  "roblox__first-publish",
+  "roblox__places",
+  "roblox__add-luau-checks",
 ];
 
 /** A manifest as it was before skills could name engines or facts: every scope field taken out. */

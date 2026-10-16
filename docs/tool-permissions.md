@@ -463,11 +463,12 @@ profiles look at a stub window; other systems answer that it works on macOS only
 ## Do it for me
 
 `game.engine.assist` ([computer use](computer-use.md#the-persons-computer)) lets an engine plugin
-hand a setup click to its game's chat. Only the person starts one: a plugin action they pressed, or
-a tool call whose own `confirmation` card they approved with their own click (the registry marks
-that call `confirmed`; a yes given by a mode, a local plugin's own access card, a Genex moment's
-step or an observer's step never counts), so an agent can reach it only through a card that asks
-in every mode. The task is posted verbatim as "<plugin> asks: <task>". A plugin that came with
+hand a setup click to its game's chat. The person starts one: a plugin action they pressed, or a
+tool call whose own `confirmation` card they approved with their own click (the registry marks that
+call `confirmed`; a yes given by a mode or a local plugin's own access card never counts). A plugin
+that came with Genex may also start one from its own tools for the setup it knows, its task its own
+code's words; a Genex moment's or an observer's step never starts one, and any other plugin's agent
+reaches it only through a card that asks in every mode. The task is posted verbatim as "<plugin> asks: <task>". A plugin that came with
 Genex asks nothing more; any other shows the task on its card first, every time. With computer
 control off, the studio's own card (`studio-computer-setting`, "Computer control") asks to turn it
 on, in words that say it is for every chat, with Turn on and Not now; an earlier no in the chat

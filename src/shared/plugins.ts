@@ -174,6 +174,38 @@ export const CallCutOff = {
 } as const;
 export type CallCutOff = (typeof CallCutOff)[keyof typeof CallCutOff];
 /**
+ * The one text parameter of a confirmed tool that the person may edit on its card (API 3): the
+ * card shows the agent's value under its question, in a field with this label, and the person's
+ * Allow sends their edit as that parameter.
+ */
+export interface PluginConfirmationInput {
+  parameter: string;
+  /** One plain line of at most {@link CONFIRMATION_INPUT_LABEL_MAX_CHARS} characters. */
+  label: string;
+}
+/** The longest label a card's field carries. */
+export const CONFIRMATION_INPUT_LABEL_MAX_CHARS = 60;
+/** The longest edit a card's field sends. */
+export const CONFIRMATION_INPUT_MAX_CHARS = 200;
+/** The last character code of the ASCII controls, and DEL: characters that break a plain line. */
+const LAST_CONTROL = 0x1f;
+const DELETE = 0x7f;
+const breaksLine = (char: string) => {
+  const code = char.charCodeAt(0);
+  return code <= LAST_CONTROL || code === DELETE;
+};
+
+/**
+ * The person's edit on a card, as the host takes it: one plain line, trimmed, of 1 to
+ * {@link CONFIRMATION_INPUT_MAX_CHARS} characters; anything else is no edit (undefined).
+ */
+export function confirmationInputValue(value: unknown): string | undefined {
+  if (typeof value !== "string" || [...value].some(breaksLine)) return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 && trimmed.length <= CONFIRMATION_INPUT_MAX_CHARS ? trimmed : undefined;
+}
+
+/**
  * A tool as the manifest declares it. `host`, `audience`, `facts`, `makes`, `needs` and `ready`
  * never reach an agent: the tool list the registry serves is plain `PluginTool`, which the harness
  * seed is generated from.
@@ -196,6 +228,8 @@ export interface PluginManifestTool extends PluginTool {
    * Assets canvas and in the chat, in the spot its files will land.
    */
   asset?: PluginToolAsset;
+  /** API 3, with `confirmation`: the text parameter the person may edit on the card. */
+  confirmationInput?: PluginConfirmationInput;
 }
 /** Whether agents are handed a manifest tool: every one but those only the harness calls. */
 export const isAgentTool = (tool: Pick<PluginManifestTool, "audience">): boolean =>
@@ -741,6 +775,11 @@ export interface PluginConsentEvent {
   alwaysOffered?: boolean;
   /** Approved with Always allow: the tool runs without asking from now on. */
   always?: boolean;
+  /**
+   * A card with a field the person may edit (`confirmationInput`): its label and the agent's value;
+   * on an approval, the value the call was made with.
+   */
+  input?: { label: string; value: string };
   state: "pending" | "approved" | "declined";
   by?: PluginConsentBy;
   expiresAt?: number;
@@ -987,6 +1026,11 @@ export const PluginService = {
    * clicks it with computer control, limited to the apps the plugin's `engine.apps` declares.
    */
   GameEngineAssist: "game.engine.assist",
+  /**
+   * `game-engine`: whether Do it for me can run for this plugin on this computer: computer control
+   * has a desktop and its driver, and the plugin's engine declares apps here. Asks the person nothing.
+   */
+  GameEngineCanAssist: "game.engine.canAssist",
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
 
@@ -1001,10 +1045,18 @@ export const EngineAssistRefusal = {
   Declined: "declined",
   /** The call names no game, so there is no chat to hand the task to. */
   NoChat: "no-chat",
-  /** Not the person's: neither an action they pressed nor a tool call whose card they approved. */
+  /**
+   * Not the person's: neither an action they pressed nor a tool call whose card they approved, from a
+   * plugin that did not come with Genex, or any Genex moment's or observer's step.
+   */
   NotPerson: "not-person",
   /** The plugin's engine declares no apps for this computer, so there is nothing it may click. */
   NoApps: "no-apps",
+  /**
+   * An assist the person didn't ask for, while the chat's own assist is under way: the turn that
+   * answers it does the clicking, so nothing more is posted.
+   */
+  InAssist: "in-assist",
 } as const;
 export type EngineAssistRefusal = (typeof EngineAssistRefusal)[keyof typeof EngineAssistRefusal];
 

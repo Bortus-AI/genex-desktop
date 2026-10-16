@@ -4219,8 +4219,8 @@ export const ENGINE_GAME_WORDS = {
   /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (engine: string, project: string | null, place: string) =>
     project
-      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
-      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
+      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Until then, it does what you ask, then stops.`
+      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Until then, it does what you ask, then stops.`,
 } as const;
 
 /** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */

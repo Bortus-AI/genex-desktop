@@ -36,6 +36,7 @@ import type { LocateStat, Run } from "../../src/plugins/roblox/studio-locate.ts"
 import { STUDIO_MAC_APP } from "../../src/plugins/roblox/studio-locate.ts";
 import { toolbarItems, visibleToolbarEntries } from "../../src/shared/plugin-toolbar.ts";
 import type { GameKind } from "../../src/shared/project-facts.ts";
+import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 import { makeResources } from "../helpers/resources.ts";
@@ -145,17 +146,29 @@ function fakeMac(given: Mac, home = HOME) {
   return { deps, touched, ran, calls, opened, installStudio };
 }
 
-/** A plugin call's context: the plugin's storage, and the host's answer to Do it for me. */
+/**
+ * A plugin call's context: the plugin's storage, the host's answer to Do it for me, and whether the
+ * host says Do it for me can run on this computer (computer control and its driver here).
+ */
 function context(
   storage = STORAGE,
   assist: (args: unknown) => PluginEngineAssistAnswer = () => ({ started: false, reason: "unavailable" }),
+  canAssist = true,
 ): PluginContext {
   const host = (async (method: string, args: unknown) => {
     if (method === "storage.root") return storage;
     if (method === "game.engine.assist") return assist(args);
+    if (method === "game.engine.canAssist") return canAssist;
     throw new Error(`No ${method} here`);
   }) as PluginContext["host"];
   return { signal: new AbortController().signal, callId: 1, host };
+}
+
+/** A call's context whose host names the games whose run is going. */
+function withRuns(base: PluginContext, runs: unknown[]): PluginContext {
+  const host = (async (method: string, args: unknown) =>
+    method === "game.engine.runs" ? runs : base.host(method as never, args as never)) as PluginContext["host"];
+  return { ...base, host };
 }
 
 const MISSING: Mac = { installed: false, setUp: false, running: false, answering: false };
@@ -326,6 +339,24 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
     }
   });
 
+  it("offers Do it for me only where the host says computer control can run; elsewhere Restart Studio and Studio's clicks", async () => {
+    const backend = createRobloxBackend(fakeMac(STARTING).deps);
+    const mcpRow = async (canAssist: boolean) => {
+      const status = (await backend.action?.("status", {}, context(STORAGE, undefined, canAssist))) as RobloxStatus;
+      return status.rows.find((row) => row.id === "mcp");
+    };
+    const here = await mcpRow(true);
+    assert.equal(here?.action?.name, "do-it-for-me");
+    assert.deepEqual(here?.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
+    // No driver, or computer control can't run here: no Do it for me, and Studio's own clicks instead.
+    const nowhere = await mcpRow(false);
+    assert.equal(nowhere?.action?.name, "restart-studio");
+    assert.equal(nowhere?.more, undefined);
+    assert.deepEqual(nowhere?.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
+    const card = (await backend.action?.("steps", {}, context(STORAGE, undefined, false))) as StepsCard;
+    assert.notEqual(card.steps.find((step) => step.id === "mcp")?.action?.name, "do-it-for-me");
+  });
+
   it("the probe sees nobody using Studio, and an unknown action or tool is refused", async () => {
     const backend = createRobloxBackend(fakeMac(READY).deps);
     assert.deepEqual(await backend.tool?.("studio-activity", {}, context()), { personActive: false });
@@ -335,9 +366,10 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
 });
 
 describe("Set up, Restart Studio and Do it for me from the panel", () => {
-  // Flipped: the task now also says to click only its path and stop at any other dialog.
+  // Flipped: the task now also says to click only its path and stop at any other dialog, and that
+  // the turn answering it clicks it itself with the desktop tool, never handing it on again.
   const TASK =
-    "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server. Click only that path. If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.";
+    "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server. Click only that path, now, with the desktop tool (not do-it-for-me). If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.";
 
   it("Set up refuses while Studio runs, reading nothing, and offers Restart Studio, Do it for me and the click path", async () => {
     const mac = fakeMac(NOT_SET_UP);
@@ -457,6 +489,47 @@ describe("Set up, Restart Studio and Do it for me from the panel", () => {
     assert.ok(mac.deps.now() >= QUIT_WAIT_MS, "it waited the whole quit wait");
     await assert.rejects(lstat(path.join(home, "Documents", "Roblox", "Plugins")));
     assert.equal(await readFile(settings, "utf8"), '{"mcp-server": {"enabled": false}}');
+  });
+
+  it("Restart Studio leaves Studio and every file alone while a build uses it, as Quit Studio does", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const { home, storage, settings } = await robloxHome();
+    const mac = fakeMac({ ...NOT_SET_UP, quitCloses: true }, home);
+    const backend = createRobloxBackend(mac.deps);
+    const busy = withRuns(context(storage), [{ game: "tower", title: "Tower", project: "/games/tower/tower.rbxlx" }]);
+    const pressed = (await backend.action?.("restart-studio", {}, busy)) as SetupAnswer;
+    assert.equal(pressed.done, false);
+    assert.equal(pressed.reason, "in-use");
+    assert.match(pressed.message, /Tower/);
+    const called = String(await backend.tool?.("restart-studio", {}, busy));
+    assert.match(called, /Tower/);
+    assert.equal(mac.calls.filter((call) => call.file === "/usr/bin/osascript").length, 0, "never asked to quit");
+    assert.deepEqual(mac.opened, []);
+    await assert.rejects(lstat(path.join(home, "Documents", "Roblox", "Plugins")));
+    assert.equal(await readFile(settings, "utf8"), '{"mcp-server": {"enabled": false}}');
+  });
+
+  it("where Genex can't click and Studio has no settings file yet, the agent is given the person's one click", {
+    skip: process.platform === "win32" && "a Mac home on a Mac path",
+  }, async () => {
+    const root = await tmpDir("roblox-no-settings-");
+    const home = path.join(root, "home");
+    await mkdir(path.join(home, "Documents", "Roblox"), { recursive: true });
+    const nowhere = context(path.join(root, "storage"), undefined, false);
+    const restarted = String(
+      await createRobloxBackend(fakeMac({ ...NOT_SET_UP, quitCloses: true }, home).deps).tool?.(
+        "restart-studio",
+        {},
+        nowhere,
+      ),
+    );
+    assert.ok(restarted.includes(MCP_SWITCH_CLICK_PATH), restarted);
+    assert.doesNotMatch(restarted, /roblox__do-it-for-me/, "no tool to go round to");
+    // Do it for me refused here names the same click, for when Restart Studio can't switch it on.
+    const refused = context(STORAGE, undefined, false);
+    const clicked = String(await createRobloxBackend(fakeMac(STARTING).deps).tool?.("do-it-for-me", {}, refused));
+    assert.ok(clicked.includes(MCP_SWITCH_CLICK_PATH), clicked);
   });
 
   it("Set up's confirmation says what it does, naming the Documents prompt on a Mac", async () => {
@@ -644,6 +717,141 @@ describe("Get Roblox Studio and the steps card", () => {
     assert.deepEqual(ran, [], "nothing ran");
     assert.deepEqual(await readdir(tempRoot), []);
     assert.deepEqual(mac.opened, []);
+  });
+});
+
+describe("every panel action the person can press is also an agent tool", () => {
+  const MANIFEST = path.resolve(import.meta.dirname, "../../src/plugins/roblox/plugin.json");
+  /** Each action the panel offers a press for, and the agent tool that does the same. */
+  const PRESSABLE: Record<string, string> = {
+    setup: "setup",
+    "undo-setup": "undo-setup",
+    "restart-studio": "restart-studio",
+    "do-it-for-me": "do-it-for-me",
+    "get-studio": "get-studio",
+    "cancel-get-studio": "cancel-get-studio",
+    "open-studio": "open-studio",
+    "quit-studio": "quit-studio",
+    places: "places",
+    "use-place": "use-project",
+    create: "new-game",
+    "add-luau-checks": "add-luau-checks",
+    "publish-update": "publish-update",
+    "first-publish": "first-publish",
+  };
+  /** The tools that ask on a card though their panel press doesn't: an agent never closes Studio unasked. */
+  const ASKS_ONLY_AS_A_TOOL = new Set(["quit-studio"]);
+  /** Words that hand the person a click Genex can do itself. */
+  const HANDS_A_CLICK = /\bpress\b|click it yourself|turn it on yourself|in the Roblox Studio panel/i;
+
+  it("the manifest declares a tool for each, asking on a card where its press asks (and before quitting Studio)", async () => {
+    const manifest = validateManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
+    const read = new Set(["status", "toolbar-status", "steps"]);
+    const actions = (manifest.actions ?? []).filter((action) => !read.has(action.name));
+    assert.deepEqual(actions.map((action) => action.name).sort(), Object.keys(PRESSABLE).sort());
+    for (const action of actions) {
+      const tool = manifest.tools.find((entry) => entry.name === PRESSABLE[action.name]);
+      assert.ok(tool, `a tool for ${action.name}`);
+      assert.notEqual(tool.audience, "harness", `${tool.name} is the agents'`);
+      const asks = Boolean(action.confirmation) || ASKS_ONLY_AS_A_TOOL.has(tool.name);
+      assert.equal(Boolean(tool.confirmation), asks, `${tool.name} asks on a card only where it must`);
+    }
+  });
+
+  /** The host as a tool call sees it: Do it for me's answer and the tasks it was handed. */
+  function agentContext(answer: PluginEngineAssistAnswer = { started: true }) {
+    const tasks: string[] = [];
+    const ctx = context(STORAGE, (args) => {
+      tasks.push(String((args as { task?: string }).task));
+      return answer;
+    });
+    return { ctx, tasks };
+  }
+
+  it("do-it-for-me starts the switch's click itself while Studio is open and its MCP server off, and says to end the turn", async () => {
+    const backend = createRobloxBackend(fakeMac(STARTING).deps);
+    const { ctx, tasks } = agentContext();
+    const answer = String(await backend.tool?.("do-it-for-me", {}, ctx));
+    assert.deepEqual(tasks, [MESSAGE.Assist.Task]);
+    // Flipped: the answer also says to click now when the task joined this very turn.
+    assert.match(answer, /end this turn/i);
+    assert.match(answer, /in front of you in this turn/);
+    assert.doesNotMatch(answer, HANDS_A_CLICK);
+  });
+
+  it("do-it-for-me clicks nothing when Studio is closed, not set up or already answering, and names the tool to call instead", async () => {
+    const cases: Array<[Mac, RegExp]> = [
+      [CLOSED, /roblox__open-studio/],
+      [NOT_SET_UP, /roblox__restart-studio/],
+      [MISSING, /roblox__get-studio/],
+      [READY, /answering/],
+    ];
+    for (const [mac, words] of cases) {
+      const { ctx, tasks } = agentContext();
+      const answer = String(await createRobloxBackend(fakeMac(mac).deps).tool?.("do-it-for-me", {}, ctx));
+      assert.deepEqual(tasks, [], JSON.stringify(mac));
+      assert.match(answer, words);
+      assert.doesNotMatch(answer, HANDS_A_CLICK);
+    }
+  });
+
+  for (const reason of ["unavailable", "declined", "no-chat", "not-person", "no-apps"] as const)
+    it(`do-it-for-me answered ${reason} points the agent at Restart Studio, never at the person's clicks`, async () => {
+      const backend = createRobloxBackend(fakeMac(STARTING).deps);
+      const { ctx } = agentContext({ started: false, reason });
+      const answer = String(await backend.tool?.("do-it-for-me", {}, ctx));
+      if (reason !== "no-chat") assert.match(answer, /roblox__restart-studio/);
+      assert.doesNotMatch(answer, HANDS_A_CLICK);
+    });
+
+  it("do-it-for-me in the turn that holds the chat's assist tells it to click now, never to call again", async () => {
+    const backend = createRobloxBackend(fakeMac(STARTING).deps);
+    const { ctx } = agentContext({ started: false, reason: "in-assist" });
+    const answer = String(await backend.tool?.("do-it-for-me", {}, ctx));
+    assert.match(answer, /desktop tool/);
+    assert.doesNotMatch(answer, /roblox__restart-studio|roblox__do-it-for-me/);
+    assert.doesNotMatch(answer, HANDS_A_CLICK);
+  });
+
+  it("setup with Studio open names restart-studio and do-it-for-me; with no Studio, get-studio; reading no Documents", async () => {
+    const open = fakeMac(NOT_SET_UP);
+    const running = String(await createRobloxBackend(open.deps).tool?.("setup", {}, context()));
+    assert.match(running, /roblox__restart-studio/);
+    assert.match(running, /roblox__do-it-for-me/);
+    assert.doesNotMatch(running, HANDS_A_CLICK);
+    assert.deepEqual(
+      open.touched.filter((file) => file.includes("/Documents")),
+      [],
+    );
+    const missing = String(await createRobloxBackend(fakeMac(MISSING).deps).tool?.("setup", {}, context()));
+    assert.match(missing, /roblox__get-studio/);
+  });
+
+  it("places lists the places open in Studio and its recent files without reading Documents", async () => {
+    const mac = fakeMac(READY);
+    const answer = (await createRobloxBackend(mac.deps).tool?.("places", {}, context())) as {
+      open: unknown[];
+      files: unknown[];
+      note: string;
+    };
+    assert.deepEqual([answer.open, answer.files], [[], []]);
+    assert.match(answer.note, /roblox__use-project/);
+    assert.deepEqual(
+      mac.touched.filter((file) => file.includes("/Documents")),
+      [],
+    );
+  });
+
+  it("open-studio opens Studio, and get-studio on a computer with Studio says so in words", async () => {
+    const mac = fakeMac(CLOSED);
+    const backend = createRobloxBackend(mac.deps);
+    const opened = String(await backend.tool?.("open-studio", {}, context()));
+    assert.equal(mac.opened.length, 1);
+    assert.match(opened, /Opening/);
+    const got = String(await backend.tool?.("get-studio", {}, context()));
+    assert.match(got, /already on this computer/);
+    const quit = String(await createRobloxBackend(fakeMac(CLOSED).deps).tool?.("quit-studio", {}, context()));
+    assert.match(quit, /isn't open/);
   });
 });
 

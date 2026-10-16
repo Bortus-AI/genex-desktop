@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.9",
+  "version": "1.10.11",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -194,7 +194,8 @@
       "name": "genex-threejs-embed-auth",
       "engines": ["web"],
       "summary": "Player identity, saves and leaderboards with @genex-ai/embed-sdk, whose token multiplayer needs. Read before writing boot code for a game that will be published on Genex. The owner can try sign-in on the published draft; server saves persist only once the game is in the gallery.",
-      "file": "skills/genex-threejs-embed-auth/SKILL.md"
+      "file": "skills/genex-threejs-embed-auth/SKILL.md",
+      "references": ["skills/genex-threejs-embed-auth/references/shells.md"]
     },
     {
       "name": "genex-llm-in-games",

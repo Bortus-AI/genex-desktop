@@ -23,6 +23,7 @@ import { LUAU_FOLDER, LuauTool, type LuauToolset, seleneEnv } from "./luau-tools
 import { SCRIPTS_FOLDER } from "./script-paths.ts";
 import { scriptFiles, sourcemapOf } from "./sourcemap.ts";
 import { isGameId } from "./studio-binding.ts";
+import { SETUP_PROMPTS } from "./setup-prompts.ts";
 import { MESSAGE } from "./words.ts";
 
 /** What a finding is. Wire values: never rename. */
@@ -542,7 +543,7 @@ async function remember(
 /** Checks the game's scripts (the changed ones unless `all`) with every program found. */
 export async function checkScripts(deps: CheckDeps, options: CheckOptions): Promise<ScriptCheck> {
   const { ran, missing, lspWithoutTypes } = runnable(deps.tools);
-  if (missing.length === TOOL_ORDER.length) return emptyCheck(MESSAGE.Checks.NotAdded, missing);
+  if (missing.length === TOOL_ORDER.length) return emptyCheck(SETUP_PROMPTS.ChecksNotAdded, missing);
   const folder = await realpath(options.folder);
   const files = (await scriptFiles(folder)).map((file) => `${SCRIPTS_FOLDER}/${file}`);
   if (files.length === 0) return emptyCheck(MESSAGE.Checks.NoScripts, missing);

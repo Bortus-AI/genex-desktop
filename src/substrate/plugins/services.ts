@@ -254,12 +254,16 @@ function assistTask(value: unknown): string {
   return task;
 }
 
+/** Whether a call is Genex's own step: a moment's or an observer's, never the person's nor an agent's. */
+const isGenexStep = (invocation: PluginInvocation | undefined, binding: PluginBinding | undefined): boolean =>
+  !invocation || Boolean(binding?.hook || binding?.observe);
+
 /**
  * Whether a call is the person's own: a plugin action they pressed, or a tool call whose own card
  * they approved (the host sets `confirmed`). A Genex moment's or an observer's step is never theirs.
  */
 function isPersonsCall(invocation: PluginInvocation | undefined, binding: PluginBinding | undefined): boolean {
-  if (!invocation || binding?.hook || binding?.observe) return false;
+  if (!invocation || isGenexStep(invocation, binding)) return false;
   if (invocation.method === "action") return true;
   return invocation.method === "tool" && invocation.confirmed === true;
 }
@@ -376,17 +380,23 @@ export class PluginServices {
   /** Host games (`game.create`): makes a Genex game with this title; its name and folder. Unset → 'Games unavailable'. */
   gameCreate: ((title: string) => Promise<{ project: string; directory: string }>) | undefined;
   /**
-   * Host assists (`game.engine.assist`): hands a setup task to the bound game's chat. Reached only
-   * for the person's own call; unset, every call answers `unavailable`.
+   * Host assists (`game.engine.assist`): hands a setup task to the bound game's chat. Never reached
+   * from a Genex moment or an observer; `asked` says whether the person made the call (a press, or a
+   * card they approved). Unset, every call answers `unavailable`.
    */
   engineAssist:
     | ((
         pluginId: string,
         binding: PluginBinding | undefined,
         task: string,
-        signal?: AbortSignal,
+        call: { asked: boolean; signal?: AbortSignal },
       ) => Promise<EngineAssistAnswer>)
     | undefined;
+  /**
+   * Host assists' reach (`game.engine.canAssist`): whether Do it for me can run for the plugin on this
+   * computer. Unset, it never can.
+   */
+  engineCanAssist: ((pluginId: string) => Promise<boolean>) | undefined;
   /** Host runs (`game.engine.runs`): the games whose run is going now. Unset → 'Runs unavailable'. */
   runningGames: (() => Promise<Array<{ project: string; directory: string; title: string }>>) | undefined;
   /** The games each plugin made through `game.create` while this host runs, by name, with their folders. */
@@ -423,6 +433,7 @@ export class PluginServices {
     [PluginService.GameSnapshot]: ({ args, binding }) => this.#gameSnapshot(requireBinding(binding), args?.reason),
     [PluginService.GameEngineRuns]: ({ id }) => this.#engineRuns(id),
     [PluginService.GameEngineAssist]: (call) => this.#assist(call),
+    [PluginService.GameEngineCanAssist]: async ({ id }) => (this.engineCanAssist ? this.engineCanAssist(id) : false),
     [PluginService.JobsRead]: async (call) =>
       JSON.parse(await readFile(await jobReferenceFile(call), "utf8").catch(() => "null")),
     [PluginService.JobsWrite]: async (call) => {
@@ -437,14 +448,19 @@ export class PluginServices {
     return this.gameSnapshot(binding, checked);
   }
   /**
-   * Do it for me: only the person's own call reaches the host (`isPersonsCall`), and only with a
-   * task it can show verbatim; anything else answers `not-person` and nothing happens.
+   * Do it for me: a Genex moment's or an observer's step answers `not-person` and nothing happens;
+   * any other call reaches the host with a task it can show verbatim, marked `asked` when it is the
+   * person's own (`isPersonsCall`), and the host decides whose unasked call may start one.
    */
   async #assist({ id, args, binding, invocation }: ServiceCall): Promise<EngineAssistAnswer> {
-    if (!isPersonsCall(invocation, binding)) return { started: false, reason: EngineAssistRefusal.NotPerson };
+    if (isGenexStep(invocation, binding)) return { started: false, reason: EngineAssistRefusal.NotPerson };
     const task = assistTask(args?.task);
     if (!this.engineAssist) return { started: false, reason: EngineAssistRefusal.Unavailable };
-    return this.engineAssist(id, binding, task, invocation?.signal);
+    const asked = isPersonsCall(invocation, binding);
+    return this.engineAssist(id, binding, task, {
+      asked,
+      ...(invocation?.signal ? { signal: invocation.signal } : {}),
+    });
   }
   /** The games whose run is going now that this plugin linked to a project, with that project. */
   async #engineRuns(id: string): Promise<Array<{ game: string; title: string; project: string }>> {

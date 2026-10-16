@@ -127,6 +127,7 @@ undeclared method is a compile error.
 | `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an engine project file, an Unreal `.uproject` or a Godot `project.godot` (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
 | `game.engine.steps` | `game-engine` | Show your setup card (your `steps` action's answer, read live) in the calling chat; see [Setup in the chat](#setup-in-the-chat) |
 | `game.snapshot` | `game-engine` | `{reason}` → `{snapshotId}`: a game snapshot of the bound game, listed in Rewind under `reason` (one plain line, at most 200 characters), before you change files there |
+| `game.engine.canAssist` | `game-engine` | `true` when Do it for me (`game.engine.assist`) can run for your plugin on this computer: a desktop with its driver, and apps your `engine.apps` names here. Asks nothing; offer the click path when it is `false` |
 | `game.engine.runs` | `game-engine` | `{game, title, project}[]`: the games whose run (a Loop) is going now that your plugin linked to a project, with that project file; needs no bound game. Read it before you offer to quit an editor a run may be using |
 | `game.create` | `game-engine` | `{title}` → `{project, directory}`: a new Genex game (title one plain line, at most 80 characters) for an engine project made with no game open; link it with `game.engine.link {project, game}`, which accepts only a game your plugin made, from outside any game |
 | `credentials.read` / `write` / `clear` | `credentials` | Plugin-scoped protected storage; only the reserved `unlock` / `connect` / `disconnect` actions authorize these |
@@ -346,7 +347,9 @@ Two different things, both asked by the host and never by the plugin or the agen
   the game folder. Studio asks the user before the backend sees the call. With no way to ask, the
   call fails closed. A declined or expired request reaches the agent as text
   (`{consent:'declined', by, message}`), never as an error — say in your skill text that a declined
-  request must not be repeated.
+  request must not be repeated. API 3: `confirmationInput: {parameter, label}` names one of the
+  tool's string parameters the person may edit on the card before Allow (a game's name, say); the
+  call runs with their edit.
 - **`actions[].confirmation`** — a user-invoked action behind a Studio-owned review and a native
   dialog. Your optional `review` returns `{message, detail, images:[{label, dataUrl}]}`: `message`
   (at most 2,000 characters) is the dialog's question instead of the manifest's `confirmation`, and
@@ -427,8 +430,9 @@ What Studio will and will not do with it:
   PATH. (`host-cli` runs a program Studio itself ships and is reserved for the bundled Genex
   plugin.)
 - **`cwd`** is `storage` or `storage:project`, both inside your plugin's own storage — never the
-  package, which is replaced on update and deleted on remove. `HOME` is set to a folder inside that
-  directory, so a server that reads dotfiles on startup cannot reach the user's.
+  package, which is replaced on update and deleted on remove. `HOME` (and on Windows `USERPROFILE`,
+  `APPDATA` and `LOCALAPPDATA`) is set to a folder inside that directory, so a server that reads
+  dotfiles on startup cannot reach the user's.
 - **`env`** names *sources*, never values: `setting:<key>` (a declared setting), `literal:<value>`,
   or `credential-file` — which sets the variable to `/dev/fd/3` and sends your plugin's one
   credential, the bare token with no `NAME=` framing and no newline, down an anonymous pipe on
