@@ -1,8 +1,9 @@
 /**
  * The one `ToolCategory` table every lane's tool calls are counted in (§7 `calls.tools`), in the
- * evals and in the app's field rows alike, and the command classifier behind it. A shell command is unwrapped first (`/bin/zsh -c '…'` → `…`,
- * Rule 17) and then matched at COMMAND POSITION only (the start of the command or of a segment
- * after `&&`, `||`, `;`, `|`), so a word inside a quoted string or a heredoc body is not a call.
+ * evals and in the app's field rows alike, and the command classifier behind it. A shell command
+ * is unwrapped first (`/bin/zsh -c '…'` → `…`, Rule 17) and then matched at COMMAND POSITION only
+ * (the start of the command or of a segment after `&&`, `||`, `;`, `|`), so a word inside a
+ * quoted string or a heredoc body is not a call.
  * A file written through the shell (`cat > f <<'EOF'`, `sed -i`, `tee`) is an edit: the demo's
  * local lane wrote every source file that way, and counting only the Edit tool reported it as
  * having changed nothing.

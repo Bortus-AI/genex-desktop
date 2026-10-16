@@ -354,7 +354,11 @@ export function turnFacts(
     time: timingFacts(turn, between(turn[0], turn.at(-1)), 0, names),
     ...tokenFacts(turn, lead.readings, names),
     context: contextFacts(turn),
-    calls: callFacts(turn, lead.calls),
+    // A run started earlier in this thread may still be working: its records belong to its own row.
+    calls: callFacts(
+      turn.filter((event) => runIdOf(event) === null),
+      lead.calls,
+    ),
     inApp: NO_SIGNALS,
   };
 }
