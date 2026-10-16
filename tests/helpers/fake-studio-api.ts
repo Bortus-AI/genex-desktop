@@ -228,6 +228,7 @@ const METHODS = [
   "messageImages",
   "rewindPreview",
   "rewindChat",
+  "undoRewind",
   "chooseGamesRoot",
   "pickProject",
   "inspectFolder",

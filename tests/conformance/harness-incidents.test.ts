@@ -9273,13 +9273,14 @@ describe("an Unreal game is never checked as a web page", () => {
     reply: Record<string, unknown> = {},
   ): Promise<{ rig: Rig; prompts: string[]; requests: DelegateRequest[] }> {
     const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const { ENGINES, UNREAL_ENGINE } = await import("../helpers/engines.ts");
     const { tmpDir } = await import("../helpers/tmp.ts");
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const game = await rig.core.games.scaffold(GAME, { title: "Tower Game" });
     const uproject = path.join(await tmpDir("unreal-project-"), "Tower.uproject");
     await writeFile(uproject, "{}\n");
-    await writeEngineBinding(game.dir, uproject);
+    await writeEngineBinding(game.dir, uproject, UNREAL_ENGINE.id, ENGINES);
     rig.preview.pixelStatsNext = { ...rig.preview.pixelStatsNext, meanLuma: 0.4, litFraction: 0 };
     const prompts: string[] = [];
     const requests: DelegateRequest[] = [];
@@ -9615,6 +9616,7 @@ describe("a game New game made is asked its engine on its chat's first ask", () 
 describe("a game linked to Unreal during its turn", () => {
   it("a game linked to Unreal during its turn got the web health pass and a black-screen line: no preview load, no build_observation, the builder's report alone", async () => {
     const { writeEngineBinding } = await import("../../src/substrate/game-engine-binding.ts");
+    const { ENGINES, UNREAL_ENGINE } = await import("../helpers/engines.ts");
     const rig = await startRig({ replies: [] });
     rigs.push(rig);
     const game = await rig.core.games.scaffold("city-circuit", { title: "City Circuit" });
@@ -9633,7 +9635,7 @@ describe("a game linked to Unreal during its turn", () => {
         const uproject = path.join(game.dir, "unreal", "CityCircuit.uproject");
         await mkdir(path.dirname(uproject), { recursive: true });
         await writeFile(uproject, "{}\n");
-        await writeEngineBinding(game.dir, uproject);
+        await writeEngineBinding(game.dir, uproject, UNREAL_ENGINE.id, ENGINES);
         await writeFile(path.join(request.cwd, "NOTES.md"), "# City Circuit\n");
         return { ok: true, engine: "vendor", sessionId: "cc-1", turns: 9, usage: {}, summary: report };
       },
@@ -14957,6 +14959,190 @@ describe("a worker waiting on its provider when the user asks to finish", () => 
     assert.equal(flow, "stop", "the round stops at the ask, not at the run's end");
     const stopped = records.find(([type]) => type === RunEvent.FacetStopped)?.[1];
     assert.equal(stopped?.by, "user");
+  });
+});
+
+describe("a chat in a game linked to an engine other than Unreal", () => {
+  it("EG1. its brief never gives web-page rules, the preview's Reload or the web Loop, whether or not the host lists facts", async () => {
+    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const { launchRules } = await import("../../src/harness-seed/loop/launch-prompts.ts");
+    const launch = { toolName: "start_build", hours: 2 };
+    const toy = { ask: "make the garden", gameEngine: "toy-engine", engineProject: "/g/garden/Garden.toyproj", launch };
+    const webWords = [/window\.__studio/, /Reload/, /holds a web game/, /builders working in parallel/];
+    for (const [name, brief] of [
+      ["with facts", buildContractorBrief({ ...toy, facts: [{ id: "toy-project", path: "." }] })],
+      ["an older caller that names only the engine", buildContractorBrief(toy)],
+    ] as const)
+      for (const words of webWords) assert.doesNotMatch(brief, words, `${name}: ${words}`);
+    const unnamedLoop = launchRules("claude-code", launch, "toy-engine").join("\n");
+    assert.doesNotMatch(
+      unnamedLoop,
+      /builders working in parallel/,
+      "with no Loop named, another engine's is the one Loop",
+    );
+    assert.match(unnamedLoop, /reviewer/);
+    assert.match(launchRules("claude-code", launch, "unreal").join("\n"), /the Unreal Loop/, "Unreal's stays Unreal's");
+  });
+});
+
+describe("a game its engine plugin plays in its editor, with judges", () => {
+  const TOY_FACTS = [{ id: "toy-project", path: "." }];
+  const UNREAL_FACTS = [{ id: "unreal-project", path: "." }];
+  const JUDGES = [
+    { id: "crowd", label: "Crowd" },
+    { id: "plain", label: "Plain" },
+  ];
+
+  /** A Loop's host on a copy of the toy project, listed as the host lists a game it plays in its editor. */
+  async function toyLoop(
+    turns: Array<import("../helpers/loop-host.ts").LoopTurn>,
+    game: { editorPlay?: boolean; judges?: typeof JUDGES } = { editorPlay: true, judges: JUDGES },
+    facts: Array<{ id: string; path: string }> = TOY_FACTS,
+  ) {
+    const { gameRepo, loopHost } = await import("../helpers/loop-host.ts");
+    const { copyProject, Project } = await import("../helpers/project-fixtures.ts");
+    const project = facts === UNREAL_FACTS ? Project.UnrealGame : Project.ToyProject;
+    const dir = await gameRepo(await copyProject(project, await tmpDir("judged-loop-")));
+    const host = loopHost({ dir, facts, turns, run: { runId: `run-judged-${path.basename(dir)}` } });
+    Object.assign(host.game, game);
+    return host;
+  }
+
+  /** A turn that keeps one save point, "One". */
+  const savesOne = async ({ tool }: { tool: (name: string, args?: Record<string, string>) => Promise<unknown> }) => {
+    await tool("save_point", { label: "One", summary: "the first room" });
+    return undefined;
+  };
+  /** A turn that claims the goal, naming a file of the folder as proof. */
+  const finishing =
+    (proof: string) =>
+    async ({ tool }: { tool: (name: string, args?: Record<string, string>) => Promise<unknown> }) => {
+      await tool("finish", { summary: "The room is built.", proof });
+      return undefined;
+    };
+  const finishes = finishing("Garden.toyproj");
+
+  /** The lead's `judge_play` on its first turn, as its engine was handed it; undefined when not offered. */
+  const leadJudgeTool = (host: import("../helpers/loop-host.ts").LoopHost) =>
+    ((host.leadCalls()[0]?.director as { tools?: Array<Record<string, unknown>> } | undefined)?.tools ?? []).find(
+      (tool) => tool.name === "judge_play",
+    ) as { parameters: { properties: Record<string, { description?: string }> } } | undefined;
+
+  /** The judges each judge session played as, in order. */
+  const judgesPlayed = (host: import("../helpers/loop-host.ts").LoopHost) =>
+    host.judged().map((params) => (params.playtest as { judge?: string; role?: string }).judge ?? "plain judge");
+
+  it("EJ1. a game the host says it plays in an editor, whatever its engine: the lead is offered judge_play with the game's judges by id, not only on the Unreal fact", async () => {
+    const { playedInEditor } = await import("../../src/harness-seed/loop/folder-facts.ts");
+    assert.equal(playedInEditor({ editorPlay: true, facts: TOY_FACTS }), true, "the host's word");
+    assert.equal(playedInEditor({ facts: UNREAL_FACTS }), true, "an older host that never says: the Unreal fact");
+    assert.equal(playedInEditor(UNREAL_FACTS), true, "a kept older caller that hands facts alone");
+    assert.equal(playedInEditor({ facts: TOY_FACTS }), false);
+    const host = await toyLoop([finishes]);
+    await host.start();
+    const tool = leadJudgeTool(host);
+    assert.ok(tool, "judge_play offered on a toy-engine game played in its editor");
+    assert.match(String(tool.parameters.properties.judge?.description), /crowd \(Crowd\), plain \(Plain\)/);
+    assert.match(host.prompts()[0] ?? "", /judge_play: a blind judge plays the game/);
+    const plain = await toyLoop([finishes], {});
+    await plain.start();
+    assert.equal(leadJudgeTool(plain), undefined, "a game no plugin plays in its editor offers none");
+  });
+
+  it("EJ2. after a turn keeps a save point every judge plays it in turn, each as itself; the answers open the lead's next turn and reach the run's checks", async () => {
+    const host = await toyLoop([savesOne, finishes]);
+    await host.start();
+    assert.deepEqual(judgesPlayed(host), ["crowd", "plain"]);
+    for (const params of host.judged()) assert.equal((params.playtest as { role?: string }).role, "judge");
+    const second = host.prompts()[1] ?? "";
+    assert.match(second, /The Crowd judge played save point "One": The judge answered yes/, second);
+    assert.match(second, /The Plain judge played save point "One"/);
+    const checks = host.appended("run_interaction_evidence").map((payload) => String(payload.label));
+    assert.equal(checks.length, 2, JSON.stringify(checks));
+    assert.match(checks[0] ?? "", /Crowd judge/);
+    assert.match(checks[1] ?? "", /Plain judge/);
+  });
+
+  it("EJ3. a stop while a judge plays cancels the judges not played yet", async () => {
+    const host = await toyLoop([savesOne, finishes]);
+    host.judging = () => {
+      host.rec.ctx.cancelled = true;
+      return undefined;
+    };
+    await host.start();
+    assert.deepEqual(judgesPlayed(host), ["crowd"]);
+  });
+
+  it("EJ4. no judges, no rounds: a toy game whose plugin declares none, and an Unreal game", async () => {
+    const none = await toyLoop([savesOne, finishes], { editorPlay: true });
+    await none.start();
+    assert.deepEqual(none.judged(), []);
+    assert.equal(none.prompts().length, 2, "the Loop went on to its second turn");
+    const unreal = await toyLoop([savesOne, finishing("Lantern.uproject")], {}, UNREAL_FACTS);
+    await unreal.start();
+    assert.deepEqual(unreal.judged(), []);
+    assert.ok(leadJudgeTool(unreal), "the Unreal lead keeps judge_play, as before");
+  });
+
+  it("EJ5. a round keeps to the Loop's hours: with a few minutes of working time left no judge plays, and the lead hears why", async () => {
+    const host = await toyLoop([
+      async (call) => {
+        await savesOne(call);
+        call.host.pass(3 * 60 * 60_000 - 2 * 60_000);
+        return undefined;
+      },
+      finishes,
+    ]);
+    await host.start();
+    assert.deepEqual(host.judged(), []);
+    assert.match(host.prompts()[1] ?? "", /No judge played save point "One": the Loop's working time is nearly over/);
+  });
+
+  it("EJ7. a round whose working time runs out while a judge plays starts no further judge, and the lead hears which didn't play", async () => {
+    const host = await toyLoop([savesOne, finishes]);
+    host.judging = () => {
+      // The first judge plays past the Loop's working time.
+      host.pass(3 * 60 * 60_000);
+      return undefined;
+    };
+    await host.start();
+    assert.deepEqual(judgesPlayed(host), ["crowd"]);
+    assert.match(
+      host.prompts()[1] ?? "",
+      /The judges' round after save point "One" stopped before the Plain judge played: the Loop's working time is over/,
+    );
+  });
+
+  it("EJ6. the chat's judge_play plays as the judge it names; a kept older judge that can't is refused, playing nothing", async () => {
+    const { judgeFromChat } = await import("../../src/harness-seed/loop/chat-judge.ts");
+    const { servesEngineJudges } = await import("../../src/harness-seed/loop/engine-judges.ts");
+    const rec = ctxRecorder({
+      handlers: {
+        "preview.capacity": () => ({ max: 2, inUse: 0, headless: true }),
+        "preview.acquire": () => ({ handle: "w1" }),
+        "preview.release": () => true,
+        "engine.describe": () => [{ id: "claude-code", kind: "delegated", supportsSessions: true }],
+        "engine.delegate": () => ({ ok: true, summary: '{"answers":{"chat-judge":{"answer":"yes"}}}', turns: 2 }),
+      },
+    });
+    const ask = {
+      type: "chat_judge" as const,
+      threadId: "t1",
+      project: "garden",
+      root: "/games/garden",
+      engine: "claude-code",
+      ask: "Can three players all reach the gate?",
+      judge: "crowd",
+    };
+    const answered = await judgeFromChat(rec.ctx as never, ask, { retriesMs: [] });
+    assert.equal(answered.answer, "yes");
+    const [delegated] = rec.paramsOf("engine.delegate");
+    assert.equal((delegated?.playtest as { judge?: string } | undefined)?.judge, "crowd");
+    assert.equal(servesEngineJudges([{}]), false, "a kept older judge module serves no engine judge");
+    const [plainTool] = (await import("../../src/harness-seed/tools/judge-tools.ts")).tools;
+    const properties = (plainTool?.parameters ?? {}) as { properties?: Record<string, { description: string }> };
+    const judgeArg = properties.properties?.judge;
+    assert.match(judgeArg?.description ?? "", /hint, not a rule/);
   });
 });
 

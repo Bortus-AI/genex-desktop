@@ -41,6 +41,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:queue.message": "changeQueuedMessage",
   "studio:chat.rewind.preview": "rewindPreview",
   "studio:chat.rewind": "rewindChat",
+  "studio:chat.rewind.undo": "undoRewind",
   "studio:events": "events",
   "studio:thread.events": "threadEvents",
   "studio:chat.page": "chatPage",
@@ -267,6 +268,7 @@ export interface StudioInvokePayloads {
   };
   "studio:chat.rewind.preview": { threadId: string; eventId: string; messageId: string };
   "studio:chat.rewind": { threadId: string; eventId: string; messageId: string; files: boolean };
+  "studio:chat.rewind.undo": { threadId: string; rewindId: string };
   "studio:events": { after?: string };
   "studio:thread.events": { threadId: string };
   "studio:chat.page": { threadId: string; before?: string };

@@ -11,6 +11,7 @@ import { PluginCapability, type PluginManifest, PluginToolAudience } from "../..
 import { CoreFact, FolderHolds, type GameKind } from "../../src/shared/project-facts.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { COMPUTER_TOOL_NAME } from "../../src/substrate/computer-tool.ts";
+import { ENGINES, UNREAL_ENGINE } from "../helpers/engines.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const FACT = "example-project";
@@ -33,20 +34,31 @@ function plugin(id = "example", facts: string[] = [FACT]): PlayManifest {
 async function fixture(manifests: PlayManifest[], kind: GameKind = { facts: [{ id: FACT, path: "." }] }) {
   const directory = await realpath(await tmpDir("editor-play-discovery-"));
   const disabled = new Set<string>();
-  const links = new Map<string, { project: string }>();
+  const links = new Map<string, { project: string; kind: string }>();
   const linked = async (id: string) => {
     const project = path.join(directory, "game.uproject");
     await writeFile(project, "{}\n");
-    await writeEngineBinding(directory, project);
-    links.set(id, { project });
+    await writeEngineBinding(directory, project, UNREAL_ENGINE.id, ENGINES);
+    links.set(id, { project, kind: UNREAL_ENGINE.id });
     return project;
   };
   const core = {
     games: { dirFor: () => directory, kindOf: async () => kind },
-    plugins: { list: () => manifests.map((manifest) => ({ manifest })), enabled: (id: string) => !disabled.has(id) },
+    plugins: {
+      list: () => manifests.map((manifest) => ({ manifest })),
+      enabled: (id: string) => !disabled.has(id),
+      engines: () => ENGINES,
+    },
     engineLinks: { read: async (id: string) => links.get(id) ?? null },
   } as unknown as StudioCore;
-  return { core, directory, discover: () => editorPlayPlugin(core, "game"), linked, links, disabled };
+  return {
+    core,
+    directory,
+    discover: async () => (await editorPlayPlugin(core, "game"))?.id ?? null,
+    linked,
+    links,
+    disabled,
+  };
 }
 
 /** The real editor computer around a recording plugin transport, with no window or frame access. */
@@ -82,6 +94,17 @@ describe("editor play plugin discovery", () => {
     assert.equal(await f.discover(), "example");
     f.disabled.add("example");
     assert.equal(await f.discover(), null);
+  });
+
+  it("starts a play over only for a plugin whose play-open declares fresh", async () => {
+    const joins = await fixture([plugin()]);
+    assert.equal((await editorPlayPlugin(joins.core, "game"))?.restarts, false);
+    const manifest = plugin();
+    const open = manifest.tools.find((tool) => tool.name === EnginePlayTool.Open);
+    assert.ok(open);
+    open.parameters = { type: "object", properties: { fresh: { type: "boolean" } } };
+    const restarts = await fixture([manifest]);
+    assert.equal((await editorPlayPlugin(restarts.core, "game"))?.restarts, true);
   });
 
   it("refuses incomplete, agent-facing, unscoped and unrelated play tools", async () => {
@@ -139,7 +162,7 @@ describe("editor play plugin discovery", () => {
     f.disabled.add(engine.id);
     assert.equal(await f.discover(), null, "a disabled link owner cannot fall back to a fact match");
     f.disabled.clear();
-    f.links.set(engine.id, { project: "/different/game.uproject" });
+    f.links.set(engine.id, { project: "/different/game.uproject", kind: UNREAL_ENGINE.id });
     assert.equal(await f.discover(), null, "a stale plugin link cannot fall back to a fact match");
   });
 
@@ -158,7 +181,7 @@ describe("editor play plugin discovery", () => {
     for (const engine of engines) engine.capabilities = [PluginCapability.GameEngine];
     const f = await fixture(engines);
     const project = await f.linked("first");
-    f.links.set("second", { project });
+    f.links.set("second", { project, kind: UNREAL_ENGINE.id });
     assert.equal(await f.discover(), null);
   });
 });

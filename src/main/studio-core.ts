@@ -17,6 +17,7 @@ import type { ChildProcess } from "node:child_process";
 import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
 import { deliveryFolderFor, ignoreLine, webFolderOf } from "../shared/project-workspace.ts";
@@ -551,6 +552,8 @@ export class StudioCore {
       workspaceSections: () => this.plugins?.workspaceSections() ?? [],
       // Likewise: until the registry exists no plugin hooks a moment.
       hookEvents: (game) => this.plugins?.hookEvents(game) ?? [],
+      // Likewise: until the registry exists no engine is declared, so no link holds.
+      engines: () => this.plugins?.engines() ?? new Map(),
     });
     // Every save point and rescue snapshot of a game follows the rules for what it holds then,
     // and a restore never cleans away what those rules ignore.
@@ -987,6 +990,7 @@ export class StudioCore {
       changed: (project) => this.emit(UiEvent.GameChanged, { project }),
       gameThread: (project) => this.threadForGame(project),
       now: () => new Date(),
+      catalog: () => this.plugins.engines(),
     });
     this.pluginServices.engineLinks = this.engineLinks;
     // `game.snapshot`: an ordinary game snapshot, in Rewind under the plugin's reason.
@@ -1000,11 +1004,14 @@ export class StudioCore {
     };
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
+    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
+    this.pluginServices.engineAssist = (pluginId, binding, task, signal) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...(signal ? { signal } : {}) });
     this.plugins = new PluginRegistry(
       path.join(this.layout.engineHomes, "plugins"),
       path.join(this.options.paths.resources, "plugins"),
       path.join(this.options.paths.resources, "plugin-sdk/backend.mjs"),
-      (id, method, args, binding) => this.pluginServices.call(id, method, args, binding),
+      (id, method, args, binding, invocation) => this.pluginServices.call(id, method, args, binding, invocation),
     );
     const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
     this.#nativePlugins = nativePlugins;
@@ -1027,8 +1034,15 @@ export class StudioCore {
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };
-    // The Unreal and Unity editor bridges and Godot are early integrations: bundled, and off until the user turns them on.
-    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false, unity: false, godot: false };
+    // The Unreal, Unity, Godot and Roblox Studio plugins are bundled and off until the user turns
+    // them on: each needs its editor, and Roblox an account for people 18 and over.
+    this.plugins.seedEnabled = {
+      blender: this.#settings.blender,
+      unreal: false,
+      unity: false,
+      godot: false,
+      roblox: false,
+    };
     // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
     this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {
@@ -1872,7 +1886,7 @@ export class StudioCore {
     if (found.state !== NativeRuntimeState.Ready || !found.path) return null;
     const scratch = await mkdtemp(path.join(os.tmpdir(), ENGINE_SCRATCH_PREFIX));
     // A game linked to an engine project outside its folder plays that project: the engine reaches it too.
-    const linked = await readEngineBinding(root).catch(() => undefined);
+    const linked = await readEngineBinding(root, this.plugins.engines()).catch(() => undefined);
     const reach = [root, ...(linked ? [path.dirname(linked.project)] : [])];
     const child = await spawnNativeLongLived({
       binary: found.path,
@@ -2594,6 +2608,11 @@ export class StudioCore {
   /** Rewind a game chat to just before one of its messages (`core/rewind.ts`). */
   rewindChat(...args: Parameters<ChatRewindService["rewind"]>): ReturnType<ChatRewindService["rewind"]> {
     return this.#rewind.rewind(...args);
+  }
+
+  /** Bring back the game files the chat's newest rewind replaced; the chat stays rewound (`core/rewind.ts`). */
+  undoRewind(...args: Parameters<ChatRewindService["undo"]>): ReturnType<ChatRewindService["undo"]> {
+    return this.#rewind.undo(...args);
   }
 
   /** What freeing space deletes now, in `project` or in every game (`core/storage-space.ts`). */

@@ -19,6 +19,7 @@ import { CommandRun } from "./CommandRun.tsx";
 import { GenexCoverCard } from "./GenexCoverCard.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
 import { EngineLinkLine } from "./EngineLinkLine.tsx";
+import { RewindLine } from "./RewindLine.tsx";
 import { JobLine } from "./JobLine.tsx";
 import { WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
@@ -255,13 +256,18 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
   );
 }
 
-/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission, a judge's play. */
+/**
+ * The action entries that are one quiet line: an engine link, a rewind that put files back, a job,
+ * a worker, a missing permission, a judge's play.
+ */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
   context: TranscriptContext,
 ): JSX.Element | null {
   if (entry.action === EntryAction.EngineLink)
     return <EngineLinkLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Rewound)
+    return <RewindLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;

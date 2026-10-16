@@ -653,7 +653,15 @@ settles first, and no recovery starts during it) first autosaves a turn that kep
 folder changed, or `onlyIfUnsaved` where a plugin saves the app; never while a writer in place works),
 then restores the save point (`snapshot.restore`, then `waitReady`; Plan mode holds it even where no
 plugin hooks `restore.*`) or fires `restore.before` and `restore.after` with no file changed, both
-waiting while a writer in place works, each outcome a carried line. `finish` waits for that turn's
+waiting while a writer in place works, each outcome a carried line. When the turn kept a save point
+(its own or the autosave) and the folder was not taken back, the judges the game's engine plugin
+declares (`game.list`'s `judges`, on a game marked `editorPlay`) play it one at a time
+(`open/judge-rounds.ts`): each a blind `judge_play` naming its judge, its answer recorded as a run check
+and carried to the lead. A round starts only with `ROUND_MIN_MS` (3 minutes) of working time left and
+no finish asked for, plays no judge past the working time, and a Stop, a hold or the close ends it
+before the next judge. A game with no judges (Unreal, a web game) has no rounds; the lead's
+`judge_play` is offered for any game marked `editorPlay` (an older host's: an Unreal game), naming the
+game's judges by id. `finish` waits for that turn's
 end and for a writer in place, and a timed Loop's claim waits for its last turn. The health
 watch (`open/health.ts`) rides the wake loop's rounds and a turn's, one look at a time beside them
 (never awaited): `health` every `HEALTH_POLL_MS` when hooked, never once the Loop closes or its

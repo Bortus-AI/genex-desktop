@@ -142,9 +142,9 @@ function loopOptions(unavailable: boolean) {
 
 /**
  * One Loop control: Off, until the build passes, a preset or a custom time. Without `onChange` the
- * Loop is shown, not changed (a build already owns it). With `loopUnavailable` (an Unreal game
- * until the Unreal Loop exists) it shows Off, offers Off alone and says why. Plan mode lives in
- * Add (`ComposerAddMenu`).
+ * Loop is shown, not changed (a build already owns it). With `loopUnavailable` (a game whose
+ * engine needs its project in the game folder and finds it elsewhere) it shows Off, offers Off
+ * alone and says why. Plan mode lives in Add (`ComposerAddMenu`).
  */
 export function ComposerModeMenu({
   value,
