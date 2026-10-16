@@ -581,7 +581,8 @@ held, and the folder after each answer is saved too. First, the game's plugin st
 for each message (`checkpoint.before` hooks with `messages: true`) save the engine's state into the
 folder within that wait, less 5 s kept for the snapshot; Plan mode, a lock not given or no time left
 skips them, and the folder is saved whatever they answered ([plugins](plugins.md#before-each-chat-message)).
-The folder after an answer runs no step. `chat-checkpoints.ts` reads the folder
+The same steps run before the snapshot taken after each answer, so what an answer changed only in
+the engine lands inside its own pair ([plugins](plugins.md#before-each-chat-message)). `chat-checkpoints.ts` reads the folder
 through a private index with executable Git configuration disabled, first copied from the
 repository's with its times (read before the copy, rounded down to the second, so the copy is
 never dated later than its content), so a same-size edit in the second Git last read the file is
