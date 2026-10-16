@@ -46,9 +46,9 @@ text behind a Studio-written preface; `vendor.json` records each source, version
 `npm run genex:skills` refreshes them.
 
 - Eight platform cards and their references, copied unchanged from
-  `@genex-ai/cli-demo` 1.36.4 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
+  `@genex-ai/cli-demo` 1.36.7 `templates/skills` (MIT, Copyright (c) 2026 me-ai-org). The
   license text ships beside them as `skills/LICENSE-cards`, copied from the CLI's `LICENSE`.
-- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.4), which is not part of the npm
+- `genex/SKILL.md` wraps https://genex.games/SKILL.md (v1.36.7), which is not part of the npm
   package. It is attributed to Genex here; its license is not yet confirmed (see "Status not yet
   recorded" below).
 
@@ -102,7 +102,7 @@ bundled copy runs with cua's telemetry and update check turned off.
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 
 Template games and published games that bring no SDK of their own use Genex's player-identity SDK,
-`@genex-ai/embed-sdk` 0.30.0 (MIT, as its package.json declares; the package ships no license
+`@genex-ai/embed-sdk` 0.33.0 (MIT, as its package.json declares; the package ships no license
 file). Its browser modules are copied unchanged to `dist/resources/vendor/genex/embed-sdk` and to
 `dist/resources/plugins/genex/embed-sdk`, and from there into a published game's
 `vendor/genex/embed-sdk`.
@@ -272,7 +272,7 @@ SOFTWARE.
 
 These npm packages ship in the app without a license file of their own; their notices follow.
 
-### @genex-ai/embed-sdk 0.30.0
+### @genex-ai/embed-sdk 0.33.0
 
 Bundled into `vendor/genex/`, the player-identity SDK a game made from Studio's template maps in its import
 map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license

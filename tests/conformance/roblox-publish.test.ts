@@ -13,11 +13,14 @@ import { after, before, describe, it } from "node:test";
 import type { PluginEngineAssistAnswer, PluginEngineLink } from "../../src/plugin-sdk/index.d.ts";
 import { createRobloxBackend, RobloxAction, RobloxTool } from "../../src/plugins/roblox/backend.ts";
 import {
+  firstPublish,
+  firstPublishTask,
   PUBLISH_CLICK_PATH,
   PublishAsker,
   PublishMiss,
   publishTask,
   publishUpdate,
+  reviewFirstPublish,
   reviewPublish,
 } from "../../src/plugins/roblox/publish.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
@@ -110,17 +113,26 @@ describe("publish-update hands the task to the game's chat", () => {
         if (refused.reason) assert.equal(answer.reason, refused.reason);
       });
 
-  for (const asker of [PublishAsker.Person, PublishAsker.Agent])
-    it(`asked by the ${asker}, a place never published gets the first publish's click path and no assist`, async () => {
-      const host = assisting();
-      const answer = await publishUpdate({ link: linkTo(false), name: "Sky Race" }, host.deps, asker);
-      assert.deepEqual(host.order, [], "nothing is clicked or sent");
-      assert.equal(answer.started, false);
-      assert.equal(answer.reason, PublishMiss.FirstPublish);
-      assert.equal(answer.clickPath, PUBLISH_CLICK_PATH);
-      assert.ok(answer.message.includes(PUBLISH_CLICK_PATH), answer.message);
-      assert.match(answer.message, /first/);
-    });
+  // Flipped: a place never published is no longer the person's to publish by hand. Publish an update
+  // points at the first publish (the agent's first-publish, the panel's Publish to Roblox), with no click path.
+  it("asked by the agent, a place never published sends it to first-publish, clicking nothing", async () => {
+    const host = assisting();
+    const answer = await publishUpdate({ link: linkTo(false), name: "Sky Race" }, host.deps, PublishAsker.Agent);
+    assert.deepEqual(host.order, [], "nothing is clicked or sent");
+    assert.equal(answer.started, false);
+    assert.equal(answer.reason, PublishMiss.FirstPublish);
+    assert.equal(answer.clickPath, undefined);
+    assert.match(answer.message, /roblox__first-publish/);
+    assert.match(answer.message, /"Sky Race"/, "the name to pass");
+  });
+
+  it("asked by the person, a place never published points at Publish to Roblox, clicking nothing", async () => {
+    const host = assisting();
+    const answer = await publishUpdate({ link: linkTo(false), name: "Sky Race" }, host.deps, PublishAsker.Person);
+    assert.deepEqual(host.order, []);
+    assert.equal(answer.reason, PublishMiss.FirstPublish);
+    assert.match(answer.message, /Publish to Roblox/);
+  });
 
   it("a game with no place has nothing to publish, and asks nothing", async () => {
     const host = assisting();
@@ -150,6 +162,103 @@ describe("publish-update hands the task to the game's chat", () => {
     assert.ok(String(review.detail).includes(PUBLISH_CLICK_PATH));
     assert.doesNotMatch(String(review.detail), /this Mac/, "the card's words hold on any computer");
     assert.deepEqual(reviewPublish({ link: linkTo(false) }), {}, "a first publish keeps the manifest's card");
+  });
+});
+
+describe("first-publish publishes a place never on Roblox, under the game's name", () => {
+  for (const asker of [PublishAsker.Person, PublishAsker.Agent])
+    it(`asked by the ${asker}: the task names the game, scripts reach Studio first`, async () => {
+      const host = assisting();
+      const place = { link: linkTo(false), name: "sky-race", title: "Sky Race" };
+      const answer = await firstPublish(place, host.deps, asker, "Sky Racers");
+      assert.equal(answer.started, true, answer.message);
+      assert.equal(answer.name, "Sky Racers");
+      assert.deepEqual(host.tasks, [firstPublishTask("Sky Racers")]);
+      assert.deepEqual(host.order, ["flush", "assist"]);
+      assert.match(answer.message, /Sky Racers/);
+    });
+
+  it("with no name asked for, the Genex game's title, else the place's name", async () => {
+    const rows: Array<[string | undefined, Parameters<typeof firstPublish>[0], string]> = [
+      [undefined, { link: linkTo(false), name: "sky-race", title: "Sky Race" }, "Sky Race"],
+      ["  ", { link: linkTo(false), name: "sky-race", title: "Sky Race" }, "Sky Race"],
+      [undefined, { link: linkTo(false), name: "sky-race" }, "sky-race"],
+      [undefined, { link: linkTo(false) }, "My Roblox game"],
+    ];
+    for (const [requested, place, expected] of rows) {
+      const host = assisting();
+      const answer = await firstPublish(place, host.deps, PublishAsker.Agent, requested);
+      assert.equal(answer.name, expected, JSON.stringify(place));
+    }
+  });
+
+  it("a name is one plain line Roblox takes: controls gone, quotes softened, at most 50 characters", async () => {
+    const host = assisting();
+    const hostile = `a\n"b"\u0007${"x".repeat(80)}`;
+    const answer = await firstPublish({ link: linkTo(false) }, host.deps, PublishAsker.Agent, hostile);
+    const name = String(answer.name);
+    assert.ok(name.length <= 50, name);
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is refused.
+    assert.doesNotMatch(name, /[\u0000-\u001f\u007f"]/);
+  });
+
+  it("the task says where to click, to keep Studio's settings, and where to stop, within the host's limit", () => {
+    for (const name of ["Sky Race", "x".repeat(50), "Sky › Race"]) {
+      const task = firstPublishTask(name);
+      assert.ok(task.length <= ENGINE_ASSIST_TASK_MAX_CHARS, `${task.length} characters`);
+      assert.ok(task.includes(PUBLISH_CLICK_PATH));
+      assert.ok(task.includes(`"${name}"`));
+      for (const word of [/new game/, /privacy/, /description empty/, /age/, /ID/, /two-step/, /terms/, /payment/])
+        assert.match(task, word);
+    }
+  });
+
+  it("a place already on Roblox is updated with publish-update instead, and nothing is clicked", async () => {
+    const host = assisting();
+    const answer = await firstPublish({ link: linkTo(true), name: "Sky Race" }, host.deps, PublishAsker.Agent);
+    assert.deepEqual(host.order, []);
+    assert.equal(answer.reason, PublishMiss.Published);
+    assert.match(answer.message, /roblox__publish-update/);
+    const none = await firstPublish({ link: null }, host.deps, PublishAsker.Agent);
+    assert.equal(none.reason, PublishMiss.NoPlace);
+  });
+
+  for (const reason of [EngineAssistRefusal.Unavailable, EngineAssistRefusal.Declined])
+    it(`answered ${reason}, the agent hears nothing was published and where the person's own clicks are`, async () => {
+      const host = assisting({ started: false, reason });
+      const answer = await firstPublish({ link: linkTo(false), title: "Sky Race" }, host.deps, PublishAsker.Agent);
+      assert.equal(answer.started, false);
+      assert.equal(answer.clickPath, PUBLISH_CLICK_PATH);
+      assert.match(answer.message, /[Nn]othing was published/);
+    });
+
+  it("the panel's card names the game and keeps Studio's privacy", () => {
+    const review = reviewFirstPublish({ link: linkTo(false), title: "Sky Race" }, "Sky Racers");
+    assert.match(String(review.message), /Sky Racers/);
+    assert.match(String(review.detail), /privacy/);
+    assert.match(String(review.detail), /your Roblox account/);
+    assert.deepEqual(reviewFirstPublish({ link: linkTo(true) }), {}, "a published place keeps the manifest's card");
+  });
+});
+
+describe("the manifest's first publish", () => {
+  it("the panel's Publish to Roblox and the agent's first-publish both ask on a card, naming the game", async () => {
+    const manifest = validateManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
+    const action = manifest.actions?.find((entry) => entry.name === RobloxAction.FirstPublish);
+    assert.ok(action);
+    assert.equal(action.label, "Publish to Roblox");
+    assert.equal(action.native, true);
+    const tool = manifest.tools.find((entry) => entry.name === RobloxTool.FirstPublish);
+    assert.ok(tool);
+    assert.deepEqual(tool.facts, ["roblox-project"]);
+    assert.equal(tool.parameters.properties.name?.type, "string");
+    assert.deepEqual(tool.confirmationInput, { parameter: "name", label: "Name on Roblox" });
+    for (const card of [action.confirmation ?? "", tool.confirmation ?? ""]) {
+      assert.ok(card.length > 0 && card.length <= 300, `${card.length} characters`);
+      assert.match(card, /your Roblox account/);
+      assert.match(card, /privacy/);
+      assert.ok(card.includes(PUBLISH_CLICK_PATH), card);
+    }
   });
 });
 
@@ -215,13 +324,76 @@ describe("through the backend", () => {
       const linked = (await backend.action?.(RobloxAction.UsePlace, { file }, host.context)) as { linked: boolean };
       assert.equal(linked.linked, true);
       const status = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
-      assert.deepEqual(status.publish, { published: false, canClick: true });
+      // Flipped: a place never published also names the game it would be published as.
+      assert.deepEqual(status.publish, { published: false, canClick: true, name: "Sky Race" });
       mac.deps.canClick = () => false;
       const elsewhere = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
-      assert.deepEqual(elsewhere.publish, { published: false, canClick: false }, "where Genex can't click");
+      assert.deepEqual(
+        elsewhere.publish,
+        { published: false, canClick: false, name: "Sky Race" },
+        "where Genex can't click",
+      );
       const answer = (await backend.action?.(RobloxAction.PublishUpdate, {}, host.context)) as { reason?: string };
       assert.equal(answer.reason, PublishMiss.FirstPublish);
       assert.ok(!host.calls.some((call) => call.method === "game.engine.assist"));
+    },
+  );
+
+  it(
+    "a place never published is published by the panel's press and the agent's tool, under the game's name",
+    onMacWorld,
+    async () => {
+      const mac = await robloxMac();
+      const game = await makeGame(mac, "sky-race", "Sky Race");
+      const file = path.join(game.directory, "sky-race.rbxlx");
+      await writeFile(file, "<roblox/>");
+      const tasks: string[] = [];
+      const host = hostFor(mac, game, {
+        assist: (args) => {
+          tasks.push(String((args as { task: string }).task));
+          return { started: true };
+        },
+      });
+      const backend = createRobloxBackend(mac.deps);
+      await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
+      const review = await backend.review?.(RobloxAction.FirstPublish, {}, host.context);
+      assert.match(String(review?.message), /Sky Race/);
+      const pressed = (await backend.action?.(RobloxAction.FirstPublish, {}, host.context)) as { started: boolean };
+      assert.equal(pressed.started, true);
+      const called = (await backend.tool?.(RobloxTool.FirstPublish, { name: "Sky Racers" }, host.context)) as
+        | { message: string }
+        | undefined;
+      // Flipped: the answer also says to click now when the task joined this very turn.
+      assert.match(String(called?.message), /end this turn/i);
+      assert.match(String(called?.message), /in front of you in this turn/);
+      assert.deepEqual(tasks, [firstPublishTask("Sky Race"), firstPublishTask("Sky Racers")]);
+    },
+  );
+
+  it(
+    "first-publish needs a name Roblox takes as it is: an empty, too long or changed one clicks nothing",
+    onMacWorld,
+    async () => {
+      const manifest = validateManifest(JSON.parse(await readFile(MANIFEST, "utf8")));
+      const declared = manifest.tools.find((entry) => entry.name === RobloxTool.FirstPublish);
+      assert.deepEqual(declared?.parameters.required, ["name"]);
+      const mac = await robloxMac();
+      const game = await makeGame(mac, "sky-race", "Sky Race");
+      const file = path.join(game.directory, "sky-race.rbxlx");
+      await writeFile(file, "<roblox/>");
+      const host = hostFor(mac, game, { assist: () => ({ started: true }) });
+      const backend = createRobloxBackend(mac.deps);
+      await backend.action?.(RobloxAction.UsePlace, { file }, host.context);
+      for (const name of ["  ", "x".repeat(70), 'Sky "Race"']) {
+        const answer = (await backend.tool?.(RobloxTool.FirstPublish, { name }, host.context)) as {
+          started: boolean;
+          message: string;
+        };
+        assert.equal(answer.started, false, name);
+        assert.match(answer.message, /Nothing was clicked/);
+        assert.match(answer.message, /roblox__first-publish/);
+      }
+      assert.ok(!host.calls.some((call) => call.method === "game.engine.assist"), "nothing was handed over");
     },
   );
 
@@ -271,6 +443,8 @@ describe("the agent's card and the assist turn, through a real core with a fake 
   let binding: PluginBinding;
   let threadId: string;
   let approve = true;
+  /** What the next card's Allow sends as the edit of its field; undefined sends none. */
+  let edit: string | undefined;
   const posted: Array<{ text: string; thread?: string; clientId?: string }> = [];
 
   before(async () => {
@@ -284,8 +458,8 @@ describe("the agent's card and the assist turn, through a real core with a fake 
         if (event.type !== UiEvent.PluginConsent) return;
         const payload = event.payload as { consentId: string; state: string };
         if (payload.state !== "pending") return;
-        const yes = approve;
-        void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, yes));
+        const [yes, input] = [approve, edit];
+        void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, yes, false, input));
       },
     });
     const { core } = lite;
@@ -350,11 +524,49 @@ describe("the agent's card and the assist turn, through a real core with a fake 
     );
   });
 
+  it("first-publish on a place never published: its card, then the chat gets the task under the name given", async () => {
+    const { core } = lite;
+    const dir = (await core.games.scaffold("tower")).dir;
+    await writeFile(path.join(dir, "tower.rbxlx"), "<roblox/>");
+    const towerThread = await core.threadForGame("tower");
+    const tower = { project: "tower", directory: dir, threadId: towerThread };
+    await core.engineLinks.link("roblox", tower, { project: path.join(dir, "tower.rbxlx") });
+    const before = posted.length;
+    const answer = (await core.plugins.tool("roblox__first-publish", { name: "Tower Run" }, tower)) as {
+      started: boolean;
+    };
+    assert.equal(answer.started, true, JSON.stringify(answer));
+    assert.equal(posted.length, before + 1);
+    assert.equal(posted.at(-1)?.text, `Roblox Studio asks: ${firstPublishTask("Tower Run")}`);
+    const cards = toEntries(await core.store.listEvents(towerThread)).filter(
+      (entry) => (entry as { consentId?: string }).consentId,
+    ) as Array<{ consentSourceId?: string; consentInput?: { label: string; value: string } }>;
+    const card = cards.find((entry) => entry.consentSourceId === "roblox");
+    assert.deepEqual(card?.consentInput, { label: "Name on Roblox", value: "Tower Run" }, "the name, editable");
+  });
+
+  it("first-publish's card edits the name: the person's edit is the game's name on Roblox", async () => {
+    const { core } = lite;
+    const dir = (await core.games.scaffold("ramp")).dir;
+    await writeFile(path.join(dir, "ramp.rbxlx"), "<roblox/>");
+    const ramp = { project: "ramp", directory: dir, threadId: await core.threadForGame("ramp") };
+    await core.engineLinks.link("roblox", ramp, { project: path.join(dir, "ramp.rbxlx") });
+    edit = "Ramp Rush";
+    try {
+      const answer = (await core.plugins.tool("roblox__first-publish", { name: "Ramp" }, ramp)) as { name?: string };
+      assert.equal(answer.name, "Ramp Rush");
+      assert.equal(posted.at(-1)?.text, `Roblox Studio asks: ${firstPublishTask("Ramp Rush")}`);
+    } finally {
+      edit = undefined;
+    }
+  });
+
   it("declined, nothing is posted", async () => {
     approve = false;
+    const before = posted.length;
     try {
       await assert.rejects(lite.core.plugins.tool("roblox__publish-update", {}, binding), /declin|not allow/i);
-      assert.equal(posted.length, 1);
+      assert.equal(posted.length, before);
     } finally {
       approve = true;
     }

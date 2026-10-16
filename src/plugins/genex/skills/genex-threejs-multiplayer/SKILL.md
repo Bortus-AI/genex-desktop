@@ -80,7 +80,7 @@ For example: `genex__skill {"name":"genex-threejs-multiplayer","file":"skills/ge
 available in Studio: build chat, voice and the character from the SDK calls the card shows.
 Commands map onto Studio tools as the `genex` skill describes (`genex__skill {"name":"genex"}`).
 
-<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/SKILL.md v1.36.4 sha256 54f6a7324ae013962bd128efbd1cf217c41e0960df882259022e214b33072723 -->
+<!-- upstream @genex-ai/cli-demo/templates/skills/genex-threejs-multiplayer/SKILL.md v1.36.7 sha256 73106d16e0ee4723eaf1bacf3bd6c00dbcc27ef19946cf960c301dffef5db5d3 -->
 ---
 name: genex-threejs-multiplayer
 description: Realtime multiplayer for Genex Three.js games with `@genex-ai/multiplayer` — a relay whose SDK auto-smooths remote players AND shared objects (you do NOT write interpolation). Use whenever 2+ players share a world: movement sync, a shared ball/NPC via objects + ownership, host-authoritative scores/waves, shots/emotes, presence. MANDATORY for any multiplayer game — load before writing networking code.
@@ -484,12 +484,38 @@ and friends join it; the lobby is persistent (rounds replay, nobody is evicted):
 
 ```ts
 import { createPrivate, joinPrivate } from "@genex-ai/multiplayer";
-const lobby = await createPrivate<MyState>({ urls, room: slug, auth: () => getColyseusAuth() });  // live NOW
-showCode(lobby.code);                                                   // share this
-// a friend, elsewhere:
-const lobby = await joinPrivate<MyState>(code, { urls, room: slug, auth: () => getColyseusAuth() });
+import { share, getEntry } from "@genex-ai/embed-sdk";              // 0.32.0+
+const opts = { urls, room: slug, auth: () => getColyseusAuth() };
+
+// host
+const lobby = await createPrivate<MyState>(opts);                    // live NOW
+showCode(lobby.code);                 // always show the code too: the way in when a link will not do
+inviteBtn.onclick = async () => {     // share() starts inside the click, before any await
+  const { status, url } = await share({ text: "Join my lobby", params: { lobby: lobby.code } });
+  if (status === "copied") toast("Invite link copied");
+  if (status === "unavailable") showLink(url);       // no share sheet, no clipboard: show the link
+};
+
+// friend: ONE way in, for the code from a link and for a code typed by hand
+async function enter(code: string) {
+  if (!/^[\w-]{1,32}$/.test(code)) return null;      // a link is text anyone can write: take a code, nothing else
+  try { return await joinPrivate<MyState>(code, opts); }
+  catch { showNotice("That lobby is no longer open"); return null; }
+}
+// at boot, after waitForPlayer(): did they arrive on an invite link?
+const invited = getEntry().params.get("lobby");
+const joined = invited ? await enter(invited) : null;  // null → the menu, with its "Enter code" field
 // same handle API as matchmake(): lobby.session, lobby.matchmaking, eliminated()/score()/finish(), cancel()
 ```
+
+`share()` builds the link itself — the game's page on Genex plus `?lobby=<code>`, or the
+address the game is on where that is a preview address or a creator's own domain — and
+`getEntry()` hands the parameter back to whoever opens it. **Never build the invite from
+`location.href`**: on the game's page that is the frame's bare address, not the page a friend
+should land on. `lobby` is this example's name; any name works except the ones Genex keeps
+(`$genex-threejs-embed-auth`, `references/shells.md`). `joinPrivate` REJECTS when the code leads
+to no lobby this player can reach — it closed, or its host is on another region's relay — so
+catch it and show the menu, and keep the typed code as the second way in.
 
 ## Connect
 
@@ -757,10 +783,22 @@ fights (many writers). A ball on `objects` glides and has one owner. That's the 
   mesh — everyone uploads to everyone, and reliability, not bandwidth, breaks first). The
   room still holds 64 players; the 7th `join()` is refused, so handle `voice:rejected`
   instead of retrying. `join()` MUST run inside a click/tap — browsers gate both the mic
-  prompt and audio playback on a user gesture — and it REJECTS when the player denies the
-  mic, which is an ordinary outcome to show, not an error to swallow. For a 3D game use
-  `npx genex controller voice` (proximity audio + push-to-talk); it joins with
-  `{ spatial: true }` and drives a `THREE.PositionalAudio` per speaker. **TURN is automatic
+  prompt and audio playback on a user gesture — and it REJECTS when the microphone is
+  refused, which is an ordinary outcome to show, not an error to swallow. **Two refusals are
+  not the player's.** On its Genex page a game gets the microphone only when its BUILD
+  declared it: `npx genex preview` / `npx genex publish` declare it when the game's own
+  source calls `.voice.join()` with nothing or with options written at the call, and print
+  what the build is given — read that line. `voice.join(opts)` with the options in a
+  variable is not seen: declare the microphone in `package.json` then. When the
+  page withheld it, `join()` rejects with an error whose `name` is `VoiceNotDelegatedError`
+  (SDK 0.16.2+, Chromium browsers; elsewhere it arrives as the browser's own error): show
+  "Voice chat is not available here", never "allow your microphone" — the player was never
+  asked. And the Genex app refuses the microphone for every game: hide the voice button when
+  `getShell()` from `@genex-ai/embed-sdk` is `"app"`. The declaration rule, and the
+  `package.json` line for a call the CLI cannot see, are in `$genex-threejs-embed-auth`
+  (`references/shells.md`).
+  For a 3D game use `npx genex controller voice` (proximity audio + push-to-talk); it joins
+  with `{ spatial: true }` and drives a `THREE.PositionalAudio` per speaker. **TURN is automatic
   — do not pass `iceServers`**: `join()` fetches short-lived relay credentials from the
   platform before opening any peer connection, which is what lets the ~15% of players behind
   symmetric NAT or carrier CGNAT be heard at all (in a mesh they fail every leg, so they
