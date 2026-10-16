@@ -15,6 +15,7 @@ import { startingNow } from "./studio-launch.ts";
 import { studioRunning } from "./studio-locate.ts";
 import { createStudioWatch, type MomentOps, type StudioWatch } from "./studio-moments.ts";
 import { StudioTool } from "./studio-tools.ts";
+import type { ReconcileOptions } from "./script-sync.ts";
 
 /** The picture names a moment's screen captures take in Studio. */
 const CAPTURE_PREFIX = "GenexMoment_";
@@ -29,8 +30,8 @@ export interface MomentServices {
   bound(game: string): string | undefined;
   /** Sends the game's file changes still on their way to Studio. */
   flush(game: string): Promise<void>;
-  /** Reconciles the game's scripts with its folder. */
-  reapply(game: string): Promise<void>;
+  /** Reconciles the game's scripts with its folder; after a restore the restored files win. */
+  reapply(game: string, options?: ReconcileOptions): Promise<void>;
   watch: StudioWatch;
 }
 
@@ -110,7 +111,7 @@ export function momentOpsFor(
       return (await deps.studio.studios({ timeoutMs })).some((studio) => studio.id === bound);
     },
     flush: () => services.flush(game),
-    reapply: () => services.reapply(game),
+    reapply: (options) => services.reapply(game, options),
     open: (): Promise<OpenAnswer> => openStudio(deps, context),
     async placeName() {
       const linked = await link();

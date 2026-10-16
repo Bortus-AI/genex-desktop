@@ -47,6 +47,7 @@ import {
 } from "./hook-answers.ts";
 import {
   clearPendingLoad,
+  clearPendingScripts,
   exportPlace,
   loadPlace,
   PLACE_EXPORT_MAX_MS,
@@ -55,7 +56,9 @@ import {
   readManifest,
   SAVE_POINT_FILE_MAX_BYTES,
   writePendingLoad,
+  writePendingScripts,
 } from "./place-files.ts";
+import type { ReconcileOptions } from "./script-sync.ts";
 
 /** How long a sign of the person's work in Studio counts: the helper notes it at most every 2 s and says "stopped" after 10 s of quiet. */
 export const PERSON_ACTIVE_MS = 15 * SECOND_MS;
@@ -171,8 +174,8 @@ export interface MomentOps {
   listed(timeoutMs: number): Promise<boolean>;
   /** Sends the script sync's pending file changes to Studio, within `timeoutMs`. */
   flush(timeoutMs: number): Promise<void>;
-  /** Reconciles Studio's scripts with the folder's `src/`. */
-  reapply(): Promise<void>;
+  /** Reconciles Studio's scripts with the folder's `src/`; after a restore the restored files win. */
+  reapply(options?: ReconcileOptions): Promise<void>;
   /** Opens the game's place in Studio, or brings it forward. */
   open(): Promise<{ opened: boolean; message: string }>;
   /** The game's place as the chat names it. */
@@ -247,33 +250,50 @@ export async function savePlaceAt(ops: MomentOps, hook: HookContext): Promise<Ho
   return saveAnswer(await savePlace(ops, exportLimit(hook)), hook, others);
 }
 
-/** Reconciles the scripts, waiting at most {@link REAPPLY_WAIT_MS} (the reconcile goes on after); never throws. */
-async function reapplyWithin(ops: MomentOps): Promise<void> {
+/**
+ * Reconciles the restored scripts, the restored files winning, waiting at most
+ * {@link REAPPLY_WAIT_MS} (the reconcile goes on after); its wait is cleared once it ran. Never throws.
+ */
+async function reapplyWithin(ops: MomentOps, folder: string): Promise<void> {
   const waited = new AbortController();
-  const reapplied = ops.reapply().catch(() => undefined);
+  const reapplied = ops
+    .reapply({ restored: true })
+    .then(() => clearPendingScripts(folder))
+    .catch(() => undefined);
   await Promise.race([reapplied, ops.sleep(REAPPLY_WAIT_MS, waited.signal).catch(() => undefined)]);
   waited.abort();
 }
 
-/** The restored export loaded into Studio, or left for the helper's next connection. */
+/**
+ * The restored export loaded into Studio, or left for the helper's next connection. Git put back
+ * `src/` and the scripts' record together, so whatever happens to the load, the restored scripts
+ * must win over Studio's newer ones: their reconcile runs now, or waits (`pending-scripts.json`)
+ * for the next connection, never as an ordinary reconcile that would copy Studio's back.
+ */
 async function loadRestored(ops: MomentOps, folder: string): Promise<LoadRead> {
-  if (!(await readManifest(folder))) {
-    if (ops.bound()) await ops.asAgent(() => reapplyWithin(ops));
-    return { outcome: PlaceLoad.NoExport };
-  }
+  await writePendingScripts(folder, ops.now());
+  const exported = await readManifest(folder);
   if (!ops.bound()) {
+    if (!exported) return { outcome: PlaceLoad.NoExport };
     await writePendingLoad(folder, ops.now());
     return { outcome: PlaceLoad.Pending };
+  }
+  if (!exported) {
+    await ops.asAgent(() => reapplyWithin(ops, folder));
+    return { outcome: PlaceLoad.NoExport };
   }
   try {
     await ops.asAgent(() => loadPlace(ops.ask, folder, { timeoutMs: PLACE_LOAD_MAX_MS }));
   } catch (error) {
-    if (!notBound(error)) return { outcome: PlaceLoad.Failed, why: errorMessage(error) };
-    await writePendingLoad(folder, ops.now());
-    return { outcome: PlaceLoad.Pending };
+    if (notBound(error)) {
+      await writePendingLoad(folder, ops.now());
+      return { outcome: PlaceLoad.Pending };
+    }
+    await ops.asAgent(() => reapplyWithin(ops, folder));
+    return { outcome: PlaceLoad.Failed, why: errorMessage(error) };
   }
   await clearPendingLoad(folder);
-  await ops.asAgent(() => reapplyWithin(ops));
+  await ops.asAgent(() => reapplyWithin(ops, folder));
   return { outcome: PlaceLoad.Loaded };
 }
 

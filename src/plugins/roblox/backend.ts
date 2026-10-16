@@ -48,7 +48,7 @@ import {
   systemLuau,
 } from "./luau-checks.ts";
 import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
-import { loadPendingPlace } from "./place-files.ts";
+import { clearPendingScripts, hasPendingScripts, loadPendingPlace } from "./place-files.ts";
 import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
 import { PublishAsker, type PublishPlace, publishUpdate, reviewPublish } from "./publish.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
@@ -944,8 +944,9 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
 
 /**
  * What runs when a game's helper connects, before agents can reach that Studio: a load a restore
- * left waiting (`pending-load.json`) first, then the scripts compared with the folder. A failed
- * load is logged and keeps its wait for the next connection; the scripts are compared all the same.
+ * left waiting (`pending-load.json`) first, then the scripts compared with the folder, the restored
+ * files winning when a restore left their reconcile waiting (`pending-scripts.json`). A failed load
+ * is logged and keeps its wait for the next connection; the scripts are compared all the same.
  */
 export function pendingThenScripts(
   scripts: Pick<ScriptSyncs, "folder" | "bind">,
@@ -954,7 +955,9 @@ export function pendingThenScripts(
   return async (game, ask) => {
     const folder = await scripts.folder(game);
     if (folder) await loadPendingPlace(ask, folder).catch((error) => log(`pending load: ${errorMessage(error)}`));
-    await scripts.bind(game);
+    const restored = folder ? await hasPendingScripts(folder) : false;
+    await scripts.bind(game, { restored });
+    if (restored && folder) await clearPendingScripts(folder);
   };
 }
 
@@ -1027,8 +1030,8 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
       flush: async (game) => {
         await syncs?.flush(game);
       },
-      reapply: async (game) => {
-        await syncs?.bind(game);
+      reapply: async (game, options) => {
+        await syncs?.bind(game, options);
       },
       watch,
     },

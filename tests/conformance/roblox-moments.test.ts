@@ -171,8 +171,8 @@ async function momentWorld(options: { initial?: Record<string, Buffer> } = {}) {
     flush: async () => {
       steps.push("flush");
     },
-    reapply: async () => {
-      steps.push("reapply");
+    reapply: async (options) => {
+      steps.push(options?.restored ? "reapply restored" : "reapply");
     },
     open: async () => {
       steps.push("open");
@@ -313,17 +313,18 @@ describe("save-place: the place into the game folder before Genex's checkpoint",
 });
 
 describe("load-place: the restored place back into Studio", () => {
-  it("loads every saved part, then brings Studio's scripts in step with src/, both as Genex's own work", async () => {
+  it("loads every saved part, then brings Studio's scripts in step with the restored src/, both as Genex's own work", async () => {
     const world = await momentWorld();
     await savePlaceAt(world.ops, CHAT_CHECKPOINT);
     world.steps.length = 0;
     assert.deepEqual(await loadPlaceAt(world.ops), {});
+    // Flipped: the reconcile after a restore lets the restored files win.
     assert.deepEqual(world.steps, [
       "agent:start",
       HelperMessage.PlaceLoad,
       "agent:end",
       "agent:start",
-      "reapply",
+      "reapply restored",
       "agent:end",
     ]);
     assert.deepEqual(world.place.loads[0]?.uploaded.sort(), Object.keys(PLACE()).sort(), "every part is sent");
@@ -352,13 +353,14 @@ describe("load-place: the restored place back into Studio", () => {
     const logged: string[] = [];
     const scripts = {
       folder: async () => world.folder,
-      bind: async () => {
-        world.steps.push("scripts compared");
+      bind: async (_game: string, options?: { restored?: boolean }) => {
+        world.steps.push(options?.restored ? "restored scripts compared" : "scripts compared");
       },
     };
     world.place.state.loadFails = new Error("Studio is busy");
     await pendingThenScripts(scripts, (line) => logged.push(line))(GAME, world.place.ask);
-    assert.deepEqual(world.steps, [HelperMessage.PlaceLoad, "scripts compared"]);
+    // Flipped: a failed load still lets the restored files win; their wait is then done.
+    assert.deepEqual(world.steps, [HelperMessage.PlaceLoad, "restored scripts compared"]);
     assert.match(logged.join("\n"), /pending load: Studio is busy/);
     assert.match(await readFile(placeFile(world.folder, PENDING_LOAD), "utf8"), /"since"/, "still waiting");
     world.place.state.loadFails = undefined;
@@ -374,16 +376,37 @@ describe("load-place: the restored place back into Studio", () => {
   it("a save point with no saved place brings back the scripts alone, and says so", async () => {
     const world = await momentWorld();
     assert.deepEqual(await loadPlaceAt(world.ops), { note: MOMENT_WORDS.NoExport });
-    assert.deepEqual(world.steps, ["agent:start", "reapply", "agent:end"], "the scripts still come back in step");
+    // Flipped: the restored files win over Studio's newer scripts.
+    assert.deepEqual(world.steps, ["agent:start", "reapply restored", "agent:end"], "the scripts still come back");
   });
 
-  it("a load Studio refuses is a note; a restore's after step never blocks", async () => {
+  it("with Studio closed and no saved place, the restored scripts win at the next connection", async () => {
+    const world = await momentWorld();
+    world.studio.bound = false;
+    assert.deepEqual(await loadPlaceAt(world.ops), { note: MOMENT_WORDS.NoExport });
+    assert.deepEqual(world.steps, [], "nothing is asked of a Studio that isn't there");
+    const scripts = {
+      folder: async () => world.folder,
+      bind: async (_game: string, options?: { restored?: boolean }) => {
+        world.steps.push(options?.restored ? "restored scripts compared" : "scripts compared");
+      },
+    };
+    await pendingThenScripts(scripts, () => {})(GAME, world.place.ask);
+    assert.deepEqual(world.steps, ["restored scripts compared"]);
+    world.steps.length = 0;
+    await pendingThenScripts(scripts, () => {})(GAME, world.place.ask);
+    assert.deepEqual(world.steps, ["scripts compared"], "once only");
+  });
+
+  it("a load Studio refuses is a note, and the restored scripts still win; a restore's after step never blocks", async () => {
     const world = await momentWorld();
     await savePlaceAt(world.ops, CHAT_CHECKPOINT);
     world.place.state.loadFails = new Error("Studio couldn't read Workspace: bad bytes");
+    world.steps.length = 0;
     const answer = await loadPlaceAt(world.ops);
     assert.equal(answer.block, undefined);
     assert.match(String(answer.note), /couldn't load the saved place \(Studio couldn't read Workspace: bad bytes\)/);
+    assert.ok(world.steps.includes("reapply restored"), world.steps.join(", "));
   });
 });
 

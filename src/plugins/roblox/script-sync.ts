@@ -12,6 +12,9 @@
  *   deleted there too (in Studio only while its hash still matches the record). Changed on both
  *   sides, Studio's version stays and the file's goes to `.genex/conflicts/<when>/`, never under
  *   `src/`. An edit always beats a deletion.
+ * - **After a restore.** Git put back `src/` and the record together, so the record says nothing of
+ *   what Studio changed since: the restored files win. The reconcile then takes Studio's listing as
+ *   the record, so each restored file goes to Studio and a script Studio has alone is removed.
  * - **While bound.** A change under `src/` (a watcher, quiet for {@link SYNC_DEBOUNCE_MS}) is pushed
  *   with the record's hash as the base, so the helper refuses it when Studio changed meanwhile, and
  *   the same conflict rule applies. A script Studio changes (`scripts.changed`) is written to its
@@ -123,9 +126,15 @@ export interface ScriptSyncDeps {
 }
 
 /** One game's sync. */
+/** How a reconcile decides. */
+export interface ReconcileOptions {
+  /** `src/` was just restored: the restored files win over whatever Studio holds. */
+  restored?: boolean;
+}
+
 export interface ScriptSync {
   /** Reconciles disk and Studio, then keeps them in step; called again on every new binding. */
-  start(): Promise<ScriptSyncMode>;
+  start(options?: ReconcileOptions): Promise<ScriptSyncMode>;
   /** A script Studio changed, as the helper reports it. */
   changed(change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the game's top in the record, after any pass under way. */
@@ -359,7 +368,7 @@ class SyncState {
 
   api(): ScriptSync {
     return {
-      start: () => this.enqueue(() => this.reconcile()).then(() => this.current),
+      start: (options = {}) => this.enqueue(() => this.reconcile(options)).then(() => this.current),
       changed: (change) => this.enqueue(() => this.fromStudio(change)),
       written: (name) => this.enqueue(() => this.noteWritten(name)),
       flush: async () => {
@@ -407,7 +416,7 @@ class SyncState {
     return (await personsRojo(this.deps.folder, this.record)) ? ScriptSyncMode.Rojo : ScriptSyncMode.On;
   }
 
-  async reconcile(): Promise<void> {
+  async reconcile(options: ReconcileOptions = {}): Promise<void> {
     const mode = await this.check();
     if (mode !== ScriptSyncMode.On) {
       this.stop();
@@ -418,13 +427,16 @@ class SyncState {
     await ignoreLocks(this.deps.folder, (line) => this.log(line));
     const listed = await this.deps.ask(HelperMessage.ScriptsList, {});
     const disk = await scanScripts(this.root as string, (line) => this.log(line));
-    await this.decideAll(listed.scripts, disk);
+    await this.decideAll(listed.scripts, disk, options);
     await writeRecord(this.deps.folder, this.record);
     this.watchScripts();
   }
 
-  /** Each script decided by Studio's hash, the file's and the record's. */
-  async decideAll(listed: ScriptEntry[], disk: DiskScript[]): Promise<void> {
+  /**
+   * Each script decided by Studio's hash, the file's and the record's; after a restore, Studio's
+   * own hash stands in for the record's, so the restored files win.
+   */
+  async decideAll(listed: ScriptEntry[], disk: DiskScript[], options: ReconcileOptions = {}): Promise<void> {
     this.skipped = new Set(listed.filter((entry) => entry.synced).map(scriptKey));
     const kept = listed.filter((entry) => !entry.synced);
     const studio = new Map(kept.map((entry) => [scriptKey(entry), entry]));
@@ -443,7 +455,8 @@ class SyncState {
       .filter((key) => !this.skipped.has(key))
       .map((key) => {
         const file = onDisk.get(key)?.file ?? recorded.get(key)?.file ?? layout.files.get(key);
-        const step = decideScript(studio.get(key)?.hash, onDisk.get(key)?.hash, recorded.get(key)?.hash);
+        const base = options.restored ? studio.get(key)?.hash : recorded.get(key)?.hash;
+        const step = decideScript(studio.get(key)?.hash, onDisk.get(key)?.hash, base);
         return { key, file, step, studio: studio.get(key), disk: onDisk.get(key), recorded: recorded.get(key) };
       });
     const needed = plans.filter((plan) => plan.step === ScriptStep.ToDisk || plan.step === ScriptStep.Conflict);
@@ -491,7 +504,8 @@ class SyncState {
         await this.push(file, ref, plan.disk as DiskScript, plan.studio?.hash);
         return;
       case ScriptStep.RemoveFromStudio:
-        await this.remove(file, ref, plan.recorded?.hash as string);
+        // Studio's hash: the record's whenever the record decided, and Studio's own after a restore.
+        await this.remove(file, ref, plan.studio?.hash as string);
         return;
       case ScriptStep.Conflict:
         if (plan.studioSource !== undefined) await this.conflict(file, plan.disk as DiskScript, plan.studioSource);
@@ -679,8 +693,8 @@ export interface ScriptSyncsDeps {
 export interface ScriptSyncs {
   /** A call for `game` came with its folder: kept, and the sync started if its helper is bound. */
   seen(game: string, folder: string): Promise<void>;
-  /** The game's helper bound: its sync reconciles (when its folder is known). */
-  bind(game: string): Promise<void>;
+  /** The game's helper bound, or its folder was restored: its sync reconciles (when its folder is known). */
+  bind(game: string, options?: ReconcileOptions): Promise<void>;
   changed(game: string, change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the top of `game`'s folder in its record, in turn with its sync. */
   written(game: string, folder: string, name: string): Promise<void>;
@@ -717,7 +731,7 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
   const syncs = new Map<string, { folder: string; sync: ScriptSync }>();
   const log = (line: string) => deps.log?.(line);
   const folderOf = async (game: string) => folders.get(game) ?? (await readGameFolder(deps.storage, game));
-  const bind = async (game: string) => {
+  const bind = async (game: string, options: ReconcileOptions = {}) => {
     const folder = await folderOf(game);
     if (!folder) {
       log(`script sync: ${game}'s folder isn't known yet; its scripts sync once Genex calls the plugin for it`);
@@ -732,7 +746,7 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       };
       syncs.set(game, held);
     }
-    await held.sync.start();
+    await held.sync.start(options);
   };
   return {
     async seen(game, folder) {
@@ -746,7 +760,7 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       const running = syncs.get(game)?.sync.mode() === ScriptSyncMode.On;
       if (deps.bound(game) && !running) await bind(game);
     },
-    bind: (game) => (isGameId(game) ? bind(game) : Promise.resolve()),
+    bind: (game, options) => (isGameId(game) ? bind(game, options) : Promise.resolve()),
     changed: async (game, change) => {
       await syncs.get(game)?.sync.changed(change);
     },

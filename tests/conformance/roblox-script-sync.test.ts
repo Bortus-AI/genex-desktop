@@ -266,6 +266,40 @@ test("the reconcile on (re)connect decides each script by what changed since the
   );
 });
 
+test("after a restore the restored files win: each goes to Studio, one Studio has alone goes, none is written over", async () => {
+  // Git put back src/ and the record together, so the record matches the restored files; Studio
+  // still holds the newer scripts (no export was loaded, or an older one).
+  const restored = {
+    [MAIN_FILE]: "v1\n",
+    "src/ReplicatedStorage/OnlyRestored.luau": "restored\n",
+  };
+  const record = {
+    v: 1,
+    written: [],
+    scripts: {
+      "ServerScriptService/Main.server.luau": helperHash("v1\n"),
+      "ReplicatedStorage/OnlyRestored.luau": helperHash("restored\n"),
+    },
+  };
+  const studio = [
+    { ref: MAIN, source: "v2\n" },
+    { ref: module("ReplicatedStorage", "AddedLater"), source: "later\n" },
+  ];
+  const world = await setUp({ files: { ...restored, ".genex/roblox.json": JSON.stringify(record) }, studio });
+  assert.equal(await world.sync.start({ restored: true }), ScriptSyncMode.On);
+  assert.equal(await read(world.folder, MAIN_FILE), "v1\n", "the restored file stays");
+  assert.equal(world.helper.source(MAIN), "v1\n", "and goes to Studio");
+  assert.equal(world.helper.source(module("ReplicatedStorage", "OnlyRestored")), "restored\n");
+  assert.equal(world.helper.source(module("ReplicatedStorage", "AddedLater")), undefined, "gone, as at the save point");
+  assert.equal(await exists(path.join(world.folder, "src/ReplicatedStorage/AddedLater.luau")), false);
+  assert.equal(await exists(path.join(world.folder, ".genex", "conflicts")), false, "no conflict: the restore decided");
+  // The next connection's ordinary reconcile finds them in step.
+  const writes = world.helper.writes().length;
+  await world.sync.start();
+  assert.equal(world.helper.writes().length, writes);
+  assert.equal(await read(world.folder, MAIN_FILE), "v1\n");
+});
+
 test("a deleted file removes its script only while Studio's hash still matches the record", async () => {
   const world = await setUp({
     files: { [MAIN_FILE]: "a\n", [SHARED_FILE]: "b\n" },

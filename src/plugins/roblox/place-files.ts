@@ -43,6 +43,8 @@ export const PLACE_FOLDER = [".genex", "place"] as const;
 export const PLACE_MANIFEST = "manifest.json";
 /** Left by a load that couldn't reach Studio; the helper loads the export when it next binds. */
 export const PENDING_LOAD = "pending-load.json";
+/** Where a restore leaves its scripts' reconcile for the helper's next connection, when it couldn't run it. */
+export const PENDING_SCRIPTS = "pending-scripts.json";
 /**
  * The longest a place export may take, from the request to the last part written. Studio
  * serializes and sends a large place in a few seconds; past this the export answers a plain note
@@ -188,7 +190,7 @@ async function partFiles(folder: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isFile())
     .map((entry) => path.relative(folder, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"))
-    .filter((name) => name !== PLACE_MANIFEST && name !== PENDING_LOAD && isPartPath(name));
+    .filter((name) => name !== PLACE_MANIFEST && name !== PENDING_LOAD && name !== PENDING_SCRIPTS && isPartPath(name));
 }
 
 /** Removes the part files the place no longer has; a part reached through a link is left alone. */
@@ -275,6 +277,29 @@ export async function loadPlace(ask: HelperAsk, game: string, options: { timeout
 export async function writePendingLoad(game: string, now: number): Promise<void> {
   const folder = await placeFolder(game);
   await writeWhole(folder, PENDING_LOAD, `${JSON.stringify({ since: new Date(now).toISOString() })}\n`);
+}
+
+/**
+ * Leaves the restored scripts' reconcile for the next time the game's helper binds: a restore put
+ * `src/` back while Studio wasn't reachable, so its next reconcile must let the restored files win.
+ */
+export async function writePendingScripts(game: string, now: number): Promise<void> {
+  const folder = await placeFolder(game);
+  await writeWhole(folder, PENDING_SCRIPTS, `${JSON.stringify({ since: new Date(now).toISOString() })}\n`);
+}
+
+/** Whether restored scripts wait for their reconcile in the game's folder. */
+export async function hasPendingScripts(game: string): Promise<boolean> {
+  const folder = await foundPlaceFolder(game);
+  if (!folder) return false;
+  const info = await lstat(path.join(folder, PENDING_SCRIPTS)).catch(() => undefined);
+  return info?.isFile() === true;
+}
+
+/** Clears the restored scripts' wait: their reconcile ran. */
+export async function clearPendingScripts(game: string): Promise<void> {
+  const folder = await foundPlaceFolder(game);
+  if (folder) await unlink(path.join(folder, PENDING_SCRIPTS)).catch(() => undefined);
 }
 
 /** Whether a load waits in the game's folder. */
