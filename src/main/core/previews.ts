@@ -7,6 +7,7 @@ import {
   genexJobDir,
   isGenexInspectionFile,
   readContainedImage,
+  readGenexCoverClip,
   readGenexCoverShot,
   readGenexJobs,
 } from "../game-assets.ts";
@@ -1357,10 +1358,13 @@ export class PreviewService {
 
   async readProjectAsset(p: ProjectAssetRead): Promise<{ mimeType: string; data: string } | null> {
     if (!p || typeof p.project !== "string") return null;
+    // The game's kept Genex cover clip: its place is the host's, from the game's name alone; a video as it was kept.
+    if (p.scope === ProjectAssetScope.GenexCoverClip)
+      return readGenexCoverClip(this.#core.layout.engineHomes, p.project);
     const resize = this.#resizeTo(p.maxPx);
-    // The game's kept Genex cover shot: its place is the host's, from the game's name alone.
+    // The game's kept Genex cover shot or one of its candidates: the same place, from the same name.
     if (p.scope === ProjectAssetScope.GenexCover)
-      return readGenexCoverShot(this.#core.layout.engineHomes, p.project, resize);
+      return readGenexCoverShot(this.#core.layout.engineHomes, p.project, { ...resize, candidate: p.candidate });
     if (typeof p.file !== "string") return null;
     if (p.scope === ProjectAssetScope.GenexInspection) {
       const dir = genexJobDir(this.#core.layout.engineHomes, p.project, String(p.jobId ?? ""));

@@ -6029,7 +6029,8 @@ describe("a director's run through the real core and harness", () => {
           assert.equal(sessions, 1, "no second session answers a follow-up while the first director is building");
           const sent = await rig.core.store.listEvents(threadId);
           assert.equal(customEvents(sent, "coordinator_message_queued").length, 1);
-          // Live chat: handed to the lead, whose first turn cannot be cut short to read it.
+          // Live chat: handed to the lead, whose first turn — a fresh session, none to resume yet —
+          // cannot be cut short to read it.
           assert.deepEqual(
             customEvents(sent, "coordinator_message_delivered").map((e) => [e.into, e.how]),
             [[runId, "lead"]],

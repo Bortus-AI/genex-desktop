@@ -14,8 +14,8 @@ import {
   GENEX_PUBLISH_PANEL,
   GenexAction,
   GenexCoverOutcome,
+  ownerChoseCover,
   type GenexCoverRecord,
-  type GenexCoverSent,
   GenexHostedStatus,
   GenexPublishJobState,
   GenexPublishKind,
@@ -125,8 +125,10 @@ export interface PublishView {
   link: string | null;
   /** The tested draft's address while players do not have it yet ({@link testLinkOf}); null otherwise. */
   testLink: string | null;
-  /** The game has no Genex cover to send and its owner chose none: offer to ask its chat for one. */
-  coverAsk: boolean;
+  /** The game has no Genex cover yet and its owner chose none: Studio takes one as the dialog opens. */
+  needsCover: boolean;
+  /** Whether the banner offers Another cover: the plugin keeps covers, nothing runs, and the owner chose none. */
+  canAskCover: boolean;
 }
 
 export const isListed = (state: GenexPublishState): boolean => state.status === GenexHostedStatus.Published;
@@ -200,26 +202,50 @@ function failureOf(outcome: PublishOutcome, state: GenexPublishState, job: Genex
   return { text: isListed(state) ? WORDS.failedKept : WORDS.failedText, details };
 }
 
-/** Answers that mean the owner chose the game's cover on genex.games: that choice stands, so nobody asks for another. */
-const OWNER_CHOSE = new Set<GenexCoverOutcome>([GenexCoverOutcome.KeptOwner, GenexCoverOutcome.Outranked]);
-
-/** Whether the last send found the owner's own cover, then or when these bytes were first sent. */
-function ownerChose(last: GenexCoverSent | null): boolean {
-  if (!last) return false;
-  return [last.kind, last.settled].some((kind) => kind !== undefined && OWNER_CHOSE.has(kind));
-}
-
 /**
- * Whether the dialog offers to ask the game's chat for a Genex cover: the plugin reports its cover
- * (an older one does not), no shot is kept to send, none is being sent, no publish is running (it
+ * Whether Studio should take the game's Genex cover as the dialog opens: the plugin reports its
+ * cover (an older one does not), no shot is kept, none is being sent, no publish is running (it
  * shoots the cover itself), and the owner chose none on genex.games.
  */
-export function coverAsk(state: GenexPublishState): boolean {
+export function needsCover(state: GenexPublishState): boolean {
   const cover = state.cover;
   if (!cover || cover.shot) return false;
-  if (cover.sending || isLive(state.job)) return false;
-  return !ownerChose(cover.last);
+  return canAskCover(state);
 }
+
+/** Whether a new cover may be asked for now: the plugin keeps covers, nothing runs, and the owner chose none. */
+export function canAskCover(state: GenexPublishState): boolean {
+  const cover = state.cover;
+  if (!cover || cover.sending || isLive(state.job)) return false;
+  return !ownerChoseCover(cover.last);
+}
+
+/** The frames the banner flips between, newest first, and which of them is the kept shot (-1: none of them). */
+export function coverChoices(record: GenexCoverRecord | undefined): { shas: string[]; index: number } {
+  const shas = (record?.candidates ?? []).map((shot) => shot.sha256);
+  return { shas, index: record?.shot ? shas.indexOf(record.shot.sha256) : -1 };
+}
+
+/** The frame an arrow lands on, `step` places along (older is +1), wrapping round; null with nothing to flip to. */
+export function flipCover(choices: { shas: string[]; index: number }, step: 1 | -1): string | null {
+  const { shas, index } = choices;
+  if (shas.length < 2) return null;
+  const from = index < 0 ? 0 : index;
+  return shas[(from + step + shas.length) % shas.length] ?? null;
+}
+
+/** How long the banner says a cover is being made after Another cover, unless a new frame arrives first. */
+export const COVER_MAKING_MS = 15 * MINUTE_MS;
+
+/** An ask for another cover: the frame it was asked over, and when. */
+export interface CoverAskRecord {
+  from: string | null;
+  at: number;
+}
+
+/** Whether the banner still says a cover is being made: no new frame since the ask, and not for too long. */
+export const coverMaking = (ask: CoverAskRecord | null, shot: string | null, now: number): boolean =>
+  ask !== null && ask.from === shot && now - ask.at < COVER_MAKING_MS;
 
 /** The dialog's view of a publish record, at `now`. */
 export function publishView(state: GenexPublishState, now = Date.now()): PublishView {
@@ -257,7 +283,8 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
     failure: failureOf(outcome, state, job),
     link: listed ? (state.galleryUrl ?? null) : null,
     testLink: testLinkOf(state, listed),
-    coverAsk: coverAsk(state),
+    needsCover: needsCover(state),
+    canAskCover: canAskCover(state),
   };
 }
 

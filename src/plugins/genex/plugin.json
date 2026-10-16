@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.11",
+  "version": "1.10.13",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -132,13 +132,13 @@
     },
     {
       "name": "cover",
-      "description": "Check this game's Genex cover: the one real 16:9 frame genex.games shows on its gallery card, its page and every shared link (not Studio's own sidebar look, set_game_cover). operation 'shoot' runs the game's demo named genex-cover at 1920x1080 in a hidden window, keeps that frame as the game's shot, replacing the last one, and answers with its preview image and its brightness, contrast and near-black share (stats); 'status' reports the kept shot, the last send and, once the game is hosted and the account connected, Genex's current cover and who chose it (coverSource; the owner's pick always stands). Shoot once the game first looks like itself, before any publish while no shot is kept, and after a big visual change, and judge the preview before any send. Publish shoots it again and sends it; genex__cover-set sends the kept shot now. Asks nothing, charges nothing and uploads nothing.",
+      "description": "Check this game's Genex cover: the one real 16:9 frame genex.games shows on its gallery card, its page and every shared link (not Studio's own sidebar look, set_game_cover). operation 'shoot' runs the game's demo named genex-cover at 1920x1080 in a hidden window, keeps that frame as the game's shot, replacing the last one, and answers with its preview image and its brightness, contrast and near-black share (stats); 'clip' runs the game's demo named genex-clip (it starts a moment the game then plays by itself) and records five seconds of it at 960x540 as the game's clip, the video genex.games plays over the cover on its cards, answering with its first frame and how much moved (motion); 'status' reports the kept shot, the last send and, once the game is hosted and the account connected, Genex's current cover and who chose it (coverSource; the owner's pick always stands). Shoot once the game first looks like itself, before any publish while no shot is kept, and after a big visual change, and judge the preview before any send. Publish shoots it again and sends it, then sends the kept clip; genex__cover-set sends the kept shot now. Asks nothing, charges nothing and uploads nothing.",
       "parameters": {
         "type": "object",
         "properties": {
           "operation": {
             "type": "string",
-            "description": "shoot or status"
+            "description": "shoot, clip or status"
           }
         },
         "required": ["operation"]
@@ -170,7 +170,7 @@
     },
     {
       "name": "cover",
-      "text": "The Genex cover is the one real 16:9 frame genex.games shows for this game (its gallery card, its page, every shared link), not Studio's own sidebar look (set_game_cover). WHEN: once the game first looks like itself; before every publish, the first or an update, gallery or draft: check genex__cover {\"operation\":\"status\"} and, with no kept shot, stage and shoot it first; after a big visual change; never every turn. A publish whose own cover outcome is none (cover.last.jobId is its jobId) sent no frame: offer once to make one, and never again in this chat once the user says no. Neither applies to a game whose owner keeps its code untouched (a folder brought only to publish): it gets no genex-cover demo. WHO: the session that owns the whole build, not a worker with a narrower brief. HOW: read genex__skill {\"name\":\"genex-cover\"}; stage it as a demo named genex-cover in config.demos (the game's own world, light and effects, HUD hidden, ending in window.__studio.pause(), a camera composed for 16:9); check it with genex__cover {\"operation\":\"shoot\"}. SHOWN: your last shot is the cover the person sees, a card in the chat that offers Publish itself; shoot the winner last, then say one short line about it, never how to publish. Publish shoots it again and sends it; genex__cover-set sends it now. HONESTY: never relight the game or add text or anything it lacks; a dark-by-design game stays dark. A cover the owner chose on genex.games always wins: never ask to replace it.",
+      "text": "The Genex cover is the one real 16:9 frame genex.games shows for this game (its gallery card, its page, every shared link), not Studio's own sidebar look (set_game_cover). WHEN: in the same turn the game first looks like itself (a small side task, never a turn of its own), and again before a run ends; before every publish, the first or an update, gallery or draft: check genex__cover {\"operation\":\"status\"} and, with no kept shot, stage and shoot it first; after a big visual change; never every turn. A publish whose own cover outcome is none (cover.last.jobId is its jobId) sent no frame: offer once to make one, and never again in this chat once the user says no. Neither applies to a game whose owner keeps its code untouched (a folder brought only to publish): it gets no genex-cover demo. WHO: the session that owns the whole build, not a worker with a narrower brief. HOW: read genex__skill {\"name\":\"genex-cover\"}; stage it as a demo named genex-cover in config.demos (the game's own world, light and effects, HUD hidden, ending in window.__studio.pause(), a camera composed for 16:9); check it with genex__cover {\"operation\":\"shoot\"}. CLIP: beside it, a demo named genex-clip that starts a moment the game then plays by itself for five seconds (its own scripted input, HUD hidden, never paused), recorded with genex__cover {\"operation\":\"clip\"}; motion near 0 means frozen. Until a genex-cover demo exists, Studio keeps a plain frame of the game as it loads, so Publish always shows a cover; yours replaces it. SHOWN: your last shot is the cover the person sees, a card in the chat that offers Publish itself; shoot the winner last, then say one short line about it, never how to publish. Publish shoots it again and sends it; genex__cover-set sends it now. HONESTY: never relight the game or add text or anything it lacks; a dark-by-design game stays dark. A cover the owner chose on genex.games always wins: never ask to replace it.",
       "engines": ["web"]
     },
     {
@@ -345,6 +345,14 @@
     {
       "name": "asset-badge",
       "label": "Asset setup state"
+    },
+    {
+      "name": "cover-auto",
+      "label": "Take this game's cover"
+    },
+    {
+      "name": "cover-pick",
+      "label": "Use this cover"
     }
   ],
   "toolbar": [

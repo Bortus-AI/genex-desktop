@@ -316,16 +316,22 @@ it builds…" instead of "Sends when the build finishes…" (renderer `chat/live
   SAYS. A turn under way hears it in that turn: the wake loop takes the words off the inbox and
   calls `engine.steer {threadId, into: <runId>}` — the director's delegation carries `chatTurn:
   {messageId: <runId>}` on a waking run, which the host honours only for that run's director
-  grant. Claude Code reads it at its next step (`midTurnUserSays`); any other engine, on a later
-  turn with a session to resume, not the wrap-up and not inside a director tool call
-  (`toolsInFlight`, whose answer a cut would lose), is interrupted and resumed in the same session
-  with a user wake that says it was cut and asks it to finish what it was doing (a turn cut before
-  it read its message is asked it again, the words after it); otherwise `interrupt: false` leaves
-  the turn alone. Words a turn did not read, or that a turn failed before working on, open its
-  next message (`wake.owed`). A cut is never a failed turn. A message is heard once a turn works on
-  (or answers) the message that told it, or reads it mid-turn (`LeadLine.heardThrough`, counted
-  after the inbox is read), and is recorded heard (`run_steering_delivered {sourceMessageId, how:
-  "lead"}`). The chat's wakes never count in the hourly wake cap.
+  grant. Claude Code reads it at its next step (`midTurnUserSays`); any other engine, on a turn
+  with a session to resume — the first too, so a Codex lead is never deaf for a whole open Loop
+  turn — not the wrap-up and not inside a director tool call (`toolsInFlight`, whose answer a cut
+  would lose), is interrupted and resumed in the same session with a user wake that says it was
+  cut and asks it to finish what it was doing unless they asked for something else (a turn cut
+  before it read its message is asked it again, the words after it; a first turn cut before its
+  session began is asked its brief again,
+  never crashing the run); otherwise `interrupt: false` leaves the turn alone, as for a fresh lead's
+  first turn, which has no session to resume yet. Words a turn did not read, or that a turn failed
+  before working on, open its next message (`wake.owed`). A cut is never a failed turn. A message
+  is heard once a turn works on (or answers) the message that told it, or reads it mid-turn
+  (`LeadLine.heardThrough`, counted after the inbox is read), and is recorded heard
+  (`run_steering_delivered {sourceMessageId, how: "lead"}`). The chat's wakes never count in the
+  hourly wake cap. Whichever way the words arrive — read mid-turn, a cut, a wake, and in an open
+  Loop's rules too — the lead is told an ask to stop or finish is `wrap_up` quoting their words
+  (`live-prompts.ts`, the build card, `openWakeRules`), never lost under "carry on".
 - **Answering.** What the lead writes is planner text, mirrored as chat bubbles and streamed like
   any reply; the prompts ask it to answer the user directly and briefly, to write otherwise only
   when a part lands, the build can be looked at, something broke, the plan changed or the build is
@@ -658,11 +664,13 @@ retained plans, conversational continuation, duplicate starts, coordinator sessi
 addressed instructions and graceful finish. `chat-steer.test.ts` covers the chat's turn: a message
 read mid-turn and recorded where, the Codex interrupt-and-resume fallback, the first-prompt path,
 Stop, Rewind and restart replay; engine conformance covers the Claude input and Codex resume.
-`director-wake-loop-run.test.ts` (L1–L8) covers live chat: answered by the lead within one wake while
-the run is going, steered into a turn natively and by interrupt, Stop's hand-over, the long turn's
+`director-wake-loop-run.test.ts` (L1–L10) covers live chat: answered by the lead within one wake while
+the run is going, steered into a turn natively and by interrupt (the first turn of a lead continuing
+the chat's session too, told a stop is `wrap_up`), Stop's hand-over, the long turn's
 queue (and its coordinator after), the chat freed before the learning pass, a crash's hand-back
 before the close — each answered after by the chat's own session — and Stop during the pass; `harness-incidents.test.ts` (LC rows) covers what a resumed lead is told, the
-tool-call guard, owed words, the wake cap, the release races and a picture among messages.
+tool-call guard, owed words, the wake cap, the release races, a picture among messages and a
+first turn cut for the words (LC12–LC14).
 `director-one-session.test.ts` (S1–S13) covers one session: the chat's session leading its run
 read-only in the game folder and answering after the close in the same session with the run's
 controls and no coordinator (Claude and Codex), a chat session that cannot be resumed, a merge

@@ -1,13 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  canAskCover,
   clock,
-  coverAsk,
+  COVER_MAKING_MS,
   coverCardPublish,
+  coverChoices,
+  coverMaking,
+  flipCover,
   GenexSetup,
   genexSetup,
   isGenexPublish,
   justPublished,
+  needsCover,
   offeredTitle,
   PublishGate,
   publishGate,
@@ -390,7 +395,7 @@ const cover = (over: Partial<GenexCoverRecord> = {}): GenexCoverRecord => ({
 });
 const last = (kind: GenexCoverOutcome) => ({ kind, at: "2026-10-09T10:05:00Z" });
 
-test("the dialog asks for a cover only while the game has none to send and its owner chose none", () => {
+test("Studio takes a cover as the dialog opens only while the game has none and its owner chose none", () => {
   const live = { slug: "g", status: "published", lastPublishAt: "2026-10-09T10:05:00Z" } as const;
   const rows: Array<[string, GenexPublishState, boolean]> = [
     ["a game with no cover shot", state({ cover: cover() }), true],
@@ -423,9 +428,50 @@ test("the dialog asks for a cover only while the game has none to send and its o
     ["a publish running", state({ cover: cover(), job: job() }), false],
   ];
   for (const [label, record, asks] of rows) {
-    assert.equal(coverAsk(record), asks, label);
-    assert.equal(publishView(record).coverAsk, asks, `${label}: the view`);
+    assert.equal(needsCover(record), asks, label);
+    assert.equal(publishView(record).needsCover, asks, `${label}: the view`);
   }
+});
+
+test("Another cover is offered while nothing runs and the owner chose no cover", () => {
+  const rows: Array<[string, GenexPublishState, boolean]> = [
+    ["a kept shot", state({ cover: cover({ shot }) }), true],
+    ["no shot yet", state({ cover: cover() }), true],
+    ["a cover being sent", state({ cover: cover({ shot, sending: true }) }), false],
+    ["a publish running", state({ cover: cover({ shot }), job: job() }), false],
+    ["the owner's cover holds", state({ cover: cover({ shot, last: last(GenexCoverOutcome.KeptOwner) }) }), false],
+    ["a plugin older than covers", state(), false],
+  ];
+  for (const [label, record, offers] of rows) {
+    assert.equal(canAskCover(record), offers, label);
+    assert.equal(publishView(record).canAskCover, offers, `${label}: the view`);
+  }
+});
+
+test("the banner's arrows flip through the recent frames, wrapping round", () => {
+  const a = { ...shot, sha256: "a".repeat(64) };
+  const b = { ...shot, sha256: "b".repeat(64) };
+  const c = { ...shot, sha256: "c".repeat(64) };
+  const three = cover({ shot: b, candidates: [c, b, a] });
+  assert.deepEqual(coverChoices(three), { shas: [c.sha256, b.sha256, a.sha256], index: 1 });
+  assert.equal(flipCover(coverChoices(three), 1), a.sha256, "older");
+  assert.equal(flipCover(coverChoices(three), -1), c.sha256, "newer");
+  assert.equal(flipCover(coverChoices(cover({ shot: a, candidates: [c, b, a] })), 1), c.sha256, "past the oldest");
+  assert.equal(flipCover(coverChoices(cover({ shot: a, candidates: [a] })), 1), null, "one frame: nothing to flip");
+  assert.equal(flipCover(coverChoices(cover({ shot: a })), 1), null, "a plugin older than candidates");
+  assert.deepEqual(coverChoices(cover({ shot: a, candidates: [c, b] })).index, -1, "a kept shot no longer listed");
+  assert.equal(flipCover(coverChoices(cover({ shot: a, candidates: [c, b] })), 1), b.sha256);
+});
+
+test("the banner says a new cover is on its way until a new frame arrives, and not forever", () => {
+  const at = 1_000_000;
+  const ask = { from: "a".repeat(64), at };
+  assert.equal(coverMaking(null, ask.from, at), false, "nothing asked");
+  assert.equal(coverMaking(ask, ask.from, at + 1000), true, "asked, the same frame still kept");
+  assert.equal(coverMaking(ask, "b".repeat(64), at + 1000), false, "a new frame arrived");
+  assert.equal(coverMaking(ask, ask.from, at + COVER_MAKING_MS), false, "given up after a while");
+  assert.equal(coverMaking({ from: null, at }, null, at), true, "asked with no frame yet");
+  assert.equal(coverMaking({ from: null, at }, "c".repeat(64), at), false, "the first frame arrived");
 });
 
 test("the chat's cover card leaves Publish out once Genex has answered for the kept frame", () => {

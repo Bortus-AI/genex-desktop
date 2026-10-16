@@ -31,6 +31,13 @@ exports work with no enabled plugins.
   its own). A host older than the option ignores it and answers an ordinary observation, so a
   caller checks the answer for `still`, then `stillProblem`, and handles neither (the SDK types the
   answer as `PluginStillAnswer | PluginStillIgnored`).
+- API 3's `observe` takes an optional `clip` the same way (additive, no field or capability of its
+  own; never beside `still` or files): `{ demo, width, height, seconds?, fps?, maxBytes? }` records
+  `seconds` of the game running from the moment the demo stages, after the host starts its clock
+  (`__studio.start()`), on a hidden window (`core/view-clip.ts`, budget: its seconds and a minute).
+  The page records the canvas a still reads with `MediaRecorder` (MP4/H.264, else WebM VP9/VP8) at
+  two bitrates and the host keeps the best that fits (`main/preview-clip.ts`). The answer is
+  `clip` (video, poster, `motion`) or `clipProblem` with a still's codes.
 - Plugin tool parameters are scalar (`string` / `number` / `boolean` properties); API 3 also accepts `type: "object"`, optionally with `acceptJsonString` for a migrated scalar (`toolParameter` in `src/substrate/plugins/manifest.ts`; see the plugin guide's structured arguments). External MCP tools retain their full nested schemas.
 
 ## Package and distribution
@@ -2925,10 +2932,16 @@ Genex:
   in `shared/genex.ts` with the plugin's outcome kinds as `GenexCoverOutcome`). While it reports no
   kept shot and no send running, the owner chose no cover on genex.games (`kept_owner`, which the
   plugin records whenever Genex reports the owner's pick, at a send or a status check, a shot kept
-  or not; `outranked`) and no publish runs, one quiet line offers Ask for a cover (`[data-genex-cover-ask]`,
-  `coverAsk` in `genex-publish-view.ts`): it closes the dialog and leaves "Make this game's Genex
-  cover." in that game's chat composer (`renderer/compose-in-chat.ts`), never sent. A Genex plugin
-  older than covers answers no record, and the line stays hidden. Genex-specific core UI, accepted
+  or not; `outranked`) and no publish runs, the dialog asks the plugin to take one (`needsCover` in
+  `genex-publish-view.ts`, action `cover-auto`): the `genex-cover` demo, or a plain frame of the game
+  as it loads (`origin: "studio"`), never over a demo's frame; the strip asks the same once a game's
+  turns settle (`use-cover-after-turns.ts`), and it records the `genex-clip` demo's clip when there is
+  one. The banner flips between the record's `candidates` (the last four frames; `cover-pick` makes
+  one the kept shot, pinned, which a publish sends without shooting again), shows a kept clip behind
+  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Make
+  sends "Make another Genex cover for this game: …" through the chat's own send
+  (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
+  Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
 - The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
   thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose

@@ -252,12 +252,18 @@ server the person runs without a password stays reachable.
 
 ## MCP setup
 
-Studio supports stdio, streamable HTTP and SSE. A stdio command uses argument arrays; each
-argument has its own row so spaces survive editing/import. Studio resolves its launch environment
-through the user's login-shell PATH. A changed launch command requires renewed user trust.
-Imports from Claude Code/Codex configuration are reviewed before installation; unsupported
-fields are reported rather than silently treated as working configuration.
-Save and connect completes setup in one Studio flow. A connected row shows its tool count;
+Add server opens one window: a paste box, then On this Mac or From a URL, a name, the command
+or URL, secret rows (environment variables or headers) and More options (only in this game, see
+this game's folder, start-in folder). Pasting JSON, Codex TOML, a URL, a command line or a
+`claude`/`codex mcp add` line fills the form (`shared/mcp-import.ts` `parseMcpInput`); inline
+values become secrets and unsupported fields are reported. The command is one line split like a
+shell without expansion (`shared/command-line.ts`) and saved as an argument array, quoted back
+when edited. The id comes from the name (`github`, `github-2`) and never changes after saving.
+A URL saves as streamable HTTP and falls back to SSE when the server refuses it; an existing SSE
+server stays SSE. A URL server signs in through the browser when it asks, unless an
+Authorization header is given. Studio resolves its launch environment through the user's
+login-shell PATH. A changed launch command requires renewed user trust.
+Connect completes setup in one Studio flow. A connected row shows its tool count;
 Connect is offered for recovery, not as an extra required step after a successful connection.
 
 Folder roots are opt-in. A server receives only the host-bound project's root when the user
@@ -592,9 +598,12 @@ consent card. Bytes Genex already answered for, and a cover the owner picked on 
 never uploaded again; the owner's pick is recorded (`kept_owner`) whenever Genex reports it, at a
 send or a status check, a shot kept or not; a refused, rate-limited, failed or silent send leaves the publish done with a
 warning in `genex__publish-status`. Nothing is read from or written to the game folder for it.
-While the plugin reports no shot to send and no cover the owner chose, Studio's own Publish dialog
-offers Ask for a cover, which leaves the request in the game's chat composer, unsent
-([plugins](plugins.md#first-party-privileges)). The thread's latest kept shot shows in the chat as
+Once the turns on the open game settle, and as the Publish dialog opens with no shot, Studio asks
+the plugin for the cover itself (`cover-auto`): the `genex-cover` demo, or for a game with none a
+plain frame of it as it loads, and the `genex-clip` demo's five-second clip; never over the
+person's pick or the owner's cover. The dialog's banner flips between the last four frames
+(`cover-pick` pins one, and a publish then sends it as it is) and its Another cover sends a request
+to the game's chat ([plugins](plugins.md#first-party-privileges)). The thread's latest kept shot shows in the chat as
 a Genex cover card whose Publish opens that dialog; since Genex 1.6.3 the guidance tells the builder
 to shoot the winner last and then say one line, never how to publish.
 

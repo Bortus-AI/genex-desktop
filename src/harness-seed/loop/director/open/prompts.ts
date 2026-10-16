@@ -18,6 +18,7 @@ import { appIdentity } from "../../project-prompts.ts";
 import { MINUTE_MS, minutes } from "../../time.ts";
 import { JobTool } from "../../jobs/contract.ts";
 import { WorkerTool } from "../../workers/contract.ts";
+import { DirectorTool } from "../tool-specs.ts";
 import { REASON_WORDS } from "../wake-prompts.ts";
 import { WakeCause, type WakeReason, WrapCause } from "../wake-schedule.ts";
 import { OPEN_TURN_MS, OpenTool, type OpenSavePoint } from "./contract.ts";
@@ -175,7 +176,8 @@ export function openWakeRules({ heartbeatMinutes }: { heartbeatMinutes: number }
   return [
     "HOW THIS LOOP WORKS — ONE DECISION PER TURN:",
     `- Act, then end your turn; a turn lasts at most ${minutes(OPEN_TURN_MS)} minutes, and one cut there goes on at once. Between your turns nothing of yours runs; your workers and jobs keep working.`,
-    `- Genex wakes you in this same session when something happens — the person speaks or asks to finish, a worker ends or asks, a job ends, the project's app stops — and every ${heartbeatMinutes} minutes while workers run. News that comes while you work reaches you mid-turn.`,
+    `- Genex wakes you in this same session when something happens — the person speaks or asks to finish, a worker ends or asks, a job ends, the project's app stops — and every ${heartbeatMinutes} minutes while workers run. News that comes while you work reaches you mid-turn when your session can take it in, otherwise when your turn ends: a long turn hears late.`,
+    `- The person outranks the goal: answer them in the chat, directly and briefly, and act on what they ask. An ask to stop or finish the Loop is ${DirectorTool.WrapUp} first, quoting their words; a question alone stops no worker.`,
     `- Each wake opens with what happened. Use ${WorkerTool.Wait} only when you need a worker's answer within this turn.`,
   ].join("\n");
 }

@@ -1106,7 +1106,7 @@ export const PluginStillProblemCode = {
   ViewUnknown: "view_unknown",
   ViewFailed: "view_failed",
   CaptureFailed: "capture_failed",
-  /** Not even the lowest-quality JPEG fits `maxBytes`. */
+  /** Not even the lowest-quality JPEG (or, for a clip, the lowest bitrate) fits `maxBytes`. */
   TooLarge: "too_large",
   Timeout: "timeout",
 } as const;
@@ -1132,6 +1132,61 @@ export interface PluginStillProblem {
 }
 /** What `observe` with a `still` answers. A host older than the option answers an ordinary observation instead. */
 export type PluginStillAnswer = { still: PluginStill } | { stillProblem: PluginStillProblem };
+
+/** The least, the most and the default length of a clip, in seconds of the game running. */
+export const PLUGIN_CLIP_MIN_SECONDS = 2;
+export const PLUGIN_CLIP_MAX_SECONDS = 10;
+export const PLUGIN_CLIP_DEFAULT_SECONDS = 5;
+/** The least, the most and the default frames per second a clip records. */
+export const PLUGIN_CLIP_MIN_FPS = 15;
+export const PLUGIN_CLIP_MAX_FPS = 30;
+export const PLUGIN_CLIP_DEFAULT_FPS = 30;
+/** The least, the most and the default size of a clip's encoded video. */
+export const PLUGIN_CLIP_MIN_BYTES = 256 * 1024;
+export const PLUGIN_CLIP_MAX_BYTES = 8 * 1024 * 1024;
+export const PLUGIN_CLIP_DEFAULT_BYTES = 8 * 1024 * 1024;
+
+/** How a clip's video is contained: MP4 (H.264) where the recorder can, else WebM. Published to plugins: never rename a value. */
+export const PluginClipMimeType = { Webm: "video/webm", Mp4: "video/mp4" } as const;
+export type PluginClipMimeType = (typeof PluginClipMimeType)[keyof typeof PluginClipMimeType];
+
+/**
+ * `observe` with a `clip` (API 3, additive): `seconds` of the bound game running from the start
+ * of a moment a demo stages, recorded on a hidden window of its own at `width`×`height`, at `fps`,
+ * in at most `maxBytes`. Mirrors `PluginClipRequest` in `src/plugin-sdk/index.d.ts`.
+ */
+export interface PluginClipRequest {
+  demo: string;
+  width: number;
+  height: number;
+  seconds?: number;
+  fps?: number;
+  maxBytes?: number;
+}
+/** A clip request as the host checked it: whole-pixel sides and every default filled in. */
+export interface PluginClipOrder {
+  demo: string;
+  width: number;
+  height: number;
+  seconds: number;
+  fps: number;
+  maxBytes: number;
+}
+/** A clip: the video, its size and length, the demo that staged it, a poster and how much moved. */
+export interface PluginClip {
+  video: Uint8Array;
+  mimeType: PluginClipMimeType;
+  width: number;
+  height: number;
+  durationMs: number;
+  view: { demo: string };
+  /** JPEG of the first recorded frame, at most 1280 px on its long side. */
+  poster: Uint8Array;
+  /** 0–1: the share of sampled frame pairs that differ visibly; a frozen recording is about 0. */
+  motion: number;
+}
+/** What `observe` with a `clip` answers; the problem codes are a still's. A host older than the option answers an ordinary observation. */
+export type PluginClipAnswer = { clip: PluginClip } | { clipProblem: PluginStillProblem };
 
 /** Whether a plugin's own saved account is usable right now (`PluginRegistry.accountState`). */
 export const PluginAccountState = {
