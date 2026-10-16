@@ -785,6 +785,14 @@ export interface PluginPanelContext {
     /** A primary button's fill while hovered, still readable under `accentForeground`. */
     accentHover?: string;
   };
+  /**
+   * What the frame sits on: `"page"` (the plugin's page) or `"card"` (a dialog). In a dialog the SDK
+   * marks the document `data-surface="card"`, shows the panel's visible `[data-panel-head]` (its
+   * heading and the line under it) as the dialog's title, sizes the frame to the panel's height so
+   * the dialog scrolls once, and lets the dialog's Back arrow press the visible `[data-panel-back]`.
+   * Absent from older hosts.
+   */
+  surface?: "page" | "card";
 }
 
 /**

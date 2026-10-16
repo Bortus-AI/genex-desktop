@@ -90,6 +90,7 @@ const UNREAL_MANIFEST = unrealManifest as unknown as LoopManifest;
 const OPEN_TOOLS = [
   "finish",
   "note",
+  "pause",
   "restart",
   "rewind",
   "run_status",

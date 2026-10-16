@@ -198,6 +198,8 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
 /* While the panel first asks, the line saying so stands alone. */
 #app[aria-busy="false"] #checking{display:none}
 @media (prefers-reduced-motion:reduce){button,.card{transition:none}button:not(.row):active:not(:disabled){scale:none}.orb,.state[data-tone="starting"]::before{animation:none}}
+/* On a dialog's card the dialog holds the heading and the padding: the page keeps a thin edge for focus rings. */
+:root[data-surface="card"] body{padding:4px}
 /* Last, so it wins over every class that sets a display. */
 [hidden]{display:none}
 </style></head><body>
@@ -205,7 +207,7 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
   <p id="checking" class="quiet" role="status">Checking Unreal…</p>
 
   <section id="get" hidden aria-labelledby="get-title">
-    <div class="intro"><h2 id="get-title" class="title">Get Unreal Engine 5.8</h2><p id="get-text" class="quiet"></p></div>
+    <div class="intro" data-panel-head><h2 id="get-title" class="title">Get Unreal Engine 5.8</h2><p id="get-text" class="quiet"></p></div>
     <div class="group">
       <div id="get-block" class="block">
         <ol id="get-steps" class="steps">
@@ -219,7 +221,7 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
   </section>
 
   <section id="pick" hidden aria-labelledby="pick-title">
-    <div class="view-head"><button type="button" id="back" class="icon" aria-label="Back" hidden><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><h2 id="pick-title" class="title">Choose a project</h2></div>
+    <div class="view-head" data-panel-head><button type="button" id="back" class="icon" aria-label="Back" data-panel-back hidden><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></button><h2 id="pick-title" class="title">Choose a project</h2></div>
     <div id="pick-new" class="block"><div class="new-row">
       <span class="tile small new" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></span>
       <div class="row-text"><span class="row-name">New Unreal project</span><span id="pick-new-text" class="quiet small"></span></div>
@@ -232,15 +234,15 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
       </div>
       <ul id="projects" class="block list" aria-labelledby="pick-have"></ul>
       <p id="no-match" class="quiet small" hidden></p>
-      <div class="actions"><button type="button" id="choose" class="quiet"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Choose a project file…</button><p id="outside-note" class="quiet small" hidden></p></div>
+      <div class="actions"><button type="button" id="choose"><svg width="16" height="16" viewBox="0 0 24 24" stroke-width="1.75" aria-hidden="true"><path d="M3.5 7.5A1.5 1.5 0 0 1 5 6h4l2 2h8a1.5 1.5 0 0 1 1.5 1.5v8A1.5 1.5 0 0 1 19 19H5a1.5 1.5 0 0 1-1.5-1.5z"/></svg>Choose a project file…</button><p id="outside-note" class="quiet small" hidden></p></div>
     </div>
   </section>
 
   <section id="new" hidden aria-labelledby="new-title">
-    <div class="intro"><h2 id="new-title" class="title">New Unreal project</h2><p id="new-note" class="quiet" hidden></p></div>
+    <div class="intro" data-panel-head><h2 id="new-title" class="title">New Unreal project</h2><p id="new-note" class="quiet" hidden></p></div>
     <div id="unverified" class="block" hidden>
       <div class="pad intro"><p id="unverified-text"></p><p id="unverified-opened" class="quiet" role="status" hidden></p><p id="unverified-hint" class="quiet small"></p></div>
-      <div class="foot actions"><button type="button" id="unverified-get" class="primary external">Open the Epic Games Launcher</button><button type="button" id="choose-unverified" class="quiet">Choose a project…</button></div>
+      <div class="foot actions"><button type="button" id="unverified-get" class="primary external">Open the Epic Games Launcher</button><button type="button" id="choose-unverified">Choose a project…</button></div>
     </div>
     <div class="group">
       <fieldset id="cards" class="cards"><legend id="cards-legend" class="sr-only">Template</legend></fieldset>
@@ -253,7 +255,7 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
         <p id="name-hint" class="quiet small"></p>
         <p id="name-error" class="error small" role="alert"></p>
       </div>
-      <div id="new-actions" class="foot actions"><button type="button" id="create" class="primary"></button><button type="button" id="cancel-new">Cancel</button><button type="button" id="choose-new" class="quiet">Choose a project…</button></div>
+      <div id="new-actions" class="foot actions"><button type="button" id="create" class="primary"></button><button type="button" id="cancel-new">Cancel</button><button type="button" id="choose-new">Choose a project…</button></div>
     </div>
     <p id="creating" class="waiting" role="status" tabindex="-1" hidden><span class="orb" aria-hidden="true"></span><span id="creating-text"></span></p>
   </section>
@@ -285,7 +287,7 @@ code{font:12px/18px var(--mono);letter-spacing:-.02em;padding:7px 10px;border-ra
         <div class="foot">
           <div id="primary-row" class="actions"><button type="button" id="primary" class="primary"></button><button type="button" id="secondary" hidden></button></div>
           <div class="end">
-            <button type="button" id="change" class="quiet">Change project</button>
+            <button type="button" id="change">Change project</button>
             <details id="more" class="menu">
               <summary aria-label="More"><svg class="dots" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18.5" cy="12" r="1.5"/></svg></summary>
               <div class="menu-body">

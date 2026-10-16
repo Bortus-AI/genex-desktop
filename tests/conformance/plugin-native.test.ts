@@ -232,6 +232,41 @@ test("install and cancellation cannot be agent-authorized; failed preflight is d
   }
 });
 
+test("an agent's install tool the person confirms starts the pinned download and answers at once", async () => {
+  const f = await setup();
+  try {
+    // More than any disk holds, so the download stops at its space check, before any network.
+    f.manifest.nativeRuntimes![0]!.install = {
+      action: "install",
+      url: "https://example.invalid/runtime.tgz",
+      sha256: "0".repeat(64),
+      bytes: 1,
+      unpackedBytes: Number.MAX_SAFE_INTEGER,
+      format: "tar.gz",
+      entry: "bin",
+      executable: "bin/tool",
+      notices: ["LICENSE"],
+    };
+    await assert.rejects(f.call("runtime.install", { runtime: "shell" }), /trusted setup/, "no install tool: refused");
+    f.manifest.tools.push({
+      name: "install",
+      description: "Download the pinned runtime",
+      parameters: { type: "object", properties: {} },
+    });
+    await assert.rejects(f.call("runtime.install", { runtime: "shell" }), /trusted setup/, "no card: refused");
+    f.manifest.tools[0]!.confirmation = "Download the pinned runtime";
+    assert.equal(validateManifest(f.manifest).apiVersion, 3);
+    assert.deepEqual(await f.call("runtime.install", { runtime: "shell" }), { started: true });
+    // The person's own action joins the download under way, or starts it again: either ends the same.
+    await assert.rejects(f.call("runtime.install", { runtime: "shell" }, new AbortController().signal, "action"));
+    const job = (await f.call("runtime.installation", { runtime: "shell" })) as any;
+    assert.equal(job.active, false);
+    assert.equal(job.phase, "failed");
+  } finally {
+    await f.close();
+  }
+});
+
 test("asset size limits include prior worker deliveries after host restart", async () => {
   const { PluginServices } = await import("../../src/substrate/plugins/services.ts");
   const f = await setup();

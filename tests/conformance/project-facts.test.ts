@@ -207,12 +207,28 @@ describe("what the walk leaves out", () => {
     assert.deepEqual(await detectFacts(deeper, []), [], "one folder deeper is never read");
   });
 
-  it("stops at exactly its cap of entries", async () => {
+  it("stops at exactly its cap of files", async () => {
     const dir = await realpath(await tmpDir("studio-facts-cap-"));
     for (let i = 0; i < 100; i++) await writeFile(path.join(dir, `f${String(i).padStart(3, "0")}`), "");
-    assert.equal((await projectFiles(dir, { maxEntries: 50 })).length, 50);
-    assert.equal((await projectFiles(dir, { maxEntries: 7 })).length, 7);
+    assert.equal((await projectFiles(dir, { maxFiles: 50 })).length, 50);
+    assert.equal((await projectFiles(dir, { maxFiles: 7 })).length, 7);
     assert.equal((await projectFiles(dir)).length, 100, "under the cap, every file");
+  });
+
+  it("reads at most its cap of folders, the root among them", async () => {
+    const dir = await realpath(await tmpDir("studio-facts-folders-"));
+    for (let i = 0; i < 10; i++) await put(dir, `f${i}/game.blend`);
+    const files = await projectFiles(dir, { maxFolders: 4 });
+    assert.deepEqual(files, ["f0/game.blend", "f1/game.blend", "f2/game.blend"], "the root and three folders");
+  });
+
+  it("counts only the files it keeps, so folders of other files never use up the walk", async () => {
+    const dir = await realpath(await tmpDir("studio-facts-keep-"));
+    await Promise.all(Array.from({ length: 30 }, (_, i) => put(dir, `a/shot-${i}.png`)));
+    await put(dir, "b/Game.uproject");
+    const keep = (rel: string) => rel.endsWith(".uproject");
+    assert.deepEqual(await projectFiles(dir, { maxFiles: 5, keep }), ["b/Game.uproject"]);
+    assert.equal((await projectFiles(dir, { maxFiles: 5 })).length, 5, "without keep, every file counts");
   });
 
   it("throws for a folder that is gone, and skips one below the root it can't read", async () => {
@@ -231,6 +247,29 @@ describe("what the walk leaves out", () => {
     } finally {
       await chmod(path.join(dir, "shut"), 0o755);
     }
+  });
+});
+
+describe("a game whose other folders fill up with files", () => {
+  /** Empty files at `rels` under `dir`, with their folders. */
+  const putAll = async (dir: string, rels: readonly string[]) => {
+    for (const rel of rels) await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
+    await Promise.all(rels.map((rel) => writeFile(path.join(dir, rel), "")));
+  };
+
+  // A Unity game whose run kept 4,800 screenshots in docs/ lost its kind: the walk spent its whole
+  // budget there and never reached unity/ProjectSettings, so its editor's tools went away mid-run.
+  it("still finds its Unity project beside a docs folder of thousands of screenshots", async () => {
+    const game = await realpath(await tmpDir("studio-facts-crowded-"));
+    const shots = Array.from({ length: 60 }, (_, folder) =>
+      Array.from({ length: 80 }, (_, shot) => `docs/proof-v${folder}/shot-${shot}.png`),
+    ).flat();
+    await putAll(game, [...shots, "assets/props/altar.glb", "unity/Assets/Scenes/Main.unity"]);
+    await putAll(game, ["unity/ProjectSettings/ProjectVersion.txt", "unity/Packages/manifest.json"]);
+    assert.deepEqual(
+      (await detectFacts(game, [])).map((fact) => `${fact.id}@${fact.path}`),
+      ["unity-project@unity"],
+    );
   });
 });
 

@@ -76,6 +76,7 @@ describe("Genex's own table", () => {
       "game/Logs/",
       "game/obj/",
       "game/UserSettings/",
+      "game/Builds/",
     ]);
   });
 

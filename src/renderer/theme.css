@@ -84,6 +84,7 @@
   --ink-3: var(--muted-foreground);
   --line: var(--border);
   --line-strong: #29292b;
+  --line-soft: var(--line-strong);
   --field: #1b1c1d;
   --stripe: color-mix(in oklab, #dee0e2 4%, transparent);
   --stripe-bg: var(--background);
@@ -183,6 +184,7 @@
   --color-ink-3: var(--ink-3);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-line-soft: var(--line-soft);
   --color-field: var(--field);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);

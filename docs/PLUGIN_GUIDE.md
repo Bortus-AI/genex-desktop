@@ -122,7 +122,7 @@ undeclared method is a compile error.
 | `export.stage` | `export` | Studio writes the public export of the bound game under `storage.root/publish/<project>/dist` and returns the result |
 | `credentials.session` | `credentials`, API 3 | Reuse an explicitly unlocked host-memory lease; never opens the OS store |
 | `runtime.detect` / `runtime.installation` | `native-runtime`, API 3 | Read declared native runtime readiness and durable installation progress |
-| `runtime.install` / `runtime.cancelInstall` | `native-runtime`, API 3 | Fixed pinned installation through a real declared user action; installation requires its confirmation |
+| `runtime.install` / `runtime.cancelInstall` | `native-runtime`, API 3 | Fixed pinned installation through a real declared user action, or an agent tool of the same name with a `confirmation` card the person answers (the call answers once the download starts); cancelling is the person's action only |
 | `native.run` / `native.jobs` / `native.result` | `native-runtime`, API 3 | Project-bound fixed job recipes, cancellation and durable results; no automatic replay |
 | `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an engine project file, an Unreal `.uproject` or a Godot `project.godot` (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
 | `game.engine.steps` | `game-engine` | Show your setup card (your `steps` action's answer, read live) in the calling chat; see [Setup in the chat](#setup-in-the-chat) |
@@ -319,7 +319,7 @@ A panel is served into an opaque-origin sandboxed frame with
   (`inlinePanelFonts` in the same script pastes Genex's own type in at `<!-- STUDIO_PANEL_FONTS -->`), and
   `project.read` is utf8-only, so a panel cannot display a PNG read from the game folder.
 - The whole bridge is `window.studioPlugin`: `call(method, name?, args?)` with
-  `call('context')` → `{project, apiVersion, theme}` (`theme` carries `background`, `foreground`,
+  `call('context')` → `{project, apiVersion, theme, surface}` (`theme` carries `background`, `foreground`,
   `accent` and the readable button colours `accentFill`, `accentForeground`, `accentHover`),
   `call('settings')` → your standard settings
   and `call('action', name, args)` → a declared action, plus
@@ -327,6 +327,14 @@ A panel is served into an opaque-origin sandboxed frame with
   `[a-z0-9]{1,10}`; native, so a fixture profile answers `unsupported-in-fixture`; see
   [Panels](plugins.md#panels-and-trusted-approval)). Nothing else crosses. A call the person
   cancelled in Studio's confirmation rejects with `code: "cancelled"`; stay quiet then.
+- A panel opened from the stage strip sits in a dialog (`context.surface` is `"card"`), and the
+  dialog is the window: mark each page's heading block `data-panel-head` (its `h2` is the dialog's
+  title, its first `p` the line under it) and each page's Back `data-panel-back`. On a card the SDK
+  hides both (the dialog draws them, and its arrow presses your Back), marks the document
+  `data-surface="card"` so you can drop your own padding, and sizes the frame to your content, so
+  the dialog scrolls once. A page without a marked heading keeps the manifest's panel title.
+- Buttons follow Genex's rule: a padded button has a background. An action for the whole panel
+  that you want quiet is a link (underlined words, no padding), never a padded button without a fill.
 
 `plugin:doctor` warns about both of these mistakes, naming the file.
 
