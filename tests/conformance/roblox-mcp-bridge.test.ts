@@ -410,17 +410,25 @@ test("with no binding yet, the linked place is matched by name, and two matches 
 });
 
 test("Studio's absence is told in plain words: not linked, not open, or open with the MCP server off", async () => {
-  const rows: Array<{ name: string; setup: Setup; words: RegExp }> = [
-    { name: "no link", setup: {}, words: /isn't linked to a Roblox place/ },
+  // Each names the agent's own tool for the step: setup is the agent's job, never the person's clicks.
+  const rows: Array<{ name: string; setup: Setup; words: RegExp; tool: RegExp }> = [
+    {
+      name: "no link",
+      setup: {},
+      words: /isn't linked to a Roblox place/,
+      tool: /roblox__places.*roblox__use-project/,
+    },
     {
       name: "not running",
       setup: { flags: ["--no-studio"], link: { project: "/Games/Place1.rbxl" }, running: false },
       words: /Roblox Studio isn't open for this game/,
+      tool: /roblox__open-studio/,
     },
     {
       name: "running, not listed",
       setup: { flags: ["--no-studio"], link: { project: "/Games/Place1.rbxl" }, running: true },
       words: /Enable Studio as MCP server/,
+      tool: /roblox__do-it-for-me/,
     },
   ];
   for (const row of rows) {
@@ -429,6 +437,8 @@ test("Studio's absence is told in plain words: not linked, not open, or open wit
       const result = await bridge.agent.callTool({ name: "get_studio_state", arguments: {} });
       assert.equal(result.isError, true, row.name);
       assert.match(textOf(result), row.words, row.name);
+      assert.match(textOf(result), row.tool, row.name);
+      assert.doesNotMatch(textOf(result), /Ask the person|the Roblox Studio button/, row.name);
     } finally {
       await bridge.close();
     }

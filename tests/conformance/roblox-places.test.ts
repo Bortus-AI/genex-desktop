@@ -399,6 +399,21 @@ describe("Choose your place", () => {
     assert.equal(mac.touched.filter((file) => file === documents).length, reads + 1, "scanned again once it lapsed");
   });
 
+  it("named by an agent, a file there is not read, and the answer links it by its label in Studio, not the panel", async () => {
+    const mac = await robloxMac();
+    const file = path.join(mac.home, "Documents", "Roblox", "Sky Race.rbxl");
+    const game = await makeGame(mac, "sky-race", "Sky Race");
+    const backend = createRobloxBackend(mac.deps);
+    const answer = String(await backend.tool?.("use-project", { project: file }, hostFor(mac, game).context));
+    assert.match(answer, /roblox__places/);
+    assert.doesNotMatch(answer, /panel|Use in this game/);
+    assert.deepEqual(
+      mac.touched.filter((touched) => touched.includes(`${path.sep}Documents`)),
+      [],
+      "macOS would ask the person for Documents",
+    );
+  });
+
   it("is never read by the status, the toolbar or the steps card", async () => {
     const mac = await robloxMac({ studios: [{ id: "studio-a", name: "Place1" }] });
     const game = await makeGame(mac, "sky-race", "Sky Race");

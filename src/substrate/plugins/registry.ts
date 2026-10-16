@@ -237,6 +237,24 @@ const MESSAGE = {
     `"${id}" is a plugin that ships with Studio; a package from ${fromLocal ? "a local folder" : "GitHub"} cannot use its id`,
 } as const;
 
+/** One call's card, as `#askFirst` asks it. */
+interface ConsentAsk {
+  p: Installed;
+  name: string;
+  declaration: PluginManifestTool;
+  args: Record<string, unknown>;
+  binding: PluginBinding;
+  signal?: AbortSignal;
+}
+/** What a card gave a call: whether the person's own click approved it, and their edit of its field. */
+interface ConsentGiven {
+  confirmed: boolean;
+  input?: string;
+}
+/** A yes as the call takes it: confirmed only by the person's own click, which alone may edit. */
+const givenBy = (by: PluginConsentBy, input: string | undefined): ConsentGiven =>
+  by === "user" ? { confirmed: true, ...(input !== undefined ? { input } : {}) } : { confirmed: false };
+
 /** The capability a host service needs; undefined for a service no capability grants. */
 function capabilityFor(method: string): PluginCapability | undefined {
   if (method.startsWith("credentials.")) return PluginCapability.Credentials;
@@ -252,7 +270,7 @@ function capabilityFor(method: string): PluginCapability | undefined {
 /**
  * The services that link a game to an engine project, snapshot the game before the plugin changes
  * it, make a game for a project, name the games whose run is going, and hand a setup task to the
- * game's chat (Do it for me).
+ * game's chat (Do it for me) or say whether that can run here.
  */
 const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineLink,
@@ -262,6 +280,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameCreate,
   PluginService.GameEngineRuns,
   PluginService.GameEngineAssist,
+  PluginService.GameEngineCanAssist,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
@@ -767,12 +786,12 @@ export class PluginRegistry {
   consent:
     | ((
         pluginId: string,
-        tool: PluginTool,
+        tool: PluginManifestTool,
         args: Record<string, unknown>,
         binding: PluginBinding,
         signal?: AbortSignal,
         options?: PluginConsentOptions,
-      ) => Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean }>)
+      ) => Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean; input?: string }>)
     | undefined;
   /** Re-acquires a removed plugin whose origin is github/index/catalog; the marketplace host sets it. */
   reacquire: ((info: PluginInfo) => Promise<void>) | undefined;
@@ -1907,16 +1926,8 @@ export class PluginRegistry {
     validateArguments(declaration, args);
     const host = declaration.host;
     if (host) this.#assertHostTool(p);
-    // A local plugin's agent tool asks with Genex's words first, its own question after them.
-    // `confirmed`: the person approved this call's own card, the tool's declared question.
-    let confirmed = false;
-    if (localAgentCall(p, declaration, caller)) {
-      if (asksEachCall(p, declaration, caller))
-        confirmed = await this.#localConsented(id, p, name, declaration, args, binding, signal);
-    } else if (declaration.confirmation) {
-      const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
-      confirmed = await this.#consented(id, name, declaration, shown, binding, signal);
-    }
+    const asked = { p, name, declaration, args, binding, ...(signal ? { signal } : {}) };
+    const { confirmed, input } = await this.#askFirst(id, asked, caller);
     // The plugin may have been turned off while the call waited its turn: each call checks again.
     if (host)
       return async () => {
@@ -1925,28 +1936,47 @@ export class PluginRegistry {
       };
     const nativeJobTimeouts = (p.manifest.nativeJobs ?? []).map((j) => j.timeoutMs + NATIVE_JOB_MARGIN_MS);
     const ceiling = Math.max(PLUGIN_CALL_TIMEOUT_MS, timeoutMs, ...nativeJobTimeouts);
+    // The person's edit on the card (`confirmationInput`) is the call's value for that parameter.
+    const parameter = declaration.confirmationInput?.parameter;
+    const callArgs = parameter && input !== undefined ? { ...args, [parameter]: input } : args;
     return async () => {
       this.#active(id);
-      return this.#process(id).call("tool", tool, args, binding, signal, ceiling, { confirmed });
+      return this.#process(id).call("tool", tool, callArgs, binding, signal, ceiling, { confirmed });
     };
   }
   /**
+   * The card a call waits on, if any: a local plugin's agent tool asks with Genex's words first, its
+   * own question after them; any other tool asks its declared question. `confirmed` when the person
+   * approved this call's own card, with their edit of its field when it has one.
+   */
+  async #askFirst(id: string, asked: ConsentAsk, caller: PluginToolAudience): Promise<ConsentGiven> {
+    const { p, name, declaration, args, binding, signal } = asked;
+    if (localAgentCall(p, declaration, caller)) {
+      if (!asksEachCall(p, declaration, caller)) return { confirmed: false };
+      return this.#localConsented(id, p, name, declaration, args, binding, signal);
+    }
+    if (!declaration.confirmation) return { confirmed: false };
+    const host = declaration.host;
+    const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
+    return this.#consented(id, name, declaration, shown, binding, signal);
+  }
+  /**
    * Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must
-   * still be live after. True when the person's own click approved it.
+   * still be live after. Confirmed when the person's own click approved it, with their edit.
    */
   async #consented(
     id: string,
     name: string,
-    declaration: PluginTool,
+    declaration: PluginManifestTool,
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<boolean> {
+  ): Promise<ConsentGiven> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
-    const { approved, by } = await this.consent(id, declaration, args, binding, signal);
+    const { approved, by, input } = await this.consent(id, declaration, args, binding, signal);
     if (!approved) throw new PluginConsentDeclined(name, by);
     this.#active(id);
-    return by === "user";
+    return givenBy(by, input);
   }
   /**
    * Asks the person before a local plugin's agent tool runs, offering Always allow; a no is thrown,
@@ -1958,11 +1988,11 @@ export class PluginRegistry {
     id: string,
     p: Installed,
     name: string,
-    declaration: PluginTool,
+    declaration: PluginManifestTool,
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<boolean> {
+  ): Promise<ConsentGiven> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
     const own = declaration.confirmation;
     const confirmation = own
@@ -1970,14 +2000,14 @@ export class PluginRegistry {
       : MESSAGE.LocalTool(p.manifest.name, declaration.name);
     const asking = { ...declaration, confirmation };
     const options = own ? {} : { offerAlways: true };
-    const { approved, by, always } = await this.consent(id, asking, args, binding, signal, options);
+    const { approved, by, always, input } = await this.consent(id, asking, args, binding, signal, options);
     if (!approved) throw new PluginConsentDeclined(name, by);
     // Granted for the code the person was asked about: a plugin loaded again or turned off since then
     // runs nothing on this yes, and asks again.
     this.#stillAsked(id, p);
     if (always && !own) await this.#allow(id, p, declaration.name);
     this.#stillAsked(id, p);
-    return Boolean(own) && by === "user";
+    return own ? givenBy(by, input) : { confirmed: false };
   }
   /** Throws unless `p` is still the plugin's live record: the one the person was asked about. */
   #stillAsked(id: string, p: Installed): void {

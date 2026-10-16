@@ -423,7 +423,8 @@ describe("through the Roblox backend", () => {
     const context = hostFor(mac, game).context;
     const answer = (await backend.tool?.("check-scripts", {}, context)) as { checked: boolean; message: string };
     assert.equal(answer.checked, false);
-    assert.match(answer.message, /Add Luau checks in the Roblox Studio panel/);
+    // Flipped: the agent adds the checks itself with its own tool; the person only approves the card.
+    assert.match(answer.message, /roblox__add-luau-checks/);
     const status = (await backend.action?.("status", {}, context)) as { luau?: { added: boolean; offered: boolean } };
     assert.deepEqual(status.luau, { added: false, offered: true });
     const review = await backend.review?.("add-luau-checks", {}, context);
