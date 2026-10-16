@@ -1,7 +1,8 @@
 /**
  * Every tool Roblox Studio's own MCP server (StudioMCP 0.743) offers, and what Genex does with it.
  *
- * - Reads pass through the Roblox Studio connection with no card; `execute_luau` passes as a write.
+ * - Reads pass through the Roblox Studio connection with no card; `execute_luau` passes as a write,
+ *   once its code passed the screen (`luau-screen.ts`) of what reaches the person's account.
  * - Play-lane tools stay hidden: only Genex's six play tools drive Studio's one play session.
  * - `multi_edit` stays hidden because scripts are the game's `.luau` files, kept in step by Genex.
  * - `http_get` stays hidden: Studio would fetch any address for the agent, a path for leaking data
@@ -183,11 +184,14 @@ export const ASK_FIRST_STUDIO_TOOL = {
 /** How an agent names this plugin's tools: `roblox__<tool>`. */
 const PLUGIN_TOOL_PREFIX = "roblox__";
 
+/** A plugin tool by the name agents call it. */
+export const pluginToolName = (tool: string) => `${PLUGIN_TOOL_PREFIX}${tool}`;
+
 /** The plugin's ask-first tools, by the names agents call them, that stand for a Studio tool; none for any other. */
 export function askFirstToolsFor(studioTool: string): string[] {
   return (Object.entries(ASK_FIRST_STUDIO_TOOL) as Array<[AskFirstTool, StudioTool]>)
     .filter(([, studio]) => studio === studioTool)
-    .map(([tool]) => `${PLUGIN_TOOL_PREFIX}${tool}`);
+    .map(([tool]) => pluginToolName(tool));
 }
 
 /** The read tools by name, as the manifest's `reads` lists them. */

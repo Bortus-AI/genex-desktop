@@ -273,6 +273,32 @@ test("hidden and ask-first tools are refused by name and never reach Studio", as
   }
 });
 
+test("execute_luau code that reaches the person's account is refused with the asking tool, and never reaches Studio", async () => {
+  const bridge = await connect();
+  try {
+    await bridge.bind("studio-1");
+    const cases: Array<[string, RegExp]> = [
+      ['game:GetObjects("rbxassetid://123")[1].Parent = workspace', /roblox__insert-asset/],
+      ['game:GetService("AssetService"):CreateAssetAsync(model, Enum.AssetType.Model, {})', /roblox__upload-image/],
+      ["game:SavePlaceAsync()", /roblox__publish-update/],
+      ['game:GetService("HttpService"):GetAsync("https://example.test")', /Genex's own web tools/],
+      ['game:GetService("DataStoreService"):GetDataStore("Coins")', /live/],
+      ['game["Get" .. "Objects"](game, "rbxassetid://123")', /plainly/],
+    ];
+    for (const [code, words] of cases) {
+      const result = await bridge.agent.callTool({ name: "execute_luau", arguments: { code } });
+      assert.equal(result.isError, true, code);
+      assert.match(textOf(result), words, code);
+    }
+    assert.deepEqual(await bridge.calls(), [], "nothing reached Studio");
+    await assert.rejects(readFile(path.join(bridge.folder, AGENT_BUSY_FILE)), "nothing ran, so no mark");
+    const built = await bridge.agent.callTool({ name: "execute_luau", arguments: { code: "return 1" } });
+    assert.notEqual(built.isError, true);
+  } finally {
+    await bridge.close();
+  }
+});
+
 test("a write marks the agent busy around the call; a read marks nothing", async () => {
   const seen: Array<{ tool: string; mark: any }> = [];
   const wrap = (client: StudioClient, folder: string): StudioClient => ({

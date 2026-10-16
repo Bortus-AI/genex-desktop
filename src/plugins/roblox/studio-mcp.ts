@@ -11,6 +11,9 @@
  *   `capture_id` is filled when left out.
  * - Pictures over 1 MB are shrunk through the system's own tools; one that stays too large is a
  *   plain refusal rather than an answer the agent can't take.
+ * - `execute_luau` code that reaches the person's account, the internet or a live game, or that
+ *   builds the names it looks up, is refused before it reaches Studio (`luau-screen.ts`), naming the
+ *   tool that asks the person first; Auto and Bypass skip the connection's own cards.
  * - The agent's writes are marked (`agent-marks.ts`) so the Studio lock tells them from the person's.
  * - A bound Studio the connection's StudioMCP doesn't list is asked for once more through a fresh
  *   StudioMCP: one that reached Studio through another StudioMCP loses it when that one ends.
@@ -21,7 +24,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { MAX_PLAY_SHOT_BYTES } from "../../shared/engine-play.ts";
 import { CONNECTOR_OUTCOME_META } from "../../shared/mcp.ts";
+import { RobloxAction } from "./actions.ts";
 import { agentBusyMarker } from "./agent-marks.ts";
+import { type LuauRefusal, LuauReach, screenLuau } from "./luau-screen.ts";
 import { BindingState, type PlaceLink, placeMatcher, readBinding } from "./studio-binding.ts";
 import {
   type StudioClient,
@@ -39,6 +44,7 @@ import {
   DATAMODEL_ARG,
   EDIT_DATAMODEL,
   passesThrough,
+  pluginToolName,
   STUDIO_ID_ARG,
   StudioTool,
   StudioToolClass,
@@ -69,6 +75,22 @@ const MESSAGE = {
   OtherStudio:
     "This connection only reaches this game's own Roblox Studio, which it picks itself: leave studio_id out.",
   TooLarge: "Studio's picture is too large to hand over, even made smaller. Take it again closer up.",
+  /** Why execute_luau code was refused, by what it reaches; `found` is the code that showed it. */
+  Screened: {
+    [LuauReach.Insert]: (found: string) =>
+      `execute_luau won't run this: ${found} inserts from the Creator Store, and inserts ask the person first. Use ${askFirstToolsFor(StudioTool.InsertAsset).join(" or ")}.`,
+    [LuauReach.Upload]: (found: string) =>
+      `execute_luau won't run this: ${found} uploads to the person's Roblox account, and uploads ask the person first. Use ${askFirstToolsFor(StudioTool.UploadImage).join(" or ")}.`,
+    [LuauReach.Publish]: (found: string) =>
+      // The publish tool shares the panel action's name.
+      `execute_luau won't run this: ${found} publishes the place, and publishing asks the person first. Use ${pluginToolName(RobloxAction.PublishUpdate)} when the person asks for it.`,
+    [LuauReach.Network]: (found: string) =>
+      `execute_luau won't run this: ${found} would reach the internet for you. Use Genex's own web tools.`,
+    [LuauReach.LiveGame]: (found: string) =>
+      `execute_luau won't run this: ${found} reaches the published game's live data, players or purchases, which building never touches.`,
+    [LuauReach.Hidden]: (found: string) =>
+      `execute_luau won't run this: ${found} looks names up in a way Genex can't read. Write each service and member name out plainly, such as game:GetService("Lighting").`,
+  },
   Hidden: {
     [StudioToolClass.PlayLane]: (name: string) =>
       `${name} isn't offered here: play-testing goes through the computer tool and judge_play.`,
@@ -224,6 +246,13 @@ async function knownTools(deps: StudioMcpDeps, state: BridgeState, name: string)
 
 type CallRequest = { name: string; args: Record<string, unknown> };
 
+/** Why the agent's execute_luau code is refused before it reaches Studio, or null. */
+function screened(call: CallRequest): LuauRefusal | null {
+  if (call.name !== StudioTool.ExecuteLuau) return null;
+  const code = call.args.code;
+  return typeof code === "string" ? screenLuau(code) : null;
+}
+
 async function callStudio(
   deps: StudioMcpDeps,
   state: BridgeState,
@@ -233,6 +262,8 @@ async function callStudio(
 ): Promise<Answer> {
   const kind = classOf(call.name);
   if (!passesThrough(kind)) return refusal(MESSAGE.Hidden[kind as keyof typeof MESSAGE.Hidden](call.name));
+  const screen = screened(call);
+  if (screen) return refusal(MESSAGE.Screened[screen.reach](screen.found));
   const pinned = await pinStudio(deps, signal);
   if ("error" in pinned) return pinned.error;
   const asked = call.args[STUDIO_ID_ARG];

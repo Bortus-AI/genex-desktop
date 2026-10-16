@@ -1188,7 +1188,13 @@ connection's folder (`{studioId, session, at}`, believed for `BINDING_MAX_AGE_MS
 yet from the game's linked place matched by name; two matching Studios, a stale binding and a call
 naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
 30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
-write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, and a
+write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, once
+its code passes `luau-screen.ts`: code that names Creator Store inserts, uploads, publishing, the
+internet or a published game's live data, or that builds the names it looks up (`getfenv`,
+`loadstring`, `game[…]`, a `GetService` of anything but one plain name, character codes), is refused
+before it reaches Studio, naming the tool that asks first (`execute_luau` runs with a plugin's
+rights, which reach all of these). The screen reads text: a name built in a variable and looked up
+on an instance found by walking the tree still passes, so the asking tools stay the line. And a
 tool the table doesn't know (a newer Studio's) is hidden and refused until Genex classes it, since
 it could publish, upload or run Roblox's AI on the person's account. Hidden too: the play-lane tools (play goes through the
 six play tools), `multi_edit` (scripts are the game's `.luau` files), `http_get` (Studio would

@@ -738,7 +738,7 @@
       ],
       "maxTools": 24,
       "callTimeoutMs": 330000,
-      "description": "Roblox Studio, for this game's open place. The person's own Studio through its built-in MCP server: read the place (game tree, instances, scripts, console output, pictures) and change it with execute_luau, in Edit unless you name another data model. Genex picks this game's Studio itself, so studio_id is never yours to give. Scripts are the game's .luau files, play-testing goes through the computer tool and judge_play, and Roblox's AI tools, uploads and inserts ask the person first."
+      "description": "Roblox Studio, for this game's open place. The person's own Studio through its built-in MCP server: read the place (game tree, instances, scripts, console output, pictures) and change it with execute_luau, in Edit unless you name another data model. Genex picks this game's Studio itself, so studio_id is never yours to give. Scripts are the game's .luau files, play-testing goes through the computer tool and judge_play, and Roblox's AI tools, uploads and inserts ask the person first: execute_luau refuses code that inserts, uploads, publishes or reaches the internet or a live game's data."
     }
   ],
   "workerTypes": [
