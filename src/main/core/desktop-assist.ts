@@ -20,6 +20,7 @@
  */
 import { MINUTE_MS } from "../../shared/duration.ts";
 import {
+  COMPUTER_SETTING_QUESTION,
   type EngineAssistAnswer,
   EngineAssistRefusal,
   type PluginBinding,
@@ -38,8 +39,7 @@ const MESSAGE = {
   task: (plugin: string, task: string) =>
     `Let this chat's agent do this for you with computer control? ${plugin} asks: ${task}`,
   taskDescription: "a setup step done with computer control",
-  // The chat shows the card in the words of `COMPUTER_SETTING_CARD_WORDS` (renderer/words.ts).
-  setting: "Turn on computer control? Agents in every chat can then ask to use apps on this Mac, one app at a time.",
+  setting: COMPUTER_SETTING_QUESTION,
   settingDescription: "turning on computer control for every chat",
   asks: (plugin: string, task: string) => `${plugin} asks: ${task}`,
 } as const;

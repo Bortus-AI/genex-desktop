@@ -31,7 +31,7 @@ import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
-import type { GithubLookupProblem } from "../shared/plugins.ts";
+import { COMPUTER_SETTING_QUESTION, type GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
@@ -2612,7 +2612,7 @@ export const CONSENT_CHOICE_WORDS = {
  * off: it is one setting, so it says it is for every chat.
  */
 export const COMPUTER_SETTING_CARD_WORDS = {
-  title: "Turn on computer control? Agents in every chat can then ask to use apps on this Mac, one app at a time.",
+  title: COMPUTER_SETTING_QUESTION,
   turnOn: { label: "Turn on", description: "You can turn it off in Settings → Permissions." },
   notNow: { label: "Not now", description: "Computer control stays off, and nothing is clicked." },
 } as const;
