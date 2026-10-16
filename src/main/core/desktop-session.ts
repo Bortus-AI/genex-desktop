@@ -12,7 +12,7 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
-import { assistGrants, declaredEngineApps } from "./desktop-assist.ts";
+import { assistGrants, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
 import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
@@ -89,6 +89,7 @@ export async function desktopSessionTools(
   const engineApps = (app: DesktopApp) =>
     engineAppRefusal(app, {
       declared: declaredEngineApps(core.plugins.list()),
+      players: declaredPlayerApps(core.plugins.list()),
       granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
     });
   const tools = desktop.toolsFor({

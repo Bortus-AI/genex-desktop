@@ -262,7 +262,9 @@ window's tree). A refusal ends the plan and its reason is the answer.
   (`engine.apps.mac`, its editor) are refused in plain words ("use the engine's own tools") before
   the person is asked about them, unless the chat holds that plugin's setup assist; the tool's own
   description says so too. While an assist holds the chat, every app outside its grant is refused.
-  The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`).
+  The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`), and so
+  do the apps an enabled engine's games are played in (`engine.playerApps.mac`, such as Roblox's
+  player): no agent plays in a live server, not even in a setup assist.
 - **Do it for me** ([`desktop-assist.ts`](../src/main/core/desktop-assist.ts), the plugin service
   `game.engine.assist`). Setup clicks and publishing the person approved, only: a switch or dialog
   only the engine's window offers. Only the person starts one, by a plugin action they pressed or a

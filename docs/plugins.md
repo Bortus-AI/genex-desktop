@@ -159,7 +159,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `toolbar[]` | 2 | Up to 4 buttons in the stage strip; see below |
 | `mcpServers[]` | 2 | Up to 4 MCP servers the plugin ships, run by the host as connectors the plugin owns, each (API 3) with `facts`; see below |
 | `detect[]` | 3 | Up to 8 `{fact, files, notUnder?}` rules that recognise the plugin's kinds of project by their files; see [Project facts](#project-facts) |
-| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
+| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
@@ -1131,7 +1131,9 @@ opened again), **Do it for me** (`game.engine.assist` with the task "Turn on Stu
 Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server", clicking only that path and
 stopping for the person at any other dialog: saving, signing in, updates or terms) and that click
 path.
-Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone. The
+Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone;
+`engine.playerApps` names Roblox's player app (`com.roblox.RobloxPlayer`, `RobloxPlayerBeta.exe`),
+which computer use never drives. The
 setup actions are `native`: they write outside the plugin's storage or quit and open Studio, so a
 fixture profile never runs them.
 
@@ -2245,7 +2247,10 @@ Genex's code. Unreal's is `{"id": "unreal", "label": "Unreal", "projectFiles": [
 - `apps`, when present, is `{mac?, windows?}`, each 1–4 distinct names: Mac bundle ids in
   reverse-DNS form and Windows `.exe` file names, never paths. They name the apps the editor runs
   as, which computer use never drives to build or play: while the plugin is on, the `desktop`
-  tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them.
+  tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them;
+- `playerApps`, when present, has `apps`' shape and names the apps the engine's published games are
+  played in by everyone (Roblox's player app): while the plugin is on, the `desktop` tool refuses
+  them always, an assist turn included, so no agent plays in a live server.
 
 Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
 engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's

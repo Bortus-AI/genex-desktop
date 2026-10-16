@@ -42,6 +42,7 @@ const MESSAGE = {
     "Invalid engine projectInFolder (true when the Loop needs the project inside the game folder)",
   InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer and state booleans)`,
   InvalidApps: `Invalid engine apps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Editor; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
+  InvalidPlayerApps: `Invalid engine playerApps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Player; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
 } as const;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -92,13 +93,13 @@ function enginePlay(raw: unknown): EnginePlayDeclaration {
   return play;
 }
 
-/** The editor's apps, in canonical form: Mac bundle ids, then Windows program names. */
-function engineApps(raw: unknown): EngineApps {
+/** A list of apps, in canonical form: Mac bundle ids, then Windows program names; `refusal` names the field. */
+function engineApps(raw: unknown, refusal: string): EngineApps {
   const valid =
     isRecord(raw) &&
     isOptional(raw.mac, (mac) => isDistinctList(mac, 1, LIMIT.Apps, isBundleId)) &&
     isOptional(raw.windows, (windows) => isDistinctList(windows, 1, LIMIT.Apps, isExeName));
-  if (!valid) throw new Error(MESSAGE.InvalidApps);
+  if (!valid) throw new Error(refusal);
   const apps: EngineApps = {};
   if (raw.mac !== undefined) apps.mac = [...(raw.mac as string[])];
   if (raw.windows !== undefined) apps.windows = [...(raw.windows as string[])];
@@ -133,6 +134,7 @@ export function validateEngine(
     projectInFolder: raw.projectInFolder as boolean,
   };
   if (raw.play !== undefined) engine.play = enginePlay(raw.play);
-  if (raw.apps !== undefined) engine.apps = engineApps(raw.apps);
+  if (raw.apps !== undefined) engine.apps = engineApps(raw.apps, MESSAGE.InvalidApps);
+  if (raw.playerApps !== undefined) engine.playerApps = engineApps(raw.playerApps, MESSAGE.InvalidPlayerApps);
   return engine;
 }

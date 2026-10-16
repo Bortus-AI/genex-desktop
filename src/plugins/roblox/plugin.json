@@ -26,7 +26,8 @@
     "fact": "roblox-project",
     "projectInFolder": false,
     "play": { "players": 8, "clock": "none", "pointer": true, "state": true },
-    "apps": { "mac": ["com.Roblox.RobloxStudio"], "windows": ["RobloxStudioBeta.exe"] }
+    "apps": { "mac": ["com.Roblox.RobloxStudio"], "windows": ["RobloxStudioBeta.exe"] },
+    "playerApps": { "mac": ["com.roblox.RobloxPlayer"], "windows": ["RobloxPlayerBeta.exe"] }
   },
   "tools": [
     {

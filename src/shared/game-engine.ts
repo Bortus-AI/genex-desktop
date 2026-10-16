@@ -46,7 +46,8 @@ export interface EngineApps {
  * The engine a `game-engine` plugin declares (`engine` in its manifest, API 3): its id (the
  * plugin's own), the name the person reads, the project files a game links, the fact a linked
  * game holds, whether the Loop needs the project inside the game folder (its save points hold it),
- * what its editor can do in play and the apps its editor runs as.
+ * what its editor can do in play, the apps its editor runs as, and the apps its published games are
+ * played in.
  */
 export interface EngineDeclaration {
   id: EngineId;
@@ -59,6 +60,8 @@ export interface EngineDeclaration {
   projectInFolder: boolean;
   play?: EnginePlayDeclaration;
   apps?: EngineApps;
+  /** The apps the engine's games are played in by everyone (a live server): computer use never drives them, not even in a setup assist. */
+  playerApps?: EngineApps;
 }
 
 /** The engines installed plugins declare, by id. */

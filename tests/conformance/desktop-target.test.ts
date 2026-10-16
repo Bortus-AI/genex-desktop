@@ -272,6 +272,17 @@ describe("the engine-app guard", () => {
     }
   });
 
+  it("never drives the app an engine's games are played in, with or without an assist that names it", () => {
+    const player: DesktopApp = { name: "Roblox", bundleId: "com.roblox.RobloxPlayer", pid: 41 };
+    const players = new Set(["com.roblox.RobloxPlayer"]);
+    for (const granted of [null, new Set(["com.roblox.RobloxPlayer", "com.example.toy"])]) {
+      const refusal = engineAppRefusal(player, { declared, granted, players });
+      assert.match(String(refusal), /Roblox is where an engine's games are played/, String(granted));
+      assert.match(String(refusal), /never plays/);
+    }
+    assert.equal(engineAppRefusal(EDITOR, { declared, granted: null, players }), null);
+  });
+
   it("leaves apps no engine declares alone outside an assist", async () => {
     assert.equal(engineAppRefusal(EDITOR, { declared, granted: null }), null);
     assert.equal(engineAppRefusal({ name: "Nameless", bundleId: null, pid: 1 }, { declared, granted: null }), null);

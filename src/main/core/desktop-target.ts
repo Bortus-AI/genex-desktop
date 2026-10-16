@@ -80,6 +80,8 @@ const MESSAGE = {
   noApp: "no app could be found under that point or in front",
   engineApp: (app: string) =>
     `${app} is a game engine's editor: computer use never builds or play-tests there — use the engine's own tools`,
+  playerApp: (app: string) =>
+    `${app} is where an engine's games are played by everyone: computer use never plays there, not even for setup`,
   outsideAssist: (app: string) => `${app} is not one of the apps this setup step may use`,
 } as const;
 
@@ -89,14 +91,18 @@ export interface EngineAppRule {
   declared: ReadonlySet<string>;
   /** The apps the chat's live setup assist was granted; null outside an assist. */
   granted: ReadonlySet<string> | null;
+  /** Bundle ids of the apps every enabled engine's games are played in (`engine.playerApps.mac`): never driven. */
+  players?: ReadonlySet<string>;
 }
 
 /**
- * Why the engine-app guard refuses an app, or null: during an assist every app outside its grant;
- * outside one, every engine's editor. The apps the studio never drives are refused before this.
+ * Why the engine-app guard refuses an app, or null: an app an engine's games are played in always;
+ * during an assist every app outside its grant; outside one, every engine's editor. The apps the
+ * studio never drives are refused before this.
  */
 export function engineAppRefusal(app: DesktopApp, rule: EngineAppRule): string | null {
   const id = app.bundleId;
+  if (id !== null && rule.players?.has(id)) return MESSAGE.playerApp(appName(app));
   if (rule.granted) return id !== null && rule.granted.has(id) ? null : MESSAGE.outsideAssist(appName(app));
   return id !== null && rule.declared.has(id) ? MESSAGE.engineApp(appName(app)) : null;
 }

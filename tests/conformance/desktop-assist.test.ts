@@ -20,6 +20,8 @@ import {
   AssistGrants,
   type AssistHost,
   assistGrants,
+  declaredEngineApps,
+  declaredPlayerApps,
   engineAssist,
 } from "../../src/main/core/desktop-assist.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
@@ -269,6 +271,25 @@ async function toyWithAssist(): Promise<string> {
   await writeFile(file, JSON.stringify(manifest, null, 2));
   return dir;
 }
+
+describe("the apps engines declare", () => {
+  const plugin = (enabled: boolean, engine: { apps?: { mac?: string[] }; playerApps?: { mac?: string[] } }) => ({
+    enabled,
+    removed: false,
+    manifest: {
+      engine: { id: "kiln", label: "Kiln", projectFiles: [".kiln"], fact: "kiln", projectInFolder: false, ...engine },
+    },
+  });
+
+  it("names the apps every enabled engine's games are played in, apart from its editors", () => {
+    const plugins = [
+      plugin(true, { apps: { mac: ["com.kiln.Editor"] }, playerApps: { mac: ["com.kiln.Player"] } }),
+      plugin(false, { playerApps: { mac: ["com.off.Player"] } }),
+    ];
+    assert.deepEqual([...declaredPlayerApps(plugins)], ["com.kiln.Player"]);
+    assert.deepEqual([...declaredEngineApps(plugins)], ["com.kiln.Editor"]);
+  });
+});
 
 describe("the toy engine's Do it for me, through a real core", () => {
   let lite: CoreLite;

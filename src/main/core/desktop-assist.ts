@@ -135,10 +135,19 @@ export function assistGrants(core: object): AssistGrants {
   return made;
 }
 
+/** What the engine-app guard reads of a plugin: whether it is live, and its engine declaration. */
+type EnginePlugin = Pick<PluginInfo, "enabled" | "removed"> & { manifest: Pick<PluginInfo["manifest"], "engine"> };
+
+const livePlugins = (plugins: readonly EnginePlugin[]) => plugins.filter((plugin) => plugin.enabled && !plugin.removed);
+
 /** The Mac bundle ids of the editors every enabled engine plugin declares: the guard's refusals outside an assist. */
-export function declaredEngineApps(plugins: readonly PluginInfo[]): ReadonlySet<string> {
-  const live = plugins.filter((plugin) => plugin.enabled && !plugin.removed);
-  return new Set(live.flatMap((plugin) => plugin.manifest.engine?.apps?.mac ?? []));
+export function declaredEngineApps(plugins: readonly EnginePlugin[]): ReadonlySet<string> {
+  return new Set(livePlugins(plugins).flatMap((plugin) => plugin.manifest.engine?.apps?.mac ?? []));
+}
+
+/** The Mac bundle ids of the apps every enabled engine's games are played in: refused always, an assist included. */
+export function declaredPlayerApps(plugins: readonly EnginePlugin[]): ReadonlySet<string> {
+  return new Set(livePlugins(plugins).flatMap((plugin) => plugin.manifest.engine?.playerApps?.mac ?? []));
 }
 
 /** What an assist needs of the host. */

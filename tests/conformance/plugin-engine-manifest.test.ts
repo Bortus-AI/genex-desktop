@@ -95,6 +95,14 @@ const refused: Array<[name: string, value: unknown, header: Record<string, unkno
   ["a Windows app that is a path", engine({ apps: { windows: ["C:\\Kiln\\KilnEditor.exe"] } }), {}, /apps/],
   ["a Windows app named only .exe", engine({ apps: { windows: [".exe"] } }), {}, /apps/],
   ["the same Windows app twice", engine({ apps: { windows: ["Kiln.exe", "Kiln.exe"] } }), {}, /apps/],
+  ["player apps that are not an object", engine({ playerApps: ["com.kiln.Player"] }), {}, /playerApps/],
+  ["a player app that is a path", engine({ playerApps: { mac: ["/Applications/Kiln Player.app"] } }), {}, /playerApps/],
+  [
+    "a Windows player app that is a path",
+    engine({ playerApps: { windows: ["C:\\Kiln\\Player.exe"] } }),
+    {},
+    /playerApps/,
+  ],
 ];
 
 describe("a plugin's engine declaration", () => {
@@ -147,6 +155,15 @@ describe("a plugin's engine declaration", () => {
     const bare = validateManifest(manifest(engine({ play: {}, apps: { windows: ["Kiln.exe"] } }))).engine;
     assert.deepEqual(bare?.play, {});
     assert.deepEqual(bare?.apps, { windows: ["Kiln.exe"] });
+  });
+
+  it("keeps the apps an engine's games are played in, and Roblox's names its player", () => {
+    const kept = validateManifest(
+      manifest(engine({ playerApps: { windows: ["KilnPlayer.exe"], mac: ["com.kiln.Player"] } })),
+    ).engine;
+    assert.deepEqual(kept?.playerApps, { mac: ["com.kiln.Player"], windows: ["KilnPlayer.exe"] });
+    const roblox = validateManifest(read(path.join("src", "plugins", "roblox", "plugin.json"))).engine;
+    assert.deepEqual(roblox?.playerApps, { mac: ["com.roblox.RobloxPlayer"], windows: ["RobloxPlayerBeta.exe"] });
   });
 
   it("leaves a game-engine plugin without a declaration as it was", () => {

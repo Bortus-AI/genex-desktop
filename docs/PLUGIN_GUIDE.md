@@ -200,7 +200,8 @@ has (one or two dotted parts, such as `.project.json`); `fact` is one your `dete
 `projectInFolder` is true when the project must sit inside the game folder for save points to hold
 it. Optional `play` says what your editor can do in play (`players` 1–8, `clock`, `pointer`,
 `state`), and `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at
-most 4 each), which computer use never drives to build or play. See
+most 4 each), which computer use never drives to build or play; `playerApps` names the apps your
+published games are played in, which computer use never drives at all. See
 [The engine declaration](plugins.md#the-engine-declaration).
 
 What your engine generates while it runs stays out of the game's history when you say so:
