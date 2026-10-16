@@ -54,7 +54,7 @@ A game's folder owns its identity. Commits and checkpoints skip engine scratch (
 merges. Snapshots and links use raw bytes, Git hooks and filters off; LFS pointers stay
 pointers. Unsent text survives loading; hidden workspaces ignore keys.
 
-The live game is a native view overlays occlude; desktop captures can't prove it.
+The live game is a native view; while an overlay covers it, the stage holds its frame.
 
 ## Where to work
 

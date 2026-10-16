@@ -593,6 +593,8 @@ export interface StudioApi {
   /** What waits for this game's Live Reload and the build Live shows, as `live.behind` says it: read on mount. */
   liveBehind(project: string): Promise<LiveBehindEvent>;
   previewState(): Promise<unknown>;
+  /** The Live game as it looks now (a JPEG data URL), taken before a dialog covers it; null when there is none. */
+  previewCoverStill(): Promise<string | null>;
   /** Whose page Live holds, whether it is still navigating, and whether its requests have settled. */
   previewLive(): Promise<{
     project: string | null;
