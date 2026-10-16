@@ -102,7 +102,7 @@ bundled copy runs with cua's telemetry and update check turned off.
 ## Vendored Genex embed SDK (@genex-ai/embed-sdk)
 
 Template games and published games that bring no SDK of their own use Genex's player-identity SDK,
-`@genex-ai/embed-sdk` 0.30.0 (MIT, as its package.json declares; the package ships no license
+`@genex-ai/embed-sdk` 0.33.0 (MIT, as its package.json declares; the package ships no license
 file). Its browser modules are copied unchanged to `dist/resources/vendor/genex/embed-sdk` and to
 `dist/resources/plugins/genex/embed-sdk`, and from there into a published game's
 `vendor/genex/embed-sdk`.
@@ -272,7 +272,7 @@ SOFTWARE.
 
 These npm packages ship in the app without a license file of their own; their notices follow.
 
-### @genex-ai/embed-sdk 0.30.0
+### @genex-ai/embed-sdk 0.33.0
 
 Bundled into `vendor/genex/`, the player-identity SDK a game made from Studio's template maps in its import
 map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
