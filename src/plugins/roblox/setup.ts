@@ -187,8 +187,21 @@ async function checkFolders(paths: SetupPaths): Promise<boolean> {
   return true;
 }
 
-/** The helper file in the Plugins folder: missing, or a plain file read for its version. */
-async function installedHelper(paths: SetupPaths): Promise<InstalledHelper> {
+/**
+ * Whether helper bytes of this Genex's own version are still an earlier Genex's write: not the
+ * shipped bytes, but the bytes Genex's record says it wrote. A version alone can't tell a changed
+ * helper shipped under the same version; a person's own edit is never taken for Genex's.
+ */
+async function earlierGenexBytes(options: SetupOptions, bytes: Buffer): Promise<boolean> {
+  const recorded = (await readRecord(options.storage))?.helper?.sha256;
+  if (!recorded) return false;
+  const installed = sha256(bytes);
+  return installed === recorded && installed !== sha256(await readFile(options.helper));
+}
+
+/** The helper file in the Plugins folder: missing, or a plain file read for its version (and, at this version, its bytes). */
+async function installedHelper(options: SetupOptions): Promise<InstalledHelper> {
+  const { paths } = options;
   const file = path.join(paths.plugins, HELPER_FILE);
   const info = await lstat(file).catch(() => undefined);
   if (!info) return { file, state: HelperState.Missing };
@@ -199,7 +212,8 @@ async function installedHelper(paths: SetupPaths): Promise<InstalledHelper> {
   });
   const version = helperVersionOf(bytes.toString("utf8"));
   if (version === undefined || version < HELPER_VERSION) return { file, state: HelperState.Outdated, version, bytes };
-  const state = version > HELPER_VERSION ? HelperState.Newer : HelperState.Current;
+  if (version > HELPER_VERSION) return { file, state: HelperState.Newer, version, bytes };
+  const state = (await earlierGenexBytes(options, bytes)) ? HelperState.Outdated : HelperState.Current;
   return { file, state, version, bytes };
 }
 
@@ -249,12 +263,22 @@ async function readRecord(storage: string): Promise<SetupRecord | null> {
 }
 
 /**
- * The helper Genex's record says it added: its version, and whether it is this Genex's own or an
- * older one. Read from the plugin's storage only, never from the Plugins folder.
+ * The helper Genex's record says it added: its version, and whether it is this Genex's own (this
+ * version's shipped bytes, or a newer one) or an older one. Read from the plugin's storage and the
+ * shipped file only, never from the Plugins folder.
  */
-export async function recordedHelper(storage: string): Promise<{ version: number; current: boolean } | undefined> {
+export async function recordedHelper(
+  storage: string,
+  shipped: string,
+): Promise<{ version: number; current: boolean } | undefined> {
   const helper = (await readRecord(storage))?.helper;
-  return helper ? { version: helper.version, current: helper.version >= HELPER_VERSION } : undefined;
+  if (!helper) return undefined;
+  if (helper.version !== HELPER_VERSION) return { version: helper.version, current: helper.version > HELPER_VERSION };
+  const same = await readFile(shipped).then(
+    (bytes) => sha256(bytes) === helper.sha256,
+    () => true,
+  );
+  return { version: helper.version, current: same };
 }
 
 /** Writes `bytes` to `file` whole or not at all, never through a link at that name; `mode` for a new file. */
@@ -320,7 +344,7 @@ function nextRecord(
 /** What Set up would find, without writing anything; it reads the Plugins folder, so only from the person's press. */
 export async function inspectSetup(options: SetupOptions): Promise<SetupState> {
   const pluginsFolder = await checkFolders(options.paths);
-  const helper = await installedHelper(options.paths);
+  const helper = await installedHelper(options);
   const switches = await planSwitches(options.paths.settings);
   const state: SetupState = {
     helper: helper.state,
@@ -362,7 +386,7 @@ async function writeSetup(
 export async function setUp(options: SetupOptions): Promise<SetupDone> {
   if (await options.running()) throw refuse(SetupRefusal.StudioRunning, MESSAGE.Setup.StudioRunning);
   const pluginsFolder = await checkFolders(options.paths);
-  const helper = await installedHelper(options.paths);
+  const helper = await installedHelper(options);
   const switches = await planSwitches(options.paths.settings);
   const change = await writeSetup(options, { pluginsFolder, helper, switches });
   return {
@@ -375,7 +399,7 @@ export async function setUp(options: SetupOptions): Promise<SetupDone> {
 /** Brings the helper up to the shipped version, leaving a current or newer one and every setting as they are. */
 export async function updateHelper(options: SetupOptions): Promise<HelperChange> {
   const pluginsFolder = await checkFolders(options.paths);
-  const helper = await installedHelper(options.paths);
+  const helper = await installedHelper(options);
   if (!needsHelper(helper.state)) return HelperChange.Kept;
   return writeSetup(options, { pluginsFolder, helper, switches: { files: 0, alreadyOn: 0, writes: [] } });
 }

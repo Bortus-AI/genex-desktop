@@ -455,7 +455,7 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
   const { install, facts, storage } = await readStudio(deps, context);
   const running = facts.running || (facts.installed && (await studioRunning(deps)));
   const mcp = facts.installed ? await mcpSwitch(deps) : undefined;
-  const helper = facts.setUp && storage ? await recordedHelper(storage) : undefined;
+  const helper = facts.setUp && storage ? await recordedHelper(storage, deps.helper) : undefined;
   const { published, ...place } = await placeFacts(context, storage);
   const rows: RobloxStepFacts = {
     ...facts,

@@ -24,6 +24,7 @@ import {
   setUp,
   setupPaths,
   undoSetup,
+  recordedHelper,
   updateHelper,
 } from "../../src/plugins/roblox/setup.ts";
 import { RobloxSetupError, SetupRefusal } from "../../src/plugins/roblox/setup-refusal.ts";
@@ -448,6 +449,32 @@ describe("the helper's version", () => {
         assert.equal(await readFile(target, "utf8"), expected);
         if (ends === "shipped") assert.equal((await inspectSetup(home.options())).helper, HelperState.Current);
       });
+
+  it("an earlier Genex's helper of the same version but other bytes is updated; a person's edit of it is kept", async () => {
+    const home = await makeHome();
+    await setUp(home.options());
+    const target = path.join(home.paths.plugins, HELPER_FILE);
+    const recordFile = path.join(home.storage, "setup", "record.json");
+    // An earlier Genex shipped other bytes under the same HELPER_VERSION, and recorded them.
+    const earlier = helperAt(HELPER_VERSION);
+    await writeFile(target, earlier);
+    const record = JSON.parse(await readFile(recordFile, "utf8"));
+    record.helper.sha256 = createHash("sha256").update(earlier).digest("hex");
+    await writeFile(recordFile, JSON.stringify(record));
+    assert.equal((await inspectSetup(home.options())).helper, HelperState.Outdated);
+    assert.deepEqual(await recordedHelper(home.storage, SHIPPED_HELPER), { version: HELPER_VERSION, current: false });
+    assert.equal(await updateHelper(home.options()), HelperChange.Updated);
+    assert.deepEqual(await recordedHelper(home.storage, SHIPPED_HELPER), { version: HELPER_VERSION, current: true });
+    assert.equal(await readFile(target, "utf8"), await readFile(SHIPPED_HELPER, "utf8"));
+    assert.equal((await inspectSetup(home.options())).helper, HelperState.Current);
+
+    // The person's own edit, at the same version and not what Genex recorded, stays theirs.
+    const edited = `${helperAt(HELPER_VERSION)}-- my change\n`;
+    await writeFile(target, edited);
+    assert.equal((await inspectSetup(home.options())).helper, HelperState.Current);
+    assert.equal(await updateHelper(home.options()), HelperChange.Kept);
+    assert.equal(await readFile(target, "utf8"), edited);
+  });
 
   it("a current helper is not rewritten", async () => {
     const home = await makeHome();
