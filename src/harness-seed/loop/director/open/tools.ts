@@ -2,7 +2,7 @@
  * The open lead's tool calls, answered: its notes (decision cards on the run's feed), its status
  * (time, save points, workers, the run's jobs, what the folder holds), Genex's worker tools through
  * the run's own pool (its copies merged into the game folder on the git-write queue the lead's saves
- * share), its save points, rewinds and restarts (save-point.ts), and its `finish` (finish.ts). A call is counted while it runs, so the chat never cuts the
+ * share), its save points, rewinds and restarts (save-point.ts), its pause for the person, and its `finish` (finish.ts). A call is counted while it runs, so the chat never cuts the
  * lead's turn short inside one (wake.ts).
  */
 import type { AnyRecord } from "../../../types/harness.d.ts";
@@ -28,6 +28,8 @@ import { WRAP_UP_WORDS } from "../wrap-up-prompts.ts";
 /** The longest note Genex keeps, and its plain sentence. */
 const NOTE_CHARS = 2_000;
 const NOTE_PLAIN_CHARS = 400;
+/** The longest reason a pause gives the person. */
+const PAUSE_CHARS = 600;
 
 /** The worker tools the run's pool answers. */
 const WORKER_TOOLS: readonly string[] = Object.values(WorkerTool);
@@ -72,6 +74,18 @@ async function noteTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
   await loopRun.saveJournal();
   await loopRun.decision(text, plain || null);
   return OPEN_WORDS.noted;
+}
+
+/**
+ * `pause`: the Loop pauses with the lead's words as its reason once this turn ends (the director's
+ * close reads `open.halted`), so a block only the person can lift never eats the Loop's time.
+ */
+async function pauseTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
+  const why = String(args.why ?? "").trim();
+  if (!why || !loopRun.open) return OPEN_WORDS.needsWhy;
+  loopRun.open.halted = why.slice(0, PAUSE_CHARS);
+  await loopRun.saveJournal();
+  return OPEN_WORDS.pausing;
 }
 
 /** The run's jobs as `run_status` lists them, or what the host said instead. */
@@ -139,6 +153,7 @@ async function answer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<
   if (WORKER_TOOLS.includes(name)) return workerAnswer(loopRun, name, args);
   const saved = saveAnswer(loopRun, name, args);
   if (saved) return saved;
+  if (name === OpenTool.Pause) return pauseTool(loopRun, args);
   if (name === DirectorTool.Note) return noteTool(loopRun, args);
   if (name === DirectorTool.WrapUp) return wrapUp(loopRun, args);
   if (name === DirectorTool.RunStatus) return JSON.stringify(await openStatus(loopRun));

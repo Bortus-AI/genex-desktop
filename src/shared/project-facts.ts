@@ -173,6 +173,18 @@ export function globMatches(rel: string, glob: string): boolean {
   return false;
 }
 
+/**
+ * Whether a game-relative POSIX path is the file of one of `globs`, each parsed once: the files a
+ * walk keeps for these globs. A folder glob, or one outside the grammar, matches nothing.
+ */
+export function anyFileGlob(globs: readonly string[]): (rel: string) => boolean {
+  const parsed = globs.filter(isFileGlob).map(parseGlob);
+  return (rel) => {
+    const parts = rel.split("/");
+    return parsed.some((glob) => matchedPrefix(parts, glob) >= 0);
+  };
+}
+
 /** Whether a file (by its segments) lies inside a folder some folder glob names. */
 function isUnder(parts: readonly string[], folders: readonly ParsedGlob[]): boolean {
   for (let depth = 1; depth < parts.length; depth++) {

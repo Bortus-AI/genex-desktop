@@ -56,6 +56,17 @@ describe("a game's Unity project folder", () => {
     assert.equal((await findUnityProject(game))?.root, path.join(game, "deep", "deeper"));
   });
 
+  it("is still found beside folders holding thousands of other files", async () => {
+    const game = await realTmp("unity-game-");
+    for (let folder = 0; folder < 50; folder++) {
+      const shots = path.join(game, "docs", `proof-${folder}`);
+      await mkdir(shots, { recursive: true });
+      await Promise.all(Array.from({ length: 100 }, (_, shot) => writeFile(path.join(shots, `${shot}.png`), "")));
+    }
+    await makeProject(path.join(game, "unity"));
+    assert.equal((await findUnityProject(game))?.root, path.join(game, "unity"));
+  });
+
   it("never takes a project through a link, a hidden folder or node_modules", async () => {
     const outside = await makeProject(await realTmp("unity-outside-"));
     const hostile: Array<[string, (game: string) => Promise<unknown>]> = [

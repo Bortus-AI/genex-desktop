@@ -47,7 +47,7 @@ const catalogue = () =>
         parameters: [parameter("save_path", "String"), parameter("width", "Int32")],
       },
       { name: "eval", description: "Run C#", tags: ["scripts/eval"], parameters: [parameter("code", "String", true)] },
-      { name: "package_add", description: "Add a package", tags: ["packages"], parameters: [] },
+      { name: "quit", description: "Quit the editor", tags: ["editor"], parameters: [] },
       {
         name: "batch",
         description: "Run several",
@@ -205,7 +205,7 @@ describe("the Unity editor connector", () => {
   it("refuses a call the gate refuses, sending the editor no command", async () => {
     const refused: Array<[Record<string, unknown>, RegExp]> = [
       [{ command: "eval", parameters: { code: 'System.IO.File.Delete("x")' } }, /eval is not available to agents/],
-      [{ command: "package_add", parameters: { name: "x" } }, /package_add is not available to agents/],
+      [{ command: "quit" }, /quit is not available to agents/],
       [{ command: "batch", parameters: { operations: [{ command: "eval" }] } }, /eval is not available to agents/],
       [{ command: "Editor Play" }, /command must be the name of a command from list_commands/],
       [{ command: "fly_away" }, /command must be the name of a command from list_commands/],

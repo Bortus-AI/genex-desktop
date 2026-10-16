@@ -15186,3 +15186,47 @@ describe("a plugin's web build and the chat's turn", () => {
     assert.notEqual(kindKey(site), kindKey(before), "a web game no plugin claims is one");
   });
 });
+
+describe("a Loop whose lead lost what its goal needs (claude-code-and-chatgpt)", () => {
+  const WHY =
+    "Unity's editor tools are gone from this session, so nothing I change reaches the game. Open the project in Unity, then press Resume.";
+
+  it("MK1. a Unity lead whose editor tools vanished spent hours on work that never reached the game, with no way to tell the person: it pauses the Loop with its words, and nothing runs after", async () => {
+    const { gameRepo, loopHost } = await import("../helpers/loop-host.ts");
+    const { OPEN_WORDS } = await import("../../src/harness-seed/loop/director/open/prompts.ts");
+    const dir = await tmpDir("lead-pauses-");
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    await gameRepo(dir);
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ tool }) => {
+          answers.push(await tool("pause", {}));
+          answers.push(await tool("pause", { why: WHY }));
+          answers.push(await tool("save_point", { label: "Late", summary: "after the pause" }));
+          return undefined;
+        },
+      ],
+    });
+    const report = await host.start();
+    assert.match(String(answers[0]), /pause needs/, "a pause says what only the person can do");
+    assert.match(String(answers[1]), /end your turn/i);
+    assert.equal(answers[2], OPEN_WORDS.paused, "nothing is kept once it pauses");
+    assert.equal(report.executionStatus, "paused");
+    assert.match(String(report.stoppedBecause), /Open the project in Unity, then press Resume/);
+    assert.equal(host.leadCalls().length, 1, "no turn after the pause");
+    assert.equal(host.appended("autopilot_paused").length, 1);
+    assert.equal(host.reviewed().length, 0, "nothing was claimed");
+  });
+});
+
+describe("a tool the user asked for that can't run here (claude-code-and-chatgpt)", () => {
+  it("MK2. the contractor saw Blender was too old to run, said Unity was ready and queued a 24-hour build that never used Blender: its brief says to tell the user with the fix first", async () => {
+    const { buildContractorBrief } = await import("../../src/harness-seed/loop/chat-session.ts");
+    const brief = buildContractorBrief({ ask: "Make a Unity fighting game. Use blender." });
+    assert.match(brief, /never carry on without it in silence/);
+    assert.match(brief, /__install/);
+  });
+});

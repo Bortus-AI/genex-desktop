@@ -23,6 +23,8 @@ const HostService = {
 } as const;
 /** The native job state a finished model run reports. */
 const JOB_COMPLETED = "completed";
+/** The runtime state of a Blender that runs here. */
+const RUNTIME_READY = "ready";
 
 /** The native runtime every call of this plugin names. */
 const BLENDER = { runtime: "blender" } as const;
@@ -71,7 +73,7 @@ const QUOTE_CHARS = 60;
 /** The setup actions plugin.json declares. */
 const BlenderAction = { Status: "status", Install: "install", CancelInstall: "cancel-install" } as const;
 /** The agent tools plugin.json declares. */
-const BlenderTool = { Status: "status", Retrieve: "retrieve", Model: "model" } as const;
+const BlenderTool = { Status: "status", Retrieve: "retrieve", Model: "model", Install: "install" } as const;
 /**
  * The native jobs plugin.json declares: a new model from a script, a transform of an existing one,
  * or either with extra game files the script reads.
@@ -79,8 +81,11 @@ const BlenderTool = { Status: "status", Retrieve: "retrieve", Model: "model" } a
 const BlenderJob = { Model: "model", Transform: "transform", Compose: "compose" } as const;
 /** The job's `rig` value: whether armatures and their actions go into the GLB. */
 const RigValue = { On: "1", Off: "0" } as const;
-/** The engines this plugin guides by name, as studio.json's `engine.kind` names them (absent: the web). */
-const GameEngine = { Web: "web", Unreal: "unreal" } as const;
+/**
+ * The engines this plugin guides by name: as studio.json's `engine.kind` names them (absent: the
+ * web), and Unity, by the Unity project in the game's folder.
+ */
+const GameEngine = { Web: "web", Unreal: "unreal", Unity: "unity" } as const;
 type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
 /** How the host spells an engine's id (`shared/game-engine.ts` `ENGINE_ID`); any other spelling links no engine. */
 const ENGINE_ID = /^[a-z][a-z0-9-]{1,39}$/;
@@ -88,6 +93,8 @@ const ENGINE_ID = /^[a-z][a-z0-9-]{1,39}$/;
 type EngineKind = GameEngine | string;
 /** The game's own record, where a game linked to an engine names it. */
 const STUDIO_JSON = "studio.json";
+/** Where a game holds its Unity project's version file: the game is the project, or it is in unity/. */
+const UNITY_VERSION_FILES = ["ProjectSettings/ProjectVersion.txt", "unity/ProjectSettings/ProjectVersion.txt"];
 /** A Godot project's settings file, in the folder Genex delivered a Godot game's files into. */
 const GODOT_PROJECT_FILE = "project.godot";
 /** The folder delivered files land in, inside the delivery's root (`assets/<plugin>/<job>/`). */
@@ -127,6 +134,12 @@ const MESSAGE = {
     "Files are relative to the game folder. Inspect these renders first, then bring model.glb in with the engine's own import tools: Blender's +Z is up and one unit is a metre, so check the model's scale and which way it faces once it is in. Look at it in the game from the player's view: a delivered file alone is not integration proof.",
   GodotGuidance: (resPath: string) =>
     `Files are relative to the game folder; the model is inside the Godot project as ${resPath}. Inspect these renders first, then use it in a scene: an ext_resource of type PackedScene with that path, instanced as a node (or load(...).instantiate() in GDScript). Godot imports it on godot__check. Blender metres are Godot metres and +Z up becomes +Y up; model with the pivot at the base. Look at it with godot__screenshot from the player's view: a delivered file alone is not integration proof.`,
+  UnityGuidance:
+    "Files are relative to the game folder, beside its Unity project. Inspect these renders first, then bring model.glb into the project: Unity reads .glb only through the glTFast package (com.unity.cloud.gltfast), so add it with the editor's package_add when the project lacks it, then call import_asset with the delivered file as source (a path relative to the Unity project) and a path under Assets/. Blender metres are Unity metres and +Z up becomes +Y up; model with the pivot at the base and check which way it faces in the scene. Look at it with capture_game_view from the player's view: a delivered file alone is not integration proof.",
+  NotReady: (detail: string) =>
+    `Local Blender can't run on this Mac: ${detail} Tell the user in your next reply, since they may want Blender used: Genex can download the Blender it pins (about 350 MB) into its own storage and leaves their Blender as it is. Call blender__install to ask them (they confirm it on a card, and the download takes a few minutes), or they press Download Blender in Settings, Plugins, Local Blender. Until blender__status reads ready, don't make these models another way without saying so.`,
+  InstallStarted:
+    "The download of the Blender Genex pins has started in Genex's storage; the user's own Blender stays as it is. Call blender__status until its runtime reads ready (a few minutes), then model.",
   UnrealJoin: (meshes: number) =>
     `This file holds ${meshes} meshes: Unreal imports one mesh per file best, so join them unless a part must move on its own.`,
   RigLeftOut: (armatures: number) =>
@@ -305,27 +318,50 @@ async function godotPath(ctx: PluginContext, files: readonly string[]): Promise<
   return typeof read === "string" ? `res://${model.slice(at)}` : null;
 }
 
-/**
- * The engine the game builds in, from its studio.json: Unreal, any other engine by its id, else
- * (no record, one that doesn't read, or a kind no engine id spells) the web.
- */
-async function gameEngine(ctx: PluginContext): Promise<EngineKind> {
+/** Whether the game's folder has the file at `file`, read through the host. */
+async function holdsFile(ctx: PluginContext, file: string): Promise<boolean> {
+  return typeof (await ctx.host(HostService.ProjectRead, { path: file }).catch(() => null)) === "string";
+}
+
+/** The engine studio.json links the game to, by its id: none with no record, one that doesn't read, or a kind no engine id spells. */
+async function linkedEngine(ctx: PluginContext): Promise<string | undefined> {
   try {
     const kind: unknown = JSON.parse(await ctx.host(HostService.ProjectRead, { path: STUDIO_JSON }))?.engine?.kind;
-    return typeof kind === "string" && ENGINE_ID.test(kind) ? kind : GameEngine.Web;
+    return typeof kind === "string" && ENGINE_ID.test(kind) ? kind : undefined;
   } catch {
-    return GameEngine.Web;
+    return undefined;
   }
+}
+
+/** The engine the game builds in: the one its studio.json links, else Unity by its project's version file, else the web. */
+async function gameEngine(ctx: PluginContext): Promise<EngineKind> {
+  const linked = await linkedEngine(ctx);
+  if (linked) return linked;
+  for (const file of UNITY_VERSION_FILES) if (await holdsFile(ctx, file)) return GameEngine.Unity;
+  return GameEngine.Web;
 }
 
 /**
  * What to do with the delivery: Godot's `res://` path when it landed in a Godot project, the web's
- * loader, Unreal's units, or any other engine's own import.
+ * loader, Unreal's units, Unity's glTF import, or any other engine's own import.
  */
 function deliveryGuidance(engine: EngineKind, resPath: string | null): string {
   if (resPath) return MESSAGE.GodotGuidance(resPath);
   if (engine === GameEngine.Web) return MESSAGE.WebGuidance;
+  if (engine === GameEngine.Unity) return MESSAGE.UnityGuidance;
   return engine === GameEngine.Unreal ? MESSAGE.UnrealGuidance : MESSAGE.EngineGuidance;
+}
+
+/** Blender's state on this Mac, with what to tell the user when it can't run. */
+async function runtimeStatus(ctx: PluginContext) {
+  const runtime = await ctx.host(HostService.RuntimeDetect, BLENDER);
+  return runtime?.state === RUNTIME_READY ? { runtime } : { runtime, next: MESSAGE.NotReady(runtime?.detail ?? "") };
+}
+
+/** A failed job's error, or why Blender can't run here and what to tell the user, when that is the reason. */
+async function jobError(ctx: PluginContext, error: unknown): Promise<unknown> {
+  const status = await runtimeStatus(ctx).catch(() => null);
+  return status?.next ? new Error(status.next) : error;
 }
 
 /** What to do with the delivery in this engine (a Godot project when `resPath` names it), and what the file holds that needs a word. */
@@ -349,7 +385,9 @@ async function model(args: ToolArgs, ctx: PluginContext) {
   const slug = assetSlug(name);
   const extras = await extraInputs(args.inputs, ctx.directory);
   const script = await scriptFor(args, name, slug, ctx.directory);
-  const job = await ctx.host(HostService.NativeRun, nativeRequest(args, script, slug, extras));
+  const job = await ctx.host(HostService.NativeRun, nativeRequest(args, script, slug, extras)).catch(async (error) => {
+    throw await jobError(ctx, error);
+  });
   const result = blenderResult(job);
   if (job.state !== JOB_COMPLETED || !result?.ok)
     throw new Error(MESSAGE.JobFailed(job.id, result?.error || job.stderr || job.reason || MESSAGE.NoExport));
@@ -391,10 +429,11 @@ export const activate: Activate = () => ({
   },
   async tool(name, args, ctx) {
     if (name === BlenderTool.Status)
-      return {
-        runtime: await ctx.host(HostService.RuntimeDetect, BLENDER),
-        jobs: (await ctx.host(HostService.NativeJobs)).map(publicJob),
-      };
+      return { ...(await runtimeStatus(ctx)), jobs: (await ctx.host(HostService.NativeJobs)).map(publicJob) };
+    if (name === BlenderTool.Install) {
+      await ctx.host(HostService.RuntimeInstall, BLENDER);
+      return { status: "downloading", next: MESSAGE.InstallStarted };
+    }
     if (name === BlenderTool.Retrieve) {
       const job = await ctx.host(HostService.NativeResult, { id: String(args.id) });
       if (!job) throw new Error(MESSAGE.NoRecordedJob);

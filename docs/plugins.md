@@ -1686,8 +1686,11 @@ are shown in Plugins and reported as a `failed` change.
 Every listed game carries `facts` (`GameProject.facts`, `shared/project-facts.ts`): what its folder
 holds, as `{id, path, source}`, possibly several (`unreal-project` at `.` and `web-game` at
 `site`). They come from a bounded walk of the folder (`substrate/project-facts.ts`: four folders
-deep, 4,000 entries, never through a link, skipping hidden folders, `node_modules` and the folders
-engines write while they run) matched against the core table (`web-game` by `index.html` outside
+deep, 2,000 folders read, never through a link, skipping hidden folders, `node_modules` and the
+folders engines write while they run) that keeps only the files a rule's glob names, at most 4,000
+(`ruleFiles`), so a folder of other files (a run's thousands of screenshots) never uses up the walk
+before it reaches a project's marker; the Unity plugin finds its project with the same walk. They
+are matched against the core table (`web-game` by `index.html` outside
 output and vendored folders, `unreal-project`, `unreal-plugin` outside a `Plugins/` folder,
 `godot-project`, `unity-project`, `blender-assets`) and the `detect` rules of the **enabled**
 plugins (an installed plugin that is off detects nothing; source `plugin:<id>`). A fact below a
@@ -2566,10 +2569,16 @@ base64 text.
 
 Before a command is sent the gate (`pipeline-gate.ts`) checks it against the catalogue just read.
 It refuses a name the editor does not list; the commands agents never run (`eval`, `eval_file`,
-`menu`, `quit`, `build`, `switch_build_target`, `set_authoring_root`,
-`set_runtime_pipeline_settings`, and every `package_` command but `package_list`, `package_search`
-and `package_status`; `list_commands` leaves them out and `describe_command` describes none); and a
-file outside the game's folder once links are resolved. `run_script` stays available: it compiles
+`quit`, `set_authoring_root`, `set_runtime_pipeline_settings`, and the pre-0.8 `add_package` and
+`remove_package`; `list_commands` leaves them out and `describe_command` describes none); and a
+file outside the game's folder once links are resolved. Agents do what a person does in the
+editor: `package_add`, `package_remove`, `package_resolve` and `package_embed` (a `file:` package's
+folder, relative to the project's `Packages/`, must be inside the game, and any other reach to a
+disk path such as `git+file:` is refused), `switch_build_target`, `build` (only with an `outputPath`
+inside the game, since Unity otherwise builds into the person's last build folder; the skill names
+`Builds/`, which Genex leaves out of history) and `menu`, except an item with a `Quit`, `Exit`,
+`New Project`, `Open Project` or `Open Recent` segment, which would end the editor or open another
+project in it. `run_script` stays available: it compiles
 and runs a C# file of the game's own folder, which the game's checkpoints keep, and is how a scene
 is built with code. Which parameters name files comes from the catalogue's own types: a text
 parameter (`String`, `String[]`) named `path`, `paths`, `save_path`, `output`, `outputPath`,
@@ -2978,8 +2987,12 @@ live inside its plugin. No private core Blender hook is part of an agent's tool 
 A manifest declares fixed `nativeRuntimes` candidates and version probes. An optional installer
 requires an exact HTTPS URL, bytes, SHA-256, archive shape, executable and license notices, plus a
 matching confirmed user action. `runtime.detect` is read-only; `runtime.installation` hydrates a
-durable installation job; `runtime.install` and `runtime.cancelInstall` are user-action services.
-An agent cannot choose a binary, download URL or installation action.
+durable installation job; `runtime.cancelInstall` is a user-action service. `runtime.install` runs
+from the person's confirmed action, or from an agent's tool of the same name that declares a
+`confirmation`, so the person answers its card first (Local Blender's `install`); a tool's call
+answers `{started: true}` as the download starts and the installation record says how it ended,
+since a call's deadline must not cut the download short. An agent cannot choose a binary, download
+URL or installation action: either way the manifest's pinned one is installed.
 
 `nativeJobs` declares fixed argument arrays with package/input/output/value bindings, validated
 value patterns, input/output names, deadline, byte limits and optional GPU access. `native.run`

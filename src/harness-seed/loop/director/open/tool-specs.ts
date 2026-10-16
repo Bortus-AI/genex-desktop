@@ -3,7 +3,8 @@
  * list by name, so their words stay one), a `run_status` of its own under the director's name (what `openStatus`
  * answers, none of the web method's branch or boards), Genex's six worker tools with the kinds of worker the
  * project's plugins declare, its save points (`save_point`, `rewind`, and `restart` where a plugin
- * restarts the project's app), and a `finish` of its own: a claim a reviewer checks, with no landing.
+ * restarts the project's app), a `pause` for what only the person can do, and a `finish` of its own:
+ * a claim a reviewer checks, with no landing.
  * Its own list, so the director's (`DIRECTOR_TOOLS`) never changes for it.
  */
 import type { LiveToolSpec, WorkerType } from "../../../types/host-api.d.ts";
@@ -74,6 +75,20 @@ const RESTART: LiveToolSpec = {
   parameters: { type: "object", properties: { why: text("Why it needs a restart, in a few words.") } },
 };
 
+/** `pause`: the Loop pauses with the lead's words for the person, once its turn ends. */
+const PAUSE: LiveToolSpec = {
+  name: OpenTool.Pause,
+  description:
+    "Pause the Loop when the goal needs what only the person can do: a tool, editor or app the work needs is gone or can't run here and nothing you can call brings it back, or it needs an install, a permission or a sign-in. Genex pauses the Loop when this turn ends, with your words as the reason the person reads; their Resume wakes you. Don't spend the Loop's time on work that can't reach the project while such a block lasts.",
+  parameters: {
+    type: "object",
+    properties: {
+      why: text("What stops the goal and what the person should do, in two plain sentences."),
+    },
+    required: ["why"],
+  },
+};
+
 /** The open lead's `run_status`: what `openStatus` answers, under the director's wire name. */
 const OPEN_STATUS: LiveToolSpec = {
   name: DirectorTool.RunStatus,
@@ -102,5 +117,5 @@ export function openTools(
   const shared = DIRECTOR_TOOLS.filter((tool) => SHARED.includes(tool.name));
   const saves = restart ? [SAVE_POINT, REWIND, RESTART] : [SAVE_POINT, REWIND];
   const judgeTools = judge ? [judgePlaySpec(judges)] : [];
-  return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, ...judgeTools, OPEN_FINISH];
+  return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, ...judgeTools, PAUSE, OPEN_FINISH];
 }

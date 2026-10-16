@@ -16,7 +16,7 @@ import path from "node:path";
 import { CORE_FACT_RULES, CoreFact, FactSource, factsOfFiles } from "../../shared/project-facts.ts";
 import { atomicWriteJson, isJsonObject, readJsonIfExists, readRegularFile } from "../../substrate/fsx.ts";
 import { isInside } from "../../substrate/paths.ts";
-import { projectFiles } from "../../substrate/project-facts.ts";
+import { ruleFiles } from "../../substrate/project-facts.ts";
 
 /** The subfolder a game's Unity project is looked for in first, after the game's own folder. */
 export const GAME_PROJECT_FOLDER = "unity";
@@ -84,7 +84,7 @@ async function editorVersionOf(root: string): Promise<string | undefined> {
 
 /** The folders of a game that hold a Unity project, as the host finds the fact: POSIX paths relative to it. */
 async function projectFolders(game: string): Promise<string[]> {
-  const files = await projectFiles(game).catch(() => []);
+  const files = await ruleFiles(game, UNITY_RULES).catch(() => []);
   return factsOfFiles(files, UNITY_RULES).map((fact) => fact.path);
 }
 

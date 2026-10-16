@@ -23,9 +23,9 @@ Genex's moments never ask.
 ## Loops in place
 
 Except for web games at the folder's root (Blender files beside them allowed), the chat leads the
-Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers and claims
-finish; a reviewer checks (three no's stop it). Plugins add steps, reviewer pictures and editor
-locks: while you use an editor, agents wait. A linked engine game is no web game; Unreal and Godot
+Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers, pauses if
+blocked and claims finish; a reviewer checks (three no's stop it). Plugins add steps, reviewer
+pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web game; Unreal and Godot
 projects outside the game get no Loop or Rewind.
 
 ## Unreal
@@ -42,8 +42,8 @@ editor, which saves at save points, reloads after Rewind; **Change project** lin
 Its `web/` build plays in Live.
 
 **Roblox Studio** sets up your Studio; **New Roblox game** writes a Baseplate place, **Use in this
-game** links one per game. Unity sets up and opens its project; agents play through Pipeline (keys
-and mouse need Input System).
+game** links one per game. Unity sets up and opens its project; agents add packages, build and
+play (keys and mouse need Input System).
 
 ## Live's views
 
