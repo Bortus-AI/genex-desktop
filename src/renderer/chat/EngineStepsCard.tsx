@@ -144,7 +144,7 @@ function StepLine({ row, onRun }: { row: StepRow; onRun: (row: StepRow) => void 
   return (
     <li
       data-step={row.id}
-      className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1.5 rounded-[12px] border border-line-strong px-3 py-2.5 @md:grid-cols-[1rem_minmax(0,1fr)_auto]"
+      className="grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] items-start gap-x-2.5 gap-y-1.5 rounded-[12px] border border-line-soft px-3 py-2.5 @md:grid-cols-[1rem_minmax(0,1fr)_auto]"
     >
       <StepMark done={row.done} you={row.you === true} working={row.working === true} clear />
       <StepText row={row} command={command} />
@@ -207,18 +207,22 @@ export function EngineStepsCard({
             <StepLine key={row.id} row={row} onRun={run} />
           ))}
         </ul>
-        <div className="mt-1.5 flex items-center justify-end gap-2">
-          {wayOut ? (
-            <Button size="sm" variant="secondary" onClick={() => press(wayOut)}>
-              {wayOut.label}
-            </Button>
-          ) : (
-            <Button size="sm" variant="secondary" aria-label={STEPS_WORDS.hideLabel} onClick={hide}>
-              {STEPS_WORDS.hide}
-            </Button>
-          )}
-          {card.primary ? <PrimaryButton button={card.primary} onRun={press} /> : null}
-        </div>
+      </div>
+      {/* The card's buttons stay in view under the steps, which scroll above them. */}
+      <div
+        data-engine-steps-actions
+        className="flex shrink-0 items-center justify-end gap-2 border-t border-line px-4 py-2.5"
+      >
+        {wayOut ? (
+          <Button size="sm" variant="secondary" onClick={() => press(wayOut)}>
+            {wayOut.label}
+          </Button>
+        ) : (
+          <Button size="sm" variant="secondary" aria-label={STEPS_WORDS.hideLabel} onClick={hide}>
+            {STEPS_WORDS.hide}
+          </Button>
+        )}
+        {card.primary ? <PrimaryButton button={card.primary} onRun={press} /> : null}
       </div>
     </section>
   );

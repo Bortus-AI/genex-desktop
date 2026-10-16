@@ -319,7 +319,7 @@ A panel is served into an opaque-origin sandboxed frame with
   (`inlinePanelFonts` in the same script pastes Genex's own type in at `<!-- STUDIO_PANEL_FONTS -->`), and
   `project.read` is utf8-only, so a panel cannot display a PNG read from the game folder.
 - The whole bridge is `window.studioPlugin`: `call(method, name?, args?)` with
-  `call('context')` → `{project, apiVersion, theme}` (`theme` carries `background`, `foreground`,
+  `call('context')` → `{project, apiVersion, theme, surface}` (`theme` carries `background`, `foreground`,
   `accent` and the readable button colours `accentFill`, `accentForeground`, `accentHover`),
   `call('settings')` → your standard settings
   and `call('action', name, args)` → a declared action, plus
@@ -327,6 +327,14 @@ A panel is served into an opaque-origin sandboxed frame with
   `[a-z0-9]{1,10}`; native, so a fixture profile answers `unsupported-in-fixture`; see
   [Panels](plugins.md#panels-and-trusted-approval)). Nothing else crosses. A call the person
   cancelled in Studio's confirmation rejects with `code: "cancelled"`; stay quiet then.
+- A panel opened from the stage strip sits in a dialog (`context.surface` is `"card"`), and the
+  dialog is the window: mark each page's heading block `data-panel-head` (its `h2` is the dialog's
+  title, its first `p` the line under it) and each page's Back `data-panel-back`. On a card the SDK
+  hides both (the dialog draws them, and its arrow presses your Back), marks the document
+  `data-surface="card"` so you can drop your own padding, and sizes the frame to your content, so
+  the dialog scrolls once. A page without a marked heading keeps the manifest's panel title.
+- Buttons follow Genex's rule: a padded button has a background. An action for the whole panel
+  that you want quiet is a link (underlined words, no padding), never a padded button without a fill.
 
 `plugin:doctor` warns about both of these mistakes, naming the file.
 
