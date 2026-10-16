@@ -643,14 +643,20 @@ Every plugin that works with an engine's or tool's files (Unreal, Unity and Godo
 next) follows one pattern. Its strip button shows only on a game that is that engine: the game's
 facts name its project (`toolbar[].facts`), or its chat chose the engine before the project exists
 (the status's `shown`). A plugin that is on adds nothing to other games. The button opens one panel,
-titled with the engine's name, in three views: **this game's project** first (its state, where it
+and the dialog is its window: the dialog's title is the view's own heading (Set up Roblox Studio,
+Choose a project) or the engine's name, with Back as an arrow beside it, and the dialog scrolls
+once, with no second padding or scrollbar inside. Three views: **this game's project** first (its state, where it
 lives, the one next step), **setup** only while something it needs is missing, and **choose a
 project** behind Change project (New project on top, Back to the project).
 
 The panel is built from blocks: one subject per block (the project, this computer, the list), a 1px edge,
 14px corners and a fill one step above the dialog; a 13px third-ink label above each, 24px between
 them, 1px dividers between rows inside, and actions in the block's foot (primary first, Change and
-⋯ at its end). List rows are 60px (32px tile, 15px name, 12px mono path, a tag, the version, a
+⋯ at its end). A padded button always has a fill; a rare action for the whole panel (Undo Set up)
+is an underlined link with no padding. A box inside a card (a setup step, in the chat's
+setup card too) has the `line-soft` edge: as quiet as the card's own edge on a light theme, the
+control edge on a dark one. The chat's setup card keeps its buttons in a footer under the steps,
+which scroll above it. List rows are 60px (32px tile, 15px name, 12px mono path, a tag, the version, a
 chevron; the whole row is the button); fact rows 44px, label left and mono value right; 16px side
 padding everywhere. A path starts at `~` with its middle folded to …; a temporary folder says so;
 the full path is the tooltip. Status is a dot and one word, the same in the block's head and on the

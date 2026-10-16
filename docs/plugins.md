@@ -275,8 +275,9 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
-  the stage (`role="dialog"`, labelled with the panel title, closed by a button reading
-  `Close <title>`); the native game view is hidden while it is open.
+  the stage (`role="dialog"`, titled with the panel's own visible `data-panel-head` heading, else
+  the panel title; one scroll, the frame as tall as the panel); the native game view is hidden while
+  it is open.
 - `requiresProject` (default `true`) hides the button until a game is loaded.
 - `facts` (API 3, 1–8 fact ids) shows the button only on a game served by one of them (an
   engine's project); absent, every game. An engine plugin's button always names them and an `icon`,

@@ -92,6 +92,8 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
 .note::before{content:"";width:16px;height:16px;flex:none;margin-top:2px;background:currentColor;-webkit-mask:var(--warning) center/contain no-repeat;mask:var(--warning) center/contain no-repeat}
 .error{color:var(--err);white-space:pre-wrap;overflow-wrap:anywhere}
 @media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:none}.orb,.state[data-tone="starting"]::before{animation:none}}
+/* On a dialog's card the dialog holds the heading and the padding: the page keeps a thin edge for focus rings. */
+:root[data-surface="card"] body{padding:4px}
 /* Last, so it wins over every class that sets a display. */
 [hidden]{display:none}
 </style></head><body>
@@ -114,7 +116,7 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
       <p id="note" class="note" role="status" hidden></p>
       <div id="foot" class="foot" hidden>
         <button type="button" id="primary" class="primary" hidden></button>
-        <div class="end"><button type="button" id="quiet" class="quiet" hidden></button></div>
+        <div class="end"><button type="button" id="quiet" hidden></button></div>
       </div>
     </div>
   </div>
