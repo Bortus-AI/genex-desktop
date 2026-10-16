@@ -1,9 +1,42 @@
-/** Settings → Privacy: Share build metrics (off by default), See what would be sent, Delete what I shared. */
+/**
+ * Settings → Privacy: Share build metrics (off by default), See what would be sent, Delete what I
+ * shared, and a quiet line of links to how the desktop app handles data and Genex's policy and terms.
+ */
 import { type JSX, useEffect, useState } from "react";
 import type { FieldRow, RunSharingStatus } from "../../shared/run-sharing.ts";
 import { Button } from "../ui/Button.tsx";
 import { Switch } from "../ui/switch.tsx";
 import { PRIVACY_WORDS, privacyDeleteWords, problemWords } from "../words.ts";
+
+/** Where Privacy's links go, in the order the line shows them. */
+const POLICY_LINKS = [
+  {
+    id: "desktop",
+    url: "https://github.com/genex-games/genex-desktop/blob/main/PRIVACY.md",
+    label: PRIVACY_WORDS.links.desktop,
+  },
+  { id: "policy", url: "https://genex.games/privacy", label: PRIVACY_WORDS.links.policy },
+  { id: "terms", url: "https://genex.games/terms", label: PRIVACY_WORDS.links.terms },
+] as const;
+
+/** The links under the rows, quiet as Settings' other footnotes; each opens in the browser. */
+function PolicyLinks(): JSX.Element {
+  return (
+    <p data-privacy-links className="flex flex-wrap gap-x-4 gap-y-1 px-4 text-body-sm text-muted-foreground">
+      {POLICY_LINKS.map((link) => (
+        <button
+          key={link.id}
+          type="button"
+          data-privacy-link={link.id}
+          onClick={() => void window.studio.openUrl(link.url)}
+          className="cursor-pointer underline-offset-4 hover:text-ink-2 hover:underline focus-visible:underline focus-visible:outline-none"
+        >
+          {link.label}
+        </button>
+      ))}
+    </p>
+  );
+}
 
 /** The line under the switch: paused, a launch that never sends, rows waiting, or nothing. */
 function statusLine(status: RunSharingStatus): string | null {
@@ -166,12 +199,14 @@ export function PrivacySection(): JSX.Element {
             {PRIVACY_WORDS.loading}
           </p>
         )}
+        <PolicyLinks />
       </div>
     );
   if (!status.available)
     return (
       <div data-privacy-settings className="appearance-section">
-        <p className="text-ink-3">{PRIVACY_WORDS.removed}</p>
+        <p className="mb-4 text-ink-3">{PRIVACY_WORDS.removed}</p>
+        <PolicyLinks />
       </div>
     );
   return (
@@ -182,6 +217,7 @@ export function PrivacySection(): JSX.Element {
         <DeleteRow />
       </section>
       {alert}
+      <PolicyLinks />
     </div>
   );
 }
