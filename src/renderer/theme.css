@@ -2178,13 +2178,15 @@ button.chat-header-title:hover {
 .sidebar-plugin-updates[aria-busy="true"] .gi .a-spin {
   animation: gi-spin 1.5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
-.sidebar-plugin-updates-run {
+/* Install what is ticked, on the line and in its list: the accent as a soft tint, its label a
+ * lighter blue on dark and a deeper one on light. */
+.plugin-updates-run {
   flex: none;
   height: 24px;
-  padding-inline: 8px;
+  padding-inline: 9px;
   border-radius: 7px;
-  background: color-mix(in oklab, var(--ink) 8%, var(--field));
-  color: var(--ink);
+  background: color-mix(in oklab, var(--accent-primary) 20%, transparent);
+  color: color-mix(in oklab, var(--accent-primary) 62%, var(--ink));
   font-size: 12px;
   line-height: 16px;
   font-weight: 500;
@@ -2192,10 +2194,66 @@ button.chat-header-title:hover {
   cursor: pointer;
   transition: background-color var(--duration-quick);
 }
-.sidebar-plugin-updates-run:enabled:hover {
-  background: color-mix(in oklab, var(--ink) 13%, var(--field));
+.plugin-updates-run:enabled:hover {
+  background: color-mix(in oklab, var(--accent-primary) 30%, transparent);
 }
-.sidebar-plugin-updates-run:disabled {
+.plugin-updates-run:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.plugin-updates-actions .plugin-updates-run {
+  height: 26px;
+  margin-inline-start: auto;
+  padding-inline: 11px;
+  border-radius: 8px;
+}
+/* Open Plugins: a quiet text button beside Update. */
+.plugin-updates-open-all {
+  height: 26px;
+  padding-inline: 8px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+  transition:
+    color var(--duration-quick),
+    background-color var(--duration-quick);
+}
+.plugin-updates-open-all:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+/* The app's checkbox (`ui/Checkbox.tsx`): small, rounded, an outline until ticked, then the accent
+ * with a white mark (a dash when only some are ticked). */
+.check {
+  appearance: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  border: 1.5px solid color-mix(in oklab, var(--ink) 30%, transparent);
+  border-radius: 5px;
+  background: transparent center / 10px 10px no-repeat;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-quick),
+    border-color var(--duration-quick);
+}
+.check:checked,
+.check:indeterminate {
+  border-color: var(--accent-primary);
+  background-color: var(--accent-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+}
+.check:indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round'%3E%3Cpath d='M6.5 12h11'/%3E%3C/svg%3E");
+}
+.check:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.check:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -2240,14 +2298,6 @@ button.chat-header-title:hover {
   padding-inline: 10px 4px;
   font-size: 13px;
   cursor: pointer;
-}
-.plugin-updates-heading input,
-.plugin-update-pick input {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent-primary);
 }
 .plugin-update-name {
   flex: 1;

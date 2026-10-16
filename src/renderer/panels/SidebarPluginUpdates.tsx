@@ -4,9 +4,9 @@
  * out; the line and the list install what is ticked, one update after another.
  */
 import type { JSX } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { chosenUpdates, type PluginUpdate, updateKey } from "../state/plugins.ts";
-import { Button } from "../ui/Button.tsx";
+import { Checkbox } from "../ui/Checkbox.tsx";
 import { Icon } from "../ui/icons.tsx";
 import { PluginIcon } from "../ui/PluginIcon.tsx";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover.tsx";
@@ -77,19 +77,19 @@ export function SidebarPluginUpdates({ updates, updating, onUpdate, onOpenPlugin
             onOpenPlugin={(id) => closeThen(() => onOpenPlugin(id))()}
           />
           <div className="plugin-updates-actions">
-            <Button variant="secondary" onClick={closeThen(onOpenPlugins)}>
+            <button type="button" className="plugin-updates-open-all" onClick={closeThen(onOpenPlugins)}>
               {PLUGIN_UPDATE_WORDS.openPlugins}
-            </Button>
-            <Button variant="default" className="ml-auto" disabled={updating || chosen === 0} onClick={update}>
+            </button>
+            <button type="button" className="plugin-updates-run" disabled={updating || chosen === 0} onClick={update}>
               {PLUGIN_UPDATE_WORDS.update(chosen, total)}
-            </Button>
+            </button>
           </div>
         </PopoverContent>
       </Popover>
       {!updating && total > 0 && (
         <button
           type="button"
-          className="sidebar-plugin-updates-run"
+          className="plugin-updates-run"
           data-plugins-update
           disabled={chosen === 0}
           onClick={update}
@@ -119,19 +119,13 @@ function PluginUpdatesList({
 }): JSX.Element {
   const chosen = chosenUpdates(updates, skipped).length;
   const total = updates.length;
-  const all = useRef<HTMLInputElement>(null);
-  const some = chosen > 0 && chosen < total;
-  useEffect(() => {
-    if (all.current) all.current.indeterminate = some;
-  }, [some]);
   return (
     <>
       <label className="plugin-updates-heading">
-        <input
-          ref={all}
-          type="checkbox"
+        <Checkbox
           aria-label={PLUGIN_UPDATE_WORDS.chooseAll}
           checked={chosen === total}
+          indeterminate={chosen > 0 && chosen < total}
           disabled={disabled}
           onChange={(event) => onChooseAll(event.currentTarget.checked)}
         />
@@ -173,7 +167,7 @@ function PluginUpdateRow({
   return (
     <li className="plugin-update-row" data-plugin-update={update.plugin.manifest.id} data-off={!ticked}>
       <label className="plugin-update-pick">
-        <input type="checkbox" checked={ticked} disabled={disabled} onChange={onToggle} />
+        <Checkbox checked={ticked} disabled={disabled} onChange={onToggle} />
         <PluginIcon name={name} src={update.plugin.iconUrl} size="menu" />
         <span className="plugin-update-name">{name}</span>
         <span className="plugin-update-versions" aria-hidden="true">
