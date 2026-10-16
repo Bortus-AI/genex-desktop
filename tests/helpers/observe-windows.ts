@@ -20,6 +20,7 @@ import type {
 } from "../../src/substrate/preview-port.ts";
 import { coreLite } from "./core-lite.ts";
 import { tmpDir } from "./tmp.ts";
+import { CLIP_HUD_OFF } from "../../src/main/core/view-clip.ts";
 
 /** What a fake page answers: its demos, the demo and camera calls, its load, its still and its clip. */
 export interface PageScript {
@@ -151,8 +152,12 @@ export function windows(page: PageScript = {}) {
         note("screenshot");
         return Buffer.alloc(0);
       },
-      async evaluate() {
+      async evaluate(expression?: string) {
         touch("evaluate");
+        if (expression === CLIP_HUD_OFF) {
+          note("hud:off");
+          return null;
+        }
         page.onReadyProbe?.();
         return { via: ReadyVia.Shim, ready: true, phase: ReadyPhase.Ready };
       },
