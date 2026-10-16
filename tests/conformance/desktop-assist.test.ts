@@ -500,3 +500,64 @@ describe("the toy engine's Do it for me, through a real core", () => {
     assert.equal(posted.length, before, "nothing was posted");
   });
 });
+
+describe("a plugin that came with Genex starts its setup from its own tool, through a real core", () => {
+  let lite: CoreLite;
+  let binding: PluginBinding;
+  let threadId: string;
+  const posted: string[] = [];
+
+  before(async () => {
+    lite = await coreLite({
+      desktop: desktopControl({
+        findDriver: async () => "/fake/cua-driver",
+        connect: async () => quietDriver(),
+        ownApp: () => false,
+      }),
+      onUiEvent: (event: UiEventData) => {
+        if (event.type !== UiEvent.PluginConsent) return;
+        const payload = event.payload as { consentId: string; state: string };
+        if (payload.state === "pending")
+          void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, true));
+      },
+    });
+    const { core } = lite;
+    await core.plugins.installLocal(await toyWithAssist(), PluginSourceKind.Bundled, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    const dir = (await core.games.scaffold("orchard")).dir;
+    threadId = await core.threadForGame("orchard");
+    binding = { project: "orchard", directory: dir, threadId };
+    core.sendUserMessage = async (text) => {
+      posted.push(text);
+    };
+  });
+
+  after(async () => {
+    lite.core.plugins.cancel();
+    await lite.close();
+  });
+
+  it("an agent tool with no card of its own starts the task; only computer control's own card asks", async () => {
+    const { core } = lite;
+    const answer = await core.plugins.tool(`${TOY_PLUGIN_ID}__assist-unasked`, {}, binding);
+    assert.deepEqual(answer, { started: true });
+    const cards = (await core.store.listEvents(threadId))
+      .filter((event) => event.data.type === "custom" && event.data.event_type === "plugin_consent")
+      .map((event) => (event.data as { payload: { pluginId: string; state: string } }).payload.pluginId);
+    assert.deepEqual(cards, [StudioConsentSource.ComputerSetting, StudioConsentSource.ComputerSetting]);
+    assert.deepEqual(posted, ["Toy Engine asks: Turn on the toy editor's server: Toy › Settings › Server"]);
+  });
+
+  it("a Genex moment's step is still never one: nothing happens", async () => {
+    const { core } = lite;
+    const hooked = await core.plugins.tool(
+      `${TOY_PLUGIN_ID}__assist-quietly`,
+      {},
+      { ...binding, hook: { on: HookEvent.TurnStart } },
+      undefined,
+      PluginToolAudience.Harness,
+    );
+    assert.deepEqual(hooked, { started: false, reason: EngineAssistRefusal.NotPerson });
+    assert.equal(posted.length, 1);
+  });
+});
