@@ -24,7 +24,7 @@ export function servesOpenLoop(parts: readonly Readonly<Record<string, unknown>>
 }
 
 /** The open lead's own tools, by the names its engine sends. Never rename a value. */
-export const OpenTool = { SavePoint: "save_point", Rewind: "rewind", Restart: "restart" } as const;
+export const OpenTool = { SavePoint: "save_point", Rewind: "rewind", Restart: "restart", Pause: "pause" } as const;
 export type OpenTool = (typeof OpenTool)[keyof typeof OpenTool];
 
 /** A turn of the open lead's lasts at most this long; it goes on at once after. */

@@ -89,7 +89,7 @@ const MESSAGE = {
   [GateRefusal.NotParameters]:
     "parameters must be an object (for batch: operations is a list of { id?, command, params }).",
   [GateRefusal.Denied]: (command: string) =>
-    `${command} is not available to agents: running C# text that is in no file (eval, eval_file), menu items, quitting, building or switching the build target, changing packages, the authoring root, Pipeline's runtime settings and a batch inside a batch are left out, in a batch's operations too. To run code, write a C# file into the project and call run_script on it, or let Unity compile it; ask the user for the rest in Unity.`,
+    `${command} is not available to agents: running C# text that is in no file (eval, eval_file), quitting Unity or opening another project in it (quit, or such a menu item), Pipeline's authoring root and runtime settings, and a batch inside a batch are left out, in a batch's operations too. To run code, write a C# file into the project and call run_script on it, or let Unity compile it; to start Unity over, call unity__restart-editor.`,
   [GateRefusal.PathOutside]: (parameter: string) =>
     `${parameter} must name a file or folder inside this game's folder (in a batch, spelled out, not taken from an earlier operation).`,
   Cut: (chars: number) => `\n[cut: the result was ${chars} characters]`,

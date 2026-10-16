@@ -645,7 +645,10 @@ thumbnails on the "lead" part, `facet_iteration` and `integration_merge`; the ho
 observer's capture); a block or Genex's hold keeps nothing and says why. `shows` names the picture in
 the folder that shows the change (a PNG or JPEG really inside it, read before the snapshot): it is
 the round's `shown` picture, apart from the thumbnails; a save point without one is answered with a
-reminder, and one naming no readable picture says why. `rewind {label}` and
+reminder, and one naming no readable picture says why. `pause {why}` is for what only the person
+can do (a tool, editor or app the work needs is gone, an install, a permission): it sets
+`OpenLoop.halted` to the lead's words, so the Loop closes paused with them as the reason once the
+turn ends, and its acts are refused meanwhile, as below. `rewind {label}` and
 `restart` (offered only when a plugin hooks `restore.*`) only note what the turn's end runs (a rewind
 keeps the snapshot its label named when asked; a Stop leaves it unrun, and the resumed brief says so):
 `LoopRun.afterTurn` (`open/between.ts`, which the wake loop awaits; a look at the app the turn started

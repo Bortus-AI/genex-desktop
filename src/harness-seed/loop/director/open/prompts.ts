@@ -163,6 +163,7 @@ export function openBrief(facts: OpenBriefFacts): string {
     workerWords(facts.workerTypes),
     savePointWords(facts),
     "JOBS AND LOOKS: run a long command as a job and keep working while it runs; look at any window of the project's app with app_look, when the chat offers them.",
+    `BLOCKED: when the goal needs what only the person can do (a tool, editor or app the work needs is gone or can't run here and nothing you can call brings it back, an install, a permission, a sign-in), call ${OpenTool.Pause} with what they should do. While such a block lasts, never fill the Loop's time with work that can't reach the project.`,
     `FINISH: when the goal is reached, call finish with a summary, what remains (everything you know is not done or not right yet) and proof: the files in the folder that show it (a test report, a close-up picture, a log). A reviewer who did none of the work checks it; ${MAX_FINISH_REJECTIONS} no's in a row stop the Loop. While something remains and more than ${minutes(GAPS_FIRST_MIN_MS)} minutes are left, no reviewer reads the claim: you work on what remains first.`,
     ...(facts.appSaved ? [] : ["SAVING: Genex's save points keep the files on disk only: save inside the app first."]),
     ...(facts.skills.length ? [["SKILLS FOR THIS PROJECT:", ...facts.skills].join("\n\n")] : []),
@@ -200,9 +201,12 @@ export const OPEN_WORDS = {
   noted: "noted",
   finishUnderWay: "Your finish is already being checked; wait for its answer.",
   ending: "The Loop is already ending; end your turn.",
-  /** A save point, a rewind, a restart or a finish once Genex paused the Loop (the project's app couldn't be brought back). */
+  /** A save point, a rewind, a restart or a finish once the Loop is paused (its app couldn't be brought back, or the lead paused it). */
   paused:
-    "The Loop is paused: Genex couldn't bring the project's app back. Nothing was kept or checked; end your turn.",
+    "The Loop is paused: Genex couldn't bring the project's app back, or you paused it for the person. Nothing was kept or checked; end your turn.",
+  needsWhy: `${OpenTool.Pause} needs why: what stops the goal and what the person should do.`,
+  pausing:
+    "The Loop pauses when this turn ends, with your words for the person. End your turn now with the same two sentences.",
   /** A claim while a worker writes in the folder in place: the reviewer would read a folder that keeps changing. */
   writerAtWork: (ids: readonly string[]) =>
     `A worker writes in the folder in place (${ids.join(", ")}), so a reviewer would read a folder that keeps changing: nothing was checked. Wait for it (${WorkerTool.Wait}) or stop it (${WorkerTool.Stop}), then claim the goal.`,

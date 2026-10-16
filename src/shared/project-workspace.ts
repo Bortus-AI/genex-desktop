@@ -106,7 +106,8 @@ export const CORE_WORKSPACE = {
     deliver: ROOT,
   },
   [CoreFact.UnityProject]: {
-    ignore: ["Library/", "Temp/", "Logs/", "obj/", "UserSettings/"],
+    // Builds/ is where agents build players: a player is output, never the game's history.
+    ignore: ["Library/", "Temp/", "Logs/", "obj/", "UserSettings/", "Builds/"],
     copySkip: [],
     assets: [{ folder: "Assets", formats: MEDIA_FORMATS }],
   },
