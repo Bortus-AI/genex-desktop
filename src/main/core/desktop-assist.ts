@@ -7,8 +7,12 @@
  * engine's own tools do that, and the engine-app guard (`desktop-target.ts`) refuses its editor to
  * every other turn.
  *
- * - **Who may ask.** Only the person: a plugin action they pressed, or a tool call whose own card
- *   they approved. The plugin services refuse anything else before this runs (`not-person`).
+ * - **Who may ask.** The person: a plugin action they pressed, or a tool call whose own card they
+ *   approved (`asked`). A plugin that came with Genex may also start one from its own tools, for the
+ *   setup it knows (its task is its own code's, never an agent's words). A Genex moment's or an
+ *   observer's step never asks (the plugin services refuse it first); any other call is `not-person`.
+ *   An unasked one while the chat's assist is under way is `in-assist`: the turn answering that
+ *   assist is the one that clicks, so it never hands its own task on again.
  * - **Trust.** The task is posted verbatim as "<plugin> asks: <task>". A plugin that came with
  *   Genex asks nothing more; any other shows the task on a card first, every time.
  * - **Computer control off.** A card offers to turn it on, for every chat (it is one setting).
@@ -175,10 +179,22 @@ export interface AssistRequest {
   pluginId: string;
   binding: PluginBinding | undefined;
   task: string;
+  /** The person asked: an action they pressed, or a tool call whose own card they approved. */
+  asked: boolean;
   signal?: AbortSignal;
 }
 
 const refused = (reason: EngineAssistRefusal): EngineAssistAnswer => ({ started: false, reason });
+
+/**
+ * Whether an assist can run for `pluginId` here: an enabled plugin whose engine declares apps for
+ * this computer, and a desktop with its driver. Computer control that is off still counts: its card
+ * offers to turn it on. Asks nothing and changes nothing.
+ */
+export async function assistAvailable(host: AssistHost, pluginId: string): Promise<boolean> {
+  if (!host.plugin(pluginId)?.apps.length) return false;
+  return host.desktopAvailable();
+}
 
 /**
  * Hand a setup task to the game's chat (module comment). Every refusal comes before anything
@@ -189,8 +205,10 @@ export async function engineAssist(host: AssistHost, request: AssistRequest): Pr
   if (!binding) return refused(EngineAssistRefusal.NoChat);
   const plugin = host.plugin(pluginId);
   if (!plugin?.apps.length) return refused(EngineAssistRefusal.NoApps);
+  if (!request.asked && !plugin.bundled) return refused(EngineAssistRefusal.NotPerson);
   if (!(await host.desktopAvailable())) return refused(EngineAssistRefusal.Unavailable);
   const threadId = binding.threadId ?? (await host.gameChat(binding.project));
+  if (!request.asked && host.grants.live(threadId)) return refused(EngineAssistRefusal.InAssist);
   const asked = { ...binding, threadId };
   const card: AssistCard = { kind: AssistCardKind.Task, pluginId, pluginName: plugin.name, task };
   if (!plugin.bundled && !(await host.ask(card, asked, signal))) return refused(EngineAssistRefusal.Declined);

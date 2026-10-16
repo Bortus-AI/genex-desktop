@@ -61,14 +61,27 @@ export interface OpenAnswer {
   message: string;
 }
 
+/** Why Quit Studio left Studio open. Wire values: never rename. */
+export const QuitMiss = {
+  /** A build is using Studio. */
+  InUse: "in-use",
+  NotRunning: "not-running",
+  /** Studio was asked to quit and is still open: it may be asking the person to save. */
+  StillOpen: "still-open",
+} as const;
+export type QuitMiss = (typeof QuitMiss)[keyof typeof QuitMiss];
+
 /** Quit Studio's answer. */
 export interface QuitAnswer {
   quit: boolean;
   message: string;
+  reason?: QuitMiss;
+  /** The build using Studio, when one is. */
+  inUse?: string;
 }
 
 /** The game's title from its studio.json, else its id. */
-async function titleOf(folder: string, game: string): Promise<string> {
+export async function titleOf(folder: string, game: string): Promise<string> {
   const meta = await readFile(path.join(folder, "studio.json"), "utf8")
     .then((text) => JSON.parse(text) as { title?: unknown })
     .catch(() => undefined);
@@ -214,10 +227,11 @@ const isRun = (value: unknown): value is { title: string } =>
 export async function quitStudioAction(deps: PlaceActionDeps, context: PluginContext): Promise<QuitAnswer> {
   const runs = await context.host(PluginService.GameEngineRuns).catch(() => []);
   const busy = Array.isArray(runs) ? runs.find(isRun) : undefined;
-  if (busy) return { quit: false, message: MESSAGE.Quit.InUse(busy.title) };
-  if (!(await studioRunning(deps))) return { quit: false, message: MESSAGE.Quit.NotRunning };
-  const closed = await quitStudio(deps);
-  return { quit: closed, message: closed ? MESSAGE.Quit.Quitting : MESSAGE.Quit.StillOpen };
+  if (busy) return { quit: false, message: MESSAGE.Quit.InUse(busy.title), reason: QuitMiss.InUse, inUse: busy.title };
+  if (!(await studioRunning(deps)))
+    return { quit: false, message: MESSAGE.Quit.NotRunning, reason: QuitMiss.NotRunning };
+  if (await quitStudio(deps)) return { quit: true, message: MESSAGE.Quit.Quitting };
+  return { quit: false, message: MESSAGE.Quit.StillOpen, reason: QuitMiss.StillOpen };
 }
 
 /** The agent's `show-steps`: the setup card in its chat while a step is open. */

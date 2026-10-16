@@ -111,6 +111,20 @@ export async function readBinding(folder: string, now: number): Promise<BindingR
   return { state: BindingState.Bound, binding };
 }
 
+/**
+ * The game's last binding whatever its age, or undefined when there is none or it isn't one: the
+ * Studio the game's helper was last connected from, which a publish may have reopened.
+ */
+export async function readLastBinding(folder: string): Promise<StudioBinding | undefined> {
+  const bytes = await readRegularFile(path.join(folder, BINDING_FILE), MAX_BINDING_BYTES).catch(() => undefined);
+  if (!bytes) return undefined;
+  try {
+    return bindingOf(JSON.parse(bytes.toString("utf8")));
+  } catch {
+    return undefined;
+  }
+}
+
 /** Writes (or refreshes) the game's binding in its connection folder, atomically. */
 export async function writeBinding(folder: string, bound: Omit<StudioBinding, "at">, now: number): Promise<void> {
   if (!TOKEN.test(bound.studioId) || !TOKEN.test(bound.session)) throw new Error("Invalid Studio binding");

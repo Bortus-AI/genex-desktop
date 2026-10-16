@@ -276,7 +276,8 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front
 window's tree). A refusal ends the plan and its reason is the answer.
 - **Never building or play-testing.** The apps an enabled engine plugin declares
-  (`engine.apps.mac`, its editor) are refused in plain words ("use the engine's own tools") before
+  (`engine.apps.mac`, its editor) are refused in plain words ("use the engine's own tools", and a
+  setup click or a publish goes through its plugin's tool) before
   the person is asked about them, unless the chat holds that plugin's setup assist; the tool's own
   description says so too. While an assist holds the chat, every app outside its grant is refused.
   The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`), and so
@@ -284,20 +285,24 @@ window's tree). A refusal ends the plan and its reason is the answer.
   player): no agent plays in a live server, not even in a setup assist.
 - **Do it for me** ([`desktop-assist.ts`](../src/main/core/desktop-assist.ts), the plugin service
   `game.engine.assist`). Setup clicks and publishing the person approved, only: a switch or dialog
-  only the engine's window offers. Only the person starts one, by a plugin action they pressed or a
-  tool call whose own card they approved (`confirmed` on the call, set by the host); a plugin from a
-  folder or the marketplace shows the task on a card first, and with the setting off the studio's
+  only the engine's window offers. The person starts one, by a plugin action they pressed or a tool
+  call whose own card they approved (`confirmed` on the call, set by the host); a plugin that came
+  with Genex may also start one from its own tools for the setup it knows (never from a Genex
+  moment or an observer, and never while the chat's own assist is under way: `in-assist`, since
+  the turn answering it does the clicking); a plugin from a folder or the marketplace shows the task on a card first, and with the setting off the studio's
   card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
   <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
   running turn it was steered into; never another turn of the chat building beside it) the
   plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
   can follow holds it for those 20 minutes. That chat's own session then works as below, with its session and app
-  cards. Windows and a Mac with no driver answer `unavailable`. Roblox Studio's **Publish an
-  update** is the one assist that is not a setup click ([plugins](plugins.md)): the
-  person presses it or approves the agent's `publish-update` card, and the chat clicks File ›
-  Publish to Roblox in their Studio, on a Mac only (elsewhere the answer gives that click path). It
-  updates a place already published; a place's first publish stays the person's, with its click
-  path and no assist.
+  cards. Windows and a Mac with no driver answer `unavailable`, and `game.engine.canAssist` tells a
+  plugin so beforehand, so it shows its click path instead of the button. Roblox Studio's
+  publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person
+  presses Publish to Roblox or Publish an update, or approves the agent's `first-publish` card
+  (the game's name, editable on it) or `publish-update` card, and the turn answering the task
+  clicks File › Publish to Roblox in their Studio itself, keeping Studio's privacy and settings and stopping at any age, ID,
+  two-step, terms or payment question (elsewhere the answer gives that click path). Genex then
+  links the game to the published place by itself.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
