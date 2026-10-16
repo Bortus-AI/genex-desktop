@@ -122,10 +122,16 @@ describe("Roblox's sign-ins are out of every agent's reach", () => {
     path.join("AppData", "Local", "Roblox", "StudioMCP"),
   ];
 
-  it("on a Mac, the cookie jars, local storage and StudioMCP's token are never read", async () => {
+  it("on a Mac, the cookie jars and Roblox's own folder are on the deny-read list", () => {
     const denied = baseDenyRead(HOME, "darwin", {});
     for (const relative of MAC_READ) assert.ok(denied.includes(path.join(HOME, relative)), relative);
-    const denies = await macDeny(denied);
+  });
+
+  // POSIX paths: the macOS policy is built where it runs.
+  it("on a Mac, the cookie jars, local storage and StudioMCP's token are never read", {
+    skip: process.platform === "win32",
+  }, async () => {
+    const denies = await macDeny(baseDenyRead(HOME, "darwin", {}));
     for (const target of [
       path.join(HOME, "Library", "HTTPStorages", "com.Roblox.RobloxStudio.binarycookies"),
       path.join(HOME, "Library", "Roblox", "StudioMCP", "auth.token"),
