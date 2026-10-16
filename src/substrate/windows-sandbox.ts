@@ -49,12 +49,14 @@ const run = promisify(execFile);
 /** How long one `reg` or `git` call may take. */
 const TOOL_TIMEOUT_MS = 15 * SECOND_MS;
 /**
- * How often `initialize` is tried when srt-win times out. Its first egress check runs 17-23 s
+ * How often `initialize` is tried when srt-win's egress check times out. That check runs 17-23 s
  * against a 30 s limit on a hosted runner, so a busy machine can miss it once.
  */
 const INITIALIZE_ATTEMPTS = 3;
 /** sandbox-runtime's code for an srt-win call that ran out of time. */
 const SRT_WIN_TIMEOUT = "srt_win_timeout";
+/** The srt-win subcommands sandbox-runtime names on its errors (the first CLI argument). */
+const SrtWinSubcommand = { Wfp: "wfp" } as const;
 /** The registry key Git for Windows records its install folder under. */
 const GIT_REGISTRY_KEY = "HKLM\\SOFTWARE\\GitForWindows";
 const GIT_REGISTRY_VALUE = "InstallPath";
@@ -669,6 +671,13 @@ export interface WindowsSessionDeps {
   keepDenies?: (paths: readonly string[], scope: DenyScope) => string[];
 }
 
+/** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
+function egressCheckTimedOut(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const timedOut = "code" in error && error.code === SRT_WIN_TIMEOUT;
+  return timedOut && "subcommand" in error && error.subcommand === SrtWinSubcommand.Wfp;
+}
+
 /**
  * One grant session for the whole process, shared by every `ProcessSandbox`. It initializes on
  * the first join; a later member or folder that needs more, or a member leaving with folders only
@@ -794,16 +803,18 @@ export class WindowsSandboxSession {
     await this.#deps.ancestors.revokeAll();
   }
 
-  /** Initialize, again when srt-win only ran out of time; any other failure is final. */
+  /**
+   * Initialize, again when only srt-win's egress check ran out of time; any other failure is final.
+   * A timed-out ACL step is not retried: it re-applies permissions below a denied path's parent
+   * folder, which can walk the whole user profile, so a retry repeats that walk.
+   */
   async #initialize(config: SandboxRuntimeConfig): Promise<void> {
     for (let attempt = 1; ; attempt++) {
       try {
         await this.#deps.runtime.initialize(config);
         return;
       } catch (error) {
-        const timedOut =
-          typeof error === "object" && error !== null && "code" in error && error.code === SRT_WIN_TIMEOUT;
-        if (!timedOut || attempt >= INITIALIZE_ATTEMPTS) throw error;
+        if (!egressCheckTimedOut(error) || attempt >= INITIALIZE_ATTEMPTS) throw error;
       }
     }
   }
