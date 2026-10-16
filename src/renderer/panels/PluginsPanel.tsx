@@ -254,7 +254,6 @@ function toolbarActions({
   const add = {
     installFromGithub: () => nav.setGithub(true),
     addServer: () => toPluginsTab(() => connectorActions.current?.add()),
-    importConfig: () => toPluginsTab(() => connectorActions.current?.import()),
     createPlugin: () => void window.studio.openUrl(PLUGIN_GUIDE_URL),
     loadLocal: () => void act(() => window.studio.pluginInstall()),
   };
