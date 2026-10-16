@@ -99,6 +99,16 @@ test("Studio's multiplayer package pin satisfies the range the multiplayer card 
   assert.ok((patch ?? -1) >= Number(asked[3]));
 });
 
+test("Studio's embed SDK pin is at least the version the monetization card's payments require", async () => {
+  const card = await readFile(path.join(CARDS, "genex-monetization", "SKILL.md"), "utf8");
+  const asked = /Requires `@genex-ai\/embed-sdk` \*\*>= (\d+)\.(\d+)\.(\d+)\*\*/.exec(card);
+  assert.ok(asked, "the card names the minimum embed SDK");
+  const pinned = GENEX_GAME_PACKAGES["@genex-ai/embed-sdk"].split(".").map(Number);
+  const minimum = asked.slice(1).map(Number);
+  const order = pinned.map((part, i) => part - (minimum[i] ?? 0)).find((difference) => difference !== 0) ?? 0;
+  assert.ok(order >= 0, `Studio pins ${pinned.join(".")}; the card needs ${minimum.join(".")}`);
+});
+
 test("a Genex payload built without dependencies carries the skills, without prefaces, within the skill caps", async () => {
   const resources = await tmpDir("studio-genex-skills-");
   await buildPlugins(process.cwd(), resources, { dependencies: false });

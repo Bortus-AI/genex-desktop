@@ -53,7 +53,7 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
  */
 export const GENEX_GAME_PACKAGES = {
   "@genex-ai/multiplayer": "0.16.1",
-  "@genex-ai/embed-sdk": "0.30.0",
+  "@genex-ai/embed-sdk": "0.33.0",
 } as const;
 /** A Genex SDK package a game may add. */
 export type GenexGamePackage = keyof typeof GENEX_GAME_PACKAGES;
