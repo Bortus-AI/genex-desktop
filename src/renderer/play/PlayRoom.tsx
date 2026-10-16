@@ -20,6 +20,8 @@ import { Icon } from "../ui/icons.tsx";
 import { withViewTransition } from "../ui/view-transition.ts";
 import { PLAY_WORDS } from "../words.ts";
 import { useBackOnline, useOnline } from "../ui/use-online.ts";
+import { gridColumns, setClipsCovered, topRowClip } from "./clip-playback.ts";
+import { ClipsToggle } from "./CoverClip.tsx";
 import { PlayCard, PlayCardPlaceholder } from "./PlayCard.tsx";
 import { OfflineChip, OfflineMark, OfflineNotice } from "./PlayOffline.tsx";
 import { BAR_AT_TOP, barAfterScroll, FeedStatus, shelfTabs } from "./play-model.ts";
@@ -196,6 +198,21 @@ export function useCardRemix(): (game: PlayGame) => void {
   return useCallback((game: PlayGame) => withViewTransition(() => void studio().play.remix(game)), []);
 }
 
+/** How many columns the grid lays out, measured again as it resizes; null until measured or when off. */
+function useGridColumns(grid: RefObject<HTMLDivElement | null>, on: boolean): number | null {
+  const [columns, setColumns] = useState<number | null>(null);
+  useEffect(() => {
+    const element = grid.current;
+    if (!on || !element) return;
+    const measure = () => setColumns(gridColumns(getComputedStyle(element).gridTemplateColumns));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [grid, on]);
+  return on ? columns : null;
+}
+
 /** The grid of cards, with the shapes of the ones still coming. */
 export function Grid({
   games,
@@ -203,6 +220,7 @@ export function Grid({
   onRemix,
   showAuthor = true,
   marquee = false,
+  autoplayTopRow = false,
 }: {
   games: readonly PlayGame[];
   placeholders: number;
@@ -211,15 +229,30 @@ export function Grid({
   showAuthor?: boolean;
   /** Titles too long for their card scroll back and forth (a profile's cards). */
   marquee?: boolean;
+  /** The measured first row plays its clips by itself (the dashboard's Games feed only). */
+  autoplayTopRow?: boolean;
 }): JSX.Element {
   const play = useCallback(
     (game: PlayGame) => void studio().play.open({ slug: game.slug, title: game.title, coverUrl: game.coverUrl }),
     [],
   );
+  const grid = useRef<HTMLDivElement>(null);
+  const columns = useGridColumns(grid, autoplayTopRow);
+  const topRow = (game: PlayGame, index: number): boolean =>
+    topRowClip({ autoplayTopRow, measured: columns !== null, columns: columns ?? 0, index, hasClip: !!game.clipUrl });
   return (
-    <div className="play-grid">
-      {games.map((game) => (
-        <PlayCard key={game.id} game={game} onPlay={play} onRemix={onRemix} showAuthor={showAuthor} marquee={marquee} />
+    <div ref={grid} className="play-grid">
+      {games.map((game, index) => (
+        <PlayCard
+          key={game.id}
+          game={game}
+          onPlay={play}
+          onRemix={onRemix}
+          showAuthor={showAuthor}
+          marquee={marquee}
+          autoplay={topRow(game, index)}
+          index={index}
+        />
       ))}
       {Array.from({ length: placeholders }, (_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: placeholders are identical and only counted
@@ -296,7 +329,12 @@ function FeedBody({
   if (feed.games.length === 0) return <Notice text={WORDS.empty(noun)} />;
   return (
     <>
-      <Grid games={feed.games} placeholders={feed.loadingMore ? PLACEHOLDERS / 2 : 0} onRemix={onRemix} />
+      <Grid
+        games={feed.games}
+        placeholders={feed.loadingMore ? PLACEHOLDERS / 2 : 0}
+        onRemix={onRemix}
+        autoplayTopRow={shelf === PlayShelf.Games}
+      />
       {feed.moreFailed && <MoreFailed noun={noun} online={online} onRetry={more} />}
       {/* Made afresh for each page: a page too short to move the marker out of the look-ahead still reads the next. */}
       {feed.nextCursor && <MoreMarker key={feed.nextCursor} onNear={more} scroller={scroller} />}
@@ -420,6 +458,9 @@ export function PlayRoom({
     void studio().play.loadFeed(shown);
   }, [shown]);
   useReloadsWhenBack(shown, search, retry);
+  // The viewer over the dashboard holds its clips: nobody sees them play.
+  const covered = usePlay((s) => s.viewer !== null);
+  useEffect(() => setClipsCovered(covered), [covered]);
   const choose = (next: PlayCategory): void => {
     setChosen((current) => ({ ...current, [shelf]: next }));
     setQuery("");
@@ -449,6 +490,7 @@ export function PlayRoom({
             </button>
           )}
           {tabs.length > 1 && <CategoryTabs categories={tabs} active={search ? null : shown} onSelect={choose} />}
+          <ClipsToggle />
           {!online && <OfflineChip />}
           <SearchField query={query} noun={noun} onQuery={setQuery} />
         </header>

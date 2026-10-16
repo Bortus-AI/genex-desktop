@@ -41,6 +41,8 @@ export const STORAGE_KEYS = {
   playRecent: "studio.play.recent",
   /** Play's Genex card in the sidebar: "done" once dismissed (`play/play-model.ts` owns the value). */
   playPromo: "studio.play.promo",
+  /** Play's cover clips paused by the row's control: "1" while paused (`play/clip-playback.ts` owns the value). */
+  playClipsPaused: "studio.play.clipsPaused",
   /** The Genex account last signed in on this Mac, for an offline start (`state/people.ts` owns the format). */
   genexMe: "studio.genex.me",
   /** The Genex account's balance as last read, shown while genex.games can't be reached. */

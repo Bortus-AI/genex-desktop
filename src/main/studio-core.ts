@@ -43,6 +43,8 @@ import {
   type ExportReview,
   type PluginBinding,
   PluginCapability,
+  type PluginClipAnswer,
+  type PluginClipOrder,
   type PluginStillAnswer,
   type PluginStillOrder,
   PluginToolAudience,
@@ -50,6 +52,7 @@ import {
 } from "../shared/plugins.ts";
 import type { EngineLinkUndo } from "../shared/game-engine.ts";
 import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { viewClip, type ViewClipOptions } from "./core/view-clip.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
 import { recordJobEnded, recordJobStarted } from "./core/job-records.ts";
@@ -414,6 +417,8 @@ export interface StudioCoreOptions {
   autoResume?: Partial<Pick<AutoResumeDeps, "now" | "setTimer" | "clearTimer" | "freeMb">>;
   /** A plugin still's budget (default one minute) and the clock it runs on (`core/view-still.ts`); a test seam. */
   pluginStill?: ViewStillOptions;
+  /** A plugin clip's budget (default its seconds and a minute) and the clock it runs on (`core/view-clip.ts`); a test seam. */
+  pluginClip?: ViewClipOptions;
   /** A planned automatic resume started (true) or stopped (false) waiting; main holds the Mac awake meanwhile. */
   onAutoResumePending?: (pending: boolean) => void;
   onUiEvent?: (event: UiEvent) => void;
@@ -981,7 +986,10 @@ export class StudioCore {
     this.pluginServices = new PluginServices(
       path.join(this.layout.engineHomes, "plugins", "data"),
       { genex: path.join(this.layout.engineHomes, "genex") },
-      (binding, files, still) => (still ? this.#observeStill(binding, still) : this.#observeAssets(binding, files)),
+      (binding, files, still, clip) => {
+        if (clip) return this.#observeClip(binding, clip);
+        return still ? this.#observeStill(binding, still) : this.#observeAssets(binding, files);
+      },
     );
     this.pluginServices.onEvent = (id, event, binding) =>
       this.emit(UiEvent.PluginEvent, { id, event, project: binding?.project, threadId: binding?.threadId });
@@ -1140,6 +1148,14 @@ export class StudioCore {
    */
   #observeStill(binding: PluginBinding, still: PluginStillOrder): Promise<PluginStillAnswer> {
     return viewStill(this.#previews, binding, still, this.options.pluginStill);
+  }
+
+  /**
+   * A plugin's clip of a moment a demo stages (`observe` with `clip`): recorded on a hidden window
+   * of its own at the asked size, never Live, given back however it ends (`core/view-clip.ts`).
+   */
+  #observeClip(binding: PluginBinding, clip: PluginClipOrder): Promise<PluginClipAnswer> {
+    return viewClip(this.#previews, binding, clip, this.options.pluginClip);
   }
 
   /**

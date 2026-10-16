@@ -28,10 +28,9 @@ Game spend is in the usage panel, prices in Genex's Credits tab. Enabled Genex s
 Genex bundles its MCP (game/animation search, owned games, generation status) on the same account;
 host tools run the pinned CLI outside the game: `genex__cli` free; `genex__cli-paid` and
 `genex__package` (multiplayer, player identity; template games map Studio's copies) after consent. Publish (a host-drawn dialog)
-connects SDK-less games for sign-in, tests the draft, goes public and sends the `genex-cover` demo
-frame as the Genex cover, not the sidebar sphere ([rules](../plugins.md#first-party-privileges));
-else Ask for a cover drafts it in chat. Agents check `genex__cover` before publishing; consented
-`genex__cover-set` sends it. Chat shows the kept shot with Publish. Multiplayer (built, single-player) asks chat (Genex
+connects SDK-less games, tests the draft, goes public and sends the `genex-cover` frame and
+`genex-clip` clip ([rules](../plugins.md#first-party-privileges)); Studio takes the cover after
+turns. Consented `genex__cover-set` sends it now; chat shows it with Publish. Multiplayer (built, single-player) asks chat (Genex
 off: enable it); Publish needs only the account; both offer Update while older. Agents read
 Genex’s guide and cards via `genex__skill`, not game files. Plugin MCPs connect on first use.
 
