@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { lstat, mkdir, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setImmediate as tick } from "node:timers/promises";
 import type { HelperAsk } from "../../src/plugins/roblox/helper-link.ts";
 import { HelperLinkError, HelperLinkFailure } from "../../src/plugins/roblox/helper-link.ts";
 import {
@@ -180,6 +181,54 @@ test("a file edited on disk is pushed to Studio once, with Studio's last hash, a
   assert.equal(await read(world.folder, MAIN_FILE), "print(2)\n");
   const record = JSON.parse(await read(world.folder, SCRIPT_RECORD.join("/")));
   assert.equal(record.scripts["ServerScriptService/Main.server.luau"], helperHash("print(2)\n"));
+});
+
+test("a flush with a limit settles at that limit while Studio doesn't answer, and each push it sends asks within it", async () => {
+  const { folder } = await gameFolder({ [MAIN_FILE]: "print(1)\n" });
+  const helper = fakeHelper([{ ref: MAIN, source: "print(1)\n" }]);
+  const clock = manualClock();
+  const asked: Array<{ type: HelperRequest; timeoutMs: number | undefined }> = [];
+  const held = { writes: false, lists: false };
+  let reached = () => {};
+  const pushed = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  // A dialog in Studio holds the helper: the requests it holds never answer.
+  const ask = ((type, body, options) => {
+    asked.push({ type, timeoutMs: options?.timeoutMs });
+    if (type === HelperMessage.ScriptsWrite && held.writes) {
+      reached();
+      return new Promise(() => {});
+    }
+    if (type === HelperMessage.ScriptsList && held.lists) return new Promise(() => {});
+    return helper.ask(type, body, options);
+  }) as HelperAsk;
+  const sync = createScriptSync({ folder, ask, clock, watch: handWatch().watch });
+  assert.equal(await sync.start(), ScriptSyncMode.On);
+  held.writes = true;
+  await writeFile(path.join(folder, MAIN_FILE), "print(2)\n");
+  let settled = false;
+  const flushed = sync.flush(2_000).then(() => {
+    settled = true;
+  });
+  await pushed;
+  assert.deepEqual(asked.at(-1), { type: HelperMessage.ScriptsWrite, timeoutMs: 2_000 });
+  clock.advance(1_999);
+  await tick();
+  assert.equal(settled, false, "the limit isn't shortened");
+  clock.advance(1);
+  await flushed;
+
+  // Queued behind a reconcile that never ends (a new binding while the dialog stays open).
+  const { folder: other } = await gameFolder({ [MAIN_FILE]: "print(1)\n" });
+  held.writes = false;
+  const queued = createScriptSync({ folder: other, ask, clock, watch: handWatch().watch });
+  assert.equal(await queued.start(), ScriptSyncMode.On);
+  held.lists = true;
+  void queued.start();
+  const behind = queued.flush(2_000);
+  clock.advance(2_000);
+  await behind;
 });
 
 test("a script changed in Studio is written to its file once and never pushed back", async () => {

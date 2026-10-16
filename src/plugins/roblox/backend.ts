@@ -1034,8 +1034,8 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
     moments: {
       ask: askFor,
       bound: (game) => link?.bound(game),
-      flush: async (game) => {
-        await syncs?.flush(game);
+      flush: async (game, timeoutMs) => {
+        await syncs?.flush(game, timeoutMs);
       },
       reapply: async (game, options) => {
         await syncs?.bind(game, options);

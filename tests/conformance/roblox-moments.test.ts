@@ -41,6 +41,7 @@ import type { MomentServices } from "../../src/plugins/roblox/moment-ops.ts";
 import { PENDING_LOAD, PLACE_MANIFEST, SAVE_POINT_FILE_MAX_BYTES } from "../../src/plugins/roblox/place-files.ts";
 import {
   createStudioWatch,
+  FLUSH_MAX_MS,
   heroShotsAt,
   loadPlaceAt,
   type MomentOps,
@@ -49,6 +50,7 @@ import {
   PERSON_ACTIVE_MS,
   personActive,
   RECONNECT_WAIT_MS,
+  SAVE_PLACE_CHAT_MAX_MS,
   savePlaceAt,
   STUDIO_PING_MS,
   studioStateAt,
@@ -272,6 +274,45 @@ describe("save-place: the place into the game folder before Genex's checkpoint",
       nested: [],
       skipped: [".genex/place/Workspace.split/Island.rbxm"],
     });
+  });
+
+  it("a flush that never settles holds a chat's save no longer than its limit", async () => {
+    const world = await momentWorld();
+    const limits: number[] = [];
+    // A dialog in Studio holds the helper: the scripts' pushes never answer.
+    world.ops.flush = (timeoutMs) => {
+      limits.push(timeoutMs);
+      return new Promise(() => {});
+    };
+    const started = world.now();
+    const answer = await savePlaceAt(world.ops, CHAT_CHECKPOINT);
+    assert.deepEqual(limits, [FLUSH_MAX_MS]);
+    assert.ok(world.now() - started <= SAVE_PLACE_CHAT_MAX_MS, `took ${world.now() - started} ms`);
+    assert.deepEqual(answer, { note: "Saved Roblox Studio's place (4 parts changed)." });
+  });
+
+  it("stopped while the scripts flush (the host's step limit passed): nothing is exported or written", async () => {
+    const world = await momentWorld();
+    world.ops.flush = () => {
+      world.stop();
+      return new Promise(() => {});
+    };
+    await savePlaceAt(world.ops, CHAT_CHECKPOINT);
+    assert.ok(!world.steps.includes(HelperMessage.PlaceExport), world.steps.join(", "));
+    await assert.rejects(stat(path.join(world.folder, ".genex", "place")), "no export lands after the snapshot");
+  });
+
+  it("an export whose answer comes after a Stop writes nothing", async () => {
+    const world = await momentWorld();
+    const ask = world.place.ask;
+    world.ops.ask = (async (type, body, options) => {
+      const answer = await ask(type, body, options);
+      if (type === HelperMessage.PlaceExport) world.stop();
+      return answer;
+    }) as HelperAsk;
+    await savePlaceAt(world.ops, CHAT_CHECKPOINT);
+    await assert.rejects(stat(placeFile(world.folder, PLACE_MANIFEST)), "no manifest without its parts");
+    await assert.rejects(stat(placeFile(world.folder, "Workspace.rbxm")));
   });
 
   it("Studio with no way to export its place: the save point holds the scripts only, said plainly, never blocked", async () => {
@@ -573,10 +614,13 @@ describe("the backend at Genex's moments", () => {
       },
     };
     const watch = createStudioWatch(mac.deps.now);
+    const flushes: Array<[string, number | undefined]> = [];
     const moments: MomentServices = {
       ask: () => (async () => ({ editing: false })) as unknown as HelperAsk,
       bound: () => "studio-1",
-      flush: async () => {},
+      flush: async (game, timeoutMs) => {
+        flushes.push([game, timeoutMs]);
+      },
       reapply: async () => {},
       watch,
     };
@@ -586,8 +630,21 @@ describe("the backend at Genex's moments", () => {
       const { context } = hostFor(mac, game);
       return backend.tool?.(tool, {}, hook ? { ...context, hook } : context);
     };
-    return { mac, backend, call, watch, shots };
+    return { mac, game, backend, call, watch, shots, flushes };
   }
+
+  it("a chat's save gives the scripts' flush the save's own limit", async () => {
+    const world = await backendWorld();
+    const place = path.join(world.game.directory, "sky-race.rbxlx");
+    await writeFile(place, "<roblox/>");
+    await mkdir(path.join(world.mac.storage, "links"), { recursive: true });
+    await writeFile(
+      path.join(world.mac.storage, "links", `${GAME}.json`),
+      JSON.stringify({ kind: "roblox", project: place }),
+    );
+    await world.call(RobloxTool.SavePlace, CHAT_CHECKPOINT);
+    assert.deepEqual(world.flushes, [[GAME, FLUSH_MAX_MS]]);
+  });
 
   it("the crash note asks the person and never quits or kills Studio", async () => {
     const world = await backendWorld();

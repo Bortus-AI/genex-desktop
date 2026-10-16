@@ -28,8 +28,8 @@ export interface MomentServices {
   ask(game: string): HelperAsk;
   /** The Studio the game's helper is connected from now. */
   bound(game: string): string | undefined;
-  /** Sends the game's file changes still on their way to Studio. */
-  flush(game: string): Promise<void>;
+  /** Sends the game's file changes still on their way to Studio, waiting at most `timeoutMs` when given. */
+  flush(game: string, timeoutMs?: number): Promise<void>;
   /** Reconciles the game's scripts with its folder; after a restore the restored files win. */
   reapply(game: string, options?: ReconcileOptions): Promise<void>;
   watch: StudioWatch;
@@ -110,7 +110,7 @@ export function momentOpsFor(
       if (!bound || !deps.studio) return false;
       return (await deps.studio.studios({ timeoutMs })).some((studio) => studio.id === bound);
     },
-    flush: () => services.flush(game),
+    flush: (timeoutMs) => services.flush(game, timeoutMs),
     reapply: (options) => services.reapply(game, options),
     open: (): Promise<OpenAnswer> => openStudio(deps, context),
     async placeName() {

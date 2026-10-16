@@ -139,8 +139,11 @@ export interface ScriptSync {
   changed(change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the game's top in the record, after any pass under way. */
   written(name: string): Promise<void>;
-  /** Sends file changes still waiting out the quiet spell to Studio now, then settles. */
-  flush(): Promise<void>;
+  /**
+   * Sends file changes still waiting out the quiet spell to Studio now, then settles. With a limit,
+   * each request asks within it and the wait ends at it (the pass goes on after).
+   */
+  flush(timeoutMs?: number): Promise<void>;
   mode(): ScriptSyncMode;
   /** Settles once every pass under way has finished. */
   idle(): Promise<void>;
@@ -371,10 +374,11 @@ class SyncState {
       start: (options = {}) => this.enqueue(() => this.reconcile(options)).then(() => this.current),
       changed: (change) => this.enqueue(() => this.fromStudio(change)),
       written: (name) => this.enqueue(() => this.noteWritten(name)),
-      flush: async () => {
+      flush: async (timeoutMs) => {
         if (this.current !== ScriptSyncMode.On) return;
         this.deps.clock.clearTimeout(this.timer);
-        await this.enqueue(() => this.fromDisk());
+        const pass = this.enqueue(() => this.fromDisk(timeoutMs));
+        await (timeoutMs === undefined ? pass : this.within(pass, timeoutMs));
       },
       mode: () => this.current,
       idle: async () => {
@@ -391,6 +395,19 @@ class SyncState {
     const run = this.queue.then(task).catch((error: unknown) => this.log(`script sync: ${String(error)}`));
     this.queue = run;
     return run;
+  }
+
+  /** Waits for `work` at most `ms` on the sync's clock; the work goes on after. */
+  async within(work: Promise<void>, ms: number): Promise<void> {
+    let timer: unknown;
+    const limit = new Promise<void>((resolve) => {
+      timer = this.deps.clock.setTimeout(resolve, ms);
+    });
+    try {
+      await Promise.race([work, limit]);
+    } finally {
+      this.deps.clock.clearTimeout(timer);
+    }
   }
 
   async noteWritten(name: string): Promise<void> {
@@ -534,10 +551,10 @@ class SyncState {
   }
 
   /** The file's source into Studio, refused by the helper when Studio isn't at `base` any more. */
-  async push(file: string, ref: ScriptRef, disk: DiskScript, base: string | undefined): Promise<void> {
+  async push(file: string, ref: ScriptRef, disk: DiskScript, base: string | undefined, timeoutMs?: number) {
     const body = base === undefined ? { script: ref, source: disk.source } : { script: ref, source: disk.source, base };
     try {
-      const { hash } = await this.deps.ask(HelperMessage.ScriptsWrite, body);
+      const { hash } = await this.deps.ask(HelperMessage.ScriptsWrite, body, limitOf(timeoutMs));
       this.record.scripts[file] = hash;
     } catch (error) {
       await this.pushFailed(file, ref, disk, error);
@@ -556,9 +573,9 @@ class SyncState {
   }
 
   /** Removes a script deleted on disk, only while Studio's source is still the recorded one. */
-  async remove(file: string, ref: ScriptRef, hash: string): Promise<void> {
+  async remove(file: string, ref: ScriptRef, hash: string, timeoutMs?: number): Promise<void> {
     try {
-      await this.deps.ask(HelperMessage.ScriptsRemove, { script: ref, hash });
+      await this.deps.ask(HelperMessage.ScriptsRemove, { script: ref, hash }, limitOf(timeoutMs));
       delete this.record.scripts[file];
     } catch (error) {
       if (helperCode(error) !== HelperErrorCode.Conflict) {
@@ -579,8 +596,8 @@ class SyncState {
     });
   }
 
-  /** What changed under `src/` since the record: pushed, or removed from Studio. */
-  async fromDisk(): Promise<void> {
+  /** What changed under `src/` since the record: pushed, or removed from Studio, each request within `timeoutMs` when given. */
+  async fromDisk(timeoutMs?: number): Promise<void> {
     if (this.current !== ScriptSyncMode.On) return;
     const mode = await this.check();
     if (mode !== ScriptSyncMode.On) {
@@ -593,9 +610,9 @@ class SyncState {
     );
     for (const script of disk) {
       const recorded = this.record.scripts[script.file];
-      if (script.hash !== recorded) await this.push(script.file, script.ref, script, recorded);
+      if (script.hash !== recorded) await this.push(script.file, script.ref, script, recorded, timeoutMs);
     }
-    await this.removeMissing(disk);
+    await this.removeMissing(disk, timeoutMs);
     await writeRecord(this.deps.folder, this.record);
   }
 
@@ -603,7 +620,7 @@ class SyncState {
    * Recorded files no longer on disk: their scripts are removed from Studio, unless the script is
    * still on disk under another of its names (moved into its own folder as `init`, or back).
    */
-  async removeMissing(disk: DiskScript[]): Promise<void> {
+  async removeMissing(disk: DiskScript[], timeoutMs?: number): Promise<void> {
     const files = new Set(disk.map((script) => script.file));
     const keys = new Set(disk.map((script) => scriptKey(script.ref)));
     for (const [file, hash] of Object.entries(this.record.scripts)) {
@@ -611,7 +628,7 @@ class SyncState {
       const key = scriptKey(ref);
       if (files.has(file) || this.skipped.has(key)) continue;
       if (keys.has(key)) delete this.record.scripts[file];
-      else await this.remove(file, ref, hash);
+      else await this.remove(file, ref, hash, timeoutMs);
     }
   }
 
@@ -663,6 +680,9 @@ interface Plan {
   studioSource?: string | undefined;
 }
 
+/** A request's options with its limit, when the caller gave one. */
+const limitOf = (timeoutMs: number | undefined) => (timeoutMs === undefined ? {} : { timeoutMs });
+
 /** Just the reference: the fields the helper takes, nothing a listing added. */
 function toRef(value: ScriptRef): ScriptRef {
   return value.runContext === undefined
@@ -698,8 +718,8 @@ export interface ScriptSyncs {
   changed(game: string, change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the top of `game`'s folder in its record, in turn with its sync. */
   written(game: string, folder: string, name: string): Promise<void>;
-  /** Sends `game`'s file changes still on their way to Studio now; nothing when its sync isn't on. */
-  flush(game: string): Promise<void>;
+  /** Sends `game`'s file changes still on their way to Studio now, waiting at most `timeoutMs` when given; nothing when its sync isn't on. */
+  flush(game: string, timeoutMs?: number): Promise<void>;
   /** The folder kept for `game`, when it is still a folder. */
   folder(game: string): Promise<string | undefined>;
   mode(game: string): ScriptSyncMode;
@@ -769,8 +789,8 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       if (held && held.folder === (await realpath(folder).catch(() => folder))) await held.sync.written(name);
       else await recordWritten(folder, name);
     },
-    flush: async (game) => {
-      await syncs.get(game)?.sync.flush();
+    flush: async (game, timeoutMs) => {
+      await syncs.get(game)?.sync.flush(timeoutMs);
     },
     folder: folderOf,
     mode: (game) => syncs.get(game)?.sync.mode() ?? ScriptSyncMode.Off,

@@ -210,12 +210,13 @@ async function removeStale(folder: string, keep: ReadonlySet<string>): Promise<s
 
 /**
  * Asks the game's helper for its place and writes what changed into `<game>/.genex/place/`. A
- * part the helper names but doesn't send must already be in the folder with that hash.
+ * part the helper names but doesn't send must already be in the folder with that hash. Once
+ * `signal` aborts, an answer still on its way writes nothing: the caller's snapshot may be taken.
  */
 export async function exportPlace(
   ask: HelperAsk,
   game: string,
-  options: { full?: boolean; timeoutMs?: number } = {},
+  options: { full?: boolean; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<PlaceExported> {
   const folder = await placeFolder(game);
   const manifest = await readManifest(game);
@@ -230,6 +231,7 @@ export async function exportPlace(
       onChunk: (chunk) => chunks.set(chunk.part, [...(chunks.get(chunk.part) ?? []), chunk]),
     },
   );
+  options.signal?.throwIfAborted();
   const sent = new Set(answer.sent);
   const held = new Map(known.map((part) => [part.name, part.hash]));
   const data = new Map<string, Buffer>();

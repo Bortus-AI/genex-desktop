@@ -196,6 +196,15 @@ async function paused(ops: MomentOps, ms: number): Promise<boolean> {
   return !ops.signal.aborted;
 }
 
+const MESSAGE = { Stopped: "Genex stopped waiting before the place was saved" } as const;
+
+/** Waits for `work` at most `ms` on the moment's clock; the work goes on after. Never throws. */
+async function within(ops: MomentOps, work: Promise<unknown>, ms: number): Promise<void> {
+  const waited = new AbortController();
+  await Promise.race([work.catch(() => undefined), ops.sleep(ms, waited.signal).catch(() => undefined)]);
+  waited.abort();
+}
+
 /** Whether the helper answered with its own `unsupported`: this Studio can't do it at all. */
 const unsupported = (error: unknown) =>
   error instanceof HelperLinkError &&
@@ -217,9 +226,11 @@ async function savePlace(ops: MomentOps, exportMs: number): Promise<SaveRead> {
   if (!(await ops.linked())) return { outcome: PlaceSave.NotLinked };
   if (!ops.folder || !ops.bound()) return { outcome: PlaceSave.NotConnected };
   // A file change still on its way to Studio would leave the export older than the scripts.
-  await ops.flush(FLUSH_MAX_MS).catch(() => undefined);
+  await within(ops, ops.flush(FLUSH_MAX_MS), FLUSH_MAX_MS);
+  // Stopped (the host's step limit passed): its snapshot may be taken now, so nothing lands after it.
+  if (ops.signal.aborted) return { outcome: PlaceSave.Failed, why: MESSAGE.Stopped };
   try {
-    const exported = await exportPlace(ops.ask, ops.folder, { timeoutMs: exportMs });
+    const exported = await exportPlace(ops.ask, ops.folder, { timeoutMs: exportMs, signal: ops.signal });
     const large = exported.parts.filter((part) => part.bytes > SAVE_POINT_FILE_MAX_BYTES).map((part) => part.name);
     return { outcome: PlaceSave.Saved, written: exported.written.length, large: large.map(partFile) };
   } catch (error) {
