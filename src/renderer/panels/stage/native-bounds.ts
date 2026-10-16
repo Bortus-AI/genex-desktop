@@ -50,31 +50,56 @@ type Viewport = { width: number; height: number };
  * photographed first and hidden after, so the dialog opens over the frame instead of a black slot.
  * Each cover has a number: a frame or a hide that arrives after its cover ended is dropped.
  */
+/** Resolves after `count` painted frames: what the slot shows has reached the screen. */
+function afterFrames(count: number): Promise<void> {
+  return new Promise((resolve) => {
+    const step = (left: number): void => {
+      if (left <= 0) resolve();
+      else requestAnimationFrame(() => step(left - 1));
+    };
+    step(count);
+  });
+}
+
+/** The frame decoded, so painting it costs nothing when the view leaves; a frame that cannot decode is none. */
+async function decodedStill(still: string | null): Promise<string | null> {
+  if (!still) return null;
+  const image = new Image();
+  image.src = still;
+  return image.decode().then(
+    () => still,
+    () => null,
+  );
+}
+
 function boundsSender(element: HTMLElement, watching: boolean) {
   let covering = false;
   let cover = 0;
-  const send = (bounds: Bounds, viewport: Viewport): void => {
-    void window.studio.previewBounds({ ...bounds, watching, viewport });
+  const send = (bounds: Bounds, viewport: Viewport): Promise<unknown> =>
+    window.studio.previewBounds({ ...bounds, watching, viewport }).catch(() => false);
+  // Covering: the frame is decoded and painted under the view before the view leaves, so no
+  // frame of the empty slot ever shows. Uncovering: the view comes back over the frame first,
+  // and the frame goes two painted frames later. Either way the stage never blinks black.
+  const coverWith = async (mine: number, viewport: Viewport): Promise<void> => {
+    const still = await decodedStill(await window.studio.previewCoverStill().catch(() => null));
+    if (mine !== cover) return;
+    if (still) {
+      holdStill(element, still);
+      await afterFrames(2);
+      if (mine !== cover) return;
+    }
+    await send(HIDDEN_BOUNDS, viewport);
+  };
+  const uncover = async (mine: number, bounds: Bounds, viewport: Viewport): Promise<void> => {
+    await send(bounds, viewport);
+    await afterFrames(2);
+    if (mine === cover) holdStill(element, null);
   };
   return {
     send(bounds: Bounds, covered: boolean, viewport: Viewport): void {
-      if (covered && !covering) {
-        const mine = ++cover;
-        void window.studio
-          .previewCoverStill()
-          .catch(() => null)
-          .then((still) => {
-            if (mine !== cover) return;
-            if (still) holdStill(element, still);
-            send(HIDDEN_BOUNDS, viewport);
-          });
-      } else {
-        if (!covered) {
-          cover++;
-          holdStill(element, null);
-        }
-        send(bounds, viewport);
-      }
+      if (covered && !covering) void coverWith(++cover, viewport);
+      else if (!covered && covering) void uncover(++cover, bounds, viewport);
+      else void send(bounds, viewport);
       covering = covered;
     },
     /** The slot stops tracking: any frame on its way is dropped and the slot is cleared. */
