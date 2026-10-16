@@ -31,6 +31,7 @@ import { readEngineBinding } from "../../substrate/game-engine-binding.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { type ComputerGrant, type ComputerTools, computerTools } from "./computer-tools.ts";
 import { keepCaptures } from "./connector-record.ts";
+import { EDITOR_PLAY_PROMPTS } from "./editor-play-session-prompts.ts";
 import { keepProbePictures } from "./judge-probe-pictures.ts";
 import { safePathSegment } from "./run-shots.ts";
 import type { SessionPort } from "./session-port.ts";
@@ -48,11 +49,6 @@ const MAX_PROBE_NOTE_CHARS = 2_000;
 const MESSAGE = {
   noWindow: "a game played in its editor has no browser window",
   unknownJudge: (id: string) => `No judge named "${id}" plays this game in its editor.`,
-  liveData:
-    "Saved data in this play is the live game's: play only as the test players this play opened, and never change a real player's saved data.",
-  probed: (label: string, note: string) => `What the ${label} judge's probe measured once the play opened: ${note}`,
-  probeFailed: (label: string, why: string) => `The ${label} judge's probe could not measure the play: ${why}`,
-  brief: (label: string, brief: string) => `Your brief as the ${label} judge:\n${brief}`,
 } as const;
 
 /** The game a session's editor computer is for, and the session's own thread, engine and end where it has them. */
@@ -132,7 +128,7 @@ export async function gameJudge(
 
 /** A judge's brief as its session reads it, beside the rubric. */
 export async function judgeBriefText(core: StudioCore, pluginId: string, judge: PluginJudge): Promise<string> {
-  return MESSAGE.brief(judge.label, await core.plugins.judgeBrief(pluginId, judge.id));
+  return EDITOR_PLAY_PROMPTS.brief(judge.label, await core.plugins.judgeBrief(pluginId, judge.id));
 }
 
 /**
@@ -232,7 +228,7 @@ export async function editorPlayComputer(
   const afterOpen = async (opened: unknown) => {
     const next: Opening = { notes: [], images: [], kept: [] };
     if (use.brief && judge) next.notes.push(await judgeBriefText(core, plugin, judge));
-    if (reachesLiveData(opened)) next.notes.push(MESSAGE.liveData);
+    if (reachesLiveData(opened)) next.notes.push(EDITOR_PLAY_PROMPTS.liveData);
     if (judge?.probe) await probe(judge, judge.probe, next);
     opening = next;
   };
@@ -240,11 +236,11 @@ export async function editorPlayComputer(
   const probe = async (as: PluginJudge, tool: string, into: Opening) => {
     try {
       const measured = probeAnswer(await invoke(tool, players && players > 1 ? { players } : {}));
-      if (measured.note) into.notes.push(MESSAGE.probed(as.label, measured.note));
+      if (measured.note) into.notes.push(EDITOR_PLAY_PROMPTS.probed(as.label, measured.note));
       into.images.push(...measured.images);
       into.kept.push(...(await keepCaptures(game.directory, measured.images).catch(() => [])));
     } catch (error) {
-      into.notes.push(MESSAGE.probeFailed(as.label, errorMessage(error)));
+      into.notes.push(EDITOR_PLAY_PROMPTS.probeFailed(as.label, errorMessage(error)));
     }
   };
   // The grant's players (or its judge's), as many as the engine declares at most (the source holds it to that).
