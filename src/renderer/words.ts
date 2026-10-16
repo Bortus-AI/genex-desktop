@@ -31,11 +31,12 @@ import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
-import type { GithubLookupProblem } from "../shared/plugins.ts";
+import { COMPUTER_SETTING_QUESTION, type GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
-import { PlayCategory, PlayNote, PlayShelf } from "../shared/play.ts";
+import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
+import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
@@ -1443,6 +1444,14 @@ export const AUTO_RESUME_SETTING_WORDS = {
     "When a session limit resets, a while after a model provider’s outage, or when Studio’s loop restarts, a paused build picks up where it left off, up to twice per build. A build you stop stays stopped, and one paused on a sign-in waits for you.",
 } as const;
 
+/** Settings → Permissions: the switch that lets agents ask to control the person's Mac. */
+export const COMPUTER_CONTROL_SETTING_WORDS = {
+  section: "Computer control",
+  label: "Let agents control your computer",
+  detail:
+    "An agent can ask to see your screen, then click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. macOS only.",
+} as const;
+
 export function resumedWords(parts: number): string {
   const done = Math.max(0, Math.trunc(parts || 0));
   return `picking up where it left off${done ? ` — ${plural(done, "finished part")} kept` : ""}`;
@@ -1486,6 +1495,14 @@ export const STILLS_WORDS = {
   none: "Pictures show here once a Loop takes them.",
   /** A picture's alt text: the capture's label and the picture's name. */
   picture: (label: string, name: string) => (name ? `${label}: ${name}` : label),
+} as const;
+
+/** A plugin's Live card (`panels/stage/PluginCardStage.tsx`): the words Studio draws around what the plugin says. */
+export const PLUGIN_CARD_WORDS = {
+  /** The shot's alt text: the game's name in play. */
+  playShot: (game: string) => `${game} in play`,
+  /** The line while the plugin is off or has not answered, under the game's name. */
+  waiting: (plugin: string) => `Plays in ${plugin}.`,
 } as const;
 
 // ── an agent at its screen ────────────────────────────────────────────────────────────────
@@ -1615,7 +1632,14 @@ export const PLAN_WORDS = {
 export const A_PLUGIN = "A plugin";
 
 /** The steps card's own words; its rows are the plugin's. */
-export const STEPS_WORDS = { notNow: "Not now", done: "(done)", copy: "Copy", copied: "Copied" } as const;
+export const STEPS_WORDS = {
+  notNow: "Not now",
+  done: "(done)",
+  copy: "Copy",
+  copied: "Copied",
+  /** A step's button whose plugin is no longer installed. */
+  pluginGone: "This step's plugin isn't installed any more.",
+} as const;
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
 export const PLUGIN_SUGGESTION_WORDS = {
@@ -1630,7 +1654,10 @@ export const PLUGIN_SUGGESTION_WORDS = {
 } as const;
 
 /** Each game engine as the chat names it. */
-export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal" } as const satisfies Record<GameEngine, string>;
+export const GAME_ENGINE_WORDS = { web: "the web", unreal: "Unreal", godot: "Godot" } as const satisfies Record<
+  GameEngine,
+  string
+>;
 
 /**
  * What the sidebar shows beside a project that isn't a game, by the core fact it holds; a fact
@@ -1654,6 +1681,10 @@ export const TRANSCRIPT_WORDS = {
       : `Undone. ${game ?? "This game"} is a web game again.`,
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
+  rewound: (files: number) => `The chat went back, and ${files} game ${files === 1 ? "file" : "files"} with it.`,
+  rewindUndo: "Bring back newer version",
+  rewindUndoTitle: "Put the game files back as they were before this rewind; the chat stays rewound",
+  rewindUndone: "The game is back as it was before the rewind. The chat stays rewound.",
   planCancelled: "Plan cancelled.",
   studioRestarted: "Studio restarted",
   workspaceRestored: "Workspace restored",
@@ -2385,6 +2416,33 @@ export const TOAST_WORDS = {
   packagesFailed: "The packages could not be installed — the details are on the stage.",
 } as const;
 
+/** How many packages the setup-scripts window names before it counts the rest. */
+const SCRIPTS_NAMED = 4;
+
+/** "This game, sharp and esbuild": who brought the setup scripts a remix's install skipped. */
+function scriptOwners(own: boolean, packages: readonly string[]): string {
+  const names = [...(own ? ["This game"] : []), ...packages.slice(0, SCRIPTS_NAMED)];
+  const rest = packages.length - Math.min(packages.length, SCRIPTS_NAMED);
+  if (rest > 0) names.push(`${rest} more`);
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/** A remix's setup scripts its script-free install skipped: the stage's offer and the window that runs them. */
+export const SETUP_SCRIPTS_WORDS = {
+  trouble: "It may need the setup scripts its packages came with, which didn’t run.",
+  button: "Run setup scripts",
+  buttonTitle: "Run the setup scripts this game’s packages came with",
+  running: "Running…",
+  title: "Run this game’s setup scripts?",
+  body: (own: boolean, packages: readonly string[]) =>
+    `${scriptOwners(own, packages)} came with setup scripts written by their authors. Genex skipped them when it made your copy, and the game may need them to build. Run them only if you trust this game.`,
+  notNow: "Not now",
+  notNowDetail: "The game stays as it is. You can run them later from here.",
+  run: "Run setup scripts",
+  runDetail: "They run in Genex’s sandbox and can’t change your other games.",
+} as const;
+
 // ── the Builds tab's progress line ────────────────────────────────────────────────────────
 
 /** The fixed titles and sentences of the Builds tab's progress line (`build-progress.ts`). */
@@ -2586,6 +2644,16 @@ export const CONSENT_CHOICE_WORDS = {
     description: `Don't ask again for this action in ${source}.`,
   }),
   decline: { label: "Don't allow", description: "The agent carries on without it." },
+} as const;
+
+/**
+ * The studio's card that turns computer control on, asked when a plugin's Do it for me finds it
+ * off: it is one setting, so it says it is for every chat.
+ */
+export const COMPUTER_SETTING_CARD_WORDS = {
+  title: COMPUTER_SETTING_QUESTION,
+  turnOn: { label: "Turn on", description: "You can turn it off in Settings → Permissions." },
+  notNow: { label: "Not now", description: "Computer control stays off, and nothing is clicked." },
 } as const;
 
 /** A waiting consent question's title when the plugin wrote no prompt of its own. */
@@ -3457,26 +3525,24 @@ export const GENEX_WORDS = {
     balanceUnread: "balance couldn’t be read",
     /** What an invite earns, beside Invite a friend. */
     bonus: (credits: number) => `+${credits}`,
-    shared: "one balance for every game dev tool",
     plan: (allowance: string, when: string) => `Pro · ${allowance} more on ${when}`,
     inviteFriend: "Invite a friend",
     getCredits: "Get credits",
     payFor: "What credits pay for",
-    payForLine: "Only assets made with external game dev tools",
-    freeBuilding:
-      "Building your games is free: your agents run on your own subscription, and Genex charges nothing extra.",
-    refunds: "Failed generations are refunded automatically.",
-    outOfCredits: "Out of credits, your games still build with procedural assets and Local Blender.",
+    /** Beside the tools' marks, over the prices. */
+    toolsLine:
+      "The best game dev tools, always up to date. No MCPs or API keys to install: they’re connected in one click.",
     from: "from",
     pricesUnavailable: "Prices couldn’t be read from genex.games right now.",
     recent: "Recent spending",
     recentLine: "Your latest generations and refunds",
+    /** What a credit is worth, beside Recent spending's line; it wraps as one piece. */
+    perCredit: "1\u00a0credit\u00a0≈\u00a01¢",
     noRecent: "Nothing spent yet",
     refunded: (count: number) => `+${count}`,
     refundedNote: "refunded",
     failedKind: (kind: string) => `${kind}, failed`,
     spent: (count: number) => `−${Math.abs(count)}`,
-    centNote: "1 credit is about 1¢",
     loading: "Reading your credits…",
     failed: "Couldn’t read your credits.",
     signedOut: "Sign in to Genex to see your credits.",
@@ -3501,7 +3567,7 @@ export const GENEX_WORDS = {
    * multiplayer with Genex; without the plugin it opens the setup dialog, in Publish's words.
    */
   multiplayer: {
-    button: "Multiplayer",
+    button: "Make multiplayer",
     buttonLabel: "Make this game multiplayer",
     hint: "Make this game multiplayer with Genex",
     /** What the press sends to the game's chat. */
@@ -3517,37 +3583,41 @@ export const GENEX_WORDS = {
   /** The Publish dialog on the game's stage, drawn by Studio. */
   publish: {
     title: "Publish your game",
-    intro: "It goes on Play in Genex and gets a link anyone can play in a browser.",
-    published: "Your game is live. Anyone with the link can play it.",
+    /** The line under Publish. */
+    intro: "Anyone with the link can play it.",
     /** The stage strip's own Publish, when Genex adds none: the words of Genex's button. */
     button: "Publish",
     buttonLabel: "Publish game",
-    /** The name field: what the game is listed under, and what Genex paints on its cover. */
+    /** The name on the banner: what the game is listed under, and what players see. */
     name: "Name players will see",
-    /** The game's line under its name. */
-    statusNone: "Not online yet",
-    statusDraft: "Test version online",
-    statusLive: (when: string) => (when === "now" ? "Live · updated just now" : `Live · updated ${when} ago`),
-    statusLiveUndated: "Live",
-    statusPublishing: "Publishing…",
+    rename: "Rename the game",
+    /** The banner's chip: where the game is. */
+    chipNone: "Not published",
+    chipLive: (when: string) => (when === "now" ? "Live · just now" : `Live · ${when} ago`),
+    chipLiveUndated: "Live",
+    chipFailed: "Didn't publish",
     publish: "Publish",
     publishing: "Publishing…",
     updatePublic: "Publish update",
     tryAgain: "Try again",
-    openGame: "Open game",
+    publishAgain: "Publish again",
+    openGame: "Open",
+    openGameLabel: "Open the game on Genex",
     copyLink: "Copy",
     copyLinkLabel: "Copy the game's link",
     copied: "Copied",
-    /** Beside the busy Publish: closing the dialog does not stop it. */
-    keepsGoing: "Keeps going if you close this.",
-    /** The files Publish uploads, shown on request beside Publish. */
-    files: (count: number) => (count === 1 ? "1 file" : `${count} files`),
-    filesShow: "Files to upload",
-    filesLoading: "Listing files…",
-    filesLabel: "Files Publish uploads",
-    filesLeftOut: (count: number) => `${count} left out`,
+    /** Under the busy button: closing the dialog does not stop it. */
+    keepsGoing: "You can close this. It keeps going.",
+    /** Under the busy button, once the test runs longer than usual. */
+    slow: "Taking longer than usual.",
+    /** After the name on the banner, the one moment an attempt the dialog watched goes live. */
+    isLive: "is live!",
+    /** The press that lists a game renamed right after it went live under its new name. */
+    saveName: "Save name",
+    replay: "Play the celebration again",
+    changeCover: "Change cover",
     /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
-    coverNone: "No cover yet. Genex shows a real frame of your game.",
+    coverNone: "No cover yet.",
     coverAsk: "Ask for a cover",
     coverAskLabel: "Ask for a cover in this game's chat",
     /** What that press leaves in the game's composer, for the person to send. */
@@ -3556,15 +3626,16 @@ export const GENEX_WORDS = {
     coverCard: "Genex cover",
     coverCardAlt: "This game's Genex cover",
     coverCardPublishLabel: "Publish this game",
-    failedTitle: "It didn't go online this time",
-    failedText: "Your game is safe and nothing changed. Check your internet connection and try again.",
-    failedKept: "Your game is safe, and players still get the version they had. Try again in a moment.",
-    unresolvedTitle: "Still checking whether it went online",
-    unresolvedText: "Studio couldn’t tell whether the upload reached Genex. Check again before uploading again.",
-    copyDetails: "Copy details for support",
-    detailsCopied: "Details copied",
-    checkAgain: "Check again",
-    allowUpload: "I checked — allow a new upload",
+    /** A failed attempt's one line under the banner. */
+    failedText: "Nothing changed. Try again in a moment.",
+    failedKept: "The last version is still live.",
+    sendReport: "Send report",
+    sendReportLabel: "Send this problem and the app's logs to the Genex team",
+    reportSent: "Report sent",
+    reportFailed: "Couldn't send. Try again",
+    /** What Send report posts: the game and the raw reason. */
+    reportText: (title: string, project: string, details: string) =>
+      `Publishing "${title}" (${project}) didn't work.\n\n${details}`,
     reviewTerms: "Review Genex terms",
     termsNote: "Review the updated Genex terms in your browser before publishing.",
     /** With no account: why to sign in, under the account card. */
@@ -3580,20 +3651,21 @@ export const GENEX_WORDS = {
     installing: "Installing…",
     stillWorking: "Still working — Studio hasn’t answered yet.",
     progress: "Publish progress",
-    seconds: (count: number) => `${count}s`,
-    /** What the running step is doing, by `GenexPublishPhase`. */
+    /** The busy button once the test runs longer than usual, or the outcome is not known yet. */
+    stillTesting: "Still testing",
+    /** What the running step is doing, by `GenexPublishPhase`: the busy button's words. */
     phase: {
-      checking: "Preparing your game",
-      exporting: "Preparing your game",
-      "creating-project": "Preparing your game",
+      checking: "Preparing",
+      exporting: "Preparing",
+      "creating-project": "Preparing",
       uploading: "Uploading",
       promoting: "Going live",
       listing: "Going live",
       done: "Finished",
-      "verifying-deployment": "Making sure it plays",
+      "verifying-deployment": "Testing",
       ready: "Ready to play",
-      failed: "Didn't go online",
-      unresolved: "Still checking",
+      failed: "Didn't publish",
+      unresolved: "Still testing",
     } satisfies Record<GenexPublishPhase, string>,
     /** The steps under the progress bar, by `GenexPublishStep`. */
     step: {
@@ -3689,14 +3761,6 @@ export const PLAY_WORDS = {
   people: {
     friends: "Friends",
     friendsLabel: (waiting: number) => (waiting > 0 ? `Friends, ${waiting} waiting` : "Friends"),
-    /** The friends stack's tooltip and label: "12 friends · 2 playing · 2 requests". */
-    stackSummary: ({ friends, playing, waiting }: { friends: number; playing: number; waiting: number }) => {
-      const parts = [friends === 1 ? "1 friend" : `${friends} friends`];
-      if (playing > 0) parts.push(`${playing} playing`);
-      if (waiting > 0) parts.push(waiting === 1 ? "1 request" : `${waiting} requests`);
-      return parts.join(" · ");
-    },
-    noFriendsYet: "No friends yet: invite friends",
     plateLabel: (name: string) => `${name}, Genex account`,
     pro: "Pro",
     proTag: "PRO",
@@ -3704,6 +3768,8 @@ export const PLAY_WORDS = {
     profile: "Profile",
     credits: "Credits",
     creditsUnlimited: "Unlimited",
+    /** The credits beside the plate's name: "1,700 credits, open Credits". */
+    creditsLabel: (amount: string) => `${amount} credits, open Credits`,
     accountSettings: "Account settings",
     signOut: "Sign out",
     /** The plate while signed out, signing in, offline, and once genex.games ended the sign-in. */
@@ -3716,7 +3782,7 @@ export const PLAY_WORDS = {
     signInAgainLabel: (name: string | null) => (name ? `${name}: sign in to Genex again` : "Sign in to Genex again"),
     signInFailed: "Couldn’t start signing in. Check your connection and try again.",
     cancelFailed: "Couldn’t stop signing in. Try again in a moment.",
-    offlineFriends: "Offline: friends show again when you’re back online",
+    offlineFriends: "Offline: friends’ games and credits update when you’re back online",
     /** Sign out's question, asked in Studio before the app and the Genex plugin sign out together. */
     signOutTitle: "Sign out of Genex?",
     signOutText: "Your profile, friends and Publish wait until you sign in again, and the Genex plugin’s tools stop.",
@@ -3782,12 +3848,29 @@ export const PLAY_WORDS = {
     joinLabel: (name: string, game: string) => `Join ${name} in ${game}`,
     invite: "Invite a friend",
     inviteFriends: "Invite friends",
-    inviteText: "Whoever joins Genex from your link becomes your friend.",
+    /** What an invite does, and what it earns while genex.games says (never a number typed here). */
+    inviteText: (bonus: number | null) =>
+      bonus === null
+        ? "They get the Genex download page with a card from you."
+        : `They get the Genex download page with a card from you. You get ${bonus} credits when they make their first game.`,
     inviteBonus: (credits: number) => `+${credits}`,
     inviteBonusLabel: (credits: number) => `${credits} credits for you when a friend starts creating`,
     inviteLinkLabel: "Your invite link",
     copy: "Copy",
     copied: "Copied",
+    /** Post on X and the Mac's share menu, under an invite link or a profile link. */
+    postOnX: "Post on X",
+    shareMenu: "Share…",
+    shareMenuLabel: "Share the link with Messages, Mail, AirDrop and more",
+    /** What a post on X says with the link. */
+    inviteXText: "Join me on Genex",
+    profileXText: "My games on Genex",
+    /** Share, beside the pencil on the account's own profile. */
+    shareProfile: "Share profile",
+    shareProfileTitle: "Share your profile",
+    shareProfileLink: "Your profile link",
+    /** The link preview's picture, read aloud. */
+    sharePreviewLabel: "How your profile link looks when shared",
     showPlaying: "Show friends what I’m playing",
     showPlayingOff: "Off: friends see your name only.",
     empty: "No friends yet — send your link and play together.",
@@ -3895,6 +3978,29 @@ export const PLAY_WORDS = {
   remixing: "Remixing…",
   remixLabel: (title: string) => `Remix ${title}`,
   remixFailed: "Couldn’t make a copy of that game.",
+  /** Create while a remix is made (`RemixLayer`): the step bar's names, the line under the loader. */
+  making: {
+    steps: {
+      [RemixStep.Copy]: "Files",
+      [RemixStep.Models]: "Models",
+      [RemixStep.Packages]: "Packages",
+      [RemixStep.Build]: "Build",
+    } satisfies Record<RemixStep, string>,
+    line: {
+      [RemixStep.Copy]: "Copying files",
+      [RemixStep.Models]: "Downloading models",
+      [RemixStep.Packages]: "Installing packages",
+      [RemixStep.Build]: "Building the game",
+    } satisfies Record<RemixStep, string>,
+    measured: (line: string, bytes: string) => `${line} · ${bytes}`,
+    megabytes: (done: number) => `${done} MB`,
+    megabytesOf: (done: number, total: number) => `${done} of ${total} MB`,
+    progress: "Remix progress",
+    row: "Making your remix",
+    chat: (title: string) => `Remixing ${title}`,
+    /** A remix finished while the person was elsewhere: its game is in the sidebar. */
+    ready: (title: string) => `${title} is ready`,
+  },
   loading: (noun: string) => `Loading ${noun}…`,
   loadingMore: "Loading more…",
   failed: (noun: string) => `Couldn’t load ${noun}. Check your connection and try again.`,
@@ -3936,8 +4042,6 @@ export const PLAY_WORDS = {
       [PlayNote.InviteCopied]: "Invite link copied",
       [PlayNote.SignIn]: "Sign in to Genex to like games",
       [PlayNote.LikeFailed]: "Couldn’t save your like",
-      [PlayNote.Remixing]: "Making your copy…",
-      [PlayNote.RemixFailed]: "Couldn’t make a copy",
       [PlayNote.MicBlocked]: "Allow the mic in Settings",
       [PlayNote.MicMissing]: "No microphone",
       [PlayNote.MicFailed]: "Mic didn’t start",
@@ -3985,6 +4089,8 @@ export const CHAT_JUDGE_WORDS = {
   asked: "Asked:",
   /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
   notPlayed: "The judge didn't play",
+  /** Which of the engine's judges played, by the name its plugin gives it. */
+  playedAs: (judge: string) => `Played as the ${judge} judge`,
 } as const;
 
 /** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
@@ -4012,6 +4118,21 @@ export const PLUGIN_TOOLBAR_WORDS = {
     title: (plugin: string, version: string) =>
       `The ${plugin} plugin ${version} is ready. Press to update it in Plugins.`,
   },
+} as const;
+
+/**
+ * A game linked to an engine whose Loop needs its project inside the game folder, named by the
+ * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ */
+export const ENGINE_GAME_WORDS = {
+  /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
+  rewindNote: (engine: string, project: string) =>
+    `Rewind doesn’t undo changes made in ${engine}: ${project} is outside the game folder.`,
+  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
+  loopUnavailable: (engine: string, project: string | null, place: string) =>
+    project
+      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
+      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
 } as const;
 
 /** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
@@ -4044,6 +4165,7 @@ export const UNREAL_WORDS = {
     switchTo: (project: string) => `Switch to ${project}`,
     notAnswering: (project: string) => `${project} isn’t answering in Unreal.`,
     portBlocked: (project: string) => `Unreal couldn’t use the port Genex gave ${project}.`,
+    crashed: (project: string) => `Unreal crashed. Close its crash report window, then open ${project} again.`,
     restart: "Restart Unreal",
     quitFirst: (project: string) =>
       `${project} is open in Unreal. Quit Unreal to set it up; Unreal asks you to save first.`,
@@ -4065,12 +4187,10 @@ export const UNREAL_WORDS = {
   /** The latest play shot's alt text. */
   playShot: (project: string) => `${project} in play`,
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
-  rewindNote: (project: string) => `Rewind doesn’t undo changes made in Unreal: ${project} is outside the game folder.`,
+  rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
   /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (project: string | null, place: string) =>
-    project
-      ? `Loops need the Unreal project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the Unreal button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
-      : "Loops need this game’s Unreal project inside its folder, so Rewind can undo each step. A new Unreal project made from the Unreal button goes there. Each message runs one turn.",
+    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 // ── Genex account settings and avatars ─────────────────────────────────────────────────────
@@ -4111,6 +4231,35 @@ export const ACCOUNT_WORDS = {
   offline: "Changes wait until you’re back online.",
 } as const;
 
+/**
+ * The nickname field, in the welcome and in Settings → Genex account: the words genex.games uses
+ * for the same field, so both read alike. A reserved handle reads as Taken, the account's own as Free.
+ */
+export const NICKNAME_WORDS = {
+  label: "Your nickname and profile link",
+  states: {
+    [HandleState.Free]: "Free",
+    [HandleState.Taken]: "Taken",
+    [HandleState.TooShort]: "Too short",
+    [HandleState.TooLong]: "Too long",
+    [HandleState.LatinOnly]: "Latin only",
+    [HandleState.DashEdge]: "No dash at the ends",
+  } satisfies Record<Exclude<HandleState, typeof HandleState.Yours | typeof HandleState.Reserved>, string>,
+  profileLink: "Your profile link.",
+  try: "Try",
+  tryLabel: (handle: string) => `Use ${handle}`,
+  length: `${HANDLE_LENGTH.min} to ${HANDLE_LENGTH.max} characters.`,
+  letters: "Letters a–z, digits and dashes.",
+  checkFailed: "Couldn’t check this nickname. Check your connection.",
+  tooManyChanges: "You’ve changed your nickname too often lately. Try again later.",
+  saveFailed: "Couldn’t save your nickname. Try again in a moment.",
+  /** Settings → Genex account's row. */
+  row: "Nickname",
+  none: "None yet",
+  edit: "Edit",
+  editLabel: "Edit your nickname",
+} as const;
+
 /** The avatar every Genex account gets, as people meet it: its parts' names and the first-sign-in dialog. */
 export const AVATAR_WORDS = {
   welcomeTitle: "Meet your Genex avatar",
@@ -4118,6 +4267,8 @@ export const AVATAR_WORDS = {
   mixLabel: "Your mix",
   continue: "Continue",
   welcomeNote: "You can change it in Settings",
+  /** Under Continue when the welcome asks for the nickname too. */
+  welcomeNoteBoth: "You can change both in Settings",
   bodies: {
     [AvatarBody.Vapor]: "Vaporwave sun",
     [AvatarBody.Crt]: "CRT dither",

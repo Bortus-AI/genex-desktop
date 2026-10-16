@@ -35,6 +35,33 @@ describe("studio.json — a bridge game's runtime and play command", () => {
     assert.deepEqual((await readProjectShape(dir)).play, { command: "bin/game", args: [] });
   });
 
+  it("reads an engine a plugin runs for the game, beside the command a person runs", async () => {
+    const engine = { runtime: "godot", args: ["--path", "godot", "--", "--play-protocol"] };
+    const dir = await project({ runtime: "bridge", play: { command: "bin/game", engine } });
+    assert.deepEqual((await readProjectShape(dir)).play, { command: "bin/game", args: [], engine });
+    const bare = await project({ runtime: "bridge", play: { command: "bin/game", engine: { runtime: "godot" } } });
+    assert.deepEqual((await readProjectShape(bare)).play?.engine, { runtime: "godot", args: [] });
+  });
+
+  // The engine is a runtime an enabled plugin declares, named by its id: never a path, never a shell word.
+  const unusableEngines: unknown[] = [
+    { runtime: "/Applications/Godot.app" },
+    { runtime: "Godot" },
+    { runtime: "godot; rm -rf /" },
+    { runtime: "" },
+    { runtime: "godot", args: "--path godot" },
+    { runtime: "godot", args: ["a\u0000b"] },
+    { runtime: "godot", args: Array.from({ length: 33 }, () => "x") },
+    "godot",
+    ["godot"],
+  ];
+  for (const engine of unusableEngines) {
+    it(`keeps the command and drops an engine it can't use: ${JSON.stringify(engine).slice(0, 60)}`, async () => {
+      const dir = await project({ runtime: "bridge", play: { command: "bin/game", engine } });
+      assert.deepEqual((await readProjectShape(dir)).play, { command: "bin/game", args: [] });
+    });
+  }
+
   it("leaves a browser game's shape exactly as it was: no runtime, no play", async () => {
     const dir = await project({ bootMs: 2000 });
     const shape = await readProjectShape(dir);

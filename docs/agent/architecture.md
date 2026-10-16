@@ -5,9 +5,9 @@ the affected product page, then read only the section you need here. Each sectio
 current contract and names the code that owns it; history lives in Git and PR descriptions, not
 here. When code and this page disagree, fix the one that is wrong in the same change.
 
-The active app builds browser games only. The Unity CLI, editor, bridge, templates, tools and UI
-are archived in [`archive/unity/`](../../archive/unity/); no flag enables them and there is no
-migration path.
+The earlier built-in Unity integration (CLI, editor, bridge, templates, tools, UI) is archived in
+[`archive/unity/`](../../archive/unity/): no flag enables it and nothing migrates. Unity is now a
+bundled plugin ([plugins](../plugins.md#the-bundled-unity-plugin)).
 
 ## Processes and trust boundaries
 
@@ -98,8 +98,8 @@ the engine sets. Probes and the Ollama server Studio starts use the same filter.
 is the one list of coding-CLI sign-in homes that the sandbox, Claude's absolute deny rules (its own
 config home [partly](../tool-permissions.md#rules-at-their-real-paths)), the Codex brief, Bonsai
 and native plugin jobs deny. `ProcessSandbox`
-adds its base deny-read list (`baseDenyRead` in `spawn.ts`): sign-in stores such as `~/.ssh`,
-`~/.aws` and `~/Library/Keychains`, and on Linux the desktop secret stores.
+adds base deny lists (`baseDenyRead`, `baseDenyWrite` in `spawn.ts`): sign-in stores like `~/.ssh`
+and Roblox's cookie jars, and Linux's desktop secret stores.
 
 **Windows sandbox.** Commands run as the local `srt-sandbox` user under Git Bash through
 sandbox-runtime's srt-win backend
@@ -133,13 +133,16 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   deny-read is planned.
 - **OpenCode reads its sign-ins; 2.x's server is unsandboxed** ([details](../connections-and-context.md#openrouter-and-opencode)).
 - **An install briefly opens the npm registry to every sandboxed process.** sandbox-runtime's
-  proxy filters against one process-wide allow-list, so `ProcessSandbox.run` widens it for a
-  package install's length and restores it afterwards (counted, in `finally`). Two installs
-  open it: the user's Install packages button and `genex__package`, a consented add of one of the
-  two exact-pinned Genex SDK packages (`GENEX_GAME_PACKAGES`) that the agent cannot re-version.
-- **A Genex CLI run opens `api.genex.games` to every sandboxed process** for its length, by the
-  same process-wide widening. Other processes hold no Genex token (it reaches only the CLI's
-  preload, on stdin), so they can reach the API but not act as the user.
+  proxy filters against one process-wide allow-list, so `ProcessSandbox.run` widens it for an
+  install's length (counted, restored in `finally`). The Install packages button, `genex__package`
+  (an exact-pinned `GENEX_GAME_PACKAGES` entry) and a remix's script-free `installGuarded` open
+  it. No build starts meanwhile; agents' commands still reach it.
+- **A remix's setup scripts run** once trusted (Run setup scripts).
+- **Builds are confined on macOS and Linux only, and for writes**: a build can copy home files
+  into the output Publish uploads.
+- **A Genex CLI run opens `api.genex.games` to every sandboxed process** for its length, the
+  same way. Other processes hold no Genex token (it reaches only the CLI's preload, on stdin), so
+  they reach the API but not as the user.
 - **The asset adapter still runs the pinned CLI with the user's real `HOME`** (`adapter.ts`
   asset commands). The CLI's legacy cleanup therefore deletes `genex-*` entries under
   `~/.claude/skills`, `~/.codex/skills` and `~/.cursor/skills` (and two legacy `~/.claude` files)
@@ -734,20 +737,16 @@ template's (kept as `<name>.v<generation>.js`); an edited contract keeps its HUD
 older HUD is noted and narrows builders' HUD rule (`loop/held-hud.ts`).
 
 **Builds.** `preview.load`/`preview.reload` build through `GameBuilds`
-([`src/main/game-build.ts`](../../src/main/game-build.ts)) and serve the output. A build never runs in
-a folder the user owns: the folder is mirrored into a shadow under
-`scratch/builds/<project>-<hash>/` (Git's view of the project plus `.env*`, `node_modules` linked,
-output kept in `last/`); a studio worktree under `scratch/` builds in place. Builds are memoised on
-a tree key; the stage's **Try again** (`reloadPreview({retry: true})`) forgets the memo and
-re-resolves the login shell PATH ([`src/substrate/toolchain.ts`](../../src/substrate/toolchain.ts); on
-Windows the process PATH plus the registry's machine and user PATH).
-The package manager comes from the lockfile; installing is the one thing that opens the network
-(`registry.npmjs.org`, `studio:packages.install`, behind a button), and only the lockfile's own
-install line runs (`INSTALL_COMMANDS`/`isInstallCommand`). A failed or empty build shows the last
-good output with the reason (`studio:build.problem`,
-[`src/shared/build-problem.ts`](../../src/shared/build-problem.ts)); a judged load still fails. Build
-actions coalesce identical `showBuild` requests and serialize worktree replacement per project;
-preview loads serialize per handle.
+([`src/main/game-build.ts`](../../src/main/game-build.ts)) and serve the output, never in a folder the
+user owns: a shadow under `scratch/builds/<project>-<hash>/` mirrors Git's view of it plus `.env*`
+(`node_modules` linked, output in `last/`); a studio worktree under `scratch/` builds in place.
+Builds are memoised on a tree key; **Try again** (`reloadPreview({retry: true})`) forgets it and
+re-resolves the PATH ([`toolchain.ts`](../../src/substrate/toolchain.ts)). The lockfile names the
+package manager; only an install opens the network (`registry.npmjs.org`), and only the
+lockfile's own install line runs (`isInstallCommand`). Builds and installs write only their game and scratch (`confine`); an
+install that runs scripts keeps its own cache. A failed or empty build shows the last good output
+(`studio:build.problem`, [`build-problem.ts`](../../src/shared/build-problem.ts)); a judged load
+still fails. `showBuild` requests coalesce; worktree swaps serialize per project, loads per handle.
 
 **Served page.** [`src/main/page-serve.ts`](../../src/main/page-serve.ts) holds the pure serving
 decisions (`servedRelative`, `resolveServed`, `servedLocation`, `routeHttp`,
@@ -931,9 +930,9 @@ reconciliation reuses request and generation ids. A public export (Export, the h
 `game.export`, the Genex publish stage) refuses a file holding any `knownSecretValues()` value,
 naming the file, never the value. `inspect_use` and `verify_use`
 (`genex-outcomes.ts`, `audio-observation.ts`) record observed use of a captured version, not proof.
-Publishing verifies the upload against the hosted staging revision; an unresolved upload is never
-retried automatically, only settled by **Check again** or `publish-allow-upload`. Neither readiness nor an
-upload certifies gameplay.
+Publishing verifies the upload against the hosted revision and every file; an unknown upload is
+never retried, only settled by Genex's record or **Publish again**. Neither readiness nor upload
+certifies gameplay.
 
 Genex account rules: `status` returns the operation catalog for every provider path; Studio uses
 the pinned CLI's no-project-allowance mode (its `allowance.enforced` is authoritative) and Genex

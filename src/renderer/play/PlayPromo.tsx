@@ -7,9 +7,9 @@
 import type { JSX } from "react";
 import { useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
-import { PLAY_ORIGIN } from "../../shared/play.ts";
+import { playToolsUrl } from "../../shared/play.ts";
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
-import { usePeople, usePlay } from "../state/hooks.ts";
+import { usePeople, usePlay, usePlayWeb } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon, type IconName } from "../ui/icons.tsx";
@@ -19,8 +19,6 @@ import { dismissPlayPromo, playPromoDismissed, playPromoVisible } from "./play-m
 import { useGenexSignIn } from "./use-genex-sign-in.ts";
 
 const WORDS = PLAY_WORDS.promo;
-/** Where Learn goes: what Genex gives a game and its maker. */
-const LEARN_URL = `${PLAY_ORIGIN.web}/tools`;
 /** The film and its still, copied beside the renderer by the build (`design/play-publish-video/`). */
 const FILM = "media/play-publish.mp4";
 const FILM_POSTER = "media/play-publish-poster.jpg";
@@ -72,6 +70,7 @@ function Film(): JSX.Element {
 /** Opens what the Genex plugin is in the browser; copies the address where the browser may not open. */
 function Learn(): JSX.Element {
   const [copied, setCopied] = useState(false);
+  const learnUrl = playToolsUrl(usePlayWeb());
   useEffect(() => {
     if (!copied) return;
     const timer = window.setTimeout(() => setCopied(false), COPIED_NOTE_MS);
@@ -79,9 +78,9 @@ function Learn(): JSX.Element {
   }, [copied]);
   const open = async (): Promise<void> => {
     try {
-      await studio().api.openUrl(LEARN_URL);
+      await studio().api.openUrl(learnUrl);
     } catch {
-      await navigator.clipboard.writeText(LEARN_URL).then(
+      await navigator.clipboard.writeText(learnUrl).then(
         () => setCopied(true),
         () => undefined,
       );

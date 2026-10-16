@@ -41,6 +41,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:queue.message": "changeQueuedMessage",
   "studio:chat.rewind.preview": "rewindPreview",
   "studio:chat.rewind": "rewindChat",
+  "studio:chat.rewind.undo": "undoRewind",
   "studio:events": "events",
   "studio:thread.events": "threadEvents",
   "studio:chat.page": "chatPage",
@@ -178,6 +179,9 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.stats": "playStats",
   "studio:play.creators": "playCreators",
   "studio:play.credits": "playCredits",
+  "studio:play.handle-check": "playHandleCheck",
+  "studio:play.handle": "playSetHandle",
+  "studio:play.share": "playShare",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -264,6 +268,7 @@ export interface StudioInvokePayloads {
   };
   "studio:chat.rewind.preview": { threadId: string; eventId: string; messageId: string };
   "studio:chat.rewind": { threadId: string; eventId: string; messageId: string; files: boolean };
+  "studio:chat.rewind.undo": { threadId: string; rewindId: string };
   "studio:events": { after?: string };
   "studio:thread.events": { threadId: string };
   "studio:chat.page": { threadId: string; before?: string };
@@ -402,6 +407,9 @@ export interface StudioInvokePayloads {
   "studio:play.stats": { days: StatsPeriod };
   "studio:play.creators": undefined;
   "studio:play.credits": undefined;
+  "studio:play.handle-check": { handle: string };
+  "studio:play.handle": { handle: string };
+  "studio:play.share": { url: string; at?: PlayPoint };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;
@@ -434,7 +442,7 @@ export interface StudioInvokePayloads {
   "studio:preview.state": undefined;
   "studio:preview.live": undefined;
   "studio:build.problem": { project: string };
-  "studio:packages.install": { project: string };
+  "studio:packages.install": { project: string; scripts?: boolean };
   "studio:run.start": Arg<"startRun", 0>;
   "studio:run.stop": { runId: string };
   "studio:run.finish": { runId: string; threadId: string };

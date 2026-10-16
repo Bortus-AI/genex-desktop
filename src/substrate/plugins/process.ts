@@ -111,6 +111,24 @@ function forwardStderrLines(child: ChildProcess, onStderr: (line: string) => voi
   });
 }
 
+/**
+ * The call a backend's host request is made on behalf of: its kind (`tool`, `action`, …), its name,
+ * the signal that ends with it, and `confirmed` when the host showed that very call's card and the
+ * person approved it (a tool that declares `confirmation`). Only the host sets it.
+ */
+export interface PluginInvocation {
+  method: string;
+  name: string;
+  signal: AbortSignal;
+  confirmed?: true;
+}
+
+/** How one call is made beyond its name and arguments. */
+export interface PluginCallOptions {
+  /** The person approved this call's own card: its host requests carry `confirmed`. */
+  confirmed?: boolean;
+}
+
 /** Crash isolation only. Installed backends remain trusted native code. Never replay a call. */
 export class PluginProcess {
   #child: ChildProcess | undefined;
@@ -125,6 +143,7 @@ export class PluginProcess {
       method: string;
       name: string;
       controller: AbortController;
+      confirmed: boolean;
     }
   >();
   readonly bootstrap: string;
@@ -133,7 +152,7 @@ export class PluginProcess {
     method: string,
     args: any,
     context: PluginBinding | undefined,
-    invocation: { method: string; name: string; signal: AbortSignal },
+    invocation: PluginInvocation,
   ) => Promise<unknown>;
   readonly failed: (error: string) => void;
   /** Developer debug sink for backend stderr lines; default discards. Never a source of user-facing status. */
@@ -147,7 +166,7 @@ export class PluginProcess {
       method: string,
       args: any,
       context: PluginBinding | undefined,
-      invocation: { method: string; name: string; signal: AbortSignal },
+      invocation: PluginInvocation,
     ) => Promise<unknown>,
     failed: (error: string) => void,
     options?: { onStderr?: (line: string) => void; toolPath?: () => Promise<string> },
@@ -183,6 +202,7 @@ export class PluginProcess {
         method: p.method,
         name: p.name,
         signal: p.controller.signal,
+        ...(p.confirmed ? { confirmed: true as const } : {}),
       });
       reply({ result });
     } catch (e) {
@@ -236,6 +256,7 @@ export class PluginProcess {
     context?: PluginBinding,
     signal?: AbortSignal,
     timeoutMs = DEFAULT_CALL_TIMEOUT_MS,
+    options: PluginCallOptions = {},
   ): Promise<any> {
     if (signal?.aborted) throw new PluginCallNotSent();
     const child = await this.#started();
@@ -261,6 +282,7 @@ export class PluginProcess {
         method,
         name,
         controller,
+        confirmed: options.confirmed === true,
         cleanup: () => {
           controller.abort();
           clearTimeout(timer);

@@ -3,8 +3,6 @@
  * allowance and when it comes, the invite bonus, what each kind of generation costs (read live from
  * genex.games, never typed into the app) and the last few spends and refunds with their game.
  */
-import { PLAY_ORIGIN } from "./play.ts";
-
 /** Kinds of generation the price list names. Wire values, as genex.games spells them. */
 export const CreditKind = {
   Model: "model",
@@ -75,5 +73,5 @@ export interface PlayCredits {
 
 /** How many spends and refunds the tab lists. */
 export const RECENT_CREDITS = 5;
-/** Where Get credits leads: genex.games' plans page, opened in the browser. */
-export const CREDITS_PLANS_URL = `${PLAY_ORIGIN.web}/plans`;
+/** Where Get credits leads: the plans page of the website at `web` (genex.games'), opened in the browser. */
+export const creditsPlansUrl = (web: string): string => `${web}/plans`;

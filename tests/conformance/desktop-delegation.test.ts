@@ -1,17 +1,20 @@
 /**
  * Computer control through a real delegation: the chat's own session — on any engine — is handed
- * the `desktop` tool when a desktop driver is installed, and nothing moves before the person
- * answers the consent card the studio puts in the chat. Sessions nobody answers (a playtester, a
- * read-only lead) never get it, and the driver stops with the session.
+ * the `desktop` tool when the person turned computer control on in Settings (off by default) and a
+ * desktop driver is installed, and nothing moves before the person answers the consent card the
+ * studio puts in the chat. Sessions nobody answers (a playtester, a read-only lead) never get it,
+ * and the driver stops with the session or when the setting is turned off.
  */
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { assistGrants } from "../../src/main/core/desktop-assist.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
+import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { UiEvent, type UiEvent as UiEventData } from "../../src/shared/ui-events.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import type { DesktopDriver } from "../../src/substrate/desktop-driver.ts";
@@ -19,6 +22,7 @@ import { connectCuaDriver, driverEnv, GrantHolder } from "../../src/substrate/cu
 import { embeddedCuaDriver, HOST_BUNDLE_ID } from "../../src/substrate/cua-embedded.ts";
 import { running } from "../helpers/processes.ts";
 import { coreLite } from "../helpers/core-lite.ts";
+import { TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const text = (result: LiveToolResult): string => (typeof result === "string" ? result : result.text);
@@ -71,6 +75,7 @@ it("the chat's own session gets the desktop tool behind the person's consent; ot
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
     const project = "desk";
     await core.games.scaffold(project);
     const threadId = await core.createGameThread(project);
@@ -154,6 +159,7 @@ it("the harness's own loop (Ollama) gets the same desktop tool through desktop.c
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
     const project = "desk-local";
     await core.games.scaffold(project);
     const threadId = await core.createGameThread(project);
@@ -198,6 +204,146 @@ it("the harness's own loop (Ollama) gets the same desktop tool through desktop.c
   }
 });
 
+/** A fixture engine that calls the desktop tool through `steps` when it is handed one, recording what it saw. */
+function desktopEngine(steps: (call: (args: Record<string, unknown>) => Promise<string>) => Promise<void>) {
+  const seen: Array<{ tools: string[] }> = [];
+  const engine = {
+    id: "fixture-delegate",
+    label: "Fixture",
+    kind: "delegated",
+    status: async () => ({ code: "ready", detail: "Fixture" }),
+    models: async () => [],
+    delegate: async (request: DelegateRequest) => {
+      const tools = (request.liveTools ?? []).map((tool) => tool.name);
+      seen.push({ tools });
+      if (tools.includes("desktop")) await steps(async (args) => text(await request.onLiveTool!("desktop", args)));
+      return { ok: true, engine: "fixture-delegate", summary: "done", turns: 1, usage: {} };
+    },
+  };
+  return { engine, seen };
+}
+
+it("computer control is off by default: no session is handed the computer, no card shows and no driver is looked for", async () => {
+  let looked = 0;
+  const desktop = desktopControl({
+    findDriver: async () => {
+      looked += 1;
+      return "/fake/cua-driver";
+    },
+    connect: async () => {
+      throw new Error("never started");
+    },
+    ownApp: () => false,
+  });
+  const lite = await coreLite({ desktop });
+  try {
+    const { core } = lite;
+    assert.equal(core.settings.computerControl, false, "a fresh install starts with it off");
+    const project = "desk-off";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const { engine, seen } = desktopEngine(async () => {});
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<Record<string, unknown>>>;
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project, threadId, prompt: "tidy my notes" });
+    assert.equal(seen[0]?.tools.includes("desktop"), false, "the chat's own session is not handed the desktop tool");
+
+    // The harness's own loop asks the host and reads a plain answer, never an error.
+    const call = api[HostMethod.DesktopComputer]!;
+    for (const params of [
+      { project, threadId, describe: true },
+      { project, threadId, args: { action: "screenshot" } },
+    ]) {
+      const answered = await call(params);
+      assert.deepEqual(Object.keys(answered), ["unavailable"]);
+      assert.match(String(answered.unavailable), /computer control is off in Settings/);
+      assert.match(String(answered.unavailable), /Settings → Permissions/);
+    }
+    const { tools } = await import("../../src/harness-seed/tools/desktop-tools.ts");
+    const ctx = { project, threadId, call: (method: string, params: unknown) => api[method]!(params) };
+    const said = await tools[0]!.execute({ action: "screenshot" }, ctx as never);
+    assert.equal(typeof said, "string");
+    assert.match(String(said), /computer control is off in Settings/, "the seed's tool reads the host's sentence");
+
+    const cards = (await core.store.listEvents(threadId)).filter(
+      (event) => event.data.type === "custom" && event.data.event_type === "plugin_consent",
+    );
+    assert.deepEqual(cards, [], "no consent card was ever shown");
+    assert.equal(looked, 0, "the driver was never looked for, so cua-driver never started");
+  } finally {
+    await lite.close();
+  }
+});
+
+it("an existing install starts with computer control off; turning it on is remembered", async () => {
+  const lite = await coreLite();
+  try {
+    const { core, userData } = lite;
+    const settings = path.join(userData, "settings.json");
+    await writeFile(settings, JSON.stringify({ learning: true, buildersMax: 6, autoResume: true }));
+    await core.stop();
+    await core.init();
+    assert.equal(core.settings.computerControl, false, "a settings file from before the switch reads as off");
+    assert.equal((await core.updateSettings({ computerControl: true })).computerControl, true);
+    await core.stop();
+    await core.init();
+    assert.equal(core.settings.computerControl, true, "on survives a restart");
+    const saved = JSON.parse(await readFile(settings, "utf8")) as { computerControl?: unknown };
+    assert.equal(saved.computerControl, true);
+  } finally {
+    await lite.close();
+  }
+});
+
+it("turned off during a session, the next desktop call is refused in words and the running driver stops", async () => {
+  const calls: string[] = [];
+  const active: number[] = [];
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => fakeDriver(calls),
+    ownApp: () => false,
+    onActive: (count) => active.push(count),
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-toggle";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const answers: string[] = [];
+    let activeWhenOff: number | null = null;
+    const { engine, seen } = desktopEngine(async (call) => {
+      answers.push(await call({ action: "screenshot" }));
+      await core.updateSettings({ computerControl: false });
+      activeWhenOff = desktop.active();
+      answers.push(await call({ action: "left_click", coordinate: "10,20" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project, threadId, prompt: "tidy my notes" });
+    assert.ok(seen[0]?.tools.includes("desktop"), "turned on, the session was handed the computer");
+    assert.match(answers[1]!, /computer control is off in Settings/);
+    assert.equal(activeWhenOff, 0, "turning it off stopped the running driver at once");
+    assert.deepEqual(calls, ["close"], "the click never reached the driver");
+    assert.deepEqual(active, [1, 0]);
+
+    await api[HostMethod.EngineDelegate]!({ engine: "fixture-delegate", project, threadId, prompt: "again" });
+    assert.equal(seen[1]?.tools.includes("desktop"), false, "the next session is not handed it");
+  } finally {
+    await lite.close();
+  }
+});
+
 it("without a desktop driver, nothing is offered and desktop.computer says why", async () => {
   const desktop = desktopControl({
     findDriver: async () => null,
@@ -209,6 +355,7 @@ it("without a desktop driver, nothing is offered and desktop.computer says why",
   const lite = await coreLite({ desktop });
   try {
     const { core } = lite;
+    await core.updateSettings({ computerControl: true });
     await core.games.scaffold("no-driver");
     const threadId = await core.createGameThread("no-driver");
     const api = core.api() as unknown as Record<string, (input: unknown) => Promise<Record<string, unknown>>>;
@@ -239,6 +386,7 @@ it("end to end: a chat's click goes through consent, the cua client and a real M
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
     await core.games.scaffold("desk-e2e");
     const threadId = await core.createGameThread("desk-e2e");
     let said = "";
@@ -296,6 +444,7 @@ it("end to end: a chat opens a web page, reads it and types into it by ref, thro
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
     await core.games.scaffold("desk-web");
     const threadId = await core.createGameThread("desk-web");
     const said: string[] = [];
@@ -375,6 +524,7 @@ it("end to end: a chat's click goes through the app's own embedded daemon, which
   try {
     const { core } = lite;
     answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.updateSettings({ computerControl: true });
     await core.games.scaffold("desk-embedded");
     const threadId = await core.createGameThread("desk-embedded");
     let said = "";
@@ -407,6 +557,76 @@ it("end to end: a chat's click goes through the app's own embedded daemon, which
     assert.equal(running(served!.pid), false, "⌃⌥⌘Esc and quitting stop it");
   } finally {
     await daemon.stop();
+    await lite.close();
+  }
+});
+
+it("an assist's turn may drive the engine apps its grant names; the next turn and the plain chat may not", async () => {
+  const calls: string[] = [];
+  const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => ({
+      ...fakeDriver(calls),
+      focus: async () => ({ app: toyEditor, secure: false }),
+    }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-assist";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const said: string[] = [];
+    const { engine, seen } = desktopEngine(async (call) => {
+      said.push(await call({ action: "left_click", coordinate: "10,20" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    const delegate = (messageId: string) =>
+      api[HostMethod.EngineDelegate]!({
+        engine: "fixture-delegate",
+        project,
+        threadId,
+        prompt: "go",
+        chatTurn: { messageId },
+      });
+
+    await delegate("msg_plain");
+    assert.ok(seen[0]?.tools.includes("desktop"), "with computer control on, the chat is handed the desktop");
+    assert.match(said[0]!, /Toy Editor is a game engine's editor/, "an engine's editor is refused outside an assist");
+
+    assistGrants(core).record(threadId, {
+      pluginId: TOY_PLUGIN_ID,
+      apps: ["com.example.toy"],
+      messageId: "msg_assist",
+    });
+    await delegate("msg_assist");
+    assert.ok(seen[1]?.tools.includes("desktop"), "the assist's turn is handed the desktop");
+    assert.match(said[1]!, /OK — left click at 10,20/);
+    assert.equal(assistGrants(core).live(threadId), null, "the grant ended with its turn");
+
+    await delegate("msg_after");
+    assert.match(said[2]!, /Toy Editor is a game engine's editor/);
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("click")),
+      ["click 10,20"],
+      "only the assist's click reached the driver",
+    );
+  } finally {
     await lite.close();
   }
 });

@@ -4,9 +4,10 @@
  * and re-exports the types; the renderer reads them through `window.studio`.
  */
 import type { GameRuntime } from "./computer-target.ts";
-import type { EngineBinding } from "./game-engine.ts";
+import type { EngineBinding, LinkedEngine } from "./game-engine.ts";
 import type { GameLibraryEntry } from "./game-library.ts";
 import type { HookEvent } from "./plugin-hooks.ts";
+import type { JudgeRef } from "./plugins.ts";
 import type { FolderHolds, ProjectFact } from "./project-facts.ts";
 
 export interface GameProject {
@@ -28,6 +29,15 @@ export interface GameProject {
   built: boolean;
   /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
   engine?: EngineBinding;
+  /** The linked engine as its plugin declares it (its name, project files, project in the folder); absent for a web game. */
+  linkedEngine?: LinkedEngine;
+  /**
+   * True when an engine plugin that is on plays this game in its editor (its play tools hold the
+   * game's link): judges and the computer play it there. Filled by the harness's `game.list`.
+   */
+  editorPlay?: boolean;
+  /** The judges that play this game in its editor, as its engine plugin declares them; only with `editorPlay`. */
+  judges?: JudgeRef[];
   /**
    * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
    * `detect` and the engine link. Empty while the first message has not picked a kind.
@@ -131,6 +141,19 @@ export interface ProjectShape {
  */
 export interface PlayCommand {
   command: string;
+  args: string[];
+  /**
+   * An engine an enabled plugin runs for the game instead (a Godot game's own Godot): the plugin's
+   * declared native runtime, by its id, and its arguments. The studio finds the runtime where the
+   * plugin says it is and starts it in its native-job sandbox with a window and the GPU, which an
+   * engine needs to draw; the command stays for a person to run. Absent when unusable.
+   */
+  engine?: PlayEngine;
+}
+
+/** An engine runtime a plugin declares, by id, and the arguments the studio starts it with. */
+export interface PlayEngine {
+  runtime: string;
   args: string[];
 }
 

@@ -120,6 +120,9 @@ export const useLayoutView = () =>
 /** Whether this is an unpackaged developer run, which offers the developer tools. */
 export const useDeveloperRun = (): boolean => useSession((s) => s.developer);
 
+/** The website Play links to: genex.games', unless a development profile points Play elsewhere. */
+export const usePlayWeb = (): string => useSession((s) => s.playWeb);
+
 /** The session as the shell reads it: two booleans, so a change of error text never re-renders. */
 export const useSessionView = () =>
   useSession(useShallow((s) => ({ ready: s.status === SessionStatus.Ready, welcoming: s.welcoming })));

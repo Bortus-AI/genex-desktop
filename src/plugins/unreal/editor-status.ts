@@ -14,7 +14,7 @@ import type { PluginToolbarStatus } from "../../plugin-sdk/index.d.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { justLaunched, readStarting, retireStarting, type Starting, stillStarting } from "./editor-launch.ts";
 import { PortBlockedError } from "./editor-log.ts";
-import { chosenProject, linkedProject, listSetUpProjects, type SetUpProject } from "./editor-port.ts";
+import { chosenProject, linkedProject, listSetUpProjects, type SetUpProject, wantsUnreal } from "./editor-port.ts";
 import { projectName } from "./project-file.ts";
 import { findEngines, installEngineVersion, type SetupEnv } from "./setup.ts";
 
@@ -258,11 +258,12 @@ async function gameSubject(storage: string, game: string): Promise<Subject> {
 }
 
 /**
- * The Unreal toolbar button's status: Not installed while no Unreal Genex works with is installed.
- * Otherwise, with a game open it is that game's: Add while the game has no Unreal project, else its
- * own project's state, named. With no game open it is the project chosen in the panel (else the
- * first set-up one). Only a port from Genex's own setup records is
- * ever asked. The one write is removing this project's own Starting record once it answers.
+ * The Unreal toolbar button's status, `shown` on a game whose chat chose Unreal before its project
+ * could be made (the button is scoped to Unreal projects, which a linked game has). Not installed while
+ * no Unreal Genex works with is installed. Otherwise, with a game open it is that game's: Add while
+ * the game has no Unreal project, else its own project's state, named. With no game open it is the
+ * project chosen in the panel (else the first set-up one). Only a port from Genex's own setup
+ * records is ever asked. The one write is removing this project's own Starting record once it answers.
  */
 export async function toolbarStatus(
   env: SetupEnv,
@@ -270,6 +271,12 @@ export async function toolbarStatus(
   now: number,
   game?: string,
 ): Promise<PluginToolbarStatus> {
+  const [status, wanted] = await Promise.all([gameStatus(env, storage, now, game), wantsUnreal(storage, game)]);
+  return wanted ? { ...status, shown: true } : status;
+}
+
+/** The button's status before the strip's `shown`: see {@link toolbarStatus}. */
+async function gameStatus(env: SetupEnv, storage: string, now: number, game?: string): Promise<PluginToolbarStatus> {
   // Epic's list of installed engines is one small file: cheap enough for every toolbar ask.
   if (!(await findEngines(env)).some((engine) => engine.supported)) return { ...GET };
   const subject = game ? await gameSubject(storage, game) : await panelSubject(storage);

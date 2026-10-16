@@ -12,7 +12,9 @@
 import type { CSSProperties, JSX, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { type PlayBarState, type PlayMicBar, PlayControl, type PlayPoint } from "../../shared/play.ts";
+import { usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
+import { withViewTransition } from "../ui/view-transition.ts";
 import { Icon, type IconName } from "../ui/icons.tsx";
 import { useOnline } from "../ui/use-online.ts";
 import { PLAY_WORDS } from "../words.ts";
@@ -214,6 +216,7 @@ function BarButton({
   ariaPressed,
   disabled,
   glyph,
+  onPress,
 }: {
   control: PlayControl;
   icon: IconName;
@@ -226,6 +229,8 @@ function BarButton({
   disabled?: boolean;
   /** The icon as drawn, when it is more than the glyph (the like's heart and its sparks). */
   glyph?: ReactNode;
+  /** What a press does, when it is more than asking main for the control. */
+  onPress?: () => void;
 }): JSX.Element {
   const worn = noteOn(bar, control);
   const said = useLastNote(worn ? WORDS.notes[worn.note] : null);
@@ -239,7 +244,7 @@ function BarButton({
       data-play-bar={control}
       data-note={worn?.look}
       disabled={disabled}
-      onClick={() => send(control)}
+      onClick={onPress ?? (() => send(control))}
     >
       <span className="play-bar-icon">
         {glyph ?? <Icon name={icon} size={16} />}
@@ -296,9 +301,10 @@ function Actions({
   first: RefObject<HTMLButtonElement | null>;
   online: boolean;
 }): JSX.Element {
-  const busy = bar?.busy === true;
   // Like and Remix need genex.games; Share and Invite copy a link, which works offline.
-  const waits = busy || !online;
+  const making = usePlay((s) => s.making !== null);
+  // One remix at a time.
+  const remixWaits = making || !online;
   const likes = formatCount(bar?.likes ?? 0);
   const bursts = useLikeBursts(bar);
   return (
@@ -316,7 +322,7 @@ function Actions({
         buttonRef={first}
         ariaLabel={WORDS.likes(likes)}
         ariaPressed={bar?.liked === true}
-        disabled={waits}
+        disabled={!online}
       />
       <BarButton control={PlayControl.Share} icon="export" label={WORDS.share} bar={bar} />
       <BarButton control={PlayControl.Invite} icon="users" label={WORDS.invite} bar={bar} />
@@ -327,7 +333,8 @@ function Actions({
           label={WORDS.remix}
           bar={bar}
           className="play-viewer-bar-remix"
-          disabled={waits}
+          disabled={remixWaits}
+          onPress={() => withViewTransition(() => void studio().play.remixViewed())}
         />
       )}
       <button

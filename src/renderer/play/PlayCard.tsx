@@ -7,6 +7,7 @@
 import type { CSSProperties, JSX } from "react";
 import { memo, useEffect, useRef, useState } from "react";
 import type { PlayGame } from "../../shared/play.ts";
+import { usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -162,14 +163,12 @@ function Author({ author }: { author: PlayGame["author"] }): JSX.Element {
 /** One game on the dashboard; pressing its cover plays it. */
 export const PlayCard = memo(function PlayCard({
   game,
-  remixing,
   onPlay,
   onRemix,
   showAuthor = true,
   marquee = false,
 }: {
   game: PlayGame;
-  remixing: boolean;
   onPlay: (game: PlayGame) => void;
   onRemix: (game: PlayGame) => void;
   /** Whether the card says who made it. */
@@ -178,6 +177,9 @@ export const PlayCard = memo(function PlayCard({
   marquee?: boolean;
 }): JSX.Element {
   const [hovered, setHovered] = useState(false);
+  // One remix at a time: this card's says so, and every Remix waits for it.
+  const making = usePlay((s) => s.making?.slug ?? null);
+  const remixing = making === game.slug;
   return (
     <article className="play-card" data-play-game={game.slug}>
       <button
@@ -211,7 +213,7 @@ export const PlayCard = memo(function PlayCard({
             variant="secondary"
             className="play-card-remix"
             aria-label={WORDS.remixLabel(game.title)}
-            disabled={remixing}
+            disabled={making !== null}
             onClick={() => onRemix(game)}
           >
             <Icon name="remix" size={14} />

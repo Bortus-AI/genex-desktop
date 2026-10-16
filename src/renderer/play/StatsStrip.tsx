@@ -8,7 +8,7 @@ import type { JSX } from "react";
 import { useEffect } from "react";
 import { type PlayGame, playPageUrl } from "../../shared/play.ts";
 import { type Change, ChangeKind, DEFAULT_STATS_PERIOD } from "../../shared/play-stats.ts";
-import { usePeople } from "../state/hooks.ts";
+import { usePeople, usePlayWeb } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Icon } from "../ui/icons.tsx";
 import { useCopy } from "../use-copy.ts";
@@ -70,13 +70,14 @@ function PlayingNow({ count }: { count: number }): JSX.Element {
 /** Copy a game's genex.games link, for a quiet week. */
 function CopyGameLink({ game }: { game: PlayGame }): JSX.Element {
   const [copied, copy] = useCopy();
+  const web = usePlayWeb();
   return (
     <button
       type="button"
       className="people-button stats-strip-action"
       data-tone="tint"
       data-stats-copy-link
-      onClick={() => copy(playPageUrl(game.slug))}
+      onClick={() => copy(playPageUrl(web, game.slug))}
     >
       <Icon name={copied ? "check" : "link"} size={14} />
       {copied ? WORDS.linkCopied : WORDS.copyLink(game.title)}

@@ -23,6 +23,7 @@ import { HostMethod } from "../../src/shared/harness-api.ts";
 import { type ExportReview, type PluginBinding, PluginService, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { UiEvent, type UiEventMap } from "../../src/shared/ui-events.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
+import { ENGINES, UNREAL_ENGINE } from "../helpers/engines.ts";
 import { coreLite } from "../helpers/core-lite.ts";
 
 const GAME = "publish-me";
@@ -86,7 +87,7 @@ async function addUnrealGame(rig: Awaited<ReturnType<typeof dialogRig>>) {
   const project = path.join(game.dir, "unreal", "DirtTrack.uproject");
   await mkdir(path.dirname(project), { recursive: true });
   await writeFile(project, "{}");
-  await writeEngineBinding(game.dir, project);
+  await writeEngineBinding(game.dir, project, UNREAL_ENGINE.id, ENGINES);
   return game;
 }
 
@@ -298,6 +299,31 @@ test("Publish refuses a folder that holds another kind of project and no web gam
     assert.equal(rig.calls.length, 0, "Genex is asked nothing");
     assert.equal(rig.consents.length, 0, "and nobody is asked anything");
     assert.deepEqual((await publishReview(rig.core, GAME)).included, ["index.html"], "a web game still is");
+  } finally {
+    await rig.close();
+  }
+});
+
+test("Publish puts a Godot game's web export online: its web/ folder in the root's place", async () => {
+  const rig = await dialogRig();
+  try {
+    const godot = await rig.core.games.scaffold("ember-run", { title: "Ember Run" });
+    await rm(path.join(godot.dir, "index.html"));
+    const meta = path.join(godot.dir, "studio.json");
+    const { contractVersion: _starter, ...kept } = JSON.parse(await readFile(meta, "utf8")) as Record<string, unknown>;
+    await writeFile(meta, JSON.stringify(kept));
+    await mkdir(path.join(godot.dir, "godot"), { recursive: true });
+    await writeFile(path.join(godot.dir, "godot", "project.godot"), "config_version=5\n");
+    await mkdir(path.join(godot.dir, "web"), { recursive: true });
+    await writeFile(
+      path.join(godot.dir, "web", "index.html"),
+      "<!doctype html><title>Ember Run</title><script src=index.js></script>",
+    );
+    for (const file of ["index.js", "index.wasm", "index.pck"])
+      await writeFile(path.join(godot.dir, "web", file), file);
+    await writeFile(path.join(godot.dir, "web", ".gdignore"), "");
+    const review = await publishReview(rig.core, "ember-run");
+    assert.deepEqual([...review.included].sort(), ["index.html", "index.js", "index.pck", "index.wasm"]);
   } finally {
     await rig.close();
   }

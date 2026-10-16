@@ -13,16 +13,19 @@
  * Deliberately free of Electron imports so the whole core can be exercised under plain node; the
  * preview is injected through {@link PreviewPort}.
  */
-import { cp, lstat, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import type { ChildProcess } from "node:child_process";
+import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { BuildPreviewRequest } from "../shared/build-preview.ts";
-import { ignoreLine } from "../shared/project-workspace.ts";
+import { deliveryFolderFor, ignoreLine, webFolderOf } from "../shared/project-workspace.ts";
 import { DEFAULT_BUILDERS, LEAD_WINDOWS } from "../shared/builders.ts";
 import type { ConnectionSnapshot } from "../shared/connections.ts";
 import type { BackdropShaderRequest, BackdropShaderResult } from "../shared/backdrop-shader.ts";
-import type { GameLocation, GameName, GameNameRequest } from "../shared/game-project.ts";
+import type { GameLocation, GameName, GameNameRequest, PlayEngine } from "../shared/game-project.ts";
+import { StudioPlatform } from "../shared/boot.ts";
 import type { GameSoundRequest } from "../shared/game-sound.ts";
 import { latestRun } from "../shared/coordinator.ts";
 import { validateCoverSurface } from "../shared/cover-shader.ts";
@@ -42,6 +45,7 @@ import {
   type PluginStillAnswer,
   type PluginStillOrder,
   PluginToolAudience,
+  NativeRuntimeState,
 } from "../shared/plugins.ts";
 import type { EngineLinkUndo } from "../shared/game-engine.ts";
 import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
@@ -71,6 +75,7 @@ import {
 } from "../shared/ui-events.ts";
 import { observeMediaPlayback } from "../substrate/audio-observation.ts";
 import { BudgetLedger } from "../substrate/budget.ts";
+import { readEngineBinding } from "../substrate/game-engine-binding.ts";
 import { latestBuildPreview } from "../substrate/build-preview.ts";
 import { ContextPreferences } from "../substrate/context-settings.ts";
 import { BonsaiEngine } from "../substrate/engines/bonsai.ts";
@@ -106,6 +111,7 @@ import { ensureFactIgnoreRules } from "../substrate/nested-repos.ts";
 import { mcpSecretPort, type SecretPort } from "../substrate/mcp/store.ts";
 import { isBelow, isInside } from "../substrate/paths.ts";
 import { PluginNativeServices } from "../substrate/plugins/native.ts";
+import { spawnNativeLongLived } from "../substrate/plugins/native-process.ts";
 import { PluginRegistry } from "../substrate/plugins/registry.ts";
 import { PluginServices } from "../substrate/plugins/services.ts";
 import { createEngineLinks, type EngineLinks } from "../substrate/plugins/engine-links.ts";
@@ -199,6 +205,9 @@ const HARNESS_HEARTBEAT_TIMEOUT_MS = 10 * MINUTE_MS;
 const HARNESS_CRASH_LOOP = { count: 3, windowMs: 5 * MINUTE_MS } as const;
 /** Where the folder chosen in Settings → Games is remembered, under userData. */
 const GAMES_ROOT_FILE = "games-root.json";
+/** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
+const ENGINE_SCRATCH_PREFIX = "genex-play-";
+
 /** How long after a boot the first full read of the log (for Activity) waits. */
 const ACTIVITY_WARMUP_DELAY_MS = 5 * SECOND_MS;
 
@@ -443,6 +452,8 @@ export class StudioCore {
   builds!: GameBuilds;
   plugins!: PluginRegistry;
   pluginServices!: PluginServices;
+  /** The plugins' native runtimes: detected for jobs, and for an engine a bridge game's play names. */
+  #nativePlugins: PluginNativeServices | null = null;
   /** Each game's link to an engine project, kept for `game-engine` plugins (`game.engine.*`, Undo, the first call's link). */
   engineLinks!: EngineLinks;
   /**
@@ -495,6 +506,7 @@ export class StudioCore {
     agentsMax: DEFAULT_POOL_MAX,
     blender: true,
     autoResume: true,
+    computerControl: false,
   };
   #assetCheckpointStore?: AssetCheckpoints;
   #planReviews?: PlanReviewController;
@@ -540,6 +552,8 @@ export class StudioCore {
       workspaceSections: () => this.plugins?.workspaceSections() ?? [],
       // Likewise: until the registry exists no plugin hooks a moment.
       hookEvents: (game) => this.plugins?.hookEvents(game) ?? [],
+      // Likewise: until the registry exists no engine is declared, so no link holds.
+      engines: () => this.plugins?.engines() ?? new Map(),
     });
     // Every save point and rescue snapshot of a game follows the rules for what it holds then,
     // and a restore never cleans away what those rules ignore.
@@ -976,6 +990,7 @@ export class StudioCore {
       changed: (project) => this.emit(UiEvent.GameChanged, { project }),
       gameThread: (project) => this.threadForGame(project),
       now: () => new Date(),
+      catalog: () => this.plugins.engines(),
     });
     this.pluginServices.engineLinks = this.engineLinks;
     // `game.snapshot`: an ordinary game snapshot, in Rewind under the plugin's reason.
@@ -989,13 +1004,17 @@ export class StudioCore {
     };
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
+    // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
+    this.pluginServices.engineAssist = (pluginId, binding, task, signal) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...(signal ? { signal } : {}) });
     this.plugins = new PluginRegistry(
       path.join(this.layout.engineHomes, "plugins"),
       path.join(this.options.paths.resources, "plugins"),
       path.join(this.options.paths.resources, "plugin-sdk/backend.mjs"),
-      (id, method, args, binding) => this.pluginServices.call(id, method, args, binding),
+      (id, method, args, binding, invocation) => this.pluginServices.call(id, method, args, binding, invocation),
     );
     const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
+    this.#nativePlugins = nativePlugins;
     this.plugins.nativeService = (manifest, directory, method, args, binding, invocation) =>
       nativePlugins.call(
         manifest,
@@ -1010,11 +1029,20 @@ export class StudioCore {
     this.pluginServices.assetLimits = (id) =>
       this.plugins.list().find((p) => p.manifest.id === id)?.manifest.assetLimits;
     this.pluginServices.assetRoot = async (binding) => {
+      const own = deliveryFolderFor(await this.games.factsOf(binding.project).catch(() => []));
+      if (own) return path.join(binding.directory, own);
       const shape = await readProjectShape(binding.directory);
       return shape.build ? path.join(binding.directory, "public") : binding.directory;
     };
-    // The Unreal Editor bridge is an early integration: bundled, and off until the user turns it on.
-    this.plugins.seedEnabled = { blender: this.#settings.blender, unreal: false };
+    // The Unreal, Unity, Godot and Roblox Studio plugins are bundled and off until the user turns
+    // them on: each needs its editor, and Roblox an account for people 18 and over.
+    this.plugins.seedEnabled = {
+      blender: this.#settings.blender,
+      unreal: false,
+      unity: false,
+      godot: false,
+      roblox: false,
+    };
     // The Genex account is the app's: Genex off takes the agent's tools, never the sign-in or Publish.
     this.plugins.appAccount = { id: GENEX_PLUGIN_ID, actions: GENEX_ACCOUNT_ACTIONS };
     this.plugins.onChange = (c) => {
@@ -1061,7 +1089,8 @@ export class StudioCore {
   #genexPackages(): GenexPackageService {
     return new GenexPackageService({
       // The builds are made after the plugins; a tool call only ever comes later.
-      addPackages: (source, names) => this.builds.addPackages(source, names),
+      addPackages: async (source, names) =>
+        this.builds.addPackages({ ...source, guarded: await this.scriptsGuarded(source.project) }, names),
       gameDir: (project) => this.games.dirFor(project),
       scratch: this.layout.scratch,
     });
@@ -1679,7 +1708,12 @@ export class StudioCore {
       next.buildersMax = clampBuilders(next.buildersMax);
       next.agentsMax = next.buildersMax + LEAD_WINDOWS;
     }
+    // Only an explicit true turns the computer over; anything else the page sends reads as off.
+    next.computerControl = next.computerControl === true;
+    const computerOff = this.#settings.computerControl && !next.computerControl;
     this.#settings = next;
+    // Turning computer control off stops every desktop session's driver now, as ⌃⌥⌘Esc does.
+    if (computerOff) await this.options.desktop?.stopAll();
     // Atomic (CQ-3): a torn write would read back as defaults at the next start. The default goes
     // beside the settings so the next start can tell a worker count someone chose from one never touched.
     const saved: SavedSettings = { ...this.#settings, buildersDefault: DEFAULT_BUILDERS };
@@ -1714,6 +1748,8 @@ export class StudioCore {
         agentsMax: buildersMax + LEAD_WINDOWS,
         blender: parsed.blender !== false,
         autoResume: parsed.autoResume !== false,
+        // Off unless the person turned it on: a file from before the switch reads as off.
+        computerControl: parsed.computerControl === true,
       };
     } catch {
       /* first launch — defaults stand */
@@ -1827,6 +1863,43 @@ export class StudioCore {
   /** The person's Stop on a job's chat line: the job's record, or null for a job this game never had. */
   async stopJob(project: string, jobId: string): Promise<JobRecord | null> {
     return this.jobs.stop(project, jobId, JobStopper.Person);
+  }
+
+  /**
+   * Starts the engine a bridge game's play names for the build at `root` (`EngineLauncher`): the
+   * runtime an enabled plugin declares by that id, found where the plugin says, in the native-job
+   * sandbox with a window and the GPU (an engine draws), reading and writing only the build, its
+   * stdio open for the Play Protocol. Null off a Mac, or when no enabled plugin has it ready: the
+   * play's own command runs then.
+   */
+  async startEngine(engine: PlayEngine, root: string): Promise<{ child: ChildProcess } | null> {
+    const native = this.#nativePlugins;
+    if (!native || process.platform !== StudioPlatform.Mac) return null;
+    const owner = this.plugins
+      .list()
+      .find(
+        (p) => this.plugins.enabled(p.manifest.id) && p.manifest.nativeRuntimes?.some((r) => r.id === engine.runtime),
+      );
+    const runtime = owner?.manifest.nativeRuntimes?.find((r) => r.id === engine.runtime);
+    if (!owner || !runtime) return null;
+    const found = await native.detect(runtime, this.pluginServices.root(owner.manifest.id));
+    if (found.state !== NativeRuntimeState.Ready || !found.path) return null;
+    const scratch = await mkdtemp(path.join(os.tmpdir(), ENGINE_SCRATCH_PREFIX));
+    // A game linked to an engine project outside its folder plays that project: the engine reaches it too.
+    const linked = await readEngineBinding(root, this.plugins.engines()).catch(() => undefined);
+    const reach = [root, ...(linked ? [path.dirname(linked.project)] : [])];
+    const child = await spawnNativeLongLived({
+      binary: found.path,
+      args: engine.args,
+      cwd: root,
+      scratch,
+      reads: reach,
+      writes: reach,
+      denyRead: [this.layout.secrets],
+      gpu: true,
+    });
+    child.once("close", () => void rm(scratch, { recursive: true, force: true }));
+    return { child };
   }
 
   /** The chat line's Undo of a game's engine link (`engineLinks.undo`); a link that changed since is refused. */
@@ -1953,8 +2026,10 @@ export class StudioCore {
   async exportPublicCopy(project: string, targetDir: string): Promise<ExportResult> {
     const game = (await this.games.list()).find((g) => g.name === project);
     if (!game) throw new Error(MESSAGE.gameNotFound);
-    let output: string | undefined;
-    if (game.shape?.build) {
+    // A game whose web game is in a folder of it (an engine's web export) publishes that folder.
+    const folder = webFolderOf(game);
+    let output: string | undefined = folder ? path.join(game.dir, folder) : undefined;
+    if (!folder && game.shape?.build) {
       const built = await this.builds.ensure({ project: game.name, dir: game.dir, shape: game.shape });
       if (!built.ok || !built.output) throw new Error(MESSAGE.exportBuildFailed);
       output = built.output;
@@ -2275,6 +2350,11 @@ export class StudioCore {
     return this.#previews.installPackages(...args);
   }
 
+  /** Whether `project` is someone else's game whose setup scripts the person has not trusted (`guardScripts`). */
+  async scriptsGuarded(project: string): Promise<boolean> {
+    return (await this.games.presentation(project)).guardScripts === true;
+  }
+
   async buildPreview(request: BuildPreviewRequest) {
     return latestBuildPreview(this.layout.runs, request);
   }
@@ -2528,6 +2608,11 @@ export class StudioCore {
   /** Rewind a game chat to just before one of its messages (`core/rewind.ts`). */
   rewindChat(...args: Parameters<ChatRewindService["rewind"]>): ReturnType<ChatRewindService["rewind"]> {
     return this.#rewind.rewind(...args);
+  }
+
+  /** Bring back the game files the chat's newest rewind replaced; the chat stays rewound (`core/rewind.ts`). */
+  undoRewind(...args: Parameters<ChatRewindService["undo"]>): ReturnType<ChatRewindService["undo"]> {
+    return this.#rewind.undo(...args);
   }
 
   /** What freeing space deletes now, in `project` or in every game (`core/storage-space.ts`). */

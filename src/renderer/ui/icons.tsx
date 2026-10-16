@@ -157,6 +157,15 @@ const glyphs = {
       <path d="M9 7.75v5a3 3 0 0 0 6 0v-5" />
     </>
   ),
+  // Godot's head as the Godot plugin's own picture draws it, in line: two antennae, two eyes, a mouth.
+  godot: (
+    <>
+      <rect x="4" y="7.5" width="16" height="12" rx="4" />
+      <path d="M8.5 7.5 7.5 4.5M15.5 7.5l1-3M10 16h4" />
+      <circle cx="9.5" cy="12.5" r="1.4" {...DOT} />
+      <circle cx="14.5" cy="12.5" r="1.4" {...DOT} />
+    </>
+  ),
   reload: (
     <g className="a-spin">
       <path d="M20 12a8 8 0 1 1-8-8c2.2 0 4.2.9 5.7 2.3L20 8.5" />

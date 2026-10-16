@@ -7,6 +7,7 @@
  */
 import type { AnyRecord } from "../../../types/harness.d.ts";
 import { HostMethod } from "../../host-methods.ts";
+import { askJudge, JUDGE_PLAY_TOOL } from "../../judge-play.ts";
 import { minutes } from "../../time.ts";
 import { WorkerIsolation, WorkerTool } from "../../workers/contract.ts";
 import type { LoopRun } from "../loop-run.ts";
@@ -21,6 +22,7 @@ import { OPEN_WORDS } from "./prompts.ts";
 import { restartTool, rewindTool, savePointTool } from "./save-point.ts";
 import { turnRoomNote, waitWithinTurn } from "./turn-room.ts";
 import { finishAsked, wrapUp } from "../wrap-up.ts";
+import { judgedInEditor, leadAsker } from "./judge-rounds.ts";
 import { WRAP_UP_WORDS } from "../wrap-up-prompts.ts";
 
 /** The longest note Genex keeps, and its plain sentence. */
@@ -117,6 +119,11 @@ async function workerAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Pr
   return answered;
 }
 
+/** A blind judge (one of the game's own, when the lead names it) plays the game folder in its engine's editor and answers the lead's yes/no question. */
+function judgeTool(loopRun: LoopRun, args: AnyRecord): Promise<string> {
+  return askJudge(leadAsker(loopRun), args);
+}
+
 /** The Loop's save points, rewinds and restarts (a restart only where a plugin restarts the project's app); null for any other tool. */
 function saveAnswer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<string> | null {
   if (name === OpenTool.SavePoint) return savePointTool(loopRun, args);
@@ -136,6 +143,7 @@ async function answer(loopRun: LoopRun, name: string, args: AnyRecord): Promise<
   if (name === DirectorTool.WrapUp) return wrapUp(loopRun, args);
   if (name === DirectorTool.RunStatus) return JSON.stringify(await openStatus(loopRun));
   if (name === DirectorTool.Finish) return openFinish(loopRun, args);
+  if (name === JUDGE_PLAY_TOOL && judgedInEditor(loopRun)) return judgeTool(loopRun, args);
   // The studio asking where the lead's build lives: the game folder itself.
   if (name === DirectorTool.ResolveRoot) return loopRun.projectDir;
   return OPEN_WORDS.unknownTool(name);

@@ -34,7 +34,12 @@ import {
   systemOpener,
 } from "../../src/plugins/unreal/editor-launch.ts";
 import { hotLibraryLoaded } from "../../src/plugins/unreal/cpp-module.ts";
-import { editorHoldsLog, heldProjectNames, namesInLsof } from "../../src/plugins/unreal/editor-holds.ts";
+import {
+  crashReporterHolds,
+  editorHoldsLog,
+  heldProjectNames,
+  namesInLsof,
+} from "../../src/plugins/unreal/editor-holds.ts";
 import {
   type Engine,
   HelperState,
@@ -48,12 +53,17 @@ import type { CompileOptions, CompileResult } from "../../src/plugins/unreal/ubt
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { toolbarStatusFrom } from "../../src/shared/plugin-toolbar.ts";
 import { createEngineLinks } from "../../src/substrate/plugins/engine-links.ts";
+import { ENGINES as ENGINE_CATALOG } from "../helpers/engines.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const GIB = 1024 ** 3;
 const HELPER = path.resolve("src/plugins/unreal/GenexEditorHelper");
 const LINKS = process.platform === "win32" && "links need privileges on Windows";
+/** Where this machine's Unreal writes a project's log: fixtures of a platform-neutral read put it there. */
+const HOST = process.platform;
+/** Who holds a log is asked of lsof on a Mac only; Windows paths can't stand in for a Mac's. */
+const MAC_LSOF = process.platform === "win32" && "lsof and ~/Library/Logs are a Mac's; Windows asks no one";
 const START = Date.UTC(2026, 9, 4, 9, 0, 0);
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -147,6 +157,8 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     openError?: Error;
     /** Ports another app listens on. */
     listening: Set<number>;
+    /** Ports Unreal's crash reporter holds after a crash (they listen too). */
+    crashReporter?: Set<number>;
     /** What the shown project's own Unreal log says, if it has one. */
     log?: EditorLog;
     /** What other projects' own logs say, by their real `.uproject`; a project not named here has `log`. */
@@ -176,6 +188,7 @@ function fakeComputer(home: string, platform: NodeJS.Platform) {
     },
     heldProjects: async () => live.held ?? [],
     portListening: async (port) => live.listening.has(port),
+    crashReporterHolds: async (port) => live.crashReporter?.has(port) ?? false,
     editorAnswers: async (port, project) => {
       asked.push(port);
       return live.answering && (live.serving === undefined || live.serving === project);
@@ -302,6 +315,7 @@ async function launchFixture(
     changed: () => {},
     gameThread: async (game) => `thread-of-${game}`,
     now: () => new Date(clock),
+    catalog: () => ENGINE_CATALOG,
   });
   const gameBinding = (game: string) => ({ project: game, directory: gameDir(game) });
   const linkGame = async (game: string, file: string) => {
@@ -782,7 +796,7 @@ describe("Get Unreal Engine", () => {
 });
 
 describe("The Unreal toolbar button", () => {
-  it("is declared on the stage strip with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
+  it("is declared on the stage strip of Unreal games only, with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
     const manifest = validateManifest(JSON.parse(await readFile("src/plugins/unreal/plugin.json", "utf8")));
     assert.deepEqual(manifest.toolbar, [
       {
@@ -790,7 +804,7 @@ describe("The Unreal toolbar button", () => {
         label: "Unreal",
         ariaLabel: "Unreal Editor",
         icon: "unreal",
-        requiresProject: false,
+        facts: ["unreal-project", "unreal-plugin"],
         target: { kind: "panel", id: "setup" },
         status: "toolbar-status",
       },
@@ -1315,6 +1329,28 @@ describe("The Unreal panel's next step", () => {
     assert.equal((await f.act("status", { project: f.drift })).next, "open");
   });
 
+  // A crashed editor's crash reporter keeps the project's port: Unreal crashed, which setup would not fix.
+  it("set up, Unreal closed, its crash reporter on the port: Unreal crashed, never sent to setup", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.listening.add(set.port);
+    f.live.crashReporter = new Set([set.port]);
+    const status = await f.act("status", { project: f.drift });
+    assert.deepEqual([status.next, status.portTaken], ["crashed", false]);
+    f.live.listening.delete(set.port);
+    f.live.crashReporter.clear();
+    assert.equal((await f.act("status", { project: f.drift })).next, "open", "the report closed: open it again");
+  });
+
+  it("set up, Unreal reopened while its crash reporter holds the port: Unreal crashed, not a blocked port", async () => {
+    const f = await launchFixture();
+    const set = await f.act("setup", { project: f.drift });
+    f.live.running = true;
+    f.live.log = ownLog(25 * SECOND, { openedAt: START + 5 * SECOND, portBlocked: true });
+    f.live.crashReporter = new Set([set.port]);
+    assert.equal((await f.act("status", { project: f.drift })).next, "crashed");
+  });
+
   it("set up, Unreal running with another project and its port held: opens once Unreal is free, never sent to setup", async () => {
     const f = await launchFixture();
     const set = await f.act("setup", { project: f.drift });
@@ -1747,7 +1783,7 @@ describe("A project's own Unreal log", () => {
   async function logFixture(text: string | Buffer) {
     const root = await realpath(await tmpDir("studio-unreal-log-"));
     const project = path.join(root, "Projects", "Drift", "Drift.uproject");
-    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), "darwin");
+    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), HOST);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, text);
     return { root, project, file };
@@ -1982,7 +2018,7 @@ describe("A project's log no editor holds", () => {
     },
   ];
   for (const row of rows)
-    it(`${row.name}, and writes nothing`, async () => {
+    it(`${row.name}, and writes nothing`, { skip: MAC_LSOF }, async () => {
       const f = await leftLog(row.closed === true);
       const { runner, calls } = lsofStandIn(row.lsof);
       const witness = await tree(f.root);
@@ -2027,7 +2063,9 @@ describe("The projects Unreal has open, by the logs its editors hold", () => {
     return { root, home, logs };
   }
 
-  it("names each project whose own log an editor holds, asking about every project log at once", async () => {
+  it("names each project whose own log an editor holds, asking about every project log at once", {
+    skip: MAC_LSOF,
+  }, async () => {
     const f = await logsHome();
     const harbor = path.join(f.logs, "HarborEditor", "Harbor.log");
     const { runner, calls } = lsofStandIn({ exit: 1, stdout: `p96814\nf5\nn${harbor}\n` });
@@ -2081,6 +2119,35 @@ describe("The projects Unreal has open, by the logs its editors hold", () => {
     });
 });
 
+// A crashed editor's crash reporter inherits its sockets and keeps the project's port until it is closed.
+describe("Unreal's crash reporter holding a project's port", () => {
+  const ASK = [LSOF, ["-w", "-n", "-P", "-t", "-a", "-c", "CrashRep", "-iTCP:18090", "-sTCP:LISTEN"]];
+
+  it("is asked of lsof by the reporter's name and the port, listening only", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "37769\n" });
+    assert.equal(await crashReporterHolds(18090, "darwin", runner), true);
+    assert.deepEqual(calls, [ASK]);
+  });
+
+  it("is false when lsof finds no reporter there, and unknown when lsof can't answer", async () => {
+    assert.equal(await crashReporterHolds(18090, "darwin", lsofStandIn({ exit: 1 }).runner), false);
+    for (const answer of [{ error: "ENOENT" }, { killed: true }, { exit: 2 }])
+      assert.equal(
+        await crashReporterHolds(18090, "darwin", lsofStandIn(answer).runner),
+        undefined,
+        JSON.stringify(answer),
+      );
+  });
+
+  it("asks nothing off a Mac, or for a port Unreal can't use", async () => {
+    const { runner, calls } = lsofStandIn({ stdout: "1\n" });
+    assert.equal(await crashReporterHolds(18090, "win32", runner), undefined);
+    for (const port of [0, -1, 1.5, 70_000, Number.NaN])
+      assert.equal(await crashReporterHolds(port, "darwin", runner), undefined, String(port));
+    assert.deepEqual(calls, []);
+  });
+});
+
 describe("A project's log naming it in another spelling", () => {
   /** Drift's real project, its open log naming `named(f)`, and a project Other beside it. */
   async function spelled(named: (f: { root: string; project: string; other: string }) => Promise<string>) {
@@ -2091,7 +2158,7 @@ describe("A project's log naming it in another spelling", () => {
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, "{}\n");
     }
-    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), "darwin");
+    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), HOST);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, UNREAL_LOG(await named({ root, project, other }), ""));
     return { root, project, file };

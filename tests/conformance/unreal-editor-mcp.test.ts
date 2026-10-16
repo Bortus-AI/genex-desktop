@@ -163,10 +163,11 @@ async function connected(
   found: Found | Project[] = [DRIFT],
   watch?: CrashWatcher,
   starts?: StartWait,
+  platform?: NodeJS.Platform,
 ) {
   const projects = Array.isArray(found) ? { chosen: found[0], setUp: found } : found;
   const logs = watch ?? logCrashWatcher(await quietHome, "darwin", POLL_MS);
-  const bridge = createEditorMcp(async () => projects, fetchImpl, logs, starts);
+  const bridge = createEditorMcp(async () => projects, fetchImpl, logs, starts, undefined, platform);
   const [local, hosted] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "studio-test", version: "1" });
   await bridge.server.connect(hosted);
@@ -427,6 +428,8 @@ const PLAY_TOOLSET = "EditorToolset.EditorAppToolset";
 function throttledEditor(
   options: {
     throttle?: boolean;
+    /** Whether the editor ray-traces (`r.RayTracing`); off unless a test says so. */
+    rayTracing?: boolean;
     refuse?: string[];
     project?: string;
     /** The editor's crash on `tool`, if this call crashes it. */
@@ -445,6 +448,8 @@ function throttledEditor(
       settings.throttle = JSON.parse(args.values).bThrottleCPUWhenNotForeground;
       return { returnValue: true };
     }
+    if (tool === "SearchCVars")
+      return { returnValue: JSON.stringify({ "r.RayTracing": { help: "", value: options.rayTracing ? 1 : 0 } }) };
     return { returnValue: null };
   }, options.project);
   const calls = () => toolCalls(unreal).map((s) => s.body.params.arguments.tool_name);
@@ -462,7 +467,7 @@ test("a play test runs at full speed behind Genex, and the user's setting comes 
   const { client, close } = await connected(unreal.fetchImpl);
   try {
     await client.callTool(play("StartPIE"));
-    assert.deepEqual(unreal.calls(), ["get_properties", "set_properties", "StartPIE"]);
+    assert.deepEqual(unreal.calls(), ["get_properties", "SearchCVars", "set_properties", "StartPIE"]);
     assert.equal(unreal.settings.throttle, false, "a background editor would otherwise play at 3 frames/s");
     const lift = unreal.seen.find((s) => s.body?.params?.arguments?.tool_name === "set_properties");
     assert.deepEqual(lift?.body.params.arguments, {
@@ -473,11 +478,11 @@ test("a play test runs at full speed behind Genex, and the user's setting comes 
 
     await client.callTool(play("CaptureEditorImage"));
     await client.callTool(play("StopPIE"));
-    assert.deepEqual(unreal.calls().slice(3), ["CaptureEditorImage", "StopPIE", "set_properties"]);
+    assert.deepEqual(unreal.calls().slice(4), ["CaptureEditorImage", "StopPIE", "set_properties"]);
     assert.equal(unreal.settings.throttle, true);
 
     await client.callTool(play("StopPIE"));
-    assert.deepEqual(unreal.calls().slice(6), ["StopPIE"], "nothing left to put back");
+    assert.deepEqual(unreal.calls().slice(7), ["StopPIE"], "nothing left to put back");
   } finally {
     await close();
   }
@@ -502,7 +507,7 @@ test("a play start that fails, or the bridge closing mid-test, puts the user's s
   try {
     const result: any = await first.client.callTool(play("StartPIE"));
     assert.equal(result.isError, true);
-    assert.deepEqual(failed.calls(), ["get_properties", "set_properties", "StartPIE", "set_properties"]);
+    assert.deepEqual(failed.calls(), ["get_properties", "SearchCVars", "set_properties", "StartPIE", "set_properties"]);
     assert.equal(failed.settings.throttle, true);
   } finally {
     await first.close();
@@ -515,6 +520,24 @@ test("a play start that fails, or the bridge closing mid-test, puts the user's s
   await second.close();
   assert.equal(abandoned.settings.throttle, true);
   assert.equal(abandoned.calls().at(-1), "set_properties");
+});
+
+// UE 5.8 on a Mac hangs the GPU rendering a ray-traced level at full speed behind another app.
+test("on a Mac, the agent's play of a ray-traced editor keeps the user's throttle; elsewhere it is lifted", async () => {
+  for (const [platform, lifted] of [
+    ["darwin", false],
+    ["win32", true],
+  ] as const) {
+    const unreal = throttledEditor({ rayTracing: true });
+    const { client, close } = await connected(unreal.fetchImpl, [DRIFT], undefined, undefined, platform);
+    try {
+      await client.callTool(play("StartPIE"));
+      assert.equal(unreal.settings.throttle, !lifted, platform);
+      assert.equal(unreal.calls().at(-1), "StartPIE", `${platform}: the play still starts`);
+    } finally {
+      await close();
+    }
+  }
 });
 
 test("the throttle setting goes back only to the editor it was taken from", async () => {

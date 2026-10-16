@@ -53,7 +53,7 @@ export function App(): JSX.Element {
   const engines = useEngines((s) => s.list);
   const updateReady = useUpdate((s) => s.ready !== null);
   useChatWidthVariable(shell, app);
-  const openRemix = usePlayRemixes(navigation);
+  usePlayRemixes(navigation, chrome);
   useGuestSignIn();
   // While Play's game or its menu lies over the window, no drag region takes the pointer from them (play.css).
   const playNative = usePlay((s) => nativeViewsUp(s.viewer));
@@ -118,9 +118,7 @@ export function App(): JSX.Element {
             onToggleSidebar={chrome.toggleSidebar}
           />
         )}
-        {chrome.playOpen && !chrome.pluginsOpen && (
-          <PlayPages chrome={chrome} onRemixed={openRemix} onNewGame={navigation.newGame} />
-        )}
+        {chrome.playOpen && !chrome.pluginsOpen && <PlayPages chrome={chrome} onNewGame={navigation.newGame} />}
       </main>
       <AppDialogs
         dialogs={dialogs}

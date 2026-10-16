@@ -39,7 +39,12 @@ import type {
   ProjectRecent,
   ProjectShape,
 } from "../shared/game-project.ts";
-import type { EngineBinding } from "../shared/game-engine.ts";
+import {
+  type EngineBinding,
+  type EngineCatalog,
+  type EngineDeclaration,
+  linkedEngineOf,
+} from "../shared/game-engine.ts";
 import {
   CoreFact,
   FactSource,
@@ -188,6 +193,8 @@ function templateKeep(shape: ProjectShape, options: { template?: boolean }): Set
 export interface AdoptOptions {
   /** Allow project configuration only after the person explicitly trusts this folder. */
   trustProjectSettings?: boolean;
+  /** Someone else's game (a Play remix): its setup scripts run only once the person trusts them. */
+  guardScripts?: boolean;
   title?: string;
   /**
    * The game to open inside the picked folder — a `rel` from `inspect`, one folder down.
@@ -377,15 +384,16 @@ const scaffoldRules = (scaffold: ScaffoldRecord | null): SourcedFactRule[] =>
   (scaffold?.facts ?? []).map((rule) => ({ rule, source: FactSource.Scaffold }));
 
 /**
- * The engine link as a fact: `unreal-project` at the linked `.uproject`'s folder, relative to the
- * game (`.` for its root), or absolute when the project lies outside it.
+ * The engine link as a fact: the fact its engine declares (`unreal-project` for Unreal) at the
+ * linked project file's folder, relative to the game (`.` for its root), or absolute when the
+ * project lies outside it.
  */
-async function linkFact(dir: string, engine: EngineBinding): Promise<ProjectFact> {
+async function linkFact(dir: string, link: EngineBinding, engine: EngineDeclaration): Promise<ProjectFact> {
   const root = await realpath(dir).catch(() => dir);
-  const folder = path.dirname(engine.project);
+  const folder = path.dirname(link.project);
   const inside = isInside(root, folder);
   const at = inside ? toPosixRelative(path.relative(root, folder)) || "." : folder;
-  return { id: CoreFact.UnrealProject, path: at, source: FactSource.Link };
+  return { id: engine.fact, path: at, source: FactSource.Link };
 }
 
 /** A cover the user (or a render they asked for) chose: a custom shader, or a recipe that is not a placeholder. */
@@ -429,6 +437,8 @@ export class GameWorkspaces {
   readonly #workspaceSections: () => readonly PluginWorkspace[];
   /** The moments the enabled plugins hook for a game of a kind, read at each description. */
   readonly #hookEvents: (game: GameKind) => readonly HookEvent[];
+  /** The engines the installed plugins declare, which a game's engine link may name, read at each read of a link. */
+  readonly #engines: () => EngineCatalog;
   /** Real paths of games whose starter was found changed: never stamped again in this app run. */
   readonly #touched = new Set<string>();
 
@@ -442,6 +452,7 @@ export class GameWorkspaces {
     factRules?: () => readonly SourcedFactRule[];
     workspaceSections?: () => readonly PluginWorkspace[];
     hookEvents?: (game: GameKind) => readonly HookEvent[];
+    engines?: () => EngineCatalog;
   }) {
     this.root = options.root;
     this.templateDir = options.templateDir;
@@ -452,6 +463,7 @@ export class GameWorkspaces {
     this.#factRules = options.factRules ?? (() => []);
     this.#workspaceSections = options.workspaceSections ?? (() => []);
     this.#hookEvents = options.hookEvents ?? (() => []);
+    this.#engines = options.engines ?? (() => new Map());
   }
 
   dirFor(name: string): string {
@@ -919,6 +931,7 @@ export class GameWorkspaces {
       await this.touch(existing.name);
       await this.#ensurePlayable(existing.dir, existing.name, options.title ?? existing.title, options);
       await this.#rememberTrust(existing.dir, options.trustProjectSettings === true);
+      if (options.guardScripts) await this.#guardScripts(existing.dir, true);
       return this.#describe(existing.name, existing.dir);
     }
 
@@ -932,9 +945,25 @@ export class GameWorkspaces {
     const title = options.title ?? path.basename(resolved);
     await this.#ensurePlayable(resolved, name, title, options);
     await this.#rememberTrust(resolved, options.trustProjectSettings === true);
+    if (options.guardScripts) await this.#guardScripts(resolved, true);
     await this.#saveIndex();
     await this.touch(name);
     return this.#describe(name, resolved);
+  }
+
+  /** The person trusts this game's setup scripts: its installs run them from now on. */
+  async trustScripts(name: string): Promise<void> {
+    await this.loadIndex();
+    await this.#guardScripts(this.dirFor(name), false);
+  }
+
+  async #guardScripts(dir: string, guarded: boolean): Promise<void> {
+    const key = await presentationPath(dir);
+    const entry = { ...this.#presentation.get(key) };
+    if (guarded) entry.guardScripts = true;
+    else delete entry.guardScripts;
+    this.#presentation.set(key, entry);
+    await this.#saveIndex();
   }
 
   async #rememberTrust(dir: string, trusted: boolean): Promise<void> {
@@ -974,13 +1003,14 @@ export class GameWorkspaces {
       : {};
     const shape = await readProjectShape(dir);
     const presentation = this.#presentation.get(await realpath(dir));
-    const engine = await readEngineBinding(dir);
+    const engine = await this.#engineLink(dir);
     const portedFrom = parsePortedFrom(parsed.portedFrom);
     const scaffold = parseScaffoldRecord(parsed.scaffold);
     const record = { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp };
     // A folder that can't be read is still listed: it has no facts and is of no kind Genex can name.
     const { facts, holds } = await this.#kind(dir, record).catch(unreadableKind);
     const hookEvents = this.#hookEvents({ facts, ...(holds ? { holds } : {}) });
+    const declared = engine ? this.#engines().get(engine.kind) : undefined;
     return {
       name,
       dir,
@@ -996,6 +1026,7 @@ export class GameWorkspaces {
       shape,
       built: isBuiltShape(shape),
       ...(engine ? { engine } : {}),
+      ...(declared ? { linkedEngine: linkedEngineOf(declared) } : {}),
       facts,
       ...(holds ? { holds } : {}),
       ...(hookEvents.length > 0 ? { hookEvents: [...hookEvents] } : {}),
@@ -1023,7 +1054,7 @@ export class GameWorkspaces {
     await this.loadIndex();
     const dir = this.dirFor(name);
     const presentation = this.#presentation.get(await presentationPath(dir));
-    const engine = await readEngineBinding(dir);
+    const engine = await this.#engineLink(dir);
     const portedFrom = parsePortedFrom((await readStudioMeta(dir))?.portedFrom);
     return this.#kind(dir, { engine, portedFrom, scaffoldStamp: presentation?.scaffoldStamp });
   }
@@ -1038,7 +1069,7 @@ export class GameWorkspaces {
   async rawFactsOf(name: string, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
     await this.loadIndex();
     const dir = this.dirFor(name);
-    return this.#rawFacts(dir, await readEngineBinding(dir), scaffold);
+    return this.#rawFacts(dir, await this.#engineLink(dir), scaffold);
   }
 
   /**
@@ -1048,11 +1079,19 @@ export class GameWorkspaces {
   async #rawFacts(dir: string, engine: EngineBinding | undefined, scaffold?: ScaffoldRecord): Promise<ProjectFact[]> {
     const recorded = scaffold ?? (await readScaffold(dir));
     const detected = await detectFacts(dir, [...this.#factRules(), ...scaffoldRules(recorded)]);
-    if (!engine) return detected;
-    // The link stands for the game's Unreal project: a project file it holds besides (one the game
-    // made before it was switched to another) is no second one, and its files are the link's own.
-    const others = detected.filter((fact) => fact.id !== CoreFact.UnrealProject);
-    return settleFacts([await linkFact(dir, engine), ...others]);
+    const declared = engine ? this.#engines().get(engine.kind) : undefined;
+    if (!engine || !declared) return detected;
+    // The link stands for the game's project in its engine: a project file of that engine it holds
+    // besides (one the game made before it was switched to another) is no second one, and its files
+    // are the link's own.
+    const linked = await linkFact(dir, engine, declared);
+    const others = detected.filter((fact) => fact.id !== linked.id);
+    return settleFacts([linked, ...others]);
+  }
+
+  /** The game's engine link among the installed plugins' engines, or undefined for a web game. */
+  #engineLink(dir: string): Promise<EngineBinding | undefined> {
+    return readEngineBinding(dir, this.#engines());
   }
 
   /**
@@ -1066,7 +1105,7 @@ export class GameWorkspaces {
 
   /** The ignore rules of the facts a folder holds now, each placed at its fact's folder (one walk). */
   async #ignoreRules(dir: string): Promise<PlacedRule[]> {
-    const facts = await this.#rawFacts(dir, await readEngineBinding(dir));
+    const facts = await this.#rawFacts(dir, await this.#engineLink(dir));
     return ignoreRulesFor(facts, this.#workspaceSections());
   }
 
@@ -1078,7 +1117,7 @@ export class GameWorkspaces {
   async copyRulesOf(name: string): Promise<{ skip: PlacedRule[]; ignored: PlacedRule[] }> {
     await this.loadIndex();
     const dir = this.dirFor(name);
-    const facts = await this.#rawFacts(dir, await readEngineBinding(dir));
+    const facts = await this.#rawFacts(dir, await this.#engineLink(dir));
     const sections = this.#workspaceSections();
     const ignored = ignoreRulesFor(facts, sections);
     const skipOnly = copySkipRulesFor(facts, sections).filter(

@@ -16,7 +16,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import type { ScreenAct } from "../../shared/agent-screen.ts";
 import {
   ClockLevel,
-  canPause,
+  canStep,
   InputRoute,
   PointerLevel,
   StateLevel,
@@ -25,6 +25,7 @@ import {
   TargetRuntime,
 } from "../../shared/computer-target.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import type { PlayEngine } from "../../shared/game-project.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import {
   PLAY_MAX_STEP_MS,
@@ -344,7 +345,7 @@ function bridgeClock(
     await client.call(PlayOp.Play, {});
     state.held = false;
   };
-  if (!canPause(caps)) return { pause, start };
+  if (!canStep(caps)) return { pause, start };
   const step = async (ms: number) => {
     try {
       const ran = await stepGame(client, ms);
@@ -401,7 +402,7 @@ export function gameBridgeTarget(
   const pause = options.sleep ?? ((ms: number) => sleep(ms).then(() => {}));
   // Inside an action a refused step is thrown, so the action counts as not applied.
   const hold = async (ms: number) => {
-    if (state.held && canPause(caps)) await stepGame(client, ms);
+    if (state.held && canStep(caps)) await stepGame(client, ms);
     else await pause(ms);
   };
   const ctx: InputContext = { client, view: hello.view, state, hold };
@@ -475,6 +476,8 @@ export interface GameBridgeLaunchOptions {
   target?: GameBridgeOptions;
   /** How long a game is given to quit on its own before it is killed. */
   stopGraceMs?: number;
+  /** Starts the game some other way than `command` in the sandbox (an engine a plugin runs). */
+  spawn?: () => Promise<{ child: ChildProcess }>;
 }
 
 /** A process to stop, the client that can ask it to quit, and how long it is given. */
@@ -504,11 +507,13 @@ async function stopGame({ child, client, exited, graceMs }: StopPlan): Promise<v
  * target. Throws a {@link PlayProtocolError} (the process stopped first) when it never becomes one.
  */
 export async function launchGameBridge(options: GameBridgeLaunchOptions): Promise<GameBridgeLaunch> {
-  const { child } = await options.sandbox.spawnLongLived({
-    command: options.command,
-    cwd: options.cwd,
-    label: options.label ?? `play:${path.basename(options.cwd)}`,
-  });
+  const { child } = options.spawn
+    ? await options.spawn()
+    : await options.sandbox.spawnLongLived({
+        command: options.command,
+        cwd: options.cwd,
+        label: options.label ?? `play:${path.basename(options.cwd)}`,
+      });
   const streams = playStreamsOf(child);
   const graceMs = options.stopGraceMs ?? QUIT_GRACE_MS;
   let client: PlayClient | null = null;
@@ -533,9 +538,18 @@ export async function launchGameBridge(options: GameBridgeLaunchOptions): Promis
   }
 }
 
+/**
+ * Starts the engine a game's play names (a runtime an enabled plugin declares) for the build at
+ * `root`, confined, its stdio open; null when no enabled plugin has that runtime ready, and the
+ * play's own command runs instead.
+ */
+export type EngineLauncher = (engine: PlayEngine, root: string) => Promise<{ child: ChildProcess } | null>;
+
 /** How a bridge source starts its games and shows their frames. */
 export interface GameBridgeSourceOptions {
   sandbox: Pick<ProcessSandbox, "spawnLongLived">;
+  /** Starts a play's engine, when the studio can (an engine needs a window and the GPU to draw). */
+  engine?: EngineLauncher;
   /** A picture of the game for the agent's screen; the default shows none. */
   frame?: (target: GameBridgeTarget, jpeg: Buffer | null, caption: string, act: ScreenAct) => Promise<void>;
   client?: PlayClientOptions;
@@ -548,13 +562,14 @@ export interface GameBridgeSource extends TargetSource<GameBridgeTarget> {
   release(): Promise<void>;
 }
 
-/** The shell command line studio.json declares for the build at `root`, or why there is none. */
-async function playCommandAt(root: string): Promise<{ command: string } | { problem: string }> {
+/** The shell command line studio.json declares for the build at `root` and the engine it names, or why there is none. */
+async function playCommandAt(root: string): Promise<{ command: string; engine?: PlayEngine } | { problem: string }> {
   const shape = await readProjectShape(root);
   if (shape.runtime !== TargetRuntime.Bridge || !shape.play) return { problem: MESSAGE.notBridge };
   const resolved = await resolvePlayCommand(root, shape.play).catch((error: unknown) => error);
   if (typeof resolved !== "string") return { problem: MESSAGE.noCommand(errorMessage(resolved)) };
-  return { command: [resolved, ...shape.play.args].map(shellQuote).join(" ") };
+  const command = [resolved, ...shape.play.args].map(shellQuote).join(" ");
+  return shape.play.engine ? { command, engine: shape.play.engine } : { command };
 }
 
 /** Why a launch gave no target, as the load's problem: a version refusal as it is, anything else as a failed start. */
@@ -586,7 +601,9 @@ export function gameBridgeSource(options: GameBridgeSourceOptions): GameBridgeSo
     const planned = await playCommandAt(root);
     if ("problem" in planned) return { target: unreachableTarget(), problem: planned.problem, note: null, fresh: true };
     try {
-      const launch = await launchGameBridge({ ...options, command: planned.command, cwd: root });
+      const engine = planned.engine && options.engine ? await options.engine(planned.engine, root) : null;
+      const spawn = engine ? { spawn: async () => engine } : {};
+      const launch = await launchGameBridge({ ...options, ...spawn, command: planned.command, cwd: root });
       const current: RunningGame = { root, launch, exit: null };
       void launch.exited.then((exit) => {
         current.exit = exit;

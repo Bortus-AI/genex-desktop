@@ -319,6 +319,17 @@ export interface DelegatePlaytestGrant {
   maxActions?: number;
   /** How the build's clock is held between moves: wall-time pacing, or seeded exact steps. */
   pacing?: "paced" | "stepped";
+  /**
+   * How many players a game played in its engine's editor opens for this session (1 to
+   * `MAX_PLAY_PLAYERS`, never more than its engine declares); absent is one.
+   */
+  players?: number;
+  /**
+   * A judge the game's engine plugin declares (`PluginJudge.id`), for a `judge` role on a game played
+   * in its editor: the host appends its brief to the session's rubric, opens its players and runs
+   * its probe once the play opens. A judge the game does not have is refused.
+   */
+  judge?: string;
 }
 // ↑ src/shared/engine-requests.ts
 
@@ -1112,6 +1123,8 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
+  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  computerControl?: boolean;
 }
 // ↑ src/shared/studio-api.ts
 
@@ -1191,7 +1204,7 @@ export interface CompleteResponse {
 }
 // ↑ src/shared/engine-requests.ts
 
-export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page';
+export type InputRoute = 'browser' | 'bridge' | 'os-background' | 'os-foreground' | 'page' | 'editor';
 // ↑ src/shared/computer-target.ts
 
 /** What a finished computer session's trace adds up to, as a delegation's result carries it. */
@@ -1339,6 +1352,11 @@ export interface GameLibraryEntry {
   removed?: boolean;
   /** Folder trust is host metadata; project files cannot grant it. */
   trustProjectSettings?: boolean;
+  /**
+   * A copy of someone else's game (a Play remix) whose setup scripts the person has not trusted:
+   * its packages install with none of them. Host metadata, like the trust above.
+   */
+  guardScripts?: boolean;
   cover?: GameCover;
   primaryThreadId?: string;
   /** The folder's content stamp as New game made it (`GameProject.scaffoldStamp`). */
@@ -1367,9 +1385,19 @@ export type ProjectKind =
   | "own-script";
 // ↑ src/shared/game-project.ts
 
-/** The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person grants. */
+/**
+ * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
+ * grants, nor the editor, which the game's matching engine plugin supplies.
+ */
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts
+
+/** An engine runtime a plugin declares, by id, and the arguments the studio starts it with. */
+export interface PlayEngine {
+  runtime: string;
+  args: string[];
+}
+// ↑ src/shared/game-project.ts
 
 /**
  * The command that starts a Play Protocol game, as studio.json declares it: a plain path inside
@@ -1378,6 +1406,13 @@ export type GameRuntime = 'browser' | 'bridge';
 export interface PlayCommand {
   command: string;
   args: string[];
+  /**
+   * An engine an enabled plugin runs for the game instead (a Godot game's own Godot): the plugin's
+   * declared native runtime, by its id, and its arguments. The studio finds the runtime where the
+   * plugin says it is and starts it in its native-job sandbox with a window and the GPU, which an
+   * engine needs to draw; the command stays for a person to run. Absent when unusable.
+   */
+  engine?: PlayEngine;
 }
 // ↑ src/shared/game-project.ts
 
@@ -1427,9 +1462,71 @@ export interface ProjectShape {
 }
 // ↑ src/shared/game-project.ts
 
-/** A game linked to an Unreal project: its `.uproject` (absolute, real path) and when Genex linked it. */
-export type EngineBinding = { kind: 'unreal'; project: string; linkedAt: string; };
+export type EngineId = string;
 // ↑ src/shared/game-engine.ts
+
+/**
+ * A published game's ids at its engine's service, kept beside a link when the project lives there
+ * rather than in a file on this computer: decimal strings, never numbers, which would lose digits.
+ */
+export interface EngineRemote {
+  placeId: string;
+  universeId: string;
+}
+// ↑ src/shared/game-engine.ts
+
+/**
+ * A game linked to an engine project: the engine (an installed plugin's `engine.id`), the project
+ * file (absolute, real path, of a kind that engine declares), when Genex linked it, and the
+ * published game's ids when the project lives at the engine's service.
+ */
+export type EngineBinding = {
+  kind: EngineId;
+  project: string;
+  linkedAt: string;
+  remote?: EngineRemote;
+};
+// ↑ src/shared/game-engine.ts
+
+/**
+ * What the app reads of a linked game's engine, as its plugin declares it, carried on the game's
+ * descriptor: the name the person reads, the project files whose names it shows, and whether the
+ * Loop needs the project inside the game folder.
+ */
+export interface LinkedEngine {
+  label: string;
+  projectFiles: string[];
+  projectInFolder: boolean;
+}
+// ↑ src/shared/game-engine.ts
+
+/**
+ * API 3: a blind judge an engine plugin declares (`judges`). It plays a game in the engine's editor
+ * through the play tools, never sees code, and answers from playing. Data only: the host runs it.
+ */
+export interface PluginJudge {
+  /** Unique in the manifest: what an agent names the judge by. */
+  id: string;
+  /** What the person and the agent read it as, 1-40 characters on one line. */
+  label: string;
+  /** The facts of the games it judges; every game the plugin plays in its editor when absent. */
+  facts?: string[];
+  /** The package's Markdown file holding its brief, appended to the judge's rubric (at most `MAX_JUDGE_BRIEF_CHARS`). */
+  brief: string;
+  /** How many players its play opens, 1 to the engine's `play.players`; one when absent. */
+  players?: number;
+  /**
+   * A quiet harness tool of the plugin, needing the play tools' locks, that the host runs once in
+   * the judge's play right after it opens: its `note` and `images` (measurements and pictures,
+   * never source) open the judge's first message.
+   */
+  probe?: string;
+}
+// ↑ src/shared/plugins.ts
+
+/** A judge as a game's descriptor and an agent name it. */
+export type JudgeRef = Pick<PluginJudge, "id" | "label">;
+// ↑ src/shared/plugins.ts
 
 export type FactSource = 'core' | 'link' | 'scaffold';
 // ↑ src/shared/project-facts.ts
@@ -1471,6 +1568,15 @@ export interface GameProject {
   built: boolean;
   /** The engine project Genex linked this game to; absent for a web game (`shared/game-engine.ts`). */
   engine?: EngineBinding;
+  /** The linked engine as its plugin declares it (its name, project files, project in the folder); absent for a web game. */
+  linkedEngine?: LinkedEngine;
+  /**
+   * True when an engine plugin that is on plays this game in its editor (its play tools hold the
+   * game's link): judges and the computer play it there. Filled by the harness's `game.list`.
+   */
+  editorPlay?: boolean;
+  /** The judges that play this game in its editor, as its engine plugin declares them; only with `editorPlay`. */
+  judges?: JudgeRef[];
   /**
    * What the folder holds, by `shared/project-facts.ts`: the core table, the enabled plugins'
    * `detect` and the engine link. Empty while the first message has not picked a kind.
@@ -2290,7 +2396,7 @@ export interface HarnessHostApi {
    * The `desktop` tool, run by the host for an engine whose tool loop is the harness's own
    * (Ollama): the person's computer, behind the consent asked on a card in `threadId`. `describe`
    * answers the tool's schema and starts the chat's session afresh; `unavailable` says why there is
-   * none (no desktop driver, no chat to ask in).
+   * none (computer control off in Settings, no desktop driver, no chat to ask in).
    */
   "desktop.computer": {
     params: { project: string; threadId?: string; args?: Record<string, unknown>; describe?: boolean };
@@ -2622,6 +2728,8 @@ export type DispatchAction =
       effort?: string;
       ask: string;
       goalState?: string;
+      /** The engine plugin's judge to play as (`PluginJudge.id`), checked by the host against the game's judges. */
+      judge?: string;
     }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };

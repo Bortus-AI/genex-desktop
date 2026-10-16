@@ -38,6 +38,21 @@ list of at most 32 strings, each passed as one word. Anything unusable is droppe
 read and the computer answers why instead of starting anything. The game starts in the build's
 folder through the studio's ProcessSandbox, like every other process the studio spawns.
 
+An engine that draws needs a window and the GPU, which the ProcessSandbox does not grant. Its play
+may name the engine an enabled plugin runs for it instead, by the id of a native runtime the
+plugin's manifest declares (`nativeRuntimes`), with that runtime's own arguments:
+
+```json
+{ "runtime": "bridge", "play": { "command": "bin/play",
+  "engine": { "runtime": "godot", "args": ["--path", "godot", "--", "--play-protocol"] } } }
+```
+
+The studio then finds that runtime where the plugin's manifest says (never a path from the game's
+folder) and starts it in the native-job sandbox with the GPU (`spawnNativeLongLived`): it reads and
+writes only the build, has no network and a private home, and its process tree stops with it.
+Without an enabled plugin that has the runtime ready, the command runs as before. The bundled
+Godot plugin sets a game up this way (`src/plugins/godot/genex-addon.ts`).
+
 An engine whose player lives outside the project (`godot`, a Unity player, `UnrealEditor -game`)
 is started by a wrapper script committed in the project, which the play command names:
 
@@ -195,6 +210,16 @@ refused `step` answers the session's clock as "cannot step". A process that is g
 that timed out, fails the whole plan.
 
 Stopping a game: `quit`, then the process tree is killed if it has not exited within two seconds.
+
+## Playing in an engine's editor
+
+A game played in its engine's editor does not speak this protocol: the studio calls its engine
+plugin's six play tools (`play-open` … `play-close`, `src/shared/engine-play.ts`) instead. They
+borrow this page's ideas in plugin-tool form: `play-open {players}` opens 1 to 8 players (absent is
+one), `player` on `play-input`, `play-shot` and `play-state` addresses one of them (absent is player
+1, which is never sent), `play-shot` answers `{data, mime, width, height}` with `mime` `image/jpeg`
+or `image/png` and at most 1 MB of picture, and a tool answers `{refused: "unsupported", message}`
+for what the engine cannot do at all. See [computer use](computer-use.md#game-engines-and-other-targets).
 
 ## Changes from the native engine's protocol 2
 

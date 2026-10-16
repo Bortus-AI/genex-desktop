@@ -74,6 +74,7 @@ import { windowsBaseEnv } from "../../substrate/child-env.ts";
 import { envPath } from "../../substrate/toolchain.ts";
 import {
   ACCEPT_URL,
+  DeviceStatus,
   GenexRoute,
   genexFetch,
   HTTP_FORBIDDEN,
@@ -81,6 +82,7 @@ import {
   HTTP_UNAUTHORIZED,
   isGenexAuthorizationUrl,
   isGenexLink,
+  MIN_POLL_INTERVAL_S,
   statusOf,
   withSignal,
 } from "./http.ts";
@@ -131,6 +133,7 @@ import {
   linkFor,
   linkTarget,
   listingLanded,
+  isOpen,
   markUnknownAfterRestart,
   MAX_UPLOADS,
   mergeMeta,
@@ -166,8 +169,6 @@ const PUBLISH_WAIT_MS = 150_000;
 const MIN_PUBLISH_WAIT_MS = SECOND_MS;
 /** How long a verified sign-in is trusted before status asks Genex again. */
 const SESSION_CACHE_MS = 2 * MINUTE_MS;
-/** Genex's device flow never asks Studio to poll faster than this. */
-const MIN_POLL_INTERVAL_S = 5;
 /** The workspace folder name: letters, digits, `_` and `-` only, so it can never be a path. */
 const PROJECT_NAME = /^[a-zA-Z0-9_-]+$/;
 const DEVICE_LABEL = "AI Game Studio";
@@ -181,8 +182,6 @@ const DEVICE_LABEL = "AI Game Studio";
 const RemoteRead = { None: "none", Fresh: "fresh", Remembered: "remembered" } as const;
 type RemoteRead = (typeof RemoteRead)[keyof typeof RemoteRead];
 
-/** Where Genex's device sign-in stands, as its poll answers. */
-const DeviceStatus = { Approved: "approved", Denied: "denied", Expired: "expired" } as const;
 const DEVICE_ENDED = new Set<string>([DeviceStatus.Denied, DeviceStatus.Expired]);
 
 const MESSAGE = {
@@ -633,6 +632,8 @@ export class GenexTools {
       if (state.job.state !== GenexPublishJobState.Unresolved) return state;
       finishJob(state.job, GenexPublishJobState.Failed, new Date().toISOString());
       state.job.error = PUBLISH_MESSAGE.AllowedNewUpload;
+      delete state.job.checkError;
+      delete state.job.nextCheckAt;
       await this.#savePublishState(project, state);
       return state;
     });
@@ -1014,6 +1015,12 @@ export class GenexTools {
       job.state = next.foreground ? GenexPublishJobState.Running : GenexPublishJobState.Unresolved;
       job.phase = next.foreground ? GenexPublishPhase.VerifyingDeployment : GenexPublishPhase.Unresolved;
       job.nextCheckAt = next.at;
+    }
+    // The user may have settled this upload while Genex was being asked: their choice stands.
+    const latest = await this.#publishState(project);
+    if (latest.job?.id !== job.id || !isOpen(latest.job)) {
+      Object.assign(state, latest);
+      return;
     }
     await this.#savePublishState(project, state);
   }

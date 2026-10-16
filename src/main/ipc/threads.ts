@@ -26,6 +26,8 @@ export interface ThreadsIpcDeps {
   welcome: boolean;
   /** An unpackaged developer run, where the renderer offers its developer tools. */
   developer: boolean;
+  /** The website Play links to (`play/origins.ts`). */
+  playWeb: string;
 }
 
 export function registerThreadsIpc(
@@ -39,6 +41,7 @@ export function registerThreadsIpc(
     smokeReads,
     welcome,
     developer,
+    playWeb,
   }: ThreadsIpcDeps,
 ): void {
   handle("studio:bootstrap", async () => {
@@ -70,6 +73,7 @@ export function registerThreadsIpc(
       activeDelegations: core.activeBuilders(),
       welcome,
       developer,
+      playWebOrigin: playWeb,
     };
   });
 
@@ -164,5 +168,8 @@ function registerQueueIpc(handle: IpcHandle, core: StudioCore): void {
     core.rewindChat(String(payload?.threadId), String(payload?.eventId), String(payload?.messageId), {
       files: payload?.files === true,
     }),
+  );
+  handle("studio:chat.rewind.undo", async (payload) =>
+    core.undoRewind(String(payload?.threadId), String(payload?.rewindId)),
   );
 }

@@ -4,11 +4,14 @@
  * there is still refused.
  */
 import assert from "node:assert/strict";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import type { LiveToolResult } from "../../src/shared/engine-requests.ts";
 import { type DispatchAction, HarnessCapability } from "../../src/shared/protocol.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
+import { tmpDir } from "../helpers/tmp.ts";
 import { workerChat } from "../helpers/worker-chat.ts";
 
 /** How long one case may take: a real lite core and its sessions. */
@@ -115,6 +118,43 @@ describe("a chat's judge on the host", () => {
     await delegate({ chatTurn: { messageId: await personSays() }, ...window });
     assert.equal(offered(seen.at(-1)), false, "an older harness: no judge");
     assert.equal(judged().length, 1);
+  });
+
+  it("offers judge_play to the chat's own session on a game played in its engine's editor, the judge playing its game folder", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, game, project, threadId, seen, delegate, personSays, whileRunning } = await workerChat();
+    const sent: DispatchAction[] = [];
+    core.host.hasCapability = (capability) => capability === HarnessCapability.ChatJudge;
+    core.host.dispatch = async (action) => {
+      sent.push(action);
+      return { status: "passed", answer: "yes", note: "", objective: "model-said", trace: null };
+    };
+    const offered = () => (seen.at(-1)?.liveTools ?? []).some((tool) => tool.name === "judge_play");
+    await core.plugins.setEnabled("unreal", true);
+    try {
+      await delegate({ chatTurn: { messageId: await personSays() } });
+      assert.equal(offered(), false, "a web game with no window: no judge");
+      const uproject = path.join(await realpath(await tmpDir("judge-uproject-")), "Valley", "Valley.uproject");
+      await mkdir(path.dirname(uproject), { recursive: true });
+      await writeFile(uproject, '{"FileVersion":3}\n');
+      await core.engineLinks.link("unreal", { project: game, directory: project.dir }, { project: uproject });
+      let asked = false;
+      whileRunning(async (request) => {
+        if (asked || !request.liveTools?.some((tool) => tool.name === "judge_play")) return;
+        asked = true;
+        await request.onLiveTool!("judge_play", { ask: "Can you walk off the start disc?" });
+      });
+      await delegate({ chatTurn: { messageId: await personSays() } });
+      assert.equal(offered(), true, "the Unreal game's chat is offered the judge");
+      const judged = sent.filter((action) => action.type === "chat_judge");
+      assert.deepEqual(
+        judged.map((action) => action.type === "chat_judge" && [action.threadId, action.project, action.root]),
+        [[threadId, game, project.dir]],
+      );
+    } finally {
+      await core.plugins.setEnabled("unreal", false);
+    }
   });
 
   it("runs judge.play for the harness's own loop (Ollama) only in a chat, with its model, on a game the studio plays in a window", {

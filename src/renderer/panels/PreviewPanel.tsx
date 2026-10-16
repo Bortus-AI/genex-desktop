@@ -67,6 +67,7 @@ import { BuildTrouble, useBuildProblem } from "./stage/build-problem.tsx";
 import { useLiveLoad, useLiveProbe, useLoadOnceStarted } from "./stage/live-load.ts";
 import { useStageControls } from "./stage/live-run.ts";
 import { useNativeViewBounds } from "./stage/native-bounds.ts";
+import { PluginCardStage } from "./stage/PluginCardStage.tsx";
 import { stageFlags } from "./stage/stage-flags.ts";
 import { EmptyGame, LiveLoading, NoGame, PlanningBuild, StoppedGame } from "./stage/StageBody.tsx";
 import { StageStrip } from "./stage/StageStrip.tsx";
@@ -153,6 +154,7 @@ function StageBanners({ trouble }: { trouble: ReturnType<typeof useBuildProblem>
       installing={trouble.installing}
       installLines={trouble.installLines}
       onInstall={trouble.installPackages}
+      onRunScripts={trouble.runSetupScripts}
       onReload={() => void window.studio.reloadPreview({ retry: true }).catch(() => {})}
     />
   );
@@ -548,7 +550,26 @@ function UnrealCardStage({
   return <UnrealStage game={game} plugins={plugins} shot={shot} onNotice={onNotice} />;
 }
 
-/** Live's view when it is not the web preview: the Unreal card, or the latest pictures of a folder no observer draws. */
+/** A plugin's card, with its observer's latest shot once the card is on the stage (as the Unreal card reads its own). */
+function PluginCardWithShot({
+  game,
+  observer,
+  runGraph,
+  plugins,
+  onNotice,
+}: {
+  game: GameProject;
+  observer: string | null;
+  runGraph: RunGraphModel | null;
+  plugins: PluginInfo[];
+  onNotice: Notify;
+}): JSX.Element {
+  const shotFile = observer ? latestShot(runGraph, observer) : null;
+  const shot = useStill(shotFile ? { run: shotFile } : null);
+  return <PluginCardStage game={game} observer={observer} plugins={plugins} shot={shot} onNotice={onNotice} />;
+}
+
+/** Live's view when it is not the web preview: the Unreal card, a plugin's card, or the latest pictures of a folder no observer draws. */
 function OwnLiveView({
   game,
   on,
@@ -558,18 +579,22 @@ function OwnLiveView({
   onNotice,
 }: {
   game: GameProject | null;
-  on: { cardOnStage: boolean; stillsOnStage: boolean };
+  on: { cardOnStage: boolean; pluginCardOnStage: boolean; stillsOnStage: boolean };
   view: LiveView;
   /** the stage's run, whose pictures (or an earlier run's) Live shows */
   run: Pick<ReturnType<typeof useStageRun>, "runGraph" | "history" | "earlierGraph">;
   plugins: PluginInfo[];
   onNotice: Notify;
 }): JSX.Element | null {
-  const graph = useLivePictures(run, view, on.cardOnStage || on.stillsOnStage);
+  const graph = useLivePictures(run, view, [on.cardOnStage, on.pluginCardOnStage, on.stillsOnStage].some(Boolean));
   if (!game) return null;
   if (on.cardOnStage)
     return (
       <UnrealCardStage game={game} observer={view.observer} runGraph={graph} plugins={plugins} onNotice={onNotice} />
+    );
+  if (on.pluginCardOnStage)
+    return (
+      <PluginCardWithShot game={game} observer={view.observer} runGraph={graph} plugins={plugins} onNotice={onNotice} />
     );
   if (on.stillsOnStage) return <StillsStage title={game.title} graph={graph} observer={view.observer} />;
   return null;

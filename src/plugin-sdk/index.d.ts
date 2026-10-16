@@ -165,10 +165,68 @@ export interface PluginManifestTool extends PluginTool {
 
 /**
  * An engine a game builds in: `web` (three.js in the browser, every game unless Genex linked it to
- * an engine project) or `unreal`. A skill that names engines (non-empty, each once) reaches only
+ * an engine project), `unreal` or `godot`. A skill that names engines (non-empty, each once) reaches only
  * those games' briefs, so web-only advice never reaches an Unreal game.
  */
-export type PluginGameEngine = "web" | "unreal";
+export type PluginGameEngine = "web" | "unreal" | "godot";
+
+/** What an engine's editor can do in play (`engine.play`); absent fields are the editor defaults. */
+export interface PluginEnginePlay {
+  /** The most players one play opens, 1–8. */
+  players?: number;
+  clock?: "none" | "freeze" | "step-locked" | "replayable";
+  /** Whether the mouse aims as a player's does. */
+  pointer?: boolean;
+  /** Whether the game's state can be read in play. */
+  state?: boolean;
+}
+
+/**
+ * API 3, capability `game-engine`: the engine your plugin declares (`engine` in the manifest).
+ * - `id` is your plugin's own id (2–40 lowercase letters, digits and dashes), never `web`.
+ * - `label` is the engine's name as people read it, 1–40 characters on one line.
+ * - `projectFiles` lists 1–4 project files a game may link, each an extension of one or two
+ *   lowercase dotted parts (`.uproject`, `.project.json`) or, for a project that is a folder marked
+ *   by one fixed file, that file's whole lowercase name (`project.godot`: the project is named by
+ *   its folder).
+ * - `fact` is the fact a linked game holds: one your `detect` declares, or one of Genex's own.
+ * - `projectInFolder` is true when the Loop needs the project inside the game folder, because its
+ *   save points hold it.
+ * - `writesProjectFiles` is true when your agents change the project as files (scenes, scripts):
+ *   a linked project outside the game folder is then a folder the game's sessions read and write.
+ * - `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at most 4
+ *   each): computer use never drives them to build or play.
+ */
+export interface PluginEngineDeclaration {
+  id: string;
+  label: string;
+  projectFiles: string[];
+  fact: string;
+  projectInFolder: boolean;
+  writesProjectFiles?: boolean;
+  play?: PluginEnginePlay;
+  apps?: { mac?: string[]; windows?: string[] };
+}
+
+/**
+ * API 3, beside an `engine`: a blind judge that plays your engine's games in its editor (`judges` in
+ * the manifest, at most 8). It never sees code and answers from playing.
+ * - `id` 2–40 lowercase letters, digits and dashes, unique in the manifest; `label` 1–40 characters.
+ * - `facts` the facts of the games it judges (none: every game your plugin plays in its editor).
+ * - `brief` a Markdown file in your package (at most 16 000 characters), added to the judge's rubric.
+ * - `players` how many players its play opens, 1 to your `engine.play.players` (one when absent).
+ * - `probe` one of your harness tools that asks nothing, runs no host program and needs every lock
+ *   `play-open` needs; Genex runs it once right after the judge's play opens, and its `note` and
+ *   `images` (measurements and pictures, never source) open the judge's first answer.
+ */
+export interface PluginJudge {
+  id: string;
+  label: string;
+  facts?: string[];
+  brief: string;
+  players?: number;
+  probe?: string;
+}
 
 /** A skill whose text sits in the manifest (1–16 000 characters); agents get all of it in their brief. */
 export interface PluginInlineSkill {
@@ -213,6 +271,11 @@ export interface PluginToolbarItem {
   icon?: string;
   /** Default true: the button waits for a loaded game. */
   requiresProject?: boolean;
+  /**
+   * API 3: the facts of the games whose strip shows this button; every game when absent. Its status
+   * can still bring it out on another game (`shown`).
+   */
+  facts?: string[];
   target: PluginToolbarTarget;
   /** Names a declared action without confirmation that returns a PluginToolbarStatus. */
   status?: string;
@@ -227,6 +290,8 @@ export interface PluginToolbarStatus {
   attention?: boolean;
   /** Draw the badge as a dot in its tone (ok green, warn amber, err red, info grey); its word moves to the tooltip. */
   dot?: boolean;
+  /** A button scoped to `facts` shows on this game anyway (its chat chose the engine before the project exists). */
+  shown?: boolean;
 }
 
 /**
@@ -303,6 +368,10 @@ export interface PluginManifest {
   toolbar?: PluginToolbarItem[];
   /** API 2: up to four MCP servers the plugin ships, run by the host as connectors it owns. */
   mcpServers?: PluginMcpServer[];
+  /** API 3, capability `game-engine`: the engine the plugin declares. */
+  engine?: PluginEngineDeclaration;
+  /** API 3, beside `engine`: the blind judges that play your engine's games in its editor. */
+  judges?: PluginJudge[];
   /** Host-managed account flow. Status may finish a pending browser authorization. */
   account?: { connect: string; unlock: string; disconnect: string; status: string; cancel?: string };
   /**
@@ -403,15 +472,28 @@ export interface PluginEvent {
 }
 
 /**
- * A game's link to an engine project (`game-engine`): the project file's real path, its name, and
- * when it was linked. The host keeps it in the plugin's storage as `links/<game>.json`, where the
- * plugin's MCP servers may read it, and mirrors it into the game's `studio.json`.
+ * A published game's ids at its engine's service, kept beside a link when the project lives there:
+ * positive decimal strings of at most 20 digits, never numbers, which would lose digits.
+ */
+export interface PluginEngineRemote {
+  placeId: string;
+  universeId: string;
+}
+
+/**
+ * A game's link to an engine project (`game-engine`): the engine (your `engine.id`), the project
+ * file's real path, its name (the file name without its declared extension, or its folder's name
+ * for a whole-name project file), when it was linked, and the published game's ids when you linked
+ * them. The host keeps it in the plugin's storage as `links/<game>.json`, where the plugin's MCP
+ * servers may read it, and mirrors it into the game's `studio.json`.
  */
 export interface PluginEngineLink {
-  kind: "unreal";
+  /** Your `engine.id`: the project's engine. */
+  kind: string;
   project: string;
   name: string;
   linkedAt: string;
+  remote?: PluginEngineRemote;
 }
 
 /**
@@ -458,12 +540,20 @@ export interface PluginHostCall {
   (method: "credentials.write", args: { token: string }): Promise<void>;
   (method: "credentials.clear"): Promise<void>;
   /**
-   * `game-engine`: links the bound game to an Unreal project file (`.uproject`, checked by real
-   * path). The chat it was called from shows one line with Undo; `auto` says the link was made by
-   * the game's first call rather than asked for. From outside any game, `game` names one this
-   * plugin made with `game.create`; any other game is refused.
+   * `game-engine`: links the bound game to a project file of the engine your manifest declares
+   * (`engine.projectFiles`, checked by real path); a plugin that declares no engine is refused.
+   * `remote` keeps the published game's ids beside the link (ids of any other shape are dropped and
+   * the link is still made); linking the same file with other ids makes a new link. The chat it was
+   * called from shows one line with Undo, naming the project by `name` when you give one (one plain
+   * line, at most 80 characters: the project as people know it, when its file's name isn't), else
+   * by its file's name; `auto` says the link was made by the game's first call rather than asked
+   * for. From outside any game, `game` names one this plugin made with `game.create`; any other
+   * game is refused.
    */
-  (method: "game.engine.link", args: { project: string; auto?: boolean; game?: string }): Promise<PluginEngineLink>;
+  (
+    method: "game.engine.link",
+    args: { project: string; remote?: PluginEngineRemote; name?: string; auto?: boolean; game?: string },
+  ): Promise<PluginEngineLink>;
   /** `game-engine`: the bound game's link, or null while it has none that still holds. */
   (method: "game.engine.read"): Promise<PluginEngineLink | null>;
   /** `game-engine`: shows the plugin's steps card (its `steps` action's answer) in the chat the call came from. */
@@ -485,6 +575,32 @@ export interface PluginHostCall {
    * Needs no bound game.
    */
   (method: "game.engine.runs"): Promise<PluginEngineRun[]>;
+  /**
+   * `game-engine`: Do it for me. Hands a setup task (one plain line, at most 300 characters) to the
+   * bound game's chat, shown there verbatim as "<your plugin's name> asks: <task>"; that chat's
+   * agent clicks it with the person's computer control, on the apps your `engine.apps` declares
+   * and no others. Only for setup clicks and publishing the person approved, never to build or
+   * play-test. The person must have asked: call it from an action they pressed, or from a tool
+   * that declares `confirmation` whose card they approved; any other call answers `not-person`.
+   * A plugin that did not come with Genex shows the task on a card first; computer control that
+   * is off is offered on a card for every chat. Windows, or a Mac with no driver, answers
+   * `unavailable`: show the click path instead.
+   */
+  (method: "game.engine.assist", args: PluginEngineAssistArgs): Promise<PluginEngineAssistAnswer>;
+}
+
+/** `game.engine.assist`'s task: what the chat is asked to click, in plain words. */
+export interface PluginEngineAssistArgs {
+  task: string;
+}
+
+/** Why `game.engine.assist` started nothing. */
+export type PluginEngineAssistRefusal = "unavailable" | "declined" | "no-chat" | "not-person" | "no-apps";
+
+/** `game.engine.assist`'s answer: whether the chat's turn started, and why not. */
+export interface PluginEngineAssistAnswer {
+  started: boolean;
+  reason?: PluginEngineAssistRefusal;
 }
 
 /** A game whose run is going, as `game.engine.runs` names it: its name, its title and its linked project file. */

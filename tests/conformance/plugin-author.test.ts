@@ -145,7 +145,8 @@ async function tree(dir: string, rel = ""): Promise<string[]> {
 
 /**
  * The example the skill teaches is nothing the person is warned about: no dangerous finding, and,
- * as the scan reads code and not Markdown, only the plugin's own skill file disclosed as not read.
+ * as the scan reads code and not Markdown, only the plugin's own Markdown (its skill file and its
+ * judge's brief) disclosed as not read.
  */
 function assertScanQuiet(scan: { verdict: string; findings: Array<{ rule: string; severity: string; file: string }> }) {
   assert.deepEqual(
@@ -155,7 +156,7 @@ function assertScanQuiet(scan: { verdict: string; findings: Array<{ rule: string
   assert.notEqual(scan.verdict, "dangerous");
   assert.deepEqual(
     scan.findings.map((f) => `${f.rule} ${f.file}`),
-    ["not-scanned skills/sketch.md"],
+    ["not-scanned judges/first-play.md", "not-scanned skills/sketch.md"],
   );
 }
 
@@ -455,7 +456,8 @@ describe("plugins_find, the harness's", () => {
     });
     try {
       assert.equal(lite.core.plugins.enabled(GENEX_PLUGIN_ID), true, "the Genex plugin is on");
-      const answer = await lite.api()[HostMethod.PluginsFind]({ fact: "godot-project" });
+      // A kind no bundled plugin knows (Godot's and Unity's now have one each).
+      const answer = await lite.api()[HostMethod.PluginsFind]({ fact: "gamemaker-project" });
       assert.equal(answer.next, FindNext.WritePlugin);
       assert.match(answer.note, /plugin-author/, "it learns where the guide is");
       assert.doesNotMatch(answer.note, /plugin_check/, "and is never told to call a tool it doesn't have");

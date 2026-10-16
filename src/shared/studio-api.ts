@@ -20,6 +20,7 @@ import type {
 } from "./play-people.ts";
 import type { GenexAccountView } from "./genex-account.ts";
 import type { PlayCredits } from "./play-credits.ts";
+import type { HandleCheck, HandleSave } from "./handle.ts";
 import type { PlayStats, StatsPeriod } from "./play-stats.ts";
 import type { PerformanceMark } from "./performance.ts";
 import type { ComposerSendOptions } from "./composer.ts";
@@ -83,6 +84,8 @@ export interface Bootstrap {
   welcome?: boolean;
   /** An unpackaged developer run: the renderer may offer its developer tools (the colour tweaker). */
   developer?: boolean;
+  /** The website Play links to: genex.games', unless a development profile points Play elsewhere. */
+  playWebOrigin?: string;
 }
 
 /** The window-control overlay's background and glyph colours, as `#rrggbb`. */
@@ -288,6 +291,12 @@ export interface StudioApi {
     messageId: string,
     files: boolean,
   ): Promise<import("./chat-rewind.ts").RewindResult>;
+  /**
+   * Bring back the game files (and, through the restore steps, the engine's state) as they were
+   * just before the chat's newest rewind; the conversation stays rewound. Refused once a message
+   * was sent after it, or once it came back.
+   */
+  undoRewind(threadId: string, rewindId: string): Promise<import("./chat-rewind.ts").UndoRewindResult>;
   /** Every thread's events after `after`; ask again with the returned `cursor`, not an event id. */
   events(after?: string): Promise<EventFeed>;
   threadEvents(threadId: string): Promise<EventEnvelope[]>;
@@ -354,6 +363,7 @@ export interface StudioApi {
     agentsMax?: number;
     blender?: boolean;
     autoResume?: boolean;
+    computerControl?: boolean;
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
@@ -477,6 +487,12 @@ export interface StudioApi {
   playCreators(): Promise<PlayCreator[] | null>;
   /** The Genex plugin's Credits tab: balance, plan, invite bonus, live prices and recent spends. */
   playCredits(): Promise<PlayCredits>;
+  /** Play: what a typed nickname is: a shape problem or the account's own at once, else genex.games' answer. */
+  playHandleCheck(handle: string): Promise<HandleCheck>;
+  /** Play: make a nickname the account's (its own one again confirms it); a refusal says why. */
+  playSetHandle(handle: string): Promise<HandleSave>;
+  /** Play: the Mac's share menu for a page of Play's website (an invite or a profile link), by `at`. */
+  playShare(url: string, at?: PlayPoint): Promise<void>;
   /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
   genexAccount(): Promise<GenexAccountView>;
   /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */
@@ -573,8 +589,11 @@ export interface StudioApi {
   }>;
   /** Why the stage cannot show this game's own build; null when the last build was fine. */
   buildProblem(project: string): Promise<BuildProblem | null>;
-  /** Install this game's packages — the one action that reaches the network, on the user's press. */
-  installPackages(project: string): Promise<InstallResult>;
+  /**
+   * Install this game's packages — the one action that reaches the network, on the user's press.
+   * `scripts`: the person trusts a remix's setup scripts, which then run (and from then on).
+   */
+  installPackages(project: string, options?: { scripts?: boolean }): Promise<InstallResult>;
   startRun(spec: {
     project: string;
     goal: string;
@@ -667,6 +686,8 @@ export interface StudioSettingsView {
   blender?: boolean;
   /** Resume builds automatically after an engine limit resets or the loop restarts; on by default. */
   autoResume?: boolean;
+  /** Let agents control your computer (Settings → Permissions, macOS); off by default. */
+  computerControl?: boolean;
 }
 
 declare global {

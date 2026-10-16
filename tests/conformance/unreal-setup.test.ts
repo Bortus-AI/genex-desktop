@@ -687,7 +687,7 @@ describe("Set up Unreal while an editor runs", () => {
       const other = (await fakeProject(path.join(f.root, "Projects"), "Other")).file;
       const named = await row.named(f, other);
       const real = await realpath(f.project.file);
-      const log = editorLogPath({ file: real, directory: path.dirname(real) }, f.home, "darwin");
+      const log = editorLogPath({ file: real, directory: path.dirname(real) }, f.home, process.platform);
       await mkdir(path.dirname(log), { recursive: true });
       await writeFile(
         log,
@@ -696,7 +696,8 @@ describe("Set up Unreal while an editor runs", () => {
       const env: SetupEnv = {
         ...f.env,
         editorRunning: async () => true,
-        editorLog: (project) => readEditorLog(editorLogPath(project, f.home, "darwin"), project.file, project.port),
+        editorLog: (project) =>
+          readEditorLog(editorLogPath(project, f.home, process.platform), project.file, project.port),
       };
       const options = { ...f.options, env };
       if (!row.refuses) {
@@ -1027,6 +1028,35 @@ describe("the Unreal plugin's setup actions", () => {
     assert.equal(status.port, null, "a project that isn't set up has no port yet");
     assert.deepEqual(status.editor, { running: true, answering: false, editors: 1 });
     assert.deepEqual([status.lowDisk, status.lowMemory, status.xcode.state], [true, false, XcodeState.Missing]);
+  });
+
+  /** The panel status's ray tracing warning for the fixture's project. */
+  const rayTracingRisk = async (b: Awaited<ReturnType<typeof backendFixture>>) => {
+    const status = (await b.backend.action?.("status", {}, b.context)) as { rayTracingRisk?: boolean } | undefined;
+    return status?.rayTracingRisk;
+  };
+
+  // UE 5.8 on a Mac hangs the GPU rendering a ray-traced level behind another app.
+  it("on a Mac, status warns of a project that ray-traces, and turning it off clears the warning", async () => {
+    const b = await backendFixture();
+    const config = path.join(b.project.directory, "Config", "DefaultEngine.ini");
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(config, "[/Script/Engine.RendererSettings]\nr.RayTracing=True\n");
+    const project = await realpath(b.project.file);
+    assert.equal(await rayTracingRisk(b), true);
+    const review = await b.backend.review?.("ray-tracing-off", { project }, b.context);
+    assert.match(String(review?.message), /Drift/);
+    await b.backend.action?.("ray-tracing-off", { project }, b.context);
+    assert.equal(await readFile(config, "utf8"), "[/Script/Engine.RendererSettings]\nr.RayTracing=False\n");
+    assert.equal(await rayTracingRisk(b), false);
+  });
+
+  it("never warns of ray tracing off a Mac", async () => {
+    const b = await backendFixture({ platform: "win32" });
+    const config = path.join(b.project.directory, "Config", "DefaultEngine.ini");
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(config, "[/Script/Engine.RendererSettings]\nr.RayTracing=True\n");
+    assert.equal(await rayTracingRisk(b), false);
   });
 
   it("status says where Xcode stands on every Mac, C++ project or not, against the supported engine", async () => {

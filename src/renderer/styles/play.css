@@ -123,13 +123,13 @@
 }
 
 /* The games and Recent share the list's place: the one that is off slides out and fades. */
-.sidebar-list > .sidebar-scroll {
+.sidebar-lists > .sidebar-scroll {
   transition:
     opacity 180ms ease,
     translate var(--duration-fast) var(--ease-smooth-out),
     visibility 0s;
 }
-.sidebar-list > .sidebar-scroll[data-off="true"] {
+.sidebar-lists > .sidebar-scroll[data-off="true"] {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -141,7 +141,7 @@
     translate var(--duration-fast) var(--ease-smooth-out),
     visibility 0s linear var(--duration-fast);
 }
-.sidebar-list > .play-recent-scroll[data-off="true"] {
+.sidebar-lists > .play-recent-scroll[data-off="true"] {
   translate: -16px 0;
 }
 /* Recent's rows stand 2px apart; a big cover fills most of the row's height, the title close beside it. */
@@ -925,14 +925,6 @@
   opacity: 1;
   filter: none;
 }
-.play-viewer-bar-pill[data-note="busy"] .play-bar-label[data-shown] > span {
-  animation: play-bar-busy 1.1s ease-in-out infinite alternate;
-}
-@keyframes play-bar-busy {
-  to {
-    opacity: 0.5;
-  }
-}
 .play-viewer-bar-remix {
   background: color-mix(in srgb, var(--play-selected, var(--play-blue)) 12%, transparent);
   box-shadow: inset 0 0 0 1px
@@ -1249,7 +1241,7 @@
 @media (prefers-reduced-motion: reduce) {
   .play-switch-pill,
   .sidebar-fold,
-  .sidebar-list > .sidebar-scroll,
+  .sidebar-lists > .sidebar-scroll,
   .play-card-image,
   .game-sidebar .sidebar-games-heading {
     transition: none;
@@ -1257,7 +1249,7 @@
   .play-card-clip {
     display: none;
   }
-  .sidebar-list > .sidebar-scroll[data-off="true"] {
+  .sidebar-lists > .sidebar-scroll[data-off="true"] {
     translate: none;
     transition: none;
   }

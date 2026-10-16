@@ -49,6 +49,7 @@ import { closeSettled, closeUnderWay, latchClose } from "./director/close-latch.
 import { fireHooks, HookEvent, notesText, runScope } from "./hooks.ts";
 import { type HeldBack, heldTurnEnding, runHeldWords } from "./director/held-words.ts";
 import { LoopProfile } from "./folder-facts.ts";
+import { judgedInEditor, loopJudges } from "./director/open/judge-rounds.ts";
 import { loopSkill } from "./loop-skills.ts";
 import { closeRunPool } from "./workers/run-pool.ts";
 import { leadsOpenLoop } from "./director/open/active-work.ts";
@@ -941,7 +942,10 @@ async function sessionParts(ctx: HarnessCtx, loopRun: LoopRun, loop: DirectorLoo
   const skill = open ? "" : await directorSkill(ctx, loopRun);
   const types = loopRun.open?.pool?.state.types ?? [];
   const workers = loopRun.open?.pool?.state.allowed;
-  const tools = open ? openTools(types, { restart: restartsApp(loopRun.game), workers }) : runTools(loop, loopRun);
+  const judge = judgedInEditor(loopRun);
+  const tools = open
+    ? openTools(types, { restart: restartsApp(loopRun.game), workers, judge, judges: loopJudges(loopRun) })
+    : runTools(loop, loopRun);
   const talk = directorTalk(loopRun, referenceImages(run), tools);
   directors.set(run.runId, open ? openHandler(loopRun) : loopRun.handler);
   // Between an open Loop's turns, Genex keeps what its lead left and runs the rewind or restart it asked for.

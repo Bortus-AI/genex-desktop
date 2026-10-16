@@ -152,6 +152,8 @@ export function stageView(
       return said(WORDS.ready);
     case UnrealStageStep.OpenWhenFree:
       return said(`${holderWords(status)} ${WORDS.openProjectWhenFree(name)}`);
+    case UnrealStageStep.Crashed:
+      return said(WORDS.crashed(name));
     default:
       return runningView(status, name);
   }

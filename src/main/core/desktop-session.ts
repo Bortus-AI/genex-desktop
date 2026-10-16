@@ -12,6 +12,8 @@ import type { DesktopApp } from "../../substrate/desktop-driver.ts";
 import type { StudioCore, CoreInternals } from "../studio-core.ts";
 import { targetFramePort } from "./computer-tools.ts";
 import { safePathSegment } from "./run-shots.ts";
+import { assistGrants, declaredEngineApps, declaredPlayerApps } from "./desktop-assist.ts";
+import { engineAppRefusal } from "./desktop-target.ts";
 import { DesktopQuestion, type DesktopTools } from "./desktop-tools.ts";
 
 /** What the person reads on the consent card and the agent screen. */
@@ -43,12 +45,21 @@ export interface DesktopSessionPlace {
   binding: PluginBinding;
   /** The chat the consent card lands in, and the screen's identity. */
   threadId: string;
+  /** The chat turn this session answers (its message's queue id): a setup assist's grant ends with it. */
+  turn?: string;
   signal?: AbortSignal;
 }
 
+/** Whether the person turned computer control on (Settings → Permissions; off by default). */
+export function computerControlOn(core: Pick<StudioCore, "settings">): boolean {
+  return core.settings.computerControl;
+}
+
 /**
- * The `desktop` tool for one chat, where a desktop driver is installed; null otherwise. Nothing
- * moves before the person answers its card in that chat — once for the session, then once per app.
+ * The `desktop` tool for one chat, where computer control is on and a desktop driver is installed;
+ * null otherwise, without looking for the driver while it is off. Nothing moves before the person
+ * answers its card in that chat — once for the session, then once per app — and turned off later,
+ * every further call answers so.
  */
 export async function desktopSessionTools(
   core: StudioCore,
@@ -56,7 +67,8 @@ export async function desktopSessionTools(
   place: DesktopSessionPlace,
 ): Promise<DesktopTools | null> {
   const desktop = core.options.desktop;
-  if (!desktop || !(await desktop.available())) return null;
+  if (!desktop || !computerControlOn(core)) return null;
+  if (!(await desktop.available())) return null;
   const screen: AgentScreen = {
     handle: `${DESKTOP_TOOL_NAME}:${place.threadId}`,
     label: MESSAGE.label,
@@ -71,7 +83,18 @@ export async function desktopSessionTools(
     const answer = await x.pluginTools.requestConsent(DESKTOP_CONSENT_SOURCE, tool, asked, place.binding, place.signal);
     return answer.approved;
   };
-  return desktop.toolsFor({
+  const grants = assistGrants(core);
+  // An engine's editor is driven only by its plugin's setup assist, in the turn that answers it,
+  // read afresh on every action.
+  const engineApps = (app: DesktopApp) =>
+    engineAppRefusal(app, {
+      declared: declaredEngineApps(core.plugins.list()),
+      players: declaredPlayerApps(core.plugins.list()),
+      granted: grants.forTurn(place.threadId, place.turn)?.apps ?? null,
+    });
+  const tools = desktop.toolsFor({
+    enabled: () => computerControlOn(core),
+    engineApps,
     frameDir: path.join(core.layout.scratch, "desktop", safePathSegment(place.threadId)),
     ask,
     frame: async (shown, jpeg, caption, act) => {
@@ -79,4 +102,13 @@ export async function desktopSessionTools(
       await x.previews.frame(targetFramePort(shown), screen, jpeg, caption, act);
     },
   });
+  const { turn } = place;
+  if (!turn) return tools;
+  return {
+    ...tools,
+    release: async () => {
+      grants.turnEnded(place.threadId, turn);
+      await tools.release();
+    },
+  };
 }

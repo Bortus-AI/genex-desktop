@@ -26,6 +26,7 @@ import { git } from "../../substrate/snapshots.ts";
 import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { attachReport, noAttachment, str } from "../core/page-report.ts";
 import { startHeldInPlan } from "../core/project-tools.ts";
+import { withEditorPlay } from "../core/editor-play-session.ts";
 import { isBelow, throughClaudeFolder, throughGitFolder } from "../../substrate/paths.ts";
 
 /** The largest image `game.read` hands back. */
@@ -117,7 +118,8 @@ export function gameRpc(core: StudioCore, x: CoreInternals) {
       return core.assetCheckpoints.checkpoint(p.project, workspace, p.assetIds);
     },
     // — games —
-    [HostMethod.GameList]: async () => core.games.list(),
+    // An engine game a plugin plays in its editor says so, with its judges: what the Loop and the chat offer.
+    [HostMethod.GameList]: async () => withEditorPlay(core, await core.games.list()),
     [HostMethod.GameSetCover]: async (p) => x.setGameCover(p.project, p, p.threadId),
     // Harnesses installed before recipes still author custom GLSL covers through this.
     [HostMethod.GameSetCoverShader]: async (p) => x.setGameCoverShader(p.project, p.surface, p.threadId),

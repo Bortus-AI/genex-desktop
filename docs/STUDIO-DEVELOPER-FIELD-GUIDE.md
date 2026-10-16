@@ -203,7 +203,7 @@ paths remain unavailable. Paid account acceptance remains a separate live gate. 
 logs even when an isolated retry passes: sandbox-runtime's one-second executable lookup has
 intermittently reported a missing bash during loaded test runs.
 
-Unity retirement: the active app supports browser games only. The CLI, editor, bridge, Unity templates, tools and UI are archived in `archive/unity/`; no feature flag enables them. There is no Unity-specific compatibility or migration path. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
+Unity retirement: the earlier built-in Unity integration (CLI, editor, bridge, Unity templates, tools and UI) is archived in `archive/unity/`; no feature flag enables it. There is no compatibility or migration path from it. Unity is now reached through the [bundled Unity plugin](plugins.md#the-bundled-unity-plugin), which shares no code with the archive. Ordinary browser-project validation remains. Historical Unity plans describe archived behavior; existing user work and the source archive remain preserved.
 
 Full regression coverage: `npm run typecheck`, `npm test`, `npm run test:e2e` (real sandbox, scripted
 Ollama wire, Chromium and CSS), `npm run test:build-ui` (build/history fixture, and since M1.8
@@ -377,7 +377,11 @@ native) and unreal-game (the game linked to a stand-in Unreal project inside
 its folder with the Unreal plugin on: the chat's link line with Undo, the Unreal Live card with a
 stand-in viewport shot from one finished run, and the steps card, whose rows come from the real plugin, so it stays hidden on a Mac whose Xcode is ready)
 and unreal-chat (a short synthetic Unreal chat, `tests/fixtures/unreal-chat/sample-chat.json`:
-connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery).
+connector rows in words, Worked in Unreal headings, failures, play views and a Blender delivery)
+and roblox-game (the game linked to a stand-in place, `FixtureGame.rbxlx`, at its top with the
+Roblox Studio plugin on: the toolbar's Roblox Studio button, the chat's link line with Undo and the
+steps card `[data-engine-steps]` (rows `[data-step=studio|sign-in|helper|mcp|place]`), whose rows come from the real plugin on
+this machine; Set up, Open Studio and Get Roblox Studio are native, so a fixture refuses them).
 Use `--reuse` explicitly for a stopped existing profile with the same fixture/provider mode.
 `--providers live` is explicit, retained, and uses existing ambient account semantics; no auth
 or account copying is performed. Fixtures park background improvement but keep the real core,

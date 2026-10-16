@@ -246,10 +246,11 @@ notes is told to read them first); with an engine plugin's kind on offer (`plugi
 `kinds`) every fresh brief until it has a kind asks with the question card, and a brief without the
 card (a local turn's too) names each kind's tool for a request that names that engine. A folder of its own files of a kind no
 rule knows is told to look through them first. Each kind gets its own rules, named by folder when
-there are several. A kind no plugin covers (Godot, Unity, Blender, an Unreal plugin, an Unreal project
-with the plugin off, an unknown one) calls `plugins_find` first, shows the card with
+there are several. A kind no plugin that is on covers (Unity, Blender, an Unreal plugin, a Godot or
+Unreal project with its plugin off, an unknown one) calls `plugins_find` first, shows the card with
 `plugins_suggest` and ends its reply, offers to write a plugin when none fits, and goes on with its
-files and the shell only on the person's word (`pluginFirstRule`). An Unreal project the game is not
+files and the shell only on the person's word (`pluginFirstRule`); a kind a plugin that is on makes
+(one of `kinds` names it, as Godot's plugin does Genex's own `godot-project`) skips that. An Unreal project the game is not
 linked to is never worked on through the Unreal tools: they reach the Unreal panel's project until
 `use-project` links it. A local turn's
 operating rules are split: `prompts/operating-rules.md` for every turn and
@@ -652,7 +653,15 @@ settles first, and no recovery starts during it) first autosaves a turn that kep
 folder changed, or `onlyIfUnsaved` where a plugin saves the app; never while a writer in place works),
 then restores the save point (`snapshot.restore`, then `waitReady`; Plan mode holds it even where no
 plugin hooks `restore.*`) or fires `restore.before` and `restore.after` with no file changed, both
-waiting while a writer in place works, each outcome a carried line. `finish` waits for that turn's
+waiting while a writer in place works, each outcome a carried line. When the turn kept a save point
+(its own or the autosave) and the folder was not taken back, the judges the game's engine plugin
+declares (`game.list`'s `judges`, on a game marked `editorPlay`) play it one at a time
+(`open/judge-rounds.ts`): each a blind `judge_play` naming its judge, its answer recorded as a run check
+and carried to the lead. A round starts only with `ROUND_MIN_MS` (3 minutes) of working time left and
+no finish asked for, plays no judge past the working time, and a Stop, a hold or the close ends it
+before the next judge. A game with no judges (Unreal, a web game) has no rounds; the lead's
+`judge_play` is offered for any game marked `editorPlay` (an older host's: an Unreal game), naming the
+game's judges by id. `finish` waits for that turn's
 end and for a writer in place, and a timed Loop's claim waits for its last turn. The health
 watch (`open/health.ts`) rides the wake loop's rounds and a turn's, one look at a time beside them
 (never awaited): `health` every `HEALTH_POLL_MS` when hooked, never once the Loop closes or its
@@ -704,7 +713,7 @@ resume of a run that runner wrote, to the Unreal runner (`loop/loop-switch.ts`) 
 Loop passes on the one Loop. Through the real studio (`one-loop-projects.test.ts`), a Loop on the toy
 plugin's project, and on a copy of that plugin with every tool renamed, runs the plugin's steps at its
 moments, its worker type and its observer, and ends on the reviewer's yes with no seed change; a Loop
-on a Godot folder with no plugin runs with Genex's own tools, lends no window and writes no web file.
+on a Godot folder with its plugin off runs with Genex's own tools, lends no window and writes no web file.
 
 One seam per worker. In a game the user brought, a worker is given a path, a folder or a glob to
 own (`*` and `?` stop at a slash, `**` crosses them; a glob must be quoted in the tool call), and
@@ -1350,7 +1359,7 @@ up and land a build nobody could check. The engines call a revoked or disabled a
 failure (`auth`): Claude Code from the CLI's own error code on the reply (`authentication_failed`,
 `oauth_org_not_allowed`, `account_on_hold`, `billing_error`) or the access words both engines share
 (`engines/common.ts` `isAccessLost`), also when the result's subtype says success. A lead turn a lost provider ended — a sign-in, a limit it will not wait out,
-an outage the patience ladder could not outlast, a 529 the session returned included — pauses the
+an outage the patience ladder could not outlast, a 529 or an unreachable network (`ENOTFOUND`) the session returned included — pauses the
 run (`afterTurn`'s `providerLost`, `state.limit`): no wrap-up, the workers stopped, nothing landed
 or judged (`NotLandedReason.Paused`), `run_finished.limit` naming its kind, and no learning pass
 until the run ends. A sign-in, cap or reset-naming limit opens that engine's circuit for the run

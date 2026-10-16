@@ -20,6 +20,7 @@ import {
   onBodyGpuLost,
   releaseBodyCanvas,
 } from "./body-gpu.ts";
+import { BRIGHT_STARS, type StarLook } from "./body-shader.ts";
 import { drawStillBody } from "./body-still.ts";
 import { type AvatarFrame, type Ctx2D, openness } from "./draw-kit.ts";
 import { drawEyes } from "./eyes.ts";
@@ -42,6 +43,10 @@ const MAX_BODY_PIXELS = 384;
 /** Where the body sits in a box with room for gear: 80% wide, a little low, so horns fit above. */
 const GEAR_BODY_SHARE = 0.4;
 const GEAR_BODY_DROP = 0.55;
+/** How strongly eyes show: in full, on a placeholder, and on a quiet face (there when you look for them). */
+const EYE_ALPHA = { Full: 1, Ghost: 0.5, Quiet: 0.22 } as const;
+/** A quiet galaxy's stars: dim, in the palette's blue. */
+const QUIET_STARS: StarLook = { strength: 0.4, tint: 1 };
 
 /** What an avatar draws. */
 export interface AvatarLook {
@@ -52,6 +57,16 @@ export interface AvatarLook {
   full: boolean;
   /** A placeholder: its eyes drawn at half strength. */
   ghost: boolean;
+  /**
+   * A face that stays in the background: eyes in their own colour but nearly see-through, and a
+   * galaxy's stars dimmed to its blue. It is there when you look for it.
+   */
+  quiet: boolean;
+  /**
+   * Drawn the way genex.games' link previews draw it, with the body as a 2D still and never on the
+   * GPU: a preview of that picture must show the same face.
+   */
+  flat: boolean;
 }
 
 /** The three canvases an avatar is, stacked in its box. */
@@ -155,7 +170,7 @@ onBodyGpuLost(() => {
 /** The surface an entry's body draws on, made the first time it paints. */
 function bodySurface(entry: Entry, context: BodyGpu | null): BodySurface {
   if (entry.body) return entry.body;
-  const made = context ? gpuBodyCanvas(context, entry.layers.body) : null;
+  const made = context && !entry.look.flat ? gpuBodyCanvas(context, entry.layers.body) : null;
   if (made) entry.body = { gpu: made };
   else {
     const ctx = entry.layers.body.getContext("2d");
@@ -172,6 +187,12 @@ function fit(canvas: HTMLCanvasElement, pixels: number, css: number, at: { left:
   canvas.style.height = `${css}px`;
   canvas.style.left = `${at.left}px`;
   canvas.style.top = `${at.top}px`;
+}
+
+/** How strongly a look's eyes show. */
+function eyeAlpha(look: AvatarLook): number {
+  if (look.quiet) return EYE_ALPHA.Quiet;
+  return look.ghost ? EYE_ALPHA.Ghost : EYE_ALPHA.Full;
 }
 
 /** Paint one avatar's 2D layers and queue its body; returns the body to draw on the GPU, if any. */
@@ -194,7 +215,7 @@ function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
     const drawn: AvatarFrame = { ctx: front, recipe: look.recipe, cx, cy, rad, t };
     front.clearRect(0, 0, pixels, pixels);
     drawSkinGear(drawn);
-    front.globalAlpha = look.ghost ? 0.5 : 1;
+    front.globalAlpha = eyeAlpha(look);
     drawEyes(drawn);
     front.globalAlpha = 1;
     if (!look.full) drawFrontGear(drawn);
@@ -206,7 +227,13 @@ function paint(entry: Entry, context: BodyGpu | null): BodyDraw | null {
     drawStillBody(surface.ctx, look.recipe, bodyPixels);
     return null;
   }
-  return { canvas: surface.gpu, recipe: look.recipe, t, pixels: bodyPixels };
+  return {
+    canvas: surface.gpu,
+    recipe: look.recipe,
+    t,
+    pixels: bodyPixels,
+    stars: look.quiet ? QUIET_STARS : BRIGHT_STARS,
+  };
 }
 
 /** One frame: move the clocks of avatars that run, then paint this frame's share. */

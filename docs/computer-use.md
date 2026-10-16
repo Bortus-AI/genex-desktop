@@ -115,13 +115,118 @@ CLI refuses a feature flag it does not know; a listing that fails is asked for a
 A game engine joins through the Genex Play Protocol ([play-protocol.md](play-protocol.md)): a small
 plugin inside the game answers about a dozen JSON commands (hello, screenshot, pointer, key, type,
 look, act, pause, play, step, reset, state). A project declares it in `studio.json`
-(`"runtime": "bridge"`, `"play": {"command", "args"}`, the command resolved by real path inside the
-project); the delegation then gives every role a `GameBridgeTarget`
+(`"runtime": "bridge"`, `"play": {"command", "args", "engine"?}`, the command resolved by real path
+inside the project, the engine a runtime an enabled plugin declares and the studio starts in its
+native-job sandbox with the GPU, as Godot needs to draw); the delegation then gives every role a `GameBridgeTarget`
 ([`src/main/core/game-bridge-target.ts`](../src/main/core/game-bridge-target.ts)) whose game runs in
 the `ProcessSandbox`. The playtest shorthands are not offered there; its moves are drawn on the
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
 conformance suite (`tests/conformance/play-protocol.test.ts`, run against
 `tests/fixtures/fake-play-game.mjs`; `PLAY_GAME_COMMAND` points it at another game).
+
+A game played in its engine's editor is the `editor` runtime
+([`editor-play-target.ts`](../src/main/core/editor-play-target.ts)): the target calls its engine
+plugin's play tools ([`shared/engine-play.ts`](../src/shared/engine-play.ts): `play-open`,
+`play-input`, `play-shot`, `play-state`, `play-pause`, `play-close`, harness-only, each needing the
+plugin's editor lock for its call, the person first). Unreal provides them
+([`plugins/unreal/computer-play.ts`](../src/plugins/unreal/computer-play.ts)): Play In Editor through
+the Genex editor helper the editor queue already uses, keys held on the game's own clock (web key
+codes, named as Unreal names them: `KeyW` is `W`; the mouse buttons as `MouseLeft`… are
+`LeftMouseButton`…), one frame of the player's mouse for `look` and the wheel (Unreal's `Mouse2D` and
+`MouseWheelAxis`, held still a frame before they are let go, since letting go of a forced analog key
+injects its opposite), the player's view by `capture_play`, and `player_state` as the state goals
+are checked against. A session joins a play that already runs and ends only one it started; a play
+it starts warms up 2 game seconds before the first look and is marked as the agent's
+(`agent-play.ts`), so the lock's person-first probe does not read it as the person playing, and a
+session whose plugin restarted takes over the play that mark still claims. While the editor queue
+still has a part or a play-check of the game, a session is refused (`busy`). Capabilities
+(`EDITOR_CAPABILITIES`): a relative pointer (`look`, the clicks pressing where the view is aimed —
+`aimedClicks` — and the wheel; no point, drag or cursor), a clock the studio can stand still but not
+step (`Freeze`: the play's own pause, held between a judge's or playtester's moves, so a run never
+claims to replay), game state, input route `editor`. Who holds it: any session the studio hands a
+computer for a game whose enabled engine plugin provides every play tool and matches its link or facts —
+the chat's own ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts)), and a judge's or
+playtester's through `_computerToolsFor`; `judge_play` is offered to such a chat, and the Unreal
+Loop's lead has its own (`loop/unreal/lead-judge.ts`). Nothing starts until the agent first uses it,
+and the session's end ends the play it started, never leaving a game paused. On a Mac, Unreal's
+background throttle is lifted only for an editor without hardware ray tracing (UE 5.8 hangs the GPU
+rendering a ray-traced level at full speed behind another app); see [plugins](plugins.md).
+
+What an editor play can do is its engine's declaration (`engine.play` in the plugin's manifest, read
+by `editorCapabilities`): `players` 1–8, `clock` (at most `freeze`: the play tools pause, never
+step), `pointer` and `state`. Unreal declares none and keeps `EDITOR_CAPABILITIES`, as does Unity,
+which declares no engine. The declaration is known before play opens, so the tool is described
+from it; `play-open`'s answer (`players` joined,
+`capabilities` in the declaration's shape) can only narrow it. A session opens the players its grant
+asks for (`players` on a playtest or judge grant; one when absent, never more than declared). With
+more than one the tool offers `player=<n>`, which addresses that player's view, keys and state from
+then on (`selectPlayer`), and the target sends `player` to `play-input`, `play-shot` and
+`play-state` only above 1, so a one-player engine sees the wire it always did. `play-shot` answers
+base64 `data` with its `mime` (`image/jpeg` or `image/png`; anything else is read as PNG, and `png`
+is still read), refused in plain words over `MAX_PLAY_SHOT_BYTES` (1 MB). An engine refuses what it
+cannot do at all with `unsupported`: a pause is then asked once and the clock is known to run on;
+Unreal answers it for more than one player. The toy engine fixture (`tests/fixtures/toy-engine-plugin`)
+plays three players this way.
+
+Roblox Studio declares `players` 8, `clock` `none`, `pointer` and `state`, and its play tools
+([`plugins/roblox/computer-play.ts`](../src/plugins/roblox/computer-play.ts)) go through Studio's own
+MCP server under the `studio` lock. One player is Play Solo (`start_stop_play`) in the game's own
+Studio, which plays as the signed-in account. More players is the Genex helper's multiplayer test:
+Studio opens a server and a window per client, and its MCP server lists each as a nameless Studio; a
+client answers its Client data model as test player `Player<k>` (UserId `-k`), which is player k, and
+the server answers only its Server data model. Starting a multiplayer test brings Studio to the
+front; Play Solo does not. Keys are held in one `user_keyboard_input` call (down, wait, up, named by
+[`keys.ts`](../src/plugins/roblox/keys.ts): `KeyW` is `W`, `Enter` is `Return`), the mouse buttons
+(left and right only) and wheel through `user_mouse_input` at the player's aim, which `dx`/`dy` moves.
+A shot is `screen_capture` on the player's Studio (a JPEG of that player's view; a test's server has
+none), shrunk past 1 MB and refused when it can't be. The state is the client's and the server's
+view of the players (position, velocity, health, leaderstats, attributes) with the player's last
+output lines. No pause holds a client's clock, so `play-pause` answers `unsupported`. `play-open`
+always asks the server once whether the live saved data can be reached (`liveData`; the link's ids
+can't say, as the person's first publish in Studio doesn't update them, and a server that doesn't
+answer counts as reachable) and keeps the answer for the Set up panel. A play the session starts is
+marked as the agent's (`agent-marks.ts`) from just before it starts until `play-close` ends it.
+
+Unity provides the same six play tools through its Pipeline package
+([`plugins/unity/computer-play.ts`](../src/plugins/unity/computer-play.ts)). Its project stays inside
+the game's folder: no engine link is needed. Without an engine binding, the host
+selects a single enabled plugin whose six harness play tools each explicitly match the game's
+facts (`unity-project` for Unity); missing or ambiguous matches expose no editor computer.
+The chat, judges and playtesters then use the same editor target and `judge_play` path.
+Unity captures the Game view, including its HUD, and waits for Play mode to finish starting before
+playing. Keyboard and mouse input require the installed, active Unity Input System; legacy
+`UnityEngine.Input` is unsupported, and this integration installs no packages. Fixed host-owned
+Pipeline code supplies relative mouse input and reads the game clock and player state. Pausing is
+idempotent, input is released after each move, and closing a session ends only agent-owned play.
+A fresh judge play never restarts a game the person started. A judge's or a playtester's play is
+asked for `fresh` only where the plugin's `play-open` declares that parameter (Unreal, Unity); an
+engine whose `play-open` does not (Roblox) is joined as it runs.
+
+A judge's grant may name one of the judges the engine plugin declares (`judge`;
+[plugins](plugins.md#judges)): its session opens that judge's players, and `play-open`'s source runs
+one step right after the play first opens (`afterOpen`), the judge's probe, through the plugin's
+tool call under the play's locks. The first answer after that carries the probe's note and pictures,
+and a play that reaches the live game's saved data (`liveData: true` on `play-open`) says so there;
+later answers carry neither. A judge named for a game no engine plugin plays in its editor is
+refused.
+
+Roblox Studio's three judges ([plugins](plugins.md#judges)) open with these probes, each a harness
+tool under the `studio` lock that reads the play the play tools hold (`plugins/roblox/probes.ts`).
+`players-state` takes a picture from each player and compares what each client sees of every
+player (who is there, leaderstats, attributes) with the server. `cheat-remotes` runs the package's
+`cheat-remotes.luau` in the player's Client data model: it lists every RemoteEvent,
+UnreliableRemoteEvent and RemoteFunction the client reaches and sends each one hostile values (no
+values, wrong types, negative, huge and broken numbers, a 50 000-character string, other players'
+and the world's instances, then a burst of 60), reading the server's leaderstats, player attributes
+and ServerStorage's attributes before and after each; it starts no remote past `CHEAT_MAX_MS`
+(2 minutes) and sends nothing when the play reaches live saved data. `phone-check` runs
+`phone-check.luau` in the Client data model, which can set Studio's Device Simulator during a play
+(the Edit data model can't be reached then): four sizes (`PHONE_SIZES`), a picture each, overlaps
+between pressable elements or with Roblox's jump button and move stick, elements off the screen,
+outside the device's safe area or under Roblox's top-bar buttons, and the place's memory (Studio's
+own memory kinds left out) against `PHONE_MEMORY_BUDGET_MB` (600). The simulator keeps its device
+after a play ends, so the probe always puts back the device shown before.
+
 ## The person's computer
 
 The desktop and a VM are targets too ([`desktop-target.ts`](../src/main/core/desktop-target.ts)),
@@ -151,17 +256,48 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   with `GENEX_VENDOR_CUA_DRIVER=1`, else runs an installed driver (`~/.local/bin/cua-driver` and the
   usual paths), embedded the same way. Moving to a newer driver: change the pin and the notices, then
   verify the web and desktop scenarios live.
-- **Who holds it.** The chat's own session on every engine is handed a `desktop` tool (the computer
-  vocabulary under its own name, so it sits beside a game's `computer`), where a driver is
-  found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
+- **The setting.** Settings → Permissions → **Let agents control your computer** (`computerControl`
+  in the studio's `settings.json`) is off for every install, new or existing; only an explicit on
+  turns it on, and only macOS offers it. Off, no session is handed the `desktop` tool, no consent card
+  shows, the driver is never looked for or started, and `desktop.computer` answers that computer
+  control is off in Settings (an answer, never an error). Turning it off stops every running driver
+  (`stopAll`, as ⌃⌥⌘Esc) and a session already holding the tool reads the same answer on its next
+  call; turned on, the next call or session works as below.
+- **Who holds it.** With the setting on, the chat's own session on every engine is handed a `desktop`
+  tool (the computer vocabulary under its own name, so it sits beside a game's `computer`), where a
+  driver is found (`desktop-session.ts`). The harness's own loop (Ollama) gets the same tool through
   `desktop.computer` and the seed's `tools/desktop-tools.ts`. Unattended sessions never hold it.
 - **Consent.** Nothing moves before the person answers a consent card in the chat (the studio's own,
   `studio-desktop`): once for the session, then once for each app the agent reaches. Inside a VM the
-  session's yes covers every app.
+  session's yes covers every app. A yes stands while the driver fails to connect (missing grants, no
+  driver): the next call retries without a new card. A stop ends it, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; nothing is typed into a
   password field (macOS's secure input on this Mac, or a field labelled as a password in the front
 window's tree). A refusal ends the plan and its reason is the answer.
+- **Never building or play-testing.** The apps an enabled engine plugin declares
+  (`engine.apps.mac`, its editor) are refused in plain words ("use the engine's own tools") before
+  the person is asked about them, unless the chat holds that plugin's setup assist; the tool's own
+  description says so too. While an assist holds the chat, every app outside its grant is refused.
+  The apps the studio never drives stay refused whatever a grant names (`engineAppRefusal`), and so
+  do the apps an enabled engine's games are played in (`engine.playerApps.mac`, such as Roblox's
+  player): no agent plays in a live server, not even in a setup assist.
+- **Do it for me** ([`desktop-assist.ts`](../src/main/core/desktop-assist.ts), the plugin service
+  `game.engine.assist`). Setup clicks and publishing the person approved, only: a switch or dialog
+  only the engine's window offers. Only the person starts one, by a plugin action they pressed or a
+  tool call whose own card they approved (`confirmed` on the call, set by the host); a plugin from a
+  folder or the marketplace shows the task on a card first, and with the setting off the studio's
+  card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
+  <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
+  running turn it was steered into; never another turn of the chat building beside it) the
+  plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
+  can follow holds it for those 20 minutes. That chat's own session then works as below, with its session and app
+  cards. Windows and a Mac with no driver answer `unavailable`. Roblox Studio's **Publish an
+  update** is the one assist that is not a setup click ([plugins](plugins.md)): the
+  person presses it or approves the agent's `publish-update` card, and the chat clicks File ›
+  Publish to Roblox in their Studio, on a Mac only (elsewhere the answer gives that click path). It
+  updates a place already published; a place's first publish stays the person's, with its click
+  path and no assist.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in

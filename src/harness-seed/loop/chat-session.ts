@@ -6,7 +6,7 @@
  */
 import { launchRules, RESUME_LOOP_CHAT, type LaunchGrant } from "./launch-prompts.ts";
 import { UNTIL_DONE_WORDS } from "./until-done-prompts.ts";
-import { GameEngine } from "./game-engine.ts";
+import { type EngineId, GameEngine } from "./game-engine.ts";
 import { handoverSection } from "./session-compact-prompts.ts";
 import { toolCall } from "./model-roles.ts";
 import { EventKind, InterviewMode, RunEvent } from "./run-events.ts";
@@ -33,6 +33,8 @@ import {
   unrealWithoutPlugin,
 } from "./project-prompts.ts";
 import { WORKERS_BRIEF_LINE } from "./workers/prompts.ts";
+import { godotWorkHere, godotWorkspaceRule } from "./linked-project-prompts.ts";
+import { pluginWebBuilds, webBuildLine } from "./web-build.ts";
 import type { AnyRecord } from "../types/harness.d.ts";
 import type { PluginKindOffer } from "../types/host-api.d.ts";
 
@@ -332,7 +334,7 @@ const WORKSPACE_RULE =
  * facts stand for that engine.
  */
 interface GameBuild {
-  gameEngine: GameEngine;
+  gameEngine: EngineId;
   /** Each fact with its source when the caller said it (a plugin's detect, a scaffold's record). */
   facts: SourcedFact[];
   /** With no facts, what the folder holds (`game.list`'s `holds`); null: not said, read as nothing. */
@@ -366,7 +368,7 @@ function gameBuild(
     engineProject,
     pluginsOff,
     holds,
-  }: { gameEngine: GameEngine; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
+  }: { gameEngine: EngineId; engineProject: string | null; pluginsOff: boolean; holds: FolderHolds | null },
 ): GameBuild {
   const legacy = !Array.isArray(facts);
   const known: SourcedFact[] = legacy ? factsOfEngine(gameEngine) : facts.map(sourcedFact);
@@ -380,7 +382,7 @@ function gameBuild(
  * project's look first, by its fact) and the Loop's profile (the one Loop in place, unless it is a
  * web game).
  */
-function loopOfGame(game: GameBuild): [GameEngine, LoopProfile] {
+function loopOfGame(game: GameBuild): [EngineId, LoopProfile] {
   const engine = hasFact(game.facts, CoreFact.UnrealProject) ? GameEngine.Unreal : game.gameEngine;
   return [engine, loopProfileOf(game)];
 }
@@ -389,11 +391,20 @@ function loopOfGame(game: GameBuild): [GameEngine, LoopProfile] {
 const inUnreal = (game: GameBuild) =>
   !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject) && !game.pluginsOff;
 
-/** The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a line for any other. */
-function rulesOfFact(engine: string | undefined, fact: SourcedFact, game: GameBuild, folder: FolderShape): string[] {
+/**
+ * The rules of one kind the folder holds: the web template's or the game's own shape, Unreal's, or a
+ * line for any other, which a plugin that is on and makes that kind (`made`) already covers.
+ */
+function rulesOfFact(
+  engine: string | undefined,
+  fact: SourcedFact,
+  game: GameBuild,
+  folder: FolderShape,
+  made: ReadonlySet<string>,
+): string[] {
   if (fact.id === CoreFact.WebGame)
     return folder.ownShape ? ownShapeRules(folder.shape, folder.contractMissing) : [TEMPLATE_RULE];
-  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact);
+  if (fact.id !== CoreFact.UnrealProject) return ownKindRules(engine, fact, made.has(fact.id));
   if (game.pluginsOff) return unrealWithoutPlugin(engine);
   const found = game.unrealFound;
   return unrealRules(engine, game.engineProject, { found, ownFiles: found !== undefined });
@@ -414,8 +425,13 @@ function factRules(
   if (kindUnknown(game)) return unknownKindRules(engine, game.holds);
   if (kindPending(game)) return [...pendingKindRule(engine, offered, null, game.holds, asked), TEMPLATE_RULE];
   const several = game.facts.length > 1;
+  // The kinds the plugins that are on make: their plugin is on already, nothing to look for.
+  const made = new Set(offered.flatMap((kind) => (Array.isArray(kind.makes) ? kind.makes : [])));
+  // A plugin's web build is said once, by its own line, and gets no web game's rules.
+  const builds = pluginWebBuilds(game.facts);
   return game.facts.flatMap((fact) => {
-    const rules = rulesOfFact(engine, fact, game, folder);
+    if (builds.has(fact.path)) return fact.id === CoreFact.WebGame ? [webBuildLine(fact.path)] : [];
+    const rules = rulesOfFact(engine, fact, game, folder, made);
     const prefix = several ? factPrefix(fact) : "";
     return rules.map((rule) => `${prefix}${rule}`);
   });
@@ -425,12 +441,23 @@ function factRules(
  * The rules every chat build follows after the game's own, in the voice of the engine that reads
  * them: a tool is named once, spelled the way this session can actually call it (M4.8b).
  */
+/** Where the game's work happens: its Unreal project, its linked Godot project, or this workspace. */
+function workspaceRule(game: GameBuild): string {
+  if (!servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject))
+    return unrealWorkspaceRule(game.engineProject, game.unrealFound);
+  const godot = linkedGodotProject(game);
+  return godot ? godotWorkspaceRule(godot) : WORKSPACE_RULE;
+}
+
+/** The `project.godot` a game is linked to, or null when it isn't linked to a Godot project. */
+const linkedGodotProject = (game: GameBuild): string | null =>
+  game.gameEngine === GameEngine.Godot ? game.engineProject : null;
+
 function contractorRules(engine: string | undefined, game: GameBuild): string[] {
-  const unrealWork = !servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject);
   return [
     "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
-    unrealWork ? unrealWorkspaceRule(game.engineProject, game.unrealFound) : WORKSPACE_RULE,
+    workspaceRule(game),
     "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
     `When a sandbox blocks a step only the user's own Mac can do (an install or download that needs the network, such as brew or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
     // The Reload a checkpoint lights is the web preview's: any other kind is seen in its own app.
@@ -481,7 +508,7 @@ const RESUME_BUILD =
  *   ownShape?: boolean,
  *   contractMissing?: boolean,
  *   engine?: string,
- *   gameEngine?: GameEngine,
+ *   gameEngine?: EngineId,
  *   engineProject?: string | null,
  *   launch?: LaunchGrant | null,
  *   afterLoopRun?: string | null,
@@ -508,7 +535,7 @@ export function buildContractorBrief({
   contractMissing = false,
   /** Which engine reads this: the one thing in the brief that is spelled per engine. */
   engine = undefined,
-  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): an Unreal game is no web page. */
+  /** Which engine the GAME builds in (game-engine.ts `engineOfGame`): a game in any engine is no web page. */
   gameEngine = GameEngine.Web,
   /** The Unreal project file an Unreal game is linked to, which its work lands in. */
   engineProject = null,
@@ -543,7 +570,7 @@ export function buildContractorBrief({
   ownShape?: boolean;
   contractMissing?: boolean;
   engine?: string;
-  gameEngine?: GameEngine;
+  gameEngine?: EngineId;
   engineProject?: string | null;
   launch?: LaunchGrant | null;
   afterLoopRun?: string | null;
@@ -631,6 +658,8 @@ function engineQuestion(
  */
 function workHereLine(game: GameBuild, folderLabel: string): string {
   if (inUnreal(game)) return unrealWorkHere(game.engineProject, folderLabel, game.unrealFound);
+  const godot = linkedGodotProject(game);
+  if (godot) return godotWorkHere(godot, folderLabel);
   return folderLabel
     ? `The game's work stays in this workspace (folder \`${folderLabel}\`).`
     : "The game's work stays in this workspace.";

@@ -381,6 +381,22 @@ test("API 2 fields are rejected under apiVersion 1 instead of being ignored", as
     /scalar/,
   );
 });
+test("a toolbar item's facts: API 3 only, fact ids, kept on the canonical item", async () => {
+  const manifest = await manifestOf();
+  const item = manifest.toolbar![0]!;
+  const v3 = (facts: unknown) => ({ ...manifest, apiVersion: 3, toolbar: [{ ...item, facts }] });
+  assert.deepEqual(validateManifest(v3(["unreal-project", "unreal-plugin"])).toolbar![0]!.facts, [
+    "unreal-project",
+    "unreal-plugin",
+  ]);
+  assert.ok(!("facts" in validateManifest({ ...manifest, apiVersion: 3 }).toolbar![0]!), "none named: every game");
+  assert.throws(
+    () => validateManifest({ ...manifest, toolbar: [{ ...item, facts: ["unreal-project"] }] }),
+    /toolbar\[\]\.facts requires apiVersion 3/,
+  );
+  for (const facts of [[], ["Unreal Project"], ["a", "a"], "unreal-project", [7]])
+    assert.throws(() => validateManifest(v3(facts)), /facts/, JSON.stringify(facts));
+});
 test("toolbar validation: reserved labels, undeclared targets, confirmed status actions and the item cap", async () => {
   const manifest = await manifestOf();
   const item = manifest.toolbar![0]!;

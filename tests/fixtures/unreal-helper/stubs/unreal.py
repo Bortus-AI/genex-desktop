@@ -1233,6 +1233,15 @@ class GameplayStatics:
         return state['game_seconds']
 
     @staticmethod
+    def set_game_paused(world_context_object, paused: bool) -> bool:
+        state['paused'] = bool(paused)
+        return True
+
+    @staticmethod
+    def is_game_paused(world_context_object) -> bool:
+        return state.get('paused', False)
+
+    @staticmethod
     def get_world_delta_seconds(world_context_object) -> float:
         return state['world_delta']
 
