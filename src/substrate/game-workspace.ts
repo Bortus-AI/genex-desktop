@@ -1036,7 +1036,6 @@ export class GameWorkspaces {
       pinned: presentation?.pinned ?? false,
       cover: presentation?.cover,
       lastOpenedAt: this.#recents.find((row) => row.name === name)?.openedAt,
-      ...(presentation?.provisional ? { provisional: true } : {}),
       createdAt: parsed.createdAt ?? "",
       pathLabel: this.pathLabel(dir),
       library: isInside(this.root, dir),
@@ -1050,8 +1049,7 @@ export class GameWorkspaces {
       ...(portedFrom.length > 0 ? { portedFrom } : {}),
       ...(scaffold ? { scaffold: { plugin: scaffold.plugin, id: scaffold.id, label: scaffold.label } } : {}),
       web: hasFact(facts, CoreFact.WebGame, "."),
-      ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
-      ...(presentation?.awaitingFirstBuild ? { awaitingFirstBuild: true } : {}),
+      ...presentationFlags(presentation),
       ...((await usesGenexMultiplayer(dir)) ? { multiplayer: true } : {}),
     };
   }
@@ -1624,4 +1622,15 @@ async function mergeCopy(from: string, to: string, keep: Set<string> = new Set()
     if (entry.isDirectory()) await mergeCopy(src, dest, keep, relative);
     else if (!there) await cp(src, dest);
   }
+}
+
+/** The listing's flags a game's library entry carries, each only when set. */
+function presentationFlags(
+  presentation: GameLibraryEntry | undefined,
+): Pick<GameProject, "provisional" | "scaffoldStamp" | "awaitingFirstBuild"> {
+  return {
+    ...(presentation?.provisional ? { provisional: true } : {}),
+    ...(presentation?.scaffoldStamp ? { scaffoldStamp: presentation.scaffoldStamp } : {}),
+    ...(presentation?.awaitingFirstBuild ? { awaitingFirstBuild: true } : {}),
+  };
 }
