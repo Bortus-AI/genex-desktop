@@ -30,6 +30,9 @@ import {
   isFileSkill,
   isToolbarIconName,
   PLUGIN_SKILL_TOOL,
+  isPluginSetup,
+  PLUGIN_SETUP_STEP_CHARS,
+  PLUGIN_SETUP_STEPS,
   PluginCapability,
   PluginHostTool,
   PluginToolAudience,
@@ -139,6 +142,7 @@ const EnvSource = {
 
 /** What a publisher reads when a manifest is refused, and a caller when tool input is. */
 const MESSAGE = {
+  InvalidSetup: `setup must be 1 to ${PLUGIN_SETUP_STEPS} plain one-line steps of at most ${PLUGIN_SETUP_STEP_CHARS} characters`,
   InvalidIcon: "icon must name a .png, .jpg, .webp or .svg file inside the package",
   MissingIcon: (file: string) => `icon ${file} is missing from the package`,
   IconNotAFile: (file: string) => `icon ${file} is not a plain file`,
@@ -653,6 +657,10 @@ export function validateManifest(value: unknown): PluginManifest {
   validateReachSections(m, canonical);
   validateHostSections(m, canonical);
   if (m.icon !== undefined) canonical.icon = validateIcon(m.icon);
+  if (m.setup !== undefined) {
+    if (!isPluginSetup(m.setup)) throw new Error(MESSAGE.InvalidSetup);
+    canonical.setup = [...m.setup];
+  }
   return canonical;
 }
 

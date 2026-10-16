@@ -1363,6 +1363,8 @@ export interface GameLibraryEntry {
   scaffoldStamp?: string;
   /** The title waits for the game's first idea; any title given since clears it. */
   provisional?: boolean;
+  /** New game made it and no answer has ended with it built yet (`GameProject.awaitingFirstBuild`). */
+  awaitingFirstBuild?: boolean;
 }
 // ↑ src/shared/game-library.ts
 
@@ -1609,6 +1611,13 @@ export interface GameProject {
   scaffoldStamp?: string;
   /** Named before anyone said what the game is: its first idea renames it in place (`nameFromIdea`). */
   provisional?: boolean;
+  /**
+   * New game made it and no answer in its chats has ended with the game made yet; absent once one
+   * has, and for every game New game did not make, which came with a game of its own.
+   */
+  awaitingFirstBuild?: true;
+  /** The game loads Genex's multiplayer: its package.json names it, or its page maps Studio's copy. */
+  multiplayer?: true;
 }
 // ↑ src/shared/game-project.ts
 

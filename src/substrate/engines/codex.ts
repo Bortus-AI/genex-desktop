@@ -47,11 +47,13 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promise
 import os from "node:os";
 import path from "node:path";
 import { pathExists } from "../fsx.ts";
+import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 import type { Usage } from "../types.ts";
 import {
   codexAuthStatus,
   codexProfileArgs,
   codexSubscriptionEnv,
+  readCodexAccountEmail,
   readCodexRateLimits,
   refreshCodexCatalogue,
   type CodexAuthStatus,
@@ -156,6 +158,8 @@ export interface CodexEngineOptions {
    * `CODEX_HOME`, and the CLI finds its own.
    */
   systemHome?: string;
+  /** The accounts this engine can run on; by default kept beside `engineHome` (`accountsRoot`). */
+  accounts?: SubscriptionAccounts;
   /** Default model id; `undefined` means "whatever Codex is configured to use". */
   model?: string;
   /** Directories the contractor must never read (the studio's secrets, engine homes). */
@@ -360,6 +364,8 @@ export class CodexEngine implements Engine {
   readonly compactsNatively = true;
   readonly engineHome: string;
   readonly systemHome: string;
+  /** The Terminal login, Studio's own and any added ones; the chosen one runs (`resolveLogin`). */
+  readonly accounts: SubscriptionAccounts;
   readonly #lockRecovery: string;
   readonly #model: string | undefined;
   readonly #protectedPaths: string[];
@@ -403,6 +409,14 @@ export class CodexEngine implements Engine {
     this.#readModels = options.readModels ?? (options.execFn || options.refreshCatalogue ? undefined : readCodexModels);
     this.engineHome = options.engineHome;
     this.systemHome = options.systemHome ?? path.join(os.homedir(), ".codex");
+    this.accounts =
+      options.accounts ??
+      new SubscriptionAccounts({
+        systemHome: this.systemHome,
+        studioHome: this.engineHome,
+        root: accountsRoot(this.engineHome, EngineId.Codex),
+        signedIn: (home) => hasCredentials(home, CREDENTIAL_FILE),
+      });
     this.#lockRecovery = path.join(path.dirname(this.engineHome), LOCK_RECOVERY_DIR);
     this.#model = options.model;
     this.#protectedPaths = options.protectedPaths ?? [];
@@ -444,6 +458,11 @@ export class CodexEngine implements Engine {
    * retain environment/studio/system discovery until the user connects through the new UI.
    */
   async resolveLogin(): Promise<CodexLogin> {
+    // An account the person chose in Settings runs, signed in or not: never another one silently.
+    const chosen = await this.accounts.chosen();
+    const chosenHome = chosen && this.accounts.homeFor(chosen);
+    if (chosen && chosenHome)
+      return { source: chosen === AccountId.Terminal ? LoginSource.System : LoginSource.Isolated, home: chosenHome };
     if (await pathExists(path.join(this.engineHome, STUDIO_LOGIN_MARKER)))
       return { source: LoginSource.Isolated, home: this.engineHome };
     if (process.env.CODEX_HOME) return { source: LoginSource.Env, home: process.env.CODEX_HOME };
@@ -523,6 +542,23 @@ export class CodexEngine implements Engine {
   }
 
   usageSnapshot = (): ProviderUsage | null => this.#usage;
+
+  /** Run on account `id` from now on: its sign-in, its models and its plan limits. */
+  async runOnAccount(id: string): Promise<EngineStatus> {
+    await this.accounts.choose(id);
+    return this.recheckLogin();
+  }
+
+  /** The email Codex's app server reports for the account signed in to `home`, if it reports one. */
+  async accountEmail(home: string): Promise<string | null> {
+    if (this.#execFn) return null;
+    const installation = await requireCodingCli(EngineId.Codex, this.#executable, undefined, false);
+    return readCodexAccountEmail(
+      installation.path,
+      await codexProfileArgs(home),
+      subscriptionEnv({ ...installation.env, CODEX_HOME: home }),
+    );
+  }
 
   /** The plan's limits for the composer, read at most once a minute from the account itself. */
   async readUsage(): Promise<ProviderUsage | null> {

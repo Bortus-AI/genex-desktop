@@ -11,6 +11,7 @@ An unset pick runs the CLI's named default, else a default row. Aliases follow t
 versions stay pinned.
 
 Settings shows CLI versions; Account rechecks or updates them; failed refreshes offer Try again.
+Tabs switch [accounts](../connections-and-context.md#several-accounts-per-subscription).
 Unavailable picks block sends; without models, Connect AI model replaces the model pill. A
 listing proves no access.
 
@@ -30,15 +31,15 @@ Studio, llama.cpp or TabbyAPI ([details](../connections-and-context.md#your-own-
 The context ring shows reported orchestrator usage and capacity; unknown stays unknown. Its panel
 offers Compact now (or `/compact`; Claude Code and Codex use
 [their own](../connections-and-context.md#compact-now), others hand over); every provider, workers
-included, also compacts automatically. Then plan limits
+included, compacts automatically. Then plan limits
 ([details](../connections-and-context.md#plan-limits)).
 
-Ollama's context is a loaded model's report, else an estimate marked unknown. Tools and images
+Ollama's context is a loaded model's report, else an unknown estimate. Tools and images
 need reported capability; unsupported requests fail before inference.
 
 Game files, instructions, reference images and enabled tools contribute through channels
-([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages, logs
-or docs.
+([tool setup](assets-plugins.md)). Credentials stay in protected storage, never in messages
+or logs.
 
 ## Permissions
 

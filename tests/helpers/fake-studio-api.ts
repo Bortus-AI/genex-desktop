@@ -146,6 +146,8 @@ const METHODS = [
   "codexLoginRetry",
   "onCodexLogin",
   "subscriptionForgetStudioLogin",
+  "subscriptionAccounts",
+  "subscriptionUseAccount",
   "openUrl",
   "playFeed",
   "playShelves",

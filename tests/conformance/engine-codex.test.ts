@@ -736,6 +736,39 @@ describe("codex engine", () => {
     assert.match(status.detail, /API key/i);
   });
 
+  it("runs on the account chosen in Settings, even over Studio's own profile", async () => {
+    const root = await tmpDir("studio-codex-accounts-");
+    const systemHome = path.join(root, "dot-codex");
+    const engineHome = path.join(root, "engine-home");
+    for (const dir of [systemHome, engineHome]) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "auth.json"), "{}");
+    }
+    await writeFile(path.join(engineHome, "studio-login.json"), "{}");
+    const { fn, seen } = fakeExec(successRun);
+    const engine = new CodexEngine({
+      resolveCli: fixtureCodingCli,
+      engineHome,
+      systemHome,
+      executable: "/fake/codex",
+      authStatusFn: async () => ({ loggedIn: true, method: "chatgpt", detail: "Logged in using ChatGPT" }),
+      execFn: fn,
+    });
+    const added = await engine.accounts.newAccount();
+    await writeFile(path.join(added.home, "auth.json"), "{}");
+    await engine.accounts.remember(added.id, {});
+    await engine.runOnAccount(added.id);
+    const cwd = path.join(root, "game");
+    await mkdir(cwd, { recursive: true });
+    await engine.delegate({ prompt: "build", cwd });
+    await engine.runOnAccount("terminal");
+    await engine.delegate({ prompt: "build", cwd });
+    assert.deepEqual(
+      seen.map((call) => call.env.CODEX_HOME),
+      [added.home, systemHome],
+    );
+  });
+
   it("keeps borrowing this Mac's Codex sign-in after a build: nothing a build leaves reads as the studio's own", async () => {
     // Any folder in the studio's Codex home reads as a sign-in (`hasCredentials`). The locks'
     // recovery records once went there, so the first build moved a borrowed login onto that empty

@@ -524,11 +524,30 @@ npm run plugin:submit -- ~/studio-plugins/my-plugin --catalog ~/genex-plugins \
 It packs the package as `plugin:pack` does, writes the immutable release record
 `records/<id>/<version>.json` and points the `index.json` entry at it, then checks the catalog the
 way its CI will, with the catalog's own validator. It refuses an official id (`genex`,
-`blender`), the scaffold's `Unpublished` publisher (the publisher owns every later release of the
+`blender`), an id that isn't yours (a community id is your GitHub name from `--repo`, alone or
+before a dash: `you` or `you-my-plugin`, so a vendor's bare name stays the vendor's), the
+scaffold's `Unpublished` publisher (the publisher owns every later release of the
 id), a bad source and a version already released, and keeps nothing it wrote when it refuses. The
 record copies `id`, `name`, `publisher`, `description`, `version` and `capabilities` from
 `plugin.json`; `category` is one of `assets`, `publishing`, `tools`, `analytics`, `other`, and
 `tier` is `community`.
+
+**Your plugin's page.** In the app, a community plugin is a tile under Community plugins: its
+name, `by` your GitHub name (from `--repo`, linking your profile) and its description. The tile
+opens its page, which Genex draws from the record: how to start, what it can do (from
+`capabilities`), the pinned source and your `--docs-url`, with an Install button; once installed,
+the tile shows its switch. "How to start" is Genex's install step, then your own `setup` steps
+from `plugin.json`, then when it is ready:
+
+```json
+"setup": ["Get an API key at example.com: Account, then Keys.", "Open its page in Genex and paste the key in Settings."]
+```
+
+`setup` is 1 to 6 steps of plain text, one line and at most 200 characters each: no markup,
+links, line breaks, control characters or text direction overrides. Genex draws them as text,
+and the plugin, the catalog's check and the app each refuse anything else. Without `setup`, a
+plugin that declares `credentials` gets a step to connect its account. `plugin:submit` copies
+`setup` into the record, and the catalog checks it matches the packed `plugin.json`.
 
 The artifact it prints (`<id>-<version>.json`, beside the clone; `--artifact <file>` to choose)
 belongs on your repository's GitHub release for that version, not in the catalog. Commit the

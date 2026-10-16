@@ -245,10 +245,16 @@ is compared by manifest.
 Each builder brief is built from one registry `snapshot(engine)`, so its tools and skill lines agree;
 `engine` is the game's (`studio.json` `engine`, read by the delegation before it takes the plugin
 lease, and by the capability facts a session without plugin tools reads), the web's when no game
-is named. The tools are the same for every engine. The plugins and skills a session was handed ride
-its `tool_registry_applied` event; a resumed session
-that has since lost some is told first to ignore their earlier instructions and not to call their
-tools (`delegation-prompts.ts`).
+is named. The tools are the same for every engine. A session with host tools also reads, beside the
+skill lines, one line for each plugin it is handed: its name, the prefix of its tools (`<id>__`)
+when it has any, and its description on one line, cut at 200 characters (`handedPluginsNote`). A
+plugin that declares an `account` whose state (`PluginAccountState`) is anything but `unlocked`
+adds that it is not set up yet and the person still has to connect its account on its page.
+The plugins and skills a session was handed ride its `tool_registry_applied` event; a resumed
+session that has since lost some is told first to ignore their earlier instructions and not to call
+their tools, and one handed a plugin it was not handed before is told first, once, that it was
+turned on and its tools are there now (`addedNotice`). A new session, or one with nothing recorded,
+gets no such notice: the list names what is on (`delegation-prompts.ts`).
 
 ### Toolbar contributions
 
@@ -1696,7 +1702,11 @@ A Loop on any project that isn't a web game (`loopProfileOf`) is led in place by
 session, and the plugins whose facts reach the folder shape it with no code in Genex: their hooks
 run at its moments, their observers feed its finish check and their worker types are its lead's
 ([the open Loop](harness-runtime.md)).
-`web` is `web-game` at the root.
+`web` is `web-game` at the root. A game New game made lists `awaitingFirstBuild` until an answer
+in any of its chats, or a run on it, ends with the folder holding a kind (`core/build-ends.ts`);
+it stays built after. `multiplayer` is set while the game's package.json names
+`@genex-ai/multiplayer` or its page maps Studio's copy (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
+Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`).
 
 ### Workspace rules
 
@@ -2639,8 +2649,8 @@ entries carrying `id`, `name`, `publisher`, `description`, `category` (`assets`,
   `error` the page shows, so the list never disappears because the network did.
 - **Fixture profiles are offline**: the marketplace is constructed with `offline: true` and never
   calls out at all, reporting `Studio is offline in this profile`; with nothing to list, the page's
-  Marketplace is only Coming soon (`[data-marketplace-soon]`), as it is whenever the catalog offers
-  nothing new. `studio:plugins.install-github`,
+  Community plugins is only Coming soon (`[data-marketplace-soon]`), as it is whenever the catalog
+  offers no community plugin you lack. `studio:plugins.install-github`,
   `studio:plugins.lookup-github`, `studio:plugins.github-versions` and `studio:plugins.update` are
   in `FIXTURE_BLOCKED_CHANNELS`.
 - **Cataloged is not audited.** The index says where a plugin's code is pinned; Studio checks the
@@ -3176,7 +3186,7 @@ and checks their exit codes, refusals and JSON report.
 
 Run `npm run plugin:doctor -- src/plugins/example`: it must exit 0, probe `ready`, scan `safe`
 with no findings and no warnings. **Fixture profiles never fetch the marketplace index** — the
-marketplace is constructed offline, the Marketplace shows only Coming soon, and the
+marketplace is constructed offline, Community plugins shows only Coming soon, and the
 GitHub lookup, install and update channels are in `FIXTURE_BLOCKED_CHANNELS`; a readiness or smoke run that reaches GitHub is a defect, not a flake.
 The readiness run also asserts that no two controls inside `[data-stage-strip]` share a label,
 which is what the manifest's reserved-label and aria-uniqueness rules exist to protect.
