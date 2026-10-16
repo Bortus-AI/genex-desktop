@@ -123,6 +123,8 @@ export interface PublishView {
   failure: { text: string; details: string } | null;
   /** The link anyone can play, once the game is public. */
   link: string | null;
+  /** The tested draft's address while players do not have it yet ({@link testLinkOf}); null otherwise. */
+  testLink: string | null;
   /** The game has no Genex cover to send and its owner chose none: offer to ask its chat for one. */
   coverAsk: boolean;
 }
@@ -241,7 +243,7 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
     steps: stepViews(job, running),
     chip: chipOf(state, outcome, now),
     primary: {
-      label: (failed && WORDS.tryAgain) || (listed && WORDS.updatePublic) || WORDS.publish,
+      label: (failed && WORDS.tryAgain) || (listed && WORDS.updatePublic) || WORDS.publishToWeb,
       action: GenexAction.PublishGallery,
       ariaLabel: "Publish this game on Genex",
     },
@@ -254,8 +256,32 @@ export function publishView(state: GenexPublishState, now = Date.now()): Publish
     problems: state.terms?.accepted === false ? [WORDS.termsNote] : [],
     failure: failureOf(outcome, state, job),
     link: listed ? (state.galleryUrl ?? null) : null,
+    testLink: testLinkOf(state, listed),
     coverAsk: coverAsk(state),
   };
+}
+
+/**
+ * The tested draft's address, while it holds something players do not have: any tested draft
+ * before the game is public; once it is, only a draft tested after the last publish that was not
+ * that publish's own build. A publish tests its draft before promoting it and stamps
+ * `lastPublishAt` when it finishes, so a fresh publish hides the link; the revision check covers a
+ * publish settled later by Genex's record. Display only: nothing here changes what Publish does.
+ */
+export function testLinkOf(state: GenexPublishState, listed: boolean): string | null {
+  const ready = state.readyDraft;
+  // While an attempt runs the dialog shows its progress, never a link that is about to change.
+  if (!ready?.url || isLive(state.job)) return null;
+  if (!listed) return ready.url;
+  const tested = Date.parse(ready.verifiedAt);
+  const published = Date.parse(state.lastPublishAt ?? "");
+  if (!Number.isFinite(tested) || !Number.isFinite(published) || tested <= published) return null;
+  const job = state.job;
+  const promoted =
+    job?.kind === GenexPublishKind.Gallery &&
+    job.state === GenexPublishJobState.Done &&
+    job.expectedStagingRevision === ready.revision;
+  return promoted ? null : ready.url;
 }
 
 /** An attempt this dialog watched just went live: the one moment it says "Your game is live!". */

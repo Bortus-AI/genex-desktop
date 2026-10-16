@@ -3658,6 +3658,8 @@ export const GENEX_WORDS = {
     chipLiveUndated: "Live",
     chipFailed: "Didn't publish",
     publish: "Publish",
+    /** The main press before the game is public: what Publish does, in a word more. */
+    publishToWeb: "Publish to the web",
     publishing: "Publishing…",
     updatePublic: "Publish update",
     tryAgain: "Try again",
@@ -3667,6 +3669,15 @@ export const GENEX_WORDS = {
     copyLink: "Copy",
     copyLinkLabel: "Copy the game's link",
     copied: "Copied",
+    /** The public link's label in the dialog, beside the globe. */
+    publicLink: "Public:",
+    /** The tested draft, while players do not have it yet: its label, its Copy, and the line under it. */
+    testLink: "Test link:",
+    copyTestLinkLabel: "Copy the test link",
+    testBefore: "Friends can play it before you publish.",
+    testChanges: "Try your changes before you update.",
+    /** Added for a multiplayer game: a second identity is all testing alone needs. */
+    testSecondPlayer: "Open it in a private window to join as another player.",
     /** Under the busy button: closing the dialog does not stop it. */
     keepsGoing: "You can close this. It keeps going.",
     /** Under the busy button, once the test runs longer than usual. */
