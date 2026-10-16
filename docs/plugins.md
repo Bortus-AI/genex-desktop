@@ -343,8 +343,9 @@ name has to stay unambiguous) and short enough that `<pluginId>-<id>` still fits
 `ELECTRON_RUN_AS_NODE=1`, because a packaged app has no `node` on its PATH — and `args[0]` is a script
 **inside your package**, checked by the same containment rule an install uses. (`host-cli` runs a
 program Studio itself ships and is reserved for the bundled Genex plugin.) `cwd` is `storage` or
-`storage:project`, never the package, which an update replaces and a remove deletes; `HOME` is set to
-a folder inside whichever you pick, so a CLI that reads dotfiles on startup cannot reach the user's.
+`storage:project`, never the package, which an update replaces and a remove deletes; `HOME` (and on
+Windows `USERPROFILE`, `APPDATA` and `LOCALAPPDATA`) is set to a folder inside whichever you pick, so
+a CLI that reads dotfiles on startup cannot reach the user's.
 `description` is required, 1–4000 characters, and rides along in the prompt guidance. `toolPolicy`
 (deny wins) and `maxTools` keep an enthusiastic server out of every prompt's tool list; Studio caps a
 connector at 64 tools regardless. `reads` (API 3, up to 64 distinct raw tool names) are the tools

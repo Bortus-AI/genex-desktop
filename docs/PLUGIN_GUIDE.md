@@ -430,8 +430,9 @@ What Studio will and will not do with it:
   PATH. (`host-cli` runs a program Studio itself ships and is reserved for the bundled Genex
   plugin.)
 - **`cwd`** is `storage` or `storage:project`, both inside your plugin's own storage — never the
-  package, which is replaced on update and deleted on remove. `HOME` is set to a folder inside that
-  directory, so a server that reads dotfiles on startup cannot reach the user's.
+  package, which is replaced on update and deleted on remove. `HOME` (and on Windows `USERPROFILE`,
+  `APPDATA` and `LOCALAPPDATA`) is set to a folder inside that directory, so a server that reads
+  dotfiles on startup cannot reach the user's.
 - **`env`** names *sources*, never values: `setting:<key>` (a declared setting), `literal:<value>`,
   or `credential-file` — which sets the variable to `/dev/fd/3` and sends your plugin's one
   credential, the bare token with no `NAME=` framing and no newline, down an anonymous pipe on
