@@ -1120,11 +1120,11 @@ async function checkLocalPluginToolbar(buildSmoke: BuildSmoke): Promise<void> {
 /** The offline marketplace, the GitHub install, and the example's own panel. */
 async function checkMarketplaceAndExample(buildSmoke: BuildSmoke): Promise<void> {
   const { wc, check, waitFor } = buildSmoke;
-  // A fixture profile is offline: the catalog offers nothing, so the Marketplace is only Coming soon.
+  // A fixture profile is offline: the catalog offers nothing, so Community plugins is only Coming soon.
   check(
-    "the Marketplace is coming soon in a fixture profile, and lists nothing",
+    "Community plugins is coming soon in a fixture profile, and the catalog lists nothing",
     await waitFor(
-      `!!document.querySelector('[aria-label="Studio plugins"] [data-marketplace-soon]')&&!document.querySelector('[aria-label="Studio plugins"] [data-more-plugins]')`,
+      `!!document.querySelector('[aria-label="Studio plugins"] [data-marketplace-soon]')&&!document.querySelector('[aria-label="Studio plugins"] [data-catalog-plugins]')`,
     ),
   );
   await wc.executeJavaScript(

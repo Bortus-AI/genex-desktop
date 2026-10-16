@@ -165,6 +165,9 @@ generation for the film.
   unaltered to refer to Blender under its logo guidelines (https://www.blender.org/about/logo/).
 - The X logo in `src/renderer/ui/brand.tsx` is a trademark of X Corp., used unaltered only to name
   X on Post on X, under its brand toolkit (https://about.x.com/en/who-we-are/brand-toolkit).
+- The GitHub mark in `src/renderer/ui/brand.tsx` is Primer Octicons' `mark-github` (MIT,
+  © GitHub, Inc.) and a trademark of GitHub, Inc., used unaltered only to mark a link to a
+  community plugin publisher's GitHub profile (https://github.com/logos).
 
 ## Status not yet recorded
 

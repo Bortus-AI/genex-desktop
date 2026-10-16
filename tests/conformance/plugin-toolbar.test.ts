@@ -175,9 +175,11 @@ test("Multiplayer brings Genex in, updates an older Genex first, and otherwise a
   assert.equal(multiplayerPress(waiting), MultiplayerPress.Ask, "as Publish: the update waits for its sessions");
   assert.equal(multiplayerPress(plugin("genex", [item()])), MultiplayerPress.Ask);
 });
-test("Multiplayer stands beside Publish only on a game with something in it, whose page is its own", () => {
-  const game = { publish: true, emptyGame: false, webExport: false };
+test("Multiplayer stands beside Publish only on a built single-player game with something in it, whose page is its own", () => {
+  const game = { publish: true, builtOnce: true, multiplayer: false, emptyGame: false, webExport: false };
   assert.equal(showsMultiplayer(game), true);
+  assert.equal(showsMultiplayer({ ...game, builtOnce: false }), false, "a game never built has nothing to share yet");
+  assert.equal(showsMultiplayer({ ...game, multiplayer: true }), false, "a multiplayer game is multiplayer already");
   assert.equal(showsMultiplayer({ ...game, emptyGame: true }), false, "an empty game has nothing to play together yet");
   assert.equal(showsMultiplayer({ ...game, publish: false }), false, "no Publish, no Multiplayer");
   assert.equal(

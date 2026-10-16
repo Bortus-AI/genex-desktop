@@ -74,13 +74,17 @@ import type { CoreInternals, StudioCore } from "../studio-core.ts";
 import { chatTurnOf, openDoor, recordSteerDelivered, settleDoor, type SteerDoor } from "./chat-steer.ts";
 import type { LeadAnswers, LeadSession, PersonSession } from "./chat-permissions.ts";
 import type { ActiveDelegation } from "./internals.ts";
-import { PluginCapability, type PluginAppliedSet, type PluginTool } from "../../shared/plugins.ts";
-import type { PluginSnapshot } from "../../substrate/plugins/registry.ts";
+import { PluginCapability, type PluginAppliedSet, type PluginInfo, type PluginTool } from "../../shared/plugins.ts";
+import type { PluginRegistry, PluginSnapshot } from "../../substrate/plugins/registry.ts";
 import { type CutOffCall, clearCutOffs, peekCutOffs } from "./cut-off-calls.ts";
 import { clearUnsaved, peekUnsaved, type UnsavedFile } from "./unsaved-files.ts";
 import {
+  addedNotice,
+  addedSince,
   anyWithdrawn,
   cutOffNotice,
+  type HandedPlugin,
+  handedPluginsNote,
   unsavedFilesNotice,
   leadToolsNote,
   mainAgentReachNote,
@@ -402,8 +406,12 @@ interface SessionTools {
   plugins: PluginTool[];
   pluginGuidance: string;
   applied: PluginAppliedSet;
+  /** The plugins behind them as its brief names them, read in the same tick as the snapshot. */
+  handed: HandedPlugin[];
   /** A resumed session's plugins and skills that were handed to it before and are gone now. */
   withdrawn: PluginAppliedSet | null;
+  /** A resumed session's plugins handed to it now and not before; none for a new session. */
+  added: HandedPlugin[];
   /** The thread's cut-off calls its brief names; forgotten once the session answers (`#settled`). */
   cutOffs: CutOffCall[];
   /** The thread's files too large to save that its brief names; forgotten the same way. */
@@ -1318,9 +1326,11 @@ export class DelegationService {
       { facts: seat.facts, holds: seat.holds },
       toolAllowRule(p.toolAllow) ?? undefined,
     );
+    // Their names from the same view: the brief's list names exactly the plugins the snapshot hands.
+    const handed = handedPlugins(this.#core.plugins.list(), plugins);
     const releaseMcp = this.#core.mcp.lease(p.project);
     const session = this.#session(p, target, grants, seat, worker);
-    const tools = sessionTools(plugins);
+    const tools = sessionTools(plugins, handed);
     // Take the lock before any await — an async deny-list walk used to leave a gap
     // where a second brief into the same folder could also pass the running check.
     const delegation = {
@@ -2462,15 +2472,19 @@ export class DelegationService {
 
   /**
    * Record the revision this session is handed. A resumed session first learns what it was handed
-   * before and is not now: its transcript still holds those plugins' instructions. The set itself
-   * is recorded only once the session answers (`#settled`), so a brief that never reached it is
-   * told again next time.
+   * before and is not now (its transcript still holds those plugins' instructions), and which
+   * plugins it is handed now and was not before (its transcript may say their tools are missing).
+   * The set itself is recorded only once the session answers (`#settled`), so a brief that never
+   * reached it is told again next time, and one that did is told once. Each handed plugin's account
+   * state is read first, for the brief to say which are not set up yet.
    */
   async #applyPlugins(p: DelegateParams, session: DelegationSession, engineId: string, tools: SessionTools) {
+    tools.handed = await withAccounts(this.#core.plugins, tools.handed);
     if (p.resume) {
       const before = await this.#x.lastAppliedTools(session.threadId, engineId, p.resume);
       const withdrawn = withdrawnSince(before, tools.applied);
       tools.withdrawn = anyWithdrawn(withdrawn) ? withdrawn : null;
+      tools.added = addedSince(before, tools.handed);
     }
     await this.#x.recordToolRevision(session.threadId, engineId);
   }
@@ -2662,7 +2676,9 @@ export class DelegationService {
    * whatever the brief says. Calls of its thread cut off before they answered are named first, to a
    * session that could repeat them (host tools, and a turn, not a compaction, which reads no brief),
    * until one answers; then, to the same sessions, files Rewind cannot bring back; then, to the chat's
-   * own session, its jobs that ended since it was last told and those still running.
+   * own session, its jobs that ended since it was last told and those still running; then, to a
+   * resumed session, the plugins withdrawn and those turned on since it last ran. A session with host
+   * tools reads each plugin it is handed on a line of its own beside their guidance.
    */
   #prompt(p: DelegateParams, session: DelegationSession, tools: SessionTools, reach: SessionReach): string {
     const told = session.hostTools && !p.compact;
@@ -2676,9 +2692,11 @@ export class DelegationService {
       unsavedFilesNotice(tools.unsaved),
       tools.jobNews.notice,
       tools.withdrawn ? withdrawnNotice(tools.withdrawn) : "",
+      addedNotice(tools.added),
       p.prompt,
       tools.judgeBrief,
       reach.reachesMac ? mainAgentReachNote() : "",
+      session.hostTools ? handedPluginsNote(tools.handed) : "",
       session.hostTools ? tools.pluginGuidance : tools.capabilityFacts,
       toldWhereLeadToolsWork ? leadToolsNote() : "",
       this.#core.mcp.guidance(tools.mcp),
@@ -2991,8 +3009,44 @@ interface CheckedGameFile {
   outside: () => Error;
 }
 
+/**
+ * The plugins a snapshot hands a session, in its order, as its brief names them: each one's name and
+ * description from the registry's list, and whether any tool of the snapshot carries its id.
+ */
+function handedPlugins(
+  listed: readonly PluginInfo[],
+  plugins: Pick<PluginSnapshot, "tools" | "applied">,
+): HandedPlugin[] {
+  const manifests = new Map(listed.map((info) => [info.manifest.id, info.manifest]));
+  return plugins.applied.plugins.flatMap((id) => {
+    const manifest = manifests.get(id);
+    if (!manifest) return [];
+    const tools = plugins.tools.some((tool) => tool.name.startsWith(`${id}__`));
+    return [{ id, name: manifest.name, description: manifest.description, tools }];
+  });
+}
+
+/**
+ * Each handed plugin with its account's state, read from the registry's memory (never the secret
+ * store); a plugin that declares no account is left as it was.
+ */
+async function withAccounts(
+  registry: Pick<PluginRegistry, "accountState">,
+  handed: readonly HandedPlugin[],
+): Promise<HandedPlugin[]> {
+  return Promise.all(
+    handed.map(async (plugin) => {
+      const account = await registry.accountState(plugin.id);
+      return account === undefined ? plugin : { ...plugin, account };
+    }),
+  );
+}
+
 /** A session's tools before they are prepared: the plugins of the snapshot it began with, and nothing else yet. */
-function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance" | "applied">): SessionTools {
+function sessionTools(
+  plugins: Pick<PluginSnapshot, "tools" | "guidance" | "applied">,
+  handed: HandedPlugin[],
+): SessionTools {
   return {
     cover: [],
     project: [],
@@ -3006,7 +3060,9 @@ function sessionTools(plugins: Pick<PluginSnapshot, "tools" | "guidance" | "appl
     plugins: plugins.tools,
     pluginGuidance: plugins.guidance,
     applied: plugins.applied,
+    handed,
     withdrawn: null,
+    added: [],
     cutOffs: [],
     unsaved: [],
     capabilityFacts: "",

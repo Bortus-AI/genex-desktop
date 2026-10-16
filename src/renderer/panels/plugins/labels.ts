@@ -4,12 +4,14 @@ import { SECOND_MS } from "../../../shared/duration.ts";
 import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
 import { GENEX_WORDS, PLUGINS_WORDS } from "../../words.ts";
 import {
+  type PluginIndexEntry,
   type PluginIndexView,
   type PluginInfo,
   type PluginManifest,
   PluginAccountState,
   PluginCapability,
   PluginSourceKind,
+  PluginTier,
 } from "../../../shared/plugins.ts";
 
 /** The plugin guide Create a plugin and Read the guide open; `plugin:new` names the same page. */
@@ -199,24 +201,89 @@ export function shownIntro(p: PluginInfo, accountName: string | null = null): st
   return accountName ? GENEX_WORDS.router.connectedAs(accountName) : GENEX_WORDS.router.description;
 }
 
-/** What the Marketplace shows: what the catalog offers you, or that more is coming. */
-export const MoreView = { List: "list", Soon: "soon" } as const;
-export type MoreView = (typeof MoreView)[keyof typeof MoreView];
+/**
+ * The catalog's two shelves on the Plugins tab: Plugins, the ones Genex makes (official), and
+ * Community plugins, everyone else's.
+ */
+export function catalogShelves(entries: readonly PluginIndexEntry[]): {
+  ours: PluginIndexEntry[];
+  community: PluginIndexEntry[];
+} {
+  return {
+    ours: entries.filter((e) => e.tier === PluginTier.Official),
+    community: entries.filter((e) => e.tier === PluginTier.Community),
+  };
+}
 
 /**
- * The Marketplace lists the catalog's entries and releases you don't have; until there are any
- * (or while the catalog loads or can't be read) it is only Coming soon.
+ * The ids the catalog lists as community plugins. Installed ones stay in Community plugins, with
+ * their switch, rather than under Installed; with no catalog every installed plugin is Installed.
  */
-export function moreView({
-  index,
-  entries,
-  releases,
-}: {
-  index: PluginIndexView | null;
-  entries: number;
-  releases: number;
-}): MoreView {
-  return index && entries + releases > 0 ? MoreView.List : MoreView.Soon;
+export function communityIds(index: Pick<PluginIndexView, "entries"> | null): Set<string> {
+  return new Set((index?.entries ?? []).filter((e) => e.tier === PluginTier.Community).map((e) => e.id));
+}
+
+/**
+ * The steps a catalog plugin's page shows before it is installed: Genex's own install step, its
+ * author's plain steps (or, when it needs an account and says nothing, connecting it), and when it
+ * is ready. The author's steps are text Genex draws; Genex's steps come first and last.
+ */
+export function listingSteps(entry: Pick<PluginIndexEntry, "name" | "setup" | "capabilities">): string[] {
+  const WORDS = PLUGINS_WORDS.listing;
+  const needsAccount = entry.capabilities.includes(PluginCapability.Credentials);
+  const own = entry.setup ?? (needsAccount ? [WORDS.connectStep(entry.name)] : []);
+  return [WORDS.installStep, ...own, WORDS.readyStep];
+}
+
+/** One step of an installed plugin's "How to start", and whether it is done. */
+export interface SetupStep {
+  text: string;
+  done: boolean;
+}
+
+/**
+ * An installed plugin's "How to start": Install, done, then its author's steps (or connecting its
+ * account when it has one and its author wrote none), then when it is ready. Empty when there is
+ * nothing to set up.
+ */
+export function installedSteps(manifest: Pick<PluginManifest, "setup" | "account">): SetupStep[] {
+  const WORDS = PLUGINS_WORDS.listing;
+  const own = manifest.setup ?? (manifest.account ? [WORDS.connectAccount] : []);
+  if (own.length === 0) return [];
+  return [
+    { text: WORDS.installedStep, done: true },
+    ...own.map((text) => ({ text, done: false })),
+    { text: WORDS.readyStep, done: false },
+  ];
+}
+
+/**
+ * Whether an installed plugin still waits on its person: it is on, has an account, and that
+ * account is not connected (never, locked or failed). A plugin with no account, one that is off,
+ * or one whose browser step is under way does not.
+ */
+export function needsSetup(plugin: Pick<PluginInfo, "enabled" | "manifest">, state: AccountState): boolean {
+  if (!plugin.enabled || !plugin.manifest.account) return false;
+  const step = rowAccountStep(state);
+  return step === RowAccountStep.Connect || step === RowAccountStep.Reconnect;
+}
+
+/** A community plugin's publisher on GitHub: the owner of its source repository, and their profile. */
+export function publisherProfile(repo: string): { login: string; url: string } {
+  const login = repo.split("/")[0] ?? repo;
+  return { login, url: `https://github.com/${encodeURIComponent(login)}` };
+}
+
+/** What Community plugins shows: the community's plugins you don't have, or that they are coming. */
+export const CommunityView = { List: "list", Soon: "soon" } as const;
+export type CommunityView = (typeof CommunityView)[keyof typeof CommunityView];
+
+/**
+ * Community plugins lists the catalog's community entries you don't have; until there are any (or
+ * while the catalog loads or can't be read) it is only Coming soon.
+ */
+export function communityView({ index, entries }: { index: PluginIndexView | null; entries: number }): CommunityView {
+  return index && entries > 0 ? CommunityView.List : CommunityView.Soon;
 }
 
 /** Whether Studio draws the plugin's page itself (Genex), account problems included. */

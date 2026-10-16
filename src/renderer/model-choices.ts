@@ -171,10 +171,15 @@ function subscriptionChoice(engine: EngineDescriptor, model: EngineModel, shown:
   };
 }
 
-/** A row's second line: what the default row is doing while no catalog names it, or that a model is free. */
+/** A free model's name without its own trailing "Free" ("Cat Jam Free", "Ling (free)"): its Free tag says it. */
+export function withoutFreeWord(name: string): string {
+  return name.replace(/\s*[(:[]?\s*free\s*[)\]]?\s*$/i, "").trim() || name;
+}
+
+/** A row's second line: what the default row is doing while no catalog names it. A free model says so in a tag beside its name. */
 function choiceDetail(engine: EngineDescriptor, model: EngineModel): string | undefined {
   if (model.id === DEFAULT_MODEL && engine.catalog) return CATALOG_LABEL[engine.catalog.state];
-  return model.free ? MODEL_PICKER_WORDS.free : undefined;
+  return undefined;
 }
 
 function subscriptionTag(engine: EngineDescriptor, ready: boolean, signIn: boolean): string {

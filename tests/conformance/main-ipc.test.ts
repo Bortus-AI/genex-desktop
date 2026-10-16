@@ -16,7 +16,12 @@ import { registerUpdateIpc } from "../../src/main/ipc/update.ts";
 import { registerStorageIpc } from "../../src/main/ipc/storage.ts";
 import { registerJobsIpc } from "../../src/main/ipc/jobs.ts";
 import { type PlayIpcDeps, registerPlayIpc } from "../../src/main/ipc/play.ts";
-import { createLoginControllers, type SubscriptionEngine } from "../../src/main/login-controllers.ts";
+import { createLoginControllers, settleSignIn, type SubscriptionEngine } from "../../src/main/login-controllers.ts";
+import { AccountId, SubscriptionAccounts } from "../../src/substrate/engines/subscription-accounts.ts";
+import { EngineStatusCode } from "../../src/shared/engine-descriptor.ts";
+import { mkdtempSync, existsSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import type { ClaudeLoginState } from "../../src/shared/claude-login.ts";
 import type { CodexLoginState } from "../../src/shared/codex-login.ts";
 import type { UiEvent } from "../../src/shared/ui-events.ts";
@@ -272,16 +277,37 @@ const codexIdle: CodexLoginState = {
   hasBrowserUrl: false,
 };
 
-function loginFixture(logins: Record<string, Awaited<ReturnType<SubscriptionEngine["resolveLogin"]>>>, busy = false) {
+function loginFixture(
+  logins: Record<string, Awaited<ReturnType<SubscriptionEngine["resolveLogin"]>>>,
+  busy = false,
+  accountsFor: { signedIn?: string[]; emails?: Record<string, string> } = {},
+) {
   const started: string[] = [];
+  const accountsRoot = mkdtempSync(path.join(os.tmpdir(), "studio-ipc-accounts-"));
+  const signedIn = new Set(accountsFor.signedIn ?? []);
   const engines = new Map<string, SubscriptionEngine>(
     ["claude-code", "codex"].map((id) => [
       id,
       {
         engineHome: `/homes/${id}`,
+        systemHome: `/system/${id}`,
+        accounts: new SubscriptionAccounts({
+          systemHome: `/system/${id}`,
+          studioHome: `/homes/${id}`,
+          root: path.join(accountsRoot, id),
+          signedIn: async (home) => signedIn.has(home),
+        }),
         resolveLogin: async () => logins[id] ?? { source: "none", home: null },
         recheckLogin: async () => {
           started.push(`recheck ${id}`);
+        },
+        runOnAccount: async (account) => {
+          started.push(`use ${id} ${account}`);
+          return { code: EngineStatusCode.Ready, detail: "" };
+        },
+        accountEmail: async (home) => {
+          started.push(`email ${id} ${home}`);
+          return accountsFor.emails?.[home] ?? null;
         },
       },
     ]),
@@ -321,8 +347,119 @@ function loginFixture(logins: Record<string, Awaited<ReturnType<SubscriptionEngi
   };
   const { handle, invoke } = registrar();
   registerLoginIpc(handle, deps);
-  return { invoke, started };
+  return { invoke, started, engines, accountsRoot, signedIn };
 }
+
+describe("a subscription's accounts", () => {
+  it("signs one more account in to a fresh home of its own, never over another's", async () => {
+    for (const engine of ["claude-code", "codex"]) {
+      const { invoke, started, accountsRoot } = loginFixture({});
+      await invoke("studio:subscription.signin", { engine, account: "new" });
+      const home = path.join(accountsRoot, engine, "account-2");
+      assert.equal(started.at(-1), engine === "codex" ? `codex ${home} browser` : `claude ${home}`);
+      assert.ok(existsSync(home));
+    }
+  });
+
+  it("signs Claude in to the Terminal login where the CLI keeps it, and never prepares Codex's own home", async () => {
+    const claude = loginFixture({});
+    await claude.invoke("studio:subscription.signin", { engine: "claude-code", account: AccountId.Terminal });
+    assert.deepEqual(claude.started, ["claude null"]);
+    const codex = loginFixture({ codex: { source: "system", home: "/system/codex" } });
+    await codex.invoke("studio:subscription.signin", { engine: "codex", account: AccountId.Terminal });
+    assert.deepEqual(codex.started, ["codex /homes/codex browser"], "Studio never writes into ~/.codex");
+  });
+
+  it("signs in again to the account in use when it is one Studio added, and only then", async () => {
+    const logins: Parameters<typeof loginFixture>[0] = {};
+    const { invoke, started, accountsRoot } = loginFixture(logins);
+    const added = path.join(accountsRoot, "codex", "account-3");
+    logins.codex = { source: "isolated", home: added };
+    logins["claude-code"] = { source: "isolated", home: "/elsewhere" };
+    await invoke("studio:subscription.signin", { engine: "codex" });
+    await invoke("studio:subscription.signin", { engine: "claude-code" });
+    logins.codex = { source: "isolated", home: "/elsewhere" };
+    await invoke("studio:subscription.signin", { engine: "codex" });
+    assert.deepEqual(started, [`codex ${added} browser`, "claude /elsewhere", "codex /homes/codex browser"]);
+  });
+
+  it("refuses a sign-in to an id that is no account's, and writes nothing", async () => {
+    for (const account of ["../x", "/etc", "account-1", "ACCOUNT-2"]) {
+      const { invoke, started, accountsRoot } = loginFixture({});
+      const answer = await invoke("studio:subscription.signin", { engine: "claude-code", account });
+      assert.equal(answer.ok, false, account);
+      assert.deepEqual(started, []);
+      assert.equal(existsSync(path.join(accountsRoot, "claude-code")), false);
+    }
+  });
+
+  it("switches accounts through the engine, Codex never while work is in flight", async () => {
+    const { invoke, started } = loginFixture({});
+    assert.deepEqual(await invoke("studio:subscription.use-account", { engine: "claude-code", account: "studio" }), {
+      ok: true,
+      value: { code: EngineStatusCode.Ready, detail: "" },
+    });
+    assert.deepEqual(started, ["use claude-code studio"]);
+    const busy = loginFixture({}, true);
+    const refused = await busy.invoke("studio:subscription.use-account", { engine: "codex", account: "studio" });
+    assert.equal(refused.ok, false);
+    assert.deepEqual(busy.started, []);
+  });
+
+  it("lists the accounts with each email asked for once and kept", async () => {
+    const { invoke, started } = loginFixture({}, false, {
+      signedIn: ["/system/claude-code", "/homes/claude-code"],
+      emails: { "/homes/claude-code": "me@example.com" },
+    });
+    const first = await invoke("studio:subscription.accounts", { engine: "claude-code" });
+    assert.deepEqual(first, {
+      ok: true,
+      value: [
+        { id: "terminal", email: null, terminal: true, signedIn: true, active: false },
+        { id: "studio", email: "me@example.com", terminal: false, signedIn: true, active: true },
+      ],
+    });
+    await invoke("studio:subscription.accounts", { engine: "claude-code" });
+    assert.deepEqual(started, ["email claude-code /system/claude-code", "email claude-code /homes/claude-code"]);
+  });
+
+  it("never signs the Terminal login out, nor an id that is no account's", async () => {
+    for (const account of [AccountId.Terminal, "../../x"]) {
+      const { invoke, started } = loginFixture({});
+      const answer = await invoke("studio:subscription.forget-studio-login", { engine: "claude-code", account });
+      assert.equal(answer.ok, false, account);
+      assert.deepEqual(started, []);
+    }
+  });
+
+  it("forgetting the account in use runs the next signed-in one", async () => {
+    const { invoke, engines, signedIn, accountsRoot } = loginFixture({}, false, {
+      signedIn: ["/system/claude-code"],
+    });
+    const accounts = engines.get("claude-code")?.accounts;
+    assert.ok(accounts);
+    const added = await accounts.newAccount();
+    signedIn.add(added.home);
+    await accounts.remember(added.id, { email: "work@example.com" });
+    await accounts.choose(added.id);
+    await invoke("studio:subscription.forget-studio-login", { engine: "claude-code", account: added.id });
+    assert.equal(await accounts.chosen(), AccountId.Terminal);
+    assert.equal(existsSync(path.join(accountsRoot, "claude-code", added.id)), false);
+  });
+
+  it("a finished sign-in remembers its account with its email and runs on it", async () => {
+    const { engines, signedIn, started } = loginFixture({}, false, { signedIn: ["/system/codex"] });
+    const engine = engines.get("codex");
+    assert.ok(engine);
+    const added = await engine.accounts.newAccount();
+    signedIn.add(added.home);
+    await settleSignIn(engine, added.home, "work@example.com");
+    assert.equal(await engine.accounts.chosen(), added.id);
+    const listed = (await engine.accounts.list()).find((entry) => entry.id === added.id);
+    assert.equal(listed?.email, "work@example.com");
+    assert.deepEqual(started, ["recheck codex"]);
+  });
+});
 
 describe("both sign-in paths go through the controllers", () => {
   it("Claude signs in to the studio's own home, the env home, or the Mac-wide login, as the engine resolves it", async () => {
