@@ -1128,7 +1128,9 @@ replaced; the person's own edit is kept). With Studio open,
 Set up offers **Restart Studio** (a normal quit of every Studio process, each asked on its own
 because each place opens a Studio of its own, so Studio asks to save as always; Set up; Studio
 opened again), **Do it for me** (`game.engine.assist` with the task "Turn on Studio's MCP server:
-Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server") and that click path.
+Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server", clicking only that path and
+stopping for the person at any other dialog: saving, signing in, updates or terms) and that click
+path.
 Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone. The
 setup actions are `native`: they write outside the plugin's storage or quit and open Studio, so a
 fixture profile never runs them.

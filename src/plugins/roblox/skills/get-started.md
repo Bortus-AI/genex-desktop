@@ -90,7 +90,7 @@ Match the symptom, give the person the single fix, then check again from step 1.
 | The connection fails right after the switch is turned on | Another app uses Studio's MCP port (13469) | Close the other app, then restart Studio |
 | Calls go to the wrong place | Several Studios are open | Choose the place for this game in the panel |
 | A Studio tool named in Roblox's docs is missing | Studio's tools differ by version | Use the tools that are there; suggest updating Studio |
-| A dialog in Studio blocks every call | Studio is waiting for the person | Ask the person to answer it; never click it for them unless they press Do it for me |
+| A dialog in Studio blocks every call | Studio is waiting for the person | Ask the person to answer it; never answer a Studio dialog for them, not even in Do it for me, which clicks only its own task's path |
 
 If nothing matches, say which step failed and what you saw. Leave the person's places and files as
 they are, and don't install other tools or MCP servers to work around it.

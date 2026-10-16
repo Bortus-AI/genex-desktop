@@ -334,7 +334,9 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
 });
 
 describe("Set up, Restart Studio and Do it for me from the panel", () => {
-  const TASK = "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server";
+  // Flipped: the task now also says to click only its path and stop at any other dialog.
+  const TASK =
+    "Turn on Studio's MCP server: Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server. Click only that path. If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.";
 
   it("Set up refuses while Studio runs, reading nothing, and offers Restart Studio, Do it for me and the click path", async () => {
     const mac = fakeMac(NOT_SET_UP);
@@ -371,6 +373,23 @@ describe("Set up, Restart Studio and Do it for me from the panel", () => {
     assert.deepEqual(asked, [{ task: TASK }]);
     assert.equal(started.started, true);
     assert.equal(started.clickPath, undefined);
+  });
+
+  it("Do it for me's task tells the chat's turn to stop at any other dialog and click only its own path", async () => {
+    const asked: Array<{ task?: string }> = [];
+    const backend = createRobloxBackend(fakeMac(READY).deps);
+    await backend.action?.(
+      "do-it-for-me",
+      {},
+      context(STORAGE, (args) => {
+        asked.push(args as { task?: string });
+        return { started: true };
+      }),
+    );
+    const task = String(asked[0]?.task);
+    assert.match(task, /If Studio shows any other dialog or question/);
+    for (const kind of ["saving", "signing in", "updates", "terms"]) assert.ok(task.includes(kind), kind);
+    assert.match(task, /stop and tell the person/);
   });
 
   const refusals: PluginEngineAssistRefusal[] = ["unavailable", "declined", "no-chat", "not-person", "no-apps"];

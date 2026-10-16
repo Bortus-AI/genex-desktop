@@ -133,7 +133,7 @@ export const MESSAGE = {
   },
   Assist: {
     /** The task the game's chat is asked to click, verbatim in the chat: plain words, then Studio's own click path. */
-    Task: `Turn on Studio's MCP server: ${MCP_SWITCH_CLICK_PATH}`,
+    Task: `Turn on Studio's MCP server: ${MCP_SWITCH_CLICK_PATH}. Click only that path. If Studio shows any other dialog or question (saving, signing in, updates, terms), stop and tell the person.`,
     Started:
       "This game's chat is turning on Studio's MCP server. If Genex asks you something first, answer it in this game's chat, then watch Roblox Studio.",
     Unavailable: `Genex can't click in Roblox Studio on this computer. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
