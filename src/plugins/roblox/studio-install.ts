@@ -8,8 +8,10 @@
  *   every redirect checked before it is followed, and only up to `MAX_INSTALLER_BYTES`. Roblox
  *   changes its installers with every release, so nothing here pins a hash: the signature is the
  *   check. Node's downloads carry no quarantine mark, so that check is Genex's to make.
- * - Mac: `codesign` must accept the DMG and the installer app inside it, both signed by Roblox's
- *   team. The DMG is attached read-only and unbrowsed in a private folder and always detached.
+ * - Mac: `codesign` must accept the DMG and the installer app inside it against Genex's own
+ *   requirement (a Developer ID certificate Apple vouches for, issued to Roblox's team; a
+ *   signature's own requirement is the signer's word), and name that team; Gatekeeper must accept
+ *   the app. The DMG is attached read-only and unbrowsed in a private folder and always detached.
  * - Windows: Authenticode must call the installer Valid and signed by Roblox Corporation.
  *   PowerShell reads the path from its own environment, so no path is ever part of a command.
  * - Nothing runs when a check fails, and the private temporary folder is always removed.
@@ -64,6 +66,13 @@ const CHECK_TIMEOUT_MS = MINUTE_MS;
 const MAX_REDIRECTS = 5;
 const REDIRECT_STATUS = new Set([301, 302, 303, 307, 308]);
 const CODESIGN = "/usr/bin/codesign";
+const SPCTL = "/usr/sbin/spctl";
+/**
+ * What Genex requires of Roblox's signature: Apple's root, Apple's Developer ID authority, and
+ * Roblox's team in the leaf certificate. Without it `--verify` checks the signature only against
+ * the requirement its signer wrote.
+ */
+const ROBLOX_REQUIREMENT = `anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[subject.OU] = "${ROBLOX_TEAM_ID}"`;
 const HDIUTIL = "/usr/bin/hdiutil";
 const MAC_OPEN = "/usr/bin/open";
 const WINDOWS_ROOT = "C:\\Windows";
@@ -264,15 +273,28 @@ async function runOr(
   });
 }
 
-/** That codesign accepts `target` and names Roblox's team as its signer. */
+/** codesign's exit when the code is signed but fails a requirement it was given (`-R`). */
+const CODESIGN_FAILED_REQUIREMENT = 3;
+
+/**
+ * That codesign accepts `target` against Roblox's requirement and names Roblox's team as its
+ * signer; an app must also pass Gatekeeper (Developer ID, notarized).
+ */
 async function checkSignedMac(deps: InstallDeps, target: string): Promise<void> {
   const options = { timeoutMs: CHECK_TIMEOUT_MS };
-  const strict = target.endsWith(".app") ? ["--verify", "--strict", "--deep"] : ["--verify", "--strict"];
-  const verified = await runOr(deps, InstallRefusal.Unsigned, { file: CODESIGN, args: [...strict, target], options });
+  const app = target.endsWith(".app");
+  const strict = app ? ["--verify", "--strict", "--deep"] : ["--verify", "--strict"];
+  const args = [...strict, `-R=${ROBLOX_REQUIREMENT}`, target];
+  const verified = await runOr(deps, InstallRefusal.Unsigned, { file: CODESIGN, args, options });
+  if (verified.code === CODESIGN_FAILED_REQUIREMENT) throw new InstallError(InstallRefusal.WrongSigner);
   if (verified.code !== 0) throw new InstallError(InstallRefusal.Unsigned);
   const details = await runOr(deps, InstallRefusal.WrongSigner, { file: CODESIGN, args: ["-dv", target], options });
   const team = TEAM_LINE.exec(`${details.stderr}\n${details.stdout}`)?.[1]?.trim();
   if (details.code !== 0 || team !== ROBLOX_TEAM_ID) throw new InstallError(InstallRefusal.WrongSigner);
+  if (!app) return;
+  const assess = { file: SPCTL, args: ["--assess", "--type", "execute", target], options };
+  const assessed = await runOr(deps, InstallRefusal.WrongSigner, assess);
+  if (assessed.code !== 0) throw new InstallError(InstallRefusal.WrongSigner);
 }
 
 /** Roblox's installer app on the mounted DMG: a real folder, not a link out of it. */
@@ -324,8 +346,13 @@ function powershellPath(env: NodeJS.ProcessEnv): string {
   return path.win32.join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
-/** Whether a certificate subject's CN or O is exactly Roblox's name. */
+/**
+ * Whether a certificate subject's CN or O is exactly Roblox's name. A subject with an escape (a
+ * backslash) is refused whole: read without its escapes, `CN=Evil\, O=Roblox Corporation` would
+ * pass as an O of Roblox's name, and Roblox's own subject has none.
+ */
 export function signedByRoblox(subject: string): boolean {
+  if (subject.includes("\\")) return false;
   for (const match of subject.matchAll(SUBJECT_NAME))
     if ((match[2] ?? match[3] ?? "").trim() === ROBLOX_SIGNER) return true;
   return false;

@@ -28,6 +28,7 @@ import {
   installStudio,
   MAX_INSTALLER_BYTES,
   SIGN_IN_WAIT_MS,
+  signedByRoblox,
 } from "../../src/plugins/roblox/studio-install.ts";
 import { shippedHelper } from "../helpers/roblox-helper.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -35,6 +36,7 @@ import { tmpDir } from "../helpers/tmp.ts";
 const BANNED_WORDS = /overnight|night|morning|tonight|Unreal/i;
 const CODESIGN = "/usr/bin/codesign";
 const HDIUTIL = "/usr/bin/hdiutil";
+const SPCTL = "/usr/sbin/spctl";
 const MAC_OPEN = "/usr/bin/open";
 const POWERSHELL = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
 const ROBLOX_TEAM = "2CFABCH843";
@@ -55,6 +57,15 @@ interface Script {
   dmgTeam?: string;
   appSigned?: boolean;
   appTeam?: string;
+  /**
+   * Signed by a certificate no Apple root vouches for, whose subject names Roblox's team: codesign
+   * accepts it against its own designated requirement and prints that team, and refuses it only
+   * against Genex's requirement (`-R`).
+   */
+  dmgSelfSigned?: boolean;
+  appSelfSigned?: boolean;
+  /** Gatekeeper (`spctl`) accepts the installer app: Developer ID, notarized. */
+  appAssessed?: boolean;
   /** The mounted DMG holds Roblox's installer app. */
   hasApp?: boolean;
   authenticode?: { status: string; subject: string };
@@ -80,7 +91,13 @@ function fakeComputer(script: Script = {}) {
       const onApp = args.some((arg) => arg.endsWith(".app"));
       const signed = onApp ? (script.appSigned ?? true) : (script.dmgSigned ?? true);
       const team = onApp ? (script.appTeam ?? ROBLOX_TEAM) : (script.dmgTeam ?? ROBLOX_TEAM);
-      if (args.includes("--verify")) return signed ? answer(0) : answer(1, "", "code object is not signed at all");
+      const selfSigned = onApp ? script.appSelfSigned : script.dmgSelfSigned;
+      const requirement = args.find((arg) => arg.startsWith("-R="));
+      const anchored = requirement?.includes("anchor apple generic") && requirement.includes(`"${team}"`);
+      if (args.includes("--verify") && !signed) return answer(1, "", "code object is not signed at all");
+      if (args.includes("--verify") && requirement && (selfSigned || !anchored))
+        return answer(3, "", "test-requirement: code failed to satisfy specified code requirement(s)");
+      if (args.includes("--verify")) return answer(0);
       return answer(0, "", codesignDetails(team));
     }
     if (file === HDIUTIL && args[0] === "attach") {
@@ -89,6 +106,7 @@ function fakeComputer(script: Script = {}) {
       return answer(0);
     }
     if (file === HDIUTIL) return answer(0);
+    if (file === SPCTL) return (script.appAssessed ?? true) ? answer(0, "", "accepted") : answer(3, "", "rejected");
     if (file === POWERSHELL) {
       const signature = script.authenticode ?? { status: "Valid", subject: ROBLOX_SUBJECT };
       return answer(0, JSON.stringify(signature));
@@ -165,6 +183,25 @@ describe("Roblox's installer: where it comes from", () => {
     assert.equal(WINDOWS_URL, "https://setup.rbxcdn.com/RobloxStudioInstaller.exe");
     assert.equal(MAX_INSTALLER_BYTES, 64 * 1024 * 1024);
   });
+});
+
+describe("a Windows signer is Roblox's only by a whole CN or O of Roblox's name", () => {
+  const ROWS: Array<[string, boolean]> = [
+    [ROBLOX_SUBJECT, true],
+    ['CN="Roblox Corporation", O="Roblox Corporation", C=US', true],
+    ["O=Roblox Corporation", true],
+    ["CN=Evil, OU=Roblox Corporation, C=US", false],
+    ["CN=Roblox Corporation Ltd, O=Elsewhere", false],
+    ["CN=Not Roblox Corporation, O=Elsewhere", false],
+    ['CN="Evil, O=Roblox Corporation", O=Elsewhere', false],
+    ["CN=Evil\\, O=Roblox Corporation", false],
+    ["CN=Evil\\2C O=Roblox Corporation", false],
+    ["", false],
+  ];
+  for (const [subject, roblox] of ROWS)
+    it(`${roblox ? "accepts" : "refuses"} ${JSON.stringify(subject)}`, () => {
+      assert.equal(signedByRoblox(subject), roblox);
+    });
 });
 
 describe("Get Roblox Studio refuses every hostile shape, running nothing and keeping no temporary folder", () => {
@@ -248,6 +285,24 @@ describe("Get Roblox Studio refuses every hostile shape, running nothing and kee
       code: InstallRefusal.WrongSigner,
     },
     {
+      name: "a DMG self-signed with Roblox's team in its certificate",
+      platform: "darwin",
+      script: { dmgSelfSigned: true },
+      code: InstallRefusal.WrongSigner,
+    },
+    {
+      name: "an installer app self-signed with Roblox's team in its certificate",
+      platform: "darwin",
+      script: { appSelfSigned: true },
+      code: InstallRefusal.WrongSigner,
+    },
+    {
+      name: "an installer app Gatekeeper rejects",
+      platform: "darwin",
+      script: { appAssessed: false },
+      code: InstallRefusal.WrongSigner,
+    },
+    {
       name: "a DMG missing Roblox's installer app",
       platform: "darwin",
       script: { hasApp: false },
@@ -263,6 +318,12 @@ describe("Get Roblox Studio refuses every hostile shape, running nothing and kee
       name: "an installer signed validly by someone else",
       platform: "win32",
       script: { authenticode: { status: "Valid", subject: "CN=Not Roblox Corporation Ltd, O=Elsewhere, C=US" } },
+      code: InstallRefusal.WrongSigner,
+    },
+    {
+      name: "an installer whose subject hides Roblox's name behind an escaped comma",
+      platform: "win32",
+      script: { authenticode: { status: "Valid", subject: "CN=Evil\\, O=Roblox Corporation, C=US" } },
       code: InstallRefusal.WrongSigner,
     },
     {
@@ -348,18 +409,25 @@ describe("Get Roblox Studio on a Mac and on Windows", () => {
     assert.deepEqual(asked, [MAC_URL]);
     assert.deepEqual(downloaded, INSTALLER_BYTES, "codesign checked the bytes Roblox sent");
     const steps = computer.calls.map((call) => `${path.basename(call.file)} ${call.args[0]}`);
+    // Flipped: Gatekeeper's assessment of the installer app was added after its codesign checks.
     assert.deepEqual(steps, [
       "codesign --verify",
       "codesign -dv",
       "hdiutil attach",
       "codesign --verify",
       "codesign -dv",
+      "spctl --assess",
       "open -W",
       "hdiutil detach",
     ]);
+    for (const verify of computer.calls.filter((call) => call.file === CODESIGN && call.args[0] === "--verify"))
+      assert.ok(
+        verify.args.some((arg) => arg.startsWith("-R=anchor apple generic") && arg.includes(`"${ROBLOX_TEAM}"`)),
+        "codesign checks Apple's chain to Roblox's team, not the signature's own requirement",
+      );
     const attach = computer.calls[2];
     for (const flag of ["-nobrowse", "-readonly", "-mountpoint"]) assert.ok(attach?.args.includes(flag), flag);
-    const open = computer.calls[5];
+    const open = computer.calls[6];
     assert.equal(open?.args.at(-1)?.endsWith(path.join("RobloxStudioInstaller.app")), true);
     assert.equal(open?.visible, true, "the person sees Roblox's installer");
     assert.deepEqual(phases, [InstallPhase.Downloading, InstallPhase.Checking, InstallPhase.Installing]);

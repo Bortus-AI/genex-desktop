@@ -1137,10 +1137,12 @@ system (`https://setup.rbxcdn.com/mac/RobloxStudio.dmg`, `…/RobloxStudioInstal
 only, following a redirect only when it stays on exactly `setup.rbxcdn.com`, and stops past
 `MAX_INSTALLER_BYTES` (64 MB). Roblox changes its installers with every release, so nothing pins a
 hash: the signature is the check, and Node's downloads carry no quarantine mark. On a Mac
-`codesign --verify --strict` must accept the DMG and the `RobloxStudioInstaller.app` on it, each
-with Roblox's `TeamIdentifier` `2CFABCH843`; the DMG is attached read-only and unbrowsed in a
-private temporary folder and always detached. On Windows Authenticode must call the installer
-`Valid` with Roblox Corporation as the signer's CN or O; PowerShell reads the path from its own
+`codesign --verify --strict` must accept the DMG and the `RobloxStudioInstaller.app` on it against
+Genex's own requirement (`-R`: Apple's root, its Developer ID authority and team `2CFABCH843` in the
+leaf; a signature's own requirement is only its signer's word), each with Roblox's `TeamIdentifier`,
+and Gatekeeper (`spctl --assess`) must accept the app; the DMG is attached read-only and unbrowsed
+in a private temporary folder and always detached. On Windows Authenticode must call the installer
+`Valid` with Roblox Corporation as the signer's whole CN or O (a subject with an escape is refused); PowerShell reads the path from its own
 environment, never from the command text. A failed check runs nothing, and the temporary folder is
 always removed. The installer and Studio run outside the process sandbox, as argument lists: the
 install is the point, and Studio's sign-in must work. After the installer Genex waits for Studio,
