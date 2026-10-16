@@ -293,12 +293,14 @@ window's tree). A refusal ends the plan and its reason is the answer.
   running turn it was steered into; never another turn of the chat building beside it) the
   plugin's declared apps until it ends, and never past 20 minutes; a session with no turn the host
   can follow holds it for those 20 minutes. That chat's own session then works as below, with its session and app
-  cards. Windows and a Mac with no driver answer `unavailable`. Roblox Studio's **Publish an
-  update** is the one assist that is not a setup click ([plugins](plugins.md)): the
-  person presses it or approves the agent's `publish-update` card, and the chat clicks File ›
-  Publish to Roblox in their Studio, on a Mac only (elsewhere the answer gives that click path). It
-  updates a place already published; a place's first publish stays the person's, with its click
-  path and no assist.
+  cards. Windows and a Mac with no driver answer `unavailable`, and `game.engine.canAssist` tells a
+  plugin so beforehand, so it shows its click path instead of the button. Roblox Studio's
+  publishing is the one assist that is not a setup click ([plugins](plugins.md)): the person
+  presses Publish to Roblox or Publish an update, or approves the agent's `first-publish` card
+  (the game's name, editable on it) or `publish-update` card, and the chat clicks File › Publish to
+  Roblox in their Studio, keeping Studio's privacy and settings and stopping at any age, ID,
+  two-step, terms or payment question (elsewhere the answer gives that click path). Genex then
+  links the game to the published place by itself.
 - **Stopping.** The chat's Stop, the session's end, ⌃⌥⌘Esc (registered only while a driver is
   connected) and quitting all stop the driver (`desktop-control.ts`).
 - **What it cannot do.** No clock, seed or replay; `state` is the accessibility tree of the app in
