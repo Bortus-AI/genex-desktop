@@ -205,6 +205,7 @@ const METHODS = [
   "liveBehind",
   "previewState",
   "previewLive",
+  "previewCoverStill",
   "buildProblem",
   "installPackages",
   "startRun",

@@ -377,5 +377,6 @@ function previewCalls(bridge: BridgeCalls) {
     liveBehind: (project) => invoke("studio:live.behind", { project }),
     previewState: () => invoke("studio:preview.state"),
     previewLive: () => invoke("studio:preview.live"),
+    previewCoverStill: () => invoke("studio:preview.cover-still"),
   } satisfies Partial<StudioApi>;
 }
