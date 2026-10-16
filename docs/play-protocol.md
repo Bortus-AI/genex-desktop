@@ -211,6 +211,16 @@ that timed out, fails the whole plan.
 
 Stopping a game: `quit`, then the process tree is killed if it has not exited within two seconds.
 
+## Playing in an engine's editor
+
+A game played in its engine's editor does not speak this protocol: the studio calls its engine
+plugin's six play tools (`play-open` … `play-close`, `src/shared/engine-play.ts`) instead. They
+borrow this page's ideas in plugin-tool form: `play-open {players}` opens 1 to 8 players (absent is
+one), `player` on `play-input`, `play-shot` and `play-state` addresses one of them (absent is player
+1, which is never sent), `play-shot` answers `{data, mime, width, height}` with `mime` `image/jpeg`
+or `image/png` and at most 1 MB of picture, and a tool answers `{refused: "unsupported", message}`
+for what the engine cannot do at all. See [computer use](computer-use.md#game-engines-and-other-targets).
+
 ## Changes from the native engine's protocol 2
 
 - `hello` with capability levels replaces `capabilities`; core ops are fixed, game ops are listed,

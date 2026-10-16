@@ -105,6 +105,8 @@ export interface AutopilotCommission {
  */
 export const MessageOrigin = {
   CommandResult: "command-result",
+  /** A tag the person tried again, now attached: its line for the agent. */
+  TagRetry: "tag-retry",
 } as const;
 export type MessageOrigin = (typeof MessageOrigin)[keyof typeof MessageOrigin];
 const MESSAGE_ORIGINS: ReadonlySet<unknown> = new Set(Object.values(MessageOrigin));
@@ -188,6 +190,8 @@ export type DispatchAction =
       effort?: string;
       ask: string;
       goalState?: string;
+      /** The engine plugin's judge to play as (`PluginJudge.id`), checked by the host against the game's judges. */
+      judge?: string;
     }
   | { type: "skillopt_start"; threadId: string; options?: Record<string, unknown> }
   | { type: "boot_notice"; notice: BootNotice };

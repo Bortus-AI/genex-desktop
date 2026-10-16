@@ -72,6 +72,17 @@ through the JS API imports `@typescript/typescript6`.
   copies one into a test's folder and adds the files its engine writes while it runs), reads of a
   listed game's facts, a fake harness `ctx` whose `game.*` calls reach a `coreLite`, and a plugin
   registry with the toy engine plugin (`fixtures/toy-engine-plugin/`) installed.
+- `roblox-helper.ts`: stand-ins for the Roblox plugin's helper link: Roblox Studio as StudioMCP lists
+  it (each Studio with the helper's session marker), a clock the test moves by hand, and the Genex
+  helper over an in-memory connection or a real WebSocket.
+- `roblox-mac.ts`: a fake Mac for the Roblox plugin's backend (Studio's app a stand-in; home, storage
+  and games real temporary folders; Studio's running, answering and open places set by the test)
+  and `hostFor`, Genex's side of a plugin call in one game, keeping links as the host does.
+- `roblox-models.ts`: small synthetic glTF models for the Roblox plugin's asset gate (a GLB writer, a
+  cube made of grids, a real grey PNG of any size) and the builders of `fixtures/roblox-models/`,
+  each model failing the gate for one reason; `writeModelFixtures` writes them again.
+- `engines.ts`: the Unreal plugin's and the toy engine's `engine` declarations, read from their
+  manifests, and a catalog of both (what `PluginRegistry.engines()` answers), for linking games.
 - `plugin-author.ts`: the Genex plugin's plugin-author skill read as an agent reads it (`genex__skill`,
   page by page) and its example plugin written into a project where the skill says.
 - `worker-chat.ts`: a game chat with a run started in it, fake engines (two delegated, one local)

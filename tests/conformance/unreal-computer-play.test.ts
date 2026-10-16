@@ -9,7 +9,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import { agentPlaying } from "../../src/plugins/unreal/agent-play.ts";
-import { ENGINE_PLAY_VIEW, EnginePlayRefusal, EnginePlayTool } from "../../src/shared/engine-play.ts";
+import {
+  ENGINE_PLAY_VIEW,
+  EnginePlayRefusal,
+  type EnginePlayShot,
+  EnginePlayTool,
+} from "../../src/shared/engine-play.ts";
 import { createComputerPlay, unrealKey } from "../../src/plugins/unreal/computer-play.ts";
 import { createEditorQueue, LoopTool } from "../../src/plugins/unreal/editor-queue.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -197,10 +202,11 @@ describe("the Unreal plugin's play tools for the computer", () => {
   it("takes the player's view as a PNG at the view's size, and reads the player", async () => {
     const { call, captures } = playTools();
     await call(EnginePlayTool.Open);
-    const shot = (await call(EnginePlayTool.Shot)) as { png: string; width: number; height: number };
+    const shot = (await call(EnginePlayTool.Shot)) as EnginePlayShot;
     assert.deepEqual([shot.width, shot.height], [ENGINE_PLAY_VIEW.width, ENGINE_PLAY_VIEW.height]);
     assert.match(captures[0]?.name ?? "", /^genex-computer-\d+$/);
     assert.equal(shot.png, `png:/p/Saved/Genex/captures/${captures[0]?.name}.png`);
+    assert.deepEqual([shot.data, shot.mime], [shot.png, "image/png"], "the picture also as data, named as a PNG");
     const state = (await call(EnginePlayTool.State)) as { pawn: string; gameSeconds: number };
     assert.equal(state.pawn, "OffroadCar_0");
   });
@@ -212,6 +218,20 @@ describe("the Unreal plugin's play tools for the computer", () => {
     const answer = await call(EnginePlayTool.Open);
     assert.equal((answer as { refused: string }).refused, EnginePlayRefusal.Busy);
     assert.equal(tools().length, before, "nothing of the session reached the editor");
+  });
+
+  it("plays one player only: more players, or any player but the first, are unsupported and reach nothing", async () => {
+    const { call, tools } = playTools();
+    const many = await call(EnginePlayTool.Open, { players: 2 });
+    assert.equal((many as { refused: string }).refused, EnginePlayRefusal.Unsupported);
+    assert.deepEqual(tools(), [], "nothing reached the editor");
+    assert.deepEqual(await call(EnginePlayTool.Open, { players: 1 }), { ...ENGINE_PLAY_VIEW, joined: false });
+    for (const tool of [EnginePlayTool.Input, EnginePlayTool.Shot, EnginePlayTool.State]) {
+      const before = tools().length;
+      const answer = await call(tool, { keys: "KeyW", seconds: 1, player: 2 });
+      assert.equal((answer as { refused: string }).refused, EnginePlayRefusal.Unsupported, tool);
+      assert.equal(tools().length, before, `${tool}: nothing reached the editor`);
+    }
   });
 
   it("says when the game's editor is not open", async () => {

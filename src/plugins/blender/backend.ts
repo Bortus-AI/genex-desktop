@@ -79,9 +79,13 @@ const BlenderTool = { Status: "status", Retrieve: "retrieve", Model: "model" } a
 const BlenderJob = { Model: "model", Transform: "transform", Compose: "compose" } as const;
 /** The job's `rig` value: whether armatures and their actions go into the GLB. */
 const RigValue = { On: "1", Off: "0" } as const;
-/** The engines a game builds in, as studio.json's `engine.kind` names them (absent: the web). */
+/** The engines this plugin guides by name, as studio.json's `engine.kind` names them (absent: the web). */
 const GameEngine = { Web: "web", Unreal: "unreal" } as const;
 type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
+/** How the host spells an engine's id (`shared/game-engine.ts` `ENGINE_ID`); any other spelling links no engine. */
+const ENGINE_ID = /^[a-z][a-z0-9-]{1,39}$/;
+/** The engine a game builds in: one this plugin guides by name, or any other engine's id. */
+type EngineKind = GameEngine | string;
 /** The game's own record, where a game linked to an engine names it. */
 const STUDIO_JSON = "studio.json";
 /** A Godot project's settings file, in the folder Genex delivered a Godot game's files into. */
@@ -119,6 +123,8 @@ const MESSAGE = {
     "Files are relative to the game workspace. Load model.glb with GLTFLoader at its returned asset path (omit public/ in a built app URL). Inspect these renders, integrate the mesh into the scene, then use the preview to verify visible use. A delivered file alone is not integration proof.",
   UnrealGuidance:
     "Files are relative to the game folder. Inspect these renders first, then import model.glb into Unreal with the editor's import tools: Blender metres become Unreal centimetres (x100), +Z stays up and +X stays forward, so model with the pivot at the base and the front along +X. Look at it in the level from the player's view: a delivered file alone is not integration proof.",
+  EngineGuidance:
+    "Files are relative to the game folder. Inspect these renders first, then bring model.glb in with the engine's own import tools: Blender's +Z is up and one unit is a metre, so check the model's scale and which way it faces once it is in. Look at it in the game from the player's view: a delivered file alone is not integration proof.",
   GodotGuidance: (resPath: string) =>
     `Files are relative to the game folder; the model is inside the Godot project as ${resPath}. Inspect these renders first, then use it in a scene: an ext_resource of type PackedScene with that path, instanced as a node (or load(...).instantiate() in GDScript). Godot imports it on godot__check. Blender metres are Godot metres and +Z up becomes +Y up; model with the pivot at the base. Look at it with godot__screenshot from the player's view: a delivered file alone is not integration proof.`,
   UnrealJoin: (meshes: number) =>
@@ -299,30 +305,37 @@ async function godotPath(ctx: PluginContext, files: readonly string[]): Promise<
   return typeof read === "string" ? `res://${model.slice(at)}` : null;
 }
 
-/** The engine the game builds in, from its studio.json; a game without a readable one is a web game. */
-async function gameEngine(ctx: PluginContext): Promise<GameEngine> {
+/**
+ * The engine the game builds in, from its studio.json: Unreal, any other engine by its id, else
+ * (no record, one that doesn't read, or a kind no engine id spells) the web.
+ */
+async function gameEngine(ctx: PluginContext): Promise<EngineKind> {
   try {
-    const record = JSON.parse(await ctx.host(HostService.ProjectRead, { path: STUDIO_JSON }));
-    return record?.engine?.kind === GameEngine.Unreal ? GameEngine.Unreal : GameEngine.Web;
+    const kind: unknown = JSON.parse(await ctx.host(HostService.ProjectRead, { path: STUDIO_JSON }))?.engine?.kind;
+    return typeof kind === "string" && ENGINE_ID.test(kind) ? kind : GameEngine.Web;
   } catch {
     return GameEngine.Web;
   }
 }
 
-/** The first note: what to do with the delivery in this engine. */
-function engineNote(engine: GameEngine, resPath: string | null): string {
+/**
+ * What to do with the delivery: Godot's `res://` path when it landed in a Godot project, the web's
+ * loader, Unreal's units, or any other engine's own import.
+ */
+function deliveryGuidance(engine: EngineKind, resPath: string | null): string {
   if (resPath) return MESSAGE.GodotGuidance(resPath);
-  return engine === GameEngine.Unreal ? MESSAGE.UnrealGuidance : MESSAGE.WebGuidance;
+  if (engine === GameEngine.Web) return MESSAGE.WebGuidance;
+  return engine === GameEngine.Unreal ? MESSAGE.UnrealGuidance : MESSAGE.EngineGuidance;
 }
 
 /** What to do with the delivery in this engine (a Godot project when `resPath` names it), and what the file holds that needs a word. */
 function guidanceFor(
-  engine: GameEngine,
+  engine: EngineKind,
   stats: { meshCount?: number; armatures?: unknown[] },
   rig: boolean,
   resPath: string | null = null,
 ): string {
-  const notes: string[] = [engineNote(engine, resPath)];
+  const notes: string[] = [deliveryGuidance(engine, resPath)];
   const meshes = stats.meshCount ?? 0;
   if (engine === GameEngine.Unreal && meshes > 1) notes.push(MESSAGE.UnrealJoin(meshes));
   const armatures = stats.armatures?.length ?? 0;

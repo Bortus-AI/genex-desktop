@@ -10,12 +10,15 @@ import path from "node:path";
 import { test } from "node:test";
 import { CustomEvent, type CustomEventRecord, customEvent } from "../../src/shared/custom-events.ts";
 import { GameEngine } from "../../src/shared/game-engine.ts";
-import { ENGINE_LINKS_FOLDER, type PluginBinding } from "../../src/shared/plugins.ts";
+import { ENGINE_LINKS_FOLDER, type PluginBinding, PluginSourceKind } from "../../src/shared/plugins.ts";
+import { FactSource } from "../../src/shared/project-facts.ts";
 import { UiEvent } from "../../src/shared/ui-events.ts";
 import { readEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import { createEngineLinks, EngineLinkStale } from "../../src/substrate/plugins/engine-links.ts";
 import { copyOfExample as copyOf, pluginFixture } from "../helpers/plugins.ts";
 import { coreLite } from "../helpers/core-lite.ts";
+import { ENGINES, TOY_ENGINE } from "../helpers/engines.ts";
+import { TOY_PLUGIN } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const PLUGIN = "unreal";
@@ -54,6 +57,7 @@ async function world(now = NOW, { failAppend = false } = {}) {
     changed: (project) => changed.push(project),
     gameThread: async (project) => `thread-of-${project}`,
     now: () => clock(),
+    catalog: () => ENGINES,
   });
   const binding = (project: string, threadId?: string): PluginBinding => ({
     project,
@@ -102,7 +106,7 @@ test("a link records the real project in the plugin's storage and studio.json, a
     name: "Valley",
     linkedAt: NOW().toISOString(),
   });
-  assert.equal((await readEngineBinding(game))?.project, project);
+  assert.equal((await readEngineBinding(game, ENGINES))?.project, project);
   const record = JSON.parse(await readFile(path.join(w.storage, ENGINE_LINKS_FOLDER, "valley.json"), "utf8"));
   assert.equal(record.project, project);
   assert.equal(record.kind, GameEngine.Unreal);
@@ -189,7 +193,7 @@ test("Undo puts back the project a link replaced, in studio.json and in the plug
   assert.equal(customEvent(envelope(w.appended[1].record), CustomEvent.EngineLinked)?.previous, "Valley");
 
   await w.links.undo(PLUGIN, "valley", b.linkedAt, "t1");
-  assert.equal((await readEngineBinding(game))?.project, first);
+  assert.equal((await readEngineBinding(game, ENGINES))?.project, first);
   assert.deepEqual(await w.links.read(PLUGIN, w.binding("valley")), a);
   const undone = customEvent(envelope(w.appended[2].record), CustomEvent.EngineLinkUndone);
   assert.equal(undone?.linkedAt, b.linkedAt);
@@ -202,7 +206,7 @@ test("Undo of a game's first link leaves it with no link", async () => {
   const project = await w.makeProject("Valley");
   const linked = await w.links.link(PLUGIN, w.binding("valley", "t1"), { project, auto: true });
   await w.links.undo(PLUGIN, "valley", linked.linkedAt, "t1");
-  assert.equal(await readEngineBinding(game), undefined);
+  assert.equal(await readEngineBinding(game, ENGINES), undefined);
   assert.equal(await w.links.read(PLUGIN, w.binding("valley")), null);
   const studio = JSON.parse(await readFile(path.join(game, "studio.json"), "utf8"));
   assert.equal(studio.engine, undefined);
@@ -340,7 +344,7 @@ test("the studio makes the game game.create asks for, and links the project its 
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, '{"FileVersion":3}\n');
     await core.pluginServices.call("unreal", "game.engine.link", { project: file, game: made.project });
-    const binding = await readEngineBinding(made.directory);
+    const binding = await readEngineBinding(made.directory, ENGINES);
     assert.equal(binding?.project, await realpath(file));
   } finally {
     await lite.close();
@@ -454,6 +458,7 @@ test("a link whose chat line can't be written takes back both its records: the g
         changed: () => {},
         gameThread: async (id) => `thread-of-${id}`,
         now: NOW,
+        catalog: () => ENGINES,
       });
       await links.link(PLUGIN, w.binding("valley"), { project: earlier });
     }
@@ -465,5 +470,130 @@ test("a link whose chat line can't be written takes back both its records: the g
     );
     assert.deepEqual(await snapshot(w.root), before, `linked before: ${linkedBefore}`);
     assert.deepEqual(w.changed, []);
+  }
+});
+
+const TOY = "toy-engine";
+
+/** A toy-engine project file under the world's root. */
+async function makeToy(root: string, name: string): Promise<string> {
+  const dir = path.join(root, "Toy Projects", name);
+  await mkdir(dir, { recursive: true });
+  const file = path.join(dir, `${name}.toyproj`);
+  await writeFile(file, "toy\n");
+  return file;
+}
+
+test("any engine plugin links like Unreal: the record and the chat line name its engine and label", async () => {
+  const w = await world();
+  const game = await w.makeGame("garden");
+  const project = await makeToy(w.root, "Garden");
+  const linked = await w.links.link(TOY, w.binding("garden", "t1"), { project });
+  assert.deepEqual(linked, { kind: TOY, project, name: "Garden", linkedAt: NOW().toISOString() });
+  const studio = JSON.parse(await readFile(path.join(game, "studio.json"), "utf8"));
+  assert.equal(studio.engine.kind, TOY);
+  assert.deepEqual(await w.links.read(TOY, w.binding("garden")), linked);
+  const payload = customEvent(envelope(w.appended[0].record), CustomEvent.EngineLinked);
+  assert.equal(payload?.engine, TOY);
+  assert.equal(payload?.label, "Toy");
+  assert.equal(payload?.name, "Garden");
+});
+
+test("a link keeps a published game's ids; new ids rewrite it, and ids of a bad shape are dropped", async () => {
+  const w = await world();
+  await w.makeGame("garden");
+  const project = await makeToy(w.root, "Garden");
+  const remote = { placeId: "1818", universeId: "2929" };
+  const first = await w.links.link(TOY, w.binding("garden", "t1"), { project, remote });
+  assert.deepEqual(first.remote, remote);
+  const again = await w.links.link(TOY, w.binding("garden", "t1"), { project, remote: { ...remote } });
+  assert.deepEqual(again, first, "the same ids: nothing changes");
+  assert.equal(w.appended.length, 1);
+
+  w.tick(LATER);
+  const moved = { placeId: "3030", universeId: "2929" };
+  const rewritten = await w.links.link(TOY, w.binding("garden", "t1"), { project, remote: moved });
+  assert.deepEqual(rewritten.remote, moved);
+  assert.equal(rewritten.linkedAt, LATER().toISOString());
+  const record = JSON.parse(
+    await readFile(path.join(w.root, "plugins", TOY, ENGINE_LINKS_FOLDER, "garden.json"), "utf8"),
+  );
+  assert.deepEqual(record.remote, moved);
+  assert.deepEqual((await readEngineBinding(path.join(w.root, "games", "garden"), ENGINES))?.remote, moved);
+
+  for (const bad of [
+    1818,
+    { placeId: "0", universeId: "2929" },
+    { placeId: "1".repeat(21), universeId: "2929" },
+    {
+      placeId: "18x",
+      universeId: "2929",
+    },
+  ]) {
+    const other = await w.makeGame("plain");
+    const made = await w.links.link(TOY, w.binding("plain"), { project, remote: bad });
+    assert.equal(made.project, project, `${JSON.stringify(bad)}: the link stays`);
+    assert.equal(made.remote, undefined, `${JSON.stringify(bad)}: the ids are dropped`);
+    assert.equal((await readEngineBinding(other, ENGINES))?.remote, undefined);
+    await w.links.undo(TOY, "plain", made.linkedAt);
+  }
+});
+
+test("a link may name its project as people know it: the chat line says that name, else the file's", async () => {
+  const w = await world();
+  await w.makeGame("garden");
+  const project = await makeToy(w.root, "Garden");
+  const named = await w.links.link(TOY, w.binding("garden", "t1"), { project, name: "Front Yard" });
+  assert.equal(named.name, "Front Yard");
+  assert.equal(customEvent(envelope(w.appended[0].record), CustomEvent.EngineLinked)?.name, "Front Yard");
+  for (const bad of ["", " ", "two\nlines", "x".repeat(81), 7, null]) {
+    await w.makeGame("plain");
+    const made = await w.links.link(TOY, w.binding("plain", "t2"), { project, name: bad });
+    assert.equal(made.name, "Garden", `${JSON.stringify(bad)}: the file's name`);
+    const last = w.appended.at(-1);
+    assert.ok(last, "the link is told in the chat");
+    const line = customEvent(envelope(last.record), CustomEvent.EngineLinked);
+    assert.equal(line?.name, "Garden", `${JSON.stringify(bad)}: the chat line names the file`);
+    await w.links.undo(TOY, "plain", made.linkedAt);
+  }
+});
+
+test("a plugin that declares no engine can't link a game, and nothing changes", async () => {
+  const w = await world();
+  await w.makeGame("garden");
+  const project = await makeToy(w.root, "Garden");
+  const uproject = await w.makeProject("Valley");
+  const before = await snapshot(w.root);
+  await assert.rejects(w.links.link("blender", w.binding("garden", "t1"), { project }), /declares no engine/);
+  await assert.rejects(w.links.link(TOY, w.binding("garden", "t1"), { project: uproject }), /not a Toy project file/);
+  assert.deepEqual(await snapshot(w.root), before);
+  assert.equal(w.appended.length, 0);
+});
+
+test("a game linked by an engine plugin that is turned off still builds in that engine", async () => {
+  const lite = await coreLite();
+  try {
+    const { core } = lite;
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    assert.equal(core.plugins.enabled(TOY), false, "a local plugin starts off");
+    const made = await core.games.scaffold("garden");
+    const projects = await realpath(await tmpDir("studio-toy-link-"));
+    const project = await makeToy(projects, "Garden");
+    await core.engineLinks.link(TOY, { project: made.name, directory: made.dir }, { project });
+    const game = (await core.games.list()).find((g) => g.name === made.name);
+    assert.equal(game?.engine?.kind, TOY);
+    assert.deepEqual(
+      game?.facts?.map(({ id, source }) => [id, source]),
+      [["toy-project", FactSource.Link]],
+      "the toy engine's fact, not Unreal's",
+    );
+    // What the app reads of its engine (the Loop's gate, Rewind's note) comes with the game, as declared.
+    const { label, projectFiles, projectInFolder } = TOY_ENGINE;
+    assert.deepEqual(game?.linkedEngine, { label, projectFiles, projectInFolder });
+    const web = await core.games.scaffold("pond");
+    assert.equal((await core.games.list()).find((g) => g.name === web.name)?.linkedEngine, undefined, "a web game");
+  } finally {
+    lite.core.plugins.cancel();
+    await lite.close();
   }
 });

@@ -11,10 +11,11 @@ import { Icon } from "../ui/icons.tsx";
 import { AnimateHeight } from "../ui/animate-height.tsx";
 import { Presence } from "../ui/Presence.tsx";
 import { SignInCard } from "../ui/SignInCard.tsx";
-import { CHAT_WORDS, CONSENT_CHOICE_WORDS, consentNeededWords } from "../words.ts";
+import { CHAT_WORDS } from "../words.ts";
 import type { EntryKind } from "../chat-entries.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
-import { type ChatChoice, ChatQuestion } from "./ChatQuestion.tsx";
+import { ChatQuestion } from "./ChatQuestion.tsx";
+import { ConsentChoice, consentChoices, consentTitle } from "./consent-card.ts";
 import { ExportReview } from "./ExportReview.tsx";
 import { PermissionRequest } from "./PermissionRequest.tsx";
 import { PlanQuestion } from "./PlanQuestion.tsx";
@@ -34,26 +35,6 @@ export interface PlanPrompt {
   onRevise: () => void;
 }
 
-/** The consent card's answers, as `ChatQuestion` choice ids. */
-const ConsentChoice = { Once: "once", Always: "always", Decline: "decline" } as const;
-
-/** The choices a consent card offers: Always allow only on a connector's, for that exact tool. */
-function consentChoices(entry: Omit<Consent, "consentId" | "permission">): ChatChoice[] {
-  const always = entry.consentAlwaysOffered
-    ? [
-        {
-          id: ConsentChoice.Always,
-          ...CONSENT_CHOICE_WORDS.always(entry.consentSource ?? ""),
-        },
-      ]
-    : [];
-  return [
-    { id: ConsentChoice.Once, ...CONSENT_CHOICE_WORDS.once },
-    ...always,
-    { id: ConsentChoice.Decline, ...CONSENT_CHOICE_WORDS.decline },
-  ];
-}
-
 /**
  * A plugin's or connector's permission request: Allow once, Always allow (a connector's only) or
  * Don't allow, with the request itself (the tool and what it was given) under Request details. A
@@ -71,7 +52,7 @@ function ConsentCard({
   const subtitle = entry.consentPrompt && !entry.consentAlwaysOffered ? entry.consentSource : undefined;
   return (
     <ChatQuestion
-      title={entry.consentPrompt || consentNeededWords(entry.consentSource)}
+      title={consentTitle(entry)}
       description={subtitle}
       reopenLabel="Review permission request"
       choices={consentChoices(entry)}

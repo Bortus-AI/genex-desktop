@@ -1,12 +1,14 @@
 /**
  * A judge that plays, for a direct engine's turn (Ollama): the same `judge_play` every session engine
  * is handed, run by the host (`judge.play`). A blind judge plays the game with this chat's model on a
- * hidden window and answers one yes/no question; the host records the outcome in the chat. A host
- * without `judge.play` offers no tool here.
+ * hidden window and answers one yes/no question; the host records the outcome in the chat. A game
+ * whose engine plugin declares judges may be played by one of them (`judge`, checked by the host).
+ * A host without `judge.play` offers no tool here.
  *
  * A new module: the registry imports every `tools/*.ts`, so a kept older workspace without it simply
  * has no judge tool.
  */
+import { ENGINE_JUDGE_WORDS } from "../loop/engine-judges-prompts.ts";
 import { HostMethod } from "../loop/host-methods.ts";
 import type { AnyRecord, HarnessTool, ToolCtx, ToolOutcome } from "../types/harness.d.ts";
 import type { LiveToolResult } from "../types/host-api.d.ts";
@@ -42,6 +44,7 @@ export const tools: HarnessTool[] = hostHasJudge()
             goal_state: str(
               'optional JSON: the state the game reaches when the answer is yes, e.g. {"path":"flow.phase","equals":"won"}',
             ),
+            judge: str(ENGINE_JUDGE_WORDS.chatArg),
           },
           required: ["ask"],
         },

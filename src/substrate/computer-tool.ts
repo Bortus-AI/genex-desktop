@@ -37,6 +37,7 @@ import {
   type TargetCapabilities,
 } from "../shared/computer-target.ts";
 import { resolveAlias, SCROLL_NOTCH_PX } from "./computer-vocabulary.ts";
+import { MAX_PLAY_PLAYERS, playerArg } from "../shared/engine-play.ts";
 import { SECOND_MS } from "../shared/duration.ts";
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import {
@@ -163,6 +164,8 @@ export interface ComputerRequest {
   ref?: string;
   /** web_type: press Enter after the text. */
   submit?: boolean;
+  /** Which player this and every later action addresses, on a target that plays several. */
+  player?: number;
 }
 
 export type ParsedComputer = { ok: true; request: ComputerRequest } | { ok: false; error: string };
@@ -444,6 +447,11 @@ export function parseComputerArgs(args: Record<string, unknown> | null | undefin
   const request: ComputerRequest = { action };
   readPointerFields(request, raw);
   readOtherFields(request, raw);
+  if (!isBlank(raw.player)) {
+    const player = playerArg(num(raw.player));
+    if (player === null) return { ok: false, error: COMPUTER_ARG_PROBLEM.badPlayer(MAX_PLAY_PLAYERS) };
+    request.player = player;
+  }
   if (action === "batch") {
     const batch = parseBatch(raw.actions);
     if ("error" in batch) return { ok: false, error: batch.error };
@@ -600,6 +608,13 @@ export function unsupportedAction(action: ComputerAction, caps: TargetCapabiliti
   return COMPUTER_ARG_PROBLEM.unsupported(action, computerActionsFor(caps).join(", "));
 }
 
+/** The sentence for a player the target does not play, or null when it plays that one (player 1 always). */
+export function unsupportedPlayer(request: ComputerRequest, caps: TargetCapabilities): string | null {
+  const players = caps.players ?? 1;
+  if (request.player === undefined || request.player <= players) return null;
+  return COMPUTER_ARG_PROBLEM.noSuchPlayer(request.player, players);
+}
+
 /** The flat parameter schema both transports share (the bridge prints it as flags). */
 export interface ComputerToolSchema {
   name: string;
@@ -657,6 +672,9 @@ export function computerToolDefinition(
           ? { ref: { type: "string", description: text.ref }, submit: { type: "boolean", description: text.submit } }
           : {}),
         ...(capabilities.surfaces ? { surface: { type: "string", description: text.surface } } : {}),
+        ...((capabilities.players ?? 1) > 1
+          ? { player: { type: "number", description: text.player(capabilities.players ?? 1) } }
+          : {}),
         observe: { type: "string", description: text.observe },
         actions: { type: "string", description: text.actions },
       },

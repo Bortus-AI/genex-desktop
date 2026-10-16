@@ -2,6 +2,9 @@ import { deliverAssetFiles } from "../genex-delivery.ts";
 import path from "node:path";
 import { lstat, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import {
+  ENGINE_ASSIST_TASK_MAX_CHARS,
+  type EngineAssistAnswer,
+  EngineAssistRefusal,
   PLUGIN_STILL_DEFAULT_BYTES,
   PLUGIN_STILL_MAX_BYTES,
   PLUGIN_STILL_MIN_BYTES,
@@ -18,6 +21,7 @@ import { SecretStore } from "../secrets.ts";
 import { atomicWriteJson } from "../fsx.ts";
 import { createHash } from "node:crypto";
 import type { EngineLinkHost } from "./engine-links.ts";
+import type { PluginInvocation } from "./process.ts";
 import { assertRelativePath, containedReal, isBelow, isInside, toPosixRelative } from "../paths.ts";
 
 const MAX_CREDENTIAL_CHARS = 65536;
@@ -58,6 +62,7 @@ const MESSAGE = {
   InvalidSnapshotReason: `Invalid snapshot reason: one plain line of at most ${MAX_SNAPSHOT_REASON_CHARS} characters`,
   SnapshotsUnavailable: "Snapshots unavailable",
   InvalidGameTitle: `Invalid game title: one plain line of at most ${MAX_GAME_TITLE_CHARS} characters`,
+  InvalidAssistTask: `Invalid task: one plain line of at most ${ENGINE_ASSIST_TASK_MAX_CHARS} characters`,
   GamesUnavailable: "Games unavailable",
   RunsUnavailable: "Runs unavailable",
   NotMadeHere: "A link may name only a game this plugin made, and only from outside another game",
@@ -79,12 +84,16 @@ const STILL_REFUSAL = {
 /** The keys a still request may carry. */
 const STILL_KEYS = new Set(["demo", "camera", "width", "height", "maxBytes"]);
 
-/** One service call: the plugin, its storage root, the backend's untyped arguments and the bound game. */
+/**
+ * One service call: the plugin, its storage root, the backend's untyped arguments, the bound game,
+ * and the call of the plugin's it was made on behalf of (absent for the host's own requests).
+ */
 interface ServiceCall {
   id: string;
   root: string;
   args: any;
   binding?: PluginBinding;
+  invocation?: PluginInvocation;
 }
 type AssetLimits = { fileBytes: number; projectBytes: number };
 
@@ -147,6 +156,24 @@ function snapshotReason(value: unknown): string {
   const plain = reason.length > 0 && reason.length <= MAX_SNAPSHOT_REASON_CHARS && ![...reason].some(isControl);
   if (!plain) throw new Error(MESSAGE.InvalidSnapshotReason);
   return reason;
+}
+
+/** A setup task a plugin hands to the chat: one plain line, trimmed, of at most {@link ENGINE_ASSIST_TASK_MAX_CHARS} characters. */
+function assistTask(value: unknown): string {
+  const task = typeof value === "string" ? value.trim() : "";
+  const plain = task.length > 0 && task.length <= ENGINE_ASSIST_TASK_MAX_CHARS && ![...task].some(isControl);
+  if (!plain) throw new Error(MESSAGE.InvalidAssistTask);
+  return task;
+}
+
+/**
+ * Whether a call is the person's own: a plugin action they pressed, or a tool call whose own card
+ * they approved (the host sets `confirmed`). A Genex moment's or an observer's step is never theirs.
+ */
+function isPersonsCall(invocation: PluginInvocation | undefined, binding: PluginBinding | undefined): boolean {
+  if (!invocation || binding?.hook || binding?.observe) return false;
+  if (invocation.method === "action") return true;
+  return invocation.method === "tool" && invocation.confirmed === true;
 }
 
 /** A game title a plugin asked for: one plain line, trimmed, of at most {@link MAX_GAME_TITLE_CHARS} characters. */
@@ -253,6 +280,18 @@ export class PluginServices {
   gameSnapshot: ((binding: PluginBinding, reason: string) => Promise<{ snapshotId: string }>) | undefined;
   /** Host games (`game.create`): makes a Genex game with this title; its name and folder. Unset → 'Games unavailable'. */
   gameCreate: ((title: string) => Promise<{ project: string; directory: string }>) | undefined;
+  /**
+   * Host assists (`game.engine.assist`): hands a setup task to the bound game's chat. Reached only
+   * for the person's own call; unset, every call answers `unavailable`.
+   */
+  engineAssist:
+    | ((
+        pluginId: string,
+        binding: PluginBinding | undefined,
+        task: string,
+        signal?: AbortSignal,
+      ) => Promise<EngineAssistAnswer>)
+    | undefined;
   /** Host runs (`game.engine.runs`): the games whose run is going now. Unset → 'Runs unavailable'. */
   runningGames: (() => Promise<Array<{ project: string; directory: string; title: string }>>) | undefined;
   /** The games each plugin made through `game.create` while this host runs, by name, with their folders. */
@@ -288,6 +327,7 @@ export class PluginServices {
     [PluginService.GameEngineSteps]: ({ id, binding }) => this.#engine().steps(id, requireBinding(binding)),
     [PluginService.GameSnapshot]: ({ args, binding }) => this.#gameSnapshot(requireBinding(binding), args?.reason),
     [PluginService.GameEngineRuns]: ({ id }) => this.#engineRuns(id),
+    [PluginService.GameEngineAssist]: (call) => this.#assist(call),
     [PluginService.JobsRead]: async (call) =>
       JSON.parse(await readFile(await jobReferenceFile(call), "utf8").catch(() => "null")),
     [PluginService.JobsWrite]: async (call) => {
@@ -300,6 +340,16 @@ export class PluginServices {
     const checked = snapshotReason(reason);
     if (!this.gameSnapshot) throw new Error(MESSAGE.SnapshotsUnavailable);
     return this.gameSnapshot(binding, checked);
+  }
+  /**
+   * Do it for me: only the person's own call reaches the host (`isPersonsCall`), and only with a
+   * task it can show verbatim; anything else answers `not-person` and nothing happens.
+   */
+  async #assist({ id, args, binding, invocation }: ServiceCall): Promise<EngineAssistAnswer> {
+    if (!isPersonsCall(invocation, binding)) return { started: false, reason: EngineAssistRefusal.NotPerson };
+    const task = assistTask(args?.task);
+    if (!this.engineAssist) return { started: false, reason: EngineAssistRefusal.Unavailable };
+    return this.engineAssist(id, binding, task, invocation?.signal);
   }
   /** The games whose run is going now that this plugin linked to a project, with that project. */
   async #engineRuns(id: string): Promise<Array<{ game: string; title: string; project: string }>> {
@@ -341,12 +391,18 @@ export class PluginServices {
     if (!this.engineLinks) throw new Error(MESSAGE.EngineLinksUnavailable);
     return this.engineLinks;
   }
-  async call(id: string, method: string, args: any, binding?: PluginBinding): Promise<unknown> {
+  async call(
+    id: string,
+    method: string,
+    args: any,
+    binding?: PluginBinding,
+    invocation?: PluginInvocation,
+  ): Promise<unknown> {
     const root = this.root(id);
     await mkdir(root, { recursive: true, mode: 0o700 });
     const handler = Object.hasOwn(this.#handlers, method) ? this.#handlers[method] : undefined;
     if (!handler) throw new Error(MESSAGE.Unknown);
-    return handler({ id, root, args, binding });
+    return handler({ id, root, args, binding, ...(invocation ? { invocation } : {}) });
   }
   /** Deliver files, one delivery at a time per plugin and project. */
   async #deliver(call: ServiceCall): Promise<unknown> {

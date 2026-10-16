@@ -174,6 +174,34 @@ test("the SDK manifest mirror, its skills and tool hosts, and src/shared/plugins
       export const hostToShared: SharedHost = sdkHost;
       export const hostToSdk: SdkHost = sharedHost;
     `,
+    "engine.ts": `
+      import type { PluginEngineDeclaration as SdkEngine, PluginEngineLink as SdkLink } from ${quote(sdk)};
+      import type { EngineDeclaration as SharedEngine, EngineBinding } from ${quote(path.resolve("src/shared/game-engine.ts"))};
+      declare const sdkEngine: SdkEngine; declare const sharedEngine: SharedEngine;
+      export const engineToShared: SharedEngine = sdkEngine;
+      export const engineToSdk: SdkEngine = sharedEngine;
+      type SharedLink = EngineBinding & { name: string };
+      declare const sdkLink: SdkLink; declare const sharedLink: SharedLink;
+      export const linkToShared: SharedLink = sdkLink;
+      export const linkToSdk: SdkLink = sharedLink;
+    `,
+    "assist.ts": `
+      import type { PluginEngineAssistAnswer as SdkAnswer, PluginEngineAssistArgs as SdkArgs } from ${quote(sdk)};
+      import type { EngineAssistAnswer as SharedAnswer, EngineAssistArgs as SharedArgs } from ${quote(shared)};
+      declare const sdkAnswer: SdkAnswer; declare const sharedAnswer: SharedAnswer;
+      export const answerToShared: SharedAnswer = sdkAnswer;
+      export const answerToSdk: SdkAnswer = sharedAnswer;
+      declare const sdkArgs: SdkArgs; declare const sharedArgs: SharedArgs;
+      export const argsToShared: SharedArgs = sdkArgs;
+      export const argsToSdk: SdkArgs = sharedArgs;
+    `,
+    "judge.ts": `
+      import type { PluginJudge as SdkJudge } from ${quote(sdk)};
+      import type { PluginJudge as SharedJudge } from ${quote(shared)};
+      declare const sdkJudge: SdkJudge; declare const sharedJudge: SharedJudge;
+      export const judgeToShared: SharedJudge = sdkJudge;
+      export const judgeToSdk: SdkJudge = sharedJudge;
+    `,
   });
   assert.equal(diagnostics.length, 0, report(diagnostics));
 });
