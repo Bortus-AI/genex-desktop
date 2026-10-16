@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -15,6 +15,14 @@
       "notUnder": ["**/.godot/"]
     }
   ],
+  "engine": {
+    "id": "godot",
+    "label": "Godot",
+    "projectFiles": ["project.godot"],
+    "fact": "godot-project",
+    "projectInFolder": true,
+    "writesProjectFiles": true
+  },
   "tools": [
     {
       "name": "new-game",

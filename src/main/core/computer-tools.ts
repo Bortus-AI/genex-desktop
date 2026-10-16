@@ -159,8 +159,19 @@ export interface ComputerToolsOptions {
    * `engine` when its play names an engine a plugin runs (an engine draws: a window and the GPU).
    */
   bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived">; engine?: EngineLauncher };
-  /** Set when the game is played in its engine's editor: the engine plugin's play tools. */
-  editor?: { call: EnginePlayCall };
+  /**
+   * Set when the game is played in its engine's editor: the engine plugin's play tools, what its
+   * declaration says the play can do (known before play opens, so the tool is described from it),
+   * how many players to open, and a step run once right after the play opens (a judge's probe).
+   */
+  editor?: {
+    call: EnginePlayCall;
+    caps?: TargetCapabilities;
+    players?: number;
+    /** Whether its play-open can start the play over; only then is a paced role's play asked to. */
+    restarts?: boolean;
+    afterOpen?: (opened: unknown) => Promise<void>;
+  };
 }
 
 /** The runtimes a computer is built for: those a game declares, and its engine's editor. */
@@ -330,8 +341,9 @@ const TARGET_SOURCES: Record<ToolsRuntime, (deps: SourceDeps, build: ToolsBuilde
     if (!editor) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
     const source = editorPlaySource({
       ...editor,
-      // A judge or a playtester judges the game from its start, never from where another play left it.
-      fresh: PACED_ROLES.has(deps.role),
+      // A judge or a playtester judges the game from its start, never from where another play left it,
+      // where the engine's play-open can start it over (one that cannot is joined as it runs).
+      fresh: Boolean(editor.restarts) && PACED_ROLES.has(deps.role),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);

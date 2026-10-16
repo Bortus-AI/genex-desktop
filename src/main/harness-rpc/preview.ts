@@ -49,7 +49,9 @@ function computersOf(core: StudioCore, x: CoreInternals): ReturnType<typeof comp
     scratch: () => core.layout.scratch,
     runs: () => core.layout.runs,
     port: (handle) => x.previews.preview(handle),
-    computerTools: (grant, root, outDir, session) => core._computerToolsFor(grant, root, outDir, session),
+    // The harness's own loop writes the judge's rubric itself: an engine judge's brief opens its first answer.
+    computerTools: (grant, root, outDir, session) =>
+      core._computerToolsFor(grant, root, outDir, session, { judgeBrief: true }),
     runOfGame: (project, runId) => core._runOfGame(project, runId),
   });
   COMPUTERS.set(x, made);

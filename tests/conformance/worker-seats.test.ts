@@ -17,6 +17,7 @@ import { normalGamesElsewhere } from "../../src/main/core/never-touch-list.ts";
 import { NeverTouchKind, pathVerdict } from "../../src/substrate/engines/never-touch.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
 import type { DelegateRequest } from "../../src/substrate/engines/types.ts";
+import { ENGINES, GODOT_ENGINE } from "../helpers/engines.ts";
 import { gitFile } from "../helpers/git.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { CODEX, closeWorkerChats, LOCAL, RUN_ID, realNearest, workerChat } from "../helpers/worker-chat.ts";
@@ -121,7 +122,7 @@ describe("the host's worker seat", () => {
     const { core, project, other, threadId, seen, delegate, runWorker } = await workerChat();
     const outside = await realpath(await tmpDir("worker-seats-godot-"));
     await writeFile(path.join(outside, "project.godot"), "config_version=5\n");
-    await writeEngineBinding(project.dir, path.join(outside, "project.godot"));
+    await writeEngineBinding(project.dir, path.join(outside, "project.godot"), GODOT_ENGINE.id, ENGINES);
     await core.setPermissionMode(threadId, PermissionMode.Auto);
     await delegate(runWorker());
     assert.ok(seen.at(-1)?.worker?.writeRoots.includes(outside), "the linked project's folder");
@@ -129,7 +130,7 @@ describe("the host's worker seat", () => {
     const elsewhere = path.join(other.dir, "godot");
     await mkdir(elsewhere, { recursive: true });
     await writeFile(path.join(elsewhere, "project.godot"), "config_version=5\n");
-    await writeEngineBinding(project.dir, path.join(elsewhere, "project.godot"));
+    await writeEngineBinding(project.dir, path.join(elsewhere, "project.godot"), GODOT_ENGINE.id, ENGINES);
     await delegate(runWorker());
     const roots = seen.at(-1)?.worker?.writeRoots ?? [];
     const otherGame = await realpath(other.dir);

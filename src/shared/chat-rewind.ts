@@ -6,7 +6,7 @@ import { compareIds } from "./compare-ids.ts";
  */
 import { APPROVED_PLAN_HEADING } from "./composer.ts";
 import { withoutMentionContext } from "./prompt-mention.ts";
-import { CustomEvent, customRecord, DELEGATED_PREFIX } from "./custom-events.ts";
+import { CustomEvent, customPayload, customRecord, DELEGATED_PREFIX } from "./custom-events.ts";
 import { type EventEnvelope, EventKind } from "./event-log.ts";
 import { messageQueueState, QueueState, type QueuedMessage } from "./message-queue.ts";
 import { workerKeyOf } from "./run-graph-events.ts";
@@ -263,6 +263,92 @@ export interface RewindResult {
   files: number | null;
   /** Waiting follow-ups that left with it and the pictures their composer had attached. */
   held: Array<{ messageId: string; pickedImages: number }>;
+  /** Game files came back: the rewind's line offers to bring the newer version back by this id. */
+  undo?: { rewindId: string };
+}
+
+/**
+ * A rewind's undo id: the name of the `rewound/` ref that keeps the game folder as it was just
+ * before that rewind (`main/chat-checkpoints.ts`): base-36 time, a dash, eight hex digits.
+ */
+const REWIND_ID = /^[0-9a-z]{1,16}-[0-9a-f]{8}$/;
+
+/** Is this a rewind's undo id the host may name a ref by? */
+export function isRewindId(value: unknown): value is string {
+  return typeof value === "string" && REWIND_ID.test(value);
+}
+
+/** The `conversation_rewind_undone` record: which rewind's newer version came back, and how many files. */
+export interface RewindUndonePayload {
+  rewindId?: string;
+  files?: number;
+}
+
+/** What bringing the newer version back did: how many game files changed. */
+export interface UndoRewindResult {
+  files: number;
+}
+
+/** Why the newer version a rewind replaced cannot come back. */
+export const UndoRewindRefusal = {
+  /** Not the chat's newest rewind, or one that put no files back. */
+  NotOffered: "not-offered",
+  AlreadyBack: "already-back",
+  MessageSent: "message-sent",
+  Busy: "busy",
+  /** HEAD moved since the rewind: a commit or a landed build. */
+  HistoryChanged: "history-changed",
+  /** The saved folder is no longer kept. */
+  Gone: "gone",
+} as const;
+export type UndoRewindRefusal = (typeof UndoRewindRefusal)[keyof typeof UndoRewindRefusal];
+
+const UNDO_REFUSAL_WORDS: Record<UndoRewindRefusal, string> = {
+  [UndoRewindRefusal.NotOffered]: "Only the latest rewind can bring the newer version back.",
+  [UndoRewindRefusal.AlreadyBack]: "The newer version is already back.",
+  [UndoRewindRefusal.MessageSent]: "A message was sent after the rewind, so the newer version can’t come back now.",
+  [UndoRewindRefusal.Busy]: "Wait for this chat to finish, or press Stop, before bringing the newer version back.",
+  [UndoRewindRefusal.HistoryChanged]:
+    "The game’s history changed since the rewind, so the newer version can’t come back now.",
+  [UndoRewindRefusal.Gone]: "The newer version is no longer saved.",
+};
+
+export function undoRewindRefusalWords(reason: UndoRewindRefusal): string {
+  return UNDO_REFUSAL_WORDS[reason];
+}
+
+/** The chat's newest rewind marker, by id, and the undo id it carries (if any). */
+function newestRewind(events: readonly EventEnvelope[]): { id: string; rewindId: string | undefined } | null {
+  let newest: { id: string; rewindId: string | undefined } | null = null;
+  for (const event of events) {
+    const marker = customPayload(event.data, CustomEvent.ConversationRewound);
+    if (marker && (!newest || compareIds(event.id, newest.id) > 0))
+      newest = { id: event.id, rewindId: marker.rewindId };
+  }
+  return newest;
+}
+
+/**
+ * Why the chat no longer offers to bring back the version this rewind replaced, or null while it
+ * does: only the chat's newest rewind, only one that put files back, only once, and only until a
+ * message is sent after it. The conversation stays rewound either way.
+ */
+export function undoRewindRefusal(events: readonly EventEnvelope[], rewindId: string): UndoRewindRefusal | null {
+  const undone = events.some(
+    (event) => customPayload(event.data, CustomEvent.ConversationRewindUndone)?.rewindId === rewindId,
+  );
+  if (undone) return UndoRewindRefusal.AlreadyBack;
+  const newest = newestRewind(events);
+  if (!newest || newest.rewindId !== rewindId) return UndoRewindRefusal.NotOffered;
+  const sentAfter = events.some((event) => compareIds(event.id, newest.id) > 0 && isUserBubble(event));
+  return sentAfter ? UndoRewindRefusal.MessageSent : null;
+}
+
+/** The rewind whose newer version the chat offers to bring back now, by its undo id; null for none. */
+export function offeredRewindUndo(events: readonly EventEnvelope[]): string | null {
+  const rewindId = newestRewind(events)?.rewindId;
+  if (!isRewindId(rewindId)) return null;
+  return undoRewindRefusal(events, rewindId) === null ? rewindId : null;
 }
 
 /** A follow-up waiting in the queue when the chat is rewound: it leaves too, and its words come back. */

@@ -195,7 +195,11 @@ to one (`PluginConsent.approveForMode`, `by: mode`). A connector's card ("Let th
 ask again for this action in <name>") and Don't allow; Always allow saves that exact tool (`McpRegistry.alwaysAllow`): the person's own connector
 in connectors.json, where its card's checkbox shows it, and a plugin's in `always-allowed.json`
 beside it, listed on the plugin's page under Connections with **Ask every time** to take it back.
-A plugin tool's own `confirmation` card never offers it. A local plugin's agent tool asks each call
+A plugin tool's own `confirmation` card never offers it, and no chat mode answers it, Bypass
+included: it asks every call. The Roblox Studio plugin puts Roblox's AI tools, uploads and Creator
+Store inserts behind such cards (`generate-mesh`, `upload-image`, `insert-asset` and the rest),
+because they run on the person's Roblox account, and its connection never offers Studio's own
+copies of them, whose cards Auto and Bypass would skip ([plugins](plugins.md)). A local plugin's agent tool asks each call
 too ("<Plugin> was loaded from a folder on this Mac and runs with your access"), and its card offers
 Always allow for that tool alone, kept until the plugin's code changes or it is turned off and listed
 on its page with **Ask every time**; Bypass and a run's own consent never answer it. A tool of a
@@ -274,7 +278,8 @@ Its seat (`WorkerSeat`, `#workerReach`) carries:
   out, and so is one that is, holds or sits in a never-touch root (`writableRoots`);
 - the never-touch list ([`never-touch-list.ts`](../src/main/core/never-touch-list.ts)): the sign-ins
   (each coding CLI's whole home, the stores every agent's box denies (`baseDenyRead`: `~/.ssh`,
-  `~/.aws`, `~/.config/gh`, `~/.netrc`, `~/Library/Keychains`), `~/.genex`, Genex's secrets and
+  `~/.aws`, `~/.config/gh`, `~/.netrc`, `~/Library/Keychains`, `~/Library/HTTPStorages`,
+  `~/Library/Roblox`), `~/.genex`, Genex's secrets and
   engine homes), Genex's own data (this profile's data folder and the other profiles the app names
   at start, `StudioCoreOptions.neverTouch`: the normal profile's and a developer build's
   `.studio-dev/profiles`), and every other game's folder (the normal profile's `~/AI Games` too when
@@ -454,6 +459,20 @@ told what the person must turn on and not to retry, and the chat gets one `app_l
 app session (a host record the harness cannot write), with **Open Privacy settings**
 (`studio:app-look.open-settings`, native), which opens only that System Settings pane. Fixture
 profiles look at a stub window; other systems answer that it works on macOS only for now.
+
+## Do it for me
+
+`game.engine.assist` ([computer use](computer-use.md#the-persons-computer)) lets an engine plugin
+hand a setup click to its game's chat. Only the person starts one: a plugin action they pressed, or
+a tool call whose own `confirmation` card they approved with their own click (the registry marks
+that call `confirmed`; a yes given by a mode, a local plugin's own access card, a Genex moment's
+step or an observer's step never counts), so an agent can reach it only through a card that asks
+in every mode. The task is posted verbatim as "<plugin> asks: <task>". A plugin that came with
+Genex asks nothing more; any other shows the task on its card first, every time. With computer
+control off, the studio's own card (`studio-computer-setting`, "Computer control") asks to turn it
+on, in words that say it is for every chat, with Turn on and Not now; an earlier no in the chat
+never answers a new press. The chat's session then asks its own session and app cards as any
+other desktop session does.
 
 ## A Loop's reviewer
 

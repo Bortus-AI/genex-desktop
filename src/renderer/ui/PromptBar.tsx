@@ -552,7 +552,7 @@ interface PromptBarProps {
   project?: string | null;
   /** The game can run a Loop (`loopAvailableFor`); without it Mode offers Off alone and says why. */
   loopAvailable?: boolean;
-  /** Why the game can't run a Loop, naming its project and where it is (`unrealLoopGate`). */
+  /** Why the game can't run a Loop, naming its project and where it is (`engineLoopGate`). */
   loopGate?: string;
   contexts?: ContextUsage[];
   contextUsage?: ContextUsage | null;

@@ -295,6 +295,12 @@ export interface StudioApi {
     messageId: string,
     files: boolean,
   ): Promise<import("./chat-rewind.ts").RewindResult>;
+  /**
+   * Bring back the game files (and, through the restore steps, the engine's state) as they were
+   * just before the chat's newest rewind; the conversation stays rewound. Refused once a message
+   * was sent after it, or once it came back.
+   */
+  undoRewind(threadId: string, rewindId: string): Promise<import("./chat-rewind.ts").UndoRewindResult>;
   /** Every thread's events after `after`; ask again with the returned `cursor`, not an event id. */
   events(after?: string): Promise<EventFeed>;
   threadEvents(threadId: string): Promise<EventEnvelope[]>;

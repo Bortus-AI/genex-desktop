@@ -23,6 +23,7 @@ import { isBelow } from "../substrate/paths.ts";
 import { ignoreLine, type PlacedRule, ruleGlob, ruleMatches } from "../shared/project-workspace.ts";
 import { ensureFactIgnoreRules } from "../substrate/nested-repos.ts";
 import { REWIND_REFS } from "../shared/game-history.ts";
+import { isRewindId, UndoRewindRefusal, undoRewindRefusalWords } from "../shared/chat-rewind.ts";
 
 /** Files the rewind never puts back: the game's shape and consent belong to now, not then. */
 const KEPT_PATHS = new Set(["studio.json"]);
@@ -107,10 +108,14 @@ interface Snapshot {
 }
 /** What a checkpoint left out: nested repositories, and files it skipped for their size. */
 export type LeftOut = Pick<Snapshot, "nested" | "skipped">;
-/** A finished restore: how many files came back, the saved copy that undoes it, and files too large to put back. */
+/**
+ * A finished restore: how many files came back, the saved copy that undoes it (and the id its
+ * `rewound/` ref is named by), and files too large to put back.
+ */
 export interface RestoredCheckpoint {
   files: number;
   saved: string;
+  rewindId: string;
   /** Changed files too large to have been saved, which stayed as they are; present only when there are any. */
   stayed?: string[];
 }
@@ -121,8 +126,10 @@ export const chatCheckpointRef = (
   messageId: string,
   phase: CheckpointPhase = CheckpointPhase.Before,
 ): string => `${refRoot(threadId)}/${phase}/${messageId}`;
-const rewoundRef = (threadId: string): string =>
-  `${refRoot(threadId)}/rewound/${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+/** Where the folder as it was just before a rewind is kept, by the id the rewind's line names it with. */
+const rewoundRef = (threadId: string, rewindId: string): string => `${refRoot(threadId)}/rewound/${rewindId}`;
+/** A new rewind's id: base-36 time, then eight hex digits (`shared/chat-rewind.ts` `isRewindId`). */
+const newRewindId = (): string => `${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
 
 const exec = promisify(execFile);
 /** The PATH filters such as git-lfs are found on (an app started from the Finder has a bare one). */
@@ -477,20 +484,42 @@ export class ChatCheckpoints {
       if ("reason" in found) {
         throw new Error(found.reason === "history-changed" ? MESSAGE.HistoryChanged : MESSAGE.NoCheckpoint);
       }
-      const taken = await this.#take(dir, rewoundRef(threadId), `studio: game files before rewinding to ${messageId}`);
-      if (!taken) throw new Error(MESSAGE.NotSaved);
-      const saved = taken.commit;
-      await this.#prune(dir, `${refRoot(threadId)}/rewound/`, REWOUND_KEPT);
-      try {
-        const current = { ...(await snapshotOf(dir, saved)), ruled: taken.ruled };
-        const { files, stayed } = await restoreTo(dir, found.commit, current, this.#indexes);
-        await keepIgnoring(dir, taken.ruled);
-        return { files, saved, ...(stayed.length ? { stayed } : {}) };
-      } catch (err) {
-        await restoreTo(dir, saved, await this.#tree(dir), this.#indexes).catch(() => {});
-        throw err;
-      }
+      return this.#restoreFrom(dir, threadId, found.commit, `studio: game files before rewinding to ${messageId}`);
     });
+  }
+
+  /**
+   * Put the folder back as it was just before a rewind (its `rewound/` ref), saving the present on
+   * a `rewound/` ref of its own first, so this too can be undone. Refused once the game's history
+   * moved since the rewind, as a restore is; a restore that fails partway is undone the same way.
+   */
+  restoreSaved(dir: string, threadId: string, rewindId: string): Promise<RestoredCheckpoint> {
+    const refused = (reason: UndoRewindRefusal) => new Error(undoRewindRefusalWords(reason));
+    if (!isRewindId(rewindId)) return Promise.reject(refused(UndoRewindRefusal.Gone));
+    return this.#serial(dir, async () => {
+      const saved = await commitAt(dir, rewoundRef(threadId, rewindId));
+      if (!saved) throw refused(UndoRewindRefusal.Gone);
+      if ((await parentOf(dir, saved)) !== (await head(dir))) throw refused(UndoRewindRefusal.HistoryChanged);
+      return this.#restoreFrom(dir, threadId, saved, `studio: game files before bringing back ${rewindId}`);
+    });
+  }
+
+  /** Save the folder on a new `rewound/` ref, then restore `target`; a failure puts the saved copy back. */
+  async #restoreFrom(dir: string, threadId: string, target: string, text: string): Promise<RestoredCheckpoint> {
+    const rewindId = newRewindId();
+    const taken = await this.#take(dir, rewoundRef(threadId, rewindId), text);
+    if (!taken) throw new Error(MESSAGE.NotSaved);
+    const saved = taken.commit;
+    await this.#prune(dir, `${refRoot(threadId)}/rewound/`, REWOUND_KEPT);
+    try {
+      const current = { ...(await snapshotOf(dir, saved)), ruled: taken.ruled };
+      const { files, stayed } = await restoreTo(dir, target, current, this.#indexes);
+      await keepIgnoring(dir, taken.ruled);
+      return { files, saved, rewindId, ...(stayed.length ? { stayed } : {}) };
+    } catch (err) {
+      await restoreTo(dir, saved, await this.#tree(dir), this.#indexes).catch(() => {});
+      throw err;
+    }
   }
 
   /** What a checkpoint commit left out (none for a commit that recorded nothing, or none at all). */
@@ -499,9 +528,14 @@ export class ChatCheckpoints {
     return { nested, skipped };
   }
 
-  /** Was the folder saved before this message was answered (and is that copy still kept)? */
-  async has(dir: string, threadId: string, messageId: string): Promise<boolean> {
-    return (await commitAt(dir, chatCheckpointRef(threadId, messageId))) !== null;
+  /** Was the folder saved before this message was answered, or after with `phase` (and is that copy still kept)? */
+  async has(
+    dir: string,
+    threadId: string,
+    messageId: string,
+    phase: CheckpointPhase = CheckpointPhase.Before,
+  ): Promise<boolean> {
+    return (await commitAt(dir, chatCheckpointRef(threadId, messageId, phase))) !== null;
   }
 
   /** Undo a restore: the folder as it was when the rewind began. */
@@ -516,8 +550,7 @@ export class ChatCheckpoints {
   ): Promise<{ commit: string } | { reason: "no-checkpoint" | "history-changed" }> {
     const commit = await commitAt(dir, chatCheckpointRef(threadId, messageId));
     if (!commit) return { reason: "no-checkpoint" };
-    const parent = (await quiet(read(dir, ["rev-parse", "--verify", "-q", `${commit}^1`])))?.trim() || null;
-    return parent === (await head(dir)) ? { commit } : { reason: "history-changed" };
+    return (await parentOf(dir, commit)) === (await head(dir)) ? { commit } : { reason: "history-changed" };
   }
 }
 
@@ -578,6 +611,11 @@ function pattern(glob: string): string {
 async function head(dir: string): Promise<string | null> {
   return (await quiet(read(dir, ["rev-parse", "--verify", "-q", "HEAD^{commit}"])))?.trim() || null;
 }
+/** The commit a checkpoint was taken on (its first parent), or null for one taken before any commit. */
+async function parentOf(dir: string, commit: string): Promise<string | null> {
+  return (await quiet(read(dir, ["rev-parse", "--verify", "-q", `${commit}^1`])))?.trim() || null;
+}
+
 async function commitAt(dir: string, ref: string): Promise<string | null> {
   return (await quiet(read(dir, ["rev-parse", "--verify", "-q", `${ref}^{commit}`])))?.trim() || null;
 }

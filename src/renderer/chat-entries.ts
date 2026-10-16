@@ -48,8 +48,9 @@ import type { EventEnvelope } from "./types.ts";
 import type { ToolChipRow } from "./ui/ToolChips.tsx";
 import { OutputTone, ToolState } from "./ui/tool-state.ts";
 import { type MentionOutcome, mergeMentionResults, withoutMentionContext } from "../shared/prompt-mention.ts";
-import { GameEngine, isGameEngine } from "../shared/game-engine.ts";
+import { type EngineLinkedPayload, GameEngine, isEngineId, isGameEngine } from "../shared/game-engine.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
+import { offeredRewindUndo } from "../shared/chat-rewind.ts";
 import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
 import {
   A_PLUGIN,
@@ -140,6 +141,8 @@ export const EntryAction = {
   AppAccess: "app-access",
   /** A blind judge played the game for the chat's own session (`chat_judge_result`): one line, the question inside. */
   Judge: "judge",
+  /** A rewind put game files back (`conversation_rewound`): one line, with Bring back newer version while offered. */
+  Rewound: "rewound",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
@@ -198,6 +201,8 @@ export type Entry =
       prefill?: string;
       /** action "consent": a plugin's question to the user — Approve/Decline while it is pending, its outcome after. */
       consentId?: string;
+      /** Whose card it is: the plugin's id, or the studio's own (`StudioConsentSource`). */
+      consentSourceId?: string;
       consentSource?: string;
       consentPrompt?: string;
       consentExport?: ExportReview;
@@ -217,6 +222,8 @@ export type Entry =
       snapshotId?: string;
       /** action "engine-link": what Undo takes back; absent once taken back or replaced by a newer link. */
       engineLink?: { project: string; pluginId: string; linkedAt: string };
+      /** action "rewound": the rewind whose newer version comes back; absent once the chat no longer offers it. */
+      rewindUndo?: string;
       /** action "job": what Stop reaches, and when the job started; absent once its end is read. */
       job?: JobHandle;
       /** action "worker": its work ended well (done, used or added), so its mark is ticked. */
@@ -518,6 +525,8 @@ interface ChatDraft {
   group: ToolsEntry | null;
   /** Each game's engine-link lines by the link's time, with the game's title, so Undo lands on its line. */
   engineLinks: Map<string, { entry: ActionEntry; title?: string; game: string }>;
+  /** Each rewind's line by its undo id, so bringing its newer version back lands on its line. */
+  rewindLines: Map<string, ActionEntry>;
   /** Each job's line by its id, with how it was named, so its end rewrites that line. */
   jobs: Map<string, { entry: ActionEntry; start: JobStart }>;
   /** The jobs whose end is on this page: an end recorded again (after a crash) draws nothing more. */
@@ -536,6 +545,7 @@ interface ChatDraft {
 export function toEntries(events: EventEnvelope[], queueIds?: ReadonlyMap<string, string>): Entry[] {
   const chat = newChatDraft(events, queueIds ?? queueIdsInOrder(events));
   for (const event of events) readEvent(chat, event);
+  keepOfferedRewind(chat, events);
   placeLastCoverCard(chat);
   for (const [runId, deliveries] of chat.runAssets) {
     const result = chat.runResults.get(runId);
@@ -570,6 +580,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     ),
     entries: [],
     engineLinks: new Map(),
+    rewindLines: new Map(),
     jobs: new Map(),
     endedJobs: new Set(),
     workerLines: new Map(),
@@ -1142,14 +1153,25 @@ function narrateCompaction(chat: ChatDraft, event: EventEnvelope): void {
   });
 }
 
+/**
+ * The engine a link names, as the chat says it: the label its plugin declares; a record with no
+ * label by Genex's own words for an engine it knows, else by the engine's id; one that names no
+ * engine is from before engines were declared, all the Unreal plugin's.
+ */
+function linkedEngineWords(link: EngineLinkedPayload): string {
+  const label = typeof link.label === "string" ? link.label.trim() : "";
+  if (label) return label;
+  if (isGameEngine(link.engine)) return GAME_ENGINE_WORDS[link.engine];
+  return isEngineId(link.engine) ? link.engine : GAME_ENGINE_WORDS[GameEngine.Unreal];
+}
+
 /** "Fog Valley now builds in Unreal · Valley": the newest link of a game keeps its Undo. */
 function narrateEngineLink(chat: ChatDraft, event: EventEnvelope): void {
   const link = customPayload(event.data, CustomEvent.EngineLinked);
   if (!link) return;
   const game = `${link.pluginId ?? ""}\n${link.project ?? ""}`;
   for (const earlier of chat.engineLinks.values()) if (earlier.game === game) delete earlier.entry.engineLink;
-  // A link is always to an engine project; a record that names none is from the Unreal plugin.
-  const engine = GAME_ENGINE_WORDS[isGameEngine(link.engine) ? link.engine : GameEngine.Unreal];
+  const engine = linkedEngineWords(link);
   const { pluginId, project, linkedAt } = link;
   const entry: ActionEntry = {
     id: event.id,
@@ -1162,6 +1184,38 @@ function narrateEngineLink(chat: ChatDraft, event: EventEnvelope): void {
   closeGroup(chat);
   chat.entries.push(entry);
   if (link.linkedAt) chat.engineLinks.set(link.linkedAt, { entry, game, ...(link.title ? { title: link.title } : {}) });
+}
+
+/** "The chat went back, and 2 game files with it": only a rewind that put files back draws a line. */
+function narrateRewound(chat: ChatDraft, event: EventEnvelope): void {
+  const rewound = customPayload(event.data, CustomEvent.ConversationRewound);
+  const files = rewound?.files;
+  if (typeof files !== "number" || files <= 0) return;
+  const entry: ActionEntry = {
+    id: event.id,
+    kind: EntryKind.Action,
+    tag: SystemTag.Checkpoint,
+    action: EntryAction.Rewound,
+    text: TRANSCRIPT_WORDS.rewound(files),
+    ...(rewound?.rewindId ? { rewindUndo: rewound.rewindId } : {}),
+  };
+  closeGroup(chat);
+  chat.entries.push(entry);
+  if (rewound?.rewindId) chat.rewindLines.set(rewound.rewindId, entry);
+}
+
+/** The newer version came back: its rewind's line says so (the chat stays rewound). */
+function narrateRewindUndone(chat: ChatDraft, event: EventEnvelope): void {
+  const rewindId = customPayload(event.data, CustomEvent.ConversationRewindUndone)?.rewindId;
+  const line = rewindId ? chat.rewindLines.get(rewindId) : undefined;
+  if (line) line.outcome = TRANSCRIPT_WORDS.rewindUndone;
+}
+
+/** Only the rewind the chat still offers keeps Bring back newer version (`offeredRewindUndo`). */
+function keepOfferedRewind(chat: ChatDraft, events: readonly EventEnvelope[]): void {
+  if (!chat.rewindLines.size) return;
+  const offered = offeredRewindUndo(events);
+  for (const [rewindId, entry] of chat.rewindLines) if (rewindId !== offered) delete entry.rewindUndo;
 }
 
 /** "In the background: Unreal build": a job's line, with Stop while it runs; one without a title draws nothing. */
@@ -1799,6 +1853,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     tag: SystemTag.Ask,
     action: EntryAction.Consent,
     consentId,
+    ...(consent.pluginId ? { consentSourceId: consent.pluginId } : {}),
     consentSource: consent.pluginName || A_PLUGIN,
     consentPrompt: consent.prompt || undefined,
     consentExport: consent.exportReview,
@@ -2024,6 +2079,8 @@ const NARRATORS: readonly Narrator[] = [
   narrateCompaction,
   narrateEngineLink,
   narrateEngineUndone,
+  narrateRewound,
+  narrateRewindUndone,
   narrateJobStarted,
   narrateJobEnded,
   narrateWorkerStarted,

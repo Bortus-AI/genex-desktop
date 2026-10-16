@@ -105,6 +105,22 @@ describe("sandboxed spawn", () => {
     assert.notEqual(result.code, 0);
   });
 
+  it("denies reads of Roblox's sign-ins: the cookie jars, local storage and StudioMCP's token", async () => {
+    for (const target of [
+      path.join(os.homedir(), "Library", "HTTPStorages", "com.Roblox.RobloxStudio.binarycookies"),
+      path.join(os.homedir(), "Library", "HTTPStorages", "com.roblox.RobloxPlayer.binarycookies"),
+      path.join(os.homedir(), "Library", "Roblox", "StudioMCP", "auth.token"),
+      path.join(os.homedir(), "Library", "Roblox", "LocalStorage"),
+    ]) {
+      const result = await sandbox.run({
+        command: `cat ${JSON.stringify(target)}; ls ${JSON.stringify(target)}`,
+        cwd: workspace,
+      });
+      // Never echo what was read: on a failure the cookie itself would land in the test log.
+      assert.ok(result.stdout === "", `nothing of ${target} is read`);
+    }
+  });
+
   it("refuses an outbound host at the filtering proxy, without needing the internet", async () => {
     // The proxy judges the host name before any lookup, so a reserved name answers the same on
     // an offline machine: 403 is the refusal, where a DNS failure would read 000.
