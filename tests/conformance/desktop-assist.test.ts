@@ -19,6 +19,7 @@ import {
   AssistCardKind,
   AssistGrants,
   type AssistHost,
+  assistAvailable,
   assistGrants,
   declaredEngineApps,
   declaredPlayerApps,
@@ -171,6 +172,23 @@ describe("game.engine.assist", () => {
       assert.deepEqual(fake.seen.posted, []);
     }
   });
+
+  it("says whether it can run here: a desktop with its driver, and apps the engine declares; asking nothing", async () => {
+    assert.equal(await assistAvailable(fakeHost().host, "toy-engine"), true);
+    assert.equal(
+      await assistAvailable(fakeHost({ control: false }).host, "toy-engine"),
+      true,
+      "the setting is offered",
+    );
+    assert.equal(await assistAvailable(fakeHost({ desktop: false }).host, "toy-engine"), false, "no driver here");
+    assert.equal(await assistAvailable(fakeHost({ apps: [] }).host, "toy-engine"), false, "nothing it may click");
+    assert.equal(await assistAvailable(fakeHost().host, "someone-else"), false, "not an enabled plugin");
+    const fake = fakeHost({ answers: [true] });
+    await assistAvailable(fake.host, "toy-engine");
+    assert.deepEqual(fake.seen.cards, []);
+    assert.deepEqual(fake.seen.posted, []);
+    assert.equal(fake.control(), false);
+  });
 });
 
 describe("an assist's grant", () => {
@@ -257,6 +275,7 @@ const ASSIST_DECLARATIONS = {
     },
     { name: "assist-quietly", audience: "harness", description: "A step of Genex's own.", parameters: NO_ARGS },
     { name: "assist-unasked", description: "A tool with no card of the toy's own.", parameters: NO_ARGS },
+    { name: "can-assist", audience: "harness", description: "Whether Do it for me can run here.", parameters: NO_ARGS },
   ],
 };
 
@@ -391,6 +410,20 @@ describe("the toy engine's Do it for me, through a real core", () => {
     );
     assert.equal(posted.length, before + 1);
     approve = true;
+  });
+
+  it("the toy learns from the host whether Do it for me can run here, asking nothing", async () => {
+    const { core } = lite;
+    const cardsBefore = (await cardsSince(0)).length;
+    const can = await core.plugins.tool(
+      `${TOY_PLUGIN_ID}__can-assist`,
+      {},
+      binding,
+      undefined,
+      PluginToolAudience.Harness,
+    );
+    assert.equal(can, true, "a driver is found and the toy declares its editor");
+    assert.equal((await cardsSince(cardsBefore)).length, 0);
   });
 
   it("a harness step, a hook and an agent tool without its own card are not the person: nothing happens", async () => {

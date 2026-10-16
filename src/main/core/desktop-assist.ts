@@ -181,6 +181,16 @@ export interface AssistRequest {
 const refused = (reason: EngineAssistRefusal): EngineAssistAnswer => ({ started: false, reason });
 
 /**
+ * Whether an assist can run for `pluginId` here: an enabled plugin whose engine declares apps for
+ * this computer, and a desktop with its driver. Computer control that is off still counts: its card
+ * offers to turn it on. Asks nothing and changes nothing.
+ */
+export async function assistAvailable(host: AssistHost, pluginId: string): Promise<boolean> {
+  if (!host.plugin(pluginId)?.apps.length) return false;
+  return host.desktopAvailable();
+}
+
+/**
  * Hand a setup task to the game's chat (module comment). Every refusal comes before anything
  * changes: no card, no setting, no grant and no message.
  */

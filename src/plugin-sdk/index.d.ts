@@ -587,6 +587,13 @@ export interface PluginHostCall {
    * `unavailable`: show the click path instead.
    */
   (method: "game.engine.assist", args: PluginEngineAssistArgs): Promise<PluginEngineAssistAnswer>;
+  /**
+   * `game-engine`: whether Do it for me can run for your plugin on this computer: computer control
+   * has a desktop and its driver, and your `engine.apps` names apps here. Computer control that is
+   * off still counts (its card offers to turn it on). Asks the person nothing; false on Windows.
+   * Offer Do it for me only when it answers true, and the click path otherwise.
+   */
+  (method: "game.engine.canAssist"): Promise<boolean>;
 }
 
 /** `game.engine.assist`'s task: what the chat is asked to click, in plain words. */

@@ -1660,6 +1660,10 @@ Available services are capability checked and scoped to the calling plugin:
   with computer control off, the studio's own card offers to turn it on for every chat. It is for
   setup clicks and publishing the person approved, never for building or play-testing
   ([computer use](computer-use.md#the-persons-computer)).
+- `game.engine.canAssist` (capability `game-engine`): whether Do it for me can run for the plugin
+  on this computer: a desktop with its driver, and apps its `engine.apps` declares here (computer
+  control that is off still counts, since its card offers to turn it on). It asks nothing and
+  needs no bound game; offer Do it for me only when it answers true, and the click path otherwise.
 - `credentials.read/write/clear`: plugin-scoped protected storage. Reserved account actions
   `unlock`, `connect`, `disconnect` authorize these operations; agents cannot invoke actions.
   Cache unlocked credentials only in the backend session. Background status must never unlock.

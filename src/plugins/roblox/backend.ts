@@ -256,8 +256,8 @@ export interface RobloxDeps extends PlaceActionDeps {
   /** Whether the open Studio answers Genex. */
   answers(): Promise<boolean>;
   /**
-   * Whether Genex can click in Studio for the person here (Do it for me, Publish an update):
-   * computer control runs on a Mac only. A Mac unless said otherwise.
+   * Whether Genex can click in Studio for the person here (Do it for me, Publish an update); when
+   * absent, the host is asked (`game.engine.canAssist`: a desktop with its driver, on a Mac only).
    */
   canClick?(): boolean;
   /** The shipped Genex helper file. */
@@ -381,6 +381,12 @@ async function setUpIn(deps: RobloxDeps, storage: string): Promise<boolean> {
   return Boolean(stat?.file && !stat.link);
 }
 
+/** Whether Genex can click in Studio here: the test's word, else the host's (never when it can't say). */
+async function canClickHere(deps: RobloxDeps, context: PluginContext): Promise<boolean> {
+  if (deps.canClick) return deps.canClick();
+  return context.host(PluginService.GameEngineCanAssist).catch(() => false);
+}
+
 /** What is known of Studio now, asking each thing only when the one before it holds. */
 async function readStudio(deps: RobloxDeps, context: PluginContext) {
   const location = await locateStudio(deps);
@@ -463,7 +469,7 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
     ...installFacts(job),
     ...place,
     mac: deps.platform === "darwin",
-    canClick: deps.canClick?.() ?? deps.platform === "darwin",
+    canClick: await canClickHere(deps, context),
     ...(mcp ? { mcpOn: mcp.on > 0 } : {}),
   };
   return { install, facts, rows, mcp, helper, published };

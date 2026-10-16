@@ -145,14 +145,19 @@ function fakeMac(given: Mac, home = HOME) {
   return { deps, touched, ran, calls, opened, installStudio };
 }
 
-/** A plugin call's context: the plugin's storage, and the host's answer to Do it for me. */
+/**
+ * A plugin call's context: the plugin's storage, the host's answer to Do it for me, and whether the
+ * host says Do it for me can run on this computer (computer control and its driver here).
+ */
 function context(
   storage = STORAGE,
   assist: (args: unknown) => PluginEngineAssistAnswer = () => ({ started: false, reason: "unavailable" }),
+  canAssist = true,
 ): PluginContext {
   const host = (async (method: string, args: unknown) => {
     if (method === "storage.root") return storage;
     if (method === "game.engine.assist") return assist(args);
+    if (method === "game.engine.canAssist") return canAssist;
     throw new Error(`No ${method} here`);
   }) as PluginContext["host"];
   return { signal: new AbortController().signal, callId: 1, host };
@@ -324,6 +329,24 @@ describe("the Roblox Studio panel's status and the lock's probe", () => {
         panel.rows.map(({ id, label, done, action }) => ({ id, label, done, action })),
       );
     }
+  });
+
+  it("offers Do it for me only where the host says computer control can run; elsewhere Restart Studio and Studio's clicks", async () => {
+    const backend = createRobloxBackend(fakeMac(STARTING).deps);
+    const mcpRow = async (canAssist: boolean) => {
+      const status = (await backend.action?.("status", {}, context(STORAGE, undefined, canAssist))) as RobloxStatus;
+      return status.rows.find((row) => row.id === "mcp");
+    };
+    const here = await mcpRow(true);
+    assert.equal(here?.action?.name, "do-it-for-me");
+    assert.deepEqual(here?.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
+    // No driver, or computer control can't run here: no Do it for me, and Studio's own clicks instead.
+    const nowhere = await mcpRow(false);
+    assert.equal(nowhere?.action?.name, "restart-studio");
+    assert.equal(nowhere?.more, undefined);
+    assert.deepEqual(nowhere?.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
+    const card = (await backend.action?.("steps", {}, context(STORAGE, undefined, false))) as StepsCard;
+    assert.notEqual(card.steps.find((step) => step.id === "mcp")?.action?.name, "do-it-for-me");
   });
 
   it("the probe sees nobody using Studio, and an unknown action or tool is refused", async () => {

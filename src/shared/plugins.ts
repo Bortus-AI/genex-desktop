@@ -961,6 +961,11 @@ export const PluginService = {
    * clicks it with computer control, limited to the apps the plugin's `engine.apps` declares.
    */
   GameEngineAssist: "game.engine.assist",
+  /**
+   * `game-engine`: whether Do it for me can run for this plugin on this computer: computer control
+   * has a desktop and its driver, and the plugin's engine declares apps here. Asks the person nothing.
+   */
+  GameEngineCanAssist: "game.engine.canAssist",
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
 

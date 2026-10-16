@@ -292,6 +292,11 @@ export class PluginServices {
         signal?: AbortSignal,
       ) => Promise<EngineAssistAnswer>)
     | undefined;
+  /**
+   * Host assists' reach (`game.engine.canAssist`): whether Do it for me can run for the plugin on this
+   * computer. Unset, it never can.
+   */
+  engineCanAssist: ((pluginId: string) => Promise<boolean>) | undefined;
   /** Host runs (`game.engine.runs`): the games whose run is going now. Unset → 'Runs unavailable'. */
   runningGames: (() => Promise<Array<{ project: string; directory: string; title: string }>>) | undefined;
   /** The games each plugin made through `game.create` while this host runs, by name, with their folders. */
@@ -328,6 +333,7 @@ export class PluginServices {
     [PluginService.GameSnapshot]: ({ args, binding }) => this.#gameSnapshot(requireBinding(binding), args?.reason),
     [PluginService.GameEngineRuns]: ({ id }) => this.#engineRuns(id),
     [PluginService.GameEngineAssist]: (call) => this.#assist(call),
+    [PluginService.GameEngineCanAssist]: async ({ id }) => (this.engineCanAssist ? this.engineCanAssist(id) : false),
     [PluginService.JobsRead]: async (call) =>
       JSON.parse(await readFile(await jobReferenceFile(call), "utf8").catch(() => "null")),
     [PluginService.JobsWrite]: async (call) => {
