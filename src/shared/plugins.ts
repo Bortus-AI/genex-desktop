@@ -980,7 +980,10 @@ export const EngineAssistRefusal = {
   Declined: "declined",
   /** The call names no game, so there is no chat to hand the task to. */
   NoChat: "no-chat",
-  /** Not the person's: neither an action they pressed nor a tool call whose card they approved. */
+  /**
+   * Not the person's: neither an action they pressed nor a tool call whose card they approved, from a
+   * plugin that did not come with Genex, or any Genex moment's or observer's step.
+   */
   NotPerson: "not-person",
   /** The plugin's engine declares no apps for this computer, so there is nothing it may click. */
   NoApps: "no-apps",

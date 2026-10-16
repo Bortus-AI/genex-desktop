@@ -1005,8 +1005,8 @@ export class StudioCore {
     // `game.engine.runs`: the games whose run is going, so an engine plugin never quits an editor a Loop uses.
     this.pluginServices.runningGames = () => this.#runningGames();
     // `game.engine.assist`: Do it for me, a setup task handed to the game's chat (`desktop-assist.ts`).
-    this.pluginServices.engineAssist = (pluginId, binding, task, signal) =>
-      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...(signal ? { signal } : {}) });
+    this.pluginServices.engineAssist = (pluginId, binding, task, call) =>
+      engineAssist(coreAssistHost(this), { pluginId, binding, task, ...call });
     // `game.engine.canAssist`: whether that can run here, so a plugin shows its click path instead.
     this.pluginServices.engineCanAssist = (pluginId) => assistAvailable(coreAssistHost(this), pluginId);
     this.plugins = new PluginRegistry(

@@ -284,9 +284,10 @@ window's tree). A refusal ends the plan and its reason is the answer.
   player): no agent plays in a live server, not even in a setup assist.
 - **Do it for me** ([`desktop-assist.ts`](../src/main/core/desktop-assist.ts), the plugin service
   `game.engine.assist`). Setup clicks and publishing the person approved, only: a switch or dialog
-  only the engine's window offers. Only the person starts one, by a plugin action they pressed or a
-  tool call whose own card they approved (`confirmed` on the call, set by the host); a plugin from a
-  folder or the marketplace shows the task on a card first, and with the setting off the studio's
+  only the engine's window offers. The person starts one, by a plugin action they pressed or a tool
+  call whose own card they approved (`confirmed` on the call, set by the host); a plugin that came
+  with Genex may also start one from its own tools for the setup it knows (never from a Genex
+  moment or an observer); a plugin from a folder or the marketplace shows the task on a card first, and with the setting off the studio's
   card `studio-computer-setting` offers to turn it on for every chat. It posts "<plugin> asks:
   <task>" to the game's chat and grants the turn answering that message (the turn it started, or the
   running turn it was steered into; never another turn of the chat building beside it) the

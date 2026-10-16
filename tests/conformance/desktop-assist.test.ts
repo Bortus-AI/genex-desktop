@@ -1,9 +1,10 @@
 /**
  * Do it for me (`game.engine.assist`): an engine plugin hands a setup task to the game's chat,
  * whose own session then clicks it with the person's computer control, limited to the apps the
- * plugin's manifest declares (`engine.apps`). Only the person may start one: a plugin action they
- * pressed, or a tool call whose card they approved. A plugin that did not come with Genex shows the
- * task on a card first, and with computer control off a card offers to turn it on for every chat.
+ * plugin's manifest declares (`engine.apps`). The person starts one: a plugin action they pressed,
+ * or a tool call whose card they approved; a plugin that came with Genex may also start one from its
+ * own tools, for the setup it knows. A plugin that did not come with Genex shows the task on a card
+ * first, and with computer control off a card offers to turn it on for every chat.
  *
  * First the service on a fake host (every refusal, and nothing happening on one), then the grant's
  * life, then the toy engine plugin through a real core: its own action, its confirmed tool, and the
@@ -92,7 +93,7 @@ function fakeHost(
 }
 
 const assist = (host: AssistHost, binding: PluginBinding = BINDING) =>
-  engineAssist(host, { pluginId: "toy-engine", binding, task: TASK });
+  engineAssist(host, { pluginId: "toy-engine", binding, task: TASK, asked: true });
 
 describe("game.engine.assist", () => {
   it("with computer control off, asks to turn it on; a yes turns it on and posts the task to the chat", async () => {
@@ -162,15 +163,61 @@ describe("game.engine.assist", () => {
   it("answers no-apps for an engine that declares no apps, and no-chat with no game, asking nothing", async () => {
     const noApps = fakeHost({ apps: [], answers: [true] });
     assert.deepEqual(await assist(noApps.host), { started: false, reason: EngineAssistRefusal.NoApps });
-    const unknown = await engineAssist(noApps.host, { pluginId: "someone-else", binding: BINDING, task: TASK });
+    const unknown = await engineAssist(noApps.host, {
+      pluginId: "someone-else",
+      binding: BINDING,
+      task: TASK,
+      asked: true,
+    });
     assert.deepEqual(unknown, { started: false, reason: EngineAssistRefusal.NoApps });
     const noChat = fakeHost({ answers: [true] });
-    const unbound = await engineAssist(noChat.host, { pluginId: "toy-engine", binding: undefined, task: TASK });
+    const unbound = await engineAssist(noChat.host, {
+      pluginId: "toy-engine",
+      binding: undefined,
+      task: TASK,
+      asked: true,
+    });
     assert.deepEqual(unbound, { started: false, reason: EngineAssistRefusal.NoChat });
     for (const fake of [noApps, noChat]) {
       assert.deepEqual(fake.seen.cards, []);
       assert.deepEqual(fake.seen.posted, []);
     }
+  });
+
+  it("a plugin that came with Genex may start its setup task from its own tool, unasked: no task card", async () => {
+    const fake = fakeHost({ control: true });
+    const answer = await engineAssist(fake.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(answer, { started: true });
+    assert.deepEqual(fake.seen.cards, []);
+    assert.equal(fake.seen.posted[0]?.text, `Toy Engine asks: ${TASK}`);
+    // With computer control off, its own card still asks first.
+    const off = fakeHost({ control: false, answers: [false] });
+    const declined = await engineAssist(off.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(declined, { started: false, reason: EngineAssistRefusal.Declined });
+    assert.deepEqual(off.seen.cards, [{ kind: AssistCardKind.ComputerSetting }]);
+  });
+
+  it("any other plugin's call the person didn't make is refused before any card", async () => {
+    const fake = fakeHost({ bundled: false, control: true, answers: [true, true] });
+    const answer = await engineAssist(fake.host, {
+      pluginId: "toy-engine",
+      binding: BINDING,
+      task: TASK,
+      asked: false,
+    });
+    assert.deepEqual(answer, { started: false, reason: EngineAssistRefusal.NotPerson });
+    assert.deepEqual(fake.seen.cards, []);
+    assert.deepEqual(fake.seen.posted, []);
   });
 
   it("says whether it can run here: a desktop with its driver, and apps the engine declares; asking nothing", async () => {

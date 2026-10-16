@@ -1652,9 +1652,10 @@ Available services are capability checked and scoped to the calling plugin:
   plain line, at most 300 characters) to the bound game's chat, posted there verbatim as
   "<plugin name> asks: <task>"; that chat's own session clicks it with the person's computer
   control, on the Mac apps the plugin's `engine.apps` declares and no others. It answers
-  `{started, reason?}`, the reason one of `not-person` (neither an action the person pressed nor
-  a tool call whose own `confirmation` card they approved; the host marks such a call
-  `confirmed`, a Genex moment's or an observer's step never is), `no-chat`, `no-apps`,
+  `{started, reason?}`, the reason one of `not-person` (a Genex moment's or an observer's step, or,
+  from a plugin that did not come with Genex, neither an action the person pressed nor a tool call
+  whose own `confirmation` card they approved; the host marks such a call `confirmed`; a plugin that
+  came with Genex may start one from its own tools), `no-chat`, `no-apps`,
   `unavailable` (Windows, or a Mac with no desktop driver: show the click path instead) or
   `declined`. A plugin that did not come with Genex shows the task on a card first, every time;
   with computer control off, the studio's own card offers to turn it on for every chat. It is for

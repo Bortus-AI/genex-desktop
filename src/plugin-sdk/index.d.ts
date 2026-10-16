@@ -581,7 +581,8 @@ export interface PluginHostCall {
    * agent clicks it with the person's computer control, on the apps your `engine.apps` declares
    * and no others. Only for setup clicks and publishing the person approved, never to build or
    * play-test. The person must have asked: call it from an action they pressed, or from a tool
-   * that declares `confirmation` whose card they approved; any other call answers `not-person`.
+   * that declares `confirmation` whose card they approved; any other call answers `not-person`
+   * (a plugin that came with Genex may also call it from its own tools, never from a moment).
    * A plugin that did not come with Genex shows the task on a card first; computer control that
    * is off is offered on a card for every chat. Windows, or a Mac with no driver, answers
    * `unavailable`: show the click path instead.
