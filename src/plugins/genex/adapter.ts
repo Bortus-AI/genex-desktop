@@ -1359,7 +1359,7 @@ export class GenexTools {
     cwd: string,
     args: string[],
     signal: AbortSignal | undefined,
-    options: { timeoutMs: number; parse: boolean; home?: string; answerExitCodes?: readonly number[] },
+    options: { timeoutMs: number; parse: boolean; home: string; answerExitCodes?: readonly number[] },
   ) {
     const cli = genexCliPath();
     const authEpoch = this.#authEpoch;

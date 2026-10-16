@@ -28,6 +28,7 @@ import type { McpPluginServer } from "../../substrate/mcp/registry.ts";
 import { ConnectorCallError, type McpLaunch } from "../../substrate/mcp/client.ts";
 import { secretKey } from "../../substrate/mcp/store.ts";
 import { genexTelemetryEnv } from "../../substrate/genex-telemetry.ts";
+import { windowsHomeEnv } from "../../substrate/child-env.ts";
 import { type ConnectorCall, type ConnectorToolEvent, McpHealth, type McpChange } from "../../shared/mcp.ts";
 import { connectorCallFields, keepCaptures } from "./connector-record.ts";
 import { noteCutOff } from "./cut-off-calls.ts";
@@ -1077,7 +1078,10 @@ export class PluginToolService {
         );
         const token = wantsCredential ? await launch.credential().catch(() => undefined) : undefined;
         if (token) secrets.push(token);
-        return { cwd: dir, extraEnv: { ...env, HOME: home }, ...(secrets.length ? { secrets } : {}) };
+        // On Windows `~` is USERPROFILE, so the profile folders move into `home` with HOME: the Genex
+        // CLI's skill cleanup and any server's dotfiles then stay out of the user's own profile.
+        const homeEnv = { HOME: home, ...windowsHomeEnv(home) };
+        return { cwd: dir, extraEnv: { ...env, ...homeEnv }, ...(secrets.length ? { secrets } : {}) };
       },
       ...(wantsCredential ? credentialPipe : {}),
     };
