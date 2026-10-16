@@ -545,6 +545,11 @@ take one, the arrows pick a recent frame, Another cover sends its request throug
 the banner says one is coming until a new frame arrives, and a kept clip plays behind its switch
 (screenshots in `.studio-dev/evidence/`). A fixture
 profile cannot show this dialog's body, since its Genex account is never connected.
+`run-publish-test-link-ui.mjs` renders the same dialog for its test link: it shows under "Publish
+to the web" for a tested draft before the first publish and under the labelled public link while
+live changes wait, never when the draft is the live build; its line names a second player only for
+a multiplayer game; no row is wider than the main press; and each main press still makes exactly
+one `genexPublish` call (screenshots in `.studio-dev/evidence/`).
 `run-chat-cover-card-ui.mjs` renders the production ChatPanel beside the production stage strip:
 the thread's latest kept `genex__cover` shot is one Genex cover card once its turn has ended (none
 mid-turn, the turn's work one group), read through the `genex-cover` scope, whose Publish opens
