@@ -11,7 +11,7 @@ import {
   type EngineDeclaration,
   GameEngine,
   isEngineId,
-  PROJECT_FILE_EXTENSION,
+  isProjectFileEntry,
 } from "../../shared/game-engine.ts";
 import { PluginCapability, type PluginManifest } from "../../shared/plugins.ts";
 import { CoreFact, isFactId } from "../../shared/project-facts.ts";
@@ -36,10 +36,12 @@ const MESSAGE = {
   InvalidId: "Invalid engine id: it is the plugin's own id, 2-40 lowercase letters, digits and dashes",
   WebId: "Invalid engine id: web is Genex's own engine",
   InvalidLabel: `Invalid engine label (1-${LIMIT.LabelChars} characters on one line, no outer spaces)`,
-  InvalidProjectFiles: `Invalid engine projectFiles (1-${LIMIT.ProjectFiles} distinct extensions of one or two lowercase dotted parts, such as .uproject or .project.json)`,
+  InvalidProjectFiles: `Invalid engine projectFiles (1-${LIMIT.ProjectFiles} distinct extensions of one or two lowercase dotted parts, such as .uproject or .project.json, or whole lowercase file names such as project.godot)`,
   InvalidFact: "Invalid engine fact (one the plugin's detect declares, or one of Genex's own; never web-game)",
   InvalidProjectInFolder:
     "Invalid engine projectInFolder (true when the Loop needs the project inside the game folder)",
+  InvalidWritesProjectFiles:
+    "Invalid engine writesProjectFiles (true when the engine's agents change the project as files)",
   InvalidPlay: `Invalid engine play (an object with optional players 1-${MAX_PLAY_PLAYERS}, clock ${[...CLOCK_LEVELS].join("|")}, pointer and state booleans)`,
   InvalidApps: `Invalid engine apps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Editor; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
   InvalidPlayerApps: `Invalid engine playerApps (mac: 1-${LIMIT.Apps} distinct bundle ids such as com.example.Player; windows: 1-${LIMIT.Apps} distinct .exe names, never paths)`,
@@ -62,7 +64,6 @@ const isLabel = (value: unknown): value is string =>
   value.length <= LIMIT.LabelChars &&
   value.trim() === value &&
   !CONTROL.test(value);
-const isExtension = (value: unknown) => typeof value === "string" && PROJECT_FILE_EXTENSION.test(value);
 const isBundleId = (value: unknown) =>
   typeof value === "string" && value.length <= LIMIT.BundleIdChars && BUNDLE_ID.test(value);
 const isExeName = (value: unknown) =>
@@ -122,10 +123,11 @@ export function validateEngine(
   if (!isRecord(raw)) throw new Error(MESSAGE.NotObject);
   assertEngineId(raw.id, m.id);
   if (!isLabel(raw.label)) throw new Error(MESSAGE.InvalidLabel);
-  if (!isDistinctList(raw.projectFiles, 1, LIMIT.ProjectFiles, isExtension))
+  if (!isDistinctList(raw.projectFiles, 1, LIMIT.ProjectFiles, isProjectFileEntry))
     throw new Error(MESSAGE.InvalidProjectFiles);
   if (!isEngineFact(raw.fact, m)) throw new Error(MESSAGE.InvalidFact);
   if (!isBoolean(raw.projectInFolder)) throw new Error(MESSAGE.InvalidProjectInFolder);
+  if (!isOptional(raw.writesProjectFiles, isBoolean)) throw new Error(MESSAGE.InvalidWritesProjectFiles);
   const engine: EngineDeclaration = {
     id: raw.id,
     label: raw.label,
@@ -133,6 +135,7 @@ export function validateEngine(
     fact: raw.fact,
     projectInFolder: raw.projectInFolder as boolean,
   };
+  if (raw.writesProjectFiles === true) engine.writesProjectFiles = true;
   if (raw.play !== undefined) engine.play = enginePlay(raw.play);
   if (raw.apps !== undefined) engine.apps = engineApps(raw.apps, MESSAGE.InvalidApps);
   if (raw.playerApps !== undefined) engine.playerApps = engineApps(raw.playerApps, MESSAGE.InvalidPlayerApps);

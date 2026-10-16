@@ -570,7 +570,6 @@ export function StartNode({
       <button
         type="button"
         data-graph-node={GraphSelection.Start}
-        data-working={building && !selected ? "true" : undefined}
         aria-label={`${START_WORDS.label}: ${goal}`}
         aria-pressed={selected}
         className="group/start relative flex cursor-pointer flex-col gap-2.5 rounded-[14px] p-0 text-left focus-visible:outline-2 focus-visible:outline-offset-[10px] focus-visible:outline-accent"
@@ -581,6 +580,8 @@ export function StartNode({
       >
         <span
           aria-hidden="true"
+          data-graph-ring
+          data-working={building && !selected ? "true" : undefined}
           className="pointer-events-none absolute -inset-2.5 rounded-[18px] transition-[box-shadow] duration-150"
           style={{ boxShadow: ring }}
         />

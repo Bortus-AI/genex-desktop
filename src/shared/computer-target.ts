@@ -24,7 +24,7 @@ export type TargetRuntime = (typeof TargetRuntime)[keyof typeof TargetRuntime];
 
 /**
  * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
- * grants, nor the editor, which the game's engine link decides.
+ * grants, nor the editor, which the game's matching engine plugin supplies.
  */
 export type GameRuntime = typeof TargetRuntime.Browser | typeof TargetRuntime.Bridge;
 
@@ -80,7 +80,7 @@ export const InputRoute = {
   OsForeground: "os-foreground",
   /** Events dispatched into a web page through its browser's DevTools protocol (a separate, clean browser). */
   Page: "page",
-  /** Input the game's engine carried into its play session in the editor (Unreal's forced input), on game time. */
+  /** Input the engine carries into its editor play session (Unreal or Unity), on game time. */
   Editor: "editor",
 } as const;
 export type InputRoute = (typeof InputRoute)[keyof typeof InputRoute];

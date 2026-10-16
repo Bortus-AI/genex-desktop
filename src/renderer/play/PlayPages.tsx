@@ -13,13 +13,10 @@ import { PlayStats } from "./PlayStats.tsx";
 /** Play's page for the view the sidebar and the people pages chose. */
 export function PlayPages({
   chrome,
-  onRemixed,
   onNewGame,
 }: {
   /** The shell's chrome: whether the sidebar is hidden, and its toggle. */
   chrome: { sidebarHidden: boolean; toggleSidebar: () => void };
-  /** A remix was made: open it in Create. */
-  onRemixed: (name: string) => void;
   /** Start a new game: Create's home, its composer ready. */
   onNewGame: () => void;
 }): JSX.Element {
@@ -36,9 +33,8 @@ export function PlayPages({
         userId={view.userId}
         sidebarHidden={sidebarHidden}
         onToggleSidebar={onToggleSidebar}
-        onRemixed={onRemixed}
         onNewGame={onNewGame}
       />
     );
-  return <PlayRoom sidebarHidden={sidebarHidden} onToggleSidebar={onToggleSidebar} onRemixed={onRemixed} />;
+  return <PlayRoom sidebarHidden={sidebarHidden} onToggleSidebar={onToggleSidebar} />;
 }

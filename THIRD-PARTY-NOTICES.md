@@ -163,6 +163,8 @@ generation for the film.
   (https://code.claude.com/docs/en/legal-and-compliance). Its native CLI packages are excluded.
 - The Blender logo in `src/renderer/ui/brand.tsx` is a trademark of the Blender Foundation, used
   unaltered to refer to Blender under its logo guidelines (https://www.blender.org/about/logo/).
+- The X logo in `src/renderer/ui/brand.tsx` is a trademark of X Corp., used unaltered only to name
+  X on Post on X, under its brand toolkit (https://about.x.com/en/who-we-are/brand-toolkit).
 
 ## Status not yet recorded
 

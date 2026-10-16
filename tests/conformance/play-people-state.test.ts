@@ -20,6 +20,7 @@ import {
 import { PlayShelf } from "../../src/shared/play.ts";
 import type { StudioApi } from "../../src/shared/studio-api.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
+import { type HandleSave, HandleSaveOutcome, HandleState } from "../../src/shared/handle.ts";
 import type { PlayCredits } from "../../src/shared/play-credits.ts";
 import { type KeyValueStorage, STORAGE_KEYS } from "../../src/renderer/storage.ts";
 import {
@@ -29,6 +30,7 @@ import {
   pageAfter,
   primaryAction,
   relationshipChanged,
+  sidebarFriends,
   waitingRequests,
   withoutPresence,
 } from "../../src/renderer/state/people.ts";
@@ -41,13 +43,21 @@ import {
   shelfChosen,
 } from "../../src/renderer/state/play.ts";
 
-const person = (id: string, name = id): PlayPerson => ({ id, name, imageUrl: null, avatarVariant: 0, pro: false });
+const person = (id: string, name = id): PlayPerson => ({
+  id,
+  name,
+  handle: null,
+  imageUrl: null,
+  avatarVariant: 0,
+  pro: false,
+});
 const me = (id = "me"): PlayMe => ({
   ...person(id, "Rab Neba"),
   joinedAt: null,
   avatarStyle: AvatarStyle.Generated,
   photoUrl: null,
   avatarVariantKept: true,
+  handleChosen: null,
 });
 /** A profile with nothing on it but its person. */
 const profileOf = (who: PlayPerson, status: FriendStatus): PlayProfile => ({
@@ -110,6 +120,13 @@ function fakeApi(handlers: Partial<PeopleApi> = {}) {
     playStats: record("playStats", async () => null),
     playCreators: record("playCreators", async () => null),
     playCredits: record("playCredits", async () => credits(1700)),
+    playSetHandle: record(
+      "playSetHandle",
+      async (handle: string): Promise<HandleSave> => ({
+        outcome: HandleSaveOutcome.Saved,
+        me: { ...me(), handle, handleChosen: true },
+      }),
+    ),
     genexAccount: record("genexAccount", async () => ({ status: GenexAccountStatus.SignedIn })),
     genexSignIn: record("genexSignIn", async () => ({ status: GenexAccountStatus.SigningIn, code: "ABCD-1234" })),
     genexCancelSignIn: record("genexCancelSignIn", async () => ({ status: GenexAccountStatus.SignedOut })),
@@ -574,5 +591,68 @@ describe("the Friends page offline", () => {
     assert.equal(online.friends[0]?.playing?.slug, "stick-steel", "the page as read is kept for when it is back");
     const quiet = page({ friends: [{ ...person("bo"), playing: null, games: 0 }] });
     assert.equal(withoutPresence(quiet), quiet, "nobody playing: the same page");
+  });
+});
+
+describe("the sidebar's Friends", () => {
+  it("shows nobody signed out, the heading alone until the page is read, then the friends in the API's order", () => {
+    assert.equal(sidebarFriends(initialPeople(), true), null, "signed out: no Friends block");
+    const signedIn = meRead(initialPeople(), me("a"));
+    assert.deepEqual(sidebarFriends(signedIn, true), [], "signed in, nobody read yet: the heading alone");
+    const read = page({
+      friends: [
+        { ...person("ann"), playing: { slug: "stick-steel", title: "Stick & Steel" }, games: 2 },
+        { ...person("bo"), playing: null, games: 0 },
+      ],
+    });
+    assert.deepEqual(ids(sidebarFriends({ ...signedIn, friends: read }, true) ?? []), ["ann", "bo"]);
+    assert.deepEqual(sidebarFriends({ ...signedIn, friends: page({ friends: [] }) }, true), [], "requests only");
+  });
+
+  it("shows nobody playing offline, as the Friends page does", () => {
+    const signedIn = { ...meRead(initialPeople(), me("a")), friends: page() };
+    assert.equal(sidebarFriends(signedIn, true)?.[0]?.playing?.title, "Stick & Steel");
+    assert.equal(sidebarFriends(signedIn, false)?.[0]?.playing, null);
+  });
+});
+
+describe("the account's nickname", () => {
+  it("reads an account remembered before nicknames as one with none, and keeps a remembered handle", () => {
+    const { handle: _handle, handleChosen: _chosen, ...older } = me("u1");
+    const before = createPeopleStore(fakeApi().api, memoryStorage({ [STORAGE_KEYS.genexMe]: JSON.stringify(older) }));
+    assert.deepEqual(
+      [before.getState().me?.id, before.getState().me?.handle, before.getState().me?.handleChosen],
+      ["u1", null, null],
+    );
+    const kept = createPeopleStore(fakeApi().api, remembering({ ...me("u1"), handle: "rabneba", handleChosen: true }));
+    assert.deepEqual([kept.getState().me?.handle, kept.getState().me?.handleChosen], ["rabneba", true]);
+    const odd = createPeopleStore(fakeApi().api, remembering({ ...me("u1"), handle: "Rab Neba" }));
+    assert.equal(odd.getState().me?.handle, null, "a handle that is not one is none");
+  });
+
+  it("shows a saved handle everywhere the account is, its own profile too", async () => {
+    const { api, calls } = fakeApi({ playProfile: async () => profileOf(person("me", "Rab Neba"), FriendStatus.Self) });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    await store.loadProfile("me");
+    const saved = await store.setHandle("rab-neba");
+    assert.equal(saved.outcome, HandleSaveOutcome.Saved);
+    assert.ok(calls.some(([method, handle]) => method === "playSetHandle" && handle === "rab-neba"));
+    assert.equal(calls.at(-1)?.[0], "playFriends", "the invite link is the handle's: it is read again");
+    assert.deepEqual([store.getState().me?.handle, store.getState().me?.handleChosen], ["rab-neba", true]);
+    assert.equal(store.getState().profiles.me?.profile?.person.handle, "rab-neba");
+  });
+
+  it("changes nothing when genex.games refuses the handle, and says why", async () => {
+    const refusal: HandleSave = {
+      outcome: HandleSaveOutcome.Refused,
+      check: { handle: "rab", state: HandleState.Taken, suggestions: ["rab2"] },
+    };
+    const { api } = fakeApi({ playSetHandle: async () => refusal });
+    const store = createPeopleStore(api, memoryStorage());
+    await store.loadMe();
+    const before = store.getState();
+    assert.deepEqual(await store.setHandle("rab"), refusal);
+    assert.equal(store.getState(), before);
   });
 });

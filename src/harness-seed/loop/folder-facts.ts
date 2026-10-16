@@ -79,14 +79,21 @@ const ROOT = FACT_ROOT;
 
 /**
  * The facts an engine stands for when a caller names the engine and not the facts (an older
- * caller): its project at the game's root. The web and Unreal by their facts (the app's
- * `factsOfEngine`); any other engine, whose declared fact only the app knows, by its own id, so it
- * is never read as a web game.
+ * caller): its project at the game's root. The engines of the older vocabulary by their facts (the
+ * app's `factsOfEngine`); any other engine, whose declared fact only the app knows, by its own id,
+ * so it is never read as a web game.
  */
 export function factsOfEngine(engine: EngineId): FactRef[] {
-  if (engine === GameEngine.Unreal) return [{ id: CoreFact.UnrealProject, path: ROOT }];
-  return [{ id: isEngineGame(engine) ? engine : CoreFact.WebGame, path: ROOT }];
+  const id = ENGINE_FACT.get(engine) ?? (isEngineGame(engine) ? engine : CoreFact.WebGame);
+  return [{ id, path: ROOT }];
 }
+
+/** The fact each engine of the older vocabulary stands for (the app's `ENGINE_FACT`). */
+const ENGINE_FACT: ReadonlyMap<string, string> = new Map<GameEngine, string>([
+  [GameEngine.Web, CoreFact.WebGame],
+  [GameEngine.Unreal, CoreFact.UnrealProject],
+  [GameEngine.Godot, CoreFact.GodotProject],
+]);
 
 /**
  * The facts of a game descriptor: the ones it carries. One from a host that predates facts reads by
@@ -144,6 +151,18 @@ export function servedFactsKey(game: FactsOfDescriptor): string {
     .map((fact) => `${fact.id}@${fact.path}`)
     .sort()
     .join("\n");
+}
+
+/** How a game runs, as its studio.json declares it: the app's `TargetRuntime` a game may name (held to it by seed-contracts). */
+export const GameRuntime = { Browser: "browser", Bridge: "bridge" } as const;
+export type GameRuntime = (typeof GameRuntime)[keyof typeof GameRuntime];
+
+/**
+ * Whether the game is its own process Genex starts and plays through the Play Protocol: its
+ * studio.json declares the bridge runtime and a play command (a Godot game Genex set up does).
+ */
+export function playsThroughBridge(game: Pick<GameProject, "shape"> | null | undefined): boolean {
+  return game?.shape?.runtime === GameRuntime.Bridge && Boolean(game.shape.play);
 }
 
 /**

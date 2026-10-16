@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.5",
+  "version": "1.10.8",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -327,8 +327,7 @@
     },
     {
       "name": "publish-allow-upload",
-      "label": "Allow a new upload",
-      "confirmation": "Studio does not know whether the last upload reached Genex. Allow a new upload only after you have checked the deployment page: if the last one did land, the new upload replaces it."
+      "label": "Publish again"
     },
     {
       "name": "publish-open",

@@ -31,6 +31,7 @@ import {
 import { atomicWriteJson, pathExists } from "../../src/substrate/fsx.ts";
 import { StudioCore } from "../../src/main/studio-core.ts";
 import { makeResources } from "../helpers/resources.ts";
+import { cloneSeededWorkspace } from "../helpers/seed-upgrade-fixture.ts";
 import { closeBeforeCleanup, removeTree, tmpDir } from "../helpers/tmp.ts";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -41,6 +42,7 @@ import { SEED_GENERATED } from "../../scripts/gen-harness-types.ts";
 import { OPEN_LOOP_REFUSAL } from "../../src/harness-seed/loop/open-loop-prompts.ts";
 import { gameRepo, loopHost } from "../helpers/loop-host.ts";
 import { copyProject, Project } from "../helpers/project-fixtures.ts";
+import { linkIsolated } from "../helpers/isolated-import.ts";
 
 /** Where an upgrade keeps the agent's copy of `rel`: a renamed module's new path (seed-renames.ts). */
 const keptAt = (rel: string): string => RENAMED_SEED_FILES[rel] ?? rel;
@@ -954,10 +956,8 @@ describe("seed upgrade across the harness structure change", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. A kept monolith importing a
     // name its new siblings no longer export would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   /**
@@ -1057,10 +1057,8 @@ describe("seed upgrade across the harness structure change", () => {
     );
 
     // The kept older gauntlet still loads beside its new siblings.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   it("SEED_MOVES says where each moved name lives now, and the old file passes on that very binding", async () => {
@@ -1714,7 +1712,7 @@ describe("seed upgrade across the harness step flag", () => {
     });
     assert.ok(report.kept.includes(file), "the agent's copy is kept");
     for (const entry of ["loop/main.ts", "loop/director/wake.ts", "loop/unreal/lead.ts"])
-      await import(`${pathToFileURL(path.join(ws, entry)).href}?v=${Date.now()}`);
+      await linkIsolated(path.join(ws, entry));
     const kept = (await import(
       `${pathToFileURL(path.join(ws, file)).href}?v=${Date.now()}`
     )) as typeof import("../../src/harness-seed/loop/director/wake-schedule.ts");
@@ -1878,10 +1876,8 @@ describe("seed upgrade across steer", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. A sibling importing a name the
     // kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 });
 
@@ -1913,10 +1909,8 @@ describe("seed upgrade across the wake loop", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. The wake loop importing a name
     // the kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   /**
@@ -1989,10 +1983,8 @@ describe("seed upgrade across the full journal", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. The journal importing a name
     // the kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 });
 
@@ -2035,10 +2027,8 @@ describe("seed upgrade across live chat", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. Live chat importing a name the
     // kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   it("a steer-delivery.ts kept from before live chat: a Resume's inbox hands nothing over twice", async () => {
@@ -2149,10 +2139,8 @@ describe("seed upgrade across one session", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. One session importing a name the
     // kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   /** The parts of the run a lead that writes nothing depends on: its words and its hands for one. */
@@ -2285,10 +2273,8 @@ describe("seed upgrade across the same agent after the build", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. The after-run chat importing a
     // name the kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   it("a chat turn, the runner that picks it or its brief kept from before: the chat after a lead's run is the coordinator's again", async () => {
@@ -2369,10 +2355,8 @@ describe("seed upgrade across a finished build reopened", () => {
 
     // What the bootstrap does: import the workspace's own main.ts. The reopen importing a name the
     // kept copies never exported would throw here, at link time.
-    const main = (await import(`${pathToFileURL(path.join(ws, "loop", "main.ts")).href}?v=${Date.now()}`)) as {
-      createStudio?: unknown;
-    };
-    assert.equal(typeof main.createStudio, "function");
+    const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+    assert.equal(main.createStudio, "function");
   });
 
   it("a chat turn, its runner, the after-run words, the coordinator or the run's start kept from before: no finished build reopens through what it serves, and the chat's own session still answers after it", async () => {
@@ -2496,9 +2480,7 @@ describe("seed upgrade across goal-directed generation", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-goals-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       // The agent's copy of the older vintage: every name it exported then, and nothing newer.
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
@@ -2513,8 +2495,8 @@ describe("seed upgrade across goal-directed generation", () => {
       // What the bootstrap does: import the workspace's own main.ts. A part importing a name the
       // kept copy never exported would throw here, at link time.
       try {
-        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
-        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+        const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+        if (main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
       } catch (err) {
         unlinked.push(`${rel}: ${(err as Error).message}`);
       }
@@ -2540,9 +2522,7 @@ describe("seed upgrade across the drive's evidence", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-drive-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       await applySeed({
@@ -2552,8 +2532,8 @@ describe("seed upgrade across the drive's evidence", () => {
         backupDir: path.join(root, "backup"),
       });
       try {
-        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
-        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+        const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+        if (main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
       } catch (err) {
         unlinked.push(`${rel}: ${(err as Error).message}`);
       }
@@ -2577,9 +2557,7 @@ describe("seed upgrade across the review fixes", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-review-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       await applySeed({
@@ -2589,8 +2567,8 @@ describe("seed upgrade across the review fixes", () => {
         backupDir: path.join(root, "backup"),
       });
       try {
-        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
-        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+        const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+        if (main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
       } catch (err) {
         unlinked.push(`${rel}: ${(err as Error).message}`);
       }
@@ -2616,9 +2594,7 @@ describe("seed upgrade across the open harness", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-open-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2631,7 +2607,7 @@ describe("seed upgrade across the open harness", () => {
       for (const entry of ["loop/main.ts", "loop/prompt.ts", "loop/unreal/lead.ts"]) {
         if (entry === rel) continue;
         try {
-          await import(pathToFileURL(path.join(ws, entry)).href);
+          await linkIsolated(path.join(ws, entry));
         } catch (err) {
           unlinked.push(`${rel} kept, ${entry}: ${(err as Error).message}`);
         }
@@ -2660,9 +2636,7 @@ describe("seed upgrade across one Loop for every project", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-one-loop-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2675,7 +2649,7 @@ describe("seed upgrade across one Loop for every project", () => {
       for (const entry of ["loop/main.ts", "loop/prompt.ts", "loop/unreal/lead.ts"]) {
         if (entry === rel) continue;
         try {
-          await import(pathToFileURL(path.join(ws, entry)).href);
+          await linkIsolated(path.join(ws, entry));
         } catch (err) {
           unlinked.push(`${rel} kept, ${entry}: ${(err as Error).message}`);
         }
@@ -2710,9 +2684,7 @@ describe("seed upgrade across one Loop for every project", () => {
     }> = [];
     for (const part of OPEN_LOOP_PARTS) {
       const root = await tmpDir("seed-open-guard-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       // The agent's copy from before Loops on any project: everything else as shipped, but no flag.
       const copy = await readFile(path.join(ws, part), "utf8");
       const older = copy.replace(/^export const SERVES_OPEN_LOOP = true;$/m, "");
@@ -2804,9 +2776,7 @@ describe("seed upgrade across the worker model", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-workers-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -2819,7 +2789,7 @@ describe("seed upgrade across the worker model", () => {
       for (const entry of ["loop/main.ts", "loop/prompt.ts", "loop/unreal/lead.ts"]) {
         if (entry === rel) continue;
         try {
-          await import(pathToFileURL(path.join(ws, entry)).href);
+          await linkIsolated(path.join(ws, entry));
         } catch (err) {
           unlinked.push(`${rel} kept, ${entry}: ${(err as Error).message}`);
         }
@@ -2862,9 +2832,7 @@ describe("seed upgrade across Genex's moments", () => {
     const unlinked: string[] = [];
     for (const rel of Object.keys(vintage.modules)) {
       const root = await tmpDir("seed-moments-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       await writeFile(path.join(ws, rel), `${keptModule(rel)}\n`);
       const report = await applySeed({
         seedDir: shipped,
@@ -2876,7 +2844,7 @@ describe("seed upgrade across Genex's moments", () => {
       for (const entry of ["loop/main.ts", "loop/prompt.ts", "loop/unreal/lead.ts"]) {
         if (entry === rel) continue;
         try {
-          await import(pathToFileURL(path.join(ws, entry)).href);
+          await linkIsolated(path.join(ws, entry));
         } catch (err) {
           unlinked.push(`${rel} kept, ${entry}: ${(err as Error).message}`);
         }
@@ -2888,9 +2856,7 @@ describe("seed upgrade across Genex's moments", () => {
 
   it("a kept host-method table without the moments', locks' and finish check's methods is reported once and noted for the agent", async () => {
     const root = await tmpDir("seed-moments-methods-");
-    const ws = path.join(root, "workspace");
-    const manifest = path.join(root, "manifest.json");
-    await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+    const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
     const file = "loop/host-methods.ts";
     const copy = await readFile(path.join(ws, file), "utf8");
     const newer = [
@@ -2972,9 +2938,7 @@ describe("seed upgrade across the Unreal lead", () => {
     const unlinked: string[] = [];
     for (const rel of Object.keys(vintage.modules)) {
       const root = await tmpDir("seed-lead-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: older, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(older, root);
       await writeFile(path.join(ws, rel), `${olderModule(rel)}\n`);
       const report = await applySeed({
         seedDir: shipped,
@@ -2984,8 +2948,8 @@ describe("seed upgrade across the Unreal lead", () => {
       });
       assert.ok(report.kept.includes(rel), `${rel} is kept`);
       try {
-        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
-        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+        const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+        if (main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
       } catch (err) {
         unlinked.push(`${rel}: ${(err as Error).message}`);
       }
@@ -3012,9 +2976,7 @@ describe("seed upgrade across computer use", () => {
     const unlinked: string[] = [];
     for (const [rel, names] of Object.entries(vintage.modules)) {
       const root = await tmpDir("seed-computer-use-");
-      const ws = path.join(root, "workspace");
-      const manifest = path.join(root, "manifest.json");
-      await applySeed({ seedDir: shipped, workspaceDir: ws, manifestFile: manifest });
+      const { ws, manifest } = await cloneSeededWorkspace(shipped, root);
       const older = names.map((name) => `export const ${name} = () => ${JSON.stringify(name)};`);
       await writeFile(path.join(ws, rel), `${older.join("\n")}\n// the agent's own change\n`);
       const report = await applySeed({
@@ -3025,8 +2987,8 @@ describe("seed upgrade across computer use", () => {
       });
       assert.ok(report.kept.includes(keptAt(rel)), `${rel} is the agent's`);
       try {
-        const main = (await import(pathToFileURL(path.join(ws, "loop", "main.ts")).href)) as { createStudio?: unknown };
-        if (typeof main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
+        const main = await linkIsolated(path.join(ws, "loop", "main.ts"));
+        if (main.createStudio !== "function") unlinked.push(`${rel}: main.ts has no createStudio`);
       } catch (err) {
         unlinked.push(`${rel}: ${(err as Error).message}`);
       }

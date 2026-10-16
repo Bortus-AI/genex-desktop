@@ -7,6 +7,7 @@
 import {
   accountMark,
   multiplayerMark,
+  remixMark,
   bodyScan,
   cobbles,
   imageMark,
@@ -30,6 +31,8 @@ export const MakingDrawing = {
   Account: "account",
   /** Not an asset: a room with two players, where Multiplayer asks for the Genex plugin. */
   Multiplayer: "multiplayer",
+  /** Not an asset: the Remix fork, on Create's stage while a Play remix is made. */
+  Remix: "remix",
 } as const;
 export type MakingDrawing = (typeof MakingDrawing)[keyof typeof MakingDrawing];
 
@@ -80,6 +83,7 @@ const image = once(imageMark);
 const video = once(videoMark);
 const account = once(accountMark);
 const multiplayer = once(multiplayerMark);
+const remix = once(remixMark);
 
 const SUBJECTS: Record<MakingDrawing, Subject> = {
   [MakingDrawing.Character]: { solid: scan, span: [0, 6], px: 54, pivot: 3, sway: [0.22, 0.32], pitch: 0.16 },
@@ -90,6 +94,7 @@ const SUBJECTS: Record<MakingDrawing, Subject> = {
   [MakingDrawing.Sound]: { mark: soundMark, nudge: 0.6 },
   [MakingDrawing.Account]: { mark: account, nudge: 0 },
   [MakingDrawing.Multiplayer]: { mark: multiplayer, nudge: 0 },
+  [MakingDrawing.Remix]: { mark: remix, nudge: 0 },
 };
 
 interface Camera {

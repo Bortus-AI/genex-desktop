@@ -67,7 +67,7 @@ import {
   type LibraryStore,
 } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
-import { createPlayStore, type PlayStore, viewerReported } from "./play.ts";
+import { createPlayStore, type PlayStore, remixProgressed, viewerReported } from "./play.ts";
 import { createPeopleStore, type PeopleStore } from "./people.ts";
 import {
   bootstrapFailed,
@@ -336,8 +336,8 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
       engines.setState((state) => enginesLoaded(state, boot.engines), true);
       threads.setState((state) => openedThreads(state, boot), true);
       const welcome = shouldWelcome(boot.welcome, boot.games.length, safeStorage(storage));
-      const developer = boot.developer;
-      session.setState((state) => bootstrapReady(state, { welcome, developer }), true);
+      const { developer, playWebOrigin: playWeb } = boot;
+      session.setState((state) => bootstrapReady(state, { welcome, developer, playWeb }), true);
       void plugins.refresh();
       void plugins.refreshIndex();
       // An update downloaded before this window opened, or before a reload, still waits.
@@ -362,6 +362,9 @@ function applyUiEvent({ agentScreens, threads, layout, library, update, play }: 
   switch (event.type) {
     case UiEvent.PlayViewer:
       play.setState((state) => viewerReported(state, event.payload), true);
+      break;
+    case UiEvent.PlayRemix:
+      play.setState((state) => remixProgressed(state, event.payload), true);
       break;
     case UiEvent.PreviewFrame:
       agentScreens.setState((state) => frameReceived(state, event.payload), true);
@@ -492,7 +495,11 @@ async function launchGame(ctx: StudioContext, input: LaunchInput): Promise<void>
   const { launch } = stores;
   if (launch.getState().launch) return;
   const id = `launch-${++launches}`;
-  launch.setState((state) => launchStarted(state, { id, text: input.text, extras: input.extras, at: ctx.now() }), true);
+  const known = stores.library.getState().games.map((game) => game.name);
+  launch.setState(
+    (state) => launchStarted(state, { id, text: input.text, extras: input.extras, at: ctx.now(), known }),
+    true,
+  );
   const { title, provisional, limited } = await launchName(api, input);
   // The picked model cannot take the game's first turn: no game waits empty for it, and the words go back home.
   if (limited) {

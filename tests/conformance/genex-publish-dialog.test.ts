@@ -304,6 +304,31 @@ test("Publish refuses a folder that holds another kind of project and no web gam
   }
 });
 
+test("Publish puts a Godot game's web export online: its web/ folder in the root's place", async () => {
+  const rig = await dialogRig();
+  try {
+    const godot = await rig.core.games.scaffold("ember-run", { title: "Ember Run" });
+    await rm(path.join(godot.dir, "index.html"));
+    const meta = path.join(godot.dir, "studio.json");
+    const { contractVersion: _starter, ...kept } = JSON.parse(await readFile(meta, "utf8")) as Record<string, unknown>;
+    await writeFile(meta, JSON.stringify(kept));
+    await mkdir(path.join(godot.dir, "godot"), { recursive: true });
+    await writeFile(path.join(godot.dir, "godot", "project.godot"), "config_version=5\n");
+    await mkdir(path.join(godot.dir, "web"), { recursive: true });
+    await writeFile(
+      path.join(godot.dir, "web", "index.html"),
+      "<!doctype html><title>Ember Run</title><script src=index.js></script>",
+    );
+    for (const file of ["index.js", "index.wasm", "index.pck"])
+      await writeFile(path.join(godot.dir, "web", file), file);
+    await writeFile(path.join(godot.dir, "web", ".gdignore"), "");
+    const review = await publishReview(rig.core, "ember-run");
+    assert.deepEqual([...review.included].sort(), ["index.html", "index.js", "index.pck", "index.wasm"]);
+  } finally {
+    await rig.close();
+  }
+});
+
 test("Publish refuses a folder of its own files of a kind no rule knows: it is served as no web game", async () => {
   const rig = await dialogRig();
   try {

@@ -122,6 +122,17 @@ test("runtime discovery supports spaced symlinks and accurately reports missing 
       (await f.service.detect({ ...spec, version: { ...spec.version, minimum: "900.0.0" } }, f.storage)).state,
       "incompatible",
     );
+    // A runtime that names a first release x.y (Godot's 4.3) reads as x.y.0 against the minimum.
+    const twoParts = { ...spec.version, pattern: "version (\\d+\\.\\d+)" };
+    const short = await f.service.detect({ ...spec, version: twoParts }, f.storage);
+    assert.equal(short.state, "ready");
+    assert.match(String(short.version), /^\d+\.\d+$/);
+    const [major = 0, minor = 0] = String(short.version).split(".").map(Number);
+    const above = `${major}.${minor + 1}.0`;
+    assert.equal(
+      (await f.service.detect({ ...spec, version: { ...twoParts, minimum: above } }, f.storage)).state,
+      "incompatible",
+    );
   } finally {
     await f.close();
   }

@@ -35,11 +35,11 @@ export const MESSAGE = {
   UnknownAfterRestart: "Upload outcome is unknown after restart. Check the deployment page before retrying.",
   CannotReach: "Genex could not be reached to check this upload. Check again later.",
   DidNotLand: "The upload did not reach Genex: the hosted game is unchanged. You can upload again.",
-  CannotTell: "Genex cannot tell whether this upload went live. Check the game page, then allow a new upload.",
+  CannotTell: "Genex cannot tell whether this upload went live. Publish again to replace it.",
   StillRunning: "This upload is still running",
   NotCurrent: "That upload is no longer the current one",
   OnlyDraftUpdated: "Only the draft page was updated: the public version is unchanged. Publish again to update it.",
-  AllowedNewUpload: "You checked the deployment page and allowed a new upload.",
+  AllowedNewUpload: "Published again before Studio knew whether this upload reached Genex.",
   ConnectFirst: "Connect the Genex plugin first",
   AuthorizationExpired: "Genex authorization expired. Reconnect the Genex plugin before uploading.",
   NoHostedProject: "Genex did not create a hosted project for this game",
@@ -183,14 +183,18 @@ export function canForceSettle(job: GenexPublishJob | undefined, live: boolean, 
   return !live && force && job?.state === GenexPublishJobState.Unresolved && !job.uploadedAt;
 }
 
-/** An uploaded draft not yet verified live, whose next check is due (or forced). */
+/** A job whose outcome is still open: running here, or unknown. A finished or settled one is never checked again. */
+export const isOpen = (job: GenexPublishJob): boolean =>
+  job.state === GenexPublishJobState.Running || job.state === GenexPublishJobState.Unresolved;
+
+/** An uploaded draft not yet verified live and still open, whose next check is due (or forced). */
 export function deploymentCheckDue(
   job: GenexPublishJob | undefined,
   live: boolean,
   force: boolean,
   now = Date.now(),
 ): boolean {
-  if (live || !job?.uploadedAt || !checksDraftPage(job)) return false;
+  if (live || !job?.uploadedAt || !checksDraftPage(job) || !isOpen(job)) return false;
   if (job.phase === GenexPublishPhase.Ready) return false;
   return force || !job.nextCheckAt || Date.parse(job.nextCheckAt) <= now;
 }

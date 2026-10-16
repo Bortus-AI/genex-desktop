@@ -6,7 +6,7 @@
  */
 import type { AvatarRecipe } from "../../shared/avatar-recipe.ts";
 import { backdropGpu, onGpuLost } from "../home-backdrop/gpu.ts";
-import { BODY_SHADER, BODY_UNIFORM_BYTES, bodyUniforms } from "./body-shader.ts";
+import { BODY_SHADER, BODY_UNIFORM_BYTES, bodyUniforms, type StarLook } from "./body-shader.ts";
 
 /** The device, the body pipeline and the canvas format it draws in. */
 export interface BodyGpu {
@@ -31,6 +31,8 @@ export interface BodyDraw {
   t: number;
   /** The body's size in canvas pixels. */
   pixels: number;
+  /** How a galaxy's stars show. */
+  stars: StarLook;
 }
 
 /**
@@ -110,8 +112,8 @@ export function releaseBodyCanvas(canvas: GpuBodyCanvas): void {
 export function drawBodies(gpu: BodyGpu, draws: readonly BodyDraw[]): void {
   if (!draws.length) return;
   const encoder = gpu.device.createCommandEncoder();
-  for (const { canvas, recipe, t, pixels } of draws) {
-    gpu.device.queue.writeBuffer(canvas.uniforms, 0, bodyUniforms(recipe, t, pixels));
+  for (const { canvas, recipe, t, pixels, stars } of draws) {
+    gpu.device.queue.writeBuffer(canvas.uniforms, 0, bodyUniforms(recipe, t, pixels, stars));
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         {

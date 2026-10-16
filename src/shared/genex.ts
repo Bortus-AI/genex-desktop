@@ -336,7 +336,7 @@ export interface GenexPublishJob {
   kind: GenexPublishKind;
   state: GenexPublishJobState;
   phase: GenexPublishPhase;
-  deployment?: { id: string; digest: string; files: Array<{ path: string; sha256: string }> };
+  deployment?: { id: string; digest: string; files: Array<{ path: string; sha256: string; bodySha256?: string }> };
   expectedStagingRevision?: string;
   stagingUrl?: string;
   uploadedAt?: string;

@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useThreads } from "../state/hooks.ts";
+import { remixReturnedTo, remixSetAside } from "../state/play.ts";
 import type { Studio } from "../state/studio.ts";
 import { returnTarget, Room, roomOf, studioThreadOf } from "../state/threads.ts";
 import { withViewTransition } from "../ui/view-transition.ts";
@@ -12,14 +13,25 @@ const fromHome = (app: Studio) => (select: () => void) => {
   else select();
 };
 
-/** Moving between conversations and games: each closes Plugins, Play and the drawer on the way. */
+/**
+ * Moving between conversations and games: each closes Plugins, Play and the drawer on the way, and
+ * sets a Play remix being made aside (its sidebar row brings it back).
+ */
 export function useNavigation(app: Studio, chrome: ShellChrome, handoff: ComposerHandoff) {
   const { setPluginsOpen, setPlayOpen, setDrawerOpen, closeOverlays } = chrome;
-  /** Leave Plugins and Play for the workspace. */
+  /** Leave Plugins and Play for the workspace, and a remix being made for where the person is going. */
   const leaveRooms = useCallback(() => {
     setPluginsOpen(false);
     setPlayOpen(false);
-  }, [setPluginsOpen, setPlayOpen]);
+    app.play.setState(remixSetAside, true);
+  }, [app, setPluginsOpen, setPlayOpen]);
+  /** Back to the Play remix being made, over Create. */
+  const showRemix = useCallback(() => {
+    setPluginsOpen(false);
+    setPlayOpen(false);
+    app.play.setState(remixReturnedTo, true);
+    setDrawerOpen(false);
+  }, [app, setPluginsOpen, setPlayOpen, setDrawerOpen]);
   const studioThread = useThreads(studioThreadOf);
   const selectThread = useCallback(
     (threadId: string) => {
@@ -84,8 +96,18 @@ export function useNavigation(app: Studio, chrome: ShellChrome, handoff: Compose
     requestAnimationFrame(() => handoff.homeComposer.current?.focus());
   }, [goHome, handoff.homeComposer]);
   return useMemo(
-    () => ({ selectThread, enterStudio, returnToGame, enterProject, selectGame, removeGame, newGame, goHome }),
-    [selectThread, enterStudio, returnToGame, enterProject, selectGame, removeGame, newGame, goHome],
+    () => ({
+      selectThread,
+      enterStudio,
+      returnToGame,
+      enterProject,
+      selectGame,
+      removeGame,
+      newGame,
+      goHome,
+      showRemix,
+    }),
+    [selectThread, enterStudio, returnToGame, enterProject, selectGame, removeGame, newGame, goHome, showRemix],
   );
 }
 

@@ -11,10 +11,14 @@ import {
   FIXTURE_SIGN_IN_MS,
   fixtureAccountPort,
 } from "../../src/main/dev/fixture-genex-account.ts";
+import { devStandAccountPort } from "../../src/main/dev/dev-stand-account.ts";
+import { GenexRoute } from "../../src/plugins/genex/http.ts";
 import { FixtureAccount, fixtureAccountToken } from "../../src/main/dev/fixture-people.ts";
+import type { GalleryAnswer, GalleryRequest } from "../../src/main/play/gallery.ts";
 import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { playPeople } from "../../src/main/play/people.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
+import { PLAY_ORIGIN } from "../../src/shared/play.ts";
 import { GENEX_PLUGIN_ID, GenexAction } from "../../src/shared/genex.ts";
 import { PluginAccountState } from "../../src/shared/plugins.ts";
 
@@ -251,6 +255,7 @@ test("a fixture account genex.games refuses reads as ended, and signing in again
     now: () => clock,
     upload: async () => 200,
     refused: service.refused,
+    web: PLAY_ORIGIN.web,
   });
   assert.equal(await people.me(), null);
   assert.deepEqual(await service.view(), { status: GenexAccountStatus.Ended });
@@ -259,4 +264,111 @@ test("a fixture account genex.games refuses reads as ended, and signing in again
   clock += FIXTURE_SIGN_IN_MS;
   assert.equal((await service.view()).status, GenexAccountStatus.SignedIn);
   assert.equal((await people.me())?.name !== undefined, true, "the new sign-in reads its account");
+});
+
+/**
+ * A development copy of genex.games' device sign-in: Start hands out a code and the website's page
+ * to approve it, Poll answers pending until the test approves or denies, then the token once.
+ */
+function devStand(start: Record<string, unknown> = {}) {
+  const calls: Array<{ route: string; body: unknown }> = [];
+  let decision: "pending" | "approved" | "denied" = "pending";
+  const request: GalleryRequest = async (route, init): Promise<GalleryAnswer> => {
+    calls.push({ route, body: init.body });
+    if (route === GenexRoute.DeviceStart)
+      return {
+        status: 200,
+        body: {
+          userCode: "WXYZ-2345",
+          deviceCode: "d".repeat(43),
+          verifyUrl: "http://localhost:5173/c/WXYZ-2345",
+          expiresIn: 600,
+          interval: 2,
+          ...start,
+        },
+      };
+    if (decision === "approved") return { status: 200, body: { status: "approved", token: "stand-token" } };
+    return { status: 200, body: { status: decision } };
+  };
+  return { request, calls, decide: (next: typeof decision) => (decision = next) };
+}
+
+test("a development profile signs in on its own genex.games copy, in the browser, for the launch only", async () => {
+  let clock = 0;
+  const stand = devStand();
+  const { service, opened } = account(
+    devStandAccountPort({ request: stand.request, now: () => clock, web: "http://localhost:5173" }),
+  );
+  assert.deepEqual(await service.view(), { status: GenexAccountStatus.SignedOut });
+  assert.deepEqual(await service.signIn(), { status: GenexAccountStatus.SigningIn, code: "WXYZ-2345" });
+  assert.deepEqual(opened, ["http://localhost:5173/c/WXYZ-2345"], "the copy's own website approves it");
+  clock += 5_000;
+  assert.equal((await service.view()).status, GenexAccountStatus.SigningIn, "pending while it waits");
+  stand.decide("approved");
+  clock += 2_000;
+  assert.equal(
+    (await service.view()).status,
+    GenexAccountStatus.SigningIn,
+    "polled no faster than genex.games' own floor, whatever the copy asks",
+  );
+  clock += 3_000;
+  assert.deepEqual(await service.view(), { status: GenexAccountStatus.SignedIn });
+  assert.equal(await service.token(), "stand-token");
+  assert.deepEqual(
+    stand.calls.filter((c) => c.route === GenexRoute.DevicePoll).map((c) => c.body),
+    [{ deviceCode: "d".repeat(43) }, { deviceCode: "d".repeat(43) }],
+  );
+  assert.deepEqual(await service.signOut(), { status: GenexAccountStatus.SignedOut });
+  assert.equal(await service.token(), undefined, "signing out forgets the token");
+});
+
+test("a development sign-in the browser denied, or that ran out, signs nobody in", async () => {
+  let clock = 0;
+  const denied = devStand();
+  const deny = account(
+    devStandAccountPort({ request: denied.request, now: () => clock, web: "http://localhost:5173" }),
+  );
+  await deny.service.signIn();
+  denied.decide("denied");
+  clock += 5_000;
+  assert.deepEqual(await deny.service.view(), { status: GenexAccountStatus.SignedOut });
+  const expired = devStand({ expiresIn: 5 });
+  const late = account(
+    devStandAccountPort({ request: expired.request, now: () => clock, web: "http://localhost:5173" }),
+  );
+  await late.service.signIn();
+  clock += 6_000;
+  assert.deepEqual(await late.service.view(), { status: GenexAccountStatus.SignedOut });
+});
+
+test("a development sign-in whose copy names no lifetime keeps waiting for the browser", async () => {
+  let clock = 0;
+  const stand = devStand({ expiresIn: undefined });
+  const { service } = account(
+    devStandAccountPort({ request: stand.request, now: () => clock, web: "http://localhost:5173" }),
+  );
+  await service.signIn();
+  clock += 60_000;
+  assert.equal((await service.view()).status, GenexAccountStatus.SigningIn, "not dropped at once");
+  stand.decide("approved");
+  clock += 5_000;
+  assert.deepEqual(await service.view(), { status: GenexAccountStatus.SignedIn });
+});
+
+test("a development sign-in opens only a page of the website Play links to", async () => {
+  for (const start of [
+    { verifyUrl: "https://evil.example/c/WXYZ-2345" },
+    { verifyUrl: "https://genex.games/c/WXYZ-2345" },
+    { verifyUrl: "javascript:alert(1)" },
+    { deviceCode: 7 },
+    { userCode: null },
+  ]) {
+    const stand = devStand(start);
+    const { service, opened } = account(
+      devStandAccountPort({ request: stand.request, now: () => 0, web: "http://localhost:5173" }),
+    );
+    await assert.rejects(service.signIn(), JSON.stringify(start));
+    assert.deepEqual(opened, [], JSON.stringify(start));
+    assert.deepEqual(await service.view(), { status: GenexAccountStatus.SignedOut });
+  }
 });

@@ -4726,6 +4726,29 @@ describe("a provider lost mid-run", () => {
     assert.equal(w.state.limit?.retryAfterMs, null);
   });
 
+  // Live, 2026-10-15: a 2-hour Unreal Loop ended 6 minutes in when the Mac's network dropped, and
+  // its closing words said the time ran out.
+  it("D9b. a lead turn that couldn't reach the API (no network, no DNS) pauses the run like any outage", async () => {
+    const unreachable = [
+      "API Error: Can't reach the API server — check your internet or DNS (ENOTFOUND)",
+      "API Error: connect ENETUNREACH 160.79.104.10:443",
+      "API Error: connect EHOSTUNREACH 160.79.104.10:443",
+      "API Error: getaddrinfo ENOTFOUND api.anthropic.com",
+      "API Error: ENETDOWN",
+    ];
+    for (const errorText of unreachable) {
+      const w = clockNight();
+      const { talk } = w.lead((turn) =>
+        turn === 1
+          ? { ok: true, sessionId: "lead-1" }
+          : { ok: false, stopReason: "error", errorText, sessionId: "lead-1" },
+      );
+      const outcome = await w.run(talk);
+      assert.equal(outcome.wrapCause, null, errorText);
+      assert.equal(w.state.limit?.kind, "unavailable", errorText);
+    }
+  });
+
   it("D10. a sign-in a judge lost while the lead slept pauses the run before the lead is woken", async () => {
     const w = clockNight();
     try {
@@ -15120,5 +15143,46 @@ describe("a game its engine plugin plays in its editor, with judges", () => {
     const properties = (plainTool?.parameters ?? {}) as { properties?: Record<string, { description: string }> };
     const judgeArg = properties.properties?.judge;
     assert.match(judgeArg?.description ?? "", /hint, not a rule/);
+  });
+});
+
+describe("the close's sentence of an open Loop", () => {
+  it('SP1. a save point the lead gave no summary closes as its label alone, never with an empty "()" or ":"', async () => {
+    const { openCloseOf } = await import("../../src/harness-seed/loop/director/open/graph.ts");
+    const { newOpenJournal } = await import("../../src/harness-seed/loop/director/open/contract.ts");
+    const point = (label: string, summary: string) => ({
+      label,
+      summary,
+      snapshotId: "s",
+      auto: false,
+      at: 0,
+      notes: [],
+    });
+    const journal = (...savePoints: ReturnType<typeof point>[]) => ({ ...newOpenJournal(), savePoints });
+    assert.equal(openCloseOf(journal(point("Ship flies", "")), false).summary, "One save point: Ship flies.");
+    assert.equal(
+      openCloseOf(journal(point("Ship flies", ""), point("Rocks fall", "  ")), false).summary,
+      "2 save points; the last, Rocks fall.",
+    );
+    assert.equal(
+      openCloseOf(journal(point("Ship flies", "It turns and thrusts.")), false).summary,
+      "One save point: Ship flies (It turns and thrusts).",
+      "a summary's own full stop is not doubled",
+    );
+  });
+});
+
+describe("a plugin's web build and the chat's turn", () => {
+  it("WB1. a turn whose only change is a plugin's web build (Godot's export in web/) leaves the game's kind as it was: no new-kind continuation", async () => {
+    const { kindKey } = await import("../../src/harness-seed/loop/web-build.ts");
+    const before = [{ id: "godot-project", path: "godot" }];
+    const exported = [
+      ...before,
+      { id: "web-game", path: "web" },
+      { id: "godot-web-export", path: "web", source: "plugin:godot" },
+    ];
+    assert.equal(kindKey(exported), kindKey(before), "the build is no new kind");
+    const site = [...before, { id: "web-game", path: "site" }];
+    assert.notEqual(kindKey(site), kindKey(before), "a web game no plugin claims is one");
   });
 });

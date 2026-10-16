@@ -124,7 +124,7 @@ undeclared method is a compile error.
 | `runtime.detect` / `runtime.installation` | `native-runtime`, API 3 | Read declared native runtime readiness and durable installation progress |
 | `runtime.install` / `runtime.cancelInstall` | `native-runtime`, API 3 | Fixed pinned installation through a real declared user action; installation requires its confirmation |
 | `native.run` / `native.jobs` / `native.result` | `native-runtime`, API 3 | Project-bound fixed job recipes, cancellation and durable results; no automatic replay |
-| `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an Unreal project file (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
+| `game.engine.link` / `game.engine.read` | `game-engine` | Link the bound game to an engine project file, an Unreal `.uproject` or a Godot `project.godot` (checked by real path; the chat shows it with Undo), or read its link. The host keeps it in `storage.root/links/<game>.json`; a call to your MCP server never links a game |
 | `game.engine.steps` | `game-engine` | Show your steps card (your `steps` action's answer, read live) in the calling chat |
 | `game.snapshot` | `game-engine` | `{reason}` → `{snapshotId}`: a game snapshot of the bound game, listed in Rewind under `reason` (one plain line, at most 200 characters), before you change files there |
 | `game.engine.runs` | `game-engine` | `{game, title, project}[]`: the games whose run (a Loop) is going now that your plugin linked to a project, with that project file; needs no bound game. Read it before you offer to quit an editor a run may be using |
@@ -252,7 +252,10 @@ makes) keep finding facts your `detect` skips, even while your plugin is off. Se
 An observer is what Genex can capture of a project of your kind, for the reviewer who checks a
 Loop's finish: `"observers": [{ "id": "viewport", "facts": ["toy-project"], "tool": "capture" }]`
 names one of your harness tools that asks nothing and answers pictures. Add `"live": "stills"` to
-have Live show its latest pictures for such a project (`unreal-card` is the bundled Unreal
+have Live show its latest pictures for such a project, or `"live": "card", "status": "<action>"`
+for a card like Unreal's: the latest picture, the game's name, and what your action (one that asks
+nothing) answers, `{ line, hint?, button?: { label, action } | { label, panel: true } }`, one line
+each, the button one of your declared actions or your panel (`unreal-card` is the bundled Unreal
 plugin's own view; `preview` and `proof` are Genex's ids). Add `"label": "Board"` to name that
 view's tab when a folder has more than one view (1–24 characters, not a name the stage strip
 already shows); without it the tab takes your plugin's name. Your observer captures only while your

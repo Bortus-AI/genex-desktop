@@ -40,6 +40,7 @@ import type { GameProject } from "../../src/shared/game-project.ts";
 import { buildRunGraph } from "../../src/renderer/run-graph.ts";
 import { isAgentTool, PluginSourceKind } from "../../src/shared/plugins.ts";
 import { FolderHolds } from "../../src/shared/project-facts.ts";
+import { FindNext, PluginOffer } from "../../src/shared/project-tools.ts";
 import { inspectPackage, validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { PluginRegistry } from "../../src/substrate/plugins/registry.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
@@ -1526,7 +1527,7 @@ describe("an Unreal C++ editor plugin: build, test and package it", () => {
   });
 });
 
-describe("a Godot game, no plugin: generic tools, jobs and looking at the app", () => {
+describe("a Godot game with its plugin off: generic tools, jobs and looking at the app", () => {
   it("opening it plans and writes no web starter", async () => {
     await opensWithoutStarter(Project.GodotGame);
   });
@@ -1617,15 +1618,18 @@ describe("a Godot game, no plugin: generic tools, jobs and looking at the app", 
     assert.ok(!job?.policy.allowWrite?.includes(gameDir), "never the game itself");
     assert.equal(looked(worked[1]).pictures, 1, "the worker looks too");
   });
-  it("plugins_find finds no Godot plugin and offers to write one", async () => {
-    // Genex's own plugins, and no catalog: nothing knows a Godot project.
+  it("plugins_find suggests turning on the bundled Godot plugin, which ships off", async () => {
+    // Genex's own plugins, and no catalog: the bundled Godot plugin knows a Godot project.
     const find = lite.api() as unknown as Record<string, (params: unknown) => Promise<unknown>>;
     const answer = (await find[HostMethod.PluginsFind]?.({ fact: "godot-project" })) as {
-      plugins: unknown[];
+      plugins: Array<{ id: string; offer?: string }>;
       next: string;
     };
-    assert.deepEqual(answer.plugins, []);
-    assert.equal(answer.next, "write-plugin");
+    assert.deepEqual(
+      answer.plugins.map((plugin) => [plugin.id, plugin.offer]),
+      [["godot", PluginOffer.TurnOn]],
+    );
+    assert.equal(answer.next, FindNext.Suggest);
   });
 });
 

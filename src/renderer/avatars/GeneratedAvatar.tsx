@@ -42,12 +42,18 @@ export function GeneratedAvatar({
   size,
   full,
   ghost = false,
+  quiet = false,
+  flat = false,
   motion = AvatarMotion.Hover,
 }: {
   recipe: AvatarRecipe;
   size: number;
   full: boolean;
   ghost?: boolean;
+  /** A face that stays in the background (the painter's `quiet`): faint eyes, dim stars. */
+  quiet?: boolean;
+  /** Drawn as genex.games' link previews draw it: the body a 2D still, never on the GPU. */
+  flat?: boolean;
   motion?: AvatarMotion;
 }): JSX.Element {
   const box = useRef<HTMLSpanElement>(null);
@@ -55,11 +61,11 @@ export function GeneratedAvatar({
   const body = useRef<HTMLCanvasElement>(null);
   const front = useRef<HTMLCanvasElement>(null);
   const handle = useRef<AvatarHandle | null>(null);
-  const look = { recipe, size, full, ghost };
+  const look = { recipe, size, full, ghost, quiet, flat };
   const shown = useRef(look);
   shown.current = look;
   // The painter holds the canvases for the avatar's life; a change of look is a `set` below.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `full` decides which canvases exist
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `full` decides which canvases exist, `flat` how the body is drawn
   useEffect(() => {
     const layers =
       body.current && front.current ? { back: back.current, body: body.current, front: front.current } : null;
@@ -70,10 +76,10 @@ export function GeneratedAvatar({
       mounted.dispose();
       handle.current = null;
     };
-  }, [full]);
+  }, [full, flat]);
   useEffect(() => {
-    handle.current?.set({ recipe, size, full, ghost });
-  }, [recipe, size, full, ghost]);
+    handle.current?.set({ recipe, size, full, ghost, quiet, flat });
+  }, [recipe, size, full, ghost, quiet, flat]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new `full` is a new handle to set going
   useEffect(() => {
     handle.current?.animate(motion === AvatarMotion.Live);

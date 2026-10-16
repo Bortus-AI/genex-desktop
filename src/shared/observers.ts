@@ -18,11 +18,17 @@ export const ObserverLive = {
   Preview: "preview",
   UnrealCard: "unreal-card",
   Stills: "stills",
+  /** A plugin's own card: the status its `status` action answers, its latest shot and one button. */
+  Card: "card",
 } as const;
 export type ObserverLive = (typeof ObserverLive)[keyof typeof ObserverLive];
 
 /** The Live views a plugin's observer may name; `preview` is Genex's own. */
-export const PLUGIN_OBSERVER_LIVE: ReadonlySet<ObserverLive> = new Set([ObserverLive.UnrealCard, ObserverLive.Stills]);
+export const PLUGIN_OBSERVER_LIVE: ReadonlySet<ObserverLive> = new Set([
+  ObserverLive.UnrealCard,
+  ObserverLive.Stills,
+  ObserverLive.Card,
+]);
 
 /** The bundled Unreal plugin's id (`src/plugins/unreal/plugin.json`): the only manifest that may name the Unreal card. */
 export const UNREAL_PLUGIN_ID = "unreal";
@@ -61,6 +67,8 @@ export interface PluginObserver {
   tool: string;
   live?: ObserverLive;
   label?: string;
+  /** A card's status: an action of the manifest that asks nothing, answering a `PluginStageCard`. */
+  status?: string;
 }
 
 /**
@@ -75,6 +83,8 @@ export interface ObserverRef {
   live: ObserverLive | null;
   at: string;
   on: boolean;
+  /** A card's status action, when the observer is one. */
+  status?: string;
 }
 
 /** An installed plugin as `observersFor` reads it. */
@@ -107,6 +117,7 @@ function pluginRefs({ id: plugin, enabled, manifest }: ObservingPlugin, game: Ga
         live: observer.live ?? null,
         at,
         on: enabled,
+        ...(observer.status ? { status: observer.status } : {}),
       })),
   );
 }

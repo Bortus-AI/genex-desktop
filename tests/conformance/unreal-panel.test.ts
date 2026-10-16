@@ -664,7 +664,142 @@ describe("The Set up Unreal panel", { skip }, () => {
       await tab.close();
     }
   });
+
+  /** The project list as a person reads it: each shown row's name, where it is and its tag. */
+  const listRows = (tab: Page) =>
+    tab.evaluate(() =>
+      [...document.querySelectorAll("#projects li:not([hidden]) .row")].map((row) => ({
+        name: row.querySelector(".name")?.textContent ?? "",
+        where: row.querySelector(".path")?.textContent ?? "",
+        tag: row.querySelector(".tag")?.textContent ?? "",
+      })),
+    );
+  const byName = (rows: Array<{ name: string }>) => [...rows].sort((a, b) => a.name.localeCompare(b.name));
+
+  it("a path reads from ~ in home, keeps a long one's ends, names a temporary folder, and the list tags what lies outside the open game", async () => {
+    const c = await computer({ game: "lantern" });
+    const home = path.dirname(path.dirname(c.newGames));
+    const neon = await writeProject(path.join(c.newGames, "Neon", "Neon.uproject"));
+    const deep = await writeProject(
+      path.join(home, "work", "studio", "dev", "profiles", "manual", "Deep", "Deep.uproject"),
+    );
+    // The open game's folder holds Neon: Deep and Drift lie outside it. Drift is in the test's temporary folder.
+    Object.assign(c.context, { directory: path.dirname(neon) });
+    await c.act("setup", { project: c.drift });
+    await c.act("status", { project: deep });
+    const tab = await open(c);
+    try {
+      await tab.waitForSelector("#project:not([hidden])");
+      const head = await tab.evaluate(() => ({
+        where: document.getElementById("project-path")?.textContent,
+        full: document.getElementById("project-path")?.title,
+        reach: document.getElementById("fact-reach")?.hidden
+          ? ""
+          : document.getElementById("project-reach")?.textContent,
+      }));
+      assert.deepEqual(head, { where: "~/work/…/manual/Deep", full: deep, reach: "No, outside this game's folder" });
+      await tab.click("#change");
+      await tab.waitForSelector("#pick:not([hidden])");
+      const temporary =
+        process.platform === "win32" ? [] : [{ name: "Drift", where: "Temporary folder › Drift", tag: "Outside game" }];
+      assert.deepEqual(
+        byName(await listRows(tab)).filter((row) => process.platform !== "win32" || row.name !== "Drift"),
+        byName([
+          { name: "Deep", where: "~/work/…/manual/Deep", tag: "In use" },
+          { name: "Neon", where: "~/Documents/Unreal Projects/Neon", tag: "" },
+          ...temporary,
+        ]),
+      );
+      assert.equal(
+        await tab.textContent("#outside-note"),
+        "Outside game: chats use it, Rewind and Loops can't reach it.",
+      );
+      await tab.click("#back");
+      await tab.waitForSelector("#project:not([hidden])");
+      assert.equal(
+        await tab.evaluate(() => document.activeElement?.id),
+        "project-name",
+        "Back returns to the project's name",
+      );
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("Ready is the green dot alone, its word kept for screen readers; another state shows its word", async () => {
+    const c = await computer();
+    const file = await STEPS[PanelStep.Connected].arrange(c);
+    await c.act("status", { project: file });
+    const tab = await open(c);
+    const state = () =>
+      tab.evaluate(() => {
+        const chip = document.getElementById("state");
+        const word = document.getElementById("state-word");
+        return {
+          word: word?.textContent,
+          title: chip?.title,
+          wordSeen: (word?.getBoundingClientRect().width ?? 0) > 1,
+          dot: chip ? getComputedStyle(chip, "::before").backgroundColor : "",
+        };
+      });
+    try {
+      await tab.waitForFunction(() => document.getElementById("state")?.textContent === "Ready", null, {
+        timeout: CONNECTED_WAIT_MS,
+      });
+      // The light theme's green, chosen for 4.5:1 on white.
+      assert.deepEqual(await state(), { word: "Ready", title: "Ready", wordSeen: false, dot: "rgb(29, 127, 70)" });
+      c.live.running = false;
+      c.live.answering = false;
+      await tab.waitForFunction(() => document.getElementById("state")?.textContent === "Not open", null, {
+        timeout: CONNECTED_WAIT_MS,
+      });
+      assert.equal((await state()).wordSeen, true);
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("past six projects a filter narrows the list by name and says when nothing matches; six need none", async () => {
+    const names = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta"];
+    const seven = await computer();
+    for (const name of names) await writeProject(path.join(seven.newGames, name, `${name}.uproject`));
+    const tab = await open(seven);
+    try {
+      await tab.waitForSelector("#pick:not([hidden])");
+      assert.equal((await listRows(tab)).length, 7);
+      await tab.fill("#filter", "EP");
+      assert.deepEqual(
+        (await listRows(tab)).map((row) => row.name),
+        ["Epsilon"],
+      );
+      assert.equal(await tab.isVisible("#no-match"), false);
+      await tab.fill("#filter", "zzz");
+      assert.deepEqual(await listRows(tab), []);
+      assert.equal(await tab.isVisible("#no-match"), true);
+      await tab.fill("#filter", "");
+      assert.equal((await listRows(tab)).length, 7);
+    } finally {
+      await tab.close();
+    }
+    const six = await computer();
+    for (const name of names.slice(0, 6)) await writeProject(path.join(six.newGames, name, `${name}.uproject`));
+    const few = await open(six);
+    try {
+      await few.waitForSelector("#pick:not([hidden])");
+      assert.equal((await listRows(few)).length, 6);
+      assert.equal(await few.isVisible("#filter"), false);
+    } finally {
+      await few.close();
+    }
+  });
 });
+
+/** A 5.8 project file at `file`, its folder made. */
+async function writeProject(file: string) {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, uproject("5.8"));
+  return file;
+}
 
 /**
  * The host page for the sandboxed tests: the panel, with Studio's real bridge SDK pasted in, runs in

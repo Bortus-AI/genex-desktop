@@ -30,6 +30,7 @@ import {
   net,
   protocol,
   powerSaveBlocker,
+  ShareMenu,
   shell,
   utilityProcess,
 } from "electron";
@@ -114,7 +115,13 @@ import { type PreviewBoundsRecord, registerPreviewIpc } from "./ipc/preview.ts";
 import { registerProjectsIpc } from "./ipc/projects.ts";
 import { registerPlayIpc } from "./ipc/play.ts";
 import { registerGenexAccountIpc } from "./ipc/genex-account.ts";
-import { createGenexAccount, type GenexAccount, pluginAccountPort } from "./core/genex-account.ts";
+import {
+  createGenexAccount,
+  type GenexAccount,
+  type GenexAccountPort,
+  pluginAccountPort,
+} from "./core/genex-account.ts";
+import { devStandAccountPort } from "./dev/dev-stand-account.ts";
 import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
 import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
@@ -134,7 +141,8 @@ import { fixtureClone, gitClone, remixGame } from "./play/remix.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { wirePlayViewer } from "./play/viewer-view.ts";
-import { PLAY_ORIGIN } from "../shared/play.ts";
+import { playOrigins } from "./play/origins.ts";
+import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
 import { registerSettingsIpc } from "./ipc/settings.ts";
 import { readLicenseTexts } from "./licenses.ts";
@@ -375,6 +383,12 @@ configureCodingClis(
     : {},
 );
 const fixtureNativePolicy = fixtureProviders || isSmoke;
+/**
+ * Where Play talks to genex.games in this launch: genex.games itself, or a local or test copy that a
+ * development profile names (`play/origins.ts`); never in a packaged app, and never in a fixture
+ * launch, which answers Play from its own data.
+ */
+const playOrigin = playOrigins(process.env, dev !== null && !app.isPackaged && !fixtureNativePolicy);
 // Human review is an explicit opt-in; automated fixture windows stay parked and unfocusable.
 const interactiveFixture = process.env.STUDIO_FIXTURE_INTERACTIVE === "1";
 const parkedFixtureWindow = isSmoke || (fixtureProviders && !interactiveFixture);
@@ -892,16 +906,29 @@ function attachPreviews(studio: StudioCore, win: BrowserWindow): void {
  */
 function genexAccountFor(studio: StudioCore): GenexAccount {
   genexAccount ??= createGenexAccount({
-    port: fixtureNativePolicy ? fixtureAccountPort(fixtureGenexAccount, Date.now) : pluginAccountPort(studio.plugins),
-    openSignIn: (url) => openGenexPage(fixtureNativePolicy, url),
+    port: genexAccountPort(studio),
+    openSignIn: (url) => openGenexPage(fixtureNativePolicy, url, playOrigin.web),
   });
   return genexAccount;
+}
+
+/**
+ * What the app's Genex account rides on: a fixture launch's own, a development copy of genex.games'
+ * own sign-in (the Genex plugin's token is genex.games' and the copy would refuse it), or the plugin's.
+ */
+function genexAccountPort(studio: StudioCore): GenexAccountPort {
+  if (fixtureNativePolicy) return fixtureAccountPort(fixtureGenexAccount, Date.now);
+  if (playOrigin.api !== PLAY_ORIGIN.api) {
+    const request = networkRequest(globalThis.fetch, playOrigin.api);
+    return devStandAccountPort({ request, now: Date.now, web: playOrigin.web });
+  }
+  return pluginAccountPort(studio.plugins);
 }
 
 /** Play's catalog for this core: genex.games over the network, or a fixture launch's own answers. */
 function playCatalogFor(studio: StudioCore): PlayGallery {
   playCatalog ??= playGallery({
-    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
     token: genexAccountFor(studio).token,
     now: Date.now,
     localImages: fixtureNativePolicy,
@@ -916,12 +943,13 @@ function playCatalogFor(studio: StudioCore): PlayGallery {
 function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   const account = genexAccountFor(studio);
   const deps: PeopleDeps = {
-    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, PLAY_ORIGIN.api),
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
     token: account.token,
     now: Date.now,
     localImages: fixtureNativePolicy,
     upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
     refused: account.refused,
+    web: playOrigin.web,
   };
   // A 401 to a creator's numbers or the credits ends the sign-in as one to the account's own calls does.
   const counted = { ...deps, request: refusingRequest(deps.request, deps.refused) };
@@ -935,9 +963,25 @@ function remixPlayGame(studio: StudioCore, world: PlayWorld): Promise<string> {
     gamesRoot: () => studio.layout.gamesRoot,
     // A fixture launch never reaches the network: its copy is a local stand-in.
     clone: fixtureNativePolicy ? fixtureClone : gitClone,
+    install: async (dir) => {
+      await studio.builds.installGuarded({ project: world.slug, dir });
+    },
     adopt: async (dir, title) =>
-      (await studio.adoptProject(dir, { title, template: false, trustProjectSettings: false })).name,
+      (await studio.adoptProject(dir, { title, template: false, trustProjectSettings: false, guardScripts: true }))
+        .name,
+    build: async (name) => {
+      const game = (await studio.games.list()).find((listed) => listed.name === name);
+      if (game) await studio.builds.ensure({ project: name, dir: game.dir, shape: game.shape, guarded: true });
+    },
+    progress: (progress) => pushUiEvent({ type: UiEvent.PlayRemix, payload: { slug: world.slug, ...progress } }),
   });
+}
+
+/** The Mac's share menu (Messages, Mail, AirDrop…) for `url`, under the button at `at` when the renderer said where. */
+function popShareMenu(url: string, at: PlayPoint | undefined): void {
+  const win = window;
+  if (!win || win.isDestroyed() || process.platform !== StudioPlatform.Mac) return;
+  new ShareMenu({ urls: [url] }).popup({ window: win, ...at });
 }
 
 /** Play's full-screen viewer in `win`: a published game, the studio's small menu over its corner. */
@@ -945,11 +989,11 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
     gallery: playCatalogFor(studio),
-    remix: (world) => remixPlayGame(studio, world),
     emit: (payload) => pushUiEvent({ type: UiEvent.PlayViewer, payload }),
     openExternal: (url) => {
       if (!fixtureNativePolicy) void openOutside(studio, win, url);
     },
+    web: playOrigin.web,
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
@@ -1264,6 +1308,7 @@ function registerIpc(studio: StudioCore): void {
     smokeReads: isSmoke ? smokeReads : null,
     welcome: showsWelcome,
     developer: !app.isPackaged,
+    playWeb: playOrigin.web,
   });
   registerGamesIpc(handle, { core: studio, runSummaryReader, pushUiEvent });
   registerStorageIpc(handle, { core: studio });
@@ -1307,13 +1352,15 @@ function registerIpc(studio: StudioCore): void {
     busy: () => keepAwake.held || (core?.budget.userInFlight ?? 0) > 0,
   });
   registerCliInstallIpc(handle, cliInstalls(studio));
-  registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel });
+  registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel, web: playOrigin.web });
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, {
     gallery: playCatalogFor(studio),
     remix: (world) => remixPlayGame(studio, world),
     viewer: () => playView,
     ...playAccountFor(studio),
+    web: playOrigin.web,
+    share: popShareMenu,
   });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },

@@ -1,13 +1,25 @@
 /**
- * Play's people against the genex.games API: the signed-in account's own profile (its name and
- * picture, which it may change), anyone's public profile, friends and friend requests, people
- * search and who sees the game the account is in. Every call but a public profile rides the
- * Genex account's token. Electron-free, like the gallery: the request, the token and the avatar
- * upload come in as deps. Nobody's email leaves this module: `/api/me` names it, nothing here
- * returns it.
+ * Play's people against the genex.games API: the signed-in account's own profile (its name,
+ * nickname and picture, which it may change), anyone's public profile, friends and friend
+ * requests, people search and who sees the game the account is in. Every call but a public profile
+ * rides the Genex account's token. Electron-free, like the gallery: the request, the token and the
+ * avatar upload come in as deps. Nobody's email leaves this module: `/api/me` names it, nothing
+ * here returns it.
  */
 import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
+import {
+  HANDLE_SUGGESTIONS_MAX,
+  type HandleCheck,
+  type HandleSave,
+  HandleSaveOutcome,
+  HandleState,
+  isHandle,
+  isHandleProblem,
+  isHandleState,
+  localHandleCheck,
+  normalizeHandleInput,
+} from "../../shared/handle.ts";
 import {
   AvatarStyle,
   FriendAction,
@@ -31,7 +43,7 @@ import {
   playName,
   profileFriendsOrder,
 } from "../../shared/play-people.ts";
-import { isPlaySlug, PLAY_ORIGIN, type PlayGame } from "../../shared/play.ts";
+import { isPlaySlug, type PlayGame } from "../../shared/play.ts";
 import {
   type GalleryDeps,
   GalleryError,
@@ -44,6 +56,7 @@ import {
   text,
   toPlayGame,
 } from "./gallery.ts";
+import { onWebsite } from "./origins.ts";
 
 /** How long the signed-in account's own profile is trusted before it is read again. */
 const ME_TTL_MS = 30 * SECOND_MS;
@@ -57,8 +70,11 @@ const TITLE_MAX = 200;
 /** The most rows one list keeps: the API's own ceilings, with room. */
 const LIST_MAX = 500;
 /** HTTP statuses the people calls read apart. */
+const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_NOT_FOUND = 404;
+const HTTP_TOO_MANY_REQUESTS = 429;
+const BAD_GATEWAY = 502;
 /** What a WebP file starts with: `RIFF`, four length bytes, `WEBP`. */
 const RIFF = [0x52, 0x49, 0x46, 0x46];
 const WEBP = [0x57, 0x45, 0x42, 0x50];
@@ -67,6 +83,7 @@ const WEBP = [0x57, 0x45, 0x42, 0x50];
 export const PeopleRoute = {
   Me: "/api/me",
   MyAccount: "/api/users/me",
+  HandleCheck: "/api/users/handle-check",
   AvatarUpload: "/api/users/me/avatar/upload-url",
   AvatarCommit: "/api/users/me/avatar/commit",
   Friends: "/api/friends",
@@ -80,6 +97,17 @@ export const PeopleRoute = {
   friend: (id: string) => `/api/friends/${encodeURIComponent(id)}`,
   status: (id: string) => `/api/friends/status/${encodeURIComponent(id)}`,
 } as const;
+
+/** Why genex.games refused a handle, as its error names it. Wire values: never rename one. */
+export const HandleError = {
+  /** Taken or kept by genex.games; its answer offers handles to try. */
+  Taken: "handle_taken",
+  /** A shape problem, which its answer names. */
+  Invalid: "handle_invalid",
+  /** Changed too often lately (a 429). */
+  ChangesExhausted: "handle_changes_exhausted",
+} as const;
+export type HandleError = (typeof HandleError)[keyof typeof HandleError];
 
 const MESSAGE = {
   BadAccount: "Not a Genex account",
@@ -97,6 +125,8 @@ export interface PeopleDeps extends GalleryDeps {
   upload(url: string, bytes: Uint8Array, contentType: string): Promise<number>;
   /** genex.games answered 401 to `token`, on any of the account's calls: its sign-in has ended. */
   refused?(token: string): void;
+  /** The website Play links to (`origins.ts`): an invite link elsewhere is never handed on. */
+  web: string;
 }
 
 /** `request`, telling `refused` which token genex.games refused (401) on any call that carried one. */
@@ -123,7 +153,8 @@ export function toPerson(value: unknown, local = false): PlayPerson | null {
   if (!name) return null;
   const photo = value.avatarStyle === AvatarStyle.Photo ? imageUrl(value.image, local) : null;
   const avatarVariant = isAvatarVariant(value.avatarVariant) ? value.avatarVariant : 0;
-  return { id: value.id, name, imageUrl: photo, avatarVariant, pro: value.pro === true };
+  const handle = isHandle(value.handle) ? value.handle : null;
+  return { id: value.id, name, handle, imageUrl: photo, avatarVariant, pro: value.pro === true };
 }
 
 /** A count the API sent, or null when it sent none. */
@@ -211,16 +242,40 @@ export function isAvatarWebp(bytes: Uint8Array): boolean {
 /** The credits an invite earns, as the referral answer says. */
 const inviteBonusOf = (body: unknown): number | null => (isRecord(body) ? countOf(body.inviterBonus) : null);
 
-/** The invite link the referral answer carries, when it is one on genex.games itself. */
-function inviteLinkOf(body: unknown): string | null {
+/** The invite link the referral answer carries, when it is a page of the website Play links to (`web`). */
+function inviteLinkOf(body: unknown, web: string): string | null {
   const link = isRecord(body) ? body.link : null;
-  if (typeof link !== "string") return null;
-  try {
-    const url = new URL(link);
-    return url.protocol === "https:" && url.origin === PLAY_ORIGIN.web ? url.href : null;
-  } catch {
-    return null;
+  return typeof link === "string" && onWebsite(link, web) ? new URL(link).href : null;
+}
+
+/** Handles genex.games offers in place of `asked`: well formed, each once, at most a few. */
+function suggestionsOf(value: unknown, asked: string): string[] {
+  const offered = Array.isArray(value) ? value.filter(isHandle).filter((handle) => handle !== asked) : [];
+  return [...new Set(offered)].slice(0, HANDLE_SUGGESTIONS_MAX);
+}
+
+/** genex.games' answer to a handle check of `asked`; a state it does not name is a failed read, never Free. */
+function toHandleCheck(body: unknown, asked: string, route: string): HandleCheck {
+  const state = isRecord(body) ? body.state : null;
+  if (!isHandleState(state)) throw new GalleryError(route, BAD_GATEWAY);
+  return { handle: asked, state, suggestions: isRecord(body) ? suggestionsOf(body.suggestions, asked) : [] };
+}
+
+/** A refused handle save as the field shows it, or null for an answer that is no refusal of the handle. */
+function handleRefusal(handle: string, answer: { status: number; body: unknown }): HandleSave | null {
+  if (!isRecord(answer.body)) return null;
+  const { error, problem, suggestions } = answer.body;
+  // Only genex.games' own word for it: any other 429 is a rate limit, which is no verdict on the handle.
+  if (answer.status === HTTP_TOO_MANY_REQUESTS) {
+    return error === HandleError.ChangesExhausted ? { outcome: HandleSaveOutcome.TooManyChanges } : null;
   }
+  if (answer.status !== HTTP_BAD_REQUEST) return null;
+  const refused = (state: HandleState, offered: string[] = []): HandleSave => ({
+    outcome: HandleSaveOutcome.Refused,
+    check: { handle, state, suggestions: offered },
+  });
+  if (error === HandleError.Taken) return refused(HandleState.Taken, suggestionsOf(suggestions, handle));
+  return error === HandleError.Invalid && isHandleProblem(problem) ? refused(problem) : null;
 }
 
 /** A write's answer: SignInNeeded for a refused token, GalleryError for any other non-2xx. */
@@ -228,6 +283,20 @@ function checked(route: string, answer: { status: number; body: unknown }): unkn
   if (answer.status === HTTP_UNAUTHORIZED) throw new SignInNeeded();
   if (answer.status < 200 || answer.status >= 300) throw new GalleryError(route, answer.status);
   return answer.body;
+}
+
+/** The account `/api/me` names, as Play shows it, with the Pro flag its public profile carries. */
+function toMe(user: Record<string, unknown>, person: PlayPerson, pro: boolean, local: boolean): PlayMe {
+  return {
+    ...person,
+    pro,
+    joinedAt: isoDate(user.createdAt),
+    avatarStyle: isAvatarStyle(user.avatarStyle) ? user.avatarStyle : null,
+    photoUrl: imageUrl(user.photo, local),
+    avatarVariantKept: isAvatarVariant(user.avatarVariant),
+    // Absent is not false: a genex.games without handles opens no welcome for one.
+    handleChosen: typeof user.handleChosen === "boolean" ? user.handleChosen : null,
+  };
 }
 
 /** The signed-in account's own reads and writes: who it is, its name and its picture. */
@@ -258,16 +327,14 @@ function accountCalls(deps: PeopleDeps) {
     // `/api/me` has no Pro flag; the public profile has, and no email.
     const profile = await readRoute(request, PeopleRoute.user(person.id)).catch(() => null);
     const pro = isRecord(profile) && isRecord(profile.user) && profile.user.pro === true;
-    const value: PlayMe = {
-      ...person,
-      pro,
-      joinedAt: isoDate(user.createdAt),
-      avatarStyle: isAvatarStyle(user.avatarStyle) ? user.avatarStyle : null,
-      photoUrl: imageUrl(user.photo, local),
-      avatarVariantKept: isAvatarVariant(user.avatarVariant),
-    };
+    const value = toMe(user, person, pro, local);
     me = { token: current, at: now(), value };
     return value;
+  };
+
+  /** Read the account afresh on the next ask: a write changed it. */
+  const forget = (): void => {
+    me = null;
   };
 
   /** Rename the account, as genex.games trims and bounds a name. */
@@ -338,7 +405,46 @@ function accountCalls(deps: PeopleDeps) {
     return after;
   };
 
-  return { auth, whoAmI, rename, setAvatar, setAvatarStyle, setAvatarVariant };
+  return { auth, whoAmI, forget, rename, setAvatar, setAvatarStyle, setAvatarVariant };
+}
+
+/** The account's nickname: what a typed one is, and making one the account's. */
+function handleCalls(deps: PeopleDeps, account: Pick<ReturnType<typeof accountCalls>, "auth" | "whoAmI" | "forget">) {
+  const { request } = deps;
+  const { auth, whoAmI } = account;
+
+  /**
+   * What a typed handle is: its shape problem or that it is the account's own, at once; any other
+   * well-formed handle is genex.games' to judge (free, taken or reserved, with handles to try).
+   */
+  const checkHandle = async (raw: string): Promise<HandleCheck> => {
+    const own = (await whoAmI().catch(() => null))?.handle ?? null;
+    const known = localHandleCheck(String(raw), own);
+    if (known) return known;
+    const handle = normalizeHandleInput(String(raw));
+    const route = `${PeopleRoute.HandleCheck}?${new URLSearchParams({ handle })}`;
+    const answer = await request(route, { method: "GET", token: await auth() });
+    return toHandleCheck(checked(route, answer), handle, route);
+  };
+
+  /**
+   * Make a handle the account's (its own one again confirms it, which is how the welcome's Continue
+   * closes it for good). A refusal says why, as the field shows it; nothing is sent for a handle of
+   * the wrong shape.
+   */
+  const setHandle = async (raw: string): Promise<HandleSave> => {
+    const problem = localHandleCheck(String(raw), null);
+    if (problem) return { outcome: HandleSaveOutcome.Refused, check: problem };
+    const handle = normalizeHandleInput(String(raw));
+    const answer = await request(PeopleRoute.MyAccount, { method: "PATCH", token: await auth(), body: { handle } });
+    const refusal = handleRefusal(handle, answer);
+    if (refusal) return refusal;
+    checked(PeopleRoute.MyAccount, answer);
+    account.forget();
+    return { outcome: HandleSaveOutcome.Saved, me: await whoAmI() };
+  };
+
+  return { checkHandle, setHandle };
 }
 
 /** The account's friends: the Friends page, a press on a person, people search and visibility. */
@@ -363,7 +469,7 @@ function friendCalls(deps: PeopleDeps, auth: () => Promise<string>) {
       incoming: toRequests(isRecord(requests) ? requests.incoming : null, local),
       outgoing: toRequests(isRecord(requests) ? requests.outgoing : null, local),
       visibility: isPresenceVisibility(seen) ? seen : PresenceVisibility.Game,
-      inviteLink: inviteLinkOf(referral),
+      inviteLink: inviteLinkOf(referral, deps.web),
       inviteBonus: inviteBonusOf(referral),
     };
   };
@@ -473,6 +579,7 @@ export function playPeople(given: PeopleDeps) {
     setAvatar: account.setAvatar,
     setAvatarStyle: account.setAvatarStyle,
     setAvatarVariant: account.setAvatarVariant,
+    ...handleCalls(deps, account),
     profile,
     ...friendCalls(deps, account.auth),
   };

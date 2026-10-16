@@ -21,9 +21,10 @@ import {
   type FactRule,
   WEB_LOOP_FACTS,
 } from "../../src/shared/project-facts.ts";
+import { GameEngine } from "../../src/shared/game-engine.ts";
 import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { writeEngineBinding } from "../../src/substrate/game-engine-binding.ts";
-import { ENGINES, TOY_ENGINE, UNREAL_ENGINE } from "../helpers/engines.ts";
+import { ENGINES, GODOT_ENGINE, TOY_ENGINE, UNREAL_ENGINE } from "../helpers/engines.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { detectFacts, projectFiles } from "../../src/substrate/project-facts.ts";
 import { type CoreLite, coreLite } from "../helpers/core-lite.ts";
@@ -443,5 +444,21 @@ describe("a listed game's facts", () => {
       [`toy-project@garden:${FactSource.Link}`],
       "the toy engine's fact at its project's folder, and the template beside it no web game",
     );
+  });
+
+  it("a link to a Godot project outside the game is one absolute Godot fact; the game's own godot/ is no second one", async () => {
+    const elsewhere = await realpath(await tmpDir("studio-outside-godot-"));
+    await writeFile(path.join(elsewhere, "project.godot"), "config_version=5\n");
+    const game = await lite.core.games.scaffold("godot-link");
+    await mkdir(path.join(game.dir, "godot"));
+    await writeFile(path.join(game.dir, "godot", "project.godot"), "config_version=5\n");
+    const { binding } = await writeEngineBinding(
+      game.dir,
+      path.join(elsewhere, "project.godot"),
+      GODOT_ENGINE.id,
+      ENGINES,
+    );
+    assert.equal(binding.kind, GameEngine.Godot, "linked as the Godot plugin's engine");
+    assert.deepEqual(await factsOf(game.name), [`${CoreFact.GodotProject}@${elsewhere}:${FactSource.Link}`]);
   });
 });

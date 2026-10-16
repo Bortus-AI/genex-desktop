@@ -138,7 +138,8 @@ function gameCalls(bridge: BridgeCalls) {
     projectModelRigs: (p) => invoke("studio:game.asset.rigs", p),
     projectAssets: (project) => invoke("studio:game.assets", { project }),
     readProjectAsset: (p) => invoke("studio:game.asset.still", p),
-    installPackages: (project) => invoke("studio:packages.install", { project }),
+    installPackages: (project, options) =>
+      invoke("studio:packages.install", { project, scripts: options?.scripts === true }),
   } satisfies Partial<StudioApi>;
 }
 
@@ -240,6 +241,9 @@ function studioCalls(bridge: BridgeCalls) {
     playStats: (days) => invoke("studio:play.stats", { days }),
     playCreators: () => invoke("studio:play.creators"),
     playCredits: () => invoke("studio:play.credits"),
+    playHandleCheck: (handle) => invoke("studio:play.handle-check", { handle }),
+    playSetHandle: (handle) => invoke("studio:play.handle", { handle }),
+    playShare: (url, at) => invoke("studio:play.share", { url, at }),
     genexAccount: () => invoke("studio:genex-account.read"),
     genexSignIn: () => invoke("studio:genex-account.sign-in"),
     genexCancelSignIn: () => invoke("studio:genex-account.cancel"),

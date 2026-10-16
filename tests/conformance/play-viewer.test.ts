@@ -2,7 +2,7 @@
  * Play's viewer: a game fills the window under the studio's own header (Back, the game's name and
  * facts, Like, Share, Invite a friend, Remix, Exit), drawn by the app above the game's view. It signs
  * the player in with a ticket when there is a Genex account, shows the cover until the page has
- * loaded (or long enough), and closes from Back, Exit, the guest card's Sign in or a finished remix. A held Esc
+ * loaded (or long enough), and closes from Back, Exit, the guest card's Sign in or Remix. A held Esc
  * in the game moves the keyboard to the header; Esc there gives it back. A guest with no Genex
  * account is offered the Genex plugin in the header until its ×.
  */
@@ -82,7 +82,7 @@ function fakeClock() {
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
 /** A viewer over recording fakes. */
-function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewerDeps["remix"] } = {}) {
+function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { web?: string } = {}) {
   const { clock, advance } = fakeClock();
   const log: string[] = [];
   const events: PlayViewerEvent[] = [];
@@ -110,7 +110,7 @@ function rig(overrides: Partial<PlayViewerDeps["gallery"]> & { remix?: PlayViewe
     },
     focusApp: () => log.push("app.focus"),
     clipboard: (text) => copied.push(text),
-    remix: overrides.remix ?? (async () => "lost-cathedral-remix"),
+    web: overrides.web ?? "https://genex.games",
     emit: (event) => events.push(event),
     clock,
     // Voice chat has its own suite (play-mic.test.ts); these games never ask for a microphone.
@@ -142,7 +142,6 @@ describe("Play viewer", () => {
         likes: 0,
         remixable: false,
         note: null,
-        busy: false,
         guestCard: false,
         facts: null,
         mic: null,
@@ -154,7 +153,6 @@ describe("Play viewer", () => {
       likes: 3,
       remixable: true,
       note: null,
-      busy: false,
       guestCard: false,
       facts: { author: "Simeon M", authorId: null, plays: 5300, online: 8 },
       mic: null,
@@ -279,6 +277,16 @@ describe("Play viewer", () => {
     assert.equal(bar()?.note, PlayNote.InviteCopied);
   });
 
+  it("copies the game's page on the website Play links to, a development profile's too", async () => {
+    const { viewer, copied } = rig({ web: "http://localhost:5173" });
+    viewer.open("lost-cathedral");
+    await settle();
+    viewer.control(PlayControl.Share);
+    viewer.control(PlayControl.Invite);
+    await settle();
+    assert.deepEqual(copied, ["http://localhost:5173/lost-cathedral", "http://localhost:5173/lost-cathedral?ref=abc"]);
+  });
+
   it("copies the game's page for Share and an invite with the referral code", async () => {
     const { viewer, copied, bar } = rig();
     viewer.open("lost-cathedral");
@@ -297,60 +305,14 @@ describe("Play viewer", () => {
     assert.deepEqual(guest.copied, ["https://genex.games/lost-cathedral"]);
   });
 
-  it("closes into the new game when a remix is made, and stays when it fails", async () => {
+  it("gives way at once on Remix: the app makes the copy and shows it being made", async () => {
     const { viewer, events, log } = rig();
     viewer.open("lost-cathedral");
     await settle();
     viewer.control(PlayControl.Remix);
-    await settle();
-    assert.deepEqual(events.at(-1), {
-      slug: "lost-cathedral",
-      openId: 1,
-      phase: PlayViewerPhase.Closed,
-      remixed: "lost-cathedral-remix",
-    });
-    assert.ok(log.includes("game.close"));
     assert.equal(viewer.showing(), null);
-
-    const failing = rig({
-      remix: async () => {
-        throw new Error("clone failed");
-      },
-    });
-    failing.viewer.open("lost-cathedral");
-    await settle();
-    failing.viewer.control(PlayControl.Remix);
-    assert.deepEqual([failing.bar()?.note, failing.bar()?.busy], [PlayNote.Remixing, true]);
-    await settle();
-    assert.equal(failing.bar()?.note, PlayNote.RemixFailed);
-    assert.equal(failing.viewer.showing(), "lost-cathedral");
-  });
-
-  it("still opens, or tells the failure of, a remix whose viewer closed while it was made", async () => {
-    let finish: (name: string) => void = () => {};
-    const made = rig({ remix: () => new Promise((resolve) => (finish = resolve)) });
-    made.viewer.open("lost-cathedral");
-    await settle();
-    made.viewer.control(PlayControl.Remix);
-    made.viewer.control(PlayControl.Back);
-    finish("lost-cathedral-remix");
-    await settle();
-    assert.deepEqual(made.events.at(-1), {
-      slug: "lost-cathedral",
-      openId: 1,
-      phase: PlayViewerPhase.Closed,
-      remixed: "lost-cathedral-remix",
-    });
-
-    let fail: (error: Error) => void = () => {};
-    const failed = rig({ remix: () => new Promise((_resolve, reject) => (fail = reject)) });
-    failed.viewer.open("lost-cathedral");
-    await settle();
-    failed.viewer.control(PlayControl.Remix);
-    failed.viewer.control(PlayControl.Exit);
-    fail(new Error("clone failed"));
-    await settle();
-    assert.equal(failed.events.at(-1)?.remixFailed, true);
+    assert.ok(log.includes("game.close"));
+    assert.deepEqual(events.at(-1), { slug: "lost-cathedral", openId: 1, phase: PlayViewerPhase.Closed });
   });
 
   it("takes one like at a time", async () => {
@@ -378,22 +340,6 @@ describe("Play viewer", () => {
     viewer.open("lost-cathedral");
     await settle();
     assert.deepEqual(opened, ["game:lost-cathedral:T1"]);
-  });
-
-  it("never remixes a game whose source is not public", async () => {
-    let made = 0;
-    const { viewer } = rig({
-      world: async () => ({ ...WORLD, remixable: false, cloneUrl: null }),
-      remix: async () => {
-        made += 1;
-        return "x";
-      },
-    });
-    viewer.open("lost-cathedral");
-    await settle();
-    viewer.control(PlayControl.Remix);
-    await settle();
-    assert.equal(made, 0);
   });
 
   it("closes from Back and Exit", async () => {

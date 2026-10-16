@@ -9,7 +9,7 @@
 import type { GameProject } from "../types/host-api.d.ts";
 
 /** The engines a game can build in, by their wire names. */
-export const GameEngine = { Web: "web", Unreal: "unreal" } as const;
+export const GameEngine = { Web: "web", Unreal: "unreal", Godot: "godot" } as const;
 export type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
 
 /**

@@ -1352,6 +1352,11 @@ export interface GameLibraryEntry {
   removed?: boolean;
   /** Folder trust is host metadata; project files cannot grant it. */
   trustProjectSettings?: boolean;
+  /**
+   * A copy of someone else's game (a Play remix) whose setup scripts the person has not trusted:
+   * its packages install with none of them. Host metadata, like the trust above.
+   */
+  guardScripts?: boolean;
   cover?: GameCover;
   primaryThreadId?: string;
   /** The folder's content stamp as New game made it (`GameProject.scaffoldStamp`). */
@@ -1382,10 +1387,17 @@ export type ProjectKind =
 
 /**
  * The runtimes a game declares in its studio.json: never the desktop or a VM, which only the person
- * grants, nor the editor, which the game's engine link decides.
+ * grants, nor the editor, which the game's matching engine plugin supplies.
  */
 export type GameRuntime = 'browser' | 'bridge';
 // ↑ src/shared/computer-target.ts
+
+/** An engine runtime a plugin declares, by id, and the arguments the studio starts it with. */
+export interface PlayEngine {
+  runtime: string;
+  args: string[];
+}
+// ↑ src/shared/game-project.ts
 
 /**
  * The command that starts a Play Protocol game, as studio.json declares it: a plain path inside
@@ -1394,6 +1406,13 @@ export type GameRuntime = 'browser' | 'bridge';
 export interface PlayCommand {
   command: string;
   args: string[];
+  /**
+   * An engine an enabled plugin runs for the game instead (a Godot game's own Godot): the plugin's
+   * declared native runtime, by its id, and its arguments. The studio finds the runtime where the
+   * plugin says it is and starts it in its native-job sandbox with a window and the GPU, which an
+   * engine needs to draw; the command stays for a person to run. Absent when unusable.
+   */
+  engine?: PlayEngine;
 }
 // ↑ src/shared/game-project.ts
 

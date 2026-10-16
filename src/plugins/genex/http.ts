@@ -73,6 +73,13 @@ export function browserGenexLink(address: string): string {
 /** A file Studio may download: https on one of Genex's asset hosts. */
 export const isGenexAssetUrl = (url: URL) => url.protocol === "https:" && ASSET_HOSTS.has(url.hostname);
 
+/** Where Genex's device sign-in stands, as its poll answers. Wire values: never rename one. */
+export const DeviceStatus = { Approved: "approved", Denied: "denied", Expired: "expired" } as const;
+export type DeviceStatus = (typeof DeviceStatus)[keyof typeof DeviceStatus];
+
+/** Genex's device flow is never polled faster than this, whatever it asks. */
+export const MIN_POLL_INTERVAL_S = 5;
+
 /** The Genex API routes Studio calls. */
 export const GenexRoute = {
   DeviceStart: "/api/cli/device/start",

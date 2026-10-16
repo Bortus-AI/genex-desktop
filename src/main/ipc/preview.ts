@@ -104,7 +104,9 @@ export function registerPreviewIpc(
   handle("studio:preview.live", async () => livePreview().liveStatus());
   // Why the stage is not showing the game's own build, and the one button that opens the network.
   handle("studio:build.problem", async (payload) => core.buildProblem(payload.project));
-  handle("studio:packages.install", async (payload) => core.installPackages(payload.project));
+  handle("studio:packages.install", async (payload) =>
+    core.installPackages(payload.project, { scripts: payload.scripts === true }),
+  );
 }
 
 /** The window size a slot was measured in, when the renderer sent a usable one. */

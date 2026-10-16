@@ -16,7 +16,7 @@ import type { McpChange } from "./mcp.ts";
 import type { CliInstallJob } from "./cli-install.ts";
 import type { ModelInstallJob } from "./model-install.ts";
 import type { ToolPermissionState } from "./permissions.ts";
-import type { PlayViewerEvent } from "./play.ts";
+import type { PlayViewerEvent, RemixProgress } from "./play.ts";
 import type { PluginChange, PluginConsentEvent } from "./plugins.ts";
 import type { BootNotice, HarnessState } from "./protocol.ts";
 import type { RunSummary } from "./run-summary.ts";
@@ -160,6 +160,8 @@ export interface UiEventMap {
   // — play —
   /** Play's game viewer loaded, played, failed or closed (`main/play/viewer.ts`). */
   "play.viewer": PlayViewerEvent;
+  /** A remix moved to its next step or downloaded more of its models (`main/play/remix.ts`). */
+  "play.remix": RemixProgress;
 
   // — plugins and connectors —
   "plugins.changed": PluginChange;
@@ -285,6 +287,7 @@ export const UiEvent = {
   LiveBehind: "live.behind",
   PreviewSoundToggle: "preview.sound.toggle",
   PlayViewer: "play.viewer",
+  PlayRemix: "play.remix",
   PluginsChanged: "plugins.changed",
   PluginEvent: "plugin.event",
   PluginConsent: "plugin.consent",

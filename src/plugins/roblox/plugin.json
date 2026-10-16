@@ -708,7 +708,7 @@
       "label": "Roblox Studio",
       "ariaLabel": "Roblox Studio",
       "icon": "box",
-      "requiresProject": false,
+      "facts": ["roblox-project"],
       "target": { "kind": "panel", "id": "setup" },
       "status": "toolbar-status"
     }

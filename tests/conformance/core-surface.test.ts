@@ -106,6 +106,8 @@ const METHODS = [
   "runPreviewIdentity",
   "saveReferenceFrames",
   "saveRunArtifact",
+  // Whether a game is a remix whose setup scripts the person has not trusted (installs, genex__package).
+  "scriptsGuarded",
   "selfChangeList",
   "sendUserMessage",
   "setGamesRoot",
@@ -113,6 +115,7 @@ const METHODS = [
   "showBuild",
   "snapshot",
   "start",
+  "startEngine",
   "stop",
   "stopJob",
   "stopLive",

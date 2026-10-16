@@ -50,7 +50,8 @@ const TAR_LIST_MAX_BUFFER = 4 * 1024 ** 2;
 const TAR_EXTRACT_TIMEOUT_MS = 2 * MINUTE_MS;
 /** A Studio native job id: a UUID, so it names a folder and never a path. */
 const idPattern = /^[a-f0-9-]{36}$/;
-const SEMVER = /^\d+\.\d+\.\d+$/;
+/** A runtime's version as its probe reads it: x.y.z, or x.y (read as x.y.0: Godot names a first release 4.3). */
+const SEMVER = /^\d+\.\d+(\.\d+)?$/;
 /** The environment a runtime's version probe runs with: nothing of Studio's. */
 const PROBE_ENV = { PATH: "/usr/bin:/bin", LANG: "en_US.UTF-8" };
 /** Candidate path prefixes a runtime declaration may start with, and the folder each stands for. */
@@ -107,8 +108,9 @@ const MESSAGE = {
 
 /** Whether `version` is at least `minimum`, comparing major, minor and patch. */
 const versionAtLeast = (version: string, minimum: string) => {
-  const a = version.split(".").map(Number),
-    b = minimum.split(".").map(Number);
+  const parts = (text: string) => [...text.split(".").map(Number), 0, 0, 0].slice(0, 3);
+  const a = parts(version),
+    b = parts(minimum);
   for (let i = 0; i < 3; i++) {
     if (a[i] !== b[i]) return Number(a[i]) > Number(b[i]);
   }

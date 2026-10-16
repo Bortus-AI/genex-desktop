@@ -14,6 +14,7 @@ import { notifyProblem, ToastTone } from "../state/toasts.ts";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import type { Notifications } from "../use-notifications.ts";
 import { problemWords } from "../words.ts";
+import { useCoveredByRemix } from "./RemixLayer.tsx";
 import type { Navigation } from "./use-navigation.ts";
 import type { ShellChrome } from "./use-shell-chrome.ts";
 
@@ -43,16 +44,16 @@ export function AppSidebar({
   const atHome = room === Room.Home && !launch;
   const { games, building, stagedCount } = useSidebarLibrary();
   // A game home is starting has one row: a placeholder until it is made and listed, then its own.
-  const launching = useMemo(
-    () => launchInSidebar(launch, (name) => games.some((game) => game.name === name)),
-    [launch, games],
-  );
+  const launching = useMemo(() => launchInSidebar(launch, games), [launch, games]);
   const update = useUpdate((s) => s.ready);
   // Strings, compared one by one: the sidebar re-renders when a release comes or goes, not on every plugin read.
   const pluginReleases = usePlugins(useShallow((s) => pluginUpdates(s.list, s.index).map(shownRelease)));
   const updatingPlugins = usePlugins((s) => s.updating);
   const busyThreads = useMemo(() => busyThreadIds(threadStatus), [threadStatus]);
   const { pluginsOpen } = chrome;
+  // A remix Create shows is the selected row; nothing else is.
+  const remixing = useCoveredByRemix();
+  const unselected = pluginsOpen || remixing;
   const hidden = !chrome.sidebarVisible || welcoming;
   const notifyFailure = notifyProblem(app.notify);
   const restartToUpdate = (): Promise<boolean> =>
@@ -103,9 +104,9 @@ export function AppSidebar({
           stagedCount={stagedCount}
           threads={threads}
           games={games}
-          activeThreadId={pluginsOpen ? null : activeThreadId}
-          activeProject={pluginsOpen || room === Room.Home ? null : project}
-          atHome={atHome && !pluginsOpen}
+          activeThreadId={unselected ? null : activeThreadId}
+          activeProject={unselected || room === Room.Home ? null : project}
+          atHome={atHome && !unselected}
           onHome={navigation.goHome}
           launching={launching}
           building={building}
@@ -114,6 +115,7 @@ export function AppSidebar({
           onNewGame={navigation.newGame}
           onSelectThread={navigation.selectThread}
           onSelectGame={navigation.selectGame}
+          onShowRemix={navigation.showRemix}
           onRenameGame={(game) => dialogs.dispatch({ type: "game", kind: "rename", game })}
           onPinGame={(game) => {
             void app.saveGame(game.name, { pinned: !game.pinned }).catch(notifyFailure);

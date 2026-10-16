@@ -1,30 +1,46 @@
 /**
- * The chat's own session on an Unreal game gets the `computer` tool on the game's editor play
- * (`main/core/editor-play-session.ts`), through the real core and the real Unreal plugin's backend:
- * only where the Unreal plugin is on and holds the game's engine link, never on a web game's chat
- * through this path. With no Unreal Editor open, its first look answers the plugin's own words.
+ * The chat's own session, judges and playtesters get `computer` on an engine game's editor play
+ * (`main/core/editor-play-session.ts`), through the real core and each plugin's backend. Unreal and
+ * any other declared engine are selected by the game's engine link; Unity by the project's facts. With no editor open, the first look
+ * answers the selected plugin's own words. Disabling the plugin removes the editor computer.
  */
 import assert from "node:assert/strict";
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
+import type { SessionPort } from "../../src/main/core/session-port.ts";
 import { ClockLevel, TargetRuntime } from "../../src/shared/computer-target.ts";
 import { ENGINE_PLAY_TOOLS, EnginePlayTool, MAX_PLAY_PLAYERS } from "../../src/shared/engine-play.ts";
 import { type PluginManifest, PluginSourceKind, PluginToolAudience } from "../../src/shared/plugins.ts";
+import { HarnessCapability } from "../../src/shared/protocol.ts";
 import { COMPUTER_TOOL_NAME } from "../../src/substrate/computer-tool.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import { TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
-import { workerChat } from "../helpers/worker-chat.ts";
+import { closeWorkerChats, workerChat } from "../helpers/worker-chat.ts";
 
 /** How long one case may take: a real lite core, the Unreal plugin's backend and their sessions. */
 const CASE_TIMEOUT_MS = 90_000;
 const UNREAL_PLUGIN = "unreal";
+const UNITY_PLUGIN = "unity";
 
-const text = (result: LiveToolResult | null): string =>
-  result === null ? "" : typeof result === "string" ? result : result.text;
-const offered = (request: DelegateRequest | undefined) =>
-  (request?.liveTools ?? []).some((tool) => tool.name === COMPUTER_TOOL_NAME);
+after(closeWorkerChats);
+
+const text = (result: LiveToolResult | null): string => {
+  if (result === null) return "";
+  return typeof result === "string" ? result : result.text;
+};
+const offered = (request: DelegateRequest | undefined, name = COMPUTER_TOOL_NAME) =>
+  (request?.liveTools ?? []).some((tool) => tool.name === name);
+
+/** A Unity project in the game, without an editor open or any connection to a real editor. */
+async function unityProject(directory: string): Promise<string> {
+  const root = path.join(directory, "unity");
+  const settings = path.join(root, "ProjectSettings");
+  await mkdir(settings, { recursive: true });
+  await writeFile(path.join(settings, "ProjectVersion.txt"), "m_EditorVersion: 6000.6.0f1\n");
+  return root;
+}
 
 /** A `.uproject` of the game's own, as a linked Unreal project needs one on disk. */
 async function uproject(name: string): Promise<string> {
@@ -51,7 +67,9 @@ describe("the computer on an Unreal game's editor play, for the chat's own sessi
     );
     let looked: LiveToolResult | null = null;
     whileRunning(async (request) => {
-      if (offered(request)) looked = await request.onLiveTool!(COMPUTER_TOOL_NAME, { action: "screenshot" });
+      if (!offered(request)) return;
+      assert.ok(request.onLiveTool);
+      looked = await request.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot" });
     });
     await delegate({ chatTurn: { messageId: await personSays() } });
     const request = seen.at(-1);
@@ -199,5 +217,77 @@ describe("the Roblox plugin's play tools", () => {
       pointer: true,
       state: true,
     });
+  });
+});
+
+describe("the computer on a Unity game's editor play", () => {
+  it("offers the chat's computer and judge_play only while Unity is enabled and the game holds its project", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, project, seen, delegate, personSays, whileRunning } = await workerChat();
+    core.host.hasCapability = (capability) => capability === HarnessCapability.ChatJudge;
+    await core.plugins.setEnabled(UNITY_PLUGIN, true);
+    await delegate({ chatTurn: { messageId: await personSays() } });
+    assert.equal(offered(seen.at(-1)), false, "no Unity project: no editor computer");
+    assert.equal(offered(seen.at(-1), "judge_play"), false);
+
+    const root = await unityProject(project.dir);
+    let looked: LiveToolResult | null = null;
+    whileRunning(async (request) => {
+      if (!offered(request)) return;
+      assert.ok(request.onLiveTool);
+      looked = await request.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot" });
+    });
+    await delegate({ chatTurn: { messageId: await personSays() } });
+    assert.equal(offered(seen.at(-1)), true, "the project's facts select Unity's editor play");
+    assert.equal(offered(seen.at(-1), "judge_play"), true, "the editor computer enables the chat's judge");
+    assert.match(text(looked), /Unity.*not open/i, "the real Unity backend explains why it cannot play");
+
+    whileRunning(async () => {});
+    await core.plugins.setEnabled(UNITY_PLUGIN, false);
+    await delegate({ chatTurn: { messageId: await personSays() } });
+    assert.equal(offered(seen.at(-1)), false, "a disabled plugin offers no computer");
+    assert.equal(offered(seen.at(-1), "judge_play"), false);
+
+    await core.plugins.setEnabled(UNITY_PLUGIN, true);
+    await rename(path.join(root, "ProjectSettings", "ProjectVersion.txt"), path.join(root, "version.txt"));
+    await delegate({ chatTurn: { messageId: await personSays() } });
+    assert.equal(offered(seen.at(-1)), false, "a removed Unity project no longer offers the computer");
+    assert.equal(offered(seen.at(-1), "judge_play"), false);
+    await core.plugins.setEnabled(UNITY_PLUGIN, false);
+  });
+
+  it("gives judges and playtesters the Unity editor target through the real backend", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, game, project } = await workerChat();
+    await unityProject(project.dir);
+    await core.plugins.setEnabled(UNITY_PLUGIN, true);
+    const outDir = await tmpDir("unity-editor-play-judge-");
+    const session: SessionPort = {
+      loaded: null,
+      handle: () => "pool:unity",
+      get: async () => assert.fail("Unity play must not open a browser window"),
+      release: async () => {},
+    };
+    try {
+      for (const role of ["judge", "playtester"] as const) {
+        const tools = await core._computerToolsFor(
+          { project: game, root: project.dir, handle: "pool:unity", role },
+          project.dir,
+          outDir,
+          session,
+        );
+        try {
+          assert.equal(tools.runtime, TargetRuntime.Editor, role);
+          const looked = await tools.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot" });
+          assert.match(text(looked), /Unity.*not open/i, `${role}: the real Unity backend's refusal`);
+        } finally {
+          await tools.release();
+        }
+      }
+    } finally {
+      await core.plugins.setEnabled(UNITY_PLUGIN, false);
+    }
   });
 });

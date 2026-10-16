@@ -51,7 +51,7 @@ test("the plugin-updates fixture leaves every bundled plugin one version behind 
     fs.readdirSync(seeds).map((name) => fs.readFileSync(path.join(seeds, name, "plugin.json"), "utf8"));
   const shipped = shippedManifests();
   const versions = new Map(shipped.map((text) => [JSON.parse(text).id as string, JSON.parse(text).version as string]));
-  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex", "roblox", "unreal"]);
+  assert.deepEqual([...versions.keys()].sort(), ["blender", "genex", "godot", "roblox", "unity", "unreal"]);
   /** What the app's own registry says of the profile's plugins, as the core starts it. */
   const installed = async () => {
     const registry = new PluginRegistry(
@@ -283,7 +283,9 @@ test("the eval lanes strip the same session variables a live launch does, and th
 });
 
 test("a live games root under a .claude folder is warned about, through a link too, and nothing is created", (t) => {
-  const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "games-root-")));
+  // The check resolves a link with the native realpath, which on Windows also expands the 8.3
+  // short names `os.tmpdir()` can carry (RUNNER~1); the JS realpath keeps them.
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "games-root-")));
   t.after(() => fs.rmSync(base, { recursive: true, force: true }));
   const claudeTree = path.join(base, "repo/.claude/worktrees/wt");
   fs.mkdirSync(claudeTree, { recursive: true });

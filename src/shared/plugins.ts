@@ -357,7 +357,7 @@ export type PluginToolbarTarget =
   | { kind: "action"; name: string; args?: Record<string, PluginScalar> }
   | { kind: "panel"; id: string };
 /** Host icons a toolbar item may name instead of drawing its own glyph. */
-export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes", "unreal"] as const;
+export const TOOLBAR_ICON_NAMES = ["globe", "export", "play", "image", "box", "boxes", "unreal", "godot"] as const;
 export type ToolbarIconName = (typeof TOOLBAR_ICON_NAMES)[number];
 export const isToolbarIconName = (value: unknown): value is ToolbarIconName =>
   (TOOLBAR_ICON_NAMES as readonly unknown[]).includes(value);
@@ -368,6 +368,11 @@ export interface PluginToolbarItem {
   /** A glyph of at most 4 characters, or one of TOOLBAR_ICON_NAMES. */
   icon?: string;
   requiresProject?: boolean;
+  /**
+   * API 3: the facts of the games whose strip shows this button (an engine's project, say); every
+   * game when absent. Its status can still bring it out on another game (`shown`).
+   */
+  facts?: string[];
   target: PluginToolbarTarget;
   /** Names a declared action without confirmation that returns a PluginToolbarStatus. */
   status?: string;
@@ -381,6 +386,8 @@ export interface PluginToolbarStatus {
   attention?: boolean;
   /** The badge drawn as a dot in its tone (ok green, warn amber, err red, info grey), its word said in the tooltip. */
   dot?: boolean;
+  /** A button scoped to `facts` shows on this game anyway (its chat chose the engine before the project exists). */
+  shown?: boolean;
 }
 /**
  * Where one environment variable of a plugin's MCP server gets its value. The manifest names a

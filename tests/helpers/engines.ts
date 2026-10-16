@@ -1,7 +1,7 @@
 /**
  * The engines tests link games to, declared as their plugins declare them (`engine` in
- * `plugin.json`): the bundled Unreal plugin's and the made-up toy engine's, and a catalog of both,
- * as the host builds one from the installed plugins.
+ * `plugin.json`): the bundled Unreal and Godot plugins' and the made-up toy engine's, and a
+ * catalog of them, as the host builds one from the installed plugins.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -19,8 +19,15 @@ function declared(manifest: string): EngineDeclaration {
 /** The bundled Unreal plugin's engine. */
 export const UNREAL_ENGINE = declared(path.join(REPO, "src", "plugins", "unreal", "plugin.json"));
 
+/** The bundled Godot plugin's engine. */
+export const GODOT_ENGINE = declared(path.join(REPO, "src", "plugins", "godot", "plugin.json"));
+
 /** The toy engine plugin's engine (`tests/fixtures/toy-engine-plugin`). */
 export const TOY_ENGINE = declared(path.join(REPO, "tests", "fixtures", "toy-engine-plugin", "plugin.json"));
 
-/** Both engines, as the host's catalog of installed plugins holds them. */
-export const ENGINES: EngineCatalog = engineCatalog([{ engine: UNREAL_ENGINE }, { engine: TOY_ENGINE }]);
+/** These engines, as the host's catalog of installed plugins holds them. */
+export const ENGINES: EngineCatalog = engineCatalog([
+  { engine: UNREAL_ENGINE },
+  { engine: GODOT_ENGINE },
+  { engine: TOY_ENGINE },
+]);

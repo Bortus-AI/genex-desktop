@@ -165,10 +165,10 @@ export interface PluginManifestTool extends PluginTool {
 
 /**
  * An engine a game builds in: `web` (three.js in the browser, every game unless Genex linked it to
- * an engine project) or `unreal`. A skill that names engines (non-empty, each once) reaches only
+ * an engine project), `unreal` or `godot`. A skill that names engines (non-empty, each once) reaches only
  * those games' briefs, so web-only advice never reaches an Unreal game.
  */
-export type PluginGameEngine = "web" | "unreal";
+export type PluginGameEngine = "web" | "unreal" | "godot";
 
 /** What an engine's editor can do in play (`engine.play`); absent fields are the editor defaults. */
 export interface PluginEnginePlay {
@@ -185,11 +185,15 @@ export interface PluginEnginePlay {
  * API 3, capability `game-engine`: the engine your plugin declares (`engine` in the manifest).
  * - `id` is your plugin's own id (2–40 lowercase letters, digits and dashes), never `web`.
  * - `label` is the engine's name as people read it, 1–40 characters on one line.
- * - `projectFiles` lists 1–4 extensions a linked project file may have, each one or two lowercase
- *   dotted parts: `.uproject`, `.project.json`.
+ * - `projectFiles` lists 1–4 project files a game may link, each an extension of one or two
+ *   lowercase dotted parts (`.uproject`, `.project.json`) or, for a project that is a folder marked
+ *   by one fixed file, that file's whole lowercase name (`project.godot`: the project is named by
+ *   its folder).
  * - `fact` is the fact a linked game holds: one your `detect` declares, or one of Genex's own.
  * - `projectInFolder` is true when the Loop needs the project inside the game folder, because its
  *   save points hold it.
+ * - `writesProjectFiles` is true when your agents change the project as files (scenes, scripts):
+ *   a linked project outside the game folder is then a folder the game's sessions read and write.
  * - `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at most 4
  *   each): computer use never drives them to build or play.
  */
@@ -199,6 +203,7 @@ export interface PluginEngineDeclaration {
   projectFiles: string[];
   fact: string;
   projectInFolder: boolean;
+  writesProjectFiles?: boolean;
   play?: PluginEnginePlay;
   apps?: { mac?: string[]; windows?: string[] };
 }
@@ -266,6 +271,11 @@ export interface PluginToolbarItem {
   icon?: string;
   /** Default true: the button waits for a loaded game. */
   requiresProject?: boolean;
+  /**
+   * API 3: the facts of the games whose strip shows this button; every game when absent. Its status
+   * can still bring it out on another game (`shown`).
+   */
+  facts?: string[];
   target: PluginToolbarTarget;
   /** Names a declared action without confirmation that returns a PluginToolbarStatus. */
   status?: string;
@@ -280,6 +290,8 @@ export interface PluginToolbarStatus {
   attention?: boolean;
   /** Draw the badge as a dot in its tone (ok green, warn amber, err red, info grey); its word moves to the tooltip. */
   dot?: boolean;
+  /** A button scoped to `facts` shows on this game anyway (its chat chose the engine before the project exists). */
+  shown?: boolean;
 }
 
 /**
@@ -470,12 +482,13 @@ export interface PluginEngineRemote {
 
 /**
  * A game's link to an engine project (`game-engine`): the engine (your `engine.id`), the project
- * file's real path, its name (the file name without its declared extension), when it was linked,
- * and the published game's ids when you linked them. The host keeps it in the plugin's storage as
- * `links/<game>.json`, where the plugin's MCP servers may read it, and mirrors it into the game's
- * `studio.json`.
+ * file's real path, its name (the file name without its declared extension, or its folder's name
+ * for a whole-name project file), when it was linked, and the published game's ids when you linked
+ * them. The host keeps it in the plugin's storage as `links/<game>.json`, where the plugin's MCP
+ * servers may read it, and mirrors it into the game's `studio.json`.
  */
 export interface PluginEngineLink {
+  /** Your `engine.id`: the project's engine. */
   kind: string;
   project: string;
   name: string;

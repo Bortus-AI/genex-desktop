@@ -687,7 +687,7 @@ describe("Set up Unreal while an editor runs", () => {
       const other = (await fakeProject(path.join(f.root, "Projects"), "Other")).file;
       const named = await row.named(f, other);
       const real = await realpath(f.project.file);
-      const log = editorLogPath({ file: real, directory: path.dirname(real) }, f.home, "darwin");
+      const log = editorLogPath({ file: real, directory: path.dirname(real) }, f.home, process.platform);
       await mkdir(path.dirname(log), { recursive: true });
       await writeFile(
         log,
@@ -696,7 +696,8 @@ describe("Set up Unreal while an editor runs", () => {
       const env: SetupEnv = {
         ...f.env,
         editorRunning: async () => true,
-        editorLog: (project) => readEditorLog(editorLogPath(project, f.home, "darwin"), project.file, project.port),
+        editorLog: (project) =>
+          readEditorLog(editorLogPath(project, f.home, process.platform), project.file, project.port),
       };
       const options = { ...f.options, env };
       if (!row.refuses) {

@@ -115,8 +115,9 @@ CLI refuses a feature flag it does not know; a listing that fails is asked for a
 A game engine joins through the Genex Play Protocol ([play-protocol.md](play-protocol.md)): a small
 plugin inside the game answers about a dozen JSON commands (hello, screenshot, pointer, key, type,
 look, act, pause, play, step, reset, state). A project declares it in `studio.json`
-(`"runtime": "bridge"`, `"play": {"command", "args"}`, the command resolved by real path inside the
-project); the delegation then gives every role a `GameBridgeTarget`
+(`"runtime": "bridge"`, `"play": {"command", "args", "engine"?}`, the command resolved by real path
+inside the project, the engine a runtime an enabled plugin declares and the studio starts in its
+native-job sandbox with the GPU, as Godot needs to draw); the delegation then gives every role a `GameBridgeTarget`
 ([`src/main/core/game-bridge-target.ts`](../src/main/core/game-bridge-target.ts)) whose game runs in
 the `ProcessSandbox`. The playtest shorthands are not offered there; its moves are drawn on the
 worker's agent screen like a browser game's (`targetFramePort`). Every plugin is held to the shared
@@ -143,7 +144,7 @@ still has a part or a play-check of the game, a session is refused (`busy`). Cap
 `aimedClicks` — and the wheel; no point, drag or cursor), a clock the studio can stand still but not
 step (`Freeze`: the play's own pause, held between a judge's or playtester's moves, so a run never
 claims to replay), game state, input route `editor`. Who holds it: any session the studio hands a
-computer for a game an engine plugin that is on holds the link of and provides every play tool —
+computer for a game whose enabled engine plugin provides every play tool and matches its link or facts —
 the chat's own ([`editor-play-session.ts`](../src/main/core/editor-play-session.ts)), and a judge's or
 playtester's through `_computerToolsFor`; `judge_play` is offered to such a chat, and the Unreal
 Loop's lead has its own (`loop/unreal/lead-judge.ts`). Nothing starts until the agent first uses it,
@@ -153,8 +154,9 @@ rendering a ray-traced level at full speed behind another app); see [plugins](pl
 
 What an editor play can do is its engine's declaration (`engine.play` in the plugin's manifest, read
 by `editorCapabilities`): `players` 1–8, `clock` (at most `freeze`: the play tools pause, never
-step), `pointer` and `state`. Unreal declares none and keeps `EDITOR_CAPABILITIES`. The declaration
-is known before play opens, so the tool is described from it; `play-open`'s answer (`players` joined,
+step), `pointer` and `state`. Unreal declares none and keeps `EDITOR_CAPABILITIES`, as does Unity,
+which declares no engine. The declaration is known before play opens, so the tool is described
+from it; `play-open`'s answer (`players` joined,
 `capabilities` in the declaration's shape) can only narrow it. A session opens the players its grant
 asks for (`players` on a playtest or judge grant; one when absent, never more than declared). With
 more than one the tool offers `player=<n>`, which addresses that player's view, keys and state from
@@ -184,6 +186,21 @@ always asks the server once whether the live saved data can be reached (`liveDat
 can't say, as the person's first publish in Studio doesn't update them, and a server that doesn't
 answer counts as reachable) and keeps the answer for the Set up panel. A play the session starts is
 marked as the agent's (`agent-marks.ts`) from just before it starts until `play-close` ends it.
+
+Unity provides the same six play tools through its Pipeline package
+([`plugins/unity/computer-play.ts`](../src/plugins/unity/computer-play.ts)). Its project stays inside
+the game's folder: no engine link is needed. Without an engine binding, the host
+selects a single enabled plugin whose six harness play tools each explicitly match the game's
+facts (`unity-project` for Unity); missing or ambiguous matches expose no editor computer.
+The chat, judges and playtesters then use the same editor target and `judge_play` path.
+Unity captures the Game view, including its HUD, and waits for Play mode to finish starting before
+playing. Keyboard and mouse input require the installed, active Unity Input System; legacy
+`UnityEngine.Input` is unsupported, and this integration installs no packages. Fixed host-owned
+Pipeline code supplies relative mouse input and reads the game clock and player state. Pausing is
+idempotent, input is released after each move, and closing a session ends only agent-owned play.
+A fresh judge play never restarts a game the person started. A judge's or a playtester's play is
+asked for `fresh` only where the plugin's `play-open` declares that parameter (Unreal, Unity); an
+engine whose `play-open` does not (Roblox) is joined as it runs.
 
 A judge's grant may name one of the judges the engine plugin declares (`judge`;
 [plugins](plugins.md#judges)): its session opens that judge's players, and `play-open`'s source runs

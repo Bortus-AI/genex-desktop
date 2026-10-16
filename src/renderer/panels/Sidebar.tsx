@@ -1,5 +1,8 @@
-/** One game, one row. The chrome and navigation stay put; only the game list scrolls. */
-import type { ComponentPropsWithRef, JSX, ReactNode, RefObject } from "react";
+/**
+ * One game, one row. The chrome and navigation stay put; the game list scrolls, and under it the
+ * friends scroll on their own.
+ */
+import type { ComponentPropsWithRef, CSSProperties, JSX, ReactNode, RefObject } from "react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { type ReadyUpdate, UpdateAction } from "../../shared/app-update.ts";
 import { ThreadKind } from "../../shared/event-log.ts";
@@ -30,9 +33,11 @@ import { ProfilePlate } from "../play/ProfilePlate.tsx";
 import { usePeopleSync } from "../play/use-people-sync.ts";
 import { PlayRecent } from "../play/PlayRecent.tsx";
 import { PlaySwitch } from "../play/PlaySwitch.tsx";
-import { usePeople, usePlay, useShallow } from "../state/hooks.ts";
-import { waitingRequests } from "../state/people.ts";
+import { SidebarFriends } from "../play/SidebarFriends.tsx";
+import { usePlay, useShallow } from "../state/hooks.ts";
 import { PlayPage } from "../state/play.ts";
+import { besideRemix, remixCovers, remixShare } from "../play/remix-model.ts";
+import { remixTitle } from "../../shared/play.ts";
 import { studio as studioApp } from "../state/studio.ts";
 import { PLAY_WORDS } from "../words.ts";
 
@@ -68,6 +73,8 @@ interface Props {
   onNewGame: () => void;
   onSelectThread: (threadId: string) => void;
   onSelectGame: (project: string) => void;
+  /** Back to the Play remix being made, from its row. */
+  onShowRemix: () => void;
   onRenameGame: (game: GameProject) => void;
   onPinGame: (game: GameProject) => void;
   onDeleteGame: (game: GameProject) => void;
@@ -116,7 +123,7 @@ function Hint({
 const SCROLL_SETTLE_MS = 800;
 
 /** The games in the sidebar's order (`sidebarGames`). */
-function useSortedGames(games: GameProject[], threads: ConversationRecord[]): GameProject[] {
+function useSortedGames(games: readonly GameProject[], threads: ConversationRecord[]): GameProject[] {
   return useMemo(() => sidebarGames(games, threads), [games, threads]);
 }
 
@@ -143,9 +150,18 @@ export function Sidebar(props: Props): JSX.Element {
   const harnessOpen = !!studio && studio.id === activeThreadId;
   const nav = useRef<HTMLElement>(null);
   const { scrolled, onScroll } = useScrollState(nav);
-  const sorted = useSortedGames(games, threads);
+  // Only the adopted name: the remix's steps and bytes are its row's to follow, not the whole list's.
+  const adopted = usePlay((s) => s.making?.name ?? null);
+  const listed = useMemo(() => besideRemix(games, adopted), [games, adopted]);
+  const sorted = useSortedGames(listed, threads);
+  const pending = (
+    <>
+      <RemixRow onShow={props.onShowRemix} />
+      <PendingLaunch launching={props.launching} />
+    </>
+  );
   const { playOpen } = props;
-  usePeopleSync(playOpen);
+  usePeopleSync();
   return (
     <nav
       ref={nav}
@@ -158,36 +174,35 @@ export function Sidebar(props: Props): JSX.Element {
     >
       <SidebarTop {...props} studio={studio} harnessOpen={harnessOpen} />
       <div className="sidebar-list">
-        <div
-          className="sidebar-scroll play-recent-scroll"
-          data-off={!playOpen}
-          inert={!playOpen}
-          onScroll={(event) => onScroll(event.currentTarget)}
-        >
-          <PlayRecent />
-        </div>
-        <div
-          className="sidebar-scroll"
-          data-sidebar-scroll
-          data-off={playOpen}
-          inert={playOpen}
-          onScroll={(event) => onScroll(event.currentTarget)}
-        >
-          <div className="sidebar-games">
-            {sorted.map((game, index) => (
-              <Fragment key={game.name}>
-                {props.launching.placeholder && index === firstUnpinned(sorted) ? (
-                  <LaunchRow title={props.launching.title} />
-                ) : null}
-                <SidebarGame {...props} game={game} harnessOpen={harnessOpen} />
-              </Fragment>
-            ))}
-            {props.launching.placeholder && firstUnpinned(sorted) === sorted.length ? (
-              <LaunchRow title={props.launching.title} />
-            ) : null}
+        <div className="sidebar-lists">
+          <div
+            className="sidebar-scroll play-recent-scroll"
+            data-off={!playOpen}
+            inert={!playOpen}
+            onScroll={(event) => onScroll(event.currentTarget)}
+          >
+            <PlayRecent />
           </div>
+          <div
+            className="sidebar-scroll"
+            data-sidebar-scroll
+            data-off={playOpen}
+            inert={playOpen}
+            onScroll={(event) => onScroll(event.currentTarget)}
+          >
+            <div className="sidebar-games">
+              {sorted.map((game, index) => (
+                <Fragment key={game.name}>
+                  {index === firstUnpinned(sorted) ? pending : null}
+                  <SidebarGame {...props} game={game} harnessOpen={harnessOpen} />
+                </Fragment>
+              ))}
+              {firstUnpinned(sorted) === sorted.length ? pending : null}
+            </div>
+          </div>
+          <span className="sidebar-fade" aria-hidden="true" />
         </div>
-        <span className="sidebar-fade" aria-hidden="true" />
+        <SidebarFriends onPlayMode={props.onPlayMode} />
         <SidebarFooter {...props} />
       </div>
       {/* Shown once, until the first sign-in: the account plate stays under it. */}
@@ -202,6 +217,35 @@ const firstUnpinned = (sorted: GameProject[]): number => {
   const index = sorted.findIndex((game) => !game.pinned);
   return index === -1 ? sorted.length : index;
 };
+
+/** The game home is starting, until it is made and has its own row; nothing when there is none. */
+function PendingLaunch({ launching }: { launching: LaunchInSidebar }): JSX.Element | null {
+  return launching.placeholder ? <LaunchRow title={launching.title} /> : null;
+}
+
+/**
+ * A Play remix being made, working: the cover it copies inside a ring that fills as it is made.
+ * Selected while Create shows it; pressed, it comes back. Its game, once adopted, waits off the
+ * list for it.
+ */
+function RemixRow({ onShow }: { onShow: () => void }): JSX.Element | null {
+  const making = usePlay((s) => s.making);
+  if (!making) return null;
+  const shown = remixCovers(making);
+  const share = { "--remix-share": remixShare(making) } as CSSProperties;
+  return (
+    <div className="sidebar-game" data-remixing={making.step} data-active={shown} data-busy="true">
+      <button type="button" className="sidebar-game-select" aria-current={shown ? "page" : undefined} onClick={onShow}>
+        <span className="remix-avatar" style={share} aria-hidden="true">
+          {making.coverUrl ? <img src={making.coverUrl} alt="" /> : <span />}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{remixTitle(making.title)}</span>
+        <span className="sr-only">{PLAY_WORDS.making.row}</span>
+      </button>
+      <GameRowEnd busy pinned={false} />
+    </div>
+  );
+}
 
 /** The game home is starting, selected and working, until it is made and has its own row. */
 function LaunchRow({ title }: { title: string | null }): JSX.Element {
@@ -507,15 +551,12 @@ const SHELF_ICONS = {
 
 /**
  * Play's shelves in the rooms' place: Games, Tools and Assets, each with its count, as genex.games
- * lists them, and Friends after them while Genex is signed in, with the requests waiting.
+ * lists them. Friends are under the games (`SidebarFriends`), not a row here.
  */
 function PlayShelfRows(): JSX.Element {
   const onShelf = usePlay((s) => s.view.page === PlayPage.Shelf);
   const shown = usePlay((s) => s.shelf);
   const counts = usePlay(useShallow((s) => s.counts));
-  const friendsShown = usePlay((s) => s.view.page === PlayPage.Friends);
-  const signedIn = usePeople((s) => s.me !== null);
-  const waiting = usePeople(waitingRequests);
   return (
     <div className="sidebar-nav" role="group" aria-label={PLAY_WORDS.shelvesLabel}>
       {PLAY_SHELVES.map((shelf) => {
@@ -533,22 +574,6 @@ function PlayShelfRows(): JSX.Element {
           </NavRow>
         );
       })}
-      {signedIn && (
-        <NavRow
-          icon="users"
-          current={friendsShown}
-          data-play-friends=""
-          aria-label={PLAY_WORDS.people.friendsLabel(waiting)}
-          onClick={() => studioApp().play.showFriends()}
-        >
-          <span className="min-w-0 flex-1 truncate">{PLAY_WORDS.people.friends}</span>
-          {waiting > 0 && (
-            <span className="sidebar-badge" aria-hidden="true">
-              {waiting}
-            </span>
-          )}
-        </NavRow>
-      )}
     </div>
   );
 }

@@ -7,7 +7,8 @@
  * Neither the dialog, an agent nor a plugin's own export publishes a game that holds no web game at
  * its root, such as an Unreal game (`assertPublishable`).
  */
-import { CoreFact, hasFact, servedAsWebGame } from "../../shared/project-facts.ts";
+import { CoreFact, hasFact } from "../../shared/project-facts.ts";
+import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import { cleanGenexTitle, GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
 import { type ExportReview, type PluginBinding, PluginSourceKind } from "../../shared/plugins.ts";
 import type { StudioCore } from "../studio-core.ts";
@@ -60,13 +61,14 @@ const isExportReview = (review: unknown): review is ExportReview =>
 /**
  * Refuses a game Publish can't put online, by what its folder holds. Publish exports the game
  * folder as a web game, so only a game served as a web game at its root may go (one with no kind
- * yet is, one of a kind Genex can't name is not); an Unreal game's folder holds an Unreal project and no web build, and any other kind of
+ * yet is, one of a kind Genex can't name is not), or one whose web game is in a folder of it (an
+ * engine's web export, `webFolderOf`), which goes in the root's place; an Unreal game's folder holds an Unreal project and no web build, and any other kind of
  * project none either. The dialog, an agent's `genex__publish` and a plugin's `export.stage` ask
  * this before anyone is asked anything.
  */
 export async function assertPublishable(core: Pick<StudioCore, "games">, project: string): Promise<void> {
   const game = (await core.games.list()).find((g) => g.name === project);
-  if (!game || servedAsWebGame(game)) return;
+  if (!game || publishesAsWebGame(game)) return;
   if (hasFact(game.facts, CoreFact.UnrealProject))
     throw new PublishRefusedError(PublishRefusal.UnrealGame, MESSAGE.UnrealGame(game.title));
   throw new PublishRefusedError(PublishRefusal.NotWebGame, MESSAGE.NotWebGame(game.title));

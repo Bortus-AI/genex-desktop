@@ -39,7 +39,7 @@ import {
   WRITER_COPY_MAX_BYTES,
 } from "../../substrate/snapshots.ts";
 import { sizeWords } from "../../shared/byte-size.ts";
-import { isAssetPath, ruleMatches } from "../../shared/project-workspace.ts";
+import { isAssetPath, ruleMatches, webFolderOf } from "../../shared/project-workspace.ts";
 import type { DelegateRequest } from "../../substrate/engines/types.ts";
 import type { ReferenceFrame } from "../../shared/protocol.ts";
 import type { Revision } from "../../shared/optimization.ts";
@@ -170,6 +170,7 @@ const MESSAGE = {
   landingConflicted: (revision: string, excerpt: string) =>
     `landing ${revision} conflicted with the game folder; nothing was changed (${excerpt})`,
   noSuchGame: (project: string) => `there is no game called "${project}"`,
+  noPackages: "this game has no package.json, so there is nothing to install",
   stillUnreadable: "unreadable",
   stillTooLarge: `larger than ${REFERENCE_MAX_MB} MB`,
   stillNotJudgeable: (what: string) => `${what} — the reviewers cannot read it; re-save as JPEG or PNG`,
@@ -340,6 +341,15 @@ async function placeCamera(port: PreviewPort, camera: string, placeable: boolean
     if (nothingToRetry) break;
   }
   return actual;
+}
+
+/**
+ * The page the preview opens from the game's own folder: its shape's entry, or for a game whose web
+ * game is in a folder of it (an engine's web export, `webFolderOf`) that folder's page.
+ */
+function sourceEntry(game: GameProject | undefined, shape: ProjectShape): string {
+  const folder = game ? webFolderOf(game) : null;
+  return folder ? `${folder}/${TEMPLATE_SHAPE.entry}` : shape.entry;
 }
 
 /** The address a load answers with when the build had nothing to serve. */
@@ -629,9 +639,11 @@ export class PreviewService {
   ): Promise<{ entry: string; root: string | undefined; loopback: boolean; stale: string | null } | null> {
     const descriptor = (await this.#core.games.list().catch(() => [] as GameProject[])).find((g) => g.name === project);
     const shape = descriptor?.shape ?? TEMPLATE_SHAPE;
-    const base = root ?? this.#core.games.dirFor(project);
+    const game = this.#core.games.dirFor(project);
+    const base = root ?? game;
     const loopback = await servedOnLoopback(descriptor, shape, base);
-    const outcome = await this.#core.builds.ensure({ project, dir: base, shape });
+    const guarded = await this.#core.scriptsGuarded(project);
+    const outcome = await this.#core.builds.ensure({ project, dir: base, game, shape, guarded });
     const note = outcome.problem ? buildFailureNote(outcome.problem) : null;
     if (note) port.note?.("error", note, { loadError: true });
     // The live folder is the one the user is looking at, so it is the one whose trouble the
@@ -646,7 +658,7 @@ export class PreviewService {
     // its own, and a review worktree keeps the root its caller passed.
     const asSource = path.resolve(served.dir) === path.resolve(base);
     return {
-      entry: entry ?? (asSource ? shape.entry : path.basename(shape.entry)),
+      entry: entry ?? (asSource ? sourceEntry(descriptor, shape) : path.basename(shape.entry)),
       root: asSource ? (root ?? undefined) : served.dir,
       loopback,
       stale: served.stale ? note : null,
@@ -1518,10 +1530,19 @@ export class PreviewService {
    * only thing the studio ever opens the network for, it happens because the user pressed a
    * button, and it opens exactly one domain for exactly this command.
    */
-  async installPackages(project: string): Promise<InstallResult> {
+  /**
+   * The stage's Install packages. Someone else's game installs the guarded way, no setup script
+   * running, until the person trusts its scripts (`scripts`): from then on they run.
+   */
+  async installPackages(project: string, options: { scripts?: boolean } = {}): Promise<InstallResult> {
     const descriptor = (await this.#core.games.list()).find((game) => game.name === project);
     if (!descriptor) throw new Error(MESSAGE.noSuchGame(project));
-    const result = await this.#core.builds.install({ project, dir: descriptor.dir, shape: descriptor.shape });
+    if (options.scripts) await this.#core.games.trustScripts(project);
+    const source = { project, dir: descriptor.dir, shape: descriptor.shape };
+    const guarded = await this.#core.scriptsGuarded(project);
+    const result = guarded
+      ? ((await this.#core.builds.installGuarded(source)) ?? { ok: false, lines: [MESSAGE.noPackages] })
+      : await this.#core.builds.install(source);
     if (result.ok) this.#x.buildProblems.delete(project);
     return result;
   }

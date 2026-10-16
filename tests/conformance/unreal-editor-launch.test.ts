@@ -60,6 +60,10 @@ import { tmpDir } from "../helpers/tmp.ts";
 const GIB = 1024 ** 3;
 const HELPER = path.resolve("src/plugins/unreal/GenexEditorHelper");
 const LINKS = process.platform === "win32" && "links need privileges on Windows";
+/** Where this machine's Unreal writes a project's log: fixtures of a platform-neutral read put it there. */
+const HOST = process.platform;
+/** Who holds a log is asked of lsof on a Mac only; Windows paths can't stand in for a Mac's. */
+const MAC_LSOF = process.platform === "win32" && "lsof and ~/Library/Logs are a Mac's; Windows asks no one";
 const START = Date.UTC(2026, 9, 4, 9, 0, 0);
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
@@ -792,7 +796,7 @@ describe("Get Unreal Engine", () => {
 });
 
 describe("The Unreal toolbar button", () => {
-  it("is declared on the stage strip with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
+  it("is declared on the stage strip of Unreal games only, with Unreal's glyph, opens the setup panel and asks a status action that needs no confirmation", async () => {
     const manifest = validateManifest(JSON.parse(await readFile("src/plugins/unreal/plugin.json", "utf8")));
     assert.deepEqual(manifest.toolbar, [
       {
@@ -800,7 +804,7 @@ describe("The Unreal toolbar button", () => {
         label: "Unreal",
         ariaLabel: "Unreal Editor",
         icon: "unreal",
-        requiresProject: false,
+        facts: ["unreal-project", "unreal-plugin"],
         target: { kind: "panel", id: "setup" },
         status: "toolbar-status",
       },
@@ -1779,7 +1783,7 @@ describe("A project's own Unreal log", () => {
   async function logFixture(text: string | Buffer) {
     const root = await realpath(await tmpDir("studio-unreal-log-"));
     const project = path.join(root, "Projects", "Drift", "Drift.uproject");
-    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), "darwin");
+    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), HOST);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, text);
     return { root, project, file };
@@ -2014,7 +2018,7 @@ describe("A project's log no editor holds", () => {
     },
   ];
   for (const row of rows)
-    it(`${row.name}, and writes nothing`, async () => {
+    it(`${row.name}, and writes nothing`, { skip: MAC_LSOF }, async () => {
       const f = await leftLog(row.closed === true);
       const { runner, calls } = lsofStandIn(row.lsof);
       const witness = await tree(f.root);
@@ -2059,7 +2063,9 @@ describe("The projects Unreal has open, by the logs its editors hold", () => {
     return { root, home, logs };
   }
 
-  it("names each project whose own log an editor holds, asking about every project log at once", async () => {
+  it("names each project whose own log an editor holds, asking about every project log at once", {
+    skip: MAC_LSOF,
+  }, async () => {
     const f = await logsHome();
     const harbor = path.join(f.logs, "HarborEditor", "Harbor.log");
     const { runner, calls } = lsofStandIn({ exit: 1, stdout: `p96814\nf5\nn${harbor}\n` });
@@ -2152,7 +2158,7 @@ describe("A project's log naming it in another spelling", () => {
       await mkdir(path.dirname(file), { recursive: true });
       await writeFile(file, "{}\n");
     }
-    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), "darwin");
+    const file = editorLogPath({ file: project, directory: path.dirname(project) }, path.join(root, "home"), HOST);
     await mkdir(path.dirname(file), { recursive: true });
     await writeFile(file, UNREAL_LOG(await named({ root, project, other }), ""));
     return { root, project, file };

@@ -6,8 +6,9 @@ in [verification](../docs/agent/verification.md#test-layers).
 ## Runner
 
 `node --test` on Node 24, which strips TypeScript types, so tests and sources use erasable syntax
-only (no `enum`, `namespace` or parameter properties). `npm test -- <files>` runs named files;
-bare `npm test` runs everything sequentially. `conformance/` holds behavior suites, `property/`
+only (no `enum`, `namespace` or parameter properties). `npm test -- <files>` runs named files
+without building the affected graph. Bare `npm test` runs all non-rig files with two workers,
+then all rig files serially, including after non-rig failures. `conformance/` holds behavior suites, `property/`
 holds fast-check suites with fixed seeds, `e2e/` holds Electron runners.
 
 `scripts/test.mjs` and `scripts/affected-tests.mjs` preload `helpers/leftover-children.ts` into
@@ -15,6 +16,12 @@ every test file's process: a file that still has a child process running after i
 hooks fails by name, instead of never exiting and holding a runner slot. Stop what a test starts:
 a core's `stop()` (or core-lite's `close()`), a `ProcessSandbox`'s `dispose()`. On Linux,
 sandbox-runtime's socat bridges run until the last sandbox is disposed.
+
+CI partitions literal test groups with direct callbacks. Ordinary groups stay whole; the large
+`harness incidents` suite is split into direct test subtrees, with each test's runtime descendants
+and per-case hooks intact. It may not gain once-only parent hooks or dynamic direct registration.
+Seed groups stay whole; their short `seed upgrade` root uses its direct case names to avoid matching
+other roots with the same prefix. Unsupported or ambiguous shapes fail planning instead of losing coverage.
 
 A test that runs the compiler spawns `packageBin('typescript', 'tsc')` from
 `scripts/package-bin.ts` (TypeScript 7), not a `node_modules` path; one that builds a program
@@ -27,6 +34,8 @@ through the JS API imports `@typescript/typescript6`.
   (macOS `/var` → `/private/var`), so a test passing its own `gamesRoot` hands it a `realpath`.
 - `resources.ts`: the read-only resources folder a core needs. Import it, not `studio-rig.ts`,
   when you only need resources: anything that reaches the rig runs in the serial rig group.
+  `sharedResources()` assembles one read-only tree per test process for rig/core-lite defaults;
+  `makeResources()` always creates a fresh mutable tree, including compiler-off fixtures.
 - `studio-rig.ts`: the full rig with the harness loop; slow and sequential (L3).
 - `ctx-recorder.ts`: a fake harness `ctx` that records `ctx.call` sequences
   (`conformance/loop-sequences.test.ts`). Like the real host it refuses an unknown method
@@ -42,6 +51,18 @@ through the JS API imports `@typescript/typescript6`.
   `unreal-fake-engine.ts`: a small fake Unreal (the Blank template and Epic's three plugin
   templates) and the Unreal plugin's backend on it in an open game, launches and host calls recorded,
   a game link kept as the host keeps it, and stand-in programs for a plugin's build, tests and package.
+- `godot-fake-engine.ts`: a fake Mac with Godot apps where the test puts them, a runner that
+  records each Godot job and answers with Godot's recorded words (`fixtures/godot-cli/`), and the
+  Godot plugin's backend on both in an open game, its host calls recorded.
+- `unity-editor-stand-in.ts`: a Unity project folder, the descriptor Unity's Pipeline package
+  keeps in it while an editor has it open, and a stand-in for that editor's HTTP server (scripted
+  answers, every request recorded, a clock only `sleep` moves) as the Unity plugin's `PipelineDeps`;
+  a Mac's folders with editors installed as Unity Hub lays them out (`macEnv`, `fakeEditor`), a
+  process table whose signals a test decides (`processTable`, `editorRow`), and a call's binding as
+  the host hands it to the plugin's backend (`pluginContext`). `unity-backend.ts`: the Unity
+  plugin's backend on all of those in a game folder (`backendOn`: its tools by `call`, its panel's
+  actions by `act`), with launches recorded and an opened editor started as a process with its
+  descriptor.
 - `loop-host.ts`: a fake host for the one Loop (`runDirector` on a project of any kind): a real git
   repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
   the lead's scripted turns, the pool's workers and the reviewer as three kinds of delegation, on
@@ -73,11 +94,17 @@ through the JS API imports `@typescript/typescript6`.
 - `worker-pool-host.ts`: a fake host for the seed's worker pool (real git in a temporary game and
   its copies, worker sessions the test ends, every record the pool appends), for `worker-pool` and
   `worker-events`.
+- `isolated-import.ts`: imports a module in a worker thread of its own and answers with its
+  exports' types or the error that stopped it linking. Node never frees a linked module, so a test
+  that loads a whole harness from one fresh workspace after another (`seed-upgrade`) links each in
+  a worker; otherwise every copy stays in the file's heap and a CI runner's heap runs out.
 - `git.ts`, `tmp.ts`: temporary repositories and directories with cleanup. A test removes its own
   temporary folder with `removeTree` (or leaves it to `tmpDir`), not a bare `rm`: on Windows a
   sandboxed test file's srt-win entries re-propagate through all of `%TEMP%` and hold each folder
   open while they do, and a bare removal then fails with `EBUSY`. `removeTree` waits such a hold
   out.
+- `seed-upgrade-fixture.ts`: a per-process initialized snapshot for immutable vintage inputs;
+  each upgrade case gets independent physical workspace and manifest copies and unique import paths.
 - `claude-rules.ts`: whether Claude Code would deny a path by an absolute rule, matched as CLI
   2.1.281 does (node-ignore, case-blind) for the shapes `claude-permissions.ts` writes.
 - `leftover-children.ts`: the runners' per-file check for child processes left running (above).
@@ -126,6 +153,7 @@ file from the list for it. The informational fast-group report (a Windows dispat
 
 Tests that read local projects or open the network are skipped unless opted in:
 `STUDIO_LOCAL_FIXTURES=1` for local projects, `STUDIO_NETWORK_TESTS=1` for real network and
-local Ollama probes. Never make a default test depend on this machine. `STUDIO_RIG_UNSANDBOXED=1`
+local Ollama probes, `STUDIO_GODOT_LIVE=1` for the Godot plugin against this Mac's own Godot
+(`godot-live.test.ts`). Never make a default test depend on this machine. `STUDIO_RIG_UNSANDBOXED=1`
 runs rigs without the process sandbox, for a container where it cannot start (no user
 namespaces); containment cases prove nothing there, and CI keeps the sandbox.

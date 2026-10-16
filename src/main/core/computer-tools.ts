@@ -32,7 +32,7 @@ import {
   computerSession,
   type TargetSource,
 } from "./computer-session.ts";
-import { gameBridgeSource } from "./game-bridge-target.ts";
+import { type EngineLauncher, gameBridgeSource } from "./game-bridge-target.ts";
 import { type EnginePlayCall, editorPlaySource } from "./editor-play-target.ts";
 import type { FramePort, PreviewService } from "./previews.ts";
 import { iterationDir } from "./run-shots.ts";
@@ -154,8 +154,11 @@ export function targetFramePort(target: ComputerTarget): FramePort {
 
 /** What else a computer may need: a sandbox to start a Play Protocol game in, or the engine plugin's play tools. */
 export interface ComputerToolsOptions {
-  /** Set when the build's studio.json declares the `bridge` runtime: its game is started here. */
-  bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived"> };
+  /**
+   * Set when the build's studio.json declares the `bridge` runtime: its game is started here, or by
+   * `engine` when its play names an engine a plugin runs (an engine draws: a window and the GPU).
+   */
+  bridge?: { sandbox: Pick<ProcessSandbox, "spawnLongLived">; engine?: EngineLauncher };
   /**
    * Set when the game is played in its engine's editor: the engine plugin's play tools, what its
    * declaration says the play can do (known before play opens, so the tool is described from it),
@@ -165,6 +168,8 @@ export interface ComputerToolsOptions {
     call: EnginePlayCall;
     caps?: TargetCapabilities;
     players?: number;
+    /** Whether its play-open can start the play over; only then is a paced role's play asked to. */
+    restarts?: boolean;
     afterOpen?: (opened: unknown) => Promise<void>;
   };
 }
@@ -320,8 +325,10 @@ const TARGET_SOURCES: Record<ToolsRuntime, (deps: SourceDeps, build: ToolsBuilde
   [TargetRuntime.Bridge]: (deps, build) => {
     const sandbox = deps.options.bridge?.sandbox;
     if (!sandbox) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
+    const engine = deps.options.bridge?.engine;
     const source = gameBridgeSource({
       sandbox,
+      ...(engine ? { engine } : {}),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);
@@ -334,6 +341,9 @@ const TARGET_SOURCES: Record<ToolsRuntime, (deps: SourceDeps, build: ToolsBuilde
     if (!editor) return TARGET_SOURCES[TargetRuntime.Browser](deps, build);
     const source = editorPlaySource({
       ...editor,
+      // A judge or a playtester judges the game from its start, never from where another play left it,
+      // where the engine's play-open can start it over (one that cannot is joined as it runs).
+      fresh: Boolean(editor.restarts) && PACED_ROLES.has(deps.role),
       frame: (target, jpeg, caption, act) => {
         deps.previews.openScreen(deps.screen());
         return deps.previews.frame(targetFramePort(target), deps.screen(), jpeg, caption, act);

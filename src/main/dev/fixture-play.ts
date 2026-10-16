@@ -7,11 +7,11 @@
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
 import {
-  FIXTURE_REFERRAL,
   type FixtureCatalog,
   fixtureAccountOf,
   fixtureAuthorId,
   fixturePeopleAnswer,
+  fixtureReferral,
 } from "./fixture-people.ts";
 
 /** One fixture game: what a card needs and what varies between cards. */
@@ -260,7 +260,7 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
   // The creator routes first: the account's stats live under `/api/users/me`, beside the people routes.
   const people = fixtureCreatorAnswer(route, init, catalog) ?? fixturePeopleAnswer(route, init, catalog);
   if (people) return people;
-  if (route === PlayRoute.Referral && fixtureAccountOf(init.token)) return ok(FIXTURE_REFERRAL);
+  if (route === PlayRoute.Referral && fixtureAccountOf(init.token)) return ok(fixtureReferral());
   const [pathname = "", search = ""] = route.split("?");
   const query = new URLSearchParams(search);
   if (pathname === PlayRoute.Feed) return feed(query);

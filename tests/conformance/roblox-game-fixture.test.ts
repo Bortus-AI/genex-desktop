@@ -9,7 +9,7 @@ import path from "node:path";
 import { it } from "node:test";
 import { seedRobloxGame } from "../../src/main/dev/fixture-roblox.ts";
 import { FIXTURE_NAMES, FixtureName } from "../../src/main/dev/fixture-kit.ts";
-import { toolbarItems } from "../../src/shared/plugin-toolbar.ts";
+import { toolbarItems, visibleToolbarEntries } from "../../src/shared/plugin-toolbar.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import { EventKind } from "../../src/shared/event-log.ts";
 import { coreLite } from "../helpers/core-lite.ts";
@@ -30,8 +30,6 @@ it("turns Roblox Studio on, links the game to its place and puts the steps card 
     await seedRobloxGame(core, project, threadId);
 
     assert.equal(core.plugins.enabled(ROBLOX), true, "the plugin is on");
-    const button = toolbarItems(core.plugins.list(), null).find((entry) => entry.key === `${ROBLOX}:studio`);
-    assert.equal(button?.item.label, "Roblox Studio", "the toolbar shows the Roblox Studio button");
 
     const custom = (await core.store.listEvents(threadId))
       .map((e) => e.data)
@@ -51,6 +49,10 @@ it("turns Roblox Studio on, links the game to its place and puts the steps card 
       game?.facts.some((fact) => fact.id === "roblox-project"),
       "its facts hold the Roblox place",
     );
+    const button = visibleToolbarEntries(toolbarItems(core.plugins.list(), project.name, game), {}).find(
+      (entry) => entry.key === `${ROBLOX}:studio`,
+    );
+    assert.equal(button?.item.label, "Roblox Studio", "the game's toolbar shows the Roblox Studio button");
     const place = String(linked?.file);
     assert.equal(path.dirname(place), await realpath(project.dir), "the place sits at the game's top");
     assert.match(await readFile(place, "utf8"), /^<roblox /, "a place file Studio reads");

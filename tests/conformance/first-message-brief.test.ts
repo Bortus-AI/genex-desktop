@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { GameEngine } from "../../src/harness-seed/loop/game-engine.ts";
 import { buildContractorBrief } from "../../src/harness-seed/loop/chat-session.ts";
 import { runDelegatedTurn } from "../../src/harness-seed/loop/delegated-turn.ts";
 import { directorBrief, singleWorkerBrief } from "../../src/harness-seed/loop/director/briefs.ts";
@@ -57,6 +58,7 @@ function game(facts: unknown[], extra: Record<string, unknown> = {}) {
 const NEW_GAME_TOOL = { name: UNREAL_NEW_GAME_TOOL, description: "Make the game's Unreal project.", parameters: {} };
 const UNREAL_KIND = { plugin: "unreal", name: "Unreal Engine", tool: UNREAL_NEW_GAME_TOOL, makes: ["unreal-project"] };
 const TOY_KIND = { plugin: "toy", name: "Toy Engine", tool: "toy__new-toy", makes: ["toy-project"] };
+const GODOT_KIND = { plugin: "godot", name: "Godot", tool: "godot__new-game", makes: ["godot-project"] };
 const UNREAL_ON = { tools: [NEW_GAME_TOOL], kinds: [UNREAL_KIND] };
 const NONE_ON = { tools: [], kinds: [] };
 
@@ -218,6 +220,56 @@ describe("the rules each kind gets", () => {
     assert.ok(!toy.prompt.includes(PLUGINS_SUGGEST), "a plugin's kind");
   });
 
+  it("one of Genex's own kinds that a plugin on makes has that plugin already: nothing to look for", async () => {
+    const godot = game([fact(CoreFact.GodotProject, "godot")], { built: true, shape: { own: true } });
+    const on = await firstMessage(godot, { tools: [], kinds: [GODOT_KIND] });
+    assert.ok(!on.prompt.includes(PLUGINS_FIND), "its plugin is on");
+    assert.match(on.prompt, /a Godot project/);
+    const off = await firstMessage(godot, { tools: [], kinds: [TOY_KIND] });
+    assert.ok(off.prompt.includes(PLUGINS_FIND), "another plugin's kind covers nothing here");
+  });
+
+  it("a game linked to a Godot project outside its folder works in that project, its notes in the workspace", () => {
+    const brief = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      folderLabel: "AI Games/moon",
+      gameEngine: GameEngine.Godot,
+      engineProject: "/Users/me/Documents/Godot Projects/Void/project.godot",
+      facts: [fact(CoreFact.GodotProject, "/Users/me/Documents/Godot Projects/Void", "link")] as never,
+    });
+    assert.match(
+      brief,
+      /The game's work happens in its Godot project in `\/Users\/me\/Documents\/Godot Projects\/Void\/`/,
+    );
+    assert.match(
+      brief,
+      /The game's work lands in its Godot project in `[^`]+`; its notes stay in this workspace \(folder `AI Games\/moon`\)/,
+    );
+    assert.doesNotMatch(brief, /The game's work stays in this workspace/);
+  });
+
+  it("a plugin's web build in a folder is said once as a build, never handed the web game's rules", () => {
+    const brief = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      facts: [
+        fact(CoreFact.GodotProject, "godot"),
+        fact(CoreFact.WebGame, "web"),
+        fact("godot-web-export", "web", "plugin:godot"),
+      ] as never,
+    });
+    assert.ok(!brief.includes("window.__studio"), "no web game's rules for the build");
+    assert.match(brief, /The web page in `web\/` is a web build a plugin exports[^\n]*Never edit its files/);
+    assert.ok(!brief.includes("godot-web-export"), "the plugin's fact needs no line of its own");
+    const site = buildContractorBrief({
+      ask: ASK,
+      engine: CLAUDE,
+      facts: [fact(CoreFact.GodotProject, "godot"), fact(CoreFact.WebGame, "site")] as never,
+    });
+    assert.ok(site.includes("window.__studio"), "a web game no plugin claims keeps its rules");
+  });
+
   it("each kind gets its own rules, named by path when there are two", () => {
     const brief = buildContractorBrief({
       ask: ASK,
@@ -277,6 +329,20 @@ describe("the rules each kind gets", () => {
     assert.doesNotMatch(handoffText, /preview/);
     assert.doesNotMatch(prompt, /window\.__studio|checkpoint/);
     assert.match(prompt, /a Godot project/);
+  });
+
+  it("a Godot game set up for Genex's play gets the window its computer tool drives, and no web page's checks", async () => {
+    const bridge = { own: true, runtime: "bridge", play: { command: "bin/play", args: [] } };
+    const godot = game([fact(CoreFact.GodotProject, "godot")], { built: true, shape: bridge });
+    const { capture, validated, prompt } = await firstMessage(godot, NONE_ON);
+    assert.equal(capture, true, "a window of the game, which it plays through bin/play");
+    assert.equal(validated, false, "no page contract check");
+    assert.doesNotMatch(prompt, /window\.__studio/);
+    const declaredOnly = game([fact(CoreFact.GodotProject, "godot")], {
+      built: true,
+      shape: { own: true, runtime: "bridge" },
+    });
+    assert.equal((await firstMessage(declaredOnly, NONE_ON)).capture, false, "no play command, nothing to start");
   });
 
   it("a folder of a kind Genex doesn't know is served as no web game: no web capture, contract check or Reload checkpoint", async () => {

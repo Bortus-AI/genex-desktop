@@ -38,6 +38,21 @@ list of at most 32 strings, each passed as one word. Anything unusable is droppe
 read and the computer answers why instead of starting anything. The game starts in the build's
 folder through the studio's ProcessSandbox, like every other process the studio spawns.
 
+An engine that draws needs a window and the GPU, which the ProcessSandbox does not grant. Its play
+may name the engine an enabled plugin runs for it instead, by the id of a native runtime the
+plugin's manifest declares (`nativeRuntimes`), with that runtime's own arguments:
+
+```json
+{ "runtime": "bridge", "play": { "command": "bin/play",
+  "engine": { "runtime": "godot", "args": ["--path", "godot", "--", "--play-protocol"] } } }
+```
+
+The studio then finds that runtime where the plugin's manifest says (never a path from the game's
+folder) and starts it in the native-job sandbox with the GPU (`spawnNativeLongLived`): it reads and
+writes only the build, has no network and a private home, and its process tree stops with it.
+Without an enabled plugin that has the runtime ready, the command runs as before. The bundled
+Godot plugin sets a game up this way (`src/plugins/godot/genex-addon.ts`).
+
 An engine whose player lives outside the project (`godot`, a Unity player, `UnrealEditor -game`)
 is started by a wrapper script committed in the project, which the play command names:
 

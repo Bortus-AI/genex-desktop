@@ -31,6 +31,13 @@ manifest requires may be empty). `plugin_check` names the first thing Genex refu
 - `skills`: what agents read. A file skill `{name, summary, file, facts?, tools?, references?}` is
   read on demand with `<id>__skill`; `tools` ties it to the tools it explains.
 - `panels`, `settings`, `actions`: a plugin's own page, settings and buttons in Plugins (often `[]`).
+- `toolbar`: buttons on the game's strip, `{id, label, ariaLabel, icon, facts, target, status}`,
+  `target` `{kind: "panel", id}` and `status` an action answering `{badge, tone, dot}`. An engine's
+  button names the engine's `facts`, so it shows only on that engine's games, never on every game,
+  and an `icon`, as a narrow strip folds its buttons to icons; its status is a dot (`"dot": true`),
+  green (`"tone": "ok"`) once the editor answers. Its panel: one outlined block per subject (this
+  game's project first, then this computer), a quiet label above each, a rule between rows, the
+  state in the button's words, and the block's actions in its foot.
 - `locks` (API 3): what one holder at a time may use, such as the editor: `{id, label, per,
   personFirst?}`, `per` `project` or `app`; `personFirst` a harness tool answering `{personActive,
   unsaved}` so Genex waits while the person works in it.

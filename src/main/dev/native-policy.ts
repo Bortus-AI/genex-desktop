@@ -83,6 +83,8 @@ const NATIVE_CHANNELS = [
   "studio:update.download",
   // Open Privacy settings opens macOS System Settings.
   "studio:app-look.open-settings",
+  // Share… pops the Mac's share menu (Messages, Mail, AirDrop), which hands the link to other apps.
+  "studio:play.share",
 ] as const satisfies readonly StudioInvokeChannel[];
 /**
  * Native steps inside a handler, asserted by name with `assertNativeActionAllowed`; no channel of
@@ -295,6 +297,10 @@ const FIXTURE_SAFE = [
   "studio:play.stats",
   "studio:play.creators",
   "studio:play.credits",
+  // The nickname: a fixture launch answers a check and a save from its own people (a few names
+  // taken or kept), signed out unless it asks for its fixture account; the save lasts the launch.
+  "studio:play.handle-check",
+  "studio:play.handle",
   // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
   // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
   "studio:genex-account.read",

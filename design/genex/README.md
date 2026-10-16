@@ -416,7 +416,10 @@ chat header's ⋯ menu and uses that chat's bound game; it is disabled on drafts
 game stage, selected build history and native-view occlusion behind Review, drawers and dialogs.
 
 Chat header and stage strip are 48px: 8px above and below 32px controls, and every gap between
-controls drags the window. The game title hugs its text (at most 320px, then truncates); select it
+controls drags the window. The strip is always one row: once its labelled buttons (a plugin's, Make
+multiplayer, Publish) would overflow it, they all fold into 32px icons at once, each name moving to
+its tooltip and a status dot to the icon's corner, and unfold only when the labelled row fits again
+(`panels/stage/strip-fold.ts`). The game title hugs its text (at most 320px, then truncates); select it
 to rename, Enter to save and Escape to cancel. Rename updates the library display name; folder
 paths and identifiers stay stable. Show in Finder and Terminal sit together at the header's end,
 then ⋯ (Export game…, Rename). One game has one chat, so there is no chat switcher; conversations
@@ -430,29 +433,35 @@ sidebar's 7px accent dot and one `gate-pulse` (none under reduced motion), and i
 reload to see it", "A new build is ready — reload to play it", plus a builder's note). The strip's end
 holds one speaker for the game's sound, crossed out while off (⌥⌘M): no menu and no settings,
 because agents' windows are always silent and Live is silent while hidden or behind another app.
-Play/Stop sits before Reload: one icon button, ■ while the game runs, ▶ once it is stopped and a
-13px ring spinner while either is under way; each glyph fades and grows in (150ms). Full screen
+Play/Stop sits before Reload: one icon button in its action's colour, ▶ in green on the green tint
+once the game is stopped, ■ in red on the red tint while it runs, and a 13px ring spinner on the
+plain glass while either is under way; each glyph fades and grows in (150ms). Full screen
 (four corners) follows the speaker and is disabled unless the running game is on the stage. In
 full screen a studio-drawn dark glass pill sits 14px from the top-right corner, “Hold esc to exit
 full screen” beside the exit glyph; after 2.6s the words fold into the icon, which rests at 45%
 until the pointer is on it. Plugin buttons wear the prompt bar's model-pill fill (`pill-quiet`);
-one whose status says its action is due (`attention`: Publish with something to publish) takes
-the accent. Publish shows no badge: two looks, nothing else. A status badge is micro text after the
+one whose status says its action is due (`attention`) takes the accent. Publish (Genex's or
+Studio's own) wears Play's blue instead, as the profile's people buttons do: the tint with its edge
+(`Button variant="play-tint"`), the filled blue (`play-fill`) once there is something to publish,
+and no badge. A status badge is micro text after the
 label in its tone's colour, the quiet info word in ink-2 (4.5:1 on the pill in every theme), or,
-when the status asks for a dot, a 6px dot in green, amber, red or ink-3 grey. Unreal's button leads
-with the Unreal glyph and wears a dot: green Ready, amber Starting, grey Not open, Not set up or Not
-installed. A button's title opens in the strip's tooltip beside it, a dot's word on its first line;
+when the status asks for a dot, a 6px dot in green, amber, red or ink-3 grey. Unreal's button shows
+only on an Unreal game (its facts) or one whose chat chose Unreal; it leads with the Unreal glyph and
+wears a dot, never a word: green Ready, amber Starting, grey Not open, Not set up or Not installed. A button's title opens in the strip's tooltip beside it, a dot's word on its first line;
 a screen reader hears the badge after the button's name ("Unreal Editor, Ready"). An Unreal game's Live is one centred card (at most 560px) on the
 stage's hatch: the latest play shot when there is one, the project's name, one line of where it
 stands (a timer while it opens; "Ready in Unreal" once it answers) and at most one button, the same
 step the Unreal panel offers (Get Unreal Engine, Open the Unreal panel, Set up and open, Open in
 Unreal, Switch to <project>, Restart Unreal or Quit Unreal); with two editors open it offers no
 quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both faces inlined as data,
-`inlinePanelFonts`) and controls: 32px borderless buttons in Geist Mono, a 20px view title, then in
-the project view its name with one state word in the toolbar's words and tone (Not set up, Not open,
-Starting, Ready, Unreal busy, Not answering, Not connected), Change and a ⋯ menu (Undo setup, Quit
-Unreal) at the head's end, one 15px line and one primary (held, not hidden, while Unreal is busy).
-Get Unreal's steps take the steps card's round marks; the engine and Xcode end it as one mono line. While Live or Builds loads, a 52×36
+`inlinePanelFonts`) and controls (32px borderless buttons in Geist Mono) and is built as an
+[engine panel](#engine-panels): the project block's head carries its state in the toolbar's words
+and tone (Not set up, Not open, Starting, Ready as the green dot alone, Unreal busy, Not answering,
+Not connected), its foot one primary (held, not hidden, while Unreal is busy), Change project and a
+⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. The Unity
+panel is the same: its project block (cube tile, `unity/`, state in the button's words, the step,
+Engine, one primary and a quiet action at the foot's end) and This computer (the newest Unity, ticked
+once it is Unity 6); its strip button folds to the cube. While Live or Builds loads, a 52×36
 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
 at least 0.6s and fades out (150ms) before the native view is uncovered.
 
@@ -627,6 +636,26 @@ distinguishes instruction comparisons from game-quality evidence.
 Use the existing content font for Harness prose and controls, code font only for technical text,
 weights 400/500 and sizes 18px title, 15px regular, 14px small. Keep visible named entry points;
 do not replace them with hover-only controls.
+
+## Engine panels
+
+Every plugin that works with an engine's or tool's files (Unreal, Unity and Godot now; Blender, Roblox
+next) follows one pattern. Its strip button shows only on a game that is that engine: the game's
+facts name its project (`toolbar[].facts`), or its chat chose the engine before the project exists
+(the status's `shown`). A plugin that is on adds nothing to other games. The button opens one panel,
+titled with the engine's name, in three views: **this game's project** first (its state, where it
+lives, the one next step), **setup** only while something it needs is missing, and **choose a
+project** behind Change project (New project on top, Back to the project).
+
+The panel is built from blocks: one subject per block (the project, this computer, the list), a 1px edge,
+14px corners and a fill one step above the dialog; a 13px third-ink label above each, 24px between
+them, 1px dividers between rows inside, and actions in the block's foot (primary first, Change and
+⋯ at its end). List rows are 60px (32px tile, 15px name, 12px mono path, a tag, the version, a
+chevron; the whole row is the button); fact rows 44px, label left and mono value right; 16px side
+padding everywhere. A path starts at `~` with its middle folded to …; a temporary folder says so;
+the full path is the tooltip. Status is a dot and one word, the same in the block's head and on the
+strip button, except Ready, which is the green dot alone. Tags name the consequence (Outside game),
+explained once under the list.
 
 ## First launch
 

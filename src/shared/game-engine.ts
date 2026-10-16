@@ -12,12 +12,13 @@
 import type { EnginePlayDeclaration } from "./engine-play.ts";
 
 /** The engines a game can build in, by their wire names. */
-export const GameEngine = { Web: "web", Unreal: "unreal" } as const;
+export const GameEngine = { Web: "web", Unreal: "unreal", Godot: "godot" } as const;
 export type GameEngine = (typeof GameEngine)[keyof typeof GameEngine];
 
+const ENGINES: ReadonlySet<unknown> = new Set(Object.values(GameEngine));
+
 /** Whether `value` names an engine Genex knows. */
-export const isGameEngine = (value: unknown): value is GameEngine =>
-  value === GameEngine.Web || value === GameEngine.Unreal;
+export const isGameEngine = (value: unknown): value is GameEngine => ENGINES.has(value);
 
 /** The extension of an Unreal project file. */
 export const UPROJECT_EXTENSION = ".uproject";
@@ -36,6 +37,35 @@ export const isEngineId = (value: unknown): value is EngineId => typeof value ==
 /** A project file's extension as an engine declares it: one or two dotted parts (`.uproject`, `.project.json`). */
 export const PROJECT_FILE_EXTENSION = /^(\.[a-z0-9]{1,16}){1,2}$/;
 
+/**
+ * A project file's whole name as an engine declares it, for an engine whose project is a folder
+ * marked by one fixed file (`project.godot`): a lowercase name and one or two dotted parts.
+ */
+export const PROJECT_FILE_NAME = /^[a-z0-9][a-z0-9_-]{0,39}(\.[a-z0-9]{1,16}){1,2}$/;
+
+/** Whether `value` is a project file as an engine may declare it: an extension, or a whole file name. */
+export const isProjectFileEntry = (value: unknown): value is string =>
+  typeof value === "string" && (PROJECT_FILE_EXTENSION.test(value) || PROJECT_FILE_NAME.test(value));
+
+/** Whether a declared project file is a whole file name (`project.godot`) rather than an extension. */
+const isWholeName = (entry: string) => !entry.startsWith(".");
+
+/** The last part of a path, by either separator. */
+const baseName = (value: string) => value.split(/[\\/]/).pop() ?? value;
+
+/**
+ * The declared project file `file` is, of `entries`: a whole name it is named exactly, else the
+ * longest extension it ends with, in any case. None when it is none of them.
+ */
+function ownEntry(file: string, entries: readonly string[]): string | undefined {
+  const name = baseName(file);
+  const whole = entries.find((entry) => isWholeName(entry) && name === entry);
+  if (whole) return whole;
+  const lower = name.toLowerCase();
+  const extensions = entries.filter((entry) => !isWholeName(entry) && lower.endsWith(entry));
+  return extensions.sort((a, b) => b.length - a.length)[0];
+}
+
 /** The apps an engine's editor runs as, which computer use never drives to build or play: Mac bundle ids, Windows `.exe` names. */
 export interface EngineApps {
   mac?: string[];
@@ -46,18 +76,24 @@ export interface EngineApps {
  * The engine a `game-engine` plugin declares (`engine` in its manifest, API 3): its id (the
  * plugin's own), the name the person reads, the project files a game links, the fact a linked
  * game holds, whether the Loop needs the project inside the game folder (its save points hold it),
- * what its editor can do in play, the apps its editor runs as, and the apps its published games are
- * played in.
+ * whether its agents change the project as files, what its editor can do in play, the apps its
+ * editor runs as, and the apps its published games are played in.
  */
 export interface EngineDeclaration {
   id: EngineId;
   /** 1–40 characters: "Unreal". */
   label: string;
-  /** 1–4 extensions (`PROJECT_FILE_EXTENSION`), each once. */
+  /** 1–4 extensions (`PROJECT_FILE_EXTENSION`) or whole file names (`PROJECT_FILE_NAME`), each once. */
   projectFiles: string[];
   /** A fact the plugin's `detect` declares, or one of Genex's own (`CoreFact`). */
   fact: string;
   projectInFolder: boolean;
+  /**
+   * Whether the engine's agents change the project as files (scenes and scripts), so a linked
+   * project outside the game's folder is a folder its sessions read and write; one whose agents
+   * change it only through its editor leaves it unreached.
+   */
+  writesProjectFiles?: boolean;
   play?: EnginePlayDeclaration;
   apps?: EngineApps;
   /** The apps the engine's games are played in by everyone (a live server): computer use never drives them, not even in a setup assist. */
@@ -126,14 +162,13 @@ const isAbsolute = (value: string) => value.startsWith("/") || /^[A-Za-z]:[\\/]/
 const CONTROL = /[\0-\x1f\x7f]/;
 
 /**
- * Whether `value` is an absolute path to a project file with one of `extensions` (Unreal's
- * `.uproject` when none are given), spelled plainly: no `..` part, no control characters.
+ * Whether `value` is an absolute path to one of an engine's declared project files (`entries`:
+ * Unreal's `.uproject` when none are given), spelled plainly: no `..` part, no control characters.
  */
-export function isProjectPath(value: unknown, extensions: readonly string[] = [UPROJECT_EXTENSION]): value is string {
+export function isProjectPath(value: unknown, entries: readonly string[] = [UPROJECT_EXTENSION]): value is string {
   if (typeof value !== "string" || !value || value.length > MAX_PROJECT_PATH) return false;
   if (!isAbsolute(value) || CONTROL.test(value)) return false;
-  const lower = value.toLowerCase();
-  if (!extensions.some((extension) => lower.endsWith(extension))) return false;
+  if (!ownEntry(value, entries)) return false;
   return !value.split(/[\\/]/).some((part) => part === "..");
 }
 
@@ -170,14 +205,17 @@ export const engineOf = (binding: EngineBinding | undefined | null): EngineId =>
 export const isEngineGame = (kind: unknown): kind is EngineId => isEngineId(kind) && kind !== GameEngine.Web;
 
 /**
- * The project's name as its engine shows it: the file name without the longest of `extensions`
- * (its engine's project files; Unreal's `.uproject` when none are given) it ends with, in any case.
+ * The project's name as its engine's project list shows it at a glance, by the engine's declared
+ * project files (`entries`: Unreal's `.uproject` when none are given): a whole-name project file's
+ * folder name (a Godot project's), else the file name without the longest extension it ends with.
  */
-export function projectName(project: string, extensions: readonly string[] = [UPROJECT_EXTENSION]): string {
-  const file = project.split(/[\\/]/).pop() ?? project;
-  const lower = file.toLowerCase();
-  const own = extensions.filter((extension) => lower.endsWith(extension)).sort((a, b) => b.length - a.length)[0];
-  return own ? file.slice(0, file.length - own.length) : file;
+export function projectName(project: string, entries: readonly string[] = [UPROJECT_EXTENSION]): string {
+  const parts = project.split(/[\\/]/).filter(Boolean);
+  const file = parts.at(-1) ?? project;
+  const own = ownEntry(project, entries);
+  if (!own) return file;
+  if (isWholeName(own)) return parts.at(-2) ?? file;
+  return file.slice(0, file.length - own.length);
 }
 
 /**

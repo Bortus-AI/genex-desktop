@@ -2,32 +2,27 @@
  * A project's shape, in the words a person reads — and the choices the Open Game sheet offers.
  *
  * `ProjectShape` is the studio's own vocabulary — `three-vite`, `engine-export`, `serve: "dist"`
- * — and it reaches three surfaces at once: the Open Game sheet, the toast that says what was
- * opened, and the stage header. One table, so all three say the same thing. The sheet's rows are
+ * — and it reaches two surfaces at once: the Open Game sheet and the toast that says what was
+ * opened. One table, so both say the same thing. The sheet's rows are
  * here too, as data: what a folder offers is worth testing without a window. (The harness's own
  * status vocabulary is a different job and lives in `renderer/words.ts`; nothing here reads a run.)
  */
 import type { FolderInspection, ProjectKind, ProjectShape } from "./game-project.ts";
 
-/** For each kind: the phrase that finishes "This folder holds …", and the stage header's chip. */
-const KINDS: Record<ProjectKind, { phrase: string; chip: string }> = {
-  "studio-template": { phrase: "a game made from the Genex starter", chip: "studio starting point" },
-  "three-vite": { phrase: "a 3D game with its own build", chip: "3D · own build" },
-  "three-modules": { phrase: "a 3D game that runs as written", chip: "3D · runs as written" },
-  canvas2d: { phrase: "a 2D canvas game", chip: "2D canvas" },
-  phaser: { phrase: "a Phaser game", chip: "Phaser" },
-  "engine-export": { phrase: "a game exported from a game engine", chip: "engine export" },
-  "own-script": { phrase: "a game with its own scripts", chip: "own scripts" },
+/** For each kind: the phrase that finishes "This folder holds …". */
+const KINDS: Record<ProjectKind, string> = {
+  "studio-template": "a game made from the Genex starter",
+  "three-vite": "a 3D game with its own build",
+  "three-modules": "a 3D game that runs as written",
+  canvas2d: "a 2D canvas game",
+  phaser: "a Phaser game",
+  "engine-export": "a game exported from a game engine",
+  "own-script": "a game with its own scripts",
 };
 
 /** What this folder holds, as a phrase: "This folder holds …". */
 export function kindWords(kind: ProjectKind): string {
-  return KINDS[kind].phrase;
-}
-
-/** The same fact in the two or three words a header has room for. */
-export function kindChip(kind: ProjectKind): string {
-  return KINDS[kind].chip;
+  return KINDS[kind];
 }
 
 /** How the studio will run it: the build it runs first, or nothing at all. */
