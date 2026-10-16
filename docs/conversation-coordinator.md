@@ -577,7 +577,12 @@ through the queue and return to the composer with the message. The harness `rewi
 
 Before each processed message main saves the game folder: `events.append` starts the checkpoint
 and `turn.begin` waits for it (30 s at most; a late one is not kept), so the queue lock is never
-held, and the folder after each answer is saved too. `chat-checkpoints.ts` reads the folder
+held, and the folder after each answer is saved too. First, the game's plugin steps that ask to run
+for each message (`checkpoint.before` hooks with `messages: true`) save the engine's state into the
+folder within that wait, less 5 s kept for the snapshot; Plan mode, a lock not given or no time left
+skips them, and the folder is saved whatever they answered ([plugins](plugins.md#before-each-chat-message)).
+The same steps run before the snapshot taken after each answer, so what an answer changed only in
+the engine lands inside its own pair ([plugins](plugins.md#before-each-chat-message)). `chat-checkpoints.ts` reads the folder
 through a private index with executable Git configuration disabled, first copied from the
 repository's with its times (read before the copy, rounded down to the second, so the copy is
 never dated later than its content), so a same-size edit in the second Git last read the file is
@@ -594,7 +599,13 @@ reads them after the cut-off notice (`delegation-prompts.ts` `unsavedFilesNotice
 `refs/studio/chat/<thread>/before|after/<message>` with hooks off, without moving HEAD, branches
 or the user's index. Restoring changes the working tree only, and only while HEAD is the
 checkpoint's parent. The pre-rewind folder is saved on `.../rewound/<id>`; a restore that fails
-partway, or a rewind that fails after it, is put back from there. Paths the restored ignore rules
+partway, or a rewind that fails after it, is put back from there. A rewind that put files back
+records that `<id>` as `rewindId` on its marker, and its chat line offers **Bring back newer
+version** (`studio:chat.rewind.undo`, `ChatRewindService.undo`) while it is the chat's newest
+rewind, no message was sent after it and it was not taken (`undoRewindRefusal`):
+`ChatCheckpoints.restoreSaved` saves the present on a `rewound/` ref of its own, then restores that
+copy under the restore steps, only while HEAD is still its parent, and the host appends
+`conversation_rewind_undone`. The conversation stays rewound. Paths the restored ignore rules
 cover are never deleted, a folder still holding anything never saved is not replaced by a file,
 and reference pictures only withdrawn messages added are removed. Paths changed outside the
 chat's answers (between an `after` and the next `before`) are named in the confirmation; when a

@@ -8,7 +8,7 @@
  */
 import type { LiveToolSpec, WorkerType } from "../../../types/host-api.d.ts";
 import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
-import { JUDGE_PLAY_SPEC } from "../../judge-play.ts";
+import { type JudgeRef, judgePlaySpec } from "../../engine-judges.ts";
 import { minutes } from "../../time.ts";
 import { workerTools } from "../../workers/specs.ts";
 import { DIRECTOR_TOOLS, DirectorTool } from "../tool-specs.ts";
@@ -88,14 +88,19 @@ const SHARED: readonly string[] = [DirectorTool.Note, DirectorTool.WrapUp];
 /**
  * The open lead's tools, with `worker_start` naming the kinds of worker on offer and how many may run
  * at once (`workers`, when the pool knows it), `restart` only when `restart`, and `judge_play` only
- * for a game the studio plays in its engine's editor (`judge`).
+ * for a game the studio plays in its engine's editor (`judge`), naming the game's judges (`judges`).
  */
 export function openTools(
   types: readonly WorkerType[] = [],
-  { restart = false, workers, judge = false }: { restart?: boolean; workers?: number; judge?: boolean } = {},
+  {
+    restart = false,
+    workers,
+    judge = false,
+    judges = [],
+  }: { restart?: boolean; workers?: number; judge?: boolean; judges?: readonly JudgeRef[] } = {},
 ): LiveToolSpec[] {
   const shared = DIRECTOR_TOOLS.filter((tool) => SHARED.includes(tool.name));
   const saves = restart ? [SAVE_POINT, REWIND, RESTART] : [SAVE_POINT, REWIND];
-  const judges = judge ? [JUDGE_PLAY_SPEC] : [];
-  return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, ...judges, OPEN_FINISH];
+  const judgeTools = judge ? [judgePlaySpec(judges)] : [];
+  return [...shared, OPEN_STATUS, ...workerTools(types, workers), ...saves, ...judgeTools, OPEN_FINISH];
 }

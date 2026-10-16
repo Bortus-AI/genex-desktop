@@ -7,6 +7,8 @@ import type {
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
+import type { GenexCatalogItem } from "./mention-corpus.ts";
+import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
   AvatarStyle,
   FriendActionRequest,
@@ -270,6 +272,8 @@ export interface StudioApi {
   appAbout(): Promise<AppAbout>;
   bootstrap(): Promise<Bootstrap>;
   send(text: string, options?: ComposerSendOptions): Promise<boolean>;
+  /** A sent message's failed @ tag, fetched again or taken off; its result card shows the outcome. */
+  mentionRetry(threadId: string, messageId: string, tag: MentionRef, action: MentionRetry): Promise<void>;
   answerPlan(threadId: string, id: string, approved: boolean): Promise<boolean>;
   cancelTurn(threadId: string): Promise<boolean>;
   changeQueuedMessage(
@@ -291,6 +295,12 @@ export interface StudioApi {
     messageId: string,
     files: boolean,
   ): Promise<import("./chat-rewind.ts").RewindResult>;
+  /**
+   * Bring back the game files (and, through the restore steps, the engine's state) as they were
+   * just before the chat's newest rewind; the conversation stays rewound. Refused once a message
+   * was sent after it, or once it came back.
+   */
+  undoRewind(threadId: string, rewindId: string): Promise<import("./chat-rewind.ts").UndoRewindResult>;
   /** Every thread's events after `after`; ask again with the returned `cursor`, not an event id. */
   events(after?: string): Promise<EventFeed>;
   threadEvents(threadId: string): Promise<EventEnvelope[]>;
@@ -445,6 +455,8 @@ export interface StudioApi {
   playShelves(): Promise<PlayShelves>;
   /** Play: what on one shelf of the catalog answers a search, best first. */
   playSearch(query: string, shelf: PlayShelf): Promise<PlayGame[]>;
+  /** The whole catalog for the composer's @ picker: every shelf, who made each, whether it may be taken. */
+  playCatalog(): Promise<GenexCatalogItem[]>;
   /** Play: copy a game's public source into a new game of the person's own; answers its library name. */
   playRemix(slug: string): Promise<string>;
   /** Play: players in each named game now; a game nobody counts is left out. */

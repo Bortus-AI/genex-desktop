@@ -53,6 +53,7 @@ import type { CompileOptions, CompileResult } from "../../src/plugins/unreal/ubt
 import { type XcodeStatus, XcodeState } from "../../src/plugins/unreal/xcode.ts";
 import { toolbarStatusFrom } from "../../src/shared/plugin-toolbar.ts";
 import { createEngineLinks } from "../../src/substrate/plugins/engine-links.ts";
+import { ENGINES as ENGINE_CATALOG } from "../helpers/engines.ts";
 import { validateManifest } from "../../src/substrate/plugins/manifest.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -314,6 +315,7 @@ async function launchFixture(
     changed: () => {},
     gameThread: async (game) => `thread-of-${game}`,
     now: () => new Date(clock),
+    catalog: () => ENGINE_CATALOG,
   });
   const gameBinding = (game: string) => ({ project: game, directory: gameDir(game) });
   const linkGame = async (game: string, file: string) => {

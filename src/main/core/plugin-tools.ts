@@ -328,13 +328,22 @@ export class PluginToolService {
     binding: PluginBinding,
     signal?: AbortSignal,
     exportReview?: PluginConsentEvent["exportReview"],
-    options: { offerAlways?: boolean; displayName?: string; modeAnswers?: PluginConsentRequest["modeAnswers"] } = {},
+    options: {
+      offerAlways?: boolean;
+      displayName?: string;
+      modeAnswers?: PluginConsentRequest["modeAnswers"];
+      /**
+       * Asked for the person's own act (a press, or a card they just approved): an earlier no to the
+       * same card in this chat never answers it.
+       */
+      afresh?: boolean;
+    } = {},
   ): Promise<{ approved: boolean; by: PluginConsentBy; always?: boolean }> {
     const consentId = shortId("consent");
     const attribution = this.#x.pluginCallAttribution.get(binding);
     const threadId = await consentAudience(this.#core, binding, attribution?.runId);
     const name = `${pluginId}__${tool.name}`;
-    const declined = await this.#declinedBefore(attribution, threadId, name, args);
+    const declined = options.afresh ? null : await this.#declinedBefore(attribution, threadId, name, args);
     if (declined) return declined;
     const base = {
       consentId,

@@ -70,6 +70,19 @@ describe("a game's engine link in its chat", () => {
     assert.equal(second.text, "Fog Valley now builds in Unreal · Mist");
   });
 
+  it("names any engine by the label its plugin declares", () => {
+    const toy = {
+      pluginId: "toy-engine",
+      engine: "toy-engine",
+      label: "Toy",
+      name: "Garden",
+      file: "/p/Garden.toyproj",
+    };
+    const [line] = links(toEntries([linked(1, toy)]));
+    assert.ok(line?.kind === EntryKind.Action);
+    assert.equal(line.text, "Fog Valley now builds in Toy · Garden");
+  });
+
   it("reads an old or partial record without failing, naming the game plainly", () => {
     const [line] = links(toEntries([linked(1, { title: undefined, linkedAt: undefined })]));
     assert.ok(line?.kind === EntryKind.Action);

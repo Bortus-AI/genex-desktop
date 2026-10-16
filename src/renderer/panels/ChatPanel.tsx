@@ -28,7 +28,7 @@ import { loopAvailableFor } from "../loop-setting.ts";
 import { Pending } from "../ui/Pending.tsx";
 import { LoadFailed } from "../ui/LoadFailed.tsx";
 import { PromptBar, type PromptBarHandle } from "../ui/PromptBar.tsx";
-import { linkLoopGate, linkRewindNote } from "../linked-project.ts";
+import { engineLoopGate, engineRewindNote } from "../engine-game.ts";
 
 export function ChatPanel(props: ChatPanelProps): JSX.Element {
   const { loading } = props;
@@ -65,7 +65,7 @@ export function ChatPanel(props: ChatPanelProps): JSX.Element {
             <RewindDialog
               key={rewind.target.eventId}
               {...rewind.target}
-              engineNote={linkRewindNote(chat.folder)}
+              engineNote={engineRewindNote(chat.folder)}
               returnFocus={rewind.returnFocus}
               onRewound={(result) => rewind.target && rewind.rewound(rewind.target, result)}
               onDismiss={rewind.dismiss}
@@ -113,7 +113,7 @@ function ChatComposer(parts: ChatParts & { composerRef: RefObject<PromptBarHandl
         ref={composerRef}
         project={chat.meta.project}
         loopAvailable={loopAvailableFor(chat.folder)}
-        loopGate={linkLoopGate(chat.folder)}
+        loopGate={engineLoopGate(chat.folder)}
         conversationKey={threadId}
         build={composer.build}
         about={

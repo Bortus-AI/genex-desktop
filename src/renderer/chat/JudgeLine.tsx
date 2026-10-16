@@ -4,11 +4,12 @@ import { CHECK_MARKS, judgeLineLabel } from "../outcome-checks.ts";
 import { Icon } from "../ui/icons.tsx";
 import { CHAT_JUDGE_WORDS } from "../words.ts";
 import { ChatDisclosure } from "./ChatDisclosure.tsx";
+import { ShotStrip } from "./ConnectorShots.tsx";
 
 /**
  * A blind judge's play for the chat's own session (`chat_judge_result`): one line in the words of a
  * build's checks list, its state's mark leading it, and inside the question with the judge's note,
- * or why nothing was played.
+ * or why nothing was played, the engine judge it played as and the pictures its probe took.
  */
 export function JudgeLine({ judge }: { judge: ChatJudgeResultPayload }): JSX.Element {
   const mark = CHECK_MARKS[judge.status];
@@ -24,7 +25,9 @@ export function JudgeLine({ judge }: { judge: ChatJudgeResultPayload }): JSX.Ele
         <p className="text-ink-2">
           {CHAT_JUDGE_WORDS.asked} {judge.ask}
         </p>
+        {judge.judge && <p className="text-ink-3">{CHAT_JUDGE_WORDS.playedAs(judge.judge)}</p>}
         {said && <p className="text-ink-3">{said}</p>}
+        {judge.pictures && <ShotStrip paths={judge.pictures} />}
       </div>
     </ChatDisclosure>
   );

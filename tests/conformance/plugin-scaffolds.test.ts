@@ -375,6 +375,7 @@ describe("a scaffold's record in a game", () => {
     await cp(TOY_PLUGIN, dir, { recursive: true });
     const manifest = JSON.parse(await readFile(path.join(dir, "plugin.json"), "utf8"));
     manifest.id = id;
+    manifest.engine.id = id;
     manifest.tools.push(tool("new-toy-plugin", { makes: [TOY, TOY_PLUGIN_FACT] }));
     manifest.scaffolds = [SCAFFOLDS[1]];
     await writeFile(path.join(dir, "plugin.json"), JSON.stringify(manifest, null, 2));

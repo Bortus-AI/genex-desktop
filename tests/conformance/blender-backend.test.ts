@@ -308,6 +308,23 @@ describe("Local Blender model calls", () => {
     assert.match(notes, /rig/, "an armature left out: say how to export it");
   });
 
+  it("guides a game in any other engine to that engine's own import, never the web loader or Unreal's units", async () => {
+    const dir = await game();
+    const toy = {
+      engine: { kind: "toy-engine", project: "/Projects/Garden/Garden.toyproj", linkedAt: "2026-10-01T00:00:00Z" },
+    };
+    const made = { meshCount: 2, armatures: [], actions: [] };
+    const guidance = String((await (await callModel(dir, { name: "panel" }, { studio: toy, made })).run).guidance);
+    assert.doesNotMatch(guidance, /GLTFLoader|preview/, "no web page to load it in");
+    assert.doesNotMatch(guidance, /Unreal|centimetres/, "not Unreal's units");
+    assert.match(guidance, /engine's own import/);
+    for (const kind of ["Toy Engine", "web", 7, "../unreal"]) {
+      const odd = { engine: { ...toy.engine, kind } };
+      const words = String((await (await callModel(dir, { name: "panel" }, { studio: odd })).run).guidance);
+      assert.match(words, /GLTFLoader/, `${String(kind)}: a kind no engine id spells reads as the web`);
+    }
+  });
+
   it("guides a Godot game to the model's res:// path, by the project it was delivered into", async () => {
     const dir = await game();
     const delivered = ["godot/assets/blender/job-1/model.glb", "godot/assets/blender/job-1/render.png"];

@@ -146,7 +146,7 @@ and the Plugins page — no polling is needed for a change to show.
 | --- | --- | --- |
 | `apiVersion` | 1, 2, 3 | Supported SDK major; unrecognized versions are incompatible |
 | `id`, `version`, `name`, `publisher`, `description`, `backend` | 1 | Identity, semver, display text and the backend module path |
-| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` |
+| `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` and `game-engine` |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
@@ -159,6 +159,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `toolbar[]` | 2 | Up to 4 buttons in the stage strip; see below |
 | `mcpServers[]` | 2 | Up to 4 MCP servers the plugin ships, run by the host as connectors the plugin owns, each (API 3) with `facts`; see below |
 | `detect[]` | 3 | Up to 8 `{fact, files, notUnder?}` rules that recognise the plugin's kinds of project by their files; see [Project facts](#project-facts) |
+| `engine` | 3 | Capability `game-engine` only: `{id, label, projectFiles, fact, projectInFolder, play?, apps?, playerApps?}`, the engine the plugin declares; see [The engine declaration](#the-engine-declaration) |
 | `workspace` | 3 | `{facts?, ignore?, copySkip?}`: what history and writers' copies leave out of a folder holding the plugin's facts; see [Workspace rules](#workspace-rules) |
 | `assets` | 3 | `{facts?, folders, formats?}`: where the assets of a folder holding the plugin's facts live (1–8 folders inside the fact's folder or `.`, up to 32 lowercase extensions without the dot) |
 | `workerTypes[]` | 3 | Up to 16 `{id, description, tools, isolation}`: the kinds of worker a lead may start while the plugin is on; see [Worker types](#worker-types) |
@@ -166,8 +167,9 @@ and the Plugins page — no polling is needed for a change to show.
 | `folders[]` | 3 | Up to 8 `{path, why}`: folders outside the game the plugin's engine programs write to, workers' write roots; see [Folders](#folders) |
 | `locks[]` | 3 | Up to 8 `{id, label, per, personFirst?}`: what one holder at a time may use, giving way to the person; see [Locks](#locks-the-person-comes-first) |
 | `tools[].needs`, `mcpServers[].needs` | 3 | 1–4 of the manifest's lock ids a call of the tool, or of the connector's tools, holds while it runs; see [Locks](#locks-the-person-comes-first) |
-| `hooks[]` | 3 | Up to 32 `{on, tool, facts?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
+| `hooks[]` | 3 | Up to 32 `{on, tool, facts?, messages?}`: the plugin's harness tools Genex runs at its moments; see [Hooks](#hooks-genexs-moments) |
 | `observers[]` | 3 | Up to 8 `{id, facts, tool, live?, label?}`: what Genex can capture of a project with these facts, and the Live view it shows; see [Observers](#observers) |
+| `judges[]` | 3 | Beside `engine` only: up to 8 `{id, label, facts?, brief, players?, probe?}`, blind judges that play the engine's games in its editor; see [Judges](#judges) |
 | `tools[].ready` | 3 | Agent tools with `makes` only: the harness tool that answers whether the kind can be made now (`{ready, note}`) |
 | `tools[].asset` | 3 | Agent tools only: `{kind, prompt?, tool?}`, the kind of asset a call makes; see [Assets being made](#assets-being-made) |
 | `icon` | any | The plugin's picture: a `.png`, `.jpg`, `.webp` or `.svg` file in the package, at most 512 KiB, square and full-bleed (Studio rounds the corners); see [Icons](#icons) |
@@ -1106,6 +1108,358 @@ project's identity check on its port (remembered like the panel's), plus the pro
 while Unreal runs unanswered. It scans no folders, and the only thing it writes is removing its own
 stale Starting record once the project answers.
 
+**Roblox Studio.** The bundled `roblox` plugin (`src/plugins/roblox`) is off until the user turns
+it on (`seedEnabled.roblox = false`): it needs Roblox Studio and a Roblox account, and its
+description and panel say "Not affiliated with Roblox Corporation. For people 18 and over." It
+declares the engine `roblox` (label "Roblox Studio", project files `.rbxl`, `.rbxlx` and
+`.project.json`, fact `roblox-project`, `projectInFolder: false`, play for up to 8 players, and the
+editor apps `com.Roblox.RobloxStudio` and `RobloxStudioBeta.exe`), the `network` capability (hosts
+`setup.rbxcdn.com` for Studio's installer, `127.0.0.1` for the helper link, and GitHub's
+`github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` and
+`raw.githubusercontent.com` for the Luau checks), the per-game lock
+`studio` with its probe `studio-activity`, and no `folders`: a write root there would let any worker drop a
+plugin into Studio's Plugins folder. `studio-locate.ts` finds Studio on a Mac at
+`/Applications/RobloxStudio.app` (a link only while it stays inside /Applications; its version
+from Info.plist through `plutil`) with `Contents/MacOS/StudioMCP`, and on Windows as the newest
+`%LOCALAPPDATA%\Roblox\Versions\version-*\RobloxStudioBeta.exe` beside `mcp.bat`; it refuses
+links out of those folders and a home or LOCALAPPDATA of the other system. Whether Studio runs is
+`pgrep -x RobloxStudio`, or `tasklist` by its full path. The toolbar item `studio` ("Roblox Studio"
+after the host's `box` glyph, scoped to `roblox-project` games like every engine's button) opens the panel; its `toolbar-status` is a
+dot: Not installed and Not open `info`, Set up and Starting `warn`, Ready `ok`. Set up holds until
+Genex's setup record (`setup/record.json` in plugin storage) exists; Ready means Studio's own MCP
+server lists an open Studio, asked through the one StudioMCP the backend keeps once Studio runs. Neither the button nor the
+panel's `status` reads `~/Documents`, where macOS asks the person first; the Mac Plugins folder
+(`~/Documents/Roblox/Plugins`) is only named there.
+
+Set up (`setup.ts`, `mcp-switch.ts`) runs only from the person's press and only while Studio is
+closed, because Studio rewrites its settings while it runs. It adds the Genex helper
+`GenexStudioHelper.rbxmx` to Studio's Plugins folder (`~/Documents/Roblox/Plugins` on a Mac,
+`%LOCALAPPDATA%\Roblox\Plugins` on Windows), making that folder inside the real Roblox folder when
+Studio hasn't yet, and turns Studio's MCP server on (`"mcp-server": {"enabled": true}`) in every
+account's settings file named by digits in `AssistantSettings` (`~/Library/Roblox` on a Mac; on
+Windows presumed under `%LOCALAPPDATA%\Roblox`, not yet run there). The switch is edited in the
+file's own text, so every other key keeps its bytes. Genex never makes a settings file or guesses
+an account: with none, the panel offers Do it for me and Studio's click path. A link, something
+other than a folder or file where one belongs, an unreadable or oversize settings file, or a
+running Studio refuses the whole step before anything is written. Set up's confirmation says macOS
+may ask to let Genex use the Documents folder, where Roblox keeps its plugins. The record
+`setup/record.json` lists each write with its bytes' hash or the switch value it replaced, and keeps
+a copy of a helper file that was there before; Undo Set up takes back only what still holds Genex's
+bytes, and the Plugins folder only when Genex made it and it is empty. The helper carries
+`GENEX_HELPER_VERSION`: an older or unmarked one is replaced, a newer one is kept, and at the same
+version the bytes decide (an earlier Genex's recorded write that isn't the shipped helper is
+replaced; the person's own edit is kept). With Studio open,
+Set up offers **Restart Studio** (a normal quit of every Studio process, each asked on its own
+because each place opens a Studio of its own, so Studio asks to save as always; Set up; Studio
+opened again), **Do it for me** (`game.engine.assist` with the task "Turn on Studio's MCP server:
+Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server", clicking only that path and
+stopping for the person at any other dialog: saving, signing in, updates or terms) and that click
+path.
+Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone;
+`engine.playerApps` names Roblox's player app (`com.roblox.RobloxPlayer`, `RobloxPlayerBeta.exe`),
+which computer use never drives. The
+setup actions are `native`: they write outside the plugin's storage or quit and open Studio, so a
+fixture profile never runs them.
+
+**Get Roblox Studio** (`studio-install.ts`, native, after its card) installs Studio for a person
+who has none, in the order Roblox's installer sets. It downloads Roblox's own installer for the
+system (`https://setup.rbxcdn.com/mac/RobloxStudio.dmg`, `…/RobloxStudioInstaller.exe`) over HTTPS
+only, following a redirect only when it stays on exactly `setup.rbxcdn.com`, and stops past
+`MAX_INSTALLER_BYTES` (64 MB). Roblox changes its installers with every release, so nothing pins a
+hash: the signature is the check, and Node's downloads carry no quarantine mark. On a Mac
+`codesign --verify --strict` must accept the DMG and the `RobloxStudioInstaller.app` on it against
+Genex's own requirement (`-R`: Apple's root, its Developer ID authority and team `2CFABCH843` in the
+leaf; a signature's own requirement is only its signer's word), each with Roblox's `TeamIdentifier`,
+and Gatekeeper (`spctl --assess`) must accept the app; the DMG is attached read-only and unbrowsed
+in a private temporary folder and always detached. On Windows Authenticode must call the installer
+`Valid` with Roblox Corporation as the signer's whole CN or O (a subject with an escape is refused); PowerShell reads the path from its own
+environment, never from the command text. A failed check runs nothing, and the temporary folder is
+always removed. The installer and Studio run outside the process sandbox, as argument lists: the
+install is the point, and Studio's sign-in must work. After the installer Genex waits for Studio,
+lets the person sign in in the Studio the installer opens (it closes by itself after; Genex never
+closes it and never sees the password), runs Set up while it is closed (the helper always; the
+switch when a settings file exists), and opens Studio once. The action answers at once; `status`
+carries the phase (`install`) and `install/state.json` in storage keeps the last one, and **Stop**
+(`cancel-get-studio`) ends a download or a wait. The install has not been run live; it is proven
+with fakes.
+
+The Set up panel and the chat's steps card draw the same rows (`engine-steps.ts`): Studio (ticked
+with its version, so Get Roblox Studio is never offered with Studio here), signing in, the helper,
+the MCP server and the game's place, each with the same words, tick and button. `steps` answers the
+card; `status` answers the rows, the step that is next (`now`: Studio, then Set up, which needs
+Studio closed, then opening Studio, its MCP server and the place), the MCP switch read from
+Studio's settings and the helper version Genex's record names, without reading `~/Documents`. On
+the next step the panel adds Restart Studio beside Do it for me, Studio's click path, what Genex
+waits for, and on a Mac before Set up the Documents note. Do it for me is offered only where Genex
+can click (`canClick`: a Mac) and only while the switch is off; while Studio doesn't answer, the MCP
+row first says to sign in on Studio's sign-in screen, and with no place open, the place step's
+buttons show beside it. Restart Studio reopens the game's own place. Answers are said in one
+persistent live region; Do it for me and Publish an update first say a question may wait in the
+game's chat, behind the panel. Choose your place calls `places` only on
+the person's press. A linked place's block names the place, says when the person's own Rojo project
+keeps the scripts, and warns when the last play found Studio can reach the game's live saved data
+(`live-data/<game>.json` in storage, which the play adapter writes), with Studio's switch to turn
+it off.
+
+Its connection `studio` (connector `roblox-studio`, "Roblox Studio, for this game's open place.")
+is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run per game in
+`<storage>/mcp/<game>`) starts `StudioMCP` itself through `studio-client.ts`: on a Mac
+`/Applications/RobloxStudio.app/Contents/MacOS/StudioMCP` with the person's real home from the
+system's user record (the host points HOME at the connection's own folder, and StudioMCP keeps its
+connection token in the real one, which Genex never reads); on Windows `%LOCALAPPDATA%\Roblox\mcp.bat`
+through `commandLaunch`'s cmd.exe line, from its real path inside that folder, refusing anything
+cmd.exe would rewrite. Neither runs in Genex's process sandbox: Studio's own connection and the
+person's sign-in must work. Studio joins a fresh StudioMCP a moment after it starts, so a call asks
+`list_roblox_studios` until the game's Studio is listed (`STUDIO_JOIN_MS`). Every call is pinned
+to that Studio: `studio_id` is filled from the binding file `studio.json` the backend keeps in the
+connection's folder (`{studioId, session, at}`, believed for `BINDING_MAX_AGE_MS`), or with no file
+yet from the game's linked place matched by name; two matching Studios, a stale binding and a call
+naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
+30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
+write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, once
+its code passes `luau-screen.ts`: code that names Creator Store inserts, uploads, publishing, the
+internet or a published game's live data, or that builds the names it looks up (`getfenv`,
+`loadstring`, `game[…]`, a `GetService` of anything but one plain name, character codes), is refused
+before it reaches Studio, naming the tool that asks first (`execute_luau` runs with a plugin's
+rights, which reach all of these). The screen reads text: a name built in a variable and looked up
+on an instance found by walking the tree still passes, so the asking tools stay the line. And a
+tool the table doesn't know (a newer Studio's) is hidden and refused until Genex classes it, since
+it could publish, upload or run Roblox's AI on the person's account. Hidden too: the play-lane tools (play goes through the
+six play tools), `multi_edit` (scripts are the game's `.luau` files), `http_get` (Studio would
+fetch any address for the agent: a path for leaking data and for planted instructions) and
+`list_roblox_studios`; inserts, uploads and Roblox's AI tools are plugin tools that ask the person
+every time (Ask first, below), and a call to one through the connection names the plugin tool to
+use instead. A `screen_capture` JPEG over 1 MB is shrunk with `sips` or PowerShell's System.Drawing,
+and refused in plain words when it can't be.
+
+The binding file comes from the helper link (`helper-link.ts`), which the backend starts once Studio
+is set up. It is a hand-written RFC 6455 server (`helper-socket.ts`, no dependency) on 127.0.0.1
+only, on the first free port of `HELPER_PORTS` (47301–47304, which the helper tries in the same
+order), path `/genex-helper`. It refuses any handshake carrying an `Origin` (every browser sends
+one; Studio's `CreateWebStreamClient` sends none) or another Host, takes masked text frames only up
+to `MAX_HELPER_FRAME_BYTES` (4 MB), and closes on anything else; it pings every `HELPER_PING_MS`
+and ends a connection silent for a whole period. `helper-protocol.ts` checks every message once:
+protocol version, ids that only grow (a repeated id is refused), a known type, exactly the fields
+that type has, answers and data chunks only for requests the backend made, place parts that stay
+plain paths under `.genex/place/`, and sources up to 1 MB. A script is named as Studio holds it
+(the instance names from one of `SCRIPT_SERVICES` down, its class and a Script's run context); the
+backend maps that to a file under `src/` (below) and resolves the file by real path
+(`scriptTarget`, refused through any link). Both sides hash bytes with `helperHash`, FNV-1a over 32 bits. Binding
+is exact: each connection gets a random session (`session.mark`), the helper puts the sessions of
+its connections (at most two Genex apps) in a non-archivable `GenexHelperSession` StringValue in
+CoreGui, and the backend reads that marker through `execute_luau` in Edit in every listed Studio;
+the one that holds the session is the connection's. Only when no Studio lets CoreGui be read does
+the place the helper names stand in, and two such Studios are refused. The game is the one whose
+linked place that Studio has open (none when two games link it). Before a connection's game is
+first bound, `beforeBind` asks that helper (a save point's place waiting to load), and only then is
+`studio.json` written, so agents reach that Studio after it; it is refreshed every
+`BINDING_REFRESH_MS`, and after a Studio restart the helper's new connection rebinds the game to
+the new Studio's id. The newest connection wins. A connection bound to no game is obeyed in
+nothing. This stops games and profiles crossing wires; it does not stop a local process that
+already holds StudioMCP.
+
+The helper itself is readable Luau in `src/plugins/roblox/helper/` (one module per file, each
+saying what it does at its top, and `VERSION`), which `scripts/build-plugins.mjs`
+(`robloxHelperModel`) assembles into `GenexStudioHelper.rbxmx`: the entry Script (`init.luau`, run
+context Plugin) holding a ModuleScript per module and a `constants` module generated from the
+plugin's TypeScript (protocol, ports, names, limits, message and error vocabularies), the same
+bytes for the same tree. The build refuses a `VERSION` other than `HELPER_VERSION`. Studio loads it
+into each place opened after it is added. It returns at once outside the Edit data model, so the
+copies in a play session's server and clients never connect, and it never raises an error in Studio
+for a missing API: a request it can't serve answers `unsupported`. It lists, reads, writes (inside
+a ChangeHistoryService recording, through `ScriptEditorService:UpdateSourceAsync`, refused as a
+`conflict` when the source changed since `base`) and removes scripts (only while the hash still
+matches), skips writing what Studio's Script Sync keeps, and sends `scripts.changed` for edits made
+in Studio, never for its own writes or a place load. `place.export` serializes each saved service's
+children with `SerializationService` (a child that can't be created is a container of its own, such
+as `StarterPlayer/StarterPlayerScripts`), splits a container past `PLACE_PART_MAX_BYTES` (40 MB)
+into one part per child under `<container>.split/`, adds `services.json` and `terrain.rbxm`, and
+serializes again only the containers whose children changed; `place-files.ts` writes the parts
+that differ from `.genex/place/manifest.json` whole or not at all, removes parts the place no longer
+has, and loads a save point's parts back (`place.load`), each checked against the manifest first.
+`pending-load.json` waits for a Studio that wasn't reachable and loads before the next binding.
+`play.multiplayer` starts `StudioTestService:ExecuteMultiplayerTestAsync` (one session, at most
+eight players); pausing or ending a test acts in the play session's own data models, out of the
+Edit helper's reach, so those answer `unsupported`. `activity` and `team` (who else is in a Team
+Create place) are sent on change and answered when asked; `device.set` and `gui.layout` drive the
+Device Simulator; `model.import` builds a checked mesh (`GXM1`) as a MeshPart.
+
+**Scripts as files.** A Roblox game's scripts are `.luau` files under its `src/<Service>/`, in
+Rojo's names (`script-paths.ts`): `Name.server.luau` a Script, `Name.client.luau` a LocalScript,
+`Name.luau` a ModuleScript, `Name.plugin.luau` and `Name.runcontext-server|client.luau` a Script
+with that run context, folders for the instances on the way, and `init.<kind>.luau` inside its own
+folder for a script with scripts below it. A character no file system keeps (separators,
+`: * ? " < > |`, controls, trailing dots and spaces, a Windows device name's first letter, a dot
+that would read as a kind, `%` itself) is written `%XX`; each name has one spelling, so a file
+spelled otherwise is no script of the game's, and a name past 200 characters gets no file. Two
+scripts of one name, or names differing only in letter case, get no file either. `script-sync.ts`
+keeps them in step with Studio, `Source` only (attributes and tags stay in the place export). Its
+record `.genex/roblox.json` holds each file's hash as of the last agreement and the files Genex
+wrote at the game's top. When a game's helper binds, before `studio.json` is written, every script
+is reconciled three ways (Studio's hash, the file's, the record's): the side that changed wins, a
+new script is copied, a deletion is copied only when the other side is as recorded (in Studio only
+while its hash still matches), and changed on both sides keeps Studio's version and moves the
+file's to `.genex/conflicts/<when>/`; an edit beats a deletion. While bound, a change under `src/`
+(watched, quiet for `SYNC_DEBOUNCE_MS`) is pushed with the record's hash as `base`, and Studio's
+`scripts.changed` is written to its file; each write is recorded first, so its echo matches the
+record. Scripts Studio's Script Sync keeps are skipped both ways; a `default.project.json` Genex
+didn't write is the person's Rojo project, and then Genex keeps no script in step. A `src/` that is
+a link is refused whole; writes stay in the game folder by real path and never go through a link;
+a source past Studio's 200,000 characters stays on disk with a log line. The sync also adds
+Studio's place lock files (`*.rbxl.lock`, `*.rbxlx.lock`) to the game's `.gitignore`. The backend
+learns each game's folder from the plugin calls that carry one (`games/<game>.json` in its
+storage). Script workers (`workerTypes` `scripts`, `isolation: copy`) check their files with
+`check-scripts`.
+
+**Luau checks.** `check-scripts` (agent tool, no card, reads only; `all: true` for every file)
+runs, side by side from the game folder by full path with argument lists, `luau-lsp analyze
+--formatter=gnu --platform=roblox` with luau-lsp's Roblox definitions and a sourcemap,
+`selene --display-style=Json2` (the game's `selene.toml`, else Genex's with `std = "roblox"`) and
+`stylua --check --output-format=json`, each within `CHECK_TOOL_MAX_MS` (90, 60 and 30 s) and
+`MAX_CHECK_OUTPUT_BYTES` (2 MB) a stream, on at most `MAX_CHECK_FILES` (300) files
+(`check-scripts.ts`). The sourcemap is `src/` in Rojo's format (`sourcemap.ts`: the script sync's
+names, `Folder`s on the way, `StarterPlayerScripts` and `StarterCharacterScripts` by class, never
+through a link), written in the plugin's storage for each check and removed after it; a game with
+its own `sourcemap.json` (a Rojo project) uses that. Findings come back as plain lines at a file
+and line (`TypeError` and `SyntaxError`, selene's `Error` and StyLua's parse errors are errors;
+lints are warnings; StyLua's layout differences are format). A program that hangs, prints past the
+cap, can't start or exits with another code is named and never counts as a clean check. A file
+every program found clean is remembered with its sha256 and the programs that checked it
+(`luau/clean/<game>.json`) and checked again only once it changes. The programs are found where
+the person keeps them (PATH, then `~/.rokit/bin`, `~/.aftman/bin`, `~/.foreman/bin`), then in the
+plugin's storage (`luau-tools.ts`); the definitions only in the storage. **Add Luau checks**
+(`add-luau-checks`, native, a quiet button under the panel's steps once Studio is set up, its card
+naming this computer's download size) downloads only what is missing of the `PINNED` releases
+(luau-lsp 1.70.1, selene 0.32.0, StyLua 2.6.0 and luau-lsp's `globalTypes.None.d.luau` at the same
+tag; Mac arm64 and x64, Windows x64; selene has no Intel Mac build): HTTPS, each redirect checked
+to stay on GitHub's hosts, no larger than its pin and matching its sha256, all fetched into a
+private folder in the storage before `ditto` (Mac) or Windows' own `tar` unpacks any, then moved
+to `luau/<asset>-<version>/` together or not at all. Genex's own selene runs with its home in the
+storage, where it caches Roblox's library (fetched by selene itself on its first run, which Add
+Luau checks starts); on Windows selene keeps that cache in the person's local app data. The
+programs run outside ProcessSandbox, as the person's own copies would; nothing is vendored into the
+app. New Roblox game writes `selene.toml` and `stylua.toml` defaults into a game that has none.
+A call bound to a worker's copy checks the copy and never hands its folder to the script sync.
+
+**Places.** A Roblox game builds in one place (`places.ts`, `place-actions.ts`, all native).
+**Choose your place** (`places`) lists the Studios open now first, each asked in Edit for its
+`PlaceId` and `GameId` (two of one name are listed as "Place1" and "Place1 (2)"), then `.rbxl` and
+`.rbxlx` files from Studio's recent list (a Mac's exported Studio preferences, recent-file names
+only) and the top of `Documents/Roblox`: one row per real path, newest first, at most
+`MAX_PLACES` (12), the scan kept for `SCAN_KEEP_MS`. Only this press reads them; `status`,
+`toolbar-status` and `steps` never do. **Use in this game** (`use-place {file | studio}`) links a
+local place file where it is (by real path; a link, another extension or another system's path is
+refused); a published place through `default.project.json` in the game folder, listed in
+`.genex/roblox.json`'s `written` before it is written (the person's own Rojo project is linked as
+it is), with `remote {placeId, universeId}` as strings; a place never saved through that same file,
+found in Studio by its name, which the backend keeps in `places/<game>.json` in its storage beside
+each link (never in the game folder). A Studio of the same name refuses a link by name. A place
+another game builds in is refused ("Place1 already builds in Sky Race") while that game's folder
+still links it; once the game is gone the place is free. **New Roblox game** (`create`, and the
+agent's `new-game` with `makes: ["roblox-project"]`, `ready: "engine-status"`, scaffold
+`game` "Roblox game") writes `<game>.rbxlx` from `templates/baseplate.rbxlx` through a hidden file
+beside it (whole or not at all, never over a file), adds the lock lines to `.gitignore`, links it
+(with no game open, into a game `game.create` makes) and opens it with Studio's command line
+(`studio-launch.ts`): `--task EditFile --localPlaceFile`, or `--task EditPlace --placeId
+--universeId` for a published place (ids of digits only), each starting a Studio of its own, so
+**Open Studio** brings Studio forward instead when the game's place is already listed. **Quit
+Studio** is Studio's normal quit and is refused while a build uses Studio (`game.engine.runs`).
+`use-project` switches a game to an open place by its listed name or a file by path, never reading
+Documents, Desktop or Downloads; `show-steps` puts the steps card in the chat.
+
+**Ask first.** Roblox's own AI tools, uploads and Creator Store inserts are plugin tools with a
+`confirmation` card (`ai-tools.ts`, `insert-asset.ts`, `AskFirstTool` in `studio-tools.ts`), so
+they ask the person every call in every chat mode, Bypass included: they run on the person's Roblox
+account, against its limits, and Roblox's moderation of what they make or upload lands on that
+account. Each card is at most 300 characters and says what goes to Roblox. `generate-mesh`,
+`generate-model` (Studio's `generate_procedural_model`, about 50 a day), `generate-texture`,
+`generate-material`, `segment-mesh`, `roblox-playtest` and `roblox-explore` (Studio's `subagent`
+types `playtest` and `explore`), `upload-image`, `store-image` and `insert-asset` each call one
+Studio tool in the game's own Studio as its helper is bound, `studio_id` filled by the backend.
+Lists (part names, pictures) arrive as one string, comma-separated or a JSON array, and are checked
+with every other argument before any call; what is refused reaches no Studio, and Studio's own
+refusals (such as the daily cap) reach the agent in its words. The tools that change or play the
+place hold the `studio` lock and run under the agent's marks (the playtest agent under the play
+mark). Pictures are `.png` or `.jpg` files of at most 5 MB in the game folder, read with no link on
+the way and checked by their first bytes, or `https` addresses on public names: `store-image` hands
+Studio a private copy in the storage, removed when it answers, and `upload-image` serves the game's
+pictures on 127.0.0.1 at random paths only for the call, answering each picture's `rbxassetid` by
+the name the agent gave. `insert-asset` takes an id of plain digits, reads the price first (Studio's
+`search_asset` for that id; one it doesn't find by its product info in Edit, free only when public
+or the signed-in person's own), refuses a paid asset with nothing inserted, and answers every
+script the asset brought, flagging `require` with an id, `loadstring`, `getfenv`, `HttpService` and
+`MarketplaceService`.
+
+**Models.** `check-model` (no card, no lock) runs the asset gate (`asset-gate.ts`) over a `.glb` or
+`.gltf` in the game folder: at most 20,000 triangles, closed (every edge, once vertices at the same
+place are welded, shared by exactly two triangles), one material, at most 4 bone influences per
+vertex, the scene's roots at the origin, and textures at most 1024 by 1024 (`textureSide` asks for
+less), their sizes read by hand from the PNG `IHDR` or the JPEG frame marker. The file is read as
+hostile input: a plain path inside the game folder with no link on the way, a size cap checked
+before any read, a GLB read stage by stage so nothing past a broken header is read; a `.gltf`'s
+buffers and pictures follow the same rules or come inline as `data:` addresses. An FBX is answered
+with how to export `.glb`, and a Draco or meshopt export with how to export one uncompressed.
+`import-model` (a card; the `studio` lock) runs the gate and sends only a model that passes to the
+helper's `model.import` (`model-import.ts`), as the helper's own mesh (`GXM1`) converted from
+glTF's metres to studs, under the agent's busy mark; the helper builds an anchored MeshPart at the
+origin, and the mesh is uploaded to the person's account only when they publish. Only the shape
+comes in. When Studio can't add it, the answer names the checked file and Studio's own File ›
+Import 3D.
+
+**Publish an update** (`publish.ts`). No Studio or plugin API publishes a place, and Open Cloud's
+place publishing takes API keys Genex never asks for, so publishing is a Do it for me: the panel's
+`publish-update` action (native, after its card, which names the place) and the agent's
+`publish-update` tool (a card every call; no lock) send the game's changed script files to Studio,
+then hand the game's chat "Publish <place> to Roblox: File › Publish to Roblox in its Roblox Studio
+window…" through `game.engine.assist`, which accepts only the pressed action or the approved card.
+It updates a place that is already published (its link has `remote` ids): the panel offers it in
+the place block once every step is done. A place never published gets the first publish's click
+path and no assist, because Roblox asks for the game's details and an age check there; the person
+then presses Choose another place and links the published place again. Computer control is a Mac's
+only: on Windows the place block shows Studio's click path instead of the button, and with no
+driver the answer gives it.
+
+**Moments, the person first and pictures.** The handlers answer in hook terms when
+`context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in
+`hook-answers.ts`), each hooked for games with the `roblox-project` fact; nothing hooks `run.end`,
+so the person's Studio stays open when a run ends.
+
+| Handler at its moment | In a run | In a chat |
+| --- | --- | --- |
+| `open-for-run` at `run.prepare` | quiet once the helper is connected and answers; opens the place (`open-studio`'s way) and waits up to `OPEN_WAIT_MS` (3 minutes) for its helper (a note names the place); blocks with the step when Studio isn't set up, the game has no place, the helper doesn't answer (a dialog may be open) or never connects | — |
+| `team-note` at `turn.start` | notes who else is in a Team Create place, only when that changed | same |
+| `save-place` at `checkpoint.before` (`messages: true`) | sends the script sync's pending file changes, then has the helper export what changed into `.genex/place/` (up to 2 minutes); blocks while Studio isn't connected or the export fails | the same within the message's wait (`SAVE_PLACE_CHAT_MAX_MS`: the flush and `PLACE_EXPORT_MAX_MS`); never blocks, notes what it saved or why the checkpoint holds the scripts only |
+| `hero-shots` at `checkpoint.after` | Studio's `screen_capture` of the game's Studio as one `viewport` picture | nothing |
+| `save-place` at `restore.before` | the same export, so the newer state is saved first (Bring back newer version); blocks when it fails; notes that going back undoes the edits of others in Team Create | same |
+| `load-place` at `restore.after` | the helper loads the restored export, then the script sync reconciles `src/` with the restored files winning (git put back `src/` and the record together, so Studio's listing stands in for the record), whether the load ran, failed or found no export; with Studio not connected, `pending-load.json` and `pending-scripts.json` wait and the helper's next connection loads the export, then lets the restored scripts win; never blocks | same |
+| `studio-state` at `health` | quiet while the helper answers a ping within `STUDIO_PING_MS` (5 s) and Studio's MCP server lists the Studio; pending while Studio starts, its helper reconnects (`RECONNECT_WAIT_MS`), it doesn't answer ("a dialog may be open in Studio", with the hint to look with `app_look`, look only, on a Mac) or isn't listed; blocks when Studio is gone, open without the place past the reconnect wait, unlinked or not set up | same |
+| `studio-crash-note` at `crash` | asks the person to reopen Studio with Open Studio; Genex never closes or kills it | same |
+| `luau-note` at `worker.end` | the Luau checks over the scripts changed since they last passed, in the folder the call is bound to; a note of each finding, nothing when clean or not added | same |
+| `luau-finish` at `finish` | the Luau checks over every script; errors hold the finish back, naming the first; warnings, format differences and missing checks are notes | — |
+
+A helper that answers `unsupported` to an export (Studio with no way to serialize the place) never
+blocks: the note says save points hold the scripts only. A part larger than the host's 50 MB file
+cap is named in the note, and the host's checkpoint leaves it out and names it too. Only
+`load-place` needs the `studio` lock: exporting and pictures read the place, so a message's
+checkpoint never waits on the person. The lock's probe `studio-activity` answers `personActive`
+from the helper's `activity` reports in the last `PERSON_ACTIVE_MS` (15 s), leaving out what the
+agent's marks cover (`agent-marks.ts` in `<storage>/mcp/<game>`: `agent-busy.json` around the
+connection's writes, 3 s after it included, since Studio records `execute_luau` runs as edits;
+`agent-play.json` during the agent's play test; Genex's own load and reconcile run under the busy
+mark too, and so do its own reads in a Studio another game is bound to (the helper link's marker
+reads, Choose your place asking each Studio for its place); a mark older than 30 minutes or dated ahead is not believed); it claims nothing unsaved.
+The `viewport` [observer](#observers) runs `hero-shots` and shows Live's `stills`.
+
+Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never
+`engines`): the inline `roblox-studio` (scripts are files, play goes through `computer` and
+`judge_play`, the desktop tool never builds or play-tests in Studio, Roblox's AI tools, uploads and
+inserts ask) and the file skills `luau`, `remotes` (server-authoritative), `player-data`
+(session-locked, `UpdateAsync`, `BindToClose`), `purchases` (idempotent `ProcessReceipt`),
+`ui-scale` (`UIScale`, `ScreenInsets`, touch targets), `assets` (Roblox's mesh and texture rules)
+and `get-started`, adapted from Roblox's MIT `roblox-get-started` skill
+([notices](../THIRD-PARTY-NOTICES.md#adapted-roblox-skill)). A web or Unreal game reads none of
+them and is not offered `roblox__skill`.
+
 ## What Studio records around a tool call
 
 A plugin never has to report its own activity, and Studio never takes a plugin's word for it. The
@@ -1289,9 +1643,9 @@ Available services are capability checked and scoped to the calling plugin:
   result's `genex` field holds what the game's own one tells Genex (its Genex SDK versions and
   `genex` settings), read only when that file lives inside the game.
 - `game.engine.link` / `game.engine.read` / `game.engine.steps` (capability `game-engine`): link
-  the bound game to an engine project file (an Unreal `.uproject`, or a Godot project's
-  `project.godot`: the file names the link's `kind`), read its link, or show the plugin's steps card in the
-  calling chat (see "A game's engine" below).
+  the bound game to a project file of the engine the plugin declares (an Unreal `.uproject`, a
+  Godot project's `project.godot`, a Roblox place), read its link, or show the plugin's steps card
+  in the calling chat (see "A game's engine" below).
 - `game.snapshot {reason}` (capability `game-engine`): an ordinary game snapshot of the bound game,
   listed in Rewind under `reason`, taken before the plugin changes files there (the Unreal plugin,
   before it updates the editor helper in the game's project). Refused without a bound game; a
@@ -1300,6 +1654,18 @@ Available services are capability checked and scoped to the calling plugin:
   plugin linked to a project, each as `{game, title, project}`; no bound game needed. The host asks
   nothing while no run holds the studio awake. The Unreal plugin reads it so it never offers to quit
   an editor a Loop is using.
+- `game.engine.assist {task}` (capability `game-engine`): Do it for me. Hands a setup task (one
+  plain line, at most 300 characters) to the bound game's chat, posted there verbatim as
+  "<plugin name> asks: <task>"; that chat's own session clicks it with the person's computer
+  control, on the Mac apps the plugin's `engine.apps` declares and no others. It answers
+  `{started, reason?}`, the reason one of `not-person` (neither an action the person pressed nor
+  a tool call whose own `confirmation` card they approved; the host marks such a call
+  `confirmed`, a Genex moment's or an observer's step never is), `no-chat`, `no-apps`,
+  `unavailable` (Windows, or a Mac with no desktop driver: show the click path instead) or
+  `declined`. A plugin that did not come with Genex shows the task on a card first, every time;
+  with computer control off, the studio's own card offers to turn it on for every chat. It is for
+  setup clicks and publishing the person approved, never for building or play-testing
+  ([computer use](computer-use.md#the-persons-computer)).
 - `credentials.read/write/clear`: plugin-scoped protected storage. Reserved account actions
   `unlock`, `connect`, `disconnect` authorize these operations; agents cannot invoke actions.
   Cache unlocked credentials only in the backend session. Background status must never unlock.
@@ -1324,9 +1690,9 @@ engines write while they run) matched against the core table (`web-game` by `ind
 output and vendored folders, `unreal-project`, `unreal-plugin` outside a `Plugins/` folder,
 `godot-project`, `unity-project`, `blender-assets`) and the `detect` rules of the **enabled**
 plugins (an installed plugin that is off detects nothing; source `plugin:<id>`). A fact below a
-folder that already has the same one is dropped. The engine link reads as `unreal-project` at its
-`.uproject`'s folder (source `link`) and stands for the game's Unreal project: another `.uproject`
-the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
+folder that already has the same one is dropped. The engine link reads as its engine's declared
+`fact` (`unreal-project` for Unreal) at the project file's folder (source `link`) and stands for the
+game's project in that engine: another project of that engine the folder holds is not a second one. A scaffold recorded in `studio.json` adds its rules (source
 `scaffold`, see [Scaffolds](#scaffolds)). Never counted: the web template beside an older engine link,
 what a port replaced (`portedFrom` in `studio.json`, kept as the reference), and a starter an older
 New game wrote that nothing has been built in yet (its `scaffoldStamp` still matching). New game
@@ -1439,18 +1805,21 @@ in: …") name them first. A manifest is
 refused when a folder is `/`, the home folder or a folder holding it, `~/Library`,
 `~/Library/Application Support`, `~/Documents`, `~/Desktop` or `~/Downloads`, or is, holds or sits
 inside a login or Genex's own data (`~/.claude`, `~/.codex`, `~/.genex`, `~/.ssh`, `~/.aws`,
-`~/Library/Keychains`, `~/Library/Application Support/Genex`), compared case-blind. The Unreal
+`~/Library/Keychains`, `~/Library/HTTPStorages`, `~/Library/Roblox`,
+`~/Library/Application Support/Genex`), compared case-blind. The Unreal
 plugin names the two its build tool writes: `~/Library/Application Support/Epic/UnrealBuildTool`
 and `/private/tmp/.dotnet`.
 
 ### Hooks: Genex's moments
 
 `hooks` (API 3, `substrate/plugins/hook-manifest.ts`; vocabulary in `shared/plugin-hooks.ts`) names
-the plugin's harness tools Genex runs at its moments: up to 32 `{on, tool, facts?}`, each `(on,
-tool)` once. `tool` is one of the plugin's own tools with `audience: "harness"`, no `confirmation`
+the plugin's harness tools Genex runs at its moments: up to 32 `{on, tool, facts?, messages?}`, each
+`(on, tool)` once. `tool` is one of the plugin's own tools with `audience: "harness"`, no `confirmation`
 and no `host`; `facts` (1–8 fact ids, each once) narrows it to the games they reach ([Scope by
 facts](#scope-by-facts)). Another plugin's tool, an agent tool or an unknown moment refuses the
-manifest.
+manifest. `messages: true`, only on `checkpoint.before` (a boolean anywhere, or on any other moment,
+refuses the manifest; `false` is dropped), runs that step before each chat message's checkpoints too,
+the one before its answer and the one after ([Before each chat message](#before-each-chat-message)).
 
 | Moment | When | A `block` |
 | --- | --- | --- |
@@ -1539,6 +1908,26 @@ harness sends as it shuts down, cut a step of the person's own Rewind (`outlives
 checkpoint's after steps keeps its snapshot, with a note that they were stopped.
 `GameProject.hookEvents` lists a game's moments; absent, no plugin hooks it and nothing runs.
 
+#### Before each chat message
+
+A game chat saves the game folder before each message is answered, so Rewind can bring it back
+([the conversation coordinator](conversation-coordinator.md)). An engine whose state lives in its
+app and reaches the folder only when exported opts in with `messages: true` on that
+`checkpoint.before` step; the host then runs those steps, and only those
+(`registry.messageCheckpointPlan(game)`, `HookService.prepareMessageCheckpoint`), right before each
+of the message's two snapshots (before its answer and after it, so what an answer changed only in
+the engine lands inside its own pair and Rewind finds it as the chat's own), under their locks, told
+`{on: "checkpoint.before"}`. A `checkpoint.after` step
+never runs for a message, so no pictures are posted at every message. The steps live inside the
+message's own wait (`CHAT_CHECKPOINT_WAIT_MS`, 30 s, in `main/core/rewind.ts`), not the plugin call
+ceiling (`HOOK_CALL_MS`): the lock wait and the steps' shared limit are what is left of it, less 5 s
+kept for the snapshot. Plan mode, a lock not given in time or no time left skips the steps; a step
+cut short, a failure or a `block` is a log line. In every case the files are still saved: a block
+never stops a message's checkpoint. A message answered again after a restart keeps its first
+checkpoint and runs no step for it. A step that opts in must be quick; Unreal does not opt in, so its
+editor is saved at save points only. Roblox's `save-place` opts in: its incremental export
+(`SAVE_PLACE_CHAT_MAX_MS`) ends within the message's 25 s.
+
 ### Locks: the person comes first
 
 `locks` (API 3) names what one holder at a time may use, such as an editor: up to 8 `{id, label,
@@ -1584,6 +1973,11 @@ in the background (the Unreal plugin's `add-cpp-module`, `reopen-editor`, `run-p
 still closes, reopens or plays it. This is a known gap in "editor work waits its turn"; the Unreal
 runner covers adding C++ with its own wait (`whileAdding`).
 
+The bundled locks: Unreal's `editor` (probe `editor-activity`: a play neither the agent nor the
+plugin's queue started) and Roblox Studio's `studio` (probe `studio-activity`: the person's
+selections, undo and redo, their own recordings and typing in Studio within 15 s, the agent's own
+marks left out), each named under its plugin above.
+
 ### Observers
 
 `observers` (API 3, `substrate/plugins/observer-manifest.ts`; vocabulary in `shared/observers.ts`)
@@ -1601,7 +1995,7 @@ these keys are kept. `observersFor` (`registry.observers(game)`) lists a game's
 observers: each plugin's in plugin order, one per folder its facts reach (the hooks' rule), then
 Genex's own `preview` of each folder served as a web game (a game with no kind yet at its root). Only
 a plugin that is on captures (`registry.observerTool(key)` answers null otherwise). The bundled Unreal
-plugin's `viewport` observer runs `hero-shots` and shows the Unreal card.
+plugin's `viewport` observer runs `hero-shots` and shows the Unreal card. The bundled Roblox plugin's `viewport` observer runs its `hero-shots` (Studio's viewport) as a `stills` view.
 
 How Genex runs one (`main/core/observers.ts` `ObserverService`, host call `observers.capture`
 [in the harness runtime](harness-runtime.md)): only inside a run of the game, each observer of a
@@ -1739,15 +2133,27 @@ description come from the live plugin list when the plugin is installed: **Turn 
 ## A game's engine
 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
-link and the host makes it (`substrate/plugins/engine-links.ts`). `game.engine.link {project}`
-checks the project file (a `.uproject`, kind `unreal`, or a `project.godot`, kind `godot`;
-`shared/game-engine.ts` `engineOfProjectFile`) by real path (absolute, no `..`, a regular file once every link is
-resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
-linkedAt, previous}`, which the plugin's MCP servers read and agents can't write), mirrors it into
-the game's `studio.json` as `engine` (`substrate/game-engine-binding.ts`; believed only while the
-file is still at that real path), and appends `engine_linked` to the calling chat (the game's own
-chat for a link made in the panel): "Lantern Run now builds in Unreal · Lantern" with Undo. Linking the project a game already uses changes
-nothing. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
+link and the host makes it (`substrate/plugins/engine-links.ts`), to a project of the engine the
+plugin declares ([The engine declaration](#the-engine-declaration)); a plugin that declares none is
+refused. `game.engine.link {project, remote?, name?}` checks the project file by real path (absolute, no
+`..`, at most 1,024 characters, one of the engine's `projectFiles`, a regular file once every link
+is resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
+linkedAt, remote?, previous}`, `kind` being the engine's id, which the plugin's MCP servers read and
+agents can't write), mirrors it into the game's `studio.json` as `engine`
+(`substrate/game-engine-binding.ts`), and appends `engine_linked` (with the engine's id and
+`label`) to the calling chat (the game's own chat for a link made in the panel): "Lantern Run now
+builds in Unreal · Lantern" with Undo. `remote` keeps a published game's ids beside the link
+(`{placeId, universeId}`, `parseEngineRemote`); ids of any other shape are dropped and the link is
+still made. A record is believed only while its `kind` is an engine an installed plugin declares
+(`PluginRegistry.engines()`, on or off: turning a plugin off never turns its games into web games;
+removing it does) and its file is still of that engine's kind at that real path. A project's name
+is its file name without the engine's longest matching extension (`a.project.json` is `a`), or its
+folder's name for an engine whose `projectFiles` entry is a whole file name (Godot's `project.godot`); a
+link's `name` (one plain line, at most 80 characters) names it in the chat's line and the answer
+instead, for a project known by another name (a Roblox place linked through
+`default.project.json`); any other shape is dropped.
+Linking the project a game already uses, with the same ids, changes nothing; other ids make a new
+link. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
 once the link has changed; it restores the project the link replaced, or leaves the game a web
 game that stays unlinked (`{unlinkedAt}`), and appends `engine_link_undone`. A refused link
 changes nothing on disk.
@@ -1757,7 +2163,9 @@ only through the person (Use in this game) or a tool that declares `makes` (`use
 `new-game`). `new-game` offers the plugin's steps card (`game.engine.steps` appends
 `engine_steps`) while a step is open.
 
-The steps card ("Unreal setup") sits above the composer while nothing else waits there. Its
+The steps card ("Unreal setup") sits above the composer while nothing else waits there. A row's
+button runs its plugin action as every surface does (`runPluginAction`): one that declares
+`confirmation` is reviewed and approved in the native dialog first. Its
 rows are the plugin's `steps` action, read every 5 s while it shows, so Xcode installed or opened
 outside Genex is ticked by itself; it goes when no step is open, and Not now hides it for that game
 until the next offer. Unreal's rows: the project is set up, then Install Xcode (Open App Store) and
@@ -1850,6 +2258,95 @@ instead of only showing the note (`main/core/plugin-hooks.ts` `takeCheckpoint`,
 `DelegateRequest.onCheckpoint`; in Plan mode, while the person plays, or when Genex can't tell
 whether they do, it changes nothing). With the Unreal plugin off, a linked Unreal game's tool still
 snapshots the game folder, running no step: the session is told to save in the editor first.
+
+### The engine declaration
+
+A `game-engine` plugin declares its engine in `engine` (API 3, `substrate/plugins/engine-manifest.ts`,
+`EngineDeclaration` in `shared/game-engine.ts`), so an engine is the plugin's data rather than
+Genex's code. Unreal's is `{"id": "unreal", "label": "Unreal", "projectFiles": [".uproject"],
+"fact": "unreal-project", "projectInFolder": true}`; Godot's names the whole file
+(`"projectFiles": ["project.godot"]`) and adds `"writesProjectFiles": true`. Unity declares none: it
+plays through play tools scoped to its facts ([computer use](computer-use.md#game-engines-and-other-targets)).
+The manifest is refused unless:
+
+- `id` is the plugin's own id and an engine id (2–40 lowercase letters, digits and dashes, a letter
+  first), never `web`, so a plugin cannot speak for another engine;
+- `label`, the engine's name as people read it, is 1–40 characters on one line;
+- `projectFiles` lists 1–4 distinct entries a linked project file must match: an extension of one
+  or two lowercase dotted parts (`.uproject`, `.project.json`), or a whole lowercase file name
+  (`project.godot`, `PROJECT_FILE_NAME`; `isProjectFileEntry`);
+- `fact`, the fact a linked game holds, is one the plugin's `detect` declares or one of Genex's own
+  (never `web-game`);
+- `projectInFolder` is a boolean: true when the Loop needs the project inside the game folder,
+  because its save points hold it;
+- `writesProjectFiles`, when present, is `true`: the engine's agents change the project as files, so
+  a linked project outside the game folder joins the reads and write roots of the sessions that
+  build the game (`delegation.ts` `#linkedFolders`), as Godot's does;
+- `play`, when present, is `{players?, clock?, pointer?, state?}`: at most `players` players (1–8)
+  in one play, a `ClockLevel`, and whether the mouse aims as a player's does and the game's state
+  can be read. The `computer` tool on the engine's games is built from it before play opens
+  ([computer use](computer-use.md#game-engines-and-other-targets)); a plugin with a `play` of more
+  than one player takes `players` on `play-open` and `player` on its other play tools;
+- `apps`, when present, is `{mac?, windows?}`, each 1–4 distinct names: Mac bundle ids in
+  reverse-DNS form and Windows `.exe` file names, never paths. They name the apps the editor runs
+  as, which computer use never drives to build or play: while the plugin is on, the `desktop`
+  tool refuses them outside its `game.engine.assist` turns, and those turns may drive only them;
+- `playerApps`, when present, has `apps`' shape and names the apps the engine's published games are
+  played in by everyone (Roblox's player app): while the plugin is on, the `desktop` tool refuses
+  them always, an assist turn included, so no agent plays in a live server.
+
+Unknown keys are dropped and the rest kept in a fixed order. `engineCatalog` lists the declared
+engines by id, the first declaration of an id winning. `parseEngineRemote` reads a published game's
+ids at its engine's service (`{placeId, universeId}`, decimal strings of at most 20 digits, never
+numbers), and `isProjectPath(value, entries)` checks a project path against an engine's
+`projectFiles`. A `game-engine` plugin without `engine` still loads.
+
+A game linked to any declared engine is an engine game (`isEngineGame`, with the harness's copy in
+`loop/engine-game.ts`): it gets no web rules, preview check, web Live view or web Loop, and only
+Unreal's card, editor and words ask for Unreal by name. Its descriptor carries `linkedEngine`
+(`{label, projectFiles, projectInFolder}`). With `projectInFolder` true and the project outside the
+game folder, Mode offers no Loop and Rewind says what it can't undo, both in the engine's label
+(`renderer/engine-game.ts`); with it false the Loop runs wherever the project is.
+
+### Judges
+
+An engine plugin may declare blind judges in `judges` (API 3, beside its `engine`;
+`substrate/plugins/judge-manifest.ts`, `PluginJudge` in `shared/plugins.ts`). A judge is data: it
+plays a game in the engine's editor through the play tools, never sees code, and answers from
+playing. The manifest is refused unless there are at most 8 and each has:
+
+- `id`, 2–40 lowercase letters, digits and dashes with a letter first, unique in the manifest, and
+  `label`, 1–40 characters on one line;
+- `facts`, when present, 1–8 fact ids: the games it judges (none: every game the plugin plays);
+- `brief`, a Markdown file in the package outside every dot folder. Installing reads it and refuses
+  a missing file, a folder, or more than `MAX_JUDGE_BRIEF_CHARS` (16 000) characters;
+- `players`, when present, a whole number from 1 to the engine's `play.players` (one when it
+  declares none);
+- `probe`, when present, one of the plugin's harness tools that asks nothing, runs no host program
+  and needs every lock `play-open` needs (`quietHarnessTool`).
+
+Unknown keys are dropped and the rest kept in a fixed order. The harness's `game.list` marks a game
+an engine plugin that is on plays in its editor `editorPlay`, with `judges` (`{id, label}`) that
+reach it by its facts (`withEditorPlay` in `main/core/editor-play-session.ts`); a web game, or one no
+plugin that is on plays, has neither. The chat's `judge_play` then takes `judge`, an id the host
+checks against the game's own (an unknown one is refused in plain words and nothing plays), and a
+judge's playtest grant names it. The host appends the judge's brief to the session's rubric (to its
+first answer in the harness's own loop), opens its players, and right after the play opens runs its
+probe once through the plugin's tool call, which holds the play's locks. The probe answers `{note,
+images}`: measurements and pictures, never source. They open the judge's first answer, and the
+pictures are kept in the game's captures folder and shown on the chat's judge line, only for the
+trace the host wrote (`judge-probe-pictures.ts`). A `play-open` that answers `liveData: true` adds
+the note that saved data there is the live game's and only the play's test players may be used.
+In an open Loop the lead's `judge_play` names the game's judges too, and after each turn that keeps
+a save point every one of them plays it in turn, each answer a run check carried to the lead
+([harness runtime](harness-runtime.md)). Whether a chat's session calls a judge is its own choice: a
+change that touches what a judge tests is a hint, not a rule.
+
+The Roblox Studio plugin declares `multiplayer` (3 players, probe `players-state`), `cheater`
+(1, `cheat-remotes`) and `phone` (1, `phone-check`), for `roblox-project` games. Their briefs are in
+`judges/`; the cheater and phone probes send Luau the build copies beside `backend.mjs`
+(`cheat-remotes.luau`, `phone-check.luau`), read from the package at run time
+([computer use](computer-use.md#game-engines-and-other-targets) says what each measures).
 
 ### The bundled Unity plugin
 
@@ -2512,7 +3009,7 @@ GodotProjects one level down, each once by real path, at most 12) tagged In use 
 and Choose a project.godot…. `use-project {folder}` links the game to that project
 (`game.engine.link`, kind `godot`); every tool, hook and the observer then work in the project the
 link names (`project-link.ts` `projectOf`), else in the game's own. A game linked outside its
-folder gets no Loop and a Rewind note (`renderer/linked-project.ts`), its brief says the work
+folder gets no Loop and a Rewind note (`renderer/engine-game.ts`), its brief says the work
 happens there, Set up installs the addon there (bin/play naming it by its path), and the chat's
 session, leads, workers and Genex's play engine reach that folder.
 `web-export` (agent tool, and the panel's Export for the web) writes Godot's Web export into `web/`

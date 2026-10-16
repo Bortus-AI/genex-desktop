@@ -1,5 +1,5 @@
 import type { PluginToolAsset } from "./asset-making.ts";
-import type { GameEngine } from "./game-engine.ts";
+import type { EngineCatalog, EngineDeclaration, EngineId, GameEngine } from "./game-engine.ts";
 import type { RuntimeInstallPhase } from "./model-install.ts";
 import type { ObserveContext, PluginObserver } from "./observers.ts";
 import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
@@ -483,6 +483,11 @@ export interface PluginManifest {
    */
   detect?: FactRule[];
   /**
+   * API 3, capability `game-engine`: the engine the plugin declares, by its own id
+   * (`shared/game-engine.ts`): what a game linked to its projects builds in.
+   */
+  engine?: EngineDeclaration;
+  /**
    * API 3: what history (`ignore`) and writers' copies (`copySkip`) leave out of a folder holding
    * the plugin's facts, as patterns placed at each fact's folder (`shared/project-workspace.ts`).
    * `facts` names the facts it reaches; without it, those the plugin's `detect` declares.
@@ -509,6 +514,11 @@ export interface PluginManifest {
    * Live view it shows (`shared/observers.ts`).
    */
   observers?: PluginObserver[];
+  /**
+   * API 3, capability `game-engine` with an `engine`: the blind judges that play the engine's games
+   * in its editor, each with its own brief, players and probe (`PluginJudge`).
+   */
+  judges?: PluginJudge[];
   /** Host-managed account flow. Status may finish a pending browser authorization. */
   account?: { connect: string; unlock: string; disconnect: string; status: string; cancel?: string };
   /**
@@ -519,6 +529,50 @@ export interface PluginManifest {
   /** What to do to start using it, for its page: plain one-line steps Genex draws ({@link isPluginSetup}). */
   setup?: string[];
 }
+
+/** The most judges one manifest declares. */
+export const MAX_PLUGIN_JUDGES = 8;
+/** The longest judge brief, in characters: a package file read and checked at install. */
+export const MAX_JUDGE_BRIEF_CHARS = 16_000;
+
+/**
+ * API 3: a blind judge an engine plugin declares (`judges`). It plays a game in the engine's editor
+ * through the play tools, never sees code, and answers from playing. Data only: the host runs it.
+ */
+export interface PluginJudge {
+  /** Unique in the manifest: what an agent names the judge by. */
+  id: string;
+  /** What the person and the agent read it as, 1-40 characters on one line. */
+  label: string;
+  /** The facts of the games it judges; every game the plugin plays in its editor when absent. */
+  facts?: string[];
+  /** The package's Markdown file holding its brief, appended to the judge's rubric (at most `MAX_JUDGE_BRIEF_CHARS`). */
+  brief: string;
+  /** How many players its play opens, 1 to the engine's `play.players`; one when absent. */
+  players?: number;
+  /**
+   * A quiet harness tool of the plugin, needing the play tools' locks, that the host runs once in
+   * the judge's play right after it opens: its `note` and `images` (measurements and pictures,
+   * never source) open the judge's first message.
+   */
+  probe?: string;
+}
+
+/** A judge as a game's descriptor and an agent name it. */
+export type JudgeRef = Pick<PluginJudge, "id" | "label">;
+
+/** The judges that reach a game: those naming no facts, and those whose facts the game holds. */
+export function judgesFor(judges: readonly PluginJudge[] | undefined, game: GameKind): PluginJudge[] {
+  return (judges ?? []).filter((judge) => scopeReaches(judge.facts, game));
+}
+
+/** The engines `manifests` declare, by id: the first declaration of an id wins. */
+export function engineCatalog(manifests: readonly Pick<PluginManifest, "engine">[]): EngineCatalog {
+  const catalog = new Map<EngineId, EngineDeclaration>();
+  for (const { engine } of manifests) if (engine && !catalog.has(engine.id)) catalog.set(engine.id, engine);
+  return catalog;
+}
+
 /** Where an installed plugin came from. Persisted in install records: never rename a value. */
 export const PluginSourceKind = {
   Bundled: "bundled",
@@ -852,12 +906,24 @@ export type GithubLookup =
  * Consent cards the studio itself asks with, not a plugin: their source id, and the name the card
  * shows for it. Persisted in every log: never rename an id.
  */
-export const StudioConsentSource = { Desktop: "studio-desktop" } as const;
+export const StudioConsentSource = {
+  Desktop: "studio-desktop",
+  /** Turning computer control on for every chat, asked when a plugin's Do it for me finds it off. */
+  ComputerSetting: "studio-computer-setting",
+} as const;
 export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof StudioConsentSource];
+
+/**
+ * The question the computer-setting card asks: the chat's card shows it as its title, and the
+ * consent record keeps it as the prompt, so both say the same words.
+ */
+export const COMPUTER_SETTING_QUESTION =
+  "Turn on computer control? Agents in every chat can then ask to use apps on this Mac, one app at a time.";
 
 /** The name a studio consent card shows. */
 export const STUDIO_CONSENT_NAMES: Readonly<Record<StudioConsentSource, string>> = {
   [StudioConsentSource.Desktop]: "Computer control",
+  [StudioConsentSource.ComputerSetting]: "Computer control",
 };
 
 export interface PluginBinding {
@@ -916,8 +982,42 @@ export const PluginService = {
   GameCreate: "game.create",
   /** `game-engine`: the games whose run is going now, each with the project this plugin linked it to. */
   GameEngineRuns: "game.engine.runs",
+  /**
+   * `game-engine`: Do it for me. Hands a setup task to the bound game's chat, whose own session
+   * clicks it with computer control, limited to the apps the plugin's `engine.apps` declares.
+   */
+  GameEngineAssist: "game.engine.assist",
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
+
+/** The longest task a plugin may hand to the chat with `game.engine.assist`. */
+export const ENGINE_ASSIST_TASK_MAX_CHARS = 300;
+
+/** Why `game.engine.assist` started nothing. */
+export const EngineAssistRefusal = {
+  /** No computer control on this computer: Windows, or a Mac with no desktop driver. */
+  Unavailable: "unavailable",
+  /** The person said no to the task's card or to turning computer control on. */
+  Declined: "declined",
+  /** The call names no game, so there is no chat to hand the task to. */
+  NoChat: "no-chat",
+  /** Not the person's: neither an action they pressed nor a tool call whose card they approved. */
+  NotPerson: "not-person",
+  /** The plugin's engine declares no apps for this computer, so there is nothing it may click. */
+  NoApps: "no-apps",
+} as const;
+export type EngineAssistRefusal = (typeof EngineAssistRefusal)[keyof typeof EngineAssistRefusal];
+
+/** `game.engine.assist`'s arguments: the task, one plain line of at most {@link ENGINE_ASSIST_TASK_MAX_CHARS} characters. */
+export interface EngineAssistArgs {
+  task: string;
+}
+
+/** `game.engine.assist`'s answer: whether the task's turn was started, and why not. */
+export interface EngineAssistAnswer {
+  started: boolean;
+  reason?: EngineAssistRefusal;
+}
 
 /** The folder in a `game-engine` plugin's storage where the host keeps each game's link, `<game>.json`. */
 export const ENGINE_LINKS_FOLDER = "links";

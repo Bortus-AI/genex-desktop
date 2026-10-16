@@ -7,6 +7,9 @@
  *   waits for their answer, and a no ends the action;
  * - some apps are never driven, whatever is allowed: the studio itself (an agent must never answer
  *   its own consent card), password managers, System Settings and the system's password prompts;
+ * - computer use never builds or play-tests: a game engine's editor (the apps an enabled engine
+ *   plugin declares) is driven only in that plugin's setup assist (Do it for me), and an assist
+ *   drives only the apps it was granted;
  * - nothing is ever typed into a secure (password) field.
  *
  * A click is checked against the app under the point when the driver can say, else the app in
@@ -75,7 +78,34 @@ const MESSAGE = {
   declined: (app: string) => `the person did not allow ${app} — ask them in words, or use an app they allowed`,
   secureField: "the focused field is a password field: the studio never types into one",
   noApp: "no app could be found under that point or in front",
+  engineApp: (app: string) =>
+    `${app} is a game engine's editor: computer use never builds or play-tests there — use the engine's own tools`,
+  playerApp: (app: string) =>
+    `${app} is where an engine's games are played by everyone: computer use never plays there, not even for setup`,
+  outsideAssist: (app: string) => `${app} is not one of the apps this setup step may use`,
 } as const;
+
+/** What the engine-app guard reads: the editors engines declare, and the chat's live assist grant. */
+export interface EngineAppRule {
+  /** Bundle ids of the editor apps every enabled engine plugin declares (`engine.apps.mac`). */
+  declared: ReadonlySet<string>;
+  /** The apps the chat's live setup assist was granted; null outside an assist. */
+  granted: ReadonlySet<string> | null;
+  /** Bundle ids of the apps every enabled engine's games are played in (`engine.playerApps.mac`): never driven. */
+  players?: ReadonlySet<string>;
+}
+
+/**
+ * Why the engine-app guard refuses an app, or null: an app an engine's games are played in always;
+ * during an assist every app outside its grant; outside one, every engine's editor. The apps the
+ * studio never drives are refused before this.
+ */
+export function engineAppRefusal(app: DesktopApp, rule: EngineAppRule): string | null {
+  const id = app.bundleId;
+  if (id !== null && rule.players?.has(id)) return MESSAGE.playerApp(appName(app));
+  if (rule.granted) return id !== null && rule.granted.has(id) ? null : MESSAGE.outsideAssist(appName(app));
+  return id !== null && rule.declared.has(id) ? MESSAGE.engineApp(appName(app)) : null;
+}
 
 /** One refusal, the shape `refusals()` reports. */
 interface Refusal {
@@ -96,6 +126,8 @@ export interface DesktopTargetOptions {
   allowApp: (app: DesktopApp) => Promise<boolean>;
   /** Whether this app is one the studio never drives (beyond {@link NEVER_DRIVEN_BUNDLES}): the studio itself. */
   ownApp?: (app: DesktopApp) => boolean;
+  /** The engine-app guard ({@link engineAppRefusal}): why this app is refused now, or null. */
+  engineApps?: (app: DesktopApp) => string | null;
   /** A smaller picture for the model, where the host can make one; the driver's own otherwise. */
   downscale?: (
     shot: DesktopShot,
@@ -355,6 +387,8 @@ export function desktopTarget(options: DesktopTargetOptions): DesktopTarget {
     if (secret) return refuse(action.type, MESSAGE.secureField);
     if (!app) return refuse(action.type, MESSAGE.noApp);
     if (neverDriven(app)) return refuse(action.type, MESSAGE.neverDriven(appName(app)));
+    const engine = options.engineApps?.(app);
+    if (engine) return refuse(action.type, engine);
     if (!(await options.allowApp(app))) return refuse(action.type, MESSAGE.declined(appName(app)));
     return true;
   };
