@@ -721,7 +721,6 @@ function PublishBody({
   cover: PublishCover;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
-  const multiplayer = useLibrary((s) => s.games.find((g) => g.name === project)?.multiplayer === true);
   const [title, setTitle] = useState<string | null>(null);
   const name = title ?? offeredTitle(record.state, gameTitle, project);
   const publishing = record.pressing === Pressing.Publish || view.running;
@@ -767,10 +766,7 @@ function PublishBody({
             label={celebrate ? WORDS.saveName : undefined}
           />
         )}
-        {view.link && !publishing && <LinkField link={view.link} onOpen={open} opening={opening} />}
-        {view.testLink && !publishing && (
-          <TestLinkField link={view.testLink} listed={view.stage === PublishStage.Public} multiplayer={multiplayer} />
-        )}
+        {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
         <Hint
           testShown={Boolean(view.testLink) && !publishing}
           view={view}
@@ -781,6 +777,29 @@ function PublishBody({
         />
       </div>
     </div>
+  );
+}
+
+/** The public link, then the tested draft players do not have yet: shown together, under the presses. */
+function Links({
+  view,
+  project,
+  onOpen,
+  opening,
+}: {
+  view: PublishView;
+  project: string;
+  onOpen: () => void;
+  opening: boolean;
+}): JSX.Element {
+  const multiplayer = useLibrary((s) => s.games.find((g) => g.name === project)?.multiplayer === true);
+  return (
+    <>
+      {view.link && <LinkField link={view.link} onOpen={onOpen} opening={opening} />}
+      {view.testLink && (
+        <TestLinkField link={view.testLink} listed={view.stage === PublishStage.Public} multiplayer={multiplayer} />
+      )}
+    </>
   );
 }
 
