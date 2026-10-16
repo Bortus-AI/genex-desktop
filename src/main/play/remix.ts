@@ -397,6 +397,16 @@ export async function gitClone(
   models(total ?? done, total);
 }
 
+/**
+ * A tagged game's code as a read-only reference: the clone alone, its Git LFS files left as
+ * pointers, because an agent reads the code and a reference never ships. It may take as long as
+ * it keeps moving ({@link DOWNLOAD_STALL_MS}).
+ */
+export async function gitCloneCode(url: string, dest: string, clock: StallClock = TIMERS): Promise<void> {
+  if (!isRemixSource(url)) throw new Error(MESSAGE.NotRemixable);
+  await download(cloneArgs(url, dest), { env: hostGitEnv({ GIT_LFS_SKIP_SMUDGE: "1" }) }, clock, onStderr);
+}
+
 /** The bytes a clone's Git LFS files come to, from git-lfs's own listing; null when it cannot say. */
 async function lfsTotal(dir: string): Promise<number | null> {
   const listed = await exec("git", [...HOST_GIT_CONFIG, "lfs", "ls-files", "--json"], {

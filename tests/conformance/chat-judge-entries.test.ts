@@ -69,6 +69,34 @@ describe("a chat's judge line", () => {
     assert.equal(line?.judge?.objective, "model-said", "an unknown objective is the judge's word");
   });
 
+  it("keeps the engine judge it played as and its probe's pictures, only those in the game's captures folder", () => {
+    const [line] = judgeLines([
+      judged(1, {
+        ask: "Does every player see the others move?",
+        status: "passed",
+        answer: "yes",
+        note: "All three moved together.",
+        objective: "model-said",
+        judge: "Crowd",
+        pictures: [
+          ".studio/captures/shot_0123456789abcdef0123.jpg",
+          "../secrets.png",
+          "/etc/passwd",
+          ".studio/captures/../../src/main.js",
+          ".studio/captures/shot_fedcba9876543210fedc.png",
+          42,
+        ],
+      }),
+    ]);
+    assert.equal(line?.judge?.judge, "Crowd");
+    assert.deepEqual(line?.judge?.pictures, [
+      ".studio/captures/shot_0123456789abcdef0123.jpg",
+      ".studio/captures/shot_fedcba9876543210fedc.png",
+    ]);
+    const [plain] = judgeLines([judged(2, { ask: "Can you win?", status: "passed", pictures: "not a list" })]);
+    assert.equal(plain?.judge?.pictures, undefined, "a line with no pictures shows none");
+  });
+
   it("names its tool step in plain words", () => {
     assert.match(toolWords("judge_play").label, /judge play/);
   });

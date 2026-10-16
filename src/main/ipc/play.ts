@@ -58,6 +58,7 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
   handle("studio:play.credits", () => credits.credits());
   handle("studio:play.feed", (payload) => gallery.feed({ category: payload?.category, cursor: payload?.cursor }));
   handle("studio:play.shelves", () => gallery.shelves());
+  handle("studio:play.catalog", () => gallery.mentionItems());
   handle("studio:play.search", (payload) =>
     gallery.search(String(payload?.query ?? ""), isPlayShelf(payload?.shelf) ? payload.shelf : PlayShelf.Games),
   );

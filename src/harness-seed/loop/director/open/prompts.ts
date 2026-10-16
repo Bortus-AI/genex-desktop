@@ -12,6 +12,8 @@ import { CLAIM_BEFORE_END_MINUTES } from "../../finish-check.ts";
 import { MAX_FINISH_REJECTIONS } from "../../finish-contract.ts";
 import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
 import { JUDGE_PLAY_TOOL } from "../../judge-play-prompts.ts";
+import type { JudgeRef } from "../../engine-judges.ts";
+import { ENGINE_JUDGE_WORDS } from "../../engine-judges-prompts.ts";
 import { appIdentity } from "../../project-prompts.ts";
 import { MINUTE_MS, minutes } from "../../time.ts";
 import { JobTool } from "../../jobs/contract.ts";
@@ -75,6 +77,8 @@ export interface OpenBriefFacts {
   cppRestart: boolean;
   /** Whether the studio plays the game in its engine's editor, so the lead is offered `judge_play`. */
   judge: boolean;
+  /** The judges the game's engine plugin declares for it, which play after each turn that keeps a save point. */
+  judges?: readonly JudgeRef[];
   savePoints: readonly OpenSavePoint[];
   now: number;
   softDeadline: number;
@@ -129,7 +133,7 @@ function workerWords(types: readonly WorkerType[]): string {
 }
 
 /** The save points paragraph: `save_point`, `rewind`, and `restart` when a plugin restarts the project's app. */
-function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart" | "judge">): string {
+function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart" | "judge" | "judges">): string {
   const lines = [
     `SAVE POINTS: ${OpenTool.SavePoint} keeps the folder as it is now in Genex's checkpoint (the project's plugins save their apps first); keep one after each step that works. ${OpenTool.Rewind} with a save point's label goes back to it when your turn ends.`,
   ];
@@ -140,6 +144,7 @@ function savePointWords(facts: Pick<OpenBriefFacts, "restart" | "cppRestart" | "
     lines.push(
       `${JUDGE_PLAY_TOOL}: a blind judge plays the game and answers one yes/no; ask it before you claim a mechanic works.`,
     );
+  if (facts.judge && facts.judges?.length) lines.push(ENGINE_JUDGE_WORDS.briefRounds(facts.judges));
   return lines.join(" ");
 }
 

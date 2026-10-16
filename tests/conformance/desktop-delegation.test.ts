@@ -11,8 +11,10 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { assistGrants } from "../../src/main/core/desktop-assist.ts";
 import { desktopControl } from "../../src/main/core/desktop-control.ts";
 import { HostMethod } from "../../src/shared/harness-api.ts";
+import { PluginSourceKind } from "../../src/shared/plugins.ts";
 import { UiEvent, type UiEvent as UiEventData } from "../../src/shared/ui-events.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
 import type { DesktopDriver } from "../../src/substrate/desktop-driver.ts";
@@ -20,6 +22,7 @@ import { connectCuaDriver, driverEnv, GrantHolder } from "../../src/substrate/cu
 import { embeddedCuaDriver, HOST_BUNDLE_ID } from "../../src/substrate/cua-embedded.ts";
 import { running } from "../helpers/processes.ts";
 import { coreLite } from "../helpers/core-lite.ts";
+import { TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const text = (result: LiveToolResult): string => (typeof result === "string" ? result : result.text);
@@ -554,6 +557,76 @@ it("end to end: a chat's click goes through the app's own embedded daemon, which
     assert.equal(running(served!.pid), false, "⌃⌥⌘Esc and quitting stop it");
   } finally {
     await daemon.stop();
+    await lite.close();
+  }
+});
+
+it("an assist's turn may drive the engine apps its grant names; the next turn and the plain chat may not", async () => {
+  const calls: string[] = [];
+  const toyEditor = { name: "Toy Editor", bundleId: "com.example.toy", pid: 7 };
+  const desktop = desktopControl({
+    findDriver: async () => "/fake/cua-driver",
+    connect: async () => ({
+      ...fakeDriver(calls),
+      focus: async () => ({ app: toyEditor, secure: false }),
+    }),
+    ownApp: () => false,
+  });
+  let answer: (consentId: string) => void = () => {};
+  const lite = await coreLite({
+    desktop,
+    onUiEvent: (event: UiEventData) => {
+      if (event.type !== UiEvent.PluginConsent) return;
+      const payload = event.payload as { consentId: string; state: string };
+      if (payload.state === "pending") answer(payload.consentId);
+    },
+  });
+  try {
+    const { core } = lite;
+    answer = (consentId) => void Promise.resolve().then(() => core.resolveConsent(consentId, true));
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.updateSettings({ computerControl: true });
+    const project = "desk-assist";
+    await core.games.scaffold(project);
+    const threadId = await core.createGameThread(project);
+    const said: string[] = [];
+    const { engine, seen } = desktopEngine(async (call) => {
+      said.push(await call({ action: "left_click", coordinate: "10,20" }));
+    });
+    core.engines.register(engine as never);
+    const api = core.api() as unknown as Record<string, (input: unknown) => Promise<unknown>>;
+    const delegate = (messageId: string) =>
+      api[HostMethod.EngineDelegate]!({
+        engine: "fixture-delegate",
+        project,
+        threadId,
+        prompt: "go",
+        chatTurn: { messageId },
+      });
+
+    await delegate("msg_plain");
+    assert.ok(seen[0]?.tools.includes("desktop"), "with computer control on, the chat is handed the desktop");
+    assert.match(said[0]!, /Toy Editor is a game engine's editor/, "an engine's editor is refused outside an assist");
+
+    assistGrants(core).record(threadId, {
+      pluginId: TOY_PLUGIN_ID,
+      apps: ["com.example.toy"],
+      messageId: "msg_assist",
+    });
+    await delegate("msg_assist");
+    assert.ok(seen[1]?.tools.includes("desktop"), "the assist's turn is handed the desktop");
+    assert.match(said[1]!, /OK — left click at 10,20/);
+    assert.equal(assistGrants(core).live(threadId), null, "the grant ended with its turn");
+
+    await delegate("msg_after");
+    assert.match(said[2]!, /Toy Editor is a game engine's editor/);
+    assert.deepEqual(
+      calls.filter((call) => call.startsWith("click")),
+      ["click 10,20"],
+      "only the assist's click reached the driver",
+    );
+  } finally {
     await lite.close();
   }
 });

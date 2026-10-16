@@ -5,7 +5,15 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { finishedSays, parseSteps, stepsOffer, stepsShown, stuckSays } from "../../src/renderer/chat/engine-steps.ts";
+import {
+  finishedSays,
+  parseSteps,
+  runStep,
+  stepsOffer,
+  stepsShown,
+  stuckSays,
+} from "../../src/renderer/chat/engine-steps.ts";
+import type { PluginInfo } from "../../src/shared/plugins.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
 
 const event = (id: number, data: EventData): EventEnvelope => ({
@@ -148,5 +156,60 @@ describe("a setup card whose step stops", () => {
     );
     assert.equal(stuckSays(card("Unity's install stopped."), card()), null, "nothing stopped now");
     assert.equal(stuckSays(card(), null), null);
+  });
+});
+
+describe("a step's button", () => {
+  const offer = { id: "000001", pluginId: "toy-engine", project: "valley" };
+  const confirmed = { name: "do-it-for-me", label: "Do it for me", confirmation: "Let the chat click it for you?" };
+  const plain = { name: "open-editor", label: "Open the editor" };
+  const plugin = { manifest: { id: "toy-engine", actions: [confirmed, plain] } } as unknown as PluginInfo;
+  const row = (action: { name: string; label: string }) => ({
+    id: "switch",
+    label: "Turn on the server",
+    detail: "",
+    done: false,
+    action: { name: action.name, args: { step: "switch" }, label: action.label },
+  });
+
+  /** Main's two channels as the card meets them: a confirmed action runs only with its review's ticket. */
+  function studioWith(reached: string[]) {
+    return {
+      pluginReview: async (id: string, name: string) => {
+        reached.push(`review ${id} ${name}`);
+        return { ticket: "ticket-1" };
+      },
+      pluginAction: async (id: string, name: string, args: unknown, project: string, ticket?: string) => {
+        const needsTicket = name === confirmed.name;
+        if (needsTicket && ticket !== "ticket-1") throw new Error("Review this action in Studio before approving");
+        reached.push(`action ${id} ${name} ${JSON.stringify(args)} ${project}${ticket ? ` ${ticket}` : ""}`);
+        return { started: true };
+      },
+    };
+  }
+
+  it("runs an action that declares a confirmation through its review, then the action with the ticket", async () => {
+    const reached: string[] = [];
+    Object.assign(globalThis, { window: { studio: studioWith(reached) } });
+    assert.deepEqual(await runStep(plugin, offer, row(confirmed)), { started: true });
+    assert.deepEqual(reached, [
+      "review toy-engine do-it-for-me",
+      'action toy-engine do-it-for-me {"step":"switch"} valley ticket-1',
+    ]);
+  });
+
+  it("runs an action with no confirmation straight away, and nothing for a row without a button", async () => {
+    const reached: string[] = [];
+    Object.assign(globalThis, { window: { studio: studioWith(reached) } });
+    await runStep(plugin, offer, row(plain));
+    await runStep(plugin, offer, { id: "x", label: "Done", detail: "", done: true });
+    assert.deepEqual(reached, ['action toy-engine open-editor {"step":"switch"} valley']);
+  });
+
+  it("refuses a button whose plugin is not installed, calling nothing", async () => {
+    const reached: string[] = [];
+    Object.assign(globalThis, { window: { studio: studioWith(reached) } });
+    await assert.rejects(runStep(null, offer, row(confirmed)), /isn't installed/);
+    assert.deepEqual(reached, []);
   });
 });

@@ -3,7 +3,7 @@ import { watch as watchPath } from "node:fs";
 import { mkdir, readFile, readdir, cp, rm, stat } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { isPluginId } from "../../shared/plugin-id.ts";
-import type { GameEngine } from "../../shared/game-engine.ts";
+import type { EngineCatalog, GameEngine } from "../../shared/game-engine.ts";
 import {
   type FactRef,
   type GameKind,
@@ -22,10 +22,12 @@ import {
   hookEventsOf,
   hookPlan,
   LockScope,
+  messageCheckpointPlan,
   outlivesHarness,
   type PluginLock,
 } from "../../shared/plugin-hooks.ts";
 import {
+  engineCatalog,
   isAgentTool,
   isFileSkill,
   PLUGIN_SKILL_TOOL,
@@ -73,6 +75,7 @@ import {
   validateManifest,
 } from "./manifest.ts";
 import { fileSkillIndexLine } from "./skill-prompts.ts";
+import { readJudgeBrief } from "./judge-manifest.ts";
 import { pluginWorkspaces } from "./workspace-manifest.ts";
 import { pluginFolderPaths, pluginWorkerTypes, workerTypeOffered } from "./worker-manifest.ts";
 import type { WorkerType } from "../../shared/workers.ts";
@@ -80,7 +83,7 @@ import type { PluginWorkspace } from "../../shared/project-workspace.ts";
 import { canonicalSourceRepo } from "./marketplace.ts";
 import { containedReal } from "../paths.ts";
 import { SessionCredentials } from "../session-credentials.ts";
-import { PluginCallCutOff, PluginProcess } from "./process.ts";
+import { PluginCallCutOff, type PluginInvocation, PluginProcess } from "./process.ts";
 import { MAX_ARTIFACT_BYTES, packageCopyFilter, unpackEnvelope } from "./pack.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 
@@ -216,6 +219,7 @@ const MESSAGE = {
   CapabilityDenied: "Plugin service capability denied",
   UnknownTool: "Unknown plugin tool",
   UnknownSkill: (id: string, name: string) => `Plugin ${id} has no skill named ${JSON.stringify(name)}`,
+  UnknownJudge: (id: string, judge: string) => `Plugin ${id} has no judge named ${JSON.stringify(judge)}`,
   UndeclaredSkillFile: "Read a skill's own file or one of the references it lists, exactly as listed",
   InvalidSkillOffset: "offset must be a whole number within the file: the nextOffset of the previous read",
   HostToolBundledOnly: "A host tool runs only for a bundled plugin that ships with Studio",
@@ -247,7 +251,8 @@ function capabilityFor(method: string): PluginCapability | undefined {
 }
 /**
  * The services that link a game to an engine project, snapshot the game before the plugin changes
- * it, make a game for a project, and name the games whose run is going.
+ * it, make a game for a project, name the games whose run is going, and hand a setup task to the
+ * game's chat (Do it for me).
  */
 const ENGINE_SERVICES = new Set<string>([
   PluginService.GameEngineLink,
@@ -256,6 +261,7 @@ const ENGINE_SERVICES = new Set<string>([
   PluginService.GameSnapshot,
   PluginService.GameCreate,
   PluginService.GameEngineRuns,
+  PluginService.GameEngineAssist,
 ]);
 /** The account services the registry answers from the session lease. */
 const CREDENTIAL_SERVICES = new Set<string>([
@@ -744,7 +750,14 @@ export class PluginRegistry {
    */
   appAccount: { id: string; actions: readonly string[] } | undefined;
   readonly bootstrap: string;
-  readonly service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>;
+  /** The host services, told which call each request is made on behalf of (absent for the host's own). */
+  readonly service: (
+    id: string,
+    method: string,
+    args: any,
+    binding?: PluginBinding,
+    invocation?: PluginInvocation,
+  ) => Promise<unknown>;
   /** One source for the `plugins.changed` UI event; the host sets it. A throwing hook never fails a mutation. */
   onChange: ((change: PluginChange) => void) | undefined;
   /**
@@ -784,7 +797,13 @@ export class PluginRegistry {
     root: string,
     seeds: string,
     bootstrap: string,
-    service: (id: string, method: string, args: any, binding?: PluginBinding) => Promise<unknown>,
+    service: (
+      id: string,
+      method: string,
+      args: any,
+      binding?: PluginBinding,
+      invocation?: PluginInvocation,
+    ) => Promise<unknown>,
   ) {
     this.root = root;
     this.seeds = seeds;
@@ -1163,6 +1182,15 @@ export class PluginRegistry {
   enabled(id: string) {
     return isLive(this.#installed.get(id));
   }
+  /**
+   * The engines the installed plugins declare (`engine` in a `game-engine` plugin's manifest), on or
+   * off: a game an engine plugin linked keeps building in that engine while the plugin is turned
+   * off, and reads as a web game again only once the plugin is removed.
+   */
+  engines(): EngineCatalog {
+    const installed = [...this.#installed.values()].filter((p) => !p.removed);
+    return engineCatalog(installed.map((p) => p.manifest));
+  }
   #live(): PluginInfo[] {
     return this.list().filter(isLive);
   }
@@ -1256,6 +1284,10 @@ export class PluginRegistry {
    */
   hookPlan(on: HookEvent, game: GameKind, own?: string): HookStep[] {
     return hookPlan(this.#hooked(), on, game, own);
+  }
+  /** The handlers a chat message's checkpoint runs for a game (`shared/plugin-hooks.ts` `messageCheckpointPlan`). */
+  messageCheckpointPlan(game: GameKind): HookStep[] {
+    return messageCheckpointPlan(this.#hooked(), game);
   }
   /** The moments some enabled plugin has a handler at for a game: what its descriptor lists. */
   hookEvents(game: GameKind): HookEvent[] {
@@ -1797,7 +1829,7 @@ export class PluginRegistry {
       if (!capability || !hasCapability(p, capability)) throw new Error(MESSAGE.CapabilityDenied);
       if (capability === PluginCapability.Credentials && isCredentialService(method))
         return this.#credentialService(id, p, method, args);
-      return this.service(id, method, args, binding);
+      return this.service(id, method, args, binding, invocation);
     };
   }
   /** The plugin's backend child, started on first use: an agent's tool reaches it only while the plugin is on. */
@@ -1876,12 +1908,14 @@ export class PluginRegistry {
     const host = declaration.host;
     if (host) this.#assertHostTool(p);
     // A local plugin's agent tool asks with Genex's words first, its own question after them.
+    // `confirmed`: the person approved this call's own card, the tool's declared question.
+    let confirmed = false;
     if (localAgentCall(p, declaration, caller)) {
       if (asksEachCall(p, declaration, caller))
-        await this.#localConsented(id, p, name, declaration, args, binding, signal);
+        confirmed = await this.#localConsented(id, p, name, declaration, args, binding, signal);
     } else if (declaration.confirmation) {
       const shown = host ? await this.#hostConsentArgs(id, host, args, binding) : args;
-      await this.#consented(id, name, declaration, shown, binding, signal);
+      confirmed = await this.#consented(id, name, declaration, shown, binding, signal);
     }
     // The plugin may have been turned off while the call waited its turn: each call checks again.
     if (host)
@@ -1893,10 +1927,13 @@ export class PluginRegistry {
     const ceiling = Math.max(PLUGIN_CALL_TIMEOUT_MS, timeoutMs, ...nativeJobTimeouts);
     return async () => {
       this.#active(id);
-      return this.#process(id).call("tool", tool, args, binding, signal, ceiling);
+      return this.#process(id).call("tool", tool, args, binding, signal, ceiling, { confirmed });
     };
   }
-  /** Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must still be live after. */
+  /**
+   * Asks the user before a tool that declares `confirmation`; a no is thrown, and the plugin must
+   * still be live after. True when the person's own click approved it.
+   */
   async #consented(
     id: string,
     name: string,
@@ -1904,16 +1941,18 @@ export class PluginRegistry {
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
     const { approved, by } = await this.consent(id, declaration, args, binding, signal);
     if (!approved) throw new PluginConsentDeclined(name, by);
     this.#active(id);
+    return by === "user";
   }
   /**
    * Asks the person before a local plugin's agent tool runs, offering Always allow; a no is thrown,
    * and an Always allow lets that tool run without asking until its code changes or it is turned off.
    * A tool with its own question asks it after Genex's words, every call, with no Always allow.
+   * True when the person's own click approved that question: Genex's words alone confirm nothing.
    */
   async #localConsented(
     id: string,
@@ -1923,7 +1962,7 @@ export class PluginRegistry {
     args: Record<string, unknown>,
     binding: PluginBinding,
     signal?: AbortSignal,
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!this.consent) throw new Error(MESSAGE.ConsentUnavailable);
     const own = declaration.confirmation;
     const confirmation = own
@@ -1938,6 +1977,7 @@ export class PluginRegistry {
     this.#stillAsked(id, p);
     if (always && !own) await this.#allow(id, p, declaration.name);
     this.#stillAsked(id, p);
+    return Boolean(own) && by === "user";
   }
   /** Throws unless `p` is still the plugin's live record: the one the person was asked about. */
   #stillAsked(id: string, p: Installed): void {
@@ -2038,6 +2078,17 @@ export class PluginRegistry {
     if (isFileSkill(skill)) return (await readSkillFile(p.directory, declaredSkillFile(skill, file))).toString("utf8");
     if (file !== undefined) throw new Error(MESSAGE.UndeclaredSkillFile);
     return skill.text;
+  }
+  /**
+   * A judge's brief (`PluginJudge.brief`), read from the plugin's package through a checked handle:
+   * any installed plugin's, as a judge's session is briefed. Refused for a judge it does not declare.
+   */
+  async judgeBrief(id: string, judgeId: string): Promise<string> {
+    const p = this.#installed.get(id);
+    if (!p || p.removed) throw new Error(MESSAGE.UnknownPlugin);
+    const judge = p.manifest.judges?.find((entry) => entry.id === judgeId);
+    if (!judge) throw new Error(MESSAGE.UnknownJudge(id, judgeId));
+    return readJudgeBrief(p.directory, judge.brief);
   }
   #connecting = new Map<string, Promise<any>>();
   async action(id: string, name: string, args: unknown, binding?: PluginBinding) {

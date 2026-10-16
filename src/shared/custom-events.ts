@@ -11,10 +11,11 @@
  * `customEvent` / `customPayload`, never `payload as`.
  */
 import type { ChatActivityPhase } from "./chat-activity.ts";
-import type { ChatRewind, CheckpointSkippedPayload } from "./chat-rewind.ts";
+import type { ChatRewind, CheckpointSkippedPayload, RewindUndonePayload } from "./chat-rewind.ts";
 import type { PlanReviewRecord } from "./composer.ts";
 import type { ContextMeasurement } from "./context.ts";
 import type { AssetDeliveredPayload, PluginToolFinishedPayload, PluginToolStartedPayload } from "./game-assets.ts";
+import type { MentionTaggedPayload } from "./prompt-mention.ts";
 import type { PluginConsentEvent } from "./plugins.ts";
 import type { ConnectorToolEvent, ConnectorToolStartedEvent } from "./mcp.ts";
 import type { ToolPermissionEvent } from "./permissions.ts";
@@ -40,6 +41,8 @@ import type { FinishCheckPayload } from "./finish-check.ts";
 export const CustomEvent = {
   // assets and plugins
   AssetDelivered: "asset_delivered",
+  /** What each @ tag of a message gave the agent; written by the host after the message is sent. */
+  MentionTagged: "mention_tagged",
   BlenderAsset: "blender_asset",
   ConnectorTool: "connector_tool",
   /** A connector call on its way out, paired with its `connector_tool` by `callId`; written by the host only. */
@@ -151,6 +154,7 @@ export const CustomEvent = {
   ContractorHandoff: "contractor_handoff",
   ContractorSession: "contractor_session",
   ConversationCapabilitiesApplied: "conversation_capabilities_applied",
+  ConversationRewindUndone: "conversation_rewind_undone",
   ConversationRewound: "conversation_rewound",
   CoordinatorMessageDelivered: "coordinator_message_delivered",
   CoordinatorMessageHandled: "coordinator_message_handled",
@@ -581,6 +585,7 @@ export interface SelfChangePayload {
 
 export interface CustomEventMap {
   asset_delivered: AssetDeliveredPayload;
+  mention_tagged: MentionTaggedPayload;
   /**
    * `facetId` and `beyond`: a card about a step beyond the ask names its part and the proposal, so a
    * restart of the part reads back what it already asked (seed loop/facet/beyond.ts).
@@ -640,8 +645,13 @@ export interface CustomEventMap {
   coordinator_message_steering: SteerPayload;
   coordinator_message_updated: CoordinatorPayload;
   delegation_incomplete: DelegationIncompletePayload;
-  /** A chat rewound to before a message (`shared/chat-rewind.ts`); `files`: game files put back, null when none were asked for. */
-  conversation_rewound: Partial<ChatRewind> & { files?: number | null };
+  /**
+   * A chat rewound to before a message (`shared/chat-rewind.ts`); `files`: game files put back, null
+   * when none were asked for; `rewindId`: the saved folder that brings the newer version back.
+   */
+  conversation_rewound: Partial<ChatRewind> & { files?: number | null; rewindId?: string };
+  /** The newer version a rewind replaced came back; the chat stayed rewound. */
+  conversation_rewind_undone: RewindUndonePayload;
   checkpoint_skipped: CheckpointSkippedPayload;
   director_show: RunScope & { target?: string; root?: string };
   director_verdict: RunScope & { pass?: string; because?: string; decision?: { kept?: boolean | null } };

@@ -84,7 +84,7 @@ export function RewindDialog({
   threadId: string;
   eventId: string;
   messageId: string;
-  /** What Rewind can't undo in the game's engine project (`unreal-game.ts` `unrealRewindNote`); none for a web game. */
+  /** What Rewind can't undo in the game's engine project (`engine-game.ts` `engineRewindNote`); none for a web game. */
   engineNote?: string | null;
   /** Focus on close (the composer after a rewind); the opener when it holds nothing. */
   returnFocus?: RefObject<HTMLElement | null>;

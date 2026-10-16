@@ -19,6 +19,7 @@ import { CommandRun } from "./CommandRun.tsx";
 import { GenexCoverCard } from "./GenexCoverCard.tsx";
 import { ChatQuestion } from "./ChatQuestion.tsx";
 import { EngineLinkLine } from "./EngineLinkLine.tsx";
+import { RewindLine } from "./RewindLine.tsx";
 import { JobLine } from "./JobLine.tsx";
 import { WorkerLine } from "./WorkerLine.tsx";
 import { AppAccessLine } from "./AppAccessLine.tsx";
@@ -27,6 +28,8 @@ import { PermissionOutcome } from "./PermissionRequest.tsx";
 import { PluginSuggestionCard } from "./PluginSuggestionCard.tsx";
 import { StudioLearningLine } from "./LearningSummary.tsx";
 import { UserMessage } from "./UserMessage.tsx";
+import { MentionResults } from "./MentionResults.tsx";
+import type { MentionOutcome } from "../../shared/prompt-mention.ts";
 import { WorkLog } from "./WorkLog.tsx";
 
 /** A paused run while nothing else runs: its own card offers Resume. */
@@ -95,6 +98,8 @@ export const TranscriptEntry = memo(function TranscriptEntry({
       return <GenexCoverCard entry={entry} project={context.project} />;
     case EntryKind.User:
       return <UserEntry key={entry.id} entry={entry} context={context} />;
+    case EntryKind.Mentions:
+      return <MentionsEntry entry={entry} context={context} />;
     case EntryKind.Assistant:
       return <AssistantEntry key={entry.id} entry={entry} commands={context.commands} />;
     case EntryKind.Notice:
@@ -197,12 +202,30 @@ function AssistantEntry({
   );
 }
 
+/** The card of what a message's @ tags gave the agent, with Try again and Remove tag in this chat. */
+function MentionsEntry({
+  entry,
+  context,
+}: {
+  entry: { tags: MentionOutcome[]; messageId?: string };
+  context: TranscriptContext;
+}) {
+  return (
+    <MentionResults
+      tags={entry.tags}
+      threadId={context.threadId}
+      messageId={entry.messageId}
+      onProblem={notifyProblem(context.onNotice)}
+    />
+  );
+}
+
 /** A message the user sent, with the pictures sent with it. */
 function UserEntry({
   entry,
   context,
 }: {
-  entry: { id: string; text: string; about?: string };
+  entry: { id: string; text: string; about?: string; tags?: string[] };
   context: TranscriptContext;
 }) {
   const images = context.images.get(entry.id);
@@ -212,7 +235,15 @@ function UserEntry({
       : {};
   const { onRewind } = context;
   const rewind = onRewind && context.canRewind?.(entry.id) ? { rewindId: entry.id, onRewind } : {};
-  return <UserMessage text={entry.text} {...pictures} {...(entry.about ? { about: entry.about } : {})} {...rewind} />;
+  return (
+    <UserMessage
+      text={entry.text}
+      {...pictures}
+      {...(entry.about ? { about: entry.about } : {})}
+      {...(entry.tags ? { tags: entry.tags } : {})}
+      {...rewind}
+    />
+  );
 }
 
 /** The harness's system tags; UPDATE lines carry no heading. */
@@ -257,13 +288,18 @@ function ConsentOutcome({ entry }: { entry: Extract<Entry, { kind: typeof EntryK
   );
 }
 
-/** The action entries that are one quiet line: an engine link, a job, a worker, a missing permission, a judge's play. */
+/**
+ * The action entries that are one quiet line: an engine link, a rewind that put files back, a job,
+ * a worker, a missing permission, a judge's play.
+ */
 function quietLine(
   entry: Extract<Entry, { kind: typeof EntryKind.Action }>,
   context: TranscriptContext,
 ): JSX.Element | null {
   if (entry.action === EntryAction.EngineLink)
     return <EngineLinkLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
+  if (entry.action === EntryAction.Rewound)
+    return <RewindLine entry={entry} threadId={context.threadId} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Job) return <JobLine entry={entry} onNotice={context.onNotice} />;
   if (entry.action === EntryAction.Worker) return <WorkerLine entry={entry} />;
   if (entry.action === EntryAction.AppAccess) return <AppAccessLine entry={entry} onNotice={context.onNotice} />;

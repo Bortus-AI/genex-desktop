@@ -192,6 +192,18 @@ optional leading `**/` for any depth; a `notUnder` glob ends with `/`. At most 8
 1–8 `files` and up to 8 `notUnder`; a fact id is lowercase letters, digits and dashes. Genex knows
 web, Unreal, Godot, Unity and Blender folders itself ([Project facts](plugins.md#project-facts)).
 
+A plugin that is an engine, with capability `game-engine`, declares it in `engine`, under your
+plugin's own id:
+`"engine": { "id": "toy-engine", "label": "Toy", "projectFiles": [".toyproj"], "fact": "toy-project", "projectInFolder": false, "play": { "players": 3, "clock": "none", "pointer": true } }`.
+`label` is the engine's name as people read it; `projectFiles` lists 1–4 extensions a project file
+has (one or two dotted parts, such as `.project.json`); `fact` is one your `detect` declares;
+`projectInFolder` is true when the project must sit inside the game folder for save points to hold
+it. Optional `play` says what your editor can do in play (`players` 1–8, `clock`, `pointer`,
+`state`), and `apps` names the apps your editor runs as (Mac bundle ids, Windows `.exe` names, at
+most 4 each), which computer use never drives to build or play; `playerApps` names the apps your
+published games are played in, which computer use never drives at all. See
+[The engine declaration](plugins.md#the-engine-declaration).
+
 What your engine generates while it runs stays out of the game's history when you say so:
 `"workspace": { "ignore": ["Cache/"], "copySkip": ["Cache/"] }` puts `/Cache/` (or `sub/Cache/` for
 a project in `sub`) in the game's `.gitignore` before its first commit and every snapshot after; `copySkip` names what
@@ -222,7 +234,9 @@ editor, the agents' work in it waits. Hooks run your harness tools at Genex's mo
 `context.hook` (`{ on, runId?, worker?, … }`, absent when called directly) and answers `{ block?,
 note?, pending?, images? }`. A handler that throws blocks a moment that can be blocked, so answer
 `note` for trouble that should not stop the work. It never changes another call's arguments, and
-git stays Genex's. An agent tool that `makes` a kind
+git stays Genex's. A quick `checkpoint.before` save may add `"messages": true` to run before each
+chat message's checkpoint too, so a Rewind brings back what it saved ([Before each chat
+message](plugins.md#before-each-chat-message)). An agent tool that `makes` a kind
 may name a harness tool in `ready` that answers `{ ready, note }`. See
 [Hooks](plugins.md#hooks-genexs-moments) and [Locks](plugins.md#locks-the-person-comes-first).
 
@@ -261,7 +275,8 @@ every tool renamed. See [the open Loop](harness-runtime.md).
 
 When your engine (or anything else your plugin needs on the person's computer) is missing, don't
 answer the agent with instructions to pass on: show the **setup card** in the chat and let Genex do
-what it can. Unity, Godot and Unreal all follow this one model:
+what it can. Unity, Godot and Unreal follow this one model; Roblox's card shows the same steps,
+with Do it for me (Genex's computer control in Studio) as a step's button:
 
 1. **The agent asks for it.** Declare an agent tool `show-steps`. While a step is open it calls the
    host's `game.engine.steps`, which puts your card above the chat's composer, and answers the

@@ -6,6 +6,9 @@
  *
  * The harness is agent-editable, so its "studio-verified" is kept only for a trace the studio itself
  * saw reach the goal (`verified-traces.ts`), once; any other claim is recorded as the judge's word.
+ * A game played in its engine's editor may have judges its engine plugin declares: the session
+ * picks one by id, the host checks it against the game's own, and the line keeps the pictures its
+ * probe took (`judge-probe-pictures.ts`), again only for the trace the studio wrote.
  */
 import type { ChatJudgeResultPayload } from "../../shared/chat-judge.ts";
 import { CustomEvent, customEventData } from "../../shared/custom-events.ts";
@@ -14,7 +17,10 @@ import type { LiveToolResult, LiveToolSpec } from "../../shared/engine-requests.
 import { errorMessage } from "../../shared/errors.ts";
 import { type DispatchAction, DispatchActionType, HarnessCapability } from "../../shared/protocol.ts";
 import { InteractionObjective, InteractionStatus } from "../../shared/run-summary.ts";
-import { JUDGE_PLAY_ANSWER, JUDGE_PLAY_TOOL } from "./judge-play-tool-prompts.ts";
+import type { JudgeRef } from "../../shared/plugins.ts";
+import { JUDGE_PLAY_ANSWER, JUDGE_PLAY_TOOL, judgePlayToolWithJudges } from "./judge-play-tool-prompts.ts";
+import { gameJudgeRefs } from "./editor-play-session.ts";
+import { takeProbePictures } from "./judge-probe-pictures.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { takeVerified } from "./verified-traces.ts";
@@ -32,11 +38,13 @@ const STATUSES: ReadonlySet<unknown> = new Set(Object.values(InteractionStatus))
 /** Is this one of the statuses an interaction ends with? */
 const isStatus = (value: unknown): value is InteractionStatus => STATUSES.has(value);
 
-/** What the tool needs of the studio: the harness's capability, its dispatch, and the chat's record. */
+/** What the tool needs of the studio: the harness's capability, its dispatch, the chat's record and the game's judges. */
 export interface JudgePlayHost {
   hasCapability(capability: HarnessCapability): boolean;
   dispatch(action: DispatchAction, timeoutMs: number): Promise<unknown>;
   record(threadId: string, payload: ChatJudgeResultPayload): Promise<void>;
+  /** The judges the game's engine plugin declares for it (none for a game not played in its editor). */
+  judges(project: string): Promise<JudgeRef[]>;
 }
 
 /** Whose call it is: the game, its folder as the host resolved it, the chat its line goes to, and the chat's model. */
@@ -59,9 +67,13 @@ interface JudgeAnswer {
   refusal: string | null;
 }
 
-/** `judge_play` for the chat's own session where the harness serves it; nothing for any other. */
-export function judgePlayFor(chatsOwn: boolean, capable: boolean): LiveToolSpec[] {
-  return chatsOwn && capable ? [JUDGE_PLAY_TOOL] : [];
+/**
+ * `judge_play` for the chat's own session where the harness serves it, offering the game's engine
+ * judges by id when it has any; nothing for any other session.
+ */
+export function judgePlayFor(chatsOwn: boolean, capable: boolean, judges: readonly JudgeRef[] = []): LiveToolSpec[] {
+  if (!chatsOwn || !capable) return [];
+  return [judges.length ? judgePlayToolWithJudges(judges) : JUDGE_PLAY_TOOL];
 }
 
 /** A string field, or "". */
@@ -90,8 +102,17 @@ function goalStateOf(value: unknown): string | undefined {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
+/** What the line keeps of the judge beyond its answer: the engine judge it played as, and its probe's pictures. */
+type PlayedAs = { judge?: JudgeRef; pictures: string[] };
+
 /** The line the chat keeps, with the objective the studio vouches for. */
-function lineOf(caller: JudgePlayCaller, ask: string, read: JudgeAnswer, verified: boolean): ChatJudgeResultPayload {
+function lineOf(
+  caller: JudgePlayCaller,
+  ask: string,
+  read: JudgeAnswer,
+  verified: boolean,
+  played: PlayedAs,
+): ChatJudgeResultPayload {
   return {
     project: caller.project,
     ask,
@@ -100,7 +121,20 @@ function lineOf(caller: JudgePlayCaller, ask: string, read: JudgeAnswer, verifie
     note: read.note,
     objective: verified ? InteractionObjective.StudioVerified : InteractionObjective.ModelSaid,
     ...(read.refusal && !read.answer ? { refusal: read.refusal } : {}),
+    ...(played.judge ? { judge: played.judge.label } : {}),
+    ...(played.pictures.length ? { pictures: played.pictures } : {}),
   };
+}
+
+/** The engine judge the session named, as the game has it; an error answer when the game has none of that id. */
+async function judgeOf(host: JudgePlayHost, args: Record<string, unknown>, project: string) {
+  const id = text(args.judge).trim();
+  if (!id) return { judge: undefined };
+  const judges = await host.judges(project);
+  const judge = judges.find((entry) => entry.id === id);
+  if (judge) return { judge };
+  const words = judges.length ? JUDGE_PLAY_ANSWER.unknownJudge(id, judges) : JUDGE_PLAY_ANSWER.noJudges;
+  return { refused: { text: words, isError: true } satisfies LiveToolResult };
 }
 
 /** What the session reads back: the outcome in words, or why nothing was played. */
@@ -121,6 +155,8 @@ export async function runJudgePlay(
   const ask = text(args.ask).trim().slice(0, MAX_ASK_CHARS);
   if (!ask) return JUDGE_PLAY_ANSWER.noAsk;
   const goalState = goalStateOf(args.goal_state);
+  const named = await judgeOf(host, args, caller.project);
+  if (named.refused) return named.refused;
   const action: DispatchAction = {
     type: DispatchActionType.ChatJudge,
     threadId: caller.threadId,
@@ -131,6 +167,7 @@ export async function runJudgePlay(
     ...(caller.effort ? { effort: caller.effort } : {}),
     ask,
     ...(goalState ? { goalState } : {}),
+    ...(named.judge ? { judge: named.judge.id } : {}),
   };
   let read: JudgeAnswer | null;
   try {
@@ -141,13 +178,15 @@ export async function runJudgePlay(
   if (!read) return { text: JUDGE_PLAY_ANSWER.failed(UNREADABLE), isError: true };
   // The studio's word, not the harness's: a trace it saw reach the goal vouches once.
   const verified = read.claimsVerified && takeVerified(read.trace) !== null;
-  await host.record(caller.threadId, lineOf(caller, ask, read, verified));
+  const played: PlayedAs = { ...named, pictures: takeProbePictures(read.trace) };
+  await host.record(caller.threadId, lineOf(caller, ask, read, verified, played));
   return answerWords(read, verified);
 }
 
-/** The studio as `judge_play` reaches it: the harness's capability and dispatch, and the chat's line. */
-export function studioJudgeHost(core: Pick<StudioCore, "host" | "append" | "emit">): JudgePlayHost {
+/** The studio as `judge_play` reaches it: the harness's capability and dispatch, the chat's line and the game's judges. */
+export function studioJudgeHost(core: StudioCore): JudgePlayHost {
   return {
+    judges: (project) => gameJudgeRefs(core, project),
     hasCapability: (capability) => core.host.hasCapability(capability),
     dispatch: (action, timeoutMs) => core.host.dispatch(action, timeoutMs),
     record: async (threadId, payload) => {

@@ -48,6 +48,8 @@ export const FixtureName = {
   UpdateReady: "update-ready",
   UnrealGame: "unreal-game",
   UnrealChat: "unreal-chat",
+  /** The game linked to a stand-in Roblox place with Roblox Studio on: its toolbar button, link line and steps card. */
+  RobloxGame: "roblox-game",
   /**
    * Workers on the Builds graph and in the chat: a chat turn's two, and, written after the start,
    * a Loop's three with its lead's jobs, build-graph's web Loops and lead-graph's Unreal lead runs

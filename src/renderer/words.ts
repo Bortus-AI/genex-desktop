@@ -31,7 +31,7 @@ import { LiveBehindReason } from "../shared/live-behind.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
-import type { GithubLookupProblem } from "../shared/plugins.ts";
+import { COMPUTER_SETTING_QUESTION, type GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
 import { CreditKind } from "../shared/play-credits.ts";
@@ -73,6 +73,7 @@ import {
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
+import { MentionMiss } from "../shared/prompt-mention.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -1639,6 +1640,8 @@ export const STEPS_WORDS = {
   done: "(done)",
   copy: "Copy",
   copied: "Copied",
+  /** A step's button whose plugin is no longer installed. */
+  pluginGone: "This step's plugin isn't installed any more.",
 } as const;
 
 /** The turn-it-on card a session shows for a Genex plugin (`chat/PluginSuggestionCard.tsx`). */
@@ -1684,6 +1687,10 @@ export const TRANSCRIPT_WORDS = {
       : `Undone. ${game ?? "This game"} is a web game again.`,
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
+  rewound: (files: number) => `The chat went back, and ${files} game ${files === 1 ? "file" : "files"} with it.`,
+  rewindUndo: "Bring back newer version",
+  rewindUndoTitle: "Put the game files back as they were before this rewind; the chat stays rewound",
+  rewindUndone: "The game is back as it was before the rewind. The chat stays rewound.",
   planCancelled: "Plan cancelled.",
   studioRestarted: "Studio restarted",
   workspaceRestored: "Workspace restored",
@@ -2643,6 +2650,16 @@ export const CONSENT_CHOICE_WORDS = {
     description: `Don't ask again for this action in ${source}.`,
   }),
   decline: { label: "Don't allow", description: "The agent carries on without it." },
+} as const;
+
+/**
+ * The studio's card that turns computer control on, asked when a plugin's Do it for me finds it
+ * off: it is one setting, so it says it is for every chat.
+ */
+export const COMPUTER_SETTING_CARD_WORDS = {
+  title: COMPUTER_SETTING_QUESTION,
+  turnOn: { label: "Turn on", description: "You can turn it off in Settings → Permissions." },
+  notNow: { label: "Not now", description: "Computer control stays off, and nothing is clicked." },
 } as const;
 
 /** A waiting consent question's title when the plugin wrote no prompt of its own. */
@@ -4082,6 +4099,8 @@ export const CHAT_JUDGE_WORDS = {
   asked: "Asked:",
   /** The line when nothing was played (no window free, a goal state it could not take): the reason is inside. */
   notPlayed: "The judge didn't play",
+  /** Which of the engine's judges played, by the name its plugin gives it. */
+  playedAs: (judge: string) => `Played as the ${judge} judge`,
 } as const;
 
 /** The checks under a build's Technical details: each check's state, its group, and a replayed route's words. */
@@ -4109,6 +4128,21 @@ export const PLUGIN_TOOLBAR_WORDS = {
     title: (plugin: string, version: string) =>
       `The ${plugin} plugin ${version} is ready. Press to update it in Plugins.`,
   },
+} as const;
+
+/**
+ * A game linked to an engine whose Loop needs its project inside the game folder, named by the
+ * engine's label: Rewind's note when the project lives elsewhere, and why Mode has no Loop yet.
+ */
+export const ENGINE_GAME_WORDS = {
+  /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
+  rewindNote: (engine: string, project: string) =>
+    `Rewind doesn’t undo changes made in ${engine}: ${project} is outside the game folder.`,
+  /** Mode's caption for a game whose project lies outside its folder: where it is, and the two ways to a Loop. */
+  loopUnavailable: (engine: string, project: string | null, place: string) =>
+    project
+      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
+      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
 } as const;
 
 /** A game linked to an Unreal project: the Live tab's card, Rewind's note and why Mode has no Loop yet. */
@@ -4163,28 +4197,16 @@ export const UNREAL_WORDS = {
   /** The latest play shot's alt text. */
   playShot: (project: string) => `${project} in play`,
   /** Rewind's line when the project lives outside the game folder, so its checkpoints never hold it. */
-  rewindNote: (project: string) => ENGINE_LINK_WORDS.rewindNote("Unreal", project),
+  rewindNote: (project: string) => ENGINE_GAME_WORDS.rewindNote(GAME_ENGINE_WORDS.unreal, project),
   /** Mode's caption for an Unreal game whose project lies outside its folder: where it is, and the two ways to a Loop. */
   loopUnavailable: (project: string | null, place: string) =>
-    ENGINE_LINK_WORDS.loopUnavailable("Unreal", project, place),
+    ENGINE_GAME_WORDS.loopUnavailable(GAME_ENGINE_WORDS.unreal, project, place),
 } as const;
 
 /** The Unity plugin's words in Studio's own UI. */
 export const UNITY_WORDS = {
   /** The plugin page's name and line for the Unity plugin's editor connection. */
   connection: { title: "Editor", text: "Your open Unity editor, where agents build Unity games." },
-} as const;
-
-/** A game linked to an engine project (Unreal, Godot) that lies outside its folder, in the engine's own name. */
-export const ENGINE_LINK_WORDS = {
-  /** What Rewind can't undo there. */
-  rewindNote: (engine: string, project: string) =>
-    `Rewind doesn’t undo changes made in ${engine}: ${project} is outside the game folder.`,
-  /** Mode's caption: where the project is, and the two ways to a Loop. */
-  loopUnavailable: (engine: string, project: string | null, place: string) =>
-    project
-      ? `Loops need the ${engine} project inside this game’s folder, so Rewind can undo each step; ${project} is in ${place}. Make a new one from the ${engine} button, or move ${project} into this game’s folder and choose it there. Each message runs one turn.`
-      : `Loops need this game’s ${engine} project inside its folder, so Rewind can undo each step. A new ${engine} project made from the ${engine} button goes there. Each message runs one turn.`,
 } as const;
 
 // ── Genex account settings and avatars ─────────────────────────────────────────────────────
@@ -4308,4 +4330,41 @@ export const AVATAR_WORDS = {
     [AvatarGear.Sigil]: "Sigil",
     [AvatarGear.Scar]: "Scar",
   } satisfies Record<AvatarGear, string | null>,
+} as const;
+
+/** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
+export const MENTION_WORDS = {
+  listLabel: "Tag a game, tool or asset",
+  game: "Game",
+  tool: "Tool",
+  asset: "Asset",
+  yours: "Yours",
+  inMessage: "Already in your message",
+  yourGames: "Your games",
+  assets: "Assets",
+  tools: "Tools",
+  genexGames: "Games on Genex",
+  plugins: "Plugins",
+  plugin: "Plugin",
+  on: "On",
+  imagesHint: "Reference or mood board",
+  reading: "Loading Genex games and assets…",
+  noMatches: "No matches",
+  atCap: "That's as many as one message can carry. Remove one to tag something else.",
+  resultsLabel: "Tagged in this message",
+  ready: "Ready",
+  added: "Added",
+  read: "Your game · the agent can read it",
+  pluginRead: "Plugin · the agent will use it",
+  copied: "Downloaded for the agent to read",
+  addedTo: (path: string) => `Added to the game as ${path}`,
+  missed: {
+    [MentionMiss.NotDownloaded]: "Couldn't download it. Check your connection.",
+    [MentionMiss.NotTakeable]: "Its author no longer shares it.",
+    [MentionMiss.Gone]: "It's no longer there.",
+    [MentionMiss.NotWebGame]: "Assets are for web games.",
+  } satisfies Record<MentionMiss, string>,
+  tryAgain: "Try again",
+  removeTag: "Remove tag",
+  trying: "Trying…",
 } as const;

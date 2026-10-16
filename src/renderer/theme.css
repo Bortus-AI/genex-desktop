@@ -5696,6 +5696,326 @@ a:focus-visible {
   line-height: 16px;
   color: var(--ink-3);
 }
+/* An @ tag in a sentence, in the composer and in a sent message: an accent wash and an inset
+   hairline, no side padding (the composer's painted words must stay in register with its text). */
+.mention-pill {
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--accent-primary) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent-primary) 58%, transparent);
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+/* While the draft has tags, its words are drawn under the text box, whose own glyphs go clear. */
+.composer-input-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+.composer-input-paint {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  white-space: pre-wrap;
+  color: var(--ink);
+  pointer-events: none;
+}
+.composer-input-wrap[data-painted] textarea {
+  color: transparent;
+  caret-color: var(--ink);
+}
+/* The painted words show through a see-through selection; the text box's own stay clear, so nothing doubles. */
+.composer-input-wrap[data-painted] textarea::selection {
+  background: color-mix(in oklab, var(--accent-fill) 40%, transparent);
+  color: transparent;
+}
+/* A tag in the composer wraps exactly where the text box wraps it, or the two layers drift apart. */
+.composer-input-paint .mention-pill {
+  white-space: pre-wrap;
+}
+/* The card under a message with @ tags: a row per tag; one that attached nothing is a warning
+   (orange, never the error red), with the one action that helps. */
+.mention-results {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-inline-start: auto;
+  width: min(100%, 420px);
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.mention-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  line-height: 18px;
+}
+.mention-result[data-failed] {
+  background: var(--orange-tint);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--orange) 45%, transparent);
+}
+.mention-result-cover {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 6px;
+  background: #1a1b1e;
+  object-fit: cover;
+}
+/* A plugin's row shows the plugin's own logo, as its card in the picker does. */
+.mention-result-logo {
+  background: transparent;
+}
+.mention-result-logo .extension-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+.mention-result-cover .mention-result-avatar {
+  width: 18px;
+  height: 18px;
+}
+.mention-result-text {
+  display: grid;
+  min-width: 0;
+}
+.mention-result-text > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-result-text b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.mention-result-text span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+.mention-result[data-failed] .mention-result-text span {
+  color: color-mix(in oklab, var(--orange) 55%, var(--ink));
+  white-space: normal;
+}
+.mention-result-ok {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.mention-result-action {
+  flex: none;
+  height: 28px;
+  margin-inline-start: auto;
+  padding: 0 10px;
+  border-radius: 9px;
+  background: var(--ink);
+  color: var(--surface);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mention-result-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* The @ picker: cover cards on shelves, as on genex.games. Words on a card are white on a dark
+   scrim in both themes, because they sit on a picture. */
+.mention-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 4px;
+}
+/* The shelves genex.games will fill, standing in while it answers: quiet cards with a slow sweep. */
+.mention-skeleton-label,
+.mention-skeleton-card,
+.mention-card:has(.mention-card-cover:not([data-loaded])) {
+  display: block;
+  background: linear-gradient(
+      100deg,
+      transparent 30%,
+      color-mix(in oklab, var(--foreground) 7%, transparent) 50%,
+      transparent 70%
+    )
+    var(--control-quiet);
+  background-size: 250% 100%;
+  animation: shimmer-sweep 1.8s ease-in-out infinite;
+}
+.mention-skeleton-label {
+  width: 72px;
+  height: 12px;
+  margin: 0 4px 8px;
+  border-radius: 6px;
+}
+.mention-skeleton-card {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1px solid var(--control-quiet-edge);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mention-skeleton-label,
+  .mention-skeleton-card,
+  .mention-card:has(.mention-card-cover:not([data-loaded])) {
+    animation: none;
+  }
+}
+/* A plugin's or Images' card: its picture in the middle of the plain card, above the title. */
+.mention-card-icon {
+  color: rgb(255 255 255 / 0.85);
+}
+.mention-card-icon > * {
+  margin-bottom: 12%;
+}
+/* A plugin's card is a short tile: its picture small in the bottom right, its name at the left. */
+.mention-card[data-mention-option] {
+  aspect-ratio: auto;
+  height: 68px;
+}
+.mention-card[data-mention-option] .mention-card-icon {
+  place-items: center end;
+  padding: 0 14px;
+}
+/* The name stops short of the picture, so the two never touch. */
+.mention-card[data-mention-option] .mention-card-title {
+  right: 68px;
+}
+.mention-card[data-mention-option] .mention-card-icon > * {
+  margin: 0;
+}
+.mention-card-icon .extension-icon {
+  width: 40px;
+  height: 40px;
+}
+.mention-shelf-label {
+  margin: 0;
+  padding: 0 4px 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.mention-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--mention-columns, 2), minmax(0, 1fr));
+  gap: 12px;
+}
+.mention-card {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid var(--control-quiet-edge);
+  background: #1a1b1e;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.mention-card:hover {
+  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--control-quiet-edge));
+}
+.mention-card[data-highlighted] {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+.mention-card[data-highlighted]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--accent-primary) 16%, transparent);
+  pointer-events: none;
+}
+.mention-card[aria-disabled] {
+  cursor: default;
+  opacity: 0.45;
+}
+.mention-card-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease-out;
+}
+.mention-card-cover[data-loaded] {
+  opacity: 1;
+}
+.mention-card-wash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #2b2c31, #1b1c20);
+}
+.mention-card-wash .mention-card-avatar {
+  width: 26%;
+  height: auto;
+  aspect-ratio: 1;
+  margin-bottom: 10%;
+}
+.mention-card-scrim {
+  position: absolute;
+  inset: auto 0 0;
+  height: 55%;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0.35) 55%, transparent);
+  pointer-events: none;
+}
+.mention-card-chips {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: flex;
+  gap: 4px;
+}
+.mention-card-chips > span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: rgb(255 255 255 / 0.9);
+  font-size: 11px;
+  line-height: 13px;
+  backdrop-filter: blur(2px);
+}
+.mention-card-picked {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent-primary);
+  color: #fff;
+}
+.mention-card-title {
+  position: absolute;
+  inset: auto 8px 6px;
+  overflow: hidden;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-cap {
+  margin: 4px -6px -6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--prompt-bar-edge);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--ink-3);
+}
 /* Row actions (Connect, Set up, Turn on) are filled, so they read as buttons before hover. */
 /* The one thing a row needs done (Connect, Retry): the accent fill with its white label, like the app's primary buttons. */
 .picker-action {

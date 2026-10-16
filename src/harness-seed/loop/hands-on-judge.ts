@@ -69,6 +69,13 @@ const MESSAGE = {
  */
 export const SERVES_CHAT_JUDGE = true;
 
+/**
+ * This copy hands the host the engine plugin's judge a session plays as (`judge`, and its `players`):
+ * a kept older copy plays every judge as a plain one, and a judge named there is refused
+ * (`engine-judges.ts`).
+ */
+export const SERVES_ENGINE_JUDGES = true;
+
 /** What a judge that plays is handed. */
 export interface HandsOnOptions {
   run: Run;
@@ -86,6 +93,10 @@ export interface HandsOnOptions {
   entry?: string;
   /** The facet the session is filed under (`facetId`). */
   facetId?: string;
+  /** The judge the game's engine plugin declares that plays (`PluginJudge.id`); the host checks it and plays its brief, players and probe. */
+  judge?: string;
+  /** How many players a game played in its engine's editor opens for the judge; the judge's own when it names one. */
+  players?: number;
 }
 
 /** What it came back with: the board's results, what each rests on, the trace, and its record. */
@@ -259,7 +270,7 @@ async function judgeSeat(ctx: HarnessCtx, run: Run): Promise<Seat> {
 
 /** The grant a judge plays under: blind, stepped, on the game's own first screen, with its goal and budget. */
 function judgeGrant(options: HandsOnOptions, handle: string, maxActions: number): ComputerGrant {
-  const { run, root, entry, quest, iteration, facetId } = options;
+  const { run, root, entry, quest, iteration, facetId, judge, players } = options;
   return {
     project: run.project,
     root,
@@ -277,6 +288,8 @@ function judgeGrant(options: HandsOnOptions, handle: string, maxActions: number)
     maxActions,
     pacing: PlayPacing.Stepped,
     ...(quest ? { quest: questGrant(quest) } : {}),
+    ...(judge ? { judge } : {}),
+    ...(players && players > 1 ? { players } : {}),
   };
 }
 

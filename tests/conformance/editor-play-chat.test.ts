@@ -1,18 +1,21 @@
 /**
- * The chat's own session, judges and playtesters get `computer` on an Unreal or Unity game's editor
- * play (`main/core/editor-play-session.ts`), through the real core and each plugin's backend. Unreal
- * is selected by its engine link; Unity by the project's facts. With no editor open, the first look
+ * The chat's own session, judges and playtesters get `computer` on an engine game's editor play
+ * (`main/core/editor-play-session.ts`), through the real core and each plugin's backend. Unreal and
+ * any other declared engine are selected by the game's engine link; Unity by the project's facts. With no editor open, the first look
  * answers the selected plugin's own words. Disabling the plugin removes the editor computer.
  */
 import assert from "node:assert/strict";
-import { mkdir, realpath, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { TargetRuntime } from "../../src/shared/computer-target.ts";
-import { HarnessCapability } from "../../src/shared/protocol.ts";
 import type { SessionPort } from "../../src/main/core/session-port.ts";
+import { ClockLevel, TargetRuntime } from "../../src/shared/computer-target.ts";
+import { ENGINE_PLAY_TOOLS, EnginePlayTool, MAX_PLAY_PLAYERS } from "../../src/shared/engine-play.ts";
+import { type PluginManifest, PluginSourceKind, PluginToolAudience } from "../../src/shared/plugins.ts";
+import { HarnessCapability } from "../../src/shared/protocol.ts";
 import { COMPUTER_TOOL_NAME } from "../../src/substrate/computer-tool.ts";
 import type { DelegateRequest, LiveToolResult } from "../../src/substrate/engines/types.ts";
+import { TOY_PLUGIN, TOY_PLUGIN_ID } from "../helpers/project-fixtures.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 import { closeWorkerChats, workerChat } from "../helpers/worker-chat.ts";
 
@@ -123,6 +126,97 @@ describe("the computer of a judge or playtester on an Unreal game", () => {
       // Turning the plugin off stops its backend's process.
       await core.plugins.setEnabled(UNREAL_PLUGIN, false);
     }
+  });
+});
+
+/** A `.toyproj` of the game's own, as a linked toy project needs one on disk. */
+async function toyProject(name: string): Promise<string> {
+  const file = path.join(await realpath(await tmpDir("editor-play-toyproj-")), name, `${name}.toyproj`);
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "toy\n");
+  return file;
+}
+
+describe("the computer on a game another engine plays in its editor", () => {
+  it("is built from what the engine's plugin declares, and reaches each of the toy engine's three players", {
+    timeout: CASE_TIMEOUT_MS,
+  }, async () => {
+    const { core, game, project } = await workerChat();
+    const outDir = await tmpDir("editor-play-toy-");
+    const session = {
+      loaded: null,
+      handle: () => "pool:1",
+      get: async () => assert.fail("no window"),
+      release: async () => {},
+    };
+    await core.plugins.installLocal(TOY_PLUGIN, PluginSourceKind.Local, []);
+    await core.plugins.setEnabled(TOY_PLUGIN_ID, true);
+    await core.engineLinks.link(
+      TOY_PLUGIN_ID,
+      { project: game, directory: project.dir },
+      { project: await toyProject("Garden") },
+    );
+    try {
+      const judge = await core._computerToolsFor(
+        { project: game, root: project.dir, handle: "pool:1", role: "judge" },
+        project.dir,
+        outDir,
+        session as never,
+      );
+      assert.equal(judge.runtime, TargetRuntime.Editor);
+      const judged = judge.liveTools.find((tool) => tool.name === COMPUTER_TOOL_NAME);
+      assert.match(String(judged?.description), /clock cannot be held still/, "the toy declares no clock to hold");
+      assert.equal(Object.hasOwn(judged?.parameters.properties ?? {}, "player"), false, "a judge asked for one player");
+      await judge.release();
+
+      const crowd = await core._computerToolsFor(
+        { project: game, root: project.dir, handle: "pool:1", role: "playtester", players: 3 },
+        project.dir,
+        outDir,
+        session as never,
+      );
+      const tool = crowd.liveTools.find((t) => t.name === COMPUTER_TOOL_NAME);
+      assert.match(String(tool?.description), /3 players/);
+      for (const player of [1, 2, 3]) {
+        const looked = await crowd.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot", player });
+        assert.equal(typeof looked === "string" ? 0 : looked.images?.length, 1, `player ${player} is seen`);
+        assert.match(
+          text(await crowd.onLiveTool(COMPUTER_TOOL_NAME, { action: "state" })),
+          new RegExp(`"player":${player}`),
+        );
+      }
+      assert.match(
+        text(await crowd.onLiveTool(COMPUTER_TOOL_NAME, { action: "screenshot", player: 4 })),
+        /player 4 is not in this play/,
+      );
+      await crowd.release();
+    } finally {
+      await core.plugins.setEnabled(TOY_PLUGIN_ID, false);
+    }
+  });
+});
+
+describe("the Roblox plugin's play tools", () => {
+  it("declares every play tool as a harness step under the Studio lock, with players on open and a player on the others", async () => {
+    const manifest = JSON.parse(
+      await readFile(path.join(import.meta.dirname, "../../src/plugins/roblox/plugin.json"), "utf8"),
+    ) as PluginManifest;
+    const tools = new Map(manifest.tools.map((tool) => [tool.name, tool]));
+    for (const name of ENGINE_PLAY_TOOLS) {
+      const tool = tools.get(name);
+      assert.equal(tool?.audience, PluginToolAudience.Harness, name);
+      assert.deepEqual(tool?.needs, ["studio"], name);
+    }
+    const params = (name: string) => Object.keys(tools.get(name)?.parameters?.properties ?? {});
+    assert.ok(params(EnginePlayTool.Open).includes("players"));
+    for (const name of [EnginePlayTool.Input, EnginePlayTool.Shot, EnginePlayTool.State])
+      assert.ok(params(name).includes("player"), name);
+    assert.deepEqual(manifest.engine?.play, {
+      players: MAX_PLAY_PLAYERS,
+      clock: ClockLevel.None,
+      pointer: true,
+      state: true,
+    });
   });
 });
 

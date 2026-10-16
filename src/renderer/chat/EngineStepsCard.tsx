@@ -8,15 +8,18 @@
  */
 import { type JSX, useEffect, useRef, useState } from "react";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { isUserCancelled } from "../../shared/errors.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
 import { Button } from "../ui/Button.tsx";
 import { StepMark } from "./StepMark.tsx";
 import { STEPS_WORDS } from "../words.ts";
+import { usePlugins } from "../state/hooks.ts";
 import { Icon } from "../ui/icons.tsx";
 import {
   finishedSays,
   parseSteps,
+  runButton,
   stuckSays,
   STEPS_ACTION,
   type StepButton,
@@ -176,17 +179,20 @@ export function EngineStepsCard({
   useEffect(() => setDismissed(key ? readText(key) : null), [key]);
   const shown = stepsShown(offer, dismissed);
   const card = useSteps(offer, shown, onFinished);
+  const plugin = usePlugins((s) => s.list.find((p) => p.manifest.id === offer?.pluginId) ?? null);
   if (!shown || !card?.open) return null;
   const hide = () => {
     if (key) writeText(key, offer.id);
     setDismissed(offer.id);
   };
-  const press = (button: StepButton) =>
-    void window.studio
-      .pluginAction(offer.pluginId, button.name, button.args, offer.project)
-      .catch(notifyProblem(onNotice));
+  // Saying no in the action's dialog is an answer, not a problem to show.
+  const press = (button: StepButton | undefined) => {
+    void runButton(plugin, offer, button).catch((error: unknown) => {
+      if (!isUserCancelled(error)) notifyProblem(onNotice)(error);
+    });
+  };
   const run = (row: StepRow) => {
-    if (row.action) press(row.action);
+    press(row.action);
   };
   const wayOut = card.secondary;
   return (

@@ -3,6 +3,8 @@
  * `chat_judge` dispatch): the same blind judge a Loop's build uses (`runHandsOnJudge`), on a hidden
  * window of its own, in the game folder as the change left it, held to the goal state the session
  * names. The studio checks that state after every move; a yes it saw reached is studio-verified.
+ * The session may name one of the judges the game's engine plugin declares (`judge`, checked by the
+ * host before it forwards the call): it plays as that judge, with its brief, players and probe.
  *
  * It records nothing itself: the host writes the outcome to the chat, keeping "verified by the
  * studio" only for a trace the studio itself saw reach the goal. Never throws: a refusal, or a
@@ -12,6 +14,7 @@
  */
 import { WINDOW_RETRIES_MS } from "./config.ts";
 import { withLease } from "./evidence.ts";
+import { servesEngineJudges } from "./engine-judges.ts";
 import * as handsOn from "./hands-on-judge.ts";
 import { HostMethod } from "./host-methods.ts";
 import { InteractionStatus, interactionStatus } from "./interaction-evidence.ts";
@@ -51,6 +54,8 @@ const MESSAGE = {
   noAsk: "judge_play needs ask: one yes/no question the judge can settle by playing",
   goalState: (why: string) => `goal_state: ${why}`,
   noWindow: (why: string) => `No hidden window is free to play in right now: ${why}. Try again in a minute.`,
+  noEngineJudges: (id: string) =>
+    `this harness's judge can't play as the game's "${id}" judge (its judge module is an older copy): leave judge out and a plain judge plays`,
 } as const;
 
 /** A chat's call for a judge, as the host forwards it. */
@@ -121,6 +126,9 @@ export async function judgeFromChat(
   if (!question) return refused(MESSAGE.noAsk);
   const quest = questOf(question, ask.goalState);
   if (quest && "error" in quest) return refused(quest.error);
+  const judge = ask.judge?.trim() ?? "";
+  // A kept older judge would play a named judge as a plain one while the chat records it as that judge.
+  if (judge && !servesEngineJudges()) return refused(MESSAGE.noEngineJudges(judge));
   const capacity = await ctx.call(HostMethod.PreviewCapacity, {}).catch(() => null);
   const check: Check = {
     id: CHECK_ID,
@@ -144,10 +152,16 @@ export async function judgeFromChat(
         quest,
         deadline: Date.now() + CHAT_JUDGE_MS,
         facetId: FACET,
+        ...(judge ? { judge } : {}),
       }),
     { pooled: capacity?.headless !== false, retriesMs: options.retriesMs ?? WINDOW_RETRIES_MS },
   );
   if ("noWindow" in played) return refused(MESSAGE.noWindow(played.noWindow));
+  return answerOf(played);
+}
+
+/** What the judge that played came back with, as the host records it. */
+function answerOf(played: handsOn.HandsOnOutcome): ChatJudgeAnswer {
   const result = played.results[0];
   const answer = result?.answer === "yes" || result?.answer === "no" ? result.answer : null;
   // Nothing played (no window to drive, no engine that can play): the reason is the refusal.

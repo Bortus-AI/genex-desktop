@@ -18,6 +18,12 @@ manifest requires may be empty). `plugin_check` names the first thing Genex refu
 
 - `detect` (API 3): how Genex knows a project of the engine's kind, as facts: `{fact, files,
   notUnder?}`, `files` globs such as `**/*.sketchproj`, `notUnder` folders to skip (vendored copies).
+- `engine` (API 3, capability `game-engine`): the engine the plugin is, which games linked to its
+  projects build in: `{id, label, projectFiles, fact, projectInFolder, play?, apps?}`. `id` is the
+  plugin's own id; `label` the engine's name; `projectFiles` 1–4 extensions a project file has
+  (`.sketchproj`); `fact` one of its `detect` facts; `projectInFolder` true when save points must
+  hold the project inside the game folder; `apps` the editor's Mac bundle ids and Windows `.exe`
+  names, which computer use never drives to build or play.
 - `tools`: what agents call. Each `{name, description, parameters}` (a JSON schema object), with
   `facts` (the kinds of project it reaches; none: every project), `needs` (the locks a call holds),
   `makes` (the facts it makes in an empty folder) and `confirmation` (a question asked each call).
@@ -54,6 +60,11 @@ manifest requires may be empty). `plugin_check` names the first thing Genex refu
   place, one at a time).
 - `scaffolds` (API 3): the kinds of project its tools make, `{id, label, tool}`, the tool one that
   declares `makes`; the label names the kind beside the project.
+- `judges` (API 3, beside `engine`): blind judges that play the engine's games in its editor,
+  `{id, label, facts?, brief, players?, probe?}`. `brief` is a Markdown file in the package (at most
+  16 000 characters) added to the judge's rubric; `players` at most the engine's `play.players`;
+  `probe` a harness tool that needs every lock `play-open` needs, which Genex runs once right after
+  the judge's play opens (its `note` and `images`, never source, open the judge's first answer).
 
 ## A complete example: Sketch
 
@@ -73,9 +84,16 @@ Write `genex-plugins/sketch/plugin.json`:
   "publisher": "Written in this project",
   "description": "Builds and checks Sketch projects through the Sketch editor.",
   "backend": "backend.mjs",
-  "capabilities": ["network"],
+  "capabilities": ["network", "game-engine"],
   "network": { "hosts": ["127.0.0.1"] },
   "detect": [{ "fact": "sketch-project", "files": ["**/*.sketchproj"], "notUnder": ["**/vendor/"] }],
+  "engine": {
+    "id": "sketch",
+    "label": "Sketch",
+    "projectFiles": [".sketchproj"],
+    "fact": "sketch-project",
+    "projectInFolder": true
+  },
   "tools": [
     {
       "name": "build",
@@ -163,9 +181,20 @@ Write `genex-plugins/sketch/plugin.json`:
     { "on": "crash", "tool": "reopen-editor" }
   ],
   "observers": [{ "id": "viewport", "facts": ["sketch-project"], "tool": "capture", "live": "stills" }],
+  "judges": [{ "id": "first-play", "label": "First play", "facts": ["sketch-project"], "brief": "judges/first-play.md" }],
   "workspace": { "ignore": ["Cache/"], "copySkip": ["Cache/", "Exports/"] },
   "assets": { "folders": ["scenes"], "formats": ["skscene"] },
   "workerTypes": [{ "id": "scene", "description": "Edits one Sketch scene", "tools": ["build"], "isolation": "copy" }],
   "scaffolds": [{ "id": "game", "label": "Sketch game", "tool": "new-project" }]
 }
+```
+
+A judge's brief says what it checks, in the player's words; it never mentions code. Write
+`genex-plugins/sketch/judges/first-play.md`:
+
+```markdown
+# First play
+
+Play from the game's first screen as someone who has never seen it. Check that you can tell what to
+do within a minute, that the controls answer at once, and that the first goal can be reached.
 ```
