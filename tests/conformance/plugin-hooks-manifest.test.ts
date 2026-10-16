@@ -379,7 +379,8 @@ describe("a plugin's hooks, locks, needs and readiness", () => {
   it("the bundled Roblox manifest is valid: its version, its lock, its toolbar button, and no folders", () => {
     const raw = JSON.parse(readFileSync("src/plugins/roblox/plugin.json", "utf8")) as PluginManifest;
     const roblox = validateManifest(raw);
-    assert.equal(roblox.version, "0.1.0", "the plugin is new in this release and stays at its first version");
+    // Flipped: dev already ships 0.1.0, so a change to the plugin raises it (check-plugin-versions).
+    assert.equal(roblox.version, "0.1.1", "one step above the version dev has");
     assert.deepEqual(roblox.locks, [
       { id: "studio", label: "Roblox Studio", per: LockScope.Project, personFirst: "studio-activity" },
     ]);
