@@ -107,6 +107,7 @@ import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
 import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
+import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 
 export interface ClaudeCodeEngineOptions {
   onModelsChanged?: () => void;
@@ -119,6 +120,8 @@ export interface ClaudeCodeEngineOptions {
    * simply do not override `CLAUDE_CONFIG_DIR`, and the SDK finds its own.
    */
   systemHome?: string;
+  /** The accounts this engine can run on; by default kept beside `engineHome` (`accountsRoot`). */
+  accounts?: SubscriptionAccounts;
   /** Default model id; `undefined` means "whatever Claude Code is configured to use". */
   model?: string;
   /** Directories the contractor must never read (the studio's secrets, engine homes). */
@@ -471,6 +474,8 @@ export class ClaudeCodeEngine implements Engine {
   readonly compactsNatively = true;
   readonly engineHome: string;
   readonly systemHome: string;
+  /** The Terminal login, Studio's own and any added ones; the chosen one runs (`resolveLogin`). */
+  readonly accounts: SubscriptionAccounts;
   readonly #model: string | undefined;
   readonly #maxTurns: number | undefined;
   readonly #protectedPaths: string[];
@@ -493,6 +498,14 @@ export class ClaudeCodeEngine implements Engine {
     this.#catalog = new ModelCatalog(options.onModelsChanged);
     this.engineHome = options.engineHome;
     this.systemHome = options.systemHome ?? path.join(os.homedir(), ".claude");
+    this.accounts =
+      options.accounts ??
+      new SubscriptionAccounts({
+        systemHome: this.systemHome,
+        studioHome: this.engineHome,
+        root: accountsRoot(this.engineHome, EngineId.ClaudeCode),
+        signedIn: (home) => hasCredentials(home, CREDENTIAL_FILE),
+      });
     this.#model = options.model;
     // No default cap. The first live build hit turn 61 of 60 with $7.54 of work on disk and the
     // whole thing reported as a failure — a turn limit protects nothing the stop button and the
@@ -572,6 +585,11 @@ export class ClaudeCodeEngine implements Engine {
    */
   async resolveLogin(): Promise<{ source: LoginSource; home: string | null }> {
     if (process.env.CLAUDE_CONFIG_DIR) return { source: LoginSource.Env, home: process.env.CLAUDE_CONFIG_DIR };
+    // An account the person chose in Settings runs, signed in or not: never another one silently.
+    const chosen = await this.accounts.chosen();
+    const chosenHome = chosen && this.accounts.homeFor(chosen);
+    if (chosen && chosenHome)
+      return { source: chosen === AccountId.Terminal ? LoginSource.System : LoginSource.Isolated, home: chosenHome };
     if (await hasCredentials(this.engineHome, CREDENTIAL_FILE))
       return { source: LoginSource.Isolated, home: this.engineHome };
     if (await hasCredentials(this.systemHome, CREDENTIAL_FILE))
@@ -707,6 +725,23 @@ export class ClaudeCodeEngine implements Engine {
       return { code: EngineStatusCode.Error, detail: cli.detail, remedy: MESSAGE.RecheckRemedy };
     this.#authFailure = cli.loggedIn ? null : cli.detail || MESSAGE.CliNotSignedIn;
     return this.status();
+  }
+
+  /** Run on account `id` from now on: its sign-in, its models and its plan limits. */
+  async runOnAccount(id: string): Promise<EngineStatus> {
+    await this.accounts.choose(id);
+    return this.recheckLogin();
+  }
+
+  /** The email `claude auth status` reports for the account signed in to `home`, if it reports one. */
+  async accountEmail(home: string): Promise<string | null> {
+    const cliHome = home === this.systemHome ? null : home;
+    const installation = await this.#resolveCli(EngineId.ClaudeCode, this.#executable, undefined, false);
+    const status = await (
+      this.#authStatusFn ??
+      ((dir) => claudeAuthStatus(dir, { findBinary: async () => installation.path, env: installation.env }))
+    )(cliHome);
+    return status.email ?? null;
   }
 
   /**
@@ -1287,7 +1322,7 @@ export class ClaudeCodeEngine implements Engine {
     return subscriptionEnv({
       ...installationEnv,
       ...extra,
-      ...(login.source === LoginSource.Isolated ? { CLAUDE_CONFIG_DIR: this.engineHome } : {}),
+      ...(login.source === LoginSource.Isolated && login.home ? { CLAUDE_CONFIG_DIR: login.home } : {}),
     });
   }
 
