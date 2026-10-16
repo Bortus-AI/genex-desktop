@@ -40,6 +40,8 @@ export interface RobloxMacOptions {
   answering?: boolean;
   studios?: OpenStudio[];
   recents?: string[];
+  /** Genex can click in Studio here (computer control); true unless said otherwise. */
+  canClick?: boolean;
 }
 
 /** A Mac with Roblox Studio, whose home, storage and games are real folders. */
@@ -122,6 +124,7 @@ export async function robloxMac(options: RobloxMacOptions = {}) {
       },
     },
     answers: async () => state.answering ?? state.running,
+    canClick: () => options.canClick ?? true,
     studio,
     helper: SHIPPED_HELPER,
     install: {

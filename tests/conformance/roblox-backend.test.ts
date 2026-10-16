@@ -31,7 +31,7 @@ import type { StepsCard } from "../../src/renderer/chat/engine-steps.ts";
 import { HELPER_FILE } from "../../src/plugins/roblox/setup.ts";
 import type { InstallDeps } from "../../src/plugins/roblox/studio-install.ts";
 import { type Launch, QUIT_WAIT_MS } from "../../src/plugins/roblox/studio-launch.ts";
-import { MCP_SWITCH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
+import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "../../src/plugins/roblox/words.ts";
 import type { LocateStat, Run } from "../../src/plugins/roblox/studio-locate.ts";
 import { STUDIO_MAC_APP } from "../../src/plugins/roblox/studio-locate.ts";
 import { toolbarItems } from "../../src/shared/plugin-toolbar.ts";
@@ -490,7 +490,7 @@ describe("Get Roblox Studio and the steps card", () => {
     const studio = card.steps.find((row) => row.id === "studio");
     assert.deepEqual(studio?.action, { name: "get-studio", args: {}, label: "Get Roblox Studio" });
     const signIn = card.steps.find((row) => row.id === "sign-in");
-    assert.equal(signIn?.detail, "Studio asks you to sign in when it opens. Genex never sees your password.");
+    assert.equal(signIn?.detail, MESSAGE.Steps.SignInDetail);
     assert.equal(signIn?.action, undefined, "Genex never signs in");
     assert.equal(card.open, true);
     for (const row of card.steps) assert.doesNotMatch(`${row.label} ${row.detail}`, BANNED_WORDS);

@@ -70,6 +70,8 @@ export interface RobloxStepFacts {
   mac?: boolean;
   /** Studio's MCP switch is on in an account's settings (unknown when absent). */
   mcpOn?: boolean;
+  /** Genex can click in Studio for the person here (a Mac with computer control): Do it for me. */
+  canClick?: boolean;
   /** The game's own Rojo project keeps its scripts in step. */
   rojo?: boolean;
   /** Studio can reach the game's live saved data, as the last play found. */
@@ -125,22 +127,30 @@ function helperRow(facts: RobloxStepFacts): RobloxRow {
   return facts.mac ? { ...withSetUp, note: MESSAGE.Setup.DocumentsNote } : withSetUp;
 }
 
+/**
+ * Why an open Studio doesn't answer yet, in words: its switch is off, or it is on and Studio waits
+ * for a place; either way a Studio on its sign-in screen answers nothing, so signing in comes first.
+ */
+function mcpWaitingDetail(facts: RobloxStepFacts): string {
+  const W = MESSAGE.Steps;
+  if (!facts.mcpOn) return `${W.McpOff} ${W.SignInFirst}`;
+  return `${facts.linked ? W.McpOnWaiting : W.McpOnNoPlace} ${W.SignInFirst}`;
+}
+
 function mcpRow(facts: RobloxStepFacts): RobloxRow {
   const W = MESSAGE.Steps;
   const id = RobloxStepId.Mcp;
   if (facts.answering) return { id, label: W.McpDone, detail: W.McpDoneDetail, done: true };
   if (!facts.setUp) return { id, label: W.Mcp, detail: W.McpLater, done: false };
   if (!facts.running) return { id, label: W.Mcp, detail: W.McpWhenOpen, done: false };
-  return {
-    id,
-    label: W.Mcp,
-    detail: facts.mcpOn ? W.McpOnWaiting : W.McpOff,
-    done: false,
-    action: button(RobloxAction.DoItForMe, MESSAGE.Choice.DoItForMe),
-    more: [button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio)],
-    clickPath: clicks(MCP_SWITCH_CLICK_PATH),
-    waiting: W.Waiting,
-  };
+  const restart = button(RobloxAction.RestartStudio, MESSAGE.Choice.RestartStudio);
+  const row: RobloxRow = { id, label: W.Mcp, detail: mcpWaitingDetail(facts), done: false, waiting: W.Waiting };
+  // The switch is on: clicking it can't help, and Studio waits for a sign-in or a place.
+  if (facts.mcpOn) return { ...row, action: restart };
+  const switchOff = { ...row, clickPath: clicks(MCP_SWITCH_CLICK_PATH) };
+  // Only where Genex can click in Studio for the person; elsewhere their own clicks are the way.
+  if (!facts.canClick) return { ...switchOff, action: restart };
+  return { ...switchOff, action: button(RobloxAction.DoItForMe, MESSAGE.Choice.DoItForMe), more: [restart] };
 }
 
 function placeRow(facts: RobloxStepFacts): RobloxRow {
@@ -174,11 +184,16 @@ export function nowStep(facts: RobloxStepFacts): RobloxStepId | undefined {
   return facts.linked ? undefined : RobloxStepId.Place;
 }
 
-/** A row as the card shows it: the panel's words, with Studio's clicks written out after them. */
+/** The card's extra words for a row: Studio's clicks, or where to choose the place (the panel is where). */
+function cardHint(row: RobloxRow): string | undefined {
+  if (row.clickPath) return MESSAGE.Steps.OrInStudio(row.clickPath.join(CLICK_SEPARATOR));
+  return row.id === RobloxStepId.Place && !row.done ? MESSAGE.Steps.PlaceCardHint : undefined;
+}
+
+/** A row as the card shows it: the panel's words, with Studio's clicks or the place's button after them. */
 function cardRow(row: RobloxRow): RobloxStep {
-  const detail = row.clickPath
-    ? `${row.detail} ${MESSAGE.Steps.OrInStudio(row.clickPath.join(CLICK_SEPARATOR))}`
-    : row.detail;
+  const hint = cardHint(row);
+  const detail = hint ? `${row.detail} ${hint}` : row.detail;
   const step: RobloxStep = { id: row.id, label: row.label, detail, done: row.done };
   return row.action ? { ...step, action: row.action } : step;
 }

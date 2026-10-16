@@ -13,6 +13,6 @@ export const PUBLISH_PROMPTS = {
   Declined: `The person said no to computer control, so nothing was published. ${YOURSELF}`,
   NoChat: `There's no chat to publish from, so nothing was published. ${YOURSELF}`,
   NotStarted: `Nothing was published. ${YOURSELF}`,
-  FirstPublish: `This place has never been published, and its first publish is the person's own: Roblox asks for the game's details and may ask for an age check. Nothing was clicked. Tell them: in Studio, ${PUBLISH_CLICK_PATH}; then Choose your place and Use in this game in the Roblox Studio panel, so later updates can be published from here.`,
+  FirstPublish: `This place has never been published, and its first publish is the person's own: Roblox asks for the game's details and may ask for an age check. Nothing was clicked. Tell them: in Studio, ${PUBLISH_CLICK_PATH}; then Choose another place and Use in this game in the Roblox Studio panel, so later updates can be published from here.`,
   NoPlace: "This game doesn't build in a Roblox place yet, so there's nothing to publish.",
 } as const;

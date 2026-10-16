@@ -53,8 +53,10 @@ const STATES: Record<string, RobloxStepFacts> = {
   "not set up, closed": { ...BASE, setUp: false, running: false, answering: false, mac: true },
   "not set up, open": { ...BASE, setUp: false, answering: false, mac: true },
   "set up, closed": { ...BASE, running: false, answering: false },
-  "open, switch off": { ...BASE, answering: false, mcpOn: false },
-  "open, switch on": { ...BASE, answering: false, mcpOn: true },
+  "open, switch off": { ...BASE, answering: false, mcpOn: false, canClick: true },
+  "open, switch off, no clicking": { ...BASE, answering: false, mcpOn: false },
+  "open, switch on": { ...BASE, answering: false, mcpOn: true, canClick: true },
+  "open, switch on, place linked": { ...BASE, answering: false, mcpOn: true, canClick: true, linked: true },
   "ready, no place": BASE,
   "ready, linked": { ...BASE, linked: true, place: "Place1" },
   "linked, live data": { ...BASE, linked: true, place: "Pet Valley", liveData: true },
@@ -69,7 +71,9 @@ const NEXT: Record<string, RobloxStepId | undefined> = {
   "not set up, open": RobloxStepId.Helper,
   "set up, closed": RobloxStepId.SignIn,
   "open, switch off": RobloxStepId.Mcp,
+  "open, switch off, no clicking": RobloxStepId.Mcp,
   "open, switch on": RobloxStepId.Mcp,
+  "open, switch on, place linked": RobloxStepId.Mcp,
   "ready, no place": RobloxStepId.Place,
   "ready, linked": undefined,
   "linked, live data": undefined,
@@ -140,14 +144,43 @@ describe("the Roblox Studio setup rows", () => {
     assert.deepEqual(mcp.action, { name: RobloxAction.DoItForMe, args: {}, label: "Do it for me" });
     assert.deepEqual(mcp.more, [{ name: RobloxAction.RestartStudio, args: {}, label: "Restart Studio" }]);
     assert.deepEqual(mcp.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
-    assert.equal(mcp.detail, MESSAGE.Steps.McpOff);
+    // Flipped: a Studio on its sign-in screen doesn't answer either, so the row says to sign in first.
+    assert.equal(mcp.detail, `${MESSAGE.Steps.McpOff} ${MESSAGE.Steps.SignInFirst}`);
     assert.equal(mcp.waiting, MESSAGE.Steps.Waiting);
   });
 
-  it("Studio open with the switch already on in its settings waits for Studio rather than blaming it", () => {
-    const mcp = row(STATES["open, switch on"] as RobloxStepFacts, RobloxStepId.Mcp);
-    assert.equal(mcp.detail, MESSAGE.Steps.McpOnWaiting);
-    assert.equal(mcp.waiting, MESSAGE.Steps.Waiting);
+  it("where Genex can't click in Studio (Windows, or no computer control), the MCP step never offers Do it for me", () => {
+    const mcp = row(STATES["open, switch off, no clicking"] as RobloxStepFacts, RobloxStepId.Mcp);
+    assert.deepEqual(mcp.action, { name: RobloxAction.RestartStudio, args: {}, label: "Restart Studio" });
+    assert.equal(mcp.more, undefined);
+    assert.deepEqual(mcp.clickPath, MCP_SWITCH_CLICK_PATH.split(" › "));
+    for (const facts of Object.values(STATES))
+      if (!facts.canClick)
+        for (const candidate of robloxRows(facts))
+          assert.notEqual(candidate.action?.name, RobloxAction.DoItForMe, JSON.stringify(facts));
+  });
+
+  it("Studio open with the switch already on waits for Studio: sign in first, open a place, and no Do it for me", () => {
+    // Flipped: the switch is on, so clicking it can't help; Studio waits for a sign-in or a place.
+    const linked = row(STATES["open, switch on, place linked"] as RobloxStepFacts, RobloxStepId.Mcp);
+    assert.equal(linked.detail, `${MESSAGE.Steps.McpOnWaiting} ${MESSAGE.Steps.SignInFirst}`);
+    assert.equal(linked.waiting, MESSAGE.Steps.Waiting);
+    assert.equal(linked.action?.name, RobloxAction.RestartStudio);
+    const noPlace = row(STATES["open, switch on"] as RobloxStepFacts, RobloxStepId.Mcp);
+    assert.equal(noPlace.detail, `${MESSAGE.Steps.McpOnNoPlace} ${MESSAGE.Steps.SignInFirst}`);
+    assert.match(noPlace.detail, /New Roblox game/);
+  });
+
+  it("the sign-in step tells someone with no Roblox account where to make one", () => {
+    const signIn = row(STATES["set up, closed"] as RobloxStepFacts, RobloxStepId.SignIn);
+    assert.match(signIn.detail, /No Roblox account yet\? Choose Sign up on Studio's sign-in screen\./);
+  });
+
+  it("the place step in the panel doesn't send the person to the button that opened it; the chat's card does", () => {
+    const facts = STATES["ready, no place"] as RobloxStepFacts;
+    assert.doesNotMatch(row(facts, RobloxStepId.Place).detail, /Roblox Studio button/);
+    const card = robloxSteps(facts).steps.find((step) => step.id === RobloxStepId.Place);
+    assert.match(card?.detail ?? "", /Choose it with the Roblox Studio button\./);
   });
 
   it("Studio open before Set up: the helper step offers Restart Studio, since Set up waits for Studio to close", () => {

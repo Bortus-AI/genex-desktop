@@ -148,6 +148,7 @@ describe("publish-update hands the task to the game's chat", () => {
     assert.match(String(review.message), /Sky Race/);
     assert.match(String(review.detail), /your Roblox account/);
     assert.ok(String(review.detail).includes(PUBLISH_CLICK_PATH));
+    assert.doesNotMatch(String(review.detail), /this Mac/, "the card's words hold on any computer");
     assert.deepEqual(reviewPublish({ link: linkTo(false) }), {}, "a first publish keeps the manifest's card");
   });
 });
@@ -190,7 +191,8 @@ describe("through the backend", () => {
     };
     assert.equal(linked.linked, true);
     const status = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
-    assert.deepEqual(status.publish, { published: true });
+    // Flipped: the status also says whether Genex can click Publish in Studio here (a Mac).
+    assert.deepEqual(status.publish, { published: true, canClick: true });
     const pressed = (await backend.action?.(RobloxAction.PublishUpdate, {}, host.context)) as { started: boolean };
     assert.equal(pressed.started, true);
     const called = (await backend.tool?.(RobloxTool.PublishUpdate, {}, host.context)) as { started: boolean };
@@ -213,7 +215,10 @@ describe("through the backend", () => {
       const linked = (await backend.action?.(RobloxAction.UsePlace, { file }, host.context)) as { linked: boolean };
       assert.equal(linked.linked, true);
       const status = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
-      assert.deepEqual(status.publish, { published: false });
+      assert.deepEqual(status.publish, { published: false, canClick: true });
+      mac.deps.canClick = () => false;
+      const elsewhere = (await backend.action?.(RobloxAction.Status, {}, host.context)) as { publish?: unknown };
+      assert.deepEqual(elsewhere.publish, { published: false, canClick: false }, "where Genex can't click");
       const answer = (await backend.action?.(RobloxAction.PublishUpdate, {}, host.context)) as { reason?: string };
       assert.equal(answer.reason, PublishMiss.FirstPublish);
       assert.ok(!host.calls.some((call) => call.method === "game.engine.assist"));

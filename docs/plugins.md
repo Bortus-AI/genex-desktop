@@ -1162,7 +1162,12 @@ card; `status` answers the rows, the step that is next (`now`: Studio, then Set 
 Studio closed, then opening Studio, its MCP server and the place), the MCP switch read from
 Studio's settings and the helper version Genex's record names, without reading `~/Documents`. On
 the next step the panel adds Restart Studio beside Do it for me, Studio's click path, what Genex
-waits for, and on a Mac before Set up the Documents note. Choose your place calls `places` only on
+waits for, and on a Mac before Set up the Documents note. Do it for me is offered only where Genex
+can click (`canClick`: a Mac) and only while the switch is off; while Studio doesn't answer, the MCP
+row first says to sign in on Studio's sign-in screen, and with no place open, the place step's
+buttons show beside it. Restart Studio reopens the game's own place. Answers are said in one
+persistent live region; Do it for me and Publish an update first say a question may wait in the
+game's chat, behind the panel. Choose your place calls `places` only on
 the person's press. A linked place's block names the place, says when the person's own Rojo project
 keeps the scripts, and warns when the last play found Studio can reach the game's live saved data
 (`live-data/<game>.json` in storage, which the play adapter writes), with Studio's switch to turn
@@ -1376,8 +1381,9 @@ window…" through `game.engine.assist`, which accepts only the pressed action o
 It updates a place that is already published (its link has `remote` ids): the panel offers it in
 the place block once every step is done. A place never published gets the first publish's click
 path and no assist, because Roblox asks for the game's details and an age check there; the person
-then links the published place again with Use in this game. Computer control is a Mac's only: on
-Windows, or with no driver, the answer gives the click path.
+then presses Choose another place and links the published place again. Computer control is a Mac's
+only: on Windows the place block shows Studio's click path instead of the button, and with no
+driver the answer gives it.
 
 **Moments, the person first and pictures.** The handlers answer in hook terms when
 `context.hook` is set (`studio-moments.ts` over `MomentOps` from `moment-ops.ts`, words in

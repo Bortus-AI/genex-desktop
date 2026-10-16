@@ -441,6 +441,28 @@ describe("Open in Studio and Quit Studio", () => {
     });
   });
 
+  it("Restart Studio opens the game's own place again, not Studio alone, so Studio can answer Genex", async () => {
+    const mac = await robloxMac({
+      studios: [{ id: "studio-a", name: `Obby ${PLACE_ID}`, placeId: PLACE_ID, universeId: UNIVERSE_ID }],
+    });
+    const game = await makeGame(mac, "obby", "Obby");
+    await action(mac, "use-place", { studio: "studio-a" }, hostFor(mac, game).context);
+    const run = mac.deps.run;
+    mac.deps.run = (async (file: string, args: readonly string[]) => {
+      // Studio's normal quit closes it: its window and its MCP listing are gone.
+      if (file === "/usr/bin/osascript") {
+        mac.state.running = false;
+        mac.state.studios = [];
+      }
+      return run(file, args);
+    }) as RobloxDeps["run"];
+    await action(mac, "restart-studio", {}, hostFor(mac, game).context);
+    assert.deepEqual(mac.launches.at(-1), {
+      file: `${CONTENTS}/MacOS/RobloxStudio`,
+      args: ["--task", "EditPlace", "--placeId", PLACE_ID, "--universeId", UNIVERSE_ID],
+    });
+  });
+
   it("quits Studio normally, and not while a Loop uses it", async () => {
     const mac = await robloxMac();
     const busy = hostFor(mac, undefined, { runs: [{ game: "sky-race", title: "Sky Race", project: "/x.rbxlx" }] });

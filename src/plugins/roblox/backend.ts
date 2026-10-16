@@ -103,7 +103,7 @@ import {
 import { insertAsset } from "./insert-asset.ts";
 import { checkModelTool, importModel } from "./model-import.ts";
 import { linkedPlace, listPlaces, type ScanCache, usePlace, usePlaceNamed } from "./places.ts";
-import { openLaunch, quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
+import { quitStudio, startingNow, systemOpener } from "./studio-launch.ts";
 import {
   type LocateDeps,
   locateStudio,
@@ -255,6 +255,11 @@ export interface AssistAnswer {
 export interface RobloxDeps extends PlaceActionDeps {
   /** Whether the open Studio answers Genex. */
   answers(): Promise<boolean>;
+  /**
+   * Whether Genex can click in Studio for the person here (Do it for me, Publish an update):
+   * computer control runs on a Mac only. A Mac unless said otherwise.
+   */
+  canClick?(): boolean;
   /** The shipped Genex helper file. */
   helper: string;
   /** The network, the programs and the temporary folder Get Roblox Studio uses. */
@@ -335,7 +340,7 @@ export interface RobloxStatus {
   /** The Luau checks: all here, or Add Luau checks offered. */
   luau?: LuauStatus;
   /** The game's place, once linked: whether Roblox has it published, so Publish an update can update it. */
-  publish?: { published: boolean };
+  publish?: { published: boolean; canClick: boolean };
 }
 
 /**
@@ -458,6 +463,7 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
     ...installFacts(job),
     ...place,
     mac: deps.platform === "darwin",
+    canClick: deps.canClick?.() ?? deps.platform === "darwin",
     ...(mcp ? { mcpOn: mcp.on > 0 } : {}),
   };
   return { install, facts, rows, mcp, helper, published };
@@ -481,7 +487,7 @@ async function status(
   if (job) answer.install = installStatusOf(job);
   if (mcp) answer.mcp = mcp;
   if (helper) answer.helper = helper;
-  if (published !== undefined) answer.publish = { published };
+  if (published !== undefined) answer.publish = { published, canClick: rows.canClick === true };
   answer.luau = await luauStatus(deps, luau, context).catch(() => ({ added: false, offered: false }));
   const now = nowStep(rows);
   if (now) answer.now = now;
@@ -571,7 +577,8 @@ async function restartStudio(deps: RobloxDeps, context: PluginContext): Promise<
   if (!location.installed) return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled };
   if (!(await quitStudio(deps))) return { done: false, reason: SetupMiss.StillOpen, message: MESSAGE.Setup.StillOpen };
   const answer = await runSetup(deps, context);
-  await deps.open(openLaunch(deps.platform, location.install));
+  // The game's own place, when it has one: Studio on its start page has no MCP server to answer.
+  await openStudio(deps, context);
   return { ...answer, reopened: true, message: `${answer.message} ${MESSAGE.Setup.Reopened}` };
 }
 

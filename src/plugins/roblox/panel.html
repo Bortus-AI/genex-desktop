@@ -96,11 +96,12 @@ button svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke
   <ul class="places" id="open-places" aria-label="Places open in Studio"></ul>
   <p class="sub-h" id="files-title" hidden>Place files on this computer</p>
   <ul class="places" id="file-places" aria-labelledby="files-title" hidden></ul>
-  <p class="sub-h">Or start one</p>
+  <p class="sub-h" id="places-start">Or start one</p>
   <div class="actions"><button type="button" id="places-new" data-action="create"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New Roblox game</button><button type="button" class="quiet" id="places-file">Open a place file…</button></div>
   <p class="say" id="places-say" role="status"></p>
   <div class="actions"><button type="button" class="quiet" id="places-back">Back</button></div>
 </section>
+<p class="sr-only" id="announce" role="status"></p>
 <footer class="legal">Not affiliated with Roblox Corporation. For people 18 and over.</footer>
 </main>
 <!-- STUDIO_PANEL_SDK -->
@@ -161,6 +162,9 @@ const WORDS = {
   chooseAnother: "Choose another place",
   publish: "Publish an update",
   firstPublish: "Not published to Roblox yet. Its first publish is yours, in Studio:",
+  firstPublishThen: "Then press Choose another place and choose it again, so Genex can publish its updates.",
+  publishYourself: "Publish updates yourself, in Studio:",
+  answerInChat: "Genex may ask you something in this game's chat first: close this panel to answer it there.",
   newGame: "New Roblox game",
   noGame: "Open a game first to use a place you already have, or start a new one.",
   use: "Use in this game",
@@ -227,7 +231,8 @@ function pathLine(clicks) {
 /** Sends an action and shows its answer under its step; a declined confirmation shows nothing. */
 async function send(name, args, where) {
   ui.pending = where.key;
-  ui.said = null;
+  // Do it for me and Publish an update may wait on a question in the game's chat, behind this panel.
+  ui.said = ASKS_IN_CHAT.has(name) ? { at: where.at, text: WORDS.answerInChat } : null;
   draw(true);
   try {
     const answer = await api.call("action", name, args, WAITS[name]);
@@ -240,19 +245,32 @@ async function send(name, args, where) {
     ui.pending = null;
     await refresh();
     draw(true);
+    announce(ui.said?.text ?? "");
   }
 }
 
-/** The answer said for a step, as a live line under it. */
+/**
+ * Says an answer in the panel's one live region, which stays in the page: a region drawn afresh
+ * with its words already in it isn't read out. Cleared first, so the same words are said again.
+ */
+function announce(words) {
+  const region = $("announce");
+  region.textContent = "";
+  if (words) requestAnimationFrame(() => (region.textContent = words));
+}
+
+/** The answer said for a step, as a line under it; the live region says it aloud. */
 function sayLine(at) {
   const line = text("p", "say quiet");
-  line.setAttribute("role", "status");
   if (ui.said?.at === at) {
     line.textContent = ui.said.text;
     if (ui.said.error) line.dataset.tone = "err";
   }
   return line;
 }
+
+/** The actions that may wait on a question in the game's chat (a card the panel covers). */
+const ASKS_IN_CHAT = new Set([Action.DoItForMe, Action.PublishUpdate]);
 
 /** Studio's own clicks for publishing, as one path: "File › Publish to Roblox". */
 const PUBLISH_CLICKS = ["File", "Publish to Roblox"];
@@ -265,13 +283,20 @@ const PUBLISH_CLICKS = ["File", "Publish to Roblox"];
 function publishParts(actions, body) {
   const publish = ui.status?.publish;
   if (!ui.game || !publish || ui.status?.now) return;
-  if (publish.published) {
+  if (publish.published && publish.canClick) {
     const run = () => send(Action.PublishUpdate, {}, { key: "publish", at: Step.Place });
     actions.prepend(actionButton(WORDS.publish, run, { className: "primary", key: "publish", action: Action.PublishUpdate }));
+  } else if (publish.published) {
+    // Genex can't click in Studio here (computer control runs on a Mac): the person's own clicks.
+    const own = text("div", "first-publish");
+    own.dataset.publishClicks = "";
+    own.append(text("p", "small quiet", WORDS.publishYourself), pathLine(PUBLISH_CLICKS));
+    actions.before(own);
   } else {
     const first = text("div", "first-publish");
     first.dataset.firstPublish = "";
     first.append(text("p", "small quiet", WORDS.firstPublish), pathLine(PUBLISH_CLICKS));
+    first.append(text("p", "small quiet", WORDS.firstPublishThen));
     actions.before(first);
   }
   body.append(sayLine(Step.Place));
@@ -333,12 +358,19 @@ function stateOf(row, now) {
   return row.id === now ? "now" : "later";
 }
 
+/**
+ * Whether a step that isn't next still shows its line and buttons: the place step, while the MCP
+ * step waits for Studio, which answers only once a place is open in it.
+ */
+const opensBeside = (row, now) => row.id === Step.Place && !row.done && now === Step.Mcp;
+
 /** One step as a block: its mark, its name, its line, and on the next step what to do. */
 function stepItem(row, now) {
-  const state = stateOf(row, now);
+  const beside = opensBeside(row, now);
+  const state = beside ? "now" : stateOf(row, now);
   const item = text("li", `step ${state}`);
   item.dataset.step = row.id;
-  if (state === "now") item.setAttribute("aria-current", "step");
+  if (state === "now" && !beside) item.setAttribute("aria-current", "step");
   const mark = text("span", "mark");
   mark.setAttribute("aria-hidden", "true");
   const body = text("div", "step-body");
@@ -455,6 +487,8 @@ async function showPlaces() {
   ui.view = "places";
   $("setup").hidden = true;
   $("places").hidden = false;
+  // A game that builds in a place can't make another; it chooses one from the list.
+  $("places-new").hidden = $("places-start").hidden = ui.status?.steps?.place === true;
   $("places-loading").hidden = false;
   $("places-say").textContent = "";
   $("places-title").focus();
@@ -491,6 +525,7 @@ async function linkPlace(args, key) {
     ui.said = { at: Step.Place, text: answer.message };
     await refresh();
     showSetup(`name:${Step.Place}`);
+    announce(answer.message);
   } catch (e) {
     if (e?.code !== ErrorCode.Cancelled) $("places-say").textContent = e?.message ?? WORDS.failed;
   } finally {
@@ -509,8 +544,14 @@ async function newGameFromPlaces() {
   $("places-say").textContent = "";
   try {
     const answer = await api.call("action", Action.Create, {}, WAITS[Action.Create]);
-    if (typeof answer?.message === "string") $("places-say").textContent = answer.message;
     await refresh();
+    if (answer?.created) {
+      ui.said = { at: Step.Place, text: answer.message };
+      showSetup(`name:${Step.Place}`);
+      announce(answer.message);
+      return;
+    }
+    if (typeof answer?.message === "string") $("places-say").textContent = answer.message;
   } catch (e) {
     if (e?.code !== ErrorCode.Cancelled) $("places-say").textContent = e?.message ?? WORDS.failed;
   } finally {

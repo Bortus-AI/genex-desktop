@@ -99,7 +99,7 @@ export const MESSAGE = {
   Setup: {
     Confirm: "Add the Genex helper to Roblox Studio's Plugins folder and turn on Studio's MCP server?",
     StudioRunning:
-      "Roblox Studio is open. Genex changes Studio's settings only while it is closed: press Restart Studio, let Genex click the switch for you, or click it yourself.",
+      "Roblox Studio is open. Genex changes Studio's settings only while it is closed: press Restart Studio, or turn the switch on yourself in Studio.",
     OtherSystem: "Genex can't find this computer's Roblox folders: its home folder isn't a full path of this system.",
     NoRobloxFolder: (folder: string) => `${folder} isn't there yet. Open Roblox Studio once, then press Set up again.`,
     Linked: (file: string) =>
@@ -134,7 +134,8 @@ export const MESSAGE = {
   Assist: {
     /** The task the game's chat is asked to click, verbatim in the chat: plain words, then Studio's own click path. */
     Task: `Turn on Studio's MCP server: ${MCP_SWITCH_CLICK_PATH}`,
-    Started: "This game's chat is turning on Studio's MCP server. Watch Roblox Studio.",
+    Started:
+      "This game's chat is turning on Studio's MCP server. If Genex asks you something first, answer it in this game's chat, then watch Roblox Studio.",
     Unavailable: `Genex can't click in Roblox Studio on this computer. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
     Declined: `Nothing was clicked. Turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
     NoChat: `Open a game first, so its chat can click it for you, or turn it on yourself: ${MCP_SWITCH_CLICK_PATH}.`,
@@ -143,13 +144,14 @@ export const MESSAGE = {
   Publish: {
     /** The panel's card for a published place: its name, then what happens and whose account it is on. */
     Confirm: (name: string) => `Publish an update of ${name} to Roblox?`,
-    Plan: `This game's chat clicks ${PUBLISH_CLICK_PATH} in Roblox Studio with computer control on this Mac. Everyone who plays the game gets the update, and it is published on your Roblox account.`,
-    Started: "This game's chat is publishing the update in Roblox Studio. Watch Studio.",
+    Plan: `This game's chat clicks ${PUBLISH_CLICK_PATH} in Roblox Studio with computer control. Everyone who plays the game gets the update, and it is published on your Roblox account.`,
+    Started:
+      "This game's chat is publishing the update in Roblox Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.",
     Unavailable: `Genex can't click in Roblox Studio on this computer. Publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     Declined: `Nothing was published. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NoChat: `Open this game first, so its chat can publish it, or publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NotStarted: `Genex didn't publish anything. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
-    FirstPublish: `This place isn't published to Roblox yet, and its first publish is yours: Roblox asks for the game's details and may ask for an age check. In Studio: ${PUBLISH_CLICK_PATH}. Then choose it again with Choose your place, so Genex can publish its updates.`,
+    FirstPublish: `This place isn't published to Roblox yet, and its first publish is yours: Roblox asks for the game's details and may ask for an age check. In Studio: ${PUBLISH_CLICK_PATH}. Then press Choose another place in the Roblox Studio panel and choose it again, so Genex can publish its updates.`,
     NoPlace: "This game doesn't build in a Roblox place yet. Choose one with Choose your place first.",
   },
   Install: {
@@ -216,7 +218,10 @@ export const MESSAGE = {
     Getting: "Getting Roblox Studio",
     Stop: "Stop",
     SignIn: "Sign in to Roblox",
-    SignInDetail: "Studio asks you to sign in when it opens. Genex never sees your password.",
+    SignInDetail:
+      "Studio asks you to sign in when it opens. No Roblox account yet? Choose Sign up on Studio's sign-in screen. Genex never sees your password.",
+    /** Before the MCP step's own line while Studio doesn't answer: a Studio on its sign-in screen answers nothing. */
+    SignInFirst: "If Studio shows its sign-in screen, sign in there first.",
     SignedIn: "Signed in to Roblox",
     OpenStudio: "Open Studio",
     Helper: "Add the Genex helper",
@@ -232,13 +237,17 @@ export const MESSAGE = {
     McpWhenOpen: "Studio answers Genex once it's open.",
     McpOff: "Studio was already open, so Genex couldn't switch it on by itself.",
     McpOnWaiting: "It's switched on in Studio's settings. Studio answers once it has finished opening.",
+    McpOnNoPlace:
+      "It's switched on in Studio's settings. Studio answers once a place is open: open one in Studio, or press New Roblox game.",
     McpDone: "Studio's MCP server is on and answering Genex",
     McpDoneDetail: "Agents work in your open place through it.",
     Waiting: "Waiting for Studio to answer",
     /** The card's line for a step the panel shows Studio's own clicks for. */
     OrInStudio: (clicks: string) => `Or in Studio: ${clicks}.`,
     Place: "Choose this game's place",
-    PlaceDetail: "A place open in Roblox Studio, or a new one. Choose it with the Roblox Studio button.",
+    PlaceDetail: "A place open in Roblox Studio, or a new one.",
+    /** The chat's card's line after the place step's: where to choose it. */
+    PlaceCardHint: "Choose it with the Roblox Studio button.",
     PlaceDone: "This game builds in a Roblox place",
     PlaceDoneNamed: (name: string) => `This game builds in ${name}`,
     PlaceDoneDetail: "Agents build in it in your Studio, and its scripts are files in this game's folder.",
@@ -288,6 +297,6 @@ export const MESSAGE = {
     Created: (name: string) => `Made ${name} in this game's folder and opened it in Roblox Studio.`,
     CreatedNotOpened: (name: string, why: string) =>
       `Made ${name} in this game's folder and linked it, but Roblox Studio didn't open: ${why}`,
-    Exists: "This game already builds in a Roblox place. Choose another in the Roblox Studio panel.",
+    Exists: "This game already builds in a Roblox place. Choose another place from the list instead.",
   },
 } as const;

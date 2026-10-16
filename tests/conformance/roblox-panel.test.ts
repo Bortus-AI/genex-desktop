@@ -261,10 +261,15 @@ describe("The Roblox Studio panel", { skip }, () => {
       await sentOnce(tab, c, (names) => names.includes("do-it-for-me"));
       assert.deepEqual(c.sent, [["do-it-for-me", {}]]);
       assert.equal(c.assists.length, 1, "the backend asked Genex to click it");
+      // Flipped: the answer is said in the panel's one live region, and under its step as text.
       await tab.waitForFunction(() =>
-        /Watch Roblox Studio/.test(
-          document.querySelector('#steps [aria-current="step"] [role="status"]')?.textContent ?? "",
+        /answer it in this game's chat, then watch Roblox Studio/.test(
+          document.getElementById("announce")?.textContent ?? "",
         ),
+      );
+      assert.match(
+        (await tab.locator('#steps [aria-current="step"] .say').textContent()) ?? "",
+        /answer it in this game's chat/,
       );
     } finally {
       await tab.close();
@@ -422,6 +427,79 @@ describe("The Roblox Studio panel", { skip }, () => {
     }
   });
 
+  it("where Genex can't click in Studio, a published place shows Studio's own clicks to publish, never Publish an update", async () => {
+    const studios: OpenStudio[] = [
+      { id: "studio-a", name: "Pet Valley", placeId: "7781440219", universeId: "2611231458" },
+    ];
+    const c = await computer({ game: true, studios, canClick: false });
+    assert.equal(((await c.act("use-place", { studio: "studio-a" })) as { linked: boolean }).linked, true);
+    const tab = await open(c);
+    try {
+      const place = '#steps [data-step="place"]';
+      assert.equal(await tab.locator(`${place} button[data-action="publish-update"]`).count(), 0);
+      const clicks = await tab.locator(`${place} [data-publish-clicks] .kbd`).allTextContents();
+      assert.deepEqual(clicks, PUBLISH_CLICK_PATH.split(" › "));
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("a place never published says to choose it again with the button the block shows, once it is published", async () => {
+    const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
+    assert.equal(((await c.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
+    const tab = await open(c);
+    try {
+      const place = '#steps [data-step="place"]';
+      assert.match((await tab.locator(`${place} [data-first-publish]`).textContent()) ?? "", /Choose another place/);
+      assert.equal(await tab.locator(`${place} button`, { hasText: "Choose another place" }).count(), 1);
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("while Studio waits for a place, the place step's buttons show beside the MCP step", async () => {
+    const c = await computer({ answering: false, switchOn: true, game: true });
+    const tab = await open(c);
+    try {
+      assert.equal((await nowStep(tab)).id, "mcp");
+      const buttons = await tab.locator('#steps [data-step="place"] button').allTextContents();
+      assert.ok(buttons.includes("Choose your place"), buttons.join(", "));
+      assert.ok(
+        buttons.some((label) => label.includes("New Roblox game")),
+        buttons.join(", "),
+      );
+      assert.equal(await tab.locator('#steps [aria-current="step"]').count(), 1, "one step is next");
+    } finally {
+      await tab.close();
+    }
+  });
+
+  it("the places view offers New Roblox game only to a game with no place, and a new one returns to the steps", async () => {
+    const linked = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
+    assert.equal(((await linked.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
+    const first = await open(linked);
+    try {
+      await first.click('#steps [data-step="place"] button:has-text("Choose another place")');
+      await first.waitForSelector("#places:not([hidden])");
+      assert.equal(await first.locator("#places-new").isVisible(), false, "a game with a place can't make another");
+      assert.equal(await first.locator("#places-file").isVisible(), true);
+    } finally {
+      await first.close();
+    }
+    const c = await computer({ game: true });
+    const tab = await open(c);
+    try {
+      await tab.click('#steps [aria-current="step"] button.primary');
+      await tab.waitForSelector("#places:not([hidden])");
+      await tab.click("#places-new");
+      await sentOnce(tab, c, (names) => names.includes("create"));
+      await tab.waitForSelector("#setup:not([hidden])");
+      assert.equal(await tab.locator('#steps [data-step="place"].done').count(), 1, "the place is ticked");
+    } finally {
+      await tab.close();
+    }
+  });
+
   it("a game whose Studio can reach its live saved data warns in the place block, with the switch to turn it off", async () => {
     const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
     assert.equal(((await c.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
@@ -545,9 +623,10 @@ describe("The Roblox Studio panel in Studio's sandboxed frame", { skip }, () => 
         await p.tab.keyboard.press("Tab");
         order.push(await p.focused());
       }
+      // Flipped: the place step's buttons follow, shown while Studio waits for a place.
       assert.deepEqual(
         order.map((stop) => stop.text),
-        ["Do it for me", "Restart Studio", "Undo Set up"],
+        ["Do it for me", "Restart Studio", "Choose your place"],
       );
     } finally {
       await p.tab.close();
@@ -585,8 +664,12 @@ describe("The Roblox Studio panel in Studio's sandboxed frame", { skip }, () => 
         (await p.sentOnce((names) => names.includes("do-it-for-me"))).filter((name) => name === "do-it-for-me"),
         ["do-it-for-me"],
       );
-      await p.frame.waitForFunction(() =>
-        Boolean(document.querySelector('#steps [aria-current="step"] [role="status"]')?.textContent),
+      // Flipped: one live region that stays in the page says each answer, so a screen reader reads it.
+      await p.frame.waitForFunction(() => Boolean(document.getElementById("announce")?.textContent));
+      assert.equal(
+        await p.frame.evaluate(() => document.querySelectorAll('#steps [role="status"]').length),
+        0,
+        "no live region is made afresh with each draw",
       );
       assert.equal((await p.focused()).text, "Do it for me");
     } finally {
