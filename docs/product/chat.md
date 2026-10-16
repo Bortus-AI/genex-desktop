@@ -5,8 +5,8 @@
 One conversation per game. User messages are right-aligned bubbles, images above; long
 ones fold with Show more. Any existing file the chat names is a link: game Markdown and
 images open beside it, others in their app (programs only shown). Only the prompt bar sends;
-a pasted image adds the picture, not its filename. @ tags up to five: local games read-only,
-Genex ones in `.studio/refs/`, assets in `src/assets/`.
+a pasted image adds the picture, not its filename. @ tags (max 5): local games read-only,
+Genex ones in `.studio/refs/`, assets `src/assets/`.
 
 Chat work shows a short status and elapsed time; waiting is static. A running build is one card,
 parts counted; it opens to their checklist and Open in Builds. Run workers get no lines.
