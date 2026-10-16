@@ -50,7 +50,16 @@ import {
 import { type MomentServices, momentOpsFor, noMomentServices } from "./moment-ops.ts";
 import { clearPendingScripts, hasPendingScripts, loadPendingPlace } from "./place-files.ts";
 import { createProbes, type ProbeLuauFile, RobloxProbe } from "./probes.ts";
-import { PublishAsker, type PublishPlace, publishUpdate, reviewPublish } from "./publish.ts";
+import {
+  firstPublish,
+  firstPublishName,
+  PublishAsker,
+  type PublishDeps,
+  type PublishPlace,
+  publishUpdate,
+  reviewFirstPublish,
+  reviewPublish,
+} from "./publish.ts";
 import { crashAnswer, probeAnswer } from "./hook-answers.ts";
 import {
   createStudioWatch,
@@ -102,6 +111,7 @@ import {
   QuitMiss,
   quitStudioAction,
   showSteps,
+  titleOf as gameTitle,
 } from "./place-actions.ts";
 import { insertAsset } from "./insert-asset.ts";
 import { checkModelTool, importModel } from "./model-import.ts";
@@ -302,8 +312,11 @@ export interface RobloxStatus {
   now?: RobloxStepId;
   /** The Luau checks: all here, or Add Luau checks offered. */
   luau?: LuauStatus;
-  /** The game's place, once linked: whether Roblox has it published, so Publish an update can update it. */
-  publish?: { published: boolean; canClick: boolean };
+  /**
+   * The game's place, once linked: whether Roblox has it published (Publish an update), whether Genex
+   * can click Publish here, and for a place never published the name its first publish would use.
+   */
+  publish?: { published: boolean; canClick: boolean; name?: string };
 }
 
 /**
@@ -389,23 +402,30 @@ async function mcpSwitch(deps: RobloxDeps): Promise<McpSwitchState | undefined> 
   }
 }
 
-/** What the game's place adds to the rows: its name, the person's own Rojo project, and live saved data. */
+/** What the place step adds beyond the rows: whether Roblox has the place, and a first publish's name. */
+interface PublishFacts {
+  published?: boolean;
+  firstName?: string;
+}
+
+/**
+ * What the game's place adds to the rows: its name, the person's own Rojo project, and live saved
+ * data; and for publishing, whether Roblox has it, else the name its first publish would use.
+ */
 async function placeFacts(
   context: PluginContext,
   storage: string | undefined,
-): Promise<Pick<RobloxStepFacts, "linked" | "place" | "rojo" | "liveData"> & { published?: boolean }> {
+): Promise<Pick<RobloxStepFacts, "linked" | "place" | "rojo" | "liveData"> & PublishFacts> {
   const link = await linkHere(context);
   if (!link || !storage || !context.project) return { linked: Boolean(link) };
   const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
   const place = await linkedPlace(storage, game, link);
   const live = await readLiveData(storage, context.project);
-  return {
-    linked: true,
-    place: place.name,
-    rojo: place.rojo,
-    liveData: live?.reachable === true,
-    published: Boolean(link.remote),
-  };
+  const facts = { linked: true, place: place.name, rojo: place.rojo, liveData: live?.reachable === true };
+  if (link.remote) return { ...facts, published: true };
+  const title = context.directory ? await gameTitle(context.directory, context.project) : undefined;
+  const firstName = firstPublishName({ link, name: place.name, ...(title ? { title } : {}) });
+  return { ...facts, published: false, firstName };
 }
 
 /** Where Get Roblox Studio stands, as the rows read it: under way, or stopped and why. */
@@ -424,7 +444,7 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
   const running = facts.running || (facts.installed && (await studioRunning(deps)));
   const mcp = facts.installed ? await mcpSwitch(deps) : undefined;
   const helper = facts.setUp && storage ? await recordedHelper(storage, deps.helper) : undefined;
-  const { published, ...place } = await placeFacts(context, storage);
+  const { published, firstName, ...place } = await placeFacts(context, storage);
   const rows: RobloxStepFacts = {
     ...facts,
     running,
@@ -435,7 +455,7 @@ async function stepFacts(deps: RobloxDeps, context: PluginContext, job: InstallJ
     canClick: await canClickHere(deps, context),
     ...(mcp ? { mcpOn: mcp.on > 0 } : {}),
   };
-  return { install, facts, rows, mcp, helper, published };
+  return { install, facts, rows, mcp, helper, published, firstName };
 }
 
 async function status(
@@ -444,7 +464,7 @@ async function status(
   job: InstallJob | undefined,
   luau: LuauDeps,
 ): Promise<RobloxStatus> {
-  const { install, facts, rows, mcp, helper, published } = await stepFacts(deps, context, job);
+  const { install, facts, rows, mcp, helper, published, firstName } = await stepFacts(deps, context, job);
   const steps = {
     [PanelStep.Studio]: facts.installed,
     [PanelStep.Helper]: facts.setUp,
@@ -456,7 +476,8 @@ async function status(
   if (job) answer.install = installStatusOf(job);
   if (mcp) answer.mcp = mcp;
   if (helper) answer.helper = helper;
-  if (published !== undefined) answer.publish = { published, canClick: rows.canClick === true };
+  if (published !== undefined)
+    answer.publish = { published, canClick: rows.canClick === true, ...(firstName ? { name: firstName } : {}) };
   answer.luau = await luauStatus(deps, luau, context).catch(() => ({ added: false, offered: false }));
   const now = nowStep(rows);
   if (now) answer.now = now;
@@ -812,13 +833,26 @@ function playHandlers(deps: RobloxDeps, services: MomentServices) {
   } as const satisfies Partial<Record<RobloxTool, Handler>>;
 }
 
-/** The game's place as Publish an update sees it: its link, and its name as the panel shows it. */
+/** The game's place as publishing sees it: its link, its name as the panel shows it, and the game's title. */
 async function publishPlace(context: PluginContext): Promise<PublishPlace> {
   const link = await linkHere(context);
   if (!link || !context.project) return { link };
   const storage = await context.host(PluginService.StorageRoot);
   const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
-  return { link, name: (await linkedPlace(storage, game, link)).name };
+  const title = context.directory ? await gameTitle(context.directory, context.project) : undefined;
+  return { link, name: (await linkedPlace(storage, game, link)).name, ...(title ? { title } : {}) };
+}
+
+/** A call's requested name for a first publish, when it gave one as text. */
+const requestedName = (args: Record<string, unknown>) => (typeof args.name === "string" ? args.name : undefined);
+
+/** What publishing asks of the host and of the game's helper, for the game a call is bound to. */
+function publishDeps(services: MomentServices, context: PluginContext): PublishDeps {
+  const game = context.project ?? "";
+  return {
+    assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
+    flush: () => services.flush(game),
+  };
 }
 
 /**
@@ -826,17 +860,13 @@ async function publishPlace(context: PluginContext): Promise<PublishPlace> {
  * the task through Do it for me, after the game's changed script files reach Studio.
  */
 function publishHandler(services: MomentServices, asker: PublishAsker): Handler {
-  return async (_args, context) => {
-    const game = context.project ?? "";
-    return publishUpdate(
-      await publishPlace(context),
-      {
-        assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
-        flush: () => services.flush(game),
-      },
-      asker,
-    );
-  };
+  return async (_args, context) => publishUpdate(await publishPlace(context), publishDeps(services, context), asker);
+}
+
+/** A first publish, as the panel's Publish to Roblox or the agent's confirmed `first-publish`, under the name asked for. */
+function firstPublishHandler(services: MomentServices, asker: PublishAsker): Handler {
+  return async (args, context) =>
+    firstPublish(await publishPlace(context), publishDeps(services, context), asker, requestedName(args));
 }
 
 /** Do it for me's refusals in the agent's words; any other is "nothing was clicked". */
@@ -957,6 +987,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     [RobloxAction.DoItForMe]: (_args, context) => doItForMe(context),
     [RobloxAction.AddLuauChecks]: (_args, context) => addLuauAction(deps, luau, context),
     [RobloxAction.PublishUpdate]: publishHandler(services, PublishAsker.Person),
+    [RobloxAction.FirstPublish]: firstPublishHandler(services, PublishAsker.Person),
   };
   const tools: Record<RobloxTool, Handler> = {
     [RobloxTool.StudioActivity]: async (_args, context) =>
@@ -978,6 +1009,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...askFirstHandlers(deps, services),
     ...modelHandlers(deps, services),
     [RobloxTool.PublishUpdate]: publishHandler(services, PublishAsker.Agent),
+    [RobloxTool.FirstPublish]: firstPublishHandler(services, PublishAsker.Agent),
     ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
@@ -999,10 +1031,12 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
       if (!COPY_TOOLS.has(name)) await noteGame(deps, context).catch(() => undefined);
       return tools[name](args, context);
     },
-    async review(name, _args, context) {
+    async review(name, args, context) {
       if (name === RobloxAction.GetStudio) return reviewGetStudio(deps);
       if (name === RobloxAction.AddLuauChecks) return reviewAddLuau(deps, luau, context);
       if (name === RobloxAction.PublishUpdate) return reviewPublish(await publishPlace(context));
+      if (name === RobloxAction.FirstPublish)
+        return reviewFirstPublish(await publishPlace(context), requestedName(args));
       return name === RobloxAction.Setup ? reviewSetup(deps) : {};
     },
   };

@@ -1,12 +1,18 @@
 /**
- * Publish an update: the one Do it for me that isn't a setup click. No Studio or plugin API publishes
- * a place, and Open Cloud's place publishing takes API keys Genex never asks for, so the person's own
+ * Publishing to Roblox: a place's first publish, and its updates. No Studio or plugin API publishes a
+ * place, and Open Cloud's place publishing takes API keys Genex never asks for, so the person's own
  * computer control clicks File › Publish to Roblox in their Studio: Genex hands the game's chat that
- * task through `game.engine.assist`. Only the person starts it, by the panel's action they pressed or
- * by the agent's `publish-update` call whose card they approved; the host refuses anything else.
- * Computer control is a Mac's only: on Windows, or with no driver, the answer gives Studio's click
- * path. A place never published (its link has no `remote` ids) gets the first publish's click path
- * and no assist: Roblox asks for the game's details and an age check there, which stay the person's.
+ * task through `game.engine.assist`. Only the person starts one, by the panel's press or by an
+ * agent's call whose card they approved; the host refuses anything else.
+ *
+ * - **First publish** (`first-publish`): a place never published (its link has no `remote` ids)
+ *   becomes a new game on Roblox under the name the person approved (the Genex game's title unless
+ *   they gave another), with Studio's own privacy and settings and an empty description. The task
+ *   stops the turn at any age, ID, two-step, terms or payment question, which stay the person's.
+ * - **Publish an update** (`publish-update`): a published place, updated.
+ *
+ * Where Genex can't click (Windows, no driver, the person said no), the answer gives Studio's click
+ * path. Afterwards Genex links the game to the published place by itself (`relink.ts`).
  */
 import type {
   PluginEngineAssistAnswer,
@@ -21,15 +27,17 @@ export { PUBLISH_CLICK_PATH };
 
 /** A place name at most this long goes into the task whole; a longer one is cut, so the task stays one short line. */
 const MAX_TASK_NAME_CHARS = 60;
+/** The longest name Roblox takes for a new game. */
+export const MAX_GAME_NAME_CHARS = 50;
 /** The last character code of the ASCII controls, and DEL. */
 const LAST_CONTROL = 0x1f;
 const DELETE = 0x7f;
 
 /** Who asked to publish, which decides the answer's words. Wire values: never rename. */
 export const PublishAsker = {
-  /** The person pressed Publish an update in the panel. */
+  /** The person pressed Publish an update or Publish to Roblox in the panel. */
   Person: "person",
-  /** An agent called `publish-update` and the person approved its card. */
+  /** An agent called `publish-update` or `first-publish` and the person approved its card. */
   Agent: "agent",
 } as const;
 export type PublishAsker = (typeof PublishAsker)[keyof typeof PublishAsker];
@@ -37,34 +45,41 @@ export type PublishAsker = (typeof PublishAsker)[keyof typeof PublishAsker];
 /** Why nothing was handed to the chat, before the host was asked. Wire values: never rename. */
 export const PublishMiss = {
   NoPlace: "no-place",
-  /** The place was never published: its first publish is the person's. */
+  /** Publish an update of a place never published: it needs its first publish. */
   FirstPublish: "first-publish",
+  /** A first publish of a place Roblox already has: it needs an update. */
+  Published: "published",
 } as const;
 export type PublishMiss = (typeof PublishMiss)[keyof typeof PublishMiss];
 
-/** The game's place as publishing sees it: its link (ids when published) and its name. */
+/** The game's place as publishing sees it: its link (ids when published), its name and the Genex game's title. */
 export interface PublishPlace {
   link: PluginEngineLink | null;
   name?: string;
+  title?: string;
 }
 
 /** What publishing asks of the host and of the game's helper. */
 export interface PublishDeps {
   assist(task: string): Promise<PluginEngineAssistAnswer>;
-  /** Sends the script files changed and not yet in Studio, so the update holds them. */
+  /** Sends the script files changed and not yet in Studio, so the publish holds them. */
   flush?(): Promise<void>;
+  /** Notes that a publish was handed to the chat, under this name, so Genex links the game to it afterwards. */
+  started?(name: string): Promise<void>;
 }
 
-/** Publish an update's answer: handed to the chat, or why not and Studio's own click path. */
+/** A publish's answer: handed to the chat, or why not and Studio's own click path. */
 export interface PublishAnswer {
   started: boolean;
   message: string;
   reason?: PublishMiss | PluginEngineAssistRefusal;
   clickPath?: string;
+  /** A first publish's name on Roblox. */
+  name?: string;
 }
 
-/** A place's name as one plain line, cut to its length: control characters become spaces. */
-function plainName(name: string | undefined): string {
+/** A name as one plain line, cut to `max` characters: control characters become spaces. */
+function plainName(name: string | undefined, max = MAX_TASK_NAME_CHARS): string {
   const plain = [...(name ?? "")]
     .map((char) => {
       const code = char.charCodeAt(0);
@@ -73,7 +88,15 @@ function plainName(name: string | undefined): string {
     .join("")
     .replace(/\s+/g, " ")
     .trim();
-  return plain.length > MAX_TASK_NAME_CHARS ? `${plain.slice(0, MAX_TASK_NAME_CHARS - 1)}…` : plain;
+  return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain;
+}
+
+/** A game's name as Roblox takes it: one plain line of at most {@link MAX_GAME_NAME_CHARS}, no double quotes. */
+const gameName = (name: string | undefined) => plainName(name?.replaceAll('"', "'"), MAX_GAME_NAME_CHARS);
+
+/** The name a first publish uses: the one asked for, else the Genex game's title, else the place's. */
+export function firstPublishName(place: PublishPlace, requested?: string): string {
+  return gameName(requested) || gameName(place.title) || gameName(place.name) || MESSAGE.Publish.DefaultName;
 }
 
 /**
@@ -85,28 +108,50 @@ export function publishTask(name: string | undefined): string {
   return `Publish ${place} to Roblox: ${PUBLISH_CLICK_PATH} in its Roblox Studio window. If Roblox asks for the game's details, an age check or a sign-in, stop and tell the person.`;
 }
 
+/**
+ * A first publish's task, shown verbatim in the chat: a new game under `name`, Studio's own clicks
+ * and settings, and where the turn stops. The publish skill has the dialog's steps.
+ */
+export function firstPublishTask(name: string): string {
+  return `Publish this place to Roblox as a new game named "${gameName(name)}": ${PUBLISH_CLICK_PATH} in its Studio window (steps: publish skill). Keep Studio's privacy and settings, the description empty. Stop at any age, ID, two-step, terms or payment question.`;
+}
+
 /** Each asker's words for each answer. */
 const WORDS = {
   [PublishAsker.Person]: MESSAGE.Publish,
   [PublishAsker.Agent]: PUBLISH_PROMPTS,
-} as const satisfies Record<PublishAsker, Record<keyof typeof PUBLISH_PROMPTS, string>>;
+} as const;
+
+/** The words both askers' answers are read from. */
+type PublishWords = (typeof WORDS)[PublishAsker];
+/** The answers that are the same line whoever asked. */
+type PlainWords = "Unavailable" | "Declined" | "NoChat" | "NotStarted";
 
 /** The host's refusals that have words of their own; any other gets "nothing was published". */
 const REFUSAL_WORDS = {
   unavailable: "Unavailable",
   declined: "Declined",
   "no-chat": "NoChat",
-} as const satisfies Partial<Record<PluginEngineAssistRefusal, keyof typeof PUBLISH_PROMPTS>>;
+} as const satisfies Partial<Record<PluginEngineAssistRefusal, PlainWords>>;
 
 const hasWords = (reason: PluginEngineAssistRefusal): reason is keyof typeof REFUSAL_WORDS => reason in REFUSAL_WORDS;
 
 /** What the host's refusal says to whoever asked, with Studio's click path. */
-function refusedAnswer(answer: PluginEngineAssistAnswer, asker: PublishAsker): PublishAnswer {
+function refusedAnswer(answer: PluginEngineAssistAnswer, words: PublishWords): PublishAnswer {
   const reason = answer.reason;
-  const words = reason && hasWords(reason) ? REFUSAL_WORDS[reason] : "NotStarted";
-  const refused: PublishAnswer = { started: false, message: WORDS[asker][words], clickPath: PUBLISH_CLICK_PATH };
+  const key: PlainWords = reason && hasWords(reason) ? REFUSAL_WORDS[reason] : "NotStarted";
+  const refused: PublishAnswer = { started: false, message: words[key], clickPath: PUBLISH_CLICK_PATH };
   if (reason) refused.reason = reason;
   return refused;
+}
+
+/** Hands the chat a publish's task, once the game's changed script files are in Studio. */
+async function handOver(deps: PublishDeps, task: string, name: string): Promise<PluginEngineAssistAnswer> {
+  // Studio holds the scripts it last had when a send fails; the publish goes on with those.
+  await deps.flush?.().catch(() => undefined);
+  const answer = await deps.assist(task);
+  if (answer.started) await deps.started?.(name).catch(() => undefined);
+  return answer;
 }
 
 /**
@@ -120,17 +165,30 @@ export async function publishUpdate(
 ): Promise<PublishAnswer> {
   const words = WORDS[asker];
   if (!place.link) return { started: false, message: words.NoPlace, reason: PublishMiss.NoPlace };
-  if (!place.link.remote)
-    return {
-      started: false,
-      message: words.FirstPublish,
-      reason: PublishMiss.FirstPublish,
-      clickPath: PUBLISH_CLICK_PATH,
-    };
-  // Studio holds the scripts it last had when a send fails; the publish goes on with those.
-  await deps.flush?.().catch(() => undefined);
-  const answer = await deps.assist(publishTask(place.name));
-  return answer.started ? { started: true, message: words.Started } : refusedAnswer(answer, asker);
+  if (!place.link.remote) return { started: false, message: words.FirstPublish, reason: PublishMiss.FirstPublish };
+  const name = plainName(place.name) || plainName(place.link.name);
+  const answer = await handOver(deps, publishTask(place.name), name);
+  return answer.started ? { started: true, message: words.Started } : refusedAnswer(answer, words);
+}
+
+/**
+ * A place's first publish as a new game on Roblox, under the name asked for (else the Genex game's
+ * title): its task goes to the game's chat once its changed script files are in Studio. A place
+ * Roblox already has, or no place, asks the host nothing.
+ */
+export async function firstPublish(
+  place: PublishPlace,
+  deps: PublishDeps,
+  asker: PublishAsker,
+  requested?: string,
+): Promise<PublishAnswer> {
+  const words = WORDS[asker];
+  if (!place.link) return { started: false, message: words.NoPlace, reason: PublishMiss.NoPlace };
+  if (place.link.remote) return { started: false, message: words.AlreadyPublished, reason: PublishMiss.Published };
+  const name = firstPublishName(place, requested);
+  const answer = await handOver(deps, firstPublishTask(name), name);
+  if (answer.started) return { started: true, message: words.FirstStarted(name), name };
+  return { ...refusedAnswer(answer, words), name };
 }
 
 /** The panel's card for a published place: its name and what publishing does; a first publish keeps the manifest's. */
@@ -138,4 +196,13 @@ export function reviewPublish(place: PublishPlace): PluginReview {
   if (!place.link?.remote) return {};
   const name = plainName(place.name) || plainName(place.link.name) || "this game's place";
   return { message: MESSAGE.Publish.Confirm(name), detail: MESSAGE.Publish.Plan };
+}
+
+/** The panel's card for a first publish: the name it gets on Roblox and what happens; a published place keeps the manifest's. */
+export function reviewFirstPublish(place: PublishPlace, requested?: string): PluginReview {
+  if (!place.link || place.link.remote) return {};
+  return {
+    message: MESSAGE.Publish.ConfirmFirst(firstPublishName(place, requested)),
+    detail: MESSAGE.Publish.PlanFirst,
+  };
 }

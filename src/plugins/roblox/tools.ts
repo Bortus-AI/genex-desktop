@@ -50,6 +50,7 @@ export const RobloxTool = {
   CheckModel: "check-model",
   ImportModel: "import-model",
   PublishUpdate: RobloxAction.PublishUpdate,
+  FirstPublish: RobloxAction.FirstPublish,
   Setup: RobloxAction.Setup,
   UndoSetup: RobloxAction.UndoSetup,
   RestartStudio: RobloxAction.RestartStudio,

@@ -19,7 +19,7 @@ import type { PluginEngineAssistAnswer } from "../../src/plugin-sdk/index.d.ts";
 import { inlinePanelSdk } from "../../src/plugin-sdk/inline-panel-sdk.mjs";
 import { createRobloxBackend } from "../../src/plugins/roblox/backend.ts";
 import { writeLiveData } from "../../src/plugins/roblox/live-data.ts";
-import { publishTask } from "../../src/plugins/roblox/publish.ts";
+import { firstPublishTask, publishTask } from "../../src/plugins/roblox/publish.ts";
 import { LIVE_DATA_CLICK_PATH, MCP_SWITCH_CLICK_PATH, PUBLISH_CLICK_PATH } from "../../src/plugins/roblox/words.ts";
 import {
   type Game,
@@ -413,15 +413,32 @@ describe("The Roblox Studio panel", { skip }, () => {
     }
   });
 
-  it("a place never published offers no Publish an update, only the first publish's clicks in Studio", async () => {
+  // Flipped: a place never published is published by Genex too. Its block offers Publish to Roblox
+  // under a name field filled with the game's title, never the person's own clicks in Studio.
+  it("a place never published offers Publish to Roblox under the game's name, which the person may change", async () => {
     const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
     assert.equal(((await c.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
     const tab = await open(c);
     try {
       const place = '#steps [data-step="place"]';
       assert.equal(await tab.locator(`${place} button[data-action="publish-update"]`).count(), 0);
-      const clicks = await tab.locator(`${place} [data-first-publish] .kbd`).allTextContents();
-      assert.deepEqual(clicks, PUBLISH_CLICK_PATH.split(" › "));
+      assert.equal(await tab.locator(`${place} [data-first-publish] .kbd`).count(), 0, "no clicks for the person");
+      const field = tab.getByLabel("Name on Roblox");
+      assert.equal(await field.inputValue(), "Sky Race");
+      await field.fill("Sky Racers");
+      const publish = tab.locator(`${place} button[data-action="first-publish"]`);
+      assert.equal(await publish.textContent(), "Publish to Roblox");
+      await publish.click();
+      await sentOnce(tab, c, (names) => names.includes("first-publish"));
+      assert.deepEqual(c.sent.at(-1), ["first-publish", { name: "Sky Racers" }]);
+      await tab.waitForFunction(
+        (selector) => /publishing Sky Racers/.test(document.querySelector(`${selector} .say`)?.textContent ?? ""),
+        place,
+      );
+      assert.deepEqual(
+        c.assists.map((args) => (args as { task: string }).task),
+        [firstPublishTask("Sky Racers")],
+      );
     } finally {
       await tab.close();
     }
@@ -444,14 +461,19 @@ describe("The Roblox Studio panel", { skip }, () => {
     }
   });
 
-  it("a place never published says to choose it again with the button the block shows, once it is published", async () => {
-    const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }] });
+  // Flipped: once published by hand, Genex links the game to it by itself; nobody chooses it again.
+  it("where Genex can't click, a place never published shows Studio's clicks and says Genex picks it up after", async () => {
+    const c = await computer({ game: true, studios: [{ id: "studio-b", name: "Place1" }], canClick: false });
     assert.equal(((await c.act("use-place", { studio: "studio-b" })) as { linked: boolean }).linked, true);
     const tab = await open(c);
     try {
       const place = '#steps [data-step="place"]';
-      assert.match((await tab.locator(`${place} [data-first-publish]`).textContent()) ?? "", /Choose another place/);
-      assert.equal(await tab.locator(`${place} button`, { hasText: "Choose another place" }).count(), 1);
+      assert.equal(await tab.locator(`${place} button[data-action="first-publish"]`).count(), 0);
+      const clicks = await tab.locator(`${place} [data-first-publish] .kbd`).allTextContents();
+      assert.deepEqual(clicks, PUBLISH_CLICK_PATH.split(" › "));
+      const words = (await tab.locator(`${place} [data-first-publish]`).textContent()) ?? "";
+      assert.match(words, /by itself/);
+      assert.doesNotMatch(words, /Choose another place/);
     } finally {
       await tab.close();
     }

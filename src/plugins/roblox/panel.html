@@ -66,6 +66,10 @@ button svg{width:14px;height:14px;flex:none;fill:none;stroke:currentColor;stroke
 .notes p::before{content:"";width:16px;height:16px;flex:none;margin-top:1px;background:currentColor;-webkit-mask:var(--warning) center/contain no-repeat;mask:var(--warning) center/contain no-repeat}
 .notes .path-line{margin-inline-start:26px}
 .first-publish{display:grid;gap:4px;margin-top:6px}
+/* A first publish's name: a label over a 32px field, as wide as the block allows. */
+.field{display:grid;gap:4px;margin-top:8px}
+.field label{font-size:13px;line-height:18px;color:var(--quiet)}
+.field input{min-height:32px;width:100%;max-width:320px;padding:0 10px;font:14px/20px var(--sans);color:var(--fg);background:var(--field);border:0;border-radius:11px;box-shadow:inset 0 0 0 1px var(--outline)}
 /* Places: each its own rounded block, its name and where it is, its button at the end. */
 .places{padding:0;list-style:none;display:grid;gap:8px}
 .place{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px 12px;padding:12px 14px;border-radius:14px;box-shadow:inset 0 0 0 1px var(--outline)}
@@ -111,7 +115,7 @@ const SECOND_MS = 1000;
 const REFRESH_MS = 3 * SECOND_MS;
 /**
  * How long the panel waits for an action that takes longer than most: Restart Studio waits for
- * Studio to quit (the person may be saving), Do it for me and Publish an update for the person's
+ * Studio to quit (the person may be saving), Do it for me and publishing for the person's
  * answers to their cards, New Roblox game for Studio to open, and Add Luau checks for its downloads.
  * The rest get the SDK's own wait.
  */
@@ -137,6 +141,7 @@ const Action = {
   Create: "create",
   AddLuauChecks: "add-luau-checks",
   PublishUpdate: "publish-update",
+  FirstPublish: "first-publish",
 };
 /** The rows' ids, as the backend names them (RobloxStepId). Wire values: never rename. */
 const Step = { Studio: "studio", SignIn: "sign-in", Helper: "helper", Mcp: "mcp", Place: "place" };
@@ -151,6 +156,7 @@ const WAITS = {
   [Action.UsePlace]: { timeoutMs: LONG_WAIT_MS },
   [Action.AddLuauChecks]: { timeoutMs: LONG_WAIT_MS },
   [Action.PublishUpdate]: { timeoutMs: LONG_WAIT_MS },
+  [Action.FirstPublish]: { timeoutMs: LONG_WAIT_MS },
 };
 /** The panel's own words; each step's words come from the backend, as the chat's steps card shows them. */
 const WORDS = {
@@ -161,8 +167,10 @@ const WORDS = {
   choosePlace: "Choose your place",
   chooseAnother: "Choose another place",
   publish: "Publish an update",
-  firstPublish: "Not published to Roblox yet. Its first publish is yours, in Studio:",
-  firstPublishThen: "Then press Choose another place and choose it again, so Genex can publish its updates.",
+  firstPublish: "Publish to Roblox",
+  publishName: "Name on Roblox",
+  firstPublishYourself: "Not on Roblox yet. To publish it yourself, in Studio:",
+  firstPublishThen: "Genex links this game to it by itself once it is published.",
   publishYourself: "Publish updates yourself, in Studio:",
   answerInChat: "Genex may ask you something in this game's chat first: close this panel to answer it there.",
   newGame: "New Roblox game",
@@ -179,8 +187,14 @@ const WORDS = {
 /** The place files Choose a place file offers. */
 const PLACE_EXTENSIONS = ["rbxl", "rbxlx"];
 
-/** What the panel shows: the last status, the open game, a step's answer in words, and the press under way. */
-const ui = { status: null, game: null, said: null, pending: null, view: "setup", drawn: "" };
+/** The longest name Roblox takes for a new game (MAX_GAME_NAME_CHARS). */
+const MAX_GAME_NAME_CHARS = 50;
+
+/**
+ * What the panel shows: the last status, the open game, a step's answer in words, the press under
+ * way, and the name typed for a first publish (kept across redraws).
+ */
+const ui = { status: null, game: null, said: null, pending: null, view: "setup", drawn: "", publishName: null };
 let closed = false;
 
 const text = (tag, className, value) => {
@@ -231,7 +245,7 @@ function pathLine(clicks) {
 /** Sends an action and shows its answer under its step; a declined confirmation shows nothing. */
 async function send(name, args, where) {
   ui.pending = where.key;
-  // Do it for me and Publish an update may wait on a question in the game's chat, behind this panel.
+  // Do it for me and publishing may wait on a question in the game's chat, behind this panel.
   ui.said = ASKS_IN_CHAT.has(name) ? { at: where.at, text: WORDS.answerInChat } : null;
   draw(true);
   try {
@@ -270,34 +284,64 @@ function sayLine(at) {
 }
 
 /** The actions that may wait on a question in the game's chat (a card the panel covers). */
-const ASKS_IN_CHAT = new Set([Action.DoItForMe, Action.PublishUpdate]);
+const ASKS_IN_CHAT = new Set([Action.DoItForMe, Action.PublishUpdate, Action.FirstPublish]);
 
 /** Studio's own clicks for publishing, as one path: "File › Publish to Roblox". */
 const PUBLISH_CLICKS = ["File", "Publish to Roblox"];
 
+/** The name field of a first publish: the game's title until the person types another. */
+function nameField(suggested) {
+  const field = text("div", "field");
+  const input = document.createElement("input");
+  input.id = "publish-name";
+  input.type = "text";
+  input.maxLength = MAX_GAME_NAME_CHARS;
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.value = ui.publishName ?? suggested ?? "";
+  input.dataset.key = "publish-name";
+  input.oninput = () => (ui.publishName = input.value);
+  const label = text("label", "", WORDS.publishName);
+  label.htmlFor = input.id;
+  field.append(label, input);
+  return { field, input };
+}
+
+/** A place never published: Publish to Roblox under its name where Genex can click, else Studio's own clicks. */
+function firstPublishParts(actions, publish) {
+  if (publish.canClick) {
+    const { field, input } = nameField(publish.name);
+    const run = () => send(Action.FirstPublish, { name: input.value.trim() }, { key: "first-publish", at: Step.Place });
+    actions.prepend(actionButton(WORDS.firstPublish, run, { className: "primary", key: "first-publish", action: Action.FirstPublish }));
+    actions.before(field);
+    return;
+  }
+  // Genex can't click in Studio here: the person's own clicks, and Genex links the game after.
+  const first = text("div", "first-publish");
+  first.dataset.firstPublish = "";
+  first.append(text("p", "small quiet", WORDS.firstPublishYourself), pathLine(PUBLISH_CLICKS));
+  first.append(text("p", "small quiet", WORDS.firstPublishThen));
+  actions.before(first);
+}
+
 /**
  * A linked place's publishing, once every step is done: Publish an update leads the place's buttons
- * for a place Roblox has; a place never published shows the first publish's clicks above them,
- * because that publish stays the person's.
+ * for a place Roblox has, Publish to Roblox under the game's name for one it hasn't; where Genex
+ * can't click in Studio, Studio's own clicks instead.
  */
 function publishParts(actions, body) {
   const publish = ui.status?.publish;
   if (!ui.game || !publish || ui.status?.now) return;
-  if (publish.published && publish.canClick) {
+  if (!publish.published) firstPublishParts(actions, publish);
+  else if (publish.canClick) {
     const run = () => send(Action.PublishUpdate, {}, { key: "publish", at: Step.Place });
     actions.prepend(actionButton(WORDS.publish, run, { className: "primary", key: "publish", action: Action.PublishUpdate }));
-  } else if (publish.published) {
-    // Genex can't click in Studio here (computer control runs on a Mac): the person's own clicks.
+  } else {
+    // Genex can't click in Studio here (no computer control): the person's own clicks.
     const own = text("div", "first-publish");
     own.dataset.publishClicks = "";
     own.append(text("p", "small quiet", WORDS.publishYourself), pathLine(PUBLISH_CLICKS));
     actions.before(own);
-  } else {
-    const first = text("div", "first-publish");
-    first.dataset.firstPublish = "";
-    first.append(text("p", "small quiet", WORDS.firstPublish), pathLine(PUBLISH_CLICKS));
-    first.append(text("p", "small quiet", WORDS.firstPublishThen));
-    actions.before(first);
   }
   body.append(sayLine(Step.Place));
 }

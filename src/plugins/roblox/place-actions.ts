@@ -81,7 +81,7 @@ export interface QuitAnswer {
 }
 
 /** The game's title from its studio.json, else its id. */
-async function titleOf(folder: string, game: string): Promise<string> {
+export async function titleOf(folder: string, game: string): Promise<string> {
   const meta = await readFile(path.join(folder, "studio.json"), "utf8")
     .then((text) => JSON.parse(text) as { title?: unknown })
     .catch(() => undefined);

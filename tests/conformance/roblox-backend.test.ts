@@ -688,6 +688,7 @@ describe("every panel action the person can press is also an agent tool", () => 
     create: "new-game",
     "add-luau-checks": "add-luau-checks",
     "publish-update": "publish-update",
+    "first-publish": "first-publish",
   };
   /** The tools that ask on a card though their panel press doesn't: an agent never closes Studio unasked. */
   const ASKS_ONLY_AS_A_TOOL = new Set(["quit-studio"]);

@@ -149,8 +149,16 @@ export const MESSAGE = {
     Declined: `Nothing was published. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NoChat: `Open this game first, so its chat can publish it, or publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
     NotStarted: `Genex didn't publish anything. To publish it yourself in Studio: ${PUBLISH_CLICK_PATH}.`,
-    FirstPublish: `This place isn't published to Roblox yet, and its first publish is yours: Roblox asks for the game's details and may ask for an age check. In Studio: ${PUBLISH_CLICK_PATH}. Then press Choose another place in the Roblox Studio panel and choose it again, so Genex can publish its updates.`,
+    FirstPublish: "This place isn't on Roblox yet: press Publish to Roblox to publish it the first time.",
     NoPlace: "This game doesn't build in a Roblox place yet. Choose one with Choose your place first.",
+    /** A first publish's card: the name the game gets on Roblox. */
+    ConfirmFirst: (name: string) => `Publish ${name} to Roblox as a new game?`,
+    PlanFirst: `This game's chat clicks ${PUBLISH_CLICK_PATH} in Roblox Studio with computer control. It keeps the privacy and settings Studio gives a new game and leaves the description empty. It is published on your Roblox account; if Roblox asks for your age, ID, a two-step code, terms or a payment, Genex stops and leaves that to you.`,
+    FirstStarted: (name: string) =>
+      `This game's chat is publishing ${name} to Roblox in Studio. If Genex asks you something first, answer it in this game's chat, then watch Studio.`,
+    AlreadyPublished: "This place is already on Roblox: press Publish an update instead.",
+    /** The name of a game with no title or place name of its own. */
+    DefaultName: "My Roblox game",
   },
   Install: {
     /** Get Roblox Studio's question, for this computer's installer size. */
