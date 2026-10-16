@@ -113,6 +113,37 @@ describe("a place file named for Use in this game", () => {
     });
 });
 
+describe("a place file named on Windows", () => {
+  /** Paths a Windows Genex must refuse before it touches the disk: none reaches the file system. */
+  const WIN32_HOSTILE: Array<[string, string]> = [
+    ["a Mac path", "/Users/maker/place.rbxlx"],
+    ["a network share", "\\\\server\\share\\place.rbxl"],
+    ["a step up on a drive", "C:\\x\\..\\place.rbxlx"],
+    ["a drive-relative path", "C:place.rbxlx"],
+    ["a NUL", "C:\\x\\pla\u0000ce.rbxlx"],
+  ];
+  for (const [name, file] of WIN32_HOSTILE)
+    it(`refuses ${name}, asking the disk nothing`, async () => {
+      const asked: string[] = [];
+      const fs = {
+        ...systemLocateFs,
+        lstat: async (target: string) => {
+          asked.push(target);
+          return undefined;
+        },
+        realpath: async (target: string) => {
+          asked.push(target);
+          return target;
+        },
+      };
+      await assert.rejects(
+        placeFile(fs, "win32", file),
+        (error: unknown) => error instanceof PlaceError && error.code === PlaceRefusal.BadFile,
+      );
+      assert.deepEqual(asked, [], "nothing was looked up");
+    });
+});
+
 describe("a Studio is the one a linked place file is open in", () => {
   /** A Studio's listed name against a linked file: only the whole file name or its stem matches. */
   const ROWS: Array<[string, string, boolean]> = [
