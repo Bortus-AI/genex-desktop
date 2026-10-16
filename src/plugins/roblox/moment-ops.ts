@@ -30,8 +30,8 @@ export interface MomentServices {
   bound(game: string): string | undefined;
   /** Sends the game's file changes still on their way to Studio, waiting at most `timeoutMs` when given. */
   flush(game: string, timeoutMs?: number): Promise<void>;
-  /** Reconciles the game's scripts with its folder; after a restore the restored files win. */
-  reapply(game: string, options?: ReconcileOptions): Promise<void>;
+  /** Reconciles the game's scripts with its folder (after a restore the restored files win); whether it ran to its end. */
+  reapply(game: string, options?: ReconcileOptions): Promise<boolean>;
   watch: StudioWatch;
 }
 
@@ -44,7 +44,7 @@ export function noMomentServices(now: () => number): MomentServices {
     ask: () => ask,
     bound: () => undefined,
     flush: async () => {},
-    reapply: async () => {},
+    reapply: async () => false,
     watch: createStudioWatch(now),
   };
 }

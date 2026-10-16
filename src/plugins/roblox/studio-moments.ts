@@ -174,8 +174,8 @@ export interface MomentOps {
   listed(timeoutMs: number): Promise<boolean>;
   /** Sends the script sync's pending file changes to Studio, within `timeoutMs`. */
   flush(timeoutMs: number): Promise<void>;
-  /** Reconciles Studio's scripts with the folder's `src/`; after a restore the restored files win. */
-  reapply(options?: ReconcileOptions): Promise<void>;
+  /** Reconciles Studio's scripts with the folder's `src/` (after a restore the restored files win); whether it ran to its end. */
+  reapply(options?: ReconcileOptions): Promise<boolean>;
   /** Opens the game's place in Studio, or brings it forward. */
   open(): Promise<{ opened: boolean; message: string }>;
   /** The game's place as the chat names it. */
@@ -263,16 +263,14 @@ export async function savePlaceAt(ops: MomentOps, hook: HookContext): Promise<Ho
 
 /**
  * Reconciles the restored scripts, the restored files winning, waiting at most
- * {@link REAPPLY_WAIT_MS} (the reconcile goes on after); its wait is cleared once it ran. Never throws.
+ * {@link REAPPLY_WAIT_MS} (the reconcile goes on after); its wait is cleared only once it ran to
+ * its end, so one that failed is still a restore at the next connection. Never throws.
  */
 async function reapplyWithin(ops: MomentOps, folder: string): Promise<void> {
-  const waited = new AbortController();
-  const reapplied = ops
-    .reapply({ restored: true })
-    .then(() => clearPendingScripts(folder))
-    .catch(() => undefined);
-  await Promise.race([reapplied, ops.sleep(REAPPLY_WAIT_MS, waited.signal).catch(() => undefined)]);
-  waited.abort();
+  const reapplied = ops.reapply({ restored: true }).then(async (ran) => {
+    if (ran) await clearPendingScripts(folder);
+  });
+  await within(ops, reapplied, REAPPLY_WAIT_MS);
 }
 
 /**

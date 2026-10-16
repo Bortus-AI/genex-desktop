@@ -963,8 +963,9 @@ export function pendingThenScripts(
     const folder = await scripts.folder(game);
     if (folder) await loadPendingPlace(ask, folder).catch((error) => log(`pending load: ${errorMessage(error)}`));
     const restored = folder ? await hasPendingScripts(folder) : false;
-    await scripts.bind(game, { restored });
-    if (restored && folder) await clearPendingScripts(folder);
+    const reconciled = await scripts.bind(game, { restored });
+    // Cleared only once the restore's reconcile ran to its end: an ordinary one would undo the restore.
+    if (reconciled && restored && folder) await clearPendingScripts(folder);
   };
 }
 
@@ -1037,9 +1038,7 @@ function helperServices(client: StudioClient, stopped: AbortSignal): HelperServi
       flush: async (game, timeoutMs) => {
         await syncs?.flush(game, timeoutMs);
       },
-      reapply: async (game, options) => {
-        await syncs?.bind(game, options);
-      },
+      reapply: async (game, options) => (await syncs?.bind(game, options)) ?? false,
       watch,
     },
   };

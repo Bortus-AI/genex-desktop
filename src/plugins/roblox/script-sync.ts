@@ -43,7 +43,7 @@ import {
   type ScriptEntry,
   type ScriptRef,
 } from "./helper-protocol.ts";
-import { existingFolder, writeWhole } from "./place-files.ts";
+import { clearPendingScripts, existingFolder, hasPendingScripts, writeWhole } from "./place-files.ts";
 import { layoutScripts, SCRIPT_EXTENSION, SCRIPTS_FOLDER, scriptKey, scriptRefOf } from "./script-paths.ts";
 import { isGameId } from "./studio-binding.ts";
 
@@ -133,7 +133,10 @@ export interface ReconcileOptions {
 }
 
 export interface ScriptSync {
-  /** Reconciles disk and Studio, then keeps them in step; called again on every new binding. */
+  /**
+   * Reconciles disk and Studio, then keeps them in step; called again on every new binding. On
+   * only once the reconcile ran to its end; one that failed leaves the sync Off, for the next try.
+   */
   start(options?: ReconcileOptions): Promise<ScriptSyncMode>;
   /** A script Studio changed, as the helper reports it. */
   changed(change: ScriptChange): Promise<void>;
@@ -358,6 +361,8 @@ class SyncState {
   /** Scripts Script Sync keeps, and scripts with no file of their own (a clash), by key. */
   skipped = new Set<string>();
   queue: Promise<void> = Promise.resolve();
+  /** Scripts this reconcile couldn't carry to the other side (a request that failed). */
+  misses = 0;
   watcher: { close(): void } | undefined;
   timer: unknown;
 
@@ -433,19 +438,36 @@ class SyncState {
     return (await personsRojo(this.deps.folder, this.record)) ? ScriptSyncMode.Rojo : ScriptSyncMode.On;
   }
 
+  /**
+   * Reconciles disk and Studio; the sync is On only once that ran to its end. A failed one (Studio
+   * held by a dialog, the helper gone) stops the sync, so the next call or binding tries again.
+   */
   async reconcile(options: ReconcileOptions = {}): Promise<void> {
+    try {
+      await this.reconcileOnce(options);
+    } catch (error) {
+      this.stop();
+      throw error;
+    }
+  }
+
+  async reconcileOnce(options: ReconcileOptions): Promise<void> {
     const mode = await this.check();
     if (mode !== ScriptSyncMode.On) {
       this.stop();
       this.current = mode;
       return;
     }
-    this.current = mode;
     await ignoreLocks(this.deps.folder, (line) => this.log(line));
     const listed = await this.deps.ask(HelperMessage.ScriptsList, {});
     const disk = await scanScripts(this.root as string, (line) => this.log(line));
+    this.misses = 0;
     await this.decideAll(listed.scripts, disk, options);
     await writeRecord(this.deps.folder, this.record);
+    // After a restore every restored file must reach Studio: one that didn't would come back from Studio later.
+    if (options.restored && this.misses > 0)
+      throw new Error(`${this.misses} restored scripts didn't reach Studio; the restore's reconcile waits`);
+    this.current = mode;
     this.watchScripts();
   }
 
@@ -537,6 +559,7 @@ class SyncState {
       await writeScriptFile(this.deps.folder, file, source);
     } catch (error) {
       delete this.record.scripts[file];
+      this.misses++;
       this.log(`script sync: ${SCRIPTS_FOLDER}/${file} not written: ${String(error)}`);
     }
   }
@@ -569,6 +592,7 @@ class SyncState {
       return;
     }
     if (code === HelperErrorCode.Refused) this.skipped.add(scriptKey(ref));
+    else this.misses++;
     this.log(`script sync: ${SCRIPTS_FOLDER}/${file} not sent to Studio: ${errorText(error)}`);
   }
 
@@ -579,6 +603,7 @@ class SyncState {
       delete this.record.scripts[file];
     } catch (error) {
       if (helperCode(error) !== HelperErrorCode.Conflict) {
+        this.misses++;
         this.log(`script sync: ${ref.path.join(".")} not removed from Studio: ${errorText(error)}`);
         return;
       }
@@ -713,8 +738,12 @@ export interface ScriptSyncsDeps {
 export interface ScriptSyncs {
   /** A call for `game` came with its folder: kept, and the sync started if its helper is bound. */
   seen(game: string, folder: string): Promise<void>;
-  /** The game's helper bound, or its folder was restored: its sync reconciles (when its folder is known). */
-  bind(game: string, options?: ReconcileOptions): Promise<void>;
+  /**
+   * The game's helper bound, or its folder was restored: its sync reconciles (when its folder is
+   * known); whether that reconcile ran to its end. A restore's wait (`pending-scripts.json`) makes
+   * it a restore's reconcile unless told, and is cleared only once such a reconcile ran.
+   */
+  bind(game: string, options?: ReconcileOptions): Promise<boolean>;
   changed(game: string, change: ScriptChange): Promise<void>;
   /** Lists a file Genex wrote at the top of `game`'s folder in its record, in turn with its sync. */
   written(game: string, folder: string, name: string): Promise<void>;
@@ -751,11 +780,11 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
   const syncs = new Map<string, { folder: string; sync: ScriptSync }>();
   const log = (line: string) => deps.log?.(line);
   const folderOf = async (game: string) => folders.get(game) ?? (await readGameFolder(deps.storage, game));
-  const bind = async (game: string, options: ReconcileOptions = {}) => {
+  const bind = async (game: string, options: ReconcileOptions = {}): Promise<boolean> => {
     const folder = await folderOf(game);
     if (!folder) {
       log(`script sync: ${game}'s folder isn't known yet; its scripts sync once Genex calls the plugin for it`);
-      return;
+      return false;
     }
     let held = syncs.get(game);
     if (held?.folder !== folder) {
@@ -766,7 +795,10 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       };
       syncs.set(game, held);
     }
-    await held.sync.start(options);
+    const restored = options.restored ?? (await hasPendingScripts(folder));
+    const reconciled = (await held.sync.start({ restored })) === ScriptSyncMode.On;
+    if (reconciled && restored) await clearPendingScripts(folder);
+    return reconciled;
   };
   return {
     async seen(game, folder) {
@@ -780,7 +812,7 @@ export function createScriptSyncs(deps: ScriptSyncsDeps): ScriptSyncs {
       const running = syncs.get(game)?.sync.mode() === ScriptSyncMode.On;
       if (deps.bound(game) && !running) await bind(game);
     },
-    bind: (game, options) => (isGameId(game) ? bind(game, options) : Promise.resolve()),
+    bind: (game, options) => (isGameId(game) ? bind(game, options) : Promise.resolve(false)),
     changed: async (game, change) => {
       await syncs.get(game)?.sync.changed(change);
     },

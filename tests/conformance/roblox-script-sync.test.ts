@@ -15,6 +15,7 @@ import {
   ScriptClass,
   type ScriptRef,
 } from "../../src/plugins/roblox/helper-protocol.ts";
+import { PENDING_SCRIPTS, writePendingScripts } from "../../src/plugins/roblox/place-files.ts";
 import { scriptKey } from "../../src/plugins/roblox/script-paths.ts";
 import {
   createScriptSync,
@@ -533,6 +534,76 @@ test("the sync for many games: a game's folder is learnt from its calls, and its
   await restarted.changed("game-2", { ...SHARED, source: "x" });
   syncs.stop();
   restarted.stop();
+});
+
+const PENDING = path.join(".genex", "place", PENDING_SCRIPTS);
+
+/**
+ * A game just rewound: git put back src/ and the record (v1), a restore left the restored scripts'
+ * reconcile waiting, and Studio still holds the newer script (v2). The helper fails as `failing` says.
+ */
+async function rewound(failing: { list?: HelperLinkError; write?: HelperLinkError }) {
+  const record = { v: 1, written: [], scripts: { "ServerScriptService/Main.server.luau": helperHash("v1\n") } };
+  const { root, folder } = await gameFolder({ [MAIN_FILE]: "v1\n", ".genex/roblox.json": JSON.stringify(record) });
+  await writePendingScripts(folder, Date.now());
+  const helper = fakeHelper([{ ref: MAIN, source: "v2\n" }]);
+  const ask = (async (type, body, options) => {
+    if (type === HelperMessage.ScriptsList && failing.list) throw failing.list;
+    if (type === HelperMessage.ScriptsWrite && failing.write) throw failing.write;
+    return helper.ask(type, body, options);
+  }) as HelperAsk;
+  const watcher = handWatch();
+  const syncs = createScriptSyncs({
+    storage: path.join(root, "storage"),
+    ask: () => ask,
+    bound: () => true,
+    clock: manualClock(),
+    watch: watcher.watch,
+  });
+  return { folder, helper, syncs, watcher };
+}
+
+const helperFailures = [
+  ["timed out (a dialog in Studio)", new HelperLinkError(HelperLinkFailure.TimedOut, "no answer in time")],
+  ["found the helper gone", new HelperLinkError(HelperLinkFailure.NotBound, "not connected")],
+] as const;
+
+for (const [why, error] of helperFailures)
+  test(`a reconcile whose listing ${why} keeps the restored scripts' wait, and the next call retries it as a restore`, async () => {
+    const failing: { list?: HelperLinkError } = { list: error };
+    const world = await rewound(failing);
+    // The game's first call while its helper is bound starts its sync.
+    await world.syncs.seen("game-1", world.folder);
+    assert.equal(await world.syncs.bind("game-1", { restored: true }), false, "nothing was reconciled");
+    assert.equal(world.helper.source(MAIN), "v2\n");
+    assert.equal(world.syncs.mode("game-1"), ScriptSyncMode.Off, "the sync isn't on, so the next call starts it");
+    assert.equal(await exists(path.join(world.folder, PENDING)), true, "the wait stays");
+    assert.equal(world.watcher.watching.length, 0);
+    delete failing.list;
+    await world.syncs.seen("game-1", world.folder);
+    assert.equal(world.helper.source(MAIN), "v1\n", "the restored file won");
+    assert.equal(await read(world.folder, MAIN_FILE), "v1\n");
+    assert.equal(await exists(path.join(world.folder, ".genex", "conflicts")), false);
+    assert.equal(await exists(path.join(world.folder, PENDING)), false, "its wait is done");
+    assert.equal(world.syncs.mode("game-1"), ScriptSyncMode.On);
+    assert.equal(world.watcher.watching.length, 1, "file edits reach Studio again");
+    world.syncs.stop();
+  });
+
+test("a restored file that didn't reach Studio keeps the restore's wait", async () => {
+  const failing: { write?: HelperLinkError } = {
+    write: new HelperLinkError(HelperLinkFailure.TimedOut, "no answer in time"),
+  };
+  const world = await rewound(failing);
+  await world.syncs.seen("game-1", world.folder);
+  assert.equal(await world.syncs.bind("game-1", { restored: true }), false);
+  assert.equal(await exists(path.join(world.folder, PENDING)), true);
+  assert.equal(world.helper.source(MAIN), "v2\n");
+  delete failing.write;
+  assert.equal(await world.syncs.bind("game-1"), true, "the wait makes the next binding a restore");
+  assert.equal(world.helper.source(MAIN), "v1\n");
+  assert.equal(await exists(path.join(world.folder, PENDING)), false);
+  world.syncs.stop();
 });
 
 function module(...names: string[]): ScriptRef {

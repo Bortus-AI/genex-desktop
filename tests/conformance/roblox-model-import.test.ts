@@ -273,7 +273,7 @@ describe("through the backend", () => {
       ask: () => ask,
       bound: (id) => (id === game.project ? STUDIO : undefined),
       flush: async () => {},
-      reapply: async () => {},
+      reapply: async () => true,
       watch: createStudioWatch(mac.deps.now),
     } satisfies MomentServices;
     const backend = createRobloxBackend(mac.deps);

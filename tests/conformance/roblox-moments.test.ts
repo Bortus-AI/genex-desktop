@@ -38,7 +38,12 @@ import {
 } from "../../src/plugins/roblox/helper-protocol.ts";
 import { MOMENT_WORDS } from "../../src/plugins/roblox/hook-answers.ts";
 import type { MomentServices } from "../../src/plugins/roblox/moment-ops.ts";
-import { PENDING_LOAD, PLACE_MANIFEST, SAVE_POINT_FILE_MAX_BYTES } from "../../src/plugins/roblox/place-files.ts";
+import {
+  PENDING_LOAD,
+  PENDING_SCRIPTS,
+  PLACE_MANIFEST,
+  SAVE_POINT_FILE_MAX_BYTES,
+} from "../../src/plugins/roblox/place-files.ts";
 import {
   createStudioWatch,
   FLUSH_MAX_MS,
@@ -144,6 +149,8 @@ async function momentWorld(options: { initial?: Record<string, Buffer> } = {}) {
     starting: false,
     listed: true,
     shot: { data: Buffer.from("jpeg bytes").toString("base64") } as { data: string } | null,
+    /** Whether the scripts' reconcile runs to its end. */
+    reconciles: true,
     /** Connects the helper once Genex opens Studio, after this long. */
     connectsAfterOpen: undefined as number | undefined,
   };
@@ -175,6 +182,7 @@ async function momentWorld(options: { initial?: Record<string, Buffer> } = {}) {
     },
     reapply: async (options) => {
       steps.push(options?.restored ? "reapply restored" : "reapply");
+      return studio.reconciles;
     },
     open: async () => {
       steps.push("open");
@@ -396,6 +404,7 @@ describe("load-place: the restored place back into Studio", () => {
       folder: async () => world.folder,
       bind: async (_game: string, options?: { restored?: boolean }) => {
         world.steps.push(options?.restored ? "restored scripts compared" : "scripts compared");
+        return true;
       },
     };
     world.place.state.loadFails = new Error("Studio is busy");
@@ -414,6 +423,29 @@ describe("load-place: the restored place back into Studio", () => {
     assert.deepEqual(world.steps, ["scripts compared"], "nothing waiting: only the scripts");
   });
 
+  it("a restored scripts' reconcile that didn't run to its end keeps its wait, now and at the next connection", async () => {
+    const world = await momentWorld();
+    await savePlaceAt(world.ops, CHAT_CHECKPOINT);
+    world.studio.reconciles = false;
+    await loadPlaceAt(world.ops);
+    assert.match(await readFile(placeFile(world.folder, PENDING_SCRIPTS), "utf8"), /"since"/, "still waiting");
+    const reconciled = { now: false };
+    const scripts = {
+      folder: async () => world.folder,
+      bind: async (_game: string, options?: { restored?: boolean }) => {
+        world.steps.push(options?.restored ? "restored scripts compared" : "scripts compared");
+        return reconciled.now;
+      },
+    };
+    world.steps.length = 0;
+    await pendingThenScripts(scripts, () => {})(GAME, world.place.ask);
+    assert.deepEqual(world.steps, ["restored scripts compared"]);
+    assert.match(await readFile(placeFile(world.folder, PENDING_SCRIPTS), "utf8"), /"since"/, "still waiting");
+    reconciled.now = true;
+    await pendingThenScripts(scripts, () => {})(GAME, world.place.ask);
+    await assert.rejects(readFile(placeFile(world.folder, PENDING_SCRIPTS)), "done once it ran");
+  });
+
   it("a save point with no saved place brings back the scripts alone, and says so", async () => {
     const world = await momentWorld();
     assert.deepEqual(await loadPlaceAt(world.ops), { note: MOMENT_WORDS.NoExport });
@@ -430,6 +462,7 @@ describe("load-place: the restored place back into Studio", () => {
       folder: async () => world.folder,
       bind: async (_game: string, options?: { restored?: boolean }) => {
         world.steps.push(options?.restored ? "restored scripts compared" : "scripts compared");
+        return true;
       },
     };
     await pendingThenScripts(scripts, () => {})(GAME, world.place.ask);
@@ -621,7 +654,7 @@ describe("the backend at Genex's moments", () => {
       flush: async (game, timeoutMs) => {
         flushes.push([game, timeoutMs]);
       },
-      reapply: async () => {},
+      reapply: async () => true,
       watch,
     };
     mac.deps.moments = moments;

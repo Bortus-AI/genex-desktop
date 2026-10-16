@@ -496,7 +496,7 @@ describe("Roblox play through the backend", () => {
         ask: () => world.game.ask,
         bound: (id) => (id === GAME ? EDIT : undefined),
         flush: async () => {},
-        reapply: async () => {},
+        reapply: async () => true,
         watch: createStudioWatch(mac.deps.now),
       } satisfies MomentServices;
       const backend = createRobloxBackend(mac.deps);

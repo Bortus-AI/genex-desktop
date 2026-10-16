@@ -539,7 +539,7 @@ describe("through the backend", () => {
         ask: () => () => Promise.reject(new Error("no helper calls in this case")),
         bound: (id) => (id === game.project ? STUDIO : undefined),
         flush: async () => {},
-        reapply: async () => {},
+        reapply: async () => true,
         watch: createStudioWatch(mac.deps.now),
       } satisfies MomentServices;
       const backend = createRobloxBackend(mac.deps);
