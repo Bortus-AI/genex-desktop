@@ -159,6 +159,12 @@ export interface PluginManifestTool extends PluginTool {
   host?: PluginHostTool;
   /** API 3: who may call the tool; agents when absent. */
   audience?: PluginToolAudience;
+  /**
+   * API 3, with `confirmation`: one of the tool's string parameters the person may edit on its card,
+   * shown under the question in a field labelled `label` (one plain line, at most 60 characters).
+   * Their Allow runs the call with what the field holds (one plain line, 1–200 characters).
+   */
+  confirmationInput?: { parameter: string; label: string };
   /** API 3, agent tools only: the kind of asset a call makes. */
   asset?: PluginToolAsset;
 }

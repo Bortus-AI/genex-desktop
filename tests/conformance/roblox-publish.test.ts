@@ -251,6 +251,7 @@ describe("the manifest's first publish", () => {
     assert.ok(tool);
     assert.deepEqual(tool.facts, ["roblox-project"]);
     assert.equal(tool.parameters.properties.name?.type, "string");
+    assert.deepEqual(tool.confirmationInput, { parameter: "name", label: "Name on Roblox" });
     for (const card of [action.confirmation ?? "", tool.confirmation ?? ""]) {
       assert.ok(card.length > 0 && card.length <= 300, `${card.length} characters`);
       assert.match(card, /your Roblox account/);
@@ -412,6 +413,8 @@ describe("the agent's card and the assist turn, through a real core with a fake 
   let binding: PluginBinding;
   let threadId: string;
   let approve = true;
+  /** What the next card's Allow sends as the edit of its field; undefined sends none. */
+  let edit: string | undefined;
   const posted: Array<{ text: string; thread?: string; clientId?: string }> = [];
 
   before(async () => {
@@ -425,8 +428,8 @@ describe("the agent's card and the assist turn, through a real core with a fake 
         if (event.type !== UiEvent.PluginConsent) return;
         const payload = event.payload as { consentId: string; state: string };
         if (payload.state !== "pending") return;
-        const yes = approve;
-        void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, yes));
+        const [yes, input] = [approve, edit];
+        void Promise.resolve().then(() => lite.core.resolveConsent(payload.consentId, yes, false, input));
       },
     });
     const { core } = lite;
@@ -505,6 +508,27 @@ describe("the agent's card and the assist turn, through a real core with a fake 
     assert.equal(answer.started, true, JSON.stringify(answer));
     assert.equal(posted.length, before + 1);
     assert.equal(posted.at(-1)?.text, `Roblox Studio asks: ${firstPublishTask("Tower Run")}`);
+    const cards = toEntries(await core.store.listEvents(towerThread)).filter(
+      (entry) => (entry as { consentId?: string }).consentId,
+    ) as Array<{ consentSourceId?: string; consentInput?: { label: string; value: string } }>;
+    const card = cards.find((entry) => entry.consentSourceId === "roblox");
+    assert.deepEqual(card?.consentInput, { label: "Name on Roblox", value: "Tower Run" }, "the name, editable");
+  });
+
+  it("first-publish's card edits the name: the person's edit is the game's name on Roblox", async () => {
+    const { core } = lite;
+    const dir = (await core.games.scaffold("ramp")).dir;
+    await writeFile(path.join(dir, "ramp.rbxlx"), "<roblox/>");
+    const ramp = { project: "ramp", directory: dir, threadId: await core.threadForGame("ramp") };
+    await core.engineLinks.link("roblox", ramp, { project: path.join(dir, "ramp.rbxlx") });
+    edit = "Ramp Rush";
+    try {
+      const answer = (await core.plugins.tool("roblox__first-publish", { name: "Ramp" }, ramp)) as { name?: string };
+      assert.equal(answer.name, "Ramp Rush");
+      assert.equal(posted.at(-1)?.text, `Roblox Studio asks: ${firstPublishTask("Ramp Rush")}`);
+    } finally {
+      edit = undefined;
+    }
   });
 
   it("declined, nothing is posted", async () => {

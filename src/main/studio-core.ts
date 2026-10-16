@@ -2210,9 +2210,9 @@ export class StudioCore {
     return this.#pluginTools.requestConsent(...args);
   }
 
-  /** The user's click on a consent card (Studio UI over IPC only — never an RPC method). */
-  resolveConsent(consentId: string, approved: boolean, always = false): boolean {
-    return this.#consent.resolve(consentId, approved, always);
+  /** The user's click on a consent card, with their edit of its field (Studio UI over IPC only — never an RPC method). */
+  resolveConsent(consentId: string, approved: boolean, always = false, input?: string): boolean {
+    return this.#consent.resolve(consentId, approved, always, input);
   }
 
   // ── tool permissions in game chats (Studio UI over IPC only — never an RPC method) ─────────

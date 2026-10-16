@@ -333,7 +333,7 @@ export interface StudioInvokePayloads {
   "studio:plugins.update": { id: string };
   "studio:plugins.watch": { id: string; enabled: boolean };
   "studio:plugins.forget-allowed": { id: string };
-  "studio:plugins.consent": { consentId: string; approved: boolean; always?: boolean };
+  "studio:plugins.consent": { consentId: string; approved: boolean; always?: boolean; input?: string };
   "studio:permissions.get": undefined;
   "studio:permissions.mode": { threadId: string | null; mode: Arg<"setPermissionMode", 1> };
   "studio:permissions.answer": { requestId: string; answer: Arg<"answerPermission", 1> };

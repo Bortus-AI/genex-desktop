@@ -207,8 +207,11 @@ export interface StudioApi {
   /** The person's Ask every time: a local plugin's tools they always allowed ask again before they run. */
   pluginForgetAllowed(id: string): Promise<void>;
   /** The user's answer to a `plugin_consent` card; `resolved` is false once the question is no longer waiting. */
-  /** The person's answer to a consent card; `always` (a connector's card) also allows that tool from now on. */
-  pluginConsent(consentId: string, approved: boolean, always?: boolean): Promise<{ resolved: boolean }>;
+  /**
+   * The person's answer to a consent card; `always` (a connector's card) also allows that tool from
+   * now on, and `input` is their edit of the card's field, when it has one.
+   */
+  pluginConsent(consentId: string, approved: boolean, always?: boolean, input?: string): Promise<{ resolved: boolean }>;
 
   /**
    * Claude Code permissions for game chats. Studio UI only (main-frame guarded); the harness has

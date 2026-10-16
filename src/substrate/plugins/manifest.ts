@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { constants, type Dirent } from "node:fs";
 import { lstat, open, readdir, readFile } from "node:fs/promises";
 import type {
+  PluginConfirmationInput,
   PluginFileSkill,
   PluginManifest,
   PluginManifestTool,
@@ -27,6 +28,8 @@ import type {
   PluginToolbarTarget,
 } from "../../shared/plugins.ts";
 import {
+  CONFIRMATION_INPUT_LABEL_MAX_CHARS,
+  confirmationInputValue,
   isFileSkill,
   isToolbarIconName,
   PLUGIN_SKILL_TOOL,
@@ -177,6 +180,7 @@ const MESSAGE = {
   AudienceNeedsApi3: "tools[].audience requires apiVersion 3",
   InvalidToolAudience: `Invalid tools[].audience (${[...TOOL_AUDIENCES].join(", ")})`,
   AssetNeedsApi3: "tools[].asset requires apiVersion 3",
+  InvalidConfirmationInput: `Invalid tools[].confirmationInput (API 3, with a confirmation: { parameter: one of the tool's string parameters, label: one plain line of 1-${CONFIRMATION_INPUT_LABEL_MAX_CHARS} characters })`,
   InvalidToolAsset: `Invalid tools[].asset (an agent tool's { kind: ${Object.values(MakingKind).join("|")}, prompt?: one of its parameters, tool?: a short name })`,
   InvalidPanel: "Invalid panel",
   InvalidAction: "Invalid action",
@@ -324,6 +328,22 @@ function toolAsset(t: PluginManifestTool, m: PluginManifest): PluginToolAsset {
   return asset;
 }
 
+/**
+ * The text parameter the person may edit on a tool's card (API 3): one of the tool's own string
+ * parameters, on a tool with a card, labelled in one plain line.
+ */
+function confirmationInput(t: PluginManifestTool, m: PluginManifest): PluginConfirmationInput {
+  const input: unknown = t.confirmationInput;
+  if (m.apiVersion < 3 || t.confirmation === undefined || !isRecord(input))
+    throw new Error(MESSAGE.InvalidConfirmationInput);
+  const { parameter, label } = input;
+  const declared = typeof parameter === "string" && Object.hasOwn(t.parameters.properties, parameter);
+  const text = declared && t.parameters.properties[parameter as string]?.type === "string";
+  const labelled = confirmationInputValue(label) === label && isText(label, 1, CONFIRMATION_INPUT_LABEL_MAX_CHARS);
+  if (!text || !labelled) throw new Error(MESSAGE.InvalidConfirmationInput);
+  return { parameter: parameter as string, label: label as string };
+}
+
 /** A tool's optional declarations: its consent question (API 2), its host program and its audience. */
 function validateToolOptions(t: PluginManifestTool, m: PluginManifest): void {
   if (t.confirmation !== undefined) {
@@ -354,6 +374,7 @@ function validateTool(t: PluginManifestTool, m: PluginManifest, names: Set<strin
       required === undefined ? { type: "object", properties } : { type: "object", properties, required: [...required] },
   };
   if (t.confirmation !== undefined) tool.confirmation = t.confirmation;
+  if (t.confirmationInput !== undefined) tool.confirmationInput = confirmationInput(t, m);
   if (t.host !== undefined) tool.host = t.host;
   // Agents are the default audience, so only the harness is written.
   if (t.audience === PluginToolAudience.Harness) tool.audience = t.audience;

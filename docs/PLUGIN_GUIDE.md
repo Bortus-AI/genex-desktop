@@ -305,7 +305,9 @@ Two different things, both asked by the host and never by the plugin or the agen
   the game folder. Studio asks the user before the backend sees the call. With no way to ask, the
   call fails closed. A declined or expired request reaches the agent as text
   (`{consent:'declined', by, message}`), never as an error — say in your skill text that a declined
-  request must not be repeated.
+  request must not be repeated. API 3: `confirmationInput: {parameter, label}` names one of the
+  tool's string parameters the person may edit on the card before Allow (a game's name, say); the
+  call runs with their edit.
 - **`actions[].confirmation`** — a user-invoked action behind a Studio-owned review and a native
   dialog. Your optional `review` returns `{message, detail, images:[{label, dataUrl}]}`: `message`
   (at most 2,000 characters) is the dialog's question instead of the manifest's `confirmation`, and

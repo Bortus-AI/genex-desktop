@@ -4,7 +4,8 @@
 // `live-data.txt` stands in for a game whose play reaches the live game's saved data. A test's copy
 // that declares the Do it for me action and tools below gets the host's answer to
 // `game.engine.assist` (a setup click handed to the game's chat) back from each, and its answer to
-// `game.engine.canAssist` (whether Do it for me can run on this computer).
+// `game.engine.canAssist` (whether Do it for me can run on this computer). A copy that declares
+// `name-it` gets back the name it was called with, as the person's card left it.
 
 import { existsSync } from "node:fs";
 import path from "node:path";
@@ -78,6 +79,7 @@ export async function activate() {
       if (Object.hasOwn(play, name)) return play[name](args, ctx);
       if (Object.hasOwn(ASSIST_TASKS, name)) return ctx.host("game.engine.assist", { task: ASSIST_TASKS[name] });
       if (name === "can-assist") return ctx.host("game.engine.canAssist");
+      if (name === "name-it") return { tool: name, name: args?.name };
       // Nobody uses the toy editor: its lock's person-first probe never waits on the person.
       if (name === "editor-state") return { tool: name, project: ctx.project, personActive: false };
       return { tool: name, project: ctx.project };

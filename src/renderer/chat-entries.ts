@@ -201,6 +201,8 @@ export type Entry =
       consentExport?: ExportReview;
       /** A connector's card: Always allow is offered. */
       consentAlwaysOffered?: boolean;
+      /** A card with a field the person may edit before Allow: its label and the value it holds. */
+      consentInput?: { label: string; value: string };
       /** action "permission": Claude's own Allow / Deny question (or a plan to approve), as first asked, and how it ended. */
       permission?: ToolPermissionEvent;
       pending?: boolean;
@@ -1774,6 +1776,7 @@ function narrateConsent(chat: ChatDraft, event: EventEnvelope): void {
     consentPrompt: consent.prompt || undefined,
     consentExport: consent.exportReview,
     ...(consent.alwaysOffered ? { consentAlwaysOffered: true } : {}),
+    ...(consent.input ? { consentInput: consent.input } : {}),
     text: consentAskWords({
       pluginName: consent.pluginName,
       tool: consent.tool,

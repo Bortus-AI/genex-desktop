@@ -304,14 +304,15 @@
     {
       "name": "first-publish",
       "facts": ["roblox-project"],
-      "description": "Publish this game's place to Roblox for the first time, as a new game, when the person asks to publish and the place isn't on Roblox yet (publish-update answers so). Pass the game's name; the person approves it on a card. This chat's next turn then clicks File › Publish to Roblox in Roblox Studio with computer control, keeping Studio's privacy and settings, and stops at any age, ID, two-step, terms or payment question. End your turn once it has started; Genex links this game to the published place by itself afterwards. Never publish unasked.",
+      "description": "Publish this game's place to Roblox for the first time, as a new game, when the person asks to publish and the place isn't on Roblox yet (publish-update answers so). Pass the game's name; the person sees it on the card, may change it there, and approves. This chat's next turn then clicks File › Publish to Roblox in Roblox Studio with computer control, keeping Studio's privacy and settings, and stops at any age, ID, two-step, terms or payment question. End your turn once it has started; Genex links this game to the published place by itself afterwards. Never publish unasked.",
       "confirmation": "Publish this game to Roblox for the first time, under the name shown? This game's chat clicks File › Publish to Roblox in Roblox Studio with computer control and keeps the privacy Studio gives a new game. It is published on your Roblox account.",
+      "confirmationInput": { "parameter": "name", "label": "Name on Roblox" },
       "parameters": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "The game's name on Roblox, at most 50 characters: the person's own words for it, else this Genex game's title. Leave out to use the title."
+            "description": "The game's name on Roblox, at most 50 characters: the person's own words for it, else this Genex game's title. The person sees it on the card and may change it there."
           }
         }
       }

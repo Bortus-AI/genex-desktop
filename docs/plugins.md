@@ -149,6 +149,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `capabilities` | 1 | Host services the backend may call: `settings`, `project.read`, `project.write`, `jobs` (also `events.emit`), `observe`, `credentials`, `external-auth`, `network`, (API 2) `export`, and (API 3) `native-runtime` and `game-engine` |
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
+| `tools[].confirmationInput` | 3 | `{parameter, label}`, with `confirmation`: one of the tool's string parameters the person may edit on the card, under a one-line label of at most 60 characters; see the consent model below |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
 | `tools[].facts`, `tools[].makes` | 3 | The facts of the games whose sessions get the tool, and (agent tools) the facts it makes in a game's folder; see [Scope by facts](#scope-by-facts) |
 | `skills[]` | 1 | Guidance for agents while the plugin is enabled: inline `{name, text}`, or (API 3) a file skill `{name, summary, file, references?}`, either (API 3) with `facts` (or the older `engines`) and `tools`; see [Skills](#skills) |
@@ -1549,6 +1550,12 @@ acts beyond the game folder. The host — never the plugin, never the agent — 
   chat folds onto one ASK card with Approve and Decline. The card's own channel,
   `studio:plugins.consent`, is Studio-UI only: it keeps the main-frame guard and the core's RPC
   table has no equivalent method, so nothing an agent can call answers a card.
+- A card with a field (`confirmationInput`, API 3) shows the agent's value for that parameter under
+  its question, in a field with the declared label. The person's own Allow sends what the field
+  holds (`studio:plugins.consent {input}`), and the call runs with it as that parameter when it is
+  one plain line of 1–200 characters; otherwise the agent's value stands. The answered card records
+  the value the call ran with. A yes from a mode never edits. The Roblox plugin's `first-publish`
+  uses it for the game's name on Roblox.
 - A local plugin's agent tools ask too, each call, even with no `confirmation`: the card says the
   plugin was loaded from a folder on this Mac and runs with your access, and offers **Always
   allow** for that one tool. The grant (`PluginInfo.allowedTools`) goes when the plugin's code
