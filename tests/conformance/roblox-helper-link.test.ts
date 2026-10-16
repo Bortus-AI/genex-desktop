@@ -14,6 +14,7 @@ import {
   type HelperLinkDeps,
   startHelperLink,
 } from "../../src/plugins/roblox/helper-link.ts";
+import { type AgentMarks, agentsAt, readAgentMarks } from "../../src/plugins/roblox/agent-marks.ts";
 import {
   CHUNK_BYTES,
   type DataChunk,
@@ -244,6 +245,37 @@ test("two connections from one Studio: the newest wins and the older is closed",
   const request = newer.received.find((frame) => frame.type === HelperMessage.ScriptsList);
   newer.raw(JSON.stringify({ v: 1, id: 50, type: "answer", re: request?.id, ok: true, result: { scripts: [] } }));
   assert.deepEqual(await asked, { scripts: [] });
+  link.close();
+});
+
+test("Genex's own marker reads in a bound game's Studio carry that game's busy mark, so they never read as the person", async () => {
+  const { storage } = await world({ "game-1": "Place1.rbxl", "game-2": "Obby.rbxl" });
+  const studio = fakeStudio([PLACE1, OBBY]);
+  const clock = manualClock();
+  const seen: Array<{ studio: unknown; marks: AgentMarks }> = [];
+  const client: typeof studio.client = {
+    studios: studio.client.studios,
+    callTool: async (name, args, options) => {
+      seen.push({ studio: args.studio_id, marks: await readAgentMarks(bindingIn(storage, "game-1"), clock.now()) });
+      return studio.client.callTool(name, args, options);
+    },
+  };
+  const link = createHelperLink({ storage, studio: client, clock, newSession: () => `session-${++sessions}` });
+  memoryHelper(link, { studio, studioId: PLACE1.id }).hello();
+  await link.idle();
+  assert.equal(link.bound("game-1"), PLACE1.id);
+  // Game 2's Studio connects, but its marker can't be found: the link looks again every 2 s.
+  seen.length = 0;
+  memoryHelper(link, { studio, studioId: OBBY.id, mark: false }).hello();
+  await link.idle();
+  clock.advance(BIND_RETRY_MS);
+  await link.idle();
+  const inBound = seen.filter((read) => read.studio === PLACE1.id);
+  assert.ok(inBound.length >= 2, "the scan read game 1's Studio again");
+  for (const read of inBound) assert.ok(read.marks.busy, "game 1 was marked busy while its Studio was read");
+  // Game 1's helper reports the recording Studio made of that read: it is Genex's, not the person's.
+  const after = await readAgentMarks(bindingIn(storage, "game-1"), clock.now());
+  assert.equal(agentsAt(after, clock.now(), clock.now()), true);
   link.close();
 });
 

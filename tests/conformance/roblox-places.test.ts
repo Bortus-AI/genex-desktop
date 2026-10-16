@@ -20,6 +20,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import { engineChoiceRule } from "../../src/harness-seed/loop/unreal-prompts.ts";
 import type { PluginContext, PluginScalar } from "../../src/plugin-sdk/index.d.ts";
+import { agentsAt, readAgentMarks } from "../../src/plugins/roblox/agent-marks.ts";
 import { createRobloxBackend, type RobloxDeps } from "../../src/plugins/roblox/backend.ts";
 import { CHECK_CONFIGS } from "../../src/plugins/roblox/check-scripts.ts";
 import {
@@ -345,6 +346,40 @@ describe("Choose your place", () => {
       "the press reads Documents › Roblox",
     );
     assert.ok(mac.ran.includes("/usr/bin/defaults"), "and Studio's recent list");
+  });
+
+  it("asks each open Studio for its place under the busy mark of the game bound to it, so the ask never reads as the person", async () => {
+    const mac = await robloxMac({
+      studios: [
+        { id: "studio-a", name: "Place1" },
+        { id: "studio-b", name: "Obby" },
+      ],
+    });
+    const bound = path.join(mac.storage, "mcp", "other-game");
+    await mkdir(bound, { recursive: true });
+    await writeFile(
+      path.join(bound, "studio.json"),
+      JSON.stringify({ studioId: "studio-a", session: "s-1", at: mac.deps.now() }),
+    );
+    const studio = mac.deps.studio;
+    assert.ok(studio);
+    const marked: Array<[unknown, boolean]> = [];
+    mac.deps.studio = {
+      studios: studio.studios,
+      callTool: async (name, args, options) => {
+        const marks = await readAgentMarks(bound, mac.deps.now());
+        marked.push([args.studio_id, marks.busy !== undefined && marks.busy.until === undefined]);
+        return studio.callTool(name, args, options);
+      },
+    };
+    const game = await makeGame(mac, "sky-race", "Sky Race");
+    await action<PlacesAnswer>(mac, "places", {}, hostFor(mac, game).context);
+    assert.deepEqual(marked.sort(), [
+      ["studio-a", true],
+      ["studio-b", false],
+    ]);
+    const after = await readAgentMarks(bound, mac.deps.now());
+    assert.equal(agentsAt(after, mac.deps.now(), mac.deps.now()), true, "what Studio reports of it is Genex's");
   });
 
   it("lists at most 12 place files, and keeps a scan for a while", async () => {

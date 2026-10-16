@@ -30,6 +30,7 @@ import path from "node:path";
 import { SECOND_MS } from "../../shared/duration.ts";
 import type { JobClock } from "../../substrate/job-process.ts";
 import { isBelow } from "../../substrate/paths.ts";
+import { agentBusyMarker, agentFolder, type BusyMarker } from "./agent-marks.ts";
 import {
   CHUNK_BYTES,
   chunkFrame,
@@ -279,6 +280,8 @@ interface LinkState {
   order: number;
   refresh: unknown;
   closed: boolean;
+  /** Each game's busy mark, shared by every read the link runs in that game's Studio. */
+  markers: Map<string, BusyMarker>;
 }
 
 const log = (link: LinkState, line: string) => link.deps.log?.(line);
@@ -340,9 +343,26 @@ function answered(link: LinkState, linked: Linked, re: number, answer: HelperAns
   else pending.reject(new HelperLinkError(HelperLinkFailure.Answered, answer.error.message, answer.error.code));
 }
 
+/**
+ * Runs Genex's own read in a Studio with the busy mark of the game bound to that Studio: Studio
+ * records an `execute_luau` run as an edit, and that game's helper would report it as the person's.
+ */
+function asAgentIn<T>(link: LinkState, studio: StudioEntry, work: () => Promise<T>): Promise<T> {
+  const game = link.byStudio.get(studio.id)?.game;
+  const folder = game ? agentFolder(link.deps.storage, game) : undefined;
+  if (!game || !folder) return work();
+  let marker = link.markers.get(game);
+  if (!marker) {
+    marker = agentBusyMarker(folder, link.deps.clock.now);
+    link.markers.set(game, marker);
+  }
+  return marker.around(work);
+}
+
 function readMarker(link: LinkState, studio: StudioEntry): Promise<MarkerRead> {
   const args = { [STUDIO_ID_ARG]: studio.id, [DATAMODEL_ARG]: EDIT_DATAMODEL, code: MARKER_READ_LUAU };
-  return link.deps.studio.callTool(StudioTool.ExecuteLuau, args).then(markerOf, (): MarkerRead => ({ unknown: true }));
+  const read = () => link.deps.studio.callTool(StudioTool.ExecuteLuau, args);
+  return asAgentIn(link, studio, read).then(markerOf, (): MarkerRead => ({ unknown: true }));
 }
 
 /** The Studio the connection is in: its marker, or with no marker readable anywhere, its place alone. */
@@ -519,6 +539,7 @@ export function createHelperLink(deps: HelperLinkDeps): HelperLink {
     order: 0,
     refresh: undefined,
     closed: false,
+    markers: new Map(),
   };
   return {
     accept(connection) {

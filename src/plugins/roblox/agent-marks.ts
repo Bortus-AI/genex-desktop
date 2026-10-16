@@ -13,11 +13,11 @@
  * A mark older than {@link AGENT_MARK_MAX_MS}, or dated in the future, is not believed: the call
  * that wrote it died. Writing a mark never fails a call; reading one never throws.
  */
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { atomicWriteJson, isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
-import { isGameId } from "./studio-binding.ts";
+import { BindingState, isGameId, readBinding } from "./studio-binding.ts";
 
 /** The busy mark's name in the connection's folder. */
 export const AGENT_BUSY_FILE = "agent-busy.json";
@@ -81,6 +81,36 @@ export function agentBusyMarker(folder: string, now: () => number): BusyMarker {
       }
     },
   };
+}
+
+/** The connection folders of the games whose binding names Studio `studioId` at `now`. */
+async function boundTo(storage: string, studioId: string, now: number): Promise<string[]> {
+  const games = await readdir(path.join(storage, CONNECTIONS_FOLDER)).catch(() => [] as string[]);
+  const folders: string[] = [];
+  for (const game of games.filter(isGameId)) {
+    const folder = path.join(storage, CONNECTIONS_FOLDER, game);
+    const read = await readBinding(folder, now);
+    if (read.state === BindingState.Bound && read.binding.studioId === studioId) folders.push(folder);
+  }
+  return folders;
+}
+
+/**
+ * Runs Genex's own read in Studio `studioId` with the busy mark of every game bound to that Studio:
+ * Studio records an `execute_luau` run as an edit, and that game's helper would report it as the person's.
+ */
+export async function asAgentInStudio<T>(
+  storage: string,
+  studioId: string,
+  now: () => number,
+  work: () => Promise<T>,
+): Promise<T> {
+  const folders = await boundTo(storage, studioId, now());
+  const marked = folders.reduce<() => Promise<T>>(
+    (inner, folder) => () => agentBusyMarker(folder, now).around(inner),
+    work,
+  );
+  return marked();
 }
 
 /** Marks the agent's play test as started now. */

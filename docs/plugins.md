@@ -1418,7 +1418,8 @@ from the helper's `activity` reports in the last `PERSON_ACTIVE_MS` (15 s), leav
 agent's marks cover (`agent-marks.ts` in `<storage>/mcp/<game>`: `agent-busy.json` around the
 connection's writes, 3 s after it included, since Studio records `execute_luau` runs as edits;
 `agent-play.json` during the agent's play test; Genex's own load and reconcile run under the busy
-mark too; a mark older than 30 minutes or dated ahead is not believed); it claims nothing unsaved.
+mark too, and so do its own reads in a Studio another game is bound to (the helper link's marker
+reads, Choose your place asking each Studio for its place); a mark older than 30 minutes or dated ahead is not believed); it claims nothing unsaved.
 The `viewport` [observer](#observers) runs `hero-shots` and shows Live's `stills`.
 
 Its skills reach a game that holds a Roblox place only (`facts: ["roblox-project"]`, never

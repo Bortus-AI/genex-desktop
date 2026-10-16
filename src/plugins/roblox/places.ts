@@ -23,6 +23,7 @@ import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.t
 import { SECOND_MS } from "../../shared/duration.ts";
 import { isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
 import { PluginService } from "../../shared/plugins.ts";
+import { asAgentInStudio } from "./agent-marks.ts";
 import { writeWhole } from "./place-files.ts";
 import { ROJO_PROJECT, recordWritten, writtenByGenex } from "./script-sync.ts";
 import {
@@ -265,15 +266,20 @@ async function keptScan(deps: PlaceDeps, cache: ScanCache): Promise<FoundFile[]>
   return cache.files;
 }
 
-/** What an open Studio says of its place: its ids, or undefined when it didn't answer. */
+/**
+ * What an open Studio says of its place: its ids, or undefined when it didn't answer. Asked under
+ * the busy mark of the game bound to that Studio, so its helper never reports the ask as the person's.
+ */
 async function askPlace(
-  studio: NonNullable<PlaceDeps["studio"]>,
+  deps: PlaceDeps,
+  storage: string,
   entry: StudioEntry,
 ): Promise<{ placeId: string; universeId: string } | undefined> {
+  const studio = deps.studio;
+  if (!studio) return undefined;
   const args = { [STUDIO_ID_ARG]: entry.id, [DATAMODEL_ARG]: EDIT_DATAMODEL, code: PLACE_READ_LUAU };
-  const result = await studio
-    .callTool(StudioTool.ExecuteLuau, args, { timeoutMs: PLACE_ASK_MS })
-    .catch(() => undefined);
+  const ask = () => studio.callTool(StudioTool.ExecuteLuau, args, { timeoutMs: PLACE_ASK_MS });
+  const result = await asAgentInStudio(storage, entry.id, deps.now, ask).catch(() => undefined);
   if (!result || result.isError) return undefined;
   const text = result.content.map((part) => (part.type === "text" ? String(part.text ?? "") : "")).join("\n");
   const match = PLACE_ANSWER.exec(text);
@@ -287,8 +293,8 @@ async function listedStudios(deps: PlaceDeps): Promise<StudioEntry[]> {
 }
 
 /** An open Studio's place, asked of it. */
-async function openPlaceOf(deps: PlaceDeps, entry: StudioEntry, label: string): Promise<OpenPlace> {
-  const ids = deps.studio ? await askPlace(deps.studio, entry) : undefined;
+async function openPlaceOf(deps: PlaceDeps, storage: string, entry: StudioEntry, label: string): Promise<OpenPlace> {
+  const ids = await askPlace(deps, storage, entry);
   const base: OpenPlace = { studio: entry.id, label, name: entry.name, kind: PlaceKind.Unsaved };
   if (ids && ids.placeId !== UNPUBLISHED) return { ...base, kind: PlaceKind.Published, ...ids };
   return isPlaceName(entry.name) ? { ...base, kind: PlaceKind.File } : base;
@@ -393,7 +399,9 @@ export async function listPlaces(deps: PlaceDeps, context: PluginContext, cache:
   const storage = await context.host(PluginService.StorageRoot);
   const studios = await listedStudios(deps);
   const labels = labelsOf(studios);
-  const open = await Promise.all(studios.map((entry, at) => openPlaceOf(deps, entry, labels[at] ?? entry.name)));
+  const open = await Promise.all(
+    studios.map((entry, at) => openPlaceOf(deps, storage, entry, labels[at] ?? entry.name)),
+  );
   const files = await keptScan(deps, cache);
   const links = await liveLinks(storage);
   const game = context.project;
@@ -431,6 +439,8 @@ async function chosenFile(deps: PlaceDeps, file: unknown): Promise<Chosen> {
 
 /** How a place is found: the files to look a saved place up in, or none when only names may be used. */
 interface FindOptions {
+  /** The plugin's storage, where the games bound to each Studio are found. */
+  storage: string;
   files?: readonly FoundFile[];
 }
 
@@ -449,7 +459,7 @@ async function chosenFromEntry(
   studios: readonly StudioEntry[],
   options: FindOptions,
 ): Promise<Chosen> {
-  const ids = deps.studio ? await askPlace(deps.studio, entry) : undefined;
+  const ids = await askPlace(deps, options.storage, entry);
   const project = projectFileOf(folder);
   if (ids && ids.placeId !== UNPUBLISHED)
     return { project, name: entry.name, key: { placeId: ids.placeId }, remote: ids, throughProject: true };
@@ -541,7 +551,10 @@ export async function usePlace(
     const { folder } = await boundGame(context);
     const chosen =
       choice.studio !== undefined
-        ? await chosenStudio(deps, folder, choice.studio, { files: await keptScan(deps, cache) })
+        ? await chosenStudio(deps, folder, choice.studio, {
+            storage: await context.host(PluginService.StorageRoot),
+            files: await keptScan(deps, cache),
+          })
         : await chosenFile(deps, choice.file);
     return await linkChosen(deps, context, chosen);
   } catch (error) {
@@ -574,7 +587,8 @@ export async function usePlaceNamed(deps: PlaceDeps, context: PluginContext, pla
     const labels = labelsOf(studios);
     const entry = studios.find((listed, at) => labels[at] === named || listed.name === named);
     if (!entry) throw new PlaceError(PlaceRefusal.NotListed, MESSAGE.Places.NotOpenNamed(named));
-    return await linkChosen(deps, context, await chosenFromEntry(deps, folder, entry, studios, {}));
+    const storage = await context.host(PluginService.StorageRoot);
+    return await linkChosen(deps, context, await chosenFromEntry(deps, folder, entry, studios, { storage }));
   } catch (error) {
     return refusedAnswer(error);
   }
