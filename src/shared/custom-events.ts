@@ -15,6 +15,7 @@ import type { ChatRewind, CheckpointSkippedPayload, RewindUndonePayload } from "
 import type { PlanReviewRecord } from "./composer.ts";
 import type { ContextMeasurement } from "./context.ts";
 import type { AssetDeliveredPayload, PluginToolFinishedPayload, PluginToolStartedPayload } from "./game-assets.ts";
+import type { MentionTaggedPayload } from "./prompt-mention.ts";
 import type { PluginConsentEvent } from "./plugins.ts";
 import type { ConnectorToolEvent, ConnectorToolStartedEvent } from "./mcp.ts";
 import type { ToolPermissionEvent } from "./permissions.ts";
@@ -40,6 +41,8 @@ import type { FinishCheckPayload } from "./finish-check.ts";
 export const CustomEvent = {
   // assets and plugins
   AssetDelivered: "asset_delivered",
+  /** What each @ tag of a message gave the agent; written by the host after the message is sent. */
+  MentionTagged: "mention_tagged",
   BlenderAsset: "blender_asset",
   ConnectorTool: "connector_tool",
   /** A connector call on its way out, paired with its `connector_tool` by `callId`; written by the host only. */
@@ -582,6 +585,7 @@ export interface SelfChangePayload {
 
 export interface CustomEventMap {
   asset_delivered: AssetDeliveredPayload;
+  mention_tagged: MentionTaggedPayload;
   /**
    * `facetId` and `beyond`: a card about a step beyond the ask names its part and the proposal, so a
    * restart of the part reads back what it already asked (seed loop/facet/beyond.ts).

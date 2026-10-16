@@ -5,6 +5,7 @@ import { compareIds } from "./compare-ids.ts";
  * context and the harness read the log without them.
  */
 import { APPROVED_PLAN_HEADING } from "./composer.ts";
+import { withoutMentionContext } from "./prompt-mention.ts";
 import { CustomEvent, customPayload, customRecord, DELEGATED_PREFIX } from "./custom-events.ts";
 import { type EventEnvelope, EventKind } from "./event-log.ts";
 import { messageQueueState, QueueState, type QueuedMessage } from "./message-queue.ts";
@@ -384,10 +385,14 @@ export interface RewindBuild {
 }
 export type RewindPlan = ({ ok: true } & PlannedRewind) | { ok: false; reason: RewindRefusal };
 
-/** An approved plan is sent as the request, the plan and a closing line; the request is the user's. */
+/**
+ * An approved plan is sent as the request, the plan and a closing line, and a message with @ tags
+ * carries lines about them after the words; the request is the user's.
+ */
 export const requestOf = (text: string): string => {
-  const at = text.indexOf(APPROVED_PLAN_HEADING);
-  return at < 0 ? text : text.slice(0, at);
+  const words = withoutMentionContext(text);
+  const at = words.indexOf(APPROVED_PLAN_HEADING);
+  return at < 0 ? words : words.slice(0, at);
 };
 
 /** What a queued message's saved action says about the pictures it carried. */

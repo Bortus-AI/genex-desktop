@@ -73,6 +73,7 @@ import {
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
+import { MentionMiss } from "../shared/prompt-mention.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4314,4 +4315,41 @@ export const AVATAR_WORDS = {
     [AvatarGear.Sigil]: "Sigil",
     [AvatarGear.Scar]: "Scar",
   } satisfies Record<AvatarGear, string | null>,
+} as const;
+
+/** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
+export const MENTION_WORDS = {
+  listLabel: "Tag a game, tool or asset",
+  game: "Game",
+  tool: "Tool",
+  asset: "Asset",
+  yours: "Yours",
+  inMessage: "Already in your message",
+  yourGames: "Your games",
+  assets: "Assets",
+  tools: "Tools",
+  genexGames: "Games on Genex",
+  plugins: "Plugins",
+  plugin: "Plugin",
+  on: "On",
+  imagesHint: "Reference or mood board",
+  reading: "Loading Genex games and assets…",
+  noMatches: "No matches",
+  atCap: "That's as many as one message can carry. Remove one to tag something else.",
+  resultsLabel: "Tagged in this message",
+  ready: "Ready",
+  added: "Added",
+  read: "Your game · the agent can read it",
+  pluginRead: "Plugin · the agent will use it",
+  copied: "Downloaded for the agent to read",
+  addedTo: (path: string) => `Added to the game as ${path}`,
+  missed: {
+    [MentionMiss.NotDownloaded]: "Couldn't download it. Check your connection.",
+    [MentionMiss.NotTakeable]: "Its author no longer shares it.",
+    [MentionMiss.Gone]: "It's no longer there.",
+    [MentionMiss.NotWebGame]: "Assets are for web games.",
+  } satisfies Record<MentionMiss, string>,
+  tryAgain: "Try again",
+  removeTag: "Remove tag",
+  trying: "Trying…",
 } as const;

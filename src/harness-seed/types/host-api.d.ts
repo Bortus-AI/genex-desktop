@@ -2558,7 +2558,7 @@ export interface AutopilotCommission {
 }
 // ↑ src/shared/protocol.ts
 
-export type MessageOrigin = 'command-result';
+export type MessageOrigin = 'command-result' | 'tag-retry';
 // ↑ src/shared/protocol.ts
 
 export interface RunReference {

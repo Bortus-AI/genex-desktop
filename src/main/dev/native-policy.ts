@@ -140,6 +140,8 @@ const FIXTURE_SAFE = [
   "studio:bootstrap",
   "studio:performance.mark",
   "studio:send",
+  // A failed @ tag fetched again: a fixture launch's tag sources are its own stand-ins, as Remix's are.
+  "studio:mentions.retry",
   "studio:plan.answer",
   "studio:cancel",
   "studio:queue.message",
@@ -272,6 +274,7 @@ const FIXTURE_SAFE = [
   "studio:play.feed",
   "studio:play.shelves",
   "studio:play.search",
+  "studio:play.catalog",
   // A remix writes a new game into the profile's own games folder; a fixture launch's copy is a
   // local stand-in (`play/remix.ts` `fixtureClone`), so no socket opens.
   "studio:play.remix",

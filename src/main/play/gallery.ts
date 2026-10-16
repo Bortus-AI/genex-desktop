@@ -21,6 +21,7 @@ import {
   shelfOf,
 } from "../../shared/play.ts";
 import { AvatarStyle, isAccountId } from "../../shared/play-people.ts";
+import type { GenexCatalogItem } from "../../shared/mention-corpus.ts";
 
 /** One page of a tab: what the website loads at a time. */
 export const FEED_PAGE_SIZE = 24;
@@ -74,6 +75,7 @@ export const PlayRoute = {
   Referral: "/api/referrals/me",
   world: (slug: string) => `/api/gallery/world/${encodeURIComponent(slug)}`,
   like: (id: string) => `/api/projects/${encodeURIComponent(id)}/like`,
+  assetManifest: (slug: string) => `/api/projects/asset-manifest/${encodeURIComponent(slug)}`,
 } as const;
 
 const MESSAGE = {
@@ -412,6 +414,25 @@ function catalogReads(deps: GalleryDeps) {
     return scored.slice(0, SEARCH_MAX_RESULTS).map((hit) => hit.game);
   };
 
+  /** The whole catalog as the composer's @ picker reads it: who made each, and whether anyone may take it. */
+  const mentionItems = async (): Promise<GenexCatalogItem[]> =>
+    (await catalog()).map(({ shelf, game }) => ({
+      slug: game.slug,
+      title: game.title,
+      description: game.description,
+      shelf,
+      authorId: game.author.id,
+      thumbnailUrl: game.coverUrl,
+      playsCount: game.plays,
+      remixable: game.remixable,
+    }));
+
+  /** An asset's manifest, which carries its whole module: a public read for a published asset. */
+  const assetManifest = (slug: string): Promise<unknown> => {
+    if (!isPlaySlug(slug)) throw new Error(MESSAGE.BadSlug);
+    return readRoute(request, PlayRoute.assetManifest(slug));
+  };
+
   /** Players in up to {@link ONLINE_MAX_SLUGS} games, in one read. */
   const onlineRead = async (slugs: readonly string[]): Promise<Array<[string, number]>> => {
     const query = new URLSearchParams({ slugs: slugs.join(","), t: String(Math.floor(now() / ONLINE_BUCKET_MS)) });
@@ -429,7 +450,7 @@ function catalogReads(deps: GalleryDeps) {
     return Object.fromEntries(read.flat());
   };
 
-  return { feed, shelves, search, online };
+  return { feed, shelves, search, mentionItems, assetManifest, online };
 }
 
 /** What the signed-in account adds: a game's likes, a like, a sign-in ticket and an invite code. */
