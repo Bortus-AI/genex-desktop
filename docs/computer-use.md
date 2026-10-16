@@ -179,9 +179,10 @@ front; Play Solo does not. Keys are held in one `user_keyboard_input` call (down
 A shot is `screen_capture` on the player's Studio (a JPEG of that player's view; a test's server has
 none), shrunk past 1 MB and refused when it can't be. The state is the client's and the server's
 view of the players (position, velocity, health, leaderstats, attributes) with the player's last
-output lines. No pause holds a client's clock, so `play-pause` answers `unsupported`. For a game
-whose link names a published place, `play-open` asks the server once whether the live saved data
-can be reached (`liveData`) and keeps the answer for the Set up panel. A play the session starts is
+output lines. No pause holds a client's clock, so `play-pause` answers `unsupported`. `play-open`
+always asks the server once whether the live saved data can be reached (`liveData`; the link's ids
+can't say, as the person's first publish in Studio doesn't update them, and a server that doesn't
+answer counts as reachable) and keeps the answer for the Set up panel. A play the session starts is
 marked as the agent's (`agent-marks.ts`) from just before it starts until `play-close` ends it.
 
 A judge's grant may name one of the judges the engine plugin declares (`judge`;

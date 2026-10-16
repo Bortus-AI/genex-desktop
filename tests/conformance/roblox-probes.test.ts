@@ -65,7 +65,6 @@ const GAME: PlayGame = {
   game: "shop",
   edit: () => EDIT,
   ask: (async () => ({})) as never,
-  remote: false,
 };
 
 interface Call {

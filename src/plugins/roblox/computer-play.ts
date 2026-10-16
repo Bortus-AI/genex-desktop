@@ -108,8 +108,6 @@ export interface PlayGame {
   ask: HelperAsk;
   /** The game's connection folder, where the agent's marks live; absent for a name that isn't a game id. */
   marks?: string;
-  /** Whether the game's link names a published place (its live saved data may be reachable). */
-  remote: boolean;
   signal?: AbortSignal;
 }
 
@@ -318,11 +316,14 @@ function inOrder(map: TestMap, players: number): string[] {
   return ids;
 }
 
-/** Whether the live saved data can be reached from the play's server: asked only for a published place. */
+/**
+ * Whether the live saved data can be reached from the play's server, always asked of the server
+ * (read only): the link's ids can't say, as the person's own first publish in Studio never updates
+ * them. A server that doesn't answer counts as reachable, so no probe writes to it.
+ */
 async function liveData(c: Ctx, server: string): Promise<boolean> {
-  if (!c.game.remote) return false;
   const answer = await luau(c, server, DataModel.Server, PLAY_LUAU.LiveData);
-  return answer.ok && answer.text.trim() === "true";
+  return !(answer.ok && answer.text.trim() === "false");
 }
 
 /** Whether the agent's play mark still claims a play: one a session started before its plugin restarted. */

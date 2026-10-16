@@ -74,8 +74,8 @@ const EDITING = "- Current Studio Mode: Edit\n- Available DataModels: Edit\n- Fo
 interface WorldOptions {
   /** Polls of the Studio list before a started test's Studios appear. */
   listAfter?: number;
-  liveData?: boolean;
-  remote?: boolean;
+  /** What the play's server answers on the live-data check; "fails" answers an error. */
+  liveData?: boolean | "fails";
   shot?: Buffer;
   shrink?: (bytes: Buffer) => Promise<Buffer>;
   /** What the helper answers a multiplayer test: started, or its own error code. */
@@ -128,6 +128,7 @@ async function playWorld(options: WorldOptions = {}) {
     if (code === PLAY_LUAU.ServerState && isServer)
       return text(JSON.stringify({ players: [{ userId: -1 }], gameSeconds: 4 }));
     if (code === PLAY_LUAU.GameSeconds && isClient) return text("12.5");
+    if (code === PLAY_LUAU.LiveData && isServer && options.liveData === "fails") return text("Script timed out", true);
     if (code === PLAY_LUAU.LiveData && isServer) return text(options.liveData ? "true" : "false");
     if (code === PLAY_LUAU.EndTest && isServer && id === SERVER) {
       studio.testPlayers = 0;
@@ -201,7 +202,7 @@ async function playWorld(options: WorldOptions = {}) {
       clock += ms;
     },
   }).handlers;
-  const game: PlayGame = { storage, game: GAME, edit: () => EDIT, ask, marks, remote: options.remote ?? false };
+  const game: PlayGame = { storage, game: GAME, edit: () => EDIT, ask, marks };
   const run = (tool: EnginePlayTool, args: Record<string, unknown> = {}) =>
     play[tool](args, game) as Promise<Record<string, unknown>>;
   const of = (name: string) => calls.filter((one) => one.name === name);
@@ -325,17 +326,20 @@ describe("Roblox play: opening", () => {
     assert.equal((opened as { refused: string }).refused, EnginePlayRefusal.NoEditor);
   });
 
-  it("a published place whose live saved data Studio can reach answers liveData true and keeps it for the panel", async () => {
-    const world = await playWorld({ remote: true, liveData: true });
-    assert.equal((await world.run(EnginePlayTool.Open)).liveData, true);
-    assert.equal((await readLiveData(world.storage, GAME))?.reachable, true);
-    const local = await playWorld({ remote: false, liveData: true });
-    assert.equal((await local.run(EnginePlayTool.Open)).liveData, false);
+  it("asks the play's server whether the live saved data is reachable, even with no Roblox ids in the link, and keeps it for the panel", async () => {
+    // Flipped: a link without remote ids used to answer false without asking Studio.
+    const published = await playWorld({ liveData: true });
+    assert.equal((await published.run(EnginePlayTool.Open)).liveData, true);
     assert.ok(
-      !local.of("execute_luau").some((one) => one.args.code === PLAY_LUAU.LiveData),
-      "a local place isn't asked",
+      published.of("execute_luau").some((one) => one.args.code === PLAY_LUAU.LiveData),
+      "the server was asked",
     );
+    assert.equal((await readLiveData(published.storage, GAME))?.reachable, true);
+    const local = await playWorld({ liveData: false });
+    assert.equal((await local.run(EnginePlayTool.Open)).liveData, false);
     assert.equal((await readLiveData(local.storage, GAME))?.reachable, false);
+    const silent = await playWorld({ liveData: "fails" });
+    assert.equal((await silent.run(EnginePlayTool.Open)).liveData, true, "a server that can't say counts as reachable");
   });
 });
 

@@ -792,22 +792,20 @@ function modelHandlers(deps: RobloxDeps, services: MomentServices) {
 }
 
 /**
- * The game a play tool's call is for: its Studio as the helper link has it bound, the helper, the
- * agent's marks and whether its link names a published place. The helper link starts once Studio
- * is set up, as for the moments, when the game isn't bound yet.
+ * The game a play tool's call is for: its Studio as the helper link has it bound, the helper and the
+ * agent's marks. The helper link starts once Studio is set up, as for the moments, when the game
+ * isn't bound yet.
  */
 async function playGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<PlayGame> {
   const storage = await context.host(HostService.StorageRoot);
   const game = context.project ?? "";
   await linkFor(deps, services, storage, game);
-  const link = await linkHere(context);
   const marks = agentFolder(storage, game);
   return {
     storage,
     game,
     edit: () => services.bound(game),
     ask: services.ask(game),
-    remote: Boolean(link?.remote),
     signal: context.signal,
     ...(marks ? { marks } : {}),
   };
