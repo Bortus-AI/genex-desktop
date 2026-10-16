@@ -271,6 +271,7 @@ export function StageStrip({
           facts={loaded?.facts ?? NO_FACTS}
           holds={loaded?.holds}
           emptyGame={emptyGame}
+          game={{ builtOnce: !loaded?.awaitingFirstBuild, multiplayer: loaded?.multiplayer === true }}
           onNotice={onNotice}
           onOpenChange={onToolbarOpen}
           folded={folded}

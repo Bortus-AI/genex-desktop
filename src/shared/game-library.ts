@@ -34,6 +34,8 @@ export interface GameLibraryEntry {
   scaffoldStamp?: string;
   /** The title waits for the game's first idea; any title given since clears it. */
   provisional?: boolean;
+  /** New game made it and no answer has ended with it built yet (`GameProject.awaitingFirstBuild`). */
+  awaitingFirstBuild?: boolean;
 }
 export interface GameUpdate {
   title?: string;

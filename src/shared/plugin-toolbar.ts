@@ -104,12 +104,18 @@ const updateDue = (plugin: PluginInfo): string | null =>
   plugin.availableVersion && !plugin.pendingVersion ? plugin.availableVersion : null;
 
 /**
- * Multiplayer stands beside Publish, only on a game with something in it (an empty one has nothing
- * to play together) whose page is its own: an engine's web export (`webFolderOf`) is a build, made
- * again from its project, that the chat never edits to add Genex's multiplayer to.
+ * Multiplayer stands beside Publish, only on a game built at least once (`awaitingFirstBuild`) that
+ * is not multiplayer already and has something in it (an empty one has nothing to play together),
+ * whose page is its own: an engine's web export (`webFolderOf`) is a build, made again from its
+ * project, that the chat never edits to add Genex's multiplayer to.
  */
-export const showsMultiplayer = (game: { publish: boolean; emptyGame: boolean; webExport: boolean }): boolean =>
-  [game.publish, !game.emptyGame, !game.webExport].every(Boolean);
+export const showsMultiplayer = (game: {
+  publish: boolean;
+  builtOnce: boolean;
+  multiplayer: boolean;
+  emptyGame: boolean;
+  webExport: boolean;
+}): boolean => [game.publish, game.builtOnce, !game.multiplayer, !game.emptyGame, !game.webExport].every(Boolean);
 
 /** What Multiplayer's press does, by where Genex stands. */
 export const MultiplayerPress = { SetUp: "set-up", Update: "update", Ask: "ask" } as const;
