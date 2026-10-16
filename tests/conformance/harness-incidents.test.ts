@@ -4432,8 +4432,14 @@ function liveChat() {
   const log: Array<{ id: string; data: Record<string, any> }> = [];
   const steers: Array<Record<string, any>> = [];
   const answered: string[] = [];
-  /** The host's knobs: a gate on appends, a hook before each read, and whether it cuts a lead short. */
-  const hooks: { gate?: Promise<void>; gated: number; beforeList?: () => Promise<void>; cuts: boolean } = {
+  /** The host's knobs: a gate on appends, a hook before each read, whether it cuts a lead short, and a hold on its answer to a steer. */
+  const hooks: {
+    gate?: Promise<void>;
+    gated: number;
+    beforeList?: () => Promise<void>;
+    cuts: boolean;
+    steerAnswer?: Promise<void>;
+  } = {
     gated: 0,
     cuts: true,
   };
@@ -4455,6 +4461,7 @@ function liveChat() {
     }
     if (method === HostMethod.EngineSteer) {
       steers.push(p);
+      await hooks.steerAnswer;
       // The host cuts a lead that cannot read input mid-turn short — unless it is asked not to.
       const cut = hooks.cuts && p.interrupt !== false;
       return { how: cut ? "interrupt" : null, accepted: cut ? p.messages.map((m: { id: string }) => m.id) : [] };
@@ -4512,7 +4519,8 @@ function liveChat() {
       void say(text);
     });
   };
-  function loopRun({ resume = false } = {}) {
+  /** A run of the row's; `sessionId` is the session its lead resumes, null for a lead that opens a fresh one. */
+  function loopRun({ resume = false, sessionId = "lead-1" as string | null } = {}) {
     const notes: Array<{ at: number; seq: number; text: string; kind?: string }> = [];
     const worker = { id: "sky", title: "Sky", state: "running", iterations: [], brief: "paint the sky" };
     const state = {
@@ -4568,7 +4576,7 @@ function liveChat() {
     /** The run, each of the lead's turns answered by `script`; its line released when it ends, as director.ts does. */
     const run = async (script: (turn: number) => unknown) => {
       const talk: DirectorTalk = {
-        sessionId: "lead-1",
+        sessionId,
         keep: async (result) => {
           if (result?.sessionId) talk.sessionId = result.sessionId;
         },
@@ -5206,6 +5214,74 @@ describe("live chat during a build, reviewed", () => {
     await handleUserMessage(studio as never, { threadId: "t_pass", text: "what did you finish?" }).catch(() => {});
     assert.equal(cancels.has("t_pass"), false, "the chat takes the message");
     assert.equal(pass.cancelled, true, "the learning pass Stop reached stays stopped");
+  });
+
+  /*
+   * A Codex lead could not hear the chat for its whole first turn — up to an open Loop's 45 minutes:
+   * "stop, just test computer use" was shown as delivered and read by nobody until the person pressed
+   * Stop. A first turn with a session to resume is cut for the words like any other.
+   */
+  it("LC12. a lead's first turn with a session to resume is cut short for the user's words, told so, and asked to finish", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    await one.run(async (turn) => {
+      if (turn === 2) {
+        one.state.finished = true;
+        return worked;
+      }
+      void chat.say("stop building, just test computer use");
+      await settleOn(() => chat.steers.length > 0);
+      return { ok: false, stopReason: "stopped", sessionId: "lead-1", turns: 4 };
+    });
+    assert.equal(chat.steers[0]?.interrupt, true, "the first turn may be cut for the words");
+    // Read mid-turn by an engine that can, the words say how a stop is done, never only "carry on".
+    assert.match(String(chat.steers[0]?.messages[0]?.text), /stop or finish[^\n]*wrap_up/i);
+    assert.equal(one.calls.length, 2, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    const resumed = String(one.calls[1]?.prompt);
+    assert.match(resumed, /cut short/i, "the resumed turn is told it was cut");
+    assert.match(resumed, /stop or finish[^\n]*wrap_up/i, "a stop is wrap_up, not finishing what it was doing");
+    assert.deepEqual(userSaysIn(resumed), ["stop building, just test computer use"]);
+  });
+
+  it("LC13. a first turn cut before its session began is asked its brief again with the words, never crashing the run", async () => {
+    const chat = liveChat();
+    // The host's answer to the cut reaches the loop only after the failure the cut caused.
+    let answer = () => {};
+    chat.hooks.steerAnswer = new Promise((resolve) => {
+      answer = resolve;
+    });
+    const one = chat.loopRun();
+    await one.run(async (turn) => {
+      if (turn === 2) {
+        one.state.finished = true;
+        return worked;
+      }
+      void chat.say("stop building");
+      await settleOn(() => chat.steers.length > 0);
+      setImmediate(answer);
+      // The host was still preparing the session's tools when the cut came.
+      throw new EngineError("aborted", "codex", "stopped before the contractor started");
+    });
+    assert.equal(one.calls.length, 2, one.calls.map((c) => c.prompt.slice(0, 60)).join(" | "));
+    const [brief = "", again = ""] = one.calls.map((c) => c.prompt);
+    assert.ok(again.includes(brief), "the brief is asked again");
+    assert.deepEqual(userSaysIn(again), ["stop building"]);
+  });
+
+  it("LC14. a first turn with no session to resume yet is left alone: the words open the next message", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun({ sessionId: null });
+    await one.run(async (turn) => {
+      if (turn === 2) {
+        one.state.finished = true;
+        return worked;
+      }
+      void chat.say("is it started?");
+      await settleOn(() => chat.steers.length > 0);
+      return { ok: true, sessionId: "lead-9", turns: 2 };
+    });
+    assert.equal(chat.steers[0]?.interrupt, false, "a cut would leave nothing to resume");
+    assert.deepEqual(userSaysIn(String(one.calls[1]?.prompt)), ["is it started?"]);
   });
 });
 
