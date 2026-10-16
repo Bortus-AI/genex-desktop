@@ -44,6 +44,7 @@ import { GENEX_WORDS, PLUGIN_TOOLBAR_WORDS, problemWords } from "../words.ts";
 import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plugins/genex/GenexPublish.tsx";
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
+import { useCoverAfterTurns } from "./plugins/genex/use-cover-after-turns.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
 import { PluginPanelDialog } from "./PluginPanelDialog.tsx";
 
@@ -538,6 +539,7 @@ export function PluginToolbar({
     if (panel && !entries.some((e) => e.key === panel.key)) setPanel(null);
   }, [entries, panel]);
   const genexPublish = entries.find(isGenexPublish);
+  useCoverAfterTurns(project, Boolean(genexPublish?.plugin.enabled) && !emptyGame);
   const studioPublish = useStudioPublish(plugins, project, { facts, holds }, genexPublish);
   const publish = Boolean(genexPublish) || studioPublish.shown;
   const multiplayerShown = multiplayerOn(publish, emptyGame, game, { facts, holds });

@@ -21,7 +21,6 @@ import {
 } from "../../../../shared/genex.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
 import { GenexAccountStatus } from "../../../../shared/genex-account.ts";
-import { chatPrompt, composeInChat } from "../../../compose-in-chat.ts";
 import { MakingDrawing } from "../../../making-art.ts";
 import { prefersReducedMotion } from "../../../ui/media-queries.ts";
 import { cancelGenexSignIn, signInToGenex, useGenexSignIn } from "../../../play/use-genex-sign-in.ts";
@@ -55,6 +54,8 @@ import {
 } from "./genex-publish-view.ts";
 import { drawRocket, ROCKET_FPS, ROCKET_FRAMES, ROCKET_GRID, rocketScene } from "./publish-rocket.ts";
 import { useGenexStatus } from "./use-genex-status.ts";
+import { CoverControls, CoverMedia, CoverTool } from "./PublishCover.tsx";
+import { CoverKind, type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 
 const WORDS = GENEX_WORDS.publish;
@@ -69,18 +70,6 @@ const BANNER_PICTURE_PX = 960;
 /** A cancelled review or approval is the person's choice, not an error to show. */
 const CANCELLED = /Cancelled/;
 const words = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
-/** Seconds since an attempt started, ticking while it runs. */
-function useElapsed(startedAt: string | null): number | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!startedAt) return;
-    const timer = window.setInterval(() => setNow(Date.now()), SECOND_MS);
-    return () => window.clearInterval(timer);
-  }, [startedAt]);
-  if (!startedAt) return null;
-  return Math.max(0, Math.floor((now - Date.parse(startedAt)) / SECOND_MS));
-}
 
 /** The running attempt's steps as one bar with their names; amber while it takes longer than usual. */
 function Progress({ view }: { view: PublishView }): JSX.Element {
@@ -210,6 +199,9 @@ function Banner({
   view,
   publishing,
   celebrate,
+  cover,
+  shotKey,
+  clipKey,
 }: {
   project: string;
   title: string;
@@ -217,22 +209,42 @@ function Banner({
   view: PublishView;
   publishing: boolean;
   celebrate: boolean;
+  cover: PublishCover;
+  /** The kept shot's hash: a new one is read again. */
+  shotKey: string | null;
+  /** The kept clip's hash, or null while the game has none. */
+  clipKey: string | null;
 }): JSX.Element {
   const game = useLibrary((s) => s.games.find((g) => g.name === project));
-  const shot = useBannerShot(project, view.outcome);
+  const shot = useBannerShot(project, `${view.outcome}:${shotKey ?? ""}`);
   const fallback = useMemo(() => gameCoverUrl(game?.cover, project), [game?.cover, project]);
+  const [asking, setAsking] = useState(false);
+  const [chosen, setShow] = useState<CoverKind>(CoverKind.Clip);
+  const show = clipKey ? chosen : CoverKind.Picture;
+  const quiet = publishing || celebrate;
   return (
-    <div className="genex-publish-banner" data-shot={shot ? true : undefined}>
+    <div className="genex-publish-banner" data-shot={shot ? true : undefined} data-asking={asking || undefined}>
       <img src={shot ?? fallback} alt="" aria-hidden draggable={false} />
+      <CoverMedia project={project} cover={cover} show={show} clipKey={clipKey} />
       <span className="genex-publish-banner-shade" aria-hidden />
       {view.chip && !publishing && (
         <span className="genex-publish-chip" data-tone={view.chip.tone}>
           {view.chip.text}
         </span>
       )}
+      {!quiet && (
+        <CoverControls cover={cover} show={show} onShow={setShow} hasClip={Boolean(clipKey)} asking={asking} />
+      )}
       {celebrate && <PublishRocket />}
       <div className="genex-publish-banner-foot">
-        <BannerName title={title} onTitle={onTitle} editable={!publishing} live={celebrate} />
+        {!asking && <BannerName title={title} onTitle={onTitle} editable={!publishing} live={celebrate} />}
+        <CoverTool
+          cover={cover}
+          show={show}
+          disabled={publishing || !view.canAskCover}
+          asking={asking}
+          onAsking={setAsking}
+        />
       </div>
     </div>
   );
@@ -253,18 +265,6 @@ function LinkField({ link, onOpen, opening }: { link: string; onOpen: () => void
         <Icon name="arrow-up-right" size={14} />
       </Button>
     </div>
-  );
-}
-
-/** No Genex cover to send yet: one quiet line, and the press that leaves the ask in the game's chat. */
-function CoverAsk({ onAsk }: { onAsk: () => void }): JSX.Element {
-  return (
-    <p className="genex-publish-hint" data-genex-cover-ask>
-      {WORDS.coverNone}{" "}
-      <TextButton aria-label={WORDS.coverAskLabel} onClick={onAsk}>
-        {WORDS.coverAsk}
-      </TextButton>
-    </p>
   );
 }
 
@@ -336,7 +336,6 @@ function PublishFrame({
       onDismiss={onClose}
       size="lg"
       testId={heading.testId}
-      returnFocus={returnFocus}
     >
       <div
         className="genex-publish-body"
@@ -623,14 +622,7 @@ export function GenexPublishDialog({
 }): JSX.Element {
   const record = usePublishRecord(plugin, project);
   const { state } = record;
-  const returnFocus = useRef<HTMLElement | null>(null);
-  /** Close, leaving the cover ask in this game's composer for the person to send; the cursor goes there. */
-  const askForCover = (): void => {
-    if (!project) return;
-    returnFocus.current = chatPrompt();
-    composeInChat({ project, text: WORDS.coverPrompt });
-    onClose();
-  };
+  const cover = usePublishCover({ plugin, project: project ?? "", state, refresh: record.refresh });
   if (state && publishGate(plugin, state.connected) === PublishGate.SignIn)
     return (
       <PublishFrame intro={WORDS.intro} state={state} onClose={onClose}>
@@ -657,17 +649,10 @@ export function GenexPublishDialog({
       onDismiss={onClose}
       size="lg"
       testId="genex-publish"
-      returnFocus={returnFocus}
       headerHidden
       className="genex-publish-dialog"
     >
-      <PublishBody
-        view={view}
-        record={record}
-        project={project ?? ""}
-        // A cover is the Genex plugin's to make: with it off, nobody in the chat can.
-        onAskCover={plugin.enabled ? askForCover : null}
-      />
+      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </DialogSurface>
   );
@@ -696,13 +681,12 @@ function PublishBody({
   view,
   record,
   project,
-  onAskCover,
+  cover,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   project: string;
-  /** Leave the cover ask in the game's chat; null while no one there can make a cover. */
-  onAskCover: (() => void) | null;
+  cover: PublishCover;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -728,6 +712,9 @@ function PublishBody({
         view={view}
         publishing={publishing}
         celebrate={celebrate}
+        cover={cover}
+        shotKey={record.state?.cover?.shot?.sha256 ?? null}
+        clipKey={record.state?.cover?.clip?.sha256 ?? null}
       />
       <div className="genex-publish-content">
         {view.problems.map((problem) => (
@@ -748,14 +735,7 @@ function PublishBody({
             label={celebrate ? WORDS.saveName : undefined}
           />
         )}
-        <Hint
-          view={view}
-          publishing={publishing}
-          celebrate={celebrate}
-          onAskCover={onAskCover}
-          record={record}
-          name={name}
-        />
+        <Hint view={view} publishing={publishing} making={Boolean(cover.making)} record={record} name={name} />
       </div>
     </div>
   );
@@ -765,15 +745,14 @@ function PublishBody({
 function Hint({
   view,
   publishing,
-  celebrate,
-  onAskCover,
+  making,
   record,
   name,
 }: {
   view: PublishView;
   publishing: boolean;
-  celebrate: boolean;
-  onAskCover: (() => void) | null;
+  /** Another cover is on its way: the line says where it shows. */
+  making: boolean;
   record: ReturnType<typeof usePublishRecord>;
   name: string;
 }): JSX.Element | null {
@@ -790,13 +769,7 @@ function Hint({
       </p>
     );
   if (publishing) return <p className="genex-publish-hint">{WORDS.keepsGoing}</p>;
-  if (celebrate && onAskCover)
-    return (
-      <p className="genex-publish-hint">
-        {WORDS.intro} <TextButton onClick={onAskCover}>{WORDS.changeCover}</TextButton>
-      </p>
-    );
-  if (view.coverAsk && onAskCover) return <CoverAsk onAsk={onAskCover} />;
+  if (making) return <p className="genex-publish-hint">{WORDS.coverMakingSoon}</p>;
   if (view.stage === PublishStage.Public || view.failure) return null;
   return <p className="genex-publish-hint">{WORDS.intro}</p>;
 }

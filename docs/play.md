@@ -38,6 +38,11 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Games, Tools and Assets, each with tabs and search; Recent once something was played; Top
   creators (the last 30 days) above Games' tabs. The promo card shows until the first sign-in or
   its ×.
+- A card's five-second clip plays while hovered (after a short dwell). The first row of Games' feed
+  plays up to four clips by itself, as genex.games' Featured grid does: after its covers and an
+  idle moment, staggered, only while half in view and the window shows (none under the viewer);
+  out of view for 10 s a clip lets its decoder go. One pause after the tabs stops every clip and is
+  remembered; Reduce Motion, a failed clip or a refused play stops them for the session.
 - Friends: requests, playing now (Join), friends, sent, people search, the invite card and whether
   friends see the game the account is in. The invite link (`/api/referrals/me`, on the website
   only) opens genex.games' download page with a card from the account; the card has Copy, Post on

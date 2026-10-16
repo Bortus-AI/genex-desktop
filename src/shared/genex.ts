@@ -25,12 +25,15 @@ export const GenexAction = {
   PublishAllowUpload: "publish-allow-upload",
   PublishOpen: "publish-open",
   PublishBadge: "publish-badge",
+  CoverAuto: "cover-auto",
+  CoverPick: "cover-pick",
 } as const;
 export type GenexAction = (typeof GenexAction)[keyof typeof GenexAction];
 
 /**
  * The Genex actions that belong to the person's account, not the agent's tools: signing in and
- * out, the account's status and terms, and Publish. They run while the Genex plugin is off.
+ * out, the account's status and terms, and Publish with its cover and clip. They run while the
+ * Genex plugin is off.
  */
 export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
   GenexAction.Status,
@@ -45,6 +48,8 @@ export const GENEX_ACCOUNT_ACTIONS: readonly GenexAction[] = [
   GenexAction.PublishAllowUpload,
   GenexAction.PublishOpen,
   GenexAction.PublishBadge,
+  GenexAction.CoverAuto,
+  GenexAction.CoverPick,
 ];
 
 /**
@@ -416,8 +421,8 @@ export function withoutGenexSources<T extends Output>(files: readonly T[]): T[] 
   return files.filter((file) => !(isSource(file) && finished.has(file.generationId)));
 }
 
-/** What genex__cover does: photograph the genex-cover demo and keep it, or report the cover's state. */
-export const GenexCoverOperation = { Shoot: "shoot", Status: "status" } as const;
+/** What genex__cover does: photograph the genex-cover demo and keep it, record the genex-clip demo, or report. */
+export const GenexCoverOperation = { Shoot: "shoot", Status: "status", Clip: "clip" } as const;
 export type GenexCoverOperation = (typeof GenexCoverOperation)[keyof typeof GenexCoverOperation];
 
 /** The folder of the Genex plugin's storage that holds one folder per game's cover, `covers/<project>/`. */
@@ -428,6 +433,15 @@ export const GENEX_COVER_SHOT_FILE = {
   [StillMimeType.Png]: "shot.png",
   [StillMimeType.Jpeg]: "shot.jpg",
 } as const satisfies Record<StillMimeType, string>;
+
+/** The folder beside the kept shot that holds the recent frames as `<sha256>.png|jpg`, listed in `candidates.json`. */
+export const GENEX_COVER_CANDIDATES_DIR = "candidates";
+
+/** The kept cover clip's video beside its record (`clip.json`) in `covers/<project>/`, named by its type. */
+export const GENEX_COVER_CLIP_FILE = {
+  "video/webm": "clip.webm",
+  "video/mp4": "clip.mp4",
+} as const;
 
 /** Mirror of Genex's cover upload limit (the CLI's `COVER_MAX_BYTES`, the API's `COVER_MAX_UPLOAD_BYTES`). */
 export const GENEX_COVER_MAX_BYTES = 8 * 1024 * 1024;
@@ -442,7 +456,20 @@ export interface GenexCoverShot {
   source: CaptureSource;
   stats: StillExposure;
   takenAt: string;
+  /** Who staged the frame: the game's genex-cover demo, or Studio's plain frame of a game with none. Absent: the demo. */
+  origin?: GenexCoverOrigin;
+  /** The person picked this frame among the candidates: Studio and a publish shoot no new one over it. */
+  pinned?: boolean;
 }
+
+/** Who staged a kept cover frame (`GenexCoverShot.origin`). Persisted: never rename one. */
+export const GenexCoverOrigin = {
+  /** The game's own `genex-cover` demo. */
+  Demo: "demo",
+  /** Studio's plain frame of the game as it loads, for a game with no genex-cover demo yet. */
+  Studio: "studio",
+} as const;
+export type GenexCoverOrigin = (typeof GenexCoverOrigin)[keyof typeof GenexCoverOrigin];
 
 /** Genex's luma numbers on a refused frame, as the CLI reports them (0–1). */
 export interface GenexCoverFrameStats {
@@ -473,12 +500,40 @@ export interface GenexCoverSent {
   settled?: GenexCoverOutcome;
 }
 
+/** Answers that mean the owner chose the game's cover on genex.games: that choice stands. */
+const OWNER_CHOSE = new Set<GenexCoverOutcome>([GenexCoverOutcome.KeptOwner, GenexCoverOutcome.Outranked]);
+
+/** Whether the last send found the owner's own cover, then or when these bytes were first sent. */
+export function ownerChoseCover(last: GenexCoverSent | null | undefined): boolean {
+  if (!last) return false;
+  return [last.kind, last.settled].some((kind) => kind !== undefined && OWNER_CHOSE.has(kind));
+}
+
 /** The game's Genex cover as the plugin reports it: the kept shot, the last send, and whether one runs. */
 export interface GenexCoverRecord {
   shot: GenexCoverShot | null;
   last: GenexCoverSent | null;
   /** A send is running for this game right now. */
   sending: boolean;
+  /** The recent frames the person can flip between, newest first, the kept shot among them. Absent from older plugins. */
+  candidates?: GenexCoverShot[];
+  /** The kept genex-clip recording, or null; absent from a plugin older than clips. */
+  clip?: GenexCoverClip | null;
+  /** How the last clip send went; null before any. */
+  clipLast?: GenexCoverSent | null;
+}
+
+/** The game's kept cover clip (`covers/<project>/clip.json`), beside its video: five seconds of real play. */
+export interface GenexCoverClip {
+  sha256: string;
+  mimeType: string;
+  bytes: number;
+  width: number;
+  height: number;
+  durationMs: number;
+  /** Share of sampled frame pairs that differ: a frozen recording is near 0. */
+  motion: number;
+  takenAt: string;
 }
 
 /** What Studio knows about this game's Genex pages. Never a credential, never the user's game folder. */

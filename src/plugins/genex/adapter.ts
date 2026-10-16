@@ -16,8 +16,10 @@ import {
   cleanGenexTitle,
   defaultGenexTitle,
   GENEX_COVERS_DIR,
+  GenexCoverOrigin,
   GenexCoverOutcome,
   type GenexCoverSent,
+  ownerChoseCover,
   GenexHostedStatus,
   GenexJobStatus,
   GenexOperation,
@@ -44,6 +46,8 @@ import {
   CoverOperation,
   coverRides,
   type CoverView,
+  COVER_AUTO_GAP_MS,
+  COVER_FALLBACK_CAMERA,
   COVER_SEND_TIMEOUT_MS,
   COVER_VIEW_TIMEOUT_MS,
   decideSend,
@@ -58,8 +62,10 @@ import {
   ownerPick,
   parseCoverAnswer,
   parseCoverView,
+  pickCandidate,
   PROBLEM_GUIDANCE,
   PUBLISH_SHOT_TIMEOUT_MS,
+  readCandidates,
   readSent,
   readShot,
   readStillAnswer,
@@ -70,6 +76,19 @@ import {
   unchangedRecord,
   writeSent,
 } from "./cover.ts";
+import {
+  CLIP_MESSAGE,
+  clipGuidance,
+  clipProblemGuidance,
+  clipSentRecord,
+  clipToSend,
+  freezeClip,
+  readClip,
+  readClipAnswer,
+  readClipSent,
+  saveClip,
+  writeClipSent,
+} from "./clip.ts";
 import { windowsBaseEnv } from "../../substrate/child-env.ts";
 import { envPath } from "../../substrate/toolchain.ts";
 import {
@@ -335,6 +354,8 @@ export class GenexTools {
   #publishJobs = new Map<string, { job: GenexPublishJob; done: Promise<void> }>();
   /** The cover send running per game: the one a publish leaves behind it, or genex__cover-set's. */
   #coverSteps = new Map<string, CoverStep>();
+  /** When Studio last took each game's cover on its own (`coverAuto`). */
+  #coverAutoAt = new Map<string, number>();
   /** The last write to a game's kept shot, or a send's read of it: each waits for the one before. */
   #coverWrites = new Map<string, Promise<unknown>>();
   /** Genex's last word on each generation seen settled, by generation id: status reads apply it without asking again. */
@@ -1104,10 +1125,16 @@ export class GenexTools {
   /** A publish state with the game's cover, and the cover lines of its own job among its warnings. */
   async #withCover(project: string, state: GenexPublishState): Promise<GenexPublishState> {
     const dir = this.#coverDir(project);
-    const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+    const [shot, last, candidates, clip, clipLast] = await Promise.all([
+      readShot(dir),
+      readSent(dir),
+      readCandidates(dir),
+      readClip(dir),
+      readClipSent(dir),
+    ]);
     const own = last?.jobId !== undefined && last.jobId === state.job?.id;
     const warnings = [...(state.warnings ?? []), ...(own ? (last.lines ?? []) : [])];
-    const cover = { shot, last, sending: this.#coverSteps.has(project) };
+    const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast };
     return { ...state, ...(warnings.length ? { warnings } : {}), cover };
   }
   /**
@@ -1141,6 +1168,94 @@ export class GenexTools {
         { mimeType: "image/jpeg", data: reading.still.preview.toString("base64"), label: COVER_MESSAGE.PreviewLabel },
       ],
     };
+  }
+  /**
+   * Studio's own cover step, as the Publish dialog opens and after a turn on the game: a fresh
+   * frame of the genex-cover demo, or, for a game with no demo and no frame from one, a plain
+   * frame of the game as it loads, so Publish always shows a cover. Nothing over the person's own
+   * pick or the owner's cover on Genex, nothing beside a publish or a send, and at most once per
+   * {@link COVER_AUTO_GAP_MS} a game. Answers the game's publish state with its cover.
+   */
+  async coverAuto(project: string, camera?: CoverCamera): Promise<GenexPublishState> {
+    if (camera && (await this.#coverAutoDue(project))) {
+      this.#coverAutoAt.set(project, this.#now());
+      await this.#autoShoot(project, camera).catch(() => {});
+      // A clip needs the game's own genex-clip demo to play itself: without one nothing is recorded.
+      await this.#recordClip(project, camera).catch(() => null);
+    }
+    return this.#withCover(project, await this.publishStatus(project));
+  }
+  /** Whether Studio may take this game's cover now on its own. */
+  async #coverAutoDue(project: string): Promise<boolean> {
+    const busy = this.#publishJobs.has(project) || this.#coverSteps.has(project);
+    const recent = this.#now() - (this.#coverAutoAt.get(project) ?? Number.NEGATIVE_INFINITY) < COVER_AUTO_GAP_MS;
+    if (busy || recent) return false;
+    const dir = this.#coverDir(project);
+    const [shot, last] = await Promise.all([readShot(dir), readSent(dir)]);
+    return !shot?.pinned && !ownerChoseCover(last);
+  }
+  /** One shot of the genex-cover demo, else Studio's plain frame unless a demo's frame is already kept. */
+  async #autoShoot(project: string, camera: CoverCamera): Promise<void> {
+    const dir = this.#coverDir(project);
+    const demo = readStillAnswer(await within(camera.shoot(), this.#coverTimeouts.shotMs));
+    if ("still" in demo) {
+      const takenAt = new Date(this.#now()).toISOString();
+      await this.#coverWrite(project, () => saveShot(dir, demo.still, takenAt));
+      return;
+    }
+    const kept = await readShot(dir);
+    const noDemo = demo.problem.code === PluginStillProblemCode.ViewUnknown;
+    if (!noDemo || (kept && kept.origin !== GenexCoverOrigin.Studio)) return;
+    const plain = readStillAnswer(
+      await within(camera.shoot({ camera: COVER_FALLBACK_CAMERA }), this.#coverTimeouts.shotMs),
+    );
+    if (!("still" in plain)) return;
+    const takenAt = new Date(this.#now()).toISOString();
+    await this.#coverWrite(project, () => saveShot(dir, plain.still, takenAt, GenexCoverOrigin.Studio));
+  }
+  /**
+   * genex__cover clip: record the game's genex-clip demo now and keep it as its clip. A problem
+   * keeps the last clip and says what to fix; a recording comes back as its first frame.
+   */
+  async coverClip(project: string, camera: CoverCamera): Promise<Record<string, unknown>> {
+    const taken = await this.#recordClip(project, camera);
+    if (!taken)
+      return {
+        operation: CoverOperation.Clip,
+        problem: { code: PluginStillProblemCode.Unavailable },
+        guidance: CLIP_MESSAGE.Unavailable,
+      };
+    if ("problem" in taken)
+      return {
+        operation: CoverOperation.Clip,
+        problem: taken.problem,
+        kept: await readClip(this.#coverDir(project)),
+        guidance: clipProblemGuidance(taken.problem),
+      };
+    return {
+      operation: CoverOperation.Clip,
+      clip: taken.clip,
+      guidance: clipGuidance(taken.clip),
+      images: [{ mimeType: "image/jpeg", data: taken.poster.toString("base64"), label: CLIP_MESSAGE.PosterLabel }],
+    };
+  }
+  /** Record the genex-clip demo and keep it; null when this camera records no clips. */
+  async #recordClip(project: string, camera: CoverCamera) {
+    if (!camera.record) return null;
+    const answer = await camera.record().catch(() => null);
+    const reading = readClipAnswer(answer);
+    if ("problem" in reading) return reading;
+    const takenAt = new Date(this.#now()).toISOString();
+    const dir = this.#coverDir(project);
+    const clip = await this.#coverWrite(project, () => saveClip(dir, reading.clip, takenAt));
+    return { clip, poster: reading.clip.poster };
+  }
+  /** The person picked a candidate in Publish: it becomes the kept shot, pinned. Answers the publish state. */
+  async coverPick(project: string, sha: unknown): Promise<GenexPublishState> {
+    const dir = this.#coverDir(project);
+    const picked = await this.#coverWrite(project, () => pickCandidate(dir, sha));
+    if (!picked) throw new Error(COVER_MESSAGE.NoSuchCandidate);
+    return this.#withCover(project, await this.publishStatus(project));
   }
   /**
    * genex__cover status: the kept shot, the last send and, for a hosted game while signed in,
@@ -1204,6 +1319,8 @@ export class GenexTools {
    * Never throws: by now the job is exporting, and a cover may not hold it up or fail it.
    */
   async #reshoot(project: string, camera: CoverCamera): Promise<string[]> {
+    // The person picked this frame among the candidates: it goes as it is.
+    if ((await readShot(this.#coverDir(project)))?.pinned) return [];
     const left = INVOCATION_BUDGET_MS - (this.#now() - camera.invokedAt);
     if (left < MIN_REMAINING_FOR_SHOT_MS) return [COVER_MESSAGE.NoTimeToShoot];
     const answer = await within(camera.shoot(), this.#coverTimeouts.shotMs).catch(() => null);
@@ -1226,6 +1343,11 @@ export class GenexTools {
     const step: CoverStep = { ...(jobId ? { jobId } : {}), controller, done: Promise.resolve(null) };
     step.done = this.#sendCover(project, controller.signal, jobId)
       .catch(() => null)
+      .then(async (record) => {
+        // The clip rides behind the cover, never instead of it: a clip that fails changes nothing else.
+        await this.#sendClip(project, controller.signal, jobId).catch(() => {});
+        return record;
+      })
       .finally(() => {
         this.#controllers.delete(controller);
         if (this.#coverSteps.get(project) === step) this.#coverSteps.delete(project);
@@ -1288,6 +1410,40 @@ export class GenexTools {
       return this.#keepSent(dir, signal, sentRecord(answer, shot, at(), jobId));
     } finally {
       await rm(copy, { force: true });
+    }
+  }
+  /**
+   * Send the kept clip unless Genex settled these bytes, with the build it was recorded from (the
+   * revision the last upload shipped): Genex keeps a clip only of a build the game ships. What goes
+   * out is a copy taken when the send began; a stopped send writes nothing.
+   */
+  async #sendClip(project: string, signal: AbortSignal, jobId?: string): Promise<void> {
+    const dir = this.#coverDir(project);
+    const planned = await this.#coverWrite(project, async () => {
+      const [clip, last] = await Promise.all([readClip(dir), readClipSent(dir)]);
+      if (!clipToSend(clip, last) || !clip) return null;
+      const copy = await freezeClip(dir, clip);
+      return copy ? { clip, copy } : null;
+    });
+    if (!planned) return;
+    try {
+      const revision = (await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))))?.stagingCommit;
+      if (!revision || signal.aborted) return;
+      const { out } = (await this.#spawnCli(
+        this.#publishDir(project),
+        ["cover", "--clip", planned.copy, "--commit", revision, "--json"],
+        signal,
+        {
+          timeoutMs: this.#coverTimeouts.sendMs,
+          parse: false,
+          home: path.join(this.#publishDir(project), "home"),
+          answerExitCodes: COVER_ANSWER_EXIT_CODES,
+        },
+      ).catch(() => ({ out: "" }))) as { out: string };
+      if (signal.aborted) return;
+      await writeClipSent(dir, clipSentRecord(out, planned.clip, new Date(this.#now()).toISOString(), jobId));
+    } finally {
+      await rm(planned.copy, { force: true });
     }
   }
   /** Write a send's outcome, unless the send was stopped. */

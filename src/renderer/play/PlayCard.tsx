@@ -1,18 +1,19 @@
 /**
  * One game on the dashboard, as genex.games draws it: the 16:9 cover (pressing it plays) with its
- * five-second clip running over it while hovered, its players now and its plays over the cover's
- * corner, the title, who made it, and Remix when its source is public. A card still on its way is
- * the same shape with nothing in it.
+ * five-second clip running over it while hovered, or by itself in the Games feed's first row
+ * (`CoverClip.tsx`), its players now and its plays over the cover's corner, the title, who made it,
+ * and Remix when its source is public. A card still on its way is the same shape with nothing in it.
  */
 import type { CSSProperties, JSX } from "react";
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useId, useRef, useState } from "react";
 import type { PlayGame } from "../../shared/play.ts";
 import { usePlay } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
 import { Button } from "../ui/Button.tsx";
 import { Icon } from "../ui/icons.tsx";
-import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { PLAY_WORDS } from "../words.ts";
+import { claimHoverClip, releaseHoverClip } from "./clip-playback.ts";
+import { CoverClip } from "./CoverClip.tsx";
 import { formatCount } from "./play-model.ts";
 
 const WORDS = PLAY_WORDS;
@@ -22,7 +23,7 @@ const CoverState = { Loading: "loading", Shown: "shown", Failed: "failed" } as c
 type CoverState = (typeof CoverState)[keyof typeof CoverState];
 
 /** The cover: the picture fades in once decoded; a missing or broken one leaves the plain tile. */
-function Cover({ src }: { src: string | null }): JSX.Element | null {
+function Cover({ src, onShown }: { src: string | null; onShown: () => void }): JSX.Element | null {
   const [state, setState] = useState<CoverState>(CoverState.Loading);
   if (!src || state === CoverState.Failed) return null;
   return (
@@ -34,62 +35,11 @@ function Cover({ src }: { src: string | null }): JSX.Element | null {
       loading="lazy"
       decoding="async"
       data-shown={state === CoverState.Shown || undefined}
-      onLoad={() => setState(CoverState.Shown)}
-      onError={() => setState(CoverState.Failed)}
-    />
-  );
-}
-
-/** How long a pointer rests on a card before its clip loads: a pass across the grid fetches nothing. */
-const CLIP_HOVER_DELAY_MS = 150;
-
-/** A clip the card let go of (its source taken away) is not a failure; anything else is. */
-const releasedPlay = (error: unknown): boolean => error instanceof DOMException && error.name === "AbortError";
-
-/**
- * The cover's clip, as genex.games plays it: while the card is hovered or focused it loads and fades
- * in over the still on its first frame; leaving pauses it and frees the decoder. A clip that fails
- * keeps the still for good, and Reduce Motion plays none.
- */
-function CoverClip({ src, active }: { src: string; active: boolean }): JSX.Element | null {
-  const ref = useRef<HTMLVideoElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    const video = ref.current;
-    if (!video || failed) return;
-    if (!active) {
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-      setPlaying(false);
-      return;
-    }
-    if (prefersReducedMotion()) return;
-    const timer = window.setTimeout(() => {
-      video.src = src;
-      video.play().catch((error: unknown) => {
-        if (!releasedPlay(error)) setFailed(true);
-      });
-    }, CLIP_HOVER_DELAY_MS);
-    return () => window.clearTimeout(timer);
-  }, [active, src, failed]);
-  if (failed) return null;
-  return (
-    <video
-      ref={ref}
-      className="play-card-clip"
-      muted
-      loop
-      playsInline
-      preload="none"
-      disablePictureInPicture
-      aria-hidden="true"
-      data-shown={playing || undefined}
-      onPlaying={() => setPlaying(true)}
-      onError={(event) => {
-        if (event.currentTarget.getAttribute("src")) setFailed(true);
+      onLoad={() => {
+        setState(CoverState.Shown);
+        onShown();
       }}
+      onError={() => setState(CoverState.Failed)}
     />
   );
 }
@@ -167,6 +117,8 @@ export const PlayCard = memo(function PlayCard({
   onRemix,
   showAuthor = true,
   marquee = false,
+  autoplay = false,
+  index = 0,
 }: {
   game: PlayGame;
   onPlay: (game: PlayGame) => void;
@@ -175,8 +127,18 @@ export const PlayCard = memo(function PlayCard({
   showAuthor?: boolean;
   /** A title too long for the card scrolls back and forth instead of being cut off (a profile's cards). */
   marquee?: boolean;
+  /** A card of the Games feed's first row: its clip plays by itself. */
+  autoplay?: boolean;
+  /** The card's place in its grid: when its clip may start. */
+  index?: number;
 }): JSX.Element {
-  const [hovered, setHovered] = useState(false);
+  const clipKey = useId();
+  const cover = useRef<HTMLButtonElement>(null);
+  const [coverShown, setCoverShown] = useState(false);
+  const clip = game.clipUrl;
+  // The pointer or focus on the cover asks for its clip; the store decides when it loads.
+  const hover = clip ? () => claimHoverClip(clipKey) : undefined;
+  const leave = clip ? () => releaseHoverClip(clipKey) : undefined;
   // One remix at a time: this card's says so, and every Remix waits for it.
   const making = usePlay((s) => s.making?.slug ?? null);
   const remixing = making === game.slug;
@@ -186,14 +148,17 @@ export const PlayCard = memo(function PlayCard({
         type="button"
         className="play-card-cover"
         aria-label={WORDS.play(game.title)}
+        ref={cover}
         onClick={() => onPlay(game)}
-        onPointerEnter={() => setHovered(true)}
-        onPointerLeave={() => setHovered(false)}
-        onFocus={() => setHovered(true)}
-        onBlur={() => setHovered(false)}
+        onPointerEnter={hover}
+        onPointerLeave={leave}
+        onFocus={hover}
+        onBlur={leave}
       >
-        <Cover src={game.coverUrl} />
-        {game.clipUrl && <CoverClip src={game.clipUrl} active={hovered} />}
+        <Cover src={game.coverUrl} onShown={() => setCoverShown(true)} />
+        {clip && (
+          <CoverClip clipKey={clipKey} url={clip} ready={coverShown} autoplay={autoplay} index={index} anchor={cover} />
+        )}
         <span className="play-card-shade" aria-hidden="true" />
         <Stats game={game} />
       </button>

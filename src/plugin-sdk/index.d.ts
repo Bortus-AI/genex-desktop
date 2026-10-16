@@ -501,6 +501,42 @@ export type PluginStillAnswer = { still: PluginStill } | { stillProblem: PluginS
  */
 export type PluginStillIgnored = { still?: undefined; stillProblem?: undefined; [key: string]: unknown };
 
+/**
+ * API 3: `observe` with a `clip` records `seconds` (2–10, default 5) of the bound game running, from
+ * the start of a moment its demo `demo` stages (a `config.demos` key: it sets up the moment and its
+ * own scripted input, and returns; the host then starts the game's clock and sends no input), on a
+ * hidden window of its own at `width`×`height` (whole pixels, 320–1920 by 240–1200), at `fps`
+ * (15–30, default 30), in at most `maxBytes` (256 KiB to 8 MiB, default 8 MiB). Send `files: []`
+ * and no `still`. A host older than this option ignores `clip` and answers an ordinary observation
+ * ({@link PluginClipIgnored}), so check the answer for `clip`, then `clipProblem`, and handle neither.
+ */
+export interface PluginClipRequest {
+  demo: string;
+  width: number;
+  height: number;
+  seconds?: number;
+  fps?: number;
+  maxBytes?: number;
+}
+export interface PluginClip {
+  video: Uint8Array;
+  /** MP4 (H.264) where the host's recorder can, else WebM (VP9 or VP8). */
+  mimeType: "video/webm" | "video/mp4";
+  /** The recorded canvas's size; a game that draws smaller is not scaled up. */
+  width: number;
+  height: number;
+  durationMs: number;
+  view: { demo: string };
+  /** JPEG of the first recorded frame, at most 1280 px on its long side. */
+  poster: Uint8Array;
+  /** 0–1: the share of sampled frame pairs that differ visibly; a frozen recording is about 0. */
+  motion: number;
+}
+/** A clip's problem codes are a still's: `too_large` when even the lowest bitrate is over `maxBytes`. */
+export type PluginClipAnswer = { clip: PluginClip } | { clipProblem: PluginStillProblem };
+/** What an API-3 host older than clips answers instead: an ordinary observation, with neither `clip` nor `clipProblem`. */
+export type PluginClipIgnored = { clip?: undefined; clipProblem?: undefined; [key: string]: unknown };
+
 /** Sanitized progress for Studio. `kind: 'toolbar'` updates a toolbar item's badge. */
 export interface PluginEvent {
   kind?: string;
@@ -575,6 +611,15 @@ export interface PluginHostCall {
     method: "observe",
     args: { project: string; root: string; files: []; still: PluginStillRequest },
   ): Promise<PluginStillAnswer | PluginStillIgnored>;
+  /**
+   * API 3: a few seconds of the bound game running from a moment its demo stages; see
+   * {@link PluginClipRequest}. A host older than the option answers an ordinary observation
+   * ({@link PluginClipIgnored}).
+   */
+  (
+    method: "observe",
+    args: { project: string; root: string; files: []; clip: PluginClipRequest },
+  ): Promise<PluginClipAnswer | PluginClipIgnored>;
   (method: "observe", args: { project: string; root: string; files: string[] }): Promise<unknown>;
   /** Current plugin's explicitly unlocked memory lease; null never triggers OS access. */
   (method: "credentials.session"): Promise<string | null>;

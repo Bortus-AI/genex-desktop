@@ -67,6 +67,9 @@ through the JS API imports `@typescript/typescript6`.
   repository as the game folder, the moments a plugin manifest hooks on `unreal-moment-bus.ts`, and
   the lead's scripted turns, the pool's workers and the reviewer as three kinds of delegation, on
   the test's clock; `dispatch()` starts the run through the run's start instead, on the wall clock.
+- `observe-windows.ts`: fake preview windows for a plugin's `observe` with a `still` or a `clip`
+  (Live and the pooled windows, each logging what it was asked, over a page the test scripts), a
+  real core over them (`observeHost`) and budgets on a clock the test holds (`heldClock`).
 - `director-run.ts`: a director's run without a rig (`fakeLoopRun`, `fakeClock`, `lead`).
 - `project-fixtures.ts`: the synthetic project folders in `fixtures/projects/` (`copyProject`
   copies one into a test's folder and adds the files its engine writes while it runs), reads of a

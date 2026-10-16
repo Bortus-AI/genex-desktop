@@ -3676,17 +3676,42 @@ export const GENEX_WORDS = {
     /** The press that lists a game renamed right after it went live under its new name. */
     saveName: "Save name",
     replay: "Play the celebration again",
-    changeCover: "Change cover",
-    /** While the game has no Genex cover to send: one quiet line, and the press that asks its chat for one. */
-    coverNone: "No cover yet.",
-    coverAsk: "Ask for a cover",
-    coverAskLabel: "Ask for a cover in this game's chat",
-    /** What that press leaves in the game's composer, for the person to send. */
-    coverPrompt: "Make this game's Genex cover.",
+    /** The banner's cover controls: ask for another, say what it should show, flip through the recent ones. */
+    anotherCover: "Another cover",
+    anotherCoverLabel: "Make another cover",
+    coverWantLabel: "What the new cover should show",
+    coverWantPlaceholder: "What should it show? Or leave it empty",
+    coverMake: "Make",
+    coverKeep: "Keep this cover",
+    coverPrevious: "Previous cover",
+    coverNext: "Next cover",
+    coverOf: (at: number, of: number) => `Cover ${at} of ${of}`,
+    /** While Studio or the agent is making a cover: the banner's busy pill. */
+    coverTaking: "Taking a cover",
+    coverMaking: "New cover",
+    coverMakingSoon: "The new one shows here when it’s ready.",
+    /** What Another cover sends in the game's chat, with what the person typed. */
+    coverAnotherPrompt: (want: string) =>
+      want
+        ? `Make another Genex cover for this game: ${want}`
+        : "Make another Genex cover for this game: a different moment.",
+    /** The banner's switch between the cover and its clip, and the clip's own Another. */
+    coverShow: "Show",
+    coverPicture: "Picture",
+    coverClip: "Clip",
+    anotherClip: "Another clip",
+    anotherClipLabel: "Make another clip",
+    coverAnotherClipPrompt: (want: string) =>
+      want
+        ? `Make another Genex clip for this game: ${want}`
+        : "Make another Genex clip for this game: a different moment.",
     /** The chat's card for the cover a builder kept: its caption, its picture's name, and Publish, which opens this dialog. */
     coverCard: "Genex cover",
     coverCardAlt: "This game's Genex cover",
     coverCardPublishLabel: "Publish this game",
+    coverCardAnother: "Another",
+    /** The card's mark that the cover comes with a clip, and its length. */
+    coverCardClip: (ms: number) => `0:${String(Math.round(ms / 1000)).padStart(2, "0")}`,
     /** A failed attempt's one line under the banner. */
     failedText: "Nothing changed. Try again in a moment.",
     failedKept: "The last version is still live.",
@@ -4035,6 +4060,8 @@ export const PLAY_WORDS = {
   by: (author: string) => `By ${author}`,
   plays: (count: string) => `${count} plays`,
   online: (count: number) => `${count} playing now`,
+  /** The top row's one control over the cover clips: its name, and its tooltip while paused. */
+  clips: { pause: "Pause previews", play: "Play previews" },
   remix: "Remix",
   remixing: "Remixing…",
   remixLabel: (title: string) => `Remix ${title}`,
