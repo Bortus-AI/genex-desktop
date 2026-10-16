@@ -210,7 +210,9 @@ const baseName = (project: string) => project.split(/[\\/]/).pop() ?? project;
 
 /**
  * Whether a listed Studio has the linked place open: a published place by its id in the name, a
- * local place by its file name (Studio may leave the extension off).
+ * local place by its whole file name or its stem (Studio may leave the extension off), without
+ * letter case, as both systems' file names are. Never a part of the name: "race.rbxlx" is not
+ * open in a Studio listing "sky-race.rbxlx".
  */
 export function placeMatcher(link: PlaceLink): (studio: StudioEntry) => boolean {
   if (link.placeId) {
@@ -221,7 +223,10 @@ export function placeMatcher(link: PlaceLink): (studio: StudioEntry) => boolean 
     const name = link.name;
     return (studio) => studio.name === name;
   }
-  const file = baseName(link.project);
+  const file = baseName(link.project).toLowerCase();
   const stem = file.replace(/\.[^.]+$/, "");
-  return (studio) => studio.name === stem || studio.name.includes(file);
+  return (studio) => {
+    const name = studio.name.toLowerCase();
+    return name === file || name === stem;
+  };
 }

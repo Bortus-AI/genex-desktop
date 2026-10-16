@@ -113,6 +113,25 @@ describe("a place file named for Use in this game", () => {
     });
 });
 
+describe("a Studio is the one a linked place file is open in", () => {
+  /** A Studio's listed name against a linked file: only the whole file name or its stem matches. */
+  const ROWS: Array<[string, string, boolean]> = [
+    ["/g/sky-race/sky-race.rbxlx", "sky-race.rbxlx", true],
+    ["/g/sky-race/sky-race.rbxlx", "sky-race", true],
+    ["/g/sky-race/sky-race.rbxlx", "Sky-Race.RBXLX", true],
+    ["/g/race/race.rbxlx", "sky-race.rbxlx", false],
+    ["/g/race/race.rbxlx", "sky-race", false],
+    ["/g/a/a.rbxlx", "aa.rbxlx", false],
+    ["/g/a/a.rbxlx", "a.rbxlx.rbxlx", false],
+    ["C:\\games\\race\\race.rbxl", "race.rbxl", true],
+    ["C:\\games\\race\\race.rbxl", "my race.rbxl", false],
+  ];
+  for (const [project, name, matches] of ROWS)
+    it(`${matches ? "matches" : "doesn't match"} ${JSON.stringify(name)} for ${project}`, () => {
+      assert.equal(placeMatcher({ project })({ id: "studio", name }), matches);
+    });
+});
+
 describe("Use in this game", () => {
   it("links a local place file where it is, by its real path", async () => {
     const mac = await robloxMac();

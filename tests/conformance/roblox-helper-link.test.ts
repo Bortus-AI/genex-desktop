@@ -323,6 +323,18 @@ test("a Studio whose place two games link binds neither game", async () => {
   link.close();
 });
 
+test("a Studio on one game's place file binds that game, not a game whose file name is part of it", async () => {
+  const { storage } = await world({ race: "race.rbxlx", "sky-race": "sky-race.rbxlx" });
+  const sky = { id: "studio-sky", name: "sky-race.rbxlx" };
+  const studio = fakeStudio([sky]);
+  const { link, clock } = linkOver(storage, studio);
+  memoryHelper(link, { studio, studioId: sky.id }).hello();
+  await link.idle();
+  assert.equal(link.bound("sky-race"), sky.id);
+  assert.equal((await readBound(storage, "race", clock.now())).state, BindingState.None);
+  link.close();
+});
+
 test("a marker holding two Genex apps' sessions binds each app's connection to that Studio", async () => {
   const { storage } = await world();
   const studio = fakeStudio([OBBY, PLACE1]);
