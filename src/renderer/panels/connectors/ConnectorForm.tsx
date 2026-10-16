@@ -11,6 +11,7 @@ import { McpTransport } from "../../../shared/mcp.ts";
 import type { McpConnectorDraft, McpDraft } from "../../../shared/mcp-import.ts";
 import { SecretStorageIssue } from "../../../shared/secret-storage.ts";
 import { Button } from "../../ui/Button.tsx";
+import { Checkbox } from "../../ui/Checkbox.tsx";
 import { DialogSurface } from "../../ui/dialog.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { ViewSwitcher } from "../../ui/view-switcher.tsx";
@@ -363,12 +364,7 @@ function Option({
 }): JSX.Element {
   return (
     <label className="connector-option">
-      <input
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-      />
+      <Checkbox checked={checked} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
       <span>
         {label}
         {hint && <span className="connector-hint">{hint}</span>}
@@ -447,8 +443,7 @@ function ToolChecklist({
       {tools.map((tool) => (
         <div key={tool.name} className="flex flex-col gap-1 text-xs">
           <label className="flex items-start gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={toolAllowed(draft.connector.toolPolicy, tool.name)}
               onChange={(event) => onToolAllowed(tool.name, event.target.checked)}
             />
@@ -456,8 +451,7 @@ function ToolChecklist({
             <span className="min-w-0 flex-1 truncate text-ink-3">{tool.description}</span>
           </label>
           <label className="flex items-center gap-2 pl-5 text-micro text-ink-3">
-            <input
-              type="checkbox"
+            <Checkbox
               aria-label={`Allow ${tool.name} without asking`}
               disabled={!toolAllowed(draft.connector.toolPolicy, tool.name)}
               checked={draft.connector.toolPolicy.autoApprove?.includes(tool.name) === true}
