@@ -234,6 +234,18 @@ function tasklistPath(env: NodeJS.ProcessEnv): string {
   return path.win32.join(root && isWindowsPath(root) ? root : WINDOWS_ROOT, "System32", "tasklist.exe");
 }
 
+/** The process ids of every Studio running on a Mac (none elsewhere, or when pgrep can't run). */
+export async function studioPids(deps: LocateDeps): Promise<number[]> {
+  if (deps.platform !== "darwin") return [];
+  const answer = await deps.run(PGREP, ["-x", STUDIO_MAC_PROCESS]).catch(() => undefined);
+  if (!answer || answer.code !== 0) return [];
+  return answer.stdout
+    .split(LINE_BREAK)
+    .map((line) => line.trim())
+    .filter((line) => PID.test(line))
+    .map(Number);
+}
+
 /** Whether Roblox Studio runs; a check that can't run reads as not running. */
 export async function studioRunning(deps: LocateDeps): Promise<boolean> {
   if (deps.platform === "win32") {

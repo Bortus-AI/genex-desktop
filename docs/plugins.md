@@ -1123,7 +1123,8 @@ may ask to let Genex use the Documents folder, where Roblox keeps its plugins. T
 a copy of a helper file that was there before; Undo Set up takes back only what still holds Genex's
 bytes, and the Plugins folder only when Genex made it and it is empty. The helper carries
 `GENEX_HELPER_VERSION`: an older or unmarked one is replaced, a newer one is kept. With Studio open,
-Set up offers **Restart Studio** (a normal quit, so Studio asks to save as always; Set up; Studio
+Set up offers **Restart Studio** (a normal quit of every Studio process, each asked on its own
+because each place opens a Studio of its own, so Studio asks to save as always; Set up; Studio
 opened again), **Do it for me** (`game.engine.assist` with the task "Turn on Studio's MCP server:
 Assistant › ⋯ › Settings › MCP Servers › Enable Studio as MCP server") and that click path.
 Assistant Settings is a window of Studio's own process, so `engine.apps` names Studio alone. The

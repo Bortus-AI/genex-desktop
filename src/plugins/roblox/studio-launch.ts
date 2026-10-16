@@ -4,8 +4,9 @@
  * person's sign-in must work.
  *
  * - Quit is always a normal quit, so Studio asks to save an unsaved place as it does for the
- *   person: on a Mac an Apple event that never starts a Studio that isn't running, on Windows
- *   `taskkill` without `/F`. Genex never force-quits Studio.
+ *   person: on a Mac each Studio process is asked on its own (an Apple event to Studio's app
+ *   reaches only one of them) and nothing is started, on Windows `taskkill` without `/F`. Genex
+ *   never force-quits Studio.
  * - Open starts Studio on its own: `open -a` on a Mac, the program detached on Windows.
  * - A place opens through Studio's own command line: a local file with `--task EditFile
  *   --localPlaceFile`, a published place with `--task EditPlace --placeId --universeId`. Each
@@ -23,6 +24,7 @@ import {
   type LocateDeps,
   STUDIO_WINDOWS_EXE,
   type StudioInstall,
+  studioPids,
   studioRunning,
 } from "./studio-locate.ts";
 
@@ -90,22 +92,38 @@ export interface LaunchDeps extends LocateDeps {
   now(): number;
 }
 
-/** The normal quit for this system; never a forced one. */
-export function quitLaunch(platform: NodeJS.Platform, env: NodeJS.ProcessEnv): Launch {
+/**
+ * The Mac's quit for one Studio process, as JavaScript for Automation: the process is named as
+ * the script's own argument, and asked to quit only when it is Studio. An Apple event addressed to
+ * Studio's app reaches one of its processes, and each place Genex opens runs a Studio of its own.
+ */
+const MAC_QUIT_SCRIPT = [
+  "function run(argv) {",
+  '  ObjC.import("AppKit");',
+  "  const app = $.NSRunningApplication.runningApplicationWithProcessIdentifier(Number(argv[0]));",
+  `  if (app.isNil() || app.bundleIdentifier.js !== "${STUDIO_MAC_BUNDLE}") return "not-studio";`,
+  '  return app.terminate ? "asked" : "refused";',
+  "}",
+].join("\n");
+
+/**
+ * The normal quit for this system; never a forced one. On a Mac it is for one Studio process,
+ * `pid`; on Windows taskkill without /F asks every Studio window at once.
+ */
+export function quitLaunch(platform: NodeJS.Platform, env: NodeJS.ProcessEnv, pid?: number): Launch {
   if (platform === "win32") {
     const root = envValue(env, "SystemRoot");
     const system = root && isWindowsPath(root) ? root : WINDOWS_ROOT;
     return { file: path.win32.join(system, "System32", "taskkill.exe"), args: ["/IM", STUDIO_WINDOWS_EXE] };
   }
-  // "is running" asks without starting Studio; ignoring the answer leaves Studio's save question to the person.
-  const script = [
-    `if application id "${STUDIO_MAC_BUNDLE}" is running then`,
-    "ignoring application responses",
-    `tell application id "${STUDIO_MAC_BUNDLE}" to quit`,
-    "end ignoring",
-    "end if",
-  ];
-  return { file: OSASCRIPT, args: script.flatMap((line) => ["-e", line]) };
+  // Asking a running app to quit never starts one; Studio's save question stays the person's.
+  return { file: OSASCRIPT, args: ["-l", "JavaScript", "-e", MAC_QUIT_SCRIPT, String(pid ?? 0)] };
+}
+
+/** The quits that reach every open Studio: one per process on a Mac, one for all on Windows. */
+async function quitLaunches(deps: LaunchDeps): Promise<Launch[]> {
+  if (deps.platform !== "darwin") return [quitLaunch(deps.platform, deps.env)];
+  return (await studioPids(deps)).map((pid) => quitLaunch(deps.platform, deps.env, pid));
 }
 
 /** Whether `file` is a full place path of `platform`'s own spelling, with no control character. */
@@ -164,8 +182,7 @@ export function openLaunch(platform: NodeJS.Platform, install: StudioInstall): L
  */
 export async function quitStudio(deps: LaunchDeps, waitMs = QUIT_WAIT_MS): Promise<boolean> {
   if (!(await studioRunning(deps))) return true;
-  const quit = quitLaunch(deps.platform, deps.env);
-  await deps.run(quit.file, quit.args).catch(() => undefined);
+  for (const quit of await quitLaunches(deps)) await deps.run(quit.file, quit.args).catch(() => undefined);
   const until = deps.now() + waitMs;
   while (deps.now() < until) {
     await deps.sleep(QUIT_POLL_MS);

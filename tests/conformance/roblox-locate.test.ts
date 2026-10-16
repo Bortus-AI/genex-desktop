@@ -16,6 +16,7 @@ import {
   type Run,
   STUDIO_MAC_APP,
   StudioMiss,
+  studioPids,
   studioRunning,
   tasklistRunning,
 } from "../../src/plugins/roblox/studio-locate.ts";
@@ -338,5 +339,18 @@ describe("whether Roblox Studio runs", () => {
 
     const broken = fakeRun({});
     assert.equal(await studioRunning({ ...deps, run: broken.run }), false);
+  });
+
+  it("lists every Studio process on a Mac from pgrep's lines, keeping only whole pids", async () => {
+    const mac = { platform: "darwin" as const, env: {}, home: MAC_HOME, fs: fakeFs({}, path.posix) };
+    const several = fakeRun({ "/usr/bin/pgrep": { code: 0, stdout: "4530\n12a\n\n 8620 \n-1\n" } });
+    assert.deepEqual(await studioPids({ ...mac, run: several.run }), [4530, 8620]);
+    const none = fakeRun({ "/usr/bin/pgrep": { code: 1, stdout: "" } });
+    assert.deepEqual(await studioPids({ ...mac, run: none.run }), []);
+    assert.deepEqual(await studioPids({ ...mac, run: fakeRun({}).run }), [], "pgrep that can't run lists none");
+    const windows = fakeRun({});
+    const onWindows = { platform: "win32" as const, env: {}, home: "C:\\Users\\maker", fs: fakeFs({}, path.win32) };
+    assert.deepEqual(await studioPids({ ...onWindows, run: windows.run }), []);
+    assert.deepEqual(windows.calls, [], "nothing is asked on Windows");
   });
 });

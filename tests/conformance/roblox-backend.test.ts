@@ -414,7 +414,7 @@ describe("Set up, Restart Studio and Do it for me from the panel", () => {
     assert.equal(answer.reopened, true);
     const quits = mac.calls.filter((call) => call.file === "/usr/bin/osascript");
     assert.equal(quits.length, 1, "one quit");
-    assert.match(quits[0]?.args.join(" ") ?? "", /to quit/);
+    assert.equal(quits[0]?.args.at(-1), "4530", "the quit names the open Studio's process");
     assert.doesNotMatch(quits[0]?.args.join(" ") ?? "", /kill|-9|force/i, "never forced");
     assert.deepEqual(mac.opened, [{ file: "/usr/bin/open", args: ["-a", STUDIO_MAC_APP] }]);
     assert.ok((await lstat(path.join(home, "Documents", "Roblox", "Plugins", HELPER_FILE))).isFile());

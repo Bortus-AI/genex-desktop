@@ -12,10 +12,12 @@ import { describe, it } from "node:test";
 import { setTimeout as wait } from "node:timers/promises";
 import {
   focusLaunch,
+  type LaunchDeps,
   LaunchRefusal,
   markStarting,
   openPlaceLaunch,
   quitLaunch,
+  quitStudio,
   STARTING_MAX_MS,
   StudioLaunchError,
   startingNow,
@@ -101,15 +103,63 @@ describe("opening a place in Roblox Studio", () => {
 });
 
 describe("quitting Roblox Studio", () => {
-  it("is the normal quit on both systems: an Apple event on a Mac, taskkill without /F on Windows", () => {
-    const mac = quitLaunch("darwin", {});
+  it("is the normal quit on both systems: a quit asked of Studio on a Mac, taskkill without /F on Windows", () => {
+    const mac = quitLaunch("darwin", {}, 4530);
     assert.equal(mac.file, "/usr/bin/osascript");
-    assert.ok(mac.args.join(" ").includes("to quit"), "a quit Apple event");
     assert.ok(!mac.args.join(" ").match(/kill|-9|force/i), "never a kill");
     const windows = quitLaunch("win32", { SystemRoot: "C:\\Windows" });
     assert.equal(windows.file, "C:\\Windows\\System32\\taskkill.exe");
     assert.deepEqual(windows.args, ["/IM", "RobloxStudioBeta.exe"]);
     assert.ok(!windows.args.some((arg) => /^\/[FT]$/i.test(arg)), "never /F or /T");
+  });
+
+  /**
+   * A Mac with several Studio processes (each place Genex opens starts one of its own). A quit
+   * that names a process reaches that one; a quit addressed to Studio's app alone reaches only one
+   * of them, as an Apple event by bundle id does.
+   */
+  function studiosOnAMac(pids: number[]) {
+    const open = new Set(pids);
+    const asked: number[] = [];
+    let now = 0;
+    const run = async (file: string, args: readonly string[]) => {
+      if (file === "/usr/bin/pgrep")
+        return open.size ? { code: 0, stdout: `${[...open].join("\n")}\n` } : { code: 1, stdout: "" };
+      if (file !== "/usr/bin/osascript") throw new Error(`spawn ${file} ENOENT`);
+      const named = Number(args.at(-1));
+      const reached = open.has(named) ? named : [...open][0];
+      if (reached !== undefined) {
+        asked.push(reached);
+        open.delete(reached);
+      }
+      return { code: 0, stdout: "" };
+    };
+    const deps: LaunchDeps = {
+      platform: "darwin",
+      env: {},
+      home: "/Users/maker",
+      fs: { lstat: async () => undefined, realpath: async (file) => file, readdir: async () => [] },
+      run,
+      open: async () => undefined,
+      sleep: async (ms) => {
+        now += ms;
+      },
+      now: () => now,
+    };
+    return { deps, open, asked };
+  }
+
+  it("asks every open Studio on a Mac to quit, each by its own process", async () => {
+    const mac = studiosOnAMac([4530, 8620, 9114]);
+    assert.equal(await quitStudio(mac.deps, 10_000), true, "every Studio closed");
+    assert.deepEqual([...mac.asked].sort(), [4530, 8620, 9114]);
+  });
+
+  it("names the process as its own argument and never a kill", () => {
+    const mac = quitLaunch("darwin", {}, 4530);
+    assert.equal(mac.file, "/usr/bin/osascript");
+    assert.equal(mac.args.at(-1), "4530", "the process, as one argument after the script");
+    assert.ok(!mac.args.join(" ").match(/kill|-9|force/i), "never a kill");
   });
 });
 
