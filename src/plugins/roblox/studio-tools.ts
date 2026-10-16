@@ -10,7 +10,8 @@
  * - Inserts, uploads and Roblox's AI tools are plugin tools that ask the person every time, so
  *   they never reach the connection, whose cards Auto and Bypass skip.
  *
- * A tool this table doesn't know (a newer Studio's) passes as a write, never as a read.
+ * A tool this table doesn't know (a newer Studio's) is hidden until Genex classes it: it could
+ * publish, upload or run Roblox's AI on the person's account, which always asks first.
  */
 
 /** What Genex does with a Studio tool. Wire values: never rename. */
@@ -33,6 +34,8 @@ export const StudioToolClass = {
   ConfirmedAi: "confirmed-ai",
   /** A plugin tool that asks first: an upload to the person's account. */
   ConfirmedUpload: "confirmed-upload",
+  /** A tool this table doesn't know yet (a newer Studio's): hidden until Genex classes it. */
+  Unknown: "unknown",
 } as const;
 export type StudioToolClass = (typeof StudioToolClass)[keyof typeof StudioToolClass];
 
@@ -133,9 +136,9 @@ export const STUDIO_TOOLS = {
 
 const KNOWN: ReadonlyMap<string, StudioToolEntry> = new Map(Object.entries(STUDIO_TOOLS));
 
-/** A tool's class; one the table doesn't know is a write. */
+/** A tool's class; one the table doesn't know is Unknown, which the connection hides. */
 export function classOf(name: string): StudioToolClass {
-  return KNOWN.get(name)?.class ?? StudioToolClass.Write;
+  return KNOWN.get(name)?.class ?? StudioToolClass.Unknown;
 }
 
 /** Whether the connection offers a tool of this class: reads and writes only. */

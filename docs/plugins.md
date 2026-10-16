@@ -1180,7 +1180,8 @@ yet from the game's linked place matched by name; two matching Studios, a stale 
 naming another Studio are refused in plain words. `studio-tools.ts` gives each of StudioMCP 0.743's
 30 tools a class: the reads pass with no card (the manifest's `reads`), `execute_luau` passes as a
 write (Edit unless the agent names another data model) with `agent-busy.json` kept around it, and a
-tool the table doesn't know passes as a write. Hidden: the play-lane tools (play goes through the
+tool the table doesn't know (a newer Studio's) is hidden and refused until Genex classes it, since
+it could publish, upload or run Roblox's AI on the person's account. Hidden too: the play-lane tools (play goes through the
 six play tools), `multi_edit` (scripts are the game's `.luau` files), `http_get` (Studio would
 fetch any address for the agent: a path for leaking data and for planted instructions) and
 `list_roblox_studios`; inserts, uploads and Roblox's AI tools are plugin tools that ask the person

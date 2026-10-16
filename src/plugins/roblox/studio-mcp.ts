@@ -84,6 +84,8 @@ const MESSAGE = {
       `${name} isn't offered here: Roblox's AI tools run on the person's account and ask them first. Use ${askFirstToolsFor(name).join(" or ")}.`,
     [StudioToolClass.ConfirmedUpload]: (name: string) =>
       `${name} isn't offered here: uploads go to the person's account and ask them first. Use ${askFirstToolsFor(name).join(" or ")}.`,
+    [StudioToolClass.Unknown]: (name: string) =>
+      `${name} isn't offered yet: it is new in Roblox Studio, and Genex offers a Studio tool only once it knows what the tool does.`,
   },
 } as const;
 

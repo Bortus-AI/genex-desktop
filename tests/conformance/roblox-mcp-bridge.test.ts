@@ -143,7 +143,7 @@ test("contract pin: the class table covers every recorded Studio tool with the a
     ),
     [],
   );
-  assert.equal(classOf("a_tool_from_a_newer_studio"), StudioToolClass.Write);
+  assert.equal(classOf("a_tool_from_a_newer_studio"), StudioToolClass.Unknown);
 });
 
 test("the manifest's Roblox Studio connection reads exactly the read class and holds the studio lock", async () => {
@@ -163,7 +163,7 @@ test("the connection lists reads and writes only, with studio_id left for it to 
   try {
     const { tools } = await bridge.agent.listTools();
     const names = tools.map((tool) => tool.name).sort();
-    assert.deepEqual(names, [...READ_TOOLS, "execute_luau", "future_tool"].sort());
+    assert.deepEqual(names, [...READ_TOOLS, "execute_luau"].sort());
     for (const hidden of [...HIDDEN, ...CONFIRMED]) assert.ok(!names.includes(hidden), hidden);
     for (const tool of tools) {
       assert.equal(tool.inputSchema.properties?.studio_id, undefined, tool.name);
@@ -273,7 +273,7 @@ test("hidden and ask-first tools are refused by name and never reach Studio", as
   }
 });
 
-test("a write marks the agent busy around the call; a read marks nothing; an unknown tool is a write", async () => {
+test("a write marks the agent busy around the call; a read marks nothing", async () => {
   const seen: Array<{ tool: string; mark: any }> = [];
   const wrap = (client: StudioClient, folder: string): StudioClient => ({
     ...client,
@@ -283,7 +283,7 @@ test("a write marks the agent busy around the call; a read marks nothing; an unk
       return client.callTool(name, args, options);
     },
   });
-  const bridge = await connect({ flags: ["--extra-tool", "future_tool"], wrap });
+  const bridge = await connect({ wrap });
   try {
     await bridge.bind("studio-1");
     await bridge.agent.callTool({ name: "inspect_instance", arguments: { path: "Workspace" } });
@@ -292,9 +292,24 @@ test("a write marks the agent busy around the call; a read marks nothing; an unk
     assert.deepEqual(seen.at(-1)?.mark, { since: NOW }, "busy while the write runs");
     const after = JSON.parse(await readFile(path.join(bridge.folder, AGENT_BUSY_FILE), "utf8"));
     assert.deepEqual(after, { since: NOW, until: NOW });
-    bridge.stand.clock.t++;
-    await bridge.agent.callTool({ name: "future_tool", arguments: {} });
-    assert.deepEqual(seen.at(-1)?.mark, { since: NOW + 1 }, "an unknown tool counts as a write");
+  } finally {
+    await bridge.close();
+  }
+});
+
+test("a tool a newer Studio adds is never listed, and a call to it is refused before any Studio is asked", async () => {
+  const unknown = ["publish_place", "generate_avatar", "upload_asset"];
+  const bridge = await connect({ flags: unknown.flatMap((name) => ["--extra-tool", name]) });
+  try {
+    await bridge.bind("studio-1");
+    const names = (await bridge.agent.listTools()).tools.map((tool) => tool.name);
+    for (const name of unknown) assert.ok(!names.includes(name), `${name} is not listed`);
+    for (const name of unknown) {
+      const result: any = await bridge.agent.callTool({ name, arguments: {} });
+      assert.equal(result.isError, true, name);
+      assert.match(textOf(result), new RegExp(`^${name} isn't offered yet`), name);
+    }
+    assert.deepEqual(await bridge.calls(), [], "no Studio was asked to run them");
   } finally {
     await bridge.close();
   }

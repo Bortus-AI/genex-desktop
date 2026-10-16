@@ -13,8 +13,8 @@
  * `--studios <json>` lists those Studios (default one, `studio-1` named Place1); `--lose-after <n>`
  * lists them for its first n lists only, as a StudioMCP that reached Studio through another one
  * loses it when that one ends; `--extra-tool
- * <name>` lists one more tool, unknown to Genex, that answers like any other; `--no-init` never
- * answers `initialize`.
+ * <name>` (repeatable) lists one more tool, unknown to Genex, that answers like any other;
+ * `--no-init` never answers `initialize`.
  */
 import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -27,7 +27,7 @@ const logFile = flag("--log");
 const startedAt = Date.now();
 const lateMs = Number(flag("--late-studio") ?? 0);
 const crashAfter = Number(flag("--crash-after") ?? 0);
-const extraTool = flag("--extra-tool");
+const extraTools = argv.flatMap((arg, index) => (arg === "--extra-tool" ? [argv[index + 1]] : []));
 const loseAfter = Number(flag("--lose-after") ?? 0);
 let lists = 0;
 const studios = argv.includes("--no-studio")
@@ -37,7 +37,7 @@ const studios = argv.includes("--no-studio")
 const here = path.dirname(fileURLToPath(import.meta.url));
 const contract = JSON.parse(readFileSync(path.join(here, "roblox-studio", "tools.json"), "utf8"));
 const tools = contract.tools.map((tool) => ({ ...tool, description: `Stand-in for ${tool.name}.` }));
-if (extraTool)
+for (const extraTool of extraTools)
   tools.push({
     name: extraTool,
     description: "A tool Genex has no class for.",
