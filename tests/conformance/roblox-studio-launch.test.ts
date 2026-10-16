@@ -10,6 +10,8 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { setTimeout as wait } from "node:timers/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   focusLaunch,
   type LaunchDeps,
@@ -160,6 +162,19 @@ describe("quitting Roblox Studio", () => {
     assert.equal(mac.file, "/usr/bin/osascript");
     assert.equal(mac.args.at(-1), "4530", "the process, as one argument after the script");
     assert.ok(!mac.args.join(" ").match(/kill|-9|force/i), "never a kill");
+  });
+});
+
+describe("the Mac's quit script", () => {
+  it("compiles and runs, and asks nothing of a process that isn't Studio", {
+    skip: process.platform !== "darwin" && "osascript and AppKit exist only on a Mac",
+  }, async () => {
+    // The test's own process isn't Studio, and pid 0 is no app: neither run can quit anything.
+    for (const pid of [process.pid, 0]) {
+      const launch = quitLaunch("darwin", {}, pid);
+      const { stdout } = await promisify(execFile)(launch.file, launch.args, { timeout: 30_000 });
+      assert.equal(stdout.trim(), "not-studio", `pid ${pid}`);
+    }
   });
 });
 
