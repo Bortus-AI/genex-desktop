@@ -42,6 +42,7 @@ import type { SecretStorageIssue } from "../../shared/secret-storage.ts";
 import { exposedToolName, flatParameters } from "../engines/tool-schema.ts";
 import path from "node:path";
 import {
+  McpConnectFailed,
   McpConnection,
   CALL_TIMEOUT_MS,
   CONNECT_TIMEOUT_MS,
@@ -312,6 +313,20 @@ function applyTrust(connector: McpConnector, previous: McpConnector | undefined,
   if (trust || previous?.trustedLaunch === digest) connector.trustedLaunch = digest;
   else delete connector.trustedLaunch;
 }
+
+/** The HTTP status of a server that wants an account before it answers. */
+const SIGN_IN_FIRST = 401;
+
+/**
+ * A URL server of the person's own, with no sign-in and no key header, that answered "sign in
+ * first": its next Connect signs in through the browser.
+ */
+const asksForSignIn = (entry: Entry, error: unknown): boolean => {
+  const c = entry.connector;
+  const keyed = c.headers?.some((name) => name.toLowerCase() === "authorization") === true;
+  const remote = c.transport !== McpTransport.Stdio && c.authentication === undefined;
+  return remote && !keyed && !entry.plugin && error instanceof McpConnectFailed && error.status === SIGN_IN_FIRST;
+};
 
 /** The OAuth account no longer matches: the connector is off, or its url or sign-in changed. */
 const accountChanged = (previous: McpConnector | undefined, next: McpConnector) =>
@@ -1356,6 +1371,10 @@ export class McpRegistry {
       this.#oauth.get(id)?.ready();
       return { ok: true, tools: tools.map((t) => this.#summary(entry, t)), durationMs: Date.now() - started };
     } catch (error) {
+      if (openBrowser && entry && asksForSignIn(entry, error)) {
+        await this.save({ ...entry.connector, authentication: "oauth" });
+        return this.connect(id, project, openBrowser);
+      }
       const message = errorMessage(error);
       this.#oauth.get(id)?.ready();
       if (entry && this.#entries.get(id) === entry && entry.connector.enabled) {
