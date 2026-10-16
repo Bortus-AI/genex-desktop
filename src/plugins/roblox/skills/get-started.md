@@ -5,69 +5,66 @@ Studio isn't open for this game, or when the person asks to set Roblox up. It ge
 working connection and stops there. Once the tools answer, go back to what the person asked for.
 
 Adapted for Genex from the `roblox-get-started` skill in Roblox's roblox-studio-agent-plugin (MIT
-licence, notice at the end). In Genex the **Roblox Studio** button in the toolbar does the setup;
-you guide the person through it and keep helping meanwhile.
+licence, notice at the end). In Genex the setup is yours: every press of the **Roblox Studio**
+panel is also a tool of this plugin (`roblox__<name>`), and you call them yourself.
 
 ## Rules
 
-- **The button sets things up, not you.** Its panel has four steps: Roblox Studio on this computer,
-  the Genex helper added, Studio's MCP server on, and the place chosen for this game. Every step
-  that changes the person's computer asks them first. Don't download or install Studio, copy
-  plugins or edit Studio's settings files yourself with commands.
-- **Never touch the person's sign-in.** Never ask for, read or type their Roblox password, and
-  never read cookies, tokens or Studio's sign-in files. The person signs in to Studio themselves.
-- **Ask whether they are signed in.** Ask "Are you signed in to Roblox Studio?" and believe the
-  answer; don't try to check it.
-- **Never close or force-quit Studio.** Unsaved work could be lost. Ask the person to quit it, or
-  point them to the panel's Restart Studio, which lets Studio ask to save first.
-- **Switches only Studio's window offers** are clicked by the panel's **Do it for me**, which asks
-  the person first and uses Genex's computer control for that click only, or by the person
-  following the click path the panel shows. Never drive Studio with the desktop tool for anything
-  else.
-- **Plain asks, once.** Tell the person in one short list what is missing and which button does
-  it. Ask again only for something that wasn't on the list.
+- **You set it up, with this plugin's tools.** Never tell the person to press a button or click
+  through Studio for something a tool below does. Every step that changes their computer shows
+  them a card first; that card is their only part. Don't download or install Studio, copy plugins
+  or edit Studio's settings files yourself with commands: the tools do that safely.
+- **What stays the person's:** signing in to Roblox (never ask for, read or type their password,
+  and never read cookies, tokens or Studio's sign-in files), macOS's own prompts (such as letting
+  Genex use the Documents folder), and Studio's or Roblox's own questions: saving their place, an
+  age check, ID, a two-step code, terms or a payment. Say exactly which one and where.
+- **Never close or force-quit Studio unasked.** `restart-studio` and `quit-studio` use Studio's
+  normal quit, which asks the person to save first, and both ask on a card.
+- **Switches only Studio's window offers** are clicked by `do-it-for-me`, which hands this chat's
+  next turn the click with Genex's computer control (Genex asks once on a card when computer
+  control is off). End your turn once it has started. Never drive Studio with the desktop tool for
+  anything else.
 - If a step fails, say which step and what you saw, then check the table below.
 
-## 1. Read the button
+## 1. Read where Studio stands
 
-The Roblox Studio button shows Studio's state; its panel shows each step with a tick.
+`show-steps` shows the person the setup card, ticked live; the Roblox Studio button shows the same
+state. Each state has its tool:
 
-| The button says | What it means | What the person does |
+| State | What it means | What you call |
 | --- | --- | --- |
-| Not installed | Studio isn't on this computer | Open the panel and press Get Roblox Studio. Genex downloads it from Roblox, checks Roblox signed it, and installs it |
-| Set up | Studio is there; the helper or the MCP server isn't | Open the panel and press Set up (best with Studio closed) |
-| Not open | Everything is set up; Studio isn't running | Open the panel and open this game's place |
-| Starting | Studio is open; Genex is waiting for it to answer | Wait a moment; open a place if none is open |
+| Not installed | Studio isn't on this computer | `get-studio`: Genex downloads it from Roblox, checks Roblox signed it, installs and sets it up. The person signs in when Studio opens |
+| Set up | Studio is there; the helper or the MCP server isn't | `setup` with Studio closed, or `restart-studio` while it is open |
+| Not open | Everything is set up; Studio isn't running | `open-studio`, which opens this game's place |
+| Starting | Studio is open; Genex is waiting for it to answer | Wait a moment and retry; if it stays so, `do-it-for-me` (the MCP switch is off) |
 | Ready | Studio is open and answering | Nothing; the tools work |
 
-If the person can't find the button, it sits in the toolbar above the game and reads "Roblox
-Studio". The Roblox Studio plugin must be turned on in Plugins first; it is off until the person
-turns it on.
+The Roblox Studio plugin must be turned on in Plugins first; it is off until the person turns it on.
 
 ## 2. Sign in
 
 The first time, Studio asks the person to sign in. That is their step alone. Right after the first
-sign-in, Studio may close by itself; that is expected: open it again from the panel.
+sign-in, Studio may close by itself; that is expected: call `open-studio` again.
 
 ## 3. The MCP server switch
 
-Genex turns Studio's MCP server on during Set up while Studio is closed. If Studio was open, or the
-switch is still off, the panel offers Do it for me, Restart Studio, and the click path:
-
-**Assistant** (the toolbar icon at the top right of Studio, shown only with a place open) › **⋯** ›
-**Settings** › **MCP Servers** › turn on **Enable Studio as MCP server**.
+Genex turns Studio's MCP server on during `setup` while Studio is closed. If Studio was open, or
+the switch is still off, call `do-it-for-me`: it clicks **Assistant** (the toolbar icon at the top
+right of Studio, shown only with a place open) › **⋯** › **Settings** › **MCP Servers** › **Enable
+Studio as MCP server**. Where Genex can't click (no computer control here, or the person said no),
+`restart-studio` turns it on while Studio is closed instead.
 
 The switch is kept per Roblox account: after signing in with another account it may need turning on
 again.
 
 ## 4. The place
 
-Each game in Genex uses one place, chosen in the panel: a new Roblox game, a place file, or a place
-already open in Studio. When several Studios are open, ask the person which place they mean by its
-name before changing anything; Genex then keeps this game's calls to that place. A game with no
-place yet gets one from `new-game` (a Baseplate in the game's folder, opened in Studio); `use-project`
-switches to a place the person names, open in Studio or by its file. A place builds in one game
-only: one another game uses is refused.
+Each game in Genex uses one place. `places` lists the places open in Studio and the files Studio
+opened lately; `use-project` links this game to one by its label or its file's full path, and
+`new-game` makes a new one (a Baseplate in the game's folder, opened in Studio). When several could
+be the person's, ask them which by its name before linking. A place builds in one game only: one
+another game uses is refused. A place file in Documents that Studio didn't open lately is the
+person's to choose in the panel, since macOS asks them before Genex reads that folder.
 
 ## 5. Check
 
@@ -82,13 +79,13 @@ Match the symptom, give the person the single fix, then check again from step 1.
 
 | Symptom | Likely cause | Fix |
 | --- | --- | --- |
-| No Roblox Studio tools in this chat | The plugin is off, or the game holds no Roblox place yet | Turn the plugin on in Plugins; choose this game's place in the panel |
-| A call answers that Roblox Studio isn't open for this game | Studio is closed, another place is open, or the MCP server is off | Open this game's place from the panel; check the MCP server step |
-| Studio is open, but the button stays on Starting | No place is open, or the MCP switch is off | Open a place; turn the switch on (step 3) |
-| The switch was on, now it's off | The person signed in with another Roblox account | Turn it on again for this account |
-| Studio is installed, but the panel can't find its MCP server | Studio is out of date | Update Studio, then open it again |
-| The connection fails right after the switch is turned on | Another app uses Studio's MCP port (13469) | Close the other app, then restart Studio |
-| Calls go to the wrong place | Several Studios are open | Choose the place for this game in the panel |
+| No Roblox Studio tools in this chat | The plugin is off, or the game holds no Roblox place yet | The person turns the plugin on in Plugins; then `places` and `use-project`, or `new-game` |
+| A call answers that Roblox Studio isn't open for this game | Studio is closed, another place is open, or the MCP server is off | `open-studio`; then step 3 if it still doesn't answer |
+| Studio is open, but the button stays on Starting | No place is open, or the MCP switch is off | `open-studio` for this game's place; `do-it-for-me` for the switch (step 3) |
+| The switch was on, now it's off | The person signed in with another Roblox account | `do-it-for-me` again for this account |
+| Studio is installed, but the panel can't find its MCP server | Studio is out of date | Ask the person to update Studio, then `open-studio` |
+| The connection fails right after the switch is turned on | Another app uses Studio's MCP port (13469) | Ask the person to close the other app, then `restart-studio` |
+| Calls go to the wrong place | Several Studios are open | `places`, then `use-project` with this game's place |
 | A Studio tool named in Roblox's docs is missing | Studio's tools differ by version | Use the tools that are there; suggest updating Studio |
 | A dialog in Studio blocks every call | Studio is waiting for the person | Ask the person to answer it; never answer a Studio dialog for them, not even in Do it for me, which clicks only its own task's path |
 

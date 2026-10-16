@@ -25,8 +25,6 @@ export const MESSAGE = {
   UnknownAction: (name: string) => `Unknown Roblox Studio action: ${name}`,
   UnknownTool: (name: string) => `Unknown Roblox Studio tool: ${name}`,
   Checks: {
-    NotAdded:
-      "Luau checks aren't added yet, so nothing was checked: the person can add them with Add Luau checks in the Roblox Studio panel. Read your changes over against the luau skill meanwhile.",
     NoGame: "check-scripts checks a game's scripts, and this call has no game.",
     NoScripts: "This game has no .luau scripts under src/ to check.",
     AllClean: "Every script under src/ passed its last check and hasn't changed since.",

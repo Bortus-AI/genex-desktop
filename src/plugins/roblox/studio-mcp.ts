@@ -49,6 +49,7 @@ import {
   StudioTool,
   StudioToolClass,
 } from "./studio-tools.ts";
+import { agentTool as pluginTool, RobloxTool } from "./tools.ts";
 import { MCP_SWITCH_CLICK_PATH } from "./words.ts";
 
 const BRIDGE_VERSION = "0.1.0";
@@ -58,18 +59,15 @@ const JPEG = "image/jpeg";
 const CAPTURE_PREFIX = "ScreenCapture_";
 
 const MESSAGE = {
-  NotLinked:
-    "This game isn't linked to a Roblox place yet, so Genex doesn't know which Roblox Studio is its own. Ask the person to choose the game's place from the Roblox Studio button, then retry.",
-  NotOpen:
-    "Roblox Studio isn't open for this game. Ask the person to open the game's place in Roblox Studio (the Roblox Studio button can open it), then retry.",
-  NotAnswering: `Roblox Studio is open but isn't answering Genex. It may still be starting: retry in a moment. If it keeps saying this, Studio's MCP server is off; the person turns it on in Studio: ${MCP_SWITCH_CLICK_PATH}.`,
+  NotLinked: `This game isn't linked to a Roblox place yet, so Genex doesn't know which Roblox Studio is its own. Call ${pluginTool(RobloxTool.Places)} to see the places open in Studio, then ${pluginTool(RobloxTool.UseProject)} with this game's (ask the person which when several could be), or ${pluginTool(RobloxTool.NewGame)} for a new one; then retry.`,
+  NotOpen: `Roblox Studio isn't open for this game. Call ${pluginTool(RobloxTool.OpenStudio)}, which opens the game's place, then retry once Studio has started.`,
+  NotAnswering: `Roblox Studio is open but isn't answering Genex. It may still be starting: retry in a moment. If it keeps saying this, Studio's MCP server is off: call ${pluginTool(RobloxTool.DoItForMe)}, which switches it on with computer control (${MCP_SWITCH_CLICK_PATH}), then end your turn.`,
   TwoStudios:
     "Two Roblox Studio windows have this game's place open, so Genex can't tell which is its own. Ask the person to close one, then retry.",
-  NotInstalled: "Roblox Studio isn't on this computer. Ask the person to get it from the Roblox Studio button.",
+  NotInstalled: `Roblox Studio isn't on this computer. Call ${pluginTool(RobloxTool.GetStudio)}: Genex gets it from Roblox once the person approves its card.`,
   Refused:
     "Genex won't start Roblox Studio's MCP server from where it is installed. Ask the person to reinstall Roblox Studio.",
-  NoAnswer:
-    "Roblox Studio's MCP server didn't answer. Retry in a moment; if it keeps failing, ask the person to restart Roblox Studio.",
+  NoAnswer: `Roblox Studio's MCP server didn't answer. Retry in a moment; if it keeps failing, call ${pluginTool(RobloxTool.RestartStudio)} (the person approves its card).`,
   Lost: "Roblox Studio stopped answering during the call, so whether it took effect is unknown. Look before you repeat it.",
   Closing: "The Roblox Studio connection is closing.",
   OtherStudio:

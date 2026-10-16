@@ -76,6 +76,7 @@ import {
   setupPaths,
   undoSetup,
 } from "./setup.ts";
+import { SETUP_PROMPTS } from "./setup-prompts.ts";
 import { RobloxSetupError, SetupRefusal } from "./setup-refusal.ts";
 import { createScriptSyncs, type ScriptSyncs, systemWatch } from "./script-sync.ts";
 import { createStudioClient, type StudioClient, studioAnswers, systemStudioClientDeps } from "./studio-client.ts";
@@ -97,6 +98,8 @@ import {
   newGameTool,
   openStudio,
   type PlaceActionDeps,
+  type QuitAnswer,
+  QuitMiss,
   quitStudioAction,
   showSteps,
 } from "./place-actions.ts";
@@ -113,6 +116,7 @@ import {
   systemRun,
 } from "./studio-locate.ts";
 import { AskFirstTool } from "./studio-tools.ts";
+import { RobloxTool } from "./tools.ts";
 import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
 
 /**
@@ -126,51 +130,10 @@ import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
  * restores, health, the crash note, Team Create notes and the viewport's picture.
  */
 
-export { RobloxAction };
+export { RobloxAction, RobloxTool };
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxAction));
 const isRobloxAction = (name: string): name is RobloxAction => ACTION_NAMES.has(name);
 
-/** The tools plugin.json declares. Wire values: never rename. */
-export const RobloxTool = {
-  StudioActivity: "studio-activity",
-  CheckScripts: "check-scripts",
-  LuauNote: "luau-note",
-  LuauFinish: "luau-finish",
-  UseProject: "use-project",
-  ShowSteps: "show-steps",
-  NewGame: "new-game",
-  EngineStatus: "engine-status",
-  OpenForRun: "open-for-run",
-  SavePlace: "save-place",
-  HeroShots: "hero-shots",
-  LoadPlace: "load-place",
-  StudioState: "studio-state",
-  StudioCrashNote: "studio-crash-note",
-  TeamNote: "team-note",
-  PlayOpen: EnginePlayTool.Open,
-  PlayInput: EnginePlayTool.Input,
-  PlayShot: EnginePlayTool.Shot,
-  PlayState: EnginePlayTool.State,
-  PlayPause: EnginePlayTool.Pause,
-  PlayClose: EnginePlayTool.Close,
-  PlayersState: RobloxProbe.PlayersState,
-  CheatRemotes: RobloxProbe.CheatRemotes,
-  PhoneCheck: RobloxProbe.PhoneCheck,
-  GenerateMesh: AskFirstTool.GenerateMesh,
-  GenerateModel: AskFirstTool.GenerateModel,
-  GenerateTexture: AskFirstTool.GenerateTexture,
-  GenerateMaterial: AskFirstTool.GenerateMaterial,
-  SegmentMesh: AskFirstTool.SegmentMesh,
-  RobloxPlaytest: AskFirstTool.RobloxPlaytest,
-  RobloxExplore: AskFirstTool.RobloxExplore,
-  UploadImage: AskFirstTool.UploadImage,
-  StoreImage: AskFirstTool.StoreImage,
-  InsertAsset: AskFirstTool.InsertAsset,
-  CheckModel: "check-model",
-  ImportModel: "import-model",
-  PublishUpdate: "publish-update",
-} as const;
-export type RobloxTool = (typeof RobloxTool)[keyof typeof RobloxTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxTool));
 /**
  * The tools that may run in a worker's copy of the game: its folder is never the game's, so the
@@ -876,6 +839,95 @@ function publishHandler(services: MomentServices, asker: PublishAsker): Handler 
   };
 }
 
+/** Do it for me's refusals in the agent's words; any other is "nothing was clicked". */
+const ASSIST_PROMPTS: Partial<Record<PluginEngineAssistRefusal, string>> = {
+  unavailable: SETUP_PROMPTS.AssistUnavailable,
+  declined: SETUP_PROMPTS.AssistDeclined,
+  "no-chat": SETUP_PROMPTS.AssistNoChat,
+};
+
+/** Why Do it for me has nothing to click now, in the agent's words; undefined when the switch is to click. */
+async function nothingToClick(deps: RobloxDeps, context: PluginContext): Promise<string | undefined> {
+  const { facts } = await readStudio(deps, context);
+  if (!facts.installed) return SETUP_PROMPTS.NotInstalled;
+  const running = facts.running || (await studioRunning(deps));
+  if (!facts.setUp) return running ? SETUP_PROMPTS.NotSetUp : SETUP_PROMPTS.NotSetUpClosed;
+  if (!running) return SETUP_PROMPTS.NotOpen;
+  if (facts.answering) return SETUP_PROMPTS.Answering;
+  const mcp = await mcpSwitch(deps);
+  return mcp && mcp.on > 0 ? SETUP_PROMPTS.SwitchAlreadyOn : undefined;
+}
+
+/**
+ * The agent's `do-it-for-me`: Studio's MCP switch clicked by this game's chat with computer control,
+ * started by the agent itself when Studio is open and the switch is all that's missing; otherwise the
+ * tool that does the step that is.
+ */
+async function doItForMeTool(deps: RobloxDeps, context: PluginContext): Promise<string> {
+  const blocked = await nothingToClick(deps, context);
+  if (blocked) return blocked;
+  const answer = await doItForMe(context);
+  if (answer.started) return SETUP_PROMPTS.AssistStarted;
+  return (answer.reason && ASSIST_PROMPTS[answer.reason]) || SETUP_PROMPTS.AssistNotStarted;
+}
+
+/** Set up's answer in the agent's words: done, or the tool that does the step in the way. */
+function setupWords(answer: SetupAnswer): string {
+  if (answer.reason === SetupMiss.NotInstalled) return SETUP_PROMPTS.NotInstalled;
+  if (answer.reason === SetupMiss.StillOpen) return SETUP_PROMPTS.StillOpen;
+  if (answer.reason === SetupRefusal.StudioRunning) return SETUP_PROMPTS.SetupStudioOpen;
+  if (answer.reason === SetupRefusal.NoRobloxFolder) return SETUP_PROMPTS.NoRobloxFolder;
+  if (!answer.done) return SETUP_PROMPTS.SetupStopped(answer.message);
+  if (answer.setup?.switches.files === 0) return SETUP_PROMPTS.SetupNoSettings;
+  return SETUP_PROMPTS.SetupDone(answer.message);
+}
+
+/** Quit Studio's answer in the agent's words. */
+function quitWords(answer: QuitAnswer): string {
+  if (answer.quit) return SETUP_PROMPTS.Quit;
+  if (answer.reason === QuitMiss.StillOpen) return SETUP_PROMPTS.StillOpen;
+  if (answer.reason === QuitMiss.InUse) return SETUP_PROMPTS.QuitInUse(answer.inUse ?? "");
+  return SETUP_PROMPTS.QuitNotRunning;
+}
+
+/** Runs `then` once Studio is on this computer; otherwise the agent is told to get it. */
+async function installedThen(deps: RobloxDeps, then: () => Promise<string>): Promise<string> {
+  return (await locateStudio(deps)).installed ? then() : SETUP_PROMPTS.NotInstalled;
+}
+
+/**
+ * The panel's presses as the agent's tools, each answered in words for the agent: setup is its job,
+ * so the words name the next tool to call, never a click for the person.
+ */
+function pressHandlers(deps: RobloxDeps, slot: InstallSlot, luau: LuauDeps) {
+  return {
+    [RobloxTool.DoItForMe]: (_args, context) => doItForMeTool(deps, context),
+    [RobloxTool.Setup]: async (_args, context) => setupWords(await setupAction(deps, context)),
+    [RobloxTool.RestartStudio]: async (_args, context) => {
+      const answer = await restartStudio(deps, context);
+      const words = setupWords(answer);
+      return answer.reopened ? SETUP_PROMPTS.Restarted(words) : words;
+    },
+    [RobloxTool.UndoSetup]: async (_args, context) => (await undoAction(deps, context)).message,
+    [RobloxTool.OpenStudio]: (_args, context) =>
+      installedThen(deps, async () => SETUP_PROMPTS.Opened((await openStudio(deps, context)).message)),
+    [RobloxTool.QuitStudio]: async (_args, context) => quitWords(await quitStudioAction(deps, context)),
+    [RobloxTool.GetStudio]: async (_args, context) => {
+      const answer = await getStudio(deps, context, slot);
+      return answer.started ? SETUP_PROMPTS.Getting : SETUP_PROMPTS.Words(answer.message);
+    },
+    [RobloxTool.CancelGetStudio]: async () => cancelGetStudio(slot).message,
+    [RobloxTool.Places]: async (_args, context) => ({
+      ...(await listPlaces(deps, context)),
+      note: SETUP_PROMPTS.PlacesNote,
+    }),
+    [RobloxTool.AddLuauChecks]: async (_args, context) => {
+      const answer = await addLuauAction(deps, luau, context);
+      return answer.added ? SETUP_PROMPTS.LuauAdded(answer.message) : answer.message;
+    },
+  } as const satisfies Partial<Record<RobloxTool, Handler>>;
+}
+
 /** The backend over the computer it is given; tests hand in fakes. */
 export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
   const slot: InstallSlot = {};
@@ -926,6 +978,7 @@ export function createRobloxBackend(deps: RobloxDeps): PluginActivation {
     ...askFirstHandlers(deps, services),
     ...modelHandlers(deps, services),
     [RobloxTool.PublishUpdate]: publishHandler(services, PublishAsker.Agent),
+    ...pressHandlers(deps, slot, luau),
     [RobloxTool.HeroShots]: async (_args, context) => {
       // As the viewport observer: the picture within the time Genex gives.
       if (context.observe) {

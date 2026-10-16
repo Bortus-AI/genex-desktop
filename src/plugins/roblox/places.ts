@@ -246,9 +246,13 @@ async function found(deps: PlaceDeps, file: string): Promise<FoundFile | undefin
   return info ? { file: real, modifiedMs: info.mtimeMs } : undefined;
 }
 
-/** Place files from Studio's recent list and Documents › Roblox: one per real path, newest first. */
-async function scanPlaceFiles(deps: PlaceDeps): Promise<FoundFile[]> {
-  const candidates = [...(await studioRecents(deps.run, deps.platform)), ...(await documentPlaces(deps))];
+/**
+ * Place files from Studio's recent list and, on the person's own press, Documents › Roblox: one per
+ * real path, newest first.
+ */
+async function scanPlaceFiles(deps: PlaceDeps, documents: boolean): Promise<FoundFile[]> {
+  const fromDocuments = documents ? await documentPlaces(deps) : [];
+  const candidates = [...(await studioRecents(deps.run, deps.platform)), ...fromDocuments];
   const byPath = new Map<string, FoundFile>();
   for (const file of candidates) {
     const place = await found(deps, file);
@@ -261,7 +265,7 @@ async function scanPlaceFiles(deps: PlaceDeps): Promise<FoundFile[]> {
 async function keptScan(deps: PlaceDeps, cache: ScanCache): Promise<FoundFile[]> {
   const now = deps.now();
   if (cache.files && cache.at !== undefined && now - cache.at < SCAN_KEEP_MS) return cache.files;
-  cache.files = await scanPlaceFiles(deps);
+  cache.files = await scanPlaceFiles(deps, true);
   cache.at = now;
   return cache.files;
 }
@@ -394,15 +398,18 @@ function holding(links: readonly LiveLink[], game: string | undefined, key: Plac
   return own ? { here: true } : {};
 }
 
-/** Choose your place: open Studios first, then place files; Documents read on this press only. */
-export async function listPlaces(deps: PlaceDeps, context: PluginContext, cache: ScanCache): Promise<PlacesAnswer> {
+/**
+ * Choose your place: open Studios first, then place files. Documents is read on the person's press
+ * only; an agent's call (no `cache`) lists Studio's recent files alone, never kept for a press.
+ */
+export async function listPlaces(deps: PlaceDeps, context: PluginContext, cache?: ScanCache): Promise<PlacesAnswer> {
   const storage = await context.host(PluginService.StorageRoot);
   const studios = await listedStudios(deps);
   const labels = labelsOf(studios);
   const open = await Promise.all(
     studios.map((entry, at) => openPlaceOf(deps, storage, entry, labels[at] ?? entry.name)),
   );
-  const files = await keptScan(deps, cache);
+  const files = cache ? await keptScan(deps, cache) : await scanPlaceFiles(deps, false);
   const links = await liveLinks(storage);
   const game = context.project;
   const openNames = new Set(studios.map((entry) => entry.name));
