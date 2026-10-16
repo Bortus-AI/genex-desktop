@@ -19,6 +19,7 @@ import type { HookAnswer, HookContext } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson } from "../../substrate/fsx.ts";
 import { SYSTEM_CLOCK } from "../../substrate/job-process.ts";
 import { EnginePlayTool } from "../../shared/engine-play.ts";
+import { PluginService } from "../../shared/plugins.ts";
 import { RobloxAction } from "./actions.ts";
 import { agentFolder } from "./agent-marks.ts";
 import { type AiTool, type AskFirstGame, createAiTools } from "./ai-tools.ts";
@@ -124,13 +125,6 @@ import { MCP_SWITCH_CLICK_PATH, MESSAGE } from "./words.ts";
  * and Genex's moments (`studio-moments.ts`): the place saved and loaded around checkpoints and
  * restores, health, the crash note, Team Create notes and the viewport's picture.
  */
-
-/** The host services this backend calls, by their public SDK names. */
-const HostService = {
-  StorageRoot: "storage.root",
-  EngineAssist: "game.engine.assist",
-  EngineRead: "game.engine.read",
-} as const;
 
 export { RobloxAction };
 const ACTION_NAMES: ReadonlySet<string> = new Set(Object.values(RobloxAction));
@@ -388,7 +382,7 @@ async function readStudio(deps: RobloxDeps, context: PluginContext) {
   const install = location.installed ? location.install : undefined;
   const facts: StudioFacts = { installed: location.installed, setUp: false, running: false, answering: false };
   if (!install) return { install, facts };
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   facts.setUp = await setUpIn(deps, storage);
   if (!facts.setUp) return { install, facts, storage };
   deps.helperLink?.(storage);
@@ -408,7 +402,7 @@ const installStatusOf = (job: InstallJob): InstallStatus => {
 /** The link of the game this call is bound to, or null when it builds in no Roblox place. */
 async function linkHere(context: PluginContext): Promise<PluginEngineLink | null> {
   if (!context.project) return null;
-  return context.host(HostService.EngineRead).catch(() => null);
+  return context.host(PluginService.GameEngineRead).catch(() => null);
 }
 
 /** Studio's MCP switch across the accounts' settings files; undefined when they can't be read. */
@@ -515,7 +509,7 @@ function setupOptionsIn(deps: RobloxDeps, storage: string): SetupOptions {
 }
 
 async function setupOptions(deps: RobloxDeps, context: PluginContext): Promise<SetupOptions> {
-  return setupOptionsIn(deps, await context.host(HostService.StorageRoot));
+  return setupOptionsIn(deps, await context.host(PluginService.StorageRoot));
 }
 
 /** A refusal as the panel shows it; Studio being open comes with what to do instead. */
@@ -593,7 +587,7 @@ const ASSIST_WORDS: Partial<Record<PluginEngineAssistRefusal, string>> = {
  * no driver, no game open, the person said no), the answer carries Studio's own click path.
  */
 async function doItForMe(context: PluginContext): Promise<AssistAnswer> {
-  const answer = await context.host(HostService.EngineAssist, { task: MESSAGE.Assist.Task });
+  const answer = await context.host(PluginService.GameEngineAssist, { task: MESSAGE.Assist.Task });
   if (answer.started) return { started: true, message: MESSAGE.Assist.Started };
   const message = (answer.reason && ASSIST_WORDS[answer.reason]) || MESSAGE.Assist.NotStarted;
   const refused: AssistAnswer = { started: false, message, clickPath: MCP_SWITCH_CLICK_PATH };
@@ -659,7 +653,7 @@ async function getStudio(deps: RobloxDeps, context: PluginContext, slot: Install
   if (location.installed)
     return { started: false, message: MESSAGE.Install.AlreadyInstalled(location.install.version) };
   if (!(deps.platform in INSTALLER)) return { started: false, message: MESSAGE.Install.Refused.unsupported };
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const job: InstallJob = {
     phase: InstallPhase.Downloading,
     message: MESSAGE.Install.Phase.downloading,
@@ -706,7 +700,7 @@ type Handler = (args: Record<string, unknown>, context: PluginContext) => Promis
 /** Hands the script sync the folder of the game a call is for; a call with none is left alone. */
 async function noteGame(deps: RobloxDeps, context: PluginContext): Promise<void> {
   if (!deps.gameSeen || !context.project || !context.directory) return;
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   await deps.gameSeen(storage, context.project, context.directory);
 }
 
@@ -715,7 +709,7 @@ type MomentHandler = (ops: MomentOps, hook: HookContext) => Promise<HookAnswer>;
 
 /** The Studio operations of the game a call is bound to; the helper link starts once Studio is set up. */
 async function momentOps(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<MomentOps> {
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const setUp = async () => {
     const done = (await locateStudio(deps)).installed && (await setUpIn(deps, storage));
     if (done) deps.helperLink?.(storage);
@@ -736,7 +730,7 @@ async function linkFor(deps: RobloxDeps, services: MomentServices, storage: stri
  * a picture is read from, the plugin's storage and the agent's marks.
  */
 async function askFirstGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<AskFirstGame> {
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const game = context.project ?? "";
   await linkFor(deps, services, storage, game);
   const marks = agentFolder(storage, game);
@@ -777,7 +771,7 @@ function modelHandlers(deps: RobloxDeps, services: MomentServices) {
   return {
     [RobloxTool.CheckModel]: async (args, context) => checkModelTool(args, context.directory),
     [RobloxTool.ImportModel]: async (args, context) => {
-      const storage = await context.host(HostService.StorageRoot);
+      const storage = await context.host(PluginService.StorageRoot);
       const game = context.project ?? "";
       await linkFor(deps, services, storage, game);
       const marks = agentFolder(storage, game);
@@ -797,7 +791,7 @@ function modelHandlers(deps: RobloxDeps, services: MomentServices) {
  * isn't bound yet.
  */
 async function playGame(deps: RobloxDeps, services: MomentServices, context: PluginContext): Promise<PlayGame> {
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const game = context.project ?? "";
   await linkFor(deps, services, storage, game);
   const marks = agentFolder(storage, game);
@@ -846,7 +840,7 @@ function playHandlers(deps: RobloxDeps, services: MomentServices) {
 async function publishPlace(context: PluginContext): Promise<PublishPlace> {
   const link = await linkHere(context);
   if (!link || !context.project) return { link };
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const game = { project: context.project, ...(context.directory ? { directory: context.directory } : {}) };
   return { link, name: (await linkedPlace(storage, game, link)).name };
 }
@@ -861,7 +855,7 @@ function publishHandler(services: MomentServices, asker: PublishAsker): Handler 
     return publishUpdate(
       await publishPlace(context),
       {
-        assist: (task) => context.host(HostService.EngineAssist, { task }),
+        assist: (task) => context.host(PluginService.GameEngineAssist, { task }),
         flush: () => services.flush(game),
       },
       asker,

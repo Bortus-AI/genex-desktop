@@ -5,6 +5,7 @@
  * own MCP server, and the agent's marks in the game's connection folder.
  */
 import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.ts";
+import { PluginService } from "../../shared/plugins.ts";
 import { type AgentMarks, agentBusyMarker, agentFolder, readAgentMarks } from "./agent-marks.ts";
 import { type HelperAsk, HelperLinkError, HelperLinkFailure } from "./helper-link.ts";
 import { type OpenAnswer, openStudio, type PlaceActionDeps } from "./place-actions.ts";
@@ -15,8 +16,6 @@ import { studioRunning } from "./studio-locate.ts";
 import { createStudioWatch, type MomentOps, type StudioWatch } from "./studio-moments.ts";
 import { StudioTool } from "./studio-tools.ts";
 
-/** The host services this module calls, by their public SDK names. */
-const HostService = { EngineRead: "game.engine.read" } as const;
 /** The picture names a moment's screen captures take in Studio. */
 const CAPTURE_PREFIX = "GenexMoment_";
 
@@ -90,7 +89,7 @@ export function momentOpsFor(
   const game = context.project ?? "";
   const folder = agentFolder(place.storage, game);
   const link = (): Promise<PluginEngineLink | null> =>
-    context.project ? context.host(HostService.EngineRead).catch(() => null) : Promise.resolve(null);
+    context.project ? context.host(PluginService.GameEngineRead).catch(() => null) : Promise.resolve(null);
   const noMarks = async (): Promise<AgentMarks> => ({});
   return {
     now: deps.now,

@@ -7,6 +7,7 @@
  */
 import type { PluginContext, PluginReview } from "../../plugin-sdk/index.d.ts";
 import type { HookAnswer } from "../../shared/plugin-hooks.ts";
+import { PluginService } from "../../shared/plugins.ts";
 import { type CheckRun, checkScripts, luauFinish, luauNote, systemCheckRun } from "./check-scripts.ts";
 import {
   addLuauChecks,
@@ -21,9 +22,6 @@ import {
 } from "./luau-tools.ts";
 import type { InstallRun } from "./studio-install.ts";
 import { MESSAGE } from "./words.ts";
-
-/** The host service that names the plugin's storage. */
-const STORAGE_ROOT = "storage.root";
 
 /** The computer the checks work on: the processor, the program runner, the network and the unpacker. */
 export interface LuauDeps {
@@ -68,7 +66,7 @@ export interface LuauStatus {
 }
 
 async function toolsFor(home: ToolHome, context: PluginContext) {
-  const storage: string = await context.host(STORAGE_ROOT);
+  const storage: string = await context.host(PluginService.StorageRoot);
   return { storage, tools: await findTools(home, storage) };
 }
 

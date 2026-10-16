@@ -98,10 +98,8 @@ the engine sets. Probes and the Ollama server Studio starts use the same filter.
 is the one list of coding-CLI sign-in homes that the sandbox, Claude's absolute deny rules (its own
 config home [partly](../tool-permissions.md#rules-at-their-real-paths)), the Codex brief, Bonsai
 and native plugin jobs deny. `ProcessSandbox`
-adds its base deny-read list (`baseDenyRead` in `spawn.ts`): sign-in stores such as `~/.ssh`,
-`~/.aws`, `~/Library/Keychains` and Roblox's (the apps' cookie jars in `~/Library/HTTPStorages`,
-`~/Library/Roblox`; on Windows its `LocalStorage` and `StudioMCP`), and on Linux the desktop secret
-stores. Its base deny-write list (`baseDenyWrite`) adds Roblox Studio's `AssistantSettings`.
+adds base deny lists (`baseDenyRead`, `baseDenyWrite` in `spawn.ts`): sign-in stores like `~/.ssh`
+and Roblox's cookie jars, and Linux's desktop secret stores.
 
 **Windows sandbox.** Commands run as the local `srt-sandbox` user under Git Bash through
 sandbox-runtime's srt-win backend

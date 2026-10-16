@@ -14,6 +14,7 @@ import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { PluginService } from "../../shared/plugins.ts";
 import { writeCheckConfigs } from "./check-scripts.ts";
 import { createPlace, SHIPPED_TEMPLATE, suggestName } from "./create-place.ts";
 import { PLACE_PROMPTS } from "./place-prompts.ts";
@@ -32,17 +33,6 @@ import {
 } from "./studio-launch.ts";
 import { locateStudio, type StudioInstall, studioRunning } from "./studio-locate.ts";
 import { MESSAGE } from "./words.ts";
-
-/** The host service names this module calls. */
-const HostService = {
-  StorageRoot: "storage.root",
-  EngineLink: "game.engine.link",
-  EngineRead: "game.engine.read",
-  EngineSteps: "game.engine.steps",
-  EngineRuns: "game.engine.runs",
-  GameSnapshot: "game.snapshot",
-  GameCreate: "game.create",
-} as const;
 
 /** A project file for a place with no file of its own. */
 const PROJECT_FILE = ".project.json";
@@ -100,7 +90,7 @@ async function placeHome(
     const folder = await realpath(context.directory);
     return { game: context.project, folder, made: false, title: await titleOf(folder, context.project) };
   }
-  const made = await context.host(HostService.GameCreate, { title });
+  const made = await context.host(PluginService.GameCreate, { title });
   if (!isMadeGame(made)) throw new Error(PLACE_PROMPTS.NoGame);
   return { game: made.project, folder: await realpath(made.directory), made: true, title };
 }
@@ -133,20 +123,20 @@ export async function createGame(
 ): Promise<CreateAnswer> {
   const location = await locateStudio(deps);
   if (!location.installed) return { created: false, message: MESSAGE.Open.NotInstalled };
-  if (context.project && (await context.host(HostService.EngineRead).catch(() => null)))
+  if (context.project && (await context.host(PluginService.GameEngineRead).catch(() => null)))
     return { created: false, message: MESSAGE.Create.Exists };
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const home = await placeHome(context, options.title?.trim() || MESSAGE.Create.DefaultTitle);
   const name = await suggestName(home.folder, home.title);
   if (options.snapshot && !home.made)
-    await context.host(HostService.GameSnapshot, { reason: MESSAGE.Create.SnapshotReason });
+    await context.host(PluginService.GameSnapshot, { reason: MESSAGE.Create.SnapshotReason });
   const file = await createPlace({ folder: home.folder, name, template: deps.template ?? SHIPPED_TEMPLATE });
   await ignoreLocks(home.folder, () => undefined);
   // The Luau checks' settings a new game starts with; a game's own are never replaced.
   await writeCheckConfigs(home.folder).catch(() => []);
   await writePlaceRecord(storage, home.game, { folder: home.folder, project: file });
   if (home.made) await deps.gameSeen?.(storage, home.game, home.folder);
-  await context.host(HostService.EngineLink, { project: file, ...(home.made ? { game: home.game } : {}) });
+  await context.host(PluginService.GameEngineLink, { project: file, ...(home.made ? { game: home.game } : {}) });
   const why = await openPlace(deps, location.install, storage, { file });
   const answer: CreateAnswer = {
     created: true,
@@ -200,9 +190,9 @@ async function openStudioAlone(deps: PlaceActionDeps, install: StudioInstall): P
 export async function openStudio(deps: PlaceActionDeps, context: PluginContext): Promise<OpenAnswer> {
   const location = await locateStudio(deps);
   if (!location.installed) return { opened: false, message: MESSAGE.Open.NotInstalled };
-  const link = context.project ? await context.host(HostService.EngineRead).catch(() => null) : null;
+  const link = context.project ? await context.host(PluginService.GameEngineRead).catch(() => null) : null;
   if (!context.project || !link) return openStudioAlone(deps, location.install);
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const place: PlaceLink = (await readPlaceLink(storage, context.project)) ?? { project: link.project };
   const name = place.name ?? link.name;
   if (await placeOpenNow(deps, place)) return bringForward(deps, location.install, name);
@@ -222,7 +212,7 @@ const isRun = (value: unknown): value is { title: string } =>
 
 /** Quit Studio: its normal quit, which asks the person to save; never while a build uses Studio. */
 export async function quitStudioAction(deps: PlaceActionDeps, context: PluginContext): Promise<QuitAnswer> {
-  const runs = await context.host(HostService.EngineRuns).catch(() => []);
+  const runs = await context.host(PluginService.GameEngineRuns).catch(() => []);
   const busy = Array.isArray(runs) ? runs.find(isRun) : undefined;
   if (busy) return { quit: false, message: MESSAGE.Quit.InUse(busy.title) };
   if (!(await studioRunning(deps))) return { quit: false, message: MESSAGE.Quit.NotRunning };
@@ -233,5 +223,5 @@ export async function quitStudioAction(deps: PlaceActionDeps, context: PluginCon
 /** The agent's `show-steps`: the setup card in its chat while a step is open. */
 export async function showSteps(context: PluginContext, open: boolean): Promise<string> {
   if (!open) return PLACE_PROMPTS.StepsDone;
-  return (await context.host(HostService.EngineSteps)) ? PLACE_PROMPTS.StepsShown : PLACE_PROMPTS.StepsNoChat;
+  return (await context.host(PluginService.GameEngineSteps)) ? PLACE_PROMPTS.StepsShown : PLACE_PROMPTS.StepsNoChat;
 }

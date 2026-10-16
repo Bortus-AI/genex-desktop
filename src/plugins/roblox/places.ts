@@ -22,6 +22,7 @@ import path from "node:path";
 import type { PluginContext, PluginEngineLink } from "../../plugin-sdk/index.d.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { isJsonObject, readRegularFile } from "../../substrate/fsx.ts";
+import { PluginService } from "../../shared/plugins.ts";
 import { writeWhole } from "./place-files.ts";
 import { ROJO_PROJECT, recordWritten, writtenByGenex } from "./script-sync.ts";
 import {
@@ -46,12 +47,6 @@ export const SCAN_KEEP_MS = 30 * SECOND_MS;
 export const PLACE_ASK_MS = 5 * SECOND_MS;
 /** Place files a game can link where they are. */
 export const PLACE_FILE_EXTENSIONS = [".rbxl", ".rbxlx"] as const;
-/** The host service names this module calls. */
-const HostService = {
-  StorageRoot: "storage.root",
-  EngineLink: "game.engine.link",
-  GameSnapshot: "game.snapshot",
-} as const;
 /** Studio's preferences on a Mac, whose recent-files list names the places opened lately. */
 const MAC_DEFAULTS = "/usr/bin/defaults";
 const STUDIO_DOMAIN = "com.Roblox.RobloxStudio";
@@ -395,7 +390,7 @@ function holding(links: readonly LiveLink[], game: string | undefined, key: Plac
 
 /** Choose your place: open Studios first, then place files; Documents read on this press only. */
 export async function listPlaces(deps: PlaceDeps, context: PluginContext, cache: ScanCache): Promise<PlacesAnswer> {
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const studios = await listedStudios(deps);
   const labels = labelsOf(studios);
   const open = await Promise.all(studios.map((entry, at) => openPlaceOf(deps, entry, labels[at] ?? entry.name)));
@@ -480,7 +475,7 @@ async function readyProjectFile(
   if (info && !info.isFile()) throw new PlaceError(PlaceRefusal.NotPlace, MESSAGE.Places.ProjectInTheWay);
   // The person's own Rojo project stays as they wrote it; it is linked as it is.
   if (info && !(await writtenByGenex(target.folder, ROJO_PROJECT))) return;
-  await context.host(HostService.GameSnapshot, { reason: MESSAGE.Places.SnapshotReason });
+  await context.host(PluginService.GameSnapshot, { reason: MESSAGE.Places.SnapshotReason });
   // Listed as Genex's before it exists, so a sync pass in between never takes it for the person's.
   const note = deps.noteWritten ?? ((_storage, _game, folder, name) => recordWritten(folder, name));
   await note(target.storage, target.game, target.folder, ROJO_PROJECT);
@@ -509,7 +504,7 @@ async function boundGame(context: PluginContext): Promise<{ game: string; folder
 /** Links the bound game to the place chosen, once nothing refuses it. */
 async function linkChosen(deps: PlaceDeps, context: PluginContext, chosen: Chosen): Promise<UsePlaceAnswer> {
   const { game, folder } = await boundGame(context);
-  const storage = await context.host(HostService.StorageRoot);
+  const storage = await context.host(PluginService.StorageRoot);
   const holder = holderOf(await liveLinks(storage), game, chosen.key);
   if (holder) throw new PlaceError(PlaceRefusal.Taken, MESSAGE.Places.Taken(chosen.name, holder.title));
   if (chosen.throughProject) await readyProjectFile(deps, { storage, game, folder }, chosen, context);
@@ -522,7 +517,7 @@ async function linkChosen(deps: PlaceDeps, context: PluginContext, chosen: Chose
   // Recorded before the link: the helper link finds this game's Studio by it as soon as the link exists.
   await writePlaceRecord(storage, game, record);
   try {
-    await context.host(HostService.EngineLink, {
+    await context.host(PluginService.GameEngineLink, {
       project: chosen.project,
       ...(chosen.remote ? { remote: chosen.remote } : {}),
       // The chat names the place, not the project file it is linked through.
