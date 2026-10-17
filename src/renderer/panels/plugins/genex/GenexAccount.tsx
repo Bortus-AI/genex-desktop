@@ -1,15 +1,20 @@
 /**
- * The Genex account card: one state at a time (connect, finish in the browser, terms, connected
- * with its credits) and only the action that state needs. It replaces the plugin's own frame on
- * the Genex page, so it speaks in the app's type, colours and buttons.
+ * The Genex account in the page's Connect band: one state at a time (the offer with Connect, finish
+ * in the browser, terms, connected with its credits) and only the action that state needs, beside
+ * the routed tools' lines (`ConnectBand`). It replaces the plugin's own frame on the Genex page, so
+ * it speaks in the app's type, colours and buttons.
  */
 import type { JSX, ReactNode } from "react";
 import { GenexAction } from "../../../../shared/genex.ts";
+import { creditsPlansUrl } from "../../../../shared/play-credits.ts";
 import { CreditsShard } from "../../../play/CreditsShard.tsx";
+import { usePlayWeb } from "../../../state/hooks.ts";
 import { Button } from "../../../ui/Button.tsx";
 import { Icon } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { GENEX_WORDS } from "../../../words.ts";
+import { ConnectBand } from "./ConnectArt.tsx";
+import { connectArtState } from "./connect-art.ts";
 import {
   CreditsKind,
   type CreditsView,
@@ -24,46 +29,69 @@ const WORDS = GENEX_WORDS.account;
 /** Credits read with the reader's own digit grouping. */
 const NUMBER = new Intl.NumberFormat();
 
-/** The card's frame: its state for smoke checks and polite announcements of each change. */
-function Card({ kind, children }: { kind: GenexAccountKind; children: ReactNode }): JSX.Element {
-  return (
-    <section className="genex-account" data-genex-account={kind} aria-live="polite" aria-label="Genex account">
-      {children}
-    </section>
-  );
-}
-
-/** A state's words on the left and its actions on the right, wrapping under them when narrow. */
+/** A state's title, its line and its actions, stacked in the band's side. */
 function Prompt({ title, children, actions }: { title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
   return (
-    <div className="genex-account-row">
-      <div className="genex-account-copy">
-        <h2>{title}</h2>
-        {children}
-      </div>
-      {actions && <div className="genex-account-actions">{actions}</div>}
-    </div>
+    <>
+      <h2 className="genex-connect-title">{title}</h2>
+      {children}
+      {actions && <div className="genex-connect-actions">{actions}</div>}
+    </>
   );
 }
 
-/** The one filled action of a state. */
-function Primary({ live, children, onClick }: { live: GenexLive; children: ReactNode; onClick: () => void }) {
+/** A background-less action, as underlined text. */
+function TextAction({ disabled, onClick, children }: { disabled: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <Button variant="default" size="default" disabled={live.running !== null} onClick={onClick}>
+    <button type="button" className="genex-connect-link" disabled={disabled} onClick={onClick}>
       {children}
+    </button>
+  );
+}
+
+/**
+ * The band's one filled action, the one its lines run into. `shine` sweeps a light across its
+ * label, as genex.games' plan button does, for the press the page is there for.
+ */
+export function ConnectAction({
+  busy,
+  shine = false,
+  onClick,
+  children,
+}: {
+  busy: boolean;
+  shine?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Button variant="play-fill" size="default" disabled={busy} data-connect-target="" onClick={onClick}>
+      {shine ? <span className="genex-connect-shine">{children}</span> : children}
     </Button>
   );
 }
 
-function Stat({ label, value, warn = false }: { label: string; value: string; warn?: boolean }): JSX.Element {
+/** The offer: the best tools in one click, optional, and Connect (Reconnect after a failed one). */
+export function ConnectOffer({
+  retry = false,
+  busy,
+  onConnect,
+}: {
+  retry?: boolean;
+  busy: boolean;
+  onConnect: () => void;
+}): JSX.Element {
   return (
-    <div className="genex-stat" data-warn={warn || undefined}>
-      <dt>{label}</dt>
-      <dd>
-        <CreditsShard size={20} />
-        {value}
-      </dd>
-    </div>
+    <Prompt
+      title={retry ? WORDS.retryTitle : WORDS.offerTitle}
+      actions={
+        <ConnectAction busy={busy} shine={!retry} onClick={onConnect}>
+          {retry ? WORDS.retry : WORDS.connect}
+        </ConnectAction>
+      }
+    >
+      <p className="genex-connect-text">{retry ? WORDS.retryText : WORDS.offerText}</p>
+    </Prompt>
   );
 }
 
@@ -74,6 +102,25 @@ function creditsValue(credits: CreditsView): string | null {
 
 const outOfCredits = (credits: CreditsView): boolean => credits.kind === CreditsKind.Count && credits.count <= 0;
 
+/** The balance, its unit and Get credits, which opens genex.games' plans. */
+function Balance({ credits }: { credits: CreditsView }): JSX.Element | null {
+  const web = usePlayWeb();
+  const value = creditsValue(credits);
+  if (!value) return null;
+  return (
+    <div className="genex-connect-credits" data-warn={outOfCredits(credits) || undefined}>
+      <CreditsShard size={18} />
+      <span className="genex-connect-balance">{value}</span>
+      {credits.kind === CreditsKind.Count && (
+        <span className="genex-connect-text">{GENEX_WORDS.creditsTab.unit(credits.count)}</span>
+      )}
+      <Button variant="play-tint" onClick={() => void window.studio.openUrl(creditsPlansUrl(web))}>
+        {GENEX_WORDS.creditsTab.getCredits}
+      </Button>
+    </div>
+  );
+}
+
 function Connected({
   view,
   live,
@@ -81,38 +128,24 @@ function Connected({
   view: Extract<GenexAccountView, { kind: typeof GenexAccountKind.Connected }>;
   live: GenexLive;
 }): JSX.Element {
-  const credits = creditsValue(view.credits);
   const empty = outOfCredits(view.credits);
-  const note = empty ? WORDS.outOfCredits : WORDS.shared;
+  const counted = creditsValue(view.credits) !== null && view.credits.kind !== CreditsKind.Unlimited;
   return (
     <>
-      <Prompt
-        title={
-          <>
-            <span className="genex-dot" aria-hidden="true" />
-            {WORDS.connected}
-          </>
-        }
-        actions={
-          <Button
-            variant="ghost"
-            disabled={live.running !== null}
-            onClick={() => void live.act(GenexAction.Disconnect)}
-          >
-            {WORDS.disconnect}
-          </Button>
-        }
-      >
-        {view.identity && <p>{view.identity}</p>}
-      </Prompt>
-      {credits && (
-        <dl className="genex-stats">
-          <Stat label={WORDS.credits} value={credits} warn={empty} />
-        </dl>
-      )}
-      {credits && view.credits.kind !== CreditsKind.Unlimited && (
+      <div className="genex-connect-head">
+        <h2 className="genex-connect-title">
+          <Icon name="check" size={16} className="genex-connect-check" />
+          {WORDS.connected}
+        </h2>
+        <TextAction disabled={live.running !== null} onClick={() => void live.act(GenexAction.Disconnect)}>
+          {WORDS.disconnect}
+        </TextAction>
+      </div>
+      {view.identity && <p className="genex-connect-text">{view.identity}</p>}
+      <Balance credits={view.credits} />
+      {counted && (
         <p className="genex-note" data-quiet={!empty || undefined}>
-          {note}
+          {empty ? WORDS.outOfCredits : WORDS.shared}
         </p>
       )}
       {view.paused.length > 0 && <p className="genex-note">{WORDS.paused(view.paused.join(", "))}</p>}
@@ -120,45 +153,31 @@ function Connected({
   );
 }
 
-/** Each state's body; Connected has its own component. */
+/** Each state's words and actions; Connected has its own component. */
 function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }): JSX.Element {
+  const busy = live.running !== null;
   const connect = () => void live.act(GenexAction.Connect);
   switch (view.kind) {
     case GenexAccountKind.Loading:
-      return <Pending label={WORDS.loading} className="genex-checking" spinner />;
+      return <Pending label={WORDS.loading} className="genex-checking" />;
     case GenexAccountKind.SignedOut:
-      return (
-        <Prompt
-          title={view.retry ? WORDS.retryTitle : WORDS.signedOutTitle}
-          actions={
-            <Primary live={live} onClick={connect}>
-              {view.retry ? WORDS.retry : WORDS.connect}
-            </Primary>
-          }
-        >
-          <p>{view.retry ? WORDS.retryText : WORDS.signedOutText}</p>
-        </Prompt>
-      );
+      return <ConnectOffer retry={view.retry} busy={busy} onConnect={connect} />;
     case GenexAccountKind.SigningIn:
       return (
         <Prompt
           title={WORDS.signingInTitle}
           actions={
             <>
-              <Button disabled={live.running !== null} onClick={connect}>
+              <Button variant="play-tint" disabled={busy} onClick={connect}>
                 {WORDS.reopen}
               </Button>
-              <Button
-                variant="ghost"
-                disabled={live.running !== null}
-                onClick={() => void live.act(GenexAction.CancelConnect)}
-              >
+              <TextAction disabled={busy} onClick={() => void live.act(GenexAction.CancelConnect)}>
                 {WORDS.cancel}
-              </Button>
+              </TextAction>
             </>
           }
         >
-          <p>
+          <p className="genex-connect-text">
             {WORDS.signingInText} <code className="genex-code">{view.code}</code>
           </p>
         </Prompt>
@@ -168,24 +187,28 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
         <Prompt
           title={WORDS.termsTitle}
           actions={
-            <Primary live={live} onClick={() => void live.act(GenexAction.Terms)}>
+            <ConnectAction busy={busy} onClick={() => void live.act(GenexAction.Terms)}>
               {WORDS.terms}
               <Icon name="arrow-up-right" size={14} />
-            </Primary>
+            </ConnectAction>
           }
         >
-          <p>{WORDS.termsText}</p>
+          <p className="genex-connect-text">{WORDS.termsText}</p>
         </Prompt>
       );
     case GenexAccountKind.Checking:
-      return <Pending label={WORDS.checking} className="genex-checking" spinner />;
+      return <Pending label={WORDS.checking} className="genex-checking" />;
     case GenexAccountKind.Attention:
       return (
         <Prompt
           title={WORDS.attentionTitle}
-          actions={<Button onClick={() => void live.refresh()}>{WORDS.tryAgain}</Button>}
+          actions={
+            <Button variant="play-tint" onClick={() => void live.refresh()}>
+              {WORDS.tryAgain}
+            </Button>
+          }
         >
-          <p>{view.error}</p>
+          <p className="genex-connect-text">{view.error}</p>
         </Prompt>
       );
     default:
@@ -194,23 +217,24 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
 }
 
 /**
- * The account card for the plugin's live status. `problem` is a failure the Plugins page met on
- * the way here (its account button), shown in the card like the card's own.
+ * The account in the Connect band, for the plugin's live status. `problem` is a failure the Plugins
+ * page met on the way here (its account button, or Connect while the plugin was off), shown in the
+ * band like the band's own.
  */
 export function GenexAccount({ live, problem = "" }: { live: GenexLive; problem?: string }): JSX.Element {
   const view = genexAccountView(live.status);
-  // Before the first status, a failed read is the card's own state rather than a line beneath it.
+  // Before the first status, a failed read is the band's own state rather than a line beneath it.
   const unreadable = live.status === null && live.error;
   const shown: GenexAccountView = unreadable ? { kind: GenexAccountKind.Attention, error: live.error } : view;
   const why = unreadable ? problem : live.error || problem;
   return (
-    <Card kind={shown.kind}>
+    <ConnectBand state={connectArtState(shown.kind)} label={WORDS.label} hooks={{ "data-genex-account": shown.kind }}>
       <StateBody view={shown} live={live} />
       {why && (
         <p role="alert" className="genex-error">
           {why}
         </p>
       )}
-    </Card>
+    </ConnectBand>
   );
 }

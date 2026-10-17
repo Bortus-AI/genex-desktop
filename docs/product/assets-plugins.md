@@ -19,10 +19,10 @@ Enabled, connected, signed in and permitted differ.
 
 The Plugins page (Plugins/Skills, search, details) lists installed plugins, your servers, the
 Community plugins and the plugin guide, with
-[icons](../plugins.md#icons). Install from GitHub pins a pasted link's latest release
+[icons](../plugins.md#icons). Install from GitHub pins a link's latest release
 (else newest commit). Games build, preview and export without plugins. The host draws Genex's
 app-wide page (balance, routed tools, candidate pictures) and Local Blender's runtime card. Connect,
-unapproved, reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
+unapproved, turns Genex on and reuses a saved account or opens browser sign-in; setup survives restart and reinstall.
 Game spend is in the usage panel, prices in Genex's Credits tab. Enabled Genex suggests assets in planning.
 Generations wait for unaccepted terms (Review: sidebar, chat).
 

@@ -3557,11 +3557,16 @@ export const GENEX_WORDS = {
     dismiss: "Close",
   },
   account: {
-    signedOutTitle: "Connect your Genex account",
-    signedOutText: "Sign in once in your browser. One credit balance covers all your games.",
+    /** The Connect band, for assistive tech: the account, or the plugin while it is off. */
+    label: "Genex account",
+    offLabel: "Connect Genex",
+    /** The Connect band's offer, with the plugin off or its account not yet connected. */
+    offerTitle: "The best game dev tools, in one click",
+    offerText: "Optional and always up to date. You can always build on your own subscription.",
     retryTitle: "Reconnect your Genex account",
     retryText: "Your saved sign-in couldn’t be opened on this Mac. Sign in again in your browser.",
-    connect: "Connect Genex",
+    /** Connect turns the plugin on and signs in to Genex: the saved sign-in, or the browser. */
+    connect: "Connect",
     retry: "Reconnect",
     signingInTitle: "Finish signing in in your browser",
     signingInText: "Check that your browser shows this code:",
@@ -3586,7 +3591,6 @@ export const GENEX_WORDS = {
     shared: "One balance for all your games. Failed generations are refunded.",
     outOfCredits: "Games still build with procedural assets and Local Blender.",
     paused: (kinds: string) => `Paused on Genex right now: ${kinds}.`,
-    off: "Off. Your agent can't use Genex tools. Your profile, friends and Publish stay.",
   },
   /** Genex as the Plugins page shows it: the router, its line, and the tools it routes. */
   router: {
@@ -3600,8 +3604,6 @@ export const GENEX_WORDS = {
     rowOff: { lead: "Off. Your agent can't use Genex tools.", tail: "Your profile, friends and Publish stay." },
     /** The line under the plugin page's title while an account is connected. */
     connectedAs: (name: string) => `Game dev tools router · connected as ${name}`,
-    intro:
-      "The Genex plugin connects your agents to every game dev tool. Pay on demand, with one balance for every tool.",
     toolsTitle: "Tools it routes",
     toolsIntro:
       "Ask in any game chat. Genex picks the tool, runs it on your balance and saves the file in your game. No accounts or keys of your own.",

@@ -42,7 +42,7 @@ function shownScale(canvas: HTMLCanvasElement): number {
 }
 
 /** Repaint when the art scrolls in or out, the theme or `inert` changes, motion rests or wakes, or the window hides. */
-function watchRepaints(
+export function watchRepaints(
   canvas: HTMLCanvasElement,
   on: { visible: (visible: boolean) => void; schedule: () => void; recolor: () => void },
   media: { reduced: MediaQueryList; dark: MediaQueryList },

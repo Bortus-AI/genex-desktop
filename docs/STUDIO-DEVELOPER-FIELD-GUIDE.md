@@ -542,8 +542,8 @@ and reduced motion. Evidence lives in `.studio-dev/evidence/results-ui/`. Pair w
 `run-chat-ui.mjs` and `run-chat-feedback-ui.mjs` for real host reads, history/streaming and Studio
 navigation; component fixtures do not prove account access or native game layering.
 
-Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's own account card
-and checks that a failed connect keeps its reason after the status is read again. It does not
+Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's account in its
+Connect band and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.
 `run-publish-cover-ui.mjs` renders the production Publish dialog beside the production
 ChatPanel of the same game with a fake `window.studio`: with no shot the dialog asks the plugin to
