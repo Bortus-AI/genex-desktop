@@ -38,9 +38,11 @@ licenses and terms of included third-party software.
   a ring to identify Unreal Engine, which the Unreal plugin runs. Unreal and Unreal Engine are
   trademarks or registered trademarks of Epic Games, Inc. in the United States and elsewhere.
   Genex is not affiliated with or endorsed by Epic Games.
-- The Unity plugin uses a generic icon and names Unity only to identify it. Unity is a trademark
-  or registered trademark of Unity Technologies or its affiliates in the U.S. and elsewhere.
-  Genex is not affiliated with or endorsed by Unity Technologies.
+- `src/plugins/unity/icon.svg`, the `unity` glyph in `src/renderer/ui/icons.tsx` and the project tile
+  in `src/plugins/unity/panel.html` show the Unity logo, unaltered (its path from Simple Icons 13.21.0,
+  CC0-1.0), only to identify Unity, which the Unity plugin runs. Unity and the Unity logo are
+  trademarks or registered trademarks of Unity Technologies or its affiliates in the U.S. and
+  elsewhere. Genex is not affiliated with or endorsed by Unity Technologies.
 
 ## Routed tool marks
 

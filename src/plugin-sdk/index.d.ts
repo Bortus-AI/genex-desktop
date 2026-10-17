@@ -273,7 +273,7 @@ export interface PluginToolbarItem {
   label: string;
   /** 1–60 characters, unique across the manifest. */
   ariaLabel: string;
-  /** A glyph of at most 4 characters, or a host icon: globe, export, play, image, box, boxes, unreal. */
+  /** A glyph of at most 4 characters, or a host icon: globe, export, play, image, box, boxes, unreal, godot, unity. */
   icon?: string;
   /** Default true: the button waits for a loaded game. */
   requiresProject?: boolean;
