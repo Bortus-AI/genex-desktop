@@ -123,7 +123,9 @@ import type { PreviewInputAction } from "../substrate/preview-input.ts";
 import { DEFAULT_POOL_MAX } from "../substrate/preview-pool.ts";
 import type { PreviewConsoleEntry, PreviewPixelStats, PreviewPort } from "../substrate/preview-port.ts";
 import { SnapshotEngine, SnapshotIndex, HARNESS_WORKSPACE } from "../substrate/snapshots.ts";
+import { gitMissingProblem, SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { claudeFolderDenyWrites, ProcessSandbox } from "../substrate/spawn.ts";
+import { ensureHostGit } from "../substrate/windows-sandbox.ts";
 import { type JobProbe, JobService, type JobSpawn } from "../substrate/jobs.ts";
 import { type AppLookPort, type ScreenAccess, unsupportedAppLook } from "../substrate/app-look.ts";
 import { checkLinuxIsolation } from "../substrate/linux-isolation.ts";
@@ -752,6 +754,11 @@ export class StudioCore {
   // ── boot ─────────────────────────────────────────────────────────────────────────────────
   async init(): Promise<void> {
     const mark = (step: string): void => this.options.markBoot?.(`core:${step}`);
+    // The host runs git itself (snapshots, the harness workspace) before the sandbox looks for Git
+    // Bash, so a Windows PC without Git for Windows gets the setup screen here, not `spawn git ENOENT`.
+    if (process.platform === StudioPlatform.Windows && !(await ensureHostGit())) {
+      throw new SandboxUnavailableError(gitMissingProblem());
+    }
     await this.#restoreGamesRoot();
     for (const dir of Object.values(this.layout)) await ensureDir(dir);
     await this.#loadSettings();
