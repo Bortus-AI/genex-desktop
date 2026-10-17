@@ -150,6 +150,7 @@ import { readLicenseTexts } from "./licenses.ts";
 import { registerSkillsIpc } from "./ipc/skills.ts";
 import { registerTerminalIpc } from "./ipc/terminal.ts";
 import { registerMentionRetry, registerThreadsIpc } from "./ipc/threads.ts";
+import { engineBoot, type EngineBoot } from "./engine-boot.ts";
 import { KeepAwake } from "./keep-awake.ts";
 import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
@@ -1293,7 +1294,21 @@ function cliInstalls(studio: StudioCore) {
 }
 
 /** Every IPC channel, registered once per launch by its domain's registrar in `./ipc/`. */
-function registerIpc(studio: StudioCore): void {
+/** The launch's engine checks, started, with every later list kept for the next launch (`engine-boot.ts`). */
+function startEngineBoot(studio: StudioCore): EngineBoot {
+  const boot = engineBoot({
+    describe: () => studio.engines.describe(),
+    file: path.join(userDataRoot, "engine-homes", "last-engines.json"),
+    build: app.getVersion(),
+    changed: () => pushUiEvent({ type: UiEvent.EnginesChanged, payload: {} }),
+    log: (message) => studioLog.write("main", message),
+  });
+  studio.engines.onDescribed((list) => boot.remember(list));
+  boot.start();
+  return boot;
+}
+
+function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   const handle = createIpcHandle(ipcMain, {
     fixture: fixtureNativePolicy,
     isStudioUi: isStudioWindow,
@@ -1312,6 +1327,7 @@ function registerIpc(studio: StudioCore): void {
   });
   registerThreadsIpc(handle, {
     core: studio,
+    engines,
     gamesRootLabel,
     threadStatus: () => liveThreadStatus,
     pushUiEvent,
@@ -1633,7 +1649,10 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     if (fixtureProviders && dev?.fixture === FixtureName.UpdateReady) updates.downloaded(FIXTURE_UPDATE_RELEASE);
     protocol.handle("studio-plugin", (request) => servePluginPanel(studio, request));
     const fixture = fixtureProviders && dev ? await prepareFixture(studio, dev.fixture) : null;
-    registerIpc(studio);
+    // The engine checks take seconds: they start now, beside the window, and the window opens on
+    // the engines the last launch checked. After a fixture's engines are in place.
+    const engines = startEngineBoot(studio);
+    registerIpc(studio, engines);
     const win = await createWindow(studio);
     window = win;
     // First launch opens on an empty library, with no game chat to select.
