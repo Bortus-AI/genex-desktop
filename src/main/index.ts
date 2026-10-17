@@ -65,7 +65,7 @@ import {
   shutdownSteps,
   type ShutdownStep,
 } from "./app-lifecycle.ts";
-import { createBootGate } from "./boot-gate.ts";
+import { createBootGate, waitsOnInstall } from "./boot-gate.ts";
 import {
   activateChatFixture,
   DevProviders,
@@ -174,7 +174,7 @@ import { layoutFor } from "./core/layout.ts";
 import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
 import { TITLEBAR_HEIGHT, windowChrome } from "./window-chrome.ts";
-import { appUserModelId, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
+import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
 import { BootPhase, StudioPlatform, type SandboxProblem } from "../shared/boot.ts";
 import type { WindowControlColors } from "../shared/studio-api.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
@@ -286,6 +286,8 @@ if (squirrelStep) {
   // `app.exit` ends the process from the event loop; nothing below may run first.
   await new Promise<never>(() => {});
 }
+const workingDir = installedWorkingDir(process.platform, process.execPath, app.isPackaged);
+if (workingDir) process.chdir(workingDir);
 // Before any notification: Windows attributes toasts and taskbar entries by this id.
 const userModelId = appUserModelId(process.platform, process.execPath, existsSync);
 if (userModelId) app.setAppUserModelId(userModelId);
@@ -1616,11 +1618,30 @@ async function coreOrSetup(): Promise<StudioCore | null> {
   }
 }
 
-/** Hold startup on "Set up the protected workspace"; Retry runs {@link retryStartup}. */
+/**
+ * Hold startup on "Set up the protected workspace"; Retry runs {@link retryStartup}. Where the fix
+ * is Windows' one-time install, it runs first, so a person sees only its administrator prompt.
+ */
 async function openSandboxSetup(problem: SandboxProblem): Promise<void> {
   studioLog.write("main", `sandbox unavailable: ${problem.code} ${problem.details.join("; ")}`);
   bootGate.hold(problem, retryStartup);
+  if (await setUpWithoutAsking()) return;
   window = await createSetupWindow();
+}
+
+/**
+ * Install the Windows sandbox straight away and start the studio; false leaves the setup screen
+ * to open, with Set up, when there was nothing to install, the prompt was declined or it failed.
+ */
+async function setUpWithoutAsking(): Promise<boolean> {
+  if (!waitsOnInstall(bootGate.state())) return false;
+  try {
+    const result = await bootGate.setUp();
+    return result.state.phase === BootPhase.Ready;
+  } catch (err) {
+    studioLog.write("main", `sandbox setup failed: ${errorMessage(err)}`);
+    return false;
+  }
 }
 
 /**
@@ -1662,6 +1683,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     if (fixture) await activateChatFixture(studio, fixture);
     if (fixture?.project) await openFixtureGame(win, fixture.project);
     pushUiEvent({ type: UiEvent.StudioReady, payload: { userData } });
+    studioLog.write("main", "studio ready");
     // Rows a closed app left unsent go now, or are dropped once a week old.
     void runSharing.flush().catch((err) => studioLog.write("main", errorMessage(err)));
     const view = requirePreview();

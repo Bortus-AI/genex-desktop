@@ -44,7 +44,7 @@ const MESSAGE = {
 } as const;
 
 /** Held on the problem Set up fixes: a sandbox that has not been provisioned yet. */
-function waitsOnInstall(state: BootState): boolean {
+export function waitsOnInstall(state: BootState): boolean {
   return state.phase === BootPhase.SandboxSetup && state.sandbox?.code === SandboxProblemCode.NotProvisioned;
 }
 

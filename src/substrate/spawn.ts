@@ -625,12 +625,13 @@ export class ProcessSandbox {
     await Promise.all(this.policy.allowWrite.map((dir) => mkdir(dir, { recursive: true })));
     const toolDirs = [(await this.toolPath()) ?? "", process.env.PATH ?? ""].flatMap((value) => value.split(";"));
     const gitRoot = gitRootOf(bash);
+    const installDir = path.dirname(longPath(process.execPath, this.#platform));
     const read = [
-      path.dirname(longPath(process.execPath, this.#platform)),
+      installDir,
       ...grantableToolDirs(toolDirs, profile, this.policy.denyRead),
       ...(insideWindowsPath(profile, gitRoot) ? [gitRoot] : []),
     ];
-    const session = this.#seams.session ?? windowsSessionFor(runtime, { profile, srtWin: srtWinPath() });
+    const session = this.#seams.session ?? windowsSessionFor(runtime, { profile, srtWin: srtWinPath(), installDir });
     const backend = { session, bash, read, profile, curlHome: await writeCurlHome(this.scratchDir) };
     await session
       .join(this, { grants: this.#windowsGrants(backend), config: this.#windowsSessionConfig() })

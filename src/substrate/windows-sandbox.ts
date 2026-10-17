@@ -708,6 +708,8 @@ export interface WindowsSessionDeps {
   ancestors: AncestorGrants;
   /** Filters deny paths before they reach srt-win ({@link keepWindowsDenies}). */
   keepDenies?: (paths: readonly string[], scope: DenyScope) => string[];
+  /** Lets the sandbox user start srt-win, before an initialize ({@link grantLauncherFolders}). */
+  launcher?: () => Promise<void>;
 }
 
 /** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
@@ -736,6 +738,8 @@ export class WindowsSandboxSession {
   #networkChanged = false;
   #active = 0;
   #regrants = 0;
+  /** An initialize succeeded, so its once-per-process egress check has run srt-win as the sandbox user. */
+  #started = false;
 
   constructor(deps: WindowsSessionDeps) {
     this.#deps = deps;
@@ -848,9 +852,11 @@ export class WindowsSandboxSession {
    * folder, which can walk the whole user profile, so a retry repeats that walk.
    */
   async #initialize(config: SandboxRuntimeConfig): Promise<void> {
+    if (!this.#started) await this.#deps.launcher?.();
     for (let attempt = 1; ; attempt++) {
       try {
         await this.#deps.runtime.initialize(config);
+        this.#started = true;
         return;
       } catch (error) {
         if (!egressCheckTimedOut(error) || attempt >= INITIALIZE_ATTEMPTS) throw error;
@@ -972,6 +978,21 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
 }
 
 /**
+ * Let the sandbox user open the folders srt-win starts from: initialize's egress check runs
+ * srt-win as that user before it applies any grant, and a per-user install (Squirrel's, under
+ * `%LOCALAPPDATA%`) sits in the profile, where that user may open nothing, so Windows refused it
+ * ("CreateProcessWithLogonW(srt-sandbox): Access is denied"). The grant is srt's own, held for
+ * this process like the session's, so the session's reset takes it back with them. Before the
+ * sandbox is set up there is no user to grant to, and initialize says so.
+ */
+export async function grantLauncherFolders(srtWin: string, dirs: readonly string[]): Promise<void> {
+  const sid = await srtSandboxSid(srtWin);
+  if (!sid) return;
+  const srt = await import(SRT_PACKAGE);
+  srt.grantWindowsAcl({ read: [...dirs], write: [], sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) });
+}
+
+/**
  * sandbox-runtime's own Windows dependency check, the one its `initialize` runs first: the
  * sandbox user, its credential and the WFP filters. `initialize` reports that refusal as a plain
  * Error with no code, so a failed start asks again here to tell "not set up yet" from a fault.
@@ -991,13 +1012,18 @@ const sessions = new WeakMap<object, WindowsSandboxSession>();
  */
 export function windowsSessionFor(
   runtime: SessionRuntime,
-  options: { profile: string; srtWin: string },
+  options: { profile: string; srtWin: string; installDir: string },
 ): WindowsSandboxSession {
   const existing = sessions.get(runtime);
   if (existing) return existing;
   const holders = windowsGrantHolders(options.profile);
   const ancestors = ancestorGrants(holders, { sid: () => srtSandboxSid(options.srtWin) });
-  const session = new WindowsSandboxSession({ runtime, profile: options.profile, ancestors });
+  const srtWinDir = win.dirname(options.srtWin);
+  const launchDirs = insideWindowsPath(options.installDir, srtWinDir)
+    ? [options.installDir]
+    : [options.installDir, srtWinDir];
+  const launcher = () => grantLauncherFolders(options.srtWin, launchDirs);
+  const session = new WindowsSandboxSession({ runtime, profile: options.profile, ancestors, launcher });
   process.once("exit", () => ancestors.revokeAllSync());
   sessions.set(runtime, session);
   return session;

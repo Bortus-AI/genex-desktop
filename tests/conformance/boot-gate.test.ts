@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createBootGate } from "../../src/main/boot-gate.ts";
+import { createBootGate, waitsOnInstall } from "../../src/main/boot-gate.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerBootIpc } from "../../src/main/ipc/boot.ts";
 import {
@@ -155,6 +155,15 @@ describe("Set up (Windows)", () => {
     install.resolve();
     assert.deepEqual(await first, await second);
     assert.deepEqual(counts, { installs: 1, attempts: 1 });
+  });
+
+  it("is what main runs before it opens the screen: only a sandbox waiting on its install", () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    assert.equal(waitsOnInstall(gate.state()), false, "a ready start");
+    gate.hold(PROBLEM, async () => {});
+    assert.equal(waitsOnInstall(gate.state()), false, "Linux tools install in a terminal");
+    gate.hold(NOT_PROVISIONED, async () => {});
+    assert.equal(waitsOnInstall(gate.state()), true);
   });
 
   it("refuses when there is nothing to install: a ready start, a Linux problem, or no installer", async () => {

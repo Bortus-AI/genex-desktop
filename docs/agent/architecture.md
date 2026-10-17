@@ -168,10 +168,10 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   [`linux-isolation.ts`](../../src/substrate/linux-isolation.ts)), main holds the boot gate
   ([`src/main/boot-gate.ts`](../../src/main/boot-gate.ts)) and opens a core-less setup window
   instead of exiting; `studio:boot.retry` recreates the core and, once started, replaces
-  that window with the studio. On Windows, `studio:boot.setup` (native) first installs the sandbox
-  with the unpacked srt-win
+  that window with the studio. On Windows, main first installs the sandbox itself, as
+  `studio:boot.setup` (native) does
   ([`src/substrate/windows-sandbox-setup.ts`](../../src/substrate/windows-sandbox-setup.ts), one
-  UAC prompt) and retries; a dismissed prompt changes nothing. Other startup failures keep the error dialog and exit; smoke
+  UAC prompt) and retries; the window opens only if that fails. Other startup failures keep the error dialog and exit; smoke
   and developer launches still fail (the `sandbox-setup` fixture shows the screen over a ready
   core). The window's title bar comes from
   [`src/main/window-chrome.ts`](../../src/main/window-chrome.ts): `hiddenInset` on macOS

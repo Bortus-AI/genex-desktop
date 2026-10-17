@@ -938,6 +938,28 @@ describe("the grant session", () => {
     assert.deepEqual(s.runtime.calls, ["initialize"]);
   });
 
+  it("lets the sandbox user start srt-win from the install folder before initializing, until an initialize succeeds", async () => {
+    // initialize's egress check runs srt-win as the sandbox user before it applies any grant, and
+    // a per-user install sits in the profile, where that user may open nothing.
+    const runtime = fakeSessionRuntime();
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors: fakeAncestors().ancestors,
+      launcher: async () => {
+        runtime.calls.push("launcher");
+      },
+    });
+    const owner = {};
+    runtime.failInitializeIn("user", "not_provisioned");
+    await assert.rejects(value.join(owner, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }));
+    await value.join(owner, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
+    assert.deepEqual(runtime.calls, ["launcher", "initialize", "launcher", "initialize"]);
+    value.update(owner, { write: [GAMES, LATE], read: [] });
+    await value.settled();
+    assert.deepEqual(runtime.calls.slice(4), ["reset", "initialize"], "the egress check runs once per process");
+  });
+
   it("an srt-win timeout in the egress check is tried again, up to three attempts in all", async () => {
     const s = session();
     s.runtime.failInitialize("srt_win_timeout", "srt_win_timeout");

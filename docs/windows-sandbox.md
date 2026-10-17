@@ -18,6 +18,10 @@ the setup screen opens on `git-missing`. What differs from macOS:
   session's roots is refused (`not-granted`); network changes stay live (`updateConfig`).
   `initialize()` is tried up to three times only when srt-win's egress check (`wfp`) times out; a
   timed-out ACL step fails at once, since a retry would repeat its walk under the denied path's parent.
+- That egress check starts srt-win as the sandbox user before any grant, and Windows opens its
+  program and working folder as that user. A per-user install lives in the profile, so the session
+  grants the install folder (and srt-win's, when apart) for reading first
+  (`grantLauncherFolders`), and a packaged app works from its install folder (`installedWorkingDir`).
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(RA)` (read attributes, no listing) after every apply, since
   srt-win's deny stamps replace the entry. The entry is set on that folder alone
