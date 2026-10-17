@@ -20,6 +20,7 @@
   "tests/conformance/bonsai.test.ts",
   "tests/conformance/boot-gate.test.ts",
   "tests/conformance/boot-reads.test.ts",
+  "tests/conformance/boot-side-by-side.test.ts",
   "tests/conformance/build-preview.test.ts",
   "tests/conformance/build-progress.test.ts",
   "tests/conformance/canvas-gesture.test.ts",

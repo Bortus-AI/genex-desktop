@@ -17,6 +17,7 @@ import type { ChildProcess } from "node:child_process";
 import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
 import { assistAvailable, coreAssistHost, engineAssist } from "./core/desktop-assist.ts";
 import type { DesktopControl } from "./core/desktop-control.ts";
 import type { MentionSources } from "./core/mention-tags.ts";
@@ -784,10 +785,10 @@ export class StudioCore {
     void toolchain().catch(() => {});
     // Side by side: the sandbox reads only the layout and the games, and plugin setup reaches the
     // sandbox only when a tool runs later.
-    const [sandbox] = await Promise.all([
+    const sandbox = await sandboxBesidePlugins(
       this.#createSandbox(listed).finally(() => mark("sandbox")),
       this.#wirePluginServices().finally(() => mark("plugins")),
-    ]);
+    );
     // Linux: a sandbox that cannot start a process (AppArmor's user-namespace restriction) is a
     // setup problem the window shows, not a harness that never boots.
     await checkLinuxIsolation(sandbox).catch(async (error: unknown) => {
