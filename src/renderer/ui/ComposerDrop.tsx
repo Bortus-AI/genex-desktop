@@ -4,8 +4,18 @@
  * line while they are held, and what a drop left out stays under it in orange with a way on.
  */
 import { type JSX, type RefObject, useEffect, useRef, useState } from "react";
+import { filesToFramesDetailed, MAX_REFERENCE_FRAMES, type PickedFrame } from "../reference-frames.ts";
 import { COMPOSER_DROP_WORDS } from "../words.ts";
-import { dropLine, type HeldFiles, heldFiles, type LeftOut, leftOutLine } from "./composer-drop.ts";
+import {
+  type AttachedFile,
+  type BoardCount,
+  dropLine,
+  type HeldFiles,
+  heldFiles,
+  isPictureType,
+  type LeftOut,
+  leftOutLine,
+} from "./composer-drop.ts";
 import { Icon } from "./icons.tsx";
 
 /** The marker of an area whose drops go to the prompt bar inside it (a chat, home). */
@@ -81,10 +91,44 @@ export function useFileDrop(
   return held;
 }
 
+/** Where a file is on this computer, "" for one that is only data. */
+function placeOf(file: File): string {
+  const place: unknown = window.studio.pathOfFile?.(file);
+  return typeof place === "string" ? place : "";
+}
+
+/** A drop's files, sorted: pictures read as pictures, every other file a link to where it is. */
+export interface DroppedFiles {
+  frames: PickedFrame[];
+  files: AttachedFile[];
+  /** Pictures past the limit, never read. */
+  unreadPictures: number;
+  /** Files with no place on this computer, so there is nothing to link. */
+  unlinked: string[];
+}
+
+/**
+ * Read what a drop or paste carried. A picture the browser cannot decode (a layered PSD, say)
+ * goes as a file too, so nothing the person meant to share is turned away.
+ */
+export async function readDroppedFiles(list: File[]): Promise<DroppedFiles> {
+  const pictures = list.filter((file) => isPictureType(file.type));
+  const { frames, skipped } = await filesToFramesDetailed(pictures);
+  const undecoded = pictures.filter((file) => skipped.includes(file.name));
+  const files: AttachedFile[] = [];
+  const unlinked: string[] = [];
+  for (const file of [...list.filter((each) => !isPictureType(each.type)), ...undecoded]) {
+    const path = placeOf(file);
+    if (path) files.push({ name: file.name, path });
+    else unlinked.push(file.name);
+  }
+  return { frames, files, unreadPictures: Math.max(0, pictures.length - MAX_REFERENCE_FRAMES), unlinked };
+}
+
 /** The dashed veil over the prompt bar while files are held over the chat, with its one line. */
-export function DropVeil({ held, attached }: { held: HeldFiles | null; attached: number }): JSX.Element | null {
+export function DropVeil({ held, board }: { held: HeldFiles | null; board: BoardCount }): JSX.Element | null {
   if (!held) return null;
-  const line = dropLine(held, attached);
+  const line = dropLine(held, board);
   return (
     <div data-drop-veil data-tone={line.tone} className="composer-drop-veil" role="status">
       {line.words}
@@ -92,7 +136,7 @@ export function DropVeil({ held, attached }: { held: HeldFiles | null; attached:
   );
 }
 
-/** What a drop left off the board, in orange, with Choose pictures and a way to put it away. */
+/** What a drop left off the board, in orange, with Choose files and a way to put it away. */
 export function LeftOutNote({
   left,
   onChoose,
@@ -104,14 +148,14 @@ export function LeftOutNote({
 }): JSX.Element | null {
   const words = left ? leftOutLine(left) : null;
   if (!words) return null;
-  const title = left?.notPictures.length ? left.notPictures.join(", ") : undefined;
+  const title = left?.unlinked.length ? left.unlinked.join(", ") : undefined;
   return (
     <div data-left-out className="composer-left-out" role="alert">
       <span className="min-w-0 flex-1 break-words" title={title}>
         {words}
       </span>
       <button type="button" className="composer-left-out-action" onClick={onChoose}>
-        {COMPOSER_DROP_WORDS.choosePictures}
+        {COMPOSER_DROP_WORDS.chooseFiles}
       </button>
       <button
         type="button"
@@ -120,6 +164,27 @@ export function LeftOutNote({
         onClick={onDismiss}
       >
         <Icon name="close" size={11} />
+      </button>
+    </div>
+  );
+}
+
+/** A file going with the next message: its name on a chip (its place on hover), and its remove button. */
+export function FileChip({ file, onRemove }: { file: AttachedFile; onRemove: () => void }): JSX.Element {
+  return (
+    <div data-attached-file className="group relative">
+      <span className="composer-file-chip" title={file.path}>
+        <Icon name="file" size={14} />
+        <span className="truncate">{file.name}</span>
+      </span>
+      <button
+        type="button"
+        aria-label={COMPOSER_DROP_WORDS.remove(file.name)}
+        onClick={onRemove}
+        className="absolute -top-1 -right-1 flex size-5 items-center justify-center rounded-full text-micro"
+        style={{ background: "var(--ink)", color: "var(--surface)" }}
+      >
+        ×
       </button>
     </div>
   );

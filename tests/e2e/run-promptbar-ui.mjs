@@ -297,20 +297,31 @@ app.whenReady().then(async()=>{
  await capture('drop-veil');
  await js('dragFiles("dragleave",[{name:"sketch.png",mime:"image/png"}])');await wait(200);
  check('the veil goes when the drag leaves',!(await element(VEIL,'true')));
+ const notes=n=>Array.from({length:n},(_,i)=>({name:"notes-"+i+".txt",mime:"text/plain"}));
  await js('dragFiles("dragenter",[{name:"notes.txt",mime:"text/plain"}])');await wait(200);
- check('a file that is not a picture turns the veil orange',await element(VEIL,'e.dataset.tone==="refuses"&&e.textContent==="Only pictures can go in"'),await element(VEIL,'e.outerHTML'));
+ check('a file that is not a picture goes in too: the veil stays blue and counts files',await element(VEIL,'e.dataset.tone==="takes"&&e.textContent==="Drop to add 1 file"'),await element(VEIL,'e.outerHTML'));
+ await js('dragFiles("dragleave",[{name:"notes.txt",mime:"text/plain"}])');await js('dragFiles("dragenter",'+JSON.stringify(notes(13))+')');await wait(200);
+ check('past the limit the veil turns orange and says how many stay out',await element(VEIL,'e.dataset.tone==="refuses"&&e.textContent==="Room for 12 files, 1 will stay out"'),await element(VEIL,'e.outerHTML'));
  await capture('drop-veil-refuses');
- await js('dragFiles("drop",[{name:"notes.txt",mime:"text/plain"}])');await wait(500);
- check('a dropped file that is not a picture leaves an orange note whose buttons have a fill',!(await element(VEIL,'true'))&&await element(LEFT_OUT,'e.textContent.includes("notes.txt isn’t a picture")&&e.textContent.includes("Choose pictures")')&&await element(LEFT_OUT+' .composer-left-out-action',filled)&&await element(LEFT_OUT+' [aria-label="Dismiss"]',filled),await element(LEFT_OUT,'e.outerHTML'));
+ await js('dragFiles("drop",'+JSON.stringify(notes(13))+')');await wait(500);
+ check('a drop past the limit leaves an orange note whose buttons have a fill',!(await element(VEIL,'true'))&&await element(SPECIMEN+' [data-promptbar]','e.querySelectorAll("[data-attached-file]").length===12')&&await element(LEFT_OUT,'e.textContent.includes("1 file left out, 12 at most")&&e.textContent.includes("Choose files")')&&await element(LEFT_OUT+' .composer-left-out-action',filled)&&await element(LEFT_OUT+' [aria-label="Dismiss"]',filled),await element(LEFT_OUT,'e.outerHTML'));
  await capture('drop-left-out');
  await click(LEFT_OUT+' [aria-label="Dismiss"]');
  check('Dismiss puts the note away',!(await element(LEFT_OUT,'true')));
+ for(let i=0;i<12;i++)await click(SPECIMEN+' [aria-label="Remove notes-'+i+'.txt"]');
+ check('each file chip removes itself',!(await element(SPECIMEN+' [data-attached-file]','true')));
  // A picture is a message on its own: dropped with no words, it sends.
  await js('dragFiles("drop",[{name:"sketch.png",mime:"image/png"}])');
  await wait(500);
  check('a picture with no words enables Send',await element(PROMPT,'e.value===""')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Mood board"]','e.querySelectorAll("img").length===1')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','!e.disabled && e.dataset.state==="ready"'),await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','({pictures:e.closest("[data-promptbar]").querySelectorAll("[aria-label=\\"Mood board\\"] img").length,disabled:e.disabled,state:e.dataset.state})'));
  await click(SPECIMEN+' [data-promptbar] [aria-label="Send"]');
  check('a picture with no words sends as a message of its own',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.text==="" && v.extras?.frames?.length===1})()'),await element('#composer-settings','e.textContent'));
+ // Any other file goes as a link to where it is: alone, it is a message too.
+ await js('dragFiles("drop",[{name:"level plan.pdf",mime:"application/pdf"}])');await wait(500);
+ check('a dropped document shows as a chip with its name',await element(SPECIMEN+' [data-attached-file]','e.textContent.includes("level plan.pdf")'));
+ await capture('drop-file-chip');
+ await click(SPECIMEN+' [data-promptbar] [aria-label="Send"]');
+ check('a document with no words sends as its link',await element('#composer-settings','JSON.parse(e.textContent).text==="file:///Users/you/Downloads/level%20plan.pdf"'),await element('#composer-settings','e.textContent'));
  // No AI model yet: the model's place holds Connect AI model; Enter and Send point at it instead of sending.
  await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
  const NO_MODEL='[data-composer-specimen-nomodel]';

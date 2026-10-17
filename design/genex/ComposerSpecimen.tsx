@@ -36,6 +36,8 @@ if(!window.studio)Object.defineProperty(window,'studio',{value:{
  pluginAction:async()=>{account='unlocked';},
  pluginEnable:async(id:string,enabled:boolean)=>{const plugin=plugins.find(p=>p.manifest.id===id);if(plugin)plugin.enabled=enabled;},
  engines:async()=>[],threads:async()=>[],games:async()=>[],staged:async()=>[],
+ // A dropped file's place on disk, as the preload answers it.
+ pathOfFile:(file:File)=>`/Users/you/Downloads/${file.name}`,
  // Two subscriptions with fixed plan limits: one nearly spent, one model bucket exhausted.
  providerUsage:async()=>[
   {engine:'claude-code',usage:{measuredAt:new Date().toISOString(),plan:'max',windows:[

@@ -10,7 +10,7 @@ import { MessageImages } from "./MessageImages.tsx";
 /** The words with their @ tags painted as on the composer; the rest keeps its file links. */
 function TaggedText({ text, tags }: { text: string; tags: readonly string[] | undefined }) {
   const known = useMemo(() => new Set(tags ?? []), [tags]);
-  if (!known.size) return <FileText text={text} />;
+  if (!known.size) return <FileText text={text} chips />;
   return (
     <>
       {splitMentions(text, known).map((run, index) =>
@@ -21,7 +21,7 @@ function TaggedText({ text, tags }: { text: string; tags: readonly string[] | un
           </span>
         ) : (
           // biome-ignore lint/suspicious/noArrayIndexKey: runs are positional and rebuilt with the text.
-          <FileText key={index} text={run.text} />
+          <FileText key={index} text={run.text} chips />
         ),
       )}
     </>

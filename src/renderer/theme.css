@@ -904,6 +904,20 @@
     --drop-ink: color-mix(in oklab, var(--orange) 72%, var(--ink));
     border-color: var(--orange);
   }
+  /* A file going with the next message as a link: its name on a chip as tall as a picture's tile. */
+  .composer-file-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    height: 44px;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--field);
+    color: var(--ink-2);
+    font-size: 12px;
+  }
   /* What a drop left off the board, in orange, with its action. */
   .composer-left-out {
     display: flex;
@@ -4012,6 +4026,26 @@ button.chat-header-title:hover {
 .file-link:hover {
   color: var(--ink);
   text-decoration-color: currentColor;
+}
+/* A file a person's message carries, written out in full: a chip with its own name. */
+.file-link.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 7px;
+  background: var(--surface);
+  text-decoration-line: none;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.file-link.file-chip:hover {
+  background: var(--control-hover, var(--hover));
+}
+.file-link.file-chip svg {
+  flex-shrink: 0;
+  color: var(--ink-3);
 }
 /* Studio has one reading size, one small size and a title; technical code keeps its family. */
 .studio-view {
