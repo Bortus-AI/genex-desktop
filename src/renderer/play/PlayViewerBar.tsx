@@ -415,6 +415,7 @@ export function PlayViewerBar({
       data-play-viewer-bar
       data-down={bar?.shown === false ? true : undefined}
       onPointerEnter={() => holds.pointer(true)}
+      onPointerMove={() => holds.pointer(true)}
       onPointerLeave={() => holds.pointer(false)}
       onFocus={() => holds.keyboard(true)}
       onBlur={left}

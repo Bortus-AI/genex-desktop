@@ -802,6 +802,7 @@
   opacity: 0;
   translate: 0 -8px;
   pointer-events: none;
+  -webkit-app-region: no-drag;
 }
 /* Comments covers the window: the bar under its dimmed backdrop drags nothing. */
 .play-bar-layer[data-comments] .play-viewer-bar {

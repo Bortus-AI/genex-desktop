@@ -362,12 +362,12 @@ function viewerCalls(loop: ViewerLoop, heldEsc: ReturnType<typeof heldEscape>) {
   const actions = barActions(ctx);
   const playing = () => ctx.session()?.phase === PlayViewerPhase.Playing;
   return {
-    /** The game's page finished loading: it takes the window under the bar. */
+    /** The game's page finished loading: it takes the window under the bar, and the keyboard unless Comments has it. */
     loaded: (): void => {
       if (ctx.session()?.phase !== PlayViewerPhase.Loading) return;
       loop.stopShowTimer();
       loop.setPhase(PlayViewerPhase.Playing);
-      deps.game.focus();
+      if (!reveal.comments()) deps.game.focus();
     },
     /** The game's page could not load, or its renderer went away. */
     failed: (): void => {

@@ -82,10 +82,9 @@ export function barReveal(deps: BarRevealDeps) {
   };
 
   return {
-    /** A game opened, or could not load: the bar is up, and stays. */
+    /** A game opened, or could not load: the bar is up, and stays (Comments stays open over a failure). */
     pinned(): void {
       playing = false;
-      hold = NO_HOLD;
       showFor(0);
     },
     /** The game is on screen: the bar stays a few seconds more. */

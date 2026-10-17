@@ -48,9 +48,15 @@ function useHold(api: BarApi, openId: number | null) {
     told.current = key;
     api.playBar(hold).catch(() => undefined);
   }, [api, held, comments]);
-  // Another game, or none: Comments belongs to the game it was opened over.
+  // Another game, or none: Comments belongs to the game it was opened over, and main holds nothing
+  // for the new one until the pointer or the keyboard comes back to the bar.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the opening is what resets it.
-  useEffect(() => setComments(false), [openId]);
+  useEffect(() => {
+    setComments(false);
+    setPointer(false);
+    setKeyboard(false);
+    told.current = "";
+  }, [openId]);
   const holds: BarHolds = useMemo(() => ({ pointer: setPointer, keyboard: setKeyboard }), []);
   const openComments = useCallback(() => {
     // The layer covers the window first, so the modal never draws cut off at the bar's edge.

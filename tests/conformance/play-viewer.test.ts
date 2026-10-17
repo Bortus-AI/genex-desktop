@@ -623,6 +623,23 @@ describe("Play viewer's bar over the game", () => {
     assert.deepEqual(log, [`bar.show 0,0 ${WINDOW.width}x${PLAY_BAR_HEIGHT}`, "buttons shown", "game.focus"]);
   });
 
+  it("leaves the keyboard with Comments opened while the game loads, and keeps it over the window if the game fails", async () => {
+    const { viewer, log } = rig();
+    viewer.open("lost-cathedral", "Lost Cathedral");
+    await settle();
+    viewer.hold({ held: true, comments: true });
+    log.length = 0;
+    viewer.loaded();
+    assert.ok(!log.includes("game.focus"), "the comment field keeps the keyboard");
+    const failing = rig();
+    failing.viewer.open("lost-cathedral", "Lost Cathedral");
+    await settle();
+    failing.viewer.hold({ held: true, comments: true });
+    failing.log.length = 0;
+    failing.viewer.failed();
+    assert.ok(!failing.log.some((line) => line.startsWith("bar.")), "the layer stays over the whole window");
+  });
+
   it("reads only what holds it, as two booleans", async () => {
     const { viewer, bar, advance } = await playing();
     viewer.hold({ held: "yes", comments: 1 });
