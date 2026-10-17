@@ -34,11 +34,10 @@ works. Tries at one step fold into one node; what reached the build forms the li
 hangs below. Tries a pause cut off show Paused until added. An eye marks (and opens) the reviewers'
 notes. A new build is “Checking it starts…” until it runs. A working node shows its agent's
 screen and action; a selected one opens as a card. **Follow up in chat** notes the next message to its build.
-Chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
+Its tabs, one per build of the chat, and chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
 below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
 line each round. In place, save points form one line showing each change; workers hang off
-it, solid under the save point taking their work, else ghosts. A chat message's
-workers get a graph while newest.
+it, solid under the save point taking their work, else ghosts.
 
 Agents test in hidden windows, never Live; blind judges play when screenshots can't decide;
 chat frames never certify a build. A finished worker, passing checks, integration and Live's

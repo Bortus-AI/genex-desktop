@@ -353,9 +353,9 @@ finish-check (four Loops written after the start, one per finish check look: Don
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
 Paused, one Added after the resume, one Left out by the lead's stop),
-building-card (a 4h Loop still going, written after the start, for the chat's Building card and its
-parts: two added, one working with its time left, one restarted on one row, one waiting;
-`[data-build-checklist]` open, `[data-build-toggle]` closes it),
+building-card (a 4h Loop still going after a finished one, written after the start, for the chat's
+Building card and its parts: two added, one working with its time left, one restarted on one row,
+one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds has two tabs),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
 Mountain pass, a Blender game with no run, whose Live says where pictures come from),
@@ -411,7 +411,8 @@ Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json
 and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
-snapshot (desktop, scope/limit), click (selector/scope), type (plus text/replace), key
+snapshot (desktop, scope/limit; its `play` part counts Play's cards, the covers on screen still
+blank and the clips playing), click (selector/scope), type (plus text/replace), key
 (surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
@@ -420,7 +421,8 @@ commit counters through release; `window.resize` takes bounded width/height delt
 duration, resizes the studio window step by step with a game in Live, and returns how far the
 game view trailed its slot right after each change and before the next ([performance](performance.md));
 `fixture.graph` takes `other-project-frames` or `append-round`
-only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
+only in `large-build-graph`. `file.drag` (target, `stage` over/drop/leave, `file` picture/text)
+drags the control's own sample file onto it; it takes no path. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
 Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
 that has just opened takes pointer input one render later, so an input sent at once can be

@@ -664,6 +664,11 @@ export interface StudioApi {
   /** The images sent with a chat message. */
   messageImages(threadId: string, messageId: string): Promise<ReferenceFrame[]>;
   /**
+   * Where a file the person dropped or pasted is on this computer, so a message can link it; ""
+   * for one that is only data (a pasted screenshot). Answered by the preload, never by main.
+   */
+  pathOfFile(file: File): string;
+  /**
    * The native folder dialog. It answers *which folder* only — nothing is written by picking, and
    * the answer goes straight back to `inspectFolder`/`adoptFolder`; the renderer shows the folder
    * as `pathLabel`, never as the path it holds here.
