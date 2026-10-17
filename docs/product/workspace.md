@@ -28,8 +28,9 @@ idea.
 
 Then a Genex plugin card offers **Connect Genex plugin** once.
 
-A sandbox that cannot start opens **Set up the protected workspace** with the fix; Windows first
-sets itself up behind one administrator prompt.
+A sandbox that cannot start opens **Set up the protected workspace** with the fix. On Windows the
+first start shows **Setting up Genex** and sets itself up behind one administrator prompt; if that
+fails, **Try again** and **Send a report** sit under the error.
 
 ## Main actions
 

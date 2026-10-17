@@ -81,6 +81,8 @@ const NATIVE_CHANNELS = [
   // Set up (Windows) creates a local user account and network filters behind an administrator
   // prompt; a fixture profile never provisions anything on the machine.
   "studio:boot.setup",
+  // A failed Set up's report posts to genex.games, as Send feedback does.
+  "studio:boot.report",
   // Relaunch to update quits the app and installs a downloaded release over it.
   "studio:update.restart",
   // Download opens the waiting release's page in the person's real browser.

@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createBootGate, waitsOnInstall } from "../../src/main/boot-gate.ts";
+import { createBootGate } from "../../src/main/boot-gate.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerBootIpc } from "../../src/main/ipc/boot.ts";
 import {
@@ -17,6 +17,7 @@ import {
   linuxInstallCommands,
   type SandboxProblem,
 } from "../../src/shared/boot.ts";
+import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../../src/shared/feedback.ts";
 import type { WindowControlColors } from "../../src/shared/studio-api.ts";
 import { SandboxUnavailableError } from "../../src/substrate/sandbox-unavailable.ts";
 
@@ -147,6 +148,27 @@ describe("Set up (Windows)", () => {
     assert.equal(counts.attempts, 0);
   });
 
+  it("tells the log why a Set up failed, the install or the startup after it, and nothing for a cancel", async () => {
+    const failures: string[] = [];
+    const setUpFailed = (error: unknown) => void failures.push(String(error));
+    let install = async () => ({ cancelled: true });
+    const gate = createBootGate(StudioPlatform.Windows, { installSandbox: () => install(), setUpFailed });
+    gate.hold(NOT_PROVISIONED, async () => {
+      throw new Error("WFP egress fence could not be verified");
+    });
+    await gate.setUp();
+    install = async () => {
+      throw new Error("srt-win install: WFP filter install failed");
+    };
+    await assert.rejects(gate.setUp());
+    install = async () => ({ cancelled: false });
+    await assert.rejects(gate.setUp());
+    assert.deepEqual(failures, [
+      "Error: srt-win install: WFP filter install failed",
+      "Error: WFP egress fence could not be verified",
+    ]);
+  });
+
   it("presses of Set up while one install runs share it", async () => {
     const install = deferred();
     const { gate, counts } = windowsGate(() => install.promise.then(() => ({ cancelled: false })));
@@ -155,15 +177,6 @@ describe("Set up (Windows)", () => {
     install.resolve();
     assert.deepEqual(await first, await second);
     assert.deepEqual(counts, { installs: 1, attempts: 1 });
-  });
-
-  it("is what main runs before it opens the screen: only a sandbox waiting on its install", () => {
-    const gate = createBootGate(StudioPlatform.Windows);
-    assert.equal(waitsOnInstall(gate.state()), false, "a ready start");
-    gate.hold(PROBLEM, async () => {});
-    assert.equal(waitsOnInstall(gate.state()), false, "Linux tools install in a terminal");
-    gate.hold(NOT_PROVISIONED, async () => {});
-    assert.equal(waitsOnInstall(gate.state()), true);
   });
 
   it("refuses when there is nothing to install: a ready start, a Linux problem, or no installer", async () => {
@@ -200,13 +213,18 @@ function bootIpc(fixture: boolean, platform: string = StudioPlatform.Linux) {
     },
   });
   const painted: WindowControlColors[] = [];
-  registerBootIpc(handle, { gate, setWindowControls: (colors) => void painted.push(colors) });
+  const reports: FeedbackDraft[] = [];
+  registerBootIpc(handle, {
+    gate,
+    report: async (draft) => void reports.push(draft),
+    setWindowControls: (colors) => void painted.push(colors),
+  });
   const invoke = (channel: string, payload?: unknown) => {
     const listener = listeners.get(channel);
     assert.ok(listener, `${channel} is not registered`);
     return listener({ sender: "studio", senderFrame: "main" }, payload);
   };
-  return { gate, painted, invoke, installs };
+  return { gate, painted, reports, invoke, installs };
 }
 
 describe("boot IPC", () => {
@@ -236,6 +254,36 @@ describe("boot IPC", () => {
     assert.equal((await fixture.invoke("studio:boot.setup")).ok, false);
     assert.deepEqual(fixture.installs, []);
     assert.equal(fixture.gate.state().phase, BootPhase.SandboxSetup);
+  });
+
+  it("sends a failed Set up's report with the app's log, and refuses it in a fixture profile", async () => {
+    const live = bootIpc(false, StudioPlatform.Windows);
+    assert.deepEqual(await live.invoke("studio:boot.report", { error: " Access is denied. (0x80070005) " }), {
+      ok: true,
+      value: undefined,
+    });
+    assert.deepEqual(live.reports, [
+      {
+        text: "Windows setup didn't finish (sent from the setup screen).\n\nAccess is denied. (0x80070005)",
+        screen: FeedbackScreen.Home,
+        appLogs: true,
+        chatId: null,
+      },
+    ]);
+    const fixture = bootIpc(true, StudioPlatform.Windows);
+    assert.equal((await fixture.invoke("studio:boot.report", { error: "Access is denied." })).ok, false);
+    assert.deepEqual(fixture.reports, []);
+  });
+
+  it("clips a long error to what a report holds, and sends nothing without one", async () => {
+    const { reports, invoke } = bootIpc(false, StudioPlatform.Windows);
+    await invoke("studio:boot.report", { error: "x".repeat(FEEDBACK_TEXT_MAX_CHARS * 2) });
+    assert.equal(reports[0]?.text.length, FEEDBACK_TEXT_MAX_CHARS);
+    for (const payload of [undefined, null, "Access is denied.", {}, { error: "" }, { error: "   " }, { error: 5 }]) {
+      const result = await invoke("studio:boot.report", payload);
+      assert.equal(result.ok, false, JSON.stringify(payload));
+    }
+    assert.equal(reports.length, 1);
   });
 
   it("paints the window controls with two hex colours", async () => {

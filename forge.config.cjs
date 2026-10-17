@@ -180,8 +180,9 @@ module.exports = {
         description: SUMMARY,
         setupExe: WINDOWS_SETUP_EXE,
         setupIcon: `${ICON}.ico`,
-        // Shown while Setup installs: a dithered ripple field that bends where it crosses the G.
-        loadingGif: path.join(__dirname, "build", "installing.gif"),
+        // Shown while Setup installs, and behind the first start's setup screen: a dithered ripple
+        // field that bends where it crosses the G.
+        loadingGif: path.join(__dirname, "src", "renderer", "media", "installing.gif"),
         noMsi: true,
         ...(windowsSign ? { windowsSign } : {}),
       },

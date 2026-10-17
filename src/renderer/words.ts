@@ -3270,10 +3270,28 @@ export const SANDBOX_SETUP_WORDS = {
   copyCommand: (system: string) => `Copy the ${system} command`,
   retry: "Retry",
   retrying: "Checking…",
-  /** Windows: install it now, behind one administrator prompt. */
-  setUp: "Set up",
-  settingUp: "Waiting for approval…",
-  setupCancelled: "Setup was cancelled, so nothing changed. Choose Set up again when you’re ready to approve it.",
+  /** Windows' first start, which sets the workspace up by itself behind one approval prompt. */
+  windows: {
+    settingUp: {
+      title: "Setting up Genex",
+      line: "Windows will ask you to allow this once. Agents work in their own protected space, away from your files.",
+      step: "Waiting for your OK",
+    },
+    needsOk: {
+      title: "Genex needs your OK to set up",
+      line: "Agents only run in a protected space that Windows has to allow once. On a work PC, an admin may need to approve it.",
+      setUp: "Set up",
+    },
+    failed: {
+      title: "Setup didn’t finish",
+      line: "Windows wouldn’t start Genex’s protected space.",
+      tryAgain: "Try again",
+      report: "Send a report",
+      sending: "Sending…",
+      sent: "✓ Sent",
+      reportFailed: "The report didn’t send. Try again in a moment.",
+    },
+  },
   stillFailing: "Studio still couldn’t start:",
   details: "Details",
 } as const;

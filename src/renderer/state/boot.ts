@@ -3,7 +3,8 @@
  * asks main (`bootState`): the platform (the window chrome is laid out by it) and whether the
  * protected workspace is ready. While it is not, the window shows the sandbox setup screen, whose
  * Retry re-runs core startup in main (and on Windows, Set up installs it first); once it is,
- * `onReady` starts the studio, exactly once.
+ * `onReady` starts the studio, exactly once. On Windows the first start runs Set up by itself, so
+ * a person sees only "Setting up Genex" and Windows' own prompt.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
@@ -26,6 +27,15 @@ export const BootView = {
 } as const;
 export type BootView = (typeof BootView)[keyof typeof BootView];
 
+/** Where a failed Set up's report stands. */
+export const SetupReport = {
+  Idle: "idle",
+  Sending: "sending",
+  Sent: "sent",
+  Failed: "failed",
+} as const;
+export type SetupReport = (typeof SetupReport)[keyof typeof SetupReport];
+
 export interface BootStoreState {
   /** Main's platform, in `process.platform` spelling; null until main answers. */
   platform: string | null;
@@ -39,6 +49,8 @@ export interface BootStoreState {
   setupCancelled: boolean;
   /** Why the last Retry or Set up failed, other than the sandbox still being unavailable. */
   error: string | null;
+  /** The report of the last failed Set up. */
+  report: SetupReport;
 }
 
 export const initialBoot = (): BootStoreState => ({
@@ -49,6 +61,7 @@ export const initialBoot = (): BootStoreState => ({
   settingUp: false,
   setupCancelled: false,
   error: null,
+  report: SetupReport.Idle,
 });
 
 /** Main answered: its platform, its phase and the setup problem, if any. */
@@ -74,7 +87,7 @@ export function retryFailed(state: BootStoreState, error: string): BootStoreStat
 }
 
 export function setupStarted(state: BootStoreState): BootStoreState {
-  return { ...state, settingUp: true, setupCancelled: false, error: null };
+  return { ...state, settingUp: true, setupCancelled: false, error: null, report: SetupReport.Idle };
 }
 
 /** Set up answered: installed (main has retried, so this is its state) or the prompt dismissed. */
@@ -87,17 +100,13 @@ export function setupFailed(state: BootStoreState, error: string): BootStoreStat
   return { ...state, settingUp: false, error };
 }
 
+export function reportChanged(state: BootStoreState, report: SetupReport): BootStoreState {
+  return { ...state, report };
+}
+
 /** Whether the setup screen offers Set up: a Windows sandbox that has not been installed yet. */
 export function canSetUp(state: Pick<BootStoreState, "platform" | "problem">): boolean {
   return state.platform === StudioPlatform.Windows && state.problem?.code === SandboxProblemCode.NotProvisioned;
-}
-
-/**
- * Whether the setup screen offers Retry. Where Set up is offered, a Retry before it changes nothing,
- * so it shows only once a Set up has failed.
- */
-export function offersRetry(state: Pick<BootStoreState, "platform" | "problem" | "error">): boolean {
-  return !canSetUp(state) || state.error !== null;
 }
 
 /** The screen the state calls for. */
@@ -114,10 +123,14 @@ export interface Boot {
   store: BootStore;
   /** Ask main where startup stands; starts the studio when it is ready. */
   load(): Promise<void>;
+  /** Load, then run Set up straight away where it is offered (a Windows sandbox not installed yet). */
+  start(): Promise<void>;
   /** Re-run core startup from the setup screen; presses while one runs share it. */
   retry(): Promise<void>;
   /** Install the Windows sandbox, then start; presses while one runs share it. */
   setUp(): Promise<void>;
+  /** Send the team the last Set up's error with this build's log; presses while one sends share it. */
+  report(): Promise<void>;
 }
 
 /** One run at a time of `run`: calls while it runs share it. */
@@ -132,7 +145,7 @@ function shared(run: () => Promise<void>): () => Promise<void> {
 }
 
 export function createBoot(
-  api: Pick<StudioApi, "bootState" | "retrySandboxSetup" | "setUpSandbox">,
+  api: Pick<StudioApi, "bootState" | "retrySandboxSetup" | "setUpSandbox" | "reportSandboxSetup">,
   options: { onReady(): void },
 ): Boot {
   const store = createStore<BootStoreState>()(() => initialBoot());
@@ -174,5 +187,20 @@ export function createBoot(
       store.setState((state) => setupFailed(state, errorMessage(error)), true);
     }
   };
-  return { store, load, retry: shared(runRetry), setUp: shared(runSetUp) };
+  const runReport = async (): Promise<void> => {
+    const { error } = store.getState();
+    if (error === null) return;
+    store.setState((state) => reportChanged(state, SetupReport.Sending), true);
+    const sent = await api.reportSandboxSetup(error).then(
+      () => SetupReport.Sent,
+      () => SetupReport.Failed,
+    );
+    store.setState((state) => reportChanged(state, sent), true);
+  };
+  const setUp = shared(runSetUp);
+  const start = async (): Promise<void> => {
+    await load();
+    if (canSetUp(store.getState())) await setUp();
+  };
+  return { store, load, start, retry: shared(runRetry), setUp, report: shared(runReport) };
 }

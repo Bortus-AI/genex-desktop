@@ -258,6 +258,8 @@ export interface StudioApi {
    * answers whether it was installed or the prompt was dismissed, and the state after.
    */
   setUpSandbox(): Promise<SandboxSetupResult>;
+  /** Send the team a report of a Set up that failed with `error`, with this build's recent log; throws when it was not taken. */
+  reportSandboxSetup(error: string): Promise<void>;
   /** Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours; macOS ignores it. */
   setWindowControls(colors: WindowControlColors): Promise<void>;
   /** The new version of the app downloaded in the background, or null; `onEvent` announces later ones. */

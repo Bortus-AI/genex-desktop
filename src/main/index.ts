@@ -65,7 +65,7 @@ import {
   shutdownSteps,
   type ShutdownStep,
 } from "./app-lifecycle.ts";
-import { createBootGate, waitsOnInstall } from "./boot-gate.ts";
+import { createBootGate } from "./boot-gate.ts";
 import {
   activateChatFixture,
   DevProviders,
@@ -433,7 +433,12 @@ let playView: PlayViewer | null = null;
 /** Where startup stands for the window: Ready, or the sandbox setup screen with its Retry. */
 const bootGate = createBootGate(
   process.platform,
-  process.platform === StudioPlatform.Windows ? { installSandbox: installWindowsSandbox } : {},
+  process.platform === StudioPlatform.Windows
+    ? {
+        installSandbox: installWindowsSandbox,
+        setUpFailed: (err) => studioLog.write("main", `sandbox setup failed: ${errorMessage(err)}`),
+      }
+    : {},
 );
 /** The theme's colours for the Windows and Linux window controls, as the renderer last sent them. */
 let windowControls: WindowControlColors | undefined;
@@ -1271,6 +1276,35 @@ function feedbackSources(studio: StudioCore): FeedbackSources {
   };
 }
 
+/**
+ * A report from the setup screen, before any core: this build and OS and the log's tail, with no
+ * games folder, providers or chats to read yet.
+ */
+function bootFeedbackSources(): FeedbackSources {
+  const studioApp = { name: app.getName(), version: app.getVersion(), packaged: app.isPackaged };
+  const system = { platform: process.platform, release: os.release(), arch: process.arch };
+  const diagnostics = async () =>
+    diagnosticsText(
+      await gatherDiagnostics({
+        app: studioApp,
+        versions: { electron: process.versions.electron, chrome: process.versions.chrome, node: process.versions.node },
+        os: system,
+        paths: { userData: userDataRoot, gamesRoot: "", log: studioLog.file },
+        home: app.getPath("home"),
+        engines: async () => [],
+        logTail: (count) => studioLog.tail(count),
+      }),
+    );
+  return {
+    app: { version: studioApp.version, packaged: studioApp.packaged },
+    os: system,
+    home: app.getPath("home"),
+    diagnostics,
+    chatEvents: async () => [],
+    fetch,
+  };
+}
+
 /** The coding-CLI installs Settings offers: busy while a sign-in, a run or a turn is under way. */
 function cliInstalls(studio: StudioCore) {
   return createCliInstalls({
@@ -1409,7 +1443,11 @@ async function main(): Promise<void> {
   await app.whenReady();
   performanceRecorder.mark("app-ready");
   const bootHandle = createIpcHandle(ipcMain, { fixture: fixtureNativePolicy, isStudioUi: isStudioWindow });
-  registerBootIpc(bootHandle, { gate: bootGate, setWindowControls: paintWindowControls });
+  registerBootIpc(bootHandle, {
+    gate: bootGate,
+    report: (draft) => sendFeedback(draft, bootFeedbackSources()),
+    setWindowControls: paintWindowControls,
+  });
   registerUpdateIpc(bootHandle, {
     updates,
     check: () => updateChecker.check(),
@@ -1619,29 +1657,13 @@ async function coreOrSetup(): Promise<StudioCore | null> {
 }
 
 /**
- * Hold startup on "Set up the protected workspace"; Retry runs {@link retryStartup}. Where the fix
- * is Windows' one-time install, it runs first, so a person sees only its administrator prompt.
+ * Hold startup on "Set up the protected workspace"; Retry runs {@link retryStartup}. On Windows the
+ * window starts Set up by itself, so a person sees "Setting up Genex" and the administrator prompt.
  */
 async function openSandboxSetup(problem: SandboxProblem): Promise<void> {
   studioLog.write("main", `sandbox unavailable: ${problem.code} ${problem.details.join("; ")}`);
   bootGate.hold(problem, retryStartup);
-  if (await setUpWithoutAsking()) return;
   window = await createSetupWindow();
-}
-
-/**
- * Install the Windows sandbox straight away and start the studio; false leaves the setup screen
- * to open, with Set up, when there was nothing to install, the prompt was declined or it failed.
- */
-async function setUpWithoutAsking(): Promise<boolean> {
-  if (!waitsOnInstall(bootGate.state())) return false;
-  try {
-    const result = await bootGate.setUp();
-    return result.state.phase === BootPhase.Ready;
-  } catch (err) {
-    studioLog.write("main", `sandbox setup failed: ${errorMessage(err)}`);
-    return false;
-  }
 }
 
 /**

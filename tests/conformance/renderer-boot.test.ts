@@ -16,7 +16,7 @@ import {
   type SandboxProblem,
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
-import { BootView, bootView, canSetUp, offersRetry, createBoot } from "../../src/renderer/state/boot.ts";
+import { BootView, bootView, canSetUp, createBoot, SetupReport } from "../../src/renderer/state/boot.ts";
 import { windowControlColors } from "../../src/renderer/window-controls.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -167,19 +167,60 @@ describe("Set up on Windows", () => {
     assert.equal(canSetUp({ platform: StudioPlatform.Windows, problem: gitMissing }), false, "Git installs by hand");
   });
 
-  it("offers Retry only once a Set up has failed, where Set up is offered", async () => {
-    const { controller } = windowsBoot([
-      { outcome: SandboxSetupOutcome.Cancelled, state: WINDOWS_SETUP },
-      new Error("srt-win install: sandbox user provisioning failed"),
-    ]);
+  it("starts Set up by itself on Windows, so the first screen is already waiting on the approval", async () => {
+    const { controller, fake, started } = windowsBoot([]);
+    const seen: string[] = [];
+    controller.store.subscribe((state) => {
+      seen.push(state.settingUp ? "setting up" : bootView(state));
+    });
+    await controller.start();
+    assert.deepEqual(seen, [BootView.SandboxSetup, "setting up", BootView.Studio]);
+    assert.equal(bootView(controller.store.getState()), BootView.Studio);
+    assert.equal(started(), 1);
+    assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+
+  it("starts nothing by itself where Set up is not offered: a ready start, or Linux", async () => {
+    for (const first of [READY, SETUP]) {
+      const { controller, fake } = boot(first);
+      await controller.start();
+      assert.equal(fake.callsOf("setUpSandbox").length, 0);
+    }
+  });
+
+  it("sends a failed Set up's error as a report once, and a new Set up starts a new report", async () => {
+    const error = "WFP egress fence could not be verified: Access is denied. (0x80070005)";
+    const { controller, fake } = windowsBoot([new Error(error), new Error(error)]);
+    const reports: string[] = [];
+    fake.stub("reportSandboxSetup", async (text) => {
+      reports.push(text);
+    });
+    await controller.start();
+    assert.equal(controller.store.getState().report, SetupReport.Idle);
+    const sending = Promise.all([controller.report(), controller.report()]);
+    assert.equal(controller.store.getState().report, SetupReport.Sending);
+    await sending;
+    assert.deepEqual(reports, [error], "two presses, one report");
+    assert.equal(controller.store.getState().report, SetupReport.Sent);
+    await controller.setUp();
+    assert.equal(controller.store.getState().report, SetupReport.Idle);
+  });
+
+  it("a report that does not go through can be sent again", async () => {
+    const { controller, fake } = windowsBoot([new Error("srt-win install failed")]);
+    fake.stub("reportSandboxSetup", async () => {
+      throw new Error("offline");
+    });
+    await controller.start();
+    await controller.report();
+    assert.equal(controller.store.getState().report, SetupReport.Failed);
+  });
+
+  it("has nothing to report before a Set up has failed", async () => {
+    const { controller, fake } = windowsBoot([]);
     await controller.load();
-    assert.equal(offersRetry(controller.store.getState()), false, "a Retry before Set up changes nothing");
-    await controller.setUp();
-    assert.equal(offersRetry(controller.store.getState()), false, "a cancelled approval is answered by Set up");
-    await controller.setUp();
-    assert.equal(offersRetry(controller.store.getState()), true);
-    const linux = { platform: SETUP.platform, problem: SETUP.sandbox, error: null };
-    assert.equal(offersRetry(linux), true, "Linux installs its tools in a terminal, then retries");
+    await controller.report();
+    assert.equal(fake.callsOf("reportSandboxSetup").length, 0);
   });
 
   it("shows it is waiting for approval, then starts the studio once installed", async () => {

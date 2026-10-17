@@ -26,6 +26,8 @@ export interface SandboxInstall {
 export interface BootGateOptions {
   /** Install the Windows sandbox (one administrator prompt); throws when the install fails. */
   installSandbox?: () => Promise<SandboxInstall>;
+  /** Told why a Set up failed (the install, or the startup after it), for the log. */
+  setUpFailed?: (error: unknown) => void;
 }
 
 /** The boot state main answers `studio:boot` with, and the Retry behind `studio:boot.retry`. */
@@ -44,7 +46,7 @@ const MESSAGE = {
 } as const;
 
 /** Held on the problem Set up fixes: a sandbox that has not been provisioned yet. */
-export function waitsOnInstall(state: BootState): boolean {
+function waitsOnInstall(state: BootState): boolean {
   return state.phase === BootPhase.SandboxSetup && state.sandbox?.code === SandboxProblemCode.NotProvisioned;
 }
 
@@ -92,9 +94,14 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
       if (installing) return installing;
       const run = options.installSandbox;
       if (!run || !waitsOnInstall(state)) return Promise.reject(new Error(MESSAGE.nothingToSetUp));
-      installing = install(run).finally(() => {
-        installing = null;
-      });
+      installing = install(run)
+        .catch((error: unknown) => {
+          options.setUpFailed?.(error);
+          throw error;
+        })
+        .finally(() => {
+          installing = null;
+        });
       return installing;
     },
   };
