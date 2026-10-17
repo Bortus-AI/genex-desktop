@@ -288,6 +288,13 @@ app.whenReady().then(async()=>{
  await key('Enter');await wait(200);
  check('Enter runs /compact and clears the message',await compacts()===1&&await element(PROMPT,'e.value===""'),String(await compacts()));
  check('the cleared message leaves no / list open',!(await open('Commands')));
+ // A picture is a message on its own: dropped with no words, it sends.
+ await element(SPECIMEN+' [data-promptbar]','(e.scrollIntoView({block:"center"}),true)');
+ await js('(async()=>{const c=Object.assign(document.createElement("canvas"),{width:32,height:32});const g=c.getContext("2d");g.fillStyle="#3b82f6";g.fillRect(0,0,32,32);const blob=await new Promise(r=>c.toBlob(r,"image/png"));const files=new DataTransfer();files.items.add(new File([blob],"sketch.png",{type:"image/png"}));document.querySelector('+JSON.stringify(SPECIMEN+' [data-promptbar]')+').dispatchEvent(new DragEvent("drop",{dataTransfer:files,bubbles:true,cancelable:true}));return true})()');
+ await wait(500);
+ check('a picture with no words enables Send',await element(PROMPT,'e.value===""')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Mood board"]','e.querySelectorAll("img").length===1')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','!e.disabled && e.dataset.state==="ready"'),await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','({pictures:e.closest("[data-promptbar]").querySelectorAll("[aria-label=\\"Mood board\\"] img").length,disabled:e.disabled,state:e.dataset.state})'));
+ await click(SPECIMEN+' [data-promptbar] [aria-label="Send"]');
+ check('a picture with no words sends as a message of its own',await element('#composer-settings','(()=>{const v=JSON.parse(e.textContent);return v.text==="" && v.extras?.frames?.length===1})()'),await element('#composer-settings','e.textContent'));
  // No AI model yet: the model's place holds Connect AI model; Enter and Send point at it instead of sending.
  await wc.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'no-preference'}]});
  const NO_MODEL='[data-composer-specimen-nomodel]';

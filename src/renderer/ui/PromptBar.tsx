@@ -609,7 +609,9 @@ function useComposerSend(
   // lights that up instead of going anywhere.
   const noModel = (props.gameMode ?? true) && props.model.choices.length === 0;
   const modelNudge = useModelNudge();
-  const writable = !props.disabled && !props.busy && draft.trim().length > 0;
+  // A picture is a message on its own: words are optional when one is attached.
+  const hasMessage = draft.trim().length > 0 || board.frames.length > 0;
+  const writable = !props.disabled && !props.busy && hasMessage;
   const canSend = writable && !noModel;
   const send = (): void => {
     if (writable && noModel) {

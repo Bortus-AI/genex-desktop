@@ -2,7 +2,7 @@
 
 ## What the user sees
 
-One conversation per game. User messages are right-aligned bubbles, images above; long
+One conversation per game. User messages are right-aligned bubbles, images above or alone; long
 ones fold with Show more. Any existing file the chat names is a link: game Markdown and
 images open beside it, others in their app (programs only shown). Only the prompt bar sends;
 a pasted image adds the picture, not its filename. @ tags (max 5): local games read-only,

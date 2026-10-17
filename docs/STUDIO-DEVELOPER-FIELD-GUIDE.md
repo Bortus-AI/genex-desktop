@@ -416,7 +416,8 @@ commit counters through release; `window.resize` takes bounded width/height delt
 duration, resizes the studio window step by step with a game in Live, and returns how far the
 game view trailed its slot right after each change and before the next ([performance](performance.md));
 `fixture.graph` takes `other-project-frames` or `append-round`
-only in `large-build-graph`. Traces accept `toplevel` for renderer task durations.
+only in `large-build-graph`. `file.drag` (target, `stage` over/drop/leave, `file` picture/text)
+drags the control's own sample file onto it; it takes no path. Traces accept `toplevel` for renderer task durations.
 No arbitrary eval, PID, webContents ID or output path is accepted.
 Scoped DOM inspection resolves one visible enabled non-occluded target. A modal dialog or menu
 that has just opened takes pointer input one render later, so an input sent at once can be
