@@ -288,9 +288,25 @@ app.whenReady().then(async()=>{
  await key('Enter');await wait(200);
  check('Enter runs /compact and clears the message',await compacts()===1&&await element(PROMPT,'e.value===""'),String(await compacts()));
  check('the cleared message leaves no / list open',!(await open('Commands')));
- // A picture is a message on its own: dropped with no words, it sends.
+ // Files held over the chat: a dashed veil on the prompt bar says what a drop does.
  await element(SPECIMEN+' [data-promptbar]','(e.scrollIntoView({block:"center"}),true)');
- await js('(async()=>{const c=Object.assign(document.createElement("canvas"),{width:32,height:32});const g=c.getContext("2d");g.fillStyle="#3b82f6";g.fillRect(0,0,32,32);const blob=await new Promise(r=>c.toBlob(r,"image/png"));const files=new DataTransfer();files.items.add(new File([blob],"sketch.png",{type:"image/png"}));document.querySelector('+JSON.stringify(SPECIMEN+' [data-promptbar]')+').dispatchEvent(new DragEvent("drop",{dataTransfer:files,bubbles:true,cancelable:true}));return true})()');
+ await js('window.dragFiles=async(type,files)=>{const dt=new DataTransfer();for(const f of files){let blob;if(f.mime.startsWith("image/")){const c=Object.assign(document.createElement("canvas"),{width:32,height:32});const g=c.getContext("2d");g.fillStyle="#3b82f6";g.fillRect(0,0,32,32);blob=await new Promise(r=>c.toBlob(r,"image/png"));}else blob=new Blob(["notes"],{type:f.mime});dt.items.add(new File([blob],f.name,{type:f.mime}));}document.querySelector('+JSON.stringify(PROMPT)+').dispatchEvent(new DragEvent(type,{dataTransfer:dt,bubbles:true,cancelable:true}));return true};true');
+ const VEIL=SPECIMEN+' [data-drop-veil]',LEFT_OUT=SPECIMEN+' [data-left-out]',filled='getComputedStyle(e).backgroundColor!=="rgba(0, 0, 0, 0)"';
+ await js('dragFiles("dragenter",[{name:"sketch.png",mime:"image/png"}])');await wait(200);
+ check('a picture held over the chat veils the prompt bar in blue with one line',await element(VEIL,'e.dataset.tone==="takes"&&e.textContent==="Drop to add 1 picture"&&getComputedStyle(e).borderTopStyle==="dashed"'),await element(VEIL,'e.outerHTML'));
+ await capture('drop-veil');
+ await js('dragFiles("dragleave",[{name:"sketch.png",mime:"image/png"}])');await wait(200);
+ check('the veil goes when the drag leaves',!(await element(VEIL,'true')));
+ await js('dragFiles("dragenter",[{name:"notes.txt",mime:"text/plain"}])');await wait(200);
+ check('a file that is not a picture turns the veil orange',await element(VEIL,'e.dataset.tone==="refuses"&&e.textContent==="Only pictures can go in"'),await element(VEIL,'e.outerHTML'));
+ await capture('drop-veil-refuses');
+ await js('dragFiles("drop",[{name:"notes.txt",mime:"text/plain"}])');await wait(500);
+ check('a dropped file that is not a picture leaves an orange note whose buttons have a fill',!(await element(VEIL,'true'))&&await element(LEFT_OUT,'e.textContent.includes("notes.txt isn’t a picture")&&e.textContent.includes("Choose pictures")')&&await element(LEFT_OUT+' .composer-left-out-action',filled)&&await element(LEFT_OUT+' [aria-label="Dismiss"]',filled),await element(LEFT_OUT,'e.outerHTML'));
+ await capture('drop-left-out');
+ await click(LEFT_OUT+' [aria-label="Dismiss"]');
+ check('Dismiss puts the note away',!(await element(LEFT_OUT,'true')));
+ // A picture is a message on its own: dropped with no words, it sends.
+ await js('dragFiles("drop",[{name:"sketch.png",mime:"image/png"}])');
  await wait(500);
  check('a picture with no words enables Send',await element(PROMPT,'e.value===""')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Mood board"]','e.querySelectorAll("img").length===1')&&await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','!e.disabled && e.dataset.state==="ready"'),await element(SPECIMEN+' [data-promptbar] [aria-label="Send"]','({pictures:e.closest("[data-promptbar]").querySelectorAll("[aria-label=\\"Mood board\\"] img").length,disabled:e.disabled,state:e.dataset.state})'));
  await click(SPECIMEN+' [data-promptbar] [aria-label="Send"]');

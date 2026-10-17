@@ -8,6 +8,8 @@ import { DevDragFile, DevDragStage } from "./protocol.ts";
 
 /** CDP's drag operation mask for copy, what the Finder offers for a file. */
 const DRAG_COPY = 1;
+/** Where Leave takes the drag before cancelling it: off every drop target. */
+const WINDOW_CORNER = { x: 0, y: 0 };
 
 /** A 96 px picture: a red circle beside a blue square on white, small enough to read at a glance. */
 const SAMPLE_PICTURE_PNG =
@@ -38,7 +40,8 @@ export async function writeDragSample(dir: string, file: DevDragFile): Promise<{
 
 /**
  * The `Input.dispatchDragEvent` calls of a stage at a point: Over enters and hovers (the drop
- * feedback stays up to be captured), Drop enters, hovers and lets go, Leave cancels the drag.
+ * feedback stays up to be captured), Drop enters, hovers and lets go, Leave moves the drag off to
+ * the window's corner and cancels it there (a cancel alone tells the page nothing).
  */
 export function fileDragEvents(
   stage: DevDragStage,
@@ -46,8 +49,8 @@ export function fileDragEvents(
   file: string,
 ): Array<Record<string, unknown>> {
   const data = { items: [], files: [file], dragOperationsMask: DRAG_COPY };
-  const event = (type: string) => ({ type, x: point.x, y: point.y, data });
-  if (stage === DevDragStage.Leave) return [event("dragCancel")];
+  const event = (type: string, at = point) => ({ type, x: at.x, y: at.y, data });
+  if (stage === DevDragStage.Leave) return [event("dragOver", WINDOW_CORNER), event("dragCancel", WINDOW_CORNER)];
   const hover = [event("dragEnter"), event("dragOver")];
   return stage === DevDragStage.Drop ? [...hover, event("drop")] : hover;
 }

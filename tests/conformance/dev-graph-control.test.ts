@@ -144,7 +144,15 @@ it("a file drag hovers, lets go or cancels at the target", async () => {
     fileDragEvents(stage, at, "/profile/dev-drag/sample-picture.png").map((event) => event.type);
   assert.deepEqual(types("over"), ["dragEnter", "dragOver"]);
   assert.deepEqual(types("drop"), ["dragEnter", "dragOver", "drop"]);
-  assert.deepEqual(types("leave"), ["dragCancel"]);
+  assert.deepEqual(types("leave"), ["dragOver", "dragCancel"]);
+  assert.deepEqual(
+    fileDragEvents("leave", at, "/f.png").map(({ x, y }) => [x, y]),
+    [
+      [0, 0],
+      [0, 0],
+    ],
+    "Leave moves off the target before it cancels",
+  );
   const [enter] = fileDragEvents("drop", at, "/profile/dev-drag/sample-picture.png");
   assert.deepEqual(enter, {
     type: "dragEnter",

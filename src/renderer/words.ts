@@ -3042,6 +3042,23 @@ export const CHAT_WORDS = {
   moreWaiting: (count: number) => `${count} more waiting`,
 } as const;
 
+/** "1 picture", "2 pictures". */
+const countedPictures = (count: number): string => `${count} ${count === 1 ? "picture" : "pictures"}`;
+
+/** The prompt bar's line while files are dragged over the chat, and the note a drop leaves. */
+export const COMPOSER_DROP_WORDS = {
+  dropToAdd: (count: number) => `Drop to add ${countedPictures(count)}`,
+  onlyPictures: "Only pictures can go in",
+  boardFull: (max: number) => `${max} pictures at most`,
+  someStayOut: (room: number, out: number) => `Room for ${countedPictures(room)}, ${out} will stay out`,
+  notAPicture: (name: string) => `${name} isn’t a picture`,
+  notPictures: (count: number) => `${count} files aren’t pictures`,
+  overLimit: (count: number, max: number) => `${countedPictures(count)} left out, ${max} at most`,
+  filesLeftOut: (count: number) => `${count} files didn’t go in`,
+  choosePictures: "Choose pictures",
+  dismiss: "Dismiss",
+} as const;
+
 // ── the system file manager ───────────────────────────────────────────────────────────────
 
 /** What a button that shows a file in the system's file manager says, and its failure. */

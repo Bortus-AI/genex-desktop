@@ -1,11 +1,13 @@
 import { markPerformance } from "../performance.tsx";
 import { PerformanceMarkName } from "../../shared/performance.ts";
-import type { ClipboardEvent, DragEvent, JSX, KeyboardEvent, Ref, RefObject } from "react";
+import type { ClipboardEvent, JSX, KeyboardEvent, Ref, RefObject } from "react";
 import { useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./icons.tsx";
 import { Shortcut } from "./Shortcut.tsx";
 import { ComposerTip } from "./PickerPanel.tsx";
 import { filesToFramesDetailed, MAX_REFERENCE_FRAMES, type PickedFrame } from "../reference-frames.ts";
+import { addToBoard, type LeftOut } from "./composer-drop.ts";
+import { DropVeil, LeftOutNote, useFileDrop } from "./ComposerDrop.tsx";
 import {
   ModelMenu,
   shortModelName,
@@ -312,10 +314,12 @@ function withFrames(current: PickedFrame[], added: PickedFrame[]): PickedFrame[]
   return [...current, ...added.filter((f) => !seen.has(f.data))].slice(0, MAX_REFERENCE_FRAMES);
 }
 
-/** The pictures on the mood board, and the files that could not be read as pictures. */
+/** The pictures on the mood board, and what the last files added left off it. */
 function useBoardFrames(conversationKey: string | undefined) {
   const [frames, setFrames] = useState<PickedFrame[]>([]);
-  const [skippedFiles, setSkippedFiles] = useState<string[]>([]);
+  const [leftOut, setLeftOut] = useState<LeftOut | null>(null);
+  const framesNow = useRef(frames);
+  framesNow.current = frames;
   // A rewound message comes back with its pictures, beside any already attached.
   useEffect(() => {
     const compose = (event: Event): void => {
@@ -328,11 +332,15 @@ function useBoardFrames(conversationKey: string | undefined) {
     return () => window.removeEventListener(COMPOSE_FRAMES_EVENT, compose);
   }, [conversationKey]);
   const addFiles = (files: FileList | File[]): void => {
-    void filesToFramesDetailed(files).then(({ frames: picked, skipped }) => {
-      // A still the browser cannot decode is said so, never silently dropped.
-      setSkippedFiles(skipped);
-      if (!picked.length) return;
-      setFrames((current) => withFrames(current, picked));
+    const list = [...files];
+    void filesToFramesDetailed(list).then(({ frames: picked, skipped }) => {
+      // Files past the limit are never read; a still the browser cannot decode is said so, never dropped silently.
+      const unread = Math.max(0, list.length - MAX_REFERENCE_FRAMES);
+      const board = addToBoard(framesNow.current, picked, unread);
+      const left = { notPictures: skipped, overLimit: board.overLimit };
+      setLeftOut(skipped.length || board.overLimit ? left : null);
+      framesNow.current = board.frames;
+      setFrames(board.frames);
     });
   };
   /** A send that failed puts its pictures back in front of what was added since. */
@@ -340,7 +348,7 @@ function useBoardFrames(conversationKey: string | undefined) {
     setFrames((current) =>
       [...sent, ...current.filter((f) => !sent.some((frame) => frame.data === f.data))].slice(0, MAX_REFERENCE_FRAMES),
     );
-  return { frames, setFrames, skippedFiles, setSkippedFiles, addFiles, restore };
+  return { frames, setFrames, leftOut, setLeftOut, addFiles, restore };
 }
 
 /** Which roles each subscription serves right now, for the plan limits beside the context. */
@@ -388,27 +396,6 @@ function pasteIsOnlyNames(clipboard: DataTransfer, files: File[]): boolean {
 }
 
 /** Files a drop or paste could not read as pictures: said so, with a way to dismiss it. */
-function SkippedFiles({ files, onDismiss }: { files: string[]; onDismiss: () => void }): JSX.Element {
-  return (
-    <div className="flex flex-wrap gap-1.5 px-1 pt-1 pb-1.5" role="alert">
-      <span
-        className="rounded-[6px] border border-red/40 bg-red-tint px-1.5 py-0.5 text-micro text-red"
-        title={files.join(", ")}
-      >
-        could not decode {files.length === 1 ? files[0] : `${files.length} files`} — not added to the board
-      </span>
-      <button
-        type="button"
-        className="text-micro text-ink-3 hover:text-control-text-hover"
-        onClick={onDismiss}
-        aria-label="Dismiss"
-      >
-        ×
-      </button>
-    </div>
-  );
-}
-
 /** The pictures going with the next message, each with its own remove button. */
 function FrameBoard({
   frames,
@@ -926,13 +913,14 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
   const placeholderNow = props.about?.placeholder ?? composerPlaceholder(coordinating, contextual, props.leadListens);
   useAutosize(inputRef, draft, placeholderNow);
   const composer = useComposerSend(props, { draft, setDraft, loop, board, inputRef, mentions });
+  const held = useFileDrop(panelRef, disabled, board.addFiles);
 
   return (
     <div
       data-promptbar
       data-studio-composer={!gameMode || undefined}
       className="composer relative min-w-0"
-      {...fileDropHandlers(disabled, board.addFiles)}
+      {...pasteHandlers(disabled, board.addFiles)}
     >
       {/* ── composer ───────────────────────────────────── */}
       <div
@@ -940,9 +928,12 @@ export function PromptBar(props: PromptBarProps): JSX.Element {
         className={`composer-panel relative flex min-w-0 flex-col gap-0.5
           transition-colors duration-150 ${disabled ? "opacity-55" : ""}`}
       >
-        {board.skippedFiles.length > 0 ? (
-          <SkippedFiles files={board.skippedFiles} onDismiss={() => board.setSkippedFiles([])} />
-        ) : null}
+        <DropVeil held={held} attached={board.frames.length} />
+        <LeftOutNote
+          left={board.leftOut}
+          onChoose={() => fileRef.current?.click()}
+          onDismiss={() => board.setLeftOut(null)}
+        />
         {props.about ? <ReplyAboutTag about={props.about} /> : null}
         {board.frames.length > 0 ? (
           <FrameBoard
@@ -1038,21 +1029,9 @@ function usePromptHandle(
   );
 }
 
-/** Pictures dropped or pasted on the composer join the board; a paste of only their names adds no text. */
-function fileDropHandlers(disabled: boolean, addFiles: (files: FileList | File[]) => void) {
+/** Pictures pasted on the composer join the board; a paste of only their names adds no text. */
+function pasteHandlers(disabled: boolean, addFiles: (files: FileList | File[]) => void) {
   return {
-    onDragOver: (event: DragEvent<HTMLDivElement>) => {
-      if (disabled) return;
-      if ([...event.dataTransfer.items].some((item) => item.kind === "file")) event.preventDefault();
-    },
-    onDrop: (event: DragEvent<HTMLDivElement>) => {
-      if (disabled) return;
-      const files = event.dataTransfer.files;
-      if (files?.length) {
-        event.preventDefault();
-        addFiles(files);
-      }
-    },
     onPaste: (event: ClipboardEvent<HTMLDivElement>) => {
       if (disabled) return;
       const files = pastedFiles(event.clipboardData);

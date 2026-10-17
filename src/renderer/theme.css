@@ -880,6 +880,84 @@
   .composer-panel:focus-within {
     border-color: var(--prompt-edge, color-mix(in oklab, var(--border) 85%, transparent));
   }
+  /* Files held over the chat: the prompt bar's edge turns dashed, its contents fade, one line says
+     what a drop does. Blue while pictures go in, orange when none can. */
+  .composer-drop-veil {
+    --drop-ink: color-mix(in oklab, var(--accent-ink) 78%, var(--ink));
+    position: absolute;
+    inset: -1px;
+    z-index: 3;
+    display: grid;
+    place-items: center;
+    padding: 0 16px;
+    border: 1.5px dashed var(--accent);
+    border-radius: inherit;
+    background: color-mix(in oklab, var(--composer) 88%, transparent);
+    color: var(--drop-ink);
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+    pointer-events: none;
+    animation: composer-drop-in var(--duration-quick) var(--ease-smooth-out);
+  }
+  .composer-drop-veil[data-tone="refuses"] {
+    --drop-ink: color-mix(in oklab, var(--orange) 72%, var(--ink));
+    border-color: var(--orange);
+  }
+  /* What a drop left off the board, in orange, with its action. */
+  .composer-left-out {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 2px 2px 6px;
+    padding: 6px 6px 6px 10px;
+    border-radius: 12px;
+    background: var(--orange-tint);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--orange) 50%, transparent);
+    color: color-mix(in oklab, var(--orange) 72%, var(--ink));
+    font-size: 12px;
+    line-height: 1.3;
+  }
+  .composer-left-out-action {
+    flex-shrink: 0;
+    height: 24px;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--orange) 34%, transparent);
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .composer-left-out-action:hover {
+    background: color-mix(in srgb, var(--orange) 46%, transparent);
+  }
+  .composer-left-out-dismiss {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 7px;
+    background: var(--field);
+    color: var(--ink-2);
+    cursor: pointer;
+  }
+  .composer-left-out-dismiss:hover {
+    background: var(--control-hover, var(--hover));
+  }
+  @keyframes composer-drop-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .composer-drop-veil {
+      animation: none;
+    }
+  }
   .composer-control {
     min-height: 32px;
     border-radius: 999px;

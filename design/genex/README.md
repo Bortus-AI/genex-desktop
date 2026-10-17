@@ -795,6 +795,14 @@ submission: Add's row turns it on, and while it is on a bulb icon button follows
 1×16px hairline, turns it off, and the prompt reads "Describe what to plan…"; active build
 follow-ups retain the existing plan. No standalone Keep going button is needed.
 
+Files dragged anywhere over a chat (or home) land in its prompt bar. While they are held, the
+prompt bar's edge turns 1.5px dashed, its contents fade under the composer colour at 88% and one
+14px line says what a drop does: "Drop to add 2 pictures" in the accent, or in orange when none
+can go in ("Only pictures can go in", "Room for 1 picture, 2 will stay out"); the chat above does
+not change. What a drop left off the board stays above the pictures as one orange line ("notes.txt
+isn’t a picture", "2 pictures left out, 12 at most") with a filled Choose pictures and a filled
+close button.
+
 Composer panels share one density: 6px insets, 32px rows with 6px/10px padding, 12px medium
 group labels and a 17px radius (row 11 + inset 6). Everything opens on click, never on hover.
 Add spans the full composer width 8px above the writing surface: Images, then **Plan mode** (a
