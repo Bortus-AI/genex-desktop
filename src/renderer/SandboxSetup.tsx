@@ -10,7 +10,7 @@ import { type JSX, useState } from "react";
 import { type InstallCommand, type SandboxProblem, toolPackage } from "../shared/boot.ts";
 import { App } from "./App.tsx";
 import { useAppLoaderDismissal } from "./app-loader.ts";
-import { type Boot, BootView, bootView, canSetUp } from "./state/boot.ts";
+import { type Boot, BootView, bootView, canSetUp, offersRetry } from "./state/boot.ts";
 import { useBoot } from "./state/hooks.ts";
 import { Button } from "./ui/Button.tsx";
 import { SANDBOX_SETUP_WORDS as WORDS } from "./words.ts";
@@ -24,13 +24,20 @@ export function BootRoot({ boot }: { boot: Boot }): JSX.Element | null {
   const installable = useBoot(boot.store, canSetUp);
   const settingUp = useBoot(boot.store, (s) => s.settingUp);
   const setupCancelled = useBoot(boot.store, (s) => s.setupCancelled);
+  const retryOffered = useBoot(boot.store, offersRetry);
   // The studio dismisses the startup loader once its own first screen is drawn; the setup screen is drawn now.
   useAppLoaderDismissal(view === BootView.SandboxSetup);
   if (view === BootView.Studio) return <App />;
   if (view === BootView.Loading || !problem) return null;
   const setUp = installable ? { settingUp, cancelled: setupCancelled, onSetUp: () => void boot.setUp() } : null;
   return (
-    <SandboxSetup problem={problem} retrying={retrying} error={error} onRetry={() => void boot.retry()} setUp={setUp} />
+    <SandboxSetup
+      problem={problem}
+      retrying={retrying}
+      error={error}
+      onRetry={retryOffered ? () => void boot.retry() : null}
+      setUp={setUp}
+    />
   );
 }
 
@@ -42,11 +49,11 @@ interface SetUpControl {
   onSetUp: () => void;
 }
 
-/** Set up and its hint, or the note that the last one was cancelled. */
+/** Set up, under the note that the last one was cancelled when it was. */
 function SetUpButton({ setUp, busy }: { setUp: SetUpControl; busy: boolean }): JSX.Element {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm text-ink-3">{setUp.cancelled ? WORDS.setupCancelled : WORDS.setUpHint}</p>
+      {setUp.cancelled && <p className="text-sm text-ink-3">{WORDS.setupCancelled}</p>}
       <div>
         <Button
           variant="default"
@@ -113,7 +120,8 @@ export function SandboxSetup({
   problem: SandboxProblem;
   retrying: boolean;
   error: string | null;
-  onRetry: () => void;
+  /** Null hides Retry: where Set up is offered, until a Set up has failed. */
+  onRetry: (() => void) | null;
   /** Offered where the sandbox installs from here (Windows); null elsewhere. */
   setUp?: SetUpControl | null;
 }): JSX.Element {
@@ -164,17 +172,19 @@ export function SandboxSetup({
             {WORDS.stillFailing} {error}
           </p>
         )}
-        <div>
-          <Button
-            variant={setUp ? "secondary" : "default"}
-            data-sandbox-retry
-            aria-busy={retrying}
-            disabled={busy}
-            onClick={onRetry}
-          >
-            {retrying ? WORDS.retrying : WORDS.retry}
-          </Button>
-        </div>
+        {onRetry && (
+          <div>
+            <Button
+              variant={setUp ? "secondary" : "default"}
+              data-sandbox-retry
+              aria-busy={retrying}
+              disabled={busy}
+              onClick={onRetry}
+            >
+              {retrying ? WORDS.retrying : WORDS.retry}
+            </Button>
+          </div>
+        )}
         {problem.details.length > 0 && (
           <details className="settings-disclosure text-sm text-ink-3">
             <summary>{WORDS.details}</summary>

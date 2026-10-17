@@ -16,7 +16,7 @@ import {
   type SandboxProblem,
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
-import { BootView, bootView, canSetUp, createBoot } from "../../src/renderer/state/boot.ts";
+import { BootView, bootView, canSetUp, offersRetry, createBoot } from "../../src/renderer/state/boot.ts";
 import { windowControlColors } from "../../src/renderer/window-controls.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -165,6 +165,21 @@ describe("Set up on Windows", () => {
     assert.equal(canSetUp({ platform: StudioPlatform.Linux, problem: NOT_PROVISIONED }), false);
     const gitMissing = { ...NOT_PROVISIONED, code: SandboxProblemCode.GitMissing };
     assert.equal(canSetUp({ platform: StudioPlatform.Windows, problem: gitMissing }), false, "Git installs by hand");
+  });
+
+  it("offers Retry only once a Set up has failed, where Set up is offered", async () => {
+    const { controller } = windowsBoot([
+      { outcome: SandboxSetupOutcome.Cancelled, state: WINDOWS_SETUP },
+      new Error("srt-win install: sandbox user provisioning failed"),
+    ]);
+    await controller.load();
+    assert.equal(offersRetry(controller.store.getState()), false, "a Retry before Set up changes nothing");
+    await controller.setUp();
+    assert.equal(offersRetry(controller.store.getState()), false, "a cancelled approval is answered by Set up");
+    await controller.setUp();
+    assert.equal(offersRetry(controller.store.getState()), true);
+    const linux = { platform: SETUP.platform, problem: SETUP.sandbox, error: null };
+    assert.equal(offersRetry(linux), true, "Linux installs its tools in a terminal, then retries");
   });
 
   it("shows it is waiting for approval, then starts the studio once installed", async () => {

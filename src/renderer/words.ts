@@ -3240,7 +3240,6 @@ export const SANDBOX_SETUP_WORDS = {
   /** Windows: install it now, behind one administrator prompt. */
   setUp: "Set up",
   settingUp: "Waiting for approval…",
-  setUpHint: "Windows will ask an administrator to approve the setup once.",
   setupCancelled: "Setup was cancelled, so nothing changed. Choose Set up again when you’re ready to approve it.",
   stillFailing: "Studio still couldn’t start:",
   details: "Details",

@@ -92,6 +92,14 @@ export function canSetUp(state: Pick<BootStoreState, "platform" | "problem">): b
   return state.platform === StudioPlatform.Windows && state.problem?.code === SandboxProblemCode.NotProvisioned;
 }
 
+/**
+ * Whether the setup screen offers Retry. Where Set up is offered, a Retry before it changes nothing,
+ * so it shows only once a Set up has failed.
+ */
+export function offersRetry(state: Pick<BootStoreState, "platform" | "problem" | "error">): boolean {
+  return !canSetUp(state) || state.error !== null;
+}
+
 /** The screen the state calls for. */
 export function bootView(state: BootStoreState): BootView {
   if (state.phase === BootPhase.Ready) return BootView.Studio;
