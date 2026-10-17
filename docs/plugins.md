@@ -3123,7 +3123,10 @@ stages only declared project input files; the child receives no full-project rea
 of each process log stream; it does not limit asset files. `maxAssetBytes` limits the combined
 declared generated files to 1–104,857,600 bytes. Delivery additionally enforces `assetLimits`.
 Set `gpu: true` for GPU rendering, including Blender EEVEE; it permits GPU services and the
-runtime's own Metal cache. It grants no network or full-project access. Runtime detection runs
+runtime's own Metal cache, which the job may also hand to Metal's shader compiler as a read-write
+sandbox extension (no other folder): the compiler builds Metal's shader module there, and without
+it a cold cache (a new Mac, a macOS or runtime update) fails every shader and crashes the first
+render. It grants no network or full-project access. Runtime detection runs
 the declared version probe, but never starts a generation recipe or installs software.
 Managed jobs use the macOS sandbox, deny network and protected host state, and retain a durable
 job ID before process launch. The profile (`nativeSandboxProfile`) names what a job may do: start

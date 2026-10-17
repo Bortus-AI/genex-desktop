@@ -7,9 +7,11 @@
  * raises exits 1, a write outside the allow-list is refused, a runaway is killed as a tree.
  */
 import assert from "node:assert/strict";
-import { access, constants, mkdir, readFile, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { access, constants, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { promisify } from "node:util";
 import { runNativeProcess } from "../../src/substrate/plugins/native-process.ts";
 import {
   BLENDER_RENDER_SIZE,
@@ -20,6 +22,7 @@ import {
 import { decodePng, encodePng } from "../../scripts/evals/prober/png.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
+const exec = promisify(execFile);
 const BLENDER = process.env.STUDIO_TEST_BLENDER ?? "/Applications/Blender.app/Contents/MacOS/Blender";
 
 async function haveBlender(): Promise<boolean> {
@@ -91,6 +94,30 @@ async function runBlender(p: {
   });
   return { ...result, durationMs: Date.now() - start, timedOut: result.reason === "timeout" };
 }
+
+/** The `.app` bundle a binary is in, or its folder. */
+const bundleOf = (binary: string) =>
+  binary.includes(".app/") ? binary.slice(0, binary.indexOf(".app/") + 4) : path.dirname(binary);
+
+/** The macOS cache folder Metal keeps for the application `binary` is in: the user's cache, then its bundle id. */
+async function metalCache(binary: string): Promise<string> {
+  const plist = path.join(bundleOf(binary), "Contents/Info.plist");
+  const id = (await exec("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist])).stdout.trim();
+  const base = (await exec("/usr/bin/getconf", ["DARWIN_USER_CACHE_DIR"])).stdout.trim();
+  return path.join(await realpath(base), id);
+}
+
+/** The line {@link EXTENSIONS_PY} prints: whether the sandbox let it issue an extension, per folder. */
+const EXTENSIONS_RESULT = "EXTENSIONS ";
+/** Asks the sandbox for a read-write extension to each folder after `--`, as Metal does for its cache. */
+const EXTENSIONS_PY = `
+import ctypes, json, sys
+issue = ctypes.CDLL("/usr/lib/libSystem.B.dylib").sandbox_extension_issue_file
+issue.restype = ctypes.c_void_p
+issue.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
+folders = sys.argv[sys.argv.index("--") + 1:]
+print(${JSON.stringify(EXTENSIONS_RESULT)} + json.dumps({f: bool(issue(b"com.apple.app-sandbox.read-write", f.encode(), 0)) for f in folders}))
+`;
 
 const MODEL_PY = `
 import bpy
@@ -301,6 +328,33 @@ bpy.context.active_object.name = "Cable"
     assert.match(String(parsed.error), /no such primitive/);
   });
 
+  it("a long error keeps the traceback's last whole lines, and an error line too long alone keeps its start", {
+    skip: SKIP,
+  }, async () => {
+    const errorOf = async (raise: string) => {
+      const { ws, assets, out, scratch, wrapper } = await setup();
+      const script = path.join(assets, "src", "long.py");
+      await writeFile(script, `import bpy\n${raise}\n`);
+      const result = await runBlender({
+        binary: BLENDER,
+        script: wrapper,
+        args: [script, path.join(assets, "long.glb"), path.join(out, "long-1.png"), "long"],
+        cwd: ws,
+        allowWrite: [assets, out],
+        denyRead: [],
+        scratch,
+        timeoutMs: 60_000,
+      });
+      return String(resultLine(result.stdout)?.error);
+    };
+    const lines = (await errorOf(`raise RuntimeError("\\n".join("step %d done" % i for i in range(400)))`)).split("\n");
+    assert.match(lines[0] ?? "", /^step \d+ done$/, "starts at a whole line");
+    assert.equal(lines.at(-1), "step 399 done");
+    const long = await errorOf(`raise RuntimeError("PROBE " + "x" * 3000)`);
+    assert.match(long, /^RuntimeError: PROBE x+…$/, "the error's own start, cut at its end");
+    assert.ok(long.length <= 1500, `${long.length} characters`);
+  });
+
   it("a script cannot write outside the allow-list, and cannot reach the network", { skip: SKIP }, async () => {
     const { root, ws, assets, out, scratch, wrapper } = await setup();
     const outside = path.join(root, "outside");
@@ -338,6 +392,38 @@ raise RuntimeError(" | ".join(errors))
     assert.match(String(parsed.error), /write: PermissionError/, "the write outside the allow-list is refused");
     assert.match(String(parsed.error), /net: /, "the socket is refused");
     await assert.rejects(readFile(path.join(outside, "x.txt")), "nothing escaped");
+  });
+
+  it("a GPU job may hand its own Metal cache to the system's shader compiler, and no other folder", {
+    skip: SKIP,
+  }, async () => {
+    // The compiler builds Metal's shader module in that cache through a read-write extension the
+    // job issues; refused, a cold cache fails every shader and Blender crashes on its first render.
+    const { ws, scratch } = await setup();
+    const cache = await metalCache(BLENDER);
+    const script = path.join(ws, "extensions.py");
+    await writeFile(script, EXTENSIONS_PY);
+    const asked = [cache, path.dirname(cache), await realpath(scratch)];
+    const result = await runNativeProcess({
+      binary: BLENDER,
+      args: ["-b", "--factory-startup", "-noaudio", "--python", script, "--", ...asked],
+      cwd: ws,
+      scratch,
+      reads: [bundleOf(BLENDER), ws],
+      writes: [],
+      denyRead: [],
+      gpu: true,
+      signal: new AbortController().signal,
+      timeoutMs: 60_000,
+      maxOutputBytes: 64000,
+    });
+    const line = result.stdout.split("\n").find((l) => l.startsWith(EXTENSIONS_RESULT));
+    assert.ok(line, result.stdout + result.stderr);
+    assert.deepEqual(JSON.parse(line.slice(EXTENSIONS_RESULT.length)), {
+      [cache]: true,
+      [path.dirname(cache)]: false,
+      [asked[2] as string]: false,
+    });
   });
 
   it("a runaway script is killed as a process tree at the timeout", { skip: SKIP }, async () => {

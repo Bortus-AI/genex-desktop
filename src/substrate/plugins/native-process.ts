@@ -81,6 +81,13 @@ async function gpuCache(binary: string): Promise<string[]> {
   return [cache];
 }
 /**
+ * The sandbox extension a GPU job hands Metal's shader compiler for its cache: the compiler is a
+ * system process of its own that builds Metal's shader module there, and a refused extension fails
+ * every shader that cache has not compiled yet (a new Mac, a macOS or Blender update), which crashes
+ * the first render.
+ */
+const READ_WRITE_EXTENSION = "com.apple.app-sandbox.read-write";
+/**
  * setsid(2) and setpgid(2), by their macOS syscall numbers: a descendant that could call them
  * would leave the job's process group, and the group is how a job is stopped.
  */
@@ -124,6 +131,8 @@ export function nativeSandboxProfile(p: {
   writes: string[];
   /** Files the job may write whose names only start so (a program's own temporary names): plain absolute paths only. */
   writePrefixes?: string[];
+  /** Folders the job may hand to a system service as a read-write extension: its GPU cache, never more. */
+  extensions?: string[];
   denied: string[];
   gpu: boolean;
 }): string {
@@ -157,6 +166,11 @@ export function nativeSandboxProfile(p: {
     `(allow file-read* ${subpaths(p.reads)})`,
     `(allow file-read* file-write* ${subpaths(p.writes)})`,
     ...(prefixes.length ? [`(allow file-read* file-write* ${prefixes.map(prefixRule).join(" ")})`] : []),
+    ...(p.extensions?.length
+      ? [
+          `(allow file-issue-extension (require-all (require-any ${subpaths(p.extensions)}) (extension-class ${quote(READ_WRITE_EXTENSION)})))`,
+        ]
+      : []),
     ...(p.denied.length ? [`(deny file-read* ${subpaths(p.denied)})`] : []),
     "(deny network*)",
   ].join("\n");
@@ -303,8 +317,9 @@ type SandboxRequest = Pick<
 async function prepareSandbox(p: SandboxRequest): Promise<{ profile: string; home: string }> {
   const root = p.binaryRoot ?? runtimeRoot(p.binary);
   const binaryRoot = await realpath(root).catch(() => path.resolve(root));
+  const extensions = p.gpu ? await gpuCache(p.binary) : [];
   const reads = await aliases([...p.reads, binaryRoot, ...SYSTEM_READS]),
-    writes = await aliases([...p.writes, p.scratch, ...(p.gpu ? await gpuCache(p.binary) : [])]),
+    writes = await aliases([...p.writes, p.scratch, ...extensions]),
     denied = await aliases(p.denyRead);
   const home = path.join(p.scratch, "home");
   await mkdir(home, { recursive: true });
@@ -313,7 +328,7 @@ async function prepareSandbox(p: SandboxRequest): Promise<{ profile: string; hom
   const writePrefixes = p.writePrefixes ?? [];
   await writeFile(
     profile,
-    nativeSandboxProfile({ binaryRoot, interpreters, reads, writes, writePrefixes, denied, gpu: !!p.gpu }),
+    nativeSandboxProfile({ binaryRoot, interpreters, reads, writes, writePrefixes, extensions, denied, gpu: !!p.gpu }),
   );
   return { profile, home };
 }

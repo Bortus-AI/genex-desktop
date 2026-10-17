@@ -53,10 +53,23 @@ MODEL_LABEL = "model" # the compose job's label for a transform's source
 NEW_MATERIAL_COLOUR = (0.8, 0.8, 0.8, 1.0)  # a new material's viewport colour, before anyone sets it
 TEXTURE_LINKS = 4     # links followed up from a Base Color to find the image feeding it
 UNIT_TOLERANCE = 1e-4 # an armature scale this close to 1 is left as it is
+ERROR_CHARS = 1500    # the most of a script's traceback the result line carries
 
 def result(payload):
     print("STUDIO_BLENDER_RESULT " + json.dumps(payload))
     sys.stdout.flush()
+
+def traceback_tail(text):
+    # The traceback's last whole lines that fit in ERROR_CHARS, so it starts at a line and ends with
+    # the error; an error line longer than that alone keeps its start, which names the error.
+    lines = text.rstrip("\n").split("\n")
+    kept, size = [], 0
+    for line in reversed(lines):
+        size += len(line) + 1
+        if size > ERROR_CHARS:
+            break
+        kept.insert(0, line)
+    return "\n".join(kept) if kept else lines[-1][:ERROR_CHARS - 1] + "…"
 
 def flags(rest):
     # The flags after the four positional arguments, each with one value; --slot repeats.
@@ -97,7 +110,7 @@ src = open(script, encoding="utf-8").read()
 try:
     exec(compile(src, script, "exec"), {"__name__": "__main__", "bpy": bpy, "math": math, "ASSET_NAME": name, "ASSET_INPUTS": asset_inputs(given)})
 except Exception:
-    result({"ok": False, "error": traceback.format_exc()[-1500:]})
+    result({"ok": False, "error": traceback_tail(traceback.format_exc())})
     sys.exit(1)
 
 meshes = [o for o in scene.objects if o.type == "MESH"]
