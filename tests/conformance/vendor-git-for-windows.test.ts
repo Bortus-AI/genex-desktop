@@ -249,4 +249,21 @@ describe("Git for Windows in a package", () => {
     assert.deepEqual(await readdir(resources), ["app"]);
     assert.ok(packageGit.VENDORED_GIT.endsWith(path.join("node_modules", ".cache", "genex", "git-for-windows", "git")));
   });
+
+  it("leaves the build's download cache out of app.asar, so Git ships once and its archive not at all", () => {
+    const config = require("../../forge.config.cjs");
+    const ignore = config.packagerConfig.ignore as RegExp[];
+    // The packager matches each copied path, relative to the app folder with a leading `/`. A
+    // folder under node_modules without a package.json is no module, so only this list keeps it out.
+    const ignored = (name: string) => ignore.some((regex) => regex.test(name));
+    for (const name of [
+      "/node_modules/.cache",
+      "/node_modules/.cache/genex/git-for-windows/git/bin/bash.exe",
+      "/node_modules/.cache/genex/git-for-windows-archive/PortableGit-2.56.0.2-64-bit.7z.exe",
+      "/node_modules/.cache/genex/cua-driver/cua-driver.tar.gz",
+    ])
+      assert.equal(ignored(name), true, name);
+    for (const name of ["/node_modules/node-pty/package.json", "/dist/main/main.js", "/package.json"])
+      assert.equal(ignored(name), false, name);
+  });
 });

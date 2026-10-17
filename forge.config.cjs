@@ -83,6 +83,9 @@ module.exports = {
       /^\/node_modules\/@genex-ai\/cli-demo(?:\/|$)/,
       /\/node_modules\/@anthropic-ai\/claude-agent-sdk-[^/]+(?:\/|$)/,
       /\/node_modules\/@openai\/codex(?:-[^/]+)?(?:\/|$)/,
+      // The build's download cache (vendored Git and cua-driver, their archives). It is no module,
+      // so the packager's prune keeps it; what ships from it is copied where it belongs.
+      /^\/node_modules\/\.cache($|\/)/,
       /^\/(?!dist(?:\/|$)|node_modules(?:\/|$)|package\.json$|LICENSE(?:\..*)?$|THIRD-PARTY-NOTICES\.md$)/,
       /^\/archive($|\/)/,
       /^\/src($|\/)/,
