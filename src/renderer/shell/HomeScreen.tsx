@@ -150,7 +150,7 @@ function HomeScreen({
       />
     );
   return (
-    <section data-home="" aria-label="Home" className="home-layer">
+    <section data-home="" data-file-drop-zone aria-label="Home" className="home-layer">
       {/* Only home at rest has it: the first message's transition fades it out with the rest. */}
       <HomeBackground covered={chrome.workspaceCovered} />
       <div className="home-header titlebar-drag">

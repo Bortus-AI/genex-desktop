@@ -3046,6 +3046,28 @@ export const CHAT_WORDS = {
   moreWaiting: (count: number) => `${count} more waiting`,
 } as const;
 
+/** "1 picture", "2 pictures", or with `files` "1 file", "2 files". */
+const counted = (count: number, files: boolean): string =>
+  `${count} ${files ? "file" : "picture"}${count === 1 ? "" : "s"}`;
+
+/**
+ * The prompt bar's line while files are dragged over the chat, and the note a drop leaves. `files`
+ * says whether what is counted includes files that are not pictures.
+ */
+export const COMPOSER_DROP_WORDS = {
+  dropToAdd: (count: number, files: boolean) => `Drop to add ${counted(count, files)}`,
+  full: (max: number, files: boolean) => `${max} ${files ? "files" : "pictures"} at most`,
+  someStayOut: (room: number, out: number, files: boolean) => `Room for ${counted(room, files)}, ${out} will stay out`,
+  overLimit: (count: number, max: number, files: boolean) => `${counted(count, files)} left out, ${max} at most`,
+  couldNotAdd: (name: string) => `${name} couldn’t be added`,
+  couldNotAddMany: (count: number) => `${count} files couldn’t be added`,
+  filesLeftOut: (count: number) => `${count} files didn’t go in`,
+  chooseFiles: "Choose files",
+  dismiss: "Dismiss",
+  /** A file on the board: its chip's remove button. */
+  remove: (name: string) => `Remove ${name}`,
+} as const;
+
 // ── the system file manager ───────────────────────────────────────────────────────────────
 
 /** What a button that shows a file in the system's file manager says, and its failure. */
