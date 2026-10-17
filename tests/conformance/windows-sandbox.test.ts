@@ -31,6 +31,7 @@ import {
   WindowsSandboxSession,
   ancestorDirs,
   ancestorGrants,
+  bundledGitRoot,
   ensureHostGit,
   findGitBash,
   gitRootFromExecPath,
@@ -448,7 +449,7 @@ describe("read and write denies", () => {
   });
 });
 
-describe("Git Bash and srt-win", () => {
+describe("which Git: Git Bash and the host's git", () => {
   it("reads Git's install folder from the registry or from git --exec-path", () => {
     const reg =
       "\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\GitForWindows\r\n    InstallPath    REG_SZ    C:\\Program Files\\Git\r\n";
@@ -458,14 +459,30 @@ describe("Git Bash and srt-win", () => {
     assert.equal(gitRootFromExecPath("/usr/libexec/git-core"), null);
   });
 
-  it("prefers the registry, falls back to git, and reports none when neither has bash.exe", async () => {
+  it("finds Genex's own Git in a packaged app's resources, and none outside a packaged app", () => {
+    assert.equal(bundledGitRoot("C:\\Genex\\app-0.1.9\\resources"), "C:\\Genex\\app-0.1.9\\resources\\git");
+    assert.equal(bundledGitRoot(undefined), null);
+  });
+
+  it("prefers Genex's own Git, then the registry, then git, and reports none when none has bash.exe", async () => {
     const regOut = "    InstallPath    REG_SZ    C:\\Git\r\n";
     const exec = "D:/PortableGit/mingw64/libexec/git-core";
+    const bundled = "C:\\Genex\\resources\\git";
     const found = (want: string) => (file: string) => file === want;
     const fail = async () => {
       throw new Error("not found");
     };
     const table: Array<[string, Parameters<typeof findGitBash>[0], string | null]> = [
+      [
+        "bundled",
+        { bundled, registry: async () => regOut, execPath: async () => exec, exists: () => true },
+        "C:\\Genex\\resources\\git\\bin\\bash.exe",
+      ],
+      [
+        "bundled without bash.exe",
+        { bundled, registry: async () => regOut, execPath: fail, exists: found("C:\\Git\\bin\\bash.exe") },
+        "C:\\Git\\bin\\bash.exe",
+      ],
       [
         "registry",
         { registry: async () => regOut, execPath: async () => exec, exists: () => true },
@@ -491,7 +508,15 @@ describe("Git Bash and srt-win", () => {
       throw new Error("not found");
     };
     const viaRegistry = { registry: async () => regOut, execPath: fail, exists: () => true };
+    const bundled = { ...viaRegistry, bundled: "C:\\Genex\\resources\\git" };
     const table: Array<[string, Parameters<typeof ensureHostGit>[0], string, boolean, string]> = [
+      [
+        "Genex's own Git",
+        bundled,
+        "C:\\Git\\cmd;C:\\Windows",
+        true,
+        "C:\\Genex\\resources\\git\\cmd;C:\\Git\\cmd;C:\\Windows",
+      ],
       [
         "no Git for Windows",
         { registry: fail, execPath: fail, exists: () => true },
@@ -509,7 +534,9 @@ describe("Git Bash and srt-win", () => {
       assert.equal(env.PATH, after, label);
     }
   });
+});
 
+describe("srt-win", () => {
   it("runs srt-win from the unpacked copy in a packaged app", () => {
     const packaged = path.join("/Genex", "resources", "app.asar", "node_modules", "@anthropic-ai", "sandbox-runtime");
     assert.equal(
