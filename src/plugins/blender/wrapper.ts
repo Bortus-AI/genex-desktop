@@ -59,17 +59,20 @@ def result(payload):
     print("STUDIO_BLENDER_RESULT " + json.dumps(payload))
     sys.stdout.flush()
 
-def traceback_tail(text):
-    # The traceback's last whole lines that fit in ERROR_CHARS, so it starts at a line and ends with
-    # the error; an error line longer than that alone keeps its start, which names the error.
-    lines = text.rstrip("\n").split("\n")
-    kept, size = [], 0
+def error_text(error):
+    # The error's own first line (its type and message), then the traceback's last whole lines that
+    # fit with it in ERROR_CHARS; a first line longer than that alone keeps its start.
+    headline = traceback.format_exception_only(error)[-1].split("\n")[0]
+    if len(headline) > ERROR_CHARS:
+        return headline[:ERROR_CHARS - 1] + "…"
+    lines = "".join(traceback.format_exception(error)).rstrip("\n").split("\n")
+    kept = []
     for line in reversed(lines):
-        size += len(line) + 1
-        if size > ERROR_CHARS:
+        shown = [line] + kept
+        if len("\n".join(shown if headline in shown else [headline] + shown)) > ERROR_CHARS:
             break
-        kept.insert(0, line)
-    return "\n".join(kept) if kept else lines[-1][:ERROR_CHARS - 1] + "…"
+        kept = shown
+    return "\n".join(kept if headline in kept else [headline] + kept)
 
 def flags(rest):
     # The flags after the four positional arguments, each with one value; --slot repeats.
@@ -109,8 +112,8 @@ scene = bpy.context.scene
 src = open(script, encoding="utf-8").read()
 try:
     exec(compile(src, script, "exec"), {"__name__": "__main__", "bpy": bpy, "math": math, "ASSET_NAME": name, "ASSET_INPUTS": asset_inputs(given)})
-except Exception:
-    result({"ok": False, "error": traceback_tail(traceback.format_exc())})
+except Exception as error:
+    result({"ok": False, "error": error_text(error)})
     sys.exit(1)
 
 meshes = [o for o in scene.objects if o.type == "MESH"]

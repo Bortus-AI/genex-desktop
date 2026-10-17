@@ -47,7 +47,7 @@ export interface PluginNativeJob {
   maxOutputBytes: number;
   /** Maximum aggregate bytes in declared generated files, 1–104857600. */
   maxAssetBytes: number;
-  /** Needed for GPU rendering, including Blender EEVEE; permits the runtime's Metal cache. */
+  /** Needed for GPU rendering, including Blender EEVEE; permits the runtime's Metal cache, and lets Metal's compiler use it. */
   gpu?: boolean;
 }
 export interface PluginNativeStatus {

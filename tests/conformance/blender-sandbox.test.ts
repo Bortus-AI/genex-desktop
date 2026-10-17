@@ -8,11 +8,16 @@
  */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { access, constants, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { access, constants, mkdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
-import { runNativeProcess } from "../../src/substrate/plugins/native-process.ts";
+import {
+  nativeSandboxProfile,
+  runNativeProcess,
+  runtimeRoot,
+  SYSTEM_READS,
+} from "../../src/substrate/plugins/native-process.ts";
 import {
   BLENDER_RENDER_SIZE,
   BLENDER_WRAPPER_PY,
@@ -78,7 +83,7 @@ async function runBlender(p: {
   timeoutMs: number;
 }) {
   const start = Date.now();
-  const bundle = p.binary.includes(".app/") ? p.binary.slice(0, p.binary.indexOf(".app/") + 4) : path.dirname(p.binary);
+  const bundle = runtimeRoot(p.binary);
   const result = await runNativeProcess({
     binary: p.binary,
     args: ["-b", "--factory-startup", "-noaudio", "--python-exit-code", "1", "--python", p.script, "--", ...p.args],
@@ -95,29 +100,37 @@ async function runBlender(p: {
   return { ...result, durationMs: Date.now() - start, timedOut: result.reason === "timeout" };
 }
 
-/** The `.app` bundle a binary is in, or its folder. */
-const bundleOf = (binary: string) =>
-  binary.includes(".app/") ? binary.slice(0, binary.indexOf(".app/") + 4) : path.dirname(binary);
-
 /** The macOS cache folder Metal keeps for the application `binary` is in: the user's cache, then its bundle id. */
 async function metalCache(binary: string): Promise<string> {
-  const plist = path.join(bundleOf(binary), "Contents/Info.plist");
+  const plist = path.join(runtimeRoot(binary), "Contents/Info.plist");
   const id = (await exec("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist])).stdout.trim();
   const base = (await exec("/usr/bin/getconf", ["DARWIN_USER_CACHE_DIR"])).stdout.trim();
   return path.join(await realpath(base), id);
 }
 
-/** The line {@link EXTENSIONS_PY} prints: whether the sandbox let it issue an extension, per folder. */
+/** The extension class Metal's compiler needs for the cache; the job may issue no other. */
+const READ_WRITE = "com.apple.app-sandbox.read-write";
+/** The line {@link EXTENSIONS_PY} prints: whether the sandbox let it issue each extension it was asked for. */
 const EXTENSIONS_RESULT = "EXTENSIONS ";
-/** Asks the sandbox for a read-write extension to each folder after `--`, as Metal does for its cache. */
+/** Asks the sandbox for each extension after `--` (a JSON list of class and path pairs), as Metal does for its cache. */
 const EXTENSIONS_PY = `
 import ctypes, json, sys
 issue = ctypes.CDLL("/usr/lib/libSystem.B.dylib").sandbox_extension_issue_file
 issue.restype = ctypes.c_void_p
 issue.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint32]
-folders = sys.argv[sys.argv.index("--") + 1:]
-print(${JSON.stringify(EXTENSIONS_RESULT)} + json.dumps({f: bool(issue(b"com.apple.app-sandbox.read-write", f.encode(), 0)) for f in folders}))
+asked = json.loads(sys.argv[sys.argv.index("--") + 1])
+print(${JSON.stringify(EXTENSIONS_RESULT)} + json.dumps([bool(issue(c.encode(), p.encode(), 0)) for c, p in asked]))
 `;
+/** One extension a sandboxed script asks for: what the row tests, the class and path, and whether it may be issued. */
+type ExtensionRow = [label: string, extension: [string, string], allowed: boolean];
+
+/** Asserts each row's extension was issued exactly when the row allows it, from the script's output. */
+function assertIssued(stdout: string, table: ExtensionRow[]): void {
+  const line = stdout.split("\n").find((l) => l.startsWith(EXTENSIONS_RESULT));
+  assert.ok(line, stdout);
+  const answers = JSON.parse(line.slice(EXTENSIONS_RESULT.length)) as boolean[];
+  for (const [index, [label, , allowed]] of table.entries()) assert.equal(answers[index], allowed, label);
+}
 
 const MODEL_PY = `
 import bpy
@@ -328,7 +341,7 @@ bpy.context.active_object.name = "Cable"
     assert.match(String(parsed.error), /no such primitive/);
   });
 
-  it("a long error keeps the traceback's last whole lines, and an error line too long alone keeps its start", {
+  it("a long error leads with its own first line, then the traceback's last whole lines; a first line too long alone keeps its start", {
     skip: SKIP,
   }, async () => {
     const errorOf = async (raise: string) => {
@@ -347,9 +360,18 @@ bpy.context.active_object.name = "Cable"
       });
       return String(resultLine(result.stdout)?.error);
     };
-    const lines = (await errorOf(`raise RuntimeError("\\n".join("step %d done" % i for i in range(400)))`)).split("\n");
-    assert.match(lines[0] ?? "", /^step \d+ done$/, "starts at a whole line");
+    const steps = await errorOf(`raise RuntimeError("\\n".join("step %d done" % i for i in range(400)))`);
+    const lines = steps.split("\n");
+    assert.equal(lines[0], "RuntimeError: step 0 done", "the error's own first line names it");
+    assert.match(lines[1] ?? "", /^step \d+ done$/, "then whole lines");
     assert.equal(lines.at(-1), "step 399 done");
+    assert.ok(steps.length <= 1500, `${steps.length} characters`);
+    const fits = await errorOf(`raise RuntimeError("x" * (1500 - len("RuntimeError: ")))`);
+    assert.equal(
+      fits.split("\n").at(-1),
+      `RuntimeError: ${"x".repeat(1500 - "RuntimeError: ".length)}`,
+      "a line that fits is whole",
+    );
     const long = await errorOf(`raise RuntimeError("PROBE " + "x" * 3000)`);
     assert.match(long, /^RuntimeError: PROBE x+…$/, "the error's own start, cut at its end");
     assert.ok(long.length <= 1500, `${long.length} characters`);
@@ -401,15 +423,31 @@ raise RuntimeError(" | ".join(errors))
     // job issues; refused, a cold cache fails every shader and Blender crashes on its first render.
     const { ws, scratch } = await setup();
     const cache = await metalCache(BLENDER);
+    const writable = await realpath(scratch);
     const script = path.join(ws, "extensions.py");
     await writeFile(script, EXTENSIONS_PY);
-    const asked = [cache, path.dirname(cache), await realpath(scratch)];
+    const table: ExtensionRow[] = [
+      ["its own Metal cache", [READ_WRITE, cache], true],
+      ["the cache, read only", ["com.apple.app-sandbox.read", cache], false],
+      ["the cache, another class", ["com.apple.quarantine", cache], false],
+      ["the user's whole cache", [READ_WRITE, path.dirname(cache)], false],
+      ["the whole cache, spelled through the app's", [READ_WRITE, `${cache}/..`], false],
+      ["a folder the job may write", [READ_WRITE, writable], false],
+    ];
     const result = await runNativeProcess({
       binary: BLENDER,
-      args: ["-b", "--factory-startup", "-noaudio", "--python", script, "--", ...asked],
+      args: [
+        "-b",
+        "--factory-startup",
+        "-noaudio",
+        "--python",
+        script,
+        "--",
+        JSON.stringify(table.map((row) => row[1])),
+      ],
       cwd: ws,
       scratch,
-      reads: [bundleOf(BLENDER), ws],
+      reads: [runtimeRoot(BLENDER), ws],
       writes: [],
       denyRead: [],
       gpu: true,
@@ -417,13 +455,46 @@ raise RuntimeError(" | ".join(errors))
       timeoutMs: 60_000,
       maxOutputBytes: 64000,
     });
-    const line = result.stdout.split("\n").find((l) => l.startsWith(EXTENSIONS_RESULT));
-    assert.ok(line, result.stdout + result.stderr);
-    assert.deepEqual(JSON.parse(line.slice(EXTENSIONS_RESULT.length)), {
-      [cache]: true,
-      [path.dirname(cache)]: false,
-      [asked[2] as string]: false,
-    });
+    assertIssued(result.stdout + result.stderr, table);
+  });
+
+  it("a link inside the folder a job may hand out hands out nothing outside it", { skip: SKIP }, async () => {
+    const root = await realpath(await tmpDir("native-extension-"));
+    const folder = path.join(root, "folder");
+    const outside = path.join(root, "outside");
+    const scratch = path.join(root, "scratch");
+    for (const dir of [folder, outside, scratch]) await mkdir(dir);
+    const link = path.join(folder, "link");
+    await symlink(outside, link);
+    const script = path.join(scratch, "extensions.py");
+    await writeFile(script, EXTENSIONS_PY);
+    const bundle = runtimeRoot(BLENDER);
+    const profile = path.join(scratch, "job.sb");
+    await writeFile(
+      profile,
+      nativeSandboxProfile({
+        binaryRoot: bundle,
+        reads: [bundle, ...SYSTEM_READS],
+        writes: [scratch, folder],
+        extensions: [folder],
+        denied: [],
+        gpu: true,
+      }),
+    );
+    const table: ExtensionRow[] = [
+      ["the folder", [READ_WRITE, folder], true],
+      ["a path inside it", [READ_WRITE, path.join(folder, "inside")], true],
+      ["a link inside it to a folder outside", [READ_WRITE, link], false],
+      ["the same link as a folder", [READ_WRITE, `${link}/`], false],
+      ["a way out through its parent", [READ_WRITE, `${folder}/../outside`], false],
+    ];
+    const asked = JSON.stringify(table.map((row) => row[1]));
+    const { stdout } = await exec(
+      "/usr/bin/sandbox-exec",
+      ["-f", profile, BLENDER, "-b", "--factory-startup", "-noaudio", "--python", script, "--", asked],
+      { cwd: scratch, env: { HOME: scratch, TMPDIR: scratch, PATH: "/usr/bin:/bin" }, timeout: 60_000 },
+    );
+    assertIssued(stdout, table);
   });
 
   it("a runaway script is killed as a process tree at the timeout", { skip: SKIP }, async () => {

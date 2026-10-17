@@ -81,10 +81,10 @@ async function gpuCache(binary: string): Promise<string[]> {
   return [cache];
 }
 /**
- * The sandbox extension a GPU job hands Metal's shader compiler for its cache: the compiler is a
- * system process of its own that builds Metal's shader module there, and a refused extension fails
- * every shader that cache has not compiled yet (a new Mac, a macOS or Blender update), which crashes
- * the first render.
+ * The extension class a GPU job may issue for its Metal cache, to Metal's shader compiler: that
+ * compiler is a system process of its own that builds Metal's shader module there, and a refused
+ * extension fails every shader the cache has not compiled yet (a new Mac, a macOS or Blender
+ * update), which crashes the first render.
  */
 const READ_WRITE_EXTENSION = "com.apple.app-sandbox.read-write";
 /**
@@ -120,8 +120,8 @@ export const JOB_UTILITIES = [
  * The Seatbelt profile for one job. Everything is named: programs only from the runtime's folder,
  * its interpreter and `JOB_UTILITIES`; signals and process details only for the job and the
  * processes it started (its children and its own process group, which `runNativeProcess` makes
- * the job's alone), never Studio or another app; reads and writes only under the given paths; no
- * network. Forking stays allowed — a runtime may use helper processes — but a descendant cannot
+ * the job's alone), never Studio or another app; reads and writes only under the given paths; a
+ * read-write extension only for `extensions`; no network. Forking stays allowed — a runtime may use helper processes — but a descendant cannot
  * leave the job's process group, and `runNativeProcess` stops the group when the job ends.
  */
 export function nativeSandboxProfile(p: {
@@ -287,7 +287,7 @@ export interface NativeProcessResult {
 }
 
 /** System folders every job may read: the OS, its tools, fonts and device nodes. */
-const SYSTEM_READS = [
+export const SYSTEM_READS = [
   "/System",
   "/usr",
   "/bin",
