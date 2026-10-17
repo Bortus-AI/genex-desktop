@@ -795,13 +795,14 @@ submission: Add's row turns it on, and while it is on a bulb icon button follows
 1×16px hairline, turns it off, and the prompt reads "Describe what to plan…"; active build
 follow-ups retain the existing plan. No standalone Keep going button is needed.
 
-Files dragged anywhere over a chat (or home) land in its prompt bar. While they are held, the
-prompt bar's edge turns 1.5px dashed, its contents fade under the composer colour at 88% and one
-14px line says what a drop does: "Drop to add 2 pictures" in the accent, or in orange when none
-can go in ("Only pictures can go in", "Room for 1 picture, 2 will stay out"); the chat above does
-not change. What a drop left off the board stays above the pictures as one orange line ("notes.txt
-isn’t a picture", "2 pictures left out, 12 at most") with a filled Choose pictures and a filled
-close button.
+Files dragged anywhere over a chat (or home) land in its prompt bar, any kind: a picture goes on
+the board as a picture, any other file as a 44px chip with its name and goes with the message as a
+link to where it is. While files are held, the prompt bar's edge turns 1.5px dashed, its contents
+fade under the composer colour at 88% and one 14px line says what a drop does ("Drop to add 2
+pictures", "Drop to add 3 files") in the accent, in orange only past the limits (12 pictures, 12
+files); the chat above does not change. What a drop left out stays above the board as one orange
+line with a filled Choose files and a filled close button. A person's message shows each file it
+carries as a small chip with the file's own name.
 
 Composer panels share one density: 6px insets, 32px rows with 6px/10px padding, 12px medium
 group labels and a 17px radius (row 11 + inset 6). Everything opens on click, never on hover.
