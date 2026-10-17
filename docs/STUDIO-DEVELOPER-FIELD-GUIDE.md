@@ -411,7 +411,8 @@ Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json
 and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
-snapshot (desktop, scope/limit), click (selector/scope), type (plus text/replace), key
+snapshot (desktop, scope/limit; its `play` part counts Play's cards, the covers on screen still
+blank and the clips playing), click (selector/scope), type (plus text/replace), key
 (surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
