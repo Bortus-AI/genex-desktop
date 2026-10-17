@@ -183,6 +183,7 @@ function AccountPlate({
 }): JSX.Element {
   const waiting = usePeople(waitingRequests);
   const [signingOut, setSigningOut] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   // The balance beside the name reads with the account, and again whenever the menu opens.
   // biome-ignore lint/correctness/useExhaustiveDependencies: another account reads its own balance
   useEffect(() => {
@@ -198,6 +199,7 @@ function AccountPlate({
     <>
       <DropdownMenu
         onOpenChange={(opened) => {
+          setMenuOpen(opened);
           if (opened) void studio().people.loadCredits();
         }}
       >
@@ -219,7 +221,7 @@ function AccountPlate({
   return (
     <>
       {me.pro ? (
-        <Nameplate recipe={plate} hover>
+        <Nameplate recipe={plate} hover dim={menuOpen}>
           {row}
         </Nameplate>
       ) : (

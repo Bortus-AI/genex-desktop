@@ -2118,9 +2118,9 @@ button.chat-header-title:hover {
   outline-offset: -2px;
 }
 /* A Pro's nameplate (`nameplate/Nameplate.tsx`). At rest the row is the plain plate; lit (under the
- * pointer, with keyboard focus, or always where a plate is shown off, as in Settings) it takes the
- * art's own colour, the piece melts in from the right under a dark wash that keeps the name
- * readable, the name glows in the avatar's colour and sparkles twinkle around the face. A light
+ * pointer but never while its menu is open, or always where a plate is shown off, as in Settings)
+ * it takes the art's own colour, the piece melts in from the right under a dark wash that keeps the
+ * name readable, the name glows in the avatar's colour and sparkles twinkle around the face. A light
  * theme draws the piece on paper (below). */
 .nameplate {
   position: relative;
@@ -2180,11 +2180,9 @@ button.chat-header-title:hover {
 .nameplate[data-lit] .profile-plate-main {
   color: #f4f5f8;
 }
-.nameplate[data-lit] :is(.profile-plate-main, .sidebar-friend-open):hover {
-  background: rgb(255 255 255 / 0.06);
-}
-.nameplate[data-lit] .profile-plate-main[data-state="open"] {
-  background: rgb(255 255 255 / 0.1);
+/* On a nameplate the row itself is the hover: no extra box under the name, hovered or open. */
+.nameplate :is(.profile-plate-main, .sidebar-friend-open):is(:hover, [data-state="open"]) {
+  background: transparent;
 }
 .nameplate[data-lit] :is(.profile-plate-name-text, .people-name-text) {
   color: var(--plate-glow);
@@ -2210,7 +2208,7 @@ button.chat-header-title:hover {
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
 }
 /* Lit, the credits are white over the art with a soft blurred shadow behind them, and a small
- * see-through blue pill under the pointer or keyboard focus. */
+ * see-through blue pill under the pointer or keyboard focus (the plate itself lights only on hover). */
 .nameplate[data-lit] .plate-credits {
   height: 24px;
   padding-inline: 6px;
@@ -2360,9 +2358,6 @@ button.chat-header-title:hover {
 }
 :root[data-theme="light"] .nameplate-sparkles > i {
   color: color-mix(in oklab, var(--plate-glow) 70%, var(--ink));
-}
-:root[data-theme="light"] .nameplate[data-lit] :is(.profile-plate-main, .sidebar-friend-open):hover {
-  background: rgb(0 0 0 / 0.04);
 }
 :root[data-motion="rest"] .nameplate-sparkles > i {
   animation-play-state: paused;

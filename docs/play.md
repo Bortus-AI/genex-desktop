@@ -66,7 +66,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   grain, colour steps). The first plate is one of the avatar body's pieces in its colours; New one
   rolls any piece (`studio.genex.plateVariant.<id>`, this Mac only). A light theme draws the piece
   on paper (its lightness turned over: a pale ground, deep colour). A sidebar plate is lit only under
-  the pointer or keyboard focus (always in Settings' preview); WebGPU, a 2D still without it, 30
+  the pointer, never while its menu is open (always in Settings' preview); WebGPU, a 2D still without it, 30
   frames a second only while lit and on screen, held while idle, under a modal or Reduce Motion.
 
 ## Playing a game

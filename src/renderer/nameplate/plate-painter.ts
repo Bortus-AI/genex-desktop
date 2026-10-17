@@ -147,8 +147,10 @@ function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
   }
   if (!context) return null;
   const pipeline = plateGpuPipeline(context, entry.recipe.sceneIndex, wake);
-  if (!pipeline) return null;
+  // Still building: it wakes the clock when ready. Failed for good: stop asking, the plate keeps its colour.
+  if (pipeline === undefined) return null;
   entry.dirty = false;
+  if (!pipeline) return null;
   return { canvas: surface.gpu, pipeline, recipe: entry.recipe, seconds: entry.t, paper: onPaper(), ...size };
 }
 

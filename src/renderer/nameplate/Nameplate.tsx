@@ -1,11 +1,11 @@
 /**
  * A Pro's nameplate: lit, the row takes the art's own colour, the piece melts in from the right
  * behind a soft dark wash, and sparkles twinkle around the face in the avatar's glow. A plate in the
- * sidebar lights up only under the pointer or with keyboard focus, and its art moves only then; one
- * shown off (Settings) is always lit. The art is one canvas on the plate painter; the rest is CSS
+ * sidebar lights up only under the pointer (never while its menu is open), and its art moves only
+ * then; one shown off (Settings) is always lit. The art is one canvas on the plate painter; the rest is CSS
  * (`theme.css`, "Pro nameplate").
  */
-import type { CSSProperties, FocusEvent, JSX, ReactNode } from "react";
+import type { CSSProperties, JSX, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type PlateRecipe, plateRecipe } from "../../shared/plate-recipe.ts";
 import { type PlateHandle, mountPlate } from "./plate-painter.ts";
@@ -78,42 +78,39 @@ function Sparkles(): JSX.Element {
   );
 }
 
-/** Whether the pointer or keyboard focus is in the plate: what lights a `hover` plate. */
-function useLit(hover: boolean) {
+/**
+ * Whether the pointer is over a `hover` plate: what lights it. `dim` (its menu open) puts it out and
+ * forgets the pointer, which an open menu keeps from leaving.
+ */
+function useLit(hover: boolean, dim: boolean) {
   const [pointer, setPointer] = useState(false);
-  const [focus, setFocus] = useState(false);
-  const leaveFocus = (event: FocusEvent<HTMLDivElement>): void => {
-    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocus(false);
-  };
-  const events = hover
-    ? {
-        onPointerEnter: () => setPointer(true),
-        onPointerLeave: () => setPointer(false),
-        onFocus: () => setFocus(true),
-        onBlur: leaveFocus,
-      }
-    : {};
-  return { lit: !hover || pointer || focus, events };
+  useEffect(() => {
+    if (dim) setPointer(false);
+  }, [dim]);
+  const events = hover ? { onPointerEnter: () => setPointer(true), onPointerLeave: () => setPointer(false) } : {};
+  return { lit: !dim && (!hover || pointer), events };
 }
 
 /**
  * The plate around its row's contents (the face, the name, the credits); `sparkles` around the
- * face, on by default; `hover` lights it only under the pointer or with keyboard focus.
+ * face, on by default; `hover` lights it only under the pointer; `dim` puts it out (its menu open).
  */
 export function Nameplate({
   recipe,
   className,
   sparkles = true,
   hover = false,
+  dim = false,
   children,
 }: {
   recipe: PlateRecipe;
   className?: string;
   sparkles?: boolean;
   hover?: boolean;
+  dim?: boolean;
   children: ReactNode;
 }): JSX.Element {
-  const { lit, events } = useLit(hover);
+  const { lit, events } = useLit(hover, dim);
   return (
     <div
       className={className ? `nameplate ${className}` : "nameplate"}
