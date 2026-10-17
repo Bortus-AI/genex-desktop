@@ -4403,6 +4403,11 @@ button.chat-header-title:hover {
   --presence-gap: 0.5rem;
   margin-block-start: -8px;
 }
+/* A running build's card is a box, not a line: it stands well clear of the reply above it (24px from
+   the reply's last line), so it never reads as part of the message. */
+.chat-work-build {
+  padding-block-start: 14px;
+}
 .chat-user-content[data-collapsed] {
   max-height: 154px;
   overflow: hidden;
@@ -5727,6 +5732,82 @@ a:focus-visible {
   .build-card,
   .build-card-open svg,
   .build-checklist-open {
+    transition: none;
+  }
+}
+
+/* The Builds bar's tabs (run-graph/chrome.tsx): the chat's builds on one quiet track, the open one
+ * raised on it with a soft edge, as the stage strip's switch holds its views. The row scrolls on its own, without a
+ * bar, once it outgrows the bar; the open tab is wider, so its name reads. */
+.build-tabs {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-control);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.build-tabs::-webkit-scrollbar {
+  display: none;
+}
+.build-tab {
+  display: inline-flex;
+  min-width: 72px;
+  max-width: 220px;
+  height: 26px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--color-control-text);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick),
+    box-shadow var(--duration-quick);
+}
+.build-tab:hover {
+  background: var(--control-hover, var(--hover));
+  color: var(--color-control-text-hover);
+}
+.build-tab[aria-selected="true"] {
+  max-width: 320px;
+  background: var(--surface);
+  color: var(--ink);
+  /* Halfway between the card's quiet edge and a control's: there, without standing out. */
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--line-strong) 50%, var(--line));
+}
+.build-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* A working build's clock: the chat's shimmer, a size under the name. */
+.build-tab-clock {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.build-tab-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .build-tab {
     transition: none;
   }
 }
