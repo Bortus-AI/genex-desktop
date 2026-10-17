@@ -1391,7 +1391,10 @@ export class ClaudeCodeEngine implements Engine {
     if (message.parent_tool_use_id) return;
     // A reply after the input ended: a background task woke the CLI, and no tool call it makes now
     // can be answered (the host's permission answers go over the input).
-    if (run.inputClosed) run.wokeAfterEnd = true;
+    if (run.inputClosed) {
+      run.wokeAfterEnd = true;
+      recordCutAfterTurn(message, run);
+    }
     run.contextTokens = requestTokens(message) ?? run.contextTokens;
     // Whether the main thread's last word was the CLI's own API error: a later reply clears it.
     run.apiError = apiErrorOf(message);
@@ -1517,7 +1520,7 @@ export class ClaudeCodeEngine implements Engine {
       ...(run.sessionId ? { sessionId: run.sessionId } : {}),
       ...(run.studioToolCalls.length ? { studioToolCalls: run.studioToolCalls } : {}),
       ...(!run.ok && run.errorText ? { errorText: run.errorText } : {}),
-      ...(run.contextTokens ? { contextTokens: run.contextTokens } : {}),
+      ...sessionReadings(run),
     };
     return request.compact ? compactionResult(result, run) : result;
   }
@@ -1753,6 +1756,8 @@ interface RunState {
   wokeAfterEnd: boolean;
   /** What the session said at the result that closed its input, before anything woke it. */
   closedSummary: string | null;
+  /** Genex tool calls it made once woken, which no answer could reach (`DelegateResult.cutAfterTurn`). */
+  cutAfterTurn: Array<{ tool: string; args: string }>;
 }
 
 /** A delegation that has not heard anything from its contractor yet. */
@@ -1781,6 +1786,7 @@ function newRunState(usage: Usage, cliInstallation: ClaudeInstallation): RunStat
     inputClosed: false,
     wokeAfterEnd: false,
     closedSummary: null,
+    cutAfterTurn: [],
   };
 }
 
@@ -1842,6 +1848,26 @@ function recordStudioToolCalls(message: Record<string, unknown>, run: RunState, 
       name: name.slice(STUDIO_TOOL_PREFIX.length),
       args: (block.input as Record<string, unknown>) ?? {},
     });
+  }
+}
+
+/** What the session's run measured and left unanswered, for its result: only what it has. */
+const sessionReadings = (run: RunState): Pick<DelegateResult, "contextTokens" | "cutAfterTurn"> => ({
+  ...(run.contextTokens ? { contextTokens: run.contextTokens } : {}),
+  ...(run.cutAfterTurn.length ? { cutAfterTurn: run.cutAfterTurn } : {}),
+});
+
+/**
+ * The Genex tool calls in a reply the session made after its input ended: the CLI answers each
+ * with its own refusal, since Genex's answer can no longer reach it, and the next session hears
+ * which they were and why (`CallCutOff.TurnEnded`).
+ */
+function recordCutAfterTurn(message: Record<string, unknown>, run: RunState): void {
+  const blocks = (message as { message?: { content?: Array<Record<string, unknown>> } }).message?.content;
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const name = typeof block?.name === "string" ? block.name : "";
+    if (block?.type !== SdkBlock.ToolUse || !name.startsWith(STUDIO_TOOL_PREFIX)) continue;
+    run.cutAfterTurn.push({ tool: name.slice(STUDIO_TOOL_PREFIX.length), args: JSON.stringify(block.input ?? {}) });
   }
 }
 

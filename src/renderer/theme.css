@@ -85,6 +85,7 @@
   --line: var(--border);
   --line-strong: #29292b;
   --line-soft: var(--line-strong);
+  --menu-edge: var(--line-strong);
   --field: #1b1c1d;
   --stripe: color-mix(in oklab, #dee0e2 4%, transparent);
   --stripe-bg: var(--background);
@@ -185,6 +186,7 @@
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
   --color-line-soft: var(--line-soft);
+  --color-menu-edge: var(--menu-edge);
   --color-field: var(--field);
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
@@ -5326,23 +5328,27 @@ a:focus-visible {
   position: relative;
   z-index: 1;
 }
-/* Open in Builds, at the foot of the Building card's parts: a quiet link above the card's own toggle. */
+/* Open in Builds, at the foot of the Building card's parts: a small filled button (`pill-quiet`)
+ * above the card's own toggle. */
 .build-checklist-open {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   align-self: flex-start;
   align-items: center;
   gap: 4px;
-  padding: 2px 0;
+  margin-top: 4px;
+  padding: 3px 8px 3px 10px;
   border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--ink-3);
-  font-family: inherit;
+  border-radius: var(--radius-control);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  letter-spacing: -0.2px;
   cursor: pointer;
-  transition: color var(--duration-quick);
-}
-.build-checklist-open:is(:hover, :focus-visible) {
-  color: var(--ink);
+  transition:
+    background-color var(--duration-quick),
+    color var(--duration-quick);
 }
 .build-checklist-open:focus-visible {
   outline: 2px solid var(--accent);
@@ -6169,9 +6175,8 @@ a:focus-visible {
   --picker-well: var(--well, color-mix(in oklab, var(--canvas) 75%, var(--popover)));
   /* A preset's own menu shadow replaces the popover's shadow-lg. */
   --tw-shadow: var(--panel-shadow, 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1));
-  /* The prompt bar's own edge, and only it: the popover's hairline ring would draw a second line. */
-  border: 1px solid var(--prompt-bar-edge);
-  --tw-ring-shadow: 0 0 #0000;
+  /* Every menu's one edge: the prompt bar's in light, the control edge in dark. */
+  border: 1px solid var(--menu-edge);
   border-radius: calc(var(--radius-control) + 6px);
   font-family: var(--font-family-sans);
   font-weight: 400;
@@ -6431,7 +6436,7 @@ a:focus-visible {
 .mention-skeleton-card {
   aspect-ratio: 16 / 9;
   border-radius: 12px;
-  border: 1px solid var(--control-quiet-edge);
+  border: 1px solid var(--line-soft);
 }
 @media (prefers-reduced-motion: reduce) {
   .mention-skeleton-label,
@@ -6484,13 +6489,13 @@ a:focus-visible {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: 12px;
-  border: 1px solid var(--control-quiet-edge);
+  border: 1px solid var(--line-soft);
   background: #1a1b1e;
   cursor: pointer;
   transition: border-color 0.12s;
 }
 .mention-card:hover {
-  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--control-quiet-edge));
+  border-color: color-mix(in oklab, var(--accent-primary) 50%, var(--line-soft));
 }
 .mention-card[data-highlighted] {
   border-color: var(--accent-primary);
@@ -7010,11 +7015,12 @@ a:focus-visible {
   font-weight: 500;
   color: var(--ink);
 }
-/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. */
+/* Each plan, and Genex, is its own outlined block: the panel reads as a stack of accounts. A box
+   inside a menu, so its edge is the soft one. */
 .usage-plan {
   margin: 6px 4px 0;
   padding: 6px 12px 4px;
-  border: 1px solid var(--line-strong, var(--line));
+  border: 1px solid var(--line-soft);
   border-radius: 12px;
 }
 .usage-plan:last-child {

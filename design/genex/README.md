@@ -881,7 +881,10 @@ rows, menu and row glyphs) use `text-icon`/`text-icon-strong`, the palette's `ic
 sidebar's search and bell stay in the muted grey. The wordmark takes the palette's `logo` (`--logo`)
 when set; its gradient runs through `logoShade` (`--logo-2`), and a shade equal to the logo draws it
 solid (`--logo-fade`). Its sidebar width is `--logo-width`. The selected Settings tab's text reads `settingsTab` (`--settings-tab`). The prompt bar's edge reads `promptEdge`
-(`--prompt-edge`), and its composer menus draw that same single edge (`--prompt-bar-edge`, no ring). The Live/Assets switch's current view reads `viewSwitch` (`--switch-fill`) and the
+(`--prompt-edge`). Every floating menu (composer menus, dropdowns, popovers) draws one edge, `--menu-edge`
+(utility `border-menu-edge`, no ring): the prompt bar's edge on a light theme, the control edge on a dark
+one, whose menu fill would swallow the prompt bar's. A box inside a menu (a plan's limits, a mention card)
+has the `line-soft` edge. The Live/Assets switch's current view reads `viewSwitch` (`--switch-fill`) and the
 empty-state wire art `wireArt` (`--wire-art`); the stage's hatch draws `hatch` stripes
 (`--hatch-stripe`) over `hatchGround` (`--hatch-ground`), else the text's faint `--stripe` over the canvas.
 Chips, tabs and hover states read `controlFill`, `controlHover`, `controlText` and
