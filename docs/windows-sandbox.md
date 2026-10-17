@@ -49,11 +49,13 @@ the setup screen opens on `git-missing`. What differs from macOS:
 edition pinned by version and SHA-256 during a Windows release build (`build.mjs --release`, or
 `GENEX_VENDOR_GIT=1`), unpacks it with 7-Zip and leaves out what Genex never reaches: the
 documentation, gitk and git gui with Tcl/Tk, Vim (a git command that wants an editor fails at once
-instead of waiting) and Git Credential Manager (host git runs without the system config and never
-prompts; sandboxed commands have the credential helper off). Forge copies it beside the archive
+instead of waiting) and Git Credential Manager, with the `[credential]` section of `etc\gitconfig`
+that names it (host git never prompts; sandboxed commands have the credential helper off). Forge
+copies it beside the archive
 ([`scripts/package-git.cjs`](../scripts/package-git.cjs)). It sits in the install folder, which
 the session already grants for reading, so it needs no grant of its own. The Squirrel install check
-runs its Git Bash and `cmd\git.exe` with no other Git on PATH. To move to a newer Git, change the
+runs its Git Bash and `cmd\git.exe` with no other Git on PATH, and the package job's chat turn
+sets `STUDIO_WINDOWS_BUNDLED_GIT_ONLY=1`, so the sandbox user runs this Git Bash. To move to a newer Git, change the
 pin; the build refuses a release that lacks a path the trim list names, so the list is reviewed.
 The terminal panel still opens an installed Git Bash, else PowerShell.
 
