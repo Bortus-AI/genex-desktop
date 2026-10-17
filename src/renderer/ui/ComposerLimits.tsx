@@ -172,7 +172,7 @@ function PlanLimits({
       {limits.map((window) => (
         <LimitWindow key={window.id} window={window} />
       ))}
-      {!limits.length && <p className="usage-note">Usage not reported</p>}
+      {!usage?.windows.length && <p className="usage-note">Usage not reported</p>}
     </section>
   );
 }

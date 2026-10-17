@@ -15,7 +15,7 @@ export interface ProviderUsageReport {
  * id: Codex names the bucket after itself). A bucket without an id reads as that one.
  */
 const CODEX_MAIN_LIMIT = "codex";
-/** The id prefix of a per-model weekly limit, such as `model:fable`. */
+/** The id prefix of a model-scoped weekly limit (`model_scoped`), such as `model:fable`. */
 export const MODEL_LIMIT_PREFIX = "model:";
 
 const percentOf = (value: unknown) =>

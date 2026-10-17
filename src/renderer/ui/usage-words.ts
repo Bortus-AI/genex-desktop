@@ -20,7 +20,7 @@ const LIMIT_FULL = 90;
 const LIMIT_HIGH = 75;
 /** A reset further off than this is said as a day and time, not a countdown. */
 const COUNTDOWN_MINUTES = 24 * MINUTES_PER_HOUR;
-/** Per-model weekly limits (such as Fable's) stay off the panel for now; true shows them again. */
+/** Model-scoped weekly limits (such as Fable's) stay off the panel for now; true shows them again. */
 const SHOW_MODEL_LIMITS = false;
 
 /**
@@ -52,7 +52,7 @@ export function resetWords(resetsAt: string | undefined, now = Date.now()): stri
   return `Resets ${new Date(at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}`;
 }
 
-/** The limits a plan shows: all it reports, less the per-model ones while those stay hidden. */
+/** The limits a plan shows: all it reports, less the model-scoped ones while those stay hidden. */
 export function shownLimits(windows: ProviderUsage["windows"]): ProviderUsage["windows"] {
   if (SHOW_MODEL_LIMITS) return windows;
   return windows.filter((window) => !window.id.startsWith(MODEL_LIMIT_PREFIX));

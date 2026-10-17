@@ -150,7 +150,7 @@ app.whenReady().then(async()=>{
  check('each signed-in subscription shows its plan limits',await element(usagePanel,'e.querySelectorAll("[role=progressbar]").length===4 && e.textContent.includes("Claude Max plan") && e.textContent.includes("ChatGPT Pro plan") && e.textContent.includes("Resets in 3 h 54 m")'));
  check('per-model weekly limits stay off the panel',await element(usagePanel,'!e.textContent.includes("Weekly · Fable")'));
  check('split roles name who draws on each plan, orchestrator\'s plan first',await js('[...document.querySelectorAll("[data-usage-engine]")].map(e=>e.dataset.usageEngine+":"+e.querySelector(".usage-plan-roles").textContent).join("|")==="codex:Main agent · Reviewers|claude-code:Workers"'));
- check('a high limit is amber',await element('[data-usage-engine="codex"] [aria-label="Weekly limit"] i','e.dataset.level==="high"'));
+ check('a nearly spent limit is red and a high one amber',await element('[data-usage-engine="claude-code"] [aria-label="Weekly · all models"] i','e.dataset.level==="full"')&&await element('[data-usage-engine="codex"] [aria-label="Weekly limit"] i','e.dataset.level==="high"'));
  check('the context ring is 16px with a 2px stroke',await js('(()=>{const s=document.querySelector("[data-promptbar] [aria-label=\\"Context and usage\\"] svg");return s.getBoundingClientRect().width===16&&getComputedStyle(s.querySelector("circle")).strokeWidth==="2px"})()'));
  check('Codex compacts on its own, so its panel offers no compaction point',!(await js('Boolean(document.querySelector("[aria-label=\\"Auto-compact\\"]"))')));
  await capture('limits');
