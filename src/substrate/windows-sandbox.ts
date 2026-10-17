@@ -433,6 +433,24 @@ export function gitRootOf(bash: string): string {
 }
 
 /**
+ * Make the host's own `git` (game snapshots, the harness workspace) runnable on Windows: Git for
+ * Windows' `cmd` folder goes first on PATH when it is not there yet, as after installing Git while
+ * Genex was open. False when Git for Windows is not installed.
+ */
+export async function ensureHostGit(
+  lookup: GitBashLookup = {},
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<boolean> {
+  const bash = await findGitBash(lookup);
+  if (!bash) return false;
+  const cmd = win.join(gitRootOf(bash), "cmd");
+  const entries = (env.PATH ?? "").split(win.delimiter).filter(Boolean);
+  const onPath = entries.some((dir) => dir.toLowerCase() === cmd.toLowerCase());
+  if (!onPath) env.PATH = [cmd, ...entries].join(win.delimiter);
+  return true;
+}
+
+/**
  * The vendored `srt-win.exe`, from the unpacked copy in a packaged app: Windows cannot execute a
  * file inside Electron's asar archive, and srt only ever uses the path it is given.
  */
