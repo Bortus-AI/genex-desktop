@@ -91,10 +91,13 @@ svg{flex:none;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin
 .note{display:flex;gap:10px;padding:12px 16px;color:var(--warn);overflow-wrap:anywhere}
 .note::before{content:"";width:16px;height:16px;flex:none;margin-top:2px;background:currentColor;-webkit-mask:var(--warning) center/contain no-repeat;mask:var(--warning) center/contain no-repeat}
 .error{color:var(--err);white-space:pre-wrap;overflow-wrap:anywhere}
-@media (prefers-reduced-motion:reduce){button{transition:none}button:active:not(:disabled){scale:none}.orb,.state[data-tone="starting"]::before{animation:none}}
+@media (prefers-reduced-motion:reduce){button,.choice input{transition:none}button:active:not(:disabled){scale:none}.orb,.state[data-tone="starting"]::before{animation:none}}
 /* A choice in a block: its box, then its name and what it means, the whole row one target. */
 .choice{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;cursor:pointer}
-.choice input{width:18px;height:18px;flex:none;margin:1px 0 0;accent-color:var(--accent);cursor:pointer}
+/* Genex's own box: two points rounder than the system's, filled with the accent and ticked when on. */
+.choice input{appearance:none;-webkit-appearance:none;display:grid;place-items:center;width:18px;height:18px;flex:none;margin:1px 0 0;border:1.5px solid color-mix(in srgb,var(--fg) 32%,var(--bg));border-radius:6px;background:var(--field);cursor:pointer;transition:background 120ms,border-color 120ms}
+.choice input:checked{background:var(--accent-fill);border-color:var(--accent-fill)}
+.choice input:checked::before{content:"";width:12px;height:12px;background:var(--accent-text);-webkit-mask:var(--tick) center/contain no-repeat;mask:var(--tick) center/contain no-repeat}
 .choice input:disabled,.choice:has(input:disabled){cursor:not-allowed}
 .choice .words{display:grid;gap:4px;min-width:0}
 /* On a dialog's card the dialog holds the heading and the padding: the page keeps a thin edge for focus rings. */
