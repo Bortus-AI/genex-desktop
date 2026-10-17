@@ -1687,6 +1687,10 @@ export const TRANSCRIPT_WORDS = {
       : `Undone. ${game ?? "This game"} is a web game again.`,
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
+  /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): said once. */
+  wentAhead: (app: string) => `An agent used ${app} while you were playing.`,
+  wentAheadSettings: (app: string) => `${app} settings`,
+  wentAheadSettingsTitle: (app: string) => `Choose whether agents may use ${app} while you play`,
   rewound: (files: number) => `The chat went back, and ${files} game ${files === 1 ? "file" : "files"} with it.`,
   rewindUndo: "Bring back newer version",
   rewindUndoTitle: "Put the game files back as they were before this rewind; the chat stays rewound",

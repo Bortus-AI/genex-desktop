@@ -105,6 +105,14 @@ export interface PersonFirstNotice {
   waiting: boolean;
 }
 
+/** What the chat hears once when an agent went ahead of the person (`CustomEvent.AgentWentAhead`). */
+export interface WentAheadNotice {
+  project: string;
+  threadId?: string;
+  label: string;
+  plugin: string;
+}
+
 /** What a lock service is built with: the probe, the clock and its wait, and who hears of a wait on the person. */
 export interface LockServiceOptions {
   /** Runs a lock's `personFirst` tool for a game; its raw answer is read by `personFirstOf`. */
@@ -116,6 +124,8 @@ export interface LockServiceOptions {
   /** How long an agent's call waits (`AGENT_LOCK_WAIT_MS`). */
   agentWaitMs?: number;
   onPersonFirst?: (notice: PersonFirstNotice) => void;
+  /** Hears a probe that let an agent go ahead of the person for the first time (`PersonFirstAnswer.wentAhead`). */
+  onWentAhead?: (notice: WentAheadNotice) => void;
 }
 
 /** How a call asks for its locks. */
@@ -269,6 +279,7 @@ export class LockService {
   readonly #sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
   readonly #timeout: (ms: number) => AbortSignal;
   readonly #onPersonFirst: LockServiceOptions["onPersonFirst"];
+  readonly #onWentAhead: LockServiceOptions["onWentAhead"];
   /** How many calls wait on the person now, by game, chat and app (`#notify`). */
   readonly #personWaits = new Map<string, number>();
   /** How long an agent's call waits for its locks. */
@@ -282,6 +293,7 @@ export class LockService {
     this.#sleep = options.sleep ?? ((ms, signal) => sleepFor(ms, undefined, { signal }));
     this.#timeout = options.timeout ?? ((ms) => AbortSignal.timeout(ms));
     this.#onPersonFirst = options.onPersonFirst;
+    this.#onWentAhead = options.onWentAhead;
     this.agentWaitMs = options.agentWaitMs ?? AGENT_LOCK_WAIT_MS;
     this.clock = { now: this.#now, timeout: this.#timeout };
   }
@@ -520,6 +532,7 @@ export class LockService {
     for (;;) {
       if (answer?.personActive === false) {
         this.#fresh.set(key, this.#now() + PERSON_FIRST_FRESH_MS);
+        if (answer.wentAhead) this.#toldWentAhead(ref, options);
         return;
       }
       if (deadline - this.#now() <= 0) throw personRefusal(ref.lock.label, answer);
@@ -580,6 +593,17 @@ export class LockService {
     } catch {
       return null;
     }
+  }
+
+  /** The chat the call answers to hears that an agent went ahead of the person in what the lock guards. */
+  #toldWentAhead(ref: LockRef, options: LockHoldOptions): void {
+    const threadId = options.threadId ?? options.binding.threadId;
+    this.#onWentAhead?.({
+      project: options.binding.project,
+      ...(threadId ? { threadId } : {}),
+      label: ref.lock.label,
+      plugin: ref.plugin,
+    });
   }
 
   /**

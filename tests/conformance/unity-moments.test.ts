@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PluginHookContext } from "../../src/plugin-sdk/index.d.ts";
-import { UnityTool } from "../../src/plugins/unity/backend.ts";
+import { UnityAction, UnityTool } from "../../src/plugins/unity/backend.ts";
 import { PIPELINE_VERSION } from "../../src/plugins/unity/pipeline.ts";
 import { encodePng } from "../../src/substrate/png.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
@@ -91,13 +91,30 @@ describe("save-all before a checkpoint", () => {
     assert.deepEqual(seen, []);
   });
 
-  it("holds the snapshot while the person plays: scenes can't be saved in Play mode", async () => {
+  it("holds the snapshot while the person plays and agents wait for them: scenes can't be saved in Play mode", async () => {
     for (const hook of [chat(HookEvent.CheckpointBefore), run(HookEvent.CheckpointBefore)]) {
-      const { at, seen } = await openGame([playing()]);
+      const { at, act, seen } = await openGame([playing()]);
+      await act(UnityAction.AgentsWait);
       const answer = (await at(UnityTool.SaveAll, hook)) as { block?: string };
       assert.match(String(answer.block), /Unity is in Play mode/);
       assert.deepEqual(commandsSent(seen), [], "the person's play is theirs to stop");
     }
+  });
+
+  it("stops the person's play in a run's save point while agents may use Unity as they play; a chat's still waits", async () => {
+    const inRun = await openGame([
+      playing(),
+      ok("Exited play mode"),
+      scenes(["Assets/Scenes/Main.unity", true]),
+      ok({ saved: true }),
+      ok(),
+    ]);
+    assert.deepEqual(await inRun.at(UnityTool.SaveAll, run(HookEvent.CheckpointBefore)), {});
+    assert.deepEqual(commandsSent(inRun.seen), ["editor_stop", "list_open_scenes", "save_scene", "eval"]);
+    const inChat = await openGame([playing()]);
+    const answer = (await inChat.at(UnityTool.SaveAll, chat(HookEvent.CheckpointBefore))) as { block?: string };
+    assert.match(String(answer.block), /Unity is in Play mode/);
+    assert.deepEqual(commandsSent(inChat.seen), []);
   });
 
   it("stops the agent's own play, then saves: a play the agent left running never holds its save point", async () => {
@@ -342,6 +359,7 @@ describe("the editor lock's probe", () => {
 
   it("takes a play for the person's unless the agent started it through the connector", async () => {
     const persons = await openGame([playing(), scenes(["Assets/A.unity", false])]);
+    await persons.act(UnityAction.AgentsWait);
     assert.deepEqual(await persons.at(UnityTool.EditorActivity), { personActive: true, unsaved: 0 });
 
     const agents = await openGame([
@@ -352,6 +370,7 @@ describe("the editor lock's probe", () => {
       playing(),
       scenes(),
     ]);
+    await agents.act(UnityAction.AgentsWait);
     const marker = path.join(agents.storage, "mcp", "lantern");
     await mkdir(marker, { recursive: true });
     await writeFile(
@@ -365,6 +384,18 @@ describe("the editor lock's probe", () => {
       { personActive: true, unsaved: 0 },
       "the agent's play ended some other way, so the next play is the person's",
     );
+  });
+
+  it("lets agents go ahead while the person plays, unless the person turned it off, and says so the first time only", async () => {
+    const game = await openGame([playing(), scenes(), playing(), scenes(), playing(), scenes()]);
+    assert.deepEqual(await game.act(UnityAction.Agents), { whilePlaying: true }, "on unless turned off");
+    assert.deepEqual(await game.at(UnityTool.EditorActivity), { personActive: false, unsaved: 0, wentAhead: true });
+    assert.deepEqual(await game.at(UnityTool.EditorActivity), { personActive: false, unsaved: 0 }, "said once");
+    assert.deepEqual(await game.act(UnityAction.AgentsWait), { whilePlaying: false });
+    assert.deepEqual(await game.at(UnityTool.EditorActivity), { personActive: true, unsaved: 0 });
+    assert.deepEqual(await game.act(UnityAction.AgentsGoAhead), { whilePlaying: true });
+    const other = await openGame();
+    assert.deepEqual(await other.act(UnityAction.Agents), { whilePlaying: true }, "each storage keeps its own");
   });
 
   it("keeps the agent's play while Unity reloads its scripts to enter Play mode", async () => {
@@ -396,6 +427,7 @@ describe("the editor lock's probe", () => {
   it("keeps believing the agent's play as long as it is seen running, however long it runs", async () => {
     const clock = { at: Date.parse("2026-10-14T09:00:00.000Z") };
     const game = await openGameAt(clock, [playing(), scenes(), playing(), scenes(), playing(), scenes()]);
+    await game.act(UnityAction.AgentsWait);
     await markAgentPlay(game.storage, clock.at - 20 * MINUTE);
     assert.deepEqual(await game.at(UnityTool.EditorActivity), { personActive: false, unsaved: 0 });
     clock.at += 20 * MINUTE;

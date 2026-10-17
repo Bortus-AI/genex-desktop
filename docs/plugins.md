@@ -2039,6 +2039,10 @@ hold with no wait left, `health`'s or one whose turn came as its wait ran out, a
 in <label>" (`UiEvent.PersonFirst`, once per chat however many of its calls wait, each app's wait kept on its own); a "not using it"
 answer stands 3 s, unless a later probe sees the person at it. A hold queued behind a holder that
 waits on the person is refused as the person's (`person_first` or `cant_tell`), never as `busy`.
+A probe may let agents go ahead of the person (`personActive: false` while they use it, the
+plugin's own setting); the first time for a game it adds `wentAhead: true`, and the chat the call
+answers to gets one line, "An agent used <label> while you were playing.", with a <label> settings
+button that opens the plugin's panel (`agent_went_ahead`, `renderer/chat/WentAheadLine.tsx`).
 A refusal for the person stands 30 s (`PERSON_REFUSAL_STANDS_MS`): a call on that lock in that
 time asks the probe once, for at most 5 s, instead of waiting its whole wait again, so an agent's
 calls sent together don't each wait four minutes behind the first.
@@ -2628,7 +2632,7 @@ operation timed out". Three things keep an unattended agent out of it and get it
 | Handler at its moment | What it does (`editor-moments.ts`) |
 | --- | --- |
 | `open-for-run` at `run.prepare` | Opens the editor and waits; a project with no Pipeline package, or an editor that does not answer, closes the run with the reason. |
-| `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In the agent's own play: stops it, then saves. In the person's play: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
+| `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In the agent's own play, or in a run in the person's play while agents may use Unity as they play: stops it, then saves. In the person's play otherwise: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
 | `scene-shots` at `checkpoint.after`, and as the `viewport` observer (`live: "stills"`) | The main camera's still (1280×720) as an image, in a run and for the reviewer; a chat's checkpoint takes none. A still of one flat colour (a scene that builds itself only when Play starts) is no image but a note saying so; the skill asks agents to build the level into the scene with an Editor script, saving the meshes, textures and materials it makes as assets. |
 | `save-all`, then `end-editor`, at `restore.before` | Stops a play, saves, ends the editor and records that it did (`restore/<game>.json`); work it can't save, or an editor that won't end, blocks the restore. |
 | `reopen-editor` at `restore.after` | Opens the project again only when `end-editor` closed it for this restore. |
@@ -2641,7 +2645,12 @@ folder written before its `editor_play`, alone or in a batch, reaches the editor
 `editor_stop`), so the agent's play never makes its own calls wait. The probe notes each time it
 sees that play running (`seenAt`), and believes a marker for half an hour after it was written or
 last seen; it forgets one once it sees the editor play nothing, but not while the editor reloads its
-scripts to enter Play mode, nor within 30 s of the play being asked for (`PLAY_START_GRACE_MS`). An editor that can't be asked answers nothing: Genex can't
+scripts to enter Play mode, nor within 30 s of the play being asked for (`PLAY_START_GRACE_MS`).
+The panel's Agents block holds one checkbox for every game, **Agents may use Unity while you
+play**, on unless the person turns it off (`agents-setting.ts`, `agents.json` in the plugin's
+storage; actions `agents`, `agents-go-ahead`, `agents-wait`). While it is on, the probe answers that
+nobody is at a play the agent did not start, saying `wentAhead` the first time for each game
+(`went-ahead/<game>.json`); while it is off, agents wait for the person's play to end. An editor that can't be asked answers nothing: Genex can't
 tell, and the agents' calls wait. A stalled one says nobody is there once the computer was left
 alone for five minutes, so that the recovery above can take the lock. `save-all`, `end-editor`,
 `reopen-editor`, `open-for-run` and `scene-shots` need the lock; the probe, `editor-state` and

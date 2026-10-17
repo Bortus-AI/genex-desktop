@@ -4,7 +4,7 @@
  *
  * | Handler at its moment | In a run (`hook.runId`) | In a chat |
  * |---|---|---|
- * | `save-all` at `checkpoint.before` | Unity not open: nothing; the agent's own play: stopped, then saved; the person's play, an editor that can't be asked, a save that fails or an unsaved scene with no name: block | the agent's play: stopped; the person's play: block; anything else it can't save: a note |
+ * | `save-all` at `checkpoint.before` | Unity not open: nothing; the agent's own play, or the person's while agents may use Unity as they play: stopped, then saved; the person's play otherwise, an editor that can't be asked, a save that fails or an unsaved scene with no name: block | the agent's play: stopped; the person's play: block; anything else it can't save: a note |
  * | `save-all` at `restore.before` | as in a run, but a play is stopped first: the restore closes the editor anyway | same |
  * | `end-editor` at `restore.before` | ends the editor and remembers it did; still running after that: block | same |
  * | `reopen-editor` at `restore.after` | reopens only when `end-editor` closed one for this restore | same |
@@ -12,7 +12,7 @@
  * | `editor-state` at `health` | answers: nothing; starting, reloading or busy: pending; not running: block; a main thread that ran nothing for two minutes: block when nobody is at the computer, pending while somebody is (the dialog may be theirs) | same |
  * | `open-for-run` at `run.prepare` | opens Unity and waits; a project that is not set up, or an editor that does not answer: block | — |
  * | `scene-shots` at `checkpoint.after`, and as the `viewport` observer | the main camera's still as an image; one flat colour (a scene built only when Play starts): no image, a note | nothing: no still taken |
- * | `editor-activity` as the lock's probe | no editor: nobody, nothing unsaved; a play counts only when the agent did not start it (its play kept while it starts and while it is seen running); an editor that can't be asked: can't tell, but nobody when it is stalled and the computer was left alone | same |
+ * | `editor-activity` as the lock's probe | no editor: nobody, nothing unsaved; a play counts only when the agent did not start it (its play kept while it starts and while it is seen running), and not while agents may use Unity as the person plays (said once per game: `wentAhead`); an editor that can't be asked: can't tell, but nobody when it is stalled and the computer was left alone | same |
  */
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
@@ -22,6 +22,7 @@ import { HookEvent } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson, isJsonObject, readJsonIfExists } from "../../substrate/fsx.ts";
 import { decodePng } from "../../substrate/png.ts";
 import { agentPlaying, agentPlayStarting, forgetAgentPlay, sawAgentPlay } from "./agent-play.ts";
+import { agentsSetting } from "./agents-setting.ts";
 import { editorCommand, editorRuns, endEditor, openScenes, saveWork } from "./editor-life.ts";
 import { type OpenDeps, Opened, type Opening, openProject, usable } from "./editor-open.ts";
 import { editorStatus, PIPELINE_PACKAGE, PipelineProblem, PLAY_STOPPED } from "./pipeline.ts";
@@ -41,7 +42,7 @@ const STILL = { source: "camera", width: 1280, height: 720 } as const;
 const CAPTURE = "capture_game_view";
 const STOP_PLAY = "editor_stop";
 /** The folders in the plugin's storage holding each game's record of an editor closed for a restore, and of a stall. */
-const Records = { Restore: "restore", Health: "health" } as const;
+const Records = { Restore: "restore", Health: "health", WentAhead: "went-ahead" } as const;
 /** A game id as Genex names a game's record: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 /** How far a channel may stray from the first pixel's and still be the same flat colour: a dither, not a picture. */
@@ -135,6 +136,13 @@ function unsaved(moment: Moment, reason: string): PluginHookAnswer {
   return strict ? { block: reason } : { note: reason };
 }
 
+/** Whether a save may end the editor's play: a restore's, the agent's own play, or a run's while agents may use Unity as the person plays. */
+async function playMayEnd(moment: Moment, deps: MomentDeps): Promise<boolean> {
+  if (at(moment, HookEvent.RestoreBefore)) return true;
+  if (await agentPlaying(moment.storage, moment.game, deps.now().getTime())) return true;
+  return inRun(moment) && (await agentsSetting(moment.storage)).whilePlaying;
+}
+
 /** Ends the editor's play, and with it any record that the play was the agent's. */
 async function stopPlay(moment: Moment, root: string, deps: MomentDeps): Promise<void> {
   await editorCommand(root, deps, STOP_PLAY, {}, moment.signal);
@@ -148,10 +156,10 @@ export async function saveAll(moment: Moment, deps: MomentDeps): Promise<PluginH
   const look = await editorStatus(root, deps.pipeline, { signal: moment.signal });
   if (!look.ok) return unsaved(moment, look.problem === PipelineProblem.Stalled ? WORDS.Stalled : WORDS.CantAsk);
   const playing = look.result.playMode !== "" && look.result.playMode !== PLAY_STOPPED;
-  const agents = playing && (await agentPlaying(moment.storage, moment.game, deps.now().getTime()));
-  // A restore closes the editor anyway, and the agent's own play is its to end: the play ends
-  // first, so what was edited before it is saved. The person's play is theirs to stop.
-  if (playing && !agents && !at(moment, HookEvent.RestoreBefore)) return { block: WORDS.Playing };
+  // A restore closes the editor anyway, the agent's own play is its to end, and a run's save point
+  // may end the person's while agents may use Unity as they play: the play ends first, so what was
+  // edited before it is saved. Otherwise the person's play is theirs to stop.
+  if (playing && !(await playMayEnd(moment, deps))) return { block: WORDS.Playing };
   if (playing) await stopPlay(moment, root, deps);
   const saved = await saveWork(root, deps, moment.signal);
   if (saved.trouble) return unsaved(moment, WORDS.SaveFailed(reasonOf(saved.trouble.detail ?? saved.trouble.problem)));
@@ -252,7 +260,7 @@ const playMayBeStarting = async (moment: Moment, reloading: boolean, now: number
   reloading || (await agentPlayStarting(moment.storage, moment.game, now));
 
 /** What the editor lock's probe answers: whether the person is using the editor, and how much is unsaved. */
-export type Activity = { personActive: boolean; unsaved: number } | Record<string, never>;
+export type Activity = { personActive: boolean; unsaved: number; wentAhead?: true } | Record<string, never>;
 
 /**
  * `editor-activity`: the person is using the editor while it plays a game the agent did not start;
@@ -277,7 +285,20 @@ export async function editorActivity(moment: Moment, deps: MomentDeps): Promise<
     await forgetAgentPlay(moment.storage, moment.game);
   const scenes = await openScenes(root, deps, moment.signal);
   if (!scenes.ok) return {};
-  return { personActive: playing && !agents, unsaved: scenes.result.filter((scene) => scene.dirty).length };
+  const unsaved = scenes.result.filter((scene) => scene.dirty).length;
+  if (!(playing && !agents)) return { personActive: false, unsaved };
+  return personPlaying(moment, unsaved);
+}
+
+/**
+ * The person plays: agents wait for them, unless they may use Unity as the person plays; then the
+ * first time for this game the answer says so (`wentAhead`), and the chat tells the person once.
+ */
+async function personPlaying(moment: Moment, unsaved: number): Promise<Activity> {
+  if (!(await agentsSetting(moment.storage)).whilePlaying) return { personActive: true, unsaved };
+  if (await readRecord(moment, Records.WentAhead)) return { personActive: false, unsaved };
+  await writeRecord(moment, Records.WentAhead, { told: true });
+  return { personActive: false, unsaved, wentAhead: true };
 }
 
 /** A capture's camera, as the still is named: `camera:Main Camera` is `Main Camera`. */
