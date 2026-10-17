@@ -2,7 +2,9 @@
 
 Run commands from the repository root with Node 24 (`nvm use` reads `.nvmrc`). First-time setup
 is in [CONTRIBUTING](../CONTRIBUTING.md#set-up). `package.json` and the lockfile own current
-dependencies; install them with `npm ci` once, not before every restart or check.
+dependencies; install them with `npm run deps` once, not before every restart or check. On macOS
+it gives each worktree a copy-on-write clone of one install per lockfile, kept in the main
+checkout's `.studio-dev/deps` (the newest two); elsewhere it runs `npm ci`.
 
 ## Run an owned development profile
 
@@ -63,6 +65,8 @@ for account-connected checks. Preserve active user work; inspect ownership/statu
 
 The controller builds immutable output under `.studio-dev/builds/<id>` and returns actual
 readiness and profile/build/source/runtime identity. Rebuilding does not update a running app.
+Each start removes the builds no profile's `launch.json` or `attempt.json` names, once they are an
+hour old.
 Use the controller to stop owned sessions; a PID alone is not authority to signal a process.
 `clean --profile <name>` removes only stopped recognized disposable state. Retained live
 profiles, evidence and normal games are not disposable fixture cleanup.
