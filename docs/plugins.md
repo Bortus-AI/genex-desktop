@@ -1219,7 +1219,9 @@ is Studio's own MCP server passed through. The node bridge (`studio-mcp.ts`, run
 system's user record (the host points HOME at the connection's own folder, and StudioMCP keeps its
 connection token in the real one, which Genex never reads); on Windows `%LOCALAPPDATA%\Roblox\mcp.bat`
 through `commandLaunch`'s cmd.exe line, from its real path inside that folder, refusing anything
-cmd.exe would rewrite. Neither runs in Genex's process sandbox: Studio's own connection and the
+cmd.exe would rewrite. The host points the Windows profile folders at the connection's own folder
+too, so the bridge rebuilds them under the person's home from the same user record, at Windows'
+default `AppData` layout (`personEnv`). Neither runs in Genex's process sandbox: Studio's own connection and the
 person's sign-in must work. Studio joins a fresh StudioMCP a moment after it starts, so a call asks
 `list_roblox_studios` until the game's Studio is listed (`STUDIO_JOIN_MS`). Every call is pinned
 to that Studio: `studio_id` is filled from the binding file `studio.json` the backend keeps in the
