@@ -3291,6 +3291,11 @@ export const PLUGINS_WORDS = {
     create: "Create a plugin",
     local: "Load local plugin…",
   },
+  /** A plugin's row in the composer's Add menu: its name opens its page, Settings shows under the pointer. */
+  menuRow: {
+    settings: "Settings",
+    settingsLabel: (name: string) => `${name} settings`,
+  },
   /** The catalog's plugins Genex makes, that you don't have. */
   ours: {
     title: "Plugins",

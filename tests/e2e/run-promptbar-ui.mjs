@@ -128,6 +128,8 @@ app.whenReady().then(async()=>{
  await click('[aria-label="Add images and more"]');
  check('Add offers images and the built-in Blender plugin',await js('document.querySelector("[aria-label=Add][data-slot=popover-content]").textContent.includes("Reference or mood board")')&&await element('[aria-label="Use Local Blender"]','e.getAttribute("aria-checked")==="false"'));
  check('a locked account offers one Connect button, with no "Account locked" words',await element('[aria-label="Connect Genex fixture"]','e.textContent==="Connect"')&&!(await js('document.querySelector("[aria-label=Add][data-slot=popover-content]").textContent.includes("Account locked")')));
+ {const p=await element('[data-plugin-row="plugin:fixture"] [data-plugin-open]','({x:e.getBoundingClientRect().x+24,y:e.getBoundingClientRect().y+e.getBoundingClientRect().height/2})');await mouse({type:'mouseMove',...p});await wait(250);}
+ check('a hovered row that needs Connect shows Settings left of it',await element('[data-plugin-row="plugin:fixture"]','(()=>{const s=e.querySelector("[data-plugin-settings]")?.getBoundingClientRect(),a=e.querySelector(".picker-action").getBoundingClientRect();return Boolean(s?.width)&&s.right<=a.left})()'));
  await capture('add-account-locked');await click('[aria-label="Connect Genex fixture"]');
  check('connecting updates the open menu without another chat',await js('!document.querySelector("[aria-label=\\\"Connect Genex fixture\\\"]")'));
  check('an enabled plugin shows its disconnected server with a filled action',await js('(()=>{const row=document.querySelector("[data-plugin-row=\\"plugin:fixture\\"]");const b=row?.querySelector(".picker-action");return row.textContent.includes("Assets needs setup")&&b?.textContent==="Set up"&&getComputedStyle(b).backgroundColor!=="rgba(0, 0, 0, 0)"})()'));
@@ -142,6 +144,26 @@ app.whenReady().then(async()=>{
  check('turning a plugin off clears its status',await statusFree('plugin:fixture'));
  await click('[aria-label="Use Genex fixture"]');await js('window.addEventListener("studio:open-plugins",()=>document.body.dataset.managed="true",{once:true})');await click('[aria-label="Set up Genex fixture"]');
  check('plugin setup routes to plugin management',await js('document.body.dataset.managed==="true"'));await close();
+
+ // A plugin row lights up under the pointer, shows Settings left of its switch (and of its own action), and opens the plugin's page.
+ const ADD_OPEN='[data-slot=popover-content][aria-label="Add"][data-open]',rowOf=id=>ADD_OPEN+' [data-plugin-row="plugin:'+id+'"]';
+ const hoverRow=async id=>{const p=await element(rowOf(id)+' [data-plugin-open]','({x:e.getBoundingClientRect().x+24,y:e.getBoundingClientRect().y+e.getBoundingClientRect().height/2})');await mouse({type:'mouseMove',...p});await wait(250);};
+ const watchOpen=()=>js('(delete document.body.dataset.openedPlugin,window.addEventListener("studio:open-plugins",e=>{document.body.dataset.openedPlugin=e.detail?.plugin??""},{once:true}),true)');
+ const openedPlugin=()=>js('document.body.dataset.openedPlugin??null');
+ await click('[aria-label="Add images and more"]');await mouse({type:'mouseMove',x:0,y:0});await wait(200);
+ check('a plugin row keeps its Settings out of sight, and out of its line, until hovered',await element(rowOf('blender')+' [data-plugin-settings]','getComputedStyle(e).display==="none"'));
+ await hoverRow('blender');
+ check('a hovered plugin row is filled and shows a filled Settings left of its switch',await element(rowOf('blender'),'(()=>{const s=e.querySelector("[data-plugin-settings]"),w=e.querySelector("[role=switch]"),row=getComputedStyle(e).backgroundColor,fill=getComputedStyle(s).backgroundColor;return row!=="rgba(0, 0, 0, 0)"&&s.getBoundingClientRect().width>0&&fill!=="rgba(0, 0, 0, 0)"&&fill!==row&&s.textContent==="Settings"&&getComputedStyle(s).cursor==="pointer"&&s.getBoundingClientRect().right<=w.getBoundingClientRect().left})()'));
+ await capture('add-hover');
+ await hoverRow('fixture');
+ check('a row whose Set up already opens its page shows no second Settings',await element(rowOf('fixture'),'e.querySelector(".picker-action")?.textContent==="Set up"&&!e.querySelector("[data-plugin-settings]")'));
+ check('the name opens the page with its own name and status, and Settings leaves keys to it',await element(rowOf('blender'),'(()=>{const b=e.querySelector("[data-plugin-open]");return document.getElementById(b.getAttribute("aria-labelledby"))?.textContent==="Local Blender"&&e.querySelector("[data-plugin-settings]").tabIndex===-1})()'));
+ await watchOpen();await click(rowOf('blender')+' [data-plugin-open]');
+ check('clicking a plugin\'s name opens its page and closes the menu',(await openedPlugin())==='blender'&&!(await js('Boolean(document.querySelector('+JSON.stringify(ADD_OPEN)+'))')));
+ await click('[aria-label="Add images and more"]');
+ check('clicking a plugin\'s name leaves its switch as it was',await element(ADD_OPEN+' [aria-label="Use Local Blender"]','e.getAttribute("aria-checked")==="false"'));
+ await hoverRow('blender');await watchOpen();await click(rowOf('blender')+' [data-plugin-settings]');
+ check('Settings opens the plugin\'s page',(await openedPlugin())==='blender');await close();
 
  await click('[data-promptbar] [aria-label="Context and usage"]');
  const usagePanel='[data-slot="popover-content"][aria-label="Context and usage"]';

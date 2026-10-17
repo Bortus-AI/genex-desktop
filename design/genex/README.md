@@ -815,8 +815,11 @@ Add spans the full composer width 8px above the writing surface: Images, then **
 bulb, "Turn plan mode on", or "off" while on; it closes Add; disabled with why while a build owns
 the chat), then plugins and MCP servers (each with its 16px picture) with switches. A status appears only when something needs
 doing, with an accent action in white mono 12px (Set up, Connect, Retry) beside it; an account
-needs only the Connect button, no words. Glyphs use the text colour. Manage plugins opens the
-Plugins page. Typing @ at the caret
+needs only the Connect button, no words. A plugin's name opens its page in Plugins (it ellipsizes
+only after its status); while its row is hovered or holds focus, a grey Settings of the same size
+shows left of its action and switch and opens that page too, unless the action (Set up, Retry,
+Manage) already does. A server's name works its switch. Glyphs use the text colour. Manage plugins
+opens the Plugins page. Typing @ at the caret
 opens the same list as mentions while focus stays in the text: arrows move, Enter/Tab inserts,
 Escape closes; with no match Enter sends as usual.
 The permissions pill shows one glyph per mode: shield (Auto), help (Manual), pencil (Accept
@@ -1002,7 +1005,8 @@ control, the roles panel (Orchestrator/Workers/Judge rows, ⓘ tooltips, quiet L
 Turn on), the side model list (focus, groups, Add more models, chat-side placement, arrow keys,
 Escape closing the list before the panel), the effort slider (keys, pointer snap, nearest level per
 role), context-window preferences and plan limits (order, roles, levels, usage link), Add density,
-plugin status actions and setup route, full-composer Add anchoring, @ mentions (filter, insert,
+plugin status actions and setup route, plugin row hover, Settings and name opening the plugin's
+page, full-composer Add anchoring, @ mentions (filter, insert,
 Escape, focus kept in the text),
 Named model rows without search, provider-default or empty local placeholders; High defaults in both displayed and submitted role settings; Send state/payload, the ink-filled Send/Stop cross-fade, exclusive Send/Stop transitions during work (including whitespace, clearing,
 follow-up submission, post-send guard and pointer/keyboard Stop), 200% zoom and reduced motion. Captures and results are in

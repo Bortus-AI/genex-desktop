@@ -12,7 +12,8 @@ it does not open credential storage. Unlocking an account does not approve tool-
 permissions or charges.
 
 The game composer Add menu exposes installed plugins and configured MCP connectors. Manage opens
-Plugins; Setup opens that plugin's registered settings panel. Connecting a source does not
+Plugins; a plugin's name, its hover Settings and Setup open that plugin's page with its registered
+settings panel. Connecting a source does not
 create a new conversation. The next provider request resolves the enabled, project-scoped tool
 registry. An active native session receives a refreshed tool contract at its next supported
 response/session boundary; Studio retains the conversation and its provider resume identity.

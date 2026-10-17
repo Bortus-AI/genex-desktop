@@ -2,7 +2,8 @@
 
 The composer's Add panel lists installed plugins with the same global enable switches, plus
 configured MCP connectors. Enabled and connected are separate states. Connect lists tools on
-the registry's live connection (or opens setup when trust/secrets are missing); Manage opens the
+the registry's live connection (or opens setup when trust/secrets are missing); a plugin's name,
+or the Settings its row shows while hovered or focused, opens that plugin's page; Manage opens the
 sidebar's Plugins workspace page, which includes MCP servers. Local Blender is an
 independent first-party plugin using the public API 3 managed-native services. It needs no
 Genex account. No connector credentials enter the composer. See [connections and context](connections-and-context.md) for the current setup/session lifecycle.
