@@ -131,15 +131,18 @@ describe("a chat-only build's turn", () => {
     assert.deepEqual(facts.calls.tools, { total: 4, byCategory: { read: 1, edit: 1, build: 1, search: 1 } });
   });
 
-  it("leaves a run's tool calls in the same thread to that run's row, so no call is counted twice", () => {
+  it("leaves a run's records in the same thread to that run's row: its tool calls, tokens and context", () => {
     const events = log(
       [0, processing("m1")],
       [0, { type: "turn_started" }],
       [1, reply("claude-opus-5-5[1m]", 10)],
       [2, { type: "tool_requested", tool_call_id: "c1", request: { name: "mcp__studio__delegate", arguments: {} } }],
       [3, delegated([toolUse("t1", "Read")])],
-      // A run started earlier in this thread is still working: its workers' records carry its runId.
+      // A run started earlier in this thread is still working: its records carry its runId.
       [4, delegated([toolUse("w1", "Edit"), toolUse("w2", "Bash", { command: "npm test" })], "run-1")],
+      [5, custom("context_usage", { engine: EngineId.ClaudeCode, percent: 40 })],
+      [6, custom("context_usage", { runId: "run-1", engine: EngineId.ClaudeCode, percent: 88 })],
+      [7, custom("completion_call", { runId: "run-1", role: "judge", usage: { input_tokens: 7, output_tokens: 3 } })],
       [30, build(true, 20_000, 900)],
       [70, reply("claude-opus-5-5[1m]", 30)],
       [90, { type: "turn_ended", status: "ok" }],
@@ -147,6 +150,8 @@ describe("a chat-only build's turn", () => {
     const facts = turnFacts({ events, permissionMode: null }, M4);
     assert.ok(facts);
     assert.deepEqual(facts.calls.tools, { total: 1, byCategory: { read: 1 } });
+    assert.equal(facts.context.leadPeakPct, 40);
+    assert.equal(facts.tokensByRole[TokenRole.Judges], undefined);
   });
 
   it("measures builds, tokens by role, timing and context from typed fields only", () => {

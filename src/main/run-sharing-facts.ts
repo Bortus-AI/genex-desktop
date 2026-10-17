@@ -343,6 +343,8 @@ export function turnFacts(
   const lead = leadCalls(turn);
   if (builds.length === 0 || !lead.engine || !lead.model) return null;
   const lastOk = builds.at(-1)?.ok;
+  // A run started earlier in this thread may still be working: its records belong to its own row.
+  const own = turn.filter((event) => runIdOf(event) === null);
   return {
     engine: lead.engine,
     model: lead.model,
@@ -352,13 +354,9 @@ export function turnFacts(
     endedHow: turnEnding(turn),
     buildOk: typeof lastOk === "boolean" ? lastOk : null,
     time: timingFacts(turn, between(turn[0], turn.at(-1)), 0, names),
-    ...tokenFacts(turn, lead.readings, names),
-    context: contextFacts(turn),
-    // A run started earlier in this thread may still be working: its records belong to its own row.
-    calls: callFacts(
-      turn.filter((event) => runIdOf(event) === null),
-      lead.calls,
-    ),
+    ...tokenFacts(own, lead.readings, names),
+    context: contextFacts(own),
+    calls: callFacts(own, lead.calls),
     inApp: NO_SIGNALS,
   };
 }
