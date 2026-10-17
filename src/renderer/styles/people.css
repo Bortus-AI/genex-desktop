@@ -1271,6 +1271,22 @@
   color: var(--ink-3);
   font: 12px / 16px var(--font-family-mono);
 }
+/* A Pro's nameplate in Settings: the sidebar's plate, its width, without the menu or the credits. */
+.account-nameplate {
+  display: flex;
+  width: 248px;
+  max-width: 100%;
+}
+.account-nameplate-row {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-inline: 6px;
+}
 .account-name-line {
   display: flex;
   gap: 8px;

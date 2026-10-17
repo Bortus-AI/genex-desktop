@@ -2090,7 +2090,7 @@ button.chat-header-title:hover {
 .profile-plate-main[data-state="open"] {
   background: var(--sidebar-selected);
 }
-/* The name gives way before its plan: "Rab Ne… · Pro" rather than "Rab Neba · …". */
+/* The name gives way before a Pro's PRO mark: "Rab Ne… PRO" rather than "Rab Neba …". */
 .profile-plate-name {
   display: flex;
   flex: 1;
@@ -2104,17 +2104,211 @@ button.chat-header-title:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.profile-plate-plan {
-  flex: none;
-  white-space: pre;
-}
-.profile-plate-plan,
 .profile-plate-chevrons {
   color: var(--ink-3);
 }
 .profile-plate-main:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: -2px;
+}
+/* A Pro's nameplate (`nameplate/Nameplate.tsx`): the row in the art's own colour, the piece melting
+ * in from the right under a dark wash that keeps the name readable, the name in the
+ * avatar's glow, sparkles around the face. The same in every theme: the art is night. */
+.nameplate {
+  /* Rings around a face keep their gap in the plate's colour, not the page's. */
+  --page: var(--plate-tint);
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--plate-tint);
+}
+.nameplate-art {
+  position: absolute;
+  inset: 0 0 0 10%;
+  z-index: 0;
+  pointer-events: none;
+  mask-image: linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.55) 22%, rgb(0 0 0 / 0.92) 48%, #000 70%);
+  filter: brightness(0.88) saturate(1.1);
+}
+.nameplate-art > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.nameplate-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgb(6 6 10 / 0.8) 0%, rgb(6 6 10 / 0.55) 34%, transparent 62%),
+    linear-gradient(270deg, rgb(0 0 0 / 0.45) 0%, transparent 24%);
+}
+.nameplate > :not(.nameplate-art, .nameplate-wash, .nameplate-sparkles) {
+  position: relative;
+  z-index: 2;
+}
+.nameplate .profile-plate-main {
+  color: #f4f5f8;
+}
+.nameplate .profile-plate-main:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+.nameplate .profile-plate-main[data-state="open"] {
+  background: rgb(255 255 255 / 0.1);
+}
+.nameplate .profile-plate-name-text {
+  color: var(--plate-glow);
+  font-weight: 500;
+  text-shadow:
+    0 0 12px color-mix(in srgb, var(--plate-glow) 45%, transparent),
+    0 1px 3px rgb(0 0 0 / 0.65);
+}
+.nameplate .profile-plate-chevrons {
+  display: none;
+}
+.nameplate :is(.cy-avatar, .person-avatar) {
+  box-shadow:
+    0 0 0 2px var(--plate-tint),
+    0 0 0 3.5px color-mix(in srgb, var(--plate-glow) 70%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--plate-glow) 40%, transparent);
+}
+.nameplate .plate-end {
+  height: 32px;
+}
+/* The credits in white over the art, a soft blurred shadow behind them so the number reads on
+ * any piece; no box. */
+.nameplate .plate-credits {
+  height: 28px;
+  padding-inline: 8px;
+  margin-inline-end: 4px;
+  isolation: isolate;
+  color: #fff;
+  text-shadow: 0 1px 4px rgb(0 0 0 / 0.7);
+  transition:
+    background-color var(--duration-quick),
+    box-shadow var(--duration-quick);
+}
+.nameplate .plate-credits::before {
+  content: "";
+  position: absolute;
+  inset: 4px 2px;
+  z-index: -1;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  filter: blur(9px);
+  pointer-events: none;
+}
+/* Under the pointer (or keyboard focus) a frosted glass pill fades in around the number. */
+.nameplate .plate-credits:is(:hover, :focus-visible) {
+  background: rgb(255 255 255 / 0.16);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
+  backdrop-filter: blur(8px);
+  color: #fff;
+}
+.nameplate-sparkles {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.nameplate-sparkles > i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  color: var(--plate-glow);
+  opacity: 0;
+  animation: nameplate-twinkle 2.6s ease-in-out infinite;
+}
+.nameplate-sparkles > i:nth-child(1) {
+  top: 3px;
+  left: 3px;
+}
+.nameplate-sparkles > i:nth-child(2) {
+  top: 1px;
+  left: 31px;
+  width: 6px;
+  height: 6px;
+  animation-delay: 0.7s;
+}
+.nameplate-sparkles > i:nth-child(3) {
+  top: 30px;
+  left: 33px;
+  width: 7px;
+  height: 7px;
+  animation-delay: 1.4s;
+}
+.nameplate-sparkles > i:nth-child(4) {
+  top: 31px;
+  left: 1px;
+  width: 5px;
+  height: 5px;
+  animation-delay: 2s;
+}
+.nameplate-sparkles svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--plate-glow) 75%, transparent));
+}
+@keyframes nameplate-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+  60% {
+    opacity: 0.85;
+    transform: scale(0.9) rotate(60deg);
+  }
+}
+/* A Pro friend's row in the sidebar: the plate behind the face, the name and the game, the art
+ * starting further right so the game line stays readable. */
+.nameplate-friend {
+  height: auto;
+  min-height: 44px;
+}
+.nameplate-friend > .nameplate-art {
+  inset: 0 0 0 26%;
+}
+.nameplate .people-name-text {
+  color: var(--plate-glow);
+  font-weight: 500;
+  text-shadow:
+    0 0 12px color-mix(in srgb, var(--plate-glow) 45%, transparent),
+    0 1px 3px rgb(0 0 0 / 0.65);
+}
+.nameplate .sidebar-friend-playing {
+  color: #6ee39a;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
+}
+.nameplate .sidebar-friend-open:hover {
+  background: rgb(255 255 255 / 0.06);
+}
+:root[data-motion="rest"] .nameplate-sparkles > i {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nameplate-sparkles > i {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 /* Where a face goes while there is no account to show: signed out, and while the browser signs in. */
 .plate-slot {

@@ -19,15 +19,16 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, Pro, credits opening Credits), offline (the last
-  account with the offline mark), ended (dimmed, Sign in again). Its menu: Profile, Friends, Credits (the
-  Genex plugin page's Credits tab), Account settings, Sign out.
+  browser (× cancels), signed in (avatar, name, credits opening Credits; a Pro's row is their
+  nameplate), offline (the last account with the offline mark), ended (dimmed, Sign in again). Its
+  menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nameplate (Pro), Account
+  settings, Sign out.
 - The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
   (the Friends page, with the requests waiting) and each friend in the API's order, their game on
-  one green line while they play (no online or offline). A row opens the profile; hovering a friend
+  one green line while they play (no online or offline); a Pro friend's row is their first nameplate. A row opens the profile; hovering a friend
   in a game offers Join. About 4½ rows show, then they scroll; the page is read every 20 seconds,
   as genex.games polls. Offline nobody is playing.
-- Settings › Genex account: avatar (generated or photo, Regenerate), name, nickname (`@handle` and
+- Settings › Genex account: avatar (generated or photo, Regenerate), a Pro's nameplate (New one), name, nickname (`@handle` and
   Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.
 - Publish needs only the account: signed out it asks to sign in. Multiplayer needs the Genex plugin
@@ -60,6 +61,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Generated avatars come from the account's id (`src/shared/avatar-recipe.ts`, the same recipe
   genex.games draws): a WebGPU body with a 2D fallback, eyes and gear in 2D, 25 frames a second,
   at most 28 avatars a frame, still under Reduce Motion, while idle and under a modal.
+- Pro nameplates: moving art behind a Pro's name (`src/shared/plate-recipe.ts`): 20 abstract
+  pieces, each with its own takes and eight shared dials (zoom, speed, warp, mirror, hue, glow,
+  grain, colour steps). The first plate is one of the avatar body's pieces in its colours; New one
+  rolls any piece (`studio.genex.plateVariant.<id>`, this Mac only); the plate looks the same in
+  every theme. WebGPU, a 2D still without it,
+  30 frames a second while on screen, held while idle, under a modal or Reduce Motion.
 
 ## Playing a game
 

@@ -4372,6 +4372,11 @@ export const ACCOUNT_WORDS = {
   browserShows: "Your browser should show",
   cancel: "Cancel",
   offline: "Changes wait until you’re back online.",
+  /** A Pro's nameplate: the moving art behind their name in the sidebar. */
+  nameplate: "Nameplate",
+  newPlate: "New one",
+  newPlateLabel: "Roll a new nameplate",
+  nameplateNote: "Behind your name in the sidebar.",
 } as const;
 
 /**
