@@ -27,7 +27,7 @@ function PolicyLinks(): JSX.Element {
           type="button"
           data-privacy-link={link.id}
           onClick={() => void window.studio.openUrl(link.url)}
-          className="cursor-pointer underline underline-offset-4 hover:text-ink-2 focus-visible:text-ink-2 focus-visible:outline-none"
+          className="cursor-pointer underline decoration-current/35 decoration-[0.5px] underline-offset-[5px] hover:text-ink-2 hover:decoration-current/70 focus-visible:text-ink-2 focus-visible:outline-none"
         >
           {link.label}
         </button>
