@@ -3,6 +3,7 @@
  * renderer's origin), the renderer draws the dashboard, and a game plays full screen in a native
  * view main owns. These are the shapes and names both sides share.
  */
+import type { LibraryKind } from "./asset-library.ts";
 
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
@@ -121,6 +122,8 @@ export interface PlayGame {
   author: { id: string | null; name: string; imageUrl: string | null };
   /** Anyone may make their own copy: its source is public. */
   remixable: boolean;
+  /** An asset's kind (3D, picture, sound, video); null for a game or a tool, or an asset genex.games does not kind. */
+  assetKind: LibraryKind | null;
 }
 
 /** One page of a tab. */

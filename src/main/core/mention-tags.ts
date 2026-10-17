@@ -183,17 +183,25 @@ async function stillFolder(dir: string): Promise<boolean> {
 /** An asset's module, written into the game under a name no file has yet. */
 async function asset(ref: MentionRef, slug: string, target: MentionTarget, sources: MentionSources): Promise<Resolved> {
   if (!target.webGame) return { outcome: miss(ref, MentionMiss.NotWebGame) };
-  const found = assetModule(await sources.assetManifest(slug));
-  if (!found) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
-  const dir = await ensureDirBelow(target.gameDir, ASSETS_DIR.split("/")).catch(() => null);
-  if (!dir) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
+  const manifest = await sources.assetManifest(slug);
+  const found = assetModule(manifest);
+  const written = found ? await vendorAssetModule(target.gameDir, manifest).catch(() => null) : null;
+  if (!found || !written) return { outcome: miss(ref, MentionMiss.NotDownloaded) };
+  return {
+    outcome: { ...tagOf(ref), result: MentionResult.Added, path: written },
+    ...(found.usage ? { usage: found.usage } : {}),
+  };
+}
+
+/** An asset manifest's module, written into the game's `src/assets/` under a free name; its path, or null for no module. */
+export async function vendorAssetModule(gameDir: string, manifest: unknown): Promise<string | null> {
+  const found = assetModule(manifest);
+  if (!found) return null;
+  const dir = await ensureDirBelow(gameDir, ASSETS_DIR.split("/"));
   const name = await freeName(dir, found.filename);
   // Never through a link at that name, nor into a folder swapped for one after the check.
   await createFileInDir(dir, name, ASSET_HEADER + found.code);
-  return {
-    outcome: { ...tagOf(ref), result: MentionResult.Added, path: `${ASSETS_DIR}/${name}` },
-    ...(found.usage ? { usage: found.usage } : {}),
-  };
+  return `${ASSETS_DIR}/${name}`;
 }
 
 /** The module an asset manifest carries, when it is one a game may take. */

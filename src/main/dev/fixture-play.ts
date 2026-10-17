@@ -5,6 +5,7 @@
  * draws the same catalog.
  */
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
+import { fixtureLibraryAnswer } from "./fixture-asset-library.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
 import {
   type FixtureCatalog,
@@ -27,6 +28,8 @@ interface FixtureGame {
   /** No cover: the card shows its plain tile. */
   bare?: boolean;
   private?: boolean;
+  /** An asset's kind on the wire (`3d`, `image`, `sound`, `video`). */
+  assetKind?: string;
 }
 
 const GAMES: FixtureGame[] = [
@@ -160,6 +163,7 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 56,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 24,
   },
   {
@@ -168,6 +172,7 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 40,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 45,
   },
   {
@@ -176,6 +181,7 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 35,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 15,
   },
 ];
@@ -203,6 +209,7 @@ function item(game: FixtureGame, index: number) {
     playsCount: game.plays,
     online: game.multiplayer ? (game.online ?? 0) : null,
     author: { id: fixtureAuthorId(game.author), name: game.author, image: null },
+    ...(game.assetKind ? { assetKind: game.assetKind } : {}),
   };
 }
 
@@ -250,6 +257,24 @@ function corpus(): GalleryAnswer {
   return ok({ items });
 }
 
+/** A fixture asset's manifest: a model file to add and a small module to tag, as a Genex-made asset has. */
+function assetManifest(slug: string): GalleryAnswer {
+  const asset = ASSETS.find((candidate) => candidate.slug === slug);
+  if (!asset) return NOT_FOUND;
+  const name = slug.replace(/-/g, "_");
+  return ok({
+    manifest: {
+      asset: { media: "glb", fileUrl: `https://assets.genex.technology/generations/fx-${slug}/${slug}.glb` },
+      source: {
+        filename: `${name}.js`,
+        entry: name,
+        code: `// ${asset.title}, a fixture asset.\nexport const ${name} = { title: ${JSON.stringify(asset.title)} };\n`,
+      },
+      usage: { snippet: `import { ${name} } from "./assets/${name}.js";`, promptHint: `Place the ${asset.title}.` },
+    },
+  });
+}
+
 /** The fixture catalog by author: the gallery items of one author's games, as a profile lists them. */
 const catalog: FixtureCatalog = {
   games: (authorId) => CATALOG.map(item).filter((game) => game.author.id === authorId),
@@ -270,8 +295,13 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
     const online = Object.fromEntries(CATALOG.filter((g) => g.multiplayer).map((g) => [g.slug, g.online ?? 0]));
     return ok({ online });
   }
+  const manifestPrefix = PlayRoute.assetManifest("");
+  if (pathname.startsWith(manifestPrefix))
+    return assetManifest(decodeURIComponent(pathname.slice(manifestPrefix.length)));
   const worldPrefix = PlayRoute.world("");
   if (pathname.startsWith(worldPrefix)) return world(decodeURIComponent(pathname.slice(worldPrefix.length)));
+  const library = fixtureLibraryAnswer(route, init);
+  if (library) return library;
   // Likes, tickets and invites answer signed out, even for the fixture account: no game's page signs in here.
   return SIGNED_OUT;
 };

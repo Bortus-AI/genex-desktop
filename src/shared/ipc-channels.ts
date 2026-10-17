@@ -15,6 +15,7 @@
  * validating the fields it acts on.
  */
 import type { StudioApi } from "./studio-api.ts";
+import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
@@ -187,6 +188,12 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.handle-check": "playHandleCheck",
   "studio:play.handle": "playSetHandle",
   "studio:play.share": "playShare",
+  "studio:assets.library": "assetLibrary",
+  "studio:assets.states": "assetLibraryStates",
+  "studio:assets.save": "assetSave",
+  "studio:assets.share": "assetShare",
+  "studio:assets.unshare": "assetUnshare",
+  "studio:assets.add": "assetAdd",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -437,6 +444,12 @@ export interface StudioInvokePayloads {
   "studio:game.asset.present": Arg<"presentProjectAssets", 0>;
   "studio:game.asset.rigs": Arg<"projectModelRigs", 0>;
   "studio:game.assets": { project: string };
+  "studio:assets.library": Arg<"assetLibrary", 0>;
+  "studio:assets.states": { project: string };
+  "studio:assets.save": { project: string; files: string[]; saved: boolean };
+  "studio:assets.share": { project: string; items: ShareItem[] };
+  "studio:assets.unshare": { project: string; file: string };
+  "studio:assets.add": { project: string; source: AddSource };
   "studio:game.asset.still": Arg<"readProjectAsset", 0>;
   "studio:run.feedback": Arg<"runFeedback", 0>;
   "studio:review.play": { snapshotId: string; project: string };

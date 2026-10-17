@@ -132,6 +132,7 @@ function game(slug: string, overrides: Partial<PlayGame> = {}): PlayGame {
     online: null,
     author: { id: null, name: "Author", imageUrl: null },
     remixable: false,
+    assetKind: null,
     ...overrides,
   };
 }

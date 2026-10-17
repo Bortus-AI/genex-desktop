@@ -4,6 +4,7 @@
  * hostile input: a card is drawn only from an item that names a game, and an image or a git address
  * outside Genex's own hosts is never handed on.
  */
+import { LibraryKind } from "../../src/shared/asset-library.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -91,7 +92,17 @@ describe("Play gallery items", () => {
         imageUrl: "https://api.genex.games/api/character-assets/avatars/u1/1.webp",
       },
       remixable: true,
+      assetKind: null,
     });
+  });
+
+  it("reads an asset's kind, a character as a 3D model, and nothing it does not know", () => {
+    const kind = (assetKind: unknown) => toPlayGame(item({ assetKind }))?.assetKind;
+    assert.equal(kind("3d"), LibraryKind.Model);
+    assert.equal(kind("character"), LibraryKind.Model);
+    assert.equal(kind("sound"), LibraryKind.Sound);
+    assert.equal(kind("hologram"), null);
+    assert.equal(kind(undefined), null);
   });
 
   it("hands on the maker's picture only when they chose it as their avatar", () => {

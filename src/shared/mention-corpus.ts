@@ -6,6 +6,7 @@
  * Only takeable things are offered: a stranger's game or tool only when genex.games marks it
  * remixable, and an absent mark reads as not takeable. The person's own work always qualifies.
  */
+import type { LibraryKind } from "./asset-library.ts";
 import { PlayShelf } from "./play.ts";
 import { handleOf, type MentionDoc, MentionKind, MentionOrigin } from "./prompt-mention.ts";
 
@@ -20,6 +21,8 @@ export interface GenexCatalogItem {
   thumbnailUrl: string | null;
   playsCount: number;
   remixable: boolean;
+  /** An asset's kind; null for a game or a tool. */
+  assetKind: LibraryKind | null;
 }
 
 /** The genex.games half of the picker: the public catalog, and who is signed in. */

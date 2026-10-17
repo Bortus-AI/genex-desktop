@@ -158,6 +158,12 @@ function gameCalls(bridge: BridgeCalls) {
     presentProjectAssets: (p) => invoke("studio:game.asset.present", p),
     projectModelRigs: (p) => invoke("studio:game.asset.rigs", p),
     projectAssets: (project) => invoke("studio:game.assets", { project }),
+    assetLibrary: (query) => invoke("studio:assets.library", query),
+    assetLibraryStates: (project) => invoke("studio:assets.states", { project }),
+    assetSave: (project, files, saved) => invoke("studio:assets.save", { project, files, saved }),
+    assetShare: (project, items) => invoke("studio:assets.share", { project, items }),
+    assetUnshare: (project, file) => invoke("studio:assets.unshare", { project, file }),
+    assetAdd: (project, source) => invoke("studio:assets.add", { project, source }),
     readProjectAsset: (p) => invoke("studio:game.asset.still", p),
     installPackages: (project, options) =>
       invoke("studio:packages.install", { project, scripts: options?.scripts === true }),

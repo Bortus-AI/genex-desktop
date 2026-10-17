@@ -108,6 +108,7 @@ function item(over: Partial<GenexCatalogItem> & { slug: string }): GenexCatalogI
     thumbnailUrl: null,
     playsCount: 0,
     remixable: true,
+    assetKind: null,
     ...over,
   };
 }

@@ -22,6 +22,15 @@ import type {
 } from "./play-people.ts";
 import type { GenexAccountView } from "./genex-account.ts";
 import type { PlayCredits } from "./play-credits.ts";
+import type {
+  AddOutcome,
+  AddSource,
+  GameLibraryStates,
+  LibraryPage,
+  LibraryQuery,
+  ShareItem,
+  ShareOutcome,
+} from "./asset-library.ts";
 import type { HandleCheck, HandleSave } from "./handle.ts";
 import type { PlayStats, StatsPeriod } from "./play-stats.ts";
 import type { PerformanceMark } from "./performance.ts";
@@ -546,6 +555,18 @@ export interface StudioApi {
   /** What these GLB and glTF files hold, read from their headers: meshes, clips and bones; other files are skipped. */
   projectModelRigs(p: { project: string; files: string[] }): Promise<ModelRig[]>;
   projectAssets(project: string): Promise<ProjectAssets>;
+  /** The Genex account's asset library on genex.games, newest first; throws signed out. */
+  assetLibrary(query: LibraryQuery): Promise<LibraryPage>;
+  /** Where each of a game's files stands with the library: saved, shared, can be shared. */
+  assetLibraryStates(project: string): Promise<GameLibraryStates>;
+  /** Save game files to the library (sending those Genex did not make), or take Saved off; the states after. */
+  assetSave(project: string, files: string[], saved: boolean): Promise<GameLibraryStates>;
+  /** Share game files to Play, each under its name; how each went. */
+  assetShare(project: string, items: ShareItem[]): Promise<ShareOutcome[]>;
+  /** Stop sharing a game file on Play; the states after. */
+  assetUnshare(project: string, file: string): Promise<GameLibraryStates>;
+  /** Bring a library generation or a shared asset into a game; where it landed. */
+  assetAdd(project: string, source: AddSource): Promise<AddOutcome>;
   /**
    * One image from inside the game, contained and byte-sniffed. `maxPx` asks for a thumbnail;
    * `scope: "genex-inspection"` reads the one saved frame of the named job instead, and
