@@ -2,11 +2,11 @@
  * The `building-card` fixture: a racing Loop still going, for the chat's Building card and its list
  * of parts. Of the plan's five parts two are added, one works on its second round with its time
  * left, one was stopped and restarted (`replaces`, one row) and works on its first round, and one
- * has not started. Written once the app has started: the start closes every run an earlier app left
+ * has not started; the Loop was given 4 hours. Written once the app has started: the start closes every run an earlier app left
  * open, so a Loop still going written before it would read as stopped.
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
-import { MINUTE_MS } from "../../shared/duration.ts";
+import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { WorkerEnd, WorkerIsolation, WorkerStopCode } from "../../shared/workers.ts";
@@ -15,6 +15,8 @@ import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
 
 const RUN_ID = "fixture-building-card";
 const GOAL = "Make a night street race on rain-slicked city streets.";
+/** The time the Loop was given, shown under the card's clock ("up to 4h"). */
+const LOOP_MS = 4 * HOUR_MS;
 /** How long the car part's round has left when the fixture is written. */
 const CARS_LEFT_MS = 25 * MINUTE_MS;
 
@@ -72,7 +74,12 @@ function buildingLoop(project: string, now: number): EventData[] {
   const stopped = "stopped by the director: the facades start again on the new street grid";
   return [
     { type: EventKind.Messages, messages: [{ role: "user", content: GOAL }] },
-    run(CustomEvent.RunStarted, { goal: GOAL, engine: EngineId.ClaudeCode, model: FIXTURE_MODEL }),
+    run(CustomEvent.RunStarted, {
+      goal: GOAL,
+      engine: EngineId.ClaudeCode,
+      model: FIXTURE_MODEL,
+      budgets: { wallClockMs: LOOP_MS },
+    }),
     run(CustomEvent.AutopilotStarted, { director: true, maxParallel: 3, facets: [], workerRecords: true }),
     run(CustomEvent.AutopilotPlanReview, {
       summary: "A night street race: a lit circuit, cars with a wet finish, and their sound.",
