@@ -184,8 +184,8 @@ with lazily mounted tasks/checks and nested technical details. They keep play/co
 tied to recorded results; no delivered revision means no
 "Play it" offer. The Builds view remains the detailed outcome/evidence surface.
 `[data-chat-transcript]` reports total/mounted entry counts for owned fixture inspection;
-`[data-streaming-reply]` is ephemeral. **Jump to latest** returns from older history without
-continually pulling the reader down. See `node tests/e2e/run-chat-ui.mjs` for the real-input gate.
+`[data-streaming-reply]` is ephemeral. **Jump to latest** (loader while agents work) returns from history,
+never pulling readers down; real-input gate: `node tests/e2e/run-chat-ui.mjs`.
 
 ### Studio activity controls
 

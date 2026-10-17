@@ -8,8 +8,8 @@ images open beside it, others in their app (programs only shown). Only the promp
 a pasted image adds the picture, not its filename. @ tags (max 5): local games read-only,
 Genex ones in `.studio/refs/`, assets `src/assets/`.
 
-Chat work shows a short status and elapsed time; waiting is static. A running build is one card,
-parts counted; it opens to their checklist and Open in Builds. Run workers get no lines.
+Chat work shows its status and elapsed time; waiting is static. A running build is one card,
+parts counted, open on their checklist and Open in Builds. Run workers get no lines.
 
 Neighboring tools group under **Worked on N steps** (or **Worked in Unreal**);
 failures stay visible. Play views and assets sit under their work. Build updates use a short
