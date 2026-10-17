@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "unity",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "name": "Unity",
   "publisher": "Genex",
   "description": "Agents build your game in the Unity editor on this computer, through Unity's Pipeline package: Genex makes or sets up the game's Unity project and opens it in your Unity 6. The project lives in the game's own folder. Unity is a trademark or registered trademark of Unity Technologies or its affiliates.",

@@ -1567,7 +1567,10 @@ agent's own mirror of the call (`chat/connector-steps.ts`, `words.ts` `connector
 Genex never sends it again. Its closing record (`plugin_tool` or `connector_tool`) carries `cutOff`
 saying why (`CallCutOff`, `shared/plugins.ts`): `harness-ended` when the harness died under it,
 `plugin-ended` when its plugin's backend exited, `app-lost` when a connector's error answer carries
-`_meta: {"genex/outcome": "unknown"}` (`CONNECTOR_OUTCOME_META`, the Unreal bridge's crash answer).
+`_meta: {"genex/outcome": "unknown"}` (`CONNECTOR_OUTCOME_META`, the Unreal bridge's crash answer),
+and `turn-ended` for a Genex tool call a Claude Code session made after its turn had ended (a
+background task woke it; `DelegateResult.cutAfterTurn`): the CLI answers such a call with its own
+"The user doesn't want to take this action", and the notice says that was not the person declining.
 The host notes it for the thread (`cut-off-calls.ts`, memory only), and the thread's next delegated
 session reads a notice first, once, naming each call and saying to look at what it was to change
 before repeating it (`delegation-prompts.ts` `cutOffNotice`). When the harness dies, plugins are
@@ -2036,6 +2039,9 @@ hold with no wait left, `health`'s or one whose turn came as its wait ran out, a
 in <label>" (`UiEvent.PersonFirst`, once per chat however many of its calls wait, each app's wait kept on its own); a "not using it"
 answer stands 3 s, unless a later probe sees the person at it. A hold queued behind a holder that
 waits on the person is refused as the person's (`person_first` or `cant_tell`), never as `busy`.
+A refusal for the person stands 30 s (`PERSON_REFUSAL_STANDS_MS`): a call on that lock in that
+time asks the probe once, for at most 5 s, instead of waiting its whole wait again, so an agent's
+calls sent together don't each wait four minutes behind the first.
 An agent's call has its
 arguments checked and its card answered before it waits (`registry.prepareTool`), and waits up
 to 4 minutes (less when its call's deadline leaves less), then answers like a
@@ -2622,7 +2628,7 @@ operation timed out". Three things keep an unattended agent out of it and get it
 | Handler at its moment | What it does (`editor-moments.ts`) |
 | --- | --- |
 | `open-for-run` at `run.prepare` | Opens the editor and waits; a project with no Pipeline package, or an editor that does not answer, closes the run with the reason. |
-| `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In Play mode: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
+| `save-all` at `checkpoint.before` | Saves as above. Unity not open: nothing. In the agent's own play: stops it, then saves. In the person's play: a block (scenes can't be saved in play). Work it can't save: a block in a run, a note in a chat. |
 | `scene-shots` at `checkpoint.after`, and as the `viewport` observer (`live: "stills"`) | The main camera's still (1280×720) as an image, in a run and for the reviewer; a chat's checkpoint takes none. A still of one flat colour (a scene that builds itself only when Play starts) is no image but a note saying so; the skill asks agents to build the level into the scene with an Editor script, saving the meshes, textures and materials it makes as assets. |
 | `save-all`, then `end-editor`, at `restore.before` | Stops a play, saves, ends the editor and records that it did (`restore/<game>.json`); work it can't save, or an editor that won't end, blocks the restore. |
 | `reopen-editor` at `restore.after` | Opens the project again only when `end-editor` closed it for this restore. |
@@ -2631,8 +2637,11 @@ operation timed out". Three things keep an unattended agent out of it and get it
 The `editor` lock (`per: project`) has `editor-activity` as its `personFirst` probe: the person is
 using the editor while it plays a game the agent did not start, and `unsaved` is the open scenes
 with unsaved work. The connector marks the agent's own play (`agent-play.ts`: a marker in its
-folder from its `editor_play` until its `editor_stop`, believed for half an hour), so the agent's
-play never makes its own calls wait. An editor that can't be asked answers nothing: Genex can't
+folder written before its `editor_play`, alone or in a batch, reaches the editor, removed on its
+`editor_stop`), so the agent's play never makes its own calls wait. The probe notes each time it
+sees that play running (`seenAt`), and believes a marker for half an hour after it was written or
+last seen; it forgets one once it sees the editor play nothing, but not while the editor reloads its
+scripts to enter Play mode, nor within 30 s of the play being asked for (`PLAY_START_GRACE_MS`). An editor that can't be asked answers nothing: Genex can't
 tell, and the agents' calls wait. A stalled one says nobody is there once the computer was left
 alone for five minutes, so that the recovery above can take the lock. `save-all`, `end-editor`,
 `reopen-editor`, `open-for-run` and `scene-shots` need the lock; the probe, `editor-state` and

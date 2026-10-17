@@ -18,6 +18,7 @@ import {
   PERSON_FIRST_ASK_MS,
   PERSON_FIRST_FRESH_MS,
   PERSON_FIRST_POLL_MS,
+  PERSON_REFUSAL_STANDS_MS,
   runHolders,
   workerHolder,
 } from "../../src/main/core/plugin-locks.ts";
@@ -850,6 +851,38 @@ describe("LockService", () => {
     assert.equal((moment.error as LockRefused).code, LockRefusal.PersonFirst);
     await clock.advance(AGENT_LOCK_WAIT_MS);
     assert.ok(agent.error instanceof LockRefused);
+  });
+
+  it("a call right after one refused for the person asks once, briefly, instead of waiting it all again", async () => {
+    const { locks, clock, asked } = service([{ personActive: true }]);
+    const first = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "a" }));
+    await settle();
+    await clock.advance(AGENT_LOCK_WAIT_MS);
+    assert.ok(first.error instanceof LockRefused);
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "b" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.ok(next.error instanceof LockRefused, "refused after one short ask");
+    assert.equal((next.error as LockRefused).code, LockRefusal.PersonFirst);
+    const before = asked.length;
+    await clock.advance(PERSON_REFUSAL_STANDS_MS);
+    const later = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "c" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.equal(later.error, null, "long after the refusal, a call waits its whole wait again");
+    assert.ok(asked.length > before);
+  });
+
+  it("a refusal for the person stands only while the person is still at it", async () => {
+    const { locks, clock } = service([{ personActive: true }, { personActive: false }]);
+    const first = track(locks.hold([bench], { binding: binding(), waitMs: PERSON_FIRST_POLL_MS, holder: "a" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_POLL_MS);
+    assert.ok(first.error instanceof LockRefused);
+    const next = track(locks.hold([bench], { binding: binding(), waitMs: AGENT_LOCK_WAIT_MS, holder: "b" }));
+    await settle();
+    await clock.advance(PERSON_FIRST_ASK_MS);
+    assert.ok(granted(next), "the person stopped: granted at once");
   });
 
   it("names a worker by the run or the chat it works for", () => {

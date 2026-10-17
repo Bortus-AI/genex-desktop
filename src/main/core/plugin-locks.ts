@@ -37,6 +37,11 @@ export const PERSON_FIRST_FRESH_MS = 3 * SECOND_MS;
  * as its wait ran out. Also the longest a read of what is unsaved asks.
  */
 export const PERSON_FIRST_ASK_MS = PERSON_FIRST_POLL_MS;
+/**
+ * How long a refusal for the person stands for the next calls on the same lock: an agent's calls
+ * sent together each ask once, briefly, instead of each waiting the whole wait again behind it.
+ */
+export const PERSON_REFUSAL_STANDS_MS = 30 * SECOND_MS;
 
 /** The owner Genex's own locks are kept under: no plugin id can be spelled with `@`. */
 const GENEX_OWNER = "@genex";
@@ -255,6 +260,8 @@ export class LockService {
   readonly #slots = new Map<string, Slot>();
   /** Until when, per lock, a probe's "the person is not using it" stands. */
   readonly #fresh = new Map<string, number>();
+  /** Until when, per lock, a refusal for the person stands: the next calls ask once, briefly. */
+  readonly #refusedForPerson = new Map<string, number>();
   /** The holders the harness asked locks for, which its end lets go. */
   readonly #harnessHolders = new Set<string>();
   readonly #probe: LockServiceOptions["probe"];
@@ -470,16 +477,31 @@ export class LockService {
     const slot = this.#slots.get(key);
     const told = { waiting: false };
     try {
-      await this.#untilFree(key, ref, options, wait, (answer) => {
+      await this.#untilFree(key, ref, options, this.#waitAfterRefusal(key, wait), (answer) => {
         if (slot) slot.person = answer;
         if (told.waiting || answer?.personActive !== true) return;
         this.#notify(ref, options, true);
         told.waiting = true;
       });
+      this.#refusedForPerson.delete(key);
+    } catch (error) {
+      if (error instanceof LockRefused && error.code === LockRefusal.PersonFirst)
+        this.#refusedForPerson.set(key, this.#now() + PERSON_REFUSAL_STANDS_MS);
+      throw error;
     } finally {
       if (slot) delete slot.person;
       if (told.waiting) this.#notify(ref, options, false);
     }
+  }
+
+  /**
+   * A hold's wait on the person: its own, or one short ask while a refusal for the person on this
+   * lock still stands (`PERSON_REFUSAL_STANDS_MS`).
+   */
+  #waitAfterRefusal(key: string, wait: HoldWait): HoldWait {
+    const now = this.#now();
+    if ((this.#refusedForPerson.get(key) ?? 0) <= now) return wait;
+    return { deadline: Math.min(wait.deadline, now + PERSON_FIRST_ASK_MS), lateAskEnds: wait.lateAskEnds };
   }
 
   /**
