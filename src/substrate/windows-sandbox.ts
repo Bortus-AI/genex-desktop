@@ -971,6 +971,17 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
   }
 }
 
+/**
+ * sandbox-runtime's own Windows dependency check, the one its `initialize` runs first: the
+ * sandbox user, its credential and the WFP filters. `initialize` reports that refusal as a plain
+ * Error with no code, so a failed start asks again here to tell "not set up yet" from a fault.
+ */
+export async function windowsDependencyErrors(srtWin: string = srtWinPath()): Promise<string[]> {
+  const srt = await import(SRT_PACKAGE);
+  const result = await srt.checkWindowsDependenciesAsync({ srtWin: srt.resolveSrtWin({ path: srtWin }) });
+  return result.errors;
+}
+
 const sessions = new WeakMap<object, WindowsSandboxSession>();
 
 /**

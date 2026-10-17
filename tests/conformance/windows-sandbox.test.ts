@@ -998,7 +998,14 @@ interface WrapCall {
   cwd: string | undefined;
 }
 
-async function windowsSandbox(options: { wrapError?: object; initializeError?: object; bash?: string | null } = {}) {
+async function windowsSandbox(
+  options: {
+    wrapError?: object;
+    initializeError?: object;
+    bash?: string | null;
+    dependencyErrors?: () => Promise<string[]>;
+  } = {},
+) {
   const root = realpathSync.native(await tmpDir("windows-launch-"));
   const workspace = path.join(root, "workspace");
   const secrets = path.join(root, "secrets");
@@ -1037,7 +1044,7 @@ async function windowsSandbox(options: { wrapError?: object; initializeError?: o
     secretPaths: [secrets, path.join(root, "never-created")],
     runtime,
     platform: "win32",
-    windows: { bash, session: s.session, profile: root },
+    windows: { bash, session: s.session, profile: root, dependencyErrors: options.dependencyErrors },
     toolPath: async () => "",
   });
   return { sandbox, root, workspace, secrets, wraps, session: s };
@@ -1226,6 +1233,31 @@ describe("ProcessSandbox on Windows", () => {
       assert.equal(error.problem.platform, "win32");
       return true;
     });
+  });
+
+  it("an unprovisioned PC is the setup screen when initialize refuses it untyped, by srt's own dependency check", async () => {
+    // sandbox-runtime runs its dependency check first in initialize and throws a plain Error on
+    // it; only a check of its own, asked after, says the sandbox user or its filters are missing.
+    const unprovisioned = "Sandbox user is not provisioned (user=false, cred=false).";
+    await assert.rejects(
+      windowsSandbox({
+        initializeError: new Error(`Sandbox dependencies not available: ${unprovisioned}`),
+        dependencyErrors: async () => [unprovisioned],
+      }),
+      (error: unknown) => {
+        if (!(error instanceof SandboxUnavailableError)) return false;
+        assert.equal(error.problem.code, SandboxProblemCode.NotProvisioned);
+        assert.deepEqual(error.problem.details, [unprovisioned]);
+        return true;
+      },
+    );
+    // A failure the check does not explain, or a check that fails itself, stays the error it was.
+    for (const dependencyErrors of [async () => [], async () => Promise.reject(new Error("srt-win missing"))]) {
+      await assert.rejects(
+        windowsSandbox({ initializeError: new Error("proxy port in use"), dependencyErrors }),
+        (error: unknown) => !(error instanceof SandboxUnavailableError) && /proxy port in use/.test(String(error)),
+      );
+    }
   });
 });
 
