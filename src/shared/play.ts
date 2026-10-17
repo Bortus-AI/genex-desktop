@@ -268,8 +268,8 @@ export interface PlayBarState {
   mic: PlayMicBar | null;
   /** How many comments the game has; null until its page facts are read. */
   comments: number | null;
-  /** A Genex account is unlocked: the comments end in a field to write one, else in Sign in. */
-  signedIn: boolean;
+  /** A Genex account is unlocked: the comments end in a field to write one, else in Sign in. Null until known. */
+  signedIn: boolean | null;
   /** A remix is being made: Remix waits for it. */
   remixing: boolean;
 }

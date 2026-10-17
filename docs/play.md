@@ -78,7 +78,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   (`main/play/comments.ts`); Esc, ✕ or a click outside closes it and the game gets the keyboard back.
 - The page stays on Genex games' addresses; a link it opens goes to the browser, at most one every
   few seconds.
-- Voice chat: a game that asks for a microphone gets the header's mic switch, remembered per game.
+- Voice chat: a game that asks for a microphone gets the bar's mic switch, remembered per game.
   Main lets the page open the microphone only right after it asked it to, and only on the game's
   own origin.
 - Remix clones the game's public source from Genex's git (https only, no hooks or filters, its Git

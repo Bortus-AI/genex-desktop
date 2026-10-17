@@ -39,9 +39,3 @@ export function commentBody(value: unknown): string | null {
   const body = value.trim();
   return body.length > 0 && body.length <= COMMENT_MAX ? body : null;
 }
-
-/** What the viewer's bar layer tells main about itself: the pointer or the keyboard is on it, or Comments is open. */
-export interface PlayBarHold {
-  held: boolean;
-  comments: boolean;
-}

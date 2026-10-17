@@ -1023,7 +1023,7 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
     barPage: path.join(distRoot, "renderer", "play-bar.html"),
-    barPreload: path.join(distRoot, "preload", "preload.cjs"),
+    barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
     comments: playCommentsFor(studio),
   });
 }

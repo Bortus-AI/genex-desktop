@@ -110,7 +110,12 @@ function CommentRow({
           <span className="play-comment-name">{author.name}</span>
           <span className="play-comment-when">{WORDS.ago(minutesSince(comment.at, now))}</span>
           {comment.mine && (
-            <button type="button" className="play-comment-delete" onClick={() => onDelete(comment)}>
+            <button
+              type="button"
+              className="play-comment-delete"
+              aria-label={WORDS.deleteLabel}
+              onClick={() => onDelete(comment)}
+            >
               {WORDS.delete}
             </button>
           )}
@@ -212,6 +217,35 @@ function CommentField({
   );
 }
 
+/**
+ * The footer's way to comment: the field signed in, one line and Sign in signed out, and an empty
+ * line of the same height while main has not said yet.
+ */
+function CommentsFooter({
+  api,
+  bar,
+  send,
+  field,
+  onPosted,
+}: {
+  api: BarApi;
+  bar: PlayBarState;
+  send: SendControl;
+  field: RefObject<HTMLInputElement | null>;
+  onPosted: (comment: PlayComment) => void;
+}): JSX.Element {
+  if (bar.signedIn === null) return <div className="play-comments-signin" aria-hidden="true" />;
+  if (bar.signedIn) return <CommentField api={api} field={field} onPosted={onPosted} />;
+  return (
+    <div className="play-comments-signin">
+      <span>{WORDS.signIn(bar.title)}</span>
+      <button type="button" className="play-comments-action" onClick={() => send(PlayControl.Install)}>
+        {WORDS.signInAction}
+      </button>
+    </div>
+  );
+}
+
 /** The modal over the dimmed game, for the game whose bar is `bar`. */
 export function PlayComments({
   api,
@@ -235,12 +269,19 @@ export function PlayComments({
     setOpen(false);
     setTimeout(() => closed.current(), prefersReducedMotion() ? 0 : CLOSE_MS);
   };
+  const deleting = useRef(new Set<string>());
   const remove = (comment: PlayComment): void => {
+    // A second press while the first is on its way would be refused as a comment already gone.
+    if (deleting.current.has(comment.id)) return;
+    deleting.current.add(comment.id);
     setDeleteFailed(false);
-    api.playUncomment(comment.id).then(
-      () => removed(comment.id),
-      () => setDeleteFailed(true),
-    );
+    api
+      .playUncomment(comment.id)
+      .then(
+        () => removed(comment.id),
+        () => setDeleteFailed(true),
+      )
+      .finally(() => deleting.current.delete(comment.id));
   };
   const scrolled = (element: HTMLDivElement): void => {
     // The list's top edge fades once anything has scrolled under the title.
@@ -282,16 +323,7 @@ export function PlayComments({
                 {WORDS.deleteFailed}
               </p>
             )}
-            {bar.signedIn ? (
-              <CommentField api={api} field={field} onPosted={posted} />
-            ) : (
-              <div className="play-comments-signin">
-                <span>{WORDS.signIn(bar.title)}</span>
-                <button type="button" className="play-comments-action" onClick={() => send(PlayControl.Install)}>
-                  {WORDS.signInAction}
-                </button>
-              </div>
-            )}
+            <CommentsFooter api={api} bar={bar} send={send} field={field} onPosted={posted} />
           </div>
         </Dialog.Content>
       </Dialog.Portal>

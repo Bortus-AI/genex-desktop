@@ -6,6 +6,7 @@
  */
 import { isAccountId } from "../../shared/play-people.ts";
 import {
+  COMMENT_MAX,
   COMMENTS_PAGE,
   commentBody,
   type PlayComment,
@@ -33,7 +34,7 @@ const BODY_MAX = 2000;
 const MESSAGE = {
   BadGame: "Not a game on genex.games",
   BadComment: "Not a comment",
-  BadBody: "A comment is 1 to 500 characters",
+  BadBody: `A comment is 1 to ${COMMENT_MAX} characters`,
 } as const;
 
 /** The routes the comments call. */

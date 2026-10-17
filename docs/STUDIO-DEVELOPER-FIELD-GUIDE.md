@@ -413,7 +413,7 @@ walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
 snapshot (desktop or `play-bar`, scope/limit; its `play` part counts Play's cards, the covers on
 screen still blank and the clips playing), click (selector/scope, desktop or `play-bar`), type
-(plus text/replace), key (surface/key/code/modifiers), move (surface/x/y: the pointer over a
+(plus text/replace, the same surfaces), key (surface/key/code/modifiers), move (surface/x/y: the pointer over a
 surface, as a mouse would), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,

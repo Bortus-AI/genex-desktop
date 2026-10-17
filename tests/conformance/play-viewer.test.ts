@@ -188,7 +188,7 @@ describe("Play viewer", () => {
         facts: null,
         mic: null,
         comments: null,
-        signedIn: false,
+        signedIn: null,
         remixing: false,
       },
     });
@@ -638,6 +638,33 @@ describe("Play viewer's bar over the game", () => {
     failing.log.length = 0;
     failing.viewer.failed();
     assert.ok(!failing.log.some((line) => line.startsWith("bar.")), "the layer stays over the whole window");
+  });
+
+  it("says whether a Genex account is there only once the ticket has answered", async () => {
+    const signedIn = rig();
+    signedIn.viewer.open("lost-cathedral", "Lost Cathedral");
+    assert.equal(signedIn.bar()?.signedIn, null, "not known yet: Comments offers neither Sign in nor the field");
+    await settle();
+    assert.equal(signedIn.bar()?.signedIn, true);
+    for (const ticket of [SIGNED_OUT, NOT_MINTED]) {
+      const made = rig({ ticket: async () => ticket });
+      made.viewer.open("lost-cathedral", "Lost Cathedral");
+      await settle();
+      assert.equal(made.bar()?.signedIn, ticket === NOT_MINTED, ticket.status);
+    }
+  });
+
+  it("draws the bar again for a layer page that has just mounted, and only then", async () => {
+    const { viewer, events } = rig();
+    viewer.open("lost-cathedral", "Lost Cathedral");
+    await settle();
+    const before = events.length;
+    viewer.hold({ held: true, comments: false });
+    viewer.hold({ held: false, comments: false });
+    assert.equal(events.length, before, "a hold alone draws nothing");
+    viewer.hold({ held: false, comments: false, ready: true });
+    assert.equal(events.length, before + 1);
+    assert.equal(events.at(-1)?.bar?.title, "Lost Cathedral");
   });
 
   it("reads only what holds it, as two booleans", async () => {

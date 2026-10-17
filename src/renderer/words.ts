@@ -4222,6 +4222,7 @@ export const PLAY_WORDS = {
     post: "Post",
     postFailed: "Couldn’t post your comment",
     delete: "Delete",
+    deleteLabel: "Delete your comment",
     deleteFailed: "Couldn’t delete your comment",
     /** How long ago a comment was written, its units spelled out. */
     ago: (minutes: number): string => {

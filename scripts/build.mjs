@@ -122,6 +122,12 @@ async function nodeContexts() {
       outfile: path.join(dist, "preload/play-mic.cjs"),
       format: "cjs",
     }),
+    await esbuild.context({
+      ...shared,
+      entryPoints: [path.join(root, "src/preload/play-bar.ts")],
+      outfile: path.join(dist, "preload/play-bar.cjs"),
+      format: "cjs",
+    }),
   ];
 }
 

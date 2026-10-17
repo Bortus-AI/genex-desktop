@@ -6,7 +6,7 @@
  * covers the whole window while Comments is open. Electron-free: the clock comes in as a dep.
  */
 import { SECOND_MS } from "../../shared/duration.ts";
-import type { PlayBarHold } from "../../shared/play-comments.ts";
+import type { PlayBarHold } from "../../shared/play-bar.ts";
 
 /** How long the bar stays after play starts, the pointer reaches the top edge or Esc is pressed. */
 export const BAR_SHOWN_MS = 3 * SECOND_MS;

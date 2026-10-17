@@ -217,6 +217,10 @@ export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
   };
 }
 
+/** Whether main's news is the viewer shown closing for its bar's Remix: the app makes the copy then. */
+export const remixClosed = (shown: ViewerShown | null, event: PlayViewerEvent): boolean =>
+  event.remix === true && shown?.slug === event.slug && shown.openId === event.openId;
+
 /**
  * Main's news about the viewer; the guest card's Sign in waits for the shell. The maker's name
  * closes the viewer onto their profile.

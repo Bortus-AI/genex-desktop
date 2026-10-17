@@ -66,6 +66,7 @@ import {
   installAnswered,
   onlineCounted,
   PlayPage,
+  remixClosed,
   remixEnded,
   remixFailureTold,
   remixOpened,
@@ -691,6 +692,17 @@ describe("Play state actions", () => {
     assert.equal(installAnswered(answered), answered, "nothing waiting: the same state");
     const later = viewerReported(answered, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed });
     assert.equal(later.installAsked, false, "a later closing asks nothing again");
+  });
+
+  it("makes a copy only for the viewer shown closing for its bar's Remix", () => {
+    const opened = gameOpened(initialPlay(), entry("a"));
+    const shown = viewerReported(opened, { slug: "a", openId: 1, phase: PlayViewerPhase.Playing }).viewer;
+    const closing = { slug: "a", openId: 1, phase: PlayViewerPhase.Closed };
+    assert.equal(remixClosed(shown, { ...closing, remix: true }), true);
+    assert.equal(remixClosed(shown, closing), false, "a plain closing");
+    assert.equal(remixClosed(shown, { ...closing, openId: 2, remix: true }), false, "another opening");
+    assert.equal(remixClosed(shown, { ...closing, slug: "b", remix: true }), false, "another game");
+    assert.equal(remixClosed(null, { ...closing, remix: true }), false, "nothing shown");
   });
 
   it("shows the maker's profile when their name closed the viewer, and only for the viewer shown", () => {

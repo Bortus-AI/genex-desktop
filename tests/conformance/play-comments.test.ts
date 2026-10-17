@@ -9,8 +9,12 @@ import { describe, it } from "node:test";
 import { CommentRoute, playComments, toComment, toCommentsPage } from "../../src/main/play/comments.ts";
 import { type GalleryAnswer, type GalleryRequest, SignInNeeded } from "../../src/main/play/gallery.ts";
 import {
+  BarEscape,
+  barEscape,
   barNews,
   CommentsStatus,
+  holdToTell,
+  NOTHING_TOLD,
   minutesSince,
   NO_COMMENTS,
   withCommentsPage,
@@ -180,6 +184,33 @@ describe("Play comments in the bar's layer", () => {
     );
     assert.equal(barNews(next, { slug: "a", openId: 1, phase: PlayViewerPhase.Playing }), next);
     assert.equal(barNews(next, { slug: "b", openId: 2, phase: PlayViewerPhase.Closed }), null);
+  });
+
+  it("tells main what holds the bar only when it changes, asking for the bar again after mounting or a new game", () => {
+    const first = holdToTell(NOTHING_TOLD, { held: false, comments: false });
+    assert.deepEqual(first?.payload, { held: false, comments: false, ready: true });
+    assert.equal(holdToTell(first?.key ?? "", { held: false, comments: false }), null, "nothing new");
+    const hovered = holdToTell(first?.key ?? "", { held: true, comments: false, ready: true });
+    assert.deepEqual(hovered?.payload, { held: true, comments: false }, "only the first word asks for the bar");
+    assert.deepEqual(holdToTell(NOTHING_TOLD, { held: true, comments: false })?.payload, {
+      held: true,
+      comments: false,
+      ready: true,
+    });
+  });
+
+  it("acts on a fresh Esc only: back to a playing game, out of one still loading or failed, never over Comments", () => {
+    const fresh = { repeat: false, commentsOpen: false };
+    assert.equal(barEscape(PlayViewerPhase.Playing, fresh), BarEscape.Resume);
+    assert.equal(barEscape(PlayViewerPhase.Loading, fresh), BarEscape.Leave);
+    assert.equal(barEscape(PlayViewerPhase.Failed, fresh), BarEscape.Leave);
+    assert.equal(
+      barEscape(PlayViewerPhase.Playing, { ...fresh, repeat: true }),
+      BarEscape.None,
+      "a held Esc repeating",
+    );
+    assert.equal(barEscape(PlayViewerPhase.Loading, { ...fresh, commentsOpen: true }), BarEscape.None);
+    assert.equal(barEscape(undefined, fresh), BarEscape.None);
   });
 
   it("adds pages newest first, each comment once, with a post on top and a delete gone", () => {

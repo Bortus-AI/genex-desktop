@@ -8,18 +8,15 @@
  */
 import type { JSX } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PlayControl, PlayViewerPhase } from "../../shared/play.ts";
-import type { StudioApi } from "../../shared/studio-api.ts";
+import { PlayControl } from "../../shared/play.ts";
+import type { PlayBarApi } from "../../shared/play-bar.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
-import { type BarView, barNews } from "./bar-model.ts";
+import { BarEscape, type BarView, barEscape, barNews, holdKey, holdToTell, NOTHING_TOLD } from "./bar-model.ts";
 import { PlayComments } from "./PlayComments.tsx";
 import { type BarHolds, PlayViewerBar, type SendControl } from "./PlayViewerBar.tsx";
 
 /** The calls the bar's layer makes. */
-export type BarApi = Pick<
-  StudioApi,
-  "onEvent" | "playControl" | "playClose" | "playBar" | "playComments" | "playComment" | "playUncomment"
->;
+export type BarApi = PlayBarApi;
 
 /** The viewer as main last drew it, from its news. */
 function useBarView(api: BarApi): BarView | null {
@@ -39,14 +36,13 @@ function useHold(api: BarApi, openId: number | null) {
   const [pointer, setPointer] = useState(false);
   const [keyboard, setKeyboard] = useState(false);
   const [comments, setComments] = useState(false);
-  const told = useRef("");
+  const told = useRef(NOTHING_TOLD);
   const held = pointer || keyboard;
   useEffect(() => {
-    const hold = { held, comments };
-    const key = JSON.stringify(hold);
-    if (told.current === key) return;
-    told.current = key;
-    api.playBar(hold).catch(() => undefined);
+    const tell = holdToTell(told.current, { held, comments });
+    if (!tell) return;
+    told.current = tell.key;
+    api.playBar(tell.payload).catch(() => undefined);
   }, [api, held, comments]);
   // Another game, or none: Comments belongs to the game it was opened over, and main holds nothing
   // for the new one until the pointer or the keyboard comes back to the bar.
@@ -55,7 +51,7 @@ function useHold(api: BarApi, openId: number | null) {
     setComments(false);
     setPointer(false);
     setKeyboard(false);
-    told.current = "";
+    told.current = NOTHING_TOLD;
   }, [openId]);
   const holds: BarHolds = useMemo(() => ({ pointer: setPointer, keyboard: setKeyboard }), []);
   const openComments = useCallback(() => {
@@ -63,7 +59,7 @@ function useHold(api: BarApi, openId: number | null) {
     api
       .playBar({ held: true, comments: true })
       .then(() => {
-        told.current = JSON.stringify({ held: true, comments: true });
+        told.current = holdKey({ held: true, comments: true });
         setComments(true);
       })
       .catch(() => undefined);
@@ -79,10 +75,11 @@ function useEscape(api: BarApi, view: BarView | null, commentsOpen: boolean): vo
   open.current = commentsOpen;
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
-      // Comments closes itself on Esc.
-      if (event.key !== "Escape" || open.current || !phase.current) return;
-      if (phase.current === PlayViewerPhase.Playing) api.playControl(PlayControl.Resume).catch(() => undefined);
-      else api.playClose().catch(() => undefined);
+      if (event.key !== "Escape") return;
+      // A held Esc that moved the keyboard here keeps repeating: only a fresh press acts.
+      const action = barEscape(phase.current, { repeat: event.repeat, commentsOpen: open.current });
+      if (action === BarEscape.Resume) api.playControl(PlayControl.Resume).catch(() => undefined);
+      if (action === BarEscape.Leave) api.playClose().catch(() => undefined);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

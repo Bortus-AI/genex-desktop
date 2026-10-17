@@ -21,7 +21,7 @@ import {
   WebContentsView,
 } from "electron";
 import { StudioPlatform } from "../../shared/boot.ts";
-import { type PlayPoint, type PlayViewerEvent, PlayViewerPhase } from "../../shared/play.ts";
+import type { PlayPoint, PlayViewerEvent } from "../../shared/play.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { type PlayMicCommand, PlayMicChannel, type PlayMicReport, readMicReport } from "../../shared/play-mic.ts";
 import type { FullScreenKey, Rect } from "../game-full-screen.ts";
@@ -85,7 +85,7 @@ export interface PlayViewDeps {
   micPreload: string;
   /** The games whose mic is on and the chosen microphone. */
   micStore: PlayMicStore;
-  /** The bar's layer: its page (`dist/renderer/play-bar.html`) and the studio's own preload. */
+  /** The bar's layer: its page (`dist/renderer/play-bar.html`) and its preload (`dist/preload/play-bar.cjs`). */
   barPage: string;
   barPreload: string;
   /** The game's comments on genex.games. */
@@ -220,17 +220,13 @@ function hearMic(contents: WebContents, mine: () => boolean, hear: (report: Play
 }
 
 /**
- * The bar's layer over the game: the studio's own page in a transparent view, made the first time a
- * game opens and kept, drawn over each new game's view. It hears the viewer's news as the studio's
- * page does; a page that loads late is sent the latest.
+ * The bar's layer over the game: the studio's own page in a transparent view, made ahead of the first
+ * game (`warm`) and kept, drawn over each new game's view. It hears the viewer's news as the studio's
+ * page does; a page that loads late says so once it has mounted (`PlayBarHold.ready`) and is drawn
+ * the bar again. A layer whose page went away loads it again.
  */
 function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
   let view: WebContentsView | null = null;
-  let latest: PlayViewerEvent | null = null;
-  const send = (contents: WebContents, payload: PlayViewerEvent): void => {
-    if (!contents.isDestroyed() && !contents.isLoading())
-      pushToRenderer(contents, "studio:event", { type: UiEvent.PlayViewer, payload });
-  };
   const made = (): WebContentsView => {
     if (view && !view.webContents.isDestroyed()) return view;
     const layer = new WebContentsView({
@@ -241,7 +237,9 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
     const contents = layer.webContents;
     contents.on("will-navigate", (event) => event.preventDefault());
     contents.setWindowOpenHandler(() => ({ action: "deny" }));
-    contents.on("did-finish-load", () => latest && send(contents, latest));
+    contents.on("render-process-gone", () => {
+      if (!contents.isDestroyed()) contents.reload();
+    });
     void contents.loadFile(deps.barPage, { query: { platform: process.platform } }).catch(() => {});
     win.contentView.addChildView(layer);
     view = layer;
@@ -263,11 +261,11 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
     warm: (): void => {
       if (!win.isDestroyed()) made();
     },
-    /** The viewer's news, for the bar's page; a closing is the last it needs. */
+    /** The viewer's news, for the bar's page. */
     tell: (event: PlayViewerEvent): void => {
-      latest = event.phase === PlayViewerPhase.Closed ? null : event;
       const contents = view?.webContents;
-      if (contents) send(contents, event);
+      if (contents && !contents.isDestroyed())
+        pushToRenderer(contents, "studio:event", { type: UiEvent.PlayViewer, payload: event });
     },
   };
 }
@@ -283,11 +281,12 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
   const close = (): void => {
     const view = current;
     current = null;
-    if (!view) return;
-    if (!view.webContents.isDestroyed()) view.webContents.close();
     if (win.isDestroyed()) return;
-    win.contentView.removeChildView(view);
-    // The keyboard comes back to the app the game took it from.
+    if (view) {
+      if (!view.webContents.isDestroyed()) view.webContents.close();
+      win.contentView.removeChildView(view);
+    }
+    // The keyboard comes back to the app the game (or its bar, before the game was up) took it from.
     win.webContents.focus();
   };
   const open = (url: string): void => {

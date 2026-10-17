@@ -11,7 +11,7 @@
  * switch beside its name, with a menu of microphones. Offline, the facts say so in place of the
  * players, and Like and Remix wait for the connection.
  */
-import type { CSSProperties, FocusEvent, JSX, ReactNode, RefObject } from "react";
+import type { CSSProperties, FocusEvent, JSX, PointerEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { type PlayBarState, type PlayMicBar, PlayControl, type PlayPoint } from "../../shared/play.ts";
 import { Icon, type IconName } from "../ui/icons.tsx";
@@ -206,7 +206,6 @@ function BarButton({
   bar,
   send,
   className = "",
-  buttonRef,
   ariaLabel,
   ariaPressed,
   disabled,
@@ -219,7 +218,6 @@ function BarButton({
   bar: PlayBarState | null;
   send: SendControl;
   className?: string;
-  buttonRef?: RefObject<HTMLButtonElement | null>;
   ariaLabel?: string;
   ariaPressed?: boolean;
   disabled?: boolean;
@@ -230,7 +228,6 @@ function BarButton({
   const said = useLastNote(worn ? WORDS.notes[worn.note] : null);
   return (
     <button
-      ref={buttonRef}
       type="button"
       className={`play-viewer-bar-pill ${className}`}
       aria-label={worn ? said : ariaLabel}
@@ -316,13 +313,13 @@ function CommentsButton({ count, onOpen }: { count: number | null; onOpen: () =>
  */
 function Actions({
   bar,
-  first,
+  actions,
   online,
   send,
   onComments,
 }: {
   bar: PlayBarState | null;
-  first: RefObject<HTMLButtonElement | null>;
+  actions: RefObject<HTMLDivElement | null>;
   online: boolean;
   send: SendControl;
   onComments: () => void;
@@ -332,7 +329,7 @@ function Actions({
   const likes = formatCount(bar?.likes ?? 0);
   const bursts = useLikeBursts(bar);
   return (
-    <div className="play-viewer-bar-actions">
+    <div ref={actions} className="play-viewer-bar-actions">
       <BarButton
         control={PlayControl.Like}
         icon="heart"
@@ -344,7 +341,6 @@ function Actions({
         }
         bar={bar}
         send={send}
-        buttonRef={first}
         ariaLabel={WORDS.likes(likes)}
         ariaPressed={bar?.liked === true}
         disabled={!online}
@@ -398,14 +394,24 @@ export function PlayViewerBar({
 }): JSX.Element {
   const { bar } = view;
   const title = bar?.title ?? "";
-  const first = useRef<HTMLButtonElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
   const online = useOnline();
-  // An Esc held in the game asked for the keyboard: it lands on the first action.
+  // An Esc held in the game asked for the keyboard: it lands on the first action that can act (Like,
+  // unless it waits for the connection).
   useEffect(() => {
-    if (view.focusAsks) first.current?.focus();
+    if (view.focusAsks) actions.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [view.focusAsks]);
+  // Only the keyboard's own focus holds the bar up; a button a click focused does not.
+  const entered = (event: FocusEvent<HTMLDivElement>): void => {
+    if (event.target.matches(":focus-visible")) holds.keyboard(true);
+  };
   const left = (event: FocusEvent<HTMLDivElement>): void => {
     if (!event.currentTarget.contains(event.relatedTarget)) holds.keyboard(false);
+  };
+  // A press with the pointer leaves the keyboard with the game; a control that opens something keeps it.
+  const pressed = (event: PointerEvent<HTMLDivElement>): void => {
+    const button = event.target instanceof Element ? event.target.closest("button") : null;
+    if (button && !button.hasAttribute("aria-haspopup")) send(PlayControl.Resume);
   };
   return (
     <div
@@ -417,7 +423,8 @@ export function PlayViewerBar({
       onPointerEnter={() => holds.pointer(true)}
       onPointerMove={() => holds.pointer(true)}
       onPointerLeave={() => holds.pointer(false)}
-      onFocus={() => holds.keyboard(true)}
+      onPointerUp={pressed}
+      onFocus={entered}
       onBlur={left}
     >
       <button
@@ -440,7 +447,7 @@ export function PlayViewerBar({
       <span className="sr-only" role="status">
         {bar?.note ? WORDS.notes[bar.note] : null}
       </span>
-      <Actions bar={bar} first={first} online={online} send={send} onComments={onComments} />
+      <Actions bar={bar} actions={actions} online={online} send={send} onComments={onComments} />
     </div>
   );
 }

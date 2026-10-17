@@ -3,6 +3,7 @@
  * serves, newest first in pages, so the viewer's Comments can be read, written and deleted with no
  * socket. One game has more than a page; the fixture account writes and deletes its own.
  */
+import { HOUR_MS } from "../../shared/duration.ts";
 import { COMMENT_MAX } from "../../shared/play-comments.ts";
 import type { GalleryAnswer, GalleryRequest } from "../play/gallery.ts";
 import { fixtureAccountOf, fixtureMeNamed, fixturePersonNamed } from "./fixture-people.ts";
@@ -27,16 +28,16 @@ const LINES = [
 const NAMES = ["Mira Kovač", "Tomás Reyes", "Kenji Mori", "Juno Park", "Simeon M"];
 /** The most comments one page answers with, as the API caps it. */
 const PAGE_MAX = 50;
-/** The fixture's own clock for its comments: they are this old and older, an hour apart. */
+/** The fixture's own clock for its comments: the newest was written then, each older one seven hours before the next. */
 const NEWEST = Date.parse("2026-10-17T09:00:00.000Z");
-const HOUR = 3_600_000;
+const APART_MS = 7 * HOUR_MS;
 
-/** A game's seeded comments: `count` of them, newest first, an hour apart. */
+/** A game's seeded comments: `count` of them, newest first. */
 function seeded(gameId: string, count: number): FixtureComment[] {
   return Array.from({ length: count }, (_, at) => ({
     id: `${gameId}c${String(count - at).padStart(3, "0")}`,
     body: LINES[at % LINES.length] ?? "",
-    createdAt: new Date(NEWEST - at * HOUR * 7).toISOString(),
+    createdAt: new Date(NEWEST - at * APART_MS).toISOString(),
     author: fixturePersonNamed(NAMES[at % NAMES.length] ?? "Simeon M"),
   }));
 }

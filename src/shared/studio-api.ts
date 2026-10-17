@@ -21,7 +21,8 @@ import type {
   PresenceVisibility,
 } from "./play-people.ts";
 import type { GenexAccountView } from "./genex-account.ts";
-import type { PlayBarHold, PlayComment, PlayCommentsPage } from "./play-comments.ts";
+import type { PlayBarHold } from "./play-bar.ts";
+import type { PlayComment, PlayCommentsPage } from "./play-comments.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type { HandleCheck, HandleSave } from "./handle.ts";
 import type { PlayStats, StatsPeriod } from "./play-stats.ts";

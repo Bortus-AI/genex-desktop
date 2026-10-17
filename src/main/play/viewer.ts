@@ -12,7 +12,7 @@
  */
 import { ESC_HOLD_MS, type FullScreenKey, type Rect } from "../game-full-screen.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
-import type { PlayBarHold } from "../../shared/play-comments.ts";
+import type { PlayBarHold } from "../../shared/play-bar.ts";
 import {
   isPlayControl,
   isPlaySlug,
@@ -109,7 +109,7 @@ const IDLE_STATE: PlayBarState = {
   facts: null,
   mic: null,
   comments: null,
-  signedIn: false,
+  signedIn: null,
   remixing: false,
 };
 
@@ -330,10 +330,10 @@ function placeBar(deps: PlayViewerDeps, layout: BarLayout): void {
   deps.window.buttons(layout !== BarLayout.Hidden);
 }
 
-/** What the bar's layer says holds it, as main accepts it: two booleans, anything else false. */
+/** What the bar's layer says holds it, as main accepts it: booleans, anything else false. */
 const readHold = (value: unknown): PlayBarHold => {
   const hold = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-  return { held: hold.held === true, comments: hold.comments === true };
+  return { held: hold.held === true, comments: hold.comments === true, ready: hold.ready === true };
 };
 
 /** What the viewer's own loop moves beyond the context: the bar's reveal, its phase and its timers. */
@@ -344,11 +344,15 @@ interface ViewerLoop {
   stopShowTimer(): void;
 }
 
-/** The bar's layer said what holds it: Comments opening takes the keyboard, closing gives it back to the game. */
+/**
+ * The bar's layer said what holds it: Comments opening takes the keyboard, closing gives it back to
+ * the game. A page that has just mounted is drawn the bar again, whatever news it missed loading.
+ */
 function holdBar(loop: ViewerLoop, value: unknown): void {
   const s = loop.ctx.session();
   if (!s) return;
   const next = readHold(value);
+  if (next.ready) loop.ctx.draw();
   const was = loop.reveal.comments();
   loop.reveal.hold(next);
   if (next.comments && !was) loop.ctx.deps.bar.focus();

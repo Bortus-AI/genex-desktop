@@ -5,6 +5,7 @@
  */
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { type PlayBarState, type PlayViewerEvent, PlayViewerPhase } from "../../shared/play.ts";
+import type { PlayBarHold } from "../../shared/play-bar.ts";
 import type { PlayComment, PlayCommentsPage } from "../../shared/play-comments.ts";
 
 /** The game the bar is over, as main last drew it. */
@@ -77,6 +78,44 @@ export const withoutComment = (list: CommentsList, id: string): CommentsList => 
   ...list,
   items: list.items.filter((item) => item.id !== id),
 });
+
+/** Nothing told main yet: a page that has just mounted, or a new game opened under it. */
+export const NOTHING_TOLD = "";
+
+/**
+ * What the layer tells main about what holds the bar, given what it last told (`told`, a key from an
+ * earlier answer): nothing when that is unchanged; the first word after `NOTHING_TOLD` asks main to
+ * draw the bar again for it (`ready`).
+ */
+export function holdToTell(told: string, hold: PlayBarHold): { key: string; payload: PlayBarHold } | null {
+  const plain = { held: hold.held, comments: hold.comments };
+  const key = holdKey(plain);
+  if (key === told) return null;
+  return { key, payload: told === NOTHING_TOLD ? { ...plain, ready: true } : plain };
+}
+
+/** The key a hold is remembered by, once told. */
+export const holdKey = (hold: PlayBarHold): string => JSON.stringify({ held: hold.held, comments: hold.comments });
+
+/** What Esc in the bar's layer does. Never rename a value. */
+export const BarEscape = {
+  /** Nothing: Comments closes itself, a key held down repeats, or no game is open. */
+  None: "none",
+  /** The game is playing: the keyboard goes back to it. */
+  Resume: "resume",
+  /** The game is not on screen yet (or failed): the viewer closes, as the cover's Esc does. */
+  Leave: "leave",
+} as const;
+export type BarEscape = (typeof BarEscape)[keyof typeof BarEscape];
+
+/** What an Esc press in the bar's layer does, by the game's phase. */
+export function barEscape(
+  phase: PlayViewerPhase | undefined,
+  press: { repeat: boolean; commentsOpen: boolean },
+): BarEscape {
+  if (!phase || press.repeat || press.commentsOpen) return BarEscape.None;
+  return phase === PlayViewerPhase.Playing ? BarEscape.Resume : BarEscape.Leave;
+}
 
 /** Whole minutes since `at`, never below zero (a clock a little behind genex.games'). */
 export const minutesSince = (at: number, now: number): number => Math.max(0, Math.floor((now - at) / MINUTE_MS));

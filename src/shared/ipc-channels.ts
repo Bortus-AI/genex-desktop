@@ -17,7 +17,7 @@
 import type { StudioApi } from "./studio-api.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
-import type { PlayBarHold } from "./play-comments.ts";
+import type { PlayBarHold } from "./play-bar.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";

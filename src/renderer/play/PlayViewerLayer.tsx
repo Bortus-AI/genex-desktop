@@ -162,7 +162,8 @@ export function PlayViewerLayer(): JSX.Element | null {
     const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     layer.current?.focus();
     const leave = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      // A key held down repeats: only a fresh press acts.
+      if (event.key !== "Escape" || event.repeat) return;
       if (leaves.current) void studio().play.close();
       else if (onScreen.current)
         void studio()
