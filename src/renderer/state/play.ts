@@ -19,7 +19,9 @@ import {
   type RemixProgress,
   RemixStep,
 } from "../../shared/play.ts";
+import { type PlayChangeResult, PlayChangeOutcome, type PlayGameChange } from "../../shared/play-manage.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
+import { changedGame } from "../play/card-menu/manage-model.ts";
 import {
   countedSlugs,
   EMPTY_FEED,
@@ -202,6 +204,24 @@ export function onlineCounted(state: PlayState, category: PlayCategory, counts: 
   return games === feed.games ? state : withFeed(state, category, { ...feed, games });
 }
 
+/**
+ * A game was changed from its card's menu: every tab shows `next` in its place, or drops it once
+ * it left the catalog (null).
+ */
+export function gameChanged(state: PlayState, gameId: string, next: PlayGame | null): PlayState {
+  const feeds: PlayState["feeds"] = {};
+  for (const [category, feed] of Object.entries(state.feeds) as Array<[PlayCategory, FeedState]>) {
+    const at = feed.games.findIndex((game) => game.id === gameId);
+    if (at === -1) {
+      feeds[category] = feed;
+      continue;
+    }
+    const games = next ? feed.games.with(at, next) : feed.games.filter((game) => game.id !== gameId);
+    feeds[category] = { ...feed, games };
+  }
+  return { ...state, feeds };
+}
+
 /** A game was opened: its cover shows at once, and it leads Recent. */
 export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
   return {
@@ -322,9 +342,29 @@ export interface PlayStore extends StoreApi<PlayState> {
   remix(game: PlayGame): Promise<void>;
   /** Copy the viewer's game as a card's is: the viewer closes at once. */
   remixViewed(): Promise<void>;
+  /**
+   * Change a published game from its card's menu; its cards change at once. Throws when
+   * genex.games refused it or could not be reached.
+   */
+  manage(game: PlayGame, change: PlayGameChange): Promise<PlayChangeResult>;
+  /** A game's new cover took: its cards show it. */
+  coverChanged(game: PlayGame, coverUrl: string): void;
 }
 
-type PlayApi = Pick<StudioApi, "playFeed" | "playShelves" | "playOnline" | "playOpen" | "playClose" | "playRemix">;
+type PlayApi = Pick<
+  StudioApi,
+  "playFeed" | "playShelves" | "playOnline" | "playOpen" | "playClose" | "playRemix" | "playManage"
+>;
+
+/** The store's `manage`: send the change, then show it on every card of the game at once. */
+function managing(api: PlayApi, set: (change: (state: PlayState) => PlayState) => void): PlayStore["manage"] {
+  return async (game, change) => {
+    const result = await api.playManage(game.id, change);
+    if (result.outcome !== PlayChangeOutcome.Done) return result;
+    set((state) => gameChanged(state, game.id, changedGame(game, change, result)));
+    return result;
+  };
+}
 
 /** Play's store over `api`, remembering Recent in `storage`. */
 export function createPlayStore(
@@ -414,6 +454,8 @@ export function createPlayStore(
     }
   };
 
+  const manage = managing(api, set);
+
   return Object.assign(store, {
     loadShelves,
     chooseShelf: (shelf: PlayShelf) => set((state) => shelfChosen(state, shelf)),
@@ -438,5 +480,8 @@ export function createPlayStore(
       await close().catch(() => {});
       await made;
     },
+    manage,
+    coverChanged: (game: PlayGame, coverUrl: string) =>
+      set((state) => gameChanged(state, game.id, { ...game, coverUrl })),
   });
 }

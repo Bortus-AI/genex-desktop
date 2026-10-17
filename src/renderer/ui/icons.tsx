@@ -587,6 +587,27 @@ const glyphs = {
       <rect x="13" y="13" width="7" height="7" rx="1" />
     </>
   ),
+  /** A tag with its hole: a game's tags. */
+  tag: (
+    <>
+      <path d="M4 12.6V5.5A1.5 1.5 0 0 1 5.5 4h7.1a1.5 1.5 0 0 1 1 .4l6.1 6.1a1.5 1.5 0 0 1 0 2.1l-7.1 7.1a1.5 1.5 0 0 1-2.1 0l-6.1-6.1a1.5 1.5 0 0 1-.4-1z" />
+      <circle cx="8.5" cy="8.5" r="1.3" {...DOT} />
+    </>
+  ),
+  /** An eye struck through: taken out of sight. */
+  "eye-off": (
+    <>
+      <path d="M2.5 12s3.5-6.5 9.5-6.5c1.6 0 3 .5 4.2 1.2M21.5 12s-3.5 6.5-9.5 6.5c-1.6 0-3-.5-4.2-1.2" />
+      <path d="M4 20L20 4" />
+    </>
+  ),
+  /** A closed padlock. */
+  lock: (
+    <>
+      <rect x="5" y="10.5" width="14" height="9.5" rx="2.5" />
+      <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" />
+    </>
+  ),
   /** A small triangle up or down: a number that rose or fell. */
   "caret-up": <path d="M12 7l6 9H6z" fill="currentColor" stroke="none" />,
   "caret-down": <path d="M12 17l6-9H6z" fill="currentColor" stroke="none" />,

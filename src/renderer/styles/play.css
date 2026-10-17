@@ -693,6 +693,194 @@
   flex: none;
 }
 
+/* ── A card's ⋯ menu (`card-menu/`): on the cover's corner, shown while the card is hovered or focused ── */
+.play-card-frame {
+  position: relative;
+}
+/* genex.games' trigger: a translucent dark circle over the cover art, the same on light and dark. */
+.play-card-menu {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline-end: 8px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--duration-quick) var(--ease-smooth-out),
+    background-color var(--duration-quick) var(--ease-smooth-out);
+}
+.play-card-menu:hover {
+  background: rgb(0 0 0 / 0.7);
+}
+.play-card-menu:focus-visible {
+  outline: 2px solid rgb(255 255 255 / 0.8);
+  outline-offset: 2px;
+}
+.play-card:hover .play-card-menu,
+.play-card:focus-within .play-card-menu,
+.play-card[data-menu-open] .play-card-menu {
+  opacity: 1;
+}
+@media (hover: none) {
+  .play-card-menu {
+    opacity: 1;
+  }
+}
+.play-card-menu-row[data-tone="danger"] {
+  color: var(--red);
+}
+.play-card-menu-state {
+  flex: none;
+  color: var(--ink-3);
+  font: 12px / 16px var(--font-family-mono);
+  letter-spacing: -0.02em;
+}
+.play-card-menu-label {
+  padding-block: 6px 4px;
+  font: 500 11px / 14px var(--font-family-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* ── Its dialogs: one surface each, the footer under the content, its one problem in orange ── */
+.play-dialog-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-block-start: 4px;
+}
+.play-dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.play-dialog-problem {
+  color: var(--orange);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.play-dialog-note {
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+
+/* Mobile support: three rows to pick one from, the picked one lit. */
+.play-dialog-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.play-dialog-choice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  text-align: start;
+  cursor: pointer;
+}
+.play-dialog-choice:hover {
+  background: var(--control-hover);
+}
+.play-dialog-choice[aria-checked="true"] {
+  background: color-mix(in srgb, var(--play-blue) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--play-blue) 40%, transparent);
+}
+.play-dialog-radio {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.play-dialog-choice[aria-checked="true"] .play-dialog-radio {
+  background: #fff;
+  box-shadow: inset 0 0 0 5px var(--play-blue);
+}
+.play-dialog-choice-name {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+.play-dialog-choice-hint {
+  display: block;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+/* Edit tags: the shelf as a segmented choice, then that shelf's tags as chips. */
+.play-tags-shelves {
+  display: inline-flex;
+  justify-self: start;
+  width: fit-content;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--play-track);
+  box-shadow: inset 0 0 0 1px var(--play-track-edge);
+}
+.play-tags-shelf {
+  padding: 5px 12px;
+  border-radius: 8px;
+  color: var(--ink-3);
+  font: 13px / 18px var(--font-family-mono);
+  cursor: pointer;
+}
+.play-tags-shelf[aria-checked="true"] {
+  background: color-mix(in srgb, var(--play-blue) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--play-blue) 40%, transparent);
+  color: var(--ink);
+}
+.play-tags-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.play-tags-chip {
+  padding: 5px 11px;
+  border-radius: 9px;
+  background: var(--control-quiet, var(--field));
+  color: var(--ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.play-tags-chip:hover {
+  background: var(--control-hover);
+}
+.play-tags-chip[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--play-blue) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--play-blue) 40%, transparent);
+  color: var(--ink);
+}
+
+/* Change cover: the picture as genex.games will store it, 16:9. */
+.play-cover-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--play-placeholder);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
+.play-cover-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* A card on its way: the same shape, shimmering; it appears only if the wait is not over at once. */
 .play-card-placeholder {
   animation: play-fade-in 200ms 120ms ease-out both;

@@ -118,6 +118,7 @@ describe("the Genex account Play is signed in as", () => {
       photoUrl: null,
       avatarVariantKept: false,
       handleChosen: null,
+      isAdmin: false,
     });
     assert.ok(!JSON.stringify(me).includes("example.com"), "no email crosses");
     await people.me();
@@ -125,6 +126,22 @@ describe("the Genex account Play is signed in as", () => {
     advance(60_000);
     await people.me();
     assert.equal(calls.filter((c) => c.route === PeopleRoute.Me).length, 2, "read again later");
+  });
+
+  it("is an admin only when genex.games says so outright", async () => {
+    const answer = (isAdmin: unknown) => (call: Call) => {
+      const kept = accountApi(call);
+      return call.route === PeopleRoute.Me ? ok({ ...(kept.body as object), isAdmin }) : kept;
+    };
+    const cases: Array<[unknown, boolean]> = [
+      [true, true],
+      [false, false],
+      ["true", false],
+      [1, false],
+      [undefined, false],
+    ];
+    for (const [isAdmin, expected] of cases)
+      assert.equal((await rig(answer(isAdmin)).people.me())?.isAdmin, expected, JSON.stringify(isAdmin));
   });
 
   it("shows its photo only when it chose the photo, and keeps the photo it uploaded either way", async () => {

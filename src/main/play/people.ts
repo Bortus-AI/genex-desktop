@@ -285,8 +285,12 @@ function checked(route: string, answer: { status: number; body: unknown }): unkn
   return answer.body;
 }
 
-/** The account `/api/me` names, as Play shows it, with the Pro flag its public profile carries. */
-function toMe(user: Record<string, unknown>, person: PlayPerson, pro: boolean, local: boolean): PlayMe {
+/**
+ * The account `/api/me` names, as Play shows it, with the Pro flag its public profile carries and
+ * whether `/api/me` names it an admin (only a plain `true` does).
+ */
+function toMe(body: Record<string, unknown>, person: PlayPerson, pro: boolean, local: boolean): PlayMe {
+  const user = isRecord(body.user) ? body.user : {};
   return {
     ...person,
     pro,
@@ -296,6 +300,7 @@ function toMe(user: Record<string, unknown>, person: PlayPerson, pro: boolean, l
     avatarVariantKept: isAvatarVariant(user.avatarVariant),
     // Absent is not false: a genex.games without handles opens no welcome for one.
     handleChosen: typeof user.handleChosen === "boolean" ? user.handleChosen : null,
+    isAdmin: body.isAdmin === true,
   };
 }
 
@@ -321,13 +326,12 @@ function accountCalls(deps: PeopleDeps) {
     // `request` told `refused` already: the account reads as ended, not as signed out.
     if (answer.status === HTTP_UNAUTHORIZED) return null;
     const body = checked(PeopleRoute.Me, answer);
-    const user = isRecord(body) ? body.user : null;
-    const person = toPerson(user, local);
-    if (!person || !isRecord(user)) throw new GalleryError(PeopleRoute.Me, answer.status);
+    const person = toPerson(isRecord(body) ? body.user : null, local);
+    if (!person || !isRecord(body)) throw new GalleryError(PeopleRoute.Me, answer.status);
     // `/api/me` has no Pro flag; the public profile has, and no email.
     const profile = await readRoute(request, PeopleRoute.user(person.id)).catch(() => null);
     const pro = isRecord(profile) && isRecord(profile.user) && profile.user.pro === true;
-    const value = toMe(user, person, pro, local);
+    const value = toMe(body, person, pro, local);
     me = { token: current, at: now(), value };
     return value;
   };
