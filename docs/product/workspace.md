@@ -37,8 +37,8 @@ commands to copy, Retry.
   ([its kind](projects-engines.md)). Duplicates never overwrite; a greeting stays **Untitled game** until an idea. **New game**, the Games **+** and Command-N open home.
 - **Settings → Games** moves new games to an empty folder (default `~/AI Games`);
   **Storage** frees older builds, keeping paused and latest finished.
-- **Settings → Privacy**: Share build metrics (off by default), See what would be sent,
-  Delete what I shared and policy links ([PRIVACY](../../PRIVACY.md)).
+- **Settings → Privacy**: Share build metrics (off by default), its preview and delete, and
+  policy links ([PRIVACY](../../PRIVACY.md)).
 - Home's **Open a folder…** inspects before writing (Claude settings and hooks trusted unless
   switched off); only a web folder gets starter files.
 - A game's menu offers Rename (same folder), Pin/Unpin, Change image and Delete, which
