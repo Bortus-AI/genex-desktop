@@ -478,8 +478,9 @@ usage (see Native context telemetry). Each engine reuses a reading under a
 minute old, shares an in-flight read and falls
 back to its last reading on failure; a Recheck clears it. The composer asks when its ring panel
 opens or the ring is hovered, and every minute while open; until the first reading it draws each
-plan this setup uses at full size with shimmering bars for its limits. Its last row opens Settings →
-Model Providers. Fixture engines report fixed limits.
+plan this setup uses at full size with shimmering bars for its limits. The panel leaves per-model
+weekly windows out (`shownLimits`; `SHOW_MODEL_LIMITS` in `usage-words.ts` brings them back). Its
+last row opens Settings → Model Providers. Fixture engines report fixed limits.
 `promptbar-redesign.test.ts` covers both normalizers; account access is proven only against a
 real login.
 
