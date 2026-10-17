@@ -835,10 +835,12 @@ async function saveAtRunCheckpoint() {
   assert.equal(savedTool(saved), 1, "the editor saved its work");
 
   const playing = await liveWorld();
+  // The person chose to have agents wait while they play: their play is theirs to stop.
+  await setAgentsSetting(playing.storage, false);
   playing.editor.editor.state.pie = true;
   const refused = (await playing.call(LiveLoopToolName.SaveAll, {}, before)) as { block?: string };
   assert.match(refused.block ?? "", /playing in the editor: stop the play session first/);
-  assert.equal(savedTool(playing), 0, "a play session is never ended to save");
+  assert.equal(savedTool(playing), 0, "the person's play session is never ended to save");
 
   const closed = await liveWorld({ answering: false });
   assert.deepEqual(await closed.call(LiveLoopToolName.SaveAll, {}, before), {
