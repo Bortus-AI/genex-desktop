@@ -2561,8 +2561,8 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 
 #### The panel and the toolbar button
 
-The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a Unity
-project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
+The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
+Unity project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
 [engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
 in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
 newest Unity installed). The button's status action `toolbar-status`
