@@ -7,8 +7,8 @@
  * reaches the editor and removed on the agent's `editor_stop`. The backend reads it there: the
  * lock's probe notes each time it sees that play still running (`seenAt`), a marker neither written
  * nor seen within {@link AGENT_PLAY_MAX_MS} is not believed (a connector that died without removing
- * it), and the probe forgets one once it sees the editor play nothing, unless the play was asked for
- * within {@link PLAY_START_GRACE_MS}. A play the agent starts any other way (a script that enters
+ * it), and the probe forgets one once it sees the editor play nothing, unless no probe saw that play
+ * running yet and it was asked for within {@link PLAY_START_GRACE_MS}. A play the agent starts any other way (a script that enters
  * Play mode) counts as the person's.
  */
 import { mkdir, rm } from "node:fs/promises";
@@ -57,12 +57,12 @@ const markerFile = (storage: string, game: string): string | null => {
   return folder ? path.join(folder, AGENT_PLAY_FILE) : null;
 };
 
-/** The marker's times, or null where there is none (or it names no game). */
-async function readMarker(storage: string, game: string): Promise<{ startedAt: number; seenAt: number } | null> {
+/** The marker's times: asked for, and last seen running by a probe (null until one did); null where there is none. */
+async function readMarker(storage: string, game: string): Promise<{ startedAt: number; seenAt: number | null } | null> {
   const file = markerFile(storage, game);
   const marker = file ? await readJsonIfExists<unknown>(file).catch(() => null) : null;
   if (!isJsonObject(marker) || typeof marker.startedAt !== "number") return null;
-  const seenAt = typeof marker.seenAt === "number" ? marker.seenAt : marker.startedAt;
+  const seenAt = typeof marker.seenAt === "number" ? marker.seenAt : null;
   return { startedAt: marker.startedAt, seenAt };
 }
 
@@ -70,13 +70,17 @@ async function readMarker(storage: string, game: string): Promise<{ startedAt: n
 export async function agentPlaying(storage: string, game: string, now: number): Promise<boolean> {
   const marker = await readMarker(storage, game);
   if (!marker || marker.startedAt > now) return false;
-  return now - Math.max(marker.startedAt, Math.min(marker.seenAt, now)) < AGENT_PLAY_MAX_MS;
+  return now - Math.max(marker.startedAt, Math.min(marker.seenAt ?? marker.startedAt, now)) < AGENT_PLAY_MAX_MS;
 }
 
-/** Whether the agent asked for its play so recently that an editor playing nothing may still be starting it. */
+/**
+ * Whether the agent asked for its play so recently, and no probe saw it running yet, that an editor
+ * playing nothing may still be starting it.
+ */
 export async function agentPlayStarting(storage: string, game: string, now: number): Promise<boolean> {
   const marker = await readMarker(storage, game);
-  return marker !== null && marker.startedAt <= now && now - marker.startedAt < PLAY_START_GRACE_MS;
+  if (!marker || marker.seenAt !== null) return false;
+  return marker.startedAt <= now && now - marker.startedAt < PLAY_START_GRACE_MS;
 }
 
 /** Notes that the agent's play was seen still running, so a long play stays the agent's. */

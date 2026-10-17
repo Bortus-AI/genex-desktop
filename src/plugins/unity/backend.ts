@@ -59,7 +59,7 @@ import {
   rememberProject,
   type UnityProject,
 } from "./project-folder.ts";
-import { agentsSetting, setAgentsSetting } from "./agents-setting.ts";
+import { agentsSetting, setAgentsSetting } from "../../substrate/engine-agents.ts";
 import { newestUnity6, readinessOf } from "./readiness.ts";
 import { pipelineVersionOf, SetupError, SetupRefusal, setUpProject, undoSetup } from "./setup.ts";
 import { readFacts, SetupAction, setupCard, skippedCard } from "./setup-steps.ts";

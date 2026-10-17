@@ -22,7 +22,7 @@ import { HookEvent } from "../../shared/plugin-hooks.ts";
 import { atomicWriteJson, isJsonObject, readJsonIfExists } from "../../substrate/fsx.ts";
 import { decodePng } from "../../substrate/png.ts";
 import { agentPlaying, agentPlayStarting, forgetAgentPlay, sawAgentPlay } from "./agent-play.ts";
-import { agentsSetting } from "./agents-setting.ts";
+import { agentsSetting, firstWentAhead } from "../../substrate/engine-agents.ts";
 import { editorCommand, editorRuns, endEditor, openScenes, saveWork } from "./editor-life.ts";
 import { type OpenDeps, Opened, type Opening, openProject, usable } from "./editor-open.ts";
 import { editorStatus, PIPELINE_PACKAGE, PipelineProblem, PLAY_STOPPED } from "./pipeline.ts";
@@ -42,7 +42,7 @@ const STILL = { source: "camera", width: 1280, height: 720 } as const;
 const CAPTURE = "capture_game_view";
 const STOP_PLAY = "editor_stop";
 /** The folders in the plugin's storage holding each game's record of an editor closed for a restore, and of a stall. */
-const Records = { Restore: "restore", Health: "health", WentAhead: "went-ahead" } as const;
+const Records = { Restore: "restore", Health: "health" } as const;
 /** A game id as Genex names a game's record: a plain folder name, never a path. */
 const GAME_ID = /^[a-zA-Z0-9_-]{1,100}$/;
 /** How far a channel may stray from the first pixel's and still be the same flat colour: a dither, not a picture. */
@@ -296,8 +296,7 @@ export async function editorActivity(moment: Moment, deps: MomentDeps): Promise<
  */
 async function personPlaying(moment: Moment, unsaved: number): Promise<Activity> {
   if (!(await agentsSetting(moment.storage)).whilePlaying) return { personActive: true, unsaved };
-  if (await readRecord(moment, Records.WentAhead)) return { personActive: false, unsaved };
-  await writeRecord(moment, Records.WentAhead, { told: true });
+  if (!(await firstWentAhead(moment.storage, moment.game))) return { personActive: false, unsaved };
   return { personActive: false, unsaved, wentAhead: true };
 }
 

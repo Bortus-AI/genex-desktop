@@ -732,9 +732,15 @@ tools that work in the open editor need (`open-for-run`, `save-all`, `end-editor
 `rollback-part`, `reload-level`); lookups, the gate, the probe and the readers need none. While the
 person plays in the game's editor, the agents' and Genex's calls there wait. A play the agent
 started is not the person's: the connector marks the agent's `StartPIE` with `agent-play.json` in
-its own folder (`<storage>/mcp/<game>`, `src/plugins/unreal/agent-play.ts`), cleared by its
-`StopPIE`, a crash under a call or the connector closing, and a mark older than 30 minutes is not
-believed; nor is a play the plugin's own queue is running. `new-game.ready` names `engine-status`,
+its own folder (`<storage>/mcp/<game>`, `src/plugins/unreal/agent-play.ts`), written before the
+`StartPIE` reaches the editor (a refused start gives back the mark there was), cleared by its
+`StopPIE`, a crash under a call or the connector closing. The probe notes each time it sees that
+play running (`seenAt`) and believes a mark for 30 minutes after it was written or last seen; it
+forgets one when it sees no play, but not a play nobody saw running yet within 30 s of its start.
+Nor is a play the plugin's own queue is running the person's. The panel's Agents block holds the
+same checkbox as Unity's, **Agents may use Unreal while you play** (on unless turned off, actions
+`agents`, `agents-go-ahead`, `agents-wait`): while it is on, the probe answers that nobody is at the
+person's play, with `wentAhead` the first time for each game. `new-game.ready` names `engine-status`,
 which also answers `{ready, note}`: whether a new Unreal game can be made here and the engine
 question's words for it. The handlers answer in hook terms when `context.hook` is set
 (`editor-moments.ts`, words in `hook-answers.ts`), and the manifest hooks them, each for games with
@@ -2645,9 +2651,10 @@ folder written before its `editor_play`, alone or in a batch, reaches the editor
 `editor_stop`), so the agent's play never makes its own calls wait. The probe notes each time it
 sees that play running (`seenAt`), and believes a marker for half an hour after it was written or
 last seen; it forgets one once it sees the editor play nothing, but not while the editor reloads its
-scripts to enter Play mode, nor within 30 s of the play being asked for (`PLAY_START_GRACE_MS`).
+scripts to enter Play mode, nor, while no probe has seen it running, within 30 s of the play being
+asked for (`PLAY_START_GRACE_MS`).
 The panel's Agents block holds one checkbox for every game, **Agents may use Unity while you
-play**, on unless the person turns it off (`agents-setting.ts`, `agents.json` in the plugin's
+play**, on unless the person turns it off (`substrate/engine-agents.ts`, `agents.json` in the plugin's
 storage; actions `agents`, `agents-go-ahead`, `agents-wait`). While it is on, the probe answers that
 nobody is at a play the agent did not start, saying `wentAhead` the first time for each game
 (`went-ahead/<game>.json`); while it is off, agents wait for the person's play to end. An editor that can't be asked answers nothing: Genex can't
