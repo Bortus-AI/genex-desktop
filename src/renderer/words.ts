@@ -74,6 +74,7 @@ import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
+import { LibraryKind } from "../shared/asset-library.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4505,4 +4506,23 @@ export const MENTION_WORDS = {
   tryAgain: "Try again",
   removeTag: "Remove tag",
   trying: "Trying…",
+  search: "Search games, assets and tools",
+  yourAssets: "Your assets",
+  clear: "Clear",
+  clearLabel: "Clear the search",
+  whatLabel: "What to show",
+  all: "All",
+  games: "Games",
+  whoseLabel: "Whose",
+  everyone: "Everyone",
+  mine: "Mine",
+  /** An asset card's chip when genex.games says what kind of asset it is. */
+  assetKind: {
+    [LibraryKind.Model]: "3D",
+    [LibraryKind.Image]: "Image",
+    [LibraryKind.Sound]: "Sound",
+    [LibraryKind.Video]: "Video",
+  } satisfies Record<LibraryKind, string>,
+  saved: "Saved",
+  shared: "Shared",
 } as const;
