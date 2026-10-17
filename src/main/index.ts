@@ -142,6 +142,7 @@ import type { MentionSources } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { wirePlayViewer } from "./play/viewer-view.ts";
+import { type PlayComments, playComments } from "./play/comments.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
@@ -996,7 +997,19 @@ function popShareMenu(url: string, at: PlayPoint | undefined): void {
   new ShareMenu({ urls: [url] }).popup({ window: win, ...at });
 }
 
-/** Play's full-screen viewer in `win`: a published game, the studio's small menu over its corner. */
+/** A Play game's comments on genex.games, as the Genex account (a fixture launch's own comments). */
+function playCommentsFor(studio: StudioCore): PlayComments {
+  const account = genexAccountFor(studio);
+  return playComments({
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    me: async () => (await playAccountFor(studio).people.me())?.id ?? null,
+  });
+}
+
+/** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
@@ -1009,6 +1022,9 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
+    barPage: path.join(distRoot, "renderer", "play-bar.html"),
+    barPreload: path.join(distRoot, "preload", "preload.cjs"),
+    comments: playCommentsFor(studio),
   });
 }
 

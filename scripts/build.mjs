@@ -149,6 +149,25 @@ async function rendererContexts() {
       splitting: true,
       loader: { ".css": "css" },
     }),
+    // Play's bar layer (`play-bar.html`): a page of its own over the game's view, with only the bar and Comments.
+    await esbuild.context({
+      ...rendererBuildOptions(rendererMode),
+      define: {
+        ...rendererBuildOptions(rendererMode).define,
+        __STUDIO_PERFORMANCE__: JSON.stringify(false),
+      },
+      bundle: true,
+      platform: "browser",
+      metafile: true,
+      target: "chrome130",
+      sourcemap: true,
+      logLevel: "info",
+      format: "esm",
+      jsx: "automatic",
+      entryPoints: [path.join(root, "src/renderer/play-bar.tsx")],
+      outfile: path.join(dist, "renderer/play-bar.js"),
+      loader: { ".css": "css" },
+    }),
     await esbuild.context({
       bundle: true,
       platform: "browser",
@@ -385,6 +404,7 @@ async function copyResources() {
 
   // Renderer shell + vendored fonts (offline app; the CSP admits no font host).
   await cp(path.join(root, "src/renderer/index.html"), path.join(dist, "renderer/index.html"));
+  await cp(path.join(root, "src/renderer/play-bar.html"), path.join(dist, "renderer/play-bar.html"));
   await cp(path.join(root, "src/renderer/fonts"), path.join(dist, "renderer/fonts"), {
     recursive: true,
     filter: (source) => !source.endsWith("urls.txt"),

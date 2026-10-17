@@ -5,6 +5,7 @@
  * draws the same catalog.
  */
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
+import { fixtureCommentCount, fixtureCommentsAnswer } from "./fixture-comments.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
 import {
   type FixtureCatalog,
@@ -237,7 +238,9 @@ function world(slug: string): GalleryAnswer {
   const game = CATALOG[index];
   if (!game) return NOT_FOUND;
   const liked = likes.get(slug) === true;
-  return ok({ item: { ...item(game, index), likesCount: 3 + (liked ? 1 : 0), likedByMe: liked } });
+  const shown = item(game, index);
+  const facts = { likesCount: 3 + (liked ? 1 : 0), likedByMe: liked, commentsCount: fixtureCommentCount(shown.id) };
+  return ok({ item: { ...shown, ...facts } });
 }
 
 /** The search catalog: every fixture game in its slim shape, the author a name. */
@@ -260,6 +263,8 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
   // The creator routes first: the account's stats live under `/api/users/me`, beside the people routes.
   const people = fixtureCreatorAnswer(route, init, catalog) ?? fixturePeopleAnswer(route, init, catalog);
   if (people) return people;
+  const comments = fixtureCommentsAnswer(route, init);
+  if (comments) return comments;
   if (route === PlayRoute.Referral && fixtureAccountOf(init.token)) return ok(fixtureReferral());
   const [pathname = "", search = ""] = route.split("?");
   const query = new URLSearchParams(search);

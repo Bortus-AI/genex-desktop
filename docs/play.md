@@ -63,10 +63,19 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## Playing a game
 
-- A game plays full window in a sandboxed view (`persist:genex-play`) under the app's header: Like,
-  Share, Invite, Remix, Exit; a held Esc gives the header the keyboard. A single-use ticket in the
-  address's fragment signs the player in; a guest is offered sign-in. The rest of the app is inert
-  until the game closes.
+- A game plays across the whole window in a sandboxed view (`persist:genex-play`). The app's bar
+  lies over its top edge as glass, in a transparent view of its own above the game's
+  (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
+  Invite a friend (multiplayer games), Share, Remix, Exit. It is up while the game loads, for 3 seconds
+  after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
+  then it fades up and out, and macOS's window buttons go with it. A held Esc gives the bar the
+  keyboard. A single-use ticket in the address's fragment signs the player in; a guest is offered
+  sign-in. The rest of the app is inert until the game closes.
+- Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the
+  title, genex.games' comments newest first in pages of 20, a footer pinned under the list (Sign in
+  signed out, else the field with Post inside it once something is typed; at most 500 characters).
+  The account's own comments can be deleted. Main reads and writes them for the game on screen
+  (`main/play/comments.ts`); Esc, ✕ or a click outside closes it and the game gets the keyboard back.
 - The page stays on Genex games' addresses; a link it opens goes to the browser, at most one every
   few seconds.
 - Voice chat: a game that asks for a microphone gets the header's mic switch, remembered per game.

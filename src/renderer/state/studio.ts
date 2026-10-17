@@ -361,6 +361,8 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
 function applyUiEvent({ agentScreens, threads, layout, library, update, play }: Stores, event: UiEvent): void {
   switch (event.type) {
     case UiEvent.PlayViewer:
+      // The bar's Remix closed the viewer: the copy is made of the game it showed, as a card's is.
+      if (event.payload.remix) void play.remixViewed();
       play.setState((state) => viewerReported(state, event.payload), true);
       break;
     case UiEvent.PlayRemix:

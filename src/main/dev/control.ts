@@ -87,6 +87,11 @@ export class DesktopControl {
     });
     return { dispatched: true, x, y };
   }
+  /** Move the pointer to `x`, `y` on the page, as a mouse would. */
+  async move(wc: WebContents, params: { x: number; y: number }) {
+    await this.cdp(wc, "Input.dispatchMouseEvent", { type: "mouseMoved", x: params.x, y: params.y });
+    return { dispatched: true, x: params.x, y: params.y };
+  }
   async key(wc: WebContents, params: { key: string; code: string; modifiers?: string[] }) {
     const modifiers = (params.modifiers ?? []).reduce((n, k) => n | (CDP_MODIFIER[k] ?? 0), 0);
     const windowsVirtualKeyCode =
@@ -115,6 +120,8 @@ export class DesktopControl {
         return this.#graphDrag(wc, op.params);
       case DevMethod.Key:
         return this.key(wc, op.params);
+      case DevMethod.Move:
+        return this.move(wc, op.params);
       case DevMethod.Type:
         return this.#type(wc, op);
       case DevMethod.Select:
