@@ -273,18 +273,39 @@ describe("picker switchers", () => {
     assert.deepEqual(MENTION_FILTER_ALL, { what: MentionWhat.All, whose: AssetScope.Everyone });
   });
 
-  it("puts your own assets first on the Assets shelf, the library after your published ones", () => {
+  it("shelves your own assets apart, published ones before the library's, then everyone's", () => {
     const assets = mentionShelves(filterMentions(docs, { what: MentionWhat.Assets, whose: AssetScope.Everyone }));
     assert.deepEqual(
       assets.map((s) => [s.shelf, s.docs.map((d) => d.handle)]),
-      [[MentionShelf.Assets, ["my-chair", "giant-mushroom-tree", "fireplace"]]],
+      [
+        [MentionShelf.YourAssets, ["my-chair", "giant-mushroom-tree"]],
+        [MentionShelf.Assets, ["fireplace"]],
+      ],
+    );
+    const big = mentionCorpus(
+      [],
+      catalog,
+      Array.from({ length: 20 }, (_, i) =>
+        libraryAsset({ id: `gen-many-${String(i).padStart(4, "0")}`, title: `Rock ${i}` }),
+      ),
+    );
+    const everyone = mentionShelves(filterMentions(big, MENTION_FILTER_ALL));
+    assert.equal(
+      everyone.find((s) => s.shelf === MentionShelf.YourAssets)?.docs.length,
+      SHELF_CAPS[MentionShelf.YourAssets],
+    );
+    assert.deepEqual(
+      everyone.find((s) => s.shelf === MentionShelf.Assets)?.docs.map((d) => d.handle),
+      ["fireplace"],
+      "a big library never pushes everyone's assets out",
     );
   });
 
   it("one kind alone gets a longer shelf", () => {
     assert.equal(shelfCaps(MENTION_FILTER_ALL), SHELF_CAPS);
     const narrow = shelfCaps({ what: MentionWhat.Assets, whose: AssetScope.Mine });
-    assert.ok(narrow.assets > SHELF_CAPS.assets);
+    assert.ok(narrow[MentionShelf.Assets] > SHELF_CAPS[MentionShelf.Assets]);
+    assert.ok(narrow[MentionShelf.YourAssets] > SHELF_CAPS[MentionShelf.YourAssets]);
   });
 
   it("typed text searches within the switchers", () => {

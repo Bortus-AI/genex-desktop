@@ -42,11 +42,23 @@ export interface LocalMentionGame {
 }
 
 /** A shelf of the empty picker. */
-export const MentionShelf = { Yours: "yours", Assets: "assets", Tools: "tools", Games: "games" } as const;
+export const MentionShelf = {
+  Yours: "yours",
+  YourAssets: "your-assets",
+  Assets: "assets",
+  Tools: "tools",
+  Games: "games",
+} as const;
 export type MentionShelf = (typeof MentionShelf)[keyof typeof MentionShelf];
 
 /** How many cards each shelf shows before anything is typed. */
-export const SHELF_CAPS: Record<MentionShelf, number> = { yours: 6, assets: 6, tools: 3, games: 3 };
+export const SHELF_CAPS: Record<MentionShelf, number> = {
+  [MentionShelf.Yours]: 6,
+  [MentionShelf.YourAssets]: 6,
+  [MentionShelf.Assets]: 6,
+  [MentionShelf.Tools]: 3,
+  [MentionShelf.Games]: 3,
+};
 /** How many cards a shelf shows when the picker shows one kind only. */
 const NARROW_SHELF_CAP = 12;
 /** How many cards a typed query shows. */
@@ -190,24 +202,25 @@ function isOwn(item: GenexCatalogItem, userId: string | null): boolean {
 /** The shelf a doc sits on before anything is typed. */
 export function shelfOf(doc: MentionDoc): MentionShelf {
   if (doc.own && doc.kind === MentionKind.Game) return MentionShelf.Yours;
+  // Your own assets (your library, your published ones) sit apart, so everyone's still show beside them.
+  if (doc.own && doc.kind === MentionKind.Asset) return MentionShelf.YourAssets;
   if (doc.kind === MentionKind.Asset) return MentionShelf.Assets;
   if (doc.kind === MentionKind.Tool) return MentionShelf.Tools;
   return MentionShelf.Games;
 }
 
-/** The person's own first (library assets keep their newest-first order), then by plays. */
+/** The person's own first, then by plays; a tie keeps the corpus's order (the library's newest first). */
 const ownThenPlays = (a: MentionDoc, b: MentionDoc): number => Number(b.own) - Number(a.own) || b.plays - a.plays;
 
 /**
- * The empty picker: each shelf in order with its first cards; local games keep their order, and on
- * the other shelves the person's own work comes first.
+ * The empty picker: each shelf in order with its first cards. Your games keep their order; your
+ * published assets come before your library's, and on the other shelves your own work leads.
  */
 export function mentionShelves(
   docs: readonly MentionDoc[],
   caps: Record<MentionShelf, number> = SHELF_CAPS,
 ): { shelf: MentionShelf; docs: MentionDoc[] }[] {
-  const order = [MentionShelf.Yours, MentionShelf.Assets, MentionShelf.Tools, MentionShelf.Games];
-  return order
+  return Object.values(MentionShelf)
     .map((shelf) => {
       const onShelf = docs.filter((doc) => shelfOf(doc) === shelf);
       const sorted = shelf === MentionShelf.Yours ? onShelf : [...onShelf].sort(ownThenPlays);
@@ -219,7 +232,13 @@ export function mentionShelves(
 /** Each shelf's cap for the switchers: one kind alone gets a longer shelf. */
 export function shelfCaps(filter: MentionFilter): Record<MentionShelf, number> {
   if (filter.what === MentionWhat.All) return SHELF_CAPS;
-  return { yours: NARROW_SHELF_CAP, assets: NARROW_SHELF_CAP, tools: NARROW_SHELF_CAP, games: NARROW_SHELF_CAP };
+  return {
+    [MentionShelf.Yours]: NARROW_SHELF_CAP,
+    [MentionShelf.YourAssets]: NARROW_SHELF_CAP,
+    [MentionShelf.Assets]: NARROW_SHELF_CAP,
+    [MentionShelf.Tools]: NARROW_SHELF_CAP,
+    [MentionShelf.Games]: NARROW_SHELF_CAP,
+  };
 }
 
 /**
