@@ -169,6 +169,43 @@ describe("Set up (Windows)", () => {
     ]);
   });
 
+  it("after an install that went through, a Set up whose startup failed only starts again", async () => {
+    let attempts = 0;
+    const counts = { installs: 0 };
+    const gate = createBootGate(StudioPlatform.Windows, {
+      installSandbox: async () => {
+        counts.installs++;
+        return { cancelled: false };
+      },
+    });
+    gate.hold(NOT_PROVISIONED, async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("event store is corrupt");
+    });
+    await assert.rejects(gate.setUp(), /event store is corrupt/);
+    assert.deepEqual(await gate.setUp(), {
+      outcome: SandboxSetupOutcome.Installed,
+      state: { platform: StudioPlatform.Windows, phase: BootPhase.Ready, sandbox: null },
+    });
+    assert.deepEqual({ ...counts, attempts }, { installs: 1, attempts: 2 }, "one administrator prompt");
+  });
+
+  it("a sandbox still waiting on its install after one is installed again by the next Set up", async () => {
+    let installs = 0;
+    const gate = createBootGate(StudioPlatform.Windows, {
+      installSandbox: async () => {
+        installs++;
+        return { cancelled: false };
+      },
+    });
+    gate.hold(NOT_PROVISIONED, async () => {
+      throw new SandboxUnavailableError(NOT_PROVISIONED);
+    });
+    await gate.setUp();
+    await gate.setUp();
+    assert.equal(installs, 2);
+  });
+
   it("presses of Set up while one install runs share it", async () => {
     const install = deferred();
     const { gate, counts } = windowsGate(() => install.promise.then(() => ({ cancelled: false })));

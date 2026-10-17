@@ -3288,7 +3288,8 @@ export const SANDBOX_SETUP_WORDS = {
       tryAgain: "Try again",
       report: "Send a report",
       sending: "Sending…",
-      sent: "✓ Sent",
+      /** The bare ✓'s label, once the report went. */
+      sent: "Report sent",
       reportFailed: "The report didn’t send. Try again in a moment.",
     },
   },

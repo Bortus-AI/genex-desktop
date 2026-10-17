@@ -128,6 +128,30 @@ export function WindowsSetup({
   );
 }
 
+/** Send a report; while it sends, a line says so, and once sent a bare ✓ takes its place. */
+function ReportAction({ report, onReport }: { report: SetupReport; onReport: () => void }): JSX.Element {
+  const words = WORDS.windows.failed;
+  if (report === SetupReport.Sent) {
+    return (
+      <span data-setup-report={report} role="img" aria-label={words.sent} className="px-2 text-ink">
+        ✓
+      </span>
+    );
+  }
+  if (report === SetupReport.Sending) {
+    return (
+      <span data-setup-report={report} className="px-2 text-sm text-ink-3">
+        {words.sending}
+      </span>
+    );
+  }
+  return (
+    <Button variant="secondary" data-setup-report={report} onClick={onReport}>
+      {words.report}
+    </Button>
+  );
+}
+
 /** A failed Set up's actions: Try again, the report (sent, it is a bare ✓), and the raw error. */
 function SetupFailed({
   error,
@@ -147,21 +171,7 @@ function SetupFailed({
         <Button variant="default" data-sandbox-set-up onClick={onSetUp}>
           {words.tryAgain}
         </Button>
-        {report === SetupReport.Sent ? (
-          <span data-setup-report={report} className="px-2 text-sm text-ink">
-            {words.sent}
-          </span>
-        ) : (
-          <Button
-            variant="secondary"
-            data-setup-report={report}
-            aria-busy={report === SetupReport.Sending}
-            disabled={report === SetupReport.Sending}
-            onClick={onReport}
-          >
-            {report === SetupReport.Sending ? words.sending : words.report}
-          </Button>
-        )}
+        <ReportAction report={report} onReport={onReport} />
       </div>
       {report === SetupReport.Failed && <p className="text-sm text-orange">{words.reportFailed}</p>}
       <details className="settings-disclosure text-sm text-ink-3">

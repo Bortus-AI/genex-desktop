@@ -123,6 +123,8 @@ const MESSAGE = {
     `could not let the sandbox user see the folder ${dir}: ${errorMessage(error)}`,
   NoAnswer: "no answer for this folder",
   NoMembers: "the Windows sandbox session has no members",
+  UserNotSetUp: (user: boolean, cred: boolean) => `Sandbox user is not provisioned (user=${user}, cred=${cred}).`,
+  FiltersNotSetUp: "WFP filters are not installed for the sandbox user.",
 } as const;
 
 /** Folders the sandbox user may write and read, for the whole session. */
@@ -414,7 +416,7 @@ export function bundledGitRoot(resources: string | undefined = process.resources
   return resources ? win.join(resources, BUNDLED_GIT_DIR) : null;
 }
 
-/** How Git Bash is looked up; the defaults ask Genex's own Git, the registry, then `git`. */
+/** How Git Bash is looked up; the defaults ask the registry, then `git`, then Genex's own Git. */
 export interface GitBashLookup {
   /** Genex's own Git for Windows (default: {@link bundledGitRoot}). */
   bundled?: string | null;
@@ -424,9 +426,9 @@ export interface GitBashLookup {
 }
 
 /**
- * Git Bash (`<Git>\bin\bash.exe`): Genex's own copy first, since a packaged app ships the Git it
- * was tested with, then an installed Git for Windows from the registry or from `git --exec-path`
- * (a development build has no copy of its own); null when none has it.
+ * Git Bash (`<Git>\bin\bash.exe`): an installed Git for Windows from the registry or from
+ * `git --exec-path` first, so a PC with Git keeps its own (with its credential manager, which the
+ * trimmed copy leaves out), then Genex's own copy in a packaged app; null when none has it.
  */
 export async function findGitBash(lookup: GitBashLookup = {}): Promise<string | null> {
   const bundled = lookup.bundled === undefined ? bundledGitRoot() : lookup.bundled;
@@ -436,9 +438,9 @@ export async function findGitBash(lookup: GitBashLookup = {}): Promise<string | 
   const execPath = lookup.execPath ?? (async () => (await run("git", ["--exec-path"], TOOL_RUN)).stdout);
   const exists = lookup.exists ?? existsSync;
   const lookups = [
-    async () => bundled,
     () => registry().then(gitRootFromRegistry, () => null),
     () => execPath().then(gitRootFromExecPath, () => null),
+    async () => bundled,
   ];
   for (const lookupRoot of lookups) {
     const root = await lookupRoot();
@@ -708,8 +710,11 @@ export interface WindowsSessionDeps {
   ancestors: AncestorGrants;
   /** Filters deny paths before they reach srt-win ({@link keepWindowsDenies}). */
   keepDenies?: (paths: readonly string[], scope: DenyScope) => string[];
-  /** Lets the sandbox user start srt-win, before an initialize ({@link grantLauncherFolders}). */
-  launcher?: () => Promise<void>;
+  /**
+   * Lets the sandbox user start srt-win, before an initialize ({@link grantLauncherFolders});
+   * answers how to take that back, which a failed initialize does.
+   */
+  launcher?: () => Promise<() => void>;
 }
 
 /** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
@@ -852,14 +857,17 @@ export class WindowsSandboxSession {
    * folder, which can walk the whole user profile, so a retry repeats that walk.
    */
   async #initialize(config: SandboxRuntimeConfig): Promise<void> {
-    if (!this.#started) await this.#deps.launcher?.();
+    const release = this.#started ? undefined : await this.#deps.launcher?.();
     for (let attempt = 1; ; attempt++) {
       try {
         await this.#deps.runtime.initialize(config);
         this.#started = true;
         return;
       } catch (error) {
-        if (!egressCheckTimedOut(error) || attempt >= INITIALIZE_ATTEMPTS) throw error;
+        if (egressCheckTimedOut(error) && attempt < INITIALIZE_ATTEMPTS) continue;
+        // srt's reset takes back only what an initialize recorded; the launcher's grant is ours.
+        release?.();
+        throw error;
       }
     }
   }
@@ -982,25 +990,61 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
  * srt-win as that user before it applies any grant, and a per-user install (Squirrel's, under
  * `%LOCALAPPDATA%`) sits in the profile, where that user may open nothing, so Windows refused it
  * ("CreateProcessWithLogonW(srt-sandbox): Access is denied"). The grant is srt's own, held for
- * this process like the session's, so the session's reset takes it back with them. Before the
- * sandbox is set up there is no user to grant to, and initialize says so.
+ * this process like the session's, so a reset after a successful initialize takes it back with
+ * them; the answer takes it back after a failed one. Before the sandbox is set up there is no user
+ * to grant to, and initialize says so.
  */
-export async function grantLauncherFolders(srtWin: string, dirs: readonly string[]): Promise<void> {
+export async function grantLauncherFolders(srtWin: string, dirs: readonly string[]): Promise<() => void> {
   const sid = await srtSandboxSid(srtWin);
-  if (!sid) return;
+  if (!sid) return () => {};
   const srt = await import(SRT_PACKAGE);
-  srt.grantWindowsAcl({ read: [...dirs], write: [], sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) });
+  const acl = { sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) };
+  srt.grantWindowsAcl({ ...acl, read: [...dirs], write: [] });
+  return () => {
+    try {
+      srt.revokeWindowsAcl(acl);
+    } catch {
+      // A read grant on the app's own files; the next start's grant replaces it.
+    }
+  };
+}
+
+/** srt-win's `wfp status` answer for filters that were never installed (or were removed). */
+const WFP_ABSENT = "absent";
+
+/** What srt-win's `user status` and `wfp status` say, as far as setup goes. */
+export interface WindowsSetupStatus {
+  user: { provisioned: boolean; credPresent: boolean };
+  wfp: { state: string };
 }
 
 /**
- * sandbox-runtime's own Windows dependency check, the one its `initialize` runs first: the
- * sandbox user, its credential and the WFP filters. `initialize` reports that refusal as a plain
- * Error with no code, so a failed start asks again here to tell "not set up yet" from a fault.
+ * What is not set up yet, by srt-win's status answers: the sandbox user, its credential, or the
+ * WFP filters (once the user exists). Empty when everything is in place, even if a start failed.
+ */
+export function setupGaps({ user, wfp }: WindowsSetupStatus): string[] {
+  if (!user.provisioned || !user.credPresent) {
+    return [MESSAGE.UserNotSetUp(user.provisioned, user.credPresent)];
+  }
+  return wfp.state === WFP_ABSENT ? [MESSAGE.FiltersNotSetUp] : [];
+}
+
+/**
+ * The parts of the Windows sandbox not set up yet, the ones `initialize` checks first.
+ * `initialize` reports that refusal as a plain Error with no code, so a failed start asks again
+ * here to tell "not set up yet" from a fault. It asks srt-win's two status probes directly, not
+ * srt's dependency check: that one also lists a probe that failed (a slow first scan, a missing
+ * srt-win), which would turn a set-up PC's fault into a second approval prompt. A probe that
+ * fails throws, and the start's own error stands.
  */
 export async function windowsDependencyErrors(srtWin: string = srtWinPath()): Promise<string[]> {
   const srt = await import(SRT_PACKAGE);
-  const result = await srt.checkWindowsDependenciesAsync({ srtWin: srt.resolveSrtWin({ path: srtWin }) });
-  return result.errors;
+  const opts = { srtWin: srt.resolveSrtWin({ path: srtWin }) };
+  const [user, wfp] = await Promise.all([
+    srt.getWindowsSandboxUserStatusAsync(opts),
+    srt.getWindowsWfpStatusAsync(opts),
+  ]);
+  return setupGaps({ user, wfp });
 }
 
 const sessions = new WeakMap<object, WindowsSandboxSession>();

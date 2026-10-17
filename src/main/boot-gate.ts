@@ -45,6 +45,9 @@ const MESSAGE = {
   nothingToSetUp: "There is nothing to set up: the protected workspace is not waiting on an install.",
 } as const;
 
+/** What a Set up runs instead of the install once one has gone through this launch. */
+const ALREADY_INSTALLED = async (): Promise<SandboxInstall> => ({ cancelled: false });
+
 /** Held on the problem Set up fixes: a sandbox that has not been provisioned yet. */
 function waitsOnInstall(state: BootState): boolean {
   return state.phase === BootPhase.SandboxSetup && state.sandbox?.code === SandboxProblemCode.NotProvisioned;
@@ -56,6 +59,9 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
   let attempt: (() => Promise<void>) | null = null;
   let running: Promise<BootState> | null = null;
   let installing: Promise<SandboxSetupResult> | null = null;
+  // The install went through but the startup after it failed: the sandbox is there, so the next
+  // Set up only starts again, without another administrator prompt.
+  let installed = false;
 
   const settle = async (run: () => Promise<void>): Promise<BootState> => {
     try {
@@ -78,9 +84,13 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
   };
 
   const install = async (run: () => Promise<SandboxInstall>): Promise<SandboxSetupResult> => {
-    const { cancelled } = await run();
+    const { cancelled } = await (installed ? ALREADY_INSTALLED : run)();
     if (cancelled) return { outcome: SandboxSetupOutcome.Cancelled, state };
-    return { outcome: SandboxSetupOutcome.Installed, state: await retry() };
+    installed = true;
+    const after = await retry();
+    // Still waiting on its install after one: the next Set up installs again.
+    installed = !waitsOnInstall(after);
+    return { outcome: SandboxSetupOutcome.Installed, state: after };
   };
 
   return {

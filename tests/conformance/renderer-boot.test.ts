@@ -216,6 +216,29 @@ describe("Set up on Windows", () => {
     assert.equal(controller.store.getState().report, SetupReport.Failed);
   });
 
+  it("a report still sending when a new Set up starts does not mark the new error sent", async () => {
+    const { controller, fake } = windowsBoot([new Error("first"), new Error("second")]);
+    let finish = () => {};
+    fake.stub("reportSandboxSetup", () => new Promise<void>((done) => (finish = done)));
+    await controller.start();
+    const sending = controller.report();
+    await controller.setUp();
+    finish();
+    await sending;
+    const state = controller.store.getState();
+    assert.equal(state.error, "second");
+    assert.equal(state.report, SetupReport.Idle);
+  });
+
+  it("an install after which Windows still reports no sandbox is a failure with Windows' words", async () => {
+    const still = { ...WINDOWS_SETUP, sandbox: { ...NOT_PROVISIONED, details: ["Sandbox user is not provisioned"] } };
+    const { controller } = windowsBoot([{ outcome: SandboxSetupOutcome.Installed, state: still }]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.SandboxSetup);
+    assert.equal(state.error, "Sandbox user is not provisioned");
+  });
+
   it("has nothing to report before a Set up has failed", async () => {
     const { controller, fake } = windowsBoot([]);
     await controller.load();

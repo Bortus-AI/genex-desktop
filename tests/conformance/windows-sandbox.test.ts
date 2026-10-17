@@ -43,6 +43,7 @@ import {
   msysPath,
   msysPathList,
   renderEnvFile,
+  setupGaps,
   srtWinExecFailure,
   srtWinPath,
   windowsGrantHolders,
@@ -464,7 +465,7 @@ describe("which Git: Git Bash and the host's git", () => {
     assert.equal(bundledGitRoot(undefined), null);
   });
 
-  it("prefers Genex's own Git, then the registry, then git, and reports none when none has bash.exe", async () => {
+  it("prefers an installed Git (registry, then git), then Genex's own, and reports none when none has bash.exe", async () => {
     const regOut = "    InstallPath    REG_SZ    C:\\Git\r\n";
     const exec = "D:/PortableGit/mingw64/libexec/git-core";
     const bundled = "C:\\Genex\\resources\\git";
@@ -474,14 +475,24 @@ describe("which Git: Git Bash and the host's git", () => {
     };
     const table: Array<[string, Parameters<typeof findGitBash>[0], string | null]> = [
       [
-        "bundled",
+        "an installed Git before the bundled one",
         { bundled, registry: async () => regOut, execPath: async () => exec, exists: () => true },
+        "C:\\Git\\bin\\bash.exe",
+      ],
+      [
+        "bundled on a PC with no Git",
+        { bundled, registry: fail, execPath: fail, exists: () => true },
         "C:\\Genex\\resources\\git\\bin\\bash.exe",
       ],
       [
-        "bundled without bash.exe",
-        { bundled, registry: async () => regOut, execPath: fail, exists: found("C:\\Git\\bin\\bash.exe") },
-        "C:\\Git\\bin\\bash.exe",
+        "bundled when the installed Git has no bash.exe",
+        {
+          bundled,
+          registry: async () => regOut,
+          execPath: fail,
+          exists: found("C:\\Genex\\resources\\git\\bin\\bash.exe"),
+        },
+        "C:\\Genex\\resources\\git\\bin\\bash.exe",
       ],
       [
         "registry",
@@ -508,14 +519,21 @@ describe("which Git: Git Bash and the host's git", () => {
       throw new Error("not found");
     };
     const viaRegistry = { registry: async () => regOut, execPath: fail, exists: () => true };
-    const bundled = { ...viaRegistry, bundled: "C:\\Genex\\resources\\git" };
+    const bundled = { registry: fail, execPath: fail, exists: () => true, bundled: "C:\\Genex\\resources\\git" };
     const table: Array<[string, Parameters<typeof ensureHostGit>[0], string, boolean, string]> = [
       [
-        "Genex's own Git",
+        "Genex's own Git, on a PC with none",
         bundled,
+        "C:\\Windows",
+        true,
+        "C:\\Genex\\resources\\git\\cmd;C:\\Windows",
+      ],
+      [
+        "an installed Git keeps its place beside Genex's own",
+        { ...viaRegistry, bundled: "C:\\Genex\\resources\\git" },
         "C:\\Git\\cmd;C:\\Windows",
         true,
-        "C:\\Genex\\resources\\git\\cmd;C:\\Git\\cmd;C:\\Windows",
+        "C:\\Git\\cmd;C:\\Windows",
       ],
       [
         "no Git for Windows",
@@ -938,7 +956,7 @@ describe("the grant session", () => {
     assert.deepEqual(s.runtime.calls, ["initialize"]);
   });
 
-  it("lets the sandbox user start srt-win from the install folder before initializing, until an initialize succeeds", async () => {
+  it("lets the sandbox user start srt-win from the install folder before initializing, taken back when it fails, until one succeeds", async () => {
     // initialize's egress check runs srt-win as the sandbox user before it applies any grant, and
     // a per-user install sits in the profile, where that user may open nothing.
     const runtime = fakeSessionRuntime();
@@ -948,16 +966,17 @@ describe("the grant session", () => {
       ancestors: fakeAncestors().ancestors,
       launcher: async () => {
         runtime.calls.push("launcher");
+        return () => runtime.calls.push("launcher taken back");
       },
     });
     const owner = {};
     runtime.failInitializeIn("user", "not_provisioned");
     await assert.rejects(value.join(owner, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }));
     await value.join(owner, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
-    assert.deepEqual(runtime.calls, ["launcher", "initialize", "launcher", "initialize"]);
+    assert.deepEqual(runtime.calls, ["launcher", "initialize", "launcher taken back", "launcher", "initialize"]);
     value.update(owner, { write: [GAMES, LATE], read: [] });
     await value.settled();
-    assert.deepEqual(runtime.calls.slice(4), ["reset", "initialize"], "the egress check runs once per process");
+    assert.deepEqual(runtime.calls.slice(5), ["reset", "initialize"], "the egress check runs once per process");
   });
 
   it("an srt-win timeout in the egress check is tried again, up to three attempts in all", async () => {
@@ -1280,6 +1299,18 @@ describe("ProcessSandbox on Windows", () => {
         (error: unknown) => !(error instanceof SandboxUnavailableError) && /proxy port in use/.test(String(error)),
       );
     }
+  });
+});
+
+describe("what is not set up yet", () => {
+  const set = { provisioned: true, credPresent: true };
+  it("names a missing sandbox user or credential, then missing filters, and nothing on a set-up PC", () => {
+    assert.equal(setupGaps({ user: { provisioned: false, credPresent: false }, wfp: { state: "absent" } }).length, 1);
+    assert.equal(setupGaps({ user: { provisioned: true, credPresent: false }, wfp: { state: "installed" } }).length, 1);
+    assert.equal(setupGaps({ user: set, wfp: { state: "absent" } }).length, 1);
+    assert.deepEqual(setupGaps({ user: set, wfp: { state: "installed" } }), []);
+    // Reading the filters needs an administrator; srt treats it as informational, and so do we.
+    assert.deepEqual(setupGaps({ user: set, wfp: { state: "cannot-read" } }), []);
   });
 });
 

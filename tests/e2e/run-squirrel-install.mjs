@@ -105,10 +105,11 @@ async function bundledGitRuns(exe) {
  * Start the installed app as a person does and wait for main to log that the studio is ready: on
  * a machine whose sandbox is not set up, after setting it up by itself. The studio starts its
  * sandbox from the installed folder, under the profile, which the sandbox user cannot open until
- * Genex lets it. A logged startup or setup failure ends the wait at once.
+ * Genex lets it. The log is read from before Setup.exe ran: the copy Setup.exe starts holds the
+ * single-instance lock, so it may be the one that gets there, and a second start only hands over
+ * to it. A logged startup or setup failure ends the wait at once.
  */
-async function startsTheStudio(exe) {
-  const from = existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").length : 0;
+async function startsTheStudio(exe, from) {
   const newLog = () => (existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").slice(from) : "");
   spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
   const log = await settle(async () => {
@@ -139,6 +140,7 @@ if (process.platform !== "win32") {
   process.exit(0);
 }
 
+const logBeforeSetup = existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").length : 0;
 console.log(`installing ${SETUP_EXE}\n  into ${installDir}`);
 await run(SETUP_EXE, ["--silent"], { timeout: SETUP_TIMEOUT_MS }).catch((error) => {
   console.log(`Setup.exe: ${error.message}`);
@@ -158,7 +160,7 @@ const tooLong = (await filesUnder(installDir)).filter((file) => file.length >= M
 check(`every installed path is under ${MAX_PATH} characters`, tooLong.length === 0, tooLong.slice(0, 3).join(", "));
 const git = exe ? await bundledGitRuns(exe) : { ok: false, detail: "no installed app" };
 check("the app's own Git runs without any other Git on PATH", git.ok, git.detail);
-const studio = exe ? await startsTheStudio(exe) : { ok: false, detail: "no installed app" };
+const studio = exe ? await startsTheStudio(exe, logBeforeSetup) : { ok: false, detail: "no installed app" };
 check(
   "the first start sets the sandbox up by itself and opens the studio from the installed folder",
   studio.ok,

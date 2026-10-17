@@ -6,8 +6,8 @@ share, is in [architecture](agent/architecture.md#processes-and-trust-boundaries
 [`src/substrate/windows-sandbox.ts`](../src/substrate/windows-sandbox.ts)
 drives sandbox-runtime's srt-win backend (vendored `srt-win.exe` from `app.asar.unpacked`):
 commands run as the local `srt-sandbox` user under Git Bash. The packaged app brings its own Git
-for Windows as `resources\git` and prefers it to an installed one (`findGitBash`); a development
-build uses the installed Git. The host runs git itself too, so the core settles which Git before
+for Windows as `resources\git` and uses it only when the PC has no Git of its own (`findGitBash`);
+a development build uses the installed Git. The host runs git itself too, so the core settles which Git before
 anything else at startup (`ensureHostGit`, which puts its `cmd` folder first on PATH); with none,
 the setup screen opens on `git-missing`. What differs from macOS:
 

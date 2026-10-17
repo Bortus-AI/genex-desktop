@@ -19,6 +19,11 @@ import {
 import { errorMessage } from "../../shared/errors.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
 
+const MESSAGE = {
+  /** The raw error under Details when an install went through and Windows still has no sandbox. */
+  stillNotSetUp: "The install finished, but Windows still reports the protected workspace as not set up.",
+} as const;
+
 /** What the window shows for the boot state. */
 export const BootView = {
   Loading: "loading",
@@ -90,10 +95,16 @@ export function setupStarted(state: BootStoreState): BootStoreState {
   return { ...state, settingUp: true, setupCancelled: false, error: null, report: SetupReport.Idle };
 }
 
-/** Set up answered: installed (main has retried, so this is its state) or the prompt dismissed. */
+/**
+ * Set up answered: installed (main has retried, so this is its state) or the prompt dismissed. An
+ * install after which Windows still reports no sandbox is a failure, with Windows' own words, so
+ * the screen offers a report rather than asking for the same approval again.
+ */
 export function setupAnswered(state: BootStoreState, result: SandboxSetupResult): BootStoreState {
   const after = bootAnswered(state, result.state);
-  return { ...after, setupCancelled: result.outcome === SandboxSetupOutcome.Cancelled };
+  if (result.outcome === SandboxSetupOutcome.Cancelled) return { ...after, setupCancelled: true };
+  if (!canSetUp(after)) return after;
+  return { ...after, error: after.problem?.details.join("\n") || MESSAGE.stillNotSetUp };
 }
 
 export function setupFailed(state: BootStoreState, error: string): BootStoreState {
@@ -195,6 +206,8 @@ export function createBoot(
       () => SetupReport.Sent,
       () => SetupReport.Failed,
     );
+    // A Set up pressed while it was sending starts a new error with a report of its own.
+    if (store.getState().error !== error) return;
     store.setState((state) => reportChanged(state, sent), true);
   };
   const setUp = shared(runSetUp);
