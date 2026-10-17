@@ -573,8 +573,13 @@ A node at work, the lead's included, is its agent's screen: the newest frame wit
 cursor, and a status that is the action in plain words with its age ("Pressing Space · 3s"; a step
 being checked keeps "Being checked · …"). Its card shows that frame live and What it did, the
 window's last frames with the newest as Now. No strip of screens sits above the stage.
-The reviewers are an eye gate on the edge into what they looked at; one 52px status line ("Building ·
-9 of 30 min" and a 2px progress rule) replaces per-card chips and per-node status boxes. A selected node opens in place: the camera glides to it at 160%, the graph dims to
+The reviewers are an eye gate on the edge into what they looked at; one 40px bar of the chat's
+builds replaces per-card chips and per-node status boxes: a tab each, oldest on the left, on one
+quiet track with the open tab raised (surface fill, a ring halfway from `line` to `line-strong`) and wider. A tab is what was
+asked, ellipsized, after a bare ✓ once done, a muted dot while paused, or the status line's orb
+while it works, then its clock at 12px in the chat's shimmer. No "Building", budget or progress
+rule; the open build's status line ("Building · 9 of 30 min · 2 parts working") is its tooltip and
+what a screen reader hears. A selected node opens in place: the camera glides to it at 160%, the graph dims to
 40% and stays clickable, and one card (max 560px, centred, scrolling inside) carries the detail —
 never a side panel. Replies go through the chat composer, so the app keeps one input. Semantic zoom
 trades words for pictures below 60% and adds the asked sentence from 135%.

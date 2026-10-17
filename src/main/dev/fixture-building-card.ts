@@ -1,9 +1,10 @@
 /**
  * The `building-card` fixture: a racing Loop still going, for the chat's Building card and its list
- * of parts. Of the plan's five parts two are added, one works on its second round with its time
- * left, one was stopped and restarted (`replaces`, one row) and works on its first round, and one
- * has not started; the Loop was given 4 hours. Written once the app has started: the start closes every run an earlier app left
- * open, so a Loop still going written before it would read as stopped.
+ * of parts, after an earlier Loop of the same chat that finished, so Builds has two tabs. Of the
+ * plan's five parts two are added, one works on its second round with its time left, one was
+ * stopped and restarted (`replaces`, one row) and works on its first round, and one has not
+ * started; the Loop was given 4 hours. Written once the app has started: the start closes every run
+ * an earlier app left open, so a Loop still going written before it would read as stopped.
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
@@ -15,6 +16,9 @@ import { FIXTURE_MODEL, fixtureRun } from "./fixture-kit.ts";
 
 const RUN_ID = "fixture-building-card";
 const GOAL = "Make a night street race on rain-slicked city streets.";
+/** The chat's earlier Loop, finished: its own tab on Builds. */
+const EARLIER_RUN_ID = "fixture-building-card-earlier";
+const EARLIER_GOAL = "Give the cars arcade handling and a drift boost.";
 /** The time the Loop was given, shown under the card's clock ("up to 4h"). */
 const LOOP_MS = 4 * HOUR_MS;
 /** How long the car part's round has left when the fixture is written. */
@@ -65,6 +69,27 @@ function added(run: Scoped, workerId: string, title: string, head: string): Even
     run(CustomEvent.DirectorWorker, { workerId, title, mode: "loop", state: "done" }),
     run(CustomEvent.WorkerFinished, { workerId, title, state: WorkerEnd.Done }),
     run(CustomEvent.IntegrationMerge, { facetId: workerId, commit: head, head, conflict: false, stage: "director" }),
+  ];
+}
+
+/** The chat's earlier Loop: two parts, both added, and its close. */
+function finishedLoop(project: string): EventData[] {
+  const run = fixtureRun({ runId: EARLIER_RUN_ID, project });
+  return [
+    { type: EventKind.Messages, messages: [{ role: "user", content: EARLIER_GOAL }] },
+    run(CustomEvent.RunStarted, { goal: EARLIER_GOAL, engine: EngineId.ClaudeCode, model: FIXTURE_MODEL }),
+    run(CustomEvent.AutopilotStarted, { director: true, maxParallel: 2, facets: [], workerRecords: true }),
+    run(CustomEvent.AutopilotPlanReview, {
+      summary: "Arcade handling for every car, and a boost for holding a drift.",
+      waitMinutes: 0,
+      facets: [
+        { id: "handling", title: "Arcade handling", identity: [], cameras: [], checks: [] },
+        { id: "drift", title: "Drift boost", identity: [], cameras: [], checks: [] },
+      ],
+    }),
+    ...added(run, "handling", "Arcade handling", "0a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d"),
+    ...added(run, "drift", "Drift boost", "0b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e"),
+    run(CustomEvent.RunFinished, { stoppedBecause: "both parts were added and checked" }),
   ];
 }
 
@@ -128,5 +153,5 @@ function buildingLoop(project: string, now: number): EventData[] {
 export async function seedBuildingCard(core: StudioCore, project: string, threadId: string): Promise<void> {
   const events = await core.store.listEvents(threadId);
   if (events.some((e) => customRecord(e.data)?.payload.runId === RUN_ID)) return;
-  await core.append(buildingLoop(project, Date.now()), threadId);
+  await core.append([...finishedLoop(project), ...buildingLoop(project, Date.now())], threadId);
 }

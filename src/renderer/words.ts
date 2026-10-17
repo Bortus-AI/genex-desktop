@@ -1853,7 +1853,7 @@ export const WORKER_LINE_WORDS = {
 export const BUILD_CHECKLIST_WORDS = {
   added: "Added",
   working: "Working",
-  workingFor: (minutes: number) => `Working · about ${minutes} min`,
+  workingFor: (minutes: number) => `Working · ~${minutes} min`,
   workingRound: (round: number) => `Working · round ${round}`,
   waiting: "Waiting to start",
   notAdded: "Not added",
@@ -1969,6 +1969,12 @@ export const FINISH_CHECK_WORDS = {
 } as const;
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
+/** The Builds bar's tabs, one for each of the chat's builds. */
+export const BUILD_TABS_WORDS = {
+  /** The track's name for a screen reader. */
+  tabs: "Builds",
+} as const;
+
 export const BUILD_HISTORY_WORDS = {
   thisTurn: "This chat turn",
   thisLoop: "This Loop",
