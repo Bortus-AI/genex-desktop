@@ -3845,9 +3845,8 @@ export const PRIVACY_WORDS = {
   deleteNotSent: "Nothing was ever sent from this launch.",
   /** The quiet line of links under the rows; each opens in the browser. */
   links: {
-    desktop: "How the desktop app handles data",
-    policy: "Genex privacy policy",
-    terms: "Genex terms",
+    policy: "Privacy Policy",
+    terms: "Terms of Service",
   },
 } as const;
 
