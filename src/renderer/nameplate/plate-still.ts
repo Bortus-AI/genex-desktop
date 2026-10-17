@@ -1,23 +1,28 @@
 /**
  * A nameplate where the GPU cannot draw: a still in the plate's own colours, the accent glowing in
- * from the right over the deep ground, so the row still reads as the person's.
+ * from the right over the deep ground (a pale one on a light theme's paper), so the row still reads
+ * as the person's.
  */
 import type { PlateRecipe } from "../../shared/plate-recipe.ts";
 
 /** Where the glow sits, as shares of the width and height, and how far it reaches. */
 const GLOW_AT = { x: 0.78, y: 0.45, reach: 0.9 } as const;
 
-/** Draw the still into a 2D context `width` by `height` pixels. */
+/** The pale ground a light theme's still is drawn on. */
+const PAPER = "#f7f7f9";
+
+/** Draw the still into a 2D context `width` by `height` pixels, on `paper` for a light theme. */
 export function drawStillPlate(
   ctx: CanvasRenderingContext2D,
   recipe: PlateRecipe,
   width: number,
   height: number,
+  paper = false,
 ): void {
   const { colors } = recipe;
   const ground = ctx.createLinearGradient(0, 0, width, 0);
-  ground.addColorStop(0, colors.deep);
-  ground.addColorStop(1, colors.mid);
+  ground.addColorStop(0, paper ? PAPER : colors.deep);
+  ground.addColorStop(1, paper ? PAPER : colors.mid);
   ctx.fillStyle = ground;
   ctx.fillRect(0, 0, width, height);
   const glow = ctx.createRadialGradient(

@@ -1,11 +1,12 @@
 /**
  * Paints every Pro nameplate on screen from one clock, at most 30 frames a second. A plate is one
- * canvas: its piece drawn on the GPU, or a 2D still where the GPU cannot draw. A plate moves while
- * it is on screen; out of sight, under a modal, while the app's motion rests, or under Reduce
- * Motion it holds one frame.
+ * canvas: its piece drawn on the GPU (on paper, its lightness turned over, in a light theme), or a
+ * 2D still where the GPU cannot draw. A plate moves while it is on screen; out of sight, under a
+ * modal, while the app's motion rests, or under Reduce Motion it holds one frame.
  */
 import type { PlateRecipe } from "../../shared/plate-recipe.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
+import { Scheme } from "../appearance/themes.ts";
 import { Motion } from "../motion-rest.ts";
 import { REDUCED_MOTION_QUERY } from "../ui/media-queries.ts";
 import {
@@ -88,6 +89,9 @@ function askGpu(): void {
 /** Whether the app's motion rests: the window idle or out of sight (`motion-rest.ts`). */
 const resting = (): boolean => document.documentElement.dataset.motion === Motion.Rest;
 
+/** Whether the app shows a light theme: plates are drawn on paper there. */
+const onPaper = (): boolean => document.documentElement.dataset.theme === Scheme.Light;
+
 /** Whether a plate's clock runs: on screen, nothing modal covers it, and motion is neither reduced nor resting. */
 const moves = (entry: Entry): boolean => entry.visible && !reduced && !resting() && !entry.canvas.closest("[inert]");
 
@@ -132,7 +136,7 @@ function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
   const surface = surfaceOf(entry, context);
   if (!surface) return null;
   if ("ctx" in surface) {
-    drawStillPlate(surface.ctx, entry.recipe, size.width, size.height);
+    drawStillPlate(surface.ctx, entry.recipe, size.width, size.height, onPaper());
     entry.dirty = false;
     return null;
   }
@@ -140,7 +144,7 @@ function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
   const pipeline = plateGpuPipeline(context, entry.recipe.sceneIndex, wake);
   if (!pipeline) return null;
   entry.dirty = false;
-  return { canvas: surface.gpu, pipeline, recipe: entry.recipe, seconds: entry.t, ...size };
+  return { canvas: surface.gpu, pipeline, recipe: entry.recipe, seconds: entry.t, paper: onPaper(), ...size };
 }
 
 /** One frame: move the clocks of plates that run, then paint the ones that are due. */
@@ -181,6 +185,11 @@ function visibility(): IntersectionObserver {
     wake();
   });
   new MutationObserver(wake).observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
+  // A theme change redraws every plate, on paper or off it.
+  new MutationObserver(() => {
+    for (const entry of entries) entry.dirty = true;
+    wake();
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   new MutationObserver(wake).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["inert"] });
   return observer;
 }

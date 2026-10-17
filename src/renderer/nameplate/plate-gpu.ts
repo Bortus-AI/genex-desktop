@@ -135,6 +135,8 @@ export interface PlateDraw {
   width: number;
   height: number;
   density: number;
+  /** A light theme: the piece is drawn on paper. */
+  paper: boolean;
 }
 
 /** Draw these plates, each into its own canvas, in one submission. */
@@ -145,7 +147,7 @@ export function drawPlates(gpu: PlateGpu, draws: readonly PlateDraw[]): void {
     gpu.device.queue.writeBuffer(
       draw.canvas.uniforms,
       0,
-      plateUniforms(draw.recipe, draw.seconds, draw.width, draw.height, draw.density),
+      plateUniforms(draw.recipe, draw.seconds, draw.width, draw.height, draw.density, draw.paper),
     );
     const pass = encoder.beginRenderPass({
       colorAttachments: [

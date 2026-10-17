@@ -2113,7 +2113,7 @@ button.chat-header-title:hover {
 }
 /* A Pro's nameplate (`nameplate/Nameplate.tsx`): the row in the art's own colour, the piece melting
  * in from the right under a dark wash that keeps the name readable, the name in the
- * avatar's glow, sparkles around the face. The same in every theme: the art is night. */
+ * avatar's glow, sparkles around the face. A light theme draws it on paper (below). */
 .nameplate {
   /* Rings around a face keep their gap in the plate's colour, not the page's. */
   --page: var(--plate-tint);
@@ -2300,6 +2300,52 @@ button.chat-header-title:hover {
 }
 .nameplate .sidebar-friend-open:hover {
   background: rgb(255 255 255 / 0.06);
+}
+/* Light themes: the piece is drawn on paper (its lightness turned over in the shader), so the plate
+ * is pale with deep colour; the wash, the name, the credits and the sparkles turn over with it. */
+:root[data-theme="light"] .nameplate {
+  --plate-paper: color-mix(in oklab, var(--plate-tint) 10%, #fbfbfc);
+  --page: var(--plate-paper);
+  background: var(--plate-paper);
+}
+:root[data-theme="light"] .nameplate-wash {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--plate-paper) 85%, transparent) 0%,
+      color-mix(in oklab, var(--plate-paper) 55%, transparent) 34%,
+      transparent 62%
+    ),
+    linear-gradient(270deg, color-mix(in oklab, var(--plate-paper) 50%, transparent) 0%, transparent 24%);
+}
+:root[data-theme="light"] .nameplate .profile-plate-main {
+  color: var(--ink);
+}
+:root[data-theme="light"] .nameplate :is(.profile-plate-name-text, .people-name-text) {
+  color: color-mix(in oklab, var(--plate-glow) 55%, var(--ink));
+  text-shadow: 0 0 10px rgb(255 255 255 / 0.9);
+}
+:root[data-theme="light"] .nameplate .plate-credits {
+  color: var(--ink);
+  text-shadow: 0 1px 4px rgb(255 255 255 / 0.8);
+}
+:root[data-theme="light"] .nameplate .plate-credits::before {
+  background: rgb(255 255 255 / 0.75);
+}
+:root[data-theme="light"] .nameplate .plate-credits:is(:hover, :focus-visible) {
+  background: rgb(255 255 255 / 0.55);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  color: var(--ink);
+}
+:root[data-theme="light"] .nameplate .sidebar-friend-playing {
+  color: var(--people-live-ink);
+  text-shadow: 0 0 8px rgb(255 255 255 / 0.9);
+}
+:root[data-theme="light"] .nameplate-sparkles > i {
+  color: color-mix(in oklab, var(--plate-glow) 70%, var(--ink));
+}
+:root[data-theme="light"] .nameplate :is(.profile-plate-main, .sidebar-friend-open):hover {
+  background: rgb(0 0 0 / 0.04);
 }
 :root[data-motion="rest"] .nameplate-sparkles > i {
   animation-play-state: paused;

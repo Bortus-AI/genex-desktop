@@ -58,6 +58,7 @@ async function render(
   recipe: PlateRecipe,
   seconds: number,
   dpr: number,
+  paper = false,
 ): Promise<Uint8Array> {
   const target = gpu.createTexture({
     size: [WIDTH, HEIGHT],
@@ -65,7 +66,7 @@ async function render(
     usage: USAGE.renderAttachment | USAGE.textureCopySrc,
   });
   const uniforms = gpu.createBuffer({ size: PLATE_UNIFORM_BYTES, usage: USAGE.uniform | USAGE.copyDst });
-  gpu.queue.writeBuffer(uniforms, 0, plateUniforms(recipe, seconds, WIDTH, HEIGHT, dpr));
+  gpu.queue.writeBuffer(uniforms, 0, plateUniforms(recipe, seconds, WIDTH, HEIGHT, dpr, paper));
   const readback = gpu.createBuffer({ size: BYTES_PER_ROW * HEIGHT, usage: USAGE.copyDst | USAGE.mapRead });
   const encoder = gpu.createCommandEncoder();
   const pass = encoder.beginRenderPass({
@@ -110,6 +111,17 @@ function colours(pixels: Uint8Array): number {
   return seen.size;
 }
 
+/** A piece on paper is at least this bright on average. */
+const PAPER_MIN = 0.45;
+
+/** The mean of every pixel's luma, 0..1. */
+function brightness(pixels: Uint8Array): number {
+  let sum = 0;
+  for (let at = 0; at < pixels.length; at += 4)
+    sum += 0.299 * (pixels[at] ?? 0) + 0.587 * (pixels[at + 1] ?? 0) + 0.114 * (pixels[at + 2] ?? 0);
+  return sum / (pixels.length / 4) / 255;
+}
+
 describe("Pro nameplate shaders", () => {
   before(async () => {
     try {
@@ -131,7 +143,7 @@ describe("Pro nameplate shaders", () => {
   });
 
   for (const [index, scene] of PLATE_SCENES.entries())
-    it(`compiles ${scene} and draws it opaque, in real art, moving with its clock`, async (t) => {
+    it(`compiles ${scene} and draws it opaque, in real art, moving with its clock, pale on paper`, async (t) => {
       if (!device) return t.skip("no WebGPU adapter on this machine");
       const { module, errors } = await compile(device, index);
       assert.deepEqual(errors, [], `${scene} compiles`);
@@ -162,5 +174,18 @@ describe("Pro nameplate shaders", () => {
       }
       assert.notDeepEqual(frames[0], frames[1], `${scene} differs between accounts`);
       assert.notDeepEqual(later, frames[0], `${scene} moves with its clock`);
+      const paper = await render(
+        device,
+        pipeline,
+        onPiece(index, first.id, first.variant),
+        first.seconds,
+        first.dpr,
+        true,
+      );
+      const dark = brightness(frames[0] ?? new Uint8Array());
+      const pale = brightness(paper);
+      // Turned over: a night piece goes pale, and nothing ends up darker than half grey.
+      assert.ok(pale > PAPER_MIN && (dark >= 0.5 || pale > dark), `${scene} on paper is pale (${pale} vs ${dark})`);
+      assert.ok(colours(paper) > MIN_COLOURS, `${scene} on paper keeps its art`);
     });
 });

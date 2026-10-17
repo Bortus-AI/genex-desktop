@@ -64,8 +64,8 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Pro nameplates: moving art behind a Pro's name (`src/shared/plate-recipe.ts`): 20 abstract
   pieces, each with its own takes and eight shared dials (zoom, speed, warp, mirror, hue, glow,
   grain, colour steps). The first plate is one of the avatar body's pieces in its colours; New one
-  rolls any piece (`studio.genex.plateVariant.<id>`, this Mac only); the plate looks the same in
-  every theme. WebGPU, a 2D still without it,
+  rolls any piece (`studio.genex.plateVariant.<id>`, this Mac only). A light theme draws the piece
+  on paper (its lightness turned over: a pale ground, deep colour). WebGPU, a 2D still without it,
   30 frames a second while on screen, held while idle, under a modal or Reduce Motion.
 
 ## Playing a game

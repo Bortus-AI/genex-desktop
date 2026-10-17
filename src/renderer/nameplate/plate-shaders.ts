@@ -31,6 +31,8 @@ const Slot = {
   /** Eight dials: zoom, speed, warp, mirror, then hue, glow, grain and colour steps. */
   Dials: 24,
   Res: 32,
+  /** 1 on a light theme: the piece is drawn on paper (its lightness turned over). */
+  Paper: 34,
 } as const;
 
 /** The uniforms, the vertex stage and the helpers every piece shares (the prototype's HEAD). */
@@ -50,6 +52,8 @@ struct Plate {
   // hue, glow, grain, colour steps
   p1: vec4f,
   res: vec2f,
+  // 1 on a light theme: the piece's lightness is turned over, a pale ground and deep colour.
+  paper: f32,
 }
 @group(0) @binding(0) var<uniform> u: Plate;
 
@@ -122,6 +126,44 @@ fn spark(d0: vec2f, s: f32) -> f32 {
 }
 `;
 
+/**
+ * A light theme's paper: the piece's lightness turned over in OKLab, its hue kept and its colour a
+ * little stronger, so a night piece becomes a pale ground with deep colour where its light was.
+ */
+const PAPER = /* wgsl */ `
+fn to_linear(c: vec3f) -> vec3f { return pow(max(c, vec3f(0.0)), vec3f(2.2)); }
+fn to_display(c: vec3f) -> vec3f { return pow(max(c, vec3f(0.0)), vec3f(1.0 / 2.2)); }
+fn oklab(c: vec3f) -> vec3f {
+  let l = pow(max(0.4122214708 * c.r + 0.5363325363 * c.g + 0.0514459929 * c.b, 0.0), 1.0 / 3.0);
+  let m = pow(max(0.2119034982 * c.r + 0.6806995451 * c.g + 0.1073969566 * c.b, 0.0), 1.0 / 3.0);
+  let s = pow(max(0.0883024619 * c.r + 0.2817188376 * c.g + 0.6299787005 * c.b, 0.0), 1.0 / 3.0);
+  return vec3f(
+    0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+  );
+}
+fn oklab_to_linear(c: vec3f) -> vec3f {
+  let l0 = c.x + 0.3963377774 * c.y + 0.2158037573 * c.z;
+  let m0 = c.x - 0.1055613458 * c.y - 0.0638541728 * c.z;
+  let s0 = c.x - 0.0894841775 * c.y - 1.2914855480 * c.z;
+  let l = l0 * l0 * l0;
+  let m = m0 * m0 * m0;
+  let s = s0 * s0 * s0;
+  return vec3f(
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s,
+  );
+}
+fn on_paper(col: vec3f) -> vec3f {
+  var lab = oklab(to_linear(col));
+  lab.x = mix(0.97, 0.5, clamp(lab.x, 0.0, 1.0));
+  lab = vec3f(lab.x, lab.y * 1.3, lab.z * 1.3);
+  return to_display(oklab_to_linear(lab));
+}
+`;
+
 /** The dials on the piece's colour, per pixel (the prototype's MAIN). */
 const MAIN = /* wgsl */ `
 @fragment fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
@@ -155,6 +197,10 @@ const MAIN = /* wgsl */ `
   col = to_rgb * yiq;
   col += (h21(frag + fract(u.time_raw) * 61.0) - 0.5) * 0.14 * u.p1.z;
   col *= 1.0 - 0.2 * u.p1.z * modulo(floor(frag.y / u.dpr), 2.0);
+  col = clamp(col, vec3f(0.0), vec3f(1.0));
+  if (u.paper > 0.5) {
+    col = on_paper(col);
+  }
   return vec4f(clamp(col, vec3f(0.0), vec3f(1.0)), 1.0);
 }
 `;
@@ -814,13 +860,14 @@ const SCENE_CODE = {
 /** The WGSL module for piece `sceneIndex` (its index in PLATE_SCENES): `vs_main` covers the canvas, `fs_main` draws it. An unknown index draws the first piece. */
 export function plateShader(sceneIndex: number): string {
   const scene = PLATE_SCENES[sceneIndex] ?? PlateScene.NeonRain;
-  return `${PRELUDE}${SCENE_CODE[scene]}${MAIN}`;
+  return `${PRELUDE}${PAPER}${SCENE_CODE[scene]}${MAIN}`;
 }
 
 /**
  * The uniform block for one draw of `recipe` at `seconds` on the page's clock, into a canvas
- * `width` by `height` device pixels at `dpr` device pixels per CSS pixel. The recipe's seed shifts
- * the clock, as the prototype's did; colours are plain `#rrggbb` channels over 255.
+ * `width` by `height` device pixels at `dpr` device pixels per CSS pixel, on `paper` for a light
+ * theme. The recipe's seed shifts the clock, as the prototype's did; colours are plain `#rrggbb`
+ * channels over 255.
  */
 export function plateUniforms(
   recipe: PlateRecipe,
@@ -828,6 +875,7 @@ export function plateUniforms(
   width: number,
   height: number,
   dpr: number,
+  paper = false,
 ): Float32Array<ArrayBuffer> {
   const data = new Float32Array(PLATE_UNIFORM_BYTES / 4);
   const { colors, dials } = recipe;
@@ -845,5 +893,6 @@ export function plateUniforms(
     Slot.Dials,
   );
   data.set([width, height], Slot.Res);
+  data[Slot.Paper] = paper ? 1 : 0;
   return data;
 }
