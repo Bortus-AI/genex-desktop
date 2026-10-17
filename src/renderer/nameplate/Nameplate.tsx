@@ -14,10 +14,10 @@ import { usePlateVariant } from "./plate-variant.ts";
 /** How many sparkles twinkle around the face. */
 const SPARKLES = 4;
 
-/** The plate an account shows, from its id and the variant it rolled on this Mac. */
-export function useNameplate(accountId: string): PlateRecipe {
+/** The plate an account shows: its id, the variant it rolled on this Mac and the avatar it shows. */
+export function useNameplate(accountId: string, avatarVariant: number): PlateRecipe {
   const variant = usePlateVariant(accountId);
-  return useMemo(() => plateRecipe(accountId, variant), [accountId, variant]);
+  return useMemo(() => plateRecipe(accountId, variant, avatarVariant), [accountId, variant, avatarVariant]);
 }
 
 /** The plate's colours as the CSS reads them. */

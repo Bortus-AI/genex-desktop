@@ -42,6 +42,19 @@ describe("Pro nameplate recipe", () => {
     assert.equal(plate.sceneIndex, PLATE_SCENES.indexOf(plate.scene));
   });
 
+  it("draws the first plate in the colours of the avatar the account shows, regenerated or not", () => {
+    for (const id of IDS.slice(0, 60))
+      for (const avatarVariant of [0, 7]) {
+        const shown = avatarRecipe(id, avatarVariant);
+        assert.deepEqual(
+          plateRecipe(id, 0, avatarVariant).colors,
+          plateColors(shown.palette, shown.turn, shown.glow),
+          `${id} with avatar ${avatarVariant}`,
+        );
+      }
+    assert.notDeepEqual(plateRecipe("fx-rab-neba", 0, 3).colors, plateRecipe("fx-rab-neba").colors);
+  });
+
   it("draws every first plate from its avatar body's own pieces", () => {
     const seen = new Map<string, Set<string>>();
     for (const id of IDS) {

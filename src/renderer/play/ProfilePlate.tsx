@@ -189,7 +189,7 @@ function AccountPlate({
   useEffect(() => {
     void studio().people.loadCredits();
   }, [me.id]);
-  const plate = useNameplate(me.id);
+  const plate = useNameplate(me.id, me.avatarVariant);
   const open = (page: typeof PlayPage.Profile | typeof PlayPage.Friends): void => {
     onPlayMode(true);
     if (page === PlayPage.Friends) studio().play.showFriends();

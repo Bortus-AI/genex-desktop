@@ -225,11 +225,14 @@ function rollDials(next: () => number): PlateDials {
   };
 }
 
-/** The nameplate an account id stands for. `variant` 0 is its first; a rolled one is another. */
-export function plateRecipe(accountId: string, variant = 0): PlateRecipe {
+/**
+ * The nameplate an account id stands for. `variant` 0 is its first, drawn from the avatar the
+ * account shows (`avatarVariant`, the one it regenerated to); a rolled one is another.
+ */
+export function plateRecipe(accountId: string, variant = 0, avatarVariant = 0): PlateRecipe {
   const first = variant === 0;
-  const avatar = first ? avatarRecipe(accountId) : avatarRecipe(`${accountId}#plate`, variant);
-  const next = stream(fnv1a(`${accountId}|${variant}`));
+  const avatar = first ? avatarRecipe(accountId, avatarVariant) : avatarRecipe(`${accountId}#plate`, variant);
+  const next = stream(fnv1a(first ? `${accountId}|0|${avatarVariant}` : `${accountId}|${variant}`));
   const family = FAMILY[avatar.body];
   const scene = first
     ? (family[Math.floor(next() * family.length)] ?? PlateScene.NeonRain)

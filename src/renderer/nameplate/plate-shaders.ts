@@ -860,7 +860,12 @@ const SCENE_CODE = {
 /** The WGSL module for piece `sceneIndex` (its index in PLATE_SCENES): `vs_main` covers the canvas, `fs_main` draws it. An unknown index draws the first piece. */
 export function plateShader(sceneIndex: number): string {
   const scene = PLATE_SCENES[sceneIndex] ?? PlateScene.NeonRain;
-  return `${PRELUDE}${PAPER}${SCENE_CODE[scene]}${MAIN}`;
+  return plateShaderWith(SCENE_CODE[scene]);
+}
+
+/** The WGSL module for a piece's own code (its `fn scene(f: vec2f) -> vec3f` and helpers), on the shared prelude and dials. */
+export function plateShaderWith(sceneCode: string): string {
+  return `${PRELUDE}${PAPER}${sceneCode}${MAIN}`;
 }
 
 /**

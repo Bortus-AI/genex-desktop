@@ -39,6 +39,8 @@ import { PersonAvatar } from "../play/PersonAvatar.tsx";
 const WORDS = ACCOUNT_WORDS;
 /** The two choices' pictures. */
 const CHOICE_AVATAR = 72;
+/** The face on the nameplate's preview: the sidebar plate's own size. */
+const PLATE_FACE = 28;
 
 /** The style the account shows: the one it chose, else the generated one. */
 const shownStyle = (me: PlayMe): AvatarStyle => me.avatarStyle ?? AvatarStyle.Generated;
@@ -212,7 +214,7 @@ function AvatarRow({ me, online }: { me: PlayMe; online: boolean }): JSX.Element
 
 /** A Pro's nameplate: how it shows behind their name, and New one, which rolls another at once. */
 function NameplateRow({ me }: { me: PlayMe }): JSX.Element {
-  const plate = useNameplate(me.id);
+  const plate = useNameplate(me.id, me.avatarVariant);
   return (
     <div className="account-row" data-account-nameplate>
       <span className="account-row-label">{WORDS.nameplate}</span>
@@ -220,7 +222,7 @@ function NameplateRow({ me }: { me: PlayMe }): JSX.Element {
         <div className="account-nameplate">
           <Nameplate recipe={plate}>
             <span className="account-nameplate-row" data-avatar-host>
-              <PersonAvatar person={me} size={28} />
+              <PersonAvatar person={me} size={PLATE_FACE} />
               <span className="profile-plate-name">
                 <span className="profile-plate-name-text">{me.name}</span>
               </span>
@@ -228,12 +230,7 @@ function NameplateRow({ me }: { me: PlayMe }): JSX.Element {
           </Nameplate>
         </div>
         <div className="account-actions">
-          <Button
-            className="account-upload"
-            aria-label={WORDS.newPlateLabel}
-            data-nameplate-new
-            onClick={() => rollPlateVariant(me.id)}
-          >
+          <Button className="account-upload" data-nameplate-new onClick={() => rollPlateVariant(me.id)}>
             <Icon name="dice" />
             {WORDS.newPlate}
           </Button>

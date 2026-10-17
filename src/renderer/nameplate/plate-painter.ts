@@ -1,9 +1,9 @@
 /**
  * Paints every Pro nameplate on screen from one clock, at most 30 frames a second. A plate is one
  * canvas: its piece drawn on the GPU (on paper, its lightness turned over, in a light theme), or a
- * 2D still where the GPU cannot draw. A plate moves while it is lit (hovered, or always where it is
- * shown off) and on screen; otherwise, out of sight, under a modal, while the app's motion rests or
- * under Reduce Motion it holds one frame.
+ * 2D still where the GPU cannot draw. A plate draws nothing until it first lights; lit and on screen
+ * it moves, unless it is a still, a modal covers it, the app's motion rests or Reduce Motion is on,
+ * when it holds one frame. The rules are `plate-clock.ts`.
  */
 import type { PlateRecipe } from "../../shared/plate-recipe.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
@@ -21,10 +21,9 @@ import {
   plateGpuPipeline,
   releasePlateCanvas,
 } from "./plate-gpu.ts";
+import { frameDue, type PlateClockState, plateDue, plateMoves } from "./plate-clock.ts";
 import { drawStillPlate } from "./plate-still.ts";
 
-/** A frame at most this often: 30 a second. */
-const FRAME_MS = SECOND_MS / 30;
 /**
  * How long plates wait for the GPU before they draw in 2D. Longer than the avatars' wait: a cold
  * start (a new build, an empty shader cache) can take seconds to answer, a 2D still would hold for
@@ -96,19 +95,29 @@ const resting = (): boolean => document.documentElement.dataset.motion === Motio
 /** Whether the app shows a light theme: plates are drawn on paper there. */
 const onPaper = (): boolean => document.documentElement.dataset.theme === Scheme.Light;
 
-/** Whether a plate's clock runs: lit, on screen, nothing modal covers it, and motion neither reduced nor resting. */
-const moves = (entry: Entry): boolean =>
-  entry.animating && entry.visible && !reduced && !resting() && !entry.canvas.closest("[inert]");
+/** What the clock's rules (`plate-clock.ts`) read about a plate this frame. */
+const clockState = (entry: Entry): PlateClockState => ({
+  visible: entry.visible,
+  dirty: entry.dirty,
+  animating: entry.animating,
+  still: entry.surface !== null && "ctx" in entry.surface,
+  reduced,
+  resting: resting(),
+  covered: entry.canvas.closest("[inert]") !== null,
+});
 
-/** Whether a plate paints this frame: on screen, and waiting to be drawn or moving. */
-const isDue = (entry: Entry): boolean => entry.visible && (entry.dirty || moves(entry));
+/** Whether a plate's clock runs this frame. */
+const moves = (entry: Entry): boolean => plateMoves(clockState(entry));
+
+/** Whether a plate paints this frame. */
+const isDue = (entry: Entry): boolean => plateDue(clockState(entry));
 
 onPlateGpuLost(() => {
   gpu = undefined;
   for (const entry of entries)
     if (entry.surface && "gpu" in entry.surface) {
       entry.surface = null;
-      entry.dirty = true;
+      entry.dirty = entry.animating;
     }
   wake();
 });
@@ -139,7 +148,11 @@ function surfaceOf(entry: Entry, context: PlateGpu | null): Surface {
 function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
   const size = fit(entry.canvas);
   const surface = surfaceOf(entry, context);
-  if (!surface) return null;
+  // No surface at all (a canvas the GPU had cannot turn 2D): nothing to draw, stop asking.
+  if (!surface) {
+    entry.dirty = false;
+    return null;
+  }
   if ("ctx" in surface) {
     drawStillPlate(surface.ctx, entry.recipe, size.width, size.height, onPaper());
     entry.dirty = false;
@@ -167,7 +180,7 @@ function tick(now: number): void {
     askGpu();
     return;
   }
-  if (lastFrame && now - lastFrame < FRAME_MS) return;
+  if (!frameDue(now, lastFrame)) return;
   const step = lastFrame ? Math.min(MAX_STEP_SECONDS, (now - lastFrame) / SECOND_MS) : 0;
   lastFrame = now;
   for (const entry of due) if (moves(entry)) entry.t += step;
@@ -192,9 +205,9 @@ function visibility(): IntersectionObserver {
     wake();
   });
   new MutationObserver(wake).observe(document.documentElement, { attributes: true, attributeFilter: ["data-motion"] });
-  // A theme change redraws every plate, on paper or off it.
+  // A theme change redraws every lit plate, on paper or off it; an unlit one redraws when it lights.
   new MutationObserver(() => {
-    for (const entry of entries) entry.dirty = true;
+    for (const entry of entries) if (entry.animating) entry.dirty = true;
     wake();
   }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   new MutationObserver(wake).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["inert"] });
@@ -207,21 +220,26 @@ if (typeof matchMedia === "function")
     wake();
   });
 
-/** Put a plate on the painter: it paints when it comes into view. */
+/**
+ * Put a plate on the painter. Its art shows only lit, so nothing is drawn (no GPU context, no
+ * pipeline) until it first lights; then it paints when it is in view.
+ */
 export function mountPlate(canvas: HTMLCanvasElement, recipe: PlateRecipe): PlateHandle {
-  const entry: Entry = { canvas, recipe, t: STILL_TIME, animating: false, visible: false, dirty: true, surface: null };
+  const entry: Entry = { canvas, recipe, t: STILL_TIME, animating: false, visible: false, dirty: false, surface: null };
   entries.add(entry);
   byCanvas.set(canvas, entry);
   visibility().observe(canvas);
   return {
     set(next) {
       entry.recipe = next;
-      entry.dirty = true;
+      // Unlit, the new look is drawn when it lights.
+      entry.dirty = entry.animating;
       wake();
     },
     animate(on) {
       if (entry.animating === on) return;
       entry.animating = on;
+      if (on) entry.dirty = true;
       wake();
     },
     dispose() {

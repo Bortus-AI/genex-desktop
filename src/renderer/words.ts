@@ -4386,8 +4386,7 @@ export const ACCOUNT_WORDS = {
   /** A Pro's nameplate: the moving art behind their name in the sidebar. */
   nameplate: "Nameplate",
   newPlate: "New one",
-  newPlateLabel: "Roll a new nameplate",
-  nameplateNote: "Behind your name in the sidebar.",
+  nameplateNote: "Lights up behind your name in the sidebar when you hover it.",
 } as const;
 
 /**

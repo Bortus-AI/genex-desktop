@@ -2139,8 +2139,21 @@ button.chat-header-title:hover {
   position: relative;
   z-index: 2;
 }
-.nameplate .plate-end {
-  height: 32px;
+/* A playing friend's Join keeps floating over the row's end, as on a plain row. */
+.nameplate > .sidebar-friend-join {
+  position: absolute;
+  z-index: 3;
+}
+/* The credits keep one box at rest and lit, so the name never re-truncates on hover; their focus
+ * ring is drawn inside, as the plate clips what reaches past its edge. */
+.nameplate .plate-credits {
+  height: 24px;
+  padding-inline: 6px;
+  margin-inline-end: 6px;
+  border-radius: 8px;
+}
+.nameplate .plate-end:focus-visible {
+  outline-offset: -2px;
 }
 .nameplate-art,
 .nameplate-wash,
@@ -2199,7 +2212,7 @@ button.chat-header-title:hover {
 }
 .nameplate[data-lit] :is(.cy-avatar, .person-avatar) {
   box-shadow:
-    0 0 0 2px var(--plate-tint),
+    0 0 0 2px var(--page),
     0 0 0 3.5px color-mix(in srgb, var(--plate-glow) 70%, transparent),
     0 0 14px 2px color-mix(in srgb, var(--plate-glow) 40%, transparent);
 }
@@ -2210,10 +2223,6 @@ button.chat-header-title:hover {
 /* Lit, the credits are white over the art with a soft blurred shadow behind them, and a small
  * see-through blue pill under the pointer or keyboard focus (the plate itself lights only on hover). */
 .nameplate[data-lit] .plate-credits {
-  height: 24px;
-  padding-inline: 6px;
-  margin-inline-end: 6px;
-  border-radius: 8px;
   isolation: isolate;
   color: #fff;
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.7);
@@ -2234,6 +2243,10 @@ button.chat-header-title:hover {
 .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
   background: color-mix(in srgb, var(--play-blue) 55%, transparent);
   color: #fff;
+}
+/* The pill takes the shadow's place: drawn above the button's own background, it would cloud it. */
+.nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::before {
+  opacity: 0;
 }
 .nameplate-sparkles {
   position: absolute;

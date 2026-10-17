@@ -35,7 +35,10 @@ function FriendRow({
   onOpen: (id: string) => void;
 }): JSX.Element {
   const { playing } = friend;
-  const plate = useMemo(() => (friend.pro ? plateRecipe(friend.id) : null), [friend.id, friend.pro]);
+  const plate = useMemo(
+    () => (friend.pro ? plateRecipe(friend.id, 0, friend.avatarVariant) : null),
+    [friend.id, friend.pro, friend.avatarVariant],
+  );
   const row = (
     <>
       <button
