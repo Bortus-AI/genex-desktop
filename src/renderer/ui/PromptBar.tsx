@@ -446,7 +446,7 @@ function FrameBoard({
             src={`data:${frame.mimeType};base64,${frame.data}`}
             alt={frame.label}
             title={frame.label}
-            className="h-11 w-14 rounded-[6px] border border-line object-cover"
+            className="h-11 w-14 rounded-[8px] border border-line object-cover"
           />
           <button
             type="button"
