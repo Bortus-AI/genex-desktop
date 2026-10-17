@@ -54,6 +54,13 @@ const MESSAGE = {
   notWebGame: "Code assets are for web games.",
 } as const;
 
+/** The library has no such generation (deleted, or never this account's): nothing to add. */
+export class NotInLibrary extends Error {
+  constructor() {
+    super(MESSAGE.notFound);
+  }
+}
+
 /** One file a link remembers: the generation it became, and whether Genex made it. */
 interface LibraryLink {
   generationId: string;
@@ -242,7 +249,7 @@ async function place(dir: string, folder: string, name: string, bytes: Uint8Arra
 /** A library generation's file, copied into the game and linked to its generation. */
 async function addGeneration(deps: LibrarySharingDeps, project: string, generationId: string): Promise<AddOutcome> {
   const entry = (await lookup(deps, [generationId])).get(generationId);
-  if (!entry) throw new Error(MESSAGE.notFound);
+  if (!entry) throw new NotInLibrary();
   if (!entry.fileUrl) throw new Error(MESSAGE.noFile);
   const dir = deps.gameDir(project);
   const bytes = await deps.download(entry.fileUrl, LIBRARY_FILE_MAX_BYTES);

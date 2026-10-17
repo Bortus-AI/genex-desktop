@@ -987,13 +987,15 @@ function librarySharingFor(studio: StudioCore): LibrarySharing {
   return gameLibrary;
 }
 
-/** Where a message's @ tags come from: Play's catalog, the Genex account and git (a fixture's stand-ins). */
+/** Where a message's @ tags come from: Play's catalog, the Genex account, its library and git (a fixture's stand-ins). */
 function mentionSourcesFor(core: () => StudioCore): MentionSources {
   return {
     world: (slug) => playCatalogFor(core()).world(slug),
     me: async () => (await playAccountFor(core()).people.me())?.id ?? null,
     clone: fixtureNativePolicy ? fixtureClone : gitCloneCode,
     assetManifest: (slug) => playCatalogFor(core()).assetManifest(slug),
+    addFromLibrary: async (project, generationId) =>
+      (await librarySharingFor(core()).add(project, { generationId })).files,
   };
 }
 
