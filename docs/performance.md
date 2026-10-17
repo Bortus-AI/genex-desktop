@@ -105,7 +105,9 @@ counters carry the regression gates.
 - Live's native view follows a resize in the window's own frame: main keeps the slot's right and
   bottom margins until the renderer measures again (`main/preview-anchor.ts`).
 - Coding-CLI discovery reads the login shell's PATH once and asks an unchanged binary for
-  `--version`/`--help` once; sessions reuse both until Recheck.
+  `--version`/`--help` once, an answer kept across launches; sessions reuse both until Recheck.
+- The launch's bootstrap does not wait for the engine checks: it carries the engines the last
+  launch checked while this launch's checks run (`main/engine-boot.ts`).
 - Plugin packages are inspected from directory listings, several folders at a time; event bodies
   are read through a sliding window.
 
