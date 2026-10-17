@@ -139,7 +139,7 @@ interface CliAnswers {
 /** Forget what discovery knows, for one provider or all; the login shell's PATH is read again either way. */
 export function invalidateCodingCli(provider?: CodingProvider): void {
   forget(provider);
-  keepAnswers();
+  void keepAnswers();
 }
 function forget(provider?: CodingProvider): void {
   for (const key of diagnostics.keys()) if (!provider || key.startsWith(`${provider}:`)) diagnostics.delete(key);
@@ -173,10 +173,10 @@ async function readKeptAnswers(file: string): Promise<void> {
     // Nothing kept, or nothing readable: every CLI is asked again.
   }
 }
-/** Keep the answers for the next launch, one write after another. */
-function keepAnswers(): void {
+/** Keep the answers for the next launch, one write after another; settles when this one is on disk. */
+function keepAnswers(): Promise<unknown> {
   const file = answersFile();
-  if (!file) return;
+  if (!file) return Promise.resolve();
   const text = JSON.stringify(Object.fromEntries(answered));
   answersWrite = answersWrite
     .catch(() => {})
@@ -185,6 +185,7 @@ function keepAnswers(): void {
       await atomicWriteText(file, text, { mode: 0o600 });
     })
     .catch(() => {});
+  return answersWrite;
 }
 let settingsFile: string | undefined;
 let discoveryDefaults: Pick<DiscoveryOptions, "loginPath" | "loginShell" | "home" | "env" | "standardDirs"> = {};
@@ -229,7 +230,8 @@ export async function setCodingCliOverride(provider: CodingProvider, executable:
       else values[provider] = executable;
       await mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
       await atomicWriteText(file, JSON.stringify(values, null, 2), { mode: 0o600 });
-      invalidateCodingCli(provider);
+      forget(provider);
+      await keepAnswers();
     });
   settingsWrite = operation;
   await operation;
@@ -694,7 +696,8 @@ async function checkCliCapabilities(
   if (missing.length) throw new Error(MESSAGE.MissingOptions(missing));
   if (identity && !known) {
     answered.set(identity, { version: status.version, help });
-    keepAnswers();
+    // A discovery ends with its answers on disk, never with a write still landing in the folder.
+    await keepAnswers();
   }
 }
 /** The options a CLI must list: OpenCode's by the command line its version speaks; throws for a version it cannot run. */
