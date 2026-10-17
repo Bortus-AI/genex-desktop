@@ -2209,9 +2209,13 @@ button.chat-header-title:hover {
   color: #6ee39a;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
 }
-/* Lit, the credits are white over the art with a soft blurred shadow behind them, and a frosted
- * glass pill under the pointer or keyboard focus. */
+/* Lit, the credits are white over the art with a soft blurred shadow behind them, and a small
+ * see-through blue pill under the pointer or keyboard focus. */
 .nameplate[data-lit] .plate-credits {
+  height: 24px;
+  padding-inline: 6px;
+  margin-inline-end: 6px;
+  border-radius: 8px;
   isolation: isolate;
   color: #fff;
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.7);
@@ -2230,9 +2234,7 @@ button.chat-header-title:hover {
   pointer-events: none;
 }
 .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: rgb(255 255 255 / 0.16);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.22);
-  backdrop-filter: blur(8px);
+  background: color-mix(in srgb, var(--play-blue) 55%, transparent);
   color: #fff;
 }
 .nameplate-sparkles {
@@ -2349,8 +2351,7 @@ button.chat-header-title:hover {
   background: rgb(255 255 255 / 0.75);
 }
 :root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: rgb(255 255 255 / 0.55);
-  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.08);
+  background: color-mix(in srgb, var(--play-blue) 30%, transparent);
   color: var(--ink);
 }
 :root[data-theme="light"] .nameplate[data-lit] .sidebar-friend-playing {
