@@ -1598,14 +1598,19 @@ const SCREEN_NOW_MS = 2 * SECOND_MS;
 
 /** A minute, in the seconds a running clock shows. */
 const SECONDS_PER_MINUTE = MINUTE_MS / SECOND_MS;
+/**
+ * Between a clock's two parts: a no-break space. The status clock's figures are tabular, and the
+ * house font's tabular set widens a plain space to a figure's width; this one keeps a word space's.
+ */
+const CLOCK_SPACE = "\u00a0";
 
 /** "42s", "3m 5s", "2h 10m": a running clock, as short as the time allows, and nothing under a second. */
 export function clockWords(ms: number): string {
   const seconds = Math.floor(ms / SECOND_MS);
   if (ms < SECOND_MS) return "";
   if (ms < MINUTE_MS) return `${seconds}s`;
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m ${seconds % SECONDS_PER_MINUTE}s`;
-  return `${Math.floor(ms / HOUR_MS)}h ${Math.floor((ms % HOUR_MS) / MINUTE_MS)}m`;
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)}m${CLOCK_SPACE}${seconds % SECONDS_PER_MINUTE}s`;
+  return `${Math.floor(ms / HOUR_MS)}h${CLOCK_SPACE}${Math.floor((ms % HOUR_MS) / MINUTE_MS)}m`;
 }
 
 /** How long ago a screen's frame came: "now", "3s", "2m" on a node, "3s ago" where there is room. */
