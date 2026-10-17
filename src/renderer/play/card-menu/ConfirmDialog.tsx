@@ -4,11 +4,10 @@
  */
 import type { JSX } from "react";
 import { PlayCardAction, PlayChangeKind } from "../../../shared/play-manage.ts";
-import type { PlayGame } from "../../../shared/play.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DialogSurface } from "../../ui/dialog.tsx";
 import { PLAY_CARD_MENU_WORDS } from "../../words.ts";
-import { actionLabel, DialogFoot } from "./DialogFoot.tsx";
+import { actionLabel, type CardDialogProps, DialogFoot } from "./DialogFoot.tsx";
 import { useChange } from "./use-change.ts";
 
 const WORDS = PLAY_CARD_MENU_WORDS;
@@ -18,11 +17,8 @@ export function ConfirmDialog({
   action,
   game,
   onClose,
-}: {
-  action: typeof PlayCardAction.Unpublish | typeof PlayCardAction.Delete;
-  game: PlayGame;
-  onClose: () => void;
-}): JSX.Element {
+  returnFocus,
+}: CardDialogProps & { action: typeof PlayCardAction.Unpublish | typeof PlayCardAction.Delete }): JSX.Element {
   const remove = action === PlayCardAction.Delete;
   const words = remove ? WORDS.remove : WORDS.unpublish;
   const save = useChange(game, onClose, words.failed);
@@ -33,6 +29,7 @@ export function ConfirmDialog({
       title={words.title(game.title)}
       description={words.body}
       onDismiss={onClose}
+      returnFocus={returnFocus}
       dismissible={!save.busy}
     >
       <DialogFoot problem={save.problem} busy={save.busy} onCancel={onClose}>

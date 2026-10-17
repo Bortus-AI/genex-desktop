@@ -36,7 +36,9 @@ export function changedGame(game: PlayGame, change: PlayGameChange, result: Play
       return curated(game, { categories: stored ?? change.categories });
     }
     case PlayChangeKind.Remixing:
-      return { ...curated(game, { remixOff: !change.allowed }), remixable: change.allowed };
+      // Off hides Remix at once; whether it shows again is the gallery's to say (a game for sale never
+      // offers it), on the next read.
+      return { ...curated(game, { remixOff: !change.allowed }), remixable: change.allowed && game.remixable };
   }
 }
 

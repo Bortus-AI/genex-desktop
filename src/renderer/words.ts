@@ -4240,6 +4240,7 @@ export const PLAY_CARD_MENU_WORDS = {
   } satisfies Record<PlayMobileSupport, string>,
   mobileAutoFlagged: "Auto · desktop only",
   linkCopied: "Link copied",
+  copyFailed: "Couldn’t copy the link.",
   cancel: "Cancel",
   save: "Save",
   saving: "Saving…",
@@ -4278,7 +4279,7 @@ export const PLAY_CARD_MENU_WORDS = {
   },
   unpublish: {
     title: (title: string) => `Unpublish ${title}?`,
-    body: "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes are kept if you publish it again.",
+    body: "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.",
     confirm: "Unpublish",
     working: "Unpublishing…",
     done: (title: string) => `${title} is unpublished`,
@@ -4308,6 +4309,7 @@ export const PLAY_CARD_MENU_WORDS = {
     save: "Use this cover",
     done: "Cover changed",
     unreadable: "That file isn’t a picture the app can read.",
+    tooLarge: "Pick a picture under 40 MB.",
     refusal: {
       [PlayCoverRefusal.Outranked]: "Genex kept the current cover: it outranks an uploaded one.",
       [PlayCoverRefusal.TooDark]: "That picture is too dark for a cover. Try a brighter one.",

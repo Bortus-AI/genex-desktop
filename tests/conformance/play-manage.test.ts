@@ -27,7 +27,7 @@ import {
   PlayCardAction,
   PlayChangeKind,
   PlayChangeOutcome,
-  type PlayCoverType,
+  PlayCoverType,
   type PlayGameChange,
   PlayMobileSupport,
   playCardMenu,
@@ -78,10 +78,10 @@ function rig(
 /** A picture of `type`: its signature and a little body. */
 function picture(type: PlayCoverType, size = 64): Uint8Array {
   const bytes = new Uint8Array(size);
-  if (type === "image/webp") {
+  if (type === PlayCoverType.Webp) {
     bytes.set([0x52, 0x49, 0x46, 0x46], 0);
     bytes.set([0x57, 0x45, 0x42, 0x50], 8);
-  } else if (type === "image/png") bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  } else if (type === PlayCoverType.Png) bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
   else bytes.set([0xff, 0xd8, 0xff, 0xe0], 0);
   return bytes;
 }
@@ -131,7 +131,7 @@ describe("the changes the card menu may ask for", () => {
     for (const change of invalid) assert.equal(isPlayGameChange(change), false, JSON.stringify(change));
   });
 
-  it("takes tags only as Save tags stores them: the shelf's marker and its own tags, within its limit", () => {
+  it("takes tags as Save tags stores them: the shelf's marker and short lowercase tags, within its limit", () => {
     const cases: Array<[unknown, boolean]> = [
       [[], true],
       [["arcade"], true],
@@ -139,13 +139,16 @@ describe("the changes the card menu may ask for", () => {
       [["arcade", "sports", "racing", "shooter"], false],
       [["arcade", "arcade"], false],
       [["sports", "arcade"], true],
-      [["physics"], false],
+      // A tag from outside the shelf's list is one the game already carried: kept, not refused.
+      [["physics"], true],
+      [["Arcade"], false],
+      [["arcade sports"], false],
       [["tools"], true],
       [["tools", "physics", "terrain"], true],
       [["tools", "physics", "terrain", "vfx"], false],
       [["physics", "tools"], false],
-      [["tools", "arcade"], false],
-      [["assets", "arcade"], false],
+      [["tools", "arcade"], true],
+      [["assets", "arcade", "sports", "racing"], false],
       [["featured"], false],
       [["arcade", 7], false],
       [["../etc"], false],
@@ -279,7 +282,7 @@ describe("a change reaching genex.games", () => {
   it("needs the account, and asks nothing without it", async () => {
     const { manage, calls, uploads } = rig(() => ok({}), { token: undefined });
     await assert.rejects(manage.change(GAME, { kind: PlayChangeKind.Delete }), SignInNeeded);
-    await assert.rejects(manage.cover(GAME, picture("image/webp"), "image/webp"), SignInNeeded);
+    await assert.rejects(manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp), SignInNeeded);
     assert.deepEqual([calls.length, uploads.length], [0, 0]);
   });
 
@@ -288,7 +291,7 @@ describe("a change reaching genex.games", () => {
     for (const id of ["../x", "a/b", "", "x".repeat(65), "a b", "%2e%2e", "a?b=1", "a#b", 7, null, undefined]) {
       const bad = id as string;
       await assert.rejects(manage.change(bad, { kind: PlayChangeKind.Delete }), JSON.stringify(id));
-      await assert.rejects(manage.cover(bad, picture("image/webp"), "image/webp"), JSON.stringify(id));
+      await assert.rejects(manage.cover(bad, picture(PlayCoverType.Webp), PlayCoverType.Webp), JSON.stringify(id));
     }
     assert.deepEqual([calls.length, uploads.length, changes()], [0, 0, 0]);
   });
@@ -312,7 +315,7 @@ describe("a change reaching genex.games", () => {
 
 describe("a new cover", () => {
   it("is asked a place for, put there and committed, each picture type as itself", async () => {
-    for (const type of ["image/webp", "image/png", "image/jpeg"] as const) {
+    for (const type of Object.values(PlayCoverType)) {
       const commit = ok({ applied: true, coverUrl: COVER, coverSource: "upload" });
       const { manage, calls, uploads, changes } = rig(coverApi(commit));
       const image = picture(type, 100);
@@ -357,11 +360,11 @@ describe("a new cover", () => {
   it("puts the picture nowhere but an https place, and commits nothing after a failed upload", async () => {
     for (const uploadUrl of ["http://uploads.genex.technology/put", "file:///etc/passwd", "javascript:alert(1)", 7]) {
       const { manage, calls, uploads } = rig(coverApi(ok({ applied: true }), uploadUrl));
-      await assert.rejects(manage.cover(GAME, picture("image/webp"), "image/webp"), String(uploadUrl));
+      await assert.rejects(manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp), String(uploadUrl));
       assert.deepEqual([calls.length, uploads.length], [1, 0], String(uploadUrl));
     }
     const failed = rig(coverApi(ok({ applied: true })), { upload: 500 });
-    await assert.rejects(failed.manage.cover(GAME, picture("image/webp"), "image/webp"));
+    await assert.rejects(failed.manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp));
     assert.deepEqual([failed.calls.length, failed.changes()], [1, 0], "no commit after a failed upload");
   });
 
@@ -382,13 +385,13 @@ describe("a new cover", () => {
     ];
     for (const [commit, expected] of cases) {
       const { manage } = rig(coverApi(commit));
-      assert.deepEqual(await manage.cover(GAME, picture("image/webp"), "image/webp"), expected);
+      assert.deepEqual(await manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp), expected);
     }
     const refused = rig(coverApi(answered(422, { error: "other" })));
-    await assert.rejects(refused.manage.cover(GAME, picture("image/webp"), "image/webp"), GalleryError);
+    await assert.rejects(refused.manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp), GalleryError);
     assert.equal(refused.changes(), 0);
     const kept = rig(coverApi(rejected("flat")));
-    await kept.manage.cover(GAME, picture("image/webp"), "image/webp");
+    await kept.manage.cover(GAME, picture(PlayCoverType.Webp), PlayCoverType.Webp);
     assert.equal(kept.changes(), 0, "a refused cover changed nothing");
   });
 });
@@ -575,7 +578,7 @@ describe("the fixture launch's genex.games", () => {
 
   it("takes a new cover for the launch with no socket", async () => {
     const snowball = await bySlug("snowball");
-    const result = await as(FULL).cover(snowball.id, picture("image/webp"), "image/webp");
+    const result = await as(FULL).cover(snowball.id, picture(PlayCoverType.Webp), PlayCoverType.Webp);
     assert.equal(result.applied, true);
     assert.match(result.coverUrl ?? "", /^data:image\/svg\+xml/);
     assert.equal((await bySlug("snowball")).coverUrl, result.coverUrl);
@@ -616,5 +619,33 @@ describe("the gallery after a change", () => {
     gallery.forget();
     await readAll();
     assert.equal(calls.length, 6, "read again after a change");
+  });
+
+  it("keeps nothing of a read that was under way when it forgot", async () => {
+    const calls: string[] = [];
+    const held: Array<() => void> = [];
+    const gallery = playGallery({
+      request: (route) => {
+        calls.push(route.split("?")[0] ?? "");
+        // Every read waits until the test lets it answer.
+        return new Promise((resolve) => held.push(() => resolve(ok({ items: [], buckets: {}, values: {} }))));
+      },
+      token: async () => undefined,
+      now: () => 0,
+    });
+    const readAll = () =>
+      Promise.all([
+        gallery.feed({ category: PlayCategory.Featured }),
+        gallery.shelves(),
+        gallery.search("cathedral", PlayShelf.Games),
+      ]);
+    const underWay = readAll();
+    gallery.forget();
+    for (const answer of held.splice(0)) answer();
+    await underWay;
+    const again = readAll();
+    assert.equal(calls.length, 6, "each read goes out again: the one under way was older than the change");
+    for (const answer of held.splice(0)) answer();
+    await again;
   });
 });

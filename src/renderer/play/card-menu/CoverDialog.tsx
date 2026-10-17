@@ -6,15 +6,14 @@
  */
 import type { DragEvent, JSX } from "react";
 import { useEffect, useRef, useState } from "react";
-import { PLAY_COVER_MAX_BYTES, PLAY_COVER_SIZE, type PlayCoverType } from "../../../shared/play-manage.ts";
-import type { PlayGame } from "../../../shared/play.ts";
+import { PLAY_COVER_MAX_BYTES, PLAY_COVER_SIZE, PlayCoverType } from "../../../shared/play-manage.ts";
 import { studio } from "../../state/studio.ts";
 import { ToastTone } from "../../state/toasts.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DialogSurface } from "../../ui/dialog.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { PLAY_CARD_MENU_WORDS } from "../../words.ts";
-import { actionLabel, DialogFoot } from "./DialogFoot.tsx";
+import { actionLabel, type CardDialogProps, DialogFoot } from "./DialogFoot.tsx";
 
 const WORDS = PLAY_CARD_MENU_WORDS.cover;
 /** The largest file read at all; the crop is always far smaller. */
@@ -22,6 +21,9 @@ const PICTURE_MAX_BYTES = 40 * 1024 * 1024;
 /** WebP quality of the cropped cover, as the website encodes one. */
 const WEBP_QUALITY = 0.85;
 const JPEG_QUALITY = 0.9;
+
+/** A picture bigger than the app reads at all. */
+class PictureTooLarge extends Error {}
 
 /** A cropped cover: its bytes, their type, and a local address to preview them. */
 interface Cropped {
@@ -36,7 +38,7 @@ const encoded = (canvas: HTMLCanvasElement, type: string, quality: number): Prom
 
 /** Centre-crop any picture this Mac decodes to the cover size: WebP, else JPEG. */
 async function crop(file: File): Promise<Cropped> {
-  if (file.size > PICTURE_MAX_BYTES) throw new Error(WORDS.unreadable);
+  if (file.size > PICTURE_MAX_BYTES) throw new PictureTooLarge();
   const bitmap = await createImageBitmap(file);
   try {
     const canvas = document.createElement("canvas");
@@ -49,10 +51,10 @@ async function crop(file: File): Promise<Cropped> {
     const height = bitmap.height * scale;
     context.drawImage(bitmap, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
     // An encoder the canvas lacks hands back a PNG without failing, so the blob's own type is read.
-    const webp = await encoded(canvas, "image/webp", WEBP_QUALITY);
-    const blob = webp?.type === "image/webp" ? webp : await encoded(canvas, "image/jpeg", JPEG_QUALITY);
+    const webp = await encoded(canvas, PlayCoverType.Webp, WEBP_QUALITY);
+    const blob = webp?.type === PlayCoverType.Webp ? webp : await encoded(canvas, PlayCoverType.Jpeg, JPEG_QUALITY);
     if (!blob || blob.size > PLAY_COVER_MAX_BYTES) throw new Error(WORDS.unreadable);
-    const type: PlayCoverType = blob.type === "image/webp" ? "image/webp" : "image/jpeg";
+    const type = blob.type === PlayCoverType.Webp ? PlayCoverType.Webp : PlayCoverType.Jpeg;
     return { bytes: new Uint8Array(await blob.arrayBuffer()), type, preview: URL.createObjectURL(blob) };
   } finally {
     bitmap.close();
@@ -60,7 +62,7 @@ async function crop(file: File): Promise<Cropped> {
 }
 
 /** Pick, preview and send a new cover. */
-export function CoverDialog({ game, onClose }: { game: PlayGame; onClose: () => void }): JSX.Element {
+export function CoverDialog({ game, onClose, returnFocus }: CardDialogProps): JSX.Element {
   const [picked, setPicked] = useState<Cropped | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -74,8 +76,8 @@ export function CoverDialog({ game, onClose }: { game: PlayGame; onClose: () => 
     setFailed(false);
     try {
       setPicked(await crop(chosen));
-    } catch {
-      setProblem(WORDS.unreadable);
+    } catch (error) {
+      setProblem(error instanceof PictureTooLarge ? WORDS.tooLarge : WORDS.unreadable);
     }
   };
   const send = async () => {
@@ -104,7 +106,13 @@ export function CoverDialog({ game, onClose }: { game: PlayGame; onClose: () => 
   };
   const shown = picked?.preview ?? game.coverUrl;
   return (
-    <DialogSurface title={WORDS.title(game.title)} description={WORDS.sub} onDismiss={onClose} dismissible={!busy}>
+    <DialogSurface
+      title={WORDS.title(game.title)}
+      description={WORDS.sub}
+      onDismiss={onClose}
+      returnFocus={returnFocus}
+      dismissible={!busy}
+    >
       <div
         className="play-cover-frame"
         data-play-cover-frame

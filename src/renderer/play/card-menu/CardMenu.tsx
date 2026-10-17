@@ -23,6 +23,7 @@ import {
 import { Icon, type IconName } from "../../ui/icons.tsx";
 import { PLAY_CARD_MENU_WORDS } from "../../words.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
+import type { CardDialogProps } from "./DialogFoot.tsx";
 import { CoverDialog } from "./CoverDialog.tsx";
 import { curationOf, MobileShown, mobileShown } from "./manage-model.ts";
 import { MobileDialog } from "./MobileDialog.tsx";
@@ -84,26 +85,18 @@ function Row({
   );
 }
 
-/** The dialog an action opens, over the card it came from. */
-function ActionDialog({
-  action,
-  game,
-  onClose,
-}: {
-  action: PlayCardAction;
-  game: PlayGame;
-  onClose: () => void;
-}): ReactNode {
+/** The dialog an action opens, over the card it came from; closing it gives the ⋯ the focus back. */
+function ActionDialog({ action, ...props }: CardDialogProps & { action: PlayCardAction }): ReactNode {
   switch (action) {
     case PlayCardAction.Mobile:
-      return <MobileDialog game={game} onClose={onClose} />;
+      return <MobileDialog {...props} />;
     case PlayCardAction.Tags:
-      return <TagsDialog game={game} onClose={onClose} />;
+      return <TagsDialog {...props} />;
     case PlayCardAction.Cover:
-      return <CoverDialog game={game} onClose={onClose} />;
+      return <CoverDialog {...props} />;
     case PlayCardAction.Unpublish:
     case PlayCardAction.Delete:
-      return <ConfirmDialog action={action} game={game} onClose={onClose} />;
+      return <ConfirmDialog action={action} {...props} />;
     default:
       return null;
   }
@@ -147,16 +140,13 @@ export function CardMenu({
     if (action === PlayCardAction.CopyLink) {
       void navigator.clipboard.writeText(playPageUrl(web, game.slug)).then(
         () => studio().notify(WORDS.linkCopied, ToastTone.Ok),
-        () => {},
+        () => studio().notify(WORDS.copyFailed, ToastTone.Error),
       );
       return;
     }
     void toggleRemixing(game);
   };
-  const close = () => {
-    setDialog(null);
-    trigger.current?.focus();
-  };
+  const close = () => setDialog(null);
   const rows = (actions: readonly PlayCardAction[]) =>
     actions.map((action) => <Row key={action} action={action} game={game} onSelect={select} />);
   return (
@@ -194,7 +184,7 @@ export function CardMenu({
           {rows(menu.end)}
         </DropdownMenuContent>
       </DropdownMenu>
-      {dialog && <ActionDialog action={dialog} game={game} onClose={close} />}
+      {dialog && <ActionDialog action={dialog} game={game} onClose={close} returnFocus={trigger} />}
     </>
   );
 }

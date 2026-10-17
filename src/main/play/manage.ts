@@ -15,7 +15,7 @@ import {
   PlayChangeOutcome,
   PlayCoverRefusal,
   type PlayCoverResult,
-  type PlayCoverType,
+  PlayCoverType,
   type PlayGameChange,
 } from "../../shared/play-manage.ts";
 import { GalleryError, type GalleryRequest, imageUrl, isRecord, SignInNeeded } from "./gallery.ts";
@@ -55,12 +55,12 @@ const MESSAGE = {
 
 /** What a picture of each cover type starts with, byte by byte from `at`. */
 const COVER_SIGNATURES: Record<PlayCoverType, ReadonlyArray<{ at: number; bytes: readonly number[] }>> = {
-  "image/webp": [
+  [PlayCoverType.Webp]: [
     { at: 0, bytes: [0x52, 0x49, 0x46, 0x46] },
     { at: 8, bytes: [0x57, 0x45, 0x42, 0x50] },
   ],
-  "image/png": [{ at: 0, bytes: [0x89, 0x50, 0x4e, 0x47] }],
-  "image/jpeg": [{ at: 0, bytes: [0xff, 0xd8, 0xff] }],
+  [PlayCoverType.Png]: [{ at: 0, bytes: [0x89, 0x50, 0x4e, 0x47] }],
+  [PlayCoverType.Jpeg]: [{ at: 0, bytes: [0xff, 0xd8, 0xff] }],
 };
 /** The shortest picture worth a look: a WebP's header. */
 const COVER_MIN_BYTES = 12;

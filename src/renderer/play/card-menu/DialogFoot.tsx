@@ -1,12 +1,20 @@
 /**
- * The bottom of every card-menu dialog: what went wrong (one orange line), an underlined action on
- * the left when there is one, and Cancel beside the dialog's own button on the right.
+ * The bottom of every card-menu dialog: what went wrong (one orange line), a second action on the
+ * left when there is one, and Cancel beside the dialog's own button on the right.
  */
-import type { JSX, ReactNode } from "react";
+import type { JSX, ReactNode, RefObject } from "react";
+import type { PlayGame } from "../../../shared/play.ts";
 import { Button } from "../../ui/Button.tsx";
 import { PLAY_CARD_MENU_WORDS } from "../../words.ts";
 
 const WORDS = PLAY_CARD_MENU_WORDS;
+
+/** What every card-menu dialog takes: its game, how it closes, and the ⋯ that gets the focus back. */
+export interface CardDialogProps {
+  game: PlayGame;
+  onClose: () => void;
+  returnFocus: RefObject<HTMLElement | null>;
+}
 
 /** The dialog's footer; `problem` replaces nothing, it sits above the buttons until the next try. */
 export function DialogFoot({
@@ -18,7 +26,7 @@ export function DialogFoot({
 }: {
   /** Why the last try failed; the dialog's own button then reads as Try again. */
   problem: string | null;
-  /** An underlined action at the left edge (Remove from Featured). */
+  /** A second action at the left edge (Change cover's Choose a picture). */
   aside?: ReactNode;
   busy: boolean;
   onCancel: () => void;

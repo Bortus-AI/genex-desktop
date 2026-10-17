@@ -963,7 +963,7 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
 
 /**
  * A published game's card menu for this core, on the Genex account: genex.games over the network,
- * or a fixture launch's own answers. A change makes the catalog read its games afresh.
+ * or a fixture launch's own answers. A change makes the catalog and profiles read their games afresh.
  */
 function playManageFor(studio: StudioCore): PlayManage {
   const account = genexAccountFor(studio);
@@ -973,7 +973,10 @@ function playManageFor(studio: StudioCore): PlayManage {
     request: refusingRequest(request, account.refused),
     token: account.token,
     upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
-    changed: playCatalogFor(studio).forget,
+    changed: () => {
+      playCatalogFor(studio).forget();
+      playAccountFor(studio).people.forgetProfiles();
+    },
     localImages: fixtureNativePolicy,
   });
   return playManage;

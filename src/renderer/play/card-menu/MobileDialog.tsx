@@ -6,11 +6,10 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { PlayChangeKind, PlayMobileSupport } from "../../../shared/play-manage.ts";
-import type { PlayGame } from "../../../shared/play.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DialogSurface } from "../../ui/dialog.tsx";
 import { PLAY_CARD_MENU_WORDS } from "../../words.ts";
-import { actionLabel, DialogFoot } from "./DialogFoot.tsx";
+import { actionLabel, type CardDialogProps, DialogFoot } from "./DialogFoot.tsx";
 import { curationOf } from "./manage-model.ts";
 import { useChange } from "./use-change.ts";
 
@@ -32,13 +31,19 @@ const CHOICES: ReadonlyArray<{ value: PlayMobileSupport | null; label: string; h
 ];
 
 /** Set or clear a game's mobile flag. */
-export function MobileDialog({ game, onClose }: { game: PlayGame; onClose: () => void }): JSX.Element {
+export function MobileDialog({ game, onClose, returnFocus }: CardDialogProps): JSX.Element {
   const curation = curationOf(game);
   const [picked, setPicked] = useState<PlayMobileSupport | null>(curation.mobileSupport);
   const save = useChange(game, onClose, WORDS.mobile.failed);
   const flagged = curation.mobileAuto === PlayMobileSupport.DesktopOnly;
   return (
-    <DialogSurface title={WORDS.mobile.title(game.title)} description={WORDS.mobile.sub} onDismiss={onClose}>
+    <DialogSurface
+      title={WORDS.mobile.title(game.title)}
+      description={WORDS.mobile.sub}
+      onDismiss={onClose}
+      returnFocus={returnFocus}
+      dismissible={!save.busy}
+    >
       <div className="play-dialog-choices" role="radiogroup" aria-label={WORDS.mobile.label}>
         {CHOICES.map((choice) => (
           // biome-ignore lint/a11y/useSemanticElements: a choice row with a name and a line under it, as the website draws it

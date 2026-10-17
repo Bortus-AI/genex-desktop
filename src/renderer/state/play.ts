@@ -205,21 +205,26 @@ export function onlineCounted(state: PlayState, category: PlayCategory, counts: 
 }
 
 /**
- * A game was changed from its card's menu: every tab shows `next` in its place, or drops it once
- * it left the catalog (null).
+ * A game was changed from its card's menu: every tab and Recent show `next` in its place, or drop
+ * it once it left the catalog (null).
  */
-export function gameChanged(state: PlayState, gameId: string, next: PlayGame | null): PlayState {
+export function gameChanged(state: PlayState, game: Pick<PlayGame, "id" | "slug">, next: PlayGame | null): PlayState {
   const feeds: PlayState["feeds"] = {};
   for (const [category, feed] of Object.entries(state.feeds) as Array<[PlayCategory, FeedState]>) {
-    const at = feed.games.findIndex((game) => game.id === gameId);
+    const at = feed.games.findIndex((shown) => shown.id === game.id);
     if (at === -1) {
       feeds[category] = feed;
       continue;
     }
-    const games = next ? feed.games.with(at, next) : feed.games.filter((game) => game.id !== gameId);
+    const games = next ? feed.games.with(at, next) : feed.games.filter((shown) => shown.id !== game.id);
     feeds[category] = { ...feed, games };
   }
-  return { ...state, feeds };
+  const recent = next
+    ? state.recent.map((entry) =>
+        entry.slug === game.slug ? { slug: next.slug, title: next.title, coverUrl: next.coverUrl } : entry,
+      )
+    : state.recent.filter((entry) => entry.slug !== game.slug);
+  return { ...state, feeds, recent };
 }
 
 /** A game was opened: its cover shows at once, and it leads Recent. */
@@ -357,20 +362,36 @@ type PlayApi = Pick<
 >;
 
 /** The store's `manage`: send the change, then show it on every card of the game at once. */
-function managing(api: PlayApi, set: (change: (state: PlayState) => PlayState) => void): PlayStore["manage"] {
+function managing(api: PlayApi, shown: (game: PlayGame, next: PlayGame | null) => void): PlayStore["manage"] {
   return async (game, change) => {
     const result = await api.playManage(game.id, change);
     if (result.outcome !== PlayChangeOutcome.Done) return result;
-    set((state) => gameChanged(state, game.id, changedGame(game, change, result)));
+    shown(game, changedGame(game, change, result));
     return result;
   };
 }
 
-/** Play's store over `api`, remembering Recent in `storage`. */
+/** Told a game changed from a card's menu, with its card after (null once it left the catalog). */
+export type GameChangeListener = (gameId: string, next: PlayGame | null) => void;
+
+/** Show a game's change on every card and in Recent (kept in `storage`), and tell `onGameChanged`. */
+function showing(store: StoreApi<PlayState>, storage: KeyValueStorage | null, onGameChanged: GameChangeListener) {
+  return (game: PlayGame, next: PlayGame | null): void => {
+    store.setState((state) => gameChanged(state, game, next), true);
+    writeRecent(store.getState().recent, storage);
+    onGameChanged(game.id, next);
+  };
+}
+
+/**
+ * Play's store over `api`, remembering Recent in `storage`; `onGameChanged` hears every change made
+ * from a card's menu, so the cards other stores show (a profile's) change too.
+ */
 export function createPlayStore(
   api: PlayApi,
   storage: KeyValueStorage | null,
   now: () => number = Date.now,
+  onGameChanged: GameChangeListener = () => {},
 ): PlayStore {
   const store = createStore<PlayState>()(() => initialPlay(readRecent(storage)));
   const set = (change: (state: PlayState) => PlayState) => store.setState(change, true);
@@ -454,7 +475,8 @@ export function createPlayStore(
     }
   };
 
-  const manage = managing(api, set);
+  const shown = showing(store, storage, onGameChanged);
+  const manage = managing(api, shown);
 
   return Object.assign(store, {
     loadShelves,
@@ -481,7 +503,6 @@ export function createPlayStore(
       await made;
     },
     manage,
-    coverChanged: (game: PlayGame, coverUrl: string) =>
-      set((state) => gameChanged(state, game.id, { ...game, coverUrl })),
+    coverChanged: (game: PlayGame, coverUrl: string) => shown(game, { ...game, coverUrl }),
   });
 }

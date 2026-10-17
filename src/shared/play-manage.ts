@@ -76,13 +76,13 @@ export interface PlayCoverResult {
   refusal: PlayCoverRefusal | null;
 }
 
-/** The picture types genex.games takes for a cover, as the website sends them. */
-export const PLAY_COVER_TYPES = ["image/webp", "image/png", "image/jpeg"] as const;
-export type PlayCoverType = (typeof PLAY_COVER_TYPES)[number];
+/** The picture types genex.games takes for a cover, as the website sends them. Wire values: never rename one. */
+export const PlayCoverType = { Webp: "image/webp", Png: "image/png", Jpeg: "image/jpeg" } as const;
+export type PlayCoverType = (typeof PlayCoverType)[keyof typeof PlayCoverType];
 
 /** Whether a value is a cover picture type genex.games takes. */
 export const isPlayCoverType = (value: unknown): value is PlayCoverType =>
-  (PLAY_COVER_TYPES as readonly unknown[]).includes(value);
+  (Object.values(PlayCoverType) as unknown[]).includes(value);
 
 /** The size every cover is cropped to before it is sent, as the website crops one. */
 export const PLAY_COVER_SIZE = { width: 1536, height: 864 } as const;
@@ -92,6 +92,9 @@ export const PLAY_COVER_MAX_BYTES = GENEX_COVER_MAX_BYTES;
 /** The most tags a game carries on the Games shelf; Tools and Assets carry their marker and two. */
 const GAMES_TAGS_MAX = 3;
 const SHELF_TAGS_MAX = 2;
+
+/** A tag genex.games stores: a short lowercase word, which a game may carry from before its shelf's list. */
+const TAG_SHAPE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
 /** The tabs a shelf opens on or names itself by, which are no tags of their own. */
 const MARKERS = new Set<string>([PlayCategory.Featured, PlayShelf.Tools, PlayShelf.Assets, PlayShelf.Games]);
@@ -119,14 +122,16 @@ export function taggedCategories(shelf: PlayShelf, tags: readonly string[]): str
   return [...marker, ...[...new Set(tags)].slice(0, shelfTagsMax(shelf))];
 }
 
-/** Whether `categories` is something Save tags could have stored: a shelf's marker and its own tags, within its limit. */
+/**
+ * Whether `categories` is something Save tags could have stored: a shelf's marker and tags within
+ * its limit, each a tag of its list or one the game already carried (a short lowercase word).
+ */
 export function isTaggedCategories(categories: unknown): categories is string[] {
   if (!Array.isArray(categories) || !categories.every((value) => typeof value === "string")) return false;
   const shelf = categoriesShelf(categories);
   const tags = categoriesTags(categories);
-  const allowed = new Set(shelfTags(shelf));
   return (
-    tags.every((tag) => allowed.has(tag)) &&
+    tags.every((tag) => TAG_SHAPE.test(tag)) &&
     new Set(tags).size === tags.length &&
     tags.length <= shelfTagsMax(shelf) &&
     categories.join() === taggedCategories(shelf, tags).join()

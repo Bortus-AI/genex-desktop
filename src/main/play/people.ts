@@ -593,6 +593,8 @@ export function playPeople(given: PeopleDeps) {
     setAvatarVariant: account.setAvatarVariant,
     ...handleCalls(deps, account),
     profile,
+    /** Drop the profiles kept: a game on one changed, so the next look reads it afresh. */
+    forgetProfiles: (): void => profiles.clear(),
     ...friendCalls(deps, account.auth),
   };
 }

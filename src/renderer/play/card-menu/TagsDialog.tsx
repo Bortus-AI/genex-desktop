@@ -12,11 +12,11 @@ import {
   shelfTagsMax,
   taggedCategories,
 } from "../../../shared/play-manage.ts";
-import { isPlayCategory, PLAY_SHELVES, type PlayGame, PlayShelf } from "../../../shared/play.ts";
+import { isPlayCategory, PLAY_SHELVES, PlayShelf } from "../../../shared/play.ts";
 import { Button } from "../../ui/Button.tsx";
 import { DialogSurface } from "../../ui/dialog.tsx";
 import { PLAY_CARD_MENU_WORDS, PLAY_WORDS } from "../../words.ts";
-import { actionLabel, DialogFoot } from "./DialogFoot.tsx";
+import { actionLabel, type CardDialogProps, DialogFoot } from "./DialogFoot.tsx";
 import { curationOf } from "./manage-model.ts";
 import { useChange } from "./use-change.ts";
 
@@ -26,19 +26,26 @@ const WORDS = PLAY_CARD_MENU_WORDS.tags;
 const tagName = (tag: string): string => (isPlayCategory(tag) ? PLAY_WORDS.categories[tag] : tag);
 
 /** Choose a game's shelf and tags. */
-export function TagsDialog({ game, onClose }: { game: PlayGame; onClose: () => void }): JSX.Element {
+export function TagsDialog({ game, onClose, returnFocus }: CardDialogProps): JSX.Element {
   const stored = curationOf(game).categories;
   const [shelf, setShelf] = useState<PlayShelf>(() => categoriesShelf(stored));
   const [tags, setTags] = useState<string[]>(() => categoriesTags(stored));
   const save = useChange(game, onClose, WORDS.failed);
   const max = shelfTagsMax(shelf);
-  const offered = shelfTags(shelf);
+  // The shelf's own tags, and any the game already carries outside them (an older tag), so a save
+  // never drops one it did not show.
+  const offered = [...new Set([...shelfTags(shelf), ...categoriesTags(stored)])];
   const kept = tags.filter((tag) => offered.includes(tag)).slice(0, max);
   const categories = taggedCategories(shelf, kept);
   const changed = categories.join() !== taggedCategories(categoriesShelf(stored), categoriesTags(stored)).join();
   const toggle = (tag: string) => setTags((now) => (now.includes(tag) ? now.filter((t) => t !== tag) : [...now, tag]));
   return (
-    <DialogSurface title={WORDS.title(game.title)} onDismiss={onClose}>
+    <DialogSurface
+      title={WORDS.title(game.title)}
+      onDismiss={onClose}
+      returnFocus={returnFocus}
+      dismissible={!save.busy}
+    >
       <div className="play-tags-shelves" role="radiogroup" aria-label={WORDS.shelfLabel}>
         {PLAY_SHELVES.map((value) => (
           // biome-ignore lint/a11y/useSemanticElements: a segmented choice of three shelves

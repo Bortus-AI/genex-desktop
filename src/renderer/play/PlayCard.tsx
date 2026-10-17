@@ -166,9 +166,11 @@ export const PlayCard = memo(function PlayCard({
   const remixing = making === game.slug;
   const menu = useCardMenu(game);
   const [menuOpen, setMenuOpen] = useState(false);
-  // A right-click anywhere on a card with a menu opens it, as the ⋯ does.
+  // A right-click anywhere on a card with a menu opens it, as the ⋯ does; one inside a dialog the
+  // menu opened (a portal, so its events still reach the card through React) is the dialog's own.
   const contextMenu = menu
-    ? (event: MouseEvent) => {
+    ? (event: MouseEvent<HTMLElement>) => {
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return;
         event.preventDefault();
         setMenuOpen(true);
       }
@@ -180,15 +182,14 @@ export const PlayCard = memo(function PlayCard({
       data-menu-open={menuOpen || undefined}
       onContextMenu={contextMenu}
     >
-      <div className="play-card-frame">
+      {/* The pointer anywhere on the cover, its ⋯ included, keeps the clip playing. */}
+      <div className="play-card-frame" onPointerEnter={hover} onPointerLeave={leave}>
         <button
           type="button"
           className="play-card-cover"
           aria-label={WORDS.play(game.title)}
           ref={cover}
           onClick={() => onPlay(game)}
-          onPointerEnter={hover}
-          onPointerLeave={leave}
           onFocus={hover}
           onBlur={leave}
         >

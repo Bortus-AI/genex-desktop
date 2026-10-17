@@ -1,11 +1,12 @@
 /**
- * A Play card's ⋯ menu on the renderer's side: what a change does to the cards on screen, what the
- * mobile row reads, and the store's `manage` over a fake API.
+ * A Play card's ⋯ menu on the renderer's side: what a change does to the cards on screen (tabs,
+ * Recent, profiles), what the mobile row reads, and the store's `manage` over a fake API.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { changedGame, curationOf, MobileShown, mobileShown } from "../../src/renderer/play/card-menu/manage-model.ts";
 import { EMPTY_FEED, FeedStatus } from "../../src/renderer/play/play-model.ts";
+import { initialPeople, LoadStatus, profileGameChanged } from "../../src/renderer/state/people.ts";
 import { createPlayStore, gameChanged, initialPlay } from "../../src/renderer/state/play.ts";
 import {
   type PlayChangeResult,
@@ -16,6 +17,7 @@ import {
   PlayMobileSupport,
 } from "../../src/shared/play-manage.ts";
 import { PlayCategory, type PlayFeedPage, type PlayGame } from "../../src/shared/play.ts";
+import type { PlayProfile } from "../../src/shared/play-people.ts";
 
 const CURATION: PlayCuration = { mobileSupport: null, mobileAuto: null, categories: ["arcade"], remixOff: false };
 
@@ -46,12 +48,13 @@ describe("Play card menu: a change on the cards", () => {
       assert.equal(changedGame(game("skate"), { kind }, DONE), null);
   });
 
-  it("turns remixing off and on with the card's Remix button", () => {
+  it("hides Remix when remixing is turned off and leaves showing it again to the next read", () => {
     const off = changedGame(game("skate"), { kind: PlayChangeKind.Remixing, allowed: false }, DONE) as PlayGame;
     assert.equal(off.remixable, false);
     assert.equal(curationOf(off).remixOff, true);
+    // Whether Remix shows again is the gallery's to say on the next read (a game for sale never offers it).
     const on = changedGame(off, { kind: PlayChangeKind.Remixing, allowed: true }, DONE) as PlayGame;
-    assert.equal(on.remixable, true);
+    assert.equal(on.remixable, false);
     assert.equal(curationOf(on).remixOff, false);
   });
 
@@ -89,15 +92,47 @@ describe("Play card menu: a change on the cards", () => {
         [PlayCategory.Sports]: ready([game("c")]),
       },
     };
-    const next = gameChanged(state, "id-b", null);
+    const next = gameChanged(state, game("b"), null);
     assert.deepEqual(slugs(next.feeds[PlayCategory.Featured]?.games), ["a"]);
     assert.deepEqual(slugs(next.feeds[PlayCategory.Arcade]?.games), []);
     assert.equal(next.feeds[PlayCategory.Sports], state.feeds[PlayCategory.Sports]);
-    const renamed = gameChanged(state, "id-a", { ...game("a"), title: "NEW" });
+    const renamed = gameChanged(state, game("a"), { ...game("a"), title: "NEW" });
     assert.deepEqual(
       renamed.feeds[PlayCategory.Featured]?.games.map((g) => g.title),
       ["NEW", "B"],
     );
+  });
+
+  it("drops a game that left the catalog from Recent and shows a new cover there", () => {
+    const entry = (slug: string, coverUrl: string | null = null) => ({ slug, title: slug.toUpperCase(), coverUrl });
+    const state = initialPlay([entry("a"), entry("b")]);
+    assert.deepEqual(
+      gameChanged(state, game("b"), null).recent.map((e) => e.slug),
+      ["a"],
+    );
+    const covered = gameChanged(state, game("a"), {
+      ...game("a"),
+      coverUrl: "https://cdn.genex.technology/covers/a.webp",
+    });
+    assert.deepEqual(covered.recent[0], entry("a", "https://cdn.genex.technology/covers/a.webp"));
+  });
+
+  it("changes a profile's cards and leaves profiles without the game as they were", () => {
+    const profile = (games: PlayGame[]) => ({
+      status: LoadStatus.Ready,
+      profile: { games } as unknown as PlayProfile,
+    });
+    const state = {
+      ...initialPeople(),
+      profiles: { owner: profile([game("a"), game("b")]), other: profile([game("c")]) },
+    };
+    const dropped = profileGameChanged(state, "id-b", null);
+    assert.deepEqual(slugs(dropped.profiles.owner?.profile?.games), ["a"]);
+    assert.equal(dropped.profiles.other, state.profiles.other);
+    const off = changedGame(game("a"), { kind: PlayChangeKind.Remixing, allowed: false }, DONE);
+    const changed = profileGameChanged(state, "id-a", off);
+    assert.equal(curationOf(changed.profiles.owner?.profile?.games[0] as PlayGame).remixOff, true);
+    assert.equal(profileGameChanged(state, "id-zzz", null), state);
   });
 });
 
@@ -106,6 +141,7 @@ describe("Play card menu: the store's manage", () => {
   function storeWith(games: PlayGame[], answer: () => Promise<PlayChangeResult>) {
     const reads: PlayCategory[] = [];
     const changes: Array<{ gameId: string; change: PlayGameChange }> = [];
+    const heard: Array<{ gameId: string; next: PlayGame | null }> = [];
     const page = (shown: PlayGame[]): PlayFeedPage => ({ games: shown, nextCursor: null });
     const store = createPlayStore(
       {
@@ -125,28 +161,31 @@ describe("Play card menu: the store's manage", () => {
       },
       null,
       () => 1_000,
+      (gameId, next) => heard.push({ gameId, next }),
     );
-    return { store, reads, changes };
+    return { store, reads, changes, heard };
   }
 
   it("sends the change once, drops a deleted game from the tab and reads nothing again", async () => {
     const shown = [game("a"), game("b")];
-    const { store, reads, changes } = storeWith(shown, async () => DONE);
+    const { store, reads, changes, heard } = storeWith(shown, async () => DONE);
     await store.loadFeed(PlayCategory.Featured);
     reads.length = 0;
     await store.manage(shown[1] as PlayGame, { kind: PlayChangeKind.Delete });
     assert.deepEqual(changes, [{ gameId: "id-b", change: { kind: PlayChangeKind.Delete } }]);
     assert.deepEqual(slugs(store.getState().feeds[PlayCategory.Featured]?.games), ["a"]);
     assert.deepEqual(reads, []);
+    assert.deepEqual(heard, [{ gameId: "id-b", next: null }]);
   });
 
   it("changes nothing on screen when genex.games refuses, and passes the failure on", async () => {
     const shown = [game("a")];
-    const { store } = storeWith(shown, () => Promise.reject(new Error("HTTP 403")));
+    const { store, heard } = storeWith(shown, () => Promise.reject(new Error("HTTP 403")));
     await store.loadFeed(PlayCategory.Featured);
     const before = store.getState();
     await assert.rejects(store.manage(shown[0] as PlayGame, { kind: PlayChangeKind.Delete }));
     assert.equal(store.getState(), before);
+    assert.deepEqual(heard, []);
   });
 
   it("keeps the card when remixing can't be turned on from here", async () => {
