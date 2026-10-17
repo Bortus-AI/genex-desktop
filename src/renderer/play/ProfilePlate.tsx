@@ -1,8 +1,8 @@
 /**
  * The Genex account at the foot of the sidebar, in Play and in Create, always in the same place.
  * Signed in: its avatar, its name, and beside it the credits, which open Credits (the friends are
- * listed under the games). A Pro's row is their nameplate: the moving art behind the name and
- * sparkles on the face (`nameplate/Nameplate.tsx`); the word Pro shows only on the profile page.
+ * listed under the games); a Pro's name has a PRO tag, and under the pointer their row lights up
+ * with their nameplate: the moving art behind the name and sparkles on the face (`nameplate/`).
  * The name opens a menu: Profile, Friends, Credits, Nameplate (Pro), Account settings and Sign
  * out. Offline it shows the account as last time, the Offline mark where the credits were. Signed
  * out it signs in in the browser; while that waits it says so, with a way to cancel; and once
@@ -206,6 +206,7 @@ function AccountPlate({
             <PersonAvatar person={me} size={PLATE_FACE} />
             <span className="profile-plate-name">
               <span className="profile-plate-name-text">{me.name}</span>
+              {me.pro && <span className="people-pro profile-plate-pro">{WORDS.proTag}</span>}
             </span>
             <Icon name="chevrons" size={14} className="profile-plate-chevrons" />
           </button>
@@ -217,7 +218,13 @@ function AccountPlate({
   );
   return (
     <>
-      {me.pro ? <Nameplate recipe={plate}>{row}</Nameplate> : row}
+      {me.pro ? (
+        <Nameplate recipe={plate} hover>
+          {row}
+        </Nameplate>
+      ) : (
+        row
+      )}
       {signingOut && <SignOutDialog onDismiss={() => setSigningOut(false)} />}
     </>
   );

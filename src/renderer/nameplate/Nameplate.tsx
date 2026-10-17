@@ -1,10 +1,12 @@
 /**
- * A Pro's nameplate: the row takes the art's own colour, the piece melts in from the right behind a
- * soft dark wash, and sparkles twinkle around the face in the avatar's glow. The art is one canvas
- * on the plate painter; the rest is CSS (`theme.css`, "Pro nameplate").
+ * A Pro's nameplate: lit, the row takes the art's own colour, the piece melts in from the right
+ * behind a soft dark wash, and sparkles twinkle around the face in the avatar's glow. A plate in the
+ * sidebar lights up only under the pointer or with keyboard focus, and its art moves only then; one
+ * shown off (Settings) is always lit. The art is one canvas on the plate painter; the rest is CSS
+ * (`theme.css`, "Pro nameplate").
  */
-import type { CSSProperties, JSX, ReactNode } from "react";
-import { useEffect, useMemo, useRef } from "react";
+import type { CSSProperties, FocusEvent, JSX, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { type PlateRecipe, plateRecipe } from "../../shared/plate-recipe.ts";
 import { type PlateHandle, mountPlate } from "./plate-painter.ts";
 import { usePlateVariant } from "./plate-variant.ts";
@@ -26,8 +28,8 @@ function plateStyle(recipe: PlateRecipe): CSSProperties {
   } as CSSProperties;
 }
 
-/** The art: one canvas the painter draws the piece into. */
-function NameplateArt({ recipe }: { recipe: PlateRecipe }): JSX.Element {
+/** The art: one canvas the painter draws the piece into, moving while `live`. */
+function NameplateArt({ recipe, live }: { recipe: PlateRecipe; live: boolean }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null);
   const handle = useRef<PlateHandle | null>(null);
   const shown = useRef(recipe);
@@ -44,6 +46,9 @@ function NameplateArt({ recipe }: { recipe: PlateRecipe }): JSX.Element {
   useEffect(() => {
     handle.current?.set(recipe);
   }, [recipe]);
+  useEffect(() => {
+    handle.current?.animate(live);
+  }, [live]);
   return (
     <span className="nameplate-art" aria-hidden="true">
       <canvas ref={canvas} data-nameplate-scene={recipe.scene} />
@@ -73,21 +78,51 @@ function Sparkles(): JSX.Element {
   );
 }
 
-/** The plate around its row's contents (the face, the name, the credits); `sparkles` around the face, on by default. */
+/** Whether the pointer or keyboard focus is in the plate: what lights a `hover` plate. */
+function useLit(hover: boolean) {
+  const [pointer, setPointer] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const leaveFocus = (event: FocusEvent<HTMLDivElement>): void => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocus(false);
+  };
+  const events = hover
+    ? {
+        onPointerEnter: () => setPointer(true),
+        onPointerLeave: () => setPointer(false),
+        onFocus: () => setFocus(true),
+        onBlur: leaveFocus,
+      }
+    : {};
+  return { lit: !hover || pointer || focus, events };
+}
+
+/**
+ * The plate around its row's contents (the face, the name, the credits); `sparkles` around the
+ * face, on by default; `hover` lights it only under the pointer or with keyboard focus.
+ */
 export function Nameplate({
   recipe,
   className,
   sparkles = true,
+  hover = false,
   children,
 }: {
   recipe: PlateRecipe;
   className?: string;
   sparkles?: boolean;
+  hover?: boolean;
   children: ReactNode;
 }): JSX.Element {
+  const { lit, events } = useLit(hover);
   return (
-    <div className={className ? `nameplate ${className}` : "nameplate"} style={plateStyle(recipe)} data-nameplate>
-      <NameplateArt recipe={recipe} />
+    <div
+      className={className ? `nameplate ${className}` : "nameplate"}
+      style={plateStyle(recipe)}
+      data-nameplate
+      data-lit={lit || undefined}
+      {...events}
+    >
+      <NameplateArt recipe={recipe} live={lit} />
       <span className="nameplate-wash" aria-hidden="true" />
       {sparkles && <Sparkles />}
       {children}

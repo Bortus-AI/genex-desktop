@@ -126,20 +126,11 @@ function Actions(props: FriendCardProps): JSX.Element | null {
 }
 
 /** A person's name with their Pro tag. */
-export function PersonName({
-  person,
-  className,
-  showPro = true,
-}: {
-  person: PlayPerson;
-  className: string;
-  /** The PRO tag after the name; the sidebar leaves it to the nameplate. */
-  showPro?: boolean;
-}): JSX.Element {
+export function PersonName({ person, className }: { person: PlayPerson; className: string }): JSX.Element {
   return (
     <span className={className}>
       <span className="people-name-text">{person.name}</span>
-      {showPro && person.pro && <span className="people-pro">{WORDS.proTag}</span>}
+      {person.pro && <span className="people-pro">{WORDS.proTag}</span>}
     </span>
   );
 }

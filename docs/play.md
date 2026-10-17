@@ -19,13 +19,13 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   signed out: the last account and balance are remembered on this Mac (`studio.genex.me`,
   `studio.genex.credits`); signing out, which Studio asks first, forgets them.
 - The sidebar plate: signed out (a quiet generated face, Sign in to Genex), finishing in the
-  browser (× cancels), signed in (avatar, name, credits opening Credits; a Pro's row is their
-  nameplate), offline (the last account with the offline mark), ended (dimmed, Sign in again). Its
+  browser (× cancels), signed in (avatar, name, credits opening Credits; a Pro's name has a PRO tag
+  and their row lights up with their nameplate under the pointer), offline (the last account with the offline mark), ended (dimmed, Sign in again). Its
   menu: Profile, Friends, Credits (the Genex plugin page's Credits tab), Nameplate (Pro), Account
   settings, Sign out.
 - The sidebar's friends, signed in, in Play and Create: right under the games, the word Friends
   (the Friends page, with the requests waiting) and each friend in the API's order, their game on
-  one green line while they play (no online or offline); a Pro friend's row is their first nameplate. A row opens the profile; hovering a friend
+  one green line while they play (no online or offline); a Pro friend's row lights up with their first nameplate under the pointer. A row opens the profile; hovering a friend
   in a game offers Join. About 4½ rows show, then they scroll; the page is read every 20 seconds,
   as genex.games polls. Offline nobody is playing.
 - Settings › Genex account: avatar (generated or photo, Regenerate), a Pro's nameplate (New one), name, nickname (`@handle` and
@@ -65,8 +65,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   pieces, each with its own takes and eight shared dials (zoom, speed, warp, mirror, hue, glow,
   grain, colour steps). The first plate is one of the avatar body's pieces in its colours; New one
   rolls any piece (`studio.genex.plateVariant.<id>`, this Mac only). A light theme draws the piece
-  on paper (its lightness turned over: a pale ground, deep colour). WebGPU, a 2D still without it,
-  30 frames a second while on screen, held while idle, under a modal or Reduce Motion.
+  on paper (its lightness turned over: a pale ground, deep colour). A sidebar plate is lit only under
+  the pointer or keyboard focus (always in Settings' preview); WebGPU, a 2D still without it, 30
+  frames a second only while lit and on screen, held while idle, under a modal or Reduce Motion.
 
 ## Playing a game
 
