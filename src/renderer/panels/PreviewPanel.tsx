@@ -639,8 +639,9 @@ export function PreviewPanel({
   // Only the web preview is a game to watch or a page to probe; beside any other view, what waits goes in.
   const watch: StageWatch = { view: stageView, visible, showEmpty, preview };
   const watching = watchingLive(watch);
+  const firstPlan = useFirstPlan(project, status, runGraph);
   const shown = { onLive: previewOnStage && visible, loading: liveLoading, empty: showEmpty };
-  const controls = useStageControls(project, live, shown, onNotice);
+  const controls = useStageControls(project, live, { ...shown, firstPlan: Boolean(firstPlan) }, onNotice);
   const cover = { ...flags, liveLoading: controls.loader.covering, project, visible, sidebarOverlay, toolbarOpen };
   useNativeViewBounds(slot, { ...cover, watching });
   const trouble = useBuildProblem(project, live.loadLive, onNotice);
@@ -656,7 +657,6 @@ export function PreviewPanel({
     onView,
     onNotice,
   });
-  const firstPlan = useFirstPlan(project, status, runGraph);
 
   return (
     <div
@@ -681,6 +681,7 @@ export function PreviewPanel({
         sound={controls.sound}
         emptyGame={flags.emptyScene}
         livePreview={Boolean(project) && preview}
+        gameControls={controls.gameControls}
         plugins={plugins}
         onNotice={onNotice}
         onToolbarOpen={setToolbarOpen}

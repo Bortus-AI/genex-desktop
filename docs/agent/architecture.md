@@ -943,7 +943,7 @@ not in the caller's workspace.
 
 **Genex cover** (`cover.ts`): the game's `genex-cover` demo, shot with `observe`'s `still` into the
 plugin's `covers/<project>/`, sent by `genex cover --json` after a recorded publish (the next one
-aborts it) or by `genex__cover-set`.
+aborts it), with the kept `genex-clip` clip after it, or by `genex__cover-set` (the picture only).
 
 **Plugin skills.** A manifest skill is inline text or (API 3) a package `.md` file with a summary
 (`PluginSkill`, `shared/plugins.ts`). `PluginRegistry.snapshot()` reads tools, guidance and the
