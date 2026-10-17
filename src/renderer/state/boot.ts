@@ -134,7 +134,10 @@ export interface Boot {
   store: BootStore;
   /** Ask main where startup stands; starts the studio when it is ready. */
   load(): Promise<void>;
-  /** Load, then run Set up straight away where it is offered (a Windows sandbox not installed yet). */
+  /**
+   * Load, then run Set up straight away where it is offered (a Windows sandbox not installed yet)
+   * and has not run this launch.
+   */
   start(): Promise<void>;
   /** Re-run core startup from the setup screen; presses while one runs share it. */
   retry(): Promise<void>;
@@ -172,13 +175,17 @@ export function createBoot(
     startOnce(boot);
     store.setState((state) => bootAnswered(state, boot), true);
   };
-  const load = async (): Promise<void> => {
+  const ask = async (): Promise<BootState> => {
     // A main that cannot say (an older build, a closing window) must not strand the window: the
     // studio starts, and its own bootstrap reports what is wrong.
     const boot = await api
       .bootState()
       .catch((): BootState => ({ platform: store.getState().platform ?? "", phase: BootPhase.Ready, sandbox: null }));
     answered(boot);
+    return boot;
+  };
+  const load = async (): Promise<void> => {
+    await ask();
   };
   const runRetry = async (): Promise<void> => {
     store.setState(retryStarted, true);
@@ -212,8 +219,8 @@ export function createBoot(
   };
   const setUp = shared(runSetUp);
   const start = async (): Promise<void> => {
-    await load();
-    if (canSetUp(store.getState())) await setUp();
+    const boot = await ask();
+    if (canSetUp(store.getState()) && !boot.setupTried) await setUp();
   };
   return { store, load, start, retry: shared(runRetry), setUp, report: shared(runReport) };
 }

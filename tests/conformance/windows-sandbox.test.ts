@@ -485,6 +485,11 @@ describe("which Git: Git Bash and the host's git", () => {
         "C:\\Genex\\resources\\git\\bin\\bash.exe",
       ],
       [
+        "bundled only, as the package job runs it, though Git is installed",
+        { bundled, bundledOnly: true, registry: async () => regOut, execPath: async () => exec, exists: () => true },
+        "C:\\Genex\\resources\\git\\bin\\bash.exe",
+      ],
+      [
         "bundled when the installed Git has no bash.exe",
         {
           bundled,

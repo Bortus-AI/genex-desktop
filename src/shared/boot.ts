@@ -93,6 +93,11 @@ export interface BootState {
   platform: string;
   phase: BootPhase;
   sandbox: SandboxProblem | null;
+  /**
+   * A Set up has already run this launch, so a window that loads again (after a renderer crash)
+   * does not raise Windows' approval prompt again unasked. Absent until then.
+   */
+  setupTried?: true;
 }
 
 /** How Set up (Windows) ended when it did not fail. */

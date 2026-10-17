@@ -416,10 +416,18 @@ export function bundledGitRoot(resources: string | undefined = process.resources
   return resources ? win.join(resources, BUNDLED_GIT_DIR) : null;
 }
 
+/**
+ * Set to "1", Genex uses only its own Git, as on a PC without Git: the Windows package job runs
+ * its chat turn this way, since its runner has Git installed.
+ */
+export const BUNDLED_GIT_ONLY_ENV = "STUDIO_WINDOWS_BUNDLED_GIT_ONLY";
+
 /** How Git Bash is looked up; the defaults ask the registry, then `git`, then Genex's own Git. */
 export interface GitBashLookup {
   /** Genex's own Git for Windows (default: {@link bundledGitRoot}). */
   bundled?: string | null;
+  /** Skip an installed Git (default: {@link BUNDLED_GIT_ONLY_ENV}). */
+  bundledOnly?: boolean;
   registry?: () => Promise<string>;
   execPath?: () => Promise<string>;
   exists?: (file: string) => boolean;
@@ -437,11 +445,12 @@ export async function findGitBash(lookup: GitBashLookup = {}): Promise<string | 
     (async () => (await run("reg", ["query", GIT_REGISTRY_KEY, "/v", GIT_REGISTRY_VALUE], TOOL_RUN)).stdout);
   const execPath = lookup.execPath ?? (async () => (await run("git", ["--exec-path"], TOOL_RUN)).stdout);
   const exists = lookup.exists ?? existsSync;
-  const lookups = [
+  const bundledOnly = lookup.bundledOnly ?? process.env[BUNDLED_GIT_ONLY_ENV] === "1";
+  const installed = [
     () => registry().then(gitRootFromRegistry, () => null),
     () => execPath().then(gitRootFromExecPath, () => null),
-    async () => bundled,
   ];
+  const lookups = [...(bundledOnly ? [] : installed), async () => bundled];
   for (const lookupRoot of lookups) {
     const root = await lookupRoot();
     const bash = root ? win.join(root, ...GIT_BASH) : null;
@@ -992,21 +1001,27 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
  * ("CreateProcessWithLogonW(srt-sandbox): Access is denied"). The grant is srt's own, held for
  * this process like the session's, so a reset after a successful initialize takes it back with
  * them; the answer takes it back after a failed one. Before the sandbox is set up there is no user
- * to grant to, and initialize says so.
+ * to grant to, and initialize says so. A grant that fails is taken back at once and leaves
+ * initialize to report what that costs (an install outside the profile needs none).
  */
 export async function grantLauncherFolders(srtWin: string, dirs: readonly string[]): Promise<() => void> {
   const sid = await srtSandboxSid(srtWin);
   if (!sid) return () => {};
   const srt = await import(SRT_PACKAGE);
   const acl = { sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) };
-  srt.grantWindowsAcl({ ...acl, read: [...dirs], write: [] });
-  return () => {
+  const release = () => {
     try {
       srt.revokeWindowsAcl(acl);
     } catch {
       // A read grant on the app's own files; the next start's grant replaces it.
     }
   };
+  try {
+    srt.grantWindowsAcl({ ...acl, read: [...dirs], write: [] });
+  } catch {
+    release();
+  }
+  return release;
 }
 
 /** srt-win's `wfp status` answer for filters that were never installed (or were removed). */

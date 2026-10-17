@@ -1,7 +1,7 @@
 /**
  * Vendor Git for Windows into a Windows build, so Genex runs on a PC without Git installed: the
  * sandbox runs every agent command in Git Bash, and the host keeps game snapshots with git
- * (`src/substrate/windows-sandbox.ts` prefers this copy; `scripts/package-git.cjs` puts it in
+ * (`src/substrate/windows-sandbox.ts` uses this copy on a PC without Git; `scripts/package-git.cjs` puts it in
  * the package's resources).
  *
  * The release is Git for Windows' portable edition, pinned by version and SHA-256, and an archive
@@ -24,7 +24,7 @@
  */
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { type Download, fetchTo, type PinnedFile, verifiedArchive } from "./pinned-download.ts";
@@ -44,9 +44,9 @@ export const GIT_FOR_WINDOWS_RELEASES: Readonly<Record<string, GitForWindowsRele
 };
 
 /**
- * What the build removes, by why. Host git runs without the system config and never prompts, and
- * sandboxed commands run with the credential helper switched off and no terminal, so none of
- * this is reachable through Genex.
+ * What the build removes, by why. Host git never prompts, the system config left names no
+ * credential helper ({@link withoutCredentialHelper}), and sandboxed commands run with the helper
+ * switched off and no terminal, so none of this is reachable through Genex.
  */
 export const GIT_FOR_WINDOWS_TRIM = {
   /** HTML and man pages, which `git help` opens in a browser. */
@@ -108,6 +108,25 @@ const CREDENTIAL_MANAGER = {
   file: /^(?:(?:Atlassian|Avalonia|GitHub|GitLab|HarfBuzzSharp|MicroCom|Microsoft|SkiaSharp|System)(?:\..+)?\.dll|(?:av_libglesv2|gcmcore|libHarfBuzzSharp|libSkiaSharp|msalruntime)\.dll|git-credential-(?:manager|helper-selector)\.exe(?:\.config)?)$/,
 } as const;
 
+/**
+ * Git's system config, which every git that does not set `GIT_CONFIG_SYSTEM` reads: the release
+ * names `credential.helper = helper-selector`, a program the trim removes with the credential
+ * manager, so an HTTPS git call there would fail on a missing helper instead of asking for none.
+ */
+const SYSTEM_CONFIG = "etc/gitconfig";
+
+/** The system config without its `[credential]` section; everything else as the release has it. */
+export function withoutCredentialHelper(config: string): string {
+  const kept: string[] = [];
+  let inCredential = false;
+  for (const line of config.split("\n")) {
+    const section = /^\s*\[([^\]\s"]+)/.exec(line);
+    if (section) inCredential = section[1]?.toLowerCase() === "credential";
+    if (!inCredential && line) kept.push(line);
+  }
+  return kept.map((line) => `${line}\n`).join("");
+}
+
 /** What a vendored Git must have: Git Bash for the sandbox and `cmd\git.exe` for the host. */
 const REQUIRED = ["bin/bash.exe", "cmd/git.exe", "LICENSE.txt"] as const;
 
@@ -154,9 +173,9 @@ async function measure(dir: string): Promise<{ files: number; bytes: number }> {
   return { files: files.length, bytes: sizes.reduce((sum, size) => sum + size, 0) };
 }
 
-/** Remove the trimmed paths, each of which must exist, and Git Credential Manager. */
+/** Remove the trimmed paths, each of which must exist, Git Credential Manager and the config naming it. */
 async function trim(dest: string, version: string): Promise<void> {
-  const listed = [...Object.values(GIT_FOR_WINDOWS_TRIM).flat(), CREDENTIAL_MANAGER.required];
+  const listed = [...Object.values(GIT_FOR_WINDOWS_TRIM).flat(), CREDENTIAL_MANAGER.required, SYSTEM_CONFIG];
   for (const entry of listed)
     if (!existsSync(path.join(dest, entry))) throw new Error(MESSAGE.trimMissing(version, entry));
   for (const entry of Object.values(GIT_FOR_WINDOWS_TRIM).flat())
@@ -165,6 +184,8 @@ async function trim(dest: string, version: string): Promise<void> {
     const names = (await readdir(path.join(dest, dir))).filter((name) => CREDENTIAL_MANAGER.file.test(name));
     await Promise.all(names.map((name) => rm(path.join(dest, dir, name), { force: true })));
   }
+  const config = path.join(dest, SYSTEM_CONFIG);
+  await writeFile(config, withoutCredentialHelper(await readFile(config, "utf8")));
 }
 
 /**

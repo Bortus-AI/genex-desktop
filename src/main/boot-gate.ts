@@ -93,8 +93,10 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
     return { outcome: SandboxSetupOutcome.Installed, state: after };
   };
 
+  // Set once Set up first runs: a window that loads again does not run it by itself again.
+  let tried = false;
   return {
-    state: () => state,
+    state: () => (tried ? { ...state, setupTried: true } : state),
     hold(problem, next) {
       state = { platform, phase: BootPhase.SandboxSetup, sandbox: problem };
       attempt = next;
@@ -104,6 +106,7 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
       if (installing) return installing;
       const run = options.installSandbox;
       if (!run || !waitsOnInstall(state)) return Promise.reject(new Error(MESSAGE.nothingToSetUp));
+      tried = true;
       installing = install(run)
         .catch((error: unknown) => {
           options.setUpFailed?.(error);

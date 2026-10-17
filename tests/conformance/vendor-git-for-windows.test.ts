@@ -17,6 +17,7 @@ import {
   sevenZip,
   type VendorGitDeps,
   vendorGitForWindows,
+  withoutCredentialHelper,
 } from "../../scripts/vendor-git-for-windows.ts";
 import { BUNDLED_GIT_DIR } from "../../src/substrate/windows-sandbox.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -59,6 +60,7 @@ const CREDENTIAL_MANAGER = [
 const KEPT = [
   "LICENSE.txt",
   "bin/bash.exe",
+  "etc/gitconfig",
   "cmd/git.exe",
   "ucrt64/bin/git-lfs.exe",
   "ucrt64/bin/git.exe",
@@ -76,9 +78,22 @@ async function unpackRelease(dir: string, without: readonly string[] = []): Prom
     if (without.includes(entry)) continue;
     const file = TRIMMED_DIRS.has(entry) ? path.join(dir, entry, "inside.txt") : path.join(dir, entry);
     await mkdir(path.dirname(file), { recursive: true });
-    await writeFile(file, entry);
+    await writeFile(file, entry === "etc/gitconfig" ? RELEASE_GITCONFIG : entry);
   }
 }
+
+/** The 2.56.0.windows.2 portable edition's `etc/gitconfig`, as it ships. */
+const RELEASE_GITCONFIG = [
+  "[core]",
+  "\tsymlinks = false",
+  "\tautocrlf = true",
+  '[filter "lfs"]',
+  "\tclean = git-lfs clean -- %f",
+  "\trequired = true",
+  "[credential]",
+  "\thelper = helper-selector",
+  "",
+].join("\n");
 
 /** A release archive (any bytes: the stand-in 7-Zip never reads it) and its pin. */
 async function release() {
@@ -138,6 +153,21 @@ describe("vendoring Git for Windows into a Windows build", () => {
     await vendorGitForWindows(dest, { cacheDir, release: pin, deps, sevenZip: "7z-test" });
     assert.deepEqual(downloads, [pin.url]);
     assert.deepEqual(await filesUnder(dest), [...KEPT].sort());
+  });
+
+  it("keeps the system config but drops its credential helper, which the trim removed", async () => {
+    const { served, pin } = await release();
+    const dest = path.join(await tmpDir("git-dest-"), "git");
+    await vendorGitForWindows(dest, {
+      cacheDir: await tmpDir("git-cache-"),
+      release: pin,
+      deps: standIns(served).deps,
+    });
+    const config = await readFile(path.join(dest, "etc", "gitconfig"), "utf8");
+    assert.doesNotMatch(config, /credential|helper/i);
+    assert.match(config, /autocrlf = true/);
+    assert.match(config, /\[filter "lfs"\]\n\tclean = git-lfs clean -- %f\n\trequired = true\n/);
+    assert.equal(withoutCredentialHelper("[Credential]\n\thelper = x\n[core]\n\ta = 1"), "[core]\n\ta = 1\n");
   });
 
   it("refuses an archive that is not the pinned bytes, and unpacks nothing", async () => {

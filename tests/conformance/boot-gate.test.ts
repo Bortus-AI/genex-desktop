@@ -206,6 +206,13 @@ describe("Set up (Windows)", () => {
     assert.equal(installs, 2);
   });
 
+  it("says a Set up has run this launch, so a window that loads again does not run it by itself", async () => {
+    const { gate } = windowsGate(async () => ({ cancelled: true }));
+    assert.equal(gate.state().setupTried, undefined);
+    await gate.setUp();
+    assert.equal(gate.state().setupTried, true);
+  });
+
   it("presses of Set up while one install runs share it", async () => {
     const install = deferred();
     const { gate, counts } = windowsGate(() => install.promise.then(() => ({ cancelled: false })));

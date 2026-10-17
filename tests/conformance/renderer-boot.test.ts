@@ -180,6 +180,14 @@ describe("Set up on Windows", () => {
     assert.equal(fake.callsOf("setUpSandbox").length, 1);
   });
 
+  it("starts Set up by itself once a launch: a window that loads again after a decline waits for Set up", async () => {
+    const { controller, fake } = windowsBoot([]);
+    fake.stub("bootState", async () => ({ ...WINDOWS_SETUP, setupTried: true }));
+    await controller.start();
+    assert.equal(fake.callsOf("setUpSandbox").length, 0);
+    assert.equal(bootView(controller.store.getState()), BootView.SandboxSetup);
+  });
+
   it("starts nothing by itself where Set up is not offered: a ready start, or Linux", async () => {
     for (const first of [READY, SETUP]) {
       const { controller, fake } = boot(first);

@@ -36,6 +36,7 @@ const STUDIO_LOG = path.join(process.env.APPDATA ?? "", "Genex", "logs", "studio
 /** What main logs when it opens the setup screen on an unprovisioned sandbox (main/index.ts). */
 const STUDIO_READY_LOG = /\[main\] studio ready/;
 const STARTUP_FAILED_LOG = /startup failed|sandbox setup failed/;
+const FIRST_START_LOG_LINES = 60;
 const POLL_MS = 1_000;
 
 const installDir = path.join(process.env.LOCALAPPDATA ?? "", INSTALL_NAME);
@@ -111,12 +112,17 @@ async function bundledGitRuns(exe) {
  */
 async function startsTheStudio(exe, from) {
   const newLog = () => (existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").slice(from) : "");
+  const started = Date.now();
   spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
   const log = await settle(async () => {
     const text = newLog();
     return STUDIO_READY_LOG.test(text) || STARTUP_FAILED_LOG.test(text) ? text : null;
   }, STUDIO_START_TIMEOUT_MS);
-  if (log && STUDIO_READY_LOG.test(log)) return { ok: true, detail: "studio ready" };
+  if (log && STUDIO_READY_LOG.test(log)) {
+    // The first start's own timestamped lines, so a slow setup shows which step took the time.
+    console.log(log.split("\n").slice(0, FIRST_START_LOG_LINES).join("\n"));
+    return { ok: true, detail: `studio ready in ${Math.round((Date.now() - started) / 1000)} s` };
+  }
   return { ok: false, detail: (log ?? newLog()).slice(-3000) || "no studio.log" };
 }
 
