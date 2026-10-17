@@ -1450,7 +1450,7 @@ export const COMPUTER_CONTROL_SETTING_WORDS = {
   section: "Computer control",
   label: "Let agents control your computer",
   detail:
-    "An agent can ask to see your screen, then click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. macOS only.",
+    "With this on, an agent can click and type in the apps you allow. Each chat session asks you first, and ⌃⌥⌘Esc stops it. Agents can look at an app’s window without it, never at password managers, System Settings, password prompts or Genex. macOS only.",
 } as const;
 
 export function resumedWords(parts: number): string {
@@ -3843,6 +3843,12 @@ export const PRIVACY_WORDS = {
   deletePartial: (count: number) =>
     `Deleted ${plural(count, "row")}, but Genex couldn’t finish. Try again later to remove the rest.`,
   deleteNotSent: "Nothing was ever sent from this launch.",
+  /** The quiet line of links under the rows; each opens in the browser. */
+  links: {
+    desktop: "How the desktop app handles data",
+    policy: "Genex privacy policy",
+    terms: "Genex terms",
+  },
 } as const;
 
 /** What a finished Delete what I shared says; a stop after earlier ids' rows were removed says how many. */
