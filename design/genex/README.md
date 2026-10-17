@@ -855,7 +855,8 @@ reviewers use the closest level their models accept.
 The ring panel (340px) shows Context window used/capacity with one meter, "Compacts automatically",
 and, for a model whose chat can be compacted, Compact now (also `/compact` in the composer). Below it, each signed-in subscription has a block titled with
 its plan (e.g. Claude Max plan) that opens the provider's usage page, then each limit with its reset
-time, percent used and meter (amber from 75%, red from 90%). The orchestrator's plan comes first;
+time, percent used and meter (amber from 75%, red from 90%); per-model weekly limits (such as Fable's)
+stay off the panel. The orchestrator's plan comes first;
 with two plans, each names the roles it serves or says Not in use. While Genex is connected, a
 Genex credits block follows: Used by this game, then Left for all games in ink-3.
 Fresh games inherit the last selected chat model; returning chats retain their own saved model.
