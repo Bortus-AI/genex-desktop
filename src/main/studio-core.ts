@@ -615,7 +615,7 @@ export class StudioCore {
   /**
    * The lock table: a lock's `personFirst` tool is asked straight through the registry as the
    * harness's own step (never through a call that holds locks itself), and a wait on the person is
-   * told to the chat.
+   * told to the chat, as is, once, an agent going ahead of them where the plugin lets it.
    */
   #createLocks(): LockService {
     return new LockService({
@@ -623,6 +623,11 @@ export class StudioCore {
       probe: (plugin, lock, binding, signal) =>
         this.plugins.tool(`${plugin}__${lock.personFirst}`, {}, binding, signal, PluginToolAudience.Harness),
       onPersonFirst: (notice) => this.emit(UiEvent.PersonFirst, notice),
+      onWentAhead: ({ threadId, project, label, plugin }) => {
+        if (!threadId) return;
+        const payload = { project, pluginId: plugin, label };
+        void this.append([customEventData(CustomEvent.AgentWentAhead, payload)], threadId).catch(() => undefined);
+      },
     });
   }
 
