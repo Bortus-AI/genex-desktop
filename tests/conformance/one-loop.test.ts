@@ -1963,6 +1963,28 @@ describe("the one Loop's idle rule", () => {
     assert.equal(report.victory, true, String(report.stoppedBecause));
   });
 
+  it(
+    "a timed Loop in a Godot project names its time left when it settles a claim, so the reviewer's no keeps it going",
+    TEST_TIMEOUT,
+    async () => {
+      const host = await hostOn(Project.GodotGame, {
+        facts: GODOT,
+        run: { budgets: { wallClockMs: 3 * 60 * MINUTE, completionPolicy: "duration" } },
+        turns: [keepsRoom(1), finishes, keepsRoom(2), finishes],
+      });
+      host.reviews.push(reviewerAnswer("no", ["the door does not open"]));
+      const report = await host.start();
+      const [settled] = host.rec.paramsOf("finish.settle");
+      assert.ok(
+        Number(settled?.timeLeftMs) > 2 * 60 * MINUTE,
+        `the settle names the Loop's time left: ${settled?.timeLeftMs}`,
+      );
+      const no = host.appended("finish_check").find((record) => record.step === "rejected");
+      assert.equal(no?.timeLeft, true, "the no records that the Loop had time left");
+      assert.equal(report.victory, true, String(report.stoppedBecause));
+    },
+  );
+
   it("one quiet turn after work is asked what next, never wrapped up at once", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, {
       facts: GODOT,
@@ -4312,7 +4334,7 @@ describe("the open lead's finish words", () => {
     assert.ok(
       timed.includes(`more than ${FINISH_TIME_LEFT_MS / MINUTE} minutes are left its no's never stop the Loop`),
     );
-    assert.match(timed, /a new claim needs proof made since the last no/);
+    assert.match(timed, /a new claim needs new work since the last no/);
     assert.ok(endless.includes(`${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`));
     assert.doesNotMatch(endless, /never stop/);
     for (const line of [timed, endless])

@@ -7,6 +7,7 @@
  * session's engine calls them.
  */
 import { CLAIM_BEFORE_END_MINUTES } from "../finish-check.ts";
+import { PICTURE_OUTRANKS_FILES, stopRuleWords } from "../finish-check-prompts.ts";
 import { toolCall } from "../model-roles.ts";
 import { type FactRef, ProjectTool } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
@@ -85,6 +86,8 @@ export type LeadBriefOptions = {
   templateKind: TemplateKind;
   /** The run's working time, in minutes (null for a run with no end). */
   minutes: number | null;
+  /** The run lasts until a reviewer's yes (an ∞ or goal Loop), not for its hours; absent: not known. */
+  untilFinish?: boolean;
   /** Whether the game can take C++. */
   cpp: boolean;
   /** The plugin tools its workers can be offered, and the worker types the plugins that are on declare. */
@@ -116,7 +119,7 @@ export function leadBrief(options: LeadBriefOptions): string {
     CHECKLIST,
     assetText(engine, options.offers),
     agentsText(engine, options),
-    savingText(engine),
+    savingText(engine, options.untilFinish ?? null),
     templateText(options),
     // The game folder is the lead's seat: no folder label, which the title is not.
     unrealWorkHere(project, ""),
@@ -184,7 +187,7 @@ ${lines.join("\n")}
 - ${runTool(engine, LeadTool.JudgePlay)}: a blind judge plays it and answers one yes/no.`;
 }
 
-function savingText(engine: string | undefined): string {
+function savingText(engine: string | undefined, untilFinish: boolean | null): string {
   const tool = (name: LeadTool) => runTool(engine, name);
   return `SAVING AND THE RUN:
 - ${tool(LeadTool.SavePoint)} after you have looked: Genex saves all, snapshots the game and captures the hero cameras. Save often, at least every 15 minutes of work; never while the game plays.
@@ -192,7 +195,8 @@ function savingText(engine: string | undefined): string {
 - ${tool(LeadTool.RebuildUnreal)} restarts Unreal between turns: after C++ changes in unreal/Source (never Live Coding), or when the editor renders differently from play.
 - Act on the owner's words right after the edit you are in.
 - ${tool(LeadTool.Note)} leaves the owner one line.
-- When you believe the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, test reports). A reviewer who did none of the work checks it; a no comes back with reasons, and three in a row stop the Loop.
+- When you believe the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, test reports). A reviewer who did none of the work checks it; a no comes back with reasons, and ${stopRuleWords(untilFinish)}
+- ${PICTURE_OUTRANKS_FILES}
 - Your last words are honest: what you built, and what you did not test.`;
 }
 

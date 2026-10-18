@@ -14,6 +14,7 @@ import { isRunning } from "../outcomes.ts";
 import { KIND_NAMES } from "../kinds.ts";
 import { minutes } from "../time.ts";
 import { CLAIM_BEFORE_END_MINUTES } from "../finish-check.ts";
+import { PICTURE_OUTRANKS_FILES } from "../finish-check-prompts.ts";
 import { LEAD_BRIEF, LEAD_RESUMED_MEMORY } from "./lead-session-prompts.ts";
 import { MAX_DIRECTOR_MEMORY } from "./memory.ts";
 import { DIRECTOR_TOOLS } from "./tool-specs.ts";
@@ -248,7 +249,7 @@ function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): strin
     `- First playable: prioritize a small complete playable loop and integrate its healthy revision before broad atmosphere or asset polish. Continue judging normally; a preview is not acceptance or landing.`,
     `- Asset truth: run_status.assets lists generated originals and current workspace copies. Read it before answering asset questions. Preserve delivered local files; integrate checkpoints them through the host. Never move them to /tmp or swap in remote URLs: assets live in the game folder. State generated-but-unused assets and procedural fallbacks explicitly in completion reports.`,
     `- Completion reporting: distinguish delivered changes from passed, failed and unverified checks. The Studio outcome card counts integrations separately from evaluated attempts; never call all requested features verified merely because the structural board passed.`,
-    `- Evidence, not reports: judge, playtest or look at a single session's "done" before you integrate (kept loop rounds were judged); look at the integrated build before you finish.`,
+    `- Evidence, not reports: judge, playtest or look at a single session's "done" before you integrate (kept loop rounds were judged); look at the integrated build before you finish. ${PICTURE_OUTRANKS_FILES}`,
     userSaysWords(loop),
     leads
       ? ""

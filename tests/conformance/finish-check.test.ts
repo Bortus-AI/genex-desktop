@@ -445,7 +445,7 @@ describe("the finish check", () => {
     const recorded = checks().length;
     const stale = await checkFinish(scopeOf(r, folder, timed), claimOf());
     assert.ok(!("noTime" in stale) && stale.step === FinishCheckStep.Unanswered && stale.staleProof === true);
-    assert.match(finishAnswer(stale), /proof made since the last no/);
+    assert.match(finishAnswer(stale), /new work since the last no/);
     assert.equal(checks().length, recorded, "nothing recorded");
     assert.equal(reviewersOf(r).length, MAX_FINISH_REJECTIONS, "no reviewer asked");
 
@@ -453,6 +453,31 @@ describe("the finish check", () => {
     await utimes(path.join(folder, "shots", "finish.png"), after, after);
     const fresh = await checkFinish(scopeOf(r, folder, timed), claimOf());
     assert.equal(stepOf(fresh), FinishCheckStep.Accepted, "a claim with a fresh picture is checked");
+  });
+
+  it("after the row of no's a timed Loop went on past, a fresh picture alone is no new work: the lead's work mark must move too", async () => {
+    const folder = await leadFolder();
+    const { r, checks } = host([
+      verdict("no", [], NO_REASONS),
+      verdict("no", [], NO_REASONS),
+      verdict("no", [], NO_REASONS),
+      verdict("yes", ["The laps and the timer show."]),
+    ]);
+    const tally = newTally();
+    let mark = "save-1";
+    const timed = { tally, timeLeft: () => FINISH_TIME_LEFT_MS + MINUTE_MS, workMark: async () => mark };
+    for (let n = 0; n < MAX_FINISH_REJECTIONS; n++) await checkFinish(scopeOf(r, folder, timed), claimOf());
+    assert.equal(tally.noMark, "save-1", "the no keeps the mark it was given on");
+    const after = new Date(START + MINUTE_MS);
+    await utimes(path.join(folder, "shots", "finish.png"), after, after);
+    const recorded = checks().length;
+    const touched = await checkFinish(scopeOf(r, folder, timed), claimOf());
+    assert.ok(!("noTime" in touched) && touched.step === FinishCheckStep.Unanswered && touched.staleProof === true);
+    assert.equal(checks().length, recorded, "nothing recorded");
+    mark = "save-2";
+    const saved = await checkFinish(scopeOf(r, folder, timed), claimOf());
+    assert.equal(stepOf(saved), FinishCheckStep.Accepted, "a save point since the no and a fresh picture are checked");
+    assert.equal(tally.noMark, undefined, "a yes clears the mark");
   });
 
   it("only a proof file inside the lead's folder counts as fresh proof", async () => {

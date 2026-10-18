@@ -3,7 +3,26 @@
  * answered after a check (`FINISH_ANSWER`). Product copy addressed to in-app models. Everything the
  * lead, its files, the plugins or the build wrote is marked as data, not instructions.
  */
+import { FINISH_TIME_LEFT_MS, MAX_FINISH_REJECTIONS } from "./finish-contract.ts";
 import type { ProofText } from "./finish-proof.ts";
+import { minutes } from "./time.ts";
+
+/** What every lead is told about its own pictures beside the project's files. */
+export const PICTURE_OUTRANKS_FILES =
+  "A picture of the running project outranks what its files say: when one contradicts them (a model, a mesh, a material, a setting), find out why and fix it before you claim, and never claim what your own pictures don't show.";
+
+/**
+ * When the reviewer's no's stop a Loop, as its lead is told: an ∞ Loop's at the cap (`untilFinish`),
+ * a timed Loop's only once little time is left; null when the words must cover both (a tool's description).
+ */
+export function stopRuleWords(untilFinish: boolean | null): string {
+  const max = MAX_FINISH_REJECTIONS;
+  const left = minutes(FINISH_TIME_LEFT_MS);
+  if (untilFinish === true) return `${max} no's in a row stop the Loop.`;
+  if (untilFinish === null)
+    return `${max} no's in a row stop the Loop once ${left} minutes or less are left (an ∞ Loop, at any time); before that it keeps working, and a new claim after them needs new work since the last no.`;
+  return `while more than ${left} minutes are left its no's never stop the Loop: you keep working on what isn't done, and after ${max} no's in a row a new claim needs new work since the last no (a save point and proof made since). With ${left} minutes or less left, ${max} no's in a row stop it.`;
+}
 
 /** One capture as the reviewer is told of it beside its pictures: what was taken, and how much of it is attached. */
 export interface CaptureLine {
@@ -184,9 +203,9 @@ export const FINISH_ANSWER = {
     `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop has time left, so it goes on: work on what isn't done, then call finish again with proof made since this no (a close picture of each point).`,
   stopped: (count: number, reasons: readonly string[], notDone: readonly string[] = []) =>
     `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop stops here with what isn't done.`,
-  /** A claim turned back before any check: after the row of no's the Loop went on past, its proof is no newer than the last no. */
+  /** A claim turned back before any check: after the row of no's the Loop went on past, nothing new since the last no. */
   staleProof: (max: number) =>
-    `After ${max} no's in a row the Loop went on, so a claim needs proof made since the last no, and none of the files you named is newer than it. Work on what isn't done, then call finish with a close picture or a report of each point made since then.`,
+    `After ${max} no's in a row the Loop went on, so a claim needs new work since the last no: a save point, and proof made since (a close picture or a report of each point). Nothing has changed since it. Work on what isn't done, then call finish again.`,
   unanswered: (why: string) =>
     `The reviewer could not answer (${why}). Your claim is neither accepted nor counted; call finish again when ready.`,
   alreadyClosed:

@@ -330,6 +330,7 @@ export async function checkClaim(
       ended: () => closing(loopRun),
       lapsed: () => headMoved(loopRun, claim.head),
       timeLeft: () => timeLeftOf(run, loopRun.softDeadline, Date.now()),
+      workMark: async () => (await loopRun.currentHead().catch(() => null)) ?? null,
       keep: () => loopRun.saveJournal(),
     },
     { summary, proof: list(args.proof), hookNotes: call.notes ?? [], hookImages: call.images ?? [] },

@@ -9,7 +9,7 @@ import { type HookHeldBy, HookHold, holdOf } from "../../hooks.ts";
 import { resumeHeldWords, runHeldWords } from "../held-words.ts";
 import { FACT_ROOT, type FactRef, type FolderHolds } from "../../folder-facts.ts";
 import { CLAIM_BEFORE_END_MINUTES } from "../../finish-check.ts";
-import { FINISH_TIME_LEFT_MS, MAX_FINISH_REJECTIONS } from "../../finish-contract.ts";
+import { PICTURE_OUTRANKS_FILES, stopRuleWords } from "../../finish-check-prompts.ts";
 import { GAPS_FIRST_MIN_MS } from "../../finish-remaining.ts";
 import { JUDGE_PLAY_TOOL } from "../../judge-play-prompts.ts";
 import type { JudgeRef } from "../../engine-judges.ts";
@@ -107,13 +107,6 @@ function timeWords(facts: OpenBriefFacts): string {
   return `TIME: this Loop runs ${span}. You have about ${left} minutes of working time left. Genex tells you shortly before the time is up and when it is: then start nothing new, bring in finished worker work, make sure the project runs, keep a save point, and call finish only if the goal is reached.`;
 }
 
-/** When the reviewer's no's stop the Loop: an ∞ Loop's at the cap, a timed Loop's only once little time is left. */
-function stopWords(untilFinish: boolean): string {
-  if (untilFinish) return `${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`;
-  const left = minutes(FINISH_TIME_LEFT_MS);
-  return `while more than ${left} minutes are left its no's never stop the Loop: you keep working on what isn't done, and after ${MAX_FINISH_REJECTIONS} no's in a row a new claim needs proof made since the last no. With ${left} minutes or less left, ${MAX_FINISH_REJECTIONS} no's in a row stop it.`;
-}
-
 /** The project paragraph: what the folder holds, what its plugins said, its references and save points. */
 function projectWords(facts: OpenBriefFacts): string[] {
   const holds = facts.facts.length ? facts.facts.map(factLine).join("; ") : "nothing Genex recognises yet";
@@ -172,7 +165,7 @@ export function openBrief(facts: OpenBriefFacts): string {
     savePointWords(facts),
     "JOBS AND LOOKS: run a long command as a job and keep working while it runs; look at any window of the project's app with app_look, when the chat offers them.",
     `BLOCKED: when the goal needs what only the person can do (a tool, editor or app the work needs is gone or can't run here and nothing you can call brings it back, an install, a permission, a sign-in), call ${OpenTool.Pause} with what they should do. While such a block lasts, never fill the Loop's time with work that can't reach the project.`,
-    `FINISH: when the goal is reached, call finish with a summary, what remains (everything you know is not done or not right yet) and proof: the files in the folder that show it (a test report, a close-up picture, a log). A reviewer who did none of the work checks it; ${stopWords(facts.untilFinish)} While something remains and more than ${minutes(GAPS_FIRST_MIN_MS)} minutes are left, no reviewer reads the claim: you work on what remains first. A picture of the running project outranks what its files say: when one contradicts them (a model, a mesh, a material, a setting), find out why and fix it before you claim, and never claim what your own pictures don't show.`,
+    `FINISH: when the goal is reached, call finish with a summary, what remains (everything you know is not done or not right yet) and proof: the files in the folder that show it (a test report, a close-up picture, a log). A reviewer who did none of the work checks it; ${stopRuleWords(facts.untilFinish)} While something remains and more than ${minutes(GAPS_FIRST_MIN_MS)} minutes are left, no reviewer reads the claim: you work on what remains first. ${PICTURE_OUTRANKS_FILES}`,
     ...(facts.appSaved ? [] : ["SAVING: Genex's save points keep the files on disk only: save inside the app first."]),
     ...(facts.skills.length ? [["SKILLS FOR THIS PROJECT:", ...facts.skills].join("\n\n")] : []),
   ].join("\n\n");

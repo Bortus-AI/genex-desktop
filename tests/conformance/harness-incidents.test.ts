@@ -15342,7 +15342,7 @@ describe("the reviewer's no's in a Loop that still has time", () => {
     return dir;
   }
 
-  it("FC1. a timed Loop with most of its time left closed on the reviewer's third no about one fixable point: it keeps working, and its next claim needs proof made since that no", async () => {
+  it("FC1. a timed Loop with most of its time left closed on the reviewer's third no about one fixable point: it keeps working, and its next claim needs new work since that no", async () => {
     const { utimes } = await import("node:fs/promises");
     const { loopHost } = await import("../helpers/loop-host.ts");
     const { reviewerAnswer } = await import("../helpers/reviewer.ts");
@@ -15356,8 +15356,12 @@ describe("the reviewer's no's in a Loop that still has time", () => {
       turns: [
         async ({ tool }) => {
           for (let n = 0; n <= MAX_FINISH_REJECTIONS; n++) answers.push(await tool("finish", CLAIM));
+          // A fresh picture alone is no new work: it needs a save point too.
           const now = new Date(host.now() + MINUTE);
           await utimes(path.join(dir, "shots/enemy.png"), now, now);
+          answers.push(await tool("finish", CLAIM));
+          await writeFile(path.join(dir, "enemy.txt"), "armour plates on the limbs\n");
+          answers.push(await tool("save_point", { label: "Armour", summary: "the enemy wears its plates" }));
           answers.push(await tool("finish", CLAIM));
           return undefined;
         },
@@ -15369,11 +15373,16 @@ describe("the reviewer's no's in a Loop that still has time", () => {
     assert.match(String(answers[MAX_FINISH_REJECTIONS - 1]), /time left, so it goes on/, "the third no keeps it going");
     assert.match(
       String(answers[MAX_FINISH_REJECTIONS]),
-      /proof made since the last no/,
+      /new work since the last no/,
       "the same proof again is turned back",
     );
-    assert.equal(host.reviewed().length, MAX_FINISH_REJECTIONS + 1, "the stale claim asked no reviewer");
-    assert.equal(report.victory, true, "the claim with a fresh picture was checked and accepted");
+    assert.match(
+      String(answers[MAX_FINISH_REJECTIONS + 1]),
+      /new work since the last no/,
+      "a touched file is not enough",
+    );
+    assert.equal(host.reviewed().length, MAX_FINISH_REJECTIONS + 1, "the stale claims asked no reviewer");
+    assert.equal(report.victory, true, "the claim after a save point and a fresh picture was checked and accepted");
     const nos = host.appended("finish_check").filter((check) => check.step === "rejected");
     assert.deepEqual(
       nos.map((check) => [check.stopped === true, check.timeLeft === true]),

@@ -23,9 +23,11 @@ import {
   type FinishTally,
   finishAnswer,
   notDoneOf,
+  staleClaim,
   tallyOf,
 } from "../../finish-check.ts";
-import { FinishCheckStep, LEAD_CALL_MS } from "../../finish-contract.ts";
+import { FINISH_ANSWER } from "../../finish-check-prompts.ts";
+import { FinishCheckStep, LEAD_CALL_MS, MAX_FINISH_REJECTIONS } from "../../finish-contract.ts";
 import { readFinishLog } from "../../finish-log.ts";
 import { GAPS_FIRST_MIN_MS, remainingOf } from "../../finish-remaining.ts";
 import { fireHooks, HookEvent, runScope } from "../../hooks.ts";
@@ -88,6 +90,10 @@ function tallyFor(loopRun: LoopRun, lastRound: number): FinishTally {
   return tally;
 }
 
+/** What marks the lead's work: its Loop's newest save point, its own or an autosave ("" before the first). */
+const workMarkOf = (loopRun: LoopRun): string | null =>
+  loopRun.open ? (loopRun.open.journal.savePoints.at(-1)?.snapshotId ?? "") : null;
+
 /** Whether the claim's own turn is over: its session returned, or another turn began. */
 const turnLost = (loopRun: LoopRun, claimed: TurnEnds | undefined): boolean => {
   const now = turnEndsOf(loopRun.state);
@@ -128,6 +134,7 @@ async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Pro
       abandoned: () => turnLost(loopRun, turn),
       lapsed: lapsedSince(loopRun),
       timeLeft: () => timeLeftOf(run, loopRun.softDeadline, clock.now()),
+      workMark: async () => workMarkOf(loopRun),
       keep: () => loopRun.saveJournal(),
     },
     claim,
@@ -215,6 +222,9 @@ async function claimFinish(loopRun: LoopRun, args: AnyRecord, started: number): 
   }
   const refused = claimRefusal(loopRun, args);
   if (refused) return refused;
+  // Nothing new since the row of no's the Loop went on past: no plugin step and no reviewer for it.
+  if (await staleClaim(tallyFor(loopRun, 0), loopRun.projectDir, proofOf(args), workMarkOf(loopRun)))
+    return FINISH_ANSWER.staleProof(MAX_FINISH_REJECTIONS);
   const held = await fireHooks(loopRun.ctx, loopRun.game, HookEvent.Finish, runScope(loopRun));
   if (held.blocked) return HOOK_PROMPTS.finishHeld(held.blocked.reason);
   const claim: FinishClaim = {
