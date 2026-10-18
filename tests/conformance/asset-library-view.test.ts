@@ -238,6 +238,7 @@ describe("search", () => {
       thumbnailUrl: null,
       fileUrl: null,
       fileKind: null,
+      fileFormat: null,
       saved: false,
       shared: null,
       shareable: true,

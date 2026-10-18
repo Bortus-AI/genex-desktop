@@ -57,6 +57,11 @@ export interface LibraryAsset {
    * model is off the asset hosts may keep its preview picture. Null when neither says, or no file.
    */
   fileKind: LibraryKind | null;
+  /**
+   * The format that file was found to be, as an extension (`glb`, `fbx`): its content type's, its
+   * `ext`, its address's or its role's. Null when nothing says.
+   */
+  fileFormat: string | null;
   saved: boolean;
   shared: SharedAsset | null;
   /** genex.games takes a share of it: Genex made it (not sent from a file, nor made from one) and its kind may go on Play (not music). */

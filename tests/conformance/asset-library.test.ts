@@ -80,6 +80,7 @@ describe("library rows", () => {
       thumbnailUrl: "https://assets.genex.technology/thumb.webp",
       fileUrl: "https://assets.genex.technology/generations/x/audio.mp3",
       fileKind: LibraryKind.Sound,
+      fileFormat: "mp3",
       saved: true,
       shared: { projectId: "p1", slug: "stadium-crowd", live: false },
       shareable: true,
@@ -300,6 +301,28 @@ describe("a library row's file", () => {
     assert.equal(kindOf({ role: "x", contentType: 42, ext: ["glb"] }), null);
   });
 
+  it("says which format the file is, so a model whose address names none is read by its own loader", () => {
+    const HOST = "https://assets.genex.technology/generations/x";
+    const formatOf = (file: Record<string, unknown>) => {
+      const row = toLibraryAsset({ id: GEN, kind: "model", files: [{ url: `${HOST}/original`, ...file }] });
+      return { kind: row?.fileKind, format: row?.fileFormat };
+    };
+    const model = (format: string | null) => ({ kind: LibraryKind.Model, format });
+    assert.deepEqual(formatOf({ role: "original", ext: "fbx" }), model("fbx"));
+    assert.deepEqual(formatOf({ role: "original", contentType: "model/gltf+json" }), model("gltf"));
+    assert.deepEqual(formatOf({ role: "original", contentType: "model/gltf-binary" }), model("glb"));
+    assert.deepEqual(formatOf({ role: "original", contentType: "application/octet-stream", ext: "STL" }), model("stl"));
+    assert.deepEqual(formatOf({ role: "model-glb" }), model("glb"), "the role names its format");
+    assert.deepEqual(formatOf({ role: "original" }), { kind: null, format: null });
+    // A content type that names a format no tile shows gives way to the row's ext and the address.
+    assert.deepEqual(
+      formatOf({ role: "scene", contentType: "application/json", url: `${HOST}/scene.gltf` }),
+      model("gltf"),
+    );
+    assert.deepEqual(formatOf({ role: "scene", contentType: "application/json", ext: "gltf" }), model("gltf"));
+    assert.deepEqual(formatOf({ role: "scene", contentType: "application/json" }), { kind: null, format: "json" });
+  });
+
   it("names only a file a tile can show as a model or a picture: an authoring file or a GPU texture is neither", () => {
     const HOST = "https://assets.genex.technology/generations/x";
     const kindOf = (file: Record<string, unknown>) =>
@@ -358,7 +381,7 @@ describe("a tile's picture file", () => {
     assert.deepEqual(asked, [FILE_URL]);
   });
 
-  it("never follows a redirect off genex.games' hosts", async () => {
+  it("never follows a redirect off genex.games' hosts, and refuses the file for good", async () => {
     // genex.games' host answers with a redirect; a fetch that follows it asks the other host.
     const { asked, fetchImpl } = recordingFetch(async (url, init) => {
       if (url === EVIL) return new Response(new Uint8Array(4));
@@ -368,7 +391,7 @@ describe("a tile's picture file", () => {
       return new Response(new Uint8Array(4));
     });
     assert.deepEqual(await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL), {
-      miss: LibraryFileMiss.Unavailable,
+      miss: LibraryFileMiss.Refused,
     });
     assert.deepEqual(asked, [FILE_URL]);
   });
@@ -416,10 +439,12 @@ describe("a tile's picture file: why there is none", () => {
     [404, LibraryFileMiss.Refused],
     [403, LibraryFileMiss.Refused],
     [410, LibraryFileMiss.Refused],
+    [408, LibraryFileMiss.Unavailable],
+    [429, LibraryFileMiss.Unavailable],
     [500, LibraryFileMiss.Unavailable],
     [503, LibraryFileMiss.Unavailable],
   ] as const) {
-    it(`answers a ${status} as ${miss}: ${miss === LibraryFileMiss.Refused ? "the file's own" : "it may pass"}`, async () => {
+    it(`answers a ${status} as ${miss}`, async () => {
       const { fetchImpl } = recordingFetch(() => new Response("no", { status }));
       assert.deepEqual(await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL), { miss });
     });

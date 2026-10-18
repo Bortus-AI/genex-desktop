@@ -10,7 +10,7 @@ import { ASSET_PREVIEW_MIME, assetExtension, PreviewFileError } from "../../shar
 import { viewerSnapshot } from "../asset-snapshot.ts";
 import { studio } from "../state/studio.ts";
 import { type AssetTile, PictureFrom, tilePicture } from "./asset-tiles.ts";
-import { PictureFileMissed, pictureQueue, viewerFileOf } from "./tile-pictures.ts";
+import { type ModelFile, pictureFileBytes, pictureQueue, viewerFileOf } from "./tile-pictures.ts";
 
 /** A drawn picture's side in CSS pixels: a tile's widest in the usual window. */
 const PICTURE_PX = 256;
@@ -20,11 +20,9 @@ const UNKNOWN_TYPE = "application/octet-stream";
 const MESSAGE = { notTheFile: "A tile's model reads only its own file." } as const;
 
 /** Read a library model through main and draw it; a resource it names beside itself is not read. */
-async function drawModel(url: string): Promise<string> {
-  const answer = await studio().api.assetLibraryFile(url);
-  if ("miss" in answer) throw new PictureFileMissed(answer.miss);
-  const data = answer.bytes;
-  const file = viewerFileOf(url);
+async function drawModel(model: ModelFile): Promise<string> {
+  const data = pictureFileBytes(await studio().api.assetLibraryFile(model.url));
+  const file = viewerFileOf(model);
   const mimeType = ASSET_PREVIEW_MIME[assetExtension(file)] ?? UNKNOWN_TYPE;
   return viewerSnapshot({
     file,
@@ -43,11 +41,12 @@ async function drawModel(url: string): Promise<string> {
 const pictures = pictureQueue(drawModel);
 
 /**
- * The picture drawn from the 3D file at `url` for the tile `ref` holds: kept, or asked for while the
+ * The picture drawn from the 3D file at `url` (of `format`, when main knows it) for the tile `ref`
+ * holds: kept, or asked for while the
  * tile is on screen (a tile that leaves before its turn gives its turn up; one whose draw failed for a
  * reason that may pass asks again when next on screen). Null until it is drawn, or when it cannot be.
  */
-function useDrawnPicture(url: string | null, ref: RefObject<HTMLElement | null>): string | null {
+function useDrawnPicture(url: string | null, format: string | null, ref: RefObject<HTMLElement | null>): string | null {
   const [picture, setPicture] = useState(() => (url ? (pictures.drawn(url) ?? null) : null));
   useEffect(() => {
     const kept = url ? pictures.drawn(url) : undefined;
@@ -59,7 +58,7 @@ function useDrawnPicture(url: string | null, ref: RefObject<HTMLElement | null>)
     const ask = (): void => {
       const controller = new AbortController();
       asking = controller;
-      pictures.request(url, controller.signal).then(
+      pictures.request({ url, format }, controller.signal).then(
         (drawn) => {
           if (mounted) setPicture(drawn);
         },
@@ -83,14 +82,14 @@ function useDrawnPicture(url: string | null, ref: RefObject<HTMLElement | null>)
       observer.disconnect();
       asking?.abort();
     };
-  }, [url, ref]);
+  }, [url, format, ref]);
   return picture;
 }
 
 /** What a tile's square shows from: its cover or image file, or its 3D file's drawn picture; null keeps the glyph. */
 export function useTilePicture(tile: AssetTile, ref: RefObject<HTMLElement | null>): string | null {
   const picture = useMemo(() => tilePicture(tile), [tile]);
-  const model = picture?.from === PictureFrom.Model ? picture.url : null;
-  const drawn = useDrawnPicture(model, ref);
+  const model = picture?.from === PictureFrom.Model ? picture : null;
+  const drawn = useDrawnPicture(model?.url ?? null, model?.format ?? null, ref);
   return model ? drawn : (picture?.url ?? null);
 }

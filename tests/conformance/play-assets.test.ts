@@ -40,9 +40,12 @@ import {
 import { CardTag } from "../../src/renderer/asset-library-view.ts";
 import { FeedStatus } from "../../src/renderer/play/play-model.ts";
 import {
+  MAX_PICTURE_TRIES,
+  type ModelFile,
   PICTURE_RETRY_MS,
   PICTURES_AT_ONCE,
   PictureFileMissed,
+  pictureFileBytes,
   pictureQueue,
   viewerFileOf,
 } from "../../src/renderer/play/tile-pictures.ts";
@@ -90,6 +93,7 @@ function asset(over: Partial<LibraryAsset> & { id: string }): LibraryAsset {
     thumbnailUrl: null,
     fileUrl: `https://assets.genex.technology/generations/${over.id}/file.glb`,
     fileKind: LibraryKind.Model,
+    fileFormat: "glb",
     saved: false,
     shared: null,
     shareable: true,
@@ -153,6 +157,7 @@ describe("Assets shelf: tiles", () => {
       kind: LibraryKind.Sound,
       fileUrl: null,
       fileKind: null,
+      fileFormat: null,
       source: { slug: "crowd-cheer" },
       slug: "crowd-cheer",
       tag: null,
@@ -248,7 +253,15 @@ describe("Assets shelf: a tile's picture", () => {
   it("draws a 3D asset with no cover from its model file", () => {
     const file = `${FILES}/gen-sword-0008/model-glb`;
     const tile = libraryTile(asset({ id: "gen-sword-0008", fileUrl: file }));
-    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Model, url: file });
+    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Model, url: file, format: "glb" });
+  });
+
+  it("draws a 3D asset whose address names no format by the format main decided", () => {
+    const file = `${FILES}/gen-knight-0012/original`;
+    const tile = libraryTile(
+      asset({ id: "gen-knight-0012", fileUrl: file, fileKind: LibraryKind.Model, fileFormat: "fbx" }),
+    );
+    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Model, url: file, format: "fbx" });
   });
 
   it("keeps the glyph for a sound, a video, a tile that knows no file, and a file off genex.games' hosts", () => {
@@ -270,19 +283,28 @@ describe("Assets shelf: a tile's picture", () => {
     assert.equal(tilePicture(noCover), null, "a shared asset with no cover knows no file");
   });
 
-  it("reads a model file by its own extension when it has one, else as a GLB", () => {
-    assert.equal(viewerFileOf(`${FILES}/gen-a/model-glb`), "model.glb");
-    assert.equal(viewerFileOf(`${FILES}/gen-a/knight.fbx`), "model.fbx");
-    assert.equal(viewerFileOf(`${FILES}/gen-a/knight.GLB?v=2`), "model.glb");
-    assert.equal(viewerFileOf(`${FILES}/gen-a/notes.txt`), "model.glb");
+  it("reads a model file by the format main decided, else its address's model extension, else as a GLB", () => {
+    const read = (url: string, format: string | null = null) => viewerFileOf({ url: `${FILES}/gen-a/${url}`, format });
+    assert.equal(read("original", "fbx"), "model.fbx", "a non-GLB model whose address names no format");
+    assert.equal(read("original", "gltf"), "model.gltf");
+    assert.equal(read("original", "OBJ"), "model.obj");
+    assert.equal(read("model-glb"), "model.glb");
+    assert.equal(read("knight.fbx"), "model.fbx");
+    assert.equal(read("knight.GLB?v=2"), "model.glb");
+    assert.equal(read("notes.txt"), "model.glb");
+    for (const format of ["png", "blend", "../x", "constructor", ""])
+      assert.equal(read("original", format), "model.glb", format);
   });
 });
+
+/** A model file the queue is asked for, by its address alone. */
+const model = (url: string): ModelFile => ({ url, format: null });
 
 /** A draw the test finishes by hand, each start recorded. */
 function handDraws() {
   const started: string[] = [];
   const pending = new Map<string, { resolve: (picture: string) => void; reject: (error: Error) => void }>();
-  const draw = (url: string) =>
+  const draw = ({ url }: ModelFile) =>
     new Promise<string>((resolve, reject) => {
       started.push(url);
       pending.set(url, { resolve, reject });
@@ -304,7 +326,7 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
     const hand = handDraws();
     const queue = pictureQueue(hand.draw);
     const urls = ["a", "b", "c", "d"];
-    const asked = urls.map((url) => queue.request(url, live()));
+    const asked = urls.map((url) => queue.request(model(url), live()));
     await new Promise((resolve) => setImmediate(resolve));
     assert.equal(PICTURES_AT_ONCE, 2);
     assert.deepEqual(hand.started, ["a", "b"]);
@@ -319,25 +341,25 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
   it("keeps a drawn picture for the session: asking again never draws again", async () => {
     const hand = handDraws();
     const queue = pictureQueue(hand.draw);
-    const first = queue.request("a", live());
-    const again = queue.request("a", live());
+    const first = queue.request(model("a"), live());
+    const again = queue.request(model("a"), live());
     await new Promise((resolve) => setImmediate(resolve));
     await hand.settle("a", "pic-a");
     assert.equal(await first, "pic-a");
     assert.equal(await again, "pic-a");
     assert.equal(queue.drawn("a"), "pic-a");
-    assert.equal(await queue.request("a", live()), "pic-a");
+    assert.equal(await queue.request(model("a"), live()), "pic-a");
     assert.deepEqual(hand.started, ["a"]);
   });
 
   it("never draws a picture whose tile left the screen before its turn, and frees its place", async () => {
     const hand = handDraws();
     const queue = pictureQueue(hand.draw);
-    void queue.request("a", live());
-    void queue.request("b", live());
+    void queue.request(model("a"), live());
+    void queue.request(model("b"), live());
     const leaving = new AbortController();
-    const left = queue.request("c", leaving.signal);
-    void queue.request("d", live());
+    const left = queue.request(model("c"), leaving.signal);
+    void queue.request(model("d"), live());
     leaving.abort();
     await assert.rejects(left);
     await hand.settle("a", "pic-a");
@@ -346,8 +368,8 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
   });
 
   it("forgets the oldest picture past what it keeps", async () => {
-    const queue = pictureQueue(async (url) => `pic-${url}`, { kept: 2 });
-    for (const url of ["a", "b", "c"]) await queue.request(url, live());
+    const queue = pictureQueue(async ({ url }) => `pic-${url}`, { kept: 2 });
+    for (const url of ["a", "b", "c"]) await queue.request(model(url), live());
     assert.equal(queue.drawn("a"), undefined);
     assert.equal(queue.drawn("c"), "pic-c");
   });
@@ -365,12 +387,12 @@ describe("Assets shelf: a picture that could not be drawn", () => {
       const hand = handDraws();
       const clock = { at: 0 };
       const queue = pictureQueue(hand.draw, { now: () => clock.at });
-      const failed = assert.rejects(queue.request("broken", live()));
+      const failed = assert.rejects(queue.request(model("broken"), live()));
       await new Promise((resolve) => setImmediate(resolve));
       await hand.settle("broken", error);
       await failed;
       clock.at += 100 * PICTURE_RETRY_MS;
-      const again = assert.rejects(queue.request("broken", live()));
+      const again = assert.rejects(queue.request(model("broken"), live()));
       await new Promise((resolve) => setImmediate(resolve));
       assert.deepEqual(hand.started, ["broken"], "never drawn again");
       await again;
@@ -387,15 +409,15 @@ describe("Assets shelf: a picture that could not be drawn", () => {
       const hand = handDraws();
       const clock = { at: 0 };
       const queue = pictureQueue(hand.draw, { now: () => clock.at });
-      const failed = assert.rejects(queue.request("a", live()));
+      const failed = assert.rejects(queue.request(model("a"), live()));
       await new Promise((resolve) => setImmediate(resolve));
       await hand.settle("a", error);
       await failed;
       clock.at += PICTURE_RETRY_MS - 1;
-      await assert.rejects(queue.request("a", live()), "not again while it rests");
+      await assert.rejects(queue.request(model("a"), live()), "not again while it rests");
       assert.deepEqual(hand.started, ["a"]);
       clock.at += 1;
-      const again = queue.request("a", live());
+      const again = queue.request(model("a"), live());
       await new Promise((resolve) => setImmediate(resolve));
       assert.deepEqual(hand.started, ["a", "a"], "the tile next on screen asks again");
       await hand.settle("a", "pic-a");
@@ -403,6 +425,60 @@ describe("Assets shelf: a picture that could not be drawn", () => {
       assert.equal(queue.drawn("a"), "pic-a");
     });
   }
+});
+
+describe("Assets shelf: a picture that keeps failing, and main's answer", () => {
+  const live = () => new AbortController().signal;
+
+  it(`stops trying a file whose draw failed ${MAX_PICTURE_TRIES} times for reasons that may pass`, async () => {
+    const hand = handDraws();
+    const clock = { at: 0 };
+    const queue = pictureQueue(hand.draw, { now: () => clock.at });
+    for (let tried = 1; tried <= MAX_PICTURE_TRIES; tried += 1) {
+      const failed = assert.rejects(queue.request(model("a"), live()));
+      await new Promise((resolve) => setImmediate(resolve));
+      await hand.settle("a", new Error("the 3D loader gave up"));
+      await failed;
+      clock.at += PICTURE_RETRY_MS;
+    }
+    assert.equal(hand.started.length, MAX_PICTURE_TRIES);
+    const again = assert.rejects(queue.request(model("a"), live()));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(hand.started.length, MAX_PICTURE_TRIES, "remembered as failed for the session");
+    await again;
+  });
+
+  it("turns main's answer into the file's bytes, or into the refusal the queue reads", async () => {
+    const bytes = new Uint8Array([0x67, 0x6c, 0x54, 0x46]);
+    assert.equal(pictureFileBytes({ bytes }), bytes);
+    for (const miss of Object.values(LibraryFileMiss)) {
+      assert.throws(
+        () => pictureFileBytes({ miss }),
+        (error: unknown) => error instanceof PictureFileMissed && error.miss === miss,
+        miss,
+      );
+    }
+    // Through the queue: a refusal for the file itself is never asked again; one that may pass is.
+    const clock = { at: 0 };
+    const answers = new Map([
+      ["big", { miss: LibraryFileMiss.TooLarge }],
+      ["gone", { miss: LibraryFileMiss.Refused }],
+      ["busy", { miss: LibraryFileMiss.Unavailable }],
+    ]);
+    const asked: string[] = [];
+    const queue = pictureQueue(
+      async ({ url }) => {
+        asked.push(url);
+        pictureFileBytes(answers.get(url) ?? { bytes });
+        return `pic-${url}`;
+      },
+      { now: () => clock.at },
+    );
+    for (const url of answers.keys()) await assert.rejects(queue.request(model(url), live()));
+    clock.at += PICTURE_RETRY_MS;
+    for (const url of answers.keys()) await assert.rejects(queue.request(model(url), live()));
+    assert.deepEqual(asked, ["big", "gone", "busy", "busy"]);
+  });
 });
 
 describe("Assets shelf: the person's library, page by page", () => {
