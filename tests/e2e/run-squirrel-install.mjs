@@ -7,14 +7,16 @@
  * path reaches MAX_PATH, the app's own Git runs with no other Git on PATH, the first start sets
  * the sandbox up by itself (on a person's PC behind one administrator prompt; the CI machine is
  * elevated, so none shows) and opens the studio with the sandbox running from the installed
- * folder, and `Update.exe --uninstall` takes the shortcuts away again. The copy
+ * folder, again with only the app's own Git and again on a profile made to look lived-in (SSH keys,
+ * the coding CLIs' homes, a browser profile, thousands of files), printing the folders' DACLs
+ * between the profile and the install, and `Update.exe --uninstall` takes the shortcuts away. The copy
  * Setup.exe opens is closed before the uninstall; it runs on the CI machine's own profile.
  *
  *   npm run make -- --platform win32 --arch x64 && node tests/e2e/run-squirrel-install.mjs
  */
 import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -38,6 +40,9 @@ const STUDIO_READY_LOG = /\[main\] studio ready/;
 const STARTUP_FAILED_LOG = /startup failed|sandbox setup failed/;
 const FIRST_START_LOG_LINES = 60;
 const POLL_MS = 1_000;
+/** A lived-in profile's bulk: folders × files, so a walk of the whole profile takes as long as on a PC. */
+const BULK_DIRS = 200;
+const BULK_FILES = 100;
 
 const installDir = path.join(process.env.LOCALAPPDATA ?? "", INSTALL_NAME);
 const shortcutRoots = [
@@ -132,6 +137,50 @@ async function closeInstalledCopies() {
   await run("powershell.exe", ["-NoProfile", "-Command", script]).catch(() => {});
 }
 
+/**
+ * Make the CI profile look like a person's: the coding CLIs' homes, SSH keys and browser profiles
+ * the sandbox denies (srt-win stamps each deny's parent, the profile itself for `.ssh`), and enough
+ * files that a walk of the profile takes real time.
+ */
+async function liveInTheProfile() {
+  const home = process.env.USERPROFILE ?? "";
+  const local = process.env.LOCALAPPDATA ?? "";
+  const files = [
+    path.join(home, ".ssh", "known_hosts"),
+    path.join(home, ".claude", "settings.json"),
+    path.join(home, ".codex", "config.toml"),
+    path.join(local, "Google", "Chrome", "User Data", "Local State"),
+  ];
+  for (const file of files) {
+    await mkdir(path.dirname(file), { recursive: true });
+    if (!existsSync(file)) await writeFile(file, "{}");
+  }
+  const bulk = path.join(home, "Documents", "genex-ci-lived-in");
+  for (let d = 0; d < BULK_DIRS; d++) {
+    const dir = path.join(bulk, `d${d}`);
+    await mkdir(dir, { recursive: true });
+    await Promise.all(Array.from({ length: BULK_FILES }, (_, f) => writeFile(path.join(dir, `f${f}.txt`), "x")));
+  }
+}
+
+/** The DACLs on the folders between the profile and the install, and the grant records, for a failure's reader. */
+async function printAccess(exe) {
+  const home = process.env.USERPROFILE ?? "";
+  const dirs = [home, path.join(home, "AppData"), path.join(home, "AppData", "Local"), installDir];
+  if (exe) dirs.push(path.dirname(exe));
+  for (const dir of dirs) {
+    const out = await run("icacls", [dir]).then(
+      (r) => r.stdout,
+      (error) => String(error.stdout || error.message),
+    );
+    console.log(out.trim());
+  }
+  const holders = path.join(process.env.LOCALAPPDATA ?? "", "genex-sandbox-grants");
+  for (const name of await readdir(holders).catch(() => [])) {
+    console.log(`${name}: ${readFileSync(path.join(holders, name), "utf8")}`);
+  }
+}
+
 function printSetupLogs() {
   for (const log of [
     path.join(process.env.LOCALAPPDATA ?? "", "SquirrelTemp", "SquirrelSetup.log"),
@@ -172,6 +221,7 @@ check(
   studio.ok,
   studio.detail,
 );
+await printAccess(exe);
 
 // Again with only the app's own Git, as on a PC without Git: the harness boots from the profile
 // through the bundled Git Bash, which the package job's chat turn (from out\) does not cover.
@@ -182,6 +232,15 @@ const again = exe
   ? await startsTheStudio(exe, logBeforeRestart, bundledOnly)
   : { ok: false, detail: "no installed app" };
 check("a start with only the app's own Git boots the harness from the installed folder", again.ok, again.detail);
+if (!again.ok) await printAccess(exe);
+
+// Again on a profile like a person's, where srt-win's deny stamps reach the profile folder itself.
+await closeInstalledCopies();
+await liveInTheProfile();
+const logBeforeLivedIn = existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").length : 0;
+const livedIn = exe ? await startsTheStudio(exe, logBeforeLivedIn) : { ok: false, detail: "no installed app" };
+await printAccess(exe);
+check("a start on a lived-in profile boots the harness from the installed folder", livedIn.ok, livedIn.detail);
 
 await closeInstalledCopies();
 await run(path.join(installDir, "Update.exe"), ["--uninstall", "-s"], { timeout: SETUP_TIMEOUT_MS }).catch((error) => {
