@@ -24,6 +24,7 @@ import { after, before, describe, it } from "node:test";
 import { HarnessInbox } from "../../src/substrate/harness-inbox.ts";
 import { SandboxLaunchCode, SandboxLaunchError } from "../../src/substrate/sandbox-unavailable.ts";
 import { ProcessSandbox, killChild } from "../../src/substrate/spawn.ts";
+import { srtWinPath } from "../../src/substrate/windows-sandbox.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
 
 /** Why this machine cannot run the suite, or false when it can. */
@@ -250,7 +251,7 @@ describe("Windows sandbox: environment", { skip: SKIP, timeout: TEST_TIMEOUT_MS 
     // Claude Code 2.1 runs sandbox-runtime's own Windows sandbox as the same srt-sandbox user, so
     // its grants, deny stamps and their cleanup land on the folders above Genex's grants.
     const srt = await import("@anthropic-ai/sandbox-runtime");
-    const srtWin = srt.resolveSrtWin();
+    const srtWin = srt.resolveSrtWin({ path: srtWinPath() });
     const status = await srt.getWindowsSandboxUserStatusAsync({ srtWin });
     t.diagnostic(`sandbox user ${status.sid}, group ${status.groupSid}, in group ${status.inSandboxGroup}`);
     const appData = path.join(os.homedir(), "AppData");
