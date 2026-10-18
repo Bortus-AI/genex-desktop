@@ -152,12 +152,14 @@ app.whenReady().then(async()=>{
  const openedPlugin=()=>js('document.body.dataset.openedPlugin??null');
  await click('[aria-label="Add images and more"]');await mouse({type:'mouseMove',x:0,y:0});await wait(200);
  check('a plugin row keeps its Settings out of sight, and out of its line, until hovered',await element(rowOf('blender')+' [data-plugin-settings]','getComputedStyle(e).display==="none"'));
+ const restingRows=await js('[...document.querySelectorAll('+JSON.stringify(ADD_OPEN+' .picker-item')+')].map(e=>e.getBoundingClientRect().height).join()');
  await hoverRow('blender');
+ check('showing Settings moves no row: every row keeps its height',(await js('[...document.querySelectorAll('+JSON.stringify(ADD_OPEN+' .picker-item')+')].map(e=>e.getBoundingClientRect().height).join()'))===restingRows,restingRows);
  check('a hovered plugin row is filled and shows a filled Settings left of its switch',await element(rowOf('blender'),'(()=>{const s=e.querySelector("[data-plugin-settings]"),w=e.querySelector("[role=switch]"),row=getComputedStyle(e).backgroundColor,fill=getComputedStyle(s).backgroundColor;return row!=="rgba(0, 0, 0, 0)"&&s.getBoundingClientRect().width>0&&fill!=="rgba(0, 0, 0, 0)"&&fill!==row&&s.textContent==="Settings"&&getComputedStyle(s).cursor==="pointer"&&s.getBoundingClientRect().right<=w.getBoundingClientRect().left})()'));
  await capture('add-hover');
  await hoverRow('fixture');
  check('a row whose Set up already opens its page shows no second Settings',await element(rowOf('fixture'),'e.querySelector(".picker-action")?.textContent==="Set up"&&!e.querySelector("[data-plugin-settings]")'));
- check('the name opens the page with its own name and status, and Settings leaves keys to it',await element(rowOf('blender'),'(()=>{const b=e.querySelector("[data-plugin-open]");return document.getElementById(b.getAttribute("aria-labelledby"))?.textContent==="Local Blender"&&e.querySelector("[data-plugin-settings]").tabIndex===-1})()'));
+ check('the name says it opens the plugin\'s settings, and Settings leaves keys to it',await element(rowOf('blender'),'e.querySelector("[data-plugin-open]").getAttribute("aria-label")==="Open Local Blender settings"&&e.querySelector("[data-plugin-settings]").tabIndex===-1'));
  await watchOpen();await click(rowOf('blender')+' [data-plugin-open]');
  check('clicking a plugin\'s name opens its page and closes the menu',(await openedPlugin())==='blender'&&!(await js('Boolean(document.querySelector('+JSON.stringify(ADD_OPEN)+'))')));
  await click('[aria-label="Add images and more"]');

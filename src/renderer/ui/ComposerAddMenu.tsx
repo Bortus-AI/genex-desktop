@@ -249,9 +249,7 @@ function EntryWords({ entry, id, scope }: { entry: AddMenuEntry; id: string; sco
     <>
       <PluginIcon name={entry.name} src={entry.icon} size="menu" />
       {/* The status gives up its room first; the name ellipsizes only once that is gone. */}
-      <span id={`${id}-name`} className="min-w-0 shrink-[0.01] truncate">
-        {entry.name}
-      </span>
+      <span className="min-w-0 shrink-[0.01] truncate">{entry.name}</span>
       {entry.status?.text && (
         <span id={`${id}-status`} className="picker-desc">
           {action && <span className="picker-dot" aria-hidden />}
@@ -299,7 +297,7 @@ function EntryRow({
           type="button"
           className={ENTRY_NAME}
           data-plugin-open
-          aria-labelledby={`${id}-name`}
+          aria-label={PLUGINS_WORDS.menuRow.openLabel(entry.name)}
           aria-describedby={entry.status?.text ? `${id}-status` : undefined}
           onClick={entry.open}
         >

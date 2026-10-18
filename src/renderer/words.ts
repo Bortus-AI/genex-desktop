@@ -3295,6 +3295,8 @@ export const PLUGINS_WORDS = {
   menuRow: {
     settings: "Settings",
     settingsLabel: (name: string) => `${name} settings`,
+    /** The name's own label: it opens the same page as Settings. */
+    openLabel: (name: string) => `Open ${name} settings`,
   },
   /** The catalog's plugins Genex makes, that you don't have. */
   ours: {
