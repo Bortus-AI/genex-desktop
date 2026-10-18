@@ -4508,6 +4508,18 @@ export const PLAY_ASSET_WORDS = {
   mineEmpty: "Assets you make with Genex show up here.",
 } as const;
 
+/** Publish's one line that shares the game's assets on Play when it goes live (`PublishShare.tsx`). */
+export const PUBLISH_SHARE_WORDS = {
+  offer: (count: number) => `Share its ${plural(count, "asset")} on Play`,
+  switchLabel: (count: number) => `Share its ${plural(count, "asset")} on Play when it goes live`,
+  sharing: (count: number) => `Sharing ${plural(count, "asset")} on Play…`,
+  shared: (count: number) => `${plural(count, "asset")} on Play`,
+  checking: (count: number) => `${plural(count, "asset")} on Play once checked`,
+  missed: (count: number) => `${count} couldn’t be shared`,
+  tryAgain: "Try again",
+  tryAgainLabel: "Share the assets that couldn’t be shared again",
+} as const;
+
 /** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
 export const MENTION_WORDS = {
   listLabel: "Tag a game, tool or asset",
