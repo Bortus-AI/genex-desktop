@@ -62,7 +62,7 @@ import { createScope, userWordsInLog } from "./scope.ts";
 import { closeCarriedPool } from "./workers/carry.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
-import type { QueueAction, SteerHandle } from "./message-queue.ts";
+import { messageQueueState, type QueueAction, type SteerHandle } from "./message-queue.ts";
 
 /** The run an interview commissions when it names no length, in hours. */
 const DEFAULT_RUN_HOURS = 8;
@@ -974,8 +974,32 @@ async function userWordsSoFar(host: Host, action: QueueAction): Promise<string[]
     .call(HostMethod.EventsList, { threadId: action.threadId })
     .then((listed) => (Array.isArray(listed) ? listed : []))
     .catch(() => []);
-  const said = userWordsInLog(events, { through: action.messageId, sinceLastRun: true });
+  const said = launchWords(events, action.messageId);
   return said.length ? said : [String(action.text ?? "")];
+}
+
+/**
+ * The user's words a launched build is for: since the thread's previous run, through the launching
+ * message and every message its session read mid-turn (delivered into it). Those joined after the
+ * launch was recorded reach the build no other way: the session can't launch twice.
+ */
+export function launchWords(events: readonly HarnessEvent[], messageId: string | undefined): string[] {
+  return userWordsInLog(events, { through: lastJoined(events, messageId), sinceLastRun: true });
+}
+
+/** The last message read into `messageId`'s turn (and not handed back since), or that message itself when none joined it. */
+function lastJoined(events: readonly HarnessEvent[], messageId: string | undefined): string | undefined {
+  let last = messageId;
+  if (!messageId) return last;
+  const read = new Set(
+    events
+      .filter((e) => e.data?.type === EventKind.Custom && e.data.event_type === RunEvent.CoordinatorMessageDelivered)
+      .filter((e) => e.data.payload?.into === messageId)
+      .map((e) => e.data.payload?.messageId),
+  );
+  for (const message of messageQueueState(events).messages.values())
+    if (message.into === messageId && read.has(message.messageId)) last = message.messageId;
+  return last;
 }
 
 /**

@@ -3966,6 +3966,13 @@ describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
     assert.equal(launch?.onlyWhenAsked, true, "called only when asked: messages still join the turn");
   });
 
+  it('auto-loop. "30m" is half an hour, never 30 hours', async () => {
+    const { rig, thread } = await autoChat({ ...ask, hours: "30m" });
+    await rig.core.sendUserMessage("Start a 30 minute Loop", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+    assert.equal(run?.budgets?.wallClockMs, HOUR_MS / 2);
+  });
+
   it('auto-loop. a Loop "until it\'s done" in Auto: no hours named, the run goes until what was asked is verified', async () => {
     const { rig, thread } = await autoChat(ask);
     await rig.core.sendUserMessage("Start a Loop and don't stop until it's really AAA", { thread, engine: "vendor" });

@@ -838,9 +838,18 @@ function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null
 
 /** Auto: the Loop the user asked for in words, for the hours they named (none: until done), on this message's pictures. */
 function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): AnyRecord {
-  // Engines that bridge every field as text send "3", or "3h": the number it starts with.
-  const named = Number.parseFloat(String(hours ?? ""));
+  const named = hoursNamed(hours);
   return { ...(named > 0 ? { hours: named } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
+}
+
+/** A number of hours, or minutes when it says so; NaN when it names none. */
+const HOURS_TEXT = /^\s*(\d+(?:\.\d+)?)\s*(m\b|min|minutes?)?/i;
+
+/** The hours an engine sent, as a number: 3, "3", "3h" or "2.5 hours"; "30m" is half an hour. */
+function hoursNamed(hours: unknown): number {
+  const match = HOURS_TEXT.exec(String(hours ?? ""));
+  if (!match) return Number.NaN;
+  return Number(match[1]) / (match[2] ? 60 : 1);
 }
 
 function launchToolName(options: DelegatedOptions): string | null {
