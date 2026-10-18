@@ -2,18 +2,17 @@
 
 ## From a request to a game
 
-Auto edits directly; Loop delegates workers (four by default) while the chat
-leads. Parts grow boldly within the ask; an art director reviews the whole game; only its
-blockers send a part back (flaws and nits are reported). Other
+Auto edits directly or starts a Loop when asked; Loop delegates workers (four by
+default) while the chat leads. Parts grow boldly within the ask; an art director reviews the whole
+game; only its blockers send a part back. Other
 projects' Loops run [in place](projects-engines.md#loops-in-place). Loop hours are a soft cap (a
 reviewer's yes ends it early, in place after the lead's named gaps; 15 minutes' grace).
 Acceptance survives workers and restarts. External blockers pause the run at its
-checkpoint. ∞ ends on verified outcomes with no blocker. Asked in chat to finish, the lead lets
+checkpoint. ∞ ends on verified outcomes with no blocker. Asked to finish, the lead lets
 rounds end, then lands. Finish overrides the clock, never the final judge
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
 
-An active run opens Builds once; a build shown from chat, or an empty Builds, opens
-Live. Files and images opened from chat get closable tabs.
+An active run opens Builds once; a build shown from chat or an empty Builds opens Live. Files and images opened from chat get closable tabs.
 
 ## The two views
 

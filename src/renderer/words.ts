@@ -1723,10 +1723,16 @@ export const TRANSCRIPT_WORDS = {
   /** A game's engine link (`engine_linked`): one line with Undo, then what Undo did. */
   engineLinked: (game: string | undefined, engine: string, project: string) =>
     `${game ?? "This game"} now builds in ${engine} · ${project}`,
-  engineUndone: (game: string | undefined, restored: string | undefined) =>
-    restored
-      ? `Undone. ${game ?? "This game"} builds in ${restored} again.`
-      : `Undone. ${game ?? "This game"} is a web game again.`,
+  /** A link whose plugin also set the project up for Genex: the same one line, the set-up first. */
+  engineSetUpAndLinked: (game: string | undefined, engine: string, project: string) =>
+    `Set up ${project} for Genex · ${game ?? "This game"} now builds in ${engine}`,
+  /** What Undo did: where the game builds now, and the project whose set-up it also took back. */
+  engineUndone: (game: string | undefined, restored: string | undefined, setUpUndone?: string) => {
+    const now = restored
+      ? `Undone. ${game ?? "This game"} builds in ${restored} again`
+      : `Undone. ${game ?? "This game"} is a web game again`;
+    return setUpUndone ? `${now}, and ${setUpUndone} is no longer set up for Genex.` : `${now}.`;
+  },
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
   /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): said once. */

@@ -168,6 +168,8 @@ interface Handoff {
   commission: AnyRecord | null;
   /** Loop on: the tool that launches a build, bridged in with `ask_user`; null in Auto. */
   launchTool: HarnessTool | null;
+  /** Auto: the launch bridged in for a Loop the user asks for in words; null with Loop on, after a run or in a run's turn. */
+  autoLaunch: HarnessTool | null;
   /** After a finished build the chat may reopen, with Loop on: the reopen is offered (reopen-run.ts). */
   reopening: boolean;
   /** The contractor session this chat resumes, if any. */
@@ -464,11 +466,13 @@ async function switchSeat(ctx: HarnessCtx, seat: Seat, item: AnyRecord): Promise
   const commission = settings.autopilot ?? settings.loop ?? null;
   const reopening = reopens(options.afterLoopRun, commission);
   const newSession = settings.engine !== before.engine;
+  const launchTool = launchToolFor(options, reopening);
   const handoff: Handoff = {
     ...seat.handoff,
     commission,
     reopening,
-    launchTool: launchToolFor(options, reopening),
+    launchTool,
+    autoLaunch: autoLaunchFor(options, launchTool),
     ...(newSession ? { resume: null } : {}),
   };
   const briefFor = await briefWriter(ctx, options, handoff);
@@ -550,7 +554,7 @@ async function finishTurn(
   result: DelegateResult,
   change: FolderChange,
 ): Promise<TurnOutcome> {
-  const { launchTool } = handoff;
+  const launchTool = handoff.launchTool ?? handoff.autoLaunch;
   const recorded = result.studioToolCalls ?? [];
   // After a paused run the session may ask to resume it: the chat does that once the reply ends.
   const resume = options.afterLoopRun ? resumeAsked(options.afterLoopRun, recorded) : null;
@@ -768,6 +772,7 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
   // beside it only for an explicit start over.
   const reopening = reopens(options.afterLoopRun, commission);
   const launchTool = launchToolFor(options, reopening);
+  const autoLaunch = autoLaunchFor(options, launchTool);
   // This chat's contractor session, if any — follow-ups resume it instead of starting a new
   // mind that only sees the last line ("keep going" with no idea what the game is). Only the
   // chat's latest goes on: one another model answered after missed those turns (chat-continuity.ts).
@@ -788,7 +793,19 @@ async function readChat(ctx: HarnessCtx, options: DelegatedOptions): Promise<Cha
     resume || !hasPriorAsk
       ? compactedSummary(events)
       : await briefSummary(ctx, { threadId, engine, model: options.model, events });
-  return { ask, messages, commission, launchTool, reopening, resume, compacted, hasPriorAsk, project, games };
+  return {
+    ask,
+    messages,
+    commission,
+    launchTool,
+    autoLaunch,
+    reopening,
+    resume,
+    compacted,
+    hasPriorAsk,
+    project,
+    games,
+  };
 }
 
 /**
@@ -801,6 +818,25 @@ function launchToolFor(options: DelegatedOptions, reopening: boolean): HarnessTo
   if (!name) return null;
   if (options.afterLoopRun && !reopening) return null;
   return launchToolset.find((t) => t.name === name) ?? null;
+}
+
+/**
+ * Auto (Loop off): Autopilot's launch, for a Loop the user asks for in words. Only in the chat's own
+ * turn: never beside a Loop's own launch, after a run the chat led, in a run's turn or in the build
+ * a finished run's coordinator handed on. An Auto chat once asked for a Loop said it had started
+ * one, with no way to start it.
+ */
+function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null): HarnessTool | null {
+  const loopOff = !launchTool && !options.autopilot && !options.loop;
+  const chatsOwnTurn = !options.afterLoopRun && !options.runId && !options.followupOf;
+  if (!loopOff || !chatsOwnTurn) return null;
+  return launchToolset.find((t) => t.name === "start_autopilot") ?? null;
+}
+
+/** Auto: the Loop the user asked for in words, for the hours they named (none: until done), on this message's pictures. */
+function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): AnyRecord {
+  const named = Number(hours);
+  return { ...(named > 0 ? { hours: named } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
 }
 
 function launchToolName(options: DelegatedOptions): string | null {
@@ -972,6 +1008,7 @@ async function briefWriter(
       gameEngine: engineOfGame(descriptor),
       engineProject: descriptor?.engine?.project ?? null,
       launch,
+      autoLoop: handoff.autoLaunch ? handoff.autoLaunch.name : null,
       engineChoice: handoff.engineChoice,
       // What the folder holds decides the rules; a host that lists no facts leaves them to the engine.
       facts: Array.isArray(descriptor?.facts) ? descriptor.facts : null,
@@ -1146,6 +1183,11 @@ function bridgedTools(launchTool: HarnessTool): StudioToolSpec[] {
   return [bridged(launchTool), bridged(askUser)];
 }
 
+/** An Auto chat's: the Loop's launch, for a Loop asked for in words, and the engine question when it is asked. */
+function autoTools(handoff: Handoff): StudioToolSpec[] {
+  return [...(handoff.autoLaunch ? [bridged(handoff.autoLaunch)] : []), ...questionCard(handoff)];
+}
+
 /** The question card alone, for an Auto chat asked to choose its new game's engine. */
 function questionCard(handoff: Handoff): StudioToolSpec[] {
   return handoff.engineChoice ? [bridged(askUser)] : [];
@@ -1157,7 +1199,7 @@ function questionCard(handoff: Handoff): StudioToolSpec[] {
  * — reopening a finished build — the reopen first, beside the launch for a start over.
  */
 function sessionTools(options: DelegatedOptions, handoff: Handoff): AnyRecord {
-  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : questionCard(handoff);
+  const launch = handoff.launchTool ? bridgedTools(handoff.launchTool) : autoTools(handoff);
   if (!options.afterLoopRun) return launch.length ? { interviewTools: launch } : {};
   const grant = afterLoopRunGrant(options.afterLoopRun);
   const reopen = handoff.reopening ? [reopenRunTool] : [];
@@ -1499,7 +1541,7 @@ async function executeLaunch(
     engine,
     model,
     ...(options.loop ? { loop: options.loop } : {}),
-    ...(options.autopilot ? { autopilot: options.autopilot } : {}),
+    autopilot: options.autopilot ?? (options.loop ? undefined : loopAskedInWords(args.hours, messageStills(options))),
   } as ToolCtx)) as ToolOutcome;
   const content = toolResult.content ?? "";
   await ctx.call(HostMethod.TurnAppend, {

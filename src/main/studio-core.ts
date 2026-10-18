@@ -51,7 +51,7 @@ import {
   PluginToolAudience,
   NativeRuntimeState,
 } from "../shared/plugins.ts";
-import type { EngineLinkUndo } from "../shared/game-engine.ts";
+import { EngineHostAction, type EngineLinkUndo, type EngineUndoSetUpArgs } from "../shared/game-engine.ts";
 import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
 import { viewClip, type ViewClipOptions } from "./core/view-clip.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
@@ -1021,6 +1021,11 @@ export class StudioCore {
       gameThread: (project) => this.threadForGame(project),
       now: () => new Date(),
       catalog: () => this.plugins.engines(),
+      // A link that set its project up: Undo has the plugin take the set-up back, unasked (the Undo is the person's).
+      undoSetUp: async (pluginId, game, project) => {
+        const args: EngineUndoSetUpArgs = { project, ifSetUp: true };
+        await this.plugins.action(pluginId, EngineHostAction.UndoSetUp, args, await this.pluginBinding(game));
+      },
     });
     this.pluginServices.engineLinks = this.engineLinks;
     // `game.snapshot`: an ordinary game snapshot, in Rewind under the plugin's reason.
@@ -1955,7 +1960,11 @@ export class StudioCore {
     return { child };
   }
 
-  /** The chat line's Undo of a game's engine link (`engineLinks.undo`); a link that changed since is refused. */
+  /**
+   * The chat line's Undo of a game's engine link (`engineLinks.undo`); a link that changed since is
+   * refused, and one that set its project up is refused with the plugin's reason while that set-up
+   * can't be taken back.
+   */
   async undoEngineLink(request: EngineLinkUndo): Promise<boolean> {
     const { project, pluginId, linkedAt, threadId } = request;
     const plugin = this.plugins.list().find((p) => p.manifest.id === pluginId);

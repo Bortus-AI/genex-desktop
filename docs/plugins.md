@@ -430,8 +430,8 @@ running editor and the project's own log) is asked again every 2 s for up to 150
 past that the agent reads "Unreal is still starting <Name>. Call again in a minute." The wait
 comes out of the call's own five minutes, inside the host's 330 s. One whose own log says Epic's
 server couldn't listen on its port gets that message at once. A chosen project that isn't set up
-gets "set it up from the Unreal button", and no editor
-is asked. Only with nothing chosen does the bridge use the first set-up project whose editor
+gets a message naming its file and `unreal__use-project` (which sets it up and links it), and no
+editor is asked. Only with nothing chosen does the bridge use the first set-up project whose editor
 answers. Each answer ends with `[Unreal project: <Name>]`. "Answering" means Epic's own server
 completes an MCP `initialize` on the project's port: an empty `serverInfo.name` (UE 5.8.3 never
 fills it, where other MCP apps name themselves) with both the `resources` and `tools`
@@ -1637,7 +1637,9 @@ with its job; Bundled Blender declares `model`.
 ## The tool consent model
 
 A tool declared with `confirmation` is an agent-invoked tool that spends, publishes or otherwise
-acts beyond the game folder. The host — never the plugin, never the agent — asks the user:
+acts beyond the game folder. One action beyond the game folder runs unasked: `unreal__use-project`
+setting up a project it links (`game.engine.link {setUp}`), because the chat's one Undo takes back
+the set-up with the link. The host — never the plugin, never the agent — asks the user:
 
 - The registry's `consent` hook is called with the plugin id, the tool declaration, the arguments
   and the binding before the backend sees the call. When Studio has no way to ask (no hook in
@@ -2267,7 +2269,7 @@ description come from the live plugin list when the plugin is installed: **Turn 
 A game builds in an engine when Genex links it to one; a plugin with `game-engine` asks for the
 link and the host makes it (`substrate/plugins/engine-links.ts`), to a project of the engine the
 plugin declares ([The engine declaration](#the-engine-declaration)); a plugin that declares none is
-refused. `game.engine.link {project, remote?, name?}` checks the project file by real path (absolute, no
+refused. `game.engine.link {project, remote?, name?, setUp?}` checks the project file by real path (absolute, no
 `..`, at most 1,024 characters, one of the engine's `projectFiles`, a regular file once every link
 is resolved), keeps the link in the plugin's storage as `links/<game>.json` (`{kind, project,
 linkedAt, remote?, previous}`, `kind` being the engine's id, which the plugin's MCP servers read and
@@ -2285,9 +2287,14 @@ link's `name` (one plain line, at most 80 characters) names it in the chat's lin
 instead, for a project known by another name (a Roblox place linked through
 `default.project.json`); any other shape is dropped.
 Linking the project a game already uses, with the same ids, changes nothing; other ids make a new
-link. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
+link. `setUp` says the plugin set the project up to make this link: the record keeps it, the line
+reads "Set up Lantern for Genex · Lantern Run now builds in Unreal", and linking the project the game
+already uses makes a new link. Undo (`studio:game.engine.undo`) is offered on the game's newest link only and refused
 once the link has changed; it restores the project the link replaced, or leaves the game a web
-game that stays unlinked (`{unlinkedAt}`), and appends `engine_link_undone`. A refused link
+game that stays unlinked (`{unlinkedAt}`), and appends `engine_link_undone`. Undo of a `setUp` link
+first runs the plugin's `undo-setup` action (`EngineHostAction.UndoSetUp`) with `{project, ifSetUp:
+true}` and no question; a project no longer set up answers nothing, and a refusal (the project open
+in Unreal) keeps the link and shows its reason (`setUpUndone` names the project when it worked). A refused link
 changes nothing on disk.
 
 A call to a `game-engine` plugin's MCP server never links a game: a game takes an engine project
@@ -2312,7 +2319,9 @@ Open Xcode once, or the one Terminal line for another developer folder, or Updat
 old for the engine, or Add Xcode N for one too new (Apple's developer downloads page; a second
 installed Xcode in range is the one to select instead). `get-xcode` opens only the App Store page,
 Apple's downloads page (`{step: downloads}`) or the Xcode app the probes found. The agent shows it again with `unreal__show-steps` when C++ would
-help, switches a game to another set-up project with `unreal__use-project`, and makes a game's
+help, links a game to a project with `unreal__use-project` (a set-up project by name, any by its
+`.uproject` path: one not set up yet is set up first, unasked, and linked with `setUp`; while Unreal
+has it open the call is refused with that reason and nothing changes), and makes a game's
 own project with `unreal__new-game {template, variant?, name}` (`Combat` with the third-person
 template only): a new project exactly as the panel makes it from the open game (in its folder as
 `unreal/`, set up, linked), then opened in Unreal, with the setup card offered while a step is
