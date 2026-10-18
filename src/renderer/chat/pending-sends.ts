@@ -55,6 +55,18 @@ export function newClientId(): string {
 /** How long an acknowledged send may wait for its row before the placeholder gives way. */
 export const PENDING_SEND_GRACE_MS = 10 * SECOND_MS;
 
+/** What a slash command starts with: words to the chat's session, never to a build's lead. */
+const SLASH = "/";
+
+/**
+ * Whether a running build's lead takes this send at once, as the harness hands one over (the
+ * seed's `loop/live-chat.ts` `forTheLead`): anything but a slash command, to a lead that takes the
+ * chat, wrap-up included. Pictures go too: the chat saves them in the game for the lead.
+ */
+export function leadTakesSend(text: string, leadListens: boolean): boolean {
+  return leadListens && !text.trim().startsWith(SLASH);
+}
+
 /**
  * Whether a send waits below what is under way: the chat's own work, or a running build that does
  * not take it at once. One the build's lead takes at once joins the conversation above the

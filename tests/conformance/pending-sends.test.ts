@@ -5,6 +5,7 @@ import {
   newClientId,
   reconcilePendingSends,
   sendPlacement,
+  leadTakesSend,
   type PendingSend,
   waitsBehindWork,
 } from "../../src/renderer/chat/pending-sends.ts";
@@ -146,6 +147,14 @@ test("a message to a running build's listening lead joins the conversation; one 
   assert.equal(placed({ chatWorking: false, runId: "run_a", leadTakes: false }), "waiting");
   assert.equal(placed({ chatWorking: true, runId: "run_a", leadTakes: true }), "waiting");
   assert.equal(placed({ chatWorking: false, runId: null, leadTakes: false }), "transcript");
+});
+
+test("a running build's lead takes words at once, never a slash command, which waits below its card", () => {
+  assert.equal(leadTakesSend("Make the fog thicker", true), true);
+  assert.equal(leadTakesSend("", true), true, "pictures alone: the chat saved them for the lead");
+  assert.equal(leadTakesSend("/compact", true), false);
+  assert.equal(leadTakesSend("  /model opus", true), false);
+  assert.equal(leadTakesSend("Make the fog thicker", false), false, "a lead that does not take the chat");
 });
 
 test("client ids are ones the queue accepts", () => {

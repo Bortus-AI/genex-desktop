@@ -68,12 +68,12 @@ export interface ChatWorkState {
 }
 
 /**
- * The chat's own input the busy line shows: a send on its way, or saved input being answered. A
- * message sent while a build runs goes to that build: its card keeps its place, never giving way
- * to a Sending… line.
+ * The chat's own input the busy line shows: a send on its way, or saved input being answered. None
+ * while a build runs: a message sent then goes to that build, and its card keeps its place instead
+ * of giving way to a Sending… line.
  */
 function linedInput(input: ChatWorkInput): boolean {
-  if (input.activeRunId) return input.answering;
+  if (input.activeRunId) return false;
   return input.busy || input.sending || input.answering;
 }
 
