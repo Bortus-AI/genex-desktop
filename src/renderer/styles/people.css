@@ -1691,8 +1691,17 @@
   color: var(--ink-3);
   font: 12px / 1 var(--font-family-mono);
 }
-.avatar-welcome-continue {
+/* Regenerate beside Continue, which takes the rest of the row. */
+.avatar-welcome-actions {
+  display: flex;
+  gap: 8px;
   width: 100%;
+}
+.avatar-welcome-continue {
+  flex: 1;
+  height: 38px;
+}
+.avatar-welcome-regenerate {
   height: 38px;
 }
 .avatar-welcome-note {

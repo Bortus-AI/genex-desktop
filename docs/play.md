@@ -69,7 +69,8 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   without handles gets the avatar-only welcome once per account on this Mac.
 - Generated avatars come from the account's id (`src/shared/avatar-recipe.ts`, the same recipe
   genex.games draws): a WebGPU body with a 2D fallback, eyes and gear in 2D, 25 frames a second,
-  at most 28 avatars a frame, still under Reduce Motion, while idle and under a modal.
+  at most 28 avatars a frame, still under Reduce Motion, while idle and under a modal. The
+  avatar welcome builds the account's under a beam and offers Regenerate beside Continue.
 - Pro nameplates: moving art behind a Pro's name (`src/shared/plate-recipe.ts`): 20 abstract
   pieces, each with its own takes and eight shared dials (zoom, speed, warp, mirror, hue, glow,
   grain, colour steps). The first plate is one of the avatar body's pieces in its colours; New one

@@ -1,7 +1,8 @@
 /**
  * An account meets its generated avatar: a beam scans up over a wireframe sphere and builds it,
- * then the mix it was made of (body, eyes, how block eyes look, gear) and one Continue. The avatar
- * is already the account's, in the app and on genex.games; Settings is where it changes. Once
+ * then the mix it was made of (body, eyes, how block eyes look, gear), Regenerate (another avatar,
+ * built again under the beam) and Continue. The avatar is already the account's, in the app and on
+ * genex.games; Settings is where it changes later. Once
  * genex.games knows nicknames, the welcome also asks for one (prefilled with the account's handle):
  * once for an account that has not chosen it, here or on genex.games, and Continue waits until the
  * nickname may be had. Before that, it is shown once per account on this Mac. Never over the first
@@ -18,10 +19,13 @@ import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 import { usePeople, usePlay } from "../state/hooks.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
 import { DialogSurface } from "../ui/dialog.tsx";
-import { AVATAR_WORDS, NICKNAME_WORDS } from "../words.ts";
+import { Icon } from "../ui/icons.tsx";
+import { useOnline } from "../ui/use-online.ts";
+import { ACCOUNT_WORDS, AVATAR_WORDS, NICKNAME_WORDS } from "../words.ts";
 import { mixOf } from "./avatar-mix.ts";
 import { HandleField, useNicknameEdit } from "./HandleField.tsx";
 import { HandleHint, WelcomeKind, type WelcomesSeen, welcomeFor } from "./nickname-model.ts";
+import { useRegenerateAvatar } from "./use-regenerate-avatar.ts";
 
 const WORDS = AVATAR_WORDS;
 /** The nickname field's id in the welcome. */
@@ -80,12 +84,12 @@ const seenOnThisMac = (accountId: string): WelcomesSeen => ({
   nickname: readText(storageKeyFor.nicknameWelcomed(accountId)) === "1",
 });
 
-/** The avatar being built under the beam, over its wireframe. */
+/** The avatar being built under the beam, over its wireframe; a regenerated one is built again. */
 function BuiltAvatar({ me }: { me: PlayMe }): JSX.Element {
   const recipe = useMemo(() => avatarRecipe(me.id, me.avatarVariant), [me.id, me.avatarVariant]);
   return (
     <>
-      <div className="avatar-welcome-stage">
+      <div className="avatar-welcome-stage" key={me.avatarVariant}>
         <Wireframe />
         <div className="avatar-welcome-built">
           <GeneratedAvatar recipe={recipe} size={STAGE} full={false} motion={AvatarMotion.Live} />
@@ -133,7 +137,29 @@ function ContinueButton({
   );
 }
 
-/** The welcome as it was before nicknames: the avatar alone, and Continue. */
+/**
+ * Another generated avatar, at once, as Settings' Regenerate gives it; shown once genex.games keeps
+ * one, and waiting for the connection.
+ */
+function RegenerateButton({ me }: { me: PlayMe }): JSX.Element | null {
+  const { available, regenerate } = useRegenerateAvatar(me);
+  const online = useOnline();
+  if (!available) return null;
+  return (
+    <button
+      type="button"
+      className="people-button avatar-welcome-regenerate"
+      data-avatar-welcome-regenerate
+      disabled={!online}
+      onClick={regenerate}
+    >
+      <Icon name="dice" />
+      {ACCOUNT_WORDS.regenerate}
+    </button>
+  );
+}
+
+/** The welcome as it was before nicknames: the avatar alone, Regenerate and Continue. */
 function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Element {
   const button = useRef<HTMLButtonElement>(null);
   return (
@@ -148,7 +174,10 @@ function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Ele
     >
       <div className="avatar-welcome-body" data-avatar-welcome>
         <BuiltAvatar me={me} />
-        <ContinueButton button={button} onClick={onDone} />
+        <div className="avatar-welcome-actions">
+          <RegenerateButton me={me} />
+          <ContinueButton button={button} onClick={onDone} />
+        </div>
         <span className="avatar-welcome-note">{WORDS.welcomeNote}</span>
       </div>
     </DialogSurface>
@@ -206,7 +235,14 @@ function AvatarAndNickname({
           inputRef={input}
           onChange={nickname.setValue}
         />
-        <ContinueButton button={button} disabled={!nickname.view.keepable || nickname.saving} busy={nickname.saving} />
+        <div className="avatar-welcome-actions">
+          <RegenerateButton me={me} />
+          <ContinueButton
+            button={button}
+            disabled={!nickname.view.keepable || nickname.saving}
+            busy={nickname.saving}
+          />
+        </div>
         <span className="avatar-welcome-note">{WORDS.welcomeNoteBoth}</span>
       </form>
     </DialogSurface>
