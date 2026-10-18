@@ -15,16 +15,18 @@ import { toRgb } from "../../../ui/WireArt.tsx";
 import {
   type ArtPoint,
   ConnectArtState,
+  BAND_SPOTS,
+  LINE_GAP,
+  lineStart,
   linePoint,
   PULSE_LENGTH,
   pulseHead,
   pulseSpeed,
   pulsesPerLine,
   STILL_TRAVEL,
-  TOOL_SPOTS,
   travelAfter,
 } from "./connect-art.ts";
-import { markIsLight, ROUTED_TOOLS } from "./routed-tools.ts";
+import { markIsLight, toolMark } from "./routed-tools.ts";
 
 /** The lines move at most this many frames a second. */
 const FRAME_MS = SECOND_MS / 30;
@@ -35,6 +37,14 @@ const LINE_STEPS = 24;
 const PULSE_STEPS = 8;
 /** How strongly a line shows over the band while it waits: the canvas reads its colour without alpha. */
 const LINE_ALPHA = 0.16;
+/** A connected line, in the light's colour. */
+const CONNECTED_LINE_ALPHA = 0.4;
+/** The light: resting, how much more while Connect is pointed at, and lit (signing in, connected). */
+const RESTING_ALPHA = 0.25;
+const HEATED_ALPHA = 0.4;
+const LIT_ALPHA = 0.65;
+/** The light's dashes and gaps, in CSS pixels. */
+const PULSE_DASH = [2, 3];
 /** How far short of the action the lines stop, in CSS pixels. */
 const TARGET_GAP = 6;
 /** Stacked under the logos, how far in from the words' left edge the lines meet, in CSS pixels. */
@@ -45,7 +55,11 @@ const HEAT_EASE = 0.08;
 const TARGET = "[data-connect-target]";
 
 type Rgb = [number, number, number];
-type Lines = { from: ArtPoint[]; to: ArtPoint };
+/**
+ * Each logo's line: its logo's centre, the room around it no line enters (its radius and the gap)
+ * and where (0 to 1) its own line leaves it; all run into `to`.
+ */
+type Lines = { from: Array<{ at: ArtPoint; room: number; start: number }>; to: ArtPoint };
 /** What the loop paints from: the state, how far Connect is pointed at (eased), and how far the light has run. */
 type LoopInput = { state: ConnectArtState; heat: number; travel: number };
 
@@ -64,19 +78,28 @@ function readColors(canvas: HTMLCanvasElement): { line: Rgb; flow: Rgb } {
 function measure(band: HTMLElement): Lines {
   const box = band.getBoundingClientRect();
   const local = (x: number, y: number): ArtPoint => ({ x: x - box.left, y: y - box.top });
-  const from = [...band.querySelectorAll<HTMLElement>("[data-connect-mark]")].map((mark) => {
+  const marks = [...band.querySelectorAll<HTMLElement>("[data-connect-mark]")].map((mark) => {
     const rect = mark.getBoundingClientRect();
-    return local(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return { at: local(rect.left + rect.width / 2, rect.top + rect.height / 2), radius: rect.width / 2 };
   });
+  const to = actionPoint(band, box, local);
+  return {
+    from: marks.map(({ at, radius }) => ({ at, room: radius + LINE_GAP, start: lineStart(at, to, radius + LINE_GAP) })),
+    to,
+  };
+}
+
+/** Where the lines end: beside the action, or just above the words when they stack under the logos. */
+function actionPoint(band: HTMLElement, box: DOMRect, local: (x: number, y: number) => ArtPoint): ArtPoint {
   const side = band.querySelector<HTMLElement>(".genex-connect-side");
   const first = side?.firstElementChild;
-  if (!side || !first) return { from, to: { x: box.width, y: box.height / 2 } };
+  if (!side || !first) return { x: box.width, y: box.height / 2 };
   const field = band.querySelector<HTMLElement>(".genex-connect-field")?.getBoundingClientRect();
   const words = first.getBoundingClientRect();
   if (field !== undefined && words.top >= field.bottom - 1)
-    return { from, to: local(words.left + STACKED_INSET, words.top - TARGET_GAP) };
+    return local(words.left + STACKED_INSET, words.top - TARGET_GAP);
   const anchor = (side.querySelector<HTMLElement>(TARGET) ?? first).getBoundingClientRect();
-  return { from, to: local(anchor.left - TARGET_GAP, anchor.top + anchor.height / 2) };
+  return local(anchor.left - TARGET_GAP, anchor.top + anchor.height / 2);
 }
 
 /** Traces the stretch of a line from `start` to `end` (0 at the logo, 1 at the action) in `steps` segments. */
@@ -89,27 +112,46 @@ function trace(ctx: CanvasRenderingContext2D, from: ArtPoint, to: ArtPoint, star
   }
 }
 
-/** One frame: every line, then the light running along it. */
+/**
+ * One frame: every line from just clear of its logo, then the light running along it as a short
+ * run of dashes, like bits on a wire.
+ */
 function paint(ctx: CanvasRenderingContext2D, lines: Lines, input: LoopInput, colors: { line: Rgb; flow: Rgb }) {
   const connected = input.state === ConnectArtState.Connected;
   const pulses = pulsesPerLine(input.state);
   const lit = connected || input.state === ConnectArtState.SigningIn;
-  const line = connected ? rgba(colors.flow, 0.55) : rgba(colors.line, LINE_ALPHA);
-  const light = rgba(colors.flow, lit ? 0.9 : 0.35 + input.heat * 0.6);
-  ctx.lineCap = "round";
-  for (const [index, from] of lines.from.entries()) {
-    trace(ctx, from, lines.to, 0, 1, LINE_STEPS);
-    ctx.lineWidth = 1;
+  const line = connected ? rgba(colors.flow, CONNECTED_LINE_ALPHA) : rgba(colors.line, LINE_ALPHA);
+  const light = rgba(colors.flow, lit ? LIT_ALPHA : RESTING_ALPHA + input.heat * HEATED_ALPHA);
+  ctx.lineWidth = 1;
+  ctx.lineCap = "butt";
+  for (const [index, { at, start }] of lines.from.entries()) {
+    const along = (share: number): number => start + (1 - start) * share;
+    ctx.setLineDash([]);
+    trace(ctx, at, lines.to, start, 1, LINE_STEPS);
     ctx.strokeStyle = line;
     ctx.stroke();
+    ctx.setLineDash(PULSE_DASH);
     for (let pulse = 0; pulse < pulses; pulse++) {
       const head = pulseHead(input.travel, index, pulse, pulses);
-      trace(ctx, from, lines.to, Math.max(0, head - PULSE_LENGTH), head, PULSE_STEPS);
-      ctx.lineWidth = 1.5;
+      trace(ctx, at, lines.to, along(Math.max(0, head - PULSE_LENGTH)), along(head), PULSE_STEPS);
       ctx.strokeStyle = light;
       ctx.stroke();
     }
   }
+  ctx.setLineDash([]);
+  clearAroundLogos(ctx, lines);
+}
+
+/** Cuts every line, another logo's too, away from the room around each logo. */
+function clearAroundLogos(ctx: CanvasRenderingContext2D, lines: Lines) {
+  ctx.save();
+  ctx.globalCompositeOperation = "destination-out";
+  for (const { at, room } of lines.from) {
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, room, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 /** The paint loop: a frame every FRAME_MS while the band should move, one frame otherwise. Returns the stop. */
@@ -306,15 +348,15 @@ export function ConnectBand({
       <canvas ref={canvas} className="genex-connect-lines" aria-hidden="true" />
       <div className="genex-connect-grid">
         <div className="genex-connect-field" aria-hidden="true">
-          {ROUTED_TOOLS.map(({ id, mark }) => (
+          {[...BAND_SPOTS].map(([id, spot]) => (
             <img
               key={id}
-              src={mark}
+              src={toolMark(id)}
               alt=""
               draggable={false}
               data-connect-mark={id}
               data-light-mark={markIsLight(id) || undefined}
-              style={{ left: `${TOOL_SPOTS[id].x * 100}%`, top: `${TOOL_SPOTS[id].y * 100}%` }}
+              style={{ left: `${spot.x * 100}%`, top: `${spot.y * 100}%` }}
             />
           ))}
         </div>

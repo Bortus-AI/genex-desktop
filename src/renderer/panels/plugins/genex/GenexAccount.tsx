@@ -177,11 +177,7 @@ function StateBody({ view, live, busy }: { view: GenexAccountView; live: GenexLi
               </TextAction>
             </>
           }
-        >
-          <p className="genex-connect-text">
-            {WORDS.signingInText} <code className="genex-code">{view.code}</code>
-          </p>
-        </Prompt>
+        />
       );
     case GenexAccountKind.Terms:
       return (

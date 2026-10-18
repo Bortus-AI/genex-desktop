@@ -8,14 +8,16 @@ import { GenexTool } from "../../src/shared/asset-making.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import manifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
 import {
+  BAND_SPOTS,
   ConnectArtState,
   connectArtState,
+  LINE_GAP,
+  lineStart,
   linePoint,
   MAX_STEP_SECONDS,
   pulseHead,
   pulseSpeed,
   pulsesPerLine,
-  TOOL_SPOTS,
   travelAfter,
 } from "../../src/renderer/panels/plugins/genex/connect-art.ts";
 import { turnOnAndConnect } from "../../src/renderer/panels/plugins/genex/connect-genex.ts";
@@ -107,12 +109,25 @@ describe("the Connect band's lines", () => {
       assert.equal(connectArtState(kind), ConnectArtState.Waiting, String(kind));
   });
 
-  it("give every routed tool its own place inside the logos' field", () => {
-    const spots = Object.values(GenexTool).map((tool) => TOOL_SPOTS[tool]);
+  it("give every tool in the band its own place inside the logos' field, and leave the chat app's logo out", () => {
+    const spots = [...BAND_SPOTS.values()];
     for (const spot of spots) {
       assert.ok(spot.x > 0 && spot.x < 1 && spot.y > 0 && spot.y < 1, JSON.stringify(spot));
     }
     assert.equal(new Set(spots.map((spot) => `${spot.x},${spot.y}`)).size, spots.length);
+    assert.equal(BAND_SPOTS.has(GenexTool.GptImage), false);
+    assert.equal(BAND_SPOTS.size, Object.values(GenexTool).length - 1);
+  });
+
+  it("start just clear of each logo's edge", () => {
+    const from = { x: 40, y: 60 };
+    const to = { x: 520, y: 120 };
+    const clearance = 11 + LINE_GAP;
+    const start = lineStart(from, to, clearance);
+    const at = linePoint(from, to, start);
+    const distance = Math.hypot(at.x - from.x, at.y - from.y);
+    assert.ok(distance >= clearance && distance < clearance + 12, String(distance));
+    assert.equal(lineStart(from, { x: 45, y: 62 }, clearance), 1, "an action inside the logo's room draws no line");
   });
 
   it("run from the logo to the action", () => {

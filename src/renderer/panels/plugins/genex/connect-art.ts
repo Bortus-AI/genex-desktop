@@ -17,23 +17,27 @@ export interface ArtPoint {
 }
 
 /**
- * Each tool's place in the logos' field, as fractions of its width and height: a loose cloud whose
- * lines fan into the action without two logos sharing a line.
+ * The tools whose logos float in the band, each at its place in the logos' field as fractions of
+ * its width and height: a loose cloud whose lines fan into the action, passing as few other logos as
+ * they can (the band keeps every line clear of every logo anyway). GPT Image's logo is the chat app's, which reads as out of place here; the list below keeps it.
  */
-export const TOOL_SPOTS: Record<GenexTool, ArtPoint> = {
-  [GenexTool.Tripo]: { x: 0.08, y: 0.3 },
-  [GenexTool.Meshy]: { x: 0.2, y: 0.72 },
-  [GenexTool.Uthana]: { x: 0.27, y: 0.2 },
-  [GenexTool.GptImage]: { x: 0.38, y: 0.5 },
-  [GenexTool.NanoBanana]: { x: 0.12, y: 0.55 },
-  [GenexTool.MiniMax]: { x: 0.47, y: 0.18 },
-  [GenexTool.Blender]: { x: 0.52, y: 0.8 },
-  [GenexTool.ElevenLabs]: { x: 0.34, y: 0.86 },
-  [GenexTool.Publishing]: { x: 0.6, y: 0.42 },
-};
+export const BAND_SPOTS: ReadonlyMap<GenexTool, ArtPoint> = new Map([
+  [GenexTool.Tripo, { x: 0.05, y: 0.32 }],
+  [GenexTool.Uthana, { x: 0.33, y: 0.26 }],
+  [GenexTool.MiniMax, { x: 0.51, y: 0.13 }],
+  [GenexTool.Publishing, { x: 0.58, y: 0.38 }],
+  [GenexTool.NanoBanana, { x: 0.13, y: 0.62 }],
+  [GenexTool.Meshy, { x: 0.37, y: 0.51 }],
+  [GenexTool.ElevenLabs, { x: 0.25, y: 0.79 }],
+  [GenexTool.Blender, { x: 0.47, y: 0.88 }],
+]);
 
 /** How much of a line one pulse of light covers, as a share of the line. */
-export const PULSE_LENGTH = 0.16;
+export const PULSE_LENGTH = 0.18;
+/** The room a line leaves between itself and its logo's edge, in CSS pixels. */
+export const LINE_GAP = 2;
+/** Steps the search for where a line leaves its logo takes. */
+const START_STEPS = 48;
 /** How far toward the action a line's bend sits, as a share of the height between them. */
 const BEND = 0.1;
 /** Lines a second, each state's pulses: slow while waiting (faster as Connect is pointed at), quick in the browser. */
@@ -62,6 +66,19 @@ export function linePoint(from: ArtPoint, to: ArtPoint, t: number): ArtPoint {
     x: u * u * from.x + 2 * u * t * bend.x + t * t * to.x,
     y: u * u * from.y + 2 * u * t * bend.y + t * t * to.y,
   };
+}
+
+/**
+ * Where (0 to 1) a line from `from` to `to` first leaves a circle of `clearance` pixels around its
+ * logo, so it starts just clear of the logo's edge; 1 when the action sits inside that circle.
+ */
+export function lineStart(from: ArtPoint, to: ArtPoint, clearance: number): number {
+  for (let step = 0; step <= START_STEPS; step++) {
+    const t = step / START_STEPS;
+    const at = linePoint(from, to, t);
+    if (Math.hypot(at.x - from.x, at.y - from.y) >= clearance) return t;
+  }
+  return 1;
 }
 
 /** How fast pulses run, in lines a second; `heat` (0 to 1) is how far Connect is pointed at. */

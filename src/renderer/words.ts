@@ -3569,7 +3569,6 @@ export const GENEX_WORDS = {
     connect: "Connect",
     retry: "Reconnect",
     signingInTitle: "Finish signing in in your browser",
-    signingInText: "Check that your browser shows this code:",
     /** The code beside it in the Publish dialog. */
     browserShows: "Your browser should show",
     reopen: "Open sign-in again",

@@ -58,16 +58,6 @@
   background: var(--green);
   box-shadow: 0 0 0 3px var(--green-tint);
 }
-.genex-code {
-  display: inline-block;
-  margin-inline-start: 4px;
-  padding: 1px 8px;
-  border-radius: var(--radius-chip);
-  background: var(--soft);
-  color: var(--ink);
-  font: 13px / 20px var(--font-family-mono);
-  letter-spacing: 0.08em;
-}
 .genex-note[data-quiet] {
   color: var(--ink-3);
 }
