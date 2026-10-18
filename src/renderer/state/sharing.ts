@@ -217,13 +217,18 @@ export function createSharingStore(
         });
     }, CHECK_REREAD_MS);
   };
+  /** A write's own answer wins: a read that started before it lands nowhere. */
+  const applyWrite = (project: string, read: GameLibraryStates): void => {
+    readerOf(project).reset();
+    apply(read);
+  };
   const failed = (items: readonly ShareItem[]): ShareOutcome[] =>
     items.map((item) => ({ file: item.file, miss: ShareMiss.Failed }));
 
   return Object.assign(store, {
     read: (project: string) => readerOf(project).request(),
     async save(project: string, files: string[], saved: boolean): Promise<void> {
-      for (const run of inBatches(files)) apply(await api.assetSave(project, run, saved));
+      for (const run of inBatches(files)) applyWrite(project, await api.assetSave(project, run, saved));
     },
     async share(project: string, items: ShareItem[]): Promise<void> {
       const files = items.map((item) => item.file);
@@ -243,7 +248,7 @@ export function createSharingStore(
         );
     },
     async unshare(project: string, file: string): Promise<void> {
-      apply(await api.assetUnshare(project, file));
+      applyWrite(project, await api.assetUnshare(project, file));
       clear(project, file);
     },
     clear,

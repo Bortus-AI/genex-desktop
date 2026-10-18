@@ -18,7 +18,7 @@ import {
 import { layoutAssets } from "../assets-layout.ts";
 import { gridTransform, keepView, keptView, useCanvasView, useOnWheel } from "../canvas-view.ts";
 import { boundsOf } from "../run-graph.ts";
-import { useLibrary, useSharing } from "../state/hooks.ts";
+import { useLibrary, usePeople, useSharing } from "../state/hooks.ts";
 import { assetsOf } from "../state/library.ts";
 import { libraryOf, sharesOf } from "../state/sharing.ts";
 import { studio } from "../state/studio.ts";
@@ -447,12 +447,17 @@ function cardedAssets(assets: ProjectAsset[], folded: FoldedMotions | null): Pro
   );
 }
 
-/** The open game's files as its library knows them: read when the tab opens and whenever the files change. */
+/**
+ * The open game's files as its library knows them: read when the tab opens, whenever the files
+ * change, and when the Genex account signs in, out or changes.
+ */
 function useLibraryStates(project: string, ledger: unknown) {
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new inventory is a new list of files to read
+  const account = usePeople((s) => s.account);
+  const me = usePeople((s) => s.me?.id ?? null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new inventory or account is a new read
   useEffect(() => {
     void studio().sharing.read(project);
-  }, [project, ledger]);
+  }, [project, ledger, account, me]);
   const library = useSharing((s) => libraryOf(s, project));
   const shares = useSharing((s) => sharesOf(s, project));
   return { library, shares };

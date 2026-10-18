@@ -113,6 +113,33 @@ describe("the library's word on a game", () => {
   });
 });
 
+describe("a write and a read in flight", () => {
+  it("keeps Save's answer over a read that started before it", async () => {
+    const slow = deferred<ReturnType<typeof states>>();
+    const fake = fakeStudioApi({
+      assetLibraryStates: () => slow.promise,
+      assetSave: async () => states([state("a", { saved: true })]),
+    });
+    const store = createSharingStore(fake.api, heldClock());
+    const reading = store.read("g");
+    await store.save("g", ["a"], true);
+    slow.resolve(states([state("a", { saved: false })]));
+    await reading;
+    assert.equal(libraryOf(store.getState(), "g")?.states[0]?.saved, true);
+  });
+
+  it("saves more than one call carries in runs", async () => {
+    const files = Array.from({ length: 120 }, (_, i) => `f${i}`);
+    const fake = fakeStudioApi({ assetSave: async () => states([]) });
+    const store = createSharingStore(fake.api, heldClock());
+    await store.save("g", files, true);
+    assert.deepEqual(
+      fake.callsOf("assetSave").map((call) => (call[1] as string[]).length),
+      [50, 50, 20],
+    );
+  });
+});
+
 describe("a share's line", () => {
   it("goes Send, then Check while it is out, then ✓ On Play with the Shared tag, then away", async () => {
     const answer = deferred<ShareOutcome[]>();
