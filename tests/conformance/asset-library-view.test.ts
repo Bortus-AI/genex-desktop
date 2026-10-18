@@ -53,6 +53,7 @@ const state = (file: string, extra: Partial<AssetLibraryState> = {}): AssetLibra
   generationId: `gen-${file}`,
   saved: false,
   shared: null,
+  saveable: true,
   shareable: true,
   ...extra,
 });
@@ -133,15 +134,10 @@ describe("a card's tag and Share", () => {
     assert.equal(cardTagOf(null), null);
   });
 
-  it("can save what the library says it takes, else what is in the library already", () => {
-    const told = (saveable: boolean): AssetLibraryState & { saveable?: boolean } => ({
-      ...state("a", { generationId: null }),
-      saveable,
-    });
-    assert.equal(canSave(told(true)), true);
-    assert.equal(canSave({ ...told(false), generationId: "g" }), false);
+  it("can save what the library says Save can act on, and nothing else", () => {
     assert.equal(canSave(state("a")), true);
-    assert.equal(canSave(state("a", { generationId: null })), false);
+    assert.equal(canSave(state("a", { generationId: null })), true, "a file genex.games takes from the app");
+    assert.equal(canSave(state("a", { saveable: false })), false);
     assert.equal(canSave(null), false);
   });
 
@@ -170,16 +166,13 @@ describe("picking several cards", () => {
   });
 
   it("saves the picked files not saved yet and shares the ones Share can take", () => {
-    const dropped: AssetLibraryState & { saveable?: boolean } = {
-      ...state("dropped", { shareable: false, generationId: null }),
-      saveable: true,
-    };
+    const dropped = state("dropped", { shareable: false, generationId: null });
     const library = game([
       state("saved", { saved: true }),
       state("fresh"),
       state("live", { shared: LIVE }),
       dropped,
-      state("other", { shareable: false, generationId: null }),
+      state("other", { shareable: false, generationId: null, saveable: false }),
     ]);
     const actions = selectionActions(library, new Set(["saved", "fresh", "live", "dropped", "other", "unknown"]));
     assert.deepEqual(actions.save, ["fresh", "live", "dropped"], "not what genex.games would not take");

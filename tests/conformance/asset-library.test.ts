@@ -129,6 +129,7 @@ describe("the library's calls", () => {
       { status: 403, body: { error: "moderation_refused", detail: "Not for Play." } },
       { status: 400, body: { error: "kind_not_publishable" } },
       { status: 429, body: null },
+      { status: 409, body: { error: "asset_share_in_progress" } },
     ];
     const { library, calls } = rig(() => answers.shift() ?? ok({}));
     assert.deepEqual(await library.share(GEN, " Giant mushroom "), {
@@ -139,6 +140,7 @@ describe("the library's calls", () => {
     assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.Refused, detail: "Not for Play." });
     assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.KindNotShareable });
     assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.TooMany });
+    assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.Checking }, "another share is on its way");
   });
 
   it("sends a file: asks for a place, uploads the bytes there, then marks it done", async () => {

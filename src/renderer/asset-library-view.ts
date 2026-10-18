@@ -107,13 +107,9 @@ export function cardTagOf(state: AssetLibraryState | null): CardTag | null {
   return state?.saved ? CardTag.Saved : null;
 }
 
-/**
- * Whether Save can act on a file: the library's own word (`saveable`: in the library, or a kind
- * genex.games takes from the app), else whether the file is in the library already.
- */
-export function canSave(state: (AssetLibraryState & { saveable?: boolean }) | null): boolean {
-  if (!state) return false;
-  return state.saveable ?? Boolean(state.generationId);
+/** Whether Save can act on a file: it is in the library, or a kind genex.games takes from the app. */
+export function canSave(state: AssetLibraryState | null): boolean {
+  return state?.saveable === true;
 }
 
 /** Whether Share can act on a file: Genex made it and it is not on Play already. */

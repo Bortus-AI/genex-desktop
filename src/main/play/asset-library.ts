@@ -157,6 +157,8 @@ function shareMiss(status: number, body: unknown): { miss: ShareMiss; detail?: s
   if (status === HTTP_TOO_MANY) return { miss: ShareMiss.TooMany };
   if (error === "kind_not_publishable") return { miss: ShareMiss.KindNotShareable };
   if (error === "upload_not_shareable") return { miss: ShareMiss.NotShareable };
+  // A share of this asset is still on its way (copied, then checked): it goes live on its own.
+  if (error === "asset_share_in_progress") return { miss: ShareMiss.Checking };
   return { miss: ShareMiss.Failed };
 }
 

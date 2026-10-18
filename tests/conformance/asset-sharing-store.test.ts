@@ -31,6 +31,7 @@ const state = (file: string, extra: Partial<AssetLibraryState> = {}): AssetLibra
   generationId: `gen-${file}`,
   saved: false,
   shared: null,
+  saveable: true,
   shareable: true,
   ...extra,
 });
