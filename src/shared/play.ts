@@ -4,6 +4,8 @@
  * view main owns. These are the shapes and names both sides share.
  */
 
+import type { PlayCuration } from "./play-manage.ts";
+
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
   api: string;
@@ -121,6 +123,8 @@ export interface PlayGame {
   author: { id: string | null; name: string; imageUrl: string | null };
   /** Anyone may make their own copy: its source is public. */
   remixable: boolean;
+  /** What the card menu reads (mobile flag, tags, remixing); a search's card carries none, so it has no menu. */
+  curation?: PlayCuration;
 }
 
 /** One page of a tab. */
