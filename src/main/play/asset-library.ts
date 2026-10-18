@@ -16,6 +16,7 @@ import {
   type SharedAsset,
   ShareMiss,
 } from "../../shared/asset-library.ts";
+import { MINUTE_MS } from "../../shared/duration.ts";
 import { isPlaySlug } from "../../shared/play.ts";
 import { GalleryError, type GalleryRequest, imageUrl, isRecord, SignInNeeded, text } from "./gallery.ts";
 import type { PeopleDeps } from "./people.ts";
@@ -37,6 +38,11 @@ const HTTP_TOO_MANY = 429;
 const TITLE_MAX = 300;
 /** How long one library file may take to download. */
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+/**
+ * How long Save's upload of one file may take: a file as large as Save sends, over a slow uplink.
+ * An avatar's upload is a far smaller picture, and its wait would cut a large file off.
+ */
+export const LIBRARY_UPLOAD_TIMEOUT_MS = 10 * MINUTE_MS;
 const ID_MAX = 64;
 /** genex.games' wire status of a project on Play. */
 const PUBLISHED = "published";
@@ -233,7 +239,12 @@ export function assetLibrary(deps: LibraryDeps) {
     return id;
   };
 
-  return { list, setSaved, share, unshare, send };
+  /** Throws {@link SignInNeeded} unless the account is signed in; asks genex.games nothing. */
+  const requireSignIn = async (): Promise<void> => {
+    await auth();
+  };
+
+  return { list, setSaved, share, unshare, send, requireSignIn };
 }
 
 /** The project id a share's answer names, under either of the names genex.games uses. */

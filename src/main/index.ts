@@ -136,7 +136,7 @@ import {
 } from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
-import { type AssetLibrary, assetLibrary, networkDownload } from "./play/asset-library.ts";
+import { type AssetLibrary, assetLibrary, LIBRARY_UPLOAD_TIMEOUT_MS, networkDownload } from "./play/asset-library.ts";
 import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
@@ -966,7 +966,11 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
     people: playPeople(deps),
     creators: creatorStats(counted),
     credits: genexCredits(counted),
-    library: assetLibrary(counted),
+    // Save sends whole game files, so its upload waits longer than an avatar's.
+    library: assetLibrary({
+      ...counted,
+      upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch, LIBRARY_UPLOAD_TIMEOUT_MS),
+    }),
   };
   return playAccount;
 }

@@ -5,7 +5,8 @@
  * before anything is read, sent or written.
  */
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, realpath, symlink, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { librarySharing, type LibrarySharingDeps } from "../../src/main/core/library-sharing.ts";
@@ -186,16 +187,28 @@ describe("share names", () => {
   });
 });
 
-/** A game folder with an asset list the test controls, over the fixture's library. */
-async function gameRig(root: string, assets: ProjectAsset[], account: FixtureAccount | null = FixtureAccount.Full) {
+/**
+ * A game folder with an asset list the test controls, over the fixture's library; every library
+ * route asked is kept, and `request` may answer a route itself first.
+ */
+async function gameRig(
+  root: string,
+  assets: ProjectAsset[],
+  account: FixtureAccount | null = FixtureAccount.Full,
+  request?: (route: string, init: Parameters<GalleryRequest>[1]) => Promise<GalleryAnswer> | null,
+) {
   const dir = path.join(root, `game-${Math.random().toString(36).slice(2)}`);
   await mkdir(path.join(dir, "assets"), { recursive: true });
   for (const asset of assets) {
     await mkdir(path.dirname(path.join(dir, asset.file)), { recursive: true });
     await writeFile(path.join(dir, asset.file), "bytes");
   }
+  const routes: string[] = [];
   const library = assetLibrary({
-    request: fixturePlayRequest,
+    request: (route, init) => {
+      routes.push(route);
+      return request?.(route, init) ?? fixturePlayRequest(route, init);
+    },
     token: async () => (account ? fixtureAccountToken(account) : undefined),
     upload: async () => 200,
     localImages: true,
@@ -214,7 +227,7 @@ async function gameRig(root: string, assets: ProjectAsset[], account: FixtureAcc
     download: fixtureDownload,
     vendorModule: async () => null,
   };
-  return { dir, sharing: librarySharing(deps), reads };
+  return { dir, sharing: librarySharing(deps), reads, routes };
 }
 
 const asset = (file: string, extra: Partial<ProjectAsset> = {}): ProjectAsset => ({
@@ -332,3 +345,144 @@ describe("a game's files and the library", () => {
     assert.match(files[0] ?? "", /^assets\/community\/[0-9a-f-]{36}\/model\.glb$/);
   });
 });
+
+describe("a game's Save, Share and Add when things overlap or break", () => {
+  let root = "";
+  before(async () => {
+    root = await realpath(await tmpDir("asset-library-edges-"));
+  });
+  after(async () => {
+    await removeTree(root);
+  });
+
+  it("reads a game with no Genex file as unread while signed out, so Save is not offered", async () => {
+    const game = await gameRig(root, [asset("assets/drop.png", { source: "imported" })], null);
+    const { states, unread } = await game.sharing.states("g");
+    assert.equal(unread, true);
+    assert.equal(states[0]?.saveable, false);
+  });
+
+  it("sends a file once when Save is pressed twice before the first answers", async () => {
+    const game = await gameRig(root, [asset("assets/twice.png", { source: "imported" })]);
+    await Promise.all([
+      game.sharing.save("g", ["assets/twice.png"], true),
+      game.sharing.save("g", ["assets/twice.png"], true),
+    ]);
+    assert.equal(game.routes.filter((route) => route === LibraryRoute.Import).length, 1);
+  });
+
+  it("keeps the link of each of two assets added at once", async () => {
+    const game = await gameRig(root, []);
+    const added = await Promise.all([
+      game.sharing.add("g", { generationId: FixtureGenerationId.Lantern }),
+      game.sharing.add("g", { generationId: FixtureGenerationId.Crowd }),
+    ]);
+    const links = JSON.parse(await readFile(path.join(game.dir, ".studio", "library-links.json"), "utf8"));
+    assert.deepEqual(Object.keys(links.files).sort(), added.flatMap((outcome) => outcome.files).sort());
+  });
+
+  it("answers each share of a batch when one of them cannot reach genex.games", async () => {
+    const strider = "assets/genex/b/strider.glb";
+    const lantern = "assets/genex/c/lantern.glb";
+    const game = await gameRig(
+      root,
+      [
+        asset(strider, { generationId: FixtureGenerationId.Strider }),
+        asset(lantern, { generationId: FixtureGenerationId.Lantern }),
+      ],
+      FixtureAccount.Full,
+      (route) =>
+        route === LibraryRoute.share(FixtureGenerationId.Lantern) ? Promise.reject(new Error("offline")) : null,
+    );
+    const outcomes = await game.sharing.share("g", [
+      { file: strider, name: "Silt strider" },
+      { file: lantern, name: "Iron lantern" },
+    ]);
+    assert.ok(outcomes[0] && "shared" in outcomes[0] && outcomes[0].shared.live, "the first went live");
+    assert.deepEqual(outcomes[1], { file: lantern, miss: ShareMiss.Failed });
+  });
+
+  it("adds a library file whose address names it with a broken escape under its own name", async () => {
+    const broken = "https://assets.genex.technology/generations/x/%E0%A4%A.glb";
+    const game = await gameRig(root, [], FixtureAccount.Full, (route) =>
+      route.startsWith(`${LibraryRoute.List}?`)
+        ? Promise.resolve(
+            ok({ generations: [{ id: GEN, kind: "model", files: [{ role: "model-glb", url: broken }] }] }),
+          )
+        : null,
+    );
+    const { files } = await game.sharing.add("g", { generationId: GEN });
+    assert.match(files[0] ?? "", new RegExp(`^assets/library/[0-9a-f-]{36}/${GEN}\\.glb$`));
+  });
+});
+
+describe("a game's library links are the game's own file", () => {
+  let root = "";
+  before(async () => {
+    root = await realpath(await tmpDir("asset-links-"));
+  });
+  after(async () => {
+    await removeTree(root);
+  });
+
+  const DROPPED = "assets/linked.png";
+  const LINKS = JSON.stringify({
+    version: 1,
+    files: { [DROPPED]: { generationId: FixtureGenerationId.Moss, sent: false } },
+  });
+
+  /** A links file whose link to the fixture's moss picture must not be honored. */
+  const hostile: ReadonlyArray<readonly [string, (dir: string) => Promise<void>]> = [
+    [
+      "a link to a file outside the game",
+      async (dir) => {
+        const outside = path.join(root, `outside-${Math.random().toString(36).slice(2)}.json`);
+        await writeFile(outside, LINKS);
+        await symlink(outside, path.join(dir, ".studio", "library-links.json"));
+      },
+    ],
+    [
+      "a .studio folder that links outside the game",
+      async (dir) => {
+        const outside = await mkdtempIn(root);
+        await writeFile(path.join(outside, "library-links.json"), LINKS);
+        await rm(path.join(dir, ".studio"), { recursive: true });
+        await symlink(outside, path.join(dir, ".studio"));
+      },
+    ],
+    [
+      "a file far larger than any links file",
+      async (dir) => {
+        await writeFile(path.join(dir, ".studio", "library-links.json"), LINKS + " ".repeat(2 * 1024 * 1024));
+      },
+    ],
+    [
+      "a named pipe",
+      async (dir) => {
+        execFileSync("mkfifo", [path.join(dir, ".studio", "library-links.json")]);
+      },
+    ],
+  ];
+
+  for (const [label, plant] of hostile) {
+    it(`ignores ${label}, and Save and Share read the file as only in the game`, { timeout: 10_000 }, async () => {
+      const game = await gameRig(root, [asset(DROPPED, { source: "imported" })]);
+      await mkdir(path.join(game.dir, ".studio"), { recursive: true });
+      await plant(game.dir);
+      const { states } = await game.sharing.states("g");
+      assert.equal(states[0]?.generationId, null);
+      assert.equal(states[0]?.shareable, false);
+    });
+  }
+
+  it("honors a plain links file in the game's own .studio folder", async () => {
+    const game = await gameRig(root, [asset(DROPPED, { source: "imported" })]);
+    await mkdir(path.join(game.dir, ".studio"), { recursive: true });
+    await writeFile(path.join(game.dir, ".studio", "library-links.json"), LINKS);
+    const { states } = await game.sharing.states("g");
+    assert.equal(states[0]?.generationId, FixtureGenerationId.Moss);
+  });
+});
+
+/** A fresh folder under `root`. */
+const mkdtempIn = (root: string): Promise<string> => mkdtemp(path.join(root, "outside-"));

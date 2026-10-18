@@ -8,6 +8,7 @@
  * name the renderer sends: each is checked against the game's own asset list first.
  */
 import { randomUUID } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import {
   type AddOutcome,
@@ -26,7 +27,7 @@ import {
 } from "../../shared/asset-library.ts";
 import { assetKind, type ProjectAsset, type ProjectAssets } from "../../shared/game-assets.ts";
 import { isPlaySlug } from "../../shared/play.ts";
-import { atomicWriteJson, createFileInDir, ensureDirBelow, readJsonIfExists } from "../../substrate/fsx.ts";
+import { atomicWriteJson, createFileInDir, ensureDirBelow, readRegularFile } from "../../substrate/fsx.ts";
 import type { AssetLibrary, ShareAnswer } from "../play/asset-library.ts";
 import { libraryFileUrl } from "../play/asset-library.ts";
 
@@ -37,6 +38,8 @@ const STUDIO_DIR = ".studio";
 export const AddFolder = { Library: "library", Community: "community" } as const;
 /** The largest file Save sends or Add downloads. */
 export const LIBRARY_FILE_MAX_BYTES = 64 * 1024 * 1024;
+/** The largest links file read: thousands of links, far below anything that could stall a read. */
+const LINKS_MAX_BYTES = 1024 * 1024;
 /** A downloaded file's name: letters, digits, dot, dash, underscore, one extension. */
 const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
 
@@ -94,16 +97,39 @@ export interface LibrarySharingDeps {
   vendorModule(gameDir: string, manifest: unknown): Promise<string | null>;
 }
 
+/**
+ * The links file's text, or null. The game's folder is the game's (an agent or a cloned repo writes
+ * it), so the file is read only from the game's own `.studio` folder, never through a link, never a
+ * pipe or a device that would stall the read, and never past its cap.
+ */
+async function linksText(gameDir: string): Promise<string | null> {
+  const dir = path.join(await realpath(gameDir), STUDIO_DIR);
+  if ((await realpath(dir).catch(() => null)) !== dir) return null;
+  const bytes = await readRegularFile(path.join(dir, ...LINKS_FILE), LINKS_MAX_BYTES).catch(() => null);
+  return bytes ? bytes.toString("utf8") : null;
+}
+
 /** The game's links, empty when there are none or the file is unreadable. */
 async function readLinks(gameDir: string): Promise<LinksFile> {
-  const read = await readJsonIfExists<LinksFile>(path.join(gameDir, STUDIO_DIR, ...LINKS_FILE)).catch(() => null);
-  const files = read && typeof read === "object" && read.files && typeof read.files === "object" ? read.files : {};
-  const kept: Record<string, LibraryLink> = {};
-  for (const [file, link] of Object.entries(files)) {
-    if (link && isGenerationId(link.generationId))
-      kept[file] = { generationId: link.generationId, sent: link.sent === true };
+  const text = await linksText(gameDir).catch(() => null);
+  const read: unknown = text === null ? null : parseJson(text);
+  const listed = fieldOf(read, "files");
+  // No prototype: a file named `__proto__` is a key like any other.
+  const kept: Record<string, LibraryLink> = Object.create(null);
+  for (const [file, link] of Object.entries(typeof listed === "object" && listed !== null ? listed : {})) {
+    const generationId = fieldOf(link, "generationId");
+    if (isGenerationId(generationId)) kept[file] = { generationId, sent: fieldOf(link, "sent") === true };
   }
   return { version: 1, files: kept };
+}
+
+/** A JSON text's value, or null when it does not parse. */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 /** Remember `files` as their generations, beside the links already there. */
@@ -112,6 +138,31 @@ async function writeLinks(gameDir: string, added: Record<string, LibraryLink>): 
   const dir = await ensureDirBelow(gameDir, [STUDIO_DIR]);
   await atomicWriteJson(path.join(dir, ...LINKS_FILE), { version: 1, files: { ...links.files, ...added } });
 }
+
+/** Runs one after another under a key: a run starts once the one before it under that key settled. */
+type Turn = <T>(key: string, run: () => Promise<T>) => Promise<T>;
+
+/** A fresh set of keyed turns. */
+function keyedTurns(): Turn {
+  const last = new Map<string, Promise<void>>();
+  return <T>(key: string, run: () => Promise<T>): Promise<T> => {
+    const mine = (last.get(key) ?? Promise.resolve()).then(run);
+    const settled = mine.then(
+      () => undefined,
+      () => undefined,
+    );
+    last.set(key, settled);
+    void settled.then(() => {
+      if (last.get(key) === settled) last.delete(key);
+    });
+    return mine;
+  };
+}
+
+/** The turn key of a game's links file: two writes that overlap would each drop the other's link. */
+const linksTurn = (gameDir: string): string => `links\n${gameDir}`;
+/** The turn key of a game's Save: a second press waits, then finds the file the first one sent. */
+const saveTurn = (project: string): string => `save\n${project}`;
 
 /** The files the library can take: a model, picture, sound or video of the game's own. */
 function libraryFiles(inventory: ProjectAssets): ProjectAsset[] {
@@ -131,8 +182,17 @@ const KIND_EXTENSION = {
 
 /** A file name safe to write: the URL's last part when it is a library file, else `stem` with its kind's extension. */
 function downloadName(url: string, stem: string, kind: LibraryKind): string {
-  const last = decodeURIComponent(new URL(url).pathname.split("/").at(-1) ?? "");
+  const last = decodedName(new URL(url).pathname.split("/").at(-1) ?? "");
   return SAFE_NAME.test(last) && isLibraryFileName(last) ? last : `${stem}.${KIND_EXTENSION[kind]}`;
+}
+
+/** An address's last part decoded, or empty when its escapes are broken. */
+function decodedName(part: string): string {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return "";
+  }
 }
 
 /** One library file of a game: the asset, the generation it is (or null), and whether Save sent it. */
@@ -155,6 +215,8 @@ async function knownFiles(deps: LibrarySharingDeps, project: string): Promise<Kn
 /** The library's word on these generations, by id. */
 async function lookup(deps: LibrarySharingDeps, ids: readonly string[]): Promise<Map<string, LibraryAsset>> {
   const found = new Map<string, LibraryAsset>();
+  // With nothing to ask about no read would notice a signed-out account, which can't save either.
+  if (ids.length === 0) await deps.library().requireSignIn();
   for (let start = 0; start < ids.length; start += LIBRARY_IDS_MAX) {
     const page = await deps.library().list({ ids: ids.slice(start, start + LIBRARY_IDS_MAX) });
     for (const asset of page.assets) found.set(asset.id, asset);
@@ -184,6 +246,7 @@ async function readStates(deps: LibrarySharingDeps, project: string): Promise<Ga
 /** Save files to the library (sending those Genex did not make), or take the Saved mark off. */
 async function saveFiles(
   deps: LibrarySharingDeps,
+  turn: Turn,
   project: string,
   files: readonly string[],
   saved: boolean,
@@ -197,7 +260,7 @@ async function saveFiles(
     if (match.generationId) await deps.library().setSaved(match.generationId, saved);
     else if (saved) sent[file] = { generationId: await sendFile(deps, dir, match.asset), sent: true };
   }
-  if (Object.keys(sent).length > 0) await writeLinks(dir, sent);
+  if (Object.keys(sent).length > 0) await turn(linksTurn(dir), () => writeLinks(dir, sent));
   return readStates(deps, project);
 }
 
@@ -229,7 +292,11 @@ async function shareFiles(
 async function shareOne(deps: LibrarySharingDeps, state: AssetLibraryState, name: string): Promise<ShareAnswer> {
   if (!state.generationId || !state.shareable) return { miss: ShareMiss.NotShareable };
   if (state.shared?.live) return { shared: state.shared };
-  return deps.library().share(state.generationId, name);
+  // One share that can't reach genex.games misses alone: the ones before it are on Play already.
+  return deps
+    .library()
+    .share(state.generationId, name)
+    .catch((): ShareAnswer => ({ miss: ShareMiss.Failed }));
 }
 
 /** Take a file's shared page off Play. */
@@ -249,14 +316,19 @@ async function place(dir: string, folder: string, name: string, bytes: Uint8Arra
 }
 
 /** A library generation's file, copied into the game and linked to its generation. */
-async function addGeneration(deps: LibrarySharingDeps, project: string, generationId: string): Promise<AddOutcome> {
+async function addGeneration(
+  deps: LibrarySharingDeps,
+  turn: Turn,
+  project: string,
+  generationId: string,
+): Promise<AddOutcome> {
   const entry = (await lookup(deps, [generationId])).get(generationId);
   if (!entry) throw new NotInLibrary();
   if (!entry.fileUrl) throw new Error(MESSAGE.noFile);
   const dir = deps.gameDir(project);
   const bytes = await deps.download(entry.fileUrl, LIBRARY_FILE_MAX_BYTES);
   const file = await place(dir, AddFolder.Library, downloadName(entry.fileUrl, entry.id, entry.kind), bytes);
-  await writeLinks(dir, { [file]: { generationId, sent: false } });
+  await turn(linksTurn(dir), () => writeLinks(dir, { [file]: { generationId, sent: false } }));
   return { files: [file] };
 }
 
@@ -278,9 +350,9 @@ async function addShared(deps: LibrarySharingDeps, project: string, slug: string
 }
 
 /** Bring a library generation or a shared asset into the game. */
-function addToGame(deps: LibrarySharingDeps, project: string, source: AddSource): Promise<AddOutcome> {
+function addToGame(deps: LibrarySharingDeps, turn: Turn, project: string, source: AddSource): Promise<AddOutcome> {
   if ("generationId" in source && isGenerationId(source.generationId)) {
-    return addGeneration(deps, project, source.generationId);
+    return addGeneration(deps, turn, project, source.generationId);
   }
   if ("slug" in source && isPlaySlug(source.slug)) return addShared(deps, project, source.slug);
   return Promise.reject(new Error(MESSAGE.notFound));
@@ -288,12 +360,14 @@ function addToGame(deps: LibrarySharingDeps, project: string, source: AddSource)
 
 /** A game's library sharing over `deps`. */
 export function librarySharing(deps: LibrarySharingDeps) {
+  const turn = keyedTurns();
   return {
     states: (project: string) => readStates(deps, project),
-    save: (project: string, files: readonly string[], saved: boolean) => saveFiles(deps, project, files, saved),
+    save: (project: string, files: readonly string[], saved: boolean) =>
+      turn(saveTurn(project), () => saveFiles(deps, turn, project, files, saved)),
     share: (project: string, items: readonly ShareItem[]) => shareFiles(deps, project, items),
     unshare: (project: string, file: string) => unshareFile(deps, project, file),
-    add: (project: string, source: AddSource) => addToGame(deps, project, source),
+    add: (project: string, source: AddSource) => addToGame(deps, turn, project, source),
   };
 }
 
