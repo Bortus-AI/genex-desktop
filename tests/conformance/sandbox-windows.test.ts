@@ -277,6 +277,21 @@ describe("Windows sandbox: environment", { skip: SKIP, timeout: TEST_TIMEOUT_MS 
     assert.equal(node.stdout.trim(), "after-other-ok", node.stderr);
   });
 
+  it("opens each folder above the workspace by handle, as Node's stat does before Windows 11 24H2", async () => {
+    // Without GetFileInformationByName (Windows 10, Windows 11 before 24H2), libuv's stat opens
+    // the path with FILE_READ_ATTRIBUTES, and CreateFileW adds SYNCHRONIZE to every synchronous
+    // open: a folder that grants only read attributes refuses it, and the harness's realpath of
+    // its own entry fails with EPERM on AppData. A newer Windows asks by name and never opens it.
+    const above: string[] = [];
+    for (let dir = path.dirname(workspace); dir !== os.homedir() && dir !== path.dirname(dir); dir = path.dirname(dir))
+      above.unshift(dir);
+    const probe = await inside(powershellCommand(openFoldersScript(above)));
+    assert.equal(probe.code, 0, probe.stderr);
+    const refused = probe.stdout.split(/\r?\n/).filter((line) => line.startsWith("refused"));
+    assert.deepEqual(refused, [], probe.stdout);
+    assert.equal(probe.stdout.match(/^opened /gm)?.length, above.length, probe.stdout);
+  });
+
   it("boots an Electron-as-Node entry installed under %LOCALAPPDATA%, which spawns Git", {
     skip: existsSync(ELECTRON_DIST) ? false : "no Electron binary in node_modules",
   }, async () => {
@@ -298,6 +313,39 @@ describe("Windows sandbox: environment", { skip: SKIP, timeout: TEST_TIMEOUT_MS 
     assert.match(await readFile(out, "utf8"), /git version/);
   });
 });
+
+/** Windows PowerShell running `script`, from Git Bash inside the sandbox. */
+function powershellCommand(script: string): string {
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  return `${q("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")} -NoLogo -NoProfile -NonInteractive -EncodedCommand ${encoded} < /dev/null`;
+}
+
+/**
+ * Open each folder as libuv's stat does without GetFileInformationByName: CreateFileW for read
+ * attributes with backup semantics, synchronous. Prints `opened <dir>` or `refused <error> <dir>`.
+ */
+function openFoldersScript(dirs: readonly string[]): string {
+  const list = dirs.map((dir) => `'${dir.replaceAll("'", "''")}'`).join(", ");
+  return `
+$assembly = [AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object Reflection.AssemblyName 'GenexOpen'), [Reflection.Emit.AssemblyBuilderAccess]::Run)
+$type = $assembly.DefineDynamicModule('GenexOpen').DefineType('GenexOpen', 'Public, Class')
+$import = [Runtime.InteropServices.DllImportAttribute]
+$fields = [Reflection.FieldInfo[]]@($import.GetField('SetLastError'), $import.GetField('CharSet'))
+$values = [object[]]@($true, [Runtime.InteropServices.CharSet]::Unicode)
+foreach ($native in @(
+    @('CreateFileW', [IntPtr], [Type[]]@([string], [int], [int], [IntPtr], [int], [int], [IntPtr])),
+    @('CloseHandle', [bool], [Type[]]@([IntPtr])))) {
+  $method = $type.DefineMethod($native[0], 'Public, Static, PinvokeImpl', $native[1], $native[2])
+  $attribute = New-Object Reflection.Emit.CustomAttributeBuilder($import.GetConstructor([Type[]]@([string])), [object[]]@('kernel32.dll'), [Reflection.PropertyInfo[]]@(), [object[]]@(), $fields, $values)
+  $method.SetCustomAttribute($attribute)
+}
+$api = $type.CreateType()
+foreach ($dir in @(${list})) {
+  $handle = $api::CreateFileW($dir, 0x80, 7, [IntPtr]::Zero, 3, 0x02000000, [IntPtr]::Zero); $code = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+  if ($handle -eq [IntPtr](-1)) { "refused $code $dir" } else { [void]$api::CloseHandle($handle); "opened $dir" }
+}
+`;
+}
 
 /** A dual-stack HTTP server on the host's loopback. */
 async function hostServer(): Promise<{ port: number; close: () => Promise<void> }> {
