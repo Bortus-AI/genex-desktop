@@ -1054,8 +1054,9 @@ The confirmed `setup` step does four things, each one only if it is needed:
   project already names, on or off, stays as the user left it, and one Genex added that the user took
   out stays out. Not Epic's `AllToolsets`: on UE 5.8.3
   its `GameFeaturesToolset` makes every start log a GameFeatureData load error, and the rest serve
-  no game Genex makes. These add about 20 s to the project's first start and nothing measurable
-  after; `list_toolsets` grows, while the agent's three meta-tools stay the same;
+  no game Genex makes. On UE 5.8.3 a fresh project with these starts with no load errors and opens
+  as fast as one without them; `list_toolsets` grows from 19 toolsets to 40, while the agent's three
+  meta-tools stay the same;
 - gives the project its own port and starts the MCP server on it, by writing `bAutoStartServer`
   and `ServerPortNumber` into `Saved/Config/<Mac|Windows>Editor/EditorPerProjectUserSettings.ini`.
   The port is always in Genex's block, 18000–18999: it starts from a hash of the real `.uproject`
