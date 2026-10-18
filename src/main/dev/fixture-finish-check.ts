@@ -1,8 +1,10 @@
 /**
  * The `finish-check` fixture: the fixture game's chat holds four Loops whose finish checks stand at
  * each of the owner's four looks, in the records the seed's finish check writes: one the reviewer
- * said yes to (Done), one stopped by three no's in a row (Stopped), one sent back once with two
- * reasons (Not yet) and, newest, one the reviewer is checking now (Checking), so Builds opens on it.
+ * said yes to (Done); a timed one whose no's it went on past while it had time left, stopped by the
+ * next near its end, each no naming what it found apart from what isn't done (Stopped); one sent back
+ * once with two reasons, as an older record names them (Not yet); and, newest, one the reviewer is
+ * checking now (Checking), so Builds opens on it.
  * The other three are in the Builds history.
  *
  * It is written once the app has started: the start closes every run an earlier app left open, so
@@ -28,6 +30,7 @@ const CLAIM = "A full lap runs from the start to the finish line, and the lap ti
 const NO_FINISH_LINE = "The track has no finish line, so a lap never ends.";
 const NO_TIMER = "The lap timer isn't on screen in any shot.";
 const TIMER_RESETS = "The finish line triggers, but the lap timer still resets when the car respawns.";
+const STILL_MET = "The car holds the road and the track reads fast, as before.";
 const WHY_YES =
   "A full lap runs from start to the finish line, the timer counts on screen, and the car holds the road.";
 
@@ -66,12 +69,19 @@ function round(run: Scoped, n: number, answer: { [key: string]: unknown } | null
   return answer ? [checking, run(CustomEvent.FinishCheck, { round: n, ...answer })] : [checking];
 }
 
-/** A no with its reasons, counted in the row. */
-const no = (reasons: string[], rejections: number) => ({
+/** A no with its reasons (and what it found not done, when named), counted in the row; one with time left never stops. */
+const no = (
+  reasons: string[],
+  rejections: number,
+  more: { notDone?: string[]; done?: string[]; timeLeft?: boolean } = {},
+) => ({
   step: FinishCheckStep.Rejected,
   reasons,
+  ...(more.notDone ? { notDone: more.notDone } : {}),
+  ...(more.done ? { done: more.done } : {}),
   rejections,
-  ...(rejections >= MAX_FINISH_REJECTIONS ? { stopped: true } : {}),
+  ...(more.timeLeft ? { timeLeft: true } : {}),
+  ...(!more.timeLeft && rejections >= MAX_FINISH_REJECTIONS ? { stopped: true } : {}),
 });
 
 /** The Loop the reviewer said yes to, closed with its goal reached. */
@@ -90,14 +100,17 @@ function doneLoop(project: string): EventData[] {
   ];
 }
 
-/** The Loop three no's in a row stopped, closed with what isn't done. */
+/** The timed Loop that went on past three no's with time left, stopped by the next near its end. */
 function stoppedLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: STOPPED_RUN, project });
+  const met = [STILL_MET];
+  const done = ["The car is ported", "The track is built", "A full lap runs"];
   return [
     ...loopStart(run),
-    ...round(run, 1, no([NO_FINISH_LINE, NO_TIMER], 1)),
-    ...round(run, 2, no([NO_TIMER], 2)),
-    ...round(run, 3, no([TIMER_RESETS], 3)),
+    ...round(run, 1, no(met, 1, { notDone: [NO_FINISH_LINE, NO_TIMER], timeLeft: true })),
+    ...round(run, 2, no(met, 2, { notDone: [NO_TIMER], timeLeft: true })),
+    ...round(run, 3, no(met, MAX_FINISH_REJECTIONS, { notDone: [TIMER_RESETS], done, timeLeft: true })),
+    ...round(run, 4, no(met, MAX_FINISH_REJECTIONS + 1, { notDone: [TIMER_RESETS], done })),
     run(CustomEvent.RunFinished, {
       victory: false,
       landed: false,

@@ -60,11 +60,15 @@ export interface CapturedImage extends CapturedFile {
 export type FinishCheckStep = 'checking' | 'accepted' | 'rejected' | 'unanswered';
 // ↑ src/shared/finish-check.ts
 
-/** A finish check's round as the host answers it: the reviewer's yes or no with reasons, or no answer and why. */
+/** A finish check's round as the host answers it: the reviewer's yes or no with reasons and what isn't done, or no answer and why. */
 export interface FinishRoundAnswer {
   round: number;
   step: FinishCheckStep;
   reasons?: string[];
+  /** What the reviewer found not done, when it named any. */
+  notDone?: string[];
+  /** What the reviewer found done, in a few words each, when it named any. */
+  done?: string[];
   why?: string;
 }
 // ↑ src/shared/harness-api.ts
@@ -2246,10 +2250,12 @@ export interface HarnessHostApi {
    * End the held round of a run: the host records its outcome and counts the no's in a row from its
    * own records (`stopped` once they reach the cap). `unanswered` turns the held answer into no
    * answer, with why (a yes that lapsed, a turn that ended); nothing turns a no or no answer into a yes.
+   * `timeLeftMs`, a timed Loop's working time left: with more than `FINISH_TIME_LEFT_MS` no row of
+   * no's stops it (`timeLeft`); an ∞ Loop names none.
    */
   "finish.settle": {
-    params: { project: string; runId: string; round: number; unanswered?: string | null };
-    result: FinishRoundAnswer & { rejections: number; stopped: boolean };
+    params: { project: string; runId: string; round: number; unanswered?: string | null; timeLeftMs?: number | null };
+    result: FinishRoundAnswer & { rejections: number; stopped: boolean; timeLeft?: boolean };
   };
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that

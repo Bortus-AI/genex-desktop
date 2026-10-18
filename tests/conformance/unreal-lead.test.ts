@@ -50,6 +50,11 @@ function run(host: LeadHost, extra: { resume?: boolean; run?: Record<string, unk
 
 /** A run of `minutes` working minutes. */
 const shortRun = (minutes: number) => ({ ...RUN, budgets: { ...RUN.budgets, wallClockMs: minutes * MINUTE } });
+/** A run that lasts until the reviewer's yes, `minutes` at most: its no's stop it at the cap whatever time is left. */
+const goalRun = (minutes: number) => ({
+  ...RUN,
+  budgets: { ...RUN.budgets, wallClockMs: minutes * MINUTE, completionPolicy: "goal" },
+});
 /** The lead's turns, as they were delegated. */
 const leadTurns = (host: LeadHost) => host.rec.paramsOf("engine.delegate");
 /** The run's journal as it was saved last. */
@@ -1296,11 +1301,11 @@ describe("the Unreal lead's finish", () => {
     assert.equal(journalOf(host).finishTally?.rejections, 0);
   });
 
-  it("three no's from the reviewer stop the Unreal Loop with what isn't done", async () => {
+  it("three no's from the reviewer stop an Unreal Loop that runs until it's done, with what isn't done", async () => {
     const answers: string[] = [];
     const host = leadHost({ turns: [claims(answers), claims(answers), claims(answers)] });
     for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", NOT_DONE));
-    const report = await run(host, { run: shortRun(180) });
+    const report = await run(host, { run: goalRun(180) });
     assert.equal(host.reviewed().length, 3);
     assert.match(answers[0] ?? "", /1 of 3 in a row/);
     assert.match(answers[1] ?? "", /2 of 3 in a row/);
@@ -1313,6 +1318,26 @@ describe("the Unreal lead's finish", () => {
       assert.ok(String(report.summary).includes(reason), `the card's summary names it: ${report.summary}`);
     assert.deepEqual(checkSteps(host), ["checking", "rejected", "checking", "rejected", "checking", "rejected"]);
     assert.equal(host.appended("finish_check").at(-1)?.stopped, true);
+  });
+
+  it("a timed Unreal Loop with time left goes on past the reviewer's third no, and a claim with nothing new asks no reviewer", async () => {
+    const answers: string[] = [];
+    const host = leadHost({ turns: [claims(answers), claims(answers), claims(answers), claims(answers)] });
+    for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", [], "claude-code", NOT_DONE));
+    const report = await run(host, { run: shortRun(180) });
+    assert.match(answers[2] ?? "", /time left, so it goes on/, "the third no keeps it going");
+    assert.match(answers[3] ?? "", /new work since the last no/, "no proof made since: turned back");
+    assert.equal(host.reviewed().length, 3, "the stale claim asked no reviewer");
+    assert.notEqual(report.endReason, "not-done", "the no's never stopped it");
+    const nos = host.appended("finish_check").filter((record) => record.step === "rejected");
+    assert.deepEqual(
+      nos.map((record) => [record.stopped === true, record.timeLeft === true]),
+      [
+        [false, true],
+        [false, true],
+        [false, true],
+      ],
+    );
   });
 
   it("a claim no engine here can hold a reviewer for ends the Unreal run without a yes, never asking again", async () => {
@@ -1438,11 +1463,11 @@ describe("the Unreal lead's finish", () => {
     const answers: string[] = [];
     const host = leadHost({ turns: [claims(answers), claims(answers), capped, claims(answers)] });
     for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", NOT_DONE));
-    const paused = await run(host);
+    const paused = await run(host, { run: goalRun(180) });
     assert.equal(paused.executionStatus, "paused");
     assert.equal(journalOf(host).finishTally?.rejections, 2);
     host.clock.now += 5 * MINUTE;
-    const report = await run(host, { resume: true });
+    const report = await run(host, { resume: true, run: goalRun(180) });
     assert.deepEqual([report.executionStatus, report.endReason], ["completed", "not-done"]);
     assert.deepEqual(report.notDone, NOT_DONE);
     const last = host.appended("finish_check").at(-1);

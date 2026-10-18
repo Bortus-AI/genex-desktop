@@ -8,7 +8,9 @@ import { it } from "node:test";
 import { seedFinishCheck } from "../../src/main/dev/fixture-finish-check.ts";
 import { FixtureName, isFixtureName } from "../../src/main/dev/fixture-kit.ts";
 import { projectBuildGraph } from "../../src/renderer/build-progress.ts";
-import { EntryKind, SystemTag, toEntries } from "../../src/renderer/chat-entries.ts";
+import { EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
+import { finishCheckFace } from "../../src/renderer/run-tree.ts";
+import { FINISH_CHECK_WORDS } from "../../src/renderer/words.ts";
 import { type FinishCheckNode, FinishCheckState, GraphNodeKind } from "../../src/renderer/run-graph.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
@@ -67,11 +69,29 @@ it("seeds four Loops whose finish checks stand at each of the four looks", async
   );
   const notYet = states.find((node) => node.state === FinishCheckState.NotYet);
   assert.deepEqual([notYet?.round, notYet?.reasons.length], [1, 2], "Not yet after its first no, with two reasons");
+  const stopped = states.find((node) => node.state === FinishCheckState.Stopped);
+  assert.deepEqual(
+    stopped?.rounds.map((round) => [round.timeLeft, round.stopped, round.notDone.length > 0]),
+    [
+      [true, false, true],
+      [true, false, true],
+      [true, false, true],
+      [false, true, true],
+    ],
+    "the timed Loop went on past its no's with time left, and the next stopped it",
+  );
+  assert.equal(
+    finishCheckFace(stopped as FinishCheckNode).word,
+    FINISH_CHECK_WORDS.leftWord(1),
+    "its node says what is left",
+  );
   const newest = projectBuildGraph(log, THREAD, [], core.layout.runs);
   const shown = newest?.nodes.find((n): n is FinishCheckNode => n.kind === GraphNodeKind.FinishCheck);
   assert.equal(shown?.state, FinishCheckState.Checking, "Builds opens on the Loop being checked");
-  const lines = toEntries(log).filter((e) => e.kind === EntryKind.System && e.tag === SystemTag.FinishCheck);
-  assert.ok(lines.length >= 4, "each round has its chat line");
+  const entries = toEntries(log);
+  assert.ok(!JSON.stringify(entries).includes("Finish check"), "no finish check line in the chat");
+  const cards = entries.flatMap((e) => (e.kind === EntryKind.Morning && e.stillToFix ? [e.stillToFix] : []));
+  assert.deepEqual(cards.length, 1, "the stopped Loop's card lists what is done and still to fix");
 
   const before = log.length;
   await seedFinishCheck(core as never, GAME, THREAD);
