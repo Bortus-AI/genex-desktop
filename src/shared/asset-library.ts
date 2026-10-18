@@ -95,9 +95,9 @@ export function libraryFileUrl(value: unknown): string | null {
 export const LibraryFileMiss = {
   /** Over the picture's cap: the same file is refused again. */
   TooLarge: "too-large",
-  /** Not on genex.games' asset hosts, or genex.games refused it (a 4xx): asked again, refused again. */
+  /** Not on genex.games' asset hosts, a redirect, or a 4xx other than 408/429: asked again, refused again. */
   Refused: "refused",
-  /** Anything that may pass: a 5xx, a timeout, the network. */
+  /** Anything that may pass: a 5xx, a 408 or 429, a timeout, the network. */
   Unavailable: "unavailable",
 } as const;
 export type LibraryFileMiss = (typeof LibraryFileMiss)[keyof typeof LibraryFileMiss];
