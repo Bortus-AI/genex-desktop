@@ -1380,6 +1380,56 @@ test("the helper's build and play toolsets, and Genex's own queue calls to the L
   assert.deepEqual(await callProjectTool(DRIFT, call, queue.fetchImpl), { saved: true, dirty: [], ms: 9 });
 });
 
+test("a helper tool that answers {error} reaches the agent as a failed call; any other answer stays as Epic sent it", async () => {
+  // Epic answers the helper's str tools as their returnValue: the helper's own JSON as text.
+  const refused = { returnValue: JSON.stringify({ error: "Stop play first.", where: "build/hall.py:3" }) };
+  const rows: Array<[string, Record<string, unknown>, unknown, boolean]> = [
+    [
+      "a build tool's refusal",
+      { toolset_name: "genex_build.tools.GenexBuildTools", tool_name: "run_script" },
+      refused,
+      true,
+    ],
+    ["a play tool's failure", { toolset_name: "genex_play.tools.GenexPlayTools", tool_name: "hold" }, refused, true],
+    ["a qualified name in capitals", { tool_name: "GENEX_BUILD.tools.GenexBuildTools.set_route" }, refused, true],
+    [
+      "a helper answer with no error",
+      { toolset_name: "genex_play.tools.GenexPlayTools", tool_name: "hold" },
+      { returnValue: JSON.stringify({ held: "W", seconds: 2 }) },
+      false,
+    ],
+    [
+      "an error that is not text",
+      { toolset_name: "genex_build.tools.GenexBuildTools", tool_name: "audit" },
+      { returnValue: JSON.stringify({ error: null, actors: 3 }) },
+      false,
+    ],
+    [
+      "Epic's own tool answering an error field",
+      { ...SET_LABEL.arguments },
+      { returnValue: { error: "a log line" } },
+      false,
+    ],
+  ];
+  for (const [label, args, answer, failed] of rows) {
+    const unreal = editor(() => answer);
+    const { client, close } = await connected(unreal.fetchImpl);
+    try {
+      const result = await client.callTool({ name: EditorTool.CallTool, arguments: { arguments: {}, ...args } });
+      assert.equal(result.isError, failed ? true : undefined, label);
+      assert.equal(toolCalls(unreal).length, 1, `${label}: sent once`);
+      if (failed) assert.match(textOf(result), /Stop play first\./, `${label}: the helper's own words reach the agent`);
+      assert.match(
+        JSON.stringify(result.content),
+        /\[Unreal project: Drift\]/,
+        `${label}: the answer names the project`,
+      );
+    } finally {
+      await close();
+    }
+  }
+});
+
 /* ---- Captures: the build tools' frames reach the agent as images with their tone numbers ---- */
 
 const BUILD_TOOLSET = "genex_build.tools.GenexBuildTools";

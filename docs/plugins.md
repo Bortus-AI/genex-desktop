@@ -466,6 +466,10 @@ spelled: any case, whitespace or zero-width characters, the module or class alon
 or qualified in `tool_name` with no toolset. Only Genex's own queue calls it. Epic answers pictures
 (`CaptureEditorImage`, `CaptureViewport`, `CaptureAssetImage`) as base64 inside the JSON text,
 which Studio would truncate, so the bridge hands up to four per answer to the agent as MCP images.
+The Genex editor helper's build and play tools (below) answer a refusal or a failure as `{error}`
+inside a call Epic counts as done, so the bridge marks such an answer `isError` (the toolset named
+short or qualified, in any case): the agent and the chat read it as a failed call, in the helper's
+own words. An `error` field in any other toolset's answer stays as Epic sent it.
 An editor behind Genex runs at 3 frames per second while Unreal's "Use Less CPU when in
 Background" (`bThrottleCPUWhenNotForeground`) is on. To avoid that, a `StartPIE` call first turns
 the setting off through Epic's `ObjectTools.set_properties`. This changes only the running editor
@@ -2305,6 +2309,9 @@ nothing. A build of the host lets UnrealBuildTool's sandbox write each project p
 `Intermediate` and `Binaries`, nothing else of it (`ubt.ts` `projectPluginDirs`, `ubt-sandbox.ts`
 `pluginDirs`). A game with an `unreal-plugin` fact gets four more tools and the `unreal-plugin` skill
 that orders them (`plugin-ship.ts`; `plugin` names the folder under `Plugins/` when there are several).
+The skill also gives Epic's toolset conventions for a plugin whose tools agents call through
+Unreal's MCP (a registered `UToolsetDefinition`, static `AICallable` tools with real types, errors
+raised, not returned).
 `unreal__plugin-build` needs the editor lock and asks first: the call saves the person's work through
 the Genex editor helper, quits Unreal and waits, then the host's editor target is built as the
 plugin's background job, which opens Unreal again after a good build and leaves it closed after a

@@ -12,6 +12,8 @@
  * local endpoints, in a session of its own, so an editor restarted between calls just answers the
  * next one and no call is ever sent twice. Epic's toolsets return pictures as base64 inside their
  * JSON text, which Studio would truncate as text; the bridge hands them to the agent as images.
+ * The Genex editor helper's build and play tools answer a refusal or a failure as `{error}` inside
+ * a call Epic counts as done; the bridge hands such an answer to the agent as a failed call.
  * An editor behind Genex plays at 3 frames per second while Unreal's "Use Less CPU when in
  * Background" is on, so the bridge turns it off for the editor's current run while a play test
  * runs and gives it back afterwards; Unreal saves nothing, so the user's preference survives.
@@ -51,7 +53,7 @@ import {
   PROJECT_FILE_TOOL,
   sameProject,
 } from "./editor-port.ts";
-import { type CaptureClock, captureTool, helperAnswer, liftCapture } from "./editor-captures.ts";
+import { BUILD_TOOLSET, type CaptureClock, captureTool, helperAnswer, liftCapture } from "./editor-captures.ts";
 import { LOOP_TOOLSET } from "./editor-queue.ts";
 import {
   OBJECT_TOOLSET,
@@ -595,6 +597,25 @@ function playStep(params: CallParams): PlayStep | undefined {
   return Object.values(PlayStep).find((step) => namesStep(tool, toolset, step));
 }
 
+/** The Genex editor helper's toolsets an agent calls: each answers its refusals and failures as `{error}`. */
+const HELPER_AGENT_TOOLSETS = [BUILD_TOOLSET, HELPER_TOOLSET].map((name) => name.toLowerCase());
+
+/** Whether a forwarded call reaches one of the helper's agent toolsets, named short or qualified. */
+function callsHelper(params: CallParams): boolean {
+  if (params.name !== EditorTool.CallTool) return false;
+  const tool = String(params.arguments?.tool_name ?? "").toLowerCase();
+  const toolset = String(params.arguments?.toolset_name ?? "").toLowerCase();
+  return HELPER_AGENT_TOOLSETS.some((name) => toolset === name || tool.startsWith(`${name}.`));
+}
+
+/**
+ * Whether the editor's answer is the helper saying its tool failed: Epic delivers the helper's
+ * `{error}` as a call that succeeded, so the agent and the chat would read a refusal as done.
+ */
+function helperFailed(params: CallParams, content: Part[]): boolean {
+  return callsHelper(params) && typeof helperAnswer(content)?.error === "string";
+}
+
 /**
  * Keeps a play test at full speed while the editor is behind Genex: a play start turns the user's
  * background throttling off, and stopping play, a refused start or the bridge closing gives it back.
@@ -719,7 +740,8 @@ async function forward(session: EditorSession, params: CallParams, how: Forwardi
     const content = Array.isArray(result.content) ? (result.content as Part[]) : [];
     const captured = result.isError ? [] : await capturedParts(params, content, how.project, how.clock, signal);
     const named = [...liftImages(content), ...captured, { type: "text", text: MESSAGE.Answered(how.project.name) }];
-    return { content: named, ...(result.isError ? { isError: true } : {}) };
+    const failed = Boolean(result.isError) || helperFailed(params, content);
+    return { content: named, ...(failed ? { isError: true } : {}) };
   } catch (error) {
     // The editor answered: what failed after is Genex's own, and the editor is still there.
     return errorResult(MESSAGE.NotCompleted(errorMessage(error)));
