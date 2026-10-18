@@ -340,8 +340,8 @@ describe("the finish check on the Builds graph", () => {
     const round = node.rounds[0] as FinishRound;
     assert.deepEqual([round.reasons, round.notDone, round.timeLeft], [[met], [NO_TIMER], true]);
     assert.deepEqual(finishRoundLists(round), [
-      { heading: FINISH_CHECK_WORDS.heading.whyNotYet, items: [met], tone: Tone.Orange },
-      { heading: FINISH_CHECK_WORDS.heading.notDone, items: [NO_TIMER], tone: Tone.Orange },
+      { heading: FINISH_CHECK_WORDS.heading.whyNotYet, items: [NO_TIMER], tone: Tone.Orange },
+      { heading: FINISH_CHECK_WORDS.heading.checked, items: [met], tone: Tone.Muted },
     ]);
     assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.timeLeftNote, quiet: true });
     assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.inARowWord(1, 1), "the graph counts its own no's");

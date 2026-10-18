@@ -1941,6 +1941,8 @@ export const FINISH_CHECK_WORDS = {
     whyNotYet: "Why not yet",
     whyYes: "Why yes",
     notDone: "What isn't done",
+    /** After a no, what the reviewer looked at and found, met or not. */
+    checked: "What the reviewer checked",
   },
   /** A heading with the lead's claim it answers, when the card lists more than one (the node's "round" counts no's in a row). */
   roundHeading: (heading: string, claim: number) => `${heading} · claim ${claim}`,

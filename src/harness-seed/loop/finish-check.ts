@@ -638,7 +638,7 @@ async function settleRound(scope: FinishScope, held: HostAnswer): Promise<Accept
   }));
   // A run that ended under the check is closed: Genex dropped its round, and nothing more is recorded.
   if (scope.ended?.()) return unanswered(MESSAGE.ended);
-  const left = timeLeftOf(scope);
+  const left = timeLeftMsOf(scope);
   const settled = await ctx
     .call(HostMethod.FinishSettle, {
       project: run.project,
@@ -653,7 +653,7 @@ async function settleRound(scope: FinishScope, held: HostAnswer): Promise<Accept
 }
 
 /** A timed Loop's working time left, in whole milliseconds for the host; null for an ∞ Loop or one that names none. */
-function timeLeftOf(scope: FinishScope): number | null {
+function timeLeftMsOf(scope: FinishScope): number | null {
   const left = scope.timeLeft?.();
   return typeof left === "number" && Number.isFinite(left) ? Math.max(0, Math.floor(left)) : null;
 }
@@ -663,7 +663,7 @@ function timeLeftOf(scope: FinishScope): number | null {
  * the cap and the Loop went on (it had time left), so a claim on the same proof would only be turned
  * down again.
  */
-async function staleProof(scope: FinishScope, claim: FinishClaim): Promise<boolean> {
+async function needsFreshProof(scope: FinishScope, claim: FinishClaim): Promise<boolean> {
   const { tally } = scope;
   if (tally.rejections < MAX_FINISH_REJECTIONS || tally.noAt === undefined) return false;
   return !(await freshProofIn(scope.leadFolder, claim.proof, tally.noAt));
@@ -682,7 +682,7 @@ export async function checkFinish(scope: FinishScope, claim: FinishClaim): Promi
   if (scope.abandoned?.()) return unanswered(MESSAGE.turnEnded);
   const noTime = noTimeFor(scope);
   if (noTime) return noTime;
-  if (await staleProof(scope, claim)) return { ...unanswered(MESSAGE.staleProof), staleProof: true };
+  if (await needsFreshProof(scope, claim)) return { ...unanswered(MESSAGE.staleProof), staleProof: true };
   tally.round += 1;
   tally.checking = true;
   try {

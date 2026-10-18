@@ -6,9 +6,10 @@
  * no answer (a yes that lapsed, a turn that ended), never into a yes. The host counts the no's in a
  * row from its own records (a finished run reopened for a new ask starts them over; a resumed one goes
  * on) and writes the outcome: `MAX_FINISH_REJECTIONS` no's in a row stop the Loop, unless the settle
- * names more than `FINISH_TIME_LEFT_MS` of a timed Loop's working time left (then it goes on). A run's start, pause or close drops its held round: nothing more is
- * recorded for it, and the graph reads the round as one the Loop ended before. A round answered and
- * never settled gives way to the run's next claim, recorded as no answer.
+ * names more than `FINISH_TIME_LEFT_MS` of a timed Loop's working time left (then it goes on). A
+ * run's start, pause or close drops its held round: nothing more is recorded for it, and the graph
+ * reads the round as one the Loop ended before. A round answered and never settled gives way to the
+ * run's next claim, recorded as no answer.
  *
  * Its ports keep it free of the core, so the seed's tests drive the same rules over their fake host.
  */

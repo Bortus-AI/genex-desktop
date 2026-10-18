@@ -44,8 +44,8 @@ function RoundNote({ round, node }: { round: FinishRound; node: FinishCheckNode 
 }
 
 /**
- * One round of the check: a section for each of its lists (why not yet, then what isn't done), the
- * lead's claim while the reviewer looks, and what follows under the last.
+ * One round of the check: a section for each of its lists (what isn't done, then what the reviewer
+ * checked), the lead's claim while the reviewer looks, and what follows under the first.
  */
 function RoundSection({ round, node, goal }: { round: FinishRound; node: FinishCheckNode; goal: string }): JSX.Element {
   const lists = finishRoundLists(round);
@@ -60,7 +60,7 @@ function RoundSection({ round, node, goal }: { round: FinishRound; node: FinishC
           {checking && round.claim ? <Quote label={FINISH_CHECK_WORDS.claimLabel}>{round.claim}</Quote> : null}
           {checking && goal ? <Quote label={FINISH_CHECK_WORDS.yourRequest}>{goal}</Quote> : null}
           <Reasons reasons={list.items} tone={list.tone} />
-          {index === lists.length - 1 ? <RoundNote round={round} node={node} /> : null}
+          {index === 0 ? <RoundNote round={round} node={node} /> : null}
         </Section>
       ))}
     </>

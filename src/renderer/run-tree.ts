@@ -298,9 +298,9 @@ export interface FinishRoundList {
 
 /**
  * A round's lists on the card, under the design's headings: the reviewer at work, no answer, why
- * yes; after a no, why not yet (its reasons) and what isn't done (what it named not done, red once
- * the no's stopped the Loop). A no whose record names nothing not done lists its reasons alone, as
- * what isn't done once it stopped.
+ * yes; after a no, what it named not done (why not yet, or what isn't done once the no's stopped the
+ * Loop), then, quieter, what the reviewer checked. A no whose record names nothing not done lists its
+ * reasons there instead, as older records name them.
  */
 export function finishRoundLists(round: FinishRound): FinishRoundList[] {
   const { heading } = FINISH_CHECK_WORDS;
@@ -309,11 +309,11 @@ export function finishRoundLists(round: FinishRound): FinishRoundList[] {
     return [{ heading: heading.whyYes, items: round.reasons, tone: Tone.Green }];
   if (round.step === FinishCheckStep.Unanswered)
     return [{ heading: FINISH_CHECK_WORDS.unanswered, items: [], tone: Tone.Muted }];
-  const ink = reasonTone(round);
-  if (!round.notDone.length)
-    return [{ heading: round.stopped ? heading.notDone : heading.whyNotYet, items: round.reasons, tone: ink }];
-  const why = round.reasons.length ? [{ heading: heading.whyNotYet, items: round.reasons, tone: Tone.Orange }] : [];
-  return [...why, { heading: heading.notDone, items: round.notDone, tone: ink }];
+  const named = round.notDone.length > 0;
+  const gaps = { heading: round.stopped ? heading.notDone : heading.whyNotYet, tone: reasonTone(round) };
+  if (!named) return [{ ...gaps, items: round.reasons }];
+  const checked = round.reasons.length ? [{ heading: heading.checked, items: round.reasons, tone: Tone.Muted }] : [];
+  return [{ ...gaps, items: round.notDone }, ...checked];
 }
 
 /** The line under one round on the finish check's card, and whether it reads quietly. */
