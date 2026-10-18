@@ -3879,10 +3879,11 @@ describe("a director's run through the real core and harness", () => {
     assert.equal(reviewers.length, 1, "the run's own close asks no reviewer");
     assert.equal(finished.victory, false);
     assert.deepEqual(finished.notDone, NOT_DONE, "the report names what the reviewer found not done");
-    assert.equal(
-      (finished.stillToFix as { why?: string } | undefined)?.why,
-      StopWhy.Time,
-      "its card says its time ran out",
+    // The lead's session ended within seconds of a quarter hour: its card says it stopped, not that its time ran out.
+    assert.deepEqual(
+      finished.stillToFix,
+      { done: [], notDone: NOT_DONE, why: StopWhy.Ended, hours: null },
+      "its card lists what the no found not done",
     );
     for (const reason of NOT_DONE)
       assert.ok(String(finished.summary).includes(reason), `the card's summary names it: ${finished.summary}`);
