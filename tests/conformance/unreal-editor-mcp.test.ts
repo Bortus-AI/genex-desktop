@@ -24,6 +24,7 @@ import {
   logCrashWatcher,
   type StartWait,
 } from "../../src/plugins/unreal/editor-mcp.ts";
+import { fitDescription } from "../../src/plugins/unreal/editor-describe.ts";
 import { editorEndpoint } from "../../src/plugins/unreal/editor-port.ts";
 import { EditorStart, editorStart } from "../../src/plugins/unreal/editor-status.ts";
 import { decodePng, encodePng } from "../../src/plugins/unreal/tone.ts";
@@ -1502,13 +1503,64 @@ test("a short description, an error and other tools' answers reach the agent as 
   const unreal = editor(() => prose);
   const { client, close } = await connected(unreal.fetchImpl);
   try {
-    const text = textOf(await client.callTool(describe({ toolset_name: NIAGARA })));
+    const result = await client.callTool(describe({ toolset_name: NIAGARA }));
+    const text = textOf(result);
     assert.ok(text.startsWith(JSON.stringify(prose).slice(0, 1000)), "the start as Epic sent it");
-    assert.match(text, /too long for one answer: it was cut after its first 60 KB/);
-    assert.ok(text.length < DESCRIPTION_LIMIT + 200, String(text.length));
+    assert.equal(text.length, DESCRIPTION_LIMIT);
+    assert.match(JSON.stringify(result.content), /Cut after the first 60 KB of 103 KB: too long for one tool answer/);
   } finally {
     await close();
   }
+});
+
+/** A description's text parts as the fitter gives them back: the first, and every one joined. */
+function fitted(text: string, tool?: string) {
+  const fit = fitDescription([{ type: "text", text }], tool);
+  const texts = fit.parts.map((part) => String(part.text));
+  return { first: texts[0] ?? "", all: texts.join("\n"), failed: fit.failed, count: texts.length };
+}
+const toolsOf = (count: number, description: string) =>
+  Array.from({ length: count }, (_, i) => ({ name: `${NIAGARA}.tool_${i}`, description }));
+
+test("a description still too long once shortened is listed by name alone, and cut only when even that is too long", () => {
+  const manyLines = fitted(JSON.stringify({ name: NIAGARA, tools: toolsOf(600, "w".repeat(300)) }));
+  assert.deepEqual(JSON.parse(manyLines.first).tools[5], { name: `${NIAGARA}.tool_5` }, "names alone");
+  assert.match(manyLines.all, /each tool is listed by name\. Call describe_toolset/);
+  for (const [label, description] of [
+    ["4,000 tools", JSON.stringify({ name: NIAGARA, tools: toolsOf(4000, "Does it.") })],
+    [
+      "a huge field beside the tools",
+      JSON.stringify({ name: NIAGARA, notes: "n".repeat(70_000), tools: toolsOf(3, "x") }),
+    ],
+    ["a nested shape", JSON.stringify({ toolset: { name: NIAGARA, tools: toolsOf(40, "z".repeat(2000)) } })],
+  ]) {
+    const fit = fitted(description);
+    assert.equal(fit.first.length, DESCRIPTION_LIMIT, label);
+    assert.match(fit.all, /Cut after the first 60 KB of \d+ KB/, label);
+  }
+  const huge = { name: NIAGARA, tools: [{ name: `${NIAGARA}.Big`, inputSchema: { doc: "s".repeat(90_000) } }] };
+  const one = fitted(JSON.stringify(huge), "Big");
+  assert.deepEqual([one.first.length, one.failed], [DESCRIPTION_LIMIT, false], "one tool too long for an answer");
+  assert.match(one.all, /Cut after the first 60 KB of 91 KB/);
+});
+
+test("a short, empty or toolless description comes back whole; tool_name only applies to a list of tools", () => {
+  const short = JSON.stringify({ name: "ActorTools", tools: toolsOf(3, "Label an actor.") });
+  assert.deepEqual(fitted(short), { first: short, all: short, failed: false, count: 1 });
+  assert.deepEqual(fitted(short, "   "), { first: short, all: short, failed: false, count: 1 }, "a blank tool_name");
+  assert.deepEqual(JSON.parse(fitted(short, "tool_1").first).tools, [toolsOf(3, "Label an actor.")[1]]);
+  const prose = fitted("Tools: set_label, get_label.", "set_label");
+  assert.deepEqual([prose.first, prose.failed, prose.count], ["Tools: set_label, get_label.", false, 2]);
+  assert.match(prose.all, /tool_name "set_label" didn't apply/);
+  assert.deepEqual(fitDescription([], "x"), { parts: [], failed: false });
+  assert.deepEqual(fitted(""), { first: "", all: "", failed: false, count: 1 });
+  assert.deepEqual(fitted(JSON.stringify({ name: "Empty", tools: [] })).count, 1, "no tools to list");
+});
+
+test("a cut never splits a character in two", () => {
+  const fit = fitted(`a${"😀".repeat(40_000)}`);
+  assert.equal(fit.first.length, DESCRIPTION_LIMIT - 1);
+  assert.ok(fit.first.endsWith("😀"), "the last emoji is whole");
 });
 
 /* ---- Captures: the build tools' frames reach the agent as images with their tone numbers ---- */

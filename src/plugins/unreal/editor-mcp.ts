@@ -716,8 +716,7 @@ function editorParams(params: CallParams): CallParams {
 function fitAnswer(params: CallParams, content: Part[], isError: boolean): { parts: Part[]; failed: boolean } {
   if (params.name !== EditorTool.DescribeToolset || isError) return { parts: content, failed: false };
   const tool = params.arguments?.[ToolsetGatewayArg.Tool];
-  const named = typeof tool === "string" && tool.trim() !== "" ? tool.trim() : undefined;
-  return fitDescription(content, named);
+  return fitDescription(content, typeof tool === "string" ? tool : undefined);
 }
 
 /** The pictures a capture tool's answer promised (see editor-captures.ts); nothing for any other call. */

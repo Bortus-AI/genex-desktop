@@ -256,10 +256,14 @@ const MESSAGE = {
   XcodeMacOnly: "Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio.",
   [SetupStep.Engine]: (file: string, from: string, to: string) =>
     `${file}: switch from Unreal ${from} to ${to}. Content you save in ${to} won't open in ${from}. To keep a ${from} version, duplicate the project folder first.`,
-  [SetupStep.Plugins]: (file: string, pluginsOn: boolean) =>
-    pluginsOn
-      ? `${file}: add Epic's toolsets for UI, effects, AI, animation, procedural content and physics.`
-      : `${file}: turn on Epic's ModelContextProtocol and EditorToolset plugins, and add Epic's toolsets for UI, effects, AI, animation, procedural content and physics.`,
+  /** The plugin step names only what it still changes: Epic's MCP plugins, its toolsets, or both. */
+  [SetupStep.Plugins]: (file: string, pluginsOn: boolean, toolsetsIn: boolean) => {
+    const changes = [
+      pluginsOn ? "" : "turn on Epic's ModelContextProtocol and EditorToolset plugins",
+      toolsetsIn ? "" : "add Epic's toolsets for UI, effects, AI, animation, procedural content and physics",
+    ];
+    return `${file}: ${changes.filter(Boolean).join(", and ")}.`;
+  },
   [SetupStep.AutoStart]: (file: string, port: number) =>
     `${file}: start Unreal's MCP server on port ${port} whenever the project opens.`,
   [SetupStep.Helper]: (folder: string) => `${folder}: add the Genex editor helper, a few Python files.`,
@@ -794,7 +798,7 @@ async function describeSetup(file: string, options: SetupOptions): Promise<Plugi
   const lines = steps.map((step) => {
     if (step === SetupStep.Engine)
       return MESSAGE[step](path.basename(state.file), engine?.from ?? state.engine, engine?.to ?? "");
-    if (step === SetupStep.Plugins) return MESSAGE[step](path.basename(state.file), state.plugins);
+    if (step === SetupStep.Plugins) return MESSAGE[step](path.basename(state.file), state.plugins, state.toolsets);
     if (step === SetupStep.AutoStart) return MESSAGE[step](settingsIniPath(options.env), port);
     return helperLine;
   });

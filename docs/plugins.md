@@ -473,9 +473,11 @@ own words. An `error` field in any other toolset's answer stays as Epic sent it.
 Some of Epic's toolsets describe themselves in more than an engine takes from one tool answer
 (Niagara's system toolset in about 278 KB, past Claude Code's 25,000 tokens), so a
 `describe_toolset` answer over 60,000 characters comes back as its tools by name, each with the
-first line of its description, with a note; the bridge's own `tool_name` argument, never sent to
-Epic, returns one tool's whole entry, and a description whose tools it can't find is cut at the
-limit (`editor-describe.ts`). Shorter answers and Epic's errors stay as Epic sent them.
+first line of its description (by name alone when those are too long), with a note; the bridge's
+own `tool_name` argument, never sent to Epic, returns one tool's whole entry, and the chat shows that
+call as reading the toolset. A description whose tools it can't find, and anything still too long,
+is cut at the limit without splitting a character (`editor-describe.ts`). Shorter answers and Epic's
+errors stay as Epic sent them.
 An editor behind Genex runs at 3 frames per second while Unreal's "Use Less CPU when in
 Background" (`bThrottleCPUWhenNotForeground`) is on. To avoid that, a `StartPIE` call first turns
 the setting off through Epic's `ObjectTools.set_properties`. This changes only the running editor
