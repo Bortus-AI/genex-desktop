@@ -1798,7 +1798,9 @@ async function startHarness(studio: StudioCore): Promise<boolean> {
     return true;
   } catch (err) {
     if (dev || isSmoke) throw err;
-    const choice = dialog.showMessageBoxSync({
+    // Not the synchronous box: that one stops the main process until it is answered, so the open
+    // window behind it could neither sign in, nor load Play, nor list models.
+    const { response: choice } = await dialog.showMessageBox({
       type: "error",
       message: MESSAGE.couldNotStart,
       detail: `${MESSAGE.harnessWouldNotBoot}\n\n${errorMessage(err)}`,

@@ -132,6 +132,8 @@ export interface ClaudeCodeEngineOptions {
   resolveCli?: typeof requireCodingCli;
   /** Injected in tests. */
   queryFn?: typeof import("@anthropic-ai/claude-agent-sdk").query;
+  /** The OS the CLI runs on (default: this process's); a test picks one to see its options. */
+  platform?: NodeJS.Platform;
   /**
    * Where each session's last running totals are kept across restarts (`session-cost.ts`); in
    * memory only when absent.
@@ -417,6 +419,8 @@ export class ClaudeCodeEngine implements Engine {
   /** Bumped by every login recheck: a usage read begun before it read the account before. */
   #loginGeneration = 0;
   readonly #catalog: ModelCatalog;
+  /** The sandbox of a session that runs no tool: the usage read, model discovery, the judge. */
+  readonly #toolless: { enabled: boolean };
   #telemetryAt = new WeakMap<object, number>();
   #telemetryEpoch = new WeakMap<object, number>();
   #catalogEpoch = new WeakMap<object, number>();
@@ -517,6 +521,7 @@ export class ClaudeCodeEngine implements Engine {
     this.#executable = options.executable;
     this.#resolveCli = options.resolveCli ?? requireCodingCli;
     this.#queryFn = options.queryFn;
+    this.#toolless = toollessSandbox(options.platform);
     this.#costs = new SessionCostLedger(options.sessionCosts);
     this.#authStatusFn = options.authStatusFn;
     this.judgeCwd = options.judgeCwd ?? JUDGE_CWD;
@@ -828,7 +833,7 @@ export class ClaudeCodeEngine implements Engine {
         // No prompt is ever sent, so no tool can run; the judge's sandbox shape holds regardless.
         maxTurns: 1,
         permissionMode: "default",
-        sandbox: { enabled: true },
+        sandbox: this.#toolless,
         env: this.#sessionEnv(installation.env, login),
         abortController: controller,
       },
@@ -900,7 +905,7 @@ export class ClaudeCodeEngine implements Engine {
             allowedTools: [],
             maxTurns: 1,
             permissionMode: "default",
-            sandbox: { enabled: true },
+            sandbox: this.#toolless,
             env: this.#sessionEnv(installation.env, login),
             abortController,
           },
@@ -1049,7 +1054,7 @@ export class ClaudeCodeEngine implements Engine {
       allowedTools: [],
       ...(this.#skills.judge !== undefined ? { skills: this.#skills.judge } : {}),
       disallowedTools: [...JUDGE_DISALLOWED_TOOLS],
-      sandbox: { enabled: true },
+      sandbox: this.#toolless,
       ...modelOption(request.model ?? this.#model),
       ...(request.effort ? { effort: request.effort } : {}),
       ...(request.preferences ? { settings: await this.preferenceSettings(request.model, request.preferences) } : {}),
@@ -2276,6 +2281,17 @@ function permissionOptions(request: DelegateRequest, running: RunningSession): R
   if (request.permissions) return askingOptions(request.permissions, running);
   if (request.leadAsks) return leadAskingOptions(request.leadAsks, running);
   return { permissionMode: "acceptEdits" };
+}
+
+/**
+ * The sandbox of a session that runs no tool. On Windows the CLI's sandbox is sandbox-runtime's
+ * srt-win as the same `srt-sandbox` user Genex's own sandbox uses: starting it costs an egress
+ * check and ACL work on the profile's folders, which outran model discovery's deadline ("Couldn't
+ * load the model list"), and its cleanup touches the entries on the folders above Genex's grants.
+ * A session with no tool has nothing for it to contain, so there it stays off.
+ */
+export function toollessSandbox(platform: NodeJS.Platform = process.platform): { enabled: boolean } {
+  return { enabled: platform !== "win32" };
 }
 
 /**

@@ -79,7 +79,9 @@ requests. Claude reads SDK initialization metadata; Codex uses paginated app-ser
 Neither sends a prompt or starts a turn. Only unsupported Codex discovery falls back to the CLI
 cache. Snapshots refresh at startup, sign-in changes, focus after sixty seconds, and on request.
 Late answers from a previous identity are discarded. Failed refreshes retain same-identity rows as
-stale; absent catalogs expose provider default. Authentication and discovery failures stay separate.
+stale; absent catalogs expose provider default. Authentication and discovery failures stay separate,
+except in first launch: discovery starts the CLI, so a signed-in subscription whose list never
+loaded is not shown connected there but offers a check again, which retries discovery too.
 
 Aliases retain their request IDs and show reported canonical targets. Explicit model IDs and saved
 cross-provider roles are never silently replaced. New unset roles and effort defer to CLI defaults
