@@ -835,6 +835,74 @@ describe("steer through the host and the harness process", () => {
     assert.deepEqual(rewound.held, [], "a delivered message does not come back as a waiting follow-up");
   });
 
+  it("the Loop switched on while the chat's answer works: read at the session's next step, which goes on in the Loop and starts the build", async () => {
+    const rig = await startRig();
+    rigs.push(rig);
+    const project = "steer-loop";
+    await rig.core.games.scaffold(project);
+    const thread = await rig.core.createGameThread(project);
+    const chat: DelegateRequest[] = [],
+      runs: DelegateRequest[] = [],
+      started = deferred();
+    rig.core.engines.register({
+      id: "claude-code",
+      label: "Claude",
+      kind: "delegated",
+      steersMidTurn: true,
+      status: async () => ({ code: "ready", detail: "" }),
+      models: async () => [],
+      delegate: async (request) => {
+        // The build the turn launches: its sessions end at once, and the test stops it.
+        const inTheGame = request.cwd?.endsWith(`/games/${project}`) === true;
+        if (request.director || !inTheGame) {
+          runs.push(request);
+          return ok("Looked around.", `run-session-${runs.length}`);
+        }
+        chat.push(request);
+        if (chat.length === 1) {
+          assert.equal(request.interviewTools, undefined, "Loop off: no build to start");
+          // A session that reads words mid-turn: the switch must never be handed to it as words.
+          request.steer?.ready(() => assert.fail("a switch is never read as words mid-turn"));
+          started.resolve();
+          await whenAborted(request.signal);
+          return stopped("chat-session", 3);
+        }
+        assert.equal(request.resume, "chat-session", "the same session goes on");
+        assert.ok(
+          (request.interviewTools ?? []).some((tool) => tool.name === "start_autopilot"),
+          "with the Loop's start",
+        );
+        assert.match(request.prompt, /The Loop is on/);
+        assert.match(request.prompt, /> make it in the loop/);
+        return ok("Starting the Loop for the boss fight.", "chat-session", {
+          studioToolCalls: [
+            { name: "start_autopilot", args: { goal: "a boss fight with a giant exterminator", direction: "dark" } },
+          ],
+        });
+      },
+    });
+    await rig.core.sendUserMessage("Build the boss fight", { thread, engine: "claude-code" });
+    await started.promise;
+    await rig.core.sendUserMessage("make it in the loop", { thread, engine: "claude-code", autopilot: {} });
+    let events = (await waitForLog(rig.core, handledCount(thread, 1), 30000)).filter((e) => e.thread_id === thread);
+    assert.equal(chat.length, 2, "one answer, cut once at its next step");
+    assert.equal(byText(events, "make it in the loop").state, "delivered", "read by the answer: never queued");
+    assert.deepEqual(
+      custom(events, "coordinator_message_delivered").map((e) => payloadOf(e).how),
+      ["interrupt"],
+    );
+    events = (await waitForLog(rig.core, (es) => custom(es, "run_registered").length > 0, 30000)).filter(
+      (e) => e.thread_id === thread,
+    );
+    assert.equal(custom(events, "run_registered").length, 1, "the Loop started from the answer");
+    await rig.core.stopThread(thread);
+    await waitForLog(
+      rig.core,
+      (es) => custom(es, "run_finished").length + custom(es, "autopilot_paused").length > 0,
+      60000,
+    );
+  });
+
   it("a message steered into a turn that continues the build reaches the builder, restated or not", async () => {
     for (const restate of [false, true]) {
       const rig = await startRig();

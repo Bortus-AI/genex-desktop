@@ -104,27 +104,27 @@ async function acceptance() {
     await wc.capturePage();
     await wait(200);
     fs.writeFileSync(path.join(out, "steered-in-place.png"), (await wc.capturePage()).toPNG());
-    // A message that cannot join the turn (slash text is a command, never words for it) waits
-    // below the work, with Remove.
-    await click('[aria-label="Prompt"]');
-    await wc.debugger.sendCommand("Input.insertText", { text: "/later Add a red sphere" });
-    check(
-      "second follow-up composer is ready to send",
-      await until(`!!document.querySelector('[aria-label="Send"]:not(:disabled)')`),
+    // A message that cannot join the turn (one for a model that holds no session, which this turn
+    // cannot go on with) waits below the work as Sending…, with nothing to withdraw it.
+    await js(
+      `(async()=>{const sent=(await window.studio.events()).events.find(e=>e.data.type==='custom'&&e.data.event_type==='coordinator_message_queued'&&e.data.payload?.action?.text==='Add a purple cube');await window.studio.send("Add a red sphere",{thread:sent.thread_id,engine:"ollama"});})()`,
     );
-    await click('[aria-label="Send"]');
     check(
-      "a follow-up the turn cannot take waits below the current work with Remove",
+      "a follow-up the turn cannot take waits below the current work as Sending…, with no Remove",
       await until(
-        `(()=>{const q=document.querySelector('[data-queued-message]');const status=document.querySelector('[data-chat-status]');return !!q?.textContent.includes('Add a red sphere') && q.textContent.includes('Queued') && !!q.querySelector('[aria-label="Remove queued message"]') && !q.querySelector('[aria-label="Edit queued message"]') && !!status && !!(status.compareDocumentPosition(q)&Node.DOCUMENT_POSITION_FOLLOWING);})()`,
+        `(()=>{const q=document.querySelector('[data-queued-message]');const status=document.querySelector('[data-chat-status]');return !!q?.textContent.includes('Add a red sphere') && q.querySelector('[role="status"]')?.textContent === 'Sending…' && !q.querySelector('[aria-label="Remove queued message"]') && !q.querySelector('[aria-label="Edit queued message"]') && !!status && !!(status.compareDocumentPosition(q)&Node.DOCUMENT_POSITION_FOLLOWING);})()`,
       ),
     );
     await wc.capturePage();
     await wait(200);
     fs.writeFileSync(path.join(out, "refused-queued.png"), (await wc.capturePage()).toPNG());
-    await click('[data-queued-message] [aria-label="Remove queued message"]');
+    // The chat offers no Remove; the queue's API withdraws it, so reload and Stop below start from
+    // the one turn in flight.
+    await js(
+      `(async()=>{const id=document.querySelector('[data-queued-message]').dataset.queuedMessage;const queued=(await window.studio.events()).events.find(e=>e.data.type==='custom'&&e.data.event_type==='coordinator_message_queued'&&e.data.payload?.messageId===id);await window.studio.changeQueuedMessage(queued.thread_id,id,'remove');})()`,
+    );
     check(
-      "removed queue message leaves the transcript",
+      "a withdrawn follow-up leaves the transcript",
       await until(
         `!document.querySelector('[data-queued-message]') && !document.querySelector('[aria-label="Conversation"]')?.textContent.includes('Add a red sphere')`,
       ),

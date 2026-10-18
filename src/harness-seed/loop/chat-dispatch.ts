@@ -59,6 +59,7 @@ import { type ActiveRun, type RunReopen, StatusLane, type Studio } from "./studi
 import { clampRunHours, MAX_RUN_HOURS } from "./config.ts";
 import { CLIP_GAME_TITLE } from "./text.ts";
 import { createScope, userWordsInLog } from "./scope.ts";
+import { closeCarriedPool } from "./workers/carry.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
@@ -156,6 +157,9 @@ export async function handleUserMessage(studio: Studio, action: QueueAction, ste
   // of showing as Queued until the session starts. Known by the engine's name at once; any
   // other session engine is found by its description below, once the turn's engine is known.
   if (steering && hasSessionRoles(action.engine)) await steering.expect();
+  // Its settings as the person sent them, before routing may drop its Loop: what a message sent
+  // while it works is weighed against (turn-switch.ts), as the queue weighs it.
+  const asked: QueueAction = { ...action };
   const existing = await routeMessage(studio, action);
   const loopRuns = await loopRunsFor(studio.host, action, existing);
   const { after } = loopRuns;
@@ -173,7 +177,7 @@ export async function handleUserMessage(studio: Studio, action: QueueAction, ste
   try {
     // Stopped before its turn began: nothing answers it, and the chat is told.
     if (ctx.cancelled) await stoppedBeforeTurn(studio.host, ctx, turn.turnId);
-    else await answerMessage(studio, ctx, action, { turnId: turn.turnId, existing, ...loopRuns }, steering);
+    else await answerMessage(studio, ctx, action, { turnId: turn.turnId, existing, asked, ...loopRuns }, steering);
   } catch (err: any) {
     await failChatTurn(studio.host, ctx, turn.turnId, err);
   } finally {
@@ -413,6 +417,8 @@ async function answerStudioThreadBuild(host: Host, ctx: HarnessCtx, action: Queu
 interface AnswerTurn extends RoutedLoopRuns {
   turnId: string;
   existing: RunRecord | null;
+  /** The message's settings as the person sent them. */
+  asked: QueueAction;
 }
 
 /**
@@ -434,7 +440,7 @@ async function answerMessage(
   const outcome =
     existing && !after
       ? await coordinatorAnswer(studio.host, ctx, turnCtx, { action, turnId, existing, steer, coordinated })
-      : await runTurn(turnCtx, chatTurnOptions(action, turnId, steer, after));
+      : await runTurn(turnCtx, chatTurnOptions(action, turnId, steer, after, turn.asked));
   if (ctx.cancelled) {
     // A Stop the engine answered with a stopped result reads as one it threw (`failChatTurn`).
     await endInterrupted(studio.host, turnId);
@@ -516,10 +522,12 @@ function reopenOutcome(hours: number | null, text: string): TurnOutcome {
 async function afterTheReply(
   studio: Studio,
   ctx: HarnessCtx,
-  action: QueueAction,
+  asked: QueueAction,
   outcome: TurnOutcome | undefined,
   { after, coordinated }: RoutedLoopRuns,
 ): Promise<void> {
+  // A message sent while the turn worked may have changed its settings: what it asked for follows them.
+  const action = followedSettings(asked, outcome);
   const resume = after ? outcome?.details?.resumeRun : null;
   if (after && resume) return resumeAfterReply(studio, ctx, after, resume);
   const loopRun = after ?? coordinated;
@@ -530,6 +538,21 @@ async function afterTheReply(
   const spec = outcome?.stopped === TurnStop.LaunchRun ? outcome.details?.run : null;
   if (spec) await launchOrSayWhy(studio, ctx, action, spec);
 }
+
+/** The settings a message switched the turn to (turn-switch.ts), on the message it answers; it as it was when none did. */
+function followedSettings(action: QueueAction, outcome: TurnOutcome | undefined): QueueAction {
+  const followed = outcome?.details?.followed;
+  if (!followed || typeof followed !== "object") return action;
+  const settled: QueueAction = { ...action };
+  for (const field of FOLLOWED_FIELDS) {
+    if (followed[field] === undefined) delete settled[field];
+    else settled[field] = followed[field];
+  }
+  return settled;
+}
+
+/** The settings a switch carries onto the message a turn answers: engine, model, effort and Loop. */
+const FOLLOWED_FIELDS = ["engine", "model", "effort", "preferences", "autopilot", "loop"] as const;
 
 /**
  * What the reopened build's lead, workers and judges run on after the chat's own session's reopen:
@@ -587,6 +610,7 @@ function chatTurnOptions(
   turnId: string,
   steer: SteerHandle | undefined,
   after: AfterLoopRun | null,
+  asked: QueueAction = action,
 ): TurnOptions {
   return {
     text: action.text,
@@ -607,6 +631,8 @@ function chatTurnOptions(
     ...(action.autopilot ? { autopilot: action.autopilot } : {}),
     ...(steer ? { steer } : {}),
     ...(after ? afterLoopRunOptions(after) : {}),
+    // The message whose settings the turn follows, as it was sent: one sent meanwhile may change them (turn-switch.ts).
+    asked,
   };
 }
 
@@ -712,6 +738,8 @@ function lastReviewedPlan(events: readonly HarnessEvent[]): unknown {
 async function launchOrSayWhy(studio: Studio, ctx: HarnessCtx, action: QueueAction, spec: AnyRecord): Promise<void> {
   const { host } = studio;
   await launchFromIntake(studio, ctx, action, spec).catch(async (err: any) => {
+    // The workers the turn left for this build to take over stop: no build takes them.
+    await closeCarriedPool(action.threadId);
     const failure = err?.message ?? String(err);
     // A launch that dies before run_started needs no run_finished — but it still owes the
     // chat a durable word, not just a push that vanishes with the window.
@@ -822,7 +850,10 @@ export async function launchFromIntake(
   // reservation keeps later queued messages behind the build until it saves and settles.
   // A Stop since this message is for this build: the start keeps it (`keepStop`).
   void handleRunStart(studio, { type: "run_start", threadId: action.threadId, run }, { keepStop: true }).catch(
-    (err: unknown) => host.notify("run.failed", { error: String(err) }),
+    (err: unknown) => {
+      void closeCarriedPool(action.threadId);
+      host.notify("run.failed", { error: String(err) });
+    },
   );
 }
 

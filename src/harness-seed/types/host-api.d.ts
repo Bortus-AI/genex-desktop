@@ -2254,11 +2254,13 @@ export interface HarnessHostApi {
   /**
    * Steer: messages the person sent while the chat's turn works, into the session answering that
    * turn (`chatTurn` is `into`). `accepted` lists what the session took; `how` is how (`SteerDelivery`
-   * in `shared/message-queue.ts`), null when it took nothing. `interrupt: false` takes them only
-   * into a session that reads them mid-turn, and never cuts one short.
+   * in `shared/message-queue.ts`), null when it took nothing. A session is cut only between tool
+   * calls, never inside one. `interrupt: false` takes them only into a session that reads them
+   * mid-turn, and never cuts one short; `native: false` never hands them to it mid-turn: the session
+   * is cut at its next step (a message that changes how the turn runs, steer-switch.ts).
    */
   "engine.steer": {
-    params: { threadId: string; into: string; messages: SteerMessage[]; interrupt?: boolean };
+    params: { threadId: string; into: string; messages: SteerMessage[]; interrupt?: boolean; native?: boolean };
     result: { how: SteerDelivery | null; accepted: string[] };
   };
   "coordinator.tool": {
@@ -2695,6 +2697,8 @@ export type DispatchAction =
       pickedImages?: number;
       /** Reference files this message saved in the game (relative paths); a rewind with files removes them. */
       references?: string[];
+      /** Every file its attached pictures are saved as in the game (relative), already there or not: a run's lead reads them. */
+      pictureFiles?: string[];
       /** Composer Loop: the chat may start an unattended build when the ask needs one. */
       loop?: LoopCommission;
       /** Composer Autopilot: the chat may launch a build that decomposes into facets and runs until satisfied. */

@@ -4190,12 +4190,6 @@ button.chat-header-title:hover {
 .chat-user-toggle:hover {
   color: var(--ink);
 }
-/* Remove under a queued message: 24px like Rewind, under the icon button's usual control size
-   (a utility class loses to it; this rule is unlayered). */
-.chat-queued-remove {
-  width: 24px;
-  height: 24px;
-}
 /* Rewind sits beside a delivered bubble, shown while its row is hovered or holds focus. It is
    24px, under the icon button's usual control size, so it centres on the bubble's last line. */
 .chat-user-action {
