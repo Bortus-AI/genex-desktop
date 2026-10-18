@@ -2123,6 +2123,9 @@ button.chat-header-title:hover {
  * name readable, the name glows in the avatar's colour and sparkles twinkle around the face. A light
  * theme draws the piece on paper (below). */
 .nameplate {
+  /* Each plate sets its own colours inline (`Nameplate.tsx`); these hold until it does. */
+  --plate-tint: #0b0b0e;
+  --plate-glow: #ffffff;
   position: relative;
   isolation: isolate;
   display: flex;
