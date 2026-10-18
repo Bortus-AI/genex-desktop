@@ -16,7 +16,7 @@ import { ShowSidebarButton } from "../panels/ChatHeader.tsx";
 import type { AppDialogs as Dialogs } from "../panels/AppDialogs.tsx";
 import { HomeBackground } from "../home-backdrop/HomeBackdrop.tsx";
 import { PlanningBuild } from "../panels/stage/StageBody.tsx";
-import { useEngines, useLaunch, useLibrary, useSessionView, useThreads } from "../state/hooks.ts";
+import { useEngines, useLaunch, useLibrary, usePlay, useSessionView, useThreads } from "../state/hooks.ts";
 import { type Launch, LaunchPhase } from "../state/launch.ts";
 import type { Studio } from "../state/studio.ts";
 import { Room, roomOf } from "../state/threads.ts";
@@ -29,7 +29,8 @@ import { PromptBar, type ComposerExtras } from "../ui/PromptBar.tsx";
 import { withViewTransition } from "../ui/view-transition.ts";
 import type { ComposerHandoff } from "./use-composer-handoff.ts";
 import { useHomeComposerModel } from "./use-home-composer.ts";
-import { useHomeUnderControls } from "../window-controls.ts";
+import { homeUnderControls, useHomeUnderControls } from "../window-controls.ts";
+import { nativeViewsUp } from "../play/play-model.ts";
 import type { ShellChrome } from "./use-shell-chrome.ts";
 import { HomeBackdropButton } from "./HomeBackdropButton.tsx";
 import { HomeFolderChip } from "./HomeFolderChip.tsx";
@@ -78,8 +79,10 @@ export function HomeLayer({
   under: boolean;
 }): JSX.Element | null {
   const { shown, launch } = useHomeShown();
-  // Home at rest, with nothing over it: its background is what lies under the window controls.
-  useHomeUnderControls(shown && launch === null && !under && !props.chrome.workspaceCovered);
+  const viewerUp = usePlay((s) => nativeViewsUp(s.viewer));
+  const resting = shown && launch === null;
+  const covered = under || props.chrome.workspaceCovered;
+  useHomeUnderControls(homeUnderControls({ resting, covered, viewerUp }));
   if (!shown) return null;
   return (
     <div className="contents" inert={under}>

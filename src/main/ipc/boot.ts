@@ -36,7 +36,8 @@ export interface BootIpcDeps {
 function windowControls(payload: unknown): WindowControls {
   const { color, symbolColor, seeThrough } = (payload ?? {}) as Partial<Record<keyof WindowControls, unknown>>;
   const valid = (value: unknown): value is string => typeof value === "string" && HEX_COLOR.test(value);
-  if (!valid(color) || !valid(symbolColor) || typeof seeThrough !== "boolean") throw new Error(MESSAGE.invalidColors);
+  const wellFormed = valid(color) && valid(symbolColor) && typeof seeThrough === "boolean";
+  if (!wellFormed) throw new Error(MESSAGE.invalidColors);
   return { color, symbolColor, seeThrough };
 }
 

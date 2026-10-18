@@ -249,7 +249,7 @@ function studioCalls(bridge: BridgeCalls) {
     setUpSandbox: () => invoke("studio:boot.setup"),
     reportSandboxSetup: (error) => invoke("studio:boot.report", { error }),
     quitFromBoot: () => invoke("studio:boot.quit"),
-    setWindowControls: (colors) => invoke("studio:window.controls", colors),
+    setWindowControls: (controls) => invoke("studio:window.controls", controls),
     readyUpdate: () => invoke("studio:update"),
     restartToUpdate: () => invoke("studio:update.restart"),
     checkForUpdates: () => invoke("studio:update.check"),

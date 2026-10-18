@@ -18,7 +18,15 @@ import {
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
 import { BootView, bootView, canSetUp, createBoot, SetupReport } from "../../src/renderer/state/boot.ts";
-import { setHomeUnderControls, syncWindowControls, windowControlColors } from "../../src/renderer/window-controls.ts";
+import { nativeViewsUp } from "../../src/renderer/play/play-model.ts";
+import { gameOpened, initialPlay, type PlayState, viewerReported } from "../../src/renderer/state/play.ts";
+import {
+  homeUnderControls,
+  setHomeUnderControls,
+  syncWindowControls,
+  windowControlColors,
+} from "../../src/renderer/window-controls.ts";
+import { PlayViewerPhase } from "../../src/shared/play.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
 const PROBLEM: SandboxProblem = {
@@ -462,6 +470,27 @@ describe("window control colours", () => {
         { ...colors, seeThrough: false },
       ],
     );
+  });
+
+  it("count Home's background under them only at rest, with no room, remix or game viewer over it", () => {
+    const home = { resting: true, covered: false, viewerUp: false };
+    assert.equal(homeUnderControls(home), true);
+    assert.equal(homeUnderControls({ ...home, resting: false }), false, "a game launching from Home");
+    assert.equal(homeUnderControls({ ...home, covered: true }), false, "Play, Plugins or a remix over Home");
+    assert.equal(homeUnderControls({ ...home, viewerUp: true }), false, "a game viewer over Home");
+  });
+
+  it("stop counting Home's background while a friend's game opens in the viewer over it, and count it again once it closes", () => {
+    const atRest = (play: PlayState) =>
+      homeUnderControls({ resting: true, covered: false, viewerUp: nativeViewsUp(play.viewer) });
+    let play = initialPlay();
+    assert.equal(atRest(play), true);
+    play = gameOpened(play, { slug: "kart", title: "Kart", coverUrl: null });
+    assert.equal(atRest(play), false, "the cover shows before main answers");
+    play = viewerReported(play, { slug: "kart", openId: 1, phase: PlayViewerPhase.Playing });
+    assert.equal(atRest(play), false);
+    play = viewerReported(play, { slug: "kart", openId: 1, phase: PlayViewerPhase.Closed });
+    assert.equal(atRest(play), true);
   });
 
   it("send nothing on macOS, which draws its own lights", () => {

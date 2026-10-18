@@ -26,6 +26,20 @@ export function windowControlColors(style: ThemeStyle): WindowControlColors | nu
   return { color, symbolColor };
 }
 
+/** Home and what may lie over it, as the shell sees them. */
+export interface HomeCover {
+  /** Home is up at rest: no game launching from it. */
+  resting: boolean;
+  /** The Play or Plugins room, or a remix being made, covers it. */
+  covered: boolean;
+  /** The game viewer's native views lie over the window (`nativeViewsUp`). */
+  viewerUp: boolean;
+}
+
+/** Is Home's background what lies under the controls: Home at rest, with nothing over it? */
+export const homeUnderControls = ({ resting, covered, viewerUp }: HomeCover): boolean =>
+  resting && !covered && !viewerUp;
+
 /** Home's background now lies under the controls, or no longer does. */
 export function setHomeUnderControls(under: boolean): void {
   if (under === homeUnder) return;
