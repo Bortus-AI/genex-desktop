@@ -14,6 +14,7 @@ import {
 import type { GameProject } from "../../shared/game-project.ts";
 import type { GenexCatalogItem } from "../../shared/mention-corpus.ts";
 import { type PlayGame, PlayShelf } from "../../shared/play.ts";
+import { type CardTag, cardTagOf } from "../asset-library-view.ts";
 import { FeedStatus } from "./play-model.ts";
 
 /** The kind switcher's choice: every kind, or one. Values are the switcher's `data-play-asset-kind`. */
@@ -35,10 +36,6 @@ export interface AssetView {
 /** The shelf as it opens: everyone's assets of every kind. */
 export const ALL_ASSETS: AssetView = { scope: AssetScope.Everyone, kind: KindChoice.All };
 
-/** A tile's tag over its corner: the person's own asset, saved or shared on Play. */
-export const AssetTag = { Saved: "saved", Shared: "shared" } as const;
-export type AssetTag = (typeof AssetTag)[keyof typeof AssetTag];
-
 /** One asset as a tile draws it, whichever list it came from. */
 export interface AssetTile {
   /** Unique in its grid: the slug of a shared asset, the generation id of a library one. */
@@ -54,7 +51,8 @@ export interface AssetTile {
   source: AddSource;
   /** The page on Play the cover opens, or null for an asset with none. */
   slug: string | null;
-  tag: AssetTag | null;
+  /** The person's own asset, saved or shared on Play, as the Assets tab's cards tag it. */
+  tag: CardTag | null;
 }
 
 /** Where a grid's tiles come from. */
@@ -115,12 +113,6 @@ export function catalogTile(item: GenexCatalogItem): AssetTile {
   };
 }
 
-/** The tag a library asset wears: Shared while it is on Play, else Saved when saved, else none. */
-export function libraryTag(asset: Pick<LibraryAsset, "saved" | "shared">): AssetTag | null {
-  if (asset.shared?.live) return AssetTag.Shared;
-  return asset.saved ? AssetTag.Saved : null;
-}
-
 /** One of the person's own library assets as a tile; its cover opens its page on Play while shared. */
 export function libraryTile(asset: LibraryAsset): AssetTile {
   return {
@@ -132,7 +124,7 @@ export function libraryTile(asset: LibraryAsset): AssetTile {
     fileUrl: asset.fileUrl,
     source: { generationId: asset.id },
     slug: asset.shared?.live ? asset.shared.slug : null,
-    tag: libraryTag(asset),
+    tag: cardTagOf(asset),
   };
 }
 

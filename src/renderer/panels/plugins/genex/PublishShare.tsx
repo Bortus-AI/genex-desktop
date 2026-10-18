@@ -6,22 +6,15 @@
  */
 import type { JSX } from "react";
 import { LibraryKind } from "../../../../shared/asset-library.ts";
+import { KIND_GLYPH } from "../../../asset-library-view.ts";
 import { Button } from "../../../ui/Button.tsx";
-import { Icon, type IconName } from "../../../ui/icons.tsx";
+import { Icon } from "../../../ui/icons.tsx";
 import { Toggle } from "../../../ui/Toggle.tsx";
 import { PUBLISH_SHARE_WORDS } from "../../../words.ts";
 import { ShareLine, shareLine } from "./publish-share.ts";
 import { type PublishShare, ShareRun, type ShareThumbView } from "./use-publish-share.ts";
 
 const WORDS = PUBLISH_SHARE_WORDS;
-
-/** A picture's stand-in while the library has none: its kind's glyph. */
-const KIND_GLYPH = {
-  [LibraryKind.Model]: "box",
-  [LibraryKind.Image]: "image",
-  [LibraryKind.Sound]: "sound",
-  [LibraryKind.Video]: "video",
-} as const satisfies Record<LibraryKind, IconName>;
 
 /** One small square picture, overlapping the one before it. */
 function Thumb({ thumb }: { thumb: ShareThumbView }): JSX.Element {

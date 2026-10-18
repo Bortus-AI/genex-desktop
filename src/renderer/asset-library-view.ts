@@ -7,6 +7,7 @@ import {
   type AssetLibraryState,
   type GameLibraryStates,
   type LibraryAsset,
+  LibraryKind,
   SHARE_NAME_MAX,
   type ShareItem,
   ShareMiss,
@@ -15,6 +16,7 @@ import {
 import type { ProjectAsset } from "../shared/game-assets.ts";
 import type { PlayGame } from "../shared/play.ts";
 import { assetTitle } from "./asset-names.ts";
+import type { IconName } from "./ui/icons.tsx";
 
 /** Where one share is on its card's line. */
 export const ShareStep = { Send: "send", Check: "check", Live: "live", Missed: "missed" } as const;
@@ -98,14 +100,23 @@ export function stateOf(library: GameLibraryStates | null, file: string): AssetL
   return library.states.find((state) => state.file === file) ?? null;
 }
 
-/** The tag a card wears: Shared once on Play, else Saved, else none. */
+/** The tag a card or a tile wears: Shared once on Play, else Saved, else none. */
 export const CardTag = { Saved: "saved", Shared: "shared" } as const;
 export type CardTag = (typeof CardTag)[keyof typeof CardTag];
 
-export function cardTagOf(state: AssetLibraryState | null): CardTag | null {
-  if (state?.shared?.live) return CardTag.Shared;
-  return state?.saved ? CardTag.Saved : null;
+/** The tag of a game file's library state or of a library asset, which carry the same marks. */
+export function cardTagOf(marks: Pick<AssetLibraryState, "saved" | "shared"> | null): CardTag | null {
+  if (marks?.shared?.live) return CardTag.Shared;
+  return marks?.saved ? CardTag.Saved : null;
 }
+
+/** What stands for an asset of each kind while it has no picture of its own. */
+export const KIND_GLYPH = {
+  [LibraryKind.Model]: "box",
+  [LibraryKind.Image]: "image",
+  [LibraryKind.Sound]: "sound",
+  [LibraryKind.Video]: "video",
+} as const satisfies Record<LibraryKind, IconName>;
 
 /** Whether Save can act on a file: it is in the library, or a kind genex.games takes from the app. */
 export function canSave(state: AssetLibraryState | null): boolean {

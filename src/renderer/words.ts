@@ -76,7 +76,7 @@ import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
 import { AssetScope, LibraryKind } from "../shared/asset-library.ts";
-import { AssetTag, KindChoice } from "./play/asset-tiles.ts";
+import { KindChoice } from "./play/asset-tiles.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4556,7 +4556,6 @@ export const PLAY_ASSET_WORDS = {
   } satisfies Record<KindChoice, string>,
   scopesLabel: "Whose assets",
   scopes: { [AssetScope.Everyone]: "Everyone", [AssetScope.Mine]: "Mine" } satisfies Record<AssetScope, string>,
-  tags: { [AssetTag.Saved]: "Saved", [AssetTag.Shared]: "Shared" } satisfies Record<AssetTag, string>,
   open: (title: string) => `Open ${title}`,
   play: (title: string) => `Play ${title}`,
   pause: (title: string) => `Pause ${title}`,

@@ -231,8 +231,7 @@ const glyphs = {
       <path d="M19.5 11.5l-7.6 7.6a4.8 4.8 0 0 1-6.8-6.8l8.1-8.1a3.2 3.2 0 0 1 4.5 4.5l-8 8a1.6 1.6 0 0 1-2.3-2.3l7.3-7.3" />
     </g>
   ),
-  // Save: a ribbon bookmark. Saved draws it filled (`.gi-filled` in styles/asset-library.css;
-  // Play's tags by `[data-icon="bookmark"]` in styles/play-assets.css).
+  // Save: a ribbon bookmark. Saved draws it filled (`.gi-filled` in styles/asset-library.css).
   bookmark: <path d="M7.5 4.5h9a1 1 0 0 1 1 1v14.2l-5.5-3.9-5.5 3.9V5.5a1 1 0 0 1 1-1z" />,
   pin: (
     <g className="a-pin">

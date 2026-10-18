@@ -24,13 +24,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu.tsx";
-import { Icon, type IconName } from "../ui/icons.tsx";
+import { Icon } from "../ui/icons.tsx";
 import { useBackOnline } from "../ui/use-online.ts";
 import { ViewSwitcher, type ViewSwitcherItem } from "../ui/view-switcher.tsx";
 import { PLAY_ASSET_WORDS, PLAY_WORDS } from "../words.ts";
+import { KIND_GLYPH } from "../asset-library-view.ts";
+import { CardTagMark } from "../panels/assets/CardMarks.tsx";
 import {
   addTargets,
-  AssetTag,
   type AssetTile,
   catalogTiles,
   gameTiles,
@@ -71,14 +72,6 @@ const SCOPE_ITEMS: readonly ViewSwitcherItem<AssetScope>[] = SCOPE_CHOICES.map((
 /** Where a tile's picture stands. */
 const ImageState = { Loading: "loading", Shown: "shown", Failed: "failed" } as const;
 type ImageState = (typeof ImageState)[keyof typeof ImageState];
-
-/** What a tile shows while it has no picture of its own: its kind's glyph. */
-const KIND_GLYPH = {
-  [LibraryKind.Model]: "box",
-  [LibraryKind.Image]: "image",
-  [LibraryKind.Sound]: "sound",
-  [LibraryKind.Video]: "video",
-} as const satisfies Record<LibraryKind, IconName>;
 
 /** The kind and whose switchers, today's switcher with its blue fill; `onChoose` follows a turn. */
 export function AssetSwitchers({ onChoose }: { onChoose: () => void }): JSX.Element {
@@ -129,16 +122,6 @@ function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null
         />
       )}
     </>
-  );
-}
-
-/** The tag over a tile's corner, in glass: Saved with its filled bookmark, Shared with the globe. */
-function Tag({ tag }: { tag: AssetTag }): JSX.Element {
-  return (
-    <span className="play-asset-tag asset-glass" data-play-asset-tag={tag}>
-      <Icon name={tag === AssetTag.Saved ? "bookmark" : "globe"} size={12} />
-      {WORDS.tags[tag]}
-    </span>
   );
 }
 
@@ -218,7 +201,7 @@ const AssetTileView = memo(function AssetTileView({ tile }: { tile: AssetTile })
         ) : (
           <TileImage src={tile.coverUrl} kind={tile.kind} />
         )}
-        {tile.tag && <Tag tag={tile.tag} />}
+        {tile.tag && <CardTagMark tag={tile.tag} />}
         <UseMenu tile={tile} />
       </div>
       <div className="play-asset-meta">

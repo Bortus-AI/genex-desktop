@@ -15,7 +15,6 @@ import type { GenexCatalogItem } from "../../src/shared/mention-corpus.ts";
 import { type PlayGame, PlayShelf } from "../../src/shared/play.ts";
 import {
   ALL_ASSETS,
-  AssetTag,
   addTargets,
   catalogTiles,
   EMPTY_LIBRARY,
@@ -28,6 +27,7 @@ import {
   waveDrawing,
   withLibraryPage,
 } from "../../src/renderer/play/asset-tiles.ts";
+import { CardTag } from "../../src/renderer/asset-library-view.ts";
 import { FeedStatus } from "../../src/renderer/play/play-model.ts";
 import { assetViewChosen, createPlayStore, FEED_STALE_MS, initialPlay } from "../../src/renderer/state/play.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
@@ -151,10 +151,10 @@ describe("Assets shelf: tiles", () => {
   it("tags a library asset Shared while it is on Play, else Saved when saved, else nothing", () => {
     const live = { projectId: "p1", slug: "chitin-hut", live: true };
     const shared = libraryTile(asset({ id: "gen-hut-0003", shared: live, saved: true }));
-    assert.equal(shared.tag, AssetTag.Shared);
+    assert.equal(shared.tag, CardTag.Shared);
     assert.equal(shared.slug, "chitin-hut", "a shared asset's cover opens its page on Play");
     const stopped = libraryTile(asset({ id: "gen-old-0007", shared: { ...live, live: false }, saved: true }));
-    assert.equal(stopped.tag, AssetTag.Saved);
+    assert.equal(stopped.tag, CardTag.Saved);
     assert.equal(stopped.slug, null, "an asset taken off Play has no page to open");
     const plain = libraryTile(asset({ id: "gen-mush-0001" }));
     assert.equal(plain.tag, null);
