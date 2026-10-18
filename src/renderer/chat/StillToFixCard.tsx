@@ -14,6 +14,8 @@ export interface StillToFixProps {
   onKeepBuilding?: (() => void) | null;
   /** The title over the list; none inside a card that has its own. */
   title?: string | null;
+  /** Why the Loop stopped, one line under the title (`stopWhyLine`). */
+  why?: string | null;
   /** Actions after Keep building (Play). */
   children?: ReactNode;
 }
@@ -42,12 +44,18 @@ export function StillToFix({
   notDone,
   onKeepBuilding = null,
   title = STILL_TO_FIX_WORDS.title,
+  why = null,
   children,
 }: StillToFixProps): JSX.Element {
   const hasActions = Boolean(onKeepBuilding || children);
   return (
     <div data-still-to-fix className="flex min-w-0 flex-col gap-2.5">
-      {title ? <span className="text-chat font-medium text-ink">{title}</span> : null}
+      {title || why ? (
+        <div className="flex flex-col gap-0.5">
+          {title ? <span className="text-chat font-medium text-ink">{title}</span> : null}
+          {why ? <span className="text-chat-sub text-ink-3">{why}</span> : null}
+        </div>
+      ) : null}
       <ul className="flex flex-col gap-1.5 text-chat-sub">
         {done.map((item) => (
           <Item key={`done:${item}`} text={item} left={false} />

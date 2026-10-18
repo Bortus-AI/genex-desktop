@@ -37,9 +37,9 @@ import {
 import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../shared/genex.ts";
 import { SteerDelivery } from "../shared/message-queue.ts";
 import { engineLabel, roleName } from "../shared/model-roles.ts";
-import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
+import { ExecutionStatus, RoundOutcome, recordedRunLoop, roundOutcome } from "../shared/run-state.ts";
 import { plural, skillWords } from "../shared/skill-words.ts";
-import { MINUTE_MS } from "../shared/duration.ts";
+import { HOUR_MS, MINUTE_MS } from "../shared/duration.ts";
 import { type ToolPermissionEvent, ToolPermissionState } from "../shared/permissions.ts";
 import { contractorIdentity } from "./chat-labels.ts";
 import { splitFeedback } from "./reply-about.ts";
@@ -93,6 +93,7 @@ import {
   toolActivityWords,
   toolWords,
   usingPluginWords,
+  STILL_TO_FIX_WORDS,
   verdictSentence,
   wasCancelled,
 } from "./words.ts";
@@ -147,10 +148,32 @@ export const EntryAction = {
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
-/** What a run that ended without the reviewer's yes leaves for the person: its last no's done and still-to-fix lists. */
+/** Why a Loop stopped with something still to fix, as the person is told it. */
+export const StopWhy = {
+  /** Its hours ran out. */
+  Time: "time",
+  /** It kept getting the same thing wrong (the reviewer's no's stopped it). */
+  Stuck: "stuck",
+  /** The person stopped it. */
+  Person: "person",
+  /** It ended some other way. */
+  Ended: "ended",
+} as const;
+export type StopWhy = (typeof StopWhy)[keyof typeof StopWhy];
+
+/** Why a Loop stopped, as the person reads it under "Almost there". */
+export function stopWhyLine(why: StopWhy, hours: number | null): string {
+  if (why === StopWhy.Time) return STILL_TO_FIX_WORDS.why.time(hours);
+  return STILL_TO_FIX_WORDS.why[why];
+}
+
+/** What a run that ended without the reviewer's yes leaves for the person: its last no's lists, and why it stopped. */
 export interface StillToFix {
   done: string[];
   notDone: string[];
+  why: StopWhy;
+  /** The Loop's hours, when it had some. */
+  hours: number | null;
 }
 
 export type Entry =
@@ -546,6 +569,8 @@ interface ChatDraft {
   workerLines: Map<string, { entry: ActionEntry; line: WorkerLine }>;
   /** Each run's newest no from the reviewer, for its result card (`noteFinishCheck`). */
   lastNo: Map<string, FinishRecord>;
+  /** When each run (re)started and the hours it had, so its card can tell that its time ran out. */
+  runClocks: Map<string, { startedAt: number; hours: number | null }>;
 }
 
 /**
@@ -596,6 +621,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     endedJobs: new Set(),
     workerLines: new Map(),
     lastNo: new Map(),
+    runClocks: new Map(),
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
     directTurns: new Map(),
@@ -1449,6 +1475,11 @@ function providerName(engine: string): string {
 function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const started = customPayload(event.data, CustomEvent.RunStarted);
   if (!started) return;
+  if (started.runId)
+    chat.runClocks.set(started.runId, {
+      startedAt: Date.parse(event.created_at),
+      hours: recordedRunLoop(started.budgets)?.hours ?? null,
+    });
   // Which model judges this run, by name: a stale saved preference can put the judging on the
   // orchestrator's model, and nothing else on screen says which model is answering. And on
   // which subscription, when the judges are not on the run's own (cross-provider roles).
@@ -1939,7 +1970,7 @@ function narrateFinished(chat: ChatDraft, event: EventEnvelope): void {
   const finished = customPayload(event.data, CustomEvent.RunFinished);
   if (!finished) return;
   settleRunTools(chat, finished);
-  const result = morningCard(chat, event.id, finished);
+  const result = morningCard(chat, event.id, finished, Date.parse(event.created_at));
   chat.entries.push(result);
   if (result.runId && chat.cover?.runId === result.runId) placeCoverCard(chat);
   // A paused or reopened run closes more than once; its latest result carries everything it
@@ -1980,18 +2011,38 @@ function profileOf(finished: FinishedPayload): LoopProfile | null {
  * next close starts clean); none after a yes, a no that names nothing not done (an older record), or
  * no no at all.
  */
-function stillToFixOf(chat: ChatDraft, finished: FinishedPayload): { stillToFix?: StillToFix } {
+function stillToFixOf(chat: ChatDraft, finished: FinishedPayload, at: number): { stillToFix?: StillToFix } {
   const runId = finished.runId;
   if (!runId) return {};
   const no = chat.lastNo.get(runId);
   chat.lastNo.delete(runId);
   if (!no?.notDone.length || finished.victory === true) return {};
-  return { stillToFix: { done: no.done, notDone: no.notDone } };
+  const hours = chat.runClocks.get(runId)?.hours ?? null;
+  return {
+    stillToFix: { done: no.done, notDone: no.notDone, why: stopWhyOf(chat, runId, { no, finished, at }), hours },
+  };
 }
 
-function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): MorningEntry {
+/**
+ * Why a run that ended with something to fix stopped: the person's Stop, the reviewer's no's (the
+ * last no stopped it), its hours spent (it ended at its cap, a minute's slack), else some other way.
+ */
+function stopWhyOf(
+  chat: ChatDraft,
+  runId: string,
+  end: { no: FinishRecord; finished: FinishedPayload; at: number },
+): StopWhy {
+  if (end.finished.executionStatus === ExecutionStatus.Cancelled) return StopWhy.Person;
+  if (end.no.stopped) return StopWhy.Stuck;
+  const clock = chat.runClocks.get(runId);
+  const capMs = clock?.hours ? clock.hours * HOUR_MS : null;
+  const spent = clock && capMs !== null && end.at - clock.startedAt >= capMs - MINUTE_MS;
+  return spent ? StopWhy.Time : StopWhy.Ended;
+}
+
+function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload, at: number): MorningEntry {
   const { rounds } = chat;
-  const stillToFix = stillToFixOf(chat, finished);
+  const stillToFix = stillToFixOf(chat, finished, at);
   const judged = rounds.kept + rounds.undone;
   const n = judged || (Array.isArray(finished.iterations) ? finished.iterations.length : 0);
   const head = finished.integrationHead;

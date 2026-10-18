@@ -24,7 +24,7 @@ import type { AssetDeliveredPayload } from "../../shared/game-assets.ts";
 import type { LoopProfile } from "../../shared/project-facts.ts";
 import { Presence, type PresenceChild } from "../ui/Presence.tsx";
 import { webBuildShown } from "../web-build-shown.ts";
-import type { StillToFix } from "../chat-entries.ts";
+import { type StillToFix, stopWhyLine } from "../chat-entries.ts";
 import { StillToFixCard } from "../chat/StillToFixCard.tsx";
 
 /** How long a finished build's card keeps the place of a result that has not come yet. */
@@ -114,7 +114,12 @@ function ReportOrLeft({
 }): JSX.Element | null {
   if (stillToFix)
     return (
-      <StillToFixCard done={stillToFix.done} notDone={stillToFix.notDone} onKeepBuilding={onKeepBuilding}>
+      <StillToFixCard
+        done={stillToFix.done}
+        notDone={stillToFix.notDone}
+        why={stopWhyLine(stillToFix.why, stillToFix.hours)}
+        onKeepBuilding={onKeepBuilding}
+      >
         {children}
       </StillToFixCard>
     );

@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
+import { EntryKind, StopWhy, stopWhyLine, toEntries } from "../../src/renderer/chat-entries.ts";
 import { morningWords } from "../../src/renderer/morning-words.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
@@ -64,7 +64,9 @@ it("a run that ends without a yes lists its last no's done and still to fix on i
     }),
     finished(3, { victory: false }),
   ];
-  assert.deepEqual(stillToFixOf(log), [{ done: ["Laps run", "Finish line"], notDone: [NO_TIMER] }]);
+  assert.deepEqual(stillToFixOf(log), [
+    { done: ["Laps run", "Finish line"], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null },
+  ]);
   const said = JSON.stringify(toEntries(log));
   assert.ok(!said.includes(met), "what the reviewer checked is never listed");
 
@@ -88,7 +90,33 @@ it("a reopened run's next close starts clean: an earlier ask's no is not listed 
     finished(2),
     finished(3),
   ];
-  assert.deepEqual(stillToFixOf(log), [{ done: [], notDone: [NO_TIMER] }, null]);
+  assert.deepEqual(stillToFixOf(log), [{ done: [], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null }, null]);
+});
+
+it("the card says why the Loop stopped: its hours ran out, the person stopped it, or it ended another way", () => {
+  const HOUR = 3_600_000;
+  const started = custom(1, CustomEvent.RunStarted, {
+    runId: RUN,
+    project: "valley",
+    budgets: { wallClockMs: 5 * HOUR },
+  });
+  const no = (id: number) =>
+    check(id, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 1, timeLeft: true });
+  const whyOf = (events: EventEnvelope[]) => stillToFixOf(events).map((card) => card && [card.why, card.hours]);
+  assert.deepEqual(whyOf([started, no(2), finished(5 * HOUR)]), [[StopWhy.Time, 5]], "it ended at its five hours");
+  assert.deepEqual(
+    whyOf([started, no(2), finished(HOUR)]),
+    [[StopWhy.Ended, 5]],
+    "an hour in, it ended some other way",
+  );
+  assert.deepEqual(
+    whyOf([started, no(2), finished(HOUR, { executionStatus: "cancelled" })]),
+    [[StopWhy.Person, 5]],
+    "the person's Stop",
+  );
+  assert.equal(stopWhyLine(StopWhy.Time, 5), "Your 5 hours ran out before this was fixed.");
+  assert.equal(stopWhyLine(StopWhy.Time, 0.5), "Your 30 minutes ran out before this was fixed.");
+  assert.match(stopWhyLine(StopWhy.Stuck, null), /kept getting this wrong/);
 });
 
 it("a record it cannot place says nothing", () => {

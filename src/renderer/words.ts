@@ -1630,12 +1630,26 @@ export function screenAgo(at: number, now: number, { ago = false }: { ago?: bool
  * The plan's two replies. The steering card and the composer both offer them, and a waiting plan
  * starts on exactly `go`, so each is spelled once.
  */
+/** A Loop's hours as the person picked them: whole hours, else minutes. */
+const loopSpan = (hours: number): string =>
+  Number.isInteger(hours) ? plural(hours, "hour") : plural(Math.round(hours * 60), "minute");
+
 /** A Loop that ended with something still to fix: its card in the chat and in Builds. */
 export const STILL_TO_FIX_WORDS = {
   title: "Almost there",
   done: "Done",
   left: "Still to fix",
   keepBuilding: "Keep building",
+  /** Why the Loop stopped, in one line under the title. */
+  why: {
+    time: (hours: number | null) =>
+      hours === null
+        ? "Its time ran out before this was fixed."
+        : `Your ${loopSpan(hours)} ran out before this was fixed.`,
+    stuck: "It kept getting this wrong, so it stopped to save your credits.",
+    person: "You stopped it before this was fixed.",
+    ended: "It stopped before this was fixed.",
+  },
   /** The message Keep building sends for the person. */
   ask: (notDone: readonly string[]) =>
     ["Keep building: fix what's left.", ...notDone.map((item) => `- ${item}`)].join("\n"),
