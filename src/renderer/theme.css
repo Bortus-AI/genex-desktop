@@ -2186,7 +2186,8 @@ button.chat-header-title:hover {
     linear-gradient(270deg, rgb(0 0 0 / 0.45) 0%, transparent 24%);
 }
 /* A plate with something at its end (the credits, the Offline mark): the art fades out before it,
- * so the end sits on the plate's own plain colour with nothing behind it. */
+ * so the end sits on the plate's own plain colour with nothing behind it. The mask clears the end a
+ * short balance needs; the end's own ground (below) clears as far as it reaches, "Unlimited" too. */
 .nameplate:has(> .plate-end) > .nameplate-art {
   mask-image:
     linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.55) 22%, rgb(0 0 0 / 0.92) 48%, #000 70%),
@@ -2234,17 +2235,44 @@ button.chat-header-title:hover {
   color: #6ee39a;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
 }
+/* The end's ground: the plate's own colour from the end's left edge to the plate's, fading in just
+ * before it, shown with the art. The pill under the pointer is drawn over it. */
+.nameplate {
+  --plate-ground: var(--plate-tint);
+}
+.nameplate > .plate-end::before,
+.nameplate > .plate-end::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.nameplate > .plate-end::before {
+  inset: -10px -6px -10px -24px;
+  background: linear-gradient(90deg, transparent, var(--plate-ground) 24px);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.nameplate > .plate-end::after {
+  inset: 0;
+  border-radius: inherit;
+  transition: background-color var(--duration-quick);
+}
+.nameplate[data-lit] > .plate-end::before {
+  opacity: 1;
+}
 /* Lit, the credits are light on the plate's clear end, with nothing behind them, and a faint pill
  * under the pointer or keyboard focus (the plate itself lights only on hover). */
 .nameplate[data-lit] .plate-credits {
   color: rgb(255 255 255 / 0.88);
-  transition:
-    background-color var(--duration-quick),
-    color var(--duration-quick);
+  transition: color var(--duration-quick);
 }
 .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: rgb(255 255 255 / 0.1);
+  background: transparent;
   color: #fff;
+}
+.nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::after {
+  background: rgb(255 255 255 / 0.1);
 }
 .nameplate-sparkles {
   position: absolute;
@@ -2324,6 +2352,7 @@ button.chat-header-title:hover {
  * plate is pale with deep colour; the wash, the name, the credits and the sparkles turn over too. */
 :root[data-theme="light"] .nameplate {
   --plate-paper: color-mix(in oklab, var(--plate-tint) 10%, #fbfbfc);
+  --plate-ground: var(--plate-paper);
 }
 :root[data-theme="light"] .nameplate[data-lit] {
   --page: var(--plate-paper);
@@ -2364,8 +2393,10 @@ button.chat-header-title:hover {
   color: var(--ink-2);
 }
 :root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: rgb(0 0 0 / 0.06);
   color: var(--ink);
+}
+:root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::after {
+  background: rgb(0 0 0 / 0.06);
 }
 :root[data-theme="light"] .nameplate[data-lit] .sidebar-friend-playing {
   color: var(--people-live-ink);

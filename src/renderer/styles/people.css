@@ -1704,6 +1704,33 @@
 .avatar-welcome-regenerate {
   height: 38px;
 }
+.avatar-welcome-regenerate[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.6;
+}
+/* A refused Regenerate, in the note's place: orange, with Try again. */
+.avatar-welcome-error {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--orange);
+  font: 11px / 1.4 var(--font-family-mono);
+}
+.avatar-welcome-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+:root[data-theme="light"] .avatar-welcome-error {
+  color: color-mix(in oklab, var(--orange) 60%, var(--ink));
+}
 .avatar-welcome-note {
   color: var(--ink-3);
   font: 11px / 1.4 var(--font-family-mono);

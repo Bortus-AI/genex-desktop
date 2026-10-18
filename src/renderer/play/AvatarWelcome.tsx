@@ -1,7 +1,8 @@
 /**
  * An account meets its generated avatar: a beam scans up over a wireframe sphere and builds it,
  * then the mix it was made of (body, eyes, how block eyes look, gear), Regenerate (another avatar,
- * built again under the beam) and Continue. The avatar is already the account's, in the app and on
+ * built again under the beam; a refusal is said here, with Try again) and Continue, which waits
+ * while a regenerated avatar is being saved. The avatar is already the account's, in the app and on
  * genex.games; Settings is where it changes later. Once
  * genex.games knows nicknames, the welcome also asks for one (prefilled with the account's handle):
  * once for an account that has not chosen it, here or on genex.games, and Continue waits until the
@@ -14,7 +15,7 @@ import { SECOND_MS } from "../../shared/duration.ts";
 import { handleBaseFromName } from "../../shared/handle.ts";
 import { GenexPromoState, storedGenexPromo } from "../genex-promo.ts";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
-import type { PlayMe } from "../../shared/play-people.ts";
+import { AvatarStyle, type PlayMe } from "../../shared/play-people.ts";
 import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 import { usePeople, usePlay } from "../state/hooks.ts";
 import { readText, storageKeyFor, writeText } from "../storage.ts";
@@ -25,7 +26,7 @@ import { ACCOUNT_WORDS, AVATAR_WORDS, NICKNAME_WORDS } from "../words.ts";
 import { mixOf } from "./avatar-mix.ts";
 import { HandleField, useNicknameEdit } from "./HandleField.tsx";
 import { HandleHint, WelcomeKind, type WelcomesSeen, welcomeFor } from "./nickname-model.ts";
-import { useRegenerateAvatar } from "./use-regenerate-avatar.ts";
+import { regenerateAvatar } from "./use-regenerate-avatar.ts";
 
 const WORDS = AVATAR_WORDS;
 /** The nickname field's id in the welcome. */
@@ -137,21 +138,46 @@ function ContinueButton({
   );
 }
 
+/** Regenerate in the welcome: whether it shows, whether a save runs, a refusal, and the press. */
+interface WelcomeRegenerate {
+  shown: boolean;
+  online: boolean;
+  saving: boolean;
+  failed: boolean;
+  regenerate: () => void;
+}
+
 /**
- * Another generated avatar, at once, as Settings' Regenerate gives it; shown once genex.games keeps
- * one, and waiting for the connection.
+ * Regenerate as the welcome has it: shown while the generated avatar is the account's and
+ * genex.games keeps a regenerated one (as Settings shows it). A refusal is said in the welcome, not
+ * in a toast the dialog would cover; `saving` holds while any press's save runs.
  */
-function RegenerateButton({ me }: { me: PlayMe }): JSX.Element | null {
-  const { available, regenerate } = useRegenerateAvatar(me);
+function useWelcomeRegenerate(me: PlayMe): WelcomeRegenerate {
+  const saving = usePeople((s) => s.avatarSaving);
   const online = useOnline();
-  if (!available) return null;
+  const [failed, setFailed] = useState(false);
+  const regenerate = (): void => {
+    setFailed(false);
+    regenerateAvatar(me).catch(() => setFailed(true));
+  };
+  const shown = me.avatarVariantKept && me.avatarStyle !== AvatarStyle.Photo;
+  return { shown, online, saving, failed, regenerate };
+}
+
+/** Another generated avatar, at once; it waits for the connection and for the save before it. */
+function RegenerateButton({ regen }: { regen: WelcomeRegenerate }): JSX.Element | null {
+  if (!regen.shown) return null;
+  const waits = !regen.online || regen.saving;
   return (
     <button
       type="button"
       className="people-button avatar-welcome-regenerate"
       data-avatar-welcome-regenerate
-      disabled={!online}
-      onClick={regenerate}
+      aria-disabled={waits || undefined}
+      aria-busy={regen.saving || undefined}
+      onClick={() => {
+        if (!waits) regen.regenerate();
+      }}
     >
       <Icon name="dice" />
       {ACCOUNT_WORDS.regenerate}
@@ -159,9 +185,23 @@ function RegenerateButton({ me }: { me: PlayMe }): JSX.Element | null {
   );
 }
 
+/** Under the buttons: the note, or, after a refused Regenerate, why and Try again. */
+function WelcomeFoot({ regen, note }: { regen: WelcomeRegenerate; note: string }): JSX.Element {
+  if (!regen.failed) return <span className="avatar-welcome-note">{note}</span>;
+  return (
+    <p className="avatar-welcome-error" role="alert" data-avatar-welcome-error>
+      {ACCOUNT_WORDS.regenerateFailed}
+      <button type="button" className="avatar-welcome-retry" onClick={regen.regenerate}>
+        {WORDS.tryAgain}
+      </button>
+    </p>
+  );
+}
+
 /** The welcome as it was before nicknames: the avatar alone, Regenerate and Continue. */
 function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Element {
   const button = useRef<HTMLButtonElement>(null);
+  const regen = useWelcomeRegenerate(me);
   return (
     <DialogSurface
       title={WORDS.welcomeTitle}
@@ -175,10 +215,10 @@ function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Ele
       <div className="avatar-welcome-body" data-avatar-welcome>
         <BuiltAvatar me={me} />
         <div className="avatar-welcome-actions">
-          <RegenerateButton me={me} />
-          <ContinueButton button={button} onClick={onDone} />
+          <RegenerateButton regen={regen} />
+          <ContinueButton button={button} disabled={regen.saving} busy={regen.saving} onClick={onDone} />
         </div>
-        <span className="avatar-welcome-note">{WORDS.welcomeNote}</span>
+        <WelcomeFoot regen={regen} note={WORDS.welcomeNote} />
       </div>
     </DialogSurface>
   );
@@ -205,6 +245,8 @@ function AvatarAndNickname({
   const input = useRef<HTMLInputElement>(null);
   const button = useRef<HTMLButtonElement>(null);
   const nickname = useNicknameEdit(me.handle, me.handle ?? handleBaseFromName(me.name));
+  const regen = useWelcomeRegenerate(me);
+  const busy = nickname.saving || regen.saving;
   const keep = async (): Promise<void> => {
     if (await nickname.save()) onDone();
   };
@@ -236,14 +278,10 @@ function AvatarAndNickname({
           onChange={nickname.setValue}
         />
         <div className="avatar-welcome-actions">
-          <RegenerateButton me={me} />
-          <ContinueButton
-            button={button}
-            disabled={!nickname.view.keepable || nickname.saving}
-            busy={nickname.saving}
-          />
+          <RegenerateButton regen={regen} />
+          <ContinueButton button={button} disabled={!nickname.view.keepable || busy} busy={busy} />
         </div>
-        <span className="avatar-welcome-note">{WORDS.welcomeNoteBoth}</span>
+        <WelcomeFoot regen={regen} note={WORDS.welcomeNoteBoth} />
       </form>
     </DialogSurface>
   );
