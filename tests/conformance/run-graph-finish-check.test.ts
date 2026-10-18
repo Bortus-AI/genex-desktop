@@ -26,7 +26,6 @@ import {
   finishCheckLook,
   finishPanelTone,
   leftOf,
-  reasonTone,
   roundNoteOf,
 } from "../../src/renderer/run-tree.ts";
 import { FINISH_CHECK_WORDS } from "../../src/renderer/words.ts";
@@ -573,17 +572,12 @@ describe("the finish check's look", () => {
     assert.equal(finishPanelTone(node), Tone.Muted);
   });
 
-  it("the card's status and numbers take the state's colour", () => {
+  it("the card's status takes the state's colour", () => {
     assert.equal(finishPanelTone(placeholder()), Tone.Muted);
     assert.equal(finishPanelTone(rejected()), Tone.Orange);
     assert.equal(finishPanelTone(unanswered()), Tone.Orange);
     assert.equal(finishPanelTone(checking()), Tone.Accent);
     assert.equal(finishPanelTone(done()), Tone.Green);
     assert.equal(finishPanelTone(stopped()), Tone.Red);
-    const roundOf = (node: FinishCheckNode) => node.rounds.at(-1) as FinishRound;
-    assert.equal(reasonTone(roundOf(rejected())), Tone.Orange, "why not yet: amber numbers");
-    assert.equal(reasonTone(roundOf(stopped())), Tone.Red, "what isn't done: red numbers");
-    assert.equal(reasonTone(roundOf(done())), Tone.Green, "why yes: green numbers");
-    assert.equal(reasonTone(roundOf(checking())), Tone.Muted, "a round still being checked has no reasons yet");
   });
 });

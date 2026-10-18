@@ -522,10 +522,11 @@ a thing looks only from a close front or side picture.
 In a Loop in place, a claim that names what remains while more than `GAPS_FIRST_MIN_MS` (20 min) of
 working time is left reaches no reviewer: the lead is told to work on what remains first
 (`open/finish.ts` `gapsFirst`), and nothing is recorded.
-It answers `{"verdict":"yes"|"no","reasons":[…],"notDone":[…]}`: `reasons` say what it checked and
-found, met or not, and `notDone` names each thing asked for the proof doesn't show yet; the two stay
-apart in the record and the answer, and only `notDone` is what isn't done in the chat, the card and
-the report (`notDoneOf`; a record that names none falls back to its reasons). Yes ends the Loop, no
+It answers `{"verdict":"yes"|"no","reasons":[…],"done":[…],"notDone":[…]}`: `reasons` say what it
+checked and found, met or not, `done` and `notDone` are short checklist items of what the proof shows
+and what it doesn't show yet; they stay apart in the record and the answer, and only `notDone` is
+what is still to fix on the "Almost there" card, in Builds' "Final look" and in the report
+(`notDoneOf`; a record that names none falls back to its reasons). The chat says nothing per round. Yes ends the Loop, no
 goes back to the lead with both, and `MAX_FINISH_REJECTIONS` (3) no's in a row stop it, a timed Loop
 only once little time is left; after a row it went on past, a claim whose proof names no file made
 since the last no is turned back before any review (`freshProofIn`), and nothing is recorded. An answer

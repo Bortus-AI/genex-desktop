@@ -281,13 +281,6 @@ export const finishCheckLook = (node: FinishCheckNode): FinishCheckLook => FINIS
 /** The tone of the finish check card's status: the node's ink. */
 export const finishPanelTone = (node: FinishCheckNode): Tone => FINISH_LOOKS[lookOf(node)].tone;
 
-/** The ink of a round's reason numbers on the card: amber for why not yet, red for what isn't done, green for why yes. */
-export function reasonTone(round: FinishRound): Tone {
-  if (round.step === FinishCheckStep.Accepted) return Tone.Green;
-  if (round.step !== FinishCheckStep.Rejected) return Tone.Muted;
-  return round.stopped ? Tone.Red : Tone.Orange;
-}
-
 /** The line under one round on the finish check's card, and whether it reads quietly. */
 export interface RoundNote {
   text: string;
