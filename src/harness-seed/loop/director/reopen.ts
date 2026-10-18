@@ -63,8 +63,7 @@ export function reopenedJournal(journal: AnyRecord, run: AnyRecord, mark: Reopen
 function freshTally(saved: unknown): AnyRecord | null {
   if (!saved || typeof saved !== "object") return null;
   const round = Number((saved as AnyRecord).round);
-  const counted = Number.isSafeInteger(round) && round > 0 ? round : 0;
-  return { round: counted, rejections: 0, checking: false, reasons: [], notDone: [] };
+  return { round: Number.isSafeInteger(round) && round > 0 ? round : 0, rejections: 0, checking: false, reasons: [] };
 }
 
 /** The reopen this journal starts a run from, or null (a new run, a paused one resumed). */
