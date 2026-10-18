@@ -5,7 +5,9 @@
  * asset wears Shared while it is on Play (its cover opens that page) and Saved when saved, and Use
  * lists the person's games, the most recently opened first. The store reads the library page by page
  * for one kind and search at a time, drops an answer for a list a newer read replaced, keeps what it
- * has when a read fails, and reads the catalog once until it is stale or forced.
+ * has when a read fails, and reads the catalog once until it is stale or forced. A tile with no cover
+ * shows an image's own file, or a picture drawn from a 3D file a few at a time and kept for the
+ * session; a sound or a file off genex.games' hosts keeps the kind's glyph.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -21,7 +23,9 @@ import {
   gameTiles,
   KindChoice,
   libraryTile,
+  PictureFrom,
   TileSource,
+  tilePicture,
   tileSource,
   WAVE_BARS,
   waveDrawing,
@@ -29,6 +33,7 @@ import {
 } from "../../src/renderer/play/asset-tiles.ts";
 import { CardTag } from "../../src/renderer/asset-library-view.ts";
 import { FeedStatus } from "../../src/renderer/play/play-model.ts";
+import { PICTURES_AT_ONCE, pictureQueue, viewerFileOf } from "../../src/renderer/play/tile-pictures.ts";
 import { assetViewChosen, createPlayStore, FEED_STALE_MS, initialPlay } from "../../src/renderer/state/play.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -191,6 +196,142 @@ describe("Assets shelf: tiles", () => {
     );
     const middle = wave[Math.floor(WAVE_BARS / 2)] ?? 0;
     assert.ok(middle > (wave[0] ?? 1), "the middle is louder than the edge");
+  });
+});
+
+const FILES = "https://assets.genex.technology/generations";
+
+describe("Assets shelf: a tile's picture", () => {
+  it("shows the cover when there is one, whatever the kind", () => {
+    const cover = "https://assets.genex.technology/thumb.webp";
+    for (const kind of [LibraryKind.Model, LibraryKind.Image, LibraryKind.Video]) {
+      const tile = libraryTile(asset({ id: "gen-cover-0001", kind, thumbnailUrl: cover }));
+      assert.deepEqual(tilePicture(tile), { from: PictureFrom.Image, url: cover }, kind);
+    }
+  });
+
+  it("shows an image with no cover as its own file", () => {
+    const file = `${FILES}/gen-dusk-0007/image-main`;
+    const tile = libraryTile(asset({ id: "gen-dusk-0007", kind: LibraryKind.Image, fileUrl: file }));
+    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Image, url: file });
+  });
+
+  it("draws a 3D asset with no cover from its model file", () => {
+    const file = `${FILES}/gen-sword-0008/model-glb`;
+    const tile = libraryTile(asset({ id: "gen-sword-0008", fileUrl: file }));
+    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Model, url: file });
+  });
+
+  it("keeps the glyph for a sound, a video, a tile that knows no file, and a file off genex.games' hosts", () => {
+    const bare = (over: Partial<LibraryAsset>) => tilePicture(libraryTile(asset({ id: "gen-bare-0009", ...over })));
+    assert.equal(bare({ kind: LibraryKind.Sound, fileUrl: `${FILES}/x/audio-sfx` }), null);
+    assert.equal(bare({ kind: LibraryKind.Video, fileUrl: `${FILES}/x/video-mp4` }), null);
+    assert.equal(bare({ fileUrl: null }), null);
+    for (const fileUrl of [
+      "https://tripo-data.rg1.data.tripo3d.com/x/model.glb",
+      "http://assets.genex.technology/x/model.glb",
+      "https://assets.genex.technology.evil.example/x/model.glb",
+      "data:image/png;base64,AAAA",
+    ]) {
+      assert.equal(bare({ fileUrl }), null, fileUrl);
+      assert.equal(bare({ kind: LibraryKind.Image, fileUrl }), null, fileUrl);
+    }
+    const [noCover] = catalogTiles([catalogItem({ slug: "no-cover" })], KindChoice.All);
+    assert.ok(noCover);
+    assert.equal(tilePicture(noCover), null, "a shared asset with no cover knows no file");
+  });
+
+  it("reads a model file by its own extension when it has one, else as a GLB", () => {
+    assert.equal(viewerFileOf(`${FILES}/gen-a/model-glb`), "model.glb");
+    assert.equal(viewerFileOf(`${FILES}/gen-a/knight.fbx`), "model.fbx");
+    assert.equal(viewerFileOf(`${FILES}/gen-a/knight.GLB?v=2`), "model.glb");
+    assert.equal(viewerFileOf(`${FILES}/gen-a/notes.txt`), "model.glb");
+  });
+});
+
+/** A draw the test finishes by hand, each start recorded. */
+function handDraws() {
+  const started: string[] = [];
+  const pending = new Map<string, { resolve: (picture: string) => void; reject: (error: Error) => void }>();
+  const draw = (url: string) =>
+    new Promise<string>((resolve, reject) => {
+      started.push(url);
+      pending.set(url, { resolve, reject });
+    });
+  const settle = async (url: string, picture: string | Error): Promise<void> => {
+    const hand = pending.get(url);
+    assert.ok(hand, `${url} was drawing`);
+    if (picture instanceof Error) hand.reject(picture);
+    else hand.resolve(picture);
+    await new Promise((resolve) => setImmediate(resolve));
+  };
+  return { started, draw, settle };
+}
+
+describe("Assets shelf: pictures drawn from 3D files", () => {
+  const live = () => new AbortController().signal;
+
+  it("draws a few at a time; the rest wait their turn in order", async () => {
+    const hand = handDraws();
+    const queue = pictureQueue(hand.draw);
+    const urls = ["a", "b", "c", "d"];
+    const asked = urls.map((url) => queue.request(url, live()));
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(PICTURES_AT_ONCE, 2);
+    assert.deepEqual(hand.started, ["a", "b"]);
+    await hand.settle("a", "pic-a");
+    assert.deepEqual(hand.started, ["a", "b", "c"]);
+    await hand.settle("b", "pic-b");
+    await hand.settle("c", "pic-c");
+    await hand.settle("d", "pic-d");
+    assert.deepEqual(await Promise.all(asked), ["pic-a", "pic-b", "pic-c", "pic-d"]);
+  });
+
+  it("keeps a drawn picture for the session: asking again never draws again", async () => {
+    const hand = handDraws();
+    const queue = pictureQueue(hand.draw);
+    const first = queue.request("a", live());
+    const again = queue.request("a", live());
+    await new Promise((resolve) => setImmediate(resolve));
+    await hand.settle("a", "pic-a");
+    assert.equal(await first, "pic-a");
+    assert.equal(await again, "pic-a");
+    assert.equal(queue.drawn("a"), "pic-a");
+    assert.equal(await queue.request("a", live()), "pic-a");
+    assert.deepEqual(hand.started, ["a"]);
+  });
+
+  it("tries a file that could not be drawn only once", async () => {
+    const hand = handDraws();
+    const queue = pictureQueue(hand.draw);
+    const failed = assert.rejects(queue.request("broken", live()), /not a GLB/);
+    await new Promise((resolve) => setImmediate(resolve));
+    await hand.settle("broken", new Error("not a GLB"));
+    await failed;
+    await assert.rejects(queue.request("broken", live()));
+    assert.deepEqual(hand.started, ["broken"]);
+  });
+
+  it("never draws a picture whose tile left the screen before its turn, and frees its place", async () => {
+    const hand = handDraws();
+    const queue = pictureQueue(hand.draw);
+    void queue.request("a", live());
+    void queue.request("b", live());
+    const leaving = new AbortController();
+    const left = queue.request("c", leaving.signal);
+    void queue.request("d", live());
+    leaving.abort();
+    await assert.rejects(left);
+    await hand.settle("a", "pic-a");
+    assert.deepEqual(hand.started, ["a", "b", "d"]);
+    assert.equal(queue.drawn("c"), undefined);
+  });
+
+  it("forgets the oldest picture past what it keeps", async () => {
+    const queue = pictureQueue(async (url) => `pic-${url}`, { kept: 2 });
+    for (const url of ["a", "b", "c"]) await queue.request(url, live());
+    assert.equal(queue.drawn("a"), undefined);
+    assert.equal(queue.drawn("c"), "pic-c");
   });
 });
 

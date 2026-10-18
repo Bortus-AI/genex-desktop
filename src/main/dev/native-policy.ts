@@ -325,6 +325,9 @@ const FIXTURE_SAFE = [
   "studio:assets.share",
   "studio:assets.unshare",
   "studio:assets.add",
+  // A tile's picture file: a fixture launch reads the fixture library's own made-up file, so no
+  // socket opens.
+  "studio:assets.file",
   // The nickname: a fixture launch answers a check and a save from its own people (a few names
   // taken or kept), signed out unless it asks for its fixture account; the save lasts the launch.
   "studio:play.handle-check",
