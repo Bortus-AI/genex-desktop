@@ -168,8 +168,14 @@ export const PlayViewerPhase = {
 } as const;
 export type PlayViewerPhase = (typeof PlayViewerPhase)[keyof typeof PlayViewerPhase];
 
-/** The viewer's header: the app's own bar across the window's top, the game's view under it. */
+/**
+ * The viewer's bar: the app's own 48px strip of glass laid over the top edge of the game, which takes
+ * the whole window. It is drawn in a layer of its own above the game's native view.
+ */
 export const PLAY_BAR_HEIGHT = 48;
+
+/** The longest name of a game the viewer's bar is given to show. */
+export const PLAY_TITLE_MAX = 200;
 
 /** What the viewer's header asks main for (`studio:play.control`). Wire values: never rename one. */
 export const PlayControl = {
@@ -189,6 +195,8 @@ export const PlayControl = {
   Mic: "mic",
   /** The mic's menu: which microphone. */
   MicDevices: "mic-devices",
+  /** The maker's name: the viewer closes and the app shows their profile. */
+  Maker: "maker",
 } as const;
 export type PlayControl = (typeof PlayControl)[keyof typeof PlayControl];
 
@@ -243,12 +251,18 @@ export function readPlayPoint(value: unknown): PlayPoint | undefined {
   return onWindow(x) && onWindow(y) ? { x: Math.round(x), y: Math.round(y) } : undefined;
 }
 
-/** What the viewer's header draws. */
+/** What the viewer's bar draws. */
 export interface PlayBarState {
+  /** The game's name, as the card that opened it showed it. */
+  title: string;
+  /** The bar is up over the game; otherwise it has faded up and out. */
+  shown: boolean;
   liked: boolean;
   likes: number;
   /** The game may be remixed: the header shows Remix. */
   remixable: boolean;
+  /** The game is multiplayer: the bar offers Invite a friend. */
+  multiplayer: boolean;
   note: PlayNote | null;
   /** The header offers a signed-out guest the Genex plugin. */
   guestCard: boolean;
@@ -256,6 +270,12 @@ export interface PlayBarState {
   facts: PlayFacts | null;
   /** Null until the game asks for a microphone: then the header has a mic switch and its menu. */
   mic: PlayMicBar | null;
+  /** How many comments the game has; null until its page facts are read. */
+  comments: number | null;
+  /** A Genex account is unlocked: the comments end in a field to write one, else in Sign in. Null until known. */
+  signedIn: boolean | null;
+  /** A remix is being made: Remix waits for it. */
+  remixing: boolean;
 }
 
 /** A remix's name in the library, from the game it copies: what main adopts it as and Create shows while it is made. */
@@ -289,4 +309,8 @@ export interface PlayViewerEvent {
   focusBar?: boolean;
   /** The guest card's Install plugin closed the viewer: the app runs Play's Install plugin. */
   install?: boolean;
+  /** Remix closed the viewer: the app makes the copy of the game it showed. */
+  remix?: boolean;
+  /** The maker's name closed the viewer: the app shows this account's profile. */
+  profile?: string;
 }

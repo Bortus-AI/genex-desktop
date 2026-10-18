@@ -427,8 +427,10 @@ describe("Play gallery calls", () => {
     assert.deepEqual(await found("x" as PlayShelf), ["ocean-racer"]);
   });
 
-  it("reads a game's likes, whether it may be remixed and the facts its header shows", async () => {
-    const { gallery, calls } = rig(() => ok({ item: { ...item(), likesCount: 42, likedByMe: true } }));
+  it("reads a game's likes, comments, whether it may be remixed and the facts its bar shows", async () => {
+    const { gallery, calls } = rig(() =>
+      ok({ item: { ...item(), likesCount: 42, likedByMe: true, commentsCount: 7 } }),
+    );
     assert.deepEqual(await gallery.world("lost-cathedral"), {
       id: "cm1",
       slug: "lost-cathedral",
@@ -442,7 +444,14 @@ describe("Play gallery calls", () => {
       authorId: "u1",
       plays: 2682,
       online: null,
+      comments: 7,
     });
+    const uncounted = rig(() => ok({ item: { ...item(), commentsCount: "many" } }));
+    assert.equal(
+      (await uncounted.gallery.world("lost-cathedral")).comments,
+      0,
+      "a count that is not one reads as none",
+    );
     assert.equal(calls[0]?.token, TOKEN);
     await assert.rejects(gallery.world("../../api"), /Not a game address/);
   });

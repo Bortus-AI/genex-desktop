@@ -22,6 +22,8 @@ import type {
   PresenceVisibility,
 } from "./play-people.ts";
 import type { GenexAccountView } from "./genex-account.ts";
+import type { PlayBarHold } from "./play-bar.ts";
+import type { PlayComment, PlayCommentsPage } from "./play-comments.ts";
 import type { PlayCredits } from "./play-credits.ts";
 import type { HandleCheck, HandleSave } from "./handle.ts";
 import type { PlayStats, StatsPeriod } from "./play-stats.ts";
@@ -472,12 +474,20 @@ export interface StudioApi {
   playRemix(slug: string): Promise<string>;
   /** Play: players in each named game now; a game nobody counts is left out. */
   playOnline(slugs: string[]): Promise<Record<string, number>>;
-  /** Play: open a game full screen in the viewer; how it goes arrives as `UiEvent.PlayViewer`. */
-  playOpen(slug: string): Promise<void>;
+  /** Play: open a game full screen in the viewer, its bar showing `title`; how it goes arrives as `UiEvent.PlayViewer`. */
+  playOpen(slug: string, title: string): Promise<void>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
   playControl(control: PlayControl, at?: PlayPoint): Promise<void>;
+  /** Play: what holds the viewer's bar up (the pointer or the keyboard on it, its Comments open). */
+  playBar(hold: PlayBarHold): Promise<void>;
+  /** Play: a page of the viewed game's comments, newest first: the first, or the one after `cursor`. */
+  playComments(cursor: string | null): Promise<PlayCommentsPage>;
+  /** Play: post a comment on the viewed game as the Genex account; the comment as saved. */
+  playComment(body: string): Promise<PlayComment>;
+  /** Play: delete one of the account's comments on the viewed game. */
+  playUncomment(commentId: string): Promise<void>;
   /** Play: the Genex account the app is signed in as, or null while it is signed out. */
   playMe(): Promise<PlayMe | null>;
   /** Play: rename the account (2–20 characters); the account as it is after. */
