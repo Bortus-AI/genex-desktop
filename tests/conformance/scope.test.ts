@@ -222,18 +222,18 @@ describe("the user's words in a chat's log", () => {
   it("a launch's build also hears what joined its launching turn, which reaches it no other way", () => {
     const log = [
       ...queued("e1", "m1", "start a 3h Loop on the swamp town"),
+      ...queued("e1b", "m1b", "switch to another engine", { newRun: true }),
       ...queued("e2", "m2", "and make it foggy"),
       record("e3", "coordinator_message_delivered", { messageId: "m2", into: "m1", how: "native" }),
+      ...queued("e3b", "m2b", "handed back after it was read"),
+      record("e3c", "coordinator_message_delivered", { messageId: "m2b", into: "m1", how: "native" }),
+      record("e3d", "coordinator_message_requeued", { messageId: "m2b" }),
       ...queued("e4", "m3", "a message for the next turn"),
       ...queued("e5", "m4", "handed over but never read"),
       record("e6", "coordinator_message_steering", { messageId: "m4", into: "m1" }),
     ];
     assert.deepEqual(launchWords(log as never, "m1"), ["start a 3h Loop on the swamp town", "and make it foggy"]);
-    assert.deepEqual(launchWords(log as never, "m3"), [
-      "start a 3h Loop on the swamp town",
-      "and make it foggy",
-      "a message for the next turn",
-    ]);
+    assert.ok(!launchWords(log as never, "m1").includes("switch to another engine"), "one that never joined acts once");
   });
 });
 

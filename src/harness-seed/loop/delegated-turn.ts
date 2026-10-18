@@ -843,7 +843,7 @@ function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): Any
 }
 
 /** A number of hours, or minutes when it says so; NaN when it names none. */
-const HOURS_TEXT = /^\s*(\d+(?:\.\d+)?)\s*(m\b|min|minutes?)?/i;
+const HOURS_TEXT = /^\s*(\d*\.?\d+)\s*(m\b|mins?\b|minutes?)?/i;
 
 /** The hours an engine sent, as a number: 3, "3", "3h" or "2.5 hours"; "30m" is half an hour. */
 function hoursNamed(hours: unknown): number {
