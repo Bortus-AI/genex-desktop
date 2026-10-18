@@ -1430,6 +1430,87 @@ test("a helper tool that answers {error} reaches the agent as a failed call; any
   }
 });
 
+/* ---- Descriptions: a toolset described in more than one answer holds reaches the agent by its tools' names ---- */
+
+/** The longest description the bridge hands over whole, in characters. */
+const DESCRIPTION_LIMIT = 60_000;
+const NIAGARA = "NiagaraToolset_System";
+/** A toolset described as Niagara's system toolset is: dozens of tools, each with a long schema. */
+const longDescription = {
+  name: NIAGARA,
+  description: "Make and edit Niagara systems.",
+  tools: Array.from({ length: 40 }, (_, i) => ({
+    name: `${NIAGARA}.tool_${i}`,
+    description: `Does step ${i} of a system.\n${"Details. ".repeat(40)}`,
+    inputSchema: { type: "object", properties: { path: { type: "string", description: "x".repeat(2500) } } },
+  })),
+};
+const describe = (args: Record<string, unknown>) => ({ name: EditorTool.DescribeToolset, arguments: args });
+const sentArgs = (unreal: ReturnType<typeof editor>) => toolCalls(unreal).map((s) => s.body.params.arguments);
+
+test("a toolset description too long for one answer reaches the agent as its tools by name, and tool_name reads one", async () => {
+  assert.ok(JSON.stringify(longDescription).length > DESCRIPTION_LIMIT, "the fixture is over the limit");
+  const unreal = editor(() => longDescription);
+  const { client, close } = await connected(unreal.fetchImpl);
+  try {
+    const listed = await client.callTool(describe({ toolset_name: NIAGARA }));
+    assert.equal(listed.isError, undefined);
+    const text = textOf(listed);
+    assert.ok(text.length <= DESCRIPTION_LIMIT, String(text.length));
+    const shortened = JSON.parse(text);
+    assert.equal(shortened.description, longDescription.description, "the toolset's own fields stay");
+    assert.deepEqual(shortened.tools[3], { name: `${NIAGARA}.tool_3`, description: "Does step 3 of a system." });
+    assert.equal(shortened.tools.length, longDescription.tools.length);
+    assert.match(JSON.stringify(listed.content), /too long for one answer[^"]*tool_name/);
+
+    for (const tool of ["tool_7", `${NIAGARA}.TOOL_7`]) {
+      const one = await client.callTool(describe({ toolset_name: NIAGARA, tool_name: tool }));
+      assert.equal(one.isError, undefined, tool);
+      assert.deepEqual(JSON.parse(textOf(one)).tools, [longDescription.tools[7]], `${tool}: the tool's whole entry`);
+    }
+    const missing = await client.callTool(describe({ toolset_name: NIAGARA, tool_name: "make_coffee" }));
+    assert.equal(missing.isError, true);
+    assert.match(textOf(missing), /no tool "make_coffee"\. Its tools: NiagaraToolset_System\.tool_0, /);
+    assert.deepEqual(sentArgs(unreal), Array(4).fill({ toolset_name: NIAGARA }), "Epic is asked for the toolset alone");
+  } finally {
+    await close();
+  }
+});
+
+test("a short description, an error and other tools' answers reach the agent as Epic sent them; a long one the bridge can't read is cut", async () => {
+  const short = { name: "EditorToolset.ActorTools", tools: [{ name: "set_label", description: "Label an actor." }] };
+  const rows: Array<[string, { name: string; arguments: Record<string, unknown> }, unknown]> = [
+    ["a short description", describe({ toolset_name: "EditorToolset.ActorTools" }), short],
+    ["Epic's refusal", describe({ toolset_name: "Nope" }), new Refusal("Unknown toolset Nope")],
+    ["a long answer to another tool", SET_LABEL, { returnValue: "y".repeat(DESCRIPTION_LIMIT * 2) }],
+  ];
+  for (const [label, call, answer] of rows) {
+    const unreal = editor(() => answer);
+    const { client, close } = await connected(unreal.fetchImpl);
+    try {
+      const result = await client.callTool(call);
+      assert.deepEqual(
+        result.content,
+        [...toolResult(answer).content, { type: "text", text: "[Unreal project: Drift]" }],
+        label,
+      );
+    } finally {
+      await close();
+    }
+  }
+  const prose = `${"Tool make_system: makes a system. ".repeat(3000)}`;
+  const unreal = editor(() => prose);
+  const { client, close } = await connected(unreal.fetchImpl);
+  try {
+    const text = textOf(await client.callTool(describe({ toolset_name: NIAGARA })));
+    assert.ok(text.startsWith(JSON.stringify(prose).slice(0, 1000)), "the start as Epic sent it");
+    assert.match(text, /too long for one answer: it was cut after its first 60 KB/);
+    assert.ok(text.length < DESCRIPTION_LIMIT + 200, String(text.length));
+  } finally {
+    await close();
+  }
+});
+
 /* ---- Captures: the build tools' frames reach the agent as images with their tone numbers ---- */
 
 const BUILD_TOOLSET = "genex_build.tools.GenexBuildTools";

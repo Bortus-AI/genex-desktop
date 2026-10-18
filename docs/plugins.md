@@ -470,6 +470,12 @@ The Genex editor helper's build and play tools (below) answer a refusal or a fai
 inside a call Epic counts as done, so the bridge marks such an answer `isError` (the toolset named
 short or qualified, in any case): the agent and the chat read it as a failed call, in the helper's
 own words. An `error` field in any other toolset's answer stays as Epic sent it.
+Some of Epic's toolsets describe themselves in more than an engine takes from one tool answer
+(Niagara's system toolset in about 278 KB, past Claude Code's 25,000 tokens), so a
+`describe_toolset` answer over 60,000 characters comes back as its tools by name, each with the
+first line of its description, with a note; the bridge's own `tool_name` argument, never sent to
+Epic, returns one tool's whole entry, and a description whose tools it can't find is cut at the
+limit (`editor-describe.ts`). Shorter answers and Epic's errors stay as Epic sent them.
 An editor behind Genex runs at 3 frames per second while Unreal's "Use Less CPU when in
 Background" (`bThrottleCPUWhenNotForeground`) is on. To avoid that, a `StartPIE` call first turns
 the setting off through Epic's `ObjectTools.set_properties`. This changes only the running editor
@@ -995,6 +1001,7 @@ a setup record; a Genex editor helper that is older or missing gives it the upda
 (setup again copies only the helper) rather than making it look never set up, and Connected then
 adds a quiet note. A project set up before Epic's toolsets were added is still set up; the same Open
 adds them (`addToolsetPlugins`, after the game snapshot, recorded so Undo takes them out), with no note.
+A toolset Genex added that the user took out again counts as settled: no Open, setup or snapshot puts it back.
 A user's Open updates an older helper only in the open game's own linked project, so only
 there does the panel say Open in Unreal updates it; elsewhere it says opening it from its Genex game does. A newer helper (`helperNewer`) gets one line under Open in Unreal and Connected,
 never an update. Connected needs both an answer on the project's port and a running editor
@@ -1044,7 +1051,8 @@ The confirmed `setup` step does four things, each one only if it is needed:
   layout, and adds Epic's toolsets for games, editor-only (`TOOLSET_PLUGINS`: `UMGToolSet`,
   `NiagaraToolsets`, `StateTreeToolset`, `AIModuleToolset`, `AnimationAssistantToolset`,
   `PCGToolset`, `PhysicsToolsets`, `GameplayTagsToolset`, `AutomationTestToolset`). A toolset the
-  project already names, on or off, stays as the user left it. Not Epic's `AllToolsets`: on UE 5.8.3
+  project already names, on or off, stays as the user left it, and one Genex added that the user took
+  out stays out. Not Epic's `AllToolsets`: on UE 5.8.3
   its `GameFeaturesToolset` makes every start log a GameFeatureData load error, and the rest serve
   no game Genex makes. These add about 20 s to the project's first start and nothing measurable
   after; `list_toolsets` grows, while the agent's three meta-tools stay the same;

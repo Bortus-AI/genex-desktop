@@ -389,6 +389,24 @@ describe("Epic's toolsets for games", () => {
     assert.equal(await readFile(f.project.file, "utf8"), own, "undo keeps the user's own entries");
   });
 
+  it("a toolset the user takes out after setup stays out: the project stays set up, and nothing puts it back", async () => {
+    const f = await setupFixture({ ini: USER_INI });
+    await setUpProject(f.project.file, f.options);
+    const uproject = JSON.parse(await readFile(f.project.file, "utf8"));
+    uproject.Plugins = uproject.Plugins.filter((p: PluginEntry) => p.Name !== "NiagaraToolsets");
+    const edited = `${JSON.stringify(uproject, null, "\t")}\n`;
+    await writeFile(f.project.file, edited);
+
+    const state = await inspectProject(f.project.file, f.options);
+    assert.deepEqual([state.toolsets, state.ready], [true, true], "the user's removal counts as decided");
+    assert.deepEqual((await planSetup(f.project.file, f.options)).steps, []);
+    assert.deepEqual(await addToolsetPlugins(f.project.file, f.options), []);
+    await setUpProject(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), edited, "neither adding nor setup again puts it back");
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), UPROJECT, "the .uproject as it was before Genex");
+  });
+
   it("a project set up before them is still set up, and only its setup plan names them", async () => {
     const f = await setUpWithoutToolsets();
     const state = await inspectProject(f.project.file, f.options);

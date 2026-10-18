@@ -22,6 +22,7 @@ import {
   portBlockedIn,
   readEditorLog,
 } from "../../src/plugins/unreal/editor-log.ts";
+import { SetupStorage } from "../../src/plugins/unreal/editor-port.ts";
 import { answersOrBlocked } from "../../src/plugins/unreal/editor-status.ts";
 import {
   getUnrealLaunch,
@@ -2555,14 +2556,24 @@ const TOOLSETS = [
 const pluginNames = async (file: string): Promise<string[]> =>
   JSON.parse(await readFile(file, "utf8")).Plugins.map((p: { Name: string }) => p.Name);
 
+/** Drift's .uproject with the plugins `keep` keeps. */
+async function keepPlugins(file: string, keep: (name: string) => boolean) {
+  const uproject = JSON.parse(await readFile(file, "utf8"));
+  uproject.Plugins = uproject.Plugins.filter((p: { Name: string }) => keep(p.Name));
+  await writeFile(file, `${JSON.stringify(uproject, null, "\t")}\n`);
+}
+
 describe("Open in Unreal adds Epic's toolsets to a project set up before them", () => {
-  /** Drift set up, then its toolsets taken out, as a Genex from before them left it. */
+  /** Drift set up, its toolsets taken out of it and of its setup record, as a Genex from before them left it. */
   async function setUpBefore() {
     const f = await launchFixture();
     await f.act("setup", { project: f.drift });
-    const uproject = JSON.parse(await readFile(f.drift, "utf8"));
-    uproject.Plugins = uproject.Plugins.filter((p: { Name: string }) => !TOOLSETS.includes(p.Name));
-    await writeFile(f.drift, `${JSON.stringify(uproject, null, "\t")}\n`);
+    await keepPlugins(f.drift, (name) => !TOOLSETS.includes(name));
+    const [key] = await readdir(path.join(f.storage, SetupStorage.Folder));
+    const recordFile = path.join(f.storage, SetupStorage.Folder, key, SetupStorage.Record);
+    const record = JSON.parse(await readFile(recordFile, "utf8"));
+    record.uproject.added = record.uproject.added.filter((name: string) => !TOOLSETS.includes(name));
+    await writeFile(recordFile, JSON.stringify(record));
     return f;
   }
 
@@ -2586,6 +2597,17 @@ describe("Open in Unreal adds Epic's toolsets to a project set up before them", 
     f.live.running = true;
     await f.actIn("valley", "open-editor", { project: f.drift });
     assert.deepEqual(f.snapshots, []);
+    assert.equal(await readFile(f.drift, "utf8"), witness);
+  });
+
+  it("never one Genex added that the user took out again: no snapshot, and the .uproject stays as it was", async () => {
+    const f = await launchFixture();
+    await f.act("setup", { project: f.drift });
+    await keepPlugins(f.drift, (name) => name !== "NiagaraToolsets");
+    const witness = await readFile(f.drift, "utf8");
+    await f.linkGame("valley", f.drift);
+    await f.actIn("valley", "open-editor", { project: f.drift });
+    assert.deepEqual([f.snapshots, f.events], [[], ["launch"]]);
     assert.equal(await readFile(f.drift, "utf8"), witness);
   });
 });

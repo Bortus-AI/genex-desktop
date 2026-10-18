@@ -14,6 +14,8 @@
  * JSON text, which Studio would truncate as text; the bridge hands them to the agent as images.
  * The Genex editor helper's build and play tools answer a refusal or a failure as `{error}` inside
  * a call Epic counts as done; the bridge hands such an answer to the agent as a failed call.
+ * A toolset's description too long for one answer comes back as its tools by name, and the
+ * bridge's own `tool_name` reads one tool's (`editor-describe.ts`).
  * An editor behind Genex plays at 3 frames per second while Unreal's "Use Less CPU when in
  * Background" is on, so the bridge turns it off for the editor's current run while a play test
  * runs and gives it back afterwards; Unreal saves nothing, so the user's preference survives.
@@ -35,7 +37,7 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { type AgentPlayMarker, NO_AGENT_PLAY } from "./agent-play.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { CONNECTOR_OUTCOME_META } from "../../shared/mcp.ts";
+import { CONNECTOR_OUTCOME_META, ToolsetGatewayArg } from "../../shared/mcp.ts";
 import {
   type CrashWatch,
   type EditorCrash,
@@ -54,6 +56,7 @@ import {
   sameProject,
 } from "./editor-port.ts";
 import { BUILD_TOOLSET, type CaptureClock, captureTool, helperAnswer, liftCapture } from "./editor-captures.ts";
+import { fitDescription } from "./editor-describe.ts";
 import { LOOP_TOOLSET } from "./editor-queue.ts";
 import {
   OBJECT_TOOLSET,
@@ -171,10 +174,14 @@ const TOOLS = [
   },
   {
     name: EditorTool.DescribeToolset,
-    description: "Describe one Unreal Editor toolset: its tools, what each does and its input schema.",
+    description:
+      "Describe one Unreal Editor toolset: its tools, what each does and its input schema. A toolset too long for one answer lists its tools by name; then describe one tool with tool_name.",
     inputSchema: {
       type: "object" as const,
-      properties: { toolset_name: { type: "string", description: "A name from list_toolsets." } },
+      properties: {
+        toolset_name: { type: "string", description: "A name from list_toolsets." },
+        tool_name: { type: "string", description: "Optional: one of the toolset's tools, to read only its schema." },
+      },
       required: ["toolset_name"],
     },
   },
@@ -698,6 +705,21 @@ async function settlePlay(
   if (step === PlayStep.Stop && !failed) await marker.stopped();
 }
 
+/** What the editor is asked: a description's `tool_name` is the bridge's own, so Epic gets only the toolset. */
+function editorParams(params: CallParams): CallParams {
+  if (params.name !== EditorTool.DescribeToolset) return params;
+  const args = Object.entries(params.arguments ?? {}).filter(([key]) => key !== ToolsetGatewayArg.Tool);
+  return { ...params, arguments: Object.fromEntries(args) };
+}
+
+/** The editor's answer as the agent reads it: a toolset's description fitted to one answer (editor-describe.ts). */
+function fitAnswer(params: CallParams, content: Part[], isError: boolean): { parts: Part[]; failed: boolean } {
+  if (params.name !== EditorTool.DescribeToolset || isError) return { parts: content, failed: false };
+  const tool = params.arguments?.[ToolsetGatewayArg.Tool];
+  const named = typeof tool === "string" && tool.trim() !== "" ? tool.trim() : undefined;
+  return fitDescription(content, named);
+}
+
 /** The pictures a capture tool's answer promised (see editor-captures.ts); nothing for any other call. */
 async function capturedParts(
   params: CallParams,
@@ -725,7 +747,7 @@ async function forward(session: EditorSession, params: CallParams, how: Forwardi
   const giveBack = await markStart(how.agentPlay, step);
   let result: CallResult;
   try {
-    result = await session.call(params, how.timeoutMs);
+    result = await session.call(editorParams(params), how.timeoutMs);
   } catch (error) {
     // A JSON-RPC error is the editor's own answer: it is still there, and the call did not complete.
     if (editorAnswered(error)) {
@@ -738,9 +760,10 @@ async function forward(session: EditorSession, params: CallParams, how: Forwardi
     await how.keeper.after(session, step, Boolean(result.isError));
     await settlePlay(how.agentPlay, step, Boolean(result.isError), giveBack);
     const content = Array.isArray(result.content) ? (result.content as Part[]) : [];
+    const fit = fitAnswer(params, content, Boolean(result.isError));
     const captured = result.isError ? [] : await capturedParts(params, content, how.project, how.clock, signal);
-    const named = [...liftImages(content), ...captured, { type: "text", text: MESSAGE.Answered(how.project.name) }];
-    const failed = Boolean(result.isError) || helperFailed(params, content);
+    const named = [...liftImages(fit.parts), ...captured, { type: "text", text: MESSAGE.Answered(how.project.name) }];
+    const failed = Boolean(result.isError) || fit.failed || helperFailed(params, content);
     return { content: named, ...(failed ? { isError: true } : {}) };
   } catch (error) {
     // The editor answered: what failed after is Genex's own, and the editor is still there.

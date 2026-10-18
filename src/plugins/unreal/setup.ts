@@ -67,7 +67,8 @@ const MCP_PLUGINS = ["ModelContextProtocol", "EditorToolset"] as const;
  * UI widgets, effects, AI (state trees, behavior trees), animation and sequences, procedural content,
  * physics assets, gameplay tags and automation tests. Not Epic's AllToolsets: its GameFeaturesToolset
  * makes every editor start log a load error, and its other toolsets serve no game Genex makes. A
- * toolset the project already names, on or off, stays as the user left it.
+ * toolset the project already names, on or off, stays as the user left it, and one Genex added that
+ * the user took out again stays out.
  */
 const TOOLSET_PLUGINS = [
   "UMGToolSet",
@@ -235,7 +236,10 @@ export type ProjectState = {
   engine: string;
   cpp: boolean;
   plugins: boolean;
-  /** The .uproject names each of Epic's toolsets for games ({@link TOOLSET_PLUGINS}), on or as the user left it. */
+  /**
+   * Each of Epic's toolsets for games ({@link TOOLSET_PLUGINS}) is named in the .uproject, or Genex
+   * added it and the user took it out again.
+   */
   toolsets: boolean;
   autoStart: boolean;
   /** The port Epic's MCP server starts on when the project opens; null while it doesn't start. */
@@ -522,7 +526,13 @@ function pluginEntry(json: UProject, name: string): Record<string, unknown> | un
 }
 
 const pluginsOn = (json: UProject) => MCP_PLUGINS.every((name) => pluginEntry(json, name)?.Enabled === true);
-const toolsetsNamed = (json: UProject) => TOOLSET_PLUGINS.every((name) => pluginEntry(json, name) !== undefined);
+/** Whether Genex added this plugin before: a toolset it added that the user took out again stays out. */
+const addedBefore = (record: SetupRecord | null, name: string) =>
+  record?.uproject.added.some((added) => lower(added) === lower(name)) === true;
+
+/** The toolsets the project doesn't name and Genex never added to it: the ones setup still adds. */
+const toolsetsMissing = (json: UProject, record: SetupRecord | null) =>
+  TOOLSET_PLUGINS.filter((name) => pluginEntry(json, name) === undefined && !addedBefore(record, name));
 
 function addOnce(list: string[], name: string) {
   if (!list.includes(name)) list.push(name);
@@ -533,7 +543,7 @@ const editorPlugin = (name: string) => ({ Name: name, Enabled: true, TargetAllow
 
 /** Turns Epic's plugins on and adds its toolsets, recording which it added and which it switched on. */
 function enablePlugins(json: UProject, record: SetupRecord): boolean {
-  if (pluginsOn(json) && toolsetsNamed(json)) return false;
+  if (pluginsOn(json) && toolsetsMissing(json, record).length === 0) return false;
   if (!Array.isArray(json.Plugins)) json.Plugins = [];
   for (const name of MCP_PLUGINS) {
     const entry = pluginEntry(json, name);
@@ -550,10 +560,10 @@ function enablePlugins(json: UProject, record: SetupRecord): boolean {
   return true;
 }
 
-/** Adds each of Epic's toolsets the project doesn't name yet, recording it; the names it added. */
+/** Adds each of Epic's toolsets still missing, recording it; the names it added. */
 function addToolsets(json: UProject, record: SetupRecord): string[] {
   if (!Array.isArray(json.Plugins)) json.Plugins = [];
-  const missing = TOOLSET_PLUGINS.filter((name) => pluginEntry(json, name) === undefined);
+  const missing = toolsetsMissing(json, record);
   for (const name of missing) {
     (json.Plugins as unknown[]).push(editorPlugin(name));
     addOnce(record.uproject.added, name);
@@ -887,7 +897,7 @@ export async function inspectProject(file: string, options: SetupOptions): Promi
     engine: typeof json.EngineAssociation === "string" ? json.EngineAssociation : "",
     cpp: Array.isArray(json.Modules) && json.Modules.length > 0,
     plugins: pluginsOn(json),
-    toolsets: toolsetsNamed(json),
+    toolsets: toolsetsMissing(json, record).length === 0,
     autoStart: inProjectBlock(port) && recordAgrees(record, port),
     port,
     helper: await helperState(project, options.helper),
