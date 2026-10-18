@@ -42,8 +42,18 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   its ×.
 - Assets are square tiles under two switchers: kind (All · 3D · Images · Sounds · Videos, a kind
   read from the whole catalog) and Everyone · Mine (the account's library, Saved/Shared tags, signed
-  out a sign-in line). Sounds with a known file play on the tile; Use (on hover) adds the asset to
-  one of the person's games (`studio:assets.add`). No Remix or plays on assets.
+  out a sign-in line). A tile with no thumbnail shows the file the library keeps, by what that file
+  is (its content type, else its `ext`, else its address's extension): a picture an `<img>` shows,
+  loaded as its tile nears the screen, or a model drawn by the Assets tab's viewer. Main reads the
+  file (`studio:assets.file`: https on genex.games' asset hosts, no redirects, 32 MiB, one minute)
+  and answers a refusal as a code; tiles on screen draw two at a time, and each picture is kept for
+  the session. Main also says the file's format (`fbx`, `gltf`), which picks the 3D loader. A file
+  that is too large, redirected, refused (a 4xx other than 408 or 429) or unreadable as a model is
+  not tried again; one that failed otherwise (a 5xx, a 408 or 429, offline, a timeout, a lost
+  graphics context) is tried when its tile is next on screen, 30 s on, three tries in all. Until
+  then, and for sounds, the kind's glyph stays.
+  Sounds with a known file play on the tile; Use (on hover) adds the asset to one of the person's
+  games (`studio:assets.add`). No Remix or plays on assets.
 - A card's five-second clip plays while hovered (after a short dwell). The first row of Games' feed
   plays up to four clips by itself, as genex.games' Featured grid does: after its covers and an
   idle moment, staggered, only while half in view and the window shows (none under the viewer);
@@ -155,5 +165,7 @@ same way (copied into `assets/library/`). Signed out, Save and Share are hidden 
 
 Code: `main/play/asset-library.ts` (the calls), `main/core/library-sharing.ts` (a game's files, Save,
 Share, Add), `ipc/asset-library.ts` (`studio:assets.*`), `renderer/state/sharing.ts`,
-`renderer/panels/assets/`; fixtures answer from `dev/fixture-asset-library.ts` (fixture `asset-library`).
+`renderer/panels/assets/`, Play's tiles in `renderer/play/` (`asset-tiles.ts`, `tile-pictures.ts`,
+`use-tile-picture.ts`); fixtures answer from `dev/fixture-asset-library.ts` (fixture `asset-library`,
+whose window also gets the library's files from the fixture).
 

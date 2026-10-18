@@ -62,7 +62,7 @@ import { createScope, userWordsInLog } from "./scope.ts";
 import { closeCarriedPool } from "./workers/carry.ts";
 import type { AnyRecord, ForwardedCall, HarnessCtx, HarnessEvent, Host, HostCall } from "../types/harness.d.ts";
 import type { ModelPreferences, RunSpec } from "../types/host-api.d.ts";
-import type { QueueAction, SteerHandle } from "./message-queue.ts";
+import { messageQueueState, type QueueAction, type SteerHandle } from "./message-queue.ts";
 
 /** The run an interview commissions when it names no length, in hours. */
 const DEFAULT_RUN_HOURS = 8;
@@ -974,8 +974,48 @@ async function userWordsSoFar(host: Host, action: QueueAction): Promise<string[]
     .call(HostMethod.EventsList, { threadId: action.threadId })
     .then((listed) => (Array.isArray(listed) ? listed : []))
     .catch(() => []);
-  const said = userWordsInLog(events, { through: action.messageId, sinceLastRun: true });
+  const said = launchWords(events, action.messageId);
   return said.length ? said : [String(action.text ?? "")];
+}
+
+/**
+ * The user's words a launched build is for: since the thread's previous run, through the launching
+ * message, then each message its session read mid-turn (delivered into it, and not handed back since).
+ * Those read after the launch was recorded reach the build no other way: the session can't launch
+ * twice. A message sent meanwhile that never joined keeps its own turn, so it isn't counted here.
+ */
+export function launchWords(events: readonly HarnessEvent[], messageId: string | undefined): string[] {
+  const asked = userWordsInLog(events, { through: messageId, sinceLastRun: true });
+  return messageId ? [...asked, ...joinedWords(events, messageId)] : asked;
+}
+
+/** The words of the messages read into `messageId`'s turn and still part of it, in the order sent. */
+function joinedWords(events: readonly HarnessEvent[], messageId: string): string[] {
+  const read = readInto(events, messageId);
+  const words: string[] = [];
+  for (const message of messageQueueState(events).messages.values()) {
+    const text = message.action?.text;
+    // A message the chat queued itself (a command's result) is never the person's words.
+    const fromThePerson = message.action?.origin === undefined || message.action?.origin === null;
+    if (read.has(message.messageId) && fromThePerson && typeof text === "string" && text.trim()) words.push(text);
+  }
+  return words;
+}
+
+/** The messages whose latest steer record says `messageId`'s turn read them: a later hand-back or re-steer undoes it. */
+function readInto(events: readonly HarnessEvent[], messageId: string): Set<string> {
+  const read = new Set<string>();
+  for (const event of events) {
+    if (event.data?.type !== EventKind.Custom) continue;
+    const payload = event.data.payload ?? {};
+    const id = payload.messageId;
+    if (typeof id !== "string") continue;
+    const type = event.data.event_type;
+    if (type === RunEvent.CoordinatorMessageDelivered && payload.into === messageId) read.add(id);
+    else if (type === RunEvent.CoordinatorMessageRequeued || type === RunEvent.CoordinatorMessageSteering)
+      read.delete(id);
+  }
+  return read;
 }
 
 /**

@@ -579,7 +579,14 @@ quiet track with the open tab raised (surface fill, a ring halfway from `line` t
 asked, ellipsized, after a bare ✓ once done, a muted dot while paused, or the status line's orb
 while it works, then its clock at 12px in the chat's shimmer. No "Building", budget or progress
 rule; the open build's status line ("Building · 9 of 30 min · 2 parts working") is its tooltip and
-what a screen reader hears. A selected node opens in place: the camera glides to it at 160%, the graph dims to
+what a screen reader hears. Past three builds, or when the bar less Play's fixed 160px is too narrow
+for each tab to show about 16 characters (150px), the track becomes one picker of the same height
+and edge (focus moves with the swap): the open build's mark, whole name and clock, then ⌄ and the
+count. Its list is the shared dropdown, newest first, one 32px line per build with its start time
+(its clock while it works). The open build's row is filled and scrolled into view, and focused when
+the list opens from the keyboard. Past ten rows it scrolls, the last row shown fading under a
+gradient that keeps the menu's shadow. Play keeps its place at the right end and shows for every
+build; one that made nothing yet plays Live as it is. A selected node opens in place: the camera glides to it at 160%, the graph dims to
 40% and stays clickable, and one card (max 560px, centred, scrolling inside) carries the detail —
 never a side panel. Replies go through the chat composer, so the app keeps one input. Semantic zoom
 trades words for pictures below 60% and adds the asked sentence from 135%.

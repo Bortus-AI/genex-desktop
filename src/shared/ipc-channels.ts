@@ -202,6 +202,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:assets.share": "assetShare",
   "studio:assets.unshare": "assetUnshare",
   "studio:assets.add": "assetAdd",
+  "studio:assets.file": "assetLibraryFile",
   "studio:play.manage": "playManage",
   "studio:play.cover": "playCover",
   "studio:genex-account.read": "genexAccount",
@@ -468,6 +469,7 @@ export interface StudioInvokePayloads {
   "studio:assets.share": { project: string; items: ShareItem[] };
   "studio:assets.unshare": { project: string; file: string };
   "studio:assets.add": { project: string; source: AddSource };
+  "studio:assets.file": { url: string };
   "studio:game.asset.still": Arg<"readProjectAsset", 0>;
   "studio:run.feedback": Arg<"runFeedback", 0>;
   "studio:review.play": { snapshotId: string; project: string };

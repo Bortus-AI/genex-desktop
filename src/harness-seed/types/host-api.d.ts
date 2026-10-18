@@ -210,6 +210,11 @@ export interface StudioToolSpec {
     properties: Record<string, { type: string; description?: string }>;
     required?: string[];
   };
+  /**
+   * Called only when the person asks for it in words (an Auto chat's Loop start): it doesn't make the
+   * session an interview, so messages still join it mid-turn, and no nudge names it.
+   */
+  onlyWhenAsked?: boolean;
 }
 // ↑ src/shared/engine-requests.ts
 

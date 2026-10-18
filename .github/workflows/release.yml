@@ -216,6 +216,11 @@ jobs:
       - run: npm run rebuild:terminal
       - name: Check the Linux runtime after rebuilding the terminal
         run: npm run runtime:check
+      # Every deb and rpm from here on adds packages.genex.games on install (build/linux/postinst,
+      # rpm-post); shipping one while that repository is down would break `apt update` for its users.
+      - name: The package repository the packages add is up
+        if: needs.validate.outputs.publish == 'true'
+        run: curl -fsS --retry 3 -o /dev/null https://packages.genex.games/dists/stable/InRelease
       - name: Make (deb, rpm, zip)
         run: npm run make -- --platform linux --arch x64
       - name: Packaged smoke

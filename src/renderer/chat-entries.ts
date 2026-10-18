@@ -1193,7 +1193,10 @@ function linkedEngineWords(link: EngineLinkedPayload): string {
   return isEngineId(link.engine) ? link.engine : GAME_ENGINE_WORDS[GameEngine.Unreal];
 }
 
-/** "Fog Valley now builds in Unreal · Valley": the newest link of a game keeps its Undo. */
+/**
+ * "Fog Valley now builds in Unreal · Valley" ("Set up Valley for Genex · Fog Valley now builds in
+ * Unreal" when the link also set the project up): the newest link of a game keeps its one Undo.
+ */
 function narrateEngineLink(chat: ChatDraft, event: EventEnvelope): void {
   const link = customPayload(event.data, CustomEvent.EngineLinked);
   if (!link) return;
@@ -1206,7 +1209,9 @@ function narrateEngineLink(chat: ChatDraft, event: EventEnvelope): void {
     kind: EntryKind.Action,
     tag: SystemTag.Engine,
     action: EntryAction.EngineLink,
-    text: TRANSCRIPT_WORDS.engineLinked(link.title, engine, link.name ?? ""),
+    text: link.setUp
+      ? TRANSCRIPT_WORDS.engineSetUpAndLinked(link.title, engine, link.name ?? "")
+      : TRANSCRIPT_WORDS.engineLinked(link.title, engine, link.name ?? ""),
     ...(pluginId && project && linkedAt ? { engineLink: { project, pluginId, linkedAt } } : {}),
   };
   closeGroup(chat);
@@ -1417,7 +1422,10 @@ function narrateEngineUndone(chat: ChatDraft, event: EventEnvelope): void {
   const line = undone?.linkedAt ? chat.engineLinks.get(undone.linkedAt) : undefined;
   if (!line) return;
   delete line.entry.engineLink;
-  line.entry.outcome = TRANSCRIPT_WORDS.engineUndone(line.title, undone?.restored);
+  line.entry.outcome = TRANSCRIPT_WORDS.engineUndone(line.title, undone?.restored, {
+    undone: undone?.setUpUndone,
+    kept: undone?.setUpKept,
+  });
 }
 
 function narrateImprovement(chat: ChatDraft, event: EventEnvelope): void {
