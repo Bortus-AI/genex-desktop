@@ -411,9 +411,10 @@ Send with `npm run studio:dev -- ui --profile ag-933 --request /tmp/request.json
 and `runs --profile P` are shortcuts. The [verify-ui-via-dev-control skill](../.agents/skills/verify-ui-via-dev-control/SKILL.md)
 walks the full loop.
 The request union/runtime validator is src/main/dev/protocol.ts. Operations are status,
-snapshot (desktop, scope/limit; its `play` part counts Play's cards, the covers on screen still
-blank and the clips playing), click (selector/scope), type (plus text/replace), key
-(surface/key/code/modifiers), select (selector/scope/value), scroll (surface/deltas/target),
+snapshot (desktop or `play-bar`, scope/limit; its `play` part counts Play's cards, the covers on
+screen still blank and the clips playing), click (selector/scope, desktop or `play-bar`), type
+(plus text/replace, the same surfaces), key (surface/key/code/modifiers), move (surface/x/y: the pointer over a
+surface, as a mouse would), select (selector/scope/value), scroll (surface/deltas/target),
 game.input (existing bounded action union), game.state, window.resize, capture, logs, runs, cpu.start/stop,
 main.cpu.start/stop (a profile of the main process), heap,
 trace.start/stop and stop. `graph.drag` takes bounded duration/distance/steps and returns
@@ -442,7 +443,9 @@ providers, credential isolation and native-action restrictions remain unchanged.
 opt-in unset for automated acceptance.
 
 `capture --profile ag-933 --surface desktop --name after` writes an owned surface-labelled PNG;
-repeat for game. Renderer captures do not include the native game child. The capture records
+repeat for game. Renderer captures do not include the native game child. While Play's viewer has a
+game open, `play-bar` is its bar's layer (the bar and Comments) and `play-game` the game's own view;
+the bar comes back for a `move` near the top edge of `play-game`. The capture records
 image dimensions, image-pixel/CSS-pixel scale, renderer zoom, visibility, focus and time. For diagnostics use a JSON request
 with `diagnostics --profile ag-933 --request FILE`. Start/stop a matching CPU profile ID; heap
 needs surface/name. Trace needs traceId, durationMs (100–30000) and supported categories from
@@ -542,8 +545,8 @@ and reduced motion. Evidence lives in `.studio-dev/evidence/results-ui/`. Pair w
 `run-chat-ui.mjs` and `run-chat-feedback-ui.mjs` for real host reads, history/streaming and Studio
 navigation; component fixtures do not prove account access or native game layering.
 
-Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's own account card
-and checks that a failed connect keeps its reason after the status is read again. It does not
+Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's account in its
+Connect band and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.
 `run-publish-cover-ui.mjs` renders the production Publish dialog beside the production
 ChatPanel of the same game with a fake `window.studio`: with no shot the dialog asks the plugin to

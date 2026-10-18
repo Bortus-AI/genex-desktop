@@ -289,6 +289,12 @@ const FIXTURE_SAFE = [
   "studio:play.close",
   // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
   "studio:play.control",
+  // The bar's layer says what holds it up; no socket.
+  "studio:play.bar",
+  // A game's comments: a fixture launch answers from its own comments (`dev/fixture-play.ts`).
+  "studio:play.comments",
+  "studio:play.comment",
+  "studio:play.uncomment",
   // Play's people: a fixture launch answers from its own people (`dev/fixture-play.ts`), signed out
   // unless the launch asks for its fixture account, and an avatar "upload" stays in memory.
   "studio:play.me",
@@ -306,10 +312,24 @@ const FIXTURE_SAFE = [
   "studio:play.stats",
   "studio:play.creators",
   "studio:play.credits",
+  // The asset library and Save, Share and Add: a fixture launch answers from its own made-up
+  // library (`dev/fixture-asset-library.ts`), signed out unless it asks for its fixture account;
+  // a share or a save lasts the launch, and Add writes only into the fixture's own game.
+  "studio:assets.library",
+  "studio:assets.states",
+  "studio:assets.save",
+  "studio:assets.share",
+  "studio:assets.unshare",
+  "studio:assets.add",
   // The nickname: a fixture launch answers a check and a save from its own people (a few names
   // taken or kept), signed out unless it asks for its fixture account; the save lasts the launch.
   "studio:play.handle-check",
   "studio:play.handle",
+  // A game's card menu: a fixture launch answers every change and a new cover from its own data
+  // (`dev/fixture-manage.ts`), kept for the launch, and a cover "upload" stays in memory, so no
+  // socket opens.
+  "studio:play.manage",
+  "studio:play.cover",
   // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
   // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
   "studio:genex-account.read",

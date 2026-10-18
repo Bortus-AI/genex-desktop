@@ -136,12 +136,19 @@ import {
 } from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
+import { type AssetLibrary, assetLibrary, LIBRARY_UPLOAD_TIMEOUT_MS, networkDownload } from "./play/asset-library.ts";
+import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
+import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
+import { readAssetPreview } from "./asset-preview.ts";
+import { fixtureDownload } from "./dev/fixture-asset-library.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
-import type { MentionSources } from "./core/mention-tags.ts";
+import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
-import { wirePlayViewer } from "./play/viewer-view.ts";
+import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
+import { type PlayComments, playComments } from "./play/comments.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
@@ -421,7 +428,10 @@ let preview: GamePreview | null = null;
 let gameScreen: GameFullScreen | null = null;
 /** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
 let playCatalog: PlayGallery | null = null;
-let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits } | null = null;
+let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits; library: AssetLibrary } | null =
+  null;
+let gameLibrary: LibrarySharing | null = null;
+let playManage: PlayManage | null = null;
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
@@ -955,17 +965,70 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   };
   // A 401 to a creator's numbers or the credits ends the sign-in as one to the account's own calls does.
   const counted = { ...deps, request: refusingRequest(deps.request, deps.refused) };
-  playAccount ??= { people: playPeople(deps), creators: creatorStats(counted), credits: genexCredits(counted) };
+  playAccount ??= {
+    people: playPeople(deps),
+    creators: creatorStats(counted),
+    credits: genexCredits(counted),
+    // Save sends whole game files, so its upload waits longer than an avatar's.
+    library: assetLibrary({
+      ...counted,
+      upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch, LIBRARY_UPLOAD_TIMEOUT_MS),
+    }),
+  };
   return playAccount;
 }
 
-/** Where a message's @ tags come from: Play's catalog, the Genex account and git (a fixture's stand-ins). */
+/**
+ * A published game's card menu for this core, on the Genex account: genex.games over the network,
+ * or a fixture launch's own answers. A change makes the catalog and profiles read their games afresh.
+ */
+function playManageFor(studio: StudioCore): PlayManage {
+  const account = genexAccountFor(studio);
+  const request = fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api);
+  playManage ??= createPlayManage({
+    // A 401 ends the sign-in as one to the account's own calls does.
+    request: refusingRequest(request, account.refused),
+    token: account.token,
+    upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
+    changed: () => {
+      playCatalogFor(studio).forget();
+      playAccountFor(studio).people.forgetProfiles();
+    },
+    localImages: fixtureNativePolicy,
+  });
+  return playManage;
+}
+
+/** The person's genex.games library joined with a game's files: Save, Share and Add for the Assets tab. */
+function librarySharingFor(studio: StudioCore): LibrarySharing {
+  gameLibrary ??= librarySharing({
+    library: () => playAccountFor(studio).library,
+    // Add and Save write into the game: only a game this launch's project policy allows.
+    gameDir: async (project) => {
+      const dir = studio.games.dirFor(project);
+      await studio.assertProjectAllowed(dir);
+      return dir;
+    },
+    webGame: async (project) => !(await studio.games.list()).find((game) => game.name === project)?.engine,
+    assets: (project) => studio.projectAssets(project),
+    readFile: (dir, file, maxBytes) => readAssetPreview(dir, file, [], maxBytes),
+    manifest: (slug) => playCatalogFor(studio).assetManifest(slug),
+    // A fixture launch never reaches the network: its downloads are the fixture's own files.
+    download: fixtureNativePolicy ? fixtureDownload : networkDownload(globalThis.fetch),
+    vendorModule: vendorAssetModule,
+  });
+  return gameLibrary;
+}
+
+/** Where a message's @ tags come from: Play's catalog, the Genex account, its library and git (a fixture's stand-ins). */
 function mentionSourcesFor(core: () => StudioCore): MentionSources {
   return {
     world: (slug) => playCatalogFor(core()).world(slug),
     me: async () => (await playAccountFor(core()).people.me())?.id ?? null,
     clone: fixtureNativePolicy ? fixtureClone : gitCloneCode,
     assetManifest: (slug) => playCatalogFor(core()).assetManifest(slug),
+    addFromLibrary: async (project, generationId) =>
+      (await librarySharingFor(core()).add(project, { generationId })).files,
   };
 }
 
@@ -996,7 +1059,19 @@ function popShareMenu(url: string, at: PlayPoint | undefined): void {
   new ShareMenu({ urls: [url] }).popup({ window: win, ...at });
 }
 
-/** Play's full-screen viewer in `win`: a published game, the studio's small menu over its corner. */
+/** A Play game's comments on genex.games, as the Genex account (a fixture launch's own comments). */
+function playCommentsFor(studio: StudioCore): PlayComments {
+  const account = genexAccountFor(studio);
+  return playComments({
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    me: async () => (await playAccountFor(studio).people.me())?.id ?? null,
+  });
+}
+
+/** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
@@ -1009,6 +1084,9 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
+    barPage: path.join(distRoot, "renderer", "play-bar.html"),
+    barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
+    comments: playCommentsFor(studio),
   });
 }
 
@@ -1312,6 +1390,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   const handle = createIpcHandle(ipcMain, {
     fixture: fixtureNativePolicy,
     isStudioUi: isStudioWindow,
+    isPlayBar: isPlayBarPage,
     performance: performanceRecorder,
   });
   registerPerformanceIpc(handle, performanceRecorder);
@@ -1387,9 +1466,12 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     remix: (world) => remixPlayGame(studio, world),
     viewer: () => playView,
     ...playAccountFor(studio),
+    manage: playManageFor(studio),
     web: playOrigin.web,
     share: popShareMenu,
   });
+  const { library } = playAccountFor(studio);
+  registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio) });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },
     window: () => window,
@@ -1432,6 +1514,13 @@ async function main(): Promise<void> {
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */
 function isStudioWindow(event: { sender: unknown; senderFrame: unknown }): boolean {
   return event.sender === window?.webContents && event.senderFrame === window?.webContents.mainFrame;
+}
+
+/** Whether an IPC call came from Play's bar layer's own page, over a game in the studio window. */
+function isPlayBarPage(event: { sender: unknown; senderFrame: unknown }): boolean {
+  const bar = window && !window.isDestroyed() ? playViewsOf(window)?.bar() : null;
+  if (!bar || bar.webContents.isDestroyed()) return false;
+  return event.sender === bar.webContents && event.senderFrame === bar.webContents.mainFrame;
 }
 
 /** A Dock click with no window open: the studio, or the setup screen while the sandbox waits. */

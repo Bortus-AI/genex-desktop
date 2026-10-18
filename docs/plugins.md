@@ -2,7 +2,8 @@
 
 The composer's Add panel lists installed plugins with the same global enable switches, plus
 configured MCP connectors. Enabled and connected are separate states. Connect lists tools on
-the registry's live connection (or opens setup when trust/secrets are missing); Manage opens the
+the registry's live connection (or opens setup when trust/secrets are missing); a plugin's name,
+or the Settings its row shows while hovered or focused, opens that plugin's page; Manage opens the
 sidebar's Plugins workspace page, which includes MCP servers. Local Blender is an
 independent first-party plugin using the public API 3 managed-native services. It needs no
 Genex account. No connector credentials enter the composer. See [connections and context](connections-and-context.md) for the current setup/session lifecycle.
@@ -279,7 +280,7 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
   (`Retry`, `Ready`, `Live`, `Builds`, `Assets`, `Export`, `Plugins`, `Reload`, `State`,
   `Close plugins`, compared case-insensitively); `ariaLabel` 1–60 characters, unique, not reserved;
   `icon` a glyph of at most 4 characters or a host icon (`globe`, `export`, `play`, `image`, `box`,
-  `boxes`, `unreal`).
+  `boxes`, `unreal`, `godot`, `unity`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
@@ -2564,8 +2565,8 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 
 #### The panel and the toolbar button
 
-The toolbar button (`unity:editor`, labelled Unity with the `box` icon, only on a game with a Unity
-project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
+The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
+Unity project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
 [engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
 in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
 newest Unity installed). The button's status action `toolbar-status`
@@ -3126,7 +3127,10 @@ stages only declared project input files; the child receives no full-project rea
 of each process log stream; it does not limit asset files. `maxAssetBytes` limits the combined
 declared generated files to 1–104,857,600 bytes. Delivery additionally enforces `assetLimits`.
 Set `gpu: true` for GPU rendering, including Blender EEVEE; it permits GPU services and the
-runtime's own Metal cache. It grants no network or full-project access. Runtime detection runs
+runtime's own Metal cache, which the job may also hand to Metal's shader compiler as a read-write
+sandbox extension (no other folder): the compiler builds Metal's shader module there, and without
+it a cold cache (a new Mac, a macOS or runtime update) fails every shader and crashes the first
+render. It grants no network or full-project access. Runtime detection runs
 the declared version probe, but never starts a generation recipe or installs software.
 Managed jobs use the macOS sandbox, deny network and protected host state, and retain a durable
 job ID before process launch. The profile (`nativeSandboxProfile`) names what a job may do: start

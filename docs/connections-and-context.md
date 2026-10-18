@@ -12,7 +12,8 @@ it does not open credential storage. Unlocking an account does not approve tool-
 permissions or charges.
 
 The game composer Add menu exposes installed plugins and configured MCP connectors. Manage opens
-Plugins; Setup opens that plugin's registered settings panel. Connecting a source does not
+Plugins; a plugin's name, its hover Settings and Setup open that plugin's page with its registered
+settings panel. Connecting a source does not
 create a new conversation. The next provider request resolves the enabled, project-scoped tool
 registry. An active native session receives a refreshed tool contract at its next supported
 response/session boundary; Studio retains the conversation and its provider resume identity.
@@ -478,8 +479,9 @@ usage (see Native context telemetry). Each engine reuses a reading under a
 minute old, shares an in-flight read and falls
 back to its last reading on failure; a Recheck clears it. The composer asks when its ring panel
 opens or the ring is hovered, and every minute while open; until the first reading it draws each
-plan this setup uses at full size with shimmering bars for its limits. Its last row opens Settings →
-Model Providers. Fixture engines report fixed limits.
+plan this setup uses at full size with shimmering bars for its limits. The panel leaves the
+`model_scoped` windows out (`shownLimits`; `SHOW_MODEL_LIMITS` in `usage-words.ts` brings them back). Its
+last row opens Settings → Model Providers. Fixture engines report fixed limits.
 `promptbar-redesign.test.ts` covers both normalizers; account access is proven only against a
 real login.
 
