@@ -132,6 +132,24 @@ function assertIssued(stdout: string, table: ExtensionRow[]): void {
   for (const [index, [label, , allowed]] of table.entries()) assert.equal(answers[index], allowed, label);
 }
 
+/** The error a wrapper run reports when the script `long.py` (bpy imported, then `body`) fails. */
+async function errorOf(body: string): Promise<string> {
+  const { ws, assets, out, scratch, wrapper } = await setup();
+  const script = path.join(assets, "src", "long.py");
+  await writeFile(script, `import bpy\n${body}\n`);
+  const result = await runBlender({
+    binary: BLENDER,
+    script: wrapper,
+    args: [script, path.join(assets, "long.glb"), path.join(out, "long-1.png"), "long"],
+    cwd: ws,
+    allowWrite: [assets, out],
+    denyRead: [],
+    scratch,
+    timeoutMs: 60_000,
+  });
+  return String(resultLine(result.stdout)?.error);
+}
+
 const MODEL_PY = `
 import bpy
 bpy.ops.mesh.primitive_cylinder_add(radius=0.3, depth=1.2, location=(0, 0, 0.6))
@@ -341,30 +359,16 @@ bpy.context.active_object.name = "Cable"
     assert.match(String(parsed.error), /no such primitive/);
   });
 
-  it("a long error leads with its own first line, then the traceback's last whole lines; a first line too long alone keeps its start", {
+  it("a long error leads with its own first line, notes left after it, then the traceback's last lines; a first line too long alone keeps its start", {
     skip: SKIP,
   }, async () => {
-    const errorOf = async (raise: string) => {
-      const { ws, assets, out, scratch, wrapper } = await setup();
-      const script = path.join(assets, "src", "long.py");
-      await writeFile(script, `import bpy\n${raise}\n`);
-      const result = await runBlender({
-        binary: BLENDER,
-        script: wrapper,
-        args: [script, path.join(assets, "long.glb"), path.join(out, "long-1.png"), "long"],
-        cwd: ws,
-        allowWrite: [assets, out],
-        denyRead: [],
-        scratch,
-        timeoutMs: 60_000,
-      });
-      return String(resultLine(result.stdout)?.error);
-    };
-    const steps = await errorOf(`raise RuntimeError("\\n".join("step %d done" % i for i in range(400)))`);
+    const steps = await errorOf(
+      `error = RuntimeError("\\n".join("step %d done" % i for i in range(400)))\nerror.add_note("a note")\nraise error`,
+    );
     const lines = steps.split("\n");
-    assert.equal(lines[0], "RuntimeError: step 0 done", "the error's own first line names it");
+    assert.equal(lines[0], "RuntimeError: step 0 done", "the error's own first line names it, never its note");
     assert.match(lines[1] ?? "", /^step \d+ done$/, "then whole lines");
-    assert.equal(lines.at(-1), "step 399 done");
+    assert.equal(lines.at(-1), "a note");
     assert.ok(steps.length <= 1500, `${steps.length} characters`);
     const fits = await errorOf(`raise RuntimeError("x" * (1500 - len("RuntimeError: ")))`);
     assert.equal(
@@ -375,6 +379,21 @@ bpy.context.active_object.name = "Cable"
     const long = await errorOf(`raise RuntimeError("PROBE " + "x" * 3000)`);
     assert.match(long, /^RuntimeError: PROBE x+…$/, "the error's own start, cut at its end");
     assert.ok(long.length <= 1500, `${long.length} characters`);
+  });
+
+  it("an error raised on a very long source line still names the script's file and line", { skip: SKIP }, async () => {
+    const error = await errorOf(`raise RuntimeError("bad vertex") if len([${"0.5, ".repeat(1500)}]) else None`);
+    const lines = error.split("\n");
+    assert.equal(lines.at(-1), "RuntimeError: bad vertex");
+    assert.ok(
+      lines.some((line) => /File ".*long\.py", line 2/.test(line)),
+      error,
+    );
+    assert.ok(
+      lines.some((line) => line.endsWith("…")),
+      "the long line is cut short",
+    );
+    assert.ok(error.length <= 1500, `${error.length} characters`);
   });
 
   it("a script cannot write outside the allow-list, and cannot reach the network", { skip: SKIP }, async () => {

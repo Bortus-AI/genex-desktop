@@ -54,18 +54,32 @@ NEW_MATERIAL_COLOUR = (0.8, 0.8, 0.8, 1.0)  # a new material's viewport colour, 
 TEXTURE_LINKS = 4     # links followed up from a Base Color to find the image feeding it
 UNIT_TOLERANCE = 1e-4 # an armature scale this close to 1 is left as it is
 ERROR_CHARS = 1500    # the most of a script's traceback the result line carries
+LINE_CHARS = 300      # the most of one other traceback line it keeps (a long literal in a script's source)
 
 def result(payload):
     print("STUDIO_BLENDER_RESULT " + json.dumps(payload))
     sys.stdout.flush()
 
+def cut(line, chars):
+    # The line as it is when it fits in chars, else its start and an ellipsis.
+    return line if len(line) <= chars else line[:chars - 1] + "…"
+
+def error_headline(error):
+    # The error's own first line, its type and message: the last of what format_exception_only lists
+    # before the notes add_note() attached, one entry each.
+    listed = traceback.format_exception_only(error)
+    notes = getattr(error, "__notes__", None)
+    count = len(notes) if isinstance(notes, (list, tuple)) else 0
+    return listed[max(0, len(listed) - 1 - count)].split("\n")[0]
+
 def error_text(error):
-    # The error's own first line (its type and message), then the traceback's last whole lines that
-    # fit with it in ERROR_CHARS; a first line longer than that alone keeps its start.
-    headline = traceback.format_exception_only(error)[-1].split("\n")[0]
+    # The error's own first line, then the traceback's last lines that fit with it in ERROR_CHARS,
+    # each other line cut to LINE_CHARS; a first line longer than ERROR_CHARS alone keeps its start.
+    headline = error_headline(error)
     if len(headline) > ERROR_CHARS:
-        return headline[:ERROR_CHARS - 1] + "…"
-    lines = "".join(traceback.format_exception(error)).rstrip("\n").split("\n")
+        return cut(headline, ERROR_CHARS)
+    traced = "".join(traceback.format_exception(error)).rstrip("\n").split("\n")
+    lines = [line if line == headline else cut(line, LINE_CHARS) for line in traced]
     kept = []
     for line in reversed(lines):
         shown = [line] + kept
