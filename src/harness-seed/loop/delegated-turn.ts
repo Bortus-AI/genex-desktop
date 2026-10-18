@@ -25,7 +25,7 @@ import { afterLoopRunGrant, resumeAsked } from "./after-loop-run.ts";
 import { afterLoopRunNote } from "./after-loop-run-prompts.ts";
 import { commissionHours, reopenAsked, reopens } from "./reopen-run.ts";
 import { type ReopenGrant, reopenRunTool } from "./reopen-run-prompts.ts";
-import { type LegSwitch, steeredCall, type TurnSwitches } from "./chat-steer.ts";
+import { type LegSwitch, type SessionCall, steeredCall, type TurnSwitches } from "./chat-steer.ts";
 import { changesLoop, changesSettings } from "./steer-switch.ts";
 import { type DescribedEngine, endsTurnFor, switchedSettings, switchNotes, type TurnSettings } from "./turn-switch.ts";
 import * as chatWorkerParts from "./workers/chat-workers.ts";
@@ -338,7 +338,7 @@ async function afterDelegation(ctx: HarnessCtx, seat: Seat, delegation: Delegati
   const { turnId, engine } = options;
   const { callId, before, result } = delegation;
   await recordDelegateResult(ctx, turnId, callId, result);
-  await bookmarkSession(ctx, options, handoff.project, result);
+  await bookmarkSession(ctx, sessionOptions(seat), handoff.project, result);
   // Stop must not launch a recorded build or start a new preview health pass.
   if (result.stopReason === StopReason.Stopped) {
     ctx.notify("game.changed", { project: handoff.project });
@@ -375,6 +375,26 @@ interface Seat {
   described: DescribedEngine[];
   /** The message the turn answers: a switch moves `asked` on from it. */
   firstAsked: AnyRecord | null;
+  /**
+   * The engine and model the last leg ran on: a switch followed as the turn ended ran no leg, so the
+   * session it saves is still the one these made.
+   */
+  ran?: { engine: string; model?: string };
+}
+
+/** The seat's call: one leg on its settings now, remembered as the engine and model its session is on. */
+function seatCall(ctx: HarnessCtx, seat: Seat): SessionCall {
+  return (prompt, resume, images) => {
+    seat.ran = { engine: seat.options.engine, ...(seat.options.model ? { model: seat.options.model } : {}) };
+    return delegate(ctx, seat.options, seat.handoff, prompt, resume, images);
+  };
+}
+
+/** The turn's options as its session was made: on the engine and model its last leg ran on. */
+function sessionOptions(seat: Seat): DelegatedOptions {
+  const { ran, options } = seat;
+  if (!ran) return options;
+  return { ...options, engine: ran.engine, model: ran.model } as DelegatedOptions;
 }
 
 /**
@@ -450,7 +470,7 @@ async function switchSeat(ctx: HarnessCtx, seat: Seat, item: AnyRecord): Promise
   Object.assign(seat, { options, handoff, briefFor, asked: item });
   rescopeWorkers(options, handoff);
   return {
-    call: (prompt, resume, images) => delegate(ctx, seat.options, seat.handoff, prompt, resume, images),
+    call: seatCall(ctx, seat),
     fresh: () => seat.briefFor(false),
     newSession,
     notes,
@@ -642,7 +662,7 @@ async function goOnInSession(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn, pr
     result = await steeredCall(ctx, seat.options.steer, {
       prompt,
       resume: turn.result.sessionId ?? null,
-      call: (text, resume, images) => delegate(ctx, seat.options, seat.handoff, text, resume, images),
+      call: seatCall(ctx, seat),
       fresh: () => `${seat.briefFor(false)}\n\n${prompt}`,
       ...(switches ? { switches } : {}),
     });
@@ -652,7 +672,7 @@ async function goOnInSession(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn, pr
   const { options, handoff } = seat;
   const { turnId, engine } = options;
   await recordDelegateResult(ctx, turnId, callId, result);
-  await bookmarkSession(ctx, options, handoff.project, result);
+  await bookmarkSession(ctx, sessionOptions(seat), handoff.project, result);
   if (result.stopReason === StopReason.Stopped) {
     await sayInTurn(ctx, turnId, MESSAGE.stopped);
     return { stopped: TurnStop.Aborted, round: 0, engine };
@@ -1195,7 +1215,7 @@ async function delegateResuming(ctx: HarnessCtx, seat: Seat): Promise<DelegateRe
     prompt: seat.briefFor(Boolean(handoff.resume)),
     resume: handoff.resume,
     images: messageStills(options),
-    call: (prompt, resume, images) => delegate(ctx, seat.options, seat.handoff, prompt, resume, images),
+    call: seatCall(ctx, seat),
     // A Loop chat that starts afresh keeps its launch rules and the folder's shape.
     fresh: () => seat.briefFor(false),
     ...(switches ? { switches } : {}),

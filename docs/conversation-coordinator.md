@@ -226,9 +226,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   game folder started from a plain chat turn) and the resumed leg opens with what changed
   (`steer-switch-prompts.ts`): another model or effort resumes the same session; another engine
   starts a new one told the brief and everything the turn was told. A Loop switch drops a launch or
-  question the cut leg recorded (the session is told); another keeps it, on its settings. Slash text runs as a leg of its own, the command
-  alone in the same session, and the turn carries on after it. Messages reach it in the order they
-  were sent.
+  question the cut leg recorded (the session is told); another keeps it, on its settings. Slash
+  text runs as a leg of its own, the command alone in the same session, and the turn carries on
+  after it. Messages reach it in the order they were sent.
 - **Not read.** Whatever a session took but did not read — a Stop (checked again before every
   resumed leg), a turn that ended first, a Loop chat that had already asked its question or
   launched, a leg that failed or was stopped before it read its prompt (with anything an earlier
@@ -240,9 +240,10 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   pool is the same pool re-scoped to the run, `run-pool.ts` `runPool`), so they keep going as the
   run's; for a Loop on a copy, or a turn with a writer in the game folder, the session is told to
   wait for them and mark their work before it launches, and the launch waits only for a writer in
-  the game folder (`LAND_WAIT_MS`); any other still at work stops, a copy's work kept on its ref. A pool no run takes within
-  `CARRY_TAKE_MS`, or whose launch failed, closes. The launch takes the settings of the message the
-  turn followed last (`details.followed`, `chat-dispatch.ts` `followedSettings`).
+  the game folder (`LAND_WAIT_MS`); any other still at work stops, a copy's work kept on its ref.
+  A pool no run takes within `CARRY_TAKE_MS`, or whose launch failed, closes. The launch takes the
+  settings of the message the turn followed last (`details.followed`, `chat-dispatch.ts`
+  `followedSettings`).
 - **Delivered is final.** The turn it joined answers it: it never gets a processing event or a
   checkpoint of its own. Rewinding to it withdraws it from its bubble on (the files stay; the turn
   it joined keeps its end and `handled`), and rewinding the message it joined withdraws it too. When
@@ -258,8 +259,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   finished turn, or into one a second restart cut off (never retried: `MESSAGE_ATTEMPTS`), stays
   settled with it. One that switched that turn (the Loop, another model) and all it read after it
   get turns of their own after the replay instead, which runs on the turn's own settings; a slash
-  command it read stays read, never run twice. A turn that began before the replay reached its chat takes none of the replayed
-  messages, and removing a replayed turn gives what it had read a turn of its own.
+  command it read stays read, never run twice. A turn that began before the replay reached its chat
+  takes none of the replayed messages, and removing a replayed turn gives what it had read a turn of
+  its own.
 
 `steeredCall` knows only "the session that is the chat's current turn"; the run's lead answers
 the chat through its own wake loop instead (below). What steer added to the seed never comes from a
