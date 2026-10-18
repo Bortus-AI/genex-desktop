@@ -11,7 +11,8 @@ import { type Notify, ToastTone } from "../state/toasts.ts";
 import type { AutopilotSend, ComposerExtras } from "../ui/PromptBar.tsx";
 import { problemWords } from "../words.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
-import { newClientId, type PendingSend, sendPlacement } from "./pending-sends.ts";
+import { newClientId, type PendingSend, sendPlacement, waitsBehindWork } from "./pending-sends.ts";
+import { finishingRun } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
 import type { ComposerModel } from "./use-composer-model.ts";
@@ -67,6 +68,16 @@ function sendRoute(chat: ChatThread, work: ChatWorkView, extras?: ComposerExtras
   return { autopilot, toPlanReview };
 }
 
+/** What a send waits behind: the chat's own work, or its running build unless that build's lead takes it now (not once it wraps up). */
+function sendWork(chat: ChatThread, work: ChatWorkView): Parameters<typeof waitsBehindWork>[0] {
+  const runId = chat.activeRunId;
+  return {
+    chatWorking: work.line.chatWorking,
+    runId,
+    leadTakes: chat.leadListens && !finishingRun(chat.threadEvents, runId),
+  };
+}
+
 /** The bubble a send shows at once, until its durable row arrives (`chat/pending-sends.ts`). */
 function pendingSend(
   send: { clientId: string; threadId: string; text: string },
@@ -78,7 +89,7 @@ function pendingSend(
   return {
     ...send,
     after: chat.rawStateEvents.at(-1)?.id ?? null,
-    placement: sendPlacement(work.line.chatWorking || Boolean(chat.activeRunId), chat.queue),
+    placement: sendPlacement(waitsBehindWork(sendWork(chat, work)), chat.queue),
     ...(attached?.length ? { frames: attached } : {}),
   };
 }

@@ -67,6 +67,16 @@ export interface ChatWorkState {
   workItems: ActivityItem[];
 }
 
+/**
+ * The chat's own input the busy line shows: a send on its way, or saved input being answered. A
+ * message sent while a build runs goes to that build: its card keeps its place, never giving way
+ * to a Sending… line.
+ */
+function linedInput(input: ChatWorkInput): boolean {
+  if (input.activeRunId) return input.answering;
+  return input.busy || input.sending || input.answering;
+}
+
 export function chatWorkState(input: ChatWorkInput): ChatWorkState {
   const { status, run, activeRunId, working } = input;
   const learning = isLearningStatus(status);
@@ -80,7 +90,7 @@ export function chatWorkState(input: ChatWorkInput): ChatWorkState {
   const ownInput = input.busy || input.sending || input.answering;
   const planWork = input.planWorking || input.revisingPlan;
   const answering = ownInput || planWork || input.stopping || ownTurnWorking;
-  const chatWorking = answering || waitingOnAnswer;
+  const chatWorking = linedInput(input) || planWork || input.stopping || ownTurnWorking || waitingOnAnswer;
   // Work followed by a streaming reply is done: it stays in the transcript, above where the reply
   // lands, so nothing moves when the reply is saved.
   const trailing = chatWorking && !input.streamingReply ? input.readingEntries.at(-1) : undefined;

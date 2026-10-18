@@ -6,6 +6,7 @@ import {
   reconcilePendingSends,
   sendPlacement,
   type PendingSend,
+  waitsBehindWork,
 } from "../../src/renderer/chat/pending-sends.ts";
 import { messageQueueState } from "../../src/shared/message-queue.ts";
 import type { EventData, EventEnvelope } from "../../src/substrate/types.ts";
@@ -136,6 +137,15 @@ test("a message waits below current work, and joins the conversation in an idle 
   ]);
   assert.equal(sendPlacement(false, queued), "waiting");
   assert.equal(sendPlacement(false, messageQueueState([custom(1, "coordinator_queue_paused", {})])), "waiting");
+});
+
+test("a message to a running build's listening lead joins the conversation; one the build keeps waits below", () => {
+  const placed = (work: Parameters<typeof waitsBehindWork>[0]) =>
+    sendPlacement(waitsBehindWork(work), messageQueueState([]));
+  assert.equal(placed({ chatWorking: false, runId: "run_a", leadTakes: true }), "transcript");
+  assert.equal(placed({ chatWorking: false, runId: "run_a", leadTakes: false }), "waiting");
+  assert.equal(placed({ chatWorking: true, runId: "run_a", leadTakes: true }), "waiting");
+  assert.equal(placed({ chatWorking: false, runId: null, leadTakes: false }), "transcript");
 });
 
 test("client ids are ones the queue accepts", () => {

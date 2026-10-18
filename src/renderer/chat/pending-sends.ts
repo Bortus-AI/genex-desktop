@@ -55,6 +55,15 @@ export function newClientId(): string {
 /** How long an acknowledged send may wait for its row before the placeholder gives way. */
 export const PENDING_SEND_GRACE_MS = 10 * SECOND_MS;
 
+/**
+ * Whether a send waits below what is under way: the chat's own work, or a running build that does
+ * not take it at once. One the build's lead takes at once joins the conversation above the
+ * build's card, as one to an idle chat does.
+ */
+export function waitsBehindWork(work: { chatWorking: boolean; runId: string | null; leadTakes: boolean }): boolean {
+  return work.chatWorking || (work.runId !== null && !work.leadTakes);
+}
+
 /** A follow-up waits below the current work; an idle chat answers at once. */
 export function sendPlacement(working: boolean, queue: QueueView): SendPlacement {
   if (working || queue.paused) return SendPlacement.Waiting;
