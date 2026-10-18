@@ -22,7 +22,7 @@
 import { InteractionObjective, InteractionSource } from "../shared/run-summary.ts";
 import type { GameEngine } from "../shared/game-engine.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
-import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
+import { type PackageManager, type SandboxProblemCode, type StartStep, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
 import { sizeWords } from "../shared/byte-size.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
@@ -3325,11 +3325,46 @@ export const SANDBOX_SETUP_WORDS = {
   copyCommand: (system: string) => `Copy the ${system} command`,
   retry: "Retry",
   retrying: "Checking…",
-  /** Windows: install it now, behind one administrator prompt. */
-  setUp: "Set up",
-  settingUp: "Waiting for approval…",
-  setUpHint: "Windows will ask an administrator to approve the setup once.",
-  setupCancelled: "Setup was cancelled, so nothing changed. Choose Set up again when you’re ready to approve it.",
+  /** Windows' first start, which sets the workspace up by itself behind one approval prompt. */
+  windows: {
+    settingUp: {
+      title: "Setting up Genex",
+      line: "Windows will ask you to allow this once. Agents work in their own protected space, away from your files.",
+      step: "Waiting for your OK",
+    },
+    needsOk: {
+      title: "Genex needs your OK to set up",
+      line: "Agents only run in a protected space that Windows has to allow once. On a work PC, an admin may need to approve it.",
+      setUp: "Set up",
+    },
+    failed: {
+      title: "Setup didn’t finish",
+      line: "Windows wouldn’t start Genex’s protected space.",
+      tryAgain: "Try again",
+      report: "Send a report",
+      sending: "Sending…",
+      /** The bare ✓'s label, once the report went. */
+      sent: "Report sent",
+      reportFailed: "The report didn’t send. Try again in a moment.",
+    },
+  },
+  /** A Windows window opened before the core: what the start is doing, by `StartStep`. */
+  starting: {
+    title: "Starting Genex",
+    line: "Getting your games and the protected workspace ready.",
+    step: {
+      games: "Reading your games",
+      workspace: "Starting the protected workspace",
+      studio: "Opening the studio",
+    } satisfies Record<StartStep, string>,
+  },
+  /** The studio's harness would not start: its error, Try again, a report and Quit. */
+  startFailed: {
+    title: "Genex couldn’t start",
+    line: "The part of Genex that runs your agents didn’t start.",
+    tryAgain: "Try again",
+    quit: "Quit",
+  },
   stillFailing: "Studio still couldn’t start:",
   details: "Details",
 } as const;

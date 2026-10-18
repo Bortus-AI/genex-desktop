@@ -10,13 +10,14 @@ import {
   SandboxProblemCode,
   SandboxSetupOutcome,
   SandboxTool,
+  StartStep,
   StudioPlatform,
   linuxInstallCommands,
   type BootState,
   type SandboxProblem,
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
-import { BootView, bootView, canSetUp, createBoot } from "../../src/renderer/state/boot.ts";
+import { BootView, bootView, canSetUp, createBoot, SetupReport } from "../../src/renderer/state/boot.ts";
 import { windowControlColors } from "../../src/renderer/window-controls.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -167,6 +168,93 @@ describe("Set up on Windows", () => {
     assert.equal(canSetUp({ platform: StudioPlatform.Windows, problem: gitMissing }), false, "Git installs by hand");
   });
 
+  it("starts Set up by itself on Windows, so the first screen is already waiting on the approval", async () => {
+    const { controller, fake, started } = windowsBoot([]);
+    const seen: string[] = [];
+    controller.store.subscribe((state) => {
+      seen.push(state.settingUp ? "setting up" : bootView(state));
+    });
+    await controller.start();
+    assert.deepEqual(seen, [BootView.SandboxSetup, "setting up", BootView.Studio]);
+    assert.equal(bootView(controller.store.getState()), BootView.Studio);
+    assert.equal(started(), 1);
+    assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+
+  it("starts Set up by itself once a launch: a window that loads again after a decline waits for Set up", async () => {
+    const { controller, fake } = windowsBoot([]);
+    fake.stub("bootState", async () => ({ ...WINDOWS_SETUP, setupTried: true }));
+    await controller.start();
+    assert.equal(fake.callsOf("setUpSandbox").length, 0);
+    assert.equal(bootView(controller.store.getState()), BootView.SandboxSetup);
+  });
+
+  it("starts nothing by itself where Set up is not offered: a ready start, or Linux", async () => {
+    for (const first of [READY, SETUP]) {
+      const { controller, fake } = boot(first);
+      await controller.start();
+      assert.equal(fake.callsOf("setUpSandbox").length, 0);
+    }
+  });
+
+  it("sends a failed Set up's error as a report once, and a new Set up starts a new report", async () => {
+    const error = "WFP egress fence could not be verified: Access is denied. (0x80070005)";
+    const { controller, fake } = windowsBoot([new Error(error), new Error(error)]);
+    const reports: string[] = [];
+    fake.stub("reportSandboxSetup", async (text) => {
+      reports.push(text);
+    });
+    await controller.start();
+    assert.equal(controller.store.getState().report, SetupReport.Idle);
+    const sending = Promise.all([controller.report(), controller.report()]);
+    assert.equal(controller.store.getState().report, SetupReport.Sending);
+    await sending;
+    assert.deepEqual(reports, [error], "two presses, one report");
+    assert.equal(controller.store.getState().report, SetupReport.Sent);
+    await controller.setUp();
+    assert.equal(controller.store.getState().report, SetupReport.Idle);
+  });
+
+  it("a report that does not go through can be sent again", async () => {
+    const { controller, fake } = windowsBoot([new Error("srt-win install failed")]);
+    fake.stub("reportSandboxSetup", async () => {
+      throw new Error("offline");
+    });
+    await controller.start();
+    await controller.report();
+    assert.equal(controller.store.getState().report, SetupReport.Failed);
+  });
+
+  it("a report still sending when a new Set up starts does not mark the new error sent", async () => {
+    const { controller, fake } = windowsBoot([new Error("first"), new Error("second")]);
+    let finish = () => {};
+    fake.stub("reportSandboxSetup", () => new Promise<void>((done) => (finish = done)));
+    await controller.start();
+    const sending = controller.report();
+    await controller.setUp();
+    finish();
+    await sending;
+    const state = controller.store.getState();
+    assert.equal(state.error, "second");
+    assert.equal(state.report, SetupReport.Idle);
+  });
+
+  it("an install after which Windows still reports no sandbox is a failure with Windows' words", async () => {
+    const still = { ...WINDOWS_SETUP, sandbox: { ...NOT_PROVISIONED, details: ["Sandbox user is not provisioned"] } };
+    const { controller } = windowsBoot([{ outcome: SandboxSetupOutcome.Installed, state: still }]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.SandboxSetup);
+    assert.equal(state.error, "Sandbox user is not provisioned");
+  });
+
+  it("has nothing to report before a Set up has failed", async () => {
+    const { controller, fake } = windowsBoot([]);
+    await controller.load();
+    await controller.report();
+    assert.equal(fake.callsOf("reportSandboxSetup").length, 0);
+  });
+
   it("shows it is waiting for approval, then starts the studio once installed", async () => {
     const { controller, fake, started } = windowsBoot([]);
     await controller.load();
@@ -215,6 +303,119 @@ describe("Set up on Windows", () => {
     await controller.load();
     await Promise.all([controller.setUp(), controller.setUp()]);
     assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+});
+
+/** A Windows window that opened while the core starts: main answers `answers` in turn, then the last one. */
+function startingBoot(answers: BootState[], retries: BootState[] = []) {
+  const fake = fakeStudioApi();
+  const asked = [...answers];
+  fake.stub("bootState", async () => (asked.length > 1 ? asked.shift() : asked[0]) as BootState);
+  fake.stub("retrySandboxSetup", async () => retries.shift() ?? WINDOWS_READY);
+  fake.stub("setUpSandbox", async () => ({ outcome: SandboxSetupOutcome.Installed, state: WINDOWS_READY }));
+  let started = 0;
+  const waits: number[] = [];
+  const controller = createBoot(fake.api, {
+    onReady: () => {
+      started++;
+    },
+    wait: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  return { fake, controller, started: () => started, waits };
+}
+
+const starting = (step: StartStep): BootState => ({
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.Starting,
+  sandbox: null,
+  step,
+});
+const FAILURE = "EPERM: operation not permitted, lstat 'C:\\Users\\USER\\AppData'";
+const FAILED: BootState = {
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.Failed,
+  sandbox: null,
+  failure: FAILURE,
+};
+
+describe("a window that opens while the studio starts", () => {
+  it("says which step the core is on, and follows it", async () => {
+    const { controller, waits } = startingBoot([
+      starting(StartStep.Games),
+      starting(StartStep.Workspace),
+      starting(StartStep.Studio),
+      WINDOWS_SETUP,
+    ]);
+    const steps: Array<StartStep | null> = [];
+    controller.store.subscribe((state) => {
+      if (bootView(state) === BootView.Starting) steps.push(state.step);
+    });
+    await controller.start();
+    assert.deepEqual(steps, [StartStep.Games, StartStep.Workspace, StartStep.Studio]);
+    assert.equal(waits.length, 3, "one wait before each new question");
+  });
+
+  it("goes on to the setup screen a start ends on, and runs Set up there by itself", async () => {
+    const { controller, fake } = startingBoot([starting(StartStep.Workspace), WINDOWS_SETUP]);
+    await controller.start();
+    assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+
+  it("does not start the studio when the core is ready: main opens it in its own window", async () => {
+    const { controller, started } = startingBoot([starting(StartStep.Studio), WINDOWS_READY]);
+    await controller.start();
+    assert.equal(started(), 0);
+    assert.equal(bootView(controller.store.getState()), BootView.Starting);
+  });
+});
+
+describe("a studio that would not start", () => {
+  it("shows why, in the window, and does not start the studio", async () => {
+    const { controller, started } = startingBoot([FAILED]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.Failed);
+    assert.equal(state.error, FAILURE);
+    assert.equal(started(), 0);
+  });
+
+  it("Try again starts the studio once main says it is ready", async () => {
+    const { controller, started, fake } = startingBoot([FAILED]);
+    await controller.start();
+    await controller.retry();
+    assert.equal(bootView(controller.store.getState()), BootView.Studio);
+    assert.equal(started(), 1);
+    assert.equal(fake.callsOf("retrySandboxSetup").length, 1);
+  });
+
+  it("a Try again that fails again shows the new words", async () => {
+    const again: BootState = { ...FAILED, failure: "harness exited during boot" };
+    const { controller } = startingBoot([FAILED], [again]);
+    await controller.start();
+    await controller.retry();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.Failed);
+    assert.equal(state.error, "harness exited during boot");
+  });
+
+  it("sends its failure as a report", async () => {
+    const { controller, fake } = startingBoot([FAILED]);
+    const reports: string[] = [];
+    fake.stub("reportSandboxSetup", async (text) => {
+      reports.push(text);
+    });
+    await controller.start();
+    await controller.report();
+    assert.deepEqual(reports, [FAILURE]);
+  });
+
+  it("Quit asks main to quit", async () => {
+    const { controller, fake } = startingBoot([FAILED]);
+    await controller.start();
+    await controller.quit();
+    assert.equal(fake.callsOf("quitFromBoot").length, 1);
   });
 });
 

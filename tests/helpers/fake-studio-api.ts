@@ -62,6 +62,8 @@ const METHODS = [
   "bootState",
   "retrySandboxSetup",
   "setUpSandbox",
+  "reportSandboxSetup",
+  "quitFromBoot",
   "setWindowControls",
   "readyUpdate",
   "restartToUpdate",

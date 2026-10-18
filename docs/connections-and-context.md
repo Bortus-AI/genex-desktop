@@ -80,7 +80,9 @@ requests. Claude reads SDK initialization metadata; Codex uses paginated app-ser
 Neither sends a prompt or starts a turn. Only unsupported Codex discovery falls back to the CLI
 cache. Snapshots refresh at startup, sign-in changes, focus after sixty seconds, and on request.
 Late answers from a previous identity are discarded. Failed refreshes retain same-identity rows as
-stale; absent catalogs expose provider default. Authentication and discovery failures stay separate.
+stale; absent catalogs expose provider default. Authentication and discovery failures stay separate,
+except in first launch: discovery starts the CLI, so a signed-in subscription whose list never
+loaded is not shown connected there but offers a check again, which retries discovery too.
 
 Aliases retain their request IDs and show reported canonical targets. Explicit model IDs and saved
 cross-provider roles are never silently replaced. New unset roles and effort defer to CLI defaults
@@ -642,9 +644,16 @@ Package inspection checks both ASAR and unpacked resources for Codex/Claude nati
 The packaged smoke matrix uses isolated discovery roots for neither/one/both providers and scripted
 status/structured execution. Live subscription execution is separate: explicitly select GPT-5.6-Sol,
 never Astra. A fixture or successful version probe is not live Claude SDK compatibility evidence.
-The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.73 absolute-path lookup at
-install/build time; it checks filesystem executability without a one-second `which` subprocess.
-It changes neither sandbox policy nor command execution. Re-review on dependency changes.
+The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.73 at install/build time.
+Absolute-path lookup checks filesystem executability without a one-second `which` subprocess.
+Windows `initialize()` runs srt-win's egress check, folder grants and deny stamps through SRT's own
+async runner instead of `spawnSync`, which froze the start window ("Not Responding") on Electron's
+main thread; `sandbox-windows-start.test.ts` fails on Windows CI when the start holds the event loop.
+Those steps report their times (`setStudioStepLog`); with the session's own steps and the core's
+boot marks they land in `studio.log`, so a slow start names its slow step. The core's Windows
+sandbox starts in the background (`startInBackground`): `create` refuses only what Set up fixes,
+the window opens on the games, and every launch waits for the rest or retries a failed start.
+The patch changes neither sandbox policy nor command execution. Re-review on dependency changes.
 
 External provider clean-profile acceptance: after rebuilding the package, run
 `STUDIO_ACCEPT_CODEX=/absolute/external/codex STUDIO_ACCEPT_CLAUDE=/absolute/external/claude node tests/e2e/run-clean-provider-profiles.mjs`.
