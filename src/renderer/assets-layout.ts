@@ -67,6 +67,8 @@ export const CARD_W = 184;
 export const CARD_IMAGE_H = 168;
 export const CARD_PLAIN_H = 112;
 export const COLUMNS = 5;
+/** The room each row of a card's status (a share's steps or outcome) takes under it. */
+export const CARD_LINE_H = 30;
 const CARD_GAP = 14;
 const GROUP_GAP = 36;
 const GROUP_HEAD_H = 30;
@@ -179,17 +181,24 @@ export function cardHeight(kind: AssetKind): number {
   return kind === "other" ? CARD_PLAIN_H : CARD_IMAGE_H;
 }
 
+const NO_LINES: ReadonlyMap<string, number> = new Map();
+
 /**
  * Deterministic rectangles: source groups contain a continuous grid in job order.
- * A completed job needs no metadata row or empty band between its previews.
+ * A completed job needs no metadata row or empty band between its previews. A row with a card
+ * in `lines` (rows of status by file) leaves {@link CARD_LINE_H} a row under its cards for them.
  */
-export function layoutAssets(assets: readonly ProjectAsset[], waiting: readonly MakingJob[] = []): AssetsLayout {
+export function layoutAssets(
+  assets: readonly ProjectAsset[],
+  waiting: readonly MakingJob[] = [],
+  lines: ReadonlyMap<string, number> = NO_LINES,
+): AssetsLayout {
   const groups = groupAssets(assets, waiting);
   const rects: Record<string, AssetRect> = {};
   const widths: number[] = [];
   let y = PAD;
   for (const group of groups) {
-    const rect = placeGroup(rects, group, y);
+    const rect = placeGroup(rects, group, y, lines);
     widths.push(rect.w);
     y = rect.y + rect.h + GROUP_GAP;
   }
@@ -205,10 +214,15 @@ interface GridCursor {
 }
 
 /** One group: its header, then its jobs' cards in one continuous grid. Returns the group's rect. */
-function placeGroup(rects: Record<string, AssetRect>, group: AssetGroup, top: number): AssetRect {
+function placeGroup(
+  rects: Record<string, AssetRect>,
+  group: AssetGroup,
+  top: number,
+  lines: ReadonlyMap<string, number>,
+): AssetRect {
   const grid: GridCursor = { column: 0, rowTop: top + GROUP_HEAD_H, rowHeight: 0 };
   for (const job of group.jobs) {
-    const jobRects = jobCards(group, job).map((card) => placeCard(rects, grid, card));
+    const jobRects = jobCards(group, job, lines).map((card) => placeCard(rects, grid, card));
     const [first] = jobRects;
     if (!first) continue;
     const left = Math.min(...jobRects.map((r) => r.x));
@@ -231,21 +245,25 @@ function placeGroup(rects: Record<string, AssetRect>, group: AssetGroup, top: nu
   return rect;
 }
 
+/** One card to place: its rect's id, its height, and the room its line needs under it. */
+interface CardSlot {
+  id: string;
+  height: number;
+  below: number;
+}
+
 /** A waiting job is one card; a delivered one is a card per file. */
-function jobCards(group: AssetGroup, job: AssetGroupJob): Array<{ id: string; height: number }> {
-  if (job.waiting) return [{ id: `pending:${group.source}:${job.jobId ?? ""}`, height: CARD_IMAGE_H }];
+function jobCards(group: AssetGroup, job: AssetGroupJob, lines: ReadonlyMap<string, number>): CardSlot[] {
+  if (job.waiting) return [{ id: `pending:${group.source}:${job.jobId ?? ""}`, height: CARD_IMAGE_H, below: 0 }];
   return job.assets.map((asset) => ({
     id: `asset:${asset.file}`,
     height: cardHeight(asset.kind ?? assetKind(asset.file)),
+    below: (lines.get(asset.file) ?? 0) * CARD_LINE_H,
   }));
 }
 
 /** The next cell of the grid, wrapping to a new row after `COLUMNS` cards. */
-function placeCard(
-  rects: Record<string, AssetRect>,
-  grid: GridCursor,
-  card: { id: string; height: number },
-): AssetRect {
+function placeCard(rects: Record<string, AssetRect>, grid: GridCursor, card: CardSlot): AssetRect {
   if (grid.column === COLUMNS) {
     grid.column = 0;
     grid.rowTop += grid.rowHeight + CARD_GAP;
@@ -253,7 +271,7 @@ function placeCard(
   }
   const rect = { x: PAD + grid.column * (CARD_W + CARD_GAP), y: grid.rowTop, w: CARD_W, h: card.height };
   rects[card.id] = rect;
-  grid.rowHeight = Math.max(grid.rowHeight, card.height);
+  grid.rowHeight = Math.max(grid.rowHeight, card.height + card.below);
   grid.column++;
   return rect;
 }

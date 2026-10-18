@@ -107,6 +107,15 @@ export function cardTagOf(state: AssetLibraryState | null): CardTag | null {
   return state?.saved ? CardTag.Saved : null;
 }
 
+/**
+ * Whether Save can act on a file: the library's own word (`saveable`: in the library, or a kind
+ * genex.games takes from the app), else whether the file is in the library already.
+ */
+export function canSave(state: (AssetLibraryState & { saveable?: boolean }) | null): boolean {
+  if (!state) return false;
+  return state.saveable ?? Boolean(state.generationId);
+}
+
 /** Whether Share can act on a file: Genex made it and it is not on Play already. */
 export const canShare = (state: AssetLibraryState | null): boolean => Boolean(state?.shareable && !state.shared?.live);
 
@@ -121,15 +130,19 @@ export function toggledSelection(selection: ReadonlySet<string>, single: string 
   return next;
 }
 
-/** What the bar's Save and Share act on for a selection: the files not saved yet, and the ones Share can take. */
+/**
+ * What the bar's Save and Share act on for a selection: the files Save can take that are not saved
+ * yet, and the ones Share can take that are not being shared already.
+ */
 export function selectionActions(
   library: GameLibraryStates | null,
   files: ReadonlySet<string>,
+  shares: Readonly<Record<string, ShareProgress>> = {},
 ): { save: string[]; share: string[] } {
   const states = [...files].map((file) => stateOf(library, file)).filter((state) => state !== null);
   return {
-    save: states.filter((state) => !state.saved).map((state) => state.file),
-    share: states.filter(canShare).map((state) => state.file),
+    save: states.filter((state) => canSave(state) && !state.saved).map((state) => state.file),
+    share: states.filter((state) => canShare(state) && !shareUnderway(shares[state.file])).map((state) => state.file),
   };
 }
 

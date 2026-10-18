@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  canSave,
   canShare,
   CardTag,
   cardTagOf,
@@ -132,6 +133,18 @@ describe("a card's tag and Share", () => {
     assert.equal(cardTagOf(null), null);
   });
 
+  it("can save what the library says it takes, else what is in the library already", () => {
+    const told = (saveable: boolean): AssetLibraryState & { saveable?: boolean } => ({
+      ...state("a", { generationId: null }),
+      saveable,
+    });
+    assert.equal(canSave(told(true)), true);
+    assert.equal(canSave({ ...told(false), generationId: "g" }), false);
+    assert.equal(canSave(state("a")), true);
+    assert.equal(canSave(state("a", { generationId: null })), false);
+    assert.equal(canSave(null), false);
+  });
+
   it("can share a Genex file not on Play yet, and nothing else", () => {
     assert.equal(canShare(state("a")), true);
     assert.equal(canShare(state("a", { shared: LIVE })), false);
@@ -157,15 +170,28 @@ describe("picking several cards", () => {
   });
 
   it("saves the picked files not saved yet and shares the ones Share can take", () => {
+    const dropped: AssetLibraryState & { saveable?: boolean } = {
+      ...state("dropped", { shareable: false, generationId: null }),
+      saveable: true,
+    };
     const library = game([
       state("saved", { saved: true }),
       state("fresh"),
       state("live", { shared: LIVE }),
-      state("dropped", { shareable: false, generationId: null }),
+      dropped,
+      state("other", { shareable: false, generationId: null }),
     ]);
-    const actions = selectionActions(library, new Set(["saved", "fresh", "live", "dropped", "unknown"]));
-    assert.deepEqual(actions.save, ["fresh", "live", "dropped"]);
+    const actions = selectionActions(library, new Set(["saved", "fresh", "live", "dropped", "other", "unknown"]));
+    assert.deepEqual(actions.save, ["fresh", "live", "dropped"], "not what genex.games would not take");
     assert.deepEqual(actions.share, ["saved", "fresh"], "a saved file can still be shared");
+  });
+
+  it("does not share again what is being shared", () => {
+    const actions = selectionActions(game([state("a"), state("b")]), new Set(["a", "b"]), {
+      a: progress(ShareStep.Check, ShareMiss.Checking),
+      b: progress(ShareStep.Missed, ShareMiss.Failed),
+    });
+    assert.deepEqual(actions.share, ["b"]);
   });
 
   it("acts on nothing while the library is unread (signed out)", () => {

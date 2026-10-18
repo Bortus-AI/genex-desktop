@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CARD_IMAGE_H,
+  CARD_LINE_H,
   CARD_W,
   COLUMNS,
   cardHeight,
@@ -174,6 +175,28 @@ describe("layoutAssets", () => {
     const sixth = layout.rects[`asset:${many[5]!.file}`]!;
     assert.equal(sixth.x, first.x, "a new row starts at the left again");
     assert.ok(sixth.y >= first.y + first.h, "and below the row above it");
+  });
+
+  it("leaves room for a card's line under its row, and only its row", () => {
+    const plain = layoutAssets(many);
+    const lined = layoutAssets(many, [], new Map([[many[1]!.file, 1]]));
+    const at = (layout: ReturnType<typeof layoutAssets>, i: number) => layout.rects[`asset:${many[i]!.file}`]!;
+    assert.deepEqual(at(lined, 1), at(plain, 1), "the lined card stays where it was");
+    assert.equal(at(lined, 4).y, at(plain, 4).y, "and so does its row");
+    assert.equal(at(lined, 5).y, at(plain, 5).y + CARD_LINE_H, "the next row moves down by the line");
+    assert.equal(at(lined, 10).y, at(plain, 10).y + CARD_LINE_H, "once");
+    assert.equal(lined.height, plain.height + CARD_LINE_H);
+    const cards = many.map((_, i) => at(lined, i));
+    for (const card of cards) assert.ok(cards.every((other) => other === card || !rectsOverlap(card, other)));
+    const twoRows = layoutAssets(
+      many,
+      [],
+      new Map([
+        [many[1]!.file, 1],
+        [many[3]!.file, 2],
+      ]),
+    );
+    assert.equal(at(twoRows, 5).y, at(plain, 5).y + 2 * CARD_LINE_H, "the row takes its tallest line");
   });
 
   it("packs separate generations into the same row and reserves a full preview while pending", () => {

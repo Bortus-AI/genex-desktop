@@ -38,6 +38,7 @@ import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
+import { ShareMiss } from "../shared/asset-library.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
@@ -3130,6 +3131,69 @@ export const ASSET_WORDS = {
   animations: "Animations",
   speed: "Speed",
   playFailed: "This sound could not be played",
+} as const;
+
+/** Save, Share, select several and search on the Assets tab and in its viewer (`panels/assets/`). */
+export const ASSET_LIBRARY_WORDS = {
+  /** The tags on a card. */
+  saved: "Saved",
+  shared: "Shared",
+  save: "Save",
+  saveTip: "Save to your library",
+  unsaveTip: "Remove from Saved",
+  share: "Share",
+  shareTip: "Share with the community",
+  sharing: "Sharing…",
+  /** The menu of an asset on Play: its page, and taking it off. */
+  sharedMenu: "Shared on Play",
+  openOnPlay: "Open on Play",
+  stopSharing: "Stop sharing",
+  /** A share's step line under its card, and how it ended. */
+  steps: { send: "Send", check: "Check", live: "Live" },
+  stepsLabel: "Sharing",
+  checking: "Checking",
+  onPlay: "On Play",
+  missed: {
+    [ShareMiss.Refused]: "Couldn't share",
+    [ShareMiss.Checking]: "Checking",
+    [ShareMiss.NotShareable]: "Only Genex assets share",
+    [ShareMiss.KindNotShareable]: "Music can't be shared",
+    [ShareMiss.TooMany]: "Too many at once",
+    [ShareMiss.Failed]: "Couldn't share",
+  } satisfies Record<ShareMiss, string>,
+  tryAgain: "Try again",
+  sendReport: "Send a report",
+  sendReportLabel: "Send this refusal and the app's logs to the Genex team",
+  reportSent: "Report sent",
+  /** What Send a report posts: the asset, its game and genex.games' own words. */
+  reportText: (name: string, project: string, detail: string) =>
+    `genex.games refused to share "${name}" (${project}).${detail ? `\n\n${detail}` : ""}`,
+  /** The share window. */
+  shareOne: (name: string) => `Share ${name}`,
+  shareMany: (count: number) => `Share ${count} assets`,
+  shareButton: (count: number) => (count === 1 ? "Share" : `Share ${count} assets`),
+  nameLabel: "Name",
+  nameOf: (name: string) => `Name for ${name}`,
+  everyoneOne: "Everyone on Genex can find and use it.",
+  everyoneMany: "Everyone on Genex can find and use them.",
+  cancel: "Cancel",
+  /** Select several. */
+  selected: (count: number) => `${count} selected`,
+  select: (name: string) => `Select ${name}`,
+  deselect: (name: string) => `Deselect ${name}`,
+  clear: "Clear",
+  clearSelection: "Clear the selection",
+  /** Search on the canvas. */
+  search: "Search assets",
+  searchLabel: "Search this game, your library and the community",
+  clearSearch: "Clear the search",
+  thisGame: "This game",
+  myLibrary: "My library",
+  community: "Community",
+  noMatches: "no matches",
+  add: "Add",
+  addLabel: (title: string) => `Add ${title} to this game`,
+  added: (game: string) => `Added to ${game}`,
 } as const;
 
 /** The Builds graph's assets tile and card: jobs still open when the run ended. */
