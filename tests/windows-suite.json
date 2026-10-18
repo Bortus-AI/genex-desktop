@@ -250,6 +250,7 @@
   "tests/conformance/sandbox-overlay.test.ts",
   "tests/conformance/sandbox-prepare.test.ts",
   "tests/conformance/sandbox-unavailable.test.ts",
+  "tests/conformance/sandbox-windows-start.test.ts",
   "tests/conformance/sandbox-windows.test.ts",
   "tests/conformance/sandbox.test.ts",
   "tests/conformance/scoreboard.test.ts",
