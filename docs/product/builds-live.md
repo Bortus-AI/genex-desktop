@@ -12,7 +12,7 @@ checkpoint. ∞ ends on verified outcomes with no blocker. Asked to finish, the 
 rounds end, then lands. Finish overrides the clock, never the final judge
 ([details](../harness-runtime.md#goal-completion-and-worker-approvals)).
 
-An active run opens Builds once; a build shown from chat or an empty Builds opens Live. Files and images opened from chat get closable tabs.
+An active run opens Builds once; a build shown from chat, or empty Builds, opens Live. Files and images opened from chat get closable tabs.
 
 ## The two views
 
@@ -33,7 +33,7 @@ works. Tries at one step fold into one node; what reached the build forms the li
 hangs below. Tries a pause cut off show Paused until added. An eye marks (and opens) the reviewers'
 notes. A new build is “Checking it starts…” until it runs. A working node shows its agent's
 screen and action; a selected one opens as a card. **Follow up in chat** notes the next message to its build.
-Its tabs, one per build of the chat (past three, one picker listing them newest first), and chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
+Tabs (one per build; past three, one picker, newest first) and chat cards open earlier builds. A Loop, workers, jobs or a claim make a tree: the lead (jobs
 below), then the finish check tinted Checking, Not yet (reasons, round of 3), Done or Stopped, a chat
 line each round. In place, save points form one line showing each change; workers hang off
 it, solid under the save point taking their work, else ghosts.

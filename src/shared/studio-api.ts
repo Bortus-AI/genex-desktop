@@ -109,6 +109,11 @@ export interface WindowControlColors {
   symbolColor: string;
 }
 
+/** The window controls as the renderer paints them: the theme's colours, and whether Home's background lies under them. */
+export interface WindowControls extends WindowControlColors {
+  seeThrough: boolean;
+}
+
 /** One read of the all-threads log: the events, and the cursor the next read starts after. */
 export interface EventFeed {
   events: EventEnvelope[];
@@ -275,8 +280,11 @@ export interface StudioApi {
   reportSandboxSetup(error: string): Promise<void>;
   /** Quit the app from the screen of a studio that would not start. */
   quitFromBoot(): Promise<void>;
-  /** Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours; macOS ignores it. */
-  setWindowControls(colors: WindowControlColors): Promise<void>;
+  /**
+   * Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours, with no box
+   * of their own on Windows while `seeThrough`; macOS ignores it.
+   */
+  setWindowControls(controls: WindowControls): Promise<void>;
   /** The new version of the app downloaded in the background, or null; `onEvent` announces later ones. */
   readyUpdate(): Promise<ReadyUpdate | null>;
   /**
