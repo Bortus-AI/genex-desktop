@@ -66,7 +66,11 @@ describe("Windows sandbox: a first start", { skip: SKIP, timeout: TEST_TIMEOUT_M
     await mkdir(workspace, { recursive: true });
     const probe = stallProbe();
     const started = performance.now();
-    sandbox = await ProcessSandbox.create({ writableRoots: [workspace], scratchDir: path.join(root, "scratch") });
+    sandbox = await ProcessSandbox.create({
+      writableRoots: [workspace],
+      scratchDir: path.join(root, "scratch"),
+      secretPaths: [],
+    });
     const result = await sandbox.run({ command: "echo started", cwd: workspace, timeoutMs: RUN_TIMEOUT_MS });
     const stall = probe.stop();
     const took = Math.round(performance.now() - started);
