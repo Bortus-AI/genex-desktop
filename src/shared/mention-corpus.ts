@@ -19,6 +19,8 @@ export interface GenexCatalogItem {
   /** The Play shelf it sits on: games, tools or assets. */
   shelf: PlayShelf;
   authorId: string | null;
+  /** Who made it, as Play names them; empty when the catalog does not say. */
+  authorName: string;
   thumbnailUrl: string | null;
   playsCount: number;
   remixable: boolean;

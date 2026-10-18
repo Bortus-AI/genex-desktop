@@ -195,6 +195,8 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
       calls.remix.push(slug);
       return handlers.playRemix ? handlers.playRemix(slug) : Promise.resolve(`${slug}-copy`);
     },
+    assetLibrary: () => Promise.resolve({ assets: [], nextCursor: null }),
+    playCatalog: () => Promise.resolve([]),
   };
   return { api, calls };
 }

@@ -437,6 +437,7 @@ function catalogReads(deps: GalleryDeps) {
       description: game.description,
       shelf,
       authorId: game.author.id,
+      authorName: game.author.name,
       thumbnailUrl: game.coverUrl,
       playsCount: game.plays,
       remixable: game.remixable,
