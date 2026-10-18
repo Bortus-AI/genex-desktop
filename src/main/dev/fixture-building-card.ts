@@ -4,8 +4,9 @@
  * in the picker (more than its three tabs). Of the
  * plan's five parts two are added, one works on its second round with its time left, one was
  * stopped and restarted (`replaces`, one row) and works on its first round, and one has not
- * started; the Loop was given 4 hours. Written once the app has started: the start closes every run
- * an earlier app left open, so a Loop still going written before it would read as stopped.
+ * started; the Loop was given 4 hours, and its lead takes the chat's messages (live chat). Written
+ * once the app has started: the start closes every run an earlier app left open, so a Loop still
+ * going written before it would read as stopped.
  */
 import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
 import { HOUR_MS, MINUTE_MS } from "../../shared/duration.ts";
@@ -143,7 +144,13 @@ function buildingLoop(project: string, now: number): EventData[] {
       model: FIXTURE_MODEL,
       budgets: { wallClockMs: LOOP_MS },
     }),
-    run(CustomEvent.AutopilotStarted, { director: true, maxParallel: 3, facets: [], workerRecords: true }),
+    run(CustomEvent.AutopilotStarted, {
+      director: true,
+      maxParallel: 3,
+      facets: [],
+      workerRecords: true,
+      liveChat: true,
+    }),
     run(CustomEvent.AutopilotPlanReview, {
       summary: "A night street race: a lit circuit, cars with a wet finish, and their sound.",
       waitMinutes: 0,

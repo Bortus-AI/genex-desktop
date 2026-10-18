@@ -4450,10 +4450,10 @@ button.chat-header-title:hover {
   --presence-gap: 0.5rem;
   margin-block-start: -8px;
 }
-/* A running build's card is a box, not a line: it stands well clear of the reply above it (24px from
+/* A running build's card is a box, not a line: it stands well clear of the reply above it (32px from
    the reply's last line), so it never reads as part of the message. */
 .chat-work-build {
-  padding-block-start: 14px;
+  padding-block-start: 22px;
 }
 .chat-user-content[data-collapsed] {
   max-height: 154px;
