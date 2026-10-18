@@ -213,10 +213,10 @@ step: `button[aria-label="Connect <name>"]` (a locked or never-connected account
 with a setup card, panels, settings, enable/remove/watch actions, `[data-plugin-connections]`
 (`[data-plugin-connection="<server>"][data-state]`), Skills behind Show all, and Information
 (capabilities in words, scan). The list ends with Make your own plugin.
-Genex's detail page is host-drawn (`panels/plugins/genex/`): `[data-genex-account="<state>"]`
-(balance for all games, no per-game numbers), `[data-genex-review]` while the open game has
-a review waiting (`[data-genex-candidate="<n>"]`: picture over `Review candidate <n>`; `Review remesh`), and `[data-genex-tools]` (`[data-genex-tool="<id>"]`); it reads the plugin's
-`status` action for no game and runs its declared actions. Local Blender's page leads with
+Genex's detail page is host-drawn (`panels/plugins/genex/`): a Connect band, `[data-genex-connect="off"]`
+(Connect enables, signs in) or `[data-genex-account="<state>"]`, `[data-genex-review]` while the open game has
+a review (`[data-genex-candidate="<n>"]`: picture over `Review candidate <n>`; `Review remesh`), and `[data-genex-tools]` (`[data-genex-tool="<id>"]`); it reads the plugin's
+`status` action and runs its declared actions. Local Blender's page leads with
 `[data-blender-runtime="<state>"]` (ready / missing / downloading) instead of its frame.
 The post-welcome promo is `aside[data-genex-promo="<phase>"]` (`panels/GenexPromo.tsx`,
 `genex-promo.ts`, storage `studio.genexPromo`; `[data-at-home]` bottom-left over home); see the
