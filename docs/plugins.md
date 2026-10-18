@@ -2083,7 +2083,10 @@ arguments checked and its card answered before it waits (`registry.prepareTool`)
 to 4 minutes (less when its call's deadline leaves less), then answers like a
 declined consent (`{blocker: "lock", lock, reason, hold, message}`: `reason` the lock's refusal,
 `hold` Genex's `HookHold` the harness words the person's line from, its record closed with the message); a
-person's own action never waits for the person. A worker writing in place holds Genex's in-place
+person's own action never waits for the person. A wait ends early when the person writes in the
+chat the calling session answers (`engine.steer` handed it their message, natively or by a cut at
+its next step): the call answers the refusal `person_wrote`, telling the agent to read the message
+first and call again if it still needs the tool; only a wait ends so, never a lock already given. A worker writing in place holds Genex's in-place
 lock and the game's `project` locks for its whole life (`locks.hold`/`locks.release`,
 [harness runtime](harness-runtime.md#workers-in-a-chat)); its own calls pass them (on an engine the
 host seats no worker on too, as `unseatedHolder`), still giving way to the person, and its line and row read "Working in <label>". Any end of the harness, a planned

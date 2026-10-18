@@ -114,6 +114,9 @@ import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/mes
 import { chatWaitsFor, leadDoor, passCtx, stopRunsOf } from "../../src/harness-seed/loop/live-chat.ts";
 import { factsReadyPrompt } from "../../src/harness-seed/loop/project-prompts.ts";
 import { steeredCall } from "../../src/harness-seed/loop/chat-steer.ts";
+import { nextWords, personWrote } from "../../src/harness-seed/loop/person-wrote.ts";
+import { switchedTurnPrompt, WAIT_ENDED } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
+import { steeredTurnPrompt } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
 import { leadLineOf, openLeadLine } from "../../src/harness-seed/loop/director/lead-line.ts";
 import { handleUserMessage } from "../../src/harness-seed/loop/chat-dispatch.ts";
 import { HostMethod } from "../../src/harness-seed/loop/host-methods.ts";
@@ -5282,6 +5285,207 @@ describe("live chat during a build, reviewed", () => {
     });
     assert.equal(chat.steers[0]?.interrupt, false, "a cut would leave nothing to resume");
     assert.deepEqual(userSaysIn(String(one.calls[1]?.prompt)), ["is it started?"]);
+  });
+
+  it("LC15. a picture sent before (its file the game's already) reaches the lead: the chat names the file it is saved as", async () => {
+    const chat = liveChat();
+    chat.loopRun();
+    // Saved before, so this message added no file of its own: only `pictureFiles` names where it is.
+    const again = { ...picture, pickedImages: 1, references: [], pictureFiles: ["references/sky-1a2b3c4d.png"] };
+    await chat.say("this one again", again);
+    assert.deepEqual(standing(chat), { "this one again": `delivered ${chat.RUN}` });
+    const heard = chat.log.find((e) => e.data.event_type === "run_steering")?.data.payload.text;
+    assert.match(String(heard), /references\/sky-1a2b3c4d\.png/);
+  });
+
+  it("LC16. a picture the person's words name by its path (no picture attached) reaches the lead with the words", async () => {
+    const chat = liveChat();
+    chat.loopRun();
+    await chat.say("look at ~/Desktop/sky.png", { ...picture, pickedImages: 0 });
+    assert.deepEqual(standing(chat), { "look at ~/Desktop/sky.png": `delivered ${chat.RUN}` });
+  });
+
+  it("LC17. in the wrap-up the lead still hears the person, and the chat answers what they said once the build closes", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    one.line.wrapUp();
+    await chat.say("also add rain");
+    // Told to the lead, with the wrap-up's words; never delivered to the run: the chat owes the answer.
+    assert.deepEqual(standing(chat), { "also add rain": "queued" });
+    const told = chat.log.filter((e) => e.data.event_type === "run_steering");
+    assert.equal(told.length, 1);
+    assert.match(String(told[0]?.data.payload.text), /^also add rain\n\n\(You are wrapping up this build/);
+    assert.equal(told[0]?.data.payload.kept, true, "marked as only told: the chat shows it where the lead heard it");
+    // Never handed again while it waits, however the queue looks.
+    await chat.say("and fog");
+    await settleOn(() => chat.log.filter((e) => e.data.event_type === "run_steering").length === 2);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(chat.log.filter((e) => e.data.event_type === "run_steering").length, 2, "each told once");
+    assert.deepEqual(chat.answered, [], "nothing answered while the build closes");
+    await one.line.release();
+    chat.closeBuild();
+    assert.ok(await settleOn(() => chat.answered.length === 2));
+    assert.deepEqual(chat.answered, ["also add rain", "and fog"], "the chat answers both, in order, once it closed");
+  });
+
+  it("LC18. a lead in its wrap-up turn hears what the person sends at its next step, told the chat takes up new work", async () => {
+    const chat = liveChat();
+    const one = chat.loopRun();
+    // Working time is over: the first turn is the wrap-up.
+    one.n.softDeadline = chat.at.now - 1;
+    await one.run(async (turn) => {
+      if (turn === 1) {
+        void chat.say("also add rain");
+        await settleOn(() => chat.steers.length > 0);
+      }
+      one.state.finished = true;
+      return worked;
+    });
+    assert.equal(chat.steers[0]?.interrupt, false, "the wrap-up is never cut short");
+    assert.match(String(chat.steers[0]?.messages[0]?.text), /also add rain[\s\S]*You are wrapping up this build/);
+    chat.closeBuild();
+    assert.ok(await settleOn(() => chat.answered.length === 1));
+    assert.deepEqual(chat.answered, ["also add rain"], "and the chat answers it once the build closed");
+  });
+});
+
+/**
+ * Messages without a queue: a message the person sent while the chat's answer ran 3 workers for 28
+ * minutes had switched the Loop on, so it never joined the answer and sat in Queued for 21 minutes;
+ * a Stop pressed to get it going handed over at once, and the next press stopped it. Now it reaches
+ * the answer at its next step, which goes on with its settings, and a wait ends when the person writes.
+ */
+describe("messages without a queue", () => {
+  const ok = (summary: string, sessionId: string) => ({
+    ok: true,
+    summary,
+    sessionId,
+    turns: 1,
+    usage: {},
+    engine: "x",
+  });
+  const cut = (sessionId: string) => ({
+    ok: false,
+    summary: "",
+    stopReason: "stopped",
+    sessionId,
+    turns: 2,
+    usage: {},
+    engine: "x",
+  });
+
+  it("NQ1. the Loop switched on while the chat's answer works reaches that answer at its next step, which goes on in the Loop", async () => {
+    const log: Array<{ id: string; data: Record<string, any> }> = [];
+    let onCut = () => {};
+    const host = {
+      call: async (method: string, p: Record<string, any>) => {
+        if (method === HostMethod.EventsAppend)
+          for (const data of p.batch) log.push({ id: String(log.length + 1).padStart(6, "0"), data });
+        if (method === HostMethod.EventsList) return log;
+        if (method === HostMethod.EngineSteer) {
+          onCut();
+          return { how: "interrupt", accepted: p.messages.map((m: { id: string }) => m.id) };
+        }
+        return null;
+      },
+      notify: () => {},
+    };
+    const legs: Array<{ prompt: string; resume: string | null; loop: boolean }> = [];
+    let running = () => {};
+    const working = new Promise<void>((resolve) => {
+      running = resolve;
+    });
+    const queue = new MessageQueue(host as never, async (action, steer) => {
+      if (action.text !== "build the boss fight") return;
+      await steeredCall({ cancelled: false }, steer, {
+        prompt: "BRIEF",
+        call: async (prompt, resume) => {
+          legs.push({ prompt, resume, loop: false });
+          const cutNow = new Promise<void>((resolve) => {
+            onCut = resolve;
+          });
+          running();
+          await cutNow;
+          return cut("s1") as never;
+        },
+        switches: {
+          changes: (item) => Boolean(item.autopilot),
+          takes: () => true,
+          apply: async () => ({
+            call: async (prompt, resume) => {
+              legs.push({ prompt, resume, loop: true });
+              return ok("Starting the Loop.", "s1") as never;
+            },
+            newSession: false,
+            notes: ["The Loop is on."],
+          }),
+        },
+      });
+    });
+    await queue.enqueue({
+      type: "user_message",
+      threadId: "chat",
+      text: "build the boss fight",
+      engine: "claude-code",
+    });
+    await working;
+    await queue.enqueue({
+      type: "user_message",
+      threadId: "chat",
+      text: "make it in the loop",
+      engine: "claude-code",
+      autopilot: {},
+    });
+    assert.ok(await settleOn(() => legs.length === 2));
+    const states = () => [...messageQueueState(log as never).messages.values()].map((m) => [m.action?.text, m.state]);
+    assert.deepEqual(legs[1], {
+      prompt: switchedTurnPrompt(["The Loop is on."], steeredTurnPrompt(["make it in the loop"])),
+      resume: "s1",
+      loop: true,
+    });
+    assert.ok(
+      await settleOn(
+        () =>
+          [...messageQueueState(log as never).messages.values()].find((m) => m.action?.text === "make it in the loop")
+            ?.state === "delivered",
+      ),
+      JSON.stringify(states()),
+    );
+    queue.stop();
+  });
+
+  it("NQ2. a lead's wait for a busy reviewer ends when the person writes, and says so", async () => {
+    let calls = 0;
+    const words = nextWords("chat_nq2");
+    const busy = Object.assign(new Error("overloaded_error: the provider is busy"), {});
+    const waiting = withProviderPatience(
+      { cancelled: false, setStatus: () => {} } as never,
+      async () => {
+        calls += 1;
+        throw busy;
+      },
+      { delays: [60_000, 60_000], endEarly: { when: words.ended, why: WAIT_ENDED.judge } },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    personWrote("chat_nq2");
+    await assert.rejects(waiting, (err: Error) => err.message === WAIT_ENDED.judge);
+    assert.equal(calls, 1, "it stopped waiting at once, without asking again");
+    words.cancel();
+    // A real failure after the person wrote is still the caller's: it is never said to be their words.
+    const after = nextWords("chat_nq2");
+    personWrote("chat_nq2");
+    const refused = Object.assign(new Error("invalid_request_error: the prompt is too long"), {});
+    await assert.rejects(
+      withProviderPatience(
+        { cancelled: false, setStatus: () => {} } as never,
+        async () => {
+          throw refused;
+        },
+        { delays: [60_000], endEarly: { when: after.ended, why: WAIT_ENDED.judge } },
+      ),
+      (err: Error) => err === refused,
+    );
+    after.cancel();
   });
 });
 

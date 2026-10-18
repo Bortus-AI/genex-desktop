@@ -3036,10 +3036,8 @@ export const CHAT_WORDS = {
   stopping: "Stopping",
   /** A message on its way, until its row arrives. */
   sending: "Sending",
-  /** A message on its way (its row not saved yet), or handed to the running turn and not read yet. */
+  /** A follow-up on its way, or waiting below the work until that work reads it. */
   sendingMessage: "Sending…",
-  /** A message waiting for a turn of its own; Remove withdraws it. */
-  queued: "Queued",
   waitingForAnswer: "Waiting for your answer",
   describeChanges: "Describe the changes you’d like to make",
   /** A build's generic busy label reads as its next step instead. */

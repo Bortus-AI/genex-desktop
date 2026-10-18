@@ -194,6 +194,7 @@
   "tests/conformance/project-picker.test.ts",
   "tests/conformance/provider-skills.test.ts",
   "tests/conformance/providers.test.ts",
+  "tests/conformance/queued-message.test.ts",
   "tests/conformance/recovery.test.ts",
   "tests/conformance/redact.test.ts",
   "tests/conformance/reference-frames.test.ts",
