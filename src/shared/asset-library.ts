@@ -59,6 +59,28 @@ export interface LibraryAsset {
   createdAt: string;
 }
 
+/**
+ * Hosts a library file is read from: genex.games' asset buckets. The renderer's `img-src` and
+ * `media-src` list each of them, so a tile can show an image's own file.
+ */
+const LIBRARY_FILE_HOSTS: ReadonlySet<string> = new Set([
+  "assets.genex.technology",
+  "assets.genex.games",
+  "cdn.genex.technology",
+]);
+
+/** An https file on one of genex.games' asset hosts (no credentials, no port), else null. */
+export function libraryFileUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const plain = url.protocol === "https:" && !url.username && !url.password && !url.port;
+    return plain && LIBRARY_FILE_HOSTS.has(url.hostname) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 /** What to read from the library. */
 export interface LibraryQuery {
   /** Words the title must contain. */

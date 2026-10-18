@@ -85,6 +85,7 @@ import {
   autoUpdateDecision,
   createUpdateAnnouncer,
   createUpdateChecker,
+  installedFromGenexRepository,
   startAutoUpdate,
   updateCheckNote,
   watchInstaller,
@@ -136,11 +137,19 @@ import {
 } from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
-import { type AssetLibrary, assetLibrary, LIBRARY_UPLOAD_TIMEOUT_MS, networkDownload } from "./play/asset-library.ts";
+import {
+  type AssetLibrary,
+  assetLibrary,
+  LIBRARY_PICTURE_TIMEOUT_MS,
+  LIBRARY_UPLOAD_TIMEOUT_MS,
+  libraryPictureFile,
+  type LibraryPictureFile,
+  networkDownload,
+} from "./play/asset-library.ts";
 import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
-import { fixtureDownload } from "./dev/fixture-asset-library.ts";
+import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
@@ -490,6 +499,7 @@ const updateDecision = autoUpdateDecision({
   developerLaunch: Boolean(dev),
   testLaunch: isSmoke || isSelfTest,
   productName: app.getName(),
+  systemPackages: process.platform === "linux" && installedFromGenexRepository(process.execPath, existsSync),
 });
 /** The installer's checks, watched from launch so Check for Updates never collides with one (./auto-update.ts). */
 const installer = watchInstaller(autoUpdater);
@@ -1042,6 +1052,15 @@ function librarySharingFor(studio: StudioCore): LibrarySharing {
   return gameLibrary;
 }
 
+/** A tile's picture file from the library: genex.games' asset hosts, or a fixture launch's own made-up file. */
+function pictureFileFor(): LibraryPictureFile {
+  // A fixture launch never reaches the network: its picture files are the fixture's own.
+  const download = fixtureNativePolicy
+    ? fixtureDownload
+    : networkDownload(globalThis.fetch, LIBRARY_PICTURE_TIMEOUT_MS);
+  return libraryPictureFile(download);
+}
+
 /** Where a message's @ tags come from: Play's catalog, the Genex account, its library and git (a fixture's stand-ins). */
 function mentionSourcesFor(core: () => StudioCore): MentionSources {
   return {
@@ -1522,7 +1541,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     share: popShareMenu,
   });
   const { library } = playAccountFor(studio);
-  registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio) });
+  registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio), pictureFile: pictureFileFor() });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },
     window: () => window,
@@ -1597,6 +1616,11 @@ async function reopenWindow(): Promise<void> {
 function checkForUpdates(): void {
   if (!updateDecision.start) return;
   const log = (line: string) => studioLog.write("update", line);
+  // Linux from the Genex package repository: apt or dnf brings the next version.
+  if (updateDecision.mode === UpdateMode.System) {
+    log("updates come from the system's package manager");
+    return;
+  }
   if (updateDecision.mode === UpdateMode.Notify) {
     // Linux: ask GitHub now and every few hours; a newer release announces itself.
     const ask = () => void updateChecker.check().then((result) => log(`release check: ${result.status}`));
@@ -1844,6 +1868,20 @@ function failStartup(err: unknown): void {
   app.exit(1);
 }
 
+/**
+ * The asset-library fixture's window gets its library's files (a tile's picture, a sound it plays)
+ * from the fixture, so no socket opens for them; every other https request goes out as usual. Any
+ * other launch leaves https alone.
+ */
+function serveFixtureLibraryFiles(): void {
+  if (!fixtureProviders || dev?.fixture !== FixtureName.AssetLibrary) return;
+  protocol.handle(
+    "https",
+    async (request) =>
+      (await fixtureFileResponse(request.url)) ?? net.fetch(request, { bypassCustomProtocolHandlers: true }),
+  );
+}
+
 /** Wire a started core into the app: its IPC, the window, the harness and any developer fixture. */
 async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
   const userData = userDataRoot;
@@ -1852,6 +1890,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     // The update-ready fixture shows the window's restart prompt; nothing was downloaded.
     if (fixtureProviders && dev?.fixture === FixtureName.UpdateReady) updates.downloaded(FIXTURE_UPDATE_RELEASE);
     protocol.handle("studio-plugin", (request) => servePluginPanel(studio, request));
+    serveFixtureLibraryFiles();
     const fixture = fixtureProviders && dev ? await prepareFixture(studio, dev.fixture) : null;
     // The engine checks take seconds: they start now, beside the window, and the window opens on
     // the engines the last launch checked. After a fixture's engines are in place.

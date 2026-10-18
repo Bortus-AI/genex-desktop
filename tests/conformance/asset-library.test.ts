@@ -2,7 +2,8 @@
  * The asset library on genex.games and a game's Save, Share and Add. What genex.games answers is
  * hostile input: a file off its asset hosts is never downloaded, a malformed row never reaches a
  * card, and a file name the renderer sends that is not one of the game's own assets is refused
- * before anything is read, sent or written.
+ * before anything is read, sent or written. A file a tile draws its picture from is read only over
+ * https from those hosts, never through a redirect, never past its cap and never past its wait.
  */
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -15,14 +16,15 @@ import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { FixtureAccount, fixtureAccountToken } from "../../src/main/dev/fixture-people.ts";
 import {
   assetLibrary,
-  libraryFileUrl,
+  LIBRARY_PICTURE_MAX_BYTES,
   libraryListRoute,
+  libraryPictureFile,
   LibraryRoute,
   networkDownload,
   toLibraryAsset,
 } from "../../src/main/play/asset-library.ts";
 import { type GalleryAnswer, type GalleryRequest, SignInNeeded } from "../../src/main/play/gallery.ts";
-import { LibraryKind, shareNameOf, ShareMiss } from "../../src/shared/asset-library.ts";
+import { LibraryKind, libraryFileUrl, shareNameOf, ShareMiss } from "../../src/shared/asset-library.ts";
 import type { ProjectAsset, ProjectAssets } from "../../src/shared/game-assets.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
 
@@ -185,6 +187,104 @@ describe("downloads", () => {
     const download = networkDownload((async () => new Response(new Uint8Array(64))) as typeof fetch);
     await assert.rejects(download(FILE_URL, 10), /too large/);
     assert.equal((await download(FILE_URL, 64)).byteLength, 64);
+  });
+});
+
+/** A fetch that records every address asked and answers with `answer`. */
+function recordingFetch(answer: (url: string, init: RequestInit | undefined) => Promise<Response> | Response) {
+  const asked: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    asked.push(url);
+    return answer(url, init);
+  }) as typeof fetch;
+  return { asked, fetchImpl };
+}
+
+/** A body of `chunks` chunks of `size` bytes that counts how many were read; nothing is read ahead. */
+function countedBody(chunks: number, size: number) {
+  const counted = { read: 0 };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (counted.read >= chunks) return controller.close();
+        counted.read += 1;
+        controller.enqueue(new Uint8Array(size));
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { counted, body };
+}
+
+describe("a tile's picture file", () => {
+  const EVIL = "https://evil.example/x.glb";
+
+  for (const [label, url] of [
+    ["another host", EVIL],
+    ["a host that only starts like genex.games'", "https://assets.genex.technology.evil.example/a.glb"],
+    ["genex.games' own site, not an asset host", "https://genex.games/a.glb"],
+    ["plain http", "http://assets.genex.technology/a.glb"],
+    ["credentials", "https://u:p@assets.genex.technology/a.glb"],
+    ["a port", "https://assets.genex.technology:8443/a.glb"],
+    ["a file on this Mac", "file:///etc/passwd"],
+    ["a data address", "data:model/gltf-binary;base64,Z2xURg=="],
+    ["script", "javascript:alert(1)"],
+    ["not a URL", "assets.genex.technology/a.glb"],
+    ["nothing", undefined],
+    ["a number", 42],
+    ["an object", { url: FILE_URL }],
+  ] as const) {
+    it(`refuses ${label} before any request`, async () => {
+      const { asked, fetchImpl } = recordingFetch(() => new Response(new Uint8Array(4)));
+      await assert.rejects(libraryPictureFile(networkDownload(fetchImpl))(url));
+      assert.deepEqual(asked, []);
+    });
+  }
+
+  it("reads a file on genex.games' asset hosts", async () => {
+    const { asked, fetchImpl } = recordingFetch(() => new Response(new Uint8Array([0x67, 0x6c, 0x54, 0x46])));
+    const bytes = await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL);
+    assert.deepEqual([...bytes], [0x67, 0x6c, 0x54, 0x46]);
+    assert.deepEqual(asked, [FILE_URL]);
+  });
+
+  it("never follows a redirect off genex.games' hosts", async () => {
+    // genex.games' host answers with a redirect; a fetch that follows it asks the other host.
+    const { asked, fetchImpl } = recordingFetch(async (url, init) => {
+      if (url === EVIL) return new Response(new Uint8Array(4));
+      if (init?.redirect === "error") throw new TypeError("fetch failed: redirect");
+      if (init?.redirect === "manual") return new Response(null, { status: 302, headers: { location: EVIL } });
+      asked.push(EVIL);
+      return new Response(new Uint8Array(4));
+    });
+    await assert.rejects(libraryPictureFile(networkDownload(fetchImpl))(FILE_URL));
+    assert.deepEqual(asked, [FILE_URL]);
+  });
+
+  it("refuses a file that says it is over the cap without reading it, and stops one that lies", async () => {
+    const declared = countedBody(1, 4);
+    const big = recordingFetch(
+      () => new Response(declared.body, { headers: { "content-length": String(LIBRARY_PICTURE_MAX_BYTES + 1) } }),
+    );
+    await assert.rejects(libraryPictureFile(networkDownload(big.fetchImpl))(FILE_URL), /too large/);
+    assert.equal(declared.counted.read, 0);
+    const MIB = 1024 * 1024;
+    const chunks = LIBRARY_PICTURE_MAX_BYTES / MIB + 8;
+    const lying = countedBody(chunks, MIB);
+    const quiet = recordingFetch(() => new Response(lying.body));
+    await assert.rejects(libraryPictureFile(networkDownload(quiet.fetchImpl))(FILE_URL), /too large/);
+    assert.ok(lying.counted.read <= LIBRARY_PICTURE_MAX_BYTES / MIB + 1, `read ${lying.counted.read} MiB`);
+  });
+
+  it("gives up on a host that never answers once its wait is over", async () => {
+    const { fetchImpl } = recordingFetch(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+        }),
+    );
+    await assert.rejects(libraryPictureFile(networkDownload(fetchImpl, 10))(FILE_URL));
   });
 });
 

@@ -165,6 +165,7 @@ function gameCalls(bridge: BridgeCalls) {
     assetShare: (project, items) => invoke("studio:assets.share", { project, items }),
     assetUnshare: (project, file) => invoke("studio:assets.unshare", { project, file }),
     assetAdd: (project, source) => invoke("studio:assets.add", { project, source }),
+    assetLibraryFile: (url) => invoke("studio:assets.file", { url }),
     readProjectAsset: (p) => invoke("studio:game.asset.still", p),
     installPackages: (project, options) =>
       invoke("studio:packages.install", { project, scripts: options?.scripts === true }),

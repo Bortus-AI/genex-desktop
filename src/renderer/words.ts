@@ -2452,6 +2452,7 @@ export const ABOUT_WORDS = {
   ready: (version: string | null) => `Genex ${version ?? "update"} is ready to install.`,
   available: (version: string | null) => `Genex ${version ?? "update"} is available.`,
   off: "This build doesn't check for updates.",
+  system: "Genex updates with your system: Software Updater, apt or dnf.",
   failed: "Couldn't check for updates. Check your connection and try again.",
   restart: "Relaunch to update",
   download: "Download",
