@@ -459,11 +459,11 @@ quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both fac
 and tone (Not set up, Not open, Starting, Ready as the green dot alone, Unreal busy, Not answering,
 Not connected), its foot one primary (held, not hidden, while Unreal is busy), Change project and a
 ⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. The Unity
-panel is the same: its project block (cube tile, `unity/`, state in the button's words, the step,
-Engine, one primary and a quiet action at the foot's end) and This computer (the newest Unity, ticked
-once it is Unity 6); its strip button folds to the cube. While Live or Builds loads, a 52×36
-halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
-at least 0.6s and fades out (150ms) before the native view is uncovered.
+panel is the same: its project block (Unity's mark on the tile, `unity/`, state in the button's
+words, the step, Engine, one primary and a quiet action at the foot's end) and This computer (the
+newest Unity, ticked once it is Unity 6); its strip button folds to Unity's mark. While Live or
+Builds loads, a 52×36 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears
+only after 0.4s, stays at least 0.6s and fades out (150ms) before the native view is uncovered.
 
 **Home** is where every launch starts and where the wordmark leads: nothing selected, one 21px
 Medium line (“Everything you need to ship a game”) over the game composer (“What do you want to

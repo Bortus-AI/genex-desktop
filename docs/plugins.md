@@ -279,7 +279,7 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
   (`Retry`, `Ready`, `Live`, `Builds`, `Assets`, `Export`, `Plugins`, `Reload`, `State`,
   `Close plugins`, compared case-insensitively); `ariaLabel` 1–60 characters, unique, not reserved;
   `icon` a glyph of at most 4 characters or a host icon (`globe`, `export`, `play`, `image`, `box`,
-  `boxes`, `unreal`).
+  `boxes`, `unreal`, `godot`, `unity`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
@@ -2561,8 +2561,8 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 
 #### The panel and the toolbar button
 
-The toolbar button (`unity:editor`, labelled Unity with the `box` icon, only on a game with a Unity
-project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
+The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
+Unity project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
 [engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
 in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
 newest Unity installed). The button's status action `toolbar-status`
