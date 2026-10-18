@@ -148,9 +148,10 @@ export async function withChatWorkers<T>(
   seat: ChatWorkersSeat | null,
   work: () => Promise<T>,
   endOf: (result: T) => WorkersEnd = () => WorkersEnd.Stop,
+  clock: PoolClock = REAL_CLOCK,
 ): Promise<T> {
   if (!seat || !isDelegated(seat.engine)) return work();
-  const opened = await openChatWorkers(ctx, seat).catch(() => null);
+  const opened = await openChatWorkers(ctx, seat, clock).catch(() => null);
   let end: WorkersEnd = WorkersEnd.Stop;
   try {
     const result = await work();

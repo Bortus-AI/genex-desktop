@@ -228,12 +228,14 @@ export async function runDelegatedTurn(ctx: HarnessCtx, options: DelegatedOption
   if (held) return held;
   // The chat's own session may run workers for this turn: they stop when it ends, however it ends —
   // unless it launched a Loop, which takes them over or lets them finish first (workers/carry.ts).
+  // The game as the turn ends: a turn that changed what the project is ends on its new kind.
+  const ended = { handoff };
   try {
     return await withChatWorkers(
       ctx,
       chatWorkersSeat(options, handoff),
-      () => handOver(ctx, options, handoff),
-      (outcome) => workersEndOf(outcome, handoff),
+      () => handOver(ctx, options, handoff, ended),
+      (outcome) => workersEndOf(outcome, ended.handoff),
     );
   } finally {
     await turnMoment(ctx, options, handoff, HookEvent.TurnEnd);
@@ -292,8 +294,16 @@ function chatWorkersSeat(options: DelegatedOptions, handoff: Handoff): ChatWorke
   };
 }
 
-/** The turn's ask, handed to its contractor in the folder chosen for it, and what it did reported. */
-async function handOver(ctx: HarnessCtx, options: DelegatedOptions, handoff: Handoff): Promise<TurnOutcome> {
+/**
+ * The turn's ask, handed to its contractor in the folder chosen for it, and what it did reported.
+ * `ended` holds the handoff the turn ends on (a switch or a new kind moves it on).
+ */
+async function handOver(
+  ctx: HarnessCtx,
+  options: DelegatedOptions,
+  handoff: Handoff,
+  ended: { handoff: Handoff },
+): Promise<TurnOutcome> {
   const briefFor = await briefWriter(ctx, options, handoff);
   await recordHandoff(ctx, options, handoff);
   const callId = await recordDelegateRequest(ctx, options, handoff);
@@ -301,14 +311,18 @@ async function handOver(ctx: HarnessCtx, options: DelegatedOptions, handoff: Han
   const before = options.runId ? UNKNOWN_STAMPS : await contentStamps(ctx, handoff.project);
   // How the turn runs: a message the person sends while it works may change it (steer-switch.ts).
   const seat = await seatOf(ctx, options, handoff, briefFor);
-  let result: DelegateResult;
   try {
-    // A Stop while the turn prepared: no builder runs yet for it to abort, so none starts.
-    result = ctx.cancelled ? stoppedBeforeWork(options.engine) : await delegateResuming(ctx, seat);
-  } catch (err: any) {
-    return switchedOutcome(seat, await handleDelegateFailure(ctx, seat.options, handoff.project, callId, err));
+    let result: DelegateResult;
+    try {
+      // A Stop while the turn prepared: no builder runs yet for it to abort, so none starts.
+      result = ctx.cancelled ? stoppedBeforeWork(options.engine) : await delegateResuming(ctx, seat);
+    } catch (err: any) {
+      return switchedOutcome(seat, await handleDelegateFailure(ctx, seat.options, handoff.project, callId, err));
+    }
+    return switchedOutcome(seat, await afterDelegation(ctx, seat, { callId, before, result }));
+  } finally {
+    ended.handoff = seat.handoff;
   }
-  return switchedOutcome(seat, await afterDelegation(ctx, seat, { callId, before, result }));
 }
 
 /** What the turn's delegation left: its call, the folder before it, and the session's result. */

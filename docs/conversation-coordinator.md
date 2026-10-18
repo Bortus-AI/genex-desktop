@@ -225,8 +225,8 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   them — the after-run session's engine kept, a reopen's rules kept, the next Loop after one in the
   game folder started from a plain chat turn) and the resumed leg opens with what changed
   (`steer-switch-prompts.ts`): another model or effort resumes the same session; another engine
-  starts a new one told the brief and everything the turn was told. A switch outranks a launch or a
-  question the cut leg recorded, which is dropped. Slash text runs as a leg of its own, the command
+  starts a new one told the brief and everything the turn was told. A Loop switch drops a launch or
+  question the cut leg recorded (the session is told); another keeps it, on its settings. Slash text runs as a leg of its own, the command
   alone in the same session, and the turn carries on after it. Messages reach it in the order they
   were sent.
 - **Not read.** Whatever a session took but did not read — a Stop (checked again before every

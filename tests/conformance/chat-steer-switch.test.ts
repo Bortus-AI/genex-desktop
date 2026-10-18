@@ -222,8 +222,9 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     q.queue.stop();
   });
 
-  it("another engine, model or effort keeps a launch the cut leg recorded: the turn ends and the build starts", async () => {
+  it("another engine, model or effort keeps a launch the cut leg recorded: the build starts on the message's settings", async () => {
     const calls: any[] = [],
+      applied: string[] = [],
       started = deferred(),
       results: DelegateResult[] = [];
     const q = cuttingQueue(async (action, steer) => {
@@ -236,7 +237,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
             const launched = { studioToolCalls: [{ name: "start_autopilot", args: { goal: "boss" } }] };
             return legUntilCut(q, started, stopped("s1", 2, launched));
           },
-          switches: switchesFor(calls, [], { autopilot: { hours: 2 } }),
+          switches: switchesFor(calls, applied, { autopilot: { hours: 2 } }),
         }),
       );
     });
@@ -250,7 +251,9 @@ describe("a message that changes how the turn runs: the turn goes on with its se
       ["start_autopilot"],
       "the launch goes out",
     );
-    assert.notEqual(q.state("let codex take it")?.state, "delivered", "the message waits for what comes next");
+    assert.deepEqual(applied, ["let codex take it"], "the turn goes out on the message's settings");
+    assert.equal(calls.length, 1, "no leg runs on them: the turn has ended");
+    assert.notEqual(q.state("let codex take it")?.state, "delivered", "its words wait for what comes next");
     q.queue.stop();
   });
 

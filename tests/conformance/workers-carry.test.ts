@@ -234,6 +234,7 @@ describe("a chat turn's workers as the turn ends", () => {
         return "launched";
       },
       (result) => (result === "launched" ? WorkersEnd.Carry : WorkersEnd.Stop),
+      fastClock(),
     );
     const run = await runPool(runSeat(host, repo, "run_from_turn"));
     assert.deepEqual(
@@ -243,11 +244,17 @@ describe("a chat turn's workers as the turn ends", () => {
     await closeRunPool("run_from_turn");
     assert.equal(run.state.records[0]?.state, "stopped", "the run's close stops what is left, as it would its own");
 
-    await withChatWorkers(host.recorder.ctx as never, { ...seat, turn: "msg-3" }, async () => {
-      await chatWorkerTool({ threadId: THREAD, turn: "msg-3", name: WorkerTool.Start, args: COPY });
-      await settle();
-      return "answered";
-    });
+    await withChatWorkers(
+      host.recorder.ctx as never,
+      { ...seat, turn: "msg-3" },
+      async () => {
+        await chatWorkerTool({ threadId: THREAD, turn: "msg-3", name: WorkerTool.Start, args: COPY });
+        await settle();
+        return "answered";
+      },
+      undefined,
+      fastClock(),
+    );
     assert.equal(runningChatWorkers(THREAD, "msg-3"), 0);
   });
 
@@ -264,15 +271,21 @@ describe("a chat turn's workers as the turn ends", () => {
       facts: [{ id: "unity-project", path: "." }],
     };
     const carries: boolean[] = [];
-    await withChatWorkers(host.recorder.ctx as never, seat, async () => {
-      await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: COPY });
-      await settle();
-      carries.push(chatWorkersCarry(THREAD, "msg-4"));
-      await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: IN_PLACE });
-      await settle();
-      carries.push(chatWorkersCarry(THREAD, "msg-4"));
-      return "answered";
-    });
+    await withChatWorkers(
+      host.recorder.ctx as never,
+      seat,
+      async () => {
+        await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: COPY });
+        await settle();
+        carries.push(chatWorkersCarry(THREAD, "msg-4"));
+        await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: IN_PLACE });
+        await settle();
+        carries.push(chatWorkersCarry(THREAD, "msg-4"));
+        return "answered";
+      },
+      undefined,
+      fastClock(),
+    );
     assert.deepEqual(carries, [true, false]);
     assert.equal(chatWorkersCarry(THREAD, "msg-5"), false, "another turn's pool is not this one");
   });

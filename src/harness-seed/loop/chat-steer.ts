@@ -385,6 +385,8 @@ async function afterLeg(turn: TurnLegs, outcome: LegOutcome): Promise<DelegateRe
   const recorded = keptCalls(turn, ours, result);
   if (result) turn.legs.push({ ...result, studioToolCalls: recorded ?? [] });
   if (ours && !recorded?.length) return null;
+  // The turn ends on a launch or a question it keeps: the change of engine, model or effort it was cut for goes with it.
+  if (ours) await followKeptSwitches(turn);
   // Commands are still owed, or what they leave to do: the turn goes on after a leg that ended well.
   if (result?.ok && !ours && !ctx.cancelled && owesLegs(turn)) return null;
   const neverRead = !result || (ctx.cancelled && !(result.turns > 0));
@@ -402,13 +404,28 @@ async function afterLeg(turn: TurnLegs, outcome: LegOutcome): Promise<DelegateRe
 /**
  * The launch or question calls a leg recorded that still go out. The Loop changed (the leg was cut
  * for it): they were made on the old Loop, so they are dropped and the session is told so. Any other
- * change keeps them: the build starts on the newest settings.
+ * change keeps them, and the turn goes out on its settings (`followKeptSwitches`).
  */
 function keptCalls(turn: TurnLegs, cutForTurn: boolean, result: DelegateResult | undefined) {
   const dropped = cutForTurn && loopSwitched(turn) ? (result?.studioToolCalls ?? []) : [];
   if (!dropped.length) return result?.studioToolCalls;
   turn.notes.push(SWITCH_NOTES.dropped(dropped.map((call) => call.name)));
   return [];
+}
+
+/**
+ * The turn ends on what its leg recorded (a launch, a question): go on with the settings of each
+ * message it was cut for that changes them, in the order sent, so what it recorded goes out on the
+ * newest. Their words still wait for whoever answers next (the build's lead, or a turn of their own).
+ */
+async function followKeptSwitches(turn: TurnLegs): Promise<void> {
+  const { switches } = turn.options;
+  if (!switches) return;
+  for (const item of turn.interrupted) {
+    if (isSlashText(item.text) || !switches.changes(item)) continue;
+    switchTo(turn, await switches.apply(item));
+    turn.steer.follows?.(item);
+  }
 }
 
 /** Each message once, in the order first met: a command is both taken and unread. */
