@@ -102,8 +102,12 @@ export function AssetSwitchers({ onChoose }: { onChoose: () => void }): JSX.Elem
   );
 }
 
-/** The picture: fades in once loaded; a missing, broken or still-drawing one leaves the kind's glyph on the tile. */
-function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null }): JSX.Element {
+/**
+ * The picture: fades in once loaded; a missing, broken or still-drawing one leaves the kind's glyph on
+ * the tile. An image's own file can be a full-size original, so it loads only as its tile nears the
+ * screen.
+ */
+export function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null }): JSX.Element {
   const [state, setState] = useState<ImageState>(ImageState.Loading);
   const glyph = (!src || state === ImageState.Failed) && (
     <Icon name={KIND_GLYPH[kind ?? LibraryKind.Model]} size={22} className="play-asset-glyph" />
@@ -117,6 +121,7 @@ function TileImage({ src, kind }: { src: string | null; kind: LibraryKind | null
           src={src}
           alt=""
           draggable={false}
+          loading="lazy"
           decoding="async"
           data-shown={state === ImageState.Shown || undefined}
           onLoad={() => setState(ImageState.Shown)}

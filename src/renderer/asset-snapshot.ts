@@ -2,11 +2,26 @@
  * A model or texture drawn once off screen by the asset viewer, snapshotted, and its viewer thrown
  * away: the Assets tab's thumbnails and Play's asset tiles both make their pictures this way.
  */
+import { PreviewFailure } from "../shared/asset-preview.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 const MESSAGE = {
   cancelled: "Preview cancelled",
   unavailable: "Preview unavailable",
 } as const;
+
+/** A snapshot the viewer gave up on, and why: the file itself, or something around it that may pass. */
+export class SnapshotError extends Error {
+  readonly failure: PreviewFailure;
+  constructor(failure: PreviewFailure, cause: unknown) {
+    super(errorMessage(cause), { cause });
+    this.failure = failure;
+  }
+}
+
+/** Whether `error` says the file itself cannot be drawn, so drawing it again would fail again. */
+export const fileUndrawable = (error: unknown): boolean =>
+  error instanceof SnapshotError && error.failure === PreviewFailure.File;
 
 /** One file read for the viewer: its bytes and their type. */
 export type SnapshotRead = (file: string) => Promise<{ mimeType: string; data: Uint8Array<ArrayBuffer> }>;
@@ -24,7 +39,10 @@ export interface SnapshotRequest {
   height: number;
 }
 
-/** The PNG data URL of `request.file` drawn off screen; rejects when it cannot be drawn or `signal` aborts. */
+/**
+ * The PNG data URL of `request.file` drawn off screen; rejects when it cannot be drawn (a
+ * {@link SnapshotError} saying why, when the viewer says) or `signal` aborts.
+ */
 export async function viewerSnapshot(request: SnapshotRequest, signal?: AbortSignal): Promise<string> {
   const { createAssetViewer } = await import("./asset-model-viewer.js");
   signal?.throwIfAborted();
@@ -51,7 +69,9 @@ export async function viewerSnapshot(request: SnapshotRequest, signal?: AbortSig
         companions: request.companions,
         read: request.read,
         onTime: () => {},
-        onError: (error: unknown) => finish({ error }),
+        // The viewer says why it gave up: the file itself, or something around it that may pass.
+        onError: (error: unknown, failure?: PreviewFailure) =>
+          finish({ error: failure ? new SnapshotError(failure, error) : error }),
         onReady: () => {
           try {
             if (!viewer) throw new Error(MESSAGE.unavailable);

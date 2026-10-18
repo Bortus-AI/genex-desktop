@@ -85,6 +85,7 @@ import {
   autoUpdateDecision,
   createUpdateAnnouncer,
   createUpdateChecker,
+  installedFromGenexRepository,
   startAutoUpdate,
   updateCheckNote,
   watchInstaller,
@@ -139,11 +140,11 @@ import { type GenexCredits, genexCredits } from "./play/credits.ts";
 import {
   type AssetLibrary,
   assetLibrary,
-  LIBRARY_PICTURE_TIMEOUT_MS,
   LIBRARY_UPLOAD_TIMEOUT_MS,
   libraryPictureFile,
   type LibraryPictureFile,
   networkDownload,
+  networkPictureFile,
 } from "./play/asset-library.ts";
 import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
@@ -498,6 +499,7 @@ const updateDecision = autoUpdateDecision({
   developerLaunch: Boolean(dev),
   testLaunch: isSmoke || isSelfTest,
   productName: app.getName(),
+  systemPackages: process.platform === "linux" && installedFromGenexRepository(process.execPath, existsSync),
 });
 /** The installer's checks, watched from launch so Check for Updates never collides with one (./auto-update.ts). */
 const installer = watchInstaller(autoUpdater);
@@ -1053,10 +1055,7 @@ function librarySharingFor(studio: StudioCore): LibrarySharing {
 /** A tile's picture file from the library: genex.games' asset hosts, or a fixture launch's own made-up file. */
 function pictureFileFor(): LibraryPictureFile {
   // A fixture launch never reaches the network: its picture files are the fixture's own.
-  const download = fixtureNativePolicy
-    ? fixtureDownload
-    : networkDownload(globalThis.fetch, LIBRARY_PICTURE_TIMEOUT_MS);
-  return libraryPictureFile(download);
+  return fixtureNativePolicy ? libraryPictureFile(fixtureDownload) : networkPictureFile(globalThis.fetch);
 }
 
 /** Where a message's @ tags come from: Play's catalog, the Genex account, its library and git (a fixture's stand-ins). */
@@ -1614,6 +1613,11 @@ async function reopenWindow(): Promise<void> {
 function checkForUpdates(): void {
   if (!updateDecision.start) return;
   const log = (line: string) => studioLog.write("update", line);
+  // Linux from the Genex package repository: apt or dnf brings the next version.
+  if (updateDecision.mode === UpdateMode.System) {
+    log("updates come from the system's package manager");
+    return;
+  }
   if (updateDecision.mode === UpdateMode.Notify) {
     // Linux: ask GitHub now and every few hours; a newer release announces itself.
     const ask = () => void updateChecker.check().then((result) => log(`release check: ${result.status}`));

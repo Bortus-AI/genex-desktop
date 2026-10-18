@@ -8,6 +8,8 @@
  * a real library, a few generations list no thumbnail: their tiles draw their own pictures, and the
  * asset-library launch's window gets their files from here too (`fixtureFileResponse`).
  */
+import { LibraryFileMiss } from "../../shared/asset-library.ts";
+import { DownloadRefused } from "../play/asset-library.ts";
 import type { GalleryAnswer, GalleryRequest } from "../play/gallery.ts";
 import { gradientShot, type Rgb } from "./fixture-kit.ts";
 import { fixtureAccountOf } from "./fixture-people.ts";
@@ -424,7 +426,8 @@ export async function fixtureDownload(url: string, maxBytes: number): Promise<Ui
     if (row?.kind === "image") return gradientShot(...(row.colors ?? MOSS_COLORS));
     return triangleGlb(row?.hue ?? 200);
   })();
-  if (bytes.byteLength > maxBytes) throw new Error("That file is too large to add.");
+  if (bytes.byteLength > maxBytes)
+    throw new DownloadRefused(LibraryFileMiss.TooLarge, "That file is too large to add.");
   return bytes;
 }
 
