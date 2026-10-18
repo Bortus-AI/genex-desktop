@@ -1,8 +1,8 @@
 /**
  * Play's Assets shelf as square tiles, pure: the kind and whose switchers' choices, where the tiles
  * come from for each choice (the Assets feed, the whole catalog for one kind, a search, or the
- * person's own library), the tiles themselves, a library page added to the ones read, and the games
- * Use offers to add an asset to. `PlayAssets.tsx` draws what these decide.
+ * person's own library), the tiles themselves and the picture each shows, a library page added to the
+ * ones read, and the games Use offers to add an asset to. `PlayAssets.tsx` draws what these decide.
  */
 import {
   type AddSource,
@@ -10,6 +10,7 @@ import {
   type LibraryAsset,
   LibraryKind,
   type LibraryPage,
+  libraryFileUrl,
 } from "../../shared/asset-library.ts";
 import type { GameProject } from "../../shared/game-project.ts";
 import type { GenexCatalogItem } from "../../shared/mention-corpus.ts";
@@ -126,6 +127,30 @@ export function libraryTile(asset: LibraryAsset): AssetTile {
     slug: asset.shared?.live ? asset.shared.slug : null,
     tag: cardTagOf(asset),
   };
+}
+
+/** Where a tile's picture comes from: an image's address, or a preview drawn from a 3D file. */
+export const PictureFrom = { Image: "image", Model: "model" } as const;
+export type PictureFrom = (typeof PictureFrom)[keyof typeof PictureFrom];
+
+/** What a tile's square shows in place of the kind's glyph. */
+export interface TilePicture {
+  from: PictureFrom;
+  url: string;
+}
+
+/**
+ * A tile's picture: its cover; else, for a file on genex.games' asset hosts, an image's own file or
+ * a preview drawn from a 3D file. Null keeps the kind's glyph: a sound, a video, a tile that knows no
+ * file, a file anywhere else.
+ */
+export function tilePicture(tile: Pick<AssetTile, "coverUrl" | "kind" | "fileUrl">): TilePicture | null {
+  if (tile.coverUrl) return { from: PictureFrom.Image, url: tile.coverUrl };
+  const file = libraryFileUrl(tile.fileUrl);
+  if (!file) return null;
+  if (tile.kind === LibraryKind.Image) return { from: PictureFrom.Image, url: file };
+  if (tile.kind === LibraryKind.Model) return { from: PictureFrom.Model, url: file };
+  return null;
 }
 
 /** Everyone's assets of one kind from the whole catalog, in its order. */

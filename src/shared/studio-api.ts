@@ -589,6 +589,8 @@ export interface StudioApi {
   assetUnshare(project: string, file: string): Promise<GameLibraryStates>;
   /** Bring a library generation or a shared asset into a game; where it landed. */
   assetAdd(project: string, source: AddSource): Promise<AddOutcome>;
+  /** A library file's bytes for a tile's picture: only an https file on genex.games' asset hosts, within a cap. */
+  assetLibraryFile(url: string): Promise<Uint8Array<ArrayBuffer>>;
   /**
    * One image from inside the game, contained and byte-sniffed. `maxPx` asks for a thumbnail;
    * `scope: "genex-inspection"` reads the one saved frame of the named job instead, and

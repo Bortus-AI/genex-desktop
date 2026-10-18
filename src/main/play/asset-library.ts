@@ -7,6 +7,7 @@ import {
   isGenerationId,
   isLibraryKind,
   LIBRARY_IDS_MAX,
+  libraryFileUrl,
   LIBRARY_QUERY_MAX,
   type LibraryAsset,
   LibraryKind,
@@ -38,6 +39,10 @@ const HTTP_TOO_MANY = 429;
 const TITLE_MAX = 300;
 /** How long one library file may take to download. */
 const DOWNLOAD_TIMEOUT_MS = 120_000;
+/** The most a tile's picture reads of one library file: a larger model keeps its glyph. */
+export const LIBRARY_PICTURE_MAX_BYTES = 32 * 1024 * 1024;
+/** How long reading one library file for a tile's picture may take. */
+export const LIBRARY_PICTURE_TIMEOUT_MS = MINUTE_MS;
 /**
  * How long Save's upload of one file may take: a file as large as Save sends, over a slow uplink.
  * An avatar's upload is a far smaller picture, and its wait would cut a large file off.
@@ -47,12 +52,6 @@ const ID_MAX = 64;
 /** genex.games' wire status of a project on Play. */
 const PUBLISHED = "published";
 
-/** Hosts a library file is downloaded from: genex.games' asset buckets. */
-const FILE_HOSTS: ReadonlySet<string> = new Set([
-  "assets.genex.technology",
-  "assets.genex.games",
-  "cdn.genex.technology",
-]);
 /** A generation's own file, by the role genex.games stores it under, most wanted first. */
 const MAIN_FILE_ROLES = ["model-glb", "image-main", "audio-sfx", "video-mp4"] as const;
 
@@ -80,18 +79,6 @@ export interface LibraryFile {
   contentType: string;
   bytes: Uint8Array;
   title: string;
-}
-
-/** An https file on one of genex.games' asset hosts, else null. */
-export function libraryFileUrl(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  try {
-    const url = new URL(value);
-    const plain = url.protocol === "https:" && !url.username && !url.password && !url.port;
-    return plain && FILE_HOSTS.has(url.hostname) ? url.href : null;
-  } catch {
-    return null;
-  }
 }
 
 /** The file genex.games keeps a generation as: its main role's, else the first with an address. */
@@ -280,6 +267,21 @@ export function networkDownload(fetchImpl: typeof fetch, timeoutMs = DOWNLOAD_TI
     const declared = Number(res.headers.get("content-length") ?? "0");
     if (declared > maxBytes) throw new Error(DOWNLOAD_MESSAGE.tooLarge);
     return readCapped(res.body, maxBytes);
+  };
+}
+
+/** A library file's bytes for a tile's picture, from any address the renderer names. */
+export type LibraryPictureFile = (url: unknown) => Promise<Uint8Array<ArrayBuffer>>;
+
+/**
+ * A tile's picture file through `download`: only an https file on genex.games' asset hosts (checked
+ * before anything is asked), at most {@link LIBRARY_PICTURE_MAX_BYTES}.
+ */
+export function libraryPictureFile(download: LibraryDownload): LibraryPictureFile {
+  return async (url) => {
+    const checked = libraryFileUrl(url);
+    if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
+    return new Uint8Array(await download(checked, LIBRARY_PICTURE_MAX_BYTES));
   };
 }
 

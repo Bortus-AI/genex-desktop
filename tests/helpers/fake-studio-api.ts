@@ -205,6 +205,7 @@ const METHODS = [
   "assetShare",
   "assetUnshare",
   "assetAdd",
+  "assetLibraryFile",
   "readProjectAsset",
   "runFeedback",
   "playSnapshot",
