@@ -16,6 +16,7 @@ import {
   TicketStatus,
   toFeedPage,
   toPlayGame,
+  toSearchGame,
   visibleShelves,
 } from "../../src/main/play/gallery.ts";
 import { PlayCategory, PlayShelf } from "../../src/shared/play.ts";
@@ -91,7 +92,46 @@ describe("Play gallery items", () => {
         imageUrl: "https://api.genex.games/api/character-assets/avatars/u1/1.webp",
       },
       remixable: true,
+      curation: { mobileSupport: null, mobileAuto: null, categories: [], remixOff: false },
     });
+  });
+
+  it("carries what the card menu reads: mobile flags, tags and whether its owner turned remixing off", () => {
+    const curation = (overrides: Record<string, unknown>) => toPlayGame(item(overrides))?.curation;
+    assert.deepEqual(
+      curation({
+        mobileSupport: "desktop_only",
+        mobileAutoStatus: "desktop_only",
+        categories: ["tools", "physics"],
+        private: true,
+      }),
+      { mobileSupport: "desktop_only", mobileAuto: "desktop_only", categories: ["tools", "physics"], remixOff: true },
+    );
+    const cases: Array<[Record<string, unknown>, Record<string, unknown>]> = [
+      [{ mobileSupport: "supported" }, { mobileSupport: "supported" }],
+      [{ mobileSupport: "mobile_only" }, { mobileSupport: null }],
+      [{ mobileAutoStatus: "supported" }, { mobileAuto: null }],
+      [{ categories: "arcade" }, { categories: [] }],
+      [{ categories: ["arcade", 7, null, "x".repeat(41), "sports"] }, { categories: ["arcade", "sports"] }],
+      [
+        { categories: Array.from({ length: 40 }, (_, i) => `tag-${i}`) },
+        { categories: Array.from({ length: 16 }, (_, i) => `tag-${i}`) },
+      ],
+      [{ private: "true" }, { remixOff: false }],
+    ];
+    for (const [overrides, expected] of cases) {
+      const shown = curation(overrides);
+      assert.ok(shown, JSON.stringify(overrides));
+      for (const [key, value] of Object.entries(expected))
+        assert.deepEqual(shown[key as keyof typeof shown], value, JSON.stringify(overrides));
+    }
+  });
+
+  it("leaves a search's card without curation: not remixable is not the same as turned off by its owner", () => {
+    const searched = toSearchGame({ ...item(), author: "Simeon M", remixable: false, mobileSupport: "supported" });
+    assert.ok(searched);
+    assert.equal(searched.remixable, false);
+    assert.equal("curation" in searched, false);
   });
 
   it("hands on the maker's picture only when they chose it as their avatar", () => {

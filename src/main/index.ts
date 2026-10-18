@@ -137,6 +137,7 @@ import {
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
 import type { MentionSources } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
@@ -423,6 +424,7 @@ let gameScreen: GameFullScreen | null = null;
 /** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
 let playCatalog: PlayGallery | null = null;
 let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits } | null = null;
+let playManage: PlayManage | null = null;
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
@@ -960,6 +962,27 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   return playAccount;
 }
 
+/**
+ * A published game's card menu for this core, on the Genex account: genex.games over the network,
+ * or a fixture launch's own answers. A change makes the catalog and profiles read their games afresh.
+ */
+function playManageFor(studio: StudioCore): PlayManage {
+  const account = genexAccountFor(studio);
+  const request = fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api);
+  playManage ??= createPlayManage({
+    // A 401 ends the sign-in as one to the account's own calls does.
+    request: refusingRequest(request, account.refused),
+    token: account.token,
+    upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
+    changed: () => {
+      playCatalogFor(studio).forget();
+      playAccountFor(studio).people.forgetProfiles();
+    },
+    localImages: fixtureNativePolicy,
+  });
+  return playManage;
+}
+
 /** Where a message's @ tags come from: Play's catalog, the Genex account and git (a fixture's stand-ins). */
 function mentionSourcesFor(core: () => StudioCore): MentionSources {
   return {
@@ -1404,6 +1427,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     remix: (world) => remixPlayGame(studio, world),
     viewer: () => playView,
     ...playAccountFor(studio),
+    manage: playManageFor(studio),
     web: playOrigin.web,
     share: popShareMenu,
   });

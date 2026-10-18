@@ -3,9 +3,11 @@ import { isAvatarVariant } from "../../shared/avatar-recipe.ts";
 import { isPlayShelf, isPlaySlug, PlayShelf, type PlayPoint, readPlayPoint } from "../../shared/play.ts";
 import { isAccountId, isAvatarStyle, isFriendAction, isPresenceVisibility } from "../../shared/play-people.ts";
 import { isStatsPeriod } from "../../shared/play-stats.ts";
+import { isPlayCoverType, isPlayGameChange, isPlayGameId } from "../../shared/play-manage.ts";
 import type { CreatorStats } from "../play/creator-stats.ts";
 import type { GenexCredits } from "../play/credits.ts";
 import type { PlayGallery, PlayWorld } from "../play/gallery.ts";
+import type { PlayManage } from "../play/manage.ts";
 import { onWebsite } from "../play/origins.ts";
 import type { PlayPeople } from "../play/people.ts";
 import type { PlayViewer } from "../play/viewer.ts";
@@ -22,6 +24,9 @@ const MESSAGE = {
   badVariant: "not an avatar variant",
   badPeriod: "not a stats period",
   badShare: "not a page of the website Play links to",
+  badGame: "not a published game",
+  badChange: "not a change the card menu makes",
+  badCoverType: "not a cover picture type",
 } as const;
 
 /** What Play's channels answer from. */
@@ -34,6 +39,8 @@ export interface PlayIpcDeps {
   people: PlayPeople;
   creators: CreatorStats;
   credits: GenexCredits;
+  /** A published game's card menu: the owner's items, and the mobile flag and tags an admin sets. */
+  manage: PlayManage;
   /** The website Play links to: only its pages (an invite, a profile) go to the share menu. */
   web: string;
   /** Pop the Mac's share menu for `url` in the studio window, by `at` when it is known. */
@@ -44,6 +51,7 @@ export interface PlayIpcDeps {
 export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
   const { gallery, remix, viewer, people, creators, credits, web, share } = deps;
   registerPeopleIpc(handle, people);
+  registerManageIpc(handle, deps.manage);
   // Share… hands the Mac's share menu a page of Play's website and nothing else.
   handle("studio:play.share", async (payload) => {
     const url = String(payload?.url ?? "");
@@ -102,6 +110,21 @@ function registerCommentsIpc(handle: IpcHandle, viewer: PlayIpcDeps["viewer"]): 
   handle("studio:play.comments", (payload) => shown().comments(payload?.cursor));
   handle("studio:play.comment", (payload) => shown().comment(payload?.body));
   handle("studio:play.uncomment", (payload) => shown().uncomment(payload?.commentId));
+}
+
+/** A game's card menu: every id, change and picture type is checked here, a picture's bytes again in `manage`. */
+function registerManageIpc(handle: IpcHandle, manage: PlayManage): void {
+  handle("studio:play.manage", (payload) => {
+    if (!isPlayGameId(payload?.gameId)) throw new Error(MESSAGE.badGame);
+    if (!isPlayGameChange(payload.change)) throw new Error(MESSAGE.badChange);
+    return manage.change(payload.gameId, payload.change);
+  });
+  handle("studio:play.cover", (payload) => {
+    if (!isPlayGameId(payload?.gameId)) throw new Error(MESSAGE.badGame);
+    if (!(payload.image instanceof Uint8Array)) throw new Error(MESSAGE.badPicture);
+    if (!isPlayCoverType(payload.contentType)) throw new Error(MESSAGE.badCoverType);
+    return manage.cover(payload.gameId, payload.image, payload.contentType);
+  });
 }
 
 /** Play's people: the account, profiles and friends. Every id and choice is checked here, names and pictures in `people`. */

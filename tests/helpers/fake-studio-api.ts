@@ -178,6 +178,8 @@ const METHODS = [
   "playHandleCheck",
   "playSetHandle",
   "playShare",
+  "playManage",
+  "playCover",
   "genexAccount",
   "genexSignIn",
   "genexCancelSignIn",

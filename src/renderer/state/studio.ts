@@ -230,6 +230,7 @@ function createStores(
   visibility: VisibilitySource,
 ): Stores {
   const publication = createPublicationBatch(unstable_batchedUpdates);
+  const people = createPeopleStore(api, storage);
   return {
     publication,
     session: createSessionStore(),
@@ -241,8 +242,9 @@ function createStores(
     library: createLibraryStore(api, timers, visibility, publication.publish),
     engines: createEnginesStore(api),
     plugins: createPluginsStore(api),
-    play: createPlayStore(api, storage),
-    people: createPeopleStore(api, storage),
+    // A change from a card's menu shows on a profile's cards too.
+    play: createPlayStore(api, storage, Date.now, (gameId, next) => people.gameChanged(gameId, next)),
+    people,
     agentScreens: createAgentScreensStore(),
     commandRuns: createCommandRunsStore(),
     commandOutput: createCommandOutput(),

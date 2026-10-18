@@ -19,7 +19,9 @@ import {
   type RemixProgress,
   RemixStep,
 } from "../../shared/play.ts";
+import { type PlayChangeResult, PlayChangeOutcome, type PlayGameChange } from "../../shared/play-manage.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
+import { changedGame } from "../play/card-menu/manage-model.ts";
 import {
   countedSlugs,
   EMPTY_FEED,
@@ -202,6 +204,29 @@ export function onlineCounted(state: PlayState, category: PlayCategory, counts: 
   return games === feed.games ? state : withFeed(state, category, { ...feed, games });
 }
 
+/**
+ * A game was changed from its card's menu: every tab and Recent show `next` in its place, or drop
+ * it once it left the catalog (null).
+ */
+export function gameChanged(state: PlayState, game: Pick<PlayGame, "id" | "slug">, next: PlayGame | null): PlayState {
+  const feeds: PlayState["feeds"] = {};
+  for (const [category, feed] of Object.entries(state.feeds) as Array<[PlayCategory, FeedState]>) {
+    const at = feed.games.findIndex((shown) => shown.id === game.id);
+    if (at === -1) {
+      feeds[category] = feed;
+      continue;
+    }
+    const games = next ? feed.games.with(at, next) : feed.games.filter((shown) => shown.id !== game.id);
+    feeds[category] = { ...feed, games };
+  }
+  const recent = next
+    ? state.recent.map((entry) =>
+        entry.slug === game.slug ? { slug: next.slug, title: next.title, coverUrl: next.coverUrl } : entry,
+      )
+    : state.recent.filter((entry) => entry.slug !== game.slug);
+  return { ...state, feeds, recent };
+}
+
 /** A game was opened: its cover shows at once, and it leads Recent. */
 export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
   return {
@@ -332,21 +357,72 @@ export interface PlayStore extends StoreApi<PlayState> {
   remix(game: PlayGame): Promise<void>;
   /** Copy the viewer's game as a card's is: the viewer closes at once. */
   remixViewed(): Promise<void>;
+  /**
+   * Change a published game from its card's menu; its cards change at once. Throws when
+   * genex.games refused it or could not be reached.
+   */
+  manage(game: PlayGame, change: PlayGameChange): Promise<PlayChangeResult>;
+  /** A game's new cover took: its cards show it. */
+  coverChanged(game: PlayGame, coverUrl: string): void;
 }
 
-type PlayApi = Pick<StudioApi, "playFeed" | "playShelves" | "playOnline" | "playOpen" | "playClose" | "playRemix">;
+type PlayApi = Pick<
+  StudioApi,
+  "playFeed" | "playShelves" | "playOnline" | "playOpen" | "playClose" | "playRemix" | "playManage"
+>;
 
-/** Play's store over `api`, remembering Recent in `storage`. */
+/** The store's `manage`: send the change, then show it on every card of the game at once. */
+function managing(api: PlayApi, shown: (game: PlayGame, next: PlayGame | null) => void): PlayStore["manage"] {
+  return async (game, change) => {
+    const result = await api.playManage(game.id, change);
+    if (result.outcome !== PlayChangeOutcome.Done) return result;
+    shown(game, changedGame(game, change, result));
+    return result;
+  };
+}
+
+/** Told a game changed from a card's menu, with its card after (null once it left the catalog). */
+export type GameChangeListener = (gameId: string, next: PlayGame | null) => void;
+
+/** A page without the games that left the catalog from a card's menu: a read begun before cannot bring one back. */
+const withoutGone = (page: PlayFeedPage, gone: ReadonlySet<string>): PlayFeedPage =>
+  gone.size === 0 ? page : { ...page, games: page.games.filter((game) => !gone.has(game.id)) };
+
+/**
+ * Show a game's change on every card and in Recent (kept in `storage`), remember one that left the
+ * catalog in `gone`, and tell `onGameChanged`.
+ */
+function showing(
+  store: StoreApi<PlayState>,
+  storage: KeyValueStorage | null,
+  gone: Set<string>,
+  onGameChanged: GameChangeListener,
+) {
+  return (game: PlayGame, next: PlayGame | null): void => {
+    if (!next) gone.add(game.id);
+    store.setState((state) => gameChanged(state, game, next), true);
+    writeRecent(store.getState().recent, storage);
+    onGameChanged(game.id, next);
+  };
+}
+
+/**
+ * Play's store over `api`, remembering Recent in `storage`; `onGameChanged` hears every change made
+ * from a card's menu, so the cards other stores show (a profile's) change too.
+ */
 export function createPlayStore(
   api: PlayApi,
   storage: KeyValueStorage | null,
   now: () => number = Date.now,
+  onGameChanged: GameChangeListener = () => {},
 ): PlayStore {
   const store = createStore<PlayState>()(() => initialPlay(readRecent(storage)));
   const set = (change: (state: PlayState) => PlayState) => store.setState(change, true);
   const inFlight = new Map<string, Promise<void>>();
   /** Each tab's first-page reads so far: a further page read before the latest one lands nowhere. */
   const firstReads = new Map<PlayCategory, number>();
+  /** The games unpublished or deleted from a card's menu, which no later page shows again. */
+  const gone = new Set<string>();
 
   const loadShelves = async (): Promise<void> => {
     try {
@@ -365,7 +441,7 @@ export function createPlayStore(
     const stale = () => more && firstReads.get(category) !== generation;
     set((state) => feedRequested(state, category, more));
     try {
-      const page = await api.playFeed({ category, cursor });
+      const page = withoutGone(await api.playFeed({ category, cursor }), gone);
       set((state) => (stale() ? moreDropped(state, category) : feedLoaded(state, category, page, more, now())));
     } catch {
       set((state) => feedFailed(state, category, more));
@@ -424,6 +500,9 @@ export function createPlayStore(
     }
   };
 
+  const shown = showing(store, storage, gone, onGameChanged);
+  const manage = managing(api, shown);
+
   return Object.assign(store, {
     loadShelves,
     chooseShelf: (shelf: PlayShelf) => set((state) => shelfChosen(state, shelf)),
@@ -448,5 +527,7 @@ export function createPlayStore(
       await close().catch(() => {});
       await made;
     },
+    manage,
+    coverChanged: (game: PlayGame, coverUrl: string) => shown(game, { ...game, coverUrl }),
   });
 }

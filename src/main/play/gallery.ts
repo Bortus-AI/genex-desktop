@@ -21,6 +21,7 @@ import {
   shelfOf,
 } from "../../shared/play.ts";
 import { AvatarStyle, isAccountId } from "../../shared/play-people.ts";
+import { isPlayMobileSupport, type PlayCuration, PlayMobileSupport } from "../../shared/play-manage.ts";
 import type { GenexCatalogItem } from "../../shared/mention-corpus.ts";
 
 /** One page of a tab: what the website loads at a time. */
@@ -49,6 +50,9 @@ const TEXT_MAX = { title: 200, author: 120, description: 400 } as const;
 const ONLINE_MAX_READS = 4;
 /** How long one network call may take. */
 const REQUEST_TIMEOUT_MS = 15 * SECOND_MS;
+/** The most categories a card keeps, and the longest one: genex.games' own are short words. */
+const CATEGORIES_MAX = 16;
+const CATEGORY_MAX_LENGTH = 40;
 
 /** Hosts a cover or an avatar may load from; `renderer/index.html`'s `img-src` lists the same. */
 const IMAGE_HOSTS = new Set([
@@ -216,6 +220,26 @@ function cloneUrlOf(item: Record<string, unknown>): string | null {
   }
 }
 
+/** A gallery item's categories as strings, each short, at most {@link CATEGORIES_MAX}. */
+function categoriesOf(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const words = value.filter(
+    (category): category is string => typeof category === "string" && category.length <= CATEGORY_MAX_LENGTH,
+  );
+  return words.slice(0, CATEGORIES_MAX);
+}
+
+/** What the card menu reads from a gallery item: its mobile flags, tags and whether remixing is off. */
+function curationOf(item: Record<string, unknown>): PlayCuration {
+  return {
+    mobileSupport: isPlayMobileSupport(item.mobileSupport) ? item.mobileSupport : null,
+    // The crash reports only ever decide "desktop only"; anything else is no decision.
+    mobileAuto: item.mobileAutoStatus === PlayMobileSupport.DesktopOnly ? PlayMobileSupport.DesktopOnly : null,
+    categories: categoriesOf(item.categories),
+    remixOff: item.private === true,
+  };
+}
+
 /**
  * One gallery item as the dashboard shows it, or null when it lacks what a card needs. `local`
  * (fixture launches only) also lets drawn SVG covers through.
@@ -246,6 +270,7 @@ export function toPlayGame(item: unknown, local = false): PlayGame | null {
       imageUrl: author.avatarStyle === AvatarStyle.Photo ? imageUrl(author.image, local) : null,
     },
     remixable: cloneUrlOf(item) !== null,
+    curation: curationOf(item),
   };
 }
 
@@ -278,11 +303,19 @@ export function toFeedPage(body: unknown, local = false, shelf?: PlayShelf): Pla
 
 /**
  * One search-catalog item as a card, or null. The catalog is slimmer than a page: its author is a
- * name, and it says outright whether a stranger may remix the game.
+ * name, and it says outright whether a stranger may remix the game. That is not whether its owner
+ * turned remixing off (a game for sale is not remixable either), and it names no mobile flag, so a
+ * search's card carries no curation and offers no menu.
  */
 export function toSearchGame(item: unknown, local = false): PlayGame | null {
   if (!isRecord(item)) return null;
-  return toPlayGame({ ...item, author: { name: item.author }, private: item.remixable !== true, online: null }, local);
+  const game = toPlayGame(
+    { ...item, author: { name: item.author }, private: item.remixable !== true, online: null },
+    local,
+  );
+  if (!game) return null;
+  const { curation: _unread, ...card } = game;
+  return card;
 }
 
 /** A search-catalog item with the shelf it sits on. */
@@ -354,14 +387,57 @@ export async function readRoute(request: GalleryRequest, route: string, auth?: s
   return answer.body;
 }
 
+/**
+ * The whole search catalog, every shelf, read at most every few minutes (once, however many searches
+ * wait on it); `forget` drops it, and a read under way then keeps nothing of what it read.
+ */
+function corpusReads(deps: GalleryDeps) {
+  const { request, now } = deps;
+  const local = deps.localImages === true;
+  let corpus: { at: number; entries: CorpusEntry[] } | null = null;
+  let corpusRead: Promise<CorpusEntry[]> | null = null;
+  let generation = 0;
+
+  const catalog = (): Promise<CorpusEntry[]> => {
+    if (corpus && now() - corpus.at < COUNTS_TTL_MS) return Promise.resolve(corpus.entries);
+    if (corpusRead) return corpusRead;
+    const started = generation;
+    const read = readRoute(request, PlayRoute.Corpus)
+      .then((body) => {
+        const items = isRecord(body) && Array.isArray(body.items) ? body.items : [];
+        const entries = items.flatMap((item) => {
+          const game = toSearchGame(item, local);
+          return game ? [{ shelf: itemShelf(item), game }] : [];
+        });
+        if (started === generation) corpus = { at: now(), entries };
+        return entries;
+      })
+      .finally(() => {
+        if (corpusRead === read) corpusRead = null;
+      });
+    corpusRead = read;
+    return read;
+  };
+
+  const forget = (): void => {
+    generation++;
+    corpus = null;
+    corpusRead = null;
+  };
+
+  return { catalog, forget };
+}
+
 /** The catalog's anonymous reads: tabs, their pages and search, each kept a while. */
 function catalogReads(deps: GalleryDeps) {
   const { request, now } = deps;
   const local = deps.localImages === true;
   let counts: { at: number; shelves: PlayShelves } | null = null;
   const firstPages = new Map<PlayCategory, { at: number; page: PlayFeedPage }>();
-  let corpus: { at: number; entries: CorpusEntry[] } | null = null;
-  let corpusRead: Promise<CorpusEntry[]> | null = null;
+  const corpus = corpusReads(deps);
+  const { catalog } = corpus;
+  /** Bumped by `forget`: a read that started before it keeps nothing of what it read. */
+  let generation = 0;
 
   /** One page of a tab. A tab's first page is answered from a minute-old copy when there is one. */
   const feed = async ({ category, cursor }: PlayFeedRequest): Promise<PlayFeedPage> => {
@@ -372,35 +448,27 @@ function catalogReads(deps: GalleryDeps) {
     const query = new URLSearchParams({ limit: String(FEED_PAGE_SIZE) });
     if (category !== PlayCategory.Featured) query.set("category", category);
     if (isCursor(cursor)) query.set("cursor", cursor);
+    const started = generation;
     const page = toFeedPage(await readRoute(request, `${PlayRoute.Feed}?${query}`), local, shelfOf(category));
-    if (first) firstPages.set(category, { at: now(), page });
+    if (first && started === generation) firstPages.set(category, { at: now(), page });
     return page;
   };
 
   /** The shelves' counts and tabs. A failed read throws, so the dashboard keeps the ones it has (offline too). */
   const shelves = async (): Promise<PlayShelves> => {
     if (counts && now() - counts.at < COUNTS_TTL_MS) return counts.shelves;
-    counts = { at: now(), shelves: visibleShelves(await readRoute(request, PlayRoute.Counts)) };
-    return counts.shelves;
+    const started = generation;
+    const shelves = visibleShelves(await readRoute(request, PlayRoute.Counts));
+    if (started === generation) counts = { at: now(), shelves };
+    return shelves;
   };
 
-  /** The whole catalog, every shelf, read at most every few minutes (once, however many searches wait on it). */
-  const catalog = (): Promise<CorpusEntry[]> => {
-    if (corpus && now() - corpus.at < COUNTS_TTL_MS) return Promise.resolve(corpus.entries);
-    corpusRead ??= readRoute(request, PlayRoute.Corpus)
-      .then((body) => {
-        const items = isRecord(body) && Array.isArray(body.items) ? body.items : [];
-        const entries = items.flatMap((item) => {
-          const game = toSearchGame(item, local);
-          return game ? [{ shelf: itemShelf(item), game }] : [];
-        });
-        corpus = { at: now(), entries };
-        return entries;
-      })
-      .finally(() => {
-        corpusRead = null;
-      });
-    return corpusRead;
+  /** Drop the kept first pages, counts and search catalog: a change to a game shows on the next read. */
+  const forget = (): void => {
+    generation++;
+    counts = null;
+    firstPages.clear();
+    corpus.forget();
   };
 
   /** What on `shelf` (Games unless it names another) answers every word of `query`, best first (more plays break a tie). */
@@ -452,7 +520,7 @@ function catalogReads(deps: GalleryDeps) {
     return Object.fromEntries(read.flat());
   };
 
-  return { feed, shelves, search, mentionItems, assetManifest, online };
+  return { feed, shelves, search, mentionItems, assetManifest, online, forget };
 }
 
 /** What the signed-in account adds: a game's likes, a like, a sign-in ticket and an invite code. */

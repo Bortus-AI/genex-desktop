@@ -270,6 +270,8 @@ function studioCalls(bridge: BridgeCalls) {
     playHandleCheck: (handle) => invoke("studio:play.handle-check", { handle }),
     playSetHandle: (handle) => invoke("studio:play.handle", { handle }),
     playShare: (url, at) => invoke("studio:play.share", { url, at }),
+    playManage: (gameId, change) => invoke("studio:play.manage", { gameId, change }),
+    playCover: (gameId, image, contentType) => invoke("studio:play.cover", { gameId, image, contentType }),
     genexAccount: () => invoke("studio:genex-account.read"),
     genexSignIn: () => invoke("studio:genex-account.sign-in"),
     genexCancelSignIn: () => invoke("studio:genex-account.cancel"),
