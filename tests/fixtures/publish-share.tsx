@@ -66,6 +66,7 @@ const states: AssetLibraryState[] = FILES.map((entry) => ({
   generationId: "mine" in entry ? null : generationOf(entry.file),
   saved: false,
   shared: "live" in entry ? { projectId: "p-sled", slug: "wooden-sled", live: true } : null,
+  saveable: true,
   shareable: !("mine" in entry),
 }));
 const assets = FILES.map((entry) => ({

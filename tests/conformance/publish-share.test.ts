@@ -30,7 +30,15 @@ import {
 const LIVE = { projectId: "p1", slug: "chitin-hut", live: true };
 
 function state(file: string, over: Partial<AssetLibraryState> = {}): AssetLibraryState {
-  return { file, generationId: `gen-${file.replace(/\W/g, "")}`, saved: false, shared: null, shareable: true, ...over };
+  return {
+    file,
+    generationId: `gen-${file.replace(/\W/g, "")}`,
+    saved: false,
+    shared: null,
+    saveable: true,
+    shareable: true,
+    ...over,
+  };
 }
 
 const states = (list: AssetLibraryState[], unread = false): GameLibraryStates => ({
