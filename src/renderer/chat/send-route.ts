@@ -12,6 +12,7 @@ import type { AutopilotSend, ComposerExtras } from "../ui/PromptBar.tsx";
 import { problemWords } from "../words.ts";
 import type { ConversationEntry } from "./conversation-entries.ts";
 import { leadTakesSend, newClientId, type PendingSend, sendPlacement, waitsBehindWork } from "./pending-sends.ts";
+import { finishingRun } from "./transcript.ts";
 import type { ChatThread } from "./use-chat-thread.ts";
 import type { ChatWorkView } from "./use-chat-work.ts";
 import type { ComposerModel } from "./use-composer-model.ts";
@@ -72,7 +73,10 @@ function sendWork(text: string, chat: ChatThread, work: ChatWorkView): Parameter
   return {
     chatWorking: work.line.chatWorking,
     runId: chat.activeRunId,
-    leadTakes: leadTakesSend(text, chat.leadListens),
+    leadTakes: leadTakesSend(text, {
+      listens: chat.leadListens,
+      finishing: finishingRun(chat.threadEvents, chat.activeRunId),
+    }),
   };
 }
 

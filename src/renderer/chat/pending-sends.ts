@@ -61,10 +61,11 @@ const SLASH = "/";
 /**
  * Whether a running build's lead takes this send at once, as the harness hands one over (the
  * seed's `loop/live-chat.ts` `forTheLead`): anything but a slash command, to a lead that takes the
- * chat, wrap-up included. Pictures go too: the chat saves them in the game for the lead.
+ * chat. Pictures go too: the chat saves them in the game for the lead. Not after Finish: the lead's
+ * line shuts as the build lands, with no record the chat could read, so such a send waits below.
  */
-export function leadTakesSend(text: string, leadListens: boolean): boolean {
-  return leadListens && !text.trim().startsWith(SLASH);
+export function leadTakesSend(text: string, lead: { listens: boolean; finishing: boolean }): boolean {
+  return lead.listens && !lead.finishing && !text.trim().startsWith(SLASH);
 }
 
 /**

@@ -149,12 +149,19 @@ test("a message to a running build's listening lead joins the conversation; one 
   assert.equal(placed({ chatWorking: false, runId: null, leadTakes: false }), "transcript");
 });
 
-test("a running build's lead takes words at once, never a slash command, which waits below its card", () => {
-  assert.equal(leadTakesSend("Make the fog thicker", true), true);
-  assert.equal(leadTakesSend("", true), true, "pictures alone: the chat saved them for the lead");
-  assert.equal(leadTakesSend("/compact", true), false);
-  assert.equal(leadTakesSend("  /model opus", true), false);
-  assert.equal(leadTakesSend("Make the fog thicker", false), false, "a lead that does not take the chat");
+test("a running build's lead takes words at once, never a slash command or a send after Finish", () => {
+  const lead = { listens: true, finishing: false };
+  assert.equal(leadTakesSend("Make the fog thicker", lead), true);
+  assert.equal(leadTakesSend("", lead), true, "pictures alone: the chat saved them for the lead");
+  assert.equal(leadTakesSend("/compact", lead), false);
+  assert.equal(leadTakesSend("  /model opus", lead), false);
+  assert.equal(
+    leadTakesSend("Make the fog thicker", { ...lead, listens: false }),
+    false,
+    "a lead that does not take the chat",
+  );
+  // Its line shuts as the build lands, with no record the chat could read: such a send waits below from the start.
+  assert.equal(leadTakesSend("Make the fog thicker", { ...lead, finishing: true }), false, "after Finish");
 });
 
 test("client ids are ones the queue accepts", () => {
