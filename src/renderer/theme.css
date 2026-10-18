@@ -2093,7 +2093,7 @@ button.chat-header-title:hover {
 .profile-plate-main[data-state="open"] {
   background: var(--sidebar-selected);
 }
-/* The name gives way before its plan: "Rab Ne… · Pro" rather than "Rab Neba · …". */
+/* The name gives way before a Pro's PRO mark: "Rab Ne… PRO" rather than "Rab Neba …". */
 .profile-plate-name {
   display: flex;
   flex: 1;
@@ -2107,17 +2107,318 @@ button.chat-header-title:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.profile-plate-plan {
+/* A Pro's tag after the name, as the friends' rows show it. */
+.profile-plate-pro {
   flex: none;
-  white-space: pre;
+  align-self: center;
+  vertical-align: 0;
 }
-.profile-plate-plan,
 .profile-plate-chevrons {
   color: var(--ink-3);
 }
 .profile-plate-main:focus-visible {
   outline: 2px solid var(--focus-edge);
   outline-offset: -2px;
+}
+/* A Pro's nameplate (`nameplate/Nameplate.tsx`). At rest the row is the plain plate; lit (under the
+ * pointer but never while its menu is open, or always where a plate is shown off, as in Settings)
+ * it takes the art's own colour, the piece melts in from the right under a dark wash that keeps the
+ * name readable, the name glows in the avatar's colour and sparkles twinkle around the face. A light
+ * theme draws the piece on paper (below). */
+.nameplate {
+  /* Each plate sets its own colours inline (`Nameplate.tsx`); these hold until it does. */
+  --plate-tint: #0b0b0e;
+  --plate-glow: #ffffff;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 44px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: background-color var(--duration-fast) var(--ease-smooth-out);
+}
+.nameplate > :not(.nameplate-art, .nameplate-wash, .nameplate-sparkles) {
+  position: relative;
+  z-index: 2;
+}
+/* A playing friend's Join keeps floating over the row's end, as on a plain row. */
+.nameplate > .sidebar-friend-join {
+  position: absolute;
+  z-index: 3;
+}
+/* The credits keep one box at rest and lit, so the name never re-truncates on hover; their focus
+ * ring is drawn inside, as the plate clips what reaches past its edge. */
+.nameplate .plate-credits {
+  height: 24px;
+  padding-inline: 6px;
+  margin-inline-end: 6px;
+  border-radius: 8px;
+}
+.nameplate .plate-end:focus-visible {
+  outline-offset: -2px;
+}
+.nameplate-art,
+.nameplate-wash,
+.nameplate-sparkles {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.nameplate-art {
+  position: absolute;
+  inset: 0 0 0 10%;
+  z-index: 0;
+  mask-image: linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.55) 22%, rgb(0 0 0 / 0.92) 48%, #000 70%);
+  filter: brightness(0.88) saturate(1.1);
+}
+.nameplate-art > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.nameplate-wash {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgb(6 6 10 / 0.8) 0%, rgb(6 6 10 / 0.55) 34%, transparent 62%),
+    linear-gradient(270deg, rgb(0 0 0 / 0.45) 0%, transparent 24%);
+}
+/* A plate with something at its end (the credits, the Offline mark): the art fades out before it,
+ * so the end sits on the plate's own plain colour with nothing behind it. The mask clears the end a
+ * short balance needs; the end's own ground (below) clears as far as it reaches, "Unlimited" too. */
+.nameplate:has(> .plate-end) > .nameplate-art {
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.55) 22%, rgb(0 0 0 / 0.92) 48%, #000 70%),
+    linear-gradient(270deg, transparent 58px, rgb(0 0 0 / 0.24) 80px, rgb(0 0 0 / 0.66) 106px, #000 136px);
+  mask-composite: intersect;
+}
+.nameplate:has(> .plate-end) > .nameplate-wash {
+  background: linear-gradient(90deg, rgb(6 6 10 / 0.8) 0%, rgb(6 6 10 / 0.55) 34%, transparent 62%);
+}
+.nameplate[data-lit] {
+  /* Rings around a face keep their gap in the plate's colour, not the page's. */
+  --page: var(--plate-tint);
+  background: var(--plate-tint);
+}
+.nameplate[data-lit] :is(.nameplate-art, .nameplate-wash, .nameplate-sparkles) {
+  opacity: 1;
+}
+.nameplate[data-lit] .profile-plate-main {
+  color: #f4f5f8;
+}
+/* On a nameplate the row itself is the hover: no extra box under the name, hovered or open. */
+.nameplate :is(.profile-plate-main, .sidebar-friend-open):is(:hover, [data-state="open"]) {
+  background: transparent;
+}
+.nameplate[data-lit] :is(.profile-plate-name-text, .people-name-text) {
+  color: var(--plate-glow);
+  font-weight: 500;
+  text-shadow:
+    0 0 12px color-mix(in srgb, var(--plate-glow) 45%, transparent),
+    0 1px 3px rgb(0 0 0 / 0.65);
+}
+.nameplate[data-lit] .people-pro {
+  color: var(--plate-glow);
+}
+.nameplate[data-lit] .profile-plate-chevrons {
+  color: rgb(244 245 248 / 0.62);
+}
+.nameplate[data-lit] :is(.cy-avatar, .person-avatar) {
+  box-shadow:
+    0 0 0 2px var(--page),
+    0 0 0 3.5px color-mix(in srgb, var(--plate-glow) 70%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--plate-glow) 40%, transparent);
+}
+.nameplate[data-lit] .sidebar-friend-playing {
+  color: #6ee39a;
+  text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
+}
+/* The end's ground: the plate's own colour from the end's left edge to the plate's, fading in just
+ * before it, shown with the art. The pill under the pointer is drawn over it. */
+.nameplate {
+  --plate-ground: var(--plate-tint);
+}
+.nameplate > .plate-end::before,
+.nameplate > .plate-end::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+}
+.nameplate > .plate-end::before {
+  inset: -10px -6px -10px -24px;
+  background: linear-gradient(90deg, transparent, var(--plate-ground) 24px);
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-smooth-out);
+}
+.nameplate > .plate-end::after {
+  inset: 0;
+  border-radius: inherit;
+  transition: background-color var(--duration-quick);
+}
+.nameplate[data-lit] > .plate-end::before {
+  opacity: 1;
+}
+/* Lit, the credits are light on the plate's clear end, with nothing behind them, and a faint pill
+ * under the pointer or keyboard focus (the plate itself lights only on hover). */
+.nameplate[data-lit] .plate-credits {
+  color: rgb(255 255 255 / 0.88);
+  transition: color var(--duration-quick);
+}
+.nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
+  color: #fff;
+}
+/* The end's own hover box would sit under its ground: lit, the pill over the ground shows instead. */
+.nameplate[data-lit] .plate-end:is(:hover, :focus-visible) {
+  background: transparent;
+}
+.nameplate[data-lit] .plate-end:is(:hover, :focus-visible)::after {
+  background: rgb(255 255 255 / 0.1);
+}
+.nameplate-sparkles {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 3;
+  width: 44px;
+  height: 44px;
+  transform: translateY(-50%);
+}
+.nameplate-sparkles > i {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  color: var(--plate-glow);
+  opacity: 0;
+}
+.nameplate[data-lit] .nameplate-sparkles > i {
+  animation: nameplate-twinkle 2.6s ease-in-out infinite;
+}
+.nameplate-sparkles > i:nth-child(1) {
+  top: 3px;
+  left: 3px;
+}
+.nameplate-sparkles > i:nth-child(2) {
+  top: 1px;
+  left: 31px;
+  width: 6px;
+  height: 6px;
+  animation-delay: 0.7s;
+}
+.nameplate-sparkles > i:nth-child(3) {
+  top: 30px;
+  left: 33px;
+  width: 7px;
+  height: 7px;
+  animation-delay: 1.4s;
+}
+.nameplate-sparkles > i:nth-child(4) {
+  top: 31px;
+  left: 1px;
+  width: 5px;
+  height: 5px;
+  animation-delay: 2s;
+}
+.nameplate-sparkles svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--plate-glow) 75%, transparent));
+}
+@keyframes nameplate-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1) rotate(45deg);
+  }
+  60% {
+    opacity: 0.85;
+    transform: scale(0.9) rotate(60deg);
+  }
+}
+/* A Pro friend's row in the sidebar: the art starts further right so the game line stays readable. */
+.nameplate-friend {
+  height: auto;
+  min-height: 44px;
+}
+.nameplate-friend > .nameplate-art {
+  inset: 0 0 0 26%;
+}
+/* Light themes: the piece is drawn on paper (its lightness turned over in the shader), so the lit
+ * plate is pale with deep colour; the wash, the name, the credits and the sparkles turn over too. */
+:root[data-theme="light"] .nameplate {
+  --plate-paper: color-mix(in oklab, var(--plate-tint) 10%, #fbfbfc);
+  --plate-ground: var(--plate-paper);
+}
+:root[data-theme="light"] .nameplate[data-lit] {
+  --page: var(--plate-paper);
+  background: var(--plate-paper);
+}
+:root[data-theme="light"] .nameplate-wash {
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in oklab, var(--plate-paper) 85%, transparent) 0%,
+      color-mix(in oklab, var(--plate-paper) 55%, transparent) 34%,
+      transparent 62%
+    ),
+    linear-gradient(270deg, color-mix(in oklab, var(--plate-paper) 50%, transparent) 0%, transparent 24%);
+}
+:root[data-theme="light"] .nameplate:has(> .plate-end) > .nameplate-wash {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--plate-paper) 85%, transparent) 0%,
+    color-mix(in oklab, var(--plate-paper) 55%, transparent) 34%,
+    transparent 62%
+  );
+}
+:root[data-theme="light"] .nameplate[data-lit] .profile-plate-main {
+  color: var(--ink);
+}
+:root[data-theme="light"] .nameplate[data-lit] :is(.profile-plate-name-text, .people-name-text) {
+  color: color-mix(in oklab, var(--plate-glow) 55%, var(--ink));
+  text-shadow: 0 0 10px rgb(255 255 255 / 0.9);
+}
+:root[data-theme="light"] .nameplate[data-lit] .people-pro {
+  color: color-mix(in oklab, var(--plate-glow) 50%, var(--ink));
+}
+:root[data-theme="light"] .nameplate[data-lit] .profile-plate-chevrons {
+  color: var(--ink-3);
+}
+:root[data-theme="light"] .nameplate[data-lit] .plate-credits {
+  color: var(--ink-2);
+}
+:root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
+  color: var(--ink);
+}
+:root[data-theme="light"] .nameplate[data-lit] .plate-end:is(:hover, :focus-visible)::after {
+  background: rgb(0 0 0 / 0.06);
+}
+:root[data-theme="light"] .nameplate[data-lit] .sidebar-friend-playing {
+  color: var(--people-live-ink);
+  text-shadow: 0 0 8px rgb(255 255 255 / 0.9);
+}
+:root[data-theme="light"] .nameplate-sparkles > i {
+  color: color-mix(in oklab, var(--plate-glow) 70%, var(--ink));
+}
+:root[data-motion="rest"] .nameplate-sparkles > i {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nameplate[data-lit] .nameplate-sparkles > i {
+    animation: none;
+    opacity: 0.8;
+  }
 }
 /* Where a face goes while there is no account to show: signed out, and while the browser signs in. */
 .plate-slot {

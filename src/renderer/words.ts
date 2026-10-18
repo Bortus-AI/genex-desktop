@@ -4590,6 +4590,10 @@ export const ACCOUNT_WORDS = {
   browserShows: "Your browser should show",
   cancel: "Cancel",
   offline: "Changes wait until you’re back online.",
+  /** A Pro's nameplate: the moving art behind their name in the sidebar. */
+  nameplate: "Nameplate",
+  newPlate: "New one",
+  nameplateNote: "Lights up behind your name in the sidebar when you hover it.",
 } as const;
 
 /**
@@ -4630,6 +4634,8 @@ export const AVATAR_WORDS = {
   welcomeNote: "You can change it in Settings",
   /** Under Continue when the welcome asks for the nickname too. */
   welcomeNoteBoth: "You can change both in Settings",
+  /** After a refused Regenerate in the welcome, beside the reason. */
+  tryAgain: "Try again",
   bodies: {
     [AvatarBody.Vapor]: "Vaporwave sun",
     [AvatarBody.Crt]: "CRT dither",
