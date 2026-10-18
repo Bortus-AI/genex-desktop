@@ -256,7 +256,14 @@ const MESSAGE = {
   XcodeMacOnly: "Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio.",
   [SetupStep.Engine]: (file: string, from: string, to: string) =>
     `${file}: switch from Unreal ${from} to ${to}. Content you save in ${to} won't open in ${from}. To keep a ${from} version, duplicate the project folder first.`,
-  [SetupStep.Plugins]: (file: string) => `${file}: turn on Epic's ModelContextProtocol and EditorToolset plugins.`,
+  /** The plugin step names only what it still changes: Epic's MCP plugins, its toolsets, or both. */
+  [SetupStep.Plugins]: (file: string, pluginsOn: boolean, toolsetsIn: boolean) => {
+    const changes = [
+      pluginsOn ? "" : "turn on Epic's ModelContextProtocol and EditorToolset plugins",
+      toolsetsIn ? "" : "add Epic's toolsets for UI, effects, AI, animation, procedural content and physics",
+    ];
+    return `${file}: ${changes.filter(Boolean).join(", and ")}.`;
+  },
   [SetupStep.AutoStart]: (file: string, port: number) =>
     `${file}: start Unreal's MCP server on port ${port} whenever the project opens.`,
   [SetupStep.Helper]: (folder: string) => `${folder}: add the Genex editor helper, a few Python files.`,
@@ -269,8 +276,8 @@ const MESSAGE = {
     `Genex will take back what it added to ${name}: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays.`,
   KeptAfterUndo: (count: number) =>
     `Genex left ${count} ${count === 1 ? "file" : "files"} you changed in Plugins/${HELPER_FOLDER}.`,
-  /** The reason of the game snapshot Open takes before it updates the helper, as Rewind lists it. */
-  SnapshotBeforeUpdate: "Before Genex editor helper update",
+  /** The reason of the game snapshot Open takes before it updates the helper or adds Epic's toolsets, as Rewind lists it. */
+  SnapshotBeforeUpdate: "Before Genex updated the Unreal project",
   KeptOnUpdate: (version: string, count: number) =>
     `Genex updated the Genex editor helper to ${version} and kept ${count} ${count === 1 ? "file" : "files"} you changed beside the new ${count === 1 ? "one" : "ones"} as .mine.`,
 } as const;
@@ -791,7 +798,7 @@ async function describeSetup(file: string, options: SetupOptions): Promise<Plugi
   const lines = steps.map((step) => {
     if (step === SetupStep.Engine)
       return MESSAGE[step](path.basename(state.file), engine?.from ?? state.engine, engine?.to ?? "");
-    if (step === SetupStep.Plugins) return MESSAGE[step](path.basename(state.file));
+    if (step === SetupStep.Plugins) return MESSAGE[step](path.basename(state.file), state.plugins, state.toolsets);
     if (step === SetupStep.AutoStart) return MESSAGE[step](settingsIniPath(options.env), port);
     return helperLine;
   });
@@ -1217,7 +1224,7 @@ async function linkNewProject(context: PluginContext, { project, made }: MadePro
 const realOr = (file: string) => realpath(file).catch(() => file);
 
 /**
- * How a user's own Open updates an older Genex editor helper: only for the open game's own linked
+ * How a user's own Open updates an older Genex editor helper or adds Epic's toolsets: only for the open game's own linked
  * project, with a snapshot of that game first, since its snapshot is what holds the project's
  * folder. Any other project (none is open, or the game is linked to another) keeps its helper.
  */

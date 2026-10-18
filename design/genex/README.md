@@ -459,11 +459,11 @@ quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both fac
 and tone (Not set up, Not open, Starting, Ready as the green dot alone, Unreal busy, Not answering,
 Not connected), its foot one primary (held, not hidden, while Unreal is busy), Change project and a
 ⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. The Unity
-panel is the same: its project block (cube tile, `unity/`, state in the button's words, the step,
-Engine, one primary and a quiet action at the foot's end) and This computer (the newest Unity, ticked
-once it is Unity 6); its strip button folds to the cube. While Live or Builds loads, a 52×36
-halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
-at least 0.6s and fades out (150ms) before the native view is uncovered.
+panel is the same: its project block (Unity's mark on the tile, `unity/`, state in the button's
+words, the step, Engine, one primary and a quiet action at the foot's end) and This computer (the
+newest Unity, ticked once it is Unity 6); its strip button folds to Unity's mark. While Live or
+Builds loads, a 52×36 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears
+only after 0.4s, stays at least 0.6s and fades out (150ms) before the native view is uncovered.
 
 **Home** is where every launch starts and where the wordmark leads: nothing selected, one 21px
 Medium line (“Everything you need to ship a game”) over the game composer (“What do you want to
@@ -815,10 +815,18 @@ Add spans the full composer width 8px above the writing surface: Images, then **
 bulb, "Turn plan mode on", or "off" while on; it closes Add; disabled with why while a build owns
 the chat), then plugins and MCP servers (each with its 16px picture) with switches. A status appears only when something needs
 doing, with an accent action in white mono 12px (Set up, Connect, Retry) beside it; an account
-needs only the Connect button, no words. Glyphs use the text colour. Manage plugins opens the
-Plugins page. Typing @ at the caret
+needs only the Connect button, no words. A plugin's name opens its page in Plugins (it ellipsizes
+only after its status); while its row is hovered or holds focus, a grey Settings of the same size
+shows left of its action and switch and opens that page too, unless the action (Set up, Retry,
+Manage) already does. A server's name works its switch. Glyphs use the text colour. Manage plugins
+opens the Plugins page. Typing @ at the caret
 opens the same list as mentions while focus stays in the text: arrows move, Enter/Tab inserts,
-Escape closes; with no match Enter sends as usual.
+Escape closes; with no match Enter sends as usual. The @ panel pins a header over its scrolling
+list (soft fades at both edges, no divider): a search field showing the text after @ (a click puts
+the caret back there; a small quiet underlined Clear) and two blue-fill switchers, All · Games ·
+Assets · Tools and Everyone · Mine (mouse; focus stays in the text). Images leads the list; Your
+games, then Your assets (the genex.games library) before the others' shelves; library and shared
+asset cards chip their kind (3D, Image, Sound, Video) and Saved or Shared.
 The permissions pill shows one glyph per mode: shield (Auto), help (Manual), pencil (Accept
 edits), plan (Plan) and shield-off (Bypass permissions, orange in the pill and its row). Auto is
 the glyph alone, its tooltip "Auto permissions"; another mode adds its label. The model's name keeps
@@ -855,7 +863,8 @@ reviewers use the closest level their models accept.
 The ring panel (340px) shows Context window used/capacity with one meter, "Compacts automatically",
 and, for a model whose chat can be compacted, Compact now (also `/compact` in the composer). Below it, each signed-in subscription has a block titled with
 its plan (e.g. Claude Max plan) that opens the provider's usage page, then each limit with its reset
-time, percent used and meter (amber from 75%, red from 90%). The orchestrator's plan comes first;
+time, percent used and meter (amber from 75%, red from 90%); model-scoped weekly limits (such as
+Fable's) stay off the panel. The orchestrator's plan comes first;
 with two plans, each names the roles it serves or says Not in use. While Genex is connected, a
 Genex credits block follows: Used by this game, then Left for all games in ink-3.
 Fresh games inherit the last selected chat model; returning chats retain their own saved model.
@@ -1002,7 +1011,8 @@ control, the roles panel (Orchestrator/Workers/Judge rows, ⓘ tooltips, quiet L
 Turn on), the side model list (focus, groups, Add more models, chat-side placement, arrow keys,
 Escape closing the list before the panel), the effort slider (keys, pointer snap, nearest level per
 role), context-window preferences and plan limits (order, roles, levels, usage link), Add density,
-plugin status actions and setup route, full-composer Add anchoring, @ mentions (filter, insert,
+plugin status actions and setup route, plugin row hover, Settings and name opening the plugin's
+page, full-composer Add anchoring, @ mentions (filter, insert,
 Escape, focus kept in the text),
 Named model rows without search, provider-default or empty local placeholders; High defaults in both displayed and submitted role settings; Send state/payload, the ink-filled Send/Stop cross-fade, exclusive Send/Stop transitions during work (including whitespace, clearing,
 follow-up submission, post-send guard and pointer/keyboard Stop), 200% zoom and reduced motion. Captures and results are in

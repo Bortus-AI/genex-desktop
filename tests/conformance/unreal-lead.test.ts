@@ -15,6 +15,7 @@ import { lockAnswer } from "../../src/main/core/plugin-tools.ts";
 import { HookEvent } from "../../src/shared/plugin-hooks.ts";
 import { PluginCallBlocker } from "../../src/shared/plugins.ts";
 import { leadLineOf } from "../../src/harness-seed/loop/director/lead-line.ts";
+import { StopWhy } from "../../src/harness-seed/loop/finish-contract.ts";
 import { LoopProfile } from "../../src/harness-seed/loop/folder-facts.ts";
 import { chooseRunner } from "../../src/harness-seed/loop/run-dispatch.ts";
 import { RunnerKind } from "../../src/harness-seed/loop/studio-state.ts";
@@ -50,6 +51,11 @@ function run(host: LeadHost, extra: { resume?: boolean; run?: Record<string, unk
 
 /** A run of `minutes` working minutes. */
 const shortRun = (minutes: number) => ({ ...RUN, budgets: { ...RUN.budgets, wallClockMs: minutes * MINUTE } });
+/** A run that lasts until the reviewer's yes, `minutes` at most: its no's stop it at the cap whatever time is left. */
+const goalRun = (minutes: number) => ({
+  ...RUN,
+  budgets: { ...RUN.budgets, wallClockMs: minutes * MINUTE, completionPolicy: "goal" },
+});
 /** The lead's turns, as they were delegated. */
 const leadTurns = (host: LeadHost) => host.rec.paramsOf("engine.delegate");
 /** The run's journal as it was saved last. */
@@ -1296,11 +1302,11 @@ describe("the Unreal lead's finish", () => {
     assert.equal(journalOf(host).finishTally?.rejections, 0);
   });
 
-  it("three no's from the reviewer stop the Unreal Loop with what isn't done", async () => {
+  it("three no's from the reviewer stop an Unreal Loop that runs until it's done, with what isn't done", async () => {
     const answers: string[] = [];
     const host = leadHost({ turns: [claims(answers), claims(answers), claims(answers)] });
     for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", NOT_DONE));
-    const report = await run(host, { run: shortRun(180) });
+    const report = await run(host, { run: goalRun(180) });
     assert.equal(host.reviewed().length, 3);
     assert.match(answers[0] ?? "", /1 of 3 in a row/);
     assert.match(answers[1] ?? "", /2 of 3 in a row/);
@@ -1309,10 +1315,35 @@ describe("the Unreal lead's finish", () => {
     assert.deepEqual([report.executionStatus, report.endReason], ["completed", "not-done"]);
     assert.equal(report.stoppedBecause, "the reviewer did not accept the finish", "one fixed phrase");
     assert.deepEqual(report.notDone, NOT_DONE, "what isn't done, in its own field");
+    assert.deepEqual(
+      report.stillToFix,
+      { done: [], notDone: NOT_DONE, why: StopWhy.Stuck, hours: null },
+      "its result card's list: the reviewer's reasons when it named nothing not done",
+    );
     for (const reason of NOT_DONE)
       assert.ok(String(report.summary).includes(reason), `the card's summary names it: ${report.summary}`);
     assert.deepEqual(checkSteps(host), ["checking", "rejected", "checking", "rejected", "checking", "rejected"]);
     assert.equal(host.appended("finish_check").at(-1)?.stopped, true);
+  });
+
+  it("a timed Unreal Loop with time left goes on past the reviewer's third no, and a claim with nothing new asks no reviewer", async () => {
+    const answers: string[] = [];
+    const host = leadHost({ turns: [claims(answers), claims(answers), claims(answers), claims(answers)] });
+    for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", [], "claude-code", NOT_DONE));
+    const report = await run(host, { run: shortRun(180) });
+    assert.match(answers[2] ?? "", /time left, so it goes on/, "the third no keeps it going");
+    assert.match(answers[3] ?? "", /new work since the last no/, "no proof made since: turned back");
+    assert.equal(host.reviewed().length, 3, "the stale claim asked no reviewer");
+    assert.notEqual(report.endReason, "not-done", "the no's never stopped it");
+    const nos = host.appended("finish_check").filter((record) => record.step === "rejected");
+    assert.deepEqual(
+      nos.map((record) => [record.stopped === true, record.timeLeft === true]),
+      [
+        [false, true],
+        [false, true],
+        [false, true],
+      ],
+    );
   });
 
   it("a claim no engine here can hold a reviewer for ends the Unreal run without a yes, never asking again", async () => {
@@ -1362,6 +1393,11 @@ describe("the Unreal lead's finish", () => {
     assert.deepEqual([report.executionStatus, report.endReason], ["completed", "time-up"]);
     assert.equal(report.stoppedBecause, "the run's time ran out");
     assert.deepEqual(report.notDone, NOT_DONE);
+    assert.deepEqual(
+      report.stillToFix,
+      { done: [], notDone: NOT_DONE, why: StopWhy.Time, hours: 40 / 60 },
+      "its card says its 40 minutes ran out",
+    );
     for (const reason of NOT_DONE) assert.ok(String(report.summary).includes(reason), String(report.summary));
     const quiet = leadHost({ turns: [] });
     const ended = await run(quiet, { run: shortRun(30) });
@@ -1438,13 +1474,15 @@ describe("the Unreal lead's finish", () => {
     const answers: string[] = [];
     const host = leadHost({ turns: [claims(answers), claims(answers), capped, claims(answers)] });
     for (let i = 0; i < 3; i++) host.reviews.push(reviewerAnswer("no", NOT_DONE));
-    const paused = await run(host);
+    const paused = await run(host, { run: goalRun(180) });
     assert.equal(paused.executionStatus, "paused");
+    assert.equal(paused.stillToFix, undefined, "a pause keeps Resume: no list yet");
     assert.equal(journalOf(host).finishTally?.rejections, 2);
     host.clock.now += 5 * MINUTE;
-    const report = await run(host, { resume: true });
+    const report = await run(host, { resume: true, run: goalRun(180) });
     assert.deepEqual([report.executionStatus, report.endReason], ["completed", "not-done"]);
     assert.deepEqual(report.notDone, NOT_DONE);
+    assert.equal((report.stillToFix as { why?: string } | undefined)?.why, StopWhy.Stuck, "the resumed close lists it");
     const last = host.appended("finish_check").at(-1);
     assert.deepEqual([last?.step, last?.rejections, last?.stopped], ["rejected", 3, true]);
   });

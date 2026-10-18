@@ -16,6 +16,7 @@ import { type ReplyingAbout, useReplyAbout } from "./use-reply-about.ts";
 import { useCommandResults } from "./use-command-results.ts";
 import { useComposeInChat } from "./use-compose-in-chat.ts";
 import { useLaunchHandover } from "./use-launch-handover.ts";
+import { useKeepBuilding } from "./use-keep-building.ts";
 import { type Report, type Send, useReport, useSubmit } from "./use-submit.ts";
 
 /** Whether a reply is being written on screen, as the streaming reply reports it. */
@@ -61,6 +62,7 @@ export function useChatPanel(props: ChatPanelProps) {
   const focusComposer = useCallback((): void => composerRef.current?.focus(), [composerRef]);
   const reply = useReplyAbout(chat.threadId, focusComposer);
   const submit = useSubmit(props, chat, composer, work, follow, reply);
+  useKeepBuilding(chat.threadId, submit, props.onNotice, composerRef);
   useComposeInChat(chat.threadId, chat.project, composer.drafts, composerRef, submit);
   const report = useReport(props, chat, composer);
   useLaunchHandover(chat.threadId, loading, submit, composerRef);

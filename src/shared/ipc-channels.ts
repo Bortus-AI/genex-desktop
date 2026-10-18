@@ -15,8 +15,11 @@
  * validating the fields it acts on.
  */
 import type { StudioApi } from "./studio-api.ts";
+import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
+import type { PlayBarHold } from "./play-bar.ts";
+import type { PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
@@ -173,6 +176,10 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.open": "playOpen",
   "studio:play.close": "playClose",
   "studio:play.control": "playControl",
+  "studio:play.bar": "playBar",
+  "studio:play.comments": "playComments",
+  "studio:play.comment": "playComment",
+  "studio:play.uncomment": "playUncomment",
   "studio:play.me": "playMe",
   "studio:play.rename": "playRename",
   "studio:play.avatar": "playAvatar",
@@ -189,6 +196,14 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.handle-check": "playHandleCheck",
   "studio:play.handle": "playSetHandle",
   "studio:play.share": "playShare",
+  "studio:assets.library": "assetLibrary",
+  "studio:assets.states": "assetLibraryStates",
+  "studio:assets.save": "assetSave",
+  "studio:assets.share": "assetShare",
+  "studio:assets.unshare": "assetUnshare",
+  "studio:assets.add": "assetAdd",
+  "studio:play.manage": "playManage",
+  "studio:play.cover": "playCover",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -405,9 +420,13 @@ export interface StudioInvokePayloads {
   "studio:play.catalog": undefined;
   "studio:play.remix": { slug: string };
   "studio:play.online": { slugs: string[] };
-  "studio:play.open": { slug: string };
+  "studio:play.open": { slug: string; title: string };
   "studio:play.close": undefined;
   "studio:play.control": { control: PlayControl; at?: PlayPoint };
+  "studio:play.bar": PlayBarHold;
+  "studio:play.comments": { cursor: string | null };
+  "studio:play.comment": { body: string };
+  "studio:play.uncomment": { commentId: string };
   "studio:play.me": undefined;
   "studio:play.rename": { name: string };
   "studio:play.avatar": { webp: Uint8Array };
@@ -424,6 +443,8 @@ export interface StudioInvokePayloads {
   "studio:play.handle-check": { handle: string };
   "studio:play.handle": { handle: string };
   "studio:play.share": { url: string; at?: PlayPoint };
+  "studio:play.manage": { gameId: string; change: PlayGameChange };
+  "studio:play.cover": { gameId: string; image: Uint8Array; contentType: PlayCoverType };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;
@@ -441,6 +462,12 @@ export interface StudioInvokePayloads {
   "studio:game.asset.present": Arg<"presentProjectAssets", 0>;
   "studio:game.asset.rigs": Arg<"projectModelRigs", 0>;
   "studio:game.assets": { project: string };
+  "studio:assets.library": Arg<"assetLibrary", 0>;
+  "studio:assets.states": { project: string };
+  "studio:assets.save": { project: string; files: string[]; saved: boolean };
+  "studio:assets.share": { project: string; items: ShareItem[] };
+  "studio:assets.unshare": { project: string; file: string };
+  "studio:assets.add": { project: string; source: AddSource };
   "studio:game.asset.still": Arg<"readProjectAsset", 0>;
   "studio:run.feedback": Arg<"runFeedback", 0>;
   "studio:review.play": { snapshotId: string; project: string };

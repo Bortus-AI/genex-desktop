@@ -42,12 +42,12 @@ quits; agents may [look at apps](projects-engines.md#plugins-on-or-off) in any m
 ## Sending, waiting and history
 
 A sent message shows at once: idle, as the next bubble, **Sending** until saved.
-While the chat works it joins that turn, **Sending…** until read, then sits where read. During a
-build its lead answers it at once; asked to finish, it wraps up.
-Otherwise (a picture, another model) it waits **Queued**, removable. During work a
-sendable draft shows Send, else Stop; Stopping shows until it ends; Stop works again after 5
-s. Stop hands over to the oldest queued message; the stopped build shows its result, else
-Stopped once, with Resume. A message a quit cut off is retried once, then left to resend.
+While the chat works it reaches that work at its next step (else waits below, removable): **Sending…** until
+read, then sits where read. A changed Mode, model or effort applies from there; workers carry over
+or finish. A build's lead hears it, wrap-up included.
+During work a sendable draft shows Send, else Stop; Stopping shows until done; a second press
+within 5 s does nothing. The stopped build shows its result, else Stopped once, with Resume. A
+message a quit cut off is retried once, then left to resend.
 
 **Rewind** sits beside every sent bubble unless the chat answers; a running build stops first.
 It and later messages leave chat and model context (the log keeps them); a fresh session

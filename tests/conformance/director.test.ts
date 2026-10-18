@@ -32,7 +32,7 @@ import { ctxRecorder } from "../helpers/ctx-recorder.ts";
 import { fakeFinishReview, reviewerAnswer, seatedReviewer } from "../helpers/reviewer.ts";
 import { CLOSE_SETTLE_MS } from "../../src/harness-seed/loop/director/budgets.ts";
 import { CALL_MARGIN_MS } from "../../src/harness-seed/loop/finish-check.ts";
-import { LEAD_CALL_MS } from "../../src/harness-seed/loop/finish-contract.ts";
+import { LEAD_CALL_MS, StopWhy } from "../../src/harness-seed/loop/finish-contract.ts";
 import { buildRunGraph } from "../../src/renderer/run-graph.ts";
 import { EntryAction, EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
 import { summarizeRun } from "../../src/shared/run-summary.ts";
@@ -3032,7 +3032,7 @@ describe("the director's finish claim", () => {
     const landed = claimingLoopRun([reviewerAnswer("no", notDone)], { log });
     landed.state.finishTally = tally();
     const said = String(await finish(landed.loopRun as never, { summary: "red", land: "yes", victory: "yes" }));
-    assert.match(said, /3 of 3 in a row\): The plaza is still grey\./, said);
+    assert.match(said, /\(3 in a row\): The plaza is still grey\./, said);
     assert.match(said, /the run is closed/, "then the landing");
     assert.equal(landed.closes[0]?.victory, false);
     assert.deepEqual(landed.loopRun.report.notDone, notDone);
@@ -3048,7 +3048,7 @@ describe("the director's finish claim", () => {
     for (const done of waits) done();
     const told = String(await answer);
     assert.ok(told.endsWith(CLAIM_ANSWER.closingUnwon), told);
-    assert.match(told, /3 of 3 in a row/);
+    assert.match(told, /\(3 in a row\)/);
     assert.ok(!told.includes(CLAIM_ANSWER.closing), "never that the reviewer accepted it");
   });
 
@@ -3228,7 +3228,11 @@ describe("the director's finish claim", () => {
       any
     >;
     restoreLoopRun(back as never, now);
-    assert.deepEqual(back.state.finishTally, { ...tally, checking: false }, "a check under way then is not now");
+    assert.deepEqual(
+      back.state.finishTally,
+      { ...tally, checking: false, notDone: [] },
+      "a check under way then is not now; an older tally reads as naming nothing not done",
+    );
     const never = loopRunWith({ baseHeads: new Set() });
     recordLoopRun(never as never, now);
     assert.equal(
@@ -3847,6 +3851,11 @@ describe("a director's run through the real core and harness", () => {
       assert.equal(outcome.finished.victory, false, "no victory over the reviewer's no");
       assert.equal(outcome.finished.stoppedBecause, "the reviewer did not accept the finish", "one fixed phrase");
       assert.deepEqual(outcome.finished.notDone, NOT_DONE, "what isn't done, in its own field");
+      assert.deepEqual(
+        outcome.finished.stillToFix,
+        { done: [], notDone: NOT_DONE, why: StopWhy.Stuck, hours: null },
+        "its result card's list, and that the no's stopped it",
+      );
       for (const reason of NOT_DONE)
         assert.ok(String(outcome.finished.summary).includes(reason), String(outcome.finished.summary));
       // The no's stop the Loop; the build that runs still lands by the close's own rule, as a clock's close does.
@@ -3870,6 +3879,12 @@ describe("a director's run through the real core and harness", () => {
     assert.equal(reviewers.length, 1, "the run's own close asks no reviewer");
     assert.equal(finished.victory, false);
     assert.deepEqual(finished.notDone, NOT_DONE, "the report names what the reviewer found not done");
+    // The lead's session ended within seconds of a quarter hour: its card says it stopped, not that its time ran out.
+    assert.deepEqual(
+      finished.stillToFix,
+      { done: [], notDone: NOT_DONE, why: StopWhy.Ended, hours: null },
+      "its card lists what the no found not done",
+    );
     for (const reason of NOT_DONE)
       assert.ok(String(finished.summary).includes(reason), `the card's summary names it: ${finished.summary}`);
     for (const reason of NOT_DONE)

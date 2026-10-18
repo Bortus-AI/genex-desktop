@@ -2,7 +2,8 @@
 
 The composer's Add panel lists installed plugins with the same global enable switches, plus
 configured MCP connectors. Enabled and connected are separate states. Connect lists tools on
-the registry's live connection (or opens setup when trust/secrets are missing); Manage opens the
+the registry's live connection (or opens setup when trust/secrets are missing); a plugin's name,
+or the Settings its row shows while hovered or focused, opens that plugin's page; Manage opens the
 sidebar's Plugins workspace page, which includes MCP servers. Local Blender is an
 independent first-party plugin using the public API 3 managed-native services. It needs no
 Genex account. No connector credentials enter the composer. See [connections and context](connections-and-context.md) for the current setup/session lifecycle.
@@ -279,7 +280,7 @@ gets no such notice: the list names what is on (`delegation-prompts.ts`).
   (`Retry`, `Ready`, `Live`, `Builds`, `Assets`, `Export`, `Plugins`, `Reload`, `State`,
   `Close plugins`, compared case-insensitively); `ariaLabel` 1–60 characters, unique, not reserved;
   `icon` a glyph of at most 4 characters or a host icon (`globe`, `export`, `play`, `image`, `box`,
-  `boxes`, `unreal`).
+  `boxes`, `unreal`, `godot`, `unity`).
 - `target` is either `{kind: "action", name, args?}` naming a declared action (scalar args, at
   most 16 keys) — pressed, it runs the same review → ticket → native approval sequence as the
   Plugins page — or `{kind: "panel", id}` naming a declared panel, which opens as a dialog over
@@ -465,6 +466,18 @@ spelled: any case, whitespace or zero-width characters, the module or class alon
 or qualified in `tool_name` with no toolset. Only Genex's own queue calls it. Epic answers pictures
 (`CaptureEditorImage`, `CaptureViewport`, `CaptureAssetImage`) as base64 inside the JSON text,
 which Studio would truncate, so the bridge hands up to four per answer to the agent as MCP images.
+The Genex editor helper's build and play tools (below) answer a refusal or a failure as `{error}`
+inside a call Epic counts as done, so the bridge marks such an answer `isError` (the toolset named
+short or qualified, in any case): the agent and the chat read it as a failed call, in the helper's
+own words. An `error` field in any other toolset's answer stays as Epic sent it.
+Some of Epic's toolsets describe themselves in more than an engine takes from one tool answer
+(Niagara's system toolset in about 278 KB, past Claude Code's 25,000 tokens), so a
+`describe_toolset` answer over 60,000 characters comes back as its tools by name, each with the
+first line of its description (by name alone when those are too long), with a note; the bridge's
+own `tool_name` argument, never sent to Epic, returns one tool's whole entry, and the chat shows that
+call as reading the toolset. A description whose tools it can't find, and anything still too long,
+is cut at the limit without splitting a character (`editor-describe.ts`). Shorter answers and Epic's
+errors stay as Epic sent them.
 An editor behind Genex runs at 3 frames per second while Unreal's "Use Less CPU when in
 Background" (`bThrottleCPUWhenNotForeground`) is on. To avoid that, a `StartPIE` call first turns
 the setting off through Epic's `ObjectTools.set_properties`. This changes only the running editor
@@ -988,7 +1001,10 @@ ports; when one answers, `openProject` names it and `next` is switch, which the 
 one press: Unreal's normal quit, then Open in Unreal once it has closed. A project counts as set up with its plugins on, its own port and
 a setup record; a Genex editor helper that is older or missing gives it the update-helper step
 (setup again copies only the helper) rather than making it look never set up, and Connected then
-adds a quiet note. A user's Open updates an older helper only in the open game's own linked project, so only
+adds a quiet note. A project set up before Epic's toolsets were added is still set up; the same Open
+adds them (`addToolsetPlugins`, after the game snapshot, recorded so Undo takes them out), with no note.
+A toolset Genex added that the user took out again counts as settled: no Open, setup or snapshot puts it back.
+A user's Open updates an older helper only in the open game's own linked project, so only
 there does the panel say Open in Unreal updates it; elsewhere it says opening it from its Genex game does. A newer helper (`helperNewer`) gets one line under Open in Unreal and Connected,
 never an update. Connected needs both an answer on the project's port and a running editor
 process. Starting means Genex opened the project in the last 15 s, or its own Unreal log
@@ -1034,7 +1050,15 @@ The confirmed `setup` step does four things, each one only if it is needed:
   confirmation says that content saved in 5.8 won't open in the old version. Undo puts the old
   association back unless the user has moved the project on since;
 - turns on `ModelContextProtocol` and `EditorToolset` in the `.uproject`, keeping Unreal's tab
-  layout;
+  layout, and adds Epic's toolsets for games, editor-only (`TOOLSET_PLUGINS`: `UMGToolSet`,
+  `NiagaraToolsets`, `StateTreeToolset`, `AIModuleToolset`, `AnimationAssistantToolset`,
+  `PCGToolset`, `PhysicsToolsets`, `GameplayTagsToolset`, `AutomationTestToolset`). A toolset the
+  project already names, on or off, stays as the user left it, and one Genex added that the user took
+  out stays out. Not Epic's `AllToolsets`: on UE 5.8.3
+  its `GameFeaturesToolset` makes every start log a GameFeatureData load error, and the rest serve
+  no game Genex makes. On UE 5.8.3 a fresh project with these starts with no load errors and opens
+  as fast as one without them; `list_toolsets` grows from 19 toolsets to 40, while the agent's three
+  meta-tools stay the same;
 - gives the project its own port and starts the MCP server on it, by writing `bAutoStartServer`
   and `ServerPortNumber` into `Saved/Config/<Mac|Windows>Editor/EditorPerProjectUserSettings.ini`.
   The port is always in Genex's block, 18000–18999: it starts from a hash of the real `.uproject`
@@ -2059,7 +2083,10 @@ arguments checked and its card answered before it waits (`registry.prepareTool`)
 to 4 minutes (less when its call's deadline leaves less), then answers like a
 declined consent (`{blocker: "lock", lock, reason, hold, message}`: `reason` the lock's refusal,
 `hold` Genex's `HookHold` the harness words the person's line from, its record closed with the message); a
-person's own action never waits for the person. A worker writing in place holds Genex's in-place
+person's own action never waits for the person. A wait ends early when the person writes in the
+chat the calling session answers (`engine.steer` handed it their message, natively or by a cut at
+its next step): the call answers the refusal `person_wrote`, telling the agent to read the message
+first and call again if it still needs the tool; only a wait ends so, never a lock already given. A worker writing in place holds Genex's in-place
 lock and the game's `project` locks for its whole life (`locks.hold`/`locks.release`,
 [harness runtime](harness-runtime.md#workers-in-a-chat)); its own calls pass them (on an engine the
 host seats no worker on too, as `unseatedHolder`), still giving way to the person, and its line and row read "Working in <label>". Any end of the harness, a planned
@@ -2304,6 +2331,9 @@ nothing. A build of the host lets UnrealBuildTool's sandbox write each project p
 `Intermediate` and `Binaries`, nothing else of it (`ubt.ts` `projectPluginDirs`, `ubt-sandbox.ts`
 `pluginDirs`). A game with an `unreal-plugin` fact gets four more tools and the `unreal-plugin` skill
 that orders them (`plugin-ship.ts`; `plugin` names the folder under `Plugins/` when there are several).
+The skill also gives Epic's toolset conventions for a plugin whose tools agents call through
+Unreal's MCP (a registered `UToolsetDefinition`, static `AICallable` tools with real types, errors
+raised, not returned).
 `unreal__plugin-build` needs the editor lock and asks first: the call saves the person's work through
 the Genex editor helper, quits Unreal and waits, then the host's editor target is built as the
 plugin's background job, which opens Unreal again after a good build and leaves it closed after a
@@ -2561,8 +2591,8 @@ editors are found where Unity Hub puts them (`editors.ts`): its own folder
 
 #### The panel and the toolbar button
 
-The toolbar button (`unity:editor`, labelled Unity with the `box` icon, only on a game with a Unity
-project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
+The toolbar button (`unity:editor`, labelled Unity with the `unity` icon, only on a game with a
+Unity project: `facts`) opens the plugin's one panel (`panel.html`, also on the plugin's page), an
 [engine panel](../design/genex/README.md#engine-panels): the project's block (its folder, the state
 in the button's words, the step, Engine, the step's buttons in the foot) and This computer (the
 newest Unity installed). The button's status action `toolbar-status`
@@ -3123,7 +3153,10 @@ stages only declared project input files; the child receives no full-project rea
 of each process log stream; it does not limit asset files. `maxAssetBytes` limits the combined
 declared generated files to 1–104,857,600 bytes. Delivery additionally enforces `assetLimits`.
 Set `gpu: true` for GPU rendering, including Blender EEVEE; it permits GPU services and the
-runtime's own Metal cache. It grants no network or full-project access. Runtime detection runs
+runtime's own Metal cache, which the job may also hand to Metal's shader compiler as a read-write
+sandbox extension (no other folder): the compiler builds Metal's shader module there, and without
+it a cold cache (a new Mac, a macOS or runtime update) fails every shader and crashes the first
+render. It grants no network or full-project access. Runtime detection runs
 the declared version probe, but never starts a generation recipe or installs software.
 Managed jobs use the macOS sandbox, deny network and protected host state, and retain a durable
 job ID before process launch. The profile (`nativeSandboxProfile`) names what a job may do: start

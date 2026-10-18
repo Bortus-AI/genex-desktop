@@ -67,6 +67,8 @@ interface Props {
   onShowAsset?: (jobId: string) => void;
   /** Follow up in chat: the composer takes a chip naming the node; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
+  /** Keep building on what the run left, in the chat that owns it; null when there is no chat. */
+  onKeepBuilding?: ((notDone: string[]) => void) | null;
   /** The chat's builds, as the bar's tabs, and the one on show. */
   tabs?: BuildTabs | null;
   /** The stage's toast channel: this panel's own Play/Make it live refuse for ordinary reasons. */
@@ -278,6 +280,7 @@ export const RunGraph = memo(function RunGraph({
   graph: suppliedGraph,
   project,
   onReply,
+  onKeepBuilding = null,
   tabs = null,
   onNotice,
   onShowLive,
@@ -362,6 +365,7 @@ export const RunGraph = memo(function RunGraph({
               onStep={step}
               onOpenJob={openJob}
               onReply={onReply}
+              onKeepBuilding={onKeepBuilding}
               onNotice={onNotice}
               onPlay={hasBuild ? play : null}
             />
@@ -386,6 +390,7 @@ function SelectedPanel({
   onStep,
   onOpenJob,
   onReply,
+  onKeepBuilding,
   onNotice,
   onPlay,
 }: {
@@ -399,6 +404,7 @@ function SelectedPanel({
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   onReply: Props["onReply"];
+  onKeepBuilding: ((notDone: string[]) => void) | null;
   onNotice: Props["onNotice"];
   onPlay: (() => Promise<void> | void) | null;
 }): JSX.Element {
@@ -428,6 +434,7 @@ function SelectedPanel({
       onLight={(items, index) => overlays.setLight({ items, index })}
       onOpenJob={onOpenJob}
       onReply={onReply}
+      onKeepBuilding={onKeepBuilding}
       onNotice={onNotice}
       onPlay={onPlay}
     />
