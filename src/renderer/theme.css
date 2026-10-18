@@ -2185,6 +2185,17 @@ button.chat-header-title:hover {
     linear-gradient(90deg, rgb(6 6 10 / 0.8) 0%, rgb(6 6 10 / 0.55) 34%, transparent 62%),
     linear-gradient(270deg, rgb(0 0 0 / 0.45) 0%, transparent 24%);
 }
+/* A plate with something at its end (the credits, the Offline mark): the art fades out before it,
+ * so the end sits on the plate's own plain colour with nothing behind it. */
+.nameplate:has(> .plate-end) > .nameplate-art {
+  mask-image:
+    linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.55) 22%, rgb(0 0 0 / 0.92) 48%, #000 70%),
+    linear-gradient(270deg, transparent 58px, rgb(0 0 0 / 0.24) 80px, rgb(0 0 0 / 0.66) 106px, #000 136px);
+  mask-composite: intersect;
+}
+.nameplate:has(> .plate-end) > .nameplate-wash {
+  background: linear-gradient(90deg, rgb(6 6 10 / 0.8) 0%, rgb(6 6 10 / 0.55) 34%, transparent 62%);
+}
 .nameplate[data-lit] {
   /* Rings around a face keep their gap in the plate's colour, not the page's. */
   --page: var(--plate-tint);
@@ -2223,33 +2234,17 @@ button.chat-header-title:hover {
   color: #6ee39a;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.8);
 }
-/* Lit, the credits are white over the art with a soft blurred shadow behind them, and a small
- * see-through blue pill under the pointer or keyboard focus (the plate itself lights only on hover). */
+/* Lit, the credits are light on the plate's clear end, with nothing behind them, and a faint pill
+ * under the pointer or keyboard focus (the plate itself lights only on hover). */
 .nameplate[data-lit] .plate-credits {
-  isolation: isolate;
-  color: #fff;
-  text-shadow: 0 1px 4px rgb(0 0 0 / 0.7);
+  color: rgb(255 255 255 / 0.88);
   transition:
     background-color var(--duration-quick),
-    box-shadow var(--duration-quick);
-}
-.nameplate[data-lit] .plate-credits::before {
-  content: "";
-  position: absolute;
-  inset: 4px 2px;
-  z-index: -1;
-  border-radius: 999px;
-  background: rgb(0 0 0 / 0.55);
-  filter: blur(9px);
-  pointer-events: none;
+    color var(--duration-quick);
 }
 .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--play-blue) 55%, transparent);
+  background: rgb(255 255 255 / 0.1);
   color: #fff;
-}
-/* The pill takes the shadow's place: drawn above the button's own background, it would cloud it. */
-.nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::before {
-  opacity: 0;
 }
 .nameplate-sparkles {
   position: absolute;
@@ -2344,6 +2339,14 @@ button.chat-header-title:hover {
     ),
     linear-gradient(270deg, color-mix(in oklab, var(--plate-paper) 50%, transparent) 0%, transparent 24%);
 }
+:root[data-theme="light"] .nameplate:has(> .plate-end) > .nameplate-wash {
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--plate-paper) 85%, transparent) 0%,
+    color-mix(in oklab, var(--plate-paper) 55%, transparent) 34%,
+    transparent 62%
+  );
+}
 :root[data-theme="light"] .nameplate[data-lit] .profile-plate-main {
   color: var(--ink);
 }
@@ -2358,14 +2361,10 @@ button.chat-header-title:hover {
   color: var(--ink-3);
 }
 :root[data-theme="light"] .nameplate[data-lit] .plate-credits {
-  color: var(--ink);
-  text-shadow: 0 1px 4px rgb(255 255 255 / 0.8);
-}
-:root[data-theme="light"] .nameplate[data-lit] .plate-credits::before {
-  background: rgb(255 255 255 / 0.75);
+  color: var(--ink-2);
 }
 :root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: color-mix(in srgb, var(--play-blue) 30%, transparent);
+  background: rgb(0 0 0 / 0.06);
   color: var(--ink);
 }
 :root[data-theme="light"] .nameplate[data-lit] .sidebar-friend-playing {
