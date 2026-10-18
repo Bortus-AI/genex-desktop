@@ -319,6 +319,11 @@ const FIXTURE_SAFE = [
   // taken or kept), signed out unless it asks for its fixture account; the save lasts the launch.
   "studio:play.handle-check",
   "studio:play.handle",
+  // A game's card menu: a fixture launch answers every change and a new cover from its own data
+  // (`dev/fixture-manage.ts`), kept for the launch, and a cover "upload" stays in memory, so no
+  // socket opens.
+  "studio:play.manage",
+  "studio:play.cover",
   // The app's Genex account: a fixture launch's is its own (`dev/fixture-genex-account.ts`), signed
   // in as the fixture account it asked for; its sign-in opens no page and its sign-out lasts the launch.
   "studio:genex-account.read",

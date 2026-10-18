@@ -18,6 +18,7 @@ import type { StudioApi } from "./studio-api.ts";
 import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
+import type { PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
 import type { StatsPeriod } from "./play-stats.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
@@ -194,6 +195,8 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:assets.share": "assetShare",
   "studio:assets.unshare": "assetUnshare",
   "studio:assets.add": "assetAdd",
+  "studio:play.manage": "playManage",
+  "studio:play.cover": "playCover",
   "studio:genex-account.read": "genexAccount",
   "studio:genex-account.sign-in": "genexSignIn",
   "studio:genex-account.cancel": "genexCancelSignIn",
@@ -427,6 +430,8 @@ export interface StudioInvokePayloads {
   "studio:play.handle-check": { handle: string };
   "studio:play.handle": { handle: string };
   "studio:play.share": { url: string; at?: PlayPoint };
+  "studio:play.manage": { gameId: string; change: PlayGameChange };
+  "studio:play.cover": { gameId: string; image: Uint8Array; contentType: PlayCoverType };
   "studio:genex-account.read": undefined;
   "studio:genex-account.sign-in": undefined;
   "studio:genex-account.cancel": undefined;

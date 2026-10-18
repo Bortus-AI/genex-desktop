@@ -48,6 +48,15 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   idle moment, staggered, only while half in view and the window shows (none under the viewer);
   out of view for 10 s a clip lets its decoder go. One pause after the tabs stops every clip and is
   remembered; Reduce Motion, a failed clip or a refused play stops them for the session.
+- A card's ⋯ (on the cover's corner while hovered or focused, or a right-click on the card) is
+  genex.games' card menu (`src/renderer/play/card-menu/`). The game's owner gets Copy link,
+  remixing off or on, Change cover, Unpublish and Delete game; an account `/api/me` names
+  `isAdmin` also gets, on any game, an Admin block with Mobile support and Edit tags. Anyone else
+  gets no ⋯, and neither does a search's card. Featuring stays on genex.games. Its server checks
+  every call against its own admin list, so the app only decides what shows
+  (`src/shared/play-manage.ts`). A change shows on every card at once. Change cover crops the
+  picture to 1536×864 in the renderer and sends it through main (presigned PUT, then commit);
+  genex.games may keep the old cover and says why.
 - Friends: requests, playing now (Join), friends, sent, people search, the invite card and whether
   friends see the game the account is in. The invite link (`/api/referrals/me`, on the website
   only) opens genex.games' download page with a card from the account; the card has Copy, Post on
@@ -94,9 +103,10 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,
 `src/main/play/`, `src/main/core/genex-account.ts`; selectors in the
-[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|new|quiet|fresh|nickname|terms`
-signs a fixture launch in (`new` and `nickname` have not chosen a nickname; a few names, such as
-`rab`, read as taken), `ended` gives it a refused one. Tests: `tests/conformance/play-*`,
+[feature map](agent/feature-map.md). Fixtures: `STUDIO_FIXTURE_GENEX_ACCOUNT=1|admin|new|quiet|fresh|nickname|terms`
+signs a fixture launch in (the full account owns Snowball, and `admin` is it as a genex.games
+admin; `new` and `nickname` have not chosen a nickname; a few names, such as `rab`, read as taken),
+`ended` gives it a refused one. Tests: `tests/conformance/play-*`,
 `genex-account`, `app-account-plugin`.
 
 A live `studio:dev` profile can point Play at a local or test genex.games with

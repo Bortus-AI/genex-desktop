@@ -459,11 +459,11 @@ quit, only words. The Unreal panel, a plugin frame, wears Genex's type (both fac
 and tone (Not set up, Not open, Starting, Ready as the green dot alone, Unreal busy, Not answering,
 Not connected), its foot one primary (held, not hidden, while Unreal is busy), Change project and a
 ⋯ menu (Undo setup, Quit Unreal); This computer's block lists the engine and Xcode. The Unity
-panel is the same: its project block (cube tile, `unity/`, state in the button's words, the step,
-Engine, one primary and a quiet action at the foot's end) and This computer (the newest Unity, ticked
-once it is Unity 6); its strip button folds to the cube. While Live or Builds loads, a 52×36
-halftone plasma in ink at 62% sits over a shimmering 13px line; it appears only after 0.4s, stays
-at least 0.6s and fades out (150ms) before the native view is uncovered.
+panel is the same: its project block (Unity's mark on the tile, `unity/`, state in the button's
+words, the step, Engine, one primary and a quiet action at the foot's end) and This computer (the
+newest Unity, ticked once it is Unity 6); its strip button folds to Unity's mark. While Live or
+Builds loads, a 52×36 halftone plasma in ink at 62% sits over a shimmering 13px line; it appears
+only after 0.4s, stays at least 0.6s and fades out (150ms) before the native view is uncovered.
 
 **Home** is where every launch starts and where the wordmark leads: nothing selected, one 21px
 Medium line (“Everything you need to ship a game”) over the game composer (“What do you want to
@@ -860,7 +860,8 @@ reviewers use the closest level their models accept.
 The ring panel (340px) shows Context window used/capacity with one meter, "Compacts automatically",
 and, for a model whose chat can be compacted, Compact now (also `/compact` in the composer). Below it, each signed-in subscription has a block titled with
 its plan (e.g. Claude Max plan) that opens the provider's usage page, then each limit with its reset
-time, percent used and meter (amber from 75%, red from 90%). The orchestrator's plan comes first;
+time, percent used and meter (amber from 75%, red from 90%); model-scoped weekly limits (such as
+Fable's) stay off the panel. The orchestrator's plan comes first;
 with two plans, each names the roles it serves or says Not in use. While Genex is connected, a
 Genex credits block follows: Used by this game, then Left for all games in ink-3.
 Fresh games inherit the last selected chat model; returning chats retain their own saved model.

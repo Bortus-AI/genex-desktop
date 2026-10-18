@@ -7,6 +7,7 @@ import type {
   PlayShelf,
   PlayShelves,
 } from "./play.ts";
+import type { PlayChangeResult, PlayCoverResult, PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { GenexCatalogItem } from "./mention-corpus.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
@@ -518,6 +519,13 @@ export interface StudioApi {
   playSetHandle(handle: string): Promise<HandleSave>;
   /** Play: the Mac's share menu for a page of Play's website (an invite or a profile link), by `at`. */
   playShare(url: string, at?: PlayPoint): Promise<void>;
+  /**
+   * Play: change a published game from its card menu (mobile flag, tags, remixing, Unpublish,
+   * Delete); genex.games checks who may. Fails when it refused or could not be reached.
+   */
+  playManage(gameId: string, change: PlayGameChange): Promise<PlayChangeResult>;
+  /** Play: make a picture (already cropped to 16:9) a published game's cover on genex.games. */
+  playCover(gameId: string, image: Uint8Array, contentType: PlayCoverType): Promise<PlayCoverResult>;
   /** The app's Genex account: signed out, signing in, signed in, or a sign-in genex.games ended. Never asks the network. */
   genexAccount(): Promise<GenexAccountView>;
   /** Sign in to Genex in the browser (again, after a sign-in ended); the account as it is after. */

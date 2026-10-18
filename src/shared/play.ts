@@ -5,6 +5,8 @@
  */
 import type { LibraryKind } from "./asset-library.ts";
 
+import type { PlayCuration } from "./play-manage.ts";
+
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
   api: string;
@@ -124,6 +126,8 @@ export interface PlayGame {
   remixable: boolean;
   /** An asset's kind (3D, picture, sound, video); null for a game or a tool, or an asset genex.games does not kind. */
   assetKind: LibraryKind | null;
+  /** What the card menu reads (mobile flag, tags, remixing); a search's card carries none, so it has no menu. */
+  curation?: PlayCuration;
 }
 
 /** One page of a tab. */

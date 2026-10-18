@@ -55,6 +55,7 @@ import {
   stillWithRemix,
 } from "../../src/renderer/play/remix-model.ts";
 import { StepState } from "../../src/renderer/ui/step-bar.ts";
+import { PlayChangeOutcome, type PlayGameChange } from "../../src/shared/play-manage.ts";
 import {
   createPlayStore,
   FEED_STALE_MS,
@@ -169,6 +170,7 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
     open: [] as string[],
     remix: [] as string[],
     close: 0,
+    manage: [] as Array<{ gameId: string; change: PlayGameChange }>,
   };
   const api: PlayApi = {
     playFeed: (request) => {
@@ -197,6 +199,12 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
     },
     assetLibrary: () => Promise.resolve({ assets: [], nextCursor: null }),
     playCatalog: () => Promise.resolve([]),
+    playManage: (gameId, change) => {
+      calls.manage.push({ gameId, change });
+      return handlers.playManage
+        ? handlers.playManage(gameId, change)
+        : Promise.resolve({ outcome: PlayChangeOutcome.Done });
+    },
   };
   return { api, calls };
 }

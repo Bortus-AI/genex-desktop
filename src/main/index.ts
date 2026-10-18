@@ -142,6 +142,7 @@ import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload } from "./dev/fixture-asset-library.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
@@ -429,6 +430,7 @@ let playCatalog: PlayGallery | null = null;
 let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits; library: AssetLibrary } | null =
   null;
 let gameLibrary: LibrarySharing | null = null;
+let playManage: PlayManage | null = null;
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
 /** The fixture account a fixture launch is signed in to Genex as (`dev/fixture-people.ts`), if any. */
@@ -975,6 +977,27 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   return playAccount;
 }
 
+/**
+ * A published game's card menu for this core, on the Genex account: genex.games over the network,
+ * or a fixture launch's own answers. A change makes the catalog and profiles read their games afresh.
+ */
+function playManageFor(studio: StudioCore): PlayManage {
+  const account = genexAccountFor(studio);
+  const request = fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api);
+  playManage ??= createPlayManage({
+    // A 401 ends the sign-in as one to the account's own calls does.
+    request: refusingRequest(request, account.refused),
+    token: account.token,
+    upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch),
+    changed: () => {
+      playCatalogFor(studio).forget();
+      playAccountFor(studio).people.forgetProfiles();
+    },
+    localImages: fixtureNativePolicy,
+  });
+  return playManage;
+}
+
 /** The person's genex.games library joined with a game's files: Save, Share and Add for the Assets tab. */
 function librarySharingFor(studio: StudioCore): LibrarySharing {
   gameLibrary ??= librarySharing({
@@ -1426,6 +1449,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     remix: (world) => remixPlayGame(studio, world),
     viewer: () => playView,
     ...playAccountFor(studio),
+    manage: playManageFor(studio),
     web: playOrigin.web,
     share: popShareMenu,
   });
