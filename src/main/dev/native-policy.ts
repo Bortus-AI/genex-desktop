@@ -312,6 +312,15 @@ const FIXTURE_SAFE = [
   "studio:play.stats",
   "studio:play.creators",
   "studio:play.credits",
+  // The asset library and Save, Share and Add: a fixture launch answers from its own made-up
+  // library (`dev/fixture-asset-library.ts`), signed out unless it asks for its fixture account;
+  // a share or a save lasts the launch, and Add writes only into the fixture's own game.
+  "studio:assets.library",
+  "studio:assets.states",
+  "studio:assets.save",
+  "studio:assets.share",
+  "studio:assets.unshare",
+  "studio:assets.add",
   // The nickname: a fixture launch answers a check and a save from its own people (a few names
   // taken or kept), signed out unless it asks for its fixture account; the save lasts the launch.
   "studio:play.handle-check",

@@ -1778,9 +1778,8 @@
   width: 88px;
   height: 8px;
 }
-/* The shard before a balance wherever one is shown: the Plugins row, the usage panel, the account card. */
-.extension-credits,
-.genex-stat dd {
+/* The shard before a balance on a Plugins row. */
+.extension-credits {
   display: inline-flex;
   align-items: center;
   gap: 6px;

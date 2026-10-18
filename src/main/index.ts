@@ -136,10 +136,15 @@ import {
 } from "./play/people.ts";
 import { type CreatorStats, creatorStats } from "./play/creator-stats.ts";
 import { type GenexCredits, genexCredits } from "./play/credits.ts";
+import { type AssetLibrary, assetLibrary, LIBRARY_UPLOAD_TIMEOUT_MS, networkDownload } from "./play/asset-library.ts";
+import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
+import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
+import { readAssetPreview } from "./asset-preview.ts";
+import { fixtureDownload } from "./dev/fixture-asset-library.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
-import type { MentionSources } from "./core/mention-tags.ts";
+import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
@@ -423,7 +428,9 @@ let preview: GamePreview | null = null;
 let gameScreen: GameFullScreen | null = null;
 /** Play's catalog, made with the core: the dashboard's reads and the viewer's likes and tickets. */
 let playCatalog: PlayGallery | null = null;
-let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits } | null = null;
+let playAccount: { people: PlayPeople; creators: CreatorStats; credits: GenexCredits; library: AssetLibrary } | null =
+  null;
+let gameLibrary: LibrarySharing | null = null;
 let playManage: PlayManage | null = null;
 /** The app's Genex account, made with the core: Play, Settings and Publish read it. */
 let genexAccount: GenexAccount | null = null;
@@ -958,7 +965,16 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
   };
   // A 401 to a creator's numbers or the credits ends the sign-in as one to the account's own calls does.
   const counted = { ...deps, request: refusingRequest(deps.request, deps.refused) };
-  playAccount ??= { people: playPeople(deps), creators: creatorStats(counted), credits: genexCredits(counted) };
+  playAccount ??= {
+    people: playPeople(deps),
+    creators: creatorStats(counted),
+    credits: genexCredits(counted),
+    // Save sends whole game files, so its upload waits longer than an avatar's.
+    library: assetLibrary({
+      ...counted,
+      upload: fixtureNativePolicy ? fixtureUpload : networkUpload(globalThis.fetch, LIBRARY_UPLOAD_TIMEOUT_MS),
+    }),
+  };
   return playAccount;
 }
 
@@ -983,13 +999,36 @@ function playManageFor(studio: StudioCore): PlayManage {
   return playManage;
 }
 
-/** Where a message's @ tags come from: Play's catalog, the Genex account and git (a fixture's stand-ins). */
+/** The person's genex.games library joined with a game's files: Save, Share and Add for the Assets tab. */
+function librarySharingFor(studio: StudioCore): LibrarySharing {
+  gameLibrary ??= librarySharing({
+    library: () => playAccountFor(studio).library,
+    // Add and Save write into the game: only a game this launch's project policy allows.
+    gameDir: async (project) => {
+      const dir = studio.games.dirFor(project);
+      await studio.assertProjectAllowed(dir);
+      return dir;
+    },
+    webGame: async (project) => !(await studio.games.list()).find((game) => game.name === project)?.engine,
+    assets: (project) => studio.projectAssets(project),
+    readFile: (dir, file, maxBytes) => readAssetPreview(dir, file, [], maxBytes),
+    manifest: (slug) => playCatalogFor(studio).assetManifest(slug),
+    // A fixture launch never reaches the network: its downloads are the fixture's own files.
+    download: fixtureNativePolicy ? fixtureDownload : networkDownload(globalThis.fetch),
+    vendorModule: vendorAssetModule,
+  });
+  return gameLibrary;
+}
+
+/** Where a message's @ tags come from: Play's catalog, the Genex account, its library and git (a fixture's stand-ins). */
 function mentionSourcesFor(core: () => StudioCore): MentionSources {
   return {
     world: (slug) => playCatalogFor(core()).world(slug),
     me: async () => (await playAccountFor(core()).people.me())?.id ?? null,
     clone: fixtureNativePolicy ? fixtureClone : gitCloneCode,
     assetManifest: (slug) => playCatalogFor(core()).assetManifest(slug),
+    addFromLibrary: async (project, generationId) =>
+      (await librarySharingFor(core()).add(project, { generationId })).files,
   };
 }
 
@@ -1431,6 +1470,8 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
     web: playOrigin.web,
     share: popShareMenu,
   });
+  const { library } = playAccountFor(studio);
+  registerAssetLibraryIpc(handle, { library, sharing: librarySharingFor(studio) });
   registerNotificationsIpc(handle, {
     notifications: { isSupported: () => Notification.isSupported(), create: (options) => new Notification(options) },
     window: () => window,

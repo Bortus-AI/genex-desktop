@@ -34,6 +34,7 @@ function game(slug: string, remixOff = false): PlayGame {
     online: null,
     author: { id: "owner", name: "Owner", imageUrl: null },
     remixable: !remixOff,
+    assetKind: null,
     curation: { ...CURATION, remixOff },
   };
 }
@@ -154,6 +155,8 @@ describe("Play card menu: the store's manage", () => {
         playOpen: async () => {},
         playClose: async () => {},
         playRemix: async (slug) => slug,
+        assetLibrary: async () => ({ assets: [], nextCursor: null }),
+        playCatalog: async () => [],
         playManage: (gameId, change) => {
           changes.push({ gameId, change });
           return answer();

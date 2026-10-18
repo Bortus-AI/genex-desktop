@@ -74,10 +74,12 @@ export const isFixtureAccount = (value: unknown): value is FixtureAccount =>
 
 /**
  * The fixture account a launch signs in as: the one `STUDIO_FIXTURE_GENEX_ACCOUNT` names, else the
- * genex-terms fixture's own, else none.
+ * genex-terms fixture's own, the full account for the asset-library fixture (its library is the
+ * account's), else none.
  */
 export function launchFixtureAccount(named: unknown, fixture: string | null | undefined): FixtureAccount | null {
   if (isFixtureAccount(named)) return named;
+  if (fixture === FixtureName.AssetLibrary) return FixtureAccount.Full;
   return fixture === FixtureName.GenexTerms ? FixtureAccount.Terms : null;
 }
 

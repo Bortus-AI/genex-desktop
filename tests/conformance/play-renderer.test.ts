@@ -135,6 +135,7 @@ function game(slug: string, overrides: Partial<PlayGame> = {}): PlayGame {
     online: null,
     author: { id: null, name: "Author", imageUrl: null },
     remixable: false,
+    assetKind: null,
     ...overrides,
   };
 }
@@ -198,6 +199,8 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
       calls.remix.push(slug);
       return handlers.playRemix ? handlers.playRemix(slug) : Promise.resolve(`${slug}-copy`);
     },
+    assetLibrary: () => Promise.resolve({ assets: [], nextCursor: null }),
+    playCatalog: () => Promise.resolve([]),
     playManage: (gameId, change) => {
       calls.manage.push({ gameId, change });
       return handlers.playManage

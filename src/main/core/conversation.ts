@@ -65,6 +65,7 @@ const OFFLINE_SOURCES: MentionSources = {
   me: async () => null,
   clone: () => Promise.reject(new Error("offline")),
   assetManifest: () => Promise.reject(new Error("offline")),
+  addFromLibrary: () => Promise.reject(new Error("offline")),
 };
 
 /** Which build `show_build` and `land_build` mean when the coordinator names none: the run's own. */
@@ -365,6 +366,7 @@ export class ConversationService {
     const games = await this.#core.games.list();
     const game = games.find((entry) => entry.name === project);
     const tagTarget: MentionTarget = {
+      project,
       gameDir: this.#core.games.dirFor(project),
       webGame: !game?.engine,
       libraryDir: async (name) => (name === project ? null : (games.find((entry) => entry.name === name)?.dir ?? null)),
