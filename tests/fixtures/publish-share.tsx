@@ -8,6 +8,8 @@
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import manifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
+import { initializeAppearance, updateAppearance } from "../../src/renderer/appearance/store.ts";
+import { AppearanceMode } from "../../src/renderer/appearance/themes.ts";
 import { GenexPublishDialog } from "../../src/renderer/panels/plugins/genex/GenexPublish.tsx";
 import { studio } from "../../src/renderer/state/studio.ts";
 import {
@@ -138,6 +140,7 @@ fake.stub("assetShare", async (_game, items) => {
   });
 });
 window.studio = fake.api;
+initializeAppearance();
 const genex = { manifest, source: "bundled", enabled: true, removed: false, state: "enabled" } as unknown as PluginInfo;
 
 /** The outcome line: how it went, its words (without its button's) and its button's, if any. */
@@ -178,7 +181,8 @@ function sample() {
 
 /** Open the dialog in `theme`, signed in or not, on a game that is not online yet. */
 async function open(options: { theme?: "dark" | "light"; signedIn?: boolean; mode?: "live" | "misses" } = {}) {
-  document.documentElement.dataset.theme = options.theme ?? "dark";
+  const mode = options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark;
+  updateAppearance((appearance) => ({ ...appearance, mode }));
   shareMode = options.mode ?? "live";
   scenario = base;
   shares.length = 0;
