@@ -419,6 +419,14 @@ describe("a game's Save, Share and Add when things overlap or break", () => {
     assert.deepEqual(outcomes[1], { file: lantern, miss: ShareMiss.Failed });
   });
 
+  it("refuses to send a file whose type genex.games does not take, before reading it", async () => {
+    const file = "assets/notes.fbx";
+    const game = await gameRig(root, [asset(file, { source: "imported", kind: "model" })]);
+    await assert.rejects(game.sharing.save("g", [file], true), /genex.games doesn't take/);
+    assert.deepEqual(game.reads, []);
+    assert.equal(game.routes.includes(LibraryRoute.Import), false);
+  });
+
   it("neither reads, sends, downloads nor writes for a game the launch's policy refuses", async () => {
     const file = "assets/refused.png";
     const game = await gameRig(root, [asset(file, { source: "imported" })], FixtureAccount.Full, { refused: true });

@@ -56,6 +56,7 @@ const MESSAGE = {
   notFound: "That asset isn't in your library.",
   noFile: "genex.games has no file for that asset.",
   notWebGame: "Code assets are for web games.",
+  notSendable: "genex.games doesn't take files of that type.",
 } as const;
 
 /** The library has no such generation (deleted, or never this account's): nothing to add. */
@@ -267,6 +268,8 @@ async function saveFiles(
 
 /** A game file sent to the library, saved under what it was made from (else its name); its generation. */
 async function sendFile(deps: LibrarySharingDeps, dir: string, asset: ProjectAsset): Promise<string> {
+  // Checked before the file is read: genex.games would refuse it after the upload.
+  if (!isSendable(asset.file)) throw new Error(MESSAGE.notSendable);
   const read = await deps.readFile(dir, asset.file, LIBRARY_FILE_MAX_BYTES);
   const filename = asset.file.split("/").at(-1) ?? asset.file;
   const title = asset.prompt ?? filename;
