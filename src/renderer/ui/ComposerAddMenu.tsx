@@ -29,7 +29,7 @@ import { ComposerTip, PickerLabel, PickerSeparator, PickerSwitch, pickerItem, pi
 import { Shortcut } from "./Shortcut.tsx";
 import { Icon } from "./icons.tsx";
 import { PluginIcon } from "./PluginIcon.tsx";
-import { PLAN_MODE_WORDS, SKILLS_WORDS } from "../words.ts";
+import { PLAN_MODE_WORDS, PLUGINS_WORDS, SKILLS_WORDS } from "../words.ts";
 import { RovingAxis, rovingTarget } from "./roving-focus.ts";
 import { type MentionDoc, MentionKind, pluginDoc } from "../../shared/prompt-mention.ts";
 import { AssetScope } from "../../shared/asset-library.ts";
@@ -304,8 +304,36 @@ function useMentionPicker(input: {
   return { groups, matches, shape, columns, covers, state, rows: shownRows, libraryReading, filter, setFilter };
 }
 
+/** What a row says beside its picture: its name, then a status, else where its switch applies. */
+function EntryWords({ entry, id, scope }: { entry: AddMenuEntry; id: string; scope: string | undefined }) {
+  const action = entry.status?.action;
+  return (
+    <>
+      <PluginIcon name={entry.name} src={entry.icon} size="menu" />
+      {/* The status gives up its room first; the name ellipsizes only once that is gone. */}
+      <span className="min-w-0 shrink-[0.01] truncate">{entry.name}</span>
+      {entry.status?.text && (
+        <span id={`${id}-status`} className="picker-desc">
+          {action && <span className="picker-dot" aria-hidden />}
+          {entry.status.text}
+        </span>
+      )}
+      {scope && (
+        <span id={scope} className="picker-desc" data-plugin-scope={entry.scope}>
+          {SKILLS_WORDS.allGames}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A row's name spans the space its controls leave, top to bottom, so all of it takes the click. */
+const ENTRY_NAME = "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 self-stretch text-left";
+
 /**
- * A plugin or server row: its name, a status only when something needs doing, and its switch. Its
+ * A plugin or server row: its name, a status only when something needs doing, and its switch. A
+ * plugin's name opens its page, and Settings shows beside the switch while the row is hovered or
+ * holds focus (the pointer's way there; keys take the name); a server's name works its switch. Its
  * ids are by place, not by name: a server's id is the person's own.
  */
 function EntryRow({
@@ -323,23 +351,37 @@ function EntryRow({
   const action = entry.status?.action;
   // Where the switch applies, while no status needs the space: a plugin is on or off for every game.
   const scope = !entry.status && entry.scope === EntryScope.AllGames ? `${id}-scope` : undefined;
+  const words = <EntryWords entry={entry} id={id} scope={scope} />;
   return (
     <div className={`${pickerItem} hover:bg-control-hover`} data-plugin-row={entry.id}>
-      <label htmlFor={id} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 self-stretch">
-        <PluginIcon name={entry.name} src={entry.icon} size="menu" />
-        <span className="shrink-0">{entry.name}</span>
-        {entry.status?.text && (
-          <span className="picker-desc">
-            {action && <span className="picker-dot" aria-hidden />}
-            {entry.status.text}
-          </span>
-        )}
-        {scope && (
-          <span id={scope} className="picker-desc" data-plugin-scope={entry.scope}>
-            {SKILLS_WORDS.allGames}
-          </span>
-        )}
-      </label>
+      {entry.open ? (
+        <button
+          type="button"
+          className={ENTRY_NAME}
+          data-plugin-open
+          aria-label={PLUGINS_WORDS.menuRow.openLabel(entry.name)}
+          aria-describedby={entry.status?.text ? `${id}-status` : undefined}
+          onClick={entry.open}
+        >
+          {words}
+        </button>
+      ) : (
+        <label htmlFor={id} className={ENTRY_NAME}>
+          {words}
+        </label>
+      )}
+      {entry.settings && (
+        <button
+          type="button"
+          className="picker-settings"
+          data-plugin-settings
+          tabIndex={-1}
+          aria-label={PLUGINS_WORDS.menuRow.settingsLabel(entry.name)}
+          onClick={entry.settings}
+        >
+          {PLUGINS_WORDS.menuRow.settings}
+        </button>
+      )}
       {action && (
         <button
           type="button"
