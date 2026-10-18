@@ -554,7 +554,7 @@ function assetReads(
   now: () => number,
 ) {
   const inFlight = new Map<string, Promise<void>>();
-  /** First reads of the library so far: an answer for a list a newer first read replaced lands nowhere. */
+  /** First reads of the library so far: a further page asked before a newer first read lands nowhere. */
   let libraryReads = 0;
   const once = (key: string, read: () => Promise<void>): Promise<void> => {
     const running = inFlight.get(key);
@@ -564,17 +564,20 @@ function assetReads(
     return started;
   };
 
+  /**
+   * One library read. Its answer lands only while the list is still the one it was asked for (a
+   * list the person turned away from is not shown under another's switchers), and a further page
+   * only while no first read has started since.
+   */
   const readLibrary = async (key: LibraryKey, more: boolean): Promise<void> => {
     const cursor = more ? store.getState().library.nextCursor : null;
-    if (!more) libraryReads += 1;
     const generation = libraryReads;
-    const current = () => generation === libraryReads;
-    set((state) => libraryRequested(state, key, more));
+    const current = (state: PlayState) => sameLibraryKey(state.library, key) && (!more || generation === libraryReads);
     try {
       const page = await api.assetLibrary(libraryQuery(key, cursor));
-      set((state) => (current() ? libraryLoaded(state, key, page, more, now()) : state));
+      set((state) => (current(state) ? libraryLoaded(state, key, page, more, now()) : state));
     } catch {
-      set((state) => (current() ? libraryFailed(state, more) : state));
+      set((state) => (current(state) ? libraryFailed(state, more) : state));
     }
   };
 
@@ -585,6 +588,10 @@ function assetReads(
     if (more && (!same || !feed.nextCursor || feed.loadingMore)) return Promise.resolve();
     const fresh = same && feed.status === FeedStatus.Ready && now() - feed.at < FEED_STALE_MS;
     if (!more && fresh && !options.force) return Promise.resolve();
+    if (!more) libraryReads += 1;
+    // The list takes the key before a read is joined: coming back to a list whose read is still on
+    // its way shows that list again, and its answer lands there.
+    set((state) => libraryRequested(state, key, more));
     return once(`library:${key.kind}:${key.query.trim()}:${more}`, () => readLibrary(key, more));
   };
 

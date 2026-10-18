@@ -277,6 +277,27 @@ describe("Assets shelf: the person's library, page by page", () => {
     );
   });
 
+  it("shows the list asked for last when it comes back to one still on its way", async () => {
+    const fake = fakeStudioApi();
+    const answers: Array<(page: LibraryPage) => void> = [];
+    fake.stub("assetLibrary", () => new Promise<LibraryPage>((resolve) => answers.push(resolve)));
+    const play = createPlayStore(fake.api, null, () => 1_000);
+    const sounds = { kind: KindChoice.Sound, query: "" };
+    const all = play.loadLibrary(key);
+    const sound = play.loadLibrary(sounds);
+    const back = play.loadLibrary(key);
+    answers[1]?.(page([asset({ id: "gen-snd-0001", kind: LibraryKind.Sound })]));
+    answers[0]?.(page([asset({ id: "gen-all-0001" })]));
+    await Promise.all([all, sound, back]);
+    const library = play.getState().library;
+    assert.equal(library.kind, KindChoice.All);
+    assert.equal(library.status, FeedStatus.Ready);
+    assert.deepEqual(
+      library.assets.map((a) => a.id),
+      ["gen-all-0001"],
+    );
+  });
+
   it("says an empty list failed, keeps a list's assets when a read fails, and says a further page failed", async () => {
     const fake = fakeStudioApi();
     let fail = true;
