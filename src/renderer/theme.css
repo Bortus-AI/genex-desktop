@@ -2,6 +2,7 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "tw-animate-css";
 @import "./styles/icons.css";
+@import "./styles/asset-library.css";
 @import "./styles/covers.css";
 @import "./styles/empty-states.css";
 @import "./styles/onboarding.css";

@@ -1,7 +1,9 @@
 /**
  * The asset library in a fixture launch: a few made-up generations in the fixture account's library,
  * answered in the same shapes genex.games answers them, so Save, Share, stop sharing, search and Add
- * can be checked with no socket. Saves and shares last the launch; signed out answers 401.
+ * can be checked with no socket. Saves and shares last the launch; signed out answers 401. A share
+ * named with "refuse" is refused by the check; one named with "slow" is still being checked when it
+ * answers, and is live by the next read.
  * Downloads are files made here: a one-triangle model, a short tone, a gradient picture.
  */
 import type { GalleryAnswer, GalleryRequest } from "../play/gallery.ts";
@@ -16,6 +18,9 @@ const FORBIDDEN = 403;
 const NOT_FOUND = 404;
 /** A share whose name has this word is refused, so the refusal can be seen. */
 const REFUSED_WORD = "refuse";
+/** A share whose name has this word is still being checked when it answers, and live by the next read. */
+const CHECKING_WORD = "slow";
+const ACCEPTED = 202;
 const FILE_HOST = "https://assets.genex.technology";
 
 /** One made-up generation. */
@@ -214,6 +219,10 @@ function share(row: FixtureGeneration, body: unknown): GalleryAnswer {
     };
   }
   if (row.provider === "upload") return refused(BAD_REQUEST, "upload_not_shareable");
+  if (name.toLowerCase().includes(CHECKING_WORD)) {
+    row.shared = { projectId: `fxproj-${slugOf(name)}`, slug: slugOf(name), status: "published" };
+    return { status: ACCEPTED, body: { status: "pending" } };
+  }
   // genex.games puts a page it took off Play back, and answers the page it has: one page per asset.
   if (row.shared) row.shared.status = "published";
   if (row.shared?.status === "published")
@@ -289,7 +298,7 @@ export function fixtureLibraryAnswer(route: string, init: Parameters<GalleryRequ
 }
 
 /** A one-triangle glTF binary in `hue`: the smallest model the canvas draws. */
-function triangleGlb(hue: number): Uint8Array {
+export function triangleGlb(hue: number): Uint8Array {
   const positions = new Float32Array([-0.5, 0, 0, 0.5, 0, 0, 0, 0.9, 0]);
   const bin = Buffer.from(positions.buffer);
   const color = [0.4 + 0.4 * Math.cos((hue * Math.PI) / 180), 0.5, 0.4 + 0.4 * Math.sin((hue * Math.PI) / 180), 1];
@@ -320,7 +329,7 @@ function triangleGlb(hue: number): Uint8Array {
 }
 
 /** Half a second of a soft tone as 16-bit mono WAV. */
-function toneWav(): Uint8Array {
+export function toneWav(): Uint8Array {
   const rate = 22050;
   const samples = rate / 2;
   const data = Buffer.alloc(samples * 2);

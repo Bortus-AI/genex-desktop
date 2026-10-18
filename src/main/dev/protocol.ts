@@ -107,14 +107,13 @@ const name = z
   .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,95}$/)
   .refine((s) => !s.includes(".."));
 const target = { selector, scope: selector.optional() };
+/** Keys held through a key press or a click. */
+const modifiers = z.array(z.enum(["Alt", "Control", "Meta", "Shift"])).max(4);
 const key = {
   surface,
   key: z.string().min(1).max(40),
   code: z.string().min(1).max(40),
-  modifiers: z
-    .array(z.enum(["Alt", "Control", "Meta", "Shift"]))
-    .max(4)
-    .default([]),
+  modifiers: modifiers.default([]),
 };
 const input = z.discriminatedUnion("type", [
   z.object({ type: z.enum(["tap", "down", "up"]), keys: z.array(z.string().max(40)).min(1).max(8) }).strict(),
@@ -149,7 +148,8 @@ export const operationSchema = z.discriminatedUnion("method", [
     scope: selector.optional(),
     limit: z.number().int().min(1).max(500).default(150),
   }),
-  operation(DevMethod.Click, target),
+  // `modifiers` holds keys through the click, as a Cmd-click picks a card among several.
+  operation(DevMethod.Click, { ...target, modifiers: modifiers.optional() }),
   operation(DevMethod.Type, { ...target, text: z.string().max(16000), replace: z.boolean().default(false) }),
   operation(DevMethod.Key, key),
   operation(DevMethod.Select, { ...target, value: z.string().max(1000) }),
