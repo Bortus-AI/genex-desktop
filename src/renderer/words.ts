@@ -1727,11 +1727,17 @@ export const TRANSCRIPT_WORDS = {
   engineSetUpAndLinked: (game: string | undefined, engine: string, project: string) =>
     `Set up ${project} for Genex · ${game ?? "This game"} now builds in ${engine}`,
   /** What Undo did: where the game builds now, and the project whose set-up it also took back. */
-  engineUndone: (game: string | undefined, restored: string | undefined, setUpUndone?: string) => {
+  engineUndone: (
+    game: string | undefined,
+    restored: string | undefined,
+    setUp: { undone?: string; kept?: string } = {},
+  ) => {
     const now = restored
       ? `Undone. ${game ?? "This game"} builds in ${restored} again`
       : `Undone. ${game ?? "This game"} is a web game again`;
-    return setUpUndone ? `${now}, and ${setUpUndone} is no longer set up for Genex.` : `${now}.`;
+    if (setUp.undone) return `${now}, and ${setUp.undone} is no longer set up for Genex.`;
+    if (setUp.kept) return `${now}. ${setUp.kept} stays set up for Genex: another game uses it.`;
+    return `${now}.`;
   },
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",

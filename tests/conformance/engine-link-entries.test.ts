@@ -72,6 +72,12 @@ describe("a game's engine link in its chat", () => {
     assert.ok(back?.kind === EntryKind.Action);
     assert.equal(back.engineLink, undefined);
     assert.equal(back.outcome, "Undone. Fog Valley is a web game again, and Valley is no longer set up for Genex.");
+    const [kept] = links(toEntries([linked(1, { setUp: true }), undone(2, { linkedAt: at, setUpKept: "Valley" })]));
+    assert.ok(kept?.kind === EntryKind.Action);
+    assert.equal(
+      kept.outcome,
+      "Undone. Fog Valley is a web game again. Valley stays set up for Genex: another game uses it.",
+    );
   });
 
   it("keeps Undo on the newest link only", () => {

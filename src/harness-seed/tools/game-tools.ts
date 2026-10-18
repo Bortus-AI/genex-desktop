@@ -70,21 +70,12 @@ const IN_SCOPE_WORDS = "what this build delivers, each item in the user's words"
 const CUT_WORDS =
   "what a game like this often has that this build will not (a reference is a look bar, not a feature list)";
 
-/** What a launch's hours are: the user's own number, read only with Loop off. */
+/**
+ * A launch's hours, for a Loop an Auto chat was asked for in words (delegated-turn.ts `autoLaunchFor`
+ * bridges this tool only while it has them); with Loop on the composer's hours win.
+ */
 const LOOP_HOURS_WORDS =
-  "Loop off only: the hours the user named for this Loop; leave it out when they said until done or named none. With Loop on, the composer's hours win.";
-
-/** The commission of a Loop asked for in words with Loop off: the hours named, or none for until done. */
-function loopAskedInWords(hours: unknown): AnyRecord {
-  const named = Number(hours);
-  return named > 0 ? { hours: named } : {};
-}
-
-/** The commission a launch runs under: the composer's, else with Loop off the Loop asked for in words; none for a Loop with its own hours. */
-function launchCommission(args: AnyRecord, ctx: ToolCtx): AnyRecord | null {
-  if (ctx.autopilot) return ctx.autopilot;
-  return ctx.loop ? null : loopAskedInWords(args.hours);
-}
+  "Loop off only: the hours the user named, digits only (3, 1.5); leave it out when they said until done or named no time. With Loop on, the composer's hours win.";
 
 /** A launch's in-scope and cut lists as the run carries them to its scope (chat-dispatch.ts `intakeRun`); none when unnamed. */
 function scopeArgs(args: AnyRecord): { inScope?: string[]; cut?: string[] } {
@@ -411,7 +402,7 @@ export const tools: HarnessTool[] = [
   {
     name: "start_autopilot",
     description:
-      "Launch a build (a Loop). With Loop on: only when the ask is to build the game or change it substantially, never for research, a plan or a small change. With Loop off: only when the user asks in words for a Loop, with the hours they named. Know first what the game is and how it should look; when nobody said, ask_user instead. The build runs as the launch rules say for this project; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
+      "Launch a build — only when Loop is on and the ask is to build the game or change it substantially, never for research, a plan or a small change. Know first what the game is and how it should look; when nobody said, ask_user instead. The build runs as the launch rules say for this project; it starts from this folder as you leave it when your reply ends. Call it once, last, then recap.",
     parameters: {
       type: "object",
       properties: {
@@ -427,9 +418,13 @@ export const tools: HarnessTool[] = [
       required: ["goal", "direction"],
     },
     async execute(args, ctx) {
-      const autopilot = launchCommission(args, ctx);
+      const autopilot = ctx.autopilot;
       if (!autopilot) {
-        return { ok: false, content: "Loop is on with its own hours: start it with start_unattended_run." };
+        return {
+          ok: false,
+          content:
+            "No hours are set in the composer. Ask the user to pick hours there (∞ until satisfied, or a number of hours), then call this again.",
+        };
       }
       const frames = attachedFrames(autopilot.frames);
       const kind = referenceKind(frames);

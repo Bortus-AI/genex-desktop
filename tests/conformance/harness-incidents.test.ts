@@ -3957,6 +3957,15 @@ describe("a Loop asked for in words with Mode on Auto (auto-loop)", () => {
     assert.notEqual(run?.budgets?.untilSatisfied, true);
   });
 
+  it('auto-loop. hours sent as text ("2h", as engines that bridge every field as text send them) still cap the run', async () => {
+    const { rig, thread, chat } = await autoChat({ ...ask, hours: "2h" });
+    await rig.core.sendUserMessage("Start a 2h Loop", { thread, engine: "vendor" });
+    const run = await registered(rig, thread);
+    assert.equal(run?.budgets?.wallClockMs, 2 * HOUR_MS);
+    const launch = chat[0]?.interviewTools?.find((tool) => tool.name === "start_autopilot");
+    assert.equal(launch?.onlyWhenAsked, true, "called only when asked: messages still join the turn");
+  });
+
   it('auto-loop. a Loop "until it\'s done" in Auto: no hours named, the run goes until what was asked is verified', async () => {
     const { rig, thread } = await autoChat(ask);
     await rig.core.sendUserMessage("Start a Loop and don't stop until it's really AAA", { thread, engine: "vendor" });

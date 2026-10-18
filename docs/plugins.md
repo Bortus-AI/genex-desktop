@@ -2294,8 +2294,9 @@ once the link has changed; it restores the project the link replaced, or leaves 
 game that stays unlinked (`{unlinkedAt}`), and appends `engine_link_undone`. Undo of a `setUp` link
 first runs the plugin's `undo-setup` action (`EngineHostAction.UndoSetUp`) with `{project, ifSetUp:
 true}` and no question; a project no longer set up answers nothing, and a refusal (the project open
-in Unreal) keeps the link and shows its reason (`setUpUndone` names the project when it worked). A refused link
-changes nothing on disk.
+in Unreal) keeps the link and shows its reason (`setUpUndone` names the project when it worked).
+While another game's current link names the same project (by real path), the set-up stays and only
+the link is undone (no `setUpUndone`). A refused link changes nothing on disk.
 
 A call to a `game-engine` plugin's MCP server never links a game: a game takes an engine project
 only through the person (Use in this game) or a tool that declares `makes` (`use-project`,
@@ -2321,7 +2322,8 @@ installed Xcode in range is the one to select instead). `get-xcode` opens only t
 Apple's downloads page (`{step: downloads}`) or the Xcode app the probes found. The agent shows it again with `unreal__show-steps` when C++ would
 help, links a game to a project with `unreal__use-project` (a set-up project by name, any by its
 `.uproject` path: one not set up yet is set up first, unasked, and linked with `setUp`; while Unreal
-has it open the call is refused with that reason and nothing changes), and makes a game's
+has it open, or when setup would switch a project from an older Unreal to the supported one (the
+panel's Set up warns first), the call is refused with that reason and nothing changes), and makes a game's
 own project with `unreal__new-game {template, variant?, name}` (`Combat` with the third-person
 template only): a new project exactly as the panel makes it from the open game (in its folder as
 `unreal/`, set up, linked), then opened in Unreal, with the setup card offered while a step is

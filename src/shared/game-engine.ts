@@ -253,6 +253,8 @@ export type EngineLinkUndonePayload = {
   linkedAt?: string;
   restored?: string;
   setUpUndone?: string;
+  /** The project whose set-up Undo left in place, by name: another game's link still uses it. */
+  setUpKept?: string;
 };
 
 /**

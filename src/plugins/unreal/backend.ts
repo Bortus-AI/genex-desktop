@@ -246,6 +246,8 @@ const MESSAGE = {
   SetUpOpen: (name: string) =>
     `${name} is open in Unreal Editor, so Genex can't set it up yet (Unreal rewrites its settings when it closes). Ask the user to quit Unreal Editor, then call unreal__use-project again.`,
   SetUpRefused: (name: string, why: string) => `Genex couldn't set up ${name}: ${why}`,
+  SetUpSwitchesEngine: (name: string, from: string, to: string) =>
+    `${name} was made in Unreal ${from}, and switching it to ${to} is the user's choice. Ask the user to press Set up in the Unreal panel, then call unreal__use-project again.`,
   StepsShown: "The Unreal setup card is in the chat.",
   InstallCardShown: (version: string) =>
     `The Unreal setup card is in the chat, and the Unreal button is above the game: it gets Epic's launcher, and the user installs Unreal ${version} in it (only they can sign in to Epic). Tell them in one line, then end your reply; the chat tells you when Unreal is installed.`,
@@ -951,10 +953,14 @@ async function linkGame(deps: UnrealBackendDeps, file: string, context: PluginCo
 
 /**
  * Sets a project up for the agent's `use-project` as the panel's Set up does, unasked (the chat's
- * Undo takes it back with the link). A refusal says why in one line the agent can act on.
+ * Undo takes it back with the link). A project from an older Unreal is left to the user, whose
+ * panel warns before it switches the engine: nothing changes. A refusal says why in one line the
+ * agent can act on.
  */
 async function setUpForLink(file: string, options: SetupOptions, name: string): Promise<ProjectState> {
   try {
+    const { engine } = await planSetup(file, options);
+    if (engine) throw new Error(MESSAGE.SetUpSwitchesEngine(name, engine.from, engine.to));
     return await setUpProject(file, options);
   } catch (error) {
     if (!(error instanceof SetupError)) throw error;

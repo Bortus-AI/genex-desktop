@@ -289,6 +289,37 @@ test("a link without set-up never asks for one back; one that set up the project
   assert.deepEqual(asked, [project], "the earlier link set nothing up");
 });
 
+test("Undo of a set-up link keeps the set-up while another game's link names the project, and says only the link went", async () => {
+  const asked: string[] = [];
+  const w = await world(NOW, { undoSetUp: async (_id, _game, project) => void asked.push(project) });
+  const valley = await w.makeGame("valley");
+  const lantern = await w.makeGame("lantern");
+  const project = await w.makeProject("Valley");
+  const setUp = await w.links.link(PLUGIN, w.binding("valley", "t1"), { project, setUp: true });
+  await w.links.link(PLUGIN, w.binding("lantern", "t2"), { project });
+  await w.links.undo(PLUGIN, "valley", setUp.linkedAt, "t1");
+  assert.deepEqual(asked, [], "the other game still builds in it");
+  assert.equal(await readEngineBinding(valley, ENGINES), undefined, "the link itself is undone");
+  assert.equal((await readEngineBinding(lantern, ENGINES))?.project, project);
+  const undone = customEvent(envelope(w.appended[2].record), CustomEvent.EngineLinkUndone);
+  assert.equal(undone?.setUpUndone, undefined, "the line never says the set-up went");
+  assert.equal(undone?.setUpKept, "Valley", "it says the set-up stays");
+});
+
+test("Undo of a set-up link takes the set-up back once no other game's current link names the project", async () => {
+  const asked: string[] = [];
+  const w = await world(NOW, { undoSetUp: async (_id, _game, project) => void asked.push(project) });
+  await w.makeGame("valley");
+  await w.makeGame("lantern");
+  const project = await w.makeProject("Valley");
+  const setUp = await w.links.link(PLUGIN, w.binding("valley", "t1"), { project, setUp: true });
+  await w.links.link(PLUGIN, w.binding("lantern", "t2"), { project });
+  w.tick(LATER);
+  await w.links.link(PLUGIN, w.binding("lantern", "t2"), { project: await w.makeProject("Mist") });
+  await w.links.undo(PLUGIN, "valley", setUp.linkedAt, "t1");
+  assert.deepEqual(asked, [project], "a link another game replaced is no longer its");
+});
+
 test("the studio's Undo of a set-up link runs the plugin's undo-setup first, with no question", async () => {
   const lite = await coreLite();
   try {

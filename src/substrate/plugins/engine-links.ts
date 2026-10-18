@@ -7,9 +7,11 @@
  * the UI and the harness (`substrate/game-engine-binding.ts`). A link is made by real path, the
  * chat it came from (the game's own chat for a link made in the panel) gets one line with Undo, and
  * a refused link changes nothing on disk. A link that also set its project up (`setUp`) keeps that
- * in its record, and its Undo has the plugin take the set-up back first (`undoSetUp`).
+ * in its record, and its Undo has the plugin take the set-up back first (`undoSetUp`), unless
+ * another game's current link names the same project: that game builds in it too, so only the link
+ * is undone.
  */
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { CustomEvent, type CustomEventRecord, customEventData } from "../../shared/custom-events.ts";
 import {
@@ -94,7 +96,8 @@ function gameOf(project: string | undefined): string {
   return project;
 }
 
-const linkFile = (root: string, game: string) => path.join(root, ENGINE_LINKS_FOLDER, `${game}.json`);
+const LINK_FILE_EXTENSION = ".json";
+const linkFile = (root: string, game: string) => path.join(root, ENGINE_LINKS_FOLDER, `${game}${LINK_FILE_EXTENSION}`);
 
 /** A catalog of the one engine a plugin declares: what its own link records may name. */
 const own = (engine: EngineDeclaration): EngineCatalog => new Map([[engine.id, engine]]);
@@ -247,17 +250,49 @@ const newRecord = (link: EngineBinding, previous: EngineBinding | undefined, set
   ...(setUp ? { setUp } : {}),
 });
 
-/** Has the plugin take back the set-up the game's current link made; false for a link that set nothing up. */
+/** The games other than `game` the plugin keeps a link file for, by the id each file is named after. */
+async function otherGames(root: string, game: string): Promise<string[]> {
+  const files = await readdir(path.join(root, ENGINE_LINKS_FOLDER)).catch(() => []);
+  const ids = files
+    .filter((file) => file.endsWith(LINK_FILE_EXTENSION))
+    .map((file) => file.slice(0, -LINK_FILE_EXTENSION.length));
+  return ids.filter((id) => id !== game && GAME_ID.test(id));
+}
+
+/**
+ * Whether another game's current link names `project` (both real paths, as links are stored): that
+ * game builds in it too, so its set-up stays.
+ */
+async function linkedElsewhere(
+  root: string,
+  game: string,
+  project: string,
+  engine: EngineDeclaration,
+): Promise<boolean> {
+  for (const other of await otherGames(root, game))
+    if ((await readRecord(root, other, engine))?.link?.project === project) return true;
+  return false;
+}
+
+/** What Undo did with the set-up a link made: took it back, or kept it for another game's link. */
+const SetUpUndo = { Undone: "undone", Kept: "kept" } as const;
+type SetUpUndo = (typeof SetUpUndo)[keyof typeof SetUpUndo];
+
+/**
+ * Has the plugin take back the set-up the game's current link made; null for a link that set
+ * nothing up, and `Kept` for a project another game's current link names, whose set-up stays.
+ */
 async function takeBackSetUp(
   deps: EngineLinkDeps,
   pluginId: string,
   game: string,
-  current: LinkRecord,
-): Promise<boolean> {
-  if (!current.setUp || !current.link) return false;
+  { current, engine }: { current: LinkRecord; engine: EngineDeclaration },
+): Promise<SetUpUndo | null> {
+  if (!current.setUp || !current.link) return null;
+  if (await linkedElsewhere(deps.root(pluginId), game, current.link.project, engine)) return SetUpUndo.Kept;
   if (!deps.undoSetUp) throw new Error(MESSAGE.NoSetUpUndo);
   await deps.undoSetUp(pluginId, game, current.link.project);
-  return true;
+  return SetUpUndo.Undone;
 }
 
 /** The chat's record that Undo took the link made at `linkedAt` back, with what it restored and whose set-up it took back. */
@@ -265,7 +300,7 @@ function undoneRecord(
   pluginId: string,
   game: string,
   linkedAt: string,
-  names: { restored?: string; setUpUndone?: string },
+  names: { restored?: string; setUpUndone?: string; setUpKept?: string },
 ): CustomEventRecord {
   return customEventData(CustomEvent.EngineLinkUndone, {
     pluginId,
@@ -273,6 +308,7 @@ function undoneRecord(
     linkedAt,
     ...(names.restored ? { restored: names.restored } : {}),
     ...(names.setUpUndone ? { setUpUndone: names.setUpUndone } : {}),
+    ...(names.setUpKept ? { setUpKept: names.setUpKept } : {}),
   });
 }
 
@@ -340,8 +376,8 @@ export function createEngineLinks(deps: EngineLinkDeps) {
   /**
    * Takes back the link made at `linkedAt`: the project it replaced comes back (when it still
    * holds), else the game is left with no link. A link that has changed since is refused. A link
-   * that set its project up has the plugin take that back first; when the plugin refuses, the link
-   * stays and its reason is thrown.
+   * that set its project up has the plugin take that back first, unless another game's current
+   * link names that project; when the plugin refuses, the link stays and its reason is thrown.
    */
   async function undo(pluginId: string, project: string, linkedAt: string, threadId?: string): Promise<void> {
     const game = gameOf(project);
@@ -350,13 +386,15 @@ export function createEngineLinks(deps: EngineLinkDeps) {
     if (!engine || !current?.link || current.link.linkedAt !== linkedAt) throw new EngineLinkStale();
     const name = (binding: EngineBinding | undefined) =>
       binding ? projectName(binding.project, engine.projectFiles) : undefined;
-    const setUpUndone = (await takeBackSetUp(deps, pluginId, game, current)) ? name(current.link) : undefined;
+    const setUp = await takeBackSetUp(deps, pluginId, game, { current, engine });
+    const setUpName = setUp ? name(current.link) : undefined;
+    const setUpNames = setUp === SetUpUndo.Kept ? { setUpKept: setUpName } : { setUpUndone: setUpName };
     const restored = await holding(current.previous, engine);
     await restoreEngineBinding(deps.gameDir(game), restored);
     const next: LinkRecord = restored ? { link: restored } : { unlinkedAt: deps.now().toISOString() };
     await writeRecord(deps.root(pluginId), game, next);
     if (threadId)
-      await deps.append(undoneRecord(pluginId, game, linkedAt, { restored: name(restored), setUpUndone }), threadId);
+      await deps.append(undoneRecord(pluginId, game, linkedAt, { restored: name(restored), ...setUpNames }), threadId);
     deps.changed(game);
   }
 

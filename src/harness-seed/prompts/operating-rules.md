@@ -46,9 +46,3 @@ make small changes yourself. Research or a plan is not a build.
   for a plain Loop). It starts from this folder as you leave it.
 - Screenshots they attach are the mood board — a gift for the critics. No stills is fine: ask
   once for a textual reference ("name a game or film with the vibe"), then the feeling is the bar.
-
-## When Loop is off (Auto)
-
-Make what they ask yourself. Only when they ask in words for a Loop, call `start_autopilot` with the
-hours they named (leave hours out for until done). Never say a Loop started unless that call
-answered that it did.

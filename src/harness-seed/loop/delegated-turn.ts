@@ -17,6 +17,7 @@ import {
   resolveChatProject,
 } from "./chat-session.ts";
 import type { LaunchGrant } from "./launch-prompts.ts";
+import { AUTO_LAUNCH_WORDS } from "./auto-loop-prompts.ts";
 // The launch tools double as a Loop chat's bridged tools (MCP for Claude, the bridge command for
 // Codex) — one definition, two transports.
 import { tools as launchToolset } from "../tools/game-tools.ts";
@@ -830,12 +831,15 @@ function autoLaunchFor(options: DelegatedOptions, launchTool: HarnessTool | null
   const loopOff = !launchTool && !options.autopilot && !options.loop;
   const chatsOwnTurn = !options.afterLoopRun && !options.runId && !options.followupOf;
   if (!loopOff || !chatsOwnTurn) return null;
-  return launchToolset.find((t) => t.name === "start_autopilot") ?? null;
+  const launch = launchToolset.find((t) => t.name === "start_autopilot");
+  // A launch kept from before hours could reach it would turn every "3h Loop" into one until done.
+  return launch?.parameters?.properties?.hours ? launch : null;
 }
 
 /** Auto: the Loop the user asked for in words, for the hours they named (none: until done), on this message's pictures. */
 function loopAskedInWords(hours: unknown, stills: readonly DelegateImage[]): AnyRecord {
-  const named = Number(hours);
+  // Engines that bridge every field as text send "3", or "3h": the number it starts with.
+  const named = Number.parseFloat(String(hours ?? ""));
   return { ...(named > 0 ? { hours: named } : {}), ...(stills.length ? { frames: [...stills] } : {}) };
 }
 
@@ -1185,8 +1189,16 @@ function bridgedTools(launchTool: HarnessTool): StudioToolSpec[] {
 
 /** An Auto chat's: the Loop's launch, for a Loop asked for in words, and the engine question when it is asked. */
 function autoTools(handoff: Handoff): StudioToolSpec[] {
-  return [...(handoff.autoLaunch ? [bridged(handoff.autoLaunch)] : []), ...questionCard(handoff)];
+  const launch = handoff.autoLaunch ? [autoLaunchSpec(handoff.autoLaunch)] : [];
+  return [...launch, ...questionCard(handoff)];
 }
+
+/** The Loop start as an Auto chat is handed it: called only when asked, so messages still join the turn. */
+const autoLaunchSpec = (tool: HarnessTool): StudioToolSpec => ({
+  ...bridged(tool),
+  description: AUTO_LAUNCH_WORDS,
+  onlyWhenAsked: true,
+});
 
 /** The question card alone, for an Auto chat asked to choose its new game's engine. */
 function questionCard(handoff: Handoff): StudioToolSpec[] {

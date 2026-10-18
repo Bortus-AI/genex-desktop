@@ -1422,7 +1422,10 @@ function narrateEngineUndone(chat: ChatDraft, event: EventEnvelope): void {
   const line = undone?.linkedAt ? chat.engineLinks.get(undone.linkedAt) : undefined;
   if (!line) return;
   delete line.entry.engineLink;
-  line.entry.outcome = TRANSCRIPT_WORDS.engineUndone(line.title, undone?.restored, undone?.setUpUndone);
+  line.entry.outcome = TRANSCRIPT_WORDS.engineUndone(line.title, undone?.restored, {
+    undone: undone?.setUpUndone,
+    kept: undone?.setUpKept,
+  });
 }
 
 function narrateImprovement(chat: ChatDraft, event: EventEnvelope): void {
