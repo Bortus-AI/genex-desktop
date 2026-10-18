@@ -141,7 +141,7 @@ import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts
 import type { MentionSources } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
-import { wirePlayViewer } from "./play/viewer-view.ts";
+import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
 import { type PlayComments, playComments } from "./play/comments.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
@@ -1328,6 +1328,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   const handle = createIpcHandle(ipcMain, {
     fixture: fixtureNativePolicy,
     isStudioUi: isStudioWindow,
+    isPlayBar: isPlayBarPage,
     performance: performanceRecorder,
   });
   registerPerformanceIpc(handle, performanceRecorder);
@@ -1448,6 +1449,13 @@ async function main(): Promise<void> {
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */
 function isStudioWindow(event: { sender: unknown; senderFrame: unknown }): boolean {
   return event.sender === window?.webContents && event.senderFrame === window?.webContents.mainFrame;
+}
+
+/** Whether an IPC call came from Play's bar layer's own page, over a game in the studio window. */
+function isPlayBarPage(event: { sender: unknown; senderFrame: unknown }): boolean {
+  const bar = window && !window.isDestroyed() ? playViewsOf(window)?.bar() : null;
+  if (!bar || bar.webContents.isDestroyed()) return false;
+  return event.sender === bar.webContents && event.senderFrame === bar.webContents.mainFrame;
 }
 
 /** A Dock click with no window open: the studio, or the setup screen while the sandbox waits. */

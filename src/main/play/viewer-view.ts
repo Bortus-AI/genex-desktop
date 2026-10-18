@@ -26,12 +26,14 @@ import { UiEvent } from "../../shared/ui-events.ts";
 import { type PlayMicCommand, PlayMicChannel, type PlayMicReport, readMicReport } from "../../shared/play-mic.ts";
 import type { FullScreenKey, Rect } from "../game-full-screen.ts";
 import { GAME_DISABLED_BLINK_FEATURES } from "../game-view.ts";
+import { createReloadPolicy, ReloadDecision } from "../app-lifecycle.ts";
 import { pushToRenderer } from "../ipc-handle.ts";
 import type { PlayComments } from "./comments.ts";
 import { linkGate, playAddress, playNavigationAllowed } from "./game-address.ts";
 import type { PlayGallery } from "./gallery.ts";
 import { playPermissionShown, playPermitted } from "./game-permissions.ts";
 import { type MicGate, micGate, micGateFor } from "./mic.ts";
+import { closePage, dropGameView } from "./view-drop.ts";
 import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer } from "./viewer.ts";
 
@@ -126,7 +128,7 @@ export const playViewsOf = (win: BrowserWindow): PlayViews | null => viewsOf.get
 /** What the game's view reports to the viewer: its keys and pointer, how its page loads, and its microphone. */
 interface ViewerEvents {
   key(input: FullScreenKey): void;
-  pointer(y: number): void;
+  pointer(x: number, y: number): void;
   loaded(): void;
   failed(): void;
   mic(report: PlayMicReport): void;
@@ -201,12 +203,15 @@ function guardNavigation(contents: WebContents, offline: boolean, openExternal: 
   });
 }
 
-/** The pointer's height over the game, from the mouse moves the view is sent (none while a game holds the mouse). */
-function hearPointer(contents: WebContents, mine: () => boolean, hear: (y: number) => void): void {
+/**
+ * Where the pointer is over the game, from the mouse moves the view is sent. A game holding the mouse
+ * (pointer lock) is still sent moves, all at the point where the lock began.
+ */
+function hearPointer(contents: WebContents, mine: () => boolean, hear: (x: number, y: number) => void): void {
   contents.on("input-event", (_event, input) => {
     if (!mine() || input.type !== "mouseMove") return;
-    const { y } = input as Electron.MouseInputEvent;
-    if (typeof y === "number") hear(y);
+    const { x, y } = input as Electron.MouseInputEvent;
+    if (typeof x === "number" && typeof y === "number") hear(x, y);
   });
 }
 
@@ -225,8 +230,11 @@ function hearMic(contents: WebContents, mine: () => boolean, hear: (report: Play
  * page does; a page that loads late says so once it has mounted (`PlayBarHold.ready`) and is drawn
  * the bar again. A layer whose page went away loads it again.
  */
-function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
+function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void) {
   let view: WebContentsView | null = null;
+  // A page that dies on load does not spin: past a couple of reloads a minute the viewer closes, since
+  // a game with no bar has no way out but a held Esc.
+  const reloads = createReloadPolicy();
   const made = (): WebContentsView => {
     if (view && !view.webContents.isDestroyed()) return view;
     const layer = new WebContentsView({
@@ -237,8 +245,10 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
     const contents = layer.webContents;
     contents.on("will-navigate", (event) => event.preventDefault());
     contents.setWindowOpenHandler(() => ({ action: "deny" }));
-    contents.on("render-process-gone", () => {
-      if (!contents.isDestroyed()) contents.reload();
+    contents.on("render-process-gone", (_event, details) => {
+      const decision = reloads.decide(details.reason);
+      if (decision === ReloadDecision.GiveUp) lost();
+      else if (decision === ReloadDecision.Reload && !contents.isDestroyed()) contents.reload();
     });
     void contents.loadFile(deps.barPage, { query: { platform: process.platform } }).catch(() => {});
     win.contentView.addChildView(layer);
@@ -258,6 +268,13 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps) {
     },
     hide: (): void => view?.setVisible(false),
     focus: (): void => made().webContents.focus(),
+    /** Whether the layer's page has the keyboard. */
+    focused: (): boolean => Boolean(view && !view.webContents.isDestroyed() && view.webContents.isFocused()),
+    /** The window is gone: the layer's page closes with it. */
+    destroy: (): void => {
+      closePage(view?.webContents);
+      view = null;
+    },
     warm: (): void => {
       if (!win.isDestroyed()) made();
     },
@@ -281,13 +298,7 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
   const close = (): void => {
     const view = current;
     current = null;
-    if (win.isDestroyed()) return;
-    if (view) {
-      if (!view.webContents.isDestroyed()) view.webContents.close();
-      win.contentView.removeChildView(view);
-    }
-    // The keyboard comes back to the app the game (or its bar, before the game was up) took it from.
-    win.webContents.focus();
+    dropGameView<WebContentsView>(win, view);
   };
   const open = (url: string): void => {
     close();
@@ -361,12 +372,12 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
   let viewer: PlayViewer | null = null;
   const events: ViewerEvents = {
     key: (input) => viewer?.key(input),
-    pointer: (y) => viewer?.pointer(y),
+    pointer: (x, y) => viewer?.pointer(x, y),
     loaded: () => viewer?.loaded(),
     failed: () => viewer?.failed(),
     mic: (report) => viewer?.mic(report),
   };
-  const bar = barLayer(win, deps);
+  const bar = barLayer(win, deps, () => viewer?.close());
   const game = gameView(win, deps, events, bar.raise);
   viewsOf.set(win, { bar: bar.view, game: game.view });
   const made = playViewer({
@@ -381,6 +392,8 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
       buttons: (visible) => {
         if (process.platform === StudioPlatform.Mac && !win.isDestroyed()) win.setWindowButtonVisibility(visible);
       },
+      // Windows and Linux draw their window controls over the bar's corner and cannot hide them with it.
+      barFades: process.platform === StudioPlatform.Mac,
     },
     game,
     // The game's view loses the keyboard to the bar, and with it any mouse lock it held.
@@ -411,6 +424,9 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
   win.on("resize", () => made.resized());
   // A hidden or closed window takes its game with it: no sound, no timers on a window that is gone.
   win.on("hide", () => made.close());
-  win.on("closed", () => made.close());
+  win.on("closed", () => {
+    made.close();
+    bar.destroy();
+  });
   return made;
 }

@@ -20,6 +20,7 @@ import {
   playNavigationAllowed,
 } from "../../src/main/play/game-address.ts";
 import { BAR_FADE_MS, BAR_LINGER_MS, BAR_SHOWN_MS } from "../../src/main/play/bar-reveal.ts";
+import { closePage, dropGameView } from "../../src/main/play/view-drop.ts";
 import {
   BAR_EDGE_PX,
   NOTE_MS,
@@ -103,7 +104,12 @@ const saved = (body: string): PlayComment => ({
 
 /** A viewer over recording fakes. */
 function rig(
-  overrides: Partial<PlayViewerDeps["gallery"]> & { web?: string; comments?: Partial<PlayViewerDeps["comments"]> } = {},
+  overrides: Partial<PlayViewerDeps["gallery"]> & {
+    web?: string;
+    comments?: Partial<PlayViewerDeps["comments"]>;
+    barFades?: boolean;
+    barFocused?: () => boolean;
+  } = {},
 ) {
   const { clock, advance } = fakeClock();
   const log: string[] = [];
@@ -119,7 +125,11 @@ function rig(
       ...overrides,
     },
     gameUrl: (slug, ticket) => `game:${slug}:${ticket ?? "guest"}`,
-    window: { contentSize: () => WINDOW, buttons: (visible) => log.push(`buttons ${visible ? "shown" : "hidden"}`) },
+    window: {
+      contentSize: () => WINDOW,
+      buttons: (visible) => log.push(`buttons ${visible ? "shown" : "hidden"}`),
+      barFades: overrides.barFades ?? true,
+    },
     game: {
       open: (url) => {
         opened.push(url);
@@ -134,6 +144,7 @@ function rig(
       show: (bounds) => log.push(`bar.show ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`),
       hide: () => log.push("bar.hide"),
       focus: () => log.push("bar.focus"),
+      focused: overrides.barFocused ?? (() => false),
       warm: () => log.push("bar.warm"),
     },
     comments: {
@@ -577,13 +588,48 @@ describe("Play viewer's bar over the game", () => {
     advance(BAR_SHOWN_MS);
     advance(BAR_FADE_MS);
     log.length = 0;
-    viewer.pointer(BAR_EDGE_PX + 1);
+    viewer.pointer(300, BAR_EDGE_PX + 1);
     assert.equal(bar()?.shown, false, "below the edge the game keeps the pointer");
-    viewer.pointer(BAR_EDGE_PX);
+    viewer.pointer(310, BAR_EDGE_PX);
     assert.equal(bar()?.shown, true);
     assert.deepEqual(log, [`bar.show 0,0 ${WINDOW.width}x${PLAY_BAR_HEIGHT}`, "buttons shown"]);
     advance(BAR_SHOWN_MS);
     assert.equal(bar()?.shown, false);
+  });
+
+  it("takes no moves at one frozen point for the pointer reaching the edge: a game holding the mouse", async () => {
+    const { viewer, bar, advance } = await playing();
+    viewer.pointer(400, 2);
+    assert.equal(bar()?.shown, true, "a pointer that moved to the edge");
+    advance(BAR_SHOWN_MS);
+    for (let move = 0; move < 5; move += 1) viewer.pointer(400, 2);
+    assert.equal(bar()?.shown, false, "the lock began near the top: its moves never bring the bar back");
+    viewer.pointer(420, 2);
+    assert.equal(bar()?.shown, true, "along the edge, the pointer moves again");
+  });
+
+  it("stays up while playing where the window's own controls can't go with it", async () => {
+    const { viewer, bar, advance, log } = await playing({ barFades: false });
+    advance(LONG_PLAY_MS);
+    assert.equal(bar()?.shown, true);
+    assert.ok(!log.includes("bar.hide"));
+    viewer.pointer(10, 1);
+    assert.equal(bar()?.shown, true);
+  });
+
+  it("gives the game the keyboard back when the bar is put away holding it (a menu it opened)", async () => {
+    let focused = true;
+    const { log, advance } = await playing({ barFocused: () => focused });
+    log.length = 0;
+    advance(BAR_SHOWN_MS);
+    advance(BAR_FADE_MS);
+    assert.deepEqual(log.slice(-3), ["bar.hide", "buttons hidden", "game.focus"]);
+    focused = false;
+    const quiet = await playing({ barFocused: () => focused });
+    quiet.log.length = 0;
+    quiet.advance(BAR_SHOWN_MS);
+    quiet.advance(BAR_FADE_MS);
+    assert.ok(!quiet.log.includes("game.focus"), "the game has the keyboard already");
   });
 
   it("comes back on Esc in the game, a tap or a hold, without taking a tap from the game", async () => {
@@ -771,6 +817,25 @@ describe("Play viewer's Comments", () => {
     assert.equal(bar()?.comments, 2);
   });
 
+  it("offers Sign in for the rest of the game once genex.games refuses a write for want of one", async () => {
+    const { viewer, bar, events } = rig({
+      ticket: async () => NOT_MINTED,
+      comments: {
+        post: async () => {
+          throw new SignInNeeded();
+        },
+      },
+    });
+    viewer.open("lost-cathedral", "Lost Cathedral");
+    await settle();
+    viewer.loaded();
+    assert.equal(bar()?.signedIn, true, "an account is there, its sign-in ended unseen");
+    await assert.rejects(viewer.comment("Love it"), SignInNeeded);
+    assert.equal(bar()?.signedIn, false);
+    viewer.control(PlayControl.Install);
+    assert.equal(events.at(-1)?.install, true, "its Sign in signs in to Genex again");
+  });
+
   it("answers nothing with no game open, nor for a game whose page facts could not be read", async () => {
     const closed = rig();
     await assert.rejects(closed.viewer.comments(null));
@@ -798,6 +863,49 @@ describe("Play viewer's Comments", () => {
     answer(saved("Love it"));
     await posting;
     assert.ok(events.filter((event) => event.openId === 2).every((event) => event.bar?.comments !== 3));
+  });
+});
+
+describe("Play viewer's views leaving the window", () => {
+  /** A window and a game's view that record what is done to them. */
+  function views(destroyed: boolean) {
+    const log: string[] = [];
+    let closed = false;
+    const view = {
+      webContents: {
+        isDestroyed: () => closed,
+        close: () => {
+          closed = true;
+          log.push("page.close");
+        },
+      },
+    };
+    const win = {
+      isDestroyed: () => destroyed,
+      contentView: { removeChildView: () => void log.push("window.remove") },
+      webContents: { focus: () => void log.push("window.focus") },
+    };
+    return { log, view, win };
+  }
+
+  it("closes the game's page even when its window is already gone, so its sound and timers stop", () => {
+    const closing = views(true);
+    dropGameView(closing.win, closing.view);
+    assert.deepEqual(closing.log, ["page.close"]);
+    const open = views(false);
+    dropGameView(open.win, open.view);
+    assert.deepEqual(open.log, ["page.close", "window.remove", "window.focus"]);
+    dropGameView(open.win, open.view);
+    assert.deepEqual(open.log.slice(3), ["window.remove", "window.focus"], "a page closed once is not closed again");
+  });
+
+  it("gives the app the keyboard back with no game's view up yet, and closes a page that is there", () => {
+    const early = views(false);
+    dropGameView(early.win, null);
+    assert.deepEqual(early.log, ["window.focus"]);
+    closePage(early.view.webContents);
+    closePage(null);
+    assert.deepEqual(early.log, ["window.focus", "page.close"]);
   });
 });
 

@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CommentRoute, playComments, toComment, toCommentsPage } from "../../src/main/play/comments.ts";
+import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { type GalleryAnswer, type GalleryRequest, SignInNeeded } from "../../src/main/play/gallery.ts";
 import {
   BarEscape,
@@ -156,6 +157,47 @@ describe("Play comments on genex.games", () => {
       await assert.rejects(comments.post("cm1", body), JSON.stringify(body));
     assert.deepEqual(calls, []);
     assert.equal(commentBody("x".repeat(COMMENT_MAX)), "x".repeat(COMMENT_MAX));
+  });
+});
+
+describe("Who may write comments", () => {
+  it("takes a comment's post or delete only from Studio's own page or Play's bar layer", async () => {
+    const listeners = new Map<string, (event: IpcSender, payload: unknown) => Promise<IpcResult>>();
+    const ipc = {
+      handle: (channel: string, listener: (event: IpcSender, payload: unknown) => Promise<IpcResult>) =>
+        listeners.set(channel, listener),
+    };
+    const studio: IpcSender = { sender: "studio", senderFrame: "studio-main" };
+    const bar: IpcSender = { sender: "bar", senderFrame: "bar-main" };
+    const handle = createIpcHandle(ipc, {
+      fixture: false,
+      isStudioUi: (event) => event === studio,
+      isPlayBar: (event) => event === bar,
+    });
+    let written = 0;
+    for (const channel of ["studio:play.comment", "studio:play.uncomment", "studio:play.comments"] as const)
+      handle(channel, async () => {
+        written += 1;
+        return undefined as never;
+      });
+    const call = (channel: string, event: IpcSender) => listeners.get(channel)?.(event, {});
+    const strangers: IpcSender[] = [
+      { sender: "plugin", senderFrame: "plugin-frame" },
+      { sender: "bar", senderFrame: "a frame inside the bar" },
+      { sender: "game", senderFrame: "game-main" },
+    ];
+    for (const stranger of strangers)
+      for (const channel of ["studio:play.comment", "studio:play.uncomment"]) {
+        const answer = await call(channel, stranger);
+        assert.equal(answer?.ok, false, `${channel} from ${String(stranger.senderFrame)}`);
+      }
+    assert.equal(written, 0, "nothing was written for them");
+    for (const allowed of [studio, bar]) {
+      assert.equal((await call("studio:play.comment", allowed))?.ok, true);
+      assert.equal((await call("studio:play.uncomment", allowed))?.ok, true);
+    }
+    assert.equal((await call("studio:play.comments", strangers[0] as IpcSender))?.ok, true, "reading is anyone's");
+    assert.equal(written, 5);
   });
 });
 

@@ -68,8 +68,9 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
   Invite a friend (multiplayer games), Share, Remix, Exit. It is up while the game loads, for 3 seconds
   after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
-  then it fades up and out, and macOS's window buttons go with it. A held Esc gives the bar the
-  keyboard. A single-use ticket in the address's fragment signs the player in; a guest is offered
+  then it fades up and out, and macOS's window buttons go with it (on Windows and Linux it stays up,
+  since their window controls can't). A game holding the mouse doesn't bring it back. A held Esc
+  gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
   sign-in. The rest of the app is inert until the game closes.
 - Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the
   title, genex.games' comments newest first in pages of 20, a footer pinned under the list (Sign in

@@ -51,6 +51,8 @@ export interface PlayViewerDeps {
     contentSize(): { width: number; height: number };
     /** Show or hide the window's own buttons (macOS's traffic lights), which sit in the bar. */
     buttons(visible: boolean): void;
+    /** The bar fades during play; where the window's own controls can't go with it, it stays up. */
+    barFades: boolean;
   };
   /** A fresh view for each game; `close` destroys it (its sound and memory go with it). */
   game: {
@@ -66,6 +68,8 @@ export interface PlayViewerDeps {
     show(bounds: Rect): void;
     hide(): void;
     focus(): void;
+    /** Whether the layer's page has the keyboard. */
+    focused(): boolean;
     /** Make the layer and load its page ahead of the first game, so the bar is there as it opens. */
     warm(): void;
   };
@@ -330,6 +334,13 @@ function placeBar(deps: PlayViewerDeps, layout: BarLayout): void {
   deps.window.buttons(layout !== BarLayout.Hidden);
 }
 
+/** Place the bar's layer; put away during play while it holds the keyboard (a menu it opened, say), it gives it back to the game. */
+function placeBarInPlay(deps: PlayViewerDeps, layout: BarLayout, playing: boolean): void {
+  const handBack = layout === BarLayout.Hidden && playing && deps.bar.focused();
+  placeBar(deps, layout);
+  if (handBack) deps.game.focus();
+}
+
 /** What the bar's layer says holds it, as main accepts it: booleans, anything else false. */
 const readHold = (value: unknown): PlayBarHold => {
   const hold = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
@@ -340,6 +351,8 @@ const readHold = (value: unknown): PlayBarHold => {
 interface ViewerLoop {
   ctx: ViewerContext;
   reveal: ReturnType<typeof barReveal>;
+  /** Where the pointer last moved over the game, if it has. */
+  lastPointer: { x: number; y: number } | null;
   setPhase(phase: PlayViewerPhase): void;
   stopShowTimer(): void;
 }
@@ -392,9 +405,14 @@ function viewerCalls(loop: ViewerLoop, heldEsc: ReturnType<typeof heldEscape>) {
       heldEsc.key(input);
       if (input.key === "Escape" && input.type === "keyDown" && !input.isAutoRepeat && playing()) reveal.reveal();
     },
-    /** The pointer moved over the game, `y` pixels down the window: at the top edge the bar comes back. */
-    pointer: (y: number): void => {
-      if (playing() && y <= BAR_EDGE_PX) reveal.reveal();
+    /**
+     * The pointer moved over the game, to `x`, `y` on the window: at the top edge the bar comes back.
+     * A game holding the mouse is sent moves at one frozen point: only a pointer that moved counts.
+     */
+    pointer: (x: number, y: number): void => {
+      const moved = loop.lastPointer?.x !== x || loop.lastPointer.y !== y;
+      loop.lastPointer = { x, y };
+      if (moved && playing() && y <= BAR_EDGE_PX) reveal.reveal();
     },
     /** The window changed size: the game and the bar follow. */
     resized: (): void => {
@@ -424,7 +442,7 @@ export function playViewer(deps: PlayViewerDeps) {
       session.state = { ...session.state, shown: up };
       ctx.draw();
     },
-    place: (layout) => placeBar(deps, layout),
+    place: (layout) => placeBarInPlay(deps, layout, session?.phase === PlayViewerPhase.Playing),
   });
   const setPhase = (phase: PlayViewerPhase): void => {
     if (!session || session.phase === phase) return;
@@ -432,10 +450,10 @@ export function playViewer(deps: PlayViewerDeps) {
     if (phase === PlayViewerPhase.Failed) game.hide();
     if (phase === PlayViewerPhase.Playing) game.show(gameBounds(deps));
     deps.emit({ slug: session.slug, openId: session.epoch, phase });
-    if (phase === PlayViewerPhase.Playing) {
-      reveal.playing();
-      offerGuestCard(ctx, session);
-    } else reveal.pinned();
+    // The bar fades once the game plays, where the window's own controls can fade with it.
+    if (phase === PlayViewerPhase.Playing && deps.window.barFades) reveal.playing();
+    else reveal.pinned();
+    if (phase === PlayViewerPhase.Playing) offerGuestCard(ctx, session);
   };
   const close = (news: ClosedNews = {}): void => {
     if (!session) return;
@@ -472,6 +490,7 @@ export function playViewer(deps: PlayViewerDeps) {
     epoch += 1;
     const opened = epoch;
     reveal.pinned();
+    loop.lastPointer = null;
     session = freshSession(slug, barTitle(title), opened, deps.mic.store.on(slug), remixes > 0);
     // The first news of the opening: loading, with the bar as it starts.
     ctx.draw();
@@ -489,7 +508,13 @@ export function playViewer(deps: PlayViewerDeps) {
     );
   };
   const heldEsc = heldEscape(clock, () => focusBarByKeyboard(ctx));
-  const loop: ViewerLoop = { ctx, reveal, setPhase, stopShowTimer: () => (showTimer = stop(clock, showTimer)) };
+  const loop: ViewerLoop = {
+    ctx,
+    reveal,
+    lastPointer: null,
+    setPhase,
+    stopShowTimer: () => (showTimer = stop(clock, showTimer)),
+  };
 
   return {
     open,

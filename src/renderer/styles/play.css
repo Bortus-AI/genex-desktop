@@ -808,9 +808,14 @@
 .play-bar-layer[data-comments] .play-viewer-bar {
   -webkit-app-region: no-drag;
 }
-/* Clear of macOS's traffic lights, on one line with them. */
+/* Clear of macOS's traffic lights, on one line with them; on Windows and Linux, clear of the window
+   controls the system draws over the trailing corner (theme.css's `--window-controls-end`). */
 :root[data-platform="darwin"] .play-viewer-bar {
   padding-inline-start: 80px;
+}
+:root[data-platform="win32"] .play-viewer-bar,
+:root[data-platform="linux"] .play-viewer-bar {
+  padding-inline-end: calc(var(--window-controls-end) + 8px);
 }
 .play-viewer-bar button {
   -webkit-app-region: no-drag;
