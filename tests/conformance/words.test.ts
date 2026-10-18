@@ -192,7 +192,7 @@ describe("the lead, its workers and the finish check on the graph", () => {
 describe("the finish check's words", () => {
   it("the finish check words take the shared cap and say reviewer", () => {
     const cap = String(MAX_FINISH_REJECTIONS);
-    assert.equal(FINISH_CHECK_WORDS.stoppedWord, `${cap} no's in a row`);
+    assert.equal(FINISH_CHECK_WORDS.stoppedWord(), `${cap} no's in a row`);
     assert.equal(FINISH_CHECK_WORDS.roundWord(2, 1), `2 reasons · round 1 of ${cap}`);
     assert.equal(FINISH_CHECK_WORDS.roundWord(1, 2), `1 reason · round 2 of ${cap}`);
     assert.equal(

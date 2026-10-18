@@ -1936,7 +1936,8 @@ export const FINISH_CHECK_WORDS = {
   /** The node's line after a no the Loop had time left at: no count of no's stops it then. */
   inARowWord: (reasons: number, rejections: number) => `${plural(reasons, "reason")} · ${rejections} in a row`,
   doneWord: "Reviewer said yes",
-  stoppedWord: `${MAX_FINISH_REJECTIONS} no's in a row`,
+  /** The node's line once the no's stopped the Loop: how many in a row (more than the cap once a timed Loop went on past it). */
+  stoppedWord: (rejections: number = MAX_FINISH_REJECTIONS) => `${rejections} no's in a row`,
   unanswered: "The reviewer couldn't answer",
   /** The card's section headings, as the design names them. */
   heading: {

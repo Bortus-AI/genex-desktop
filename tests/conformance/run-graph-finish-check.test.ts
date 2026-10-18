@@ -178,7 +178,7 @@ describe("the finish check on the Builds graph", () => {
     assert.equal(stopped.rejections, MAX_FINISH_REJECTIONS);
     assert.deepEqual(finishCheckFace(stopped), {
       name: FINISH_CHECK_WORDS.state.stopped,
-      word: FINISH_CHECK_WORDS.stoppedWord,
+      word: FINISH_CHECK_WORDS.stoppedWord(),
     });
     assert.equal(stopped.rounds.length, 4);
 

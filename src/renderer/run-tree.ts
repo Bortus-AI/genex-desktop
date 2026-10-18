@@ -218,7 +218,8 @@ const currentRound = (node: FinishCheckNode): FinishRound | undefined =>
 function finishCheckLine(node: FinishCheckNode): string {
   if (node.state === FinishCheckState.Checking) return FINISH_CHECK_WORDS.checking;
   if (node.state === FinishCheckState.Done) return FINISH_CHECK_WORDS.doneWord;
-  if (node.state === FinishCheckState.Stopped) return FINISH_CHECK_WORDS.stoppedWord;
+  if (node.state === FinishCheckState.Stopped)
+    return FINISH_CHECK_WORDS.stoppedWord(Math.max(node.rejections, MAX_FINISH_REJECTIONS));
   const newest = currentRound(node);
   if (!newest) return FINISH_CHECK_WORDS.placeholder;
   if (newest.step === FinishCheckStep.Unanswered) return FINISH_CHECK_WORDS.unanswered;
