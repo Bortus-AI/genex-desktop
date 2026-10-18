@@ -2540,6 +2540,56 @@ describe("Open in Unreal brings an older Genex editor helper up to date", () => 
   });
 });
 
+/** Epic's toolsets for games that setup adds to a project. */
+const TOOLSETS = [
+  "UMGToolSet",
+  "NiagaraToolsets",
+  "StateTreeToolset",
+  "AIModuleToolset",
+  "AnimationAssistantToolset",
+  "PCGToolset",
+  "PhysicsToolsets",
+  "GameplayTagsToolset",
+  "AutomationTestToolset",
+];
+const pluginNames = async (file: string): Promise<string[]> =>
+  JSON.parse(await readFile(file, "utf8")).Plugins.map((p: { Name: string }) => p.Name);
+
+describe("Open in Unreal adds Epic's toolsets to a project set up before them", () => {
+  /** Drift set up, then its toolsets taken out, as a Genex from before them left it. */
+  async function setUpBefore() {
+    const f = await launchFixture();
+    await f.act("setup", { project: f.drift });
+    const uproject = JSON.parse(await readFile(f.drift, "utf8"));
+    uproject.Plugins = uproject.Plugins.filter((p: { Name: string }) => !TOOLSETS.includes(p.Name));
+    await writeFile(f.drift, `${JSON.stringify(uproject, null, "\t")}\n`);
+    return f;
+  }
+
+  it("in its game: a game snapshot first, then the toolsets, then Unreal opens; the current helper stays", async () => {
+    const f = await setUpBefore();
+    await f.linkGame("valley", f.drift);
+    const helper = await tree(path.join(path.dirname(f.drift), "Plugins"));
+    await f.actIn("valley", "open-editor", { project: f.drift });
+    assert.deepEqual(f.events, ["snapshot", "launch"]);
+    assert.deepEqual(f.snapshots, [HelperState.Current]);
+    const names = await pluginNames(f.drift);
+    assert.deepEqual(names.slice(-TOOLSETS.length), TOOLSETS);
+    assert.deepEqual(await tree(path.join(path.dirname(f.drift), "Plugins")), helper, "the helper is as it was");
+  });
+
+  it("never outside its game or while an Unreal editor runs: the .uproject stays as it was", async () => {
+    const f = await setUpBefore();
+    const witness = await readFile(f.drift, "utf8");
+    await f.act("open-editor", { project: f.drift });
+    await f.linkGame("valley", f.drift);
+    f.live.running = true;
+    await f.actIn("valley", "open-editor", { project: f.drift });
+    assert.deepEqual(f.snapshots, []);
+    assert.equal(await readFile(f.drift, "utf8"), witness);
+  });
+});
+
 /** Drift as a C++ project with the module Drift. */
 async function cppDrift(f: Fixture) {
   const json = { FileVersion: 3, EngineAssociation: "5.8", Modules: [{ Name: "Drift", Type: "Runtime" }] };

@@ -993,7 +993,9 @@ ports; when one answers, `openProject` names it and `next` is switch, which the 
 one press: Unreal's normal quit, then Open in Unreal once it has closed. A project counts as set up with its plugins on, its own port and
 a setup record; a Genex editor helper that is older or missing gives it the update-helper step
 (setup again copies only the helper) rather than making it look never set up, and Connected then
-adds a quiet note. A user's Open updates an older helper only in the open game's own linked project, so only
+adds a quiet note. A project set up before Epic's toolsets were added is still set up; the same Open
+adds them (`addToolsetPlugins`, after the game snapshot, recorded so Undo takes them out), with no note.
+A user's Open updates an older helper only in the open game's own linked project, so only
 there does the panel say Open in Unreal updates it; elsewhere it says opening it from its Genex game does. A newer helper (`helperNewer`) gets one line under Open in Unreal and Connected,
 never an update. Connected needs both an answer on the project's port and a running editor
 process. Starting means Genex opened the project in the last 15 s, or its own Unreal log
@@ -1039,7 +1041,13 @@ The confirmed `setup` step does four things, each one only if it is needed:
   confirmation says that content saved in 5.8 won't open in the old version. Undo puts the old
   association back unless the user has moved the project on since;
 - turns on `ModelContextProtocol` and `EditorToolset` in the `.uproject`, keeping Unreal's tab
-  layout;
+  layout, and adds Epic's toolsets for games, editor-only (`TOOLSET_PLUGINS`: `UMGToolSet`,
+  `NiagaraToolsets`, `StateTreeToolset`, `AIModuleToolset`, `AnimationAssistantToolset`,
+  `PCGToolset`, `PhysicsToolsets`, `GameplayTagsToolset`, `AutomationTestToolset`). A toolset the
+  project already names, on or off, stays as the user left it. Not Epic's `AllToolsets`: on UE 5.8.3
+  its `GameFeaturesToolset` makes every start log a GameFeatureData load error, and the rest serve
+  no game Genex makes. These add about 20 s to the project's first start and nothing measurable
+  after; `list_toolsets` grows, while the agent's three meta-tools stay the same;
 - gives the project its own port and starts the MCP server on it, by writing `bAutoStartServer`
   and `ServerPortNumber` into `Saved/Config/<Mac|Windows>Editor/EditorPerProjectUserSettings.ini`.
   The port is always in Genex's block, 18000–18999: it starts from a hash of the real `.uproject`

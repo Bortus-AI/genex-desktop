@@ -256,7 +256,8 @@ const MESSAGE = {
   XcodeMacOnly: "Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio.",
   [SetupStep.Engine]: (file: string, from: string, to: string) =>
     `${file}: switch from Unreal ${from} to ${to}. Content you save in ${to} won't open in ${from}. To keep a ${from} version, duplicate the project folder first.`,
-  [SetupStep.Plugins]: (file: string) => `${file}: turn on Epic's ModelContextProtocol and EditorToolset plugins.`,
+  [SetupStep.Plugins]: (file: string) =>
+    `${file}: turn on Epic's ModelContextProtocol and EditorToolset plugins, and add Epic's toolsets for UI, effects, AI, animation, procedural content and physics.`,
   [SetupStep.AutoStart]: (file: string, port: number) =>
     `${file}: start Unreal's MCP server on port ${port} whenever the project opens.`,
   [SetupStep.Helper]: (folder: string) => `${folder}: add the Genex editor helper, a few Python files.`,

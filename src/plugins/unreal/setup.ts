@@ -1,7 +1,8 @@
 /**
  * Set up Unreal: everything Genex needs from a user's Unreal project, applied in one step so nobody
  * edits a .uproject or an ini by hand. Each piece is what had to be done by hand before:
- * - Epic's ModelContextProtocol and EditorToolset plugins on in the .uproject;
+ * - Epic's ModelContextProtocol and EditorToolset plugins on in the .uproject, and Epic's other
+ *   toolsets agents make games with added beside them;
  * - the MCP server starting on the project's own port whenever the project opens, from the
  *   project's per-user `Saved/Config/<Platform>Editor/EditorPerProjectUserSettings.ini`, which
  *   Unreal keeps when it rewrites that file on exit; the port is chosen once (`editor-port.ts`);
@@ -59,8 +60,26 @@ export const installEngineVersion = () => `${MIN_ENGINE.major}.${MIN_ENGINE.mino
  */
 export const installEngineText = () =>
   `Unreal Engine ${installEngineVersion()} isn't on this computer yet. The Unreal button above the game shows how to get it free from Epic, and notices when it's installed.`;
-/** Epic's plugins the bridge talks to, in the order setup adds them. */
+/** Epic's plugins the bridge talks to, in the order setup adds them: a project without them on isn't set up. */
 const MCP_PLUGINS = ["ModelContextProtocol", "EditorToolset"] as const;
+/**
+ * Epic's other toolsets agents make games with, added after {@link MCP_PLUGINS}, for the editor only:
+ * UI widgets, effects, AI (state trees, behavior trees), animation and sequences, procedural content,
+ * physics assets, gameplay tags and automation tests. Not Epic's AllToolsets: its GameFeaturesToolset
+ * makes every editor start log a load error, and its other toolsets serve no game Genex makes. A
+ * toolset the project already names, on or off, stays as the user left it.
+ */
+const TOOLSET_PLUGINS = [
+  "UMGToolSet",
+  "NiagaraToolsets",
+  "StateTreeToolset",
+  "AIModuleToolset",
+  "AnimationAssistantToolset",
+  "PCGToolset",
+  "PhysicsToolsets",
+  "GameplayTagsToolset",
+  "AutomationTestToolset",
+] as const;
 /** The section of the per-user project settings that starts Epic's MCP server. */
 const MCP_SECTION = "[/Script/ModelContextProtocolEngine.ModelContextProtocolSettings]";
 const AutoStartKey = { Start: "bAutoStartServer", Port: "ServerPortNumber" } as const;
@@ -216,6 +235,8 @@ export type ProjectState = {
   engine: string;
   cpp: boolean;
   plugins: boolean;
+  /** The .uproject names each of Epic's toolsets for games ({@link TOOLSET_PLUGINS}), on or as the user left it. */
+  toolsets: boolean;
   autoStart: boolean;
   /** The port Epic's MCP server starts on when the project opens; null while it doesn't start. */
   port: number | null;
@@ -501,14 +522,18 @@ function pluginEntry(json: UProject, name: string): Record<string, unknown> | un
 }
 
 const pluginsOn = (json: UProject) => MCP_PLUGINS.every((name) => pluginEntry(json, name)?.Enabled === true);
+const toolsetsNamed = (json: UProject) => TOOLSET_PLUGINS.every((name) => pluginEntry(json, name) !== undefined);
 
 function addOnce(list: string[], name: string) {
   if (!list.includes(name)) list.push(name);
 }
 
-/** Turns Epic's plugins on, recording which it added and which it switched on. */
+/** An editor-only entry for one of Epic's plugins, as setup adds it. */
+const editorPlugin = (name: string) => ({ Name: name, Enabled: true, TargetAllowList: ["Editor"] });
+
+/** Turns Epic's plugins on and adds its toolsets, recording which it added and which it switched on. */
 function enablePlugins(json: UProject, record: SetupRecord): boolean {
-  if (pluginsOn(json)) return false;
+  if (pluginsOn(json) && toolsetsNamed(json)) return false;
   if (!Array.isArray(json.Plugins)) json.Plugins = [];
   for (const name of MCP_PLUGINS) {
     const entry = pluginEntry(json, name);
@@ -517,11 +542,23 @@ function enablePlugins(json: UProject, record: SetupRecord): boolean {
       entry.Enabled = true;
       addOnce(record.uproject.enabled, name);
     } else {
-      (json.Plugins as unknown[]).push({ Name: name, Enabled: true, TargetAllowList: ["Editor"] });
+      (json.Plugins as unknown[]).push(editorPlugin(name));
       addOnce(record.uproject.added, name);
     }
   }
+  addToolsets(json, record);
   return true;
+}
+
+/** Adds each of Epic's toolsets the project doesn't name yet, recording it; the names it added. */
+function addToolsets(json: UProject, record: SetupRecord): string[] {
+  if (!Array.isArray(json.Plugins)) json.Plugins = [];
+  const missing = TOOLSET_PLUGINS.filter((name) => pluginEntry(json, name) === undefined);
+  for (const name of missing) {
+    (json.Plugins as unknown[]).push(editorPlugin(name));
+    addOnce(record.uproject.added, name);
+  }
+  return missing;
 }
 
 function restorePlugins(json: UProject, record: SetupRecord): void {
@@ -850,12 +887,14 @@ export async function inspectProject(file: string, options: SetupOptions): Promi
     engine: typeof json.EngineAssociation === "string" ? json.EngineAssociation : "",
     cpp: Array.isArray(json.Modules) && json.Modules.length > 0,
     plugins: pluginsOn(json),
+    toolsets: toolsetsNamed(json),
     autoStart: inProjectBlock(port) && recordAgrees(record, port),
     port,
     helper: await helperState(project, options.helper),
     undoable: record !== null,
   };
-  return { ...state, ready: state.plugins && state.autoStart && !helperNeedsInstall(state.helper) };
+  const ready = state.plugins && state.toolsets && state.autoStart && !helperNeedsInstall(state.helper);
+  return { ...state, ready };
 }
 
 /**
@@ -894,7 +933,7 @@ export async function planSetup(
   const engine = await engineSwitch(state.engine, options.env);
   const steps: Array<[boolean, SetupStep]> = [
     [engine !== undefined, SetupStep.Engine],
-    [!state.plugins, SetupStep.Plugins],
+    [!state.plugins || !state.toolsets, SetupStep.Plugins],
     [!state.autoStart || state.port !== port, SetupStep.AutoStart],
     [helperNeedsInstall(state.helper), SetupStep.Helper],
   ];
@@ -1049,6 +1088,28 @@ export async function updateHelper(file: string, options: SetupOptions): Promise
   await recordHelperInstall(folder, project, record, options.helper);
   const kept = await installHelper(project, options.helper, installed);
   return { ...versions, kept: kept.map((mine) => projectRelative(project, mine)) };
+}
+
+/**
+ * Adds Epic's toolsets for games to a set-up project that lacks them (one Genex set up before it
+ * added them), touching nothing but the .uproject, and records them so undo takes them back out.
+ * Refuses, writing nothing, while Unreal Editor runs and for a project Genex hasn't set up.
+ * Answers the toolsets it added: none when the project names them all.
+ */
+export async function addToolsetPlugins(file: string, options: SetupOptions): Promise<string[]> {
+  const project = await resolveProject(file);
+  await assertEditorClosed(options.env);
+  const folder = recordFolder(options.storage, project);
+  const record = await readRecord(folder);
+  if (!record) throw new SetupError(SetupErrorCode.NotSetUp, MESSAGE.NotSetUp);
+  const { json, text } = await readUProject(project);
+  const added = addToolsets(json, record);
+  if (added.length === 0) return [];
+  await keepCopy(folder, project, path.basename(project.file));
+  // Recorded first, so an undo after a failed write still knows what to take out.
+  await atomicWriteJson(path.join(folder, SetupStorage.Record), record);
+  await atomicWriteText(project.file, formatLike(text, json));
+  return added;
 }
 
 /** Removes a folder only while it is empty: anything the user put there since keeps it. */

@@ -28,8 +28,9 @@ import { UnrealStepId, unrealInstallCard, unrealSteps, XcodeStep } from "../../s
 import type { PluginEngineLink } from "../../src/plugin-sdk/index.d.ts";
 import { pluginBackendEnv } from "../../src/substrate/plugins/process.ts";
 import { editorLogPath, readEditorLog } from "../../src/plugins/unreal/editor-log.ts";
-import { derivedPort, listSetUpProjects } from "../../src/plugins/unreal/editor-port.ts";
+import { derivedPort, listSetUpProjects, SetupStorage } from "../../src/plugins/unreal/editor-port.ts";
 import {
+  addToolsetPlugins,
   findEngines,
   HelperState,
   helperVersion,
@@ -282,6 +283,7 @@ describe("Set up Unreal on a project", () => {
         ["ChaosVehiclesPlugin", true],
         ["EditorToolset", true],
         ["ModelContextProtocol", true],
+        ...TOOLSETS.map((name) => [name, true]),
       ],
     );
     assert.deepEqual(uproject.Modules, [{ Name: "Drift", Type: "Runtime", LoadingPhase: "Default" }]);
@@ -310,6 +312,119 @@ describe("Set up Unreal on a project", () => {
     const copies = Object.values(await tree(f.storage));
     for (const original of [UPROJECT, USER_INI])
       assert.ok(copies.includes(createHash("sha256").update(original).digest("hex")));
+  });
+});
+
+/** Epic's toolset plugins setup adds beyond EditorToolset, in the order it adds them. */
+const TOOLSETS = [
+  "UMGToolSet",
+  "NiagaraToolsets",
+  "StateTreeToolset",
+  "AIModuleToolset",
+  "AnimationAssistantToolset",
+  "PCGToolset",
+  "PhysicsToolsets",
+  "GameplayTagsToolset",
+  "AutomationTestToolset",
+];
+
+type PluginEntry = { Name: string; Enabled: boolean; TargetAllowList?: string[] };
+const pluginsOf = async (file: string): Promise<PluginEntry[]> => JSON.parse(await readFile(file, "utf8")).Plugins;
+
+/** The one setup record in `storage`, read and written as the plugin keeps it. */
+async function setupRecord(storage: string) {
+  const [key] = await readdir(path.join(storage, SetupStorage.Folder));
+  const file = path.join(storage, SetupStorage.Folder, key, SetupStorage.Record);
+  return { file, record: JSON.parse(await readFile(file, "utf8")) };
+}
+
+/** Drift as a Genex from before the toolsets set it up: Epic's MCP plugins and the helper, no toolset. */
+async function setUpWithoutToolsets() {
+  const f = await setupFixture({ ini: USER_INI });
+  await setUpProject(f.project.file, f.options);
+  const uproject = JSON.parse(await readFile(f.project.file, "utf8"));
+  uproject.Plugins = uproject.Plugins.filter((p: PluginEntry) => !TOOLSETS.includes(p.Name));
+  await writeFile(f.project.file, `${JSON.stringify(uproject, null, "\t")}\n`);
+  const { file, record } = await setupRecord(f.storage);
+  record.uproject.added = record.uproject.added.filter((name: string) => !TOOLSETS.includes(name));
+  await writeFile(file, JSON.stringify(record));
+  return f;
+}
+
+describe("Epic's toolsets for games", () => {
+  it("setup adds them after Epic's MCP plugins, for the editor only, and undo takes them back out", async () => {
+    const f = await setupFixture({ ini: USER_INI });
+    const before = await inspectProject(f.project.file, f.options);
+    assert.equal(before.toolsets, false);
+    const after = await setUpProject(f.project.file, f.options);
+    assert.deepEqual([after.toolsets, after.ready], [true, true]);
+    const added = (await pluginsOf(f.project.file)).filter((p) => TOOLSETS.includes(p.Name));
+    assert.deepEqual(
+      added,
+      TOOLSETS.map((name) => ({ Name: name, Enabled: true, TargetAllowList: ["Editor"] })),
+    );
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), UPROJECT, "the .uproject as it was before Genex");
+  });
+
+  it("a toolset the project already names stays as the user left it, turned off included", async () => {
+    const f = await setupFixture({ ini: USER_INI });
+    const uproject = JSON.parse(UPROJECT);
+    uproject.Plugins.push({ Name: "NiagaraToolsets", Enabled: false }, { Name: "pcgtoolset", Enabled: true });
+    const own = `${JSON.stringify(uproject, null, "\t")}\n`;
+    await writeFile(f.project.file, own);
+    const after = await setUpProject(f.project.file, f.options);
+    assert.deepEqual([after.toolsets, after.ready], [true, true], "the user's own choice counts as decided");
+    const plugins = await pluginsOf(f.project.file);
+    assert.deepEqual(
+      plugins.filter((p) => ["niagaratoolsets", "pcgtoolset"].includes(p.Name.toLowerCase())),
+      [
+        { Name: "NiagaraToolsets", Enabled: false },
+        { Name: "pcgtoolset", Enabled: true },
+      ],
+    );
+    // Epic's MCP plugin and the toolsets the project didn't name yet join the four it had.
+    assert.equal(plugins.length, uproject.Plugins.length + 1 + TOOLSETS.length - 2);
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), own, "undo keeps the user's own entries");
+  });
+
+  it("a project set up before them is still set up, and only its setup plan names them", async () => {
+    const f = await setUpWithoutToolsets();
+    const state = await inspectProject(f.project.file, f.options);
+    assert.deepEqual(
+      [state.plugins, state.autoStart, state.undoable, state.toolsets, state.ready],
+      [true, true, true, false, false],
+    );
+    assert.deepEqual((await planSetup(f.project.file, f.options)).steps, [SetupStep.Plugins]);
+  });
+
+  it("adding them to such a project changes only its .uproject, and undo takes them back out", async () => {
+    const f = await setUpWithoutToolsets();
+    const before = await tree(f.project.directory);
+    const uprojectBefore = await readFile(f.project.file, "utf8");
+
+    assert.deepEqual(await addToolsetPlugins(f.project.file, f.options), TOOLSETS);
+
+    assert.deepEqual(changedKeys(before, await tree(f.project.directory)), [path.basename(f.project.file)]);
+    assert.match(await readFile(f.project.file, "utf8"), /^\{\n\t"FileVersion": 3,/, "Unreal's own tab layout");
+    assert.equal((await inspectProject(f.project.file, f.options)).ready, true);
+    assert.deepEqual(await addToolsetPlugins(f.project.file, f.options), [], "a second time adds nothing");
+    assert.equal((await pluginsOf(f.project.file)).length, JSON.parse(uprojectBefore).Plugins.length + TOOLSETS.length);
+    await undoSetup(f.project.file, f.options);
+    assert.equal(await readFile(f.project.file, "utf8"), UPROJECT, "the .uproject as it was before Genex");
+  });
+
+  it("adding them refuses, writing nothing, while Unreal runs or for a project Genex never set up", async () => {
+    const f = await setUpWithoutToolsets();
+    const witness = await tree(f.root);
+    const running = { ...f.options, env: { ...f.env, editorRunning: async () => true } };
+    await assert.rejects(addToolsetPlugins(f.project.file, running), { code: SetupErrorCode.EditorRunning });
+    const fresh = await setupFixture();
+    const untouched = await readFile(fresh.project.file, "utf8");
+    await assert.rejects(addToolsetPlugins(fresh.project.file, fresh.options), { code: SetupErrorCode.NotSetUp });
+    assert.deepEqual(await tree(f.root), witness);
+    assert.equal(await readFile(fresh.project.file, "utf8"), untouched);
   });
 });
 
@@ -568,9 +683,16 @@ describe("A project's own port", () => {
     assert.deepEqual([set.ready, set.undoable, set.port], [true, true, f.port]);
     const changed = await tree(f.project.directory);
     assert.deepEqual(
-      Object.keys(changed).filter((file) => changed[file] !== witness[file]),
-      [SETTINGS_INI],
-      "only the settings' port changes",
+      Object.keys(changed)
+        .filter((file) => changed[file] !== witness[file])
+        .sort(),
+      [path.basename(f.project.file), SETTINGS_INI].sort(),
+      "only the settings' port changes, and Epic's toolsets join the .uproject",
+    );
+    assert.deepEqual(
+      (await pluginsOf(f.project.file)).map((p) => p.Name),
+      ["EditorToolset", "ModelContextProtocol", ...TOOLSETS],
+      "the hand-made plugin entries stay as they were",
     );
     assert.equal(await iniPort(f.project.directory), String(f.port));
     assert.deepEqual(await setUp(f.storage), [["Drift", f.port]]);
