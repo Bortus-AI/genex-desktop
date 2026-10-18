@@ -1,0 +1,311 @@
+/**
+ * The Genex account's asset library on genex.games: read it, save to it, send a file to it, and
+ * share an asset to Play or stop sharing it. Electron-free like the gallery; every call carries the
+ * account's token and a 401 reads as {@link SignInNeeded}.
+ */
+import {
+  isGenerationId,
+  isLibraryKind,
+  LIBRARY_IDS_MAX,
+  LIBRARY_QUERY_MAX,
+  type LibraryAsset,
+  LibraryKind,
+  type LibraryPage,
+  type LibraryQuery,
+  SHARE_NAME_MAX,
+  type SharedAsset,
+  ShareMiss,
+} from "../../shared/asset-library.ts";
+import { MINUTE_MS } from "../../shared/duration.ts";
+import { isPlaySlug } from "../../shared/play.ts";
+import { GalleryError, type GalleryRequest, imageUrl, isRecord, SignInNeeded, text } from "./gallery.ts";
+import type { PeopleDeps } from "./people.ts";
+
+/** The routes the library calls. */
+export const LibraryRoute = {
+  List: "/api/generations",
+  Import: "/api/generations/import",
+  generation: (id: string) => `/api/generations/${encodeURIComponent(id)}`,
+  share: (id: string) => `/api/generations/${encodeURIComponent(id)}/publish-asset`,
+  importDone: (id: string) => `/api/generations/import/${encodeURIComponent(id)}/complete`,
+  unshare: (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}/unpublish`,
+} as const;
+
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_ACCEPTED = 202;
+const HTTP_FORBIDDEN = 403;
+const HTTP_TOO_MANY = 429;
+const TITLE_MAX = 300;
+/** How long one library file may take to download. */
+const DOWNLOAD_TIMEOUT_MS = 120_000;
+/**
+ * How long Save's upload of one file may take: a file as large as Save sends, over a slow uplink.
+ * An avatar's upload is a far smaller picture, and its wait would cut a large file off.
+ */
+export const LIBRARY_UPLOAD_TIMEOUT_MS = 10 * MINUTE_MS;
+const ID_MAX = 64;
+/** genex.games' wire status of a project on Play. */
+const PUBLISHED = "published";
+
+/** Hosts a library file is downloaded from: genex.games' asset buckets. */
+const FILE_HOSTS: ReadonlySet<string> = new Set([
+  "assets.genex.technology",
+  "assets.genex.games",
+  "cdn.genex.technology",
+]);
+/** A generation's own file, by the role genex.games stores it under, most wanted first. */
+const MAIN_FILE_ROLES = ["model-glb", "image-main", "audio-sfx", "video-mp4"] as const;
+
+/** The provider genex.games records for a file sent from a person's own Mac. Wire value. */
+const UPLOAD_PROVIDER = "upload";
+/** Generation kinds genex.games takes no shares of (music: its provider's terms). */
+const UNSHAREABLE_KINDS: ReadonlySet<string> = new Set(["music"]);
+
+/** genex.games' generation kinds by the library kind they file under (anything else is 3D). */
+const KIND_OF_GENERATION: Readonly<Record<string, LibraryKind>> = {
+  image: LibraryKind.Image,
+  texture: LibraryKind.Image,
+  sfx: LibraryKind.Sound,
+  music: LibraryKind.Sound,
+  voice: LibraryKind.Sound,
+  video: LibraryKind.Video,
+};
+
+/** What the library needs: the gallery's request and token, and a presigned upload. */
+export type LibraryDeps = Pick<PeopleDeps, "request" | "token" | "upload" | "localImages">;
+
+/** A file to send to the library: its bytes, name and type, and the title it is saved under. */
+export interface LibraryFile {
+  filename: string;
+  contentType: string;
+  bytes: Uint8Array;
+  title: string;
+}
+
+/** An https file on one of genex.games' asset hosts, else null. */
+export function libraryFileUrl(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    const plain = url.protocol === "https:" && !url.username && !url.password && !url.port;
+    return plain && FILE_HOSTS.has(url.hostname) ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The file genex.games keeps a generation as: its main role's, else the first with an address. */
+function mainFile(files: unknown): string | null {
+  const list = Array.isArray(files) ? files.filter(isRecord) : [];
+  for (const role of MAIN_FILE_ROLES) {
+    const url = libraryFileUrl(list.find((file) => file.role === role)?.url);
+    if (url) return url;
+  }
+  for (const file of list) {
+    const url = libraryFileUrl(file.url);
+    if (url) return url;
+  }
+  return null;
+}
+
+/** A generation's shared page, when it has one. */
+function sharedOf(value: unknown): SharedAsset | null {
+  if (!isRecord(value)) return null;
+  const projectId = text(value.projectId, ID_MAX);
+  if (!projectId || !isPlaySlug(value.slug)) return null;
+  // genex.games says whether the public sees the page (`live`: not held, not taken down); an older
+  // answer has only the project's status.
+  const live = typeof value.live === "boolean" ? value.live : value.status === PUBLISHED;
+  return { projectId, slug: value.slug, live };
+}
+
+/** One listed generation as the app keeps it, or null when it lacks what a card needs. */
+export function toLibraryAsset(item: unknown, local = false): LibraryAsset | null {
+  if (!isRecord(item) || !isGenerationId(item.id)) return null;
+  const kind = typeof item.kind === "string" ? (KIND_OF_GENERATION[item.kind] ?? LibraryKind.Model) : LibraryKind.Model;
+  const createdAt = typeof item.createdAt === "string" ? item.createdAt : "";
+  return {
+    id: item.id,
+    kind,
+    title: text(item.prompt, TITLE_MAX).split("\n")[0]?.trim() ?? "",
+    thumbnailUrl: imageUrl(item.thumbnailUrl, local),
+    fileUrl: mainFile(item.files),
+    saved: typeof item.savedAt === "string",
+    shared: sharedOf(item.sharedAsset),
+    shareable: item.provider !== UPLOAD_PROVIDER && !UNSHAREABLE_KINDS.has(String(item.kind)),
+    createdAt,
+  };
+}
+
+/** The list route's query for `query`; anything malformed is left out rather than sent. */
+export function libraryListRoute(query: LibraryQuery): string {
+  const params = new URLSearchParams({ scope: "library" });
+  const words = (query.query ?? "").trim().slice(0, LIBRARY_QUERY_MAX);
+  if (words) params.set("q", words);
+  if (isLibraryKind(query.kind)) params.set("type", query.kind);
+  if (query.saved) params.set("saved", "1");
+  const ids = (query.ids ?? []).filter(isGenerationId).slice(0, LIBRARY_IDS_MAX);
+  if (ids.length > 0) params.set("ids", ids.join(","));
+  if (isGenerationId(query.before)) params.set("before", query.before);
+  return `${LibraryRoute.List}?${params}`;
+}
+
+/** A share's answer: the page on Play, or why there is none. */
+export type ShareAnswer = { shared: SharedAsset } | { miss: ShareMiss; detail?: string };
+
+/** A share's answer as the page it made, or why there is none. */
+function shareAnswer(answer: { status: number; body: unknown }): ShareAnswer {
+  if (answer.status < 200 || answer.status >= 300 || answer.status === HTTP_ACCEPTED) {
+    return shareMiss(answer.status, answer.body);
+  }
+  const page = isRecord(answer.body) && isRecord(answer.body.project) ? answer.body.project : answer.body;
+  const shared = sharedOf({ ...(isRecord(page) ? page : {}), status: PUBLISHED, projectId: projectIdOf(page) });
+  return shared ? { shared } : { miss: ShareMiss.Failed };
+}
+
+/** The miss a refused share answers with. */
+function shareMiss(status: number, body: unknown): { miss: ShareMiss; detail?: string } {
+  const error = isRecord(body) && typeof body.error === "string" ? body.error : "";
+  const detail = isRecord(body) ? text(body.detail, TITLE_MAX) : "";
+  if (status === HTTP_ACCEPTED) return { miss: ShareMiss.Checking };
+  if (status === HTTP_FORBIDDEN) return { miss: ShareMiss.Refused, ...(detail ? { detail } : {}) };
+  if (status === HTTP_TOO_MANY) return { miss: ShareMiss.TooMany };
+  if (error === "kind_not_publishable") return { miss: ShareMiss.KindNotShareable };
+  if (error === "upload_not_shareable") return { miss: ShareMiss.NotShareable };
+  // A share of this asset is still on its way (copied, then checked): it goes live on its own.
+  if (error === "asset_share_in_progress") return { miss: ShareMiss.Checking };
+  return { miss: ShareMiss.Failed };
+}
+
+/** The library's calls over `deps`. */
+export function assetLibrary(deps: LibraryDeps) {
+  const { request, token, upload } = deps;
+  const local = deps.localImages === true;
+
+  /** The account's token, or {@link SignInNeeded}. */
+  const auth = async (): Promise<string> => {
+    const current = await token();
+    if (!current) throw new SignInNeeded();
+    return current;
+  };
+
+  /** A call that throws on a 401 (sign-in) and on any other non-2xx; the body otherwise. */
+  const call = async (route: string, init: Parameters<GalleryRequest>[1]): Promise<unknown> => {
+    const answer = await request(route, { ...init, token: await auth() });
+    if (answer.status === HTTP_UNAUTHORIZED) throw new SignInNeeded();
+    if (answer.status < 200 || answer.status >= 300) throw new GalleryError(route, answer.status);
+    return answer.body;
+  };
+
+  /** One page of the library, newest first. */
+  const list = async (query: LibraryQuery = {}): Promise<LibraryPage> => {
+    const body = await call(libraryListRoute(query), { method: "GET" });
+    const rows = isRecord(body) && Array.isArray(body.generations) ? body.generations : [];
+    const assets = rows.map((row) => toLibraryAsset(row, local)).filter((row) => row !== null);
+    const next = isRecord(body) && isGenerationId(body.nextCursor) ? body.nextCursor : null;
+    return { assets, nextCursor: next };
+  };
+
+  /** Mark a generation saved, or take the mark off. */
+  const setSaved = async (id: string, saved: boolean): Promise<void> => {
+    if (!isGenerationId(id)) throw new GalleryError(LibraryRoute.List, 400);
+    await call(LibraryRoute.generation(id), { method: "PATCH", body: { saved } });
+  };
+
+  /**
+   * Put a generation on Play under `name`. genex.games answers the page it has when the asset is on
+   * Play already, and puts a page it took off Play back, so a share never makes a second page.
+   */
+  const share = async (id: string, name: string): Promise<ShareAnswer> => {
+    if (!isGenerationId(id)) return { miss: ShareMiss.Failed };
+    const body = { name: name.trim().slice(0, SHARE_NAME_MAX) };
+    const answer = await request(LibraryRoute.share(id), { method: "POST", token: await auth(), body });
+    if (answer.status === HTTP_UNAUTHORIZED) throw new SignInNeeded();
+    return shareAnswer(answer);
+  };
+
+  /** Take a shared asset off Play. */
+  const unshare = async (projectId: string): Promise<void> => {
+    await call(LibraryRoute.unshare(projectId), { method: "POST" });
+  };
+
+  /** Send a file to the library, saved, and answer its generation id. */
+  const send = async (file: LibraryFile): Promise<string> => {
+    const body = {
+      filename: file.filename,
+      contentType: file.contentType,
+      bytes: file.bytes.byteLength,
+      title: file.title.trim().slice(0, SHARE_NAME_MAX),
+      save: true,
+    };
+    const started = await call(LibraryRoute.Import, { method: "POST", body });
+    const id = isRecord(started) ? started.id : undefined;
+    const url = isRecord(started) && typeof started.uploadUrl === "string" ? started.uploadUrl : "";
+    if (!isGenerationId(id) || !url.startsWith("https://")) throw new GalleryError(LibraryRoute.Import, 502);
+    const status = await upload(url, file.bytes, file.contentType);
+    if (status < 200 || status >= 300) throw new GalleryError(LibraryRoute.Import, status);
+    await call(LibraryRoute.importDone(id), { method: "POST" });
+    return id;
+  };
+
+  return { list, setSaved, share, unshare, send };
+}
+
+/** The project id a share's answer names, under either of the names genex.games uses. */
+function projectIdOf(page: unknown): string {
+  if (!isRecord(page)) return "";
+  return text(page.projectId, ID_MAX) || text(page.id, ID_MAX);
+}
+
+/** A download of a library file: its bytes, at most `maxBytes`. */
+export type LibraryDownload = (url: string, maxBytes: number) => Promise<Uint8Array>;
+
+/** Why a download was refused. */
+const DOWNLOAD_MESSAGE = {
+  notOurs: "That file isn't on genex.games.",
+  tooLarge: "That file is too large to add.",
+  failed: (status: number) => `genex.games answered ${status} for that file.`,
+} as const;
+
+/**
+ * The network download: only from genex.games' asset hosts, no redirects, never more than
+ * `maxBytes` read (a lying or missing Content-Length is caught while reading), in a bounded wait.
+ */
+export function networkDownload(fetchImpl: typeof fetch, timeoutMs = DOWNLOAD_TIMEOUT_MS): LibraryDownload {
+  return async (url, maxBytes) => {
+    const checked = libraryFileUrl(url);
+    if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
+    const res = await fetchImpl(checked, { redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
+    if (!res.ok || !res.body) throw new Error(DOWNLOAD_MESSAGE.failed(res.status));
+    const declared = Number(res.headers.get("content-length") ?? "0");
+    if (declared > maxBytes) throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+    return readCapped(res.body, maxBytes);
+  };
+}
+
+/** A body's bytes, refusing it the moment it passes `maxBytes`. */
+async function readCapped(body: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  const reader = body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return bytes;
+}
+
+/** The library as `assetLibrary` makes it. */
+export type AssetLibrary = ReturnType<typeof assetLibrary>;

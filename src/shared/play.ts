@@ -3,6 +3,7 @@
  * renderer's origin), the renderer draws the dashboard, and a game plays full screen in a native
  * view main owns. These are the shapes and names both sides share.
  */
+import type { LibraryKind } from "./asset-library.ts";
 
 import type { PlayCuration } from "./play-manage.ts";
 
@@ -123,6 +124,8 @@ export interface PlayGame {
   author: { id: string | null; name: string; imageUrl: string | null };
   /** Anyone may make their own copy: its source is public. */
   remixable: boolean;
+  /** An asset's kind (3D, picture, sound, video); null for a game or a tool, or an asset genex.games does not kind. */
+  assetKind: LibraryKind | null;
   /** What the card menu reads (mobile flag, tags, remixing); a search's card carries none, so it has no menu. */
   curation?: PlayCuration;
 }

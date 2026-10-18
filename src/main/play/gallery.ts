@@ -4,6 +4,7 @@
  * ticket and an invite code ride the Genex account's token when one is unlocked. Electron-free:
  * the request (the network, or a fixture's answers) and the token come in as deps.
  */
+import { LibraryKind } from "../../shared/asset-library.ts";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import {
   isPlayCategory,
@@ -270,9 +271,23 @@ export function toPlayGame(item: unknown, local = false): PlayGame | null {
       imageUrl: author.avatarStyle === AvatarStyle.Photo ? imageUrl(author.image, local) : null,
     },
     remixable: cloneUrlOf(item) !== null,
+    assetKind: assetKindOf(item.assetKind),
     curation: curationOf(item),
   };
 }
+
+/** genex.games' asset kinds by the library kind they show as (a character is a 3D model). */
+const ASSET_KIND: Readonly<Record<string, LibraryKind>> = {
+  "3d": LibraryKind.Model,
+  character: LibraryKind.Model,
+  image: LibraryKind.Image,
+  sound: LibraryKind.Sound,
+  video: LibraryKind.Video,
+};
+
+/** A gallery item's asset kind, or null for a game, a tool or a kind the app doesn't know. */
+export const assetKindOf = (value: unknown): LibraryKind | null =>
+  typeof value === "string" && Object.hasOwn(ASSET_KIND, value) ? (ASSET_KIND[value] ?? null) : null;
 
 /**
  * The shelf a gallery item sits on, as the website buckets it: Assets, then Tools, when its
@@ -492,9 +507,11 @@ function catalogReads(deps: GalleryDeps) {
       description: game.description,
       shelf,
       authorId: game.author.id,
+      authorName: game.author.name,
       thumbnailUrl: game.coverUrl,
       playsCount: game.plays,
       remixable: game.remixable,
+      assetKind: game.assetKind,
     }));
 
   /** An asset's manifest, which carries its whole module: a public read for a published asset. */

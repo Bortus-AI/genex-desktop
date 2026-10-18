@@ -213,6 +213,18 @@ function useMention(
     setMention(null);
     placeCaret(mention.start + insert.length);
   };
+  /** The caret goes back to the end of the words after the @, so typing goes on there. */
+  const focusQuery = (): void => {
+    if (mention) placeCaret(mention.end);
+  };
+  /** The words after the @ are emptied; the @ stays and the picker with it. */
+  const clearQuery = (): void => {
+    if (!mention) return;
+    const end = mention.start + 1;
+    setDraft(draft.slice(0, end) + draft.slice(mention.end));
+    setMention({ query: "", start: mention.start, end });
+    placeCaret(end);
+  };
   /** The draft becomes this tag alone, ready for the words after it (a pick from the / list). */
   const startWith = (doc: MentionDoc): void => {
     const value = `@${doc.handle} `;
@@ -244,6 +256,8 @@ function useMention(
     mentionListId,
     findMention,
     insertMention,
+    focusQuery,
+    clearQuery,
     insertDoc,
     startWith,
     tagged,
@@ -1170,6 +1184,8 @@ function AttachControl({
         listId={mentions.mentionListId}
         onMention={mentions.insertMention}
         onMentionClose={() => mentions.setMention(null)}
+        onMentionFocus={mentions.focusQuery}
+        onMentionClear={mentions.clearQuery}
         onActiveOption={mentions.setMentionOption}
         tagging={{ tagged: mentions.taggedNow, atCap: mentions.atCap, onPick: mentions.insertDoc, side: mentionSide }}
       />

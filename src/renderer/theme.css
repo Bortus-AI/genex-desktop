@@ -2,11 +2,13 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "tw-animate-css";
 @import "./styles/icons.css";
+@import "./styles/asset-library.css";
 @import "./styles/covers.css";
 @import "./styles/empty-states.css";
 @import "./styles/onboarding.css";
 @import "./styles/genex.css";
 @import "./styles/play.css";
+@import "./styles/play-assets.css";
 @import "./styles/people.css";
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
@@ -356,6 +358,7 @@
   .animate-ping,
   .animate-spin,
   .making-spinner,
+  .genex-connect-shine,
   .loader-grid > span,
   [style*="infinite"]
 ),
@@ -6598,12 +6601,124 @@ a:focus-visible {
   cursor: default;
 }
 /* The @ picker: cover cards on shelves, as on genex.games. Words on a card are white on a dark
-   scrim in both themes, because they sit on a picture. */
+   scrim in both themes, because they sit on a picture. A header stays put over them (the words
+   after the @, What and Whose) with no line under it; only the list below scrolls, and its edges
+   fade where cards pass under the header or more lie below. */
 .mention-panel {
   display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.mention-head {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 6px 0;
+}
+.mention-search {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--picker-well);
+}
+/* The field shows the words typed in the prompt; a click puts the caret back there. */
+.mention-search-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 100%;
+  padding-inline: 10px;
+  border-radius: inherit;
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: start;
+  cursor: text;
+}
+.mention-search-icon {
+  flex: none;
+}
+.mention-search-text,
+.mention-search-placeholder {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mention-search-text {
+  color: var(--ink);
+}
+/* Clear: small, quiet, underlined words, no fill. */
+.mention-search-clear {
+  flex: none;
+  margin-inline-end: 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.mention-search-clear:hover {
+  color: var(--ink);
+}
+.mention-switches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+@property --mention-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --mention-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+.mention-scroll {
+  display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  /* The right inset is the scrollbar's own room, kept when nothing scrolls, so the cards line up
+     with the header above them either way. */
+  padding: 12px 0 10px 6px;
+  scrollbar-gutter: stable;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--mention-fade-top),
+    #000 calc(100% - var(--mention-fade-bottom)),
+    transparent
+  );
+  transition:
+    --mention-fade-top var(--duration-quick),
+    --mention-fade-bottom var(--duration-quick);
+}
+.mention-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.mention-scroll::-webkit-scrollbar-thumb {
+  border-width: 1px;
+}
+.mention-scroll[data-scrolled] {
+  --mention-fade-top: 20px;
+}
+.mention-scroll[data-more] {
+  --mention-fade-bottom: 28px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mention-scroll {
+    transition: none;
+  }
 }
 /* The shelves genex.games will fill, standing in while it answers: quiet cards with a slow sweep. */
 .mention-skeleton-label,
@@ -6777,7 +6892,8 @@ a:focus-visible {
   white-space: nowrap;
 }
 .mention-cap {
-  margin: 4px -6px -6px;
+  flex: none;
+  margin: 0;
   padding: 8px 12px 10px;
   border-top: 1px solid var(--prompt-bar-edge);
   font-size: 12px;

@@ -821,7 +821,12 @@ shows left of its action and switch and opens that page too, unless the action (
 Manage) already does. A server's name works its switch. Glyphs use the text colour. Manage plugins
 opens the Plugins page. Typing @ at the caret
 opens the same list as mentions while focus stays in the text: arrows move, Enter/Tab inserts,
-Escape closes; with no match Enter sends as usual.
+Escape closes; with no match Enter sends as usual. The @ panel pins a header over its scrolling
+list (soft fades at both edges, no divider): a search field showing the text after @ (a click puts
+the caret back there; a small quiet underlined Clear) and two blue-fill switchers, All · Games ·
+Assets · Tools and Everyone · Mine (mouse; focus stays in the text). Images leads the list; Your
+games, then Your assets (the genex.games library) before the others' shelves; library and shared
+asset cards chip their kind (3D, Image, Sound, Video) and Saved or Shared.
 The permissions pill shows one glyph per mode: shield (Auto), help (Manual), pencil (Accept
 edits), plan (Plan) and shield-off (Bypass permissions, orange in the pill and its row). Auto is
 the glyph alone, its tooltip "Auto permissions"; another mode adds its label. The model's name keeps

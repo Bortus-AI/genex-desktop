@@ -39,6 +39,7 @@ import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
 import { MakingKind } from "../shared/asset-making.ts";
+import { ShareMiss } from "../shared/asset-library.ts";
 import { RoundOutcome, roundOutcome, stoppedSource } from "../shared/run-state.ts";
 import type { OutcomeView, RunEvidence } from "../shared/run-summary.ts";
 import { CoreFact, LoopProfile } from "../shared/project-facts.ts";
@@ -75,6 +76,8 @@ import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
+import { AssetScope, LibraryKind } from "../shared/asset-library.ts";
+import { KindChoice } from "./play/asset-tiles.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -3142,6 +3145,69 @@ export const ASSET_WORDS = {
   playFailed: "This sound could not be played",
 } as const;
 
+/** Save, Share, select several and search on the Assets tab and in its viewer (`panels/assets/`). */
+export const ASSET_LIBRARY_WORDS = {
+  /** The tags on a card. */
+  saved: "Saved",
+  shared: "Shared",
+  save: "Save",
+  saveTip: "Save to your library",
+  unsaveTip: "Remove from Saved",
+  share: "Share",
+  shareTip: "Share with the community",
+  sharing: "Sharing…",
+  /** The menu of an asset on Play: its page, and taking it off. */
+  sharedMenu: "Shared on Play",
+  openOnPlay: "Open on Play",
+  stopSharing: "Stop sharing",
+  /** A share's step line under its card, and how it ended. */
+  steps: { send: "Send", check: "Check", live: "Live" },
+  stepsLabel: "Sharing",
+  checking: "Checking",
+  onPlay: "On Play",
+  missed: {
+    [ShareMiss.Refused]: "Couldn't share",
+    [ShareMiss.Checking]: "Checking",
+    [ShareMiss.NotShareable]: "Only Genex assets share",
+    [ShareMiss.KindNotShareable]: "Music can't be shared",
+    [ShareMiss.TooMany]: "Too many at once",
+    [ShareMiss.Failed]: "Couldn't share",
+  } satisfies Record<ShareMiss, string>,
+  tryAgain: "Try again",
+  sendReport: "Send a report",
+  sendReportLabel: "Send this refusal and the app's logs to the Genex team",
+  reportSent: "Report sent",
+  /** What Send a report posts: the asset, its game and genex.games' own words. */
+  reportText: (name: string, project: string, detail: string) =>
+    `genex.games refused to share "${name}" (${project}).${detail ? `\n\n${detail}` : ""}`,
+  /** The share window. */
+  shareOne: (name: string) => `Share ${name}`,
+  shareMany: (count: number) => `Share ${count} assets`,
+  shareButton: (count: number) => (count === 1 ? "Share" : `Share ${count} assets`),
+  nameLabel: "Name",
+  nameOf: (name: string) => `Name for ${name}`,
+  everyoneOne: "Everyone on Genex can find and use it.",
+  everyoneMany: "Everyone on Genex can find and use them.",
+  cancel: "Cancel",
+  /** Select several. */
+  selected: (count: number) => `${count} selected`,
+  select: (name: string) => `Select ${name}`,
+  deselect: (name: string) => `Deselect ${name}`,
+  clear: "Clear",
+  clearSelection: "Clear the selection",
+  /** Search on the canvas. */
+  search: "Search assets",
+  searchLabel: "Search this game, your library and the community",
+  clearSearch: "Clear the search",
+  thisGame: "This game",
+  myLibrary: "My library",
+  community: "Community",
+  noMatches: "no matches",
+  add: "Add",
+  addLabel: (title: string) => `Add ${title} to this game`,
+  added: (game: string) => `Added to ${game}`,
+} as const;
+
 /** The Builds graph's assets tile and card: jobs still open when the run ended. */
 export const ASSET_JOB_WORDS = {
   notFinished: (count: number) => `${count} not finished`,
@@ -3574,14 +3640,18 @@ export const GENEX_WORDS = {
     dismiss: "Close",
   },
   account: {
-    signedOutTitle: "Connect your Genex account",
-    signedOutText: "Sign in once in your browser. One credit balance covers all your games.",
+    /** The Connect band, for assistive tech: the account, or the plugin while it is off. */
+    label: "Genex account",
+    offLabel: "Connect Genex",
+    /** The Connect band's offer, with the plugin off or its account not yet connected. */
+    offerTitle: "The best game dev tools, in one click",
+    offerText: "Extend your agent with up-to-date tools for 3D, textures, sound and video. Always optional.",
     retryTitle: "Reconnect your Genex account",
     retryText: "Your saved sign-in couldn’t be opened on this Mac. Sign in again in your browser.",
-    connect: "Connect Genex",
+    /** Connect turns the plugin on and signs in to Genex: the saved sign-in, or the browser. */
+    connect: "Connect",
     retry: "Reconnect",
     signingInTitle: "Finish signing in in your browser",
-    signingInText: "Check that your browser shows this code:",
     /** The code beside it in the Publish dialog. */
     browserShows: "Your browser should show",
     reopen: "Open sign-in again",
@@ -3598,12 +3668,9 @@ export const GENEX_WORDS = {
     tryAgain: "Try again",
     connected: "Connected",
     disconnect: "Disconnect",
-    credits: "Credits",
     unlimited: "Unlimited",
-    shared: "One balance for all your games. Failed generations are refunded.",
     outOfCredits: "Games still build with procedural assets and Local Blender.",
     paused: (kinds: string) => `Paused on Genex right now: ${kinds}.`,
-    off: "Off. Your agent can't use Genex tools. Your profile, friends and Publish stay.",
   },
   /** Genex as the Plugins page shows it: the router, its line, and the tools it routes. */
   router: {
@@ -3617,8 +3684,6 @@ export const GENEX_WORDS = {
     rowOff: { lead: "Off. Your agent can't use Genex tools.", tail: "Your profile, friends and Publish stay." },
     /** The line under the plugin page's title while an account is connected. */
     connectedAs: (name: string) => `Game dev tools router · connected as ${name}`,
-    intro:
-      "The Genex plugin connects your agents to every game dev tool. Pay on demand, with one balance for every tool.",
     toolsTitle: "Tools it routes",
     toolsIntro:
       "Ask in any game chat. Genex picks the tool, runs it on your balance and saves the file in your game. No accounts or keys of your own.",
@@ -4621,6 +4686,56 @@ export const AVATAR_WORDS = {
   } satisfies Record<AvatarGear, string | null>,
 } as const;
 
+/** Play's Assets shelf as square tiles (`play/PlayAssets.tsx`). */
+export const PLAY_ASSET_WORDS = {
+  kindsLabel: "Kinds of asset",
+  kinds: {
+    [KindChoice.All]: "All",
+    [KindChoice.Model]: "3D",
+    [KindChoice.Image]: "Images",
+    [KindChoice.Sound]: "Sounds",
+    [KindChoice.Video]: "Videos",
+  } satisfies Record<KindChoice, string>,
+  /** What a kind's grid holds, as its messages name it. */
+  nouns: {
+    [KindChoice.All]: "assets",
+    [KindChoice.Model]: "3D assets",
+    [KindChoice.Image]: "images",
+    [KindChoice.Sound]: "sounds",
+    [KindChoice.Video]: "videos",
+  } satisfies Record<KindChoice, string>,
+  scopesLabel: "Whose assets",
+  scopes: { [AssetScope.Everyone]: "Everyone", [AssetScope.Mine]: "Mine" } satisfies Record<AssetScope, string>,
+  open: (title: string) => `Open ${title}`,
+  play: (title: string) => `Play ${title}`,
+  pause: (title: string) => `Pause ${title}`,
+  playFailed: "Couldn’t play this sound.",
+  use: "Use",
+  addLabel: (title: string) => `Use ${title} in one of your games`,
+  adding: "Adding…",
+  addTo: "Add to",
+  added: (game: string) => `Added to ${game}`,
+  addFailed: (game: string) => `Couldn’t add it to ${game}. Try again in a moment.`,
+  signedOut: "Sign in to Genex to see your assets",
+  signIn: "Sign in",
+  mineEmpty: "Assets you make with Genex show up here.",
+} as const;
+
+/** Publish's one line that shares the game's assets on Play when it goes live (`PublishShare.tsx`). */
+export const PUBLISH_SHARE_WORDS = {
+  offer: (count: number) => `Share its ${plural(count, "asset")} on Play`,
+  switchLabel: (count: number) => `Share its ${plural(count, "asset")} on Play when it goes live`,
+  sharing: (count: number) => `Sharing ${plural(count, "asset")} on Play…`,
+  shared: (count: number) => `${plural(count, "asset")} on Play`,
+  checking: (count: number) => `${plural(count, "asset")} on Play once checked`,
+  missed: (count: number) => `${count} couldn’t be shared`,
+  tryAgain: "Try again",
+  tryAgainLabel: "Share the assets that couldn’t be shared again",
+  notShared: (count: number) => `${plural(count, "asset")} not on Play yet`,
+  shareNow: "Share now",
+  shareNowLabel: (count: number) => `Share its ${plural(count, "asset")} on Play now`,
+} as const;
+
 /** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */
 export const MENTION_WORDS = {
   listLabel: "Tag a game, tool or asset",
@@ -4656,4 +4771,23 @@ export const MENTION_WORDS = {
   tryAgain: "Try again",
   removeTag: "Remove tag",
   trying: "Trying…",
+  search: "Search games, assets and tools",
+  yourAssets: "Your assets",
+  clear: "Clear",
+  clearLabel: "Clear the search",
+  whatLabel: "What to show",
+  all: "All",
+  games: "Games",
+  whoseLabel: "Whose",
+  everyone: "Everyone",
+  mine: "Mine",
+  /** An asset card's chip when genex.games says what kind of asset it is. */
+  assetKind: {
+    [LibraryKind.Model]: "3D",
+    [LibraryKind.Image]: "Image",
+    [LibraryKind.Sound]: "Sound",
+    [LibraryKind.Video]: "Video",
+  } satisfies Record<LibraryKind, string>,
+  saved: "Saved",
+  shared: "Shared",
 } as const;
