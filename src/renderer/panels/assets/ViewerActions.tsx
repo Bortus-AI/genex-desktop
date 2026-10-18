@@ -9,7 +9,6 @@ import { canSave, canShare, type ShareProgress, sharedAssetUrl, shareUnderway } 
 import { usePlayWeb } from "../../state/hooks.ts";
 import { studio } from "../../state/studio.ts";
 import { type Notify, notifyProblem } from "../../state/toasts.ts";
-import { Button } from "../../ui/Button.tsx";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../../ui/dropdown-menu.tsx";
 import { Icon } from "../../ui/icons.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../ui/tooltip.tsx";
@@ -92,15 +91,23 @@ function SharedMenu({
   );
 }
 
-/** Share in Play's tint, with what it does on hover; Sharing… while it goes. */
+/** Share in Play's tint, beside Reveal in its own type, with what it does on hover; Sharing… while it goes. */
 function ShareButton({ busy, onShare }: { busy: boolean; onShare: () => void }): JSX.Element {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="play-tint" data-viewer-share busy={busy} aria-label={WORDS.shareTip} onClick={onShare}>
+        <button
+          type="button"
+          data-viewer-share
+          aria-label={WORDS.shareTip}
+          aria-busy={busy || undefined}
+          disabled={busy}
+          className="lightbox-button play-tint gap-1.5"
+          onClick={onShare}
+        >
           {!busy && <Icon name="globe" size={14} />}
           {busy ? WORDS.sharing : WORDS.share}
-        </Button>
+        </button>
       </TooltipTrigger>
       <TooltipContent side="bottom" sideOffset={6}>
         {WORDS.shareTip}

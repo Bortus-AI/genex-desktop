@@ -62,9 +62,28 @@ describe("sourceLabel", () => {
     assert.equal(sourceLabel("imported"), "Your files");
     assert.equal(sourceLabel("soundsmith"), "soundsmith");
   });
+
+  it("names what Add brought in by where it came from", () => {
+    assert.equal(sourceLabel("library"), "My library");
+    assert.equal(sourceLabel("community"), "Community");
+  });
 });
 
 describe("groupAssets", () => {
+  it("puts what Add brought in after the plugins and before the files dropped in by hand", () => {
+    const groups = groupAssets([
+      asset("assets/loose.png"),
+      asset("assets/community/c/hut.glb", { source: "community" }),
+      asset("assets/library/l/moss.png", { source: "library" }),
+      asset("assets/soundsmith/s/a.mp3", { source: "soundsmith" }),
+      asset("assets/genex/g/a.glb", { source: "genex" }),
+    ]);
+    assert.deepEqual(
+      groups.map((group) => group.source),
+      ["genex", "soundsmith", "library", "community", "imported"],
+    );
+  });
+
   it("puts the sources in a fixed order, whatever order the walk returned", () => {
     const groups = groupAssets([
       asset("assets/loose.png"),

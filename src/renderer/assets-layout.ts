@@ -5,8 +5,9 @@
  * Two rules decide the order, and both are about a person looking for something they just made:
  *
  *   1. Sources come in a fixed order — Genex first, then Blender, then any other plugin
- *      alphabetically, with the files you dropped in yourself last. A plugin installed during a run
- *      must not reshuffle yesterday's canvas.
+ *      alphabetically, then what Add brought from the library and the community, with the files
+ *      you dropped in yourself last. A plugin installed during a run must not reshuffle
+ *      yesterday's canvas.
  *   2. Inside a source, jobs are newest first, and the files of one job keep their own order by
  *      path. A generation that takes minutes therefore appears at the top and stays there.
  *
@@ -15,6 +16,7 @@
  */
 import type { MakingJob } from "../shared/asset-making.ts";
 import { type AssetKind, type AssetSource, assetKind, type ProjectAsset } from "../shared/game-assets.ts";
+import { ASSET_LIBRARY_WORDS } from "./words.ts";
 
 /** The sources the studio names itself (`AssetSource`); any other source is a plugin id. */
 export const Source = {
@@ -22,6 +24,9 @@ export const Source = {
   Blender: "blender",
   /** files nobody generated: dropped into the game folder by hand */
   Imported: "imported",
+  /** brought in from the account's library or the community by Add (`assets/library/`, `assets/community/`) */
+  Library: "library",
+  Community: "community",
 } as const satisfies Record<string, AssetSource>;
 
 export interface AssetRect {
@@ -75,11 +80,15 @@ const GROUP_HEAD_H = 30;
 const PAD = 32;
 
 const KNOWN_FIRST: readonly string[] = [Source.Genex, Source.Blender];
+/** After the plugins: what Add brought in, then the files dropped in by hand. */
+const KNOWN_LAST: readonly string[] = [Source.Library, Source.Community, Source.Imported];
 
 /** What each named source is called on screen. */
 const SOURCE_LABEL = new Map<string, string>([
   [Source.Genex, "Genex"],
   [Source.Blender, "Blender"],
+  [Source.Library, ASSET_LIBRARY_WORDS.myLibrary],
+  [Source.Community, ASSET_LIBRARY_WORDS.community],
   [Source.Imported, "Your files"],
 ]);
 
@@ -89,9 +98,10 @@ export function sourceLabel(source: string): string {
 }
 
 function sourceRank(source: string): number {
-  const known = KNOWN_FIRST.indexOf(source);
-  if (known >= 0) return known;
-  return source === Source.Imported ? KNOWN_FIRST.length + 1 : KNOWN_FIRST.length;
+  const first = KNOWN_FIRST.indexOf(source);
+  if (first >= 0) return first;
+  const last = KNOWN_LAST.indexOf(source);
+  return last >= 0 ? KNOWN_FIRST.length + 1 + last : KNOWN_FIRST.length;
 }
 
 function compareSources(a: string, b: string): number {

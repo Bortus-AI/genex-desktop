@@ -8,6 +8,18 @@
   fill: currentColor;
 }
 
+/* Share in the viewer: Play's tint and edge on the viewer's own button. */
+.lightbox-button.play-tint {
+  background: var(--people-tint);
+  box-shadow: inset 0 0 0 1px var(--people-tint-edge);
+}
+.lightbox-button.play-tint:enabled:hover {
+  background: var(--people-tint-hover);
+}
+.lightbox-button.play-tint:disabled {
+  cursor: progress;
+}
+
 /* The canvas moves cards to make room for a line under a row; they glide there. */
 .asset-card {
   transition: top var(--duration-medium) var(--ease-smooth-out);
