@@ -74,6 +74,14 @@ describe("library rows", () => {
     });
   });
 
+  it("reads a held or taken-down page as not on Play, whatever its status says", () => {
+    const shared = (sharedAsset: Record<string, unknown>) =>
+      toLibraryAsset({ id: GEN, kind: "model", sharedAsset })?.shared;
+    assert.equal(shared({ projectId: "p1", slug: "hut", status: "published", live: false })?.live, false);
+    assert.equal(shared({ projectId: "p1", slug: "hut", status: "published", live: true })?.live, true);
+    assert.equal(shared({ projectId: "p1", slug: "hut", status: "published" })?.live, true, "an older genex.games");
+  });
+
   it("drops a row without a usable id and keeps no file off genex.games' hosts", () => {
     assert.equal(toLibraryAsset({ id: "../../etc", kind: "model" }), null);
     const row = toLibraryAsset({

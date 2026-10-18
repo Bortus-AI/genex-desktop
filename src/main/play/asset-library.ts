@@ -108,7 +108,10 @@ function sharedOf(value: unknown): SharedAsset | null {
   if (!isRecord(value)) return null;
   const projectId = text(value.projectId, ID_MAX);
   if (!projectId || !isPlaySlug(value.slug)) return null;
-  return { projectId, slug: value.slug, live: value.status === PUBLISHED };
+  // genex.games says whether the public sees the page (`live`: not held, not taken down); an older
+  // answer has only the project's status.
+  const live = typeof value.live === "boolean" ? value.live : value.status === PUBLISHED;
+  return { projectId, slug: value.slug, live };
 }
 
 /** One listed generation as the app keeps it, or null when it lacks what a card needs. */
