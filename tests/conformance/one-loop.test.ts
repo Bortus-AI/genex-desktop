@@ -4331,13 +4331,11 @@ describe("the open lead's finish words", () => {
         .find((one) => one.startsWith("FINISH:")) ?? "";
     const timed = finishLine(false);
     const endless = finishLine(true);
-    assert.ok(
-      timed.includes(`more than ${FINISH_TIME_LEFT_MS / MINUTE} minutes are left its no's never stop the Loop`),
-    );
-    assert.match(timed, /a new claim needs new work since the last no/);
+    assert.ok(timed.includes(`while over ${FINISH_TIME_LEFT_MS / MINUTE} minutes are left, no's never stop the Loop`));
+    assert.match(timed, /a new claim needs a new save point and new proof/);
     assert.ok(endless.includes(`${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`));
     assert.doesNotMatch(endless, /never stop/);
     for (const line of [timed, endless])
-      assert.match(line, /A picture of the running project outranks what its files say/);
+      assert.match(line, /Your own pictures of the running project outrank what its files say/);
   });
 });

@@ -7,7 +7,7 @@
  * session's engine calls them.
  */
 import { CLAIM_BEFORE_END_MINUTES } from "../finish-check.ts";
-import { PICTURE_OUTRANKS_FILES, stopRuleWords } from "../finish-check-prompts.ts";
+import { stopRuleWords } from "../finish-check-prompts.ts";
 import { toolCall } from "../model-roles.ts";
 import { type FactRef, ProjectTool } from "../folder-facts.ts";
 import { appIdentity } from "../project-prompts.ts";
@@ -110,7 +110,7 @@ export function leadBrief(options: LeadBriefOptions): string {
     appIdentity({ folderLabel: options.folderLabel ?? "", facts: options.facts ?? UNREAL_AT_ROOT }),
     options.handover,
     notesText(options.notes),
-    `You are the lead of this Unreal Loop and its only builder: you build the whole game "${title}" yourself, live in the user's open Unreal Editor, and judge it by your own captures. Small workers may make pieces for you; nobody else touches the editor.`,
+    `You are the lead of this Unreal Loop and its only builder: you build the whole game "${title}" yourself, live in the user's open Unreal Editor, and judge it by your own captures, which outrank its files. Small workers may make pieces for you; nobody else touches the editor.`,
     `THE GOAL, in the owner's words:\n${options.goal}`,
     timeText(engine, options.minutes),
     unrealRules(engine, project, { ownFiles: true }).join("\n"),
@@ -195,8 +195,7 @@ function savingText(engine: string | undefined, untilFinish: boolean | null): st
 - ${tool(LeadTool.RebuildUnreal)} restarts Unreal between turns: after C++ changes in unreal/Source (never Live Coding), or when the editor renders differently from play.
 - Act on the owner's words right after the edit you are in.
 - ${tool(LeadTool.Note)} leaves the owner one line.
-- When you believe the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, test reports). A reviewer who did none of the work checks it; a no comes back with reasons, and ${stopRuleWords(untilFinish)}
-- ${PICTURE_OUTRANKS_FILES}
+- When the game meets the request, call ${tool(LeadTool.Finish)} with a summary and proof (pictures, logs, tests). A reviewer who did none of the work checks it; a no says why, and ${stopRuleWords(untilFinish)}
 - Your last words are honest: what you built, and what you did not test.`;
 }
 

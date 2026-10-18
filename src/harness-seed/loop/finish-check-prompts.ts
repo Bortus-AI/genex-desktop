@@ -9,7 +9,7 @@ import { minutes } from "./time.ts";
 
 /** What every lead is told about its own pictures beside the project's files. */
 export const PICTURE_OUTRANKS_FILES =
-  "A picture of the running project outranks what its files say: when one contradicts them (a model, a mesh, a material, a setting), find out why and fix it before you claim, and never claim what your own pictures don't show.";
+  "Your own pictures of the running project outrank what its files say: when they disagree, find out why before you claim.";
 
 /**
  * When the reviewer's no's stop a Loop, as its lead is told: an ∞ Loop's at the cap (`untilFinish`),
@@ -20,8 +20,8 @@ export function stopRuleWords(untilFinish: boolean | null): string {
   const left = minutes(FINISH_TIME_LEFT_MS);
   if (untilFinish === true) return `${max} no's in a row stop the Loop.`;
   if (untilFinish === null)
-    return `${max} no's in a row stop the Loop once ${left} minutes or less are left (an ∞ Loop, at any time); before that it keeps working, and a new claim after them needs new work since the last no.`;
-  return `while more than ${left} minutes are left its no's never stop the Loop: you keep working on what isn't done, and after ${max} no's in a row a new claim needs new work since the last no (a save point and proof made since). With ${left} minutes or less left, ${max} no's in a row stop it.`;
+    return `${max} no's in a row stop the Loop once ${left} minutes or less are left (an ∞ Loop: any time).`;
+  return `while over ${left} minutes are left, no's never stop the Loop: keep fixing, and after ${max} in a row a new claim needs a new save point and new proof. With less left, ${max} in a row stop it.`;
 }
 
 /** One capture as the reviewer is told of it beside its pictures: what was taken, and how much of it is attached. */
