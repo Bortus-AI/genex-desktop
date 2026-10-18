@@ -1963,6 +1963,28 @@ describe("the one Loop's idle rule", () => {
     assert.equal(report.victory, true, String(report.stoppedBecause));
   });
 
+  it(
+    "a timed Loop in a Godot project names its time left when it settles a claim, so the reviewer's no keeps it going",
+    TEST_TIMEOUT,
+    async () => {
+      const host = await hostOn(Project.GodotGame, {
+        facts: GODOT,
+        run: { budgets: { wallClockMs: 3 * 60 * MINUTE, completionPolicy: "duration" } },
+        turns: [keepsRoom(1), finishes, keepsRoom(2), finishes],
+      });
+      host.reviews.push(reviewerAnswer("no", ["the door does not open"]));
+      const report = await host.start();
+      const [settled] = host.rec.paramsOf("finish.settle");
+      assert.ok(
+        Number(settled?.timeLeftMs) > 2 * 60 * MINUTE,
+        `the settle names the Loop's time left: ${settled?.timeLeftMs}`,
+      );
+      const no = host.appended("finish_check").find((record) => record.step === "rejected");
+      assert.equal(no?.timeLeft, true, "the no records that the Loop had time left");
+      assert.equal(report.victory, true, String(report.stoppedBecause));
+    },
+  );
+
   it("one quiet turn after work is asked what next, never wrapped up at once", TEST_TIMEOUT, async () => {
     const host = await hostOn(Project.GodotGame, {
       facts: GODOT,
@@ -4276,5 +4298,44 @@ describe("the one Loop's reads of the game folder", () => {
     const loopRun = { ctx: host.rec.ctx, run: host.run } as unknown as Parameters<typeof folderChanged>[0];
     assert.equal(await folderChanged(loopRun), false);
     assert.ok((await readFile(index)).equals(before), "the folder's index is as it was");
+  });
+});
+
+describe("the open lead's finish words", () => {
+  it("a timed Loop's no's stop it only once little time is left, an ∞ Loop's at the cap, and a picture outranks the files", async () => {
+    const { FINISH_TIME_LEFT_MS, MAX_FINISH_REJECTIONS } = await import(
+      "../../src/harness-seed/loop/finish-contract.ts"
+    );
+    const finishLine = (untilFinish: boolean) =>
+      openBrief({
+        goal: "A level.",
+        folder: "/games/level",
+        folderLabel: "level",
+        facts: GODOT,
+        holds: null,
+        carried: [],
+        references: [],
+        workerTypes: [],
+        appSaved: false,
+        restart: false,
+        cppRestart: false,
+        judge: false,
+        savePoints: [],
+        now: 0,
+        softDeadline: 60 * MINUTE,
+        finalDeadline: 60 * MINUTE,
+        untilFinish,
+        skills: [],
+      })
+        .split("\n\n")
+        .find((one) => one.startsWith("FINISH:")) ?? "";
+    const timed = finishLine(false);
+    const endless = finishLine(true);
+    assert.ok(timed.includes(`while over ${FINISH_TIME_LEFT_MS / MINUTE} minutes are left, no's never stop the Loop`));
+    assert.match(timed, /a new claim needs a new save point and new proof/);
+    assert.ok(endless.includes(`${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`));
+    assert.doesNotMatch(endless, /never stop/);
+    for (const line of [timed, endless])
+      assert.match(line, /Your own pictures of the running project outrank what its files say/);
   });
 });

@@ -64,6 +64,8 @@ export interface InspectorProps {
   onOpenJob: (job: AssetInfo) => void;
   /** Put a chip naming this node in the chat's composer; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
+  /** Keep building on what the run left, in the chat that owns it; null when there is no chat. */
+  onKeepBuilding: ((notDone: string[]) => void) | null;
   onNotice: Notify;
   onPlay: (() => Promise<void> | void) | null;
 }

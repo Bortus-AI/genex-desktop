@@ -1,13 +1,11 @@
 /**
- * The finish check in the chat: each round of a run's finish check is one line, written when the
- * reviewer starts checking and rewritten in place by its verdict. A stop asks for attention; no
- * line ever folds into the run's activity row.
+ * The finish check in the chat: while the Loop works its rounds say nothing; once the run ends
+ * without the reviewer's yes, its result card lists what the last no found done and still to fix.
  */
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { EntryKind, SystemTag, toEntries } from "../../src/renderer/chat-entries.ts";
+import { EntryKind, StopWhy, stopWhyLine, toEntries } from "../../src/renderer/chat-entries.ts";
 import { morningWords } from "../../src/renderer/morning-words.ts";
-import { FINISH_CHECK_WORDS } from "../../src/renderer/words.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
 import { FinishCheckStep, MAX_FINISH_REJECTIONS } from "../../src/shared/finish-check.ts";
@@ -30,71 +28,108 @@ const check = (id: number, round: number, step: string, extra: Record<string, un
 const NO_FINISH_LINE = "The track has no finish line, so a lap never ends.";
 const NO_TIMER = "The lap timer isn't on screen in any shot.";
 
-/** The finish check's lines: their text and whether they ask for attention. */
-const finishLines = (events: EventEnvelope[]) =>
-  toEntries(events).flatMap((entry) =>
-    entry.kind === EntryKind.System && entry.tag === SystemTag.FinishCheck
-      ? [[entry.text, entry.attention === true] as const]
-      : [],
-  );
+/** The result card's still-to-fix lists, when the log ends with one. */
+const stillToFixOf = (events: EventEnvelope[]) =>
+  toEntries(events).flatMap((entry) => (entry.kind === EntryKind.Morning ? [entry.stillToFix ?? null] : []));
+const finished = (id: number, extra: Record<string, unknown> = {}) =>
+  custom(id, CustomEvent.RunFinished, { runId: RUN, project: "valley", ...extra });
 
-it("one chat line per check, rewritten by its verdict", () => {
-  assert.deepEqual(finishLines([check(1, 1, FinishCheckStep.Checking, { claim: "Done." })]), [
-    [FINISH_CHECK_WORDS.chat.checking, false],
-  ]);
+it("a round of the finish check says nothing in the chat while the Loop works", () => {
   const log = [
-    check(1, 1, FinishCheckStep.Checking),
-    check(2, 1, FinishCheckStep.Rejected, { reasons: [NO_FINISH_LINE, NO_TIMER], rejections: 1 }),
+    check(1, 1, FinishCheckStep.Checking, { claim: "Done." }),
+    check(2, 1, FinishCheckStep.Rejected, { reasons: [NO_FINISH_LINE], notDone: [NO_TIMER], rejections: 1 }),
     check(3, 2, FinishCheckStep.Checking),
     check(4, 2, FinishCheckStep.Unanswered, { why: "the reviewer's session ended", rejections: 1 }),
     check(5, 3, FinishCheckStep.Checking),
-    check(6, 3, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 2 }),
-    check(7, 4, FinishCheckStep.Checking),
-    check(8, 4, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 3, stopped: true }),
+    check(6, 3, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: MAX_FINISH_REJECTIONS, timeLeft: true }),
   ];
-  assert.deepEqual(finishLines(log), [
-    [`The reviewer sent the work back (1 of ${MAX_FINISH_REJECTIONS}): ${NO_FINISH_LINE}`, false],
-    ["The reviewer couldn't answer: the reviewer's session ended", false],
-    [`The reviewer sent the work back (2 of ${MAX_FINISH_REJECTIONS}): ${NO_TIMER}`, false],
-    [FINISH_CHECK_WORDS.chat.stopped(NO_TIMER), true],
+  assert.deepEqual(toEntries(log), [], "no line, no card, no activity row");
+});
+
+it("a run that ends without a yes lists its last no's done and still to fix on its result card", () => {
+  const met = "The laps run, as accepted before.";
+  const log = [
+    check(1, 1, FinishCheckStep.Rejected, {
+      reasons: [met],
+      done: ["Laps run"],
+      notDone: [NO_FINISH_LINE],
+      rejections: 1,
+    }),
+    check(2, 2, FinishCheckStep.Rejected, {
+      reasons: [met],
+      done: ["Laps run", "Finish line"],
+      notDone: [NO_TIMER],
+      rejections: 2,
+      stopped: true,
+    }),
+    finished(3, { victory: false }),
+  ];
+  assert.deepEqual(stillToFixOf(log), [
+    { done: ["Laps run", "Finish line"], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null },
   ]);
-  assert.match(FINISH_CHECK_WORDS.chat.stopped(NO_TIMER), /so the Loop stopped\. Not done: The lap timer/);
+  const said = JSON.stringify(toEntries(log));
+  assert.ok(!said.includes(met), "what the reviewer checked is never listed");
 
   const yes = [
-    check(1, 1, FinishCheckStep.Checking),
-    check(2, 1, FinishCheckStep.Accepted, { reasons: ["Laps run."] }),
+    check(1, 1, FinishCheckStep.Rejected, { reasons: [met], notDone: [NO_TIMER], rejections: 1 }),
+    check(2, 2, FinishCheckStep.Accepted, { reasons: ["Laps run and the timer shows."] }),
+    finished(3, { victory: true }),
   ];
-  assert.deepEqual(finishLines(yes), [[FINISH_CHECK_WORDS.chat.accepted, false]]);
+  assert.deepEqual(stillToFixOf(yes), [null], "a yes leaves nothing to fix");
+  const older = [
+    check(1, 1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 3, stopped: true }),
+    finished(2),
+  ];
+  assert.deepEqual(stillToFixOf(older), [null], "an older record that names nothing not done keeps the card as it was");
+  assert.deepEqual(stillToFixOf([finished(1)]), [null], "a run no reviewer checked has no list");
+});
+
+it("a reopened run's next close starts clean: an earlier ask's no is not listed again", () => {
+  const log = [
+    check(1, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 3, stopped: true }),
+    finished(2),
+    finished(3),
+  ];
+  assert.deepEqual(stillToFixOf(log), [{ done: [], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null }, null]);
+});
+
+it("the card says why the Loop stopped: its hours ran out, the person stopped it, or it ended another way", () => {
+  const HOUR = 3_600_000;
+  const started = custom(1, CustomEvent.RunStarted, {
+    runId: RUN,
+    project: "valley",
+    budgets: { wallClockMs: 5 * HOUR },
+  });
+  const no = (id: number) =>
+    check(id, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 1, timeLeft: true });
+  const whyOf = (events: EventEnvelope[]) => stillToFixOf(events).map((card) => card && [card.why, card.hours]);
+  assert.deepEqual(whyOf([started, no(2), finished(5 * HOUR)]), [[StopWhy.Time, 5]], "it ended at its five hours");
   assert.deepEqual(
-    finishLines([check(2, 1, FinishCheckStep.Accepted)]),
-    [[FINISH_CHECK_WORDS.chat.accepted, false]],
-    "a verdict whose checking line is not on the page is a line of its own",
+    whyOf([started, no(2), finished(HOUR)]),
+    [[StopWhy.Ended, 5]],
+    "an hour in, it ended some other way",
   );
-  const routine = toEntries(log).filter((entry) => entry.kind === EntryKind.Activity);
-  assert.deepEqual(routine, [], "never folded into an activity row");
+  assert.deepEqual(
+    whyOf([started, no(2), finished(HOUR, { executionStatus: "cancelled" })]),
+    [[StopWhy.Person, 5]],
+    "the person's Stop",
+  );
+  assert.equal(stopWhyLine(StopWhy.Time, 5), "Your 5 hours ran out before this was fixed.");
+  assert.equal(stopWhyLine(StopWhy.Time, 0.5), "Your 30 minutes ran out before this was fixed.");
+  assert.match(stopWhyLine(StopWhy.Stuck, null), /kept getting this wrong/);
 });
 
 it("a record it cannot place says nothing", () => {
   const hostile: Array<[string, Record<string, unknown>]> = [
-    ["no run", { round: 1, step: FinishCheckStep.Checking }],
-    ["a chat turn's", { turn: "m-1", round: 1, step: FinishCheckStep.Checking }],
-    ["no round", { runId: RUN, step: FinishCheckStep.Checking }],
-    ["an unknown step", { runId: RUN, round: 1, step: "maybe" }],
+    ["no run", { round: 1, step: FinishCheckStep.Rejected, notDone: [NO_TIMER] }],
+    ["an unknown step", { runId: RUN, round: 1, step: "maybe", notDone: [NO_TIMER] }],
     ["reasons that are not strings", { runId: RUN, round: 1, step: FinishCheckStep.Rejected, reasons: [3] }],
   ];
   for (const [name, payload] of hostile)
-    assert.deepEqual(finishLines([custom(1, CustomEvent.FinishCheck, payload)]), [], name);
-  assert.deepEqual(
-    finishLines([check(1, 1, FinishCheckStep.Checking), check(2, 2, FinishCheckStep.Checking)]),
-    [
-      [FINISH_CHECK_WORDS.chat.checking, false],
-      [FINISH_CHECK_WORDS.chat.checking, false],
-    ],
-    "two rounds are two lines",
-  );
+    assert.deepEqual(stillToFixOf([custom(1, CustomEvent.FinishCheck, payload), finished(2)]), [null], name);
 });
 
-it("a run paused while the reviewer is checking says there was no answer, as the graph does", async () => {
+it("a run paused while the reviewer is checking reads in the graph as not yet: no reviewer is at work", async () => {
   const { buildRunGraph, GraphNodeKind } = await import("../../src/renderer/run-graph.ts");
   const paused = [
     custom(1, CustomEvent.RunStarted, { runId: RUN, project: "valley", goal: "a racer" }),
@@ -102,34 +137,11 @@ it("a run paused while the reviewer is checking says there was no answer, as the
     check(3, 1, FinishCheckStep.Checking),
     custom(4, CustomEvent.RunFinished, { runId: RUN, paused: true, executionStatus: "paused" }),
   ];
-  assert.deepEqual(finishLines(paused), [[FINISH_CHECK_WORDS.chat.unanswered(""), false]]);
   const node = buildRunGraph(paused, RUN)?.nodes.find((one) => one.kind === GraphNodeKind.FinishCheck);
-  assert.equal((node as { state?: string } | undefined)?.state, "not_yet", "the graph agrees: no reviewer is at work");
+  assert.equal((node as { state?: string } | undefined)?.state, "not_yet");
   const resumed = [...paused, custom(5, CustomEvent.AutopilotResumed, { runId: RUN })];
   const again = buildRunGraph(resumed, RUN)?.nodes.find((one) => one.kind === GraphNodeKind.FinishCheck);
   assert.equal((again as { state?: string } | undefined)?.state, "not_yet", "nor after the run resumes");
-});
-
-it("a run that ends while the reviewer is checking leaves the line saying there was no answer", () => {
-  const finished = (id: number, runId: string) => custom(id, CustomEvent.RunFinished, { runId, project: "valley" });
-  assert.deepEqual(finishLines([check(1, 1, FinishCheckStep.Checking), finished(2, RUN)]), [
-    [FINISH_CHECK_WORDS.chat.unanswered(""), false],
-  ]);
-  assert.deepEqual(
-    finishLines([check(1, 1, FinishCheckStep.Checking), finished(2, "another-run")]),
-    [[FINISH_CHECK_WORDS.chat.checking, false]],
-    "another run's end leaves it",
-  );
-  const answered = [
-    check(1, 1, FinishCheckStep.Checking),
-    check(2, 1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 1 }),
-    finished(3, RUN),
-  ];
-  assert.deepEqual(
-    finishLines(answered),
-    [[`The reviewer sent the work back (1 of ${MAX_FINISH_REJECTIONS}): ${NO_TIMER}`, false]],
-    "an answered round keeps its verdict",
-  );
 });
 
 it("a run_finished of an in-place Loop gives its result card the profile, so the card says kept in your project before the summary loads", () => {

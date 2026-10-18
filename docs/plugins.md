@@ -466,6 +466,18 @@ spelled: any case, whitespace or zero-width characters, the module or class alon
 or qualified in `tool_name` with no toolset. Only Genex's own queue calls it. Epic answers pictures
 (`CaptureEditorImage`, `CaptureViewport`, `CaptureAssetImage`) as base64 inside the JSON text,
 which Studio would truncate, so the bridge hands up to four per answer to the agent as MCP images.
+The Genex editor helper's build and play tools (below) answer a refusal or a failure as `{error}`
+inside a call Epic counts as done, so the bridge marks such an answer `isError` (the toolset named
+short or qualified, in any case): the agent and the chat read it as a failed call, in the helper's
+own words. An `error` field in any other toolset's answer stays as Epic sent it.
+Some of Epic's toolsets describe themselves in more than an engine takes from one tool answer
+(Niagara's system toolset in about 278 KB, past Claude Code's 25,000 tokens), so a
+`describe_toolset` answer over 60,000 characters comes back as its tools by name, each with the
+first line of its description (by name alone when those are too long), with a note; the bridge's
+own `tool_name` argument, never sent to Epic, returns one tool's whole entry, and the chat shows that
+call as reading the toolset. A description whose tools it can't find, and anything still too long,
+is cut at the limit without splitting a character (`editor-describe.ts`). Shorter answers and Epic's
+errors stay as Epic sent them.
 An editor behind Genex runs at 3 frames per second while Unreal's "Use Less CPU when in
 Background" (`bThrottleCPUWhenNotForeground`) is on. To avoid that, a `StartPIE` call first turns
 the setting off through Epic's `ObjectTools.set_properties`. This changes only the running editor
@@ -989,7 +1001,10 @@ ports; when one answers, `openProject` names it and `next` is switch, which the 
 one press: Unreal's normal quit, then Open in Unreal once it has closed. A project counts as set up with its plugins on, its own port and
 a setup record; a Genex editor helper that is older or missing gives it the update-helper step
 (setup again copies only the helper) rather than making it look never set up, and Connected then
-adds a quiet note. A user's Open updates an older helper only in the open game's own linked project, so only
+adds a quiet note. A project set up before Epic's toolsets were added is still set up; the same Open
+adds them (`addToolsetPlugins`, after the game snapshot, recorded so Undo takes them out), with no note.
+A toolset Genex added that the user took out again counts as settled: no Open, setup or snapshot puts it back.
+A user's Open updates an older helper only in the open game's own linked project, so only
 there does the panel say Open in Unreal updates it; elsewhere it says opening it from its Genex game does. A newer helper (`helperNewer`) gets one line under Open in Unreal and Connected,
 never an update. Connected needs both an answer on the project's port and a running editor
 process. Starting means Genex opened the project in the last 15 s, or its own Unreal log
@@ -1035,7 +1050,15 @@ The confirmed `setup` step does four things, each one only if it is needed:
   confirmation says that content saved in 5.8 won't open in the old version. Undo puts the old
   association back unless the user has moved the project on since;
 - turns on `ModelContextProtocol` and `EditorToolset` in the `.uproject`, keeping Unreal's tab
-  layout;
+  layout, and adds Epic's toolsets for games, editor-only (`TOOLSET_PLUGINS`: `UMGToolSet`,
+  `NiagaraToolsets`, `StateTreeToolset`, `AIModuleToolset`, `AnimationAssistantToolset`,
+  `PCGToolset`, `PhysicsToolsets`, `GameplayTagsToolset`, `AutomationTestToolset`). A toolset the
+  project already names, on or off, stays as the user left it, and one Genex added that the user took
+  out stays out. Not Epic's `AllToolsets`: on UE 5.8.3
+  its `GameFeaturesToolset` makes every start log a GameFeatureData load error, and the rest serve
+  no game Genex makes. On UE 5.8.3 a fresh project with these starts with no load errors and opens
+  as fast as one without them; `list_toolsets` grows from 19 toolsets to 40, while the agent's three
+  meta-tools stay the same;
 - gives the project its own port and starts the MCP server on it, by writing `bAutoStartServer`
   and `ServerPortNumber` into `Saved/Config/<Mac|Windows>Editor/EditorPerProjectUserSettings.ini`.
   The port is always in Genex's block, 18000–18999: it starts from a hash of the real `.uproject`
@@ -2308,6 +2331,9 @@ nothing. A build of the host lets UnrealBuildTool's sandbox write each project p
 `Intermediate` and `Binaries`, nothing else of it (`ubt.ts` `projectPluginDirs`, `ubt-sandbox.ts`
 `pluginDirs`). A game with an `unreal-plugin` fact gets four more tools and the `unreal-plugin` skill
 that orders them (`plugin-ship.ts`; `plugin` names the folder under `Plugins/` when there are several).
+The skill also gives Epic's toolset conventions for a plugin whose tools agents call through
+Unreal's MCP (a registered `UToolsetDefinition`, static `AICallable` tools with real types, errors
+raised, not returned).
 `unreal__plugin-build` needs the editor lock and asks first: the call saves the person's work through
 the Genex editor helper, quits Unreal and waits, then the host's editor target is built as the
 plugin's background job, which opens Unreal again after a good build and leaves it closed after a

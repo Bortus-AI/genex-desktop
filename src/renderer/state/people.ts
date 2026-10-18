@@ -92,6 +92,8 @@ export interface PeopleState {
   profiles: Record<string, ProfileEntry>;
   /** People a press is changing, by id: their buttons wait. */
   busy: Record<string, true>;
+  /** A regenerated avatar is being saved: what depends on it being kept (the welcome's Continue) waits. */
+  avatarSaving: boolean;
   search: PeopleSearch;
   /** The account's stats by period, read only when a page shows them. */
   stats: Partial<Record<StatsPeriod, StatsEntry>>;
@@ -111,6 +113,7 @@ export const initialPeople = (): PeopleState => ({
   friendsStatus: LoadStatus.Idle,
   profiles: {},
   busy: {},
+  avatarSaving: false,
   search: { query: "", status: LoadStatus.Idle, result: null },
   stats: {},
   creators: { status: LoadStatus.Idle, list: null },
@@ -383,8 +386,9 @@ type PeopleSet = (change: (state: PeopleState) => PeopleState) => void;
 /**
  * Regenerate's writes: each new variant shows at once and is saved after the one before it, so the
  * last press is the variant genex.games keeps. Only the newest press's answer lands: an older one
- * arriving behind it never puts its face back. When the newest is refused, the account is read again
- * and shows what genex.games kept.
+ * arriving behind it never puts its face back, and an older refusal is not reported, as a newer
+ * press is what counts. When the newest is refused, the account is read again and shows what
+ * genex.games kept. `avatarSaving` holds while any press's save runs.
  */
 function avatarVariantWrites(
   store: StoreApi<PeopleState>,
@@ -393,19 +397,28 @@ function avatarVariantWrites(
   answered: (me: PlayMe | null) => Promise<void>,
 ): (variant: number) => Promise<void> {
   let newest = 0;
+  let saving = 0;
   let saved: Promise<unknown> = Promise.resolve();
+  const setSaving = (change: number): void => {
+    saving += change;
+    set((state) => ({ ...state, avatarSaving: saving > 0 }));
+  };
   return async (variant: number): Promise<void> => {
     const press = ++newest;
     const shown = store.getState().me;
     if (shown) set((state) => meRead(state, { ...shown, avatarVariant: variant }));
+    setSaving(1);
     const write = saved.then(() => api.playAvatarVariant(variant));
     saved = write.catch(() => undefined);
     try {
       const me = await write;
       if (press === newest) await answered(me);
     } catch (error) {
-      if (press === newest) await answered(await api.playMe().catch(() => shown));
+      if (press !== newest) return;
+      await answered(await api.playMe().catch(() => shown));
       throw error;
+    } finally {
+      setSaving(-1);
     }
   };
 }

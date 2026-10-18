@@ -62,7 +62,6 @@ import type { LeadFace } from "./run-tree.ts";
 import type { CommandState } from "./state/command-runs.ts";
 import type { JobState } from "./panels/plugins/genex/genex-view.ts";
 import { plural } from "../shared/skill-words.ts";
-import { MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
 import { JUDGE_PLAY_TOOL_NAME } from "../shared/chat-judge.ts";
 import {
   APP_LOOK_TOOL_NAME,
@@ -1631,6 +1630,31 @@ export function screenAgo(at: number, now: number, { ago = false }: { ago?: bool
  * The plan's two replies. The steering card and the composer both offer them, and a waiting plan
  * starts on exactly `go`, so each is spelled once.
  */
+/** A Loop's hours as the person picked them: whole hours, else minutes. */
+const loopSpan = (hours: number): string =>
+  Number.isInteger(hours) ? plural(hours, "hour") : plural(Math.round(hours * 60), "minute");
+
+/** A Loop that ended with something still to fix: its card in the chat and in Builds. */
+export const STILL_TO_FIX_WORDS = {
+  title: "Almost there",
+  done: "Done",
+  left: "Still to fix",
+  keepBuilding: "Keep building",
+  /** Why the Loop stopped, in one line under the title. */
+  why: {
+    time: (hours: number | null) =>
+      hours === null
+        ? "Its time ran out before this was fixed."
+        : `Your ${loopSpan(hours)} ran out before this was fixed.`,
+    stuck: "It kept getting this wrong, so it stopped to save your credits.",
+    person: "You stopped it before this was fixed.",
+    ended: "It stopped before this was fixed.",
+  },
+  /** The message Keep building sends for the person. */
+  ask: (notDone: readonly string[]) =>
+    ["Keep building: fix what's left.", ...notDone.map((item) => `- ${item}`)].join("\n"),
+} as const;
+
 export const PLAN_WORDS = {
   /** the reply that starts a plan waiting for it */
   go: "go",
@@ -1912,64 +1936,27 @@ export const JOBS_WORDS = {
   byLead: "Started by the lead",
 } as const;
 
-/** Small counts spelled out, for sentences that read better with a word than a digit. */
-const SPELLED_COUNTS = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"] as const;
-/** A small count as a word ("two"), a larger or odd one as its digits. */
-const spelledCount = (count: number): string => SPELLED_COUNTS[count] ?? String(count);
-
-/** The finish check's node, card and chat lines; every count of no's comes from the shared cap. */
+/** The finish check's node and card in Builds, named for the person as the Loop's final look at their game. */
 export const FINISH_CHECK_WORDS = {
-  name: "Finish check",
+  name: "Final look",
   state: {
-    not_yet: "Not yet",
-    checking: "Checking",
+    not_yet: "Not finished yet",
+    checking: "Looking",
     done: "Done",
-    stopped: "Stopped",
+    stopped: "Not finished",
   } satisfies Record<FinishCheckState, string>,
   placeholder: "Runs at the end",
-  about: "When the lead says the Loop is done, a reviewer that did none of the work checks the proof first.",
-  /** The node's line while the reviewer looks. */
-  checking: "Checking the proof",
-  /** The node's line after a no: how many reasons, and which no in a row it was (the card numbers each claim instead). */
-  roundWord: (reasons: number, rejections: number) =>
-    `${plural(reasons, "reason")} · round ${rejections} of ${MAX_FINISH_REJECTIONS}`,
-  doneWord: "Reviewer said yes",
-  stoppedWord: `${MAX_FINISH_REJECTIONS} no's in a row`,
-  unanswered: "The reviewer couldn't answer",
-  /** The card's section headings, as the design names them. */
-  heading: {
-    reviewer: "The reviewer",
-    whyNotYet: "Why not yet",
-    whyYes: "Why yes",
-    notDone: "What isn't done",
-  },
-  /** A heading with the lead's claim it answers, when the card lists more than one (the node's "round" counts no's in a row). */
-  roundHeading: (heading: string, claim: number) => `${heading} · claim ${claim}`,
-  reviewerIs: "A second agent that did none of the work.",
-  yourRequest: "Your request",
-  claimLabel: "The lead said",
-  saidYes: "The reviewer said yes.",
-  /** After a no, while the Loop goes on: how many more no's in a row stop it (fewer than the cap stand). */
-  moreNos: (rejections: number) => {
-    const left = MAX_FINISH_REJECTIONS - rejections;
-    const nos = left === 1 ? "no" : "no's";
-    return `${capitalise(spelledCount(left))} more ${nos} in a row and the Loop stops with a report.`;
-  },
+  about: "Before the Loop calls it done, a second AI looks at your game.",
+  /** The node's line and the card while the second AI looks. */
+  checking: "Looking at your game",
+  /** The node's line after a no: how many things are left. */
+  leftWord: (left: number) => `${plural(left, "thing")} left`,
+  doneWord: "All done",
+  unanswered: "Couldn't look this time",
+  /** After a no, while the Loop works on. */
+  keepsWorking: "The Loop keeps working on it.",
   /** After a no, once the Loop has ended some other way. */
-  endedAfterNo: "The Loop ended before another check.",
-  reportInChat: "The report is in the chat.",
-  /** One chat line per round, rewritten by its verdict. */
-  chat: {
-    checking: "A reviewer is checking whether the goal is reached.",
-    accepted: "The reviewer agreed the goal is reached.",
-    rejected: (rejections: number, reason: string) =>
-      reason
-        ? `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}): ${reason}`
-        : `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}).`,
-    stopped: (notDone: string) =>
-      `The reviewer said no ${spelledCount(MAX_FINISH_REJECTIONS)} times in a row, so the Loop stopped.${notDone ? ` Not done: ${notDone}` : ""}`,
-    unanswered: (why: string) => (why ? `The reviewer couldn't answer: ${why}` : "The reviewer couldn't answer."),
-  },
+  endedAfterNo: "The Loop ended before another look.",
 } as const;
 
 /** A build in the stage's history, by what it was and the day it started; never a number or a count. */
@@ -4588,6 +4575,10 @@ export const ACCOUNT_WORDS = {
   browserShows: "Your browser should show",
   cancel: "Cancel",
   offline: "Changes wait until you’re back online.",
+  /** A Pro's nameplate: the moving art behind their name in the sidebar. */
+  nameplate: "Nameplate",
+  newPlate: "New one",
+  nameplateNote: "Lights up behind your name in the sidebar when you hover it.",
 } as const;
 
 /**
@@ -4628,6 +4619,8 @@ export const AVATAR_WORDS = {
   welcomeNote: "You can change it in Settings",
   /** Under Continue when the welcome asks for the nickname too. */
   welcomeNoteBoth: "You can change both in Settings",
+  /** After a refused Regenerate in the welcome, beside the reason. */
+  tryAgain: "Try again",
   bodies: {
     [AvatarBody.Vapor]: "Vaporwave sun",
     [AvatarBody.Crt]: "CRT dither",

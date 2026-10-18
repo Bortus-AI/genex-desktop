@@ -15527,3 +15527,97 @@ describe("a tool the user asked for that can't run here (claude-code-and-chatgpt
     assert.match(brief, /__install/);
   });
 });
+
+describe("the reviewer's no's in a Loop that still has time", () => {
+  const HOUR = 60 * 60 * 1000;
+  const MINUTE = 60 * 1000;
+  const MET = "The hands, the boss and the full run were already accepted and still hold.";
+  const NOT_DONE = "The enemy in the game shows none of the armour its model has.";
+  const CLAIM = { summary: "The enemy wears its armour in the game.", proof: "shots/enemy.png" };
+
+  /** A web game with a close picture the lead names as proof, made before the Loop. */
+  async function gameWithProof(prefix: string): Promise<string> {
+    const { gameRepo } = await import("../helpers/loop-host.ts");
+    const dir = await tmpDir(prefix);
+    await mkdir(path.join(dir, "shots"), { recursive: true });
+    await writeFile(path.join(dir, "index.html"), "<canvas></canvas>\n");
+    await writeFile(path.join(dir, "shots/enemy.png"), Buffer.from(ONE_PIXEL_PNG, "base64"));
+    await gameRepo(dir);
+    return dir;
+  }
+
+  it("FC1. a timed Loop with most of its time left closed on the reviewer's third no about one fixable point: it keeps working, and its next claim needs new work since that no", async () => {
+    const { utimes } = await import("node:fs/promises");
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const { reviewerAnswer } = await import("../helpers/reviewer.ts");
+    const { MAX_FINISH_REJECTIONS } = await import("../../src/harness-seed/loop/finish-contract.ts");
+    const dir = await gameWithProof("nos-time-left-");
+    const answers: unknown[] = [];
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      run: { budgets: { wallClockMs: 5 * HOUR, completionPolicy: "duration" } },
+      turns: [
+        async ({ tool }) => {
+          for (let n = 0; n <= MAX_FINISH_REJECTIONS; n++) answers.push(await tool("finish", CLAIM));
+          // A fresh picture alone is no new work: it needs a save point too.
+          const now = new Date(host.now() + MINUTE);
+          await utimes(path.join(dir, "shots/enemy.png"), now, now);
+          answers.push(await tool("finish", CLAIM));
+          await writeFile(path.join(dir, "enemy.txt"), "armour plates on the limbs\n");
+          answers.push(await tool("save_point", { label: "Armour", summary: "the enemy wears its plates" }));
+          answers.push(await tool("finish", CLAIM));
+          return undefined;
+        },
+      ],
+    });
+    for (let n = 0; n < MAX_FINISH_REJECTIONS; n++)
+      host.reviews.push(reviewerAnswer("no", [MET], "claude-code", [NOT_DONE]));
+    const report = await host.start();
+    assert.match(String(answers[MAX_FINISH_REJECTIONS - 1]), /time left, so it goes on/, "the third no keeps it going");
+    assert.match(
+      String(answers[MAX_FINISH_REJECTIONS]),
+      /new work since the last no/,
+      "the same proof again is turned back",
+    );
+    assert.match(
+      String(answers[MAX_FINISH_REJECTIONS + 1]),
+      /new work since the last no/,
+      "a touched file is not enough",
+    );
+    assert.equal(host.reviewed().length, MAX_FINISH_REJECTIONS + 1, "the stale claims asked no reviewer");
+    assert.equal(report.victory, true, "the claim after a save point and a fresh picture was checked and accepted");
+    const nos = host.appended("finish_check").filter((check) => check.step === "rejected");
+    assert.deepEqual(
+      nos.map((check) => [check.stopped === true, check.timeLeft === true]),
+      Array.from({ length: MAX_FINISH_REJECTIONS }, () => [false, true]),
+    );
+  });
+
+  it("FC2. a Loop the reviewer's no's stopped listed what the reviewer had accepted under not done: only what isn't done is", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const { reviewerAnswer } = await import("../helpers/reviewer.ts");
+    const { MAX_FINISH_REJECTIONS } = await import("../../src/harness-seed/loop/finish-contract.ts");
+    const dir = await gameWithProof("nos-not-done-");
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ tool }) => {
+          for (let n = 0; n < MAX_FINISH_REJECTIONS; n++) await tool("finish", CLAIM);
+          return undefined;
+        },
+      ],
+    });
+    for (let n = 0; n < MAX_FINISH_REJECTIONS; n++)
+      host.reviews.push(reviewerAnswer("no", [MET], "claude-code", [NOT_DONE]));
+    const report = await host.start();
+    assert.equal(report.victory, false);
+    assert.deepEqual(report.notDone, [NOT_DONE]);
+    assert.ok(String(report.summary).includes(NOT_DONE));
+    assert.ok(!String(report.summary).includes(MET), "what the reviewer accepted is not listed as not done");
+    const stopped = host.appended("finish_check").at(-1);
+    assert.equal(stopped?.stopped, true);
+    assert.deepEqual([stopped?.reasons, stopped?.notDone], [[MET], [NOT_DONE]]);
+  });
+});
