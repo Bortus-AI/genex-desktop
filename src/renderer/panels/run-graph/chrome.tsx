@@ -160,10 +160,24 @@ function BuildRow({ build, name }: { build: HistoryEntry; name: string }): JSX.E
 
 /**
  * On opening, the list shows the open build's row: scrolled into view above the fade, and focused
- * when the list was opened from the keyboard, so the arrows go on from there.
+ * when the list was opened from the keyboard, so the arrows go on from there. `attach` is the
+ * list's ref, which also keeps its fade on while more rows lie below.
  */
 function useOpenRowShown() {
   const list = useRef<HTMLDivElement | null>(null);
+  const moreBelow = useMoreBelow<HTMLDivElement>();
+  // One callback for the list's life: an inline one would re-attach the fade's watchers on every render.
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      list.current = node;
+      const detach = moreBelow(node);
+      return () => {
+        list.current = null;
+        if (typeof detach === "function") detach();
+      };
+    },
+    [moreBelow],
+  );
   const byKeyboard = useRef(false);
   const onOpenChange = (isOpen: boolean): void => {
     if (!isOpen) return;
@@ -182,7 +196,7 @@ function useOpenRowShown() {
       byKeyboard.current = true;
     },
   };
-  return { list, onOpenChange, trigger };
+  return { attach, onOpenChange, trigger };
 }
 
 /**
@@ -194,8 +208,7 @@ function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Ele
   const { builds, open, onOpen } = tabs;
   const shown = builds.find((build) => build.runId === open) ?? builds.at(-1);
   const name = shown ? tabName(builds, shown) : "";
-  const moreBelow = useMoreBelow<HTMLDivElement>();
-  const { list, onOpenChange, trigger } = useOpenRowShown();
+  const { attach, onOpenChange, trigger } = useOpenRowShown();
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -216,19 +229,13 @@ function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Ele
           </span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        ref={(node) => {
-          list.current = node;
-          return moreBelow(node);
-        }}
-        align="start"
-        className="build-picker-menu"
-      >
+      <DropdownMenuContent ref={attach} align="start" className="build-picker-menu">
         <DropdownMenuRadioGroup value={open ?? ""} onValueChange={onOpen}>
           {newestFirst(builds).map((build) => (
             <BuildRow key={build.runId} build={build} name={tabName(builds, build)} />
           ))}
         </DropdownMenuRadioGroup>
+        <span aria-hidden="true" data-list-fade className="build-picker-fade" />
       </DropdownMenuContent>
     </DropdownMenu>
   );
