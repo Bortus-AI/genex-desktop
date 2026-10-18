@@ -13,6 +13,7 @@ import { errorMessage } from "../shared/errors.ts";
 /** Why an IPC call is refused before its handler runs. */
 const MESSAGE = {
   studioUiOnly: "This action is restricted to Studio UI",
+  playBarOnly: "This action is restricted to Studio UI and Play's bar",
 } as const;
 
 export type { IpcResult } from "../shared/ipc-channels.ts";
@@ -47,6 +48,21 @@ const STUDIO_UI_ONLY = [
   "studio:play.cover",
 ];
 
+// Writing and deleting comments as the Genex account: Studio's main frame or Play's bar layer only.
+const PLAY_BAR_WRITES: ReadonlySet<string> = new Set(["studio:play.comment", "studio:play.uncomment"]);
+
+/** Why `event`'s sender may not call `channel`, or null when it may. */
+function senderRefusal(
+  channel: string,
+  event: IpcSender,
+  options: { isStudioUi(event: IpcSender): boolean; isPlayBar?(event: IpcSender): boolean },
+): string | null {
+  const studio = options.isStudioUi(event);
+  if (STUDIO_UI_ONLY.some((prefix) => channel.startsWith(prefix)) && !studio) return MESSAGE.studioUiOnly;
+  if (PLAY_BAR_WRITES.has(channel) && !studio && options.isPlayBar?.(event) !== true) return MESSAGE.playBarOnly;
+  return null;
+}
+
 /**
  * The `handle(channel, fn)` main registers every IPC channel through. Each call is refused unless a
  * UI-only channel comes from Studio's main frame, and in a fixture profile unless the channel is
@@ -56,14 +72,20 @@ const STUDIO_UI_ONLY = [
  */
 export function createIpcHandle(
   ipc: IpcRegistrar,
-  options: { fixture: boolean; isStudioUi(event: IpcSender): boolean; performance?: PerformanceRecorder },
+  options: {
+    fixture: boolean;
+    isStudioUi(event: IpcSender): boolean;
+    /** Play's bar layer's own page (its main frame), which may also post and delete comments. */
+    isPlayBar?(event: IpcSender): boolean;
+    performance?: PerformanceRecorder;
+  },
 ) {
   return <C extends StudioInvokeChannel>(channel: C, fn: IpcHandler<C>): void => {
     ipc.handle(channel, async (event, payload) => {
       const started = options.performance?.now() ?? 0;
       try {
-        if (STUDIO_UI_ONLY.some((prefix) => channel.startsWith(prefix)) && !options.isStudioUi(event))
-          throw new Error(MESSAGE.studioUiOnly);
+        const refused = senderRefusal(channel, event, options);
+        if (refused) throw new Error(refused);
         assertNativeActionAllowed(options.fixture, channel);
         // The one place a payload is typed: whatever the preload sent on this channel. Handlers
         // still check the fields they act on, because the sender is a browser.

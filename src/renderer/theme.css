@@ -7075,6 +7075,42 @@ a:focus-visible {
 .picker-action:disabled {
   opacity: 0.5;
 }
+/* A plugin row's Settings: Connect's size in a grey a step above the hovered row, shown while the row
+   is hovered or holds focus. At rest it takes no room, so a row's status keeps the whole line; it
+   overhangs the row's 20px line by 2px each way, so showing it never makes the row taller. */
+.picker-settings {
+  display: none;
+  flex: none;
+  height: 24px;
+  margin-block: -2px;
+  padding-inline: 10px;
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--ink) 9%, var(--control-hover, var(--hover)));
+  color: var(--ink);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 24px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms;
+}
+.picker-item:is(:hover, :focus-within) .picker-settings {
+  display: block;
+}
+.picker-panel .picker-settings:is(:hover, :focus-visible) {
+  background: color-mix(in oklab, var(--ink) 16%, var(--control-hover, var(--hover)));
+}
+/* A plugin's name under keyboard focus lights its whole rounded row with the fill and inset edge a
+   focused Images row has, not a square around the name alone. */
+.picker-item:has([data-plugin-open]:focus-visible) {
+  background: var(--control-hover, var(--hover));
+  outline: 2px solid var(--foreground);
+  outline-offset: -2px;
+}
+:root .picker-item [data-plugin-open]:focus-visible {
+  outline: none;
+  background: none;
+}
 /* Pills are always filled; › drills in, ⌄ expands in place. */
 .picker-pill {
   display: inline-flex;

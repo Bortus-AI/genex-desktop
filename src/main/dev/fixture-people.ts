@@ -530,5 +530,9 @@ export const fixtureReferral = () => ({
 
 /** The fixture account's own id, for the fixture's creator numbers. */
 export const FIXTURE_ME_ID = ME.id;
+/** A fixture person by name, as the API names a commenter. */
+export const fixturePersonNamed = (name: string) => slim(person(name));
+/** The fixture account as the API names a commenter. */
+export const fixtureMeNamed = () => meSlim();
 /** Fixture people as the API names a person, for Top creators. */
 export const fixturePeople = () => PEOPLE.map(slim);

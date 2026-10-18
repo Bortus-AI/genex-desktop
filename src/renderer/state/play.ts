@@ -242,12 +242,22 @@ export function gameOpened(state: PlayState, game: PlayRecentEntry): PlayState {
   };
 }
 
-/** Main's news about the viewer; the guest card's Sign in waits for the shell. */
+/** Whether main's news is the viewer shown closing for its bar's Remix: the app makes the copy then. */
+export const remixClosed = (shown: ViewerShown | null, event: PlayViewerEvent): boolean =>
+  event.remix === true && shown?.slug === event.slug && shown.openId === event.openId;
+
+/**
+ * Main's news about the viewer; the guest card's Sign in waits for the shell. The maker's name
+ * closes the viewer onto their profile.
+ */
 export function viewerReported(state: PlayState, event: PlayViewerEvent): PlayState {
   const viewer = viewerAfter(state.viewer, event);
   const installAsked = state.installAsked || event.install === true;
   const same = viewer === state.viewer && installAsked === state.installAsked;
-  return same ? state : { ...state, viewer, installAsked };
+  if (same) return state;
+  const next = { ...state, viewer, installAsked };
+  const closed = state.viewer !== null && viewer === null;
+  return closed && event.profile ? profileShown(next, event.profile) : next;
 }
 
 /** Main never answered the opening shown: its cover says it failed, with Try again. */
@@ -467,7 +477,7 @@ export function createPlayStore(
     set((state) => gameOpened(state, game));
     writeRecent(store.getState().recent, storage);
     try {
-      await api.playOpen(game.slug);
+      await api.playOpen(game.slug, game.title);
     } catch {
       set((state) => openRefused(state, game.slug));
     }

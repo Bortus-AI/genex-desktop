@@ -19,6 +19,7 @@ import {
   setComputerControl,
 } from "../../src/renderer/use-computer-control.ts";
 import { StudioPlatform } from "../../src/shared/boot.ts";
+import { PlayViewerPhase } from "../../src/shared/play.ts";
 import { UpdateAction } from "../../src/shared/app-update.ts";
 import {
   createEventLogStore,
@@ -751,6 +752,22 @@ describe("the studio: one subscription, the bootstrap and the commands that span
     assert.equal(app.layout.getState().stageView, "builds", "another game's build leaves this stage alone");
     fake.emit({ type: "stage.show", payload: { project: "rift", view: "live" } });
     assert.equal(app.layout.getState().stageView, "live");
+  });
+
+  it("makes the copy of the game the bar's Remix closed the viewer on, as a card's Remix does", async () => {
+    const { fake, app } = started();
+    await tick();
+    await app.play.open({ slug: "pond", title: "Pond", coverUrl: null });
+    fake.emit({ type: "play.viewer", payload: { slug: "pond", openId: 1, phase: PlayViewerPhase.Playing } });
+    fake.emit({
+      type: "play.viewer",
+      payload: { slug: "pond", openId: 1, phase: PlayViewerPhase.Closed, remix: true },
+    });
+    assert.deepEqual(fake.callsOf("playRemix"), [["pond"]]);
+    assert.equal(app.play.getState().making?.slug, "pond", "Create shows the copy being made");
+    assert.equal(app.play.getState().viewer, null);
+    fake.emit({ type: "play.viewer", payload: { slug: "pond", openId: 1, phase: PlayViewerPhase.Closed } });
+    assert.equal(fake.callsOf("playRemix").length, 1, "a plain closing makes nothing");
   });
 
   it("a downloaded update waits for a restart: read at the bootstrap, and announced while the studio runs", async () => {

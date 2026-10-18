@@ -158,6 +158,10 @@ const METHODS = [
   "playOpen",
   "playClose",
   "playControl",
+  "playBar",
+  "playComments",
+  "playComment",
+  "playUncomment",
   "playMe",
   "playRename",
   "playAvatar",
@@ -347,6 +351,7 @@ function defaults(): Partial<Record<StudioMethod, () => unknown>> {
     pluginChooseFile: () => null,
     nameGame: () => ({ title: "Untitled game" }),
     playFeed: () => ({ games: [], nextCursor: null }),
+    playComments: () => ({ items: [], nextCursor: null }),
     playShelves: () => ({
       counts: { games: null, tools: null, assets: null },
       categories: ["featured", "tools", "assets"],

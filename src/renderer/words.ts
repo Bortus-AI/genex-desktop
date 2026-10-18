@@ -3292,6 +3292,13 @@ export const PLUGINS_WORDS = {
     create: "Create a plugin",
     local: "Load local plugin…",
   },
+  /** A plugin's row in the composer's Add menu: its name opens its page, Settings shows under the pointer. */
+  menuRow: {
+    settings: "Settings",
+    settingsLabel: (name: string) => `${name} settings`,
+    /** The name's own label: it opens the same page as Settings. */
+    openLabel: (name: string) => `Open ${name} settings`,
+  },
   /** The catalog's plugins Genex makes, that you don't have. */
   ours: {
     title: "Plugins",
@@ -4203,6 +4210,40 @@ export const PLAY_WORDS = {
     guest: "Save your progress with a Genex account",
     install: "Sign in",
     dismissGuest: "Close",
+    /** The Comments button's name while it shows no count (the icon alone). */
+    comments: "Comments",
+    commentsCount: (count: string) => `Comments, ${count}`,
+  },
+  /** The viewer's Comments, over the dimmed game. */
+  comments: {
+    title: (count: number): string => {
+      if (count === 0) return "Comments";
+      return count === 1 ? "1 Comment" : `${count} Comments`;
+    },
+    close: "Close",
+    none: (title: string) => `No comments on ${title} yet`,
+    failed: "Couldn’t load the comments",
+    retry: "Try again",
+    signIn: (title: string) => `Sign in to comment on ${title}`,
+    signInAction: "Sign in",
+    field: "Add a comment",
+    post: "Post",
+    postFailed: "Couldn’t post your comment",
+    delete: "Delete",
+    deleteLabel: "Delete your comment",
+    deleteFailed: "Couldn’t delete your comment",
+    /** How long ago a comment was written, its units spelled out. */
+    ago: (minutes: number): string => {
+      if (minutes < 1) return "just now";
+      const unit = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"} ago`;
+      if (minutes < 60) return unit(minutes, "minute");
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return unit(hours, "hour");
+      const days = Math.floor(hours / 24);
+      if (days < 30) return unit(days, "day");
+      if (days < 365) return unit(Math.floor(days / 30), "month");
+      return unit(Math.floor(days / 365), "year");
+    },
   },
   promo: {
     label: "Genex account",
