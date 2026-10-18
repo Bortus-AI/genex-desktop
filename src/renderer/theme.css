@@ -2271,10 +2271,13 @@ button.chat-header-title:hover {
   transition: color var(--duration-quick);
 }
 .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
-  background: transparent;
   color: #fff;
 }
-.nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::after {
+/* The end's own hover box would sit under its ground: lit, the pill over the ground shows instead. */
+.nameplate[data-lit] .plate-end:is(:hover, :focus-visible) {
+  background: transparent;
+}
+.nameplate[data-lit] .plate-end:is(:hover, :focus-visible)::after {
   background: rgb(255 255 255 / 0.1);
 }
 .nameplate-sparkles {
@@ -2398,7 +2401,7 @@ button.chat-header-title:hover {
 :root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible) {
   color: var(--ink);
 }
-:root[data-theme="light"] .nameplate[data-lit] .plate-credits:is(:hover, :focus-visible)::after {
+:root[data-theme="light"] .nameplate[data-lit] .plate-end:is(:hover, :focus-visible)::after {
   background: rgb(0 0 0 / 0.06);
 }
 :root[data-theme="light"] .nameplate[data-lit] .sidebar-friend-playing {

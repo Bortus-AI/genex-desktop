@@ -138,13 +138,17 @@ function ContinueButton({
   );
 }
 
-/** Regenerate in the welcome: whether it shows, whether a save runs, a refusal, and the press. */
+/** Regenerate in the welcome: whether it shows, whether it waits, a refusal, and the presses. */
 interface WelcomeRegenerate {
   shown: boolean;
-  online: boolean;
+  /** Offline, or a save runs: a press waits. */
+  waits: boolean;
   saving: boolean;
   failed: boolean;
+  button: RefObject<HTMLButtonElement | null>;
   regenerate: () => void;
+  /** Try again after a refusal: as Regenerate, with the focus on Regenerate as the line goes. */
+  retry: () => void;
 }
 
 /**
@@ -156,28 +160,33 @@ function useWelcomeRegenerate(me: PlayMe): WelcomeRegenerate {
   const saving = usePeople((s) => s.avatarSaving);
   const online = useOnline();
   const [failed, setFailed] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const waits = !online || saving;
   const regenerate = (): void => {
+    if (waits) return;
     setFailed(false);
     regenerateAvatar(me).catch(() => setFailed(true));
   };
+  const retry = (): void => {
+    button.current?.focus();
+    regenerate();
+  };
   const shown = me.avatarVariantKept && me.avatarStyle !== AvatarStyle.Photo;
-  return { shown, online, saving, failed, regenerate };
+  return { shown, waits, saving, failed, button, regenerate, retry };
 }
 
 /** Another generated avatar, at once; it waits for the connection and for the save before it. */
 function RegenerateButton({ regen }: { regen: WelcomeRegenerate }): JSX.Element | null {
   if (!regen.shown) return null;
-  const waits = !regen.online || regen.saving;
   return (
     <button
+      ref={regen.button}
       type="button"
       className="people-button avatar-welcome-regenerate"
       data-avatar-welcome-regenerate
-      aria-disabled={waits || undefined}
+      aria-disabled={regen.waits || undefined}
       aria-busy={regen.saving || undefined}
-      onClick={() => {
-        if (!waits) regen.regenerate();
-      }}
+      onClick={regen.regenerate}
     >
       <Icon name="dice" />
       {ACCOUNT_WORDS.regenerate}
@@ -191,14 +200,19 @@ function WelcomeFoot({ regen, note }: { regen: WelcomeRegenerate; note: string }
   return (
     <p className="avatar-welcome-error" role="alert" data-avatar-welcome-error>
       {ACCOUNT_WORDS.regenerateFailed}
-      <button type="button" className="avatar-welcome-retry" onClick={regen.regenerate}>
+      <button
+        type="button"
+        className="avatar-welcome-retry"
+        aria-disabled={regen.waits || undefined}
+        onClick={regen.retry}
+      >
         {WORDS.tryAgain}
       </button>
     </p>
   );
 }
 
-/** The welcome as it was before nicknames: the avatar alone, Regenerate and Continue. */
+/** The welcome as it was before nicknames: the avatar alone, Regenerate and Continue; it stays while a save runs. */
 function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Element {
   const button = useRef<HTMLButtonElement>(null);
   const regen = useWelcomeRegenerate(me);
@@ -210,6 +224,7 @@ function AvatarOnly({ me, onDone }: { me: PlayMe; onDone: () => void }): JSX.Ele
       testId="avatar-welcome"
       className="avatar-welcome"
       initialFocus={button}
+      dismissible={!regen.saving}
       onDismiss={onDone}
     >
       <div className="avatar-welcome-body" data-avatar-welcome>
@@ -258,6 +273,7 @@ function AvatarAndNickname({
       testId="avatar-welcome"
       className="avatar-welcome"
       initialFocus={input}
+      dismissible={!regen.saving}
       onDismiss={unreachable(nickname.view.hint) ? onLater : onDone}
     >
       <form
