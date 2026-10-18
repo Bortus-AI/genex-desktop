@@ -7,7 +7,11 @@ import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
 import { type ChatJudgeResultPayload, readChatJudgeResult } from "../shared/chat-judge.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
 import { workerKeyOf } from "../shared/run-graph-events.ts";
-import { type FinishRecord, FinishCheckStep, finishRecordOf } from "../shared/finish-check.ts";
+import {
+  type StillToFix as ClosedStillToFix,
+  StopWhy,
+  stillToFixOf as closedStillToFix,
+} from "../shared/finish-check.ts";
 /**
  * The chat transcript as entries: the thread's event log read once, oldest first, into the
  * bubbles, tool-chip groups, narration lines and cards the chat draws. Pure — `chat/transcript.ts`
@@ -37,9 +41,9 @@ import {
 import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../shared/genex.ts";
 import { SteerDelivery } from "../shared/message-queue.ts";
 import { engineLabel, roleName } from "../shared/model-roles.ts";
-import { ExecutionStatus, RoundOutcome, recordedRunLoop, roundOutcome } from "../shared/run-state.ts";
+import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
 import { plural, skillWords } from "../shared/skill-words.ts";
-import { HOUR_MS, MINUTE_MS } from "../shared/duration.ts";
+import { MINUTE_MS } from "../shared/duration.ts";
 import { type ToolPermissionEvent, ToolPermissionState } from "../shared/permissions.ts";
 import { contractorIdentity } from "./chat-labels.ts";
 import { splitFeedback } from "./reply-about.ts";
@@ -148,33 +152,14 @@ export const EntryAction = {
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
-/** Why a Loop stopped with something still to fix, as the person is told it. */
-export const StopWhy = {
-  /** Its hours ran out. */
-  Time: "time",
-  /** It kept getting the same thing wrong (the reviewer's no's stopped it). */
-  Stuck: "stuck",
-  /** The person stopped it. */
-  Person: "person",
-  /** It ended some other way. */
-  Ended: "ended",
-} as const;
-export type StopWhy = (typeof StopWhy)[keyof typeof StopWhy];
-
 /** Why a Loop stopped, as the person reads it under "Almost there". */
 export function stopWhyLine(why: StopWhy, hours: number | null): string {
   if (why === StopWhy.Time) return STILL_TO_FIX_WORDS.why.time(hours);
   return STILL_TO_FIX_WORDS.why[why];
 }
 
-/** What a run that ended without the reviewer's yes leaves for the person: its last no's lists, and why it stopped. */
-export interface StillToFix {
-  done: string[];
-  notDone: string[];
-  why: StopWhy;
-  /** The Loop's hours, when it had some. */
-  hours: number | null;
-}
+/** What a run that ended without the reviewer's yes leaves for the person: its last no's lists, why it stopped, its hours. */
+export type StillToFix = ClosedStillToFix;
 
 export type Entry =
   | {
@@ -305,6 +290,8 @@ export type Entry =
       superseded?: true;
       /** the run ended without the reviewer's yes: what its last no found done and still to fix */
       stillToFix?: StillToFix;
+      /** the chat's newest result card: only it offers Keep building */
+      latest?: true;
     };
 
 type ToolsEntry = Extract<Entry, { kind: typeof EntryKind.Tools }>;
@@ -317,7 +304,8 @@ const isConsentCard = (e: Entry): e is ActionEntry => e.kind === EntryKind.Actio
 /** Claude's own permission card in the transcript. */
 const isPermissionCard = (e: Entry): e is ActionEntry =>
   e.kind === EntryKind.Action && e.action === EntryAction.Permission;
-type MorningEntry = Extract<Entry, { kind: typeof EntryKind.Morning }>;
+/** A run's result card. */
+export type MorningEntry = Extract<Entry, { kind: typeof EntryKind.Morning }>;
 type QuestionEntry = Extract<Entry, { kind: typeof EntryKind.Question }>;
 
 /** The tag of a narration line or card (`Entry.tag`): what the transcript shows and the activity fold keys on. */
@@ -348,7 +336,6 @@ export const SystemTag = {
   Show: "SHOW",
   Checkpoint: "CHECKPOINT",
   Engine: "ENGINE",
-  /** The reviewer's check of the lead's claim that the goal is reached: never routine. */
 } as const;
 export type SystemTag = (typeof SystemTag)[keyof typeof SystemTag];
 
@@ -567,10 +554,8 @@ interface ChatDraft {
   endedJobs: Set<string>;
   /** Each worker's line by its graph and id (`workerKeyOf`), with what its records said, so later ones rewrite it. */
   workerLines: Map<string, { entry: ActionEntry; line: WorkerLine }>;
-  /** Each run's newest no from the reviewer, for its result card (`noteFinishCheck`). */
-  lastNo: Map<string, FinishRecord>;
-  /** When each run (re)started and the hours it had, so its card can tell that its time ran out. */
-  runClocks: Map<string, { startedAt: number; hours: number | null }>;
+  /** The chat's newest result card: only it offers Keep building. */
+  latestResult: MorningEntry | null;
 }
 
 /**
@@ -620,8 +605,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     jobs: new Map(),
     endedJobs: new Set(),
     workerLines: new Map(),
-    lastNo: new Map(),
-    runClocks: new Map(),
+    latestResult: null,
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
     directTurns: new Map(),
@@ -1363,19 +1347,6 @@ function pushWorkerLine(chat: ChatDraft, id: string, key: string, line: WorkerLi
   chat.workerLines.set(key, { entry, line });
 }
 
-/**
- * A finish check round says nothing in the chat while the Loop works; its newest no is kept for the
- * run's result card, which lists what that no found done and still to fix once the run ends without
- * a yes. A yes clears it.
- */
-function noteFinishCheck(chat: ChatDraft, event: EventEnvelope): void {
-  const payload = customPayload(event.data, CustomEvent.FinishCheck);
-  const check = payload ? finishRecordOf(payload) : null;
-  if (!check) return;
-  if (check.step === FinishCheckStep.Accepted) chat.lastNo.delete(check.runId);
-  if (check.step === FinishCheckStep.Rejected) chat.lastNo.set(check.runId, check);
-}
-
 /** Genex can't see app windows yet: one line naming what to allow, with a button per pane. */
 function narrateAppAccess(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.AppLookAccess);
@@ -1475,11 +1446,6 @@ function providerName(engine: string): string {
 function narrateRunStart(chat: ChatDraft, event: EventEnvelope): void {
   const started = customPayload(event.data, CustomEvent.RunStarted);
   if (!started) return;
-  if (started.runId)
-    chat.runClocks.set(started.runId, {
-      startedAt: Date.parse(event.created_at),
-      hours: recordedRunLoop(started.budgets)?.hours ?? null,
-    });
   // Which model judges this run, by name: a stale saved preference can put the judging on the
   // orchestrator's model, and nothing else on screen says which model is answering. And on
   // which subscription, when the judges are not on the run's own (cross-provider roles).
@@ -1970,8 +1936,12 @@ function narrateFinished(chat: ChatDraft, event: EventEnvelope): void {
   const finished = customPayload(event.data, CustomEvent.RunFinished);
   if (!finished) return;
   settleRunTools(chat, finished);
-  const result = morningCard(chat, event.id, finished, Date.parse(event.created_at));
+  const result = morningCard(chat, event.id, finished);
   chat.entries.push(result);
+  // Only the chat's newest result offers Keep building: an older card's list is history.
+  if (chat.latestResult) delete chat.latestResult.latest;
+  result.latest = true;
+  chat.latestResult = result;
   if (result.runId && chat.cover?.runId === result.runId) placeCoverCard(chat);
   // A paused or reopened run closes more than once; its latest result carries everything it
   // generated, and the earlier cards no longer speak for where it stands.
@@ -2007,42 +1977,19 @@ function profileOf(finished: FinishedPayload): LoopProfile | null {
 }
 
 /**
- * What a run that ended without a yes leaves to fix, from its last no (taken, so a reopened run's
- * next close starts clean); none after a yes, a no that names nothing not done (an older record), or
- * no no at all.
+ * What a Loop's close without its yes leaves to fix, as the harness wrote it on the close
+ * (`run_finished.stillToFix`): none on a pause, which keeps its own reason and Resume, nor after a yes.
  */
-function stillToFixOf(chat: ChatDraft, finished: FinishedPayload, at: number): { stillToFix?: StillToFix } {
-  const runId = finished.runId;
-  if (!runId) return {};
-  const no = chat.lastNo.get(runId);
-  chat.lastNo.delete(runId);
-  if (!no?.notDone.length || finished.victory === true) return {};
-  const hours = chat.runClocks.get(runId)?.hours ?? null;
-  return {
-    stillToFix: { done: no.done, notDone: no.notDone, why: stopWhyOf(chat, runId, { no, finished, at }), hours },
-  };
+function stillToFixOf(finished: FinishedPayload): { stillToFix?: StillToFix } {
+  const paused = finished.executionStatus === ExecutionStatus.Paused || finished.paused === true;
+  if (paused || finished.victory === true) return {};
+  const left = closedStillToFix(finished.stillToFix);
+  return left ? { stillToFix: left } : {};
 }
 
-/**
- * Why a run that ended with something to fix stopped: the person's Stop, the reviewer's no's (the
- * last no stopped it), its hours spent (it ended at its cap, a minute's slack), else some other way.
- */
-function stopWhyOf(
-  chat: ChatDraft,
-  runId: string,
-  end: { no: FinishRecord; finished: FinishedPayload; at: number },
-): StopWhy {
-  if (end.finished.executionStatus === ExecutionStatus.Cancelled) return StopWhy.Person;
-  if (end.no.stopped) return StopWhy.Stuck;
-  const clock = chat.runClocks.get(runId);
-  const capMs = clock?.hours ? clock.hours * HOUR_MS : null;
-  const spent = clock && capMs !== null && end.at - clock.startedAt >= capMs - MINUTE_MS;
-  return spent ? StopWhy.Time : StopWhy.Ended;
-}
-
-function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload, at: number): MorningEntry {
+function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): MorningEntry {
   const { rounds } = chat;
-  const stillToFix = stillToFixOf(chat, finished, at);
+  const stillToFix = stillToFixOf(finished);
   const judged = rounds.kept + rounds.undone;
   const n = judged || (Array.isArray(finished.iterations) ? finished.iterations.length : 0);
   const head = finished.integrationHead;
@@ -2144,7 +2091,6 @@ const NARRATORS: readonly Narrator[] = [
   narrateJobEnded,
   narrateWorkerStarted,
   narrateWorkerFinished,
-  noteFinishCheck,
   narrateAppAccess,
   narrateWentAhead,
   narrateChatJudge,

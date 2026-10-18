@@ -281,6 +281,9 @@ export const finishCheckLook = (node: FinishCheckNode): FinishCheckLook => FINIS
 /** The tone of the finish check card's status: the node's ink. */
 export const finishPanelTone = (node: FinishCheckNode): Tone => FINISH_LOOKS[lookOf(node)].tone;
 
+/** Whether the Loop is over for a no: the no's stopped it, or it ended some other way since. */
+export const endedOnNo = (round: FinishRound, node: FinishCheckNode): boolean => round.stopped || node.over;
+
 /** The line under one round on the finish check's card, and whether it reads quietly. */
 export interface RoundNote {
   text: string;

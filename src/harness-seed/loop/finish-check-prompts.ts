@@ -14,14 +14,15 @@ export const PICTURE_OUTRANKS_FILES =
 /**
  * When the reviewer's no's stop a Loop, as its lead is told: an ∞ Loop's at the cap (`untilFinish`),
  * a timed Loop's only once little time is left; null when the words must cover both (a tool's description).
+ * `newWork` is what marks the lead's work since the last no: its save points, or the web lead's commits.
  */
-export function stopRuleWords(untilFinish: boolean | null): string {
+export function stopRuleWords(untilFinish: boolean | null, newWork = "a new save point"): string {
   const max = MAX_FINISH_REJECTIONS;
   const left = minutes(FINISH_TIME_LEFT_MS);
   if (untilFinish === true) return `${max} no's in a row stop the Loop.`;
   if (untilFinish === null)
-    return `${max} no's in a row stop the Loop once ${left} minutes or less are left (an ∞ Loop: any time).`;
-  return `while over ${left} minutes are left, no's never stop the Loop: keep fixing, and after ${max} in a row a new claim needs a new save point and new proof. With less left, ${max} in a row stop it.`;
+    return `${max} no's in a row stop the Loop with ${left} minutes or less left (an ∞ Loop: any time).`;
+  return `while over ${left} minutes are left, no's never stop the Loop: keep fixing, and after ${max} in a row a new claim needs ${newWork} and new proof. With less left, ${max} in a row stop it.`;
 }
 
 /** One capture as the reviewer is told of it beside its pictures: what was taken, and how much of it is attached. */
