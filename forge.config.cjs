@@ -58,6 +58,16 @@ const DEB_SCRIPTS = {
   postinst: path.join(__dirname, "build", "linux", "postinst"),
   postrm: path.join(__dirname, "build", "linux", "postrm"),
 };
+/**
+ * The rpm's scriptlets: add the Genex package repository on install, take it away on uninstall.
+ * Both packages read the repository's public key from the app's resources (`LINUX_REPOSITORY_KEY`).
+ */
+const RPM_SCRIPTS = {
+  post: path.join(__dirname, "build", "linux", "rpm-post"),
+  postun: path.join(__dirname, "build", "linux", "rpm-postun"),
+};
+/** The public key of packages.genex.games, shipped in resources/ only by Linux builds. */
+const LINUX_REPOSITORY_KEY = path.join(__dirname, "build", "linux", "genex-archive-keyring.asc");
 /** The Windows installer's file name, the same for every version so a download link can stay put. */
 const WINDOWS_SETUP_EXE = "Genex-Setup.exe";
 /** Only with a WINDOWS_SIGN_* certificate, parameters or hook; otherwise unsigned. */
@@ -74,6 +84,8 @@ module.exports = {
     appBundleId: APP_BUNDLE_ID,
     appCategoryType: "public.app-category.developer-tools",
     icon: ICON,
+    // Each platform is made on its own runner, so only a Linux build carries the repository key.
+    ...(process.platform === "linux" ? { extraResource: [LINUX_REPOSITORY_KEY] } : {}),
     asar: {
       unpack:
         "{**/dist/resources/**,**/node_modules/node-pty/**,**/node_modules/@anthropic-ai/sandbox-runtime/vendor/**}",
@@ -228,6 +240,7 @@ module.exports = {
           icon: `${ICON}.png`,
           requires: LINUX_DEPENDS,
           license: "MIT",
+          scripts: RPM_SCRIPTS,
         },
       },
     },
