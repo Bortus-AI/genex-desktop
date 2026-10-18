@@ -6,12 +6,12 @@
  * under Reduce Motion. The canvas' CSS colours (`.genex-connect-lines`) are read back and
  * refreshed on theme change.
  */
-import { type JSX, type ReactNode, type RefObject, useEffect, useRef } from "react";
+import { type FocusEvent, type JSX, type ReactNode, type RefObject, useEffect, useLayoutEffect, useRef } from "react";
 import { SECOND_MS } from "../../../../shared/duration.ts";
 import { Motion } from "../../../motion-rest.ts";
+import { watchRepaints } from "../../../ui/art-repaints.ts";
 import { DARK_SCHEME_QUERY, REDUCED_MOTION_QUERY } from "../../../ui/media-queries.ts";
 import { toRgb } from "../../../ui/WireArt.tsx";
-import { watchRepaints } from "../../MakingArt.tsx";
 import {
   type ArtPoint,
   ConnectArtState,
@@ -20,7 +20,9 @@ import {
   pulseHead,
   pulseSpeed,
   pulsesPerLine,
+  STILL_TRAVEL,
   TOOL_SPOTS,
+  travelAfter,
 } from "./connect-art.ts";
 import { markIsLight, ROUTED_TOOLS } from "./routed-tools.ts";
 
@@ -39,14 +41,13 @@ const TARGET_GAP = 6;
 const STACKED_INSET = 16;
 /** How quickly the pulses speed up or settle when Connect is pointed at or left, per frame. */
 const HEAT_EASE = 0.08;
-/** The moment a still band shows, in seconds: every line with its pulse partway along. */
-const STILL_SECONDS = 1.6;
 /** What marks the band's action, which the lines run into. */
 const TARGET = "[data-connect-target]";
 
 type Rgb = [number, number, number];
 type Lines = { from: ArtPoint[]; to: ArtPoint };
-type LoopInput = { state: ConnectArtState; heat: number };
+/** What the loop paints from: the state, how far Connect is pointed at (eased), and how far the light has run. */
+type LoopInput = { state: ConnectArtState; heat: number; travel: number };
 
 const rgba = ([r, g, b]: Rgb, alpha: number): string => `rgb(${r} ${g} ${b} / ${alpha})`;
 
@@ -89,15 +90,8 @@ function trace(ctx: CanvasRenderingContext2D, from: ArtPoint, to: ArtPoint, star
 }
 
 /** One frame: every line, then the light running along it. */
-function paint(
-  ctx: CanvasRenderingContext2D,
-  lines: Lines,
-  input: LoopInput,
-  colors: { line: Rgb; flow: Rgb },
-  seconds: number,
-) {
+function paint(ctx: CanvasRenderingContext2D, lines: Lines, input: LoopInput, colors: { line: Rgb; flow: Rgb }) {
   const connected = input.state === ConnectArtState.Connected;
-  const speed = pulseSpeed(input.state, input.heat);
   const pulses = pulsesPerLine(input.state);
   const lit = connected || input.state === ConnectArtState.SigningIn;
   const line = connected ? rgba(colors.flow, 0.55) : rgba(colors.line, LINE_ALPHA);
@@ -109,7 +103,7 @@ function paint(
     ctx.strokeStyle = line;
     ctx.stroke();
     for (let pulse = 0; pulse < pulses; pulse++) {
-      const head = pulseHead(seconds, speed, index, pulse, pulses);
+      const head = pulseHead(input.travel, index, pulse, pulses);
       trace(ctx, from, lines.to, Math.max(0, head - PULSE_LENGTH), head, PULSE_STEPS);
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = light;
@@ -128,7 +122,7 @@ function startLoop(
 ): () => void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return () => {};
-  const born = performance.now();
+  let last = performance.now();
   const reduced = matchMedia(REDUCED_MOTION_QUERY);
   const dark = matchMedia(DARK_SCHEME_QUERY);
   let colors = readColors(canvas);
@@ -157,11 +151,18 @@ function startLoop(
   };
   const draw = () => {
     if (frames++ % MEASURE_EVERY_FRAMES === 0) fit();
-    const still = reduced.matches;
-    input.current.heat += ((still ? 0 : heat.current) - input.current.heat) * HEAT_EASE;
-    const seconds = still ? STILL_SECONDS : (performance.now() - born) / SECOND_MS;
+    const now = performance.now();
+    const state = input.current;
+    if (reduced.matches) {
+      state.heat = 0;
+      state.travel = STILL_TRAVEL;
+    } else {
+      state.heat += (heat.current - state.heat) * HEAT_EASE;
+      state.travel = travelAfter(state.travel, pulseSpeed(state.state, state.heat), (now - last) / SECOND_MS);
+    }
+    last = now;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    paint(ctx, lines, input.current, colors, seconds);
+    paint(ctx, lines, state, colors);
   };
   const stop = () => {
     clearTimeout(timer);
@@ -184,8 +185,11 @@ function startLoop(
     if (live()) tick();
   };
   redraw.current = schedule;
+  // The band's size, and the words beside the logos: a new state's line or button moves the action.
   const resize = new ResizeObserver(schedule);
   resize.observe(band);
+  const side = band.querySelector(".genex-connect-side");
+  if (side) resize.observe(side);
   const unwatch = watchRepaints(
     canvas,
     {
@@ -213,6 +217,33 @@ function startLoop(
 const onTarget = (target: EventTarget | null): boolean => target instanceof Element && target.closest(TARGET) !== null;
 
 /**
+ * Keeps keyboard focus in the band when its words change under it: the action that had focus goes
+ * with its state, so focus moves to the next state's action (or its words) instead of the page.
+ */
+function useKeptFocus(band: RefObject<HTMLElement | null>) {
+  const inside = useRef(false);
+  useLayoutEffect(() => {
+    const root = band.current;
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (!root || !inside.current || !lost) return;
+    const action = root.querySelector<HTMLElement>(`${TARGET}:enabled`);
+    (action ?? root.querySelector<HTMLElement>(".genex-connect-side"))?.focus();
+  });
+  return {
+    focused: () => {
+      inside.current = true;
+    },
+    blurred: (event: FocusEvent<HTMLElement>) => {
+      const left = event.target;
+      // Focus settles after the blur; an action removed with its state keeps the band's claim.
+      setTimeout(() => {
+        if (left.isConnected) inside.current = band.current?.contains(document.activeElement) ?? false;
+      });
+    },
+  };
+}
+
+/**
  * The band, with `children` (the state's words and actions) on its right. Mark the one action the
  * lines run into with `data-connect-target`; without one they run into the first line.
  */
@@ -230,7 +261,7 @@ export function ConnectBand({
 }): JSX.Element {
   const band = useRef<HTMLElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
-  const input = useRef<LoopInput>({ state, heat: 0 });
+  const input = useRef<LoopInput>({ state, heat: 0, travel: 0 });
   input.current.state = state;
   // Where the pulses are heading: 1 while Connect is pointed at or focused.
   const heat = useRef(0);
@@ -242,14 +273,17 @@ export function ConnectBand({
   }, []);
 
   // A new state moves the action and changes the light: measure and paint it now, moving or still.
+  // Its action is new too, so nothing is pointed at until the pointer or focus says so again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new state is what repaints
   useEffect(() => {
+    heat.current = 0;
     redraw.current();
   }, [state]);
 
   const warm = (on: boolean) => (event: { target: EventTarget | null }) => {
     if (onTarget(event.target)) heat.current = on ? 1 : 0;
   };
+  const kept = useKeptFocus(band);
   return (
     <section
       ref={band}
@@ -259,8 +293,14 @@ export function ConnectBand({
       data-art={state}
       onPointerOver={warm(true)}
       onPointerOut={warm(false)}
-      onFocus={warm(true)}
-      onBlur={warm(false)}
+      onFocus={(event) => {
+        warm(true)(event);
+        kept.focused();
+      }}
+      onBlur={(event) => {
+        warm(false)(event);
+        kept.blurred(event);
+      }}
       {...hooks}
     >
       <canvas ref={canvas} className="genex-connect-lines" aria-hidden="true" />
@@ -278,7 +318,9 @@ export function ConnectBand({
             />
           ))}
         </div>
-        <div className="genex-connect-side">{children}</div>
+        <div className="genex-connect-side" tabIndex={-1}>
+          {children}
+        </div>
       </div>
     </section>
   );

@@ -3586,7 +3586,6 @@ export const GENEX_WORDS = {
     tryAgain: "Try again",
     connected: "Connected",
     disconnect: "Disconnect",
-    credits: "Credits",
     unlimited: "Unlimited",
     shared: "One balance for all your games. Failed generations are refunded.",
     outOfCredits: "Games still build with procedural assets and Local Blender.",

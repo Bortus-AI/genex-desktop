@@ -74,13 +74,26 @@ export function pulseSpeed(state: ConnectArtState, heat: number): number {
 /** Pulses on each line: two once connected, so the lines read as steady; one otherwise. */
 export const pulsesPerLine = (state: ConnectArtState): number => (state === ConnectArtState.Connected ? 2 : 1);
 
+/** The longest step light takes between two frames, in seconds: a paused band picks up where it was. */
+export const MAX_STEP_SECONDS = 0.1;
+/** How far light has run along a still band (Reduce Motion), in lines: every pulse partway along. */
+export const STILL_TRAVEL = 0.4;
+
 /**
- * Where a pulse's head is at `seconds`, from 0 to 1 along its line: each line runs at its own pace
- * and phase (by `index`), so the pulses never arrive together.
+ * How far light has run, in lines, `seconds` after `travel` at `speed`. The light keeps a running
+ * distance rather than a clock, so a change of speed (Connect pointed at, a new state) only
+ * changes how fast the pulses go on, never where they are.
  */
-export function pulseHead(seconds: number, speed: number, index: number, pulse: number, pulses: number): number {
+export const travelAfter = (travel: number, speed: number, seconds: number): number =>
+  travel + speed * Math.min(MAX_STEP_SECONDS, Math.max(0, seconds));
+
+/**
+ * Where a pulse's head is after the light has run `travel` lines, from 0 to 1 along its line: each
+ * line runs at its own pace and phase (by `index`), so the pulses never arrive together.
+ */
+export function pulseHead(travel: number, index: number, pulse: number, pulses: number): number {
   const pace = PACE_BASE + ((index * PACE_STRIDE) % PACE_STEPS) * PACE_STEP;
   const phase = (index * PHASE_STRIDE) % 1;
-  const head = (seconds * speed * pace + phase + pulse / pulses) % 1;
+  const head = (travel * pace + phase + pulse / pulses) % 1;
   return head < 0 ? head + 1 : head;
 }

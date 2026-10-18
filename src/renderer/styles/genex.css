@@ -138,6 +138,7 @@
 }
 .genex-connect-side {
   position: relative;
+  outline: none;
   display: flex;
   flex-direction: column;
   align-items: flex-start;

@@ -14,7 +14,7 @@ import { Icon } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { GENEX_WORDS } from "../../../words.ts";
 import { ConnectBand } from "./ConnectArt.tsx";
-import { connectArtState } from "./connect-art.ts";
+import { ConnectArtState, connectArtState } from "./connect-art.ts";
 import {
   CreditsKind,
   type CreditsView,
@@ -53,7 +53,7 @@ function TextAction({ disabled, onClick, children }: { disabled: boolean; onClic
  * The band's one filled action, the one its lines run into. `shine` sweeps a light across its
  * label, as genex.games' plan button does, for the press the page is there for.
  */
-export function ConnectAction({
+function BandAction({
   busy,
   shine = false,
   onClick,
@@ -72,7 +72,7 @@ export function ConnectAction({
 }
 
 /** The offer: the best tools in one click, optional, and Connect (Reconnect after a failed one). */
-export function ConnectOffer({
+function ConnectOffer({
   retry = false,
   busy,
   onConnect,
@@ -85,9 +85,9 @@ export function ConnectOffer({
     <Prompt
       title={retry ? WORDS.retryTitle : WORDS.offerTitle}
       actions={
-        <ConnectAction busy={busy} shine={!retry} onClick={onConnect}>
+        <BandAction busy={busy} shine={!retry} onClick={onConnect}>
           {retry ? WORDS.retry : WORDS.connect}
-        </ConnectAction>
+        </BandAction>
       }
     >
       <p className="genex-connect-text">{retry ? WORDS.retryText : WORDS.offerText}</p>
@@ -124,9 +124,11 @@ function Balance({ credits }: { credits: CreditsView }): JSX.Element | null {
 function Connected({
   view,
   live,
+  busy,
 }: {
   view: Extract<GenexAccountView, { kind: typeof GenexAccountKind.Connected }>;
   live: GenexLive;
+  busy: boolean;
 }): JSX.Element {
   const empty = outOfCredits(view.credits);
   const counted = creditsValue(view.credits) !== null && view.credits.kind !== CreditsKind.Unlimited;
@@ -137,7 +139,7 @@ function Connected({
           <Icon name="check" size={16} className="genex-connect-check" />
           {WORDS.connected}
         </h2>
-        <TextAction disabled={live.running !== null} onClick={() => void live.act(GenexAction.Disconnect)}>
+        <TextAction disabled={busy} onClick={() => void live.act(GenexAction.Disconnect)}>
           {WORDS.disconnect}
         </TextAction>
       </div>
@@ -153,9 +155,8 @@ function Connected({
   );
 }
 
-/** Each state's words and actions; Connected has its own component. */
-function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }): JSX.Element {
-  const busy = live.running !== null;
+/** Each state's words and actions; Connected has its own component. `busy`: an action is under way. */
+function StateBody({ view, live, busy }: { view: GenexAccountView; live: GenexLive; busy: boolean }): JSX.Element {
   const connect = () => void live.act(GenexAction.Connect);
   switch (view.kind) {
     case GenexAccountKind.Loading:
@@ -187,10 +188,10 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
         <Prompt
           title={WORDS.termsTitle}
           actions={
-            <ConnectAction busy={busy} onClick={() => void live.act(GenexAction.Terms)}>
+            <BandAction busy={busy} onClick={() => void live.act(GenexAction.Terms)}>
               {WORDS.terms}
               <Icon name="arrow-up-right" size={14} />
-            </ConnectAction>
+            </BandAction>
           }
         >
           <p className="genex-connect-text">{WORDS.termsText}</p>
@@ -203,7 +204,7 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
         <Prompt
           title={WORDS.attentionTitle}
           actions={
-            <Button variant="play-tint" onClick={() => void live.refresh()}>
+            <Button variant="play-tint" disabled={busy} onClick={() => void live.refresh()}>
               {WORDS.tryAgain}
             </Button>
           }
@@ -212,16 +213,45 @@ function StateBody({ view, live }: { view: GenexAccountView; live: GenexLive }):
         </Prompt>
       );
     default:
-      return <Connected view={view} live={live} />;
+      return <Connected view={view} live={live} busy={busy} />;
   }
 }
 
+/** Connect while the plugin is off: what it runs (turn on, then sign in when needed). */
+export interface PluginOff {
+  onConnect: () => void;
+}
+
 /**
- * The account in the Connect band, for the plugin's live status. `problem` is a failure the Plugins
- * page met on the way here (its account button, or Connect while the plugin was off), shown in the
- * band like the band's own.
+ * The Connect band, for the plugin's live status: the offer while the plugin is `off`, the
+ * account's state once it is on. One band either way, so turning the plugin on keeps the page
+ * where it is and its changes are announced in place. `problem` is a failure the Plugins page met
+ * on the way here (its account button, or Connect while off), shown in the band like the band's
+ * own; `busy` is an action of the page's under way.
  */
-export function GenexAccount({ live, problem = "" }: { live: GenexLive; problem?: string }): JSX.Element {
+export function GenexAccount({
+  live,
+  problem = "",
+  busy = false,
+  off,
+}: {
+  live: GenexLive;
+  problem?: string;
+  busy?: boolean;
+  off?: PluginOff;
+}): JSX.Element {
+  const acting = busy || live.running !== null;
+  if (off)
+    return (
+      <ConnectBand state={ConnectArtState.Waiting} label={WORDS.offLabel} hooks={{ "data-genex-connect": "off" }}>
+        <ConnectOffer busy={acting} onConnect={off.onConnect} />
+        {problem && (
+          <p role="alert" className="genex-error">
+            {problem}
+          </p>
+        )}
+      </ConnectBand>
+    );
   const view = genexAccountView(live.status);
   // Before the first status, a failed read is the band's own state rather than a line beneath it.
   const unreadable = live.status === null && live.error;
@@ -229,7 +259,7 @@ export function GenexAccount({ live, problem = "" }: { live: GenexLive; problem?
   const why = unreadable ? problem : live.error || problem;
   return (
     <ConnectBand state={connectArtState(shown.kind)} label={WORDS.label} hooks={{ "data-genex-account": shown.kind }}>
-      <StateBody view={shown} live={live} />
+      <StateBody view={shown} live={live} busy={acting} />
       {why && (
         <p role="alert" className="genex-error">
           {why}

@@ -21,10 +21,8 @@ import { isActive } from "../labels.ts";
 import type { PluginsPage } from "../page.ts";
 import { Section } from "../rows.tsx";
 import type { ShownSkill } from "../skills-sections.ts";
-import { ConnectBand } from "./ConnectArt.tsx";
 import { turnOnAndConnect } from "./connect-genex.ts";
-import { ConnectArtState } from "./connect-art.ts";
-import { ConnectOffer, GenexAccount } from "./GenexAccount.tsx";
+import { GenexAccount } from "./GenexAccount.tsx";
 import { GenexCreditsTab } from "./GenexCreditsTab.tsx";
 import { chooseGenexTab, GENEX_TABS, GenexTab, useGenexTab } from "./genex-tab.ts";
 import { type GenexJobRow, genexJobRows, JobState } from "./genex-view.ts";
@@ -143,13 +141,22 @@ function WaitingForReview({ live }: { live: GenexLive }): JSX.Element | null {
   );
 }
 
-/** The account card (the shared balance, never a game's spend) and what waits for review in the open game. */
-function LiveAccount({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element {
-  const live = useGenexStatus(detail, page.project);
+/**
+ * The Connect band and what waits for review in the open game. While the plugin is off the band
+ * offers Connect, which turns it on and signs in when the app isn't; once on it shows the
+ * account (the shared balance, never a game's spend). It stays one band across the switch.
+ */
+function ConnectSection({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element {
+  const active = isActive(detail);
+  const live = useGenexStatus(detail, page.project, active);
+  const signedIn = usePeople((s) => s.account === GenexAccountStatus.SignedIn);
+  const off = active
+    ? undefined
+    : { onConnect: () => void turnOnAndConnect(detail, page, { signedIn, signIn: signInToGenex }) };
   return (
     <>
-      <GenexAccount live={live} problem={page.error} />
-      <WaitingForReview live={live} />
+      <GenexAccount live={live} problem={page.error} busy={page.busy} off={off} />
+      {active && <WaitingForReview live={live} />}
       {live.review && <PluginApproval review={live.review} onClose={live.closeReview} />}
     </>
   );
@@ -193,28 +200,6 @@ function GenexTabs({ tab, ids }: { tab: GenexTab; ids: string }): JSX.Element {
   );
 }
 
-/** Genex is off: the Connect band's offer, and what went wrong on the way. */
-function GenexOff({ detail, page }: { detail: PluginInfo; page: PluginsPage }): JSX.Element {
-  const signedIn = usePeople((s) => s.account === GenexAccountStatus.SignedIn);
-  return (
-    <ConnectBand
-      state={ConnectArtState.Waiting}
-      label={GENEX_WORDS.account.offLabel}
-      hooks={{ "data-genex-connect": "off" }}
-    >
-      <ConnectOffer
-        busy={page.busy}
-        onConnect={() => void turnOnAndConnect(detail, page, { signedIn, signIn: signInToGenex })}
-      />
-      {page.error && (
-        <p role="alert" className="genex-error">
-          {page.error}
-        </p>
-      )}
-    </ConnectBand>
-  );
-}
-
 /** The Genex page below its title. */
 export function GenexDetail({
   detail,
@@ -225,7 +210,6 @@ export function GenexDetail({
   page: PluginsPage;
   onSkill: (skill: ShownSkill) => void;
 }): JSX.Element {
-  const active = isActive(detail);
   const tab = useGenexTab();
   const ids = useId();
   return (
@@ -234,7 +218,7 @@ export function GenexDetail({
       <div role="tabpanel" id={`${ids}-panel`} aria-labelledby={`${ids}-${tab}`} className="contents">
         {tab === GenexTab.Tools && (
           <>
-            {active ? <LiveAccount detail={detail} page={page} /> : <GenexOff detail={detail} page={page} />}
+            <ConnectSection detail={detail} page={page} />
             <PluginNotes detail={detail} />
             <div className="extensions-detail-actions">
               <UpdateButton detail={detail} page={page} />

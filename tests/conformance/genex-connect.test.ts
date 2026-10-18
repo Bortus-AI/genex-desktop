@@ -11,10 +11,12 @@ import {
   ConnectArtState,
   connectArtState,
   linePoint,
+  MAX_STEP_SECONDS,
   pulseHead,
   pulseSpeed,
   pulsesPerLine,
   TOOL_SPOTS,
+  travelAfter,
 } from "../../src/renderer/panels/plugins/genex/connect-art.ts";
 import { turnOnAndConnect } from "../../src/renderer/panels/plugins/genex/connect-genex.ts";
 import { GenexAccountKind } from "../../src/renderer/panels/plugins/genex/genex-view.ts";
@@ -134,10 +136,26 @@ describe("the Connect band's lines", () => {
   });
 
   it("never send two lines' light in step", () => {
-    for (const seconds of [0, 1.6, 37.25]) {
-      const heads = Object.values(GenexTool).map((_, index) => pulseHead(seconds, 0.3, index, 0, 1));
+    for (const travel of [0, 0.5, 11.2]) {
+      const heads = Object.values(GenexTool).map((_, index) => pulseHead(travel, index, 0, 1));
       for (const head of heads) assert.ok(head >= 0 && head < 1, String(head));
       assert.equal(new Set(heads.map((head) => head.toFixed(4))).size, heads.length);
+    }
+  });
+
+  it("speed the light up where it is when Connect is pointed at, after a long wait too", () => {
+    const frame = 1 / 30;
+    let travel = travelAfter(0, pulseSpeed(ConnectArtState.Waiting, 0), 600);
+    assert.ok(travel <= MAX_STEP_SECONDS, "a paused band picks up where it was");
+    let heat = 0;
+    for (let step = 0; step < 90; step++) {
+      heat += (1 - heat) * 0.08;
+      const next = travelAfter(travel, pulseSpeed(ConnectArtState.Waiting, heat), frame);
+      for (const index of Object.values(GenexTool).keys()) {
+        const moved = (pulseHead(next, index, 0, 1) - pulseHead(travel, index, 0, 1) + 1) % 1;
+        assert.ok(moved < 0.03, `line ${index} jumped ${moved.toFixed(3)} at step ${step}`);
+      }
+      travel = next;
     }
   });
 });
