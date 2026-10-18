@@ -230,18 +230,19 @@ describe("the reviewer's verdict is the app's", () => {
     assert.equal(settled.timeLeft, undefined, "no time named: the no's count as they always have");
   });
 
-  it("what isn't done is kept apart from the reviewer's reasons, in the answer and the record", {
+  it("what isn't done and what is are kept apart from the reviewer's reasons, in the answer and the record", {
     timeout: CASE_TIMEOUT_MS,
   }, async () => {
     const chat = await workerChat();
     const met = "The laps and the finish screen were already accepted and still hold.";
-    reviewerSays(chat, [reviewerAnswer("no", [met], CLAUDE, NO_REASONS)]);
+    const done = ["Laps run", "Finish screen"];
+    reviewerSays(chat, [reviewerAnswer("no", [met], CLAUDE, NO_REASONS, done)]);
     const answered = await review(chat);
-    assert.deepEqual([answered.reasons, answered.notDone], [[met], NO_REASONS]);
+    assert.deepEqual([answered.reasons, answered.notDone, answered.done], [[met], NO_REASONS, done]);
     const settled = await settle(chat, { round: 1 });
-    assert.deepEqual([settled.reasons, settled.notDone], [[met], NO_REASONS]);
+    assert.deepEqual([settled.reasons, settled.notDone, settled.done], [[met], NO_REASONS, done]);
     const last = (await checks(chat)).at(-1);
-    assert.deepEqual([last?.reasons, last?.notDone], [[met], NO_REASONS]);
+    assert.deepEqual([last?.reasons, last?.notDone, last?.done], [[met], NO_REASONS, done]);
   });
 
   it("a resumed run goes on counting its no's; a finished run reopened for a new ask starts them over", {
@@ -515,6 +516,7 @@ describe("the app's reading of a reviewer's answer", () => {
       claim: null,
       reasons: [],
       notDone: [],
+      done: [],
       why: null,
       stopped: false,
       timeLeft: false,

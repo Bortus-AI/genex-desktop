@@ -154,6 +154,8 @@ export interface FinishTally {
   reasons: string[];
   /** What the reviewer's last no found not done, for the next round's brief and the run's report. */
   notDone: string[];
+  /** What the reviewer's last no found done, a few words each (absent from an older journal's tally). */
+  done?: string[];
   /** When the reviewer's last no was settled, on the check's clock: proof made after it is fresh. */
   noAt?: number;
   /** The lead's work mark (`FinishScope.workMark`) the reviewer's last no was given on. */
@@ -176,9 +178,13 @@ const isCount = (value: unknown): value is number => Number.isSafeInteger(value)
  */
 export function tallyOf(saved: unknown): FinishTally {
   if (!isPlainRecord(saved)) return newTally();
-  const { round, rejections, reasons, notDone, noAt, noMark } = saved;
+  const { round, rejections, reasons, notDone, done, noAt, noMark } = saved;
   if (!isCount(round) || !isCount(rejections) || !isTexts(reasons)) return newTally();
-  const when = { ...(isCount(noAt) ? { noAt } : {}), ...(typeof noMark === "string" ? { noMark } : {}) };
+  const when = {
+    ...(isTexts(done) && done.length ? { done: [...done] } : {}),
+    ...(isCount(noAt) ? { noAt } : {}),
+    ...(typeof noMark === "string" ? { noMark } : {}),
+  };
   return {
     round,
     rejections,
@@ -256,6 +262,7 @@ type Rejected = {
   step: typeof FinishCheckStep.Rejected;
   reasons: string[];
   notDone: string[];
+  done: string[];
   rejections: number;
   stop: boolean;
   timeLeft: boolean;
@@ -623,18 +630,23 @@ function outcomeOf(
   tally.rejections = settled.rejections;
   const reasons = (settled.reasons ?? []).slice(0, MAX_FINISH_REASONS);
   const notDone = (settled.notDone ?? []).slice(0, MAX_FINISH_REASONS);
+  const done = (settled.done ?? []).slice(0, MAX_FINISH_REASONS);
   if (settled.step === FinishCheckStep.Accepted) {
     Object.assign(tally, { reasons: [], notDone: [] });
+    delete tally.done;
     delete tally.noAt;
     delete tally.noMark;
     return { step: FinishCheckStep.Accepted, reasons };
   }
   if (settled.step === FinishCheckStep.Rejected) {
     Object.assign(tally, { reasons, notDone, noAt: no.at });
+    if (done.length) tally.done = done;
+    else delete tally.done;
     if (no.mark === null) delete tally.noMark;
     else tally.noMark = no.mark;
     const { rejections, stopped: stop } = settled;
-    return { step: FinishCheckStep.Rejected, reasons, notDone, rejections, stop, timeLeft: settled.timeLeft === true };
+    const timeLeft = settled.timeLeft === true;
+    return { step: FinishCheckStep.Rejected, reasons, notDone, done, rejections, stop, timeLeft };
   }
   const answer = unanswered(settled.why ?? MESSAGE.ended);
   return lapsed ? { ...answer, lapsed: true } : answer;

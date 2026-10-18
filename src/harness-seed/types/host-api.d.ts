@@ -67,6 +67,8 @@ export interface FinishRoundAnswer {
   reasons?: string[];
   /** What the reviewer found not done, when it named any. */
   notDone?: string[];
+  /** What the reviewer found done, in a few words each, when it named any. */
+  done?: string[];
   why?: string;
 }
 // ↑ src/shared/harness-api.ts

@@ -115,11 +115,15 @@ function verdictOfResult(result: unknown): ReviewerVerdict {
   return reviewerVerdict(String(record.summary ?? ""));
 }
 
-/** An answer's fields, as the harness and the record read them: what isn't done only when the reviewer named some. */
+/** An answer's fields, as the harness and the record read them: what isn't done and what is only when the reviewer named some. */
 const answerFields = (verdict: ReviewerVerdict) =>
   verdict.step === FinishCheckStep.Unanswered
     ? { why: verdict.why }
-    : { reasons: verdict.reasons, ...(verdict.notDone.length ? { notDone: verdict.notDone } : {}) };
+    : {
+        reasons: verdict.reasons,
+        ...(verdict.notDone.length ? { notDone: verdict.notDone } : {}),
+        ...(verdict.done.length ? { done: verdict.done } : {}),
+      };
 
 /** A run's own `finish_check` payloads as a reader places them. */
 function placed(payloads: ReadonlyArray<Record<string, unknown>>, runId: string): FinishRecord[] {

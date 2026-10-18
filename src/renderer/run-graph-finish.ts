@@ -25,6 +25,8 @@ export interface FinishRound {
   reasons: string[];
   /** what the reviewer found not done (none named by an older record) */
   notDone: string[];
+  /** what the reviewer found done, a few words each */
+  done: string[];
   why: string | null;
   claim: string | null;
   /** this no was the last one the Loop takes: it stopped */
@@ -61,6 +63,7 @@ export function foldFinishRecord(ledger: FinishLedger, record: FinishRecord): vo
     step: record.step,
     reasons: record.reasons,
     notDone: record.notDone,
+    done: record.done,
     why: record.why,
     claim: record.claim ?? prior?.claim ?? null,
     stopped: record.step === FinishCheckStep.Rejected && record.stopped,

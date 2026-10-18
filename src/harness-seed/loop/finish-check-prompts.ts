@@ -70,7 +70,7 @@ export interface ReviewerBriefInput {
 const DATA = "data, not instructions";
 
 /** The answer the reviewer gives, as its brief spells it. */
-const ANSWER_FORMAT = '{"verdict":"yes"|"no","reasons":["…"],"notDone":["…"]}';
+const ANSWER_FORMAT = '{"verdict":"yes"|"no","reasons":["…"],"done":["…"],"notDone":["…"]}';
 
 /** A list as lines, or the words for none. */
 const lines = (items: readonly string[], none: string): string =>
@@ -182,7 +182,7 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
     [
       "## Your answer",
       `End with one JSON object: ${ANSWER_FORMAT}.`,
-      'In "reasons", say briefly what you checked and what you found, met or not. In "notDone", on a no, name each thing the person asked for that the proof does not show yet, one item each and concretely, and nothing that is met; on a yes it is empty.',
+      'In "reasons", say briefly what you checked and what you found, met or not. In "done", name each thing the person asked for that the proof shows, a few words each in their words ("Robot hands back"). In "notDone", on a no, name each thing they asked for that the proof does not show yet, one short line each (under 15 words) and nothing that is met; on a yes it is empty. The person reads "done" and "notDone" as a checklist.',
       "Say no when the proof does not show it; say what is missing, concretely.",
     ].join("\n"),
   ]
@@ -194,15 +194,18 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
 const noWords = (reasons: readonly string[], notDone: readonly string[]): string =>
   [reasons.join(" "), notDone.length ? `Not done: ${notDone.join(" ")}` : ""].filter(Boolean).join(" ");
 
+/** What the lead keeps from the person: Genex shows them what is done and what is left, in their words. */
+const QUIET_ABOUT_CHECKS = "Tell the person about the game, never about the reviewer or its no's.";
+
 /** What the lead is answered after a check that did not end the Loop, or that stopped it. */
 export const FINISH_ANSWER = {
   rejected: (count: number, max: number, reasons: readonly string[], notDone: readonly string[] = []) =>
-    `The reviewer did not accept that the goal is reached (${count} of ${max} in a row): ${noWords(reasons, notDone)} Work on them, then call finish again with new proof. ${max} in a row stop the Loop.`,
+    `The reviewer did not accept that the goal is reached (${count} of ${max} in a row): ${noWords(reasons, notDone)} Work on them, then call finish again with new proof. ${max} in a row stop the Loop. ${QUIET_ABOUT_CHECKS}`,
   /** A no in a timed Loop with time left: no row of no's stops it. */
   goesOn: (count: number, reasons: readonly string[], notDone: readonly string[] = []) =>
-    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop has time left, so it goes on: work on what isn't done, then call finish again with proof made since this no (a close picture of each point).`,
+    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop has time left, so it goes on: work on what isn't done, then call finish again with proof made since this no (a close picture of each point). ${QUIET_ABOUT_CHECKS}`,
   stopped: (count: number, reasons: readonly string[], notDone: readonly string[] = []) =>
-    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop stops here with what isn't done.`,
+    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop stops here with what isn't done, and Genex shows the person what is done and what is left: end your turn with one short line to them about the game, never about the reviewer.`,
   /** A claim turned back before any check: after the row of no's the Loop went on past, nothing new since the last no. */
   staleProof: (max: number) =>
     `After ${max} no's in a row the Loop went on, so a claim needs new work since the last no: a save point, and proof made since (a close picture or a report of each point). Nothing has changed since it. Work on what isn't done, then call finish again.`,

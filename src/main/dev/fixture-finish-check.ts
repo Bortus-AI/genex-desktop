@@ -70,10 +70,15 @@ function round(run: Scoped, n: number, answer: { [key: string]: unknown } | null
 }
 
 /** A no with its reasons (and what it found not done, when named), counted in the row; one with time left never stops. */
-const no = (reasons: string[], rejections: number, more: { notDone?: string[]; timeLeft?: boolean } = {}) => ({
+const no = (
+  reasons: string[],
+  rejections: number,
+  more: { notDone?: string[]; done?: string[]; timeLeft?: boolean } = {},
+) => ({
   step: FinishCheckStep.Rejected,
   reasons,
   ...(more.notDone ? { notDone: more.notDone } : {}),
+  ...(more.done ? { done: more.done } : {}),
   rejections,
   ...(more.timeLeft ? { timeLeft: true } : {}),
   ...(!more.timeLeft && rejections >= MAX_FINISH_REJECTIONS ? { stopped: true } : {}),
@@ -99,12 +104,13 @@ function doneLoop(project: string): EventData[] {
 function stoppedLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: STOPPED_RUN, project });
   const met = [STILL_MET];
+  const done = ["The car is ported", "The track is built", "A full lap runs"];
   return [
     ...loopStart(run),
     ...round(run, 1, no(met, 1, { notDone: [NO_FINISH_LINE, NO_TIMER], timeLeft: true })),
     ...round(run, 2, no(met, 2, { notDone: [NO_TIMER], timeLeft: true })),
-    ...round(run, 3, no(met, MAX_FINISH_REJECTIONS, { notDone: [TIMER_RESETS], timeLeft: true })),
-    ...round(run, 4, no(met, MAX_FINISH_REJECTIONS + 1, { notDone: [TIMER_RESETS] })),
+    ...round(run, 3, no(met, MAX_FINISH_REJECTIONS, { notDone: [TIMER_RESETS], done, timeLeft: true })),
+    ...round(run, 4, no(met, MAX_FINISH_REJECTIONS + 1, { notDone: [TIMER_RESETS], done })),
     run(CustomEvent.RunFinished, {
       victory: false,
       landed: false,

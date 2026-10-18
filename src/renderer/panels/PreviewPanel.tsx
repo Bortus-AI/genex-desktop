@@ -17,6 +17,7 @@ import { useSharedSnapshot } from "../use-shared-snapshot.ts";
  * `stage/` holds the pieces: the live page load and its probe, the native view's rectangle, the
  * build-problem strip, what waits for Live's Reload, the strip over the stage and its empty states.
  */
+import { keepBuilding } from "../keep-building.ts";
 import type { JSX } from "react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { mergeChatEvents } from "../../shared/chat-history.ts";
@@ -435,6 +436,7 @@ function StageContents({
           onShowLive={showLive}
           onShowAsset={showAsset}
           onReply={reply}
+          onKeepBuilding={threadId ? (notDone) => keepBuilding({ threadId, notDone }) : null}
           tabs={tabs}
           onNotice={onNotice}
         />

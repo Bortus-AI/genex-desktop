@@ -66,6 +66,8 @@ export interface FinishCheckPayload extends RunScope {
   reasons?: string[];
   /** On a no: each thing asked for that the proof doesn't show yet, as the reviewer named it. */
   notDone?: string[];
+  /** Each thing asked for that the proof shows, in a few words, as the reviewer named it. */
+  done?: string[];
   /** The no's in a row so far. */
   rejections?: number;
   /** This no was the last one the Loop takes: it stops. */
@@ -87,6 +89,8 @@ export interface FinishRecord {
   reasons: string[];
   /** What the reviewer found not done; empty for a record that names none (older records name reasons alone). */
   notDone: string[];
+  /** What the reviewer found done, in a few words each; empty for a record that names none. */
+  done: string[];
   why: string | null;
   stopped: boolean;
   /** A no the Loop had time left at: it went on whatever the row of no's. */
@@ -122,6 +126,7 @@ export function finishRecordOf(payload: Record<string, unknown>): FinishRecord |
     claim: textOrNull(payload.claim),
     reasons,
     notDone: reasonsOf(payload.notDone) ?? [],
+    done: reasonsOf(payload.done) ?? [],
     why: textOrNull(payload.why),
     stopped: payload.stopped === true,
     timeLeft: payload.timeLeft === true,
@@ -135,6 +140,7 @@ export type ReviewerVerdict =
       step: typeof FinishCheckStep.Accepted | typeof FinishCheckStep.Rejected;
       reasons: string[];
       notDone: string[];
+      done: string[];
     }
   | { step: typeof FinishCheckStep.Unanswered; why: string };
 
@@ -202,7 +208,7 @@ function answerLines(value: unknown): string[] {
 
 /**
  * A reviewer's yes or no from its reply: the JSON `verdict` its brief asks for (fenced or trailing),
- * with its reasons and what isn't done, each a list of its own; a no that names neither says so.
+ * with its reasons, what isn't done and what is, each a list of its own; a no that names neither of the first two says so.
  * Anything else is no answer.
  */
 export function reviewerVerdict(summary: string): ReviewerVerdict {
@@ -210,10 +216,11 @@ export function reviewerVerdict(summary: string): ReviewerVerdict {
   const word = typeof answer?.verdict === "string" ? answer.verdict.trim().toLowerCase() : "";
   const reasons = answerLines(answer?.reasons);
   const notDone = answerLines(answer?.notDone);
-  if (word === FINISH_VERDICT.Yes) return { step: FinishCheckStep.Accepted, reasons, notDone };
+  const done = answerLines(answer?.done);
+  if (word === FINISH_VERDICT.Yes) return { step: FinishCheckStep.Accepted, reasons, notDone, done };
   if (word !== FINISH_VERDICT.No) return { step: FinishCheckStep.Unanswered, why: MESSAGE.noVerdict };
   const named = reasons.length || notDone.length;
-  return { step: FinishCheckStep.Rejected, reasons: named ? reasons : [MESSAGE.noReason], notDone };
+  return { step: FinishCheckStep.Rejected, reasons: named ? reasons : [MESSAGE.noReason], notDone, done };
 }
 
 /**

@@ -25,7 +25,7 @@ import {
   finishCheckFace,
   finishCheckLook,
   finishPanelTone,
-  finishRoundLists,
+  leftOf,
   reasonTone,
   roundNoteOf,
 } from "../../src/renderer/run-tree.ts";
@@ -124,7 +124,7 @@ describe("the finish check on the Builds graph", () => {
     assert.ok(box.x >= final.x + final.w, "right of the result");
   });
 
-  it("a no reads as not yet with its reasons and round, three no's as stopped, and no answer says so", () => {
+  it("a no reads as not yet with how many things are left, three no's as not finished, and no answer says so", () => {
     seq = 0;
     const opened = loopOpened();
     const checking = buildRunGraph([...opened, check(1, FinishCheckStep.Checking, { claim: CLAIM })]);
@@ -146,7 +146,7 @@ describe("the finish check on the Builds graph", () => {
     assert.equal(notYet.rejections, 1);
     assert.deepEqual(finishCheckFace(notYet), {
       name: FINISH_CHECK_WORDS.state.not_yet,
-      word: `2 reasons · round 1 of ${MAX_FINISH_REJECTIONS}`,
+      word: FINISH_CHECK_WORDS.leftWord(2),
     });
 
     const noAnswer = [
@@ -178,7 +178,7 @@ describe("the finish check on the Builds graph", () => {
     assert.equal(stopped.rejections, MAX_FINISH_REJECTIONS);
     assert.deepEqual(finishCheckFace(stopped), {
       name: FINISH_CHECK_WORDS.state.stopped,
-      word: FINISH_CHECK_WORDS.stoppedWord(),
+      word: FINISH_CHECK_WORDS.leftWord(1),
     });
     assert.equal(stopped.rounds.length, 4);
 
@@ -240,8 +240,8 @@ describe("the finish check on the Builds graph", () => {
     );
     assert.deepEqual(
       fresh.rounds.map((round) => roundNoteOf(round, fresh)),
-      [null, null, { text: FINISH_CHECK_WORDS.reportInChat, quiet: true }],
-      "no earlier no promises more no's to the new ask",
+      [null, null, null],
+      "no earlier no says the Loop keeps working on the new ask",
     );
     const oneNo = [
       ...reopened,
@@ -251,7 +251,7 @@ describe("the finish check on the Builds graph", () => {
     const after = finishCheckOf(buildRunGraph(oneNo));
     assert.equal(after?.rejections, 1, "one no for the new ask");
     assert.equal(after?.state, FinishCheckState.NotYet);
-    assert.equal(after && finishCheckFace(after).word, `1 reason · round 1 of ${MAX_FINISH_REJECTIONS}`);
+    assert.equal(after && finishCheckFace(after).word, FINISH_CHECK_WORDS.leftWord(1));
   });
 
   it("a finished run reopened after an earlier ask's yes or unanswered round waits for the new ask's claim", () => {
@@ -307,7 +307,7 @@ describe("the finish check on the Builds graph", () => {
     assert.ok(running);
     assert.equal(running.over, false, "a running Loop still waits for its check");
     assert.deepEqual(roundNoteOf(running.rounds[0] as FinishRound, running), {
-      text: FINISH_CHECK_WORDS.moreNos(1),
+      text: FINISH_CHECK_WORDS.keepsWorking,
       quiet: true,
     });
     const paused = finishCheckOf(buildRunGraph([...firstNo, inRun(CustomEvent.RunFinished, { paused: true })]));
@@ -321,7 +321,7 @@ describe("the finish check on the Builds graph", () => {
     });
   });
 
-  it("a no keeps what isn't done apart from the reviewer's reasons, and one with time left says the Loop keeps working", () => {
+  it("a no's card lists what is left, apart from the reviewer's reasons, and its done items; an older record lists its reasons", () => {
     seq = 0;
     const met = "The laps run and the finish screen shows, as accepted before.";
     const goesOn = [
@@ -329,6 +329,7 @@ describe("the finish check on the Builds graph", () => {
       check(1, FinishCheckStep.Checking, { claim: CLAIM }),
       check(1, FinishCheckStep.Rejected, {
         reasons: [met],
+        done: ["Laps run"],
         notDone: [NO_TIMER],
         rejections: MAX_FINISH_REJECTIONS,
         timeLeft: true,
@@ -336,15 +337,15 @@ describe("the finish check on the Builds graph", () => {
     ];
     const node = finishCheckOf(buildRunGraph(goesOn));
     assert.ok(node);
-    assert.equal(node.state, FinishCheckState.NotYet, "a no with time left never reads as stopped");
+    assert.equal(node.state, FinishCheckState.NotYet, "a no with time left never reads as not finished");
     const round = node.rounds[0] as FinishRound;
-    assert.deepEqual([round.reasons, round.notDone, round.timeLeft], [[met], [NO_TIMER], true]);
-    assert.deepEqual(finishRoundLists(round), [
-      { heading: FINISH_CHECK_WORDS.heading.whyNotYet, items: [NO_TIMER], tone: Tone.Orange },
-      { heading: FINISH_CHECK_WORDS.heading.checked, items: [met], tone: Tone.Muted },
-    ]);
-    assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.timeLeftNote, quiet: true });
-    assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.inARowWord(1, 1), "the graph counts its own no's");
+    assert.deepEqual(
+      [round.reasons, round.done, round.notDone, round.timeLeft],
+      [[met], ["Laps run"], [NO_TIMER], true],
+    );
+    assert.deepEqual(leftOf(round), [NO_TIMER], "what is left, never what the reviewer checked");
+    assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.keepsWorking, quiet: true });
+    assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.leftWord(1));
 
     const older = finishCheckOf(
       buildRunGraph([
@@ -352,10 +353,11 @@ describe("the finish check on the Builds graph", () => {
         check(1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 3, stopped: true }),
       ]),
     );
-    assert.deepEqual(
-      finishRoundLists(older?.rounds[0] as FinishRound),
-      [{ heading: FINISH_CHECK_WORDS.heading.notDone, items: [NO_TIMER], tone: Tone.Red }],
-      "a record with reasons alone lists them as before",
+    assert.deepEqual(leftOf(older?.rounds[0] as FinishRound), [NO_TIMER], "a record with reasons alone lists them");
+    assert.equal(
+      roundNoteOf(older?.rounds[0] as FinishRound, older as FinishCheckNode),
+      null,
+      "a stop offers Keep building",
     );
   });
 

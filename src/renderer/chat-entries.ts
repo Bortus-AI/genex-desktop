@@ -7,7 +7,7 @@ import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
 import { type ChatJudgeResultPayload, readChatJudgeResult } from "../shared/chat-judge.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
 import { workerKeyOf } from "../shared/run-graph-events.ts";
-import { type FinishRecord, FinishCheckStep, finishRecordOf, MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
+import { type FinishRecord, FinishCheckStep, finishRecordOf } from "../shared/finish-check.ts";
 /**
  * The chat transcript as entries: the thread's event log read once, oldest first, into the
  * bubbles, tool-chip groups, narration lines and cards the chat draws. Pure — `chat/transcript.ts`
@@ -54,7 +54,6 @@ import { offeredRewindUndo } from "../shared/chat-rewind.ts";
 import { type ConnectorStep, connectorStep, endsPlay, showsPlayView, startsPlay } from "./chat/connector-steps.ts";
 import {
   A_PLUGIN,
-  FINISH_CHECK_WORDS,
   GAME_ENGINE_WORDS,
   appAccessMissing,
   autopilotStartWords,
@@ -147,6 +146,12 @@ export const EntryAction = {
   WentAhead: "went-ahead",
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
+
+/** What a run that ended without the reviewer's yes leaves for the person: its last no's done and still-to-fix lists. */
+export interface StillToFix {
+  done: string[];
+  notDone: string[];
+}
 
 export type Entry =
   | {
@@ -275,10 +280,11 @@ export type Entry =
       handedOff?: boolean;
       /** a later close of the same run followed: only that one offers Resume */
       superseded?: true;
+      /** the run ended without the reviewer's yes: what its last no found done and still to fix */
+      stillToFix?: StillToFix;
     };
 
 type ToolsEntry = Extract<Entry, { kind: typeof EntryKind.Tools }>;
-type SystemEntry = Extract<Entry, { kind: typeof EntryKind.System }>;
 /** The card of the Genex cover a builder kept. */
 export type GenexCoverEntry = Extract<Entry, { kind: typeof EntryKind.GenexCover }>;
 type ActionEntry = Extract<Entry, { kind: typeof EntryKind.Action }>;
@@ -320,7 +326,6 @@ export const SystemTag = {
   Checkpoint: "CHECKPOINT",
   Engine: "ENGINE",
   /** The reviewer's check of the lead's claim that the goal is reached: never routine. */
-  FinishCheck: "FINISH CHECK",
 } as const;
 export type SystemTag = (typeof SystemTag)[keyof typeof SystemTag];
 
@@ -539,8 +544,8 @@ interface ChatDraft {
   endedJobs: Set<string>;
   /** Each worker's line by its graph and id (`workerKeyOf`), with what its records said, so later ones rewrite it. */
   workerLines: Map<string, { entry: ActionEntry; line: WorkerLine }>;
-  /** Each finish check round's line by its run and round, so the round's verdict rewrites it; `checking` until it has one. */
-  finishLines: Map<string, { entry: SystemEntry; runId: string; checking: boolean }>;
+  /** Each run's newest no from the reviewer, for its result card (`noteFinishCheck`). */
+  lastNo: Map<string, FinishRecord>;
 }
 
 /**
@@ -590,7 +595,7 @@ function newChatDraft(events: EventEnvelope[], queueIds: ReadonlyMap<string, str
     jobs: new Map(),
     endedJobs: new Set(),
     workerLines: new Map(),
-    finishLines: new Map(),
+    lastNo: new Map(),
     rounds: { kept: 0, undone: 0, firstShot: null, lastShot: null },
     rowByCall: new Map(),
     directTurns: new Map(),
@@ -1333,59 +1338,16 @@ function pushWorkerLine(chat: ChatDraft, id: string, key: string, line: WorkerLi
 }
 
 /**
- * A finish check round's line: the reviewer at work, its yes, its no with the first thing it found
- * not done (a record that names none, its first reason), a stop with what isn't done, or no answer.
+ * A finish check round says nothing in the chat while the Loop works; its newest no is kept for the
+ * run's result card, which lists what that no found done and still to fix once the run ends without
+ * a yes. A yes clears it.
  */
-function finishLine(check: FinishRecord): string {
-  const { chat } = FINISH_CHECK_WORDS;
-  if (check.step === FinishCheckStep.Checking) return chat.checking;
-  if (check.step === FinishCheckStep.Accepted) return chat.accepted;
-  if (check.step === FinishCheckStep.Unanswered) return chat.unanswered(check.why ?? "");
-  const notDone = check.notDone.length ? check.notDone : check.reasons;
-  if (check.stopped) return chat.stopped(notDone.join(" "), check.rejections ?? MAX_FINISH_REJECTIONS);
-  if (check.timeLeft) return chat.goesOn(check.rejections ?? 1, notDone[0] ?? "");
-  return chat.rejected(check.rejections ?? 1, notDone[0] ?? "");
-}
-
-/**
- * One line per round of a run's finish check: written when the reviewer starts, rewritten in place
- * by its verdict; a verdict whose start is not on this page is a line of its own. A stop asks for
- * attention.
- */
-function narrateFinishCheck(chat: ChatDraft, event: EventEnvelope): void {
+function noteFinishCheck(chat: ChatDraft, event: EventEnvelope): void {
   const payload = customPayload(event.data, CustomEvent.FinishCheck);
   const check = payload ? finishRecordOf(payload) : null;
   if (!check) return;
-  const key = `${check.runId}\u0000${check.round}`;
-  const text = finishLine(check);
-  const checking = check.step === FinishCheckStep.Checking;
-  const known = chat.finishLines.get(key);
-  if (known) {
-    known.entry.text = text;
-    known.checking = checking;
-    if (check.stopped) known.entry.attention = true;
-    return;
-  }
-  const entry: SystemEntry = {
-    id: event.id,
-    kind: EntryKind.System,
-    tag: SystemTag.FinishCheck,
-    text,
-    ...(check.stopped ? { attention: true } : {}),
-  };
-  chat.entries.push(entry);
-  chat.finishLines.set(key, { entry, runId: check.runId, checking });
-}
-
-/** A run finished: a round of its finish check still checking (no verdict reached the log) had no answer. */
-function narrateRunFinishSettled(chat: ChatDraft, event: EventEnvelope): void {
-  const runId = customPayload(event.data, CustomEvent.RunFinished)?.runId;
-  if (!runId) return;
-  for (const known of chat.finishLines.values()) {
-    if (known.runId !== runId || !known.checking) continue;
-    known.entry.text = FINISH_CHECK_WORDS.chat.unanswered("");
-    known.checking = false;
-  }
+  if (check.step === FinishCheckStep.Accepted) chat.lastNo.delete(check.runId);
+  if (check.step === FinishCheckStep.Rejected) chat.lastNo.set(check.runId, check);
 }
 
 /** Genex can't see app windows yet: one line naming what to allow, with a button per pane. */
@@ -2013,8 +1975,23 @@ function profileOf(finished: FinishedPayload): LoopProfile | null {
   return isLoopProfile(finished.profile) ? finished.profile : null;
 }
 
+/**
+ * What a run that ended without a yes leaves to fix, from its last no (taken, so a reopened run's
+ * next close starts clean); none after a yes, a no that names nothing not done (an older record), or
+ * no no at all.
+ */
+function stillToFixOf(chat: ChatDraft, finished: FinishedPayload): { stillToFix?: StillToFix } {
+  const runId = finished.runId;
+  if (!runId) return {};
+  const no = chat.lastNo.get(runId);
+  chat.lastNo.delete(runId);
+  if (!no?.notDone.length || finished.victory === true) return {};
+  return { stillToFix: { done: no.done, notDone: no.notDone } };
+}
+
 function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): MorningEntry {
   const { rounds } = chat;
+  const stillToFix = stillToFixOf(chat, finished);
   const judged = rounds.kept + rounds.undone;
   const n = judged || (Array.isArray(finished.iterations) ? finished.iterations.length : 0);
   const head = finished.integrationHead;
@@ -2040,6 +2017,7 @@ function morningCard(chat: ChatDraft, id: string, finished: FinishedPayload): Mo
     before: rounds.firstShot,
     after: rounds.lastShot,
     ...(chat.waiting.size > 0 && wasCancelled(finished.stoppedBecause) ? { handedOff: true } : {}),
+    ...stillToFix,
   };
 }
 
@@ -2115,8 +2093,7 @@ const NARRATORS: readonly Narrator[] = [
   narrateJobEnded,
   narrateWorkerStarted,
   narrateWorkerFinished,
-  narrateFinishCheck,
-  narrateRunFinishSettled,
+  noteFinishCheck,
   narrateAppAccess,
   narrateWentAhead,
   narrateChatJudge,
