@@ -1048,7 +1048,14 @@ async function closingOf(
   finishing: { summary: string; args: AnyRecord; call: FinishCall; victory: boolean; claims: boolean; land: boolean },
 ): Promise<({ close: true } & ClosingVerdict) | { close: false; answer: string }> {
   const { summary, args, call, land } = finishing;
-  const finished = { close: true as const, because: "the director finished the run", summary };
+  // A finish once the hours are spent (the wrap-up asks for it) is the time running out, for the card.
+  const pastCap = Number.isFinite(loopRun.softDeadline) && Date.now() >= loopRun.softDeadline;
+  const finished = {
+    close: true as const,
+    because: "the director finished the run",
+    summary,
+    ...(pastCap ? { why: StopWhy.Time } : {}),
+  };
   if (!finishing.claims) return { ...finished, victory: finishing.victory };
   // The reviewer reads what would land, and its yes speaks for that head only.
   const read = await commitWhatWouldLand(loopRun);
@@ -1259,13 +1266,14 @@ async function keepTheRecord(loopRun: LoopRun, landed: AnyRecord, because: strin
 
 /**
  * How the run ended, in its journal and report: paused or done, and what a close without a yes leaves
- * for its result card. A run the user stopped, or one a lost provider cut short (a limit, a sign-in,
- * an outage), is paused: Resume picks it up at its integration head (kept reachable by the ref) once
- * the user, the limit or the provider allows.
+ * for its result card. A run the user stopped (a finish then closing included: it lands nothing), or
+ * one a lost provider cut short (a limit, a sign-in, an outage) before a finish, is paused: Resume
+ * picks it up at its integration head (kept reachable by the ref) once the user, the limit or the
+ * provider allows.
  */
-function endedAs(loopRun: LoopRun): void {
+export function endedAs(loopRun: LoopRun): void {
   const { ctx, journal, report, state } = loopRun;
-  const pausedByStopOrLimit = !state.finish && (ctx.cancelled || Boolean(state.limit));
+  const pausedByStopOrLimit = ctx.cancelled || (!state.finish && Boolean(state.limit));
   const goalsBlocked = state.goals && goalDecision(state.goals, state.integrationHead) === GoalStatus.Blocked;
   journal.phase = pausedByStopOrLimit || goalsBlocked ? JournalPhase.Paused : JournalPhase.Done;
   report.executionStatus = executionStatusOf(report, journal.phase);
