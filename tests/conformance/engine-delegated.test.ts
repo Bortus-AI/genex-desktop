@@ -1395,6 +1395,38 @@ describe("steering a running Claude Code turn", () => {
     assert.deepEqual(result.steered, []);
   });
 
+  it("an Auto chat handed only its Loop start still takes input mid-turn: that tool makes no interview", {
+    timeout,
+  }, async () => {
+    const { fn } = steerableQuery(async function* ({ read }) {
+      await read();
+      yield steerInit();
+      yield said("Done.");
+      yield { type: "result", subtype: "success", is_error: false, result: "Done.", num_turns: 1, usage: {} };
+    });
+    const engine = await engineWithLogin(fn);
+    const readies: Array<unknown> = [];
+    await engine.delegate({
+      prompt: "auto brief",
+      cwd: "/tmp/x",
+      interviewTools: [
+        {
+          name: "start_autopilot",
+          description: "Start a Loop, only when asked.",
+          parameters: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
+          onlyWhenAsked: true,
+        },
+      ],
+      steer: {
+        ready: (s) => {
+          readies.push(s);
+        },
+      },
+    });
+    assert.equal(readies.length, 1);
+    assert.equal(typeof readies[0], "function", "told it takes input mid-turn");
+  });
+
   it("a message the CLI discards is not delivered, and the input still ends", { timeout }, async () => {
     const { fn } = steerableQuery(async function* ({ read }) {
       await read();

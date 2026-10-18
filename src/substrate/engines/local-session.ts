@@ -620,7 +620,9 @@ function isReadOnlySession(request: DelegateRequest): boolean {
 
 /** The launch tools a Loop chat was bridged, by name (its question tool is not one). */
 function launchToolNames(request: DelegateRequest): string[] {
-  return (request.interviewTools ?? []).map((t) => t.name).filter((name) => name !== StudioTool.AskUser);
+  return (request.interviewTools ?? [])
+    .filter((t) => t.name !== StudioTool.AskUser && t.onlyWhenAsked !== true)
+    .map((t) => t.name);
 }
 
 /**
