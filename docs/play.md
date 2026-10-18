@@ -75,7 +75,7 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - A game plays across the whole window in a sandboxed view (`persist:genex-play`). The app's bar
   lies over its top edge as glass, in a transparent view of its own above the game's
   (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
-  Invite a friend (multiplayer games), Share, Remix, Exit. It is up while the game loads, for 3 seconds
+  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. It is up while the game loads, for 3 seconds
   after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
   then it fades up and out, and macOS's window buttons go with it (on Windows and Linux it stays up,
   since their window controls can't). A game holding the mouse doesn't bring it back. A held Esc

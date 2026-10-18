@@ -1,8 +1,8 @@
 /**
  * The viewer's bar: the app's own 48px strip of glass over the game's top edge, drawn in the bar's
  * layer above the game's view (`PlayBarPage.tsx`). Back and the game's name with its facts (players
- * now, plays, maker) on the left; Like, Comments (its count, or the icon alone), Invite a friend in a
- * multiplayer game, Share (its word alone), Remix and Exit on the right, as 32px buttons with 9px
+ * now, plays, maker) on the left; Like, Comments (its count, or the icon alone), Share (its icon
+ * alone), Invite a friend in a multiplayer game, Remix and Exit on the right, as 32px buttons with 9px
  * corners, every one with a visible background. A note is worn by the button it is about, in place of its label
  * ("Link copied" on Share), and the button turns back when main drops it; a like of the player's own
  * bursts. Main keeps what it shows (`PlayViewerEvent.bar`), says when it is up, and acts on what it
@@ -212,9 +212,9 @@ function BarButton({
   glyph,
 }: {
   control: PlayControl;
-  /** None for a button that is its words alone (Share): a done note's check still takes its place. */
-  icon?: IconName;
-  label: ReactNode;
+  icon: IconName;
+  /** None for a button that is its icon alone (Share): a note still unfolds beside it. */
+  label?: ReactNode;
   bar: PlayBarState | null;
   send: SendControl;
   className?: string;
@@ -234,16 +234,19 @@ function BarButton({
       aria-pressed={ariaPressed}
       data-play-bar={control}
       data-note={worn?.look}
+      data-icon-only={label === undefined && !worn ? true : undefined}
       disabled={disabled}
       onClick={() => send(control)}
     >
-      <span className="play-bar-icon" data-iconless={glyph || icon ? undefined : true}>
-        {glyph ?? (icon && <Icon name={icon} size={16} />)}
+      <span className="play-bar-icon">
+        {glyph ?? <Icon name={icon} size={16} />}
         <Icon name="check" size={16} className="play-bar-check" />
       </span>
-      <span className="play-bar-label" data-shown={worn ? undefined : true}>
-        <span>{label}</span>
-      </span>
+      {label !== undefined && (
+        <span className="play-bar-label" data-shown={worn ? undefined : true}>
+          <span>{label}</span>
+        </span>
+      )}
       <span className="play-bar-label" data-shown={worn ? true : undefined} aria-hidden={!worn}>
         <span>{said}</span>
       </span>
@@ -308,7 +311,7 @@ function CommentsButton({ count, onOpen }: { count: number | null; onOpen: () =>
 }
 
 /**
- * The game's actions: Like with its count, Comments, Invite a friend in a multiplayer game, Share,
+ * The game's actions: Like with its count, Comments, Share, Invite a friend in a multiplayer game,
  * Remix when it may be remixed, Exit.
  */
 function Actions({
@@ -346,10 +349,10 @@ function Actions({
         disabled={!online}
       />
       <CommentsButton count={bar?.comments ?? null} onOpen={onComments} />
+      <BarButton control={PlayControl.Share} icon="export" ariaLabel={WORDS.share} bar={bar} send={send} />
       {bar?.multiplayer && (
         <BarButton control={PlayControl.Invite} icon="users" label={WORDS.invite} bar={bar} send={send} />
       )}
-      <BarButton control={PlayControl.Share} label={WORDS.share} bar={bar} send={send} />
       {bar?.remixable && (
         <BarButton
           control={PlayControl.Remix}
