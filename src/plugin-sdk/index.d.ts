@@ -47,7 +47,7 @@ export interface PluginNativeJob {
   maxOutputBytes: number;
   /** Maximum aggregate bytes in declared generated files, 1–104857600. */
   maxAssetBytes: number;
-  /** Needed for GPU rendering, including Blender EEVEE; permits the runtime's Metal cache. */
+  /** Needed for GPU rendering, including Blender EEVEE; permits the runtime's Metal cache, and lets Metal's compiler use it. */
   gpu?: boolean;
 }
 export interface PluginNativeStatus {
@@ -273,7 +273,7 @@ export interface PluginToolbarItem {
   label: string;
   /** 1–60 characters, unique across the manifest. */
   ariaLabel: string;
-  /** A glyph of at most 4 characters, or a host icon: globe, export, play, image, box, boxes, unreal. */
+  /** A glyph of at most 4 characters, or a host icon: globe, export, play, image, box, boxes, unreal, godot, unity. */
   icon?: string;
   /** Default true: the button waits for a loaded game. */
   requiresProject?: boolean;

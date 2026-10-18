@@ -28,6 +28,7 @@ import { sizeWords } from "../shared/byte-size.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
+import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
 import { AutoResumeCause, type CustomEvent, type CustomPayload } from "../shared/custom-events.ts";
 import { EngineFailureKind } from "../shared/engine-requests.ts";
 import { LocalServerProblem } from "../shared/local-server.ts";
@@ -4216,6 +4217,106 @@ export const PLAY_WORDS = {
     signIn: "Sign in",
     signInLabel: "Sign in to Genex in your browser",
     dismiss: "Close",
+  },
+} as const;
+
+/** A Play card's ⋯ menu and its dialogs: genex.games' card menu, in the app (`play/card-menu/`). */
+export const PLAY_CARD_MENU_WORDS = {
+  trigger: "Game options",
+  adminLabel: "Admin",
+  item: {
+    [PlayCardAction.CopyLink]: "Copy link",
+    [PlayCardAction.Remixing]: "Turn off remixing",
+    [PlayCardAction.Cover]: "Change cover",
+    [PlayCardAction.Mobile]: "Mobile support",
+    [PlayCardAction.Tags]: "Edit tags",
+    [PlayCardAction.Unpublish]: "Unpublish",
+    [PlayCardAction.Delete]: "Delete game",
+  } satisfies Record<PlayCardAction, string>,
+  allowRemixing: "Allow remixing",
+  mobileState: {
+    [PlayMobileSupport.DesktopOnly]: "Desktop only",
+    [PlayMobileSupport.Supported]: "Works on phones",
+  } satisfies Record<PlayMobileSupport, string>,
+  mobileAutoFlagged: "Auto · desktop only",
+  linkCopied: "Link copied",
+  copyFailed: "Couldn’t copy the link.",
+  cancel: "Cancel",
+  save: "Save",
+  saving: "Saving…",
+  tryAgain: "Try again",
+  mobile: {
+    title: (title: string) => `Mobile support for ${title}`,
+    sub: "What phone players get. Your choice wins over the automatic check.",
+    label: "Mobile support",
+    auto: "Auto",
+    autoHint: "Genex decides from crash reports",
+    hint: {
+      [PlayMobileSupport.DesktopOnly]: "Phone players see a Desktop tag first",
+      [PlayMobileSupport.Supported]: "Never marked desktop only",
+    } satisfies Record<PlayMobileSupport, string>,
+    autoFlagged: "Auto would choose Desktop only: crash reports flagged it.",
+    autoClear: "Auto would let phones play: no crash reports flagged it.",
+    done: "Mobile support saved",
+    failed: "Couldn’t save mobile support.",
+  },
+  tags: {
+    title: (title: string) => `Tags for ${title}`,
+    shelfLabel: "Shelf",
+    tagsLabel: "Tags",
+    shelf: {
+      [PlayShelf.Games]: "Games",
+      [PlayShelf.Tools]: "Tools",
+      [PlayShelf.Assets]: "Assets",
+    } satisfies Record<PlayShelf, string>,
+    noTags: "This shelf has no tags.",
+    shows: (shelf: string, tags: readonly string[]) =>
+      tags.length > 0 ? `Shows on Play under ${shelf} · ${tags.join(", ")}.` : `Shows on Play under ${shelf}.`,
+    limit: (max: number) => `Up to ${max} tags.`,
+    save: "Save tags",
+    done: "Tags saved",
+    failed: "Couldn’t save the tags.",
+  },
+  unpublish: {
+    title: (title: string) => `Unpublish ${title}?`,
+    body: "It leaves Play and genex.games and goes back to drafts. The direct link still works, and plays and likes stay if it’s published again.",
+    confirm: "Unpublish",
+    working: "Unpublishing…",
+    done: (title: string) => `${title} is unpublished`,
+    failed: "Couldn’t unpublish the game.",
+  },
+  remove: {
+    title: (title: string) => `Delete ${title}?`,
+    body: "Removes the game, its page and its source for good. This can’t be undone.",
+    confirm: "Delete game",
+    working: "Deleting…",
+    done: (title: string) => `${title} is deleted`,
+    failed: "Couldn’t delete the game.",
+  },
+  remixing: {
+    on: (title: string) => `Anyone can remix ${title} now`,
+    off: (title: string) => `Only you can remix ${title} now`,
+    ownRepo: "Its source is your own repository: run genex make-remixable in the game’s folder to allow remixing.",
+    failed: "Couldn’t change remixing.",
+  },
+  cover: {
+    title: (title: string) => `Cover for ${title}`,
+    sub: "Pick a picture. It’s cropped to 16:9, like every cover.",
+    choose: "Choose a picture",
+    another: "Choose another",
+    current: "Current cover",
+    picked: "New cover",
+    save: "Use this cover",
+    done: "Cover changed",
+    unreadable: "That file isn’t a picture the app can read.",
+    tooLarge: "Pick a picture under 40 MB.",
+    refusal: {
+      [PlayCoverRefusal.Outranked]: "Genex kept the current cover: it outranks an uploaded one.",
+      [PlayCoverRefusal.TooDark]: "That picture is too dark for a cover. Try a brighter one.",
+      [PlayCoverRefusal.Flat]: "That picture is nearly one colour. Try one with more in it.",
+      [PlayCoverRefusal.Invalid]: "Genex couldn’t read that picture. Try another.",
+    } satisfies Record<PlayCoverRefusal, string>,
+    failed: "Couldn’t change the cover.",
   },
 } as const;
 
