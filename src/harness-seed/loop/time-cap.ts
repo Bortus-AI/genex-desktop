@@ -72,6 +72,13 @@ export function capPhase(now: number, clock: CapClock): CapPhase {
   return CapPhase.Working;
 }
 
+/** A timed Loop's hours, as its result card says them (`stillToFixOf`); null for an ∞ or goal Loop. */
+export function loopHoursOf(run: Pick<Run, "reference" | "budgets">): number | null {
+  const total = run.budgets?.wallClockMs;
+  const timed = durationCommission(run) && typeof total === "number" && Number.isFinite(total) && total > 0;
+  return timed ? total / HOUR_MS : null;
+}
+
 /** A Loop's hours: an ∞ Loop's are `UNTIL_DONE_CAP_MS`, a timed one's its own. */
 export function capHoursMs(run: Pick<Run, "budgets">, totalMs: number): number {
   return run.budgets?.untilSatisfied === true ? UNTIL_DONE_CAP_MS : totalMs;

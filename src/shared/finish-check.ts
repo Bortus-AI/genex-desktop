@@ -20,6 +20,37 @@ export const FinishCheckStep = {
 } as const;
 export type FinishCheckStep = (typeof FinishCheckStep)[keyof typeof FinishCheckStep];
 
+/**
+ * Why a Loop that closed with something still to fix stopped (`run_finished.stillToFix.why`), as its
+ * result card tells the person. The seed's copy is in `loop/finish-contract.ts`. Persisted: never
+ * rename a value.
+ */
+export const StopWhy = {
+  /** Its hours ran out. */
+  Time: "time",
+  /** The reviewer's no's in a row stopped it. */
+  Stuck: "stuck",
+  /** The person stopped it. */
+  Person: "person",
+  /** It ended some other way. */
+  Ended: "ended",
+} as const;
+export type StopWhy = (typeof StopWhy)[keyof typeof StopWhy];
+
+const STOP_WHYS: ReadonlySet<unknown> = new Set(Object.values(StopWhy));
+
+/**
+ * What a Loop that closed without its yes leaves for its result card (`run_finished.stillToFix`,
+ * written by the harness at the close): the last no's lists, why it stopped, and its hours.
+ */
+export interface StillToFix {
+  done: string[];
+  notDone: string[];
+  why: StopWhy;
+  /** A timed Loop's hours; null for an ∞ or goal Loop. */
+  hours: number | null;
+}
+
 /** The words a reviewer's JSON `verdict` answers with (lower-cased). */
 const FINISH_VERDICT = { Yes: "yes", No: "no" } as const;
 
@@ -107,6 +138,16 @@ function reasonsOf(value: unknown): string[] | null {
   if (value === undefined) return [];
   if (!Array.isArray(value) || !value.every((reason) => typeof reason === "string")) return null;
   return value.filter((reason) => reason.trim());
+}
+
+/** A close's `stillToFix` as the chat reads it: null unless it names something left with a known why. */
+export function stillToFixOf(value: unknown): StillToFix | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { done, notDone, why, hours } = value as Record<string, unknown>;
+  const left = reasonsOf(notDone);
+  if (!left?.length || !STOP_WHYS.has(why)) return null;
+  const timed = typeof hours === "number" && Number.isFinite(hours) && hours > 0;
+  return { done: reasonsOf(done) ?? [], notDone: left, why: why as StopWhy, hours: timed ? hours : null };
 }
 
 /**

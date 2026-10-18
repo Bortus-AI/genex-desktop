@@ -21,6 +21,7 @@ import {
 import { partRows, Tone } from "../../src/renderer/run-steps.ts";
 import {
   buildsLayout,
+  endedOnNo,
   FinishLook,
   finishCheckFace,
   finishCheckLook,
@@ -318,6 +319,31 @@ describe("the finish check on the Builds graph", () => {
       text: FINISH_CHECK_WORDS.endedAfterNo,
       quiet: true,
     });
+  });
+
+  it("a no the Loop ended on, however it ended, is where Keep building goes, as the chat's card offers it", () => {
+    seq = 0;
+    const firstNo = [
+      ...loopOpened(),
+      check(1, FinishCheckStep.Checking, { claim: CLAIM }),
+      check(1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 1, timeLeft: true }),
+    ];
+    const roundOf = (node: FinishCheckNode | null | undefined) => node?.rounds[0] as FinishRound;
+    const running = finishCheckOf(buildRunGraph(firstNo));
+    assert.ok(running);
+    assert.equal(endedOnNo(roundOf(running), running), false, "the Loop keeps working on it");
+    const paused = finishCheckOf(buildRunGraph([...firstNo, inRun(CustomEvent.RunFinished, { paused: true })]));
+    assert.ok(paused);
+    assert.equal(endedOnNo(roundOf(paused), paused), false, "a paused Loop keeps Resume");
+    for (const close of [{ victory: false }, { executionStatus: "cancelled" }]) {
+      const ended = finishCheckOf(buildRunGraph([...firstNo, inRun(CustomEvent.RunFinished, close)]));
+      assert.ok(ended);
+      assert.equal(
+        endedOnNo(roundOf(ended), ended),
+        true,
+        `a time-out or a Stop after the no: ${JSON.stringify(close)}`,
+      );
+    }
   });
 
   it("a no's card lists what is left, apart from the reviewer's reasons, and its done items; an older record lists its reasons", () => {

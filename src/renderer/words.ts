@@ -168,7 +168,7 @@ const PHRASES: Array<[RegExp, (match: RegExpMatchArray) => StatusWords]> = [
   [/^director$/i, () => ({ line: "The lead is watching the workers", short: "The lead" })],
   // A Loop led in place: its lead builds in the project itself, often with no workers at all.
   [/^lead in place$/i, () => ({ line: "The lead is building in your project", short: "The lead" })],
-  [/^lead in place finishing$/i, () => ({ line: "A reviewer is checking the lead's finish", short: "Checking" })],
+  [/^lead in place finishing$/i, () => ({ line: "A second AI is looking at your game", short: "Final look" })],
   [/^iteration (\d+) — building$/i, (m) => ({ line: `Round ${m[1]} · building`, short: `Round ${m[1]}` })],
   [/^iteration (\d+) — judging blind$/i, (m) => ({ line: `Round ${m[1]} · reviewing`, short: `Round ${m[1]}` })],
   [
@@ -1626,10 +1626,6 @@ export function screenAgo(at: number, now: number, { ago = false }: { ago?: bool
 
 // ── words several surfaces say ────────────────────────────────────────────────────────────
 
-/**
- * The plan's two replies. The steering card and the composer both offer them, and a waiting plan
- * starts on exactly `go`, so each is spelled once.
- */
 /** A Loop's hours as the person picked them: whole hours, else minutes. */
 const loopSpan = (hours: number): string =>
   Number.isInteger(hours) ? plural(hours, "hour") : plural(Math.round(hours * 60), "minute");
@@ -1652,9 +1648,13 @@ export const STILL_TO_FIX_WORDS = {
   },
   /** The message Keep building sends for the person. */
   ask: (notDone: readonly string[]) =>
-    ["Keep building: fix what's left.", ...notDone.map((item) => `- ${item}`)].join("\n"),
+    ["Keep building: fix what’s left.", ...notDone.map((item) => `- ${item}`)].join("\n"),
 } as const;
 
+/**
+ * The plan's two replies. The steering card and the composer both offer them, and a waiting plan
+ * starts on exactly `go`, so each is spelled once.
+ */
 export const PLAN_WORDS = {
   /** the reply that starts a plan waiting for it */
   go: "go",
@@ -1949,10 +1949,13 @@ export const FINISH_CHECK_WORDS = {
   about: "Before the Loop calls it done, a second AI looks at your game.",
   /** The node's line and the card while the second AI looks. */
   checking: "Looking at your game",
+  checkingCard: "Looking at your game.",
   /** The node's line after a no: how many things are left. */
   leftWord: (left: number) => `${plural(left, "thing")} left`,
   doneWord: "All done",
+  doneCard: "All done.",
   unanswered: "Couldn't look this time",
+  unansweredCard: "Couldn't look this time.",
   /** After a no, while the Loop works on. */
   keepsWorking: "The Loop keeps working on it.",
   /** After a no, once the Loop has ended some other way. */

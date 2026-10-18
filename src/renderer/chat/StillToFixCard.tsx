@@ -3,14 +3,14 @@
  * what is still to fix, in the person's words, with Keep building and the card's other actions.
  * The chat's result card and the Builds card show the same list.
  */
-import type { JSX, ReactNode } from "react";
+import { type JSX, type ReactNode, useState } from "react";
 import { Button } from "../ui/Button.tsx";
 import { STILL_TO_FIX_WORDS } from "../words.ts";
 
 export interface StillToFixProps {
   done: readonly string[];
   notDone: readonly string[];
-  /** Start the chat's Loop again on what is left; none where no chat can take it. */
+  /** Start the chat's Loop again on what is left, once (the button goes after a tap); none where no chat can take it. */
   onKeepBuilding?: (() => void) | null;
   /** The title over the list; none inside a card that has its own. */
   title?: string | null;
@@ -47,7 +47,15 @@ export function StillToFix({
   why = null,
   children,
 }: StillToFixProps): JSX.Element {
-  const hasActions = Boolean(onKeepBuilding || children);
+  const [tapped, setTapped] = useState(false);
+  const keep =
+    onKeepBuilding && !tapped
+      ? () => {
+          setTapped(true);
+          onKeepBuilding();
+        }
+      : null;
+  const hasActions = Boolean(keep || children);
   return (
     <div data-still-to-fix className="flex min-w-0 flex-col gap-2.5">
       {title || why ? (
@@ -66,8 +74,8 @@ export function StillToFix({
       </ul>
       {hasActions ? (
         <div className="flex flex-wrap gap-1.5">
-          {onKeepBuilding ? (
-            <Button variant="play-fill" size="sm" data-keep-building onClick={onKeepBuilding}>
+          {keep ? (
+            <Button variant="play-fill" size="sm" data-keep-building onClick={keep}>
               {STILL_TO_FIX_WORDS.keepBuilding}
             </Button>
           ) : null}

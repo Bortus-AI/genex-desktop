@@ -526,7 +526,13 @@ It answers `{"verdict":"yes"|"no","reasons":[…],"done":[…],"notDone":[…]}`
 checked and found, met or not, `done` and `notDone` are short checklist items of what the proof shows
 and what it doesn't show yet; they stay apart in the record and the answer, and only `notDone` is
 what is still to fix on the "Almost there" card, in Builds' "Final look" and in the report
-(`notDoneOf`; a record that names none falls back to its reasons). The chat says nothing per round. Yes ends the Loop, no
+(`notDoneOf`; a record that names none falls back to its reasons). The chat says nothing per round.
+Every Loop's close that is neither a yes nor a pause writes `run_finished.stillToFix` (`stillToFixOf`):
+the last no's `done` and `notDone`, why it stopped (`StopWhy`: its time, the no's, the person's Stop,
+another end) and its hours (`loopHoursOf`); the chat's card reads only that, so a page that lost the
+run's start still shows it, and a pause keeps its own reason and Resume. Keep building is offered on
+the chat's newest card and Builds' newest ended build, while nothing runs or waits paused, and sends
+once through the composer's Loop (`loopOn`). Yes ends the Loop, no
 goes back to the lead with both, and `MAX_FINISH_REJECTIONS` (3) no's in a row stop it, a timed Loop
 only once little time is left; after a row it went on past, a claim whose proof names no file made
 since the last no is turned back before any review (`freshProofIn`), and nothing is recorded. An answer

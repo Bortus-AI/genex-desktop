@@ -429,6 +429,42 @@ describe("the one Loop's workers", () => {
 
 describe("the one Loop's end", () => {
   it(
+    "a claim after a row of no's that brings no new work is turned back before Genex's finish moment: no plugin step runs",
+    TEST_TIMEOUT,
+    async () => {
+      const { MAX_FINISH_REJECTIONS } = await import("../../src/harness-seed/loop/finish-contract.ts");
+      const answers: string[] = [];
+      const host = await hostOn(Project.ToyProject, {
+        facts: TOY,
+        manifest: TOY_WITH_FINISH,
+        run: { budgets: { wallClockMs: 5 * 60 * MINUTE, completionPolicy: "duration" } },
+        turns: [
+          async ({ tool, host }) => {
+            await writeFile(path.join(host.dir, "scenes", "hall.toyscene"), "a hall\n");
+            const claim = { summary: "The hall is built.", proof: "scenes/hall.toyscene" };
+            for (let n = 0; n <= MAX_FINISH_REJECTIONS; n++) answers.push(String(await tool("finish", claim)));
+            return undefined;
+          },
+        ],
+      });
+      for (let n = 0; n < MAX_FINISH_REJECTIONS; n++) host.reviews.push(reviewerAnswer("no", ["the hall is dark"]));
+      await host.start();
+      assert.match(
+        answers[MAX_FINISH_REJECTIONS] ?? "",
+        /new work since the last no/,
+        "the stale claim is turned back",
+      );
+      assert.equal(host.reviewed().length, MAX_FINISH_REJECTIONS, "and asks no reviewer");
+      const moments = callsOf(host, "hooks.fire", (p) => p.on === "finish");
+      assert.equal(
+        moments.length,
+        MAX_FINISH_REJECTIONS,
+        "Genex's finish moment ran once per checked claim, not for it",
+      );
+    },
+  );
+
+  it(
     "finish runs the finish moment, then asks the reviewer; a yes closes the Loop in place: workers settled, the last work kept, run.end fired, the report and journal written",
     TEST_TIMEOUT,
     async () => {

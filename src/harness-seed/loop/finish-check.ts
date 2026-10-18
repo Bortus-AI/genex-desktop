@@ -39,6 +39,7 @@ import {
   MAX_FINISH_REJECTIONS,
   ObserverSource,
   PROOF_OBSERVER,
+  type StopWhy,
 } from "./finish-contract.ts";
 import {
   freshProofIn,
@@ -125,8 +126,8 @@ const MESSAGE = {
 export const FINISH_REPORT = {
   /** The reviewer's no's stopped the Loop. */
   notAccepted: "the reviewer did not accept the finish",
-  /** What isn't done, for the report's summary, after the lead's own. */
-  summaryNotDone: (reasons: readonly string[]) => `Not done, by the reviewer: ${reasons.join(" ")}`,
+  /** What isn't done, for the report's summary the person reads, after the lead's own. */
+  summaryNotDone: (reasons: readonly string[]) => `Still to fix: ${reasons.join(" ")}`,
   noReviewer: "no engine here can hold a reviewer to check the finish",
   /** The lead claimed in its last turn with no time left for a review. */
   tooLate: "the time ran out before a reviewer could check the lead's claim",
@@ -143,6 +144,29 @@ export function notDoneOf(
   no: { reasons?: readonly string[]; notDone?: readonly string[] } | null | undefined,
 ): string[] {
   return [...(no?.notDone?.length ? no.notDone : (no?.reasons ?? []))];
+}
+
+/**
+ * What a Loop that closes without its yes leaves for its result card (`run_finished.stillToFix`):
+ * the last no's lists, why it stopped, and its hours (`loopHoursOf`).
+ */
+export interface StillToFix {
+  done: string[];
+  notDone: string[];
+  why: StopWhy;
+  hours: number | null;
+}
+
+/**
+ * The result card's list for a close without a yes or a pause, from the reviewer's last no
+ * (`notDoneOf`); null when no no names anything, so a Loop no reviewer read ends on its own words.
+ */
+export function stillToFixOf(
+  tally: Pick<FinishTally, "reasons" | "notDone" | "done"> | null | undefined,
+  end: { why: StopWhy; hours: number | null },
+): StillToFix | null {
+  const notDone = notDoneOf(tally);
+  return notDone.length ? { done: [...(tally?.done ?? [])], notDone, why: end.why, hours: end.hours } : null;
 }
 
 /** Where a Loop's finish checks stand: kept in the run's journal by the caller. */

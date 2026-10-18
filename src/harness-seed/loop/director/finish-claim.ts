@@ -34,7 +34,7 @@ import {
   tallyOf as savedTally,
 } from "../finish-check.ts";
 import { FINISH_ANSWER } from "../finish-check-prompts.ts";
-import { FinishCheckStep, LEAD_CALL_MS } from "../finish-contract.ts";
+import { FinishCheckStep, LEAD_CALL_MS, StopWhy } from "../finish-contract.ts";
 import { readFinishLog } from "../finish-log.ts";
 import { proofPathsIn } from "../finish-proof.ts";
 import { gitAt } from "../git.ts";
@@ -118,7 +118,16 @@ export function finishCallOf(started: number, held: Pick<HookReport, "notes" | "
  * what the lead is told before the landing when not), or an answer while the run goes on.
  */
 export type ClaimVerdict =
-  | { close: true; victory: boolean; because?: string; summary?: string; notDone?: string[]; told?: string }
+  | {
+      close: true;
+      victory: boolean;
+      because?: string;
+      summary?: string;
+      notDone?: string[];
+      told?: string;
+      /** Why the run stops short of its goal, for its result card. */
+      why?: StopWhy;
+    }
   | { close: false; answer: string };
 
 /** When the lead's `finish` call must have its answer: the call ends then, less the answer's trip. */
@@ -257,6 +266,7 @@ function noTimeVerdict(outcome: NoTime, claim: ClaimContext): ClaimVerdict {
     summary: withNotDone(claim.summary, notDone),
     ...(notDone.length ? { notDone } : {}),
     told: CLAIM_ANSWER.tooLate,
+    why: StopWhy.Time,
   };
 }
 
@@ -289,6 +299,7 @@ function verdictOf(outcome: FinishOutcome, claim: ClaimContext): ClaimVerdict {
     summary: withNotDone(claim.summary, notDone),
     notDone,
     told: CLAIM_ANSWER.stopped(outcome),
+    why: StopWhy.Stuck,
   };
 }
 

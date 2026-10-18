@@ -15,7 +15,7 @@ import { seedLargeBuildGraph } from "./fixture-large-graph.ts";
 import { seedLeadGraph } from "./fixture-lead-graph.ts";
 import { seedBuildGraph } from "./fixture-build-graph.ts";
 import { seedChatWorkers, seedChatWorkersLoop } from "./fixture-chat-workers.ts";
-import { seedFinishCheck } from "./fixture-finish-check.ts";
+import { seedFinishCheck, seedLoopEnds } from "./fixture-finish-check.ts";
 import { seedPausedBuild } from "./fixture-paused-build.ts";
 import { seedBuildingCard } from "./fixture-building-card.ts";
 import { activateLiveChat, activatePlanReviews, seedChatFeedback, seedChatHistory } from "./fixture-chat.ts";
@@ -327,6 +327,7 @@ export async function activateChatFixture(
   }
   if (fixture.fixture === FixtureName.FinishCheck) {
     await seedFinishCheck(core, fixture.project, fixture.threadId);
+    await seedLoopEnds(core);
     return;
   }
   if (fixture.fixture === FixtureName.PausedBuild) {
