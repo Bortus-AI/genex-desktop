@@ -30,7 +30,8 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Settings › Genex account: avatar (generated or photo, Regenerate), name, nickname (`@handle` and
   Edit, once genex.games knows nicknames), credits with Buy credits, Sign out by the title. Signed
   out it is the sign-in stage, with the account-card drawing.
-- Publish needs only the account: signed out it asks to sign in. Multiplayer needs the Genex plugin
+- Publish needs only the account: signed out it asks to sign in. Its "Share its N assets on Play"
+  switch (off; shown while some Genex asset is not on Play) shares them when the game goes live. Multiplayer needs the Genex plugin
   on, since the agent builds it with Genex's tools.
 
 ## The dashboard
@@ -38,6 +39,10 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Games, Tools and Assets, each with tabs and search; Recent once something was played; Top
   creators (the last 30 days) above Games' tabs. The promo card shows until the first sign-in or
   its ×.
+- Assets are square tiles under two switchers: kind (All · 3D · Images · Sounds · Videos, a kind
+  read from the whole catalog) and Everyone · Mine (the account's library, Saved/Shared tags, signed
+  out a sign-in line). Sounds with a known file play on the tile; Use (on hover) adds the asset to
+  one of the person's games (`studio:assets.add`). No Remix or plays on assets.
 - A card's five-second clip plays while hovered (after a short dwell). The first row of Games' feed
   plays up to four clips by itself, as genex.games' Featured grid does: after its covers and an
   idle moment, staggered, only while half in view and the window shows (none under the viewer);
@@ -120,3 +125,26 @@ Mac; `src/main/play/origins.ts`). A packaged app or a fixture launch ignores the
 API the account signs in on that server's own device sign-in, for the launch only
 (`src/main/dev/dev-stand-account.ts`); Publish, the Genex plugin, games' pages and their
 pictures stay on genex.games.
+
+## Asset library and sharing
+
+Every Genex generation is in the account's genex.games library already (`GET /api/generations?scope=library`).
+In a game's Assets tab, signed in, cards wear **Saved** or **Shared**; the opened file adds Save
+(bookmark) and Share (Play's tint) beside Reveal, and Cmd/Shift-click picks several for a bar (Save,
+Share, Clear). Save marks a generation Saved, or sends a file Genex did not make (GLB, PNG/JPEG/WebP,
+MP3/WAV/OGG, MP4) to the library through genex.games' import; such a file can be saved but not
+shared. Share opens one window (a name per asset, one line of what sharing means), then each card shows
+a step line (Send · Check · Live), a bare ✓ On Play, or an orange refusal with Try again or Send a
+report; a shared one offers Open on Play and Stop sharing. genex.games keeps one page per asset: a
+second share answers the page it has and puts back one taken off Play.
+
+The Assets tab's search answers from the game, My library and Community; Add copies a library asset
+into `assets/library/<id>/` and a shared one into `assets/community/<id>/` (a code-only asset into
+`src/assets/`). Which generation a saved or added file became is kept in the game's
+`.studio/library-links.json` (ignored by git, builds and Publish). The @ panel tags library assets the
+same way (copied into `assets/library/`). Signed out, Save and Share are hidden and nothing errs.
+
+Code: `main/play/asset-library.ts` (the calls), `main/core/library-sharing.ts` (a game's files, Save,
+Share, Add), `ipc/asset-library.ts` (`studio:assets.*`), `renderer/state/sharing.ts`,
+`renderer/panels/assets/`; fixtures answer from `dev/fixture-asset-library.ts` (fixture `asset-library`).
+

@@ -4,6 +4,7 @@
  * hostile input: a card is drawn only from an item that names a game, and an image or a git address
  * outside Genex's own hosts is never handed on.
  */
+import { LibraryKind } from "../../src/shared/asset-library.ts";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -92,8 +93,18 @@ describe("Play gallery items", () => {
         imageUrl: "https://api.genex.games/api/character-assets/avatars/u1/1.webp",
       },
       remixable: true,
+      assetKind: null,
       curation: { mobileSupport: null, mobileAuto: null, categories: [], remixOff: false },
     });
+  });
+
+  it("reads an asset's kind, a character as a 3D model, and nothing it does not know", () => {
+    const kind = (assetKind: unknown) => toPlayGame(item({ assetKind }))?.assetKind;
+    assert.equal(kind("3d"), LibraryKind.Model);
+    assert.equal(kind("character"), LibraryKind.Model);
+    assert.equal(kind("sound"), LibraryKind.Sound);
+    assert.equal(kind("hologram"), null);
+    assert.equal(kind(undefined), null);
   });
 
   it("carries what the card menu reads: mobile flags, tags and whether its owner turned remixing off", () => {
@@ -410,6 +421,22 @@ describe("Play gallery calls", () => {
     assert.deepEqual(
       second.map((game) => game.slug),
       ["lost-cathedral"],
+    );
+  });
+
+  it("lists the whole catalog with each item's shelf, asset kind and maker's name", async () => {
+    const items = [
+      { ...item({ id: "a1", slug: "crowd-cheer", title: "Crowd Cheer", categories: ["assets"] }), assetKind: "sound" },
+      item({ id: "g1", slug: "ocean-racer", title: "Ocean Racer" }),
+    ].map((entry) => ({ ...entry, author: "Simeon M" }));
+    const { gallery } = rig(() => ok({ items }));
+    const listed = await gallery.mentionItems();
+    assert.deepEqual(
+      listed.map(({ slug, shelf, assetKind, authorName }) => ({ slug, shelf, assetKind, authorName })),
+      [
+        { slug: "crowd-cheer", shelf: PlayShelf.Assets, assetKind: LibraryKind.Sound, authorName: "Simeon M" },
+        { slug: "ocean-racer", shelf: PlayShelf.Games, assetKind: null, authorName: "Simeon M" },
+      ],
     );
   });
 

@@ -32,6 +32,7 @@ import {
 import { NOTIFICATIONS_START_MS, notificationArrivals, seedNotificationGames } from "./fixture-notifications.ts";
 import { announceOpenLoopWait, seedOpenLoops, seedOpenProjects } from "./fixture-open-projects.ts";
 import { seedStillsGame } from "./fixture-stills.ts";
+import { seedAssetLibrary } from "./fixture-assets-tab.ts";
 import { seedRobloxGame } from "./fixture-roblox.ts";
 import { seedGenexTerms } from "./fixture-genex-terms.ts";
 import { seedUnrealGame } from "./fixture-unreal.ts";
@@ -160,6 +161,7 @@ async function seedFreshFixture(game: FixtureGame): Promise<void> {
   if (id === FixtureName.UnrealChat) return seedUnrealChat(core, game.project, threadId);
   if (id === FixtureName.RobloxGame) return seedRobloxGame(core, game.project, threadId);
   if (id === FixtureName.GenexTerms) return seedGenexTerms(core, game.project.name, threadId);
+  if (id === FixtureName.AssetLibrary) return seedAssetLibrary(game.project.dir);
 }
 
 async function seedGraphOnce(game: FixtureGame): Promise<void> {

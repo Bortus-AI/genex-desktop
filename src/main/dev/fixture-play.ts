@@ -6,6 +6,7 @@
  * (`fixture-manage.ts`) shows for the launch.
  */
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
+import { fixtureLibraryAnswer } from "./fixture-asset-library.ts";
 import { fixtureCommentCount, fixtureCommentsAnswer } from "./fixture-comments.ts";
 import { categoriesShelf, PlayMobileSupport } from "../../shared/play-manage.ts";
 import { PlayShelf } from "../../shared/play.ts";
@@ -32,6 +33,8 @@ interface FixtureGame {
   /** No cover: the card shows its plain tile. */
   bare?: boolean;
   private?: boolean;
+  /** An asset's kind on the wire (`3d`, `image`, `sound`, `video`). */
+  assetKind?: string;
   /** The admin's mobile flag. */
   mobileSupport?: PlayMobileSupport;
   /** genex.games' crash reports found it desktop only. */
@@ -179,7 +182,7 @@ const TOOLS: FixtureGame[] = [
     hue: 30,
   },
 ];
-/** The Assets shelf: single models, no tabs of its own. */
+/** The Assets shelf: single models, a sound and a picture, no tabs of its own. */
 const ASSETS: FixtureGame[] = [
   {
     slug: "stone-fireplace",
@@ -187,6 +190,7 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 56,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 24,
   },
   {
@@ -195,6 +199,7 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 40,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 45,
   },
   {
@@ -203,7 +208,26 @@ const ASSETS: FixtureGame[] = [
     author: "Threejs Community",
     plays: 35,
     categories: ["assets"],
+    assetKind: "3d",
     hue: 15,
+  },
+  {
+    slug: "crowd-cheer",
+    title: "Crowd cheer after a goal",
+    author: "Rabneba",
+    plays: 21,
+    categories: ["assets"],
+    assetKind: "sound",
+    hue: 210,
+  },
+  {
+    slug: "mossy-stone-wall",
+    title: "Mossy stone wall",
+    author: "Gab",
+    plays: 18,
+    categories: ["assets"],
+    assetKind: "image",
+    hue: 120,
   },
 ];
 const CATALOG = [...GAMES, ...MORE, ...TOOLS, ...ASSETS];
@@ -232,6 +256,7 @@ function baseItem(game: FixtureGame, index: number) {
     mobileSupport: game.mobileSupport ?? null,
     mobileAutoStatus: game.desktopOnlyByReports ? PlayMobileSupport.DesktopOnly : null,
     author: { id: fixtureAuthorId(game.author), name: game.author, image: null },
+    ...(game.assetKind ? { assetKind: game.assetKind } : {}),
   };
 }
 
@@ -296,6 +321,24 @@ function corpus(): GalleryAnswer {
   return ok({ items });
 }
 
+/** A fixture asset's manifest: a model file to add and a small module to tag, as a Genex-made asset has. */
+function assetManifest(slug: string): GalleryAnswer {
+  const asset = ASSETS.find((candidate) => candidate.slug === slug);
+  if (!asset) return NOT_FOUND;
+  const name = slug.replace(/-/g, "_");
+  return ok({
+    manifest: {
+      asset: { media: "glb", fileUrl: `https://assets.genex.technology/generations/fx-${slug}/${slug}.glb` },
+      source: {
+        filename: `${name}.js`,
+        entry: name,
+        code: `// ${asset.title}, a fixture asset.\nexport const ${name} = { title: ${JSON.stringify(asset.title)} };\n`,
+      },
+      usage: { snippet: `import { ${name} } from "./assets/${name}.js";`, promptHint: `Place the ${asset.title}.` },
+    },
+  });
+}
+
 /** The fixture catalog by author: the gallery items of one author's games, as a profile lists them. */
 const catalog: FixtureCatalog = {
   games: (authorId) => listed().filter((game) => game.author.id === authorId),
@@ -321,8 +364,13 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
     const online = Object.fromEntries(CATALOG.filter((g) => g.multiplayer).map((g) => [g.slug, g.online ?? 0]));
     return ok({ online });
   }
+  const manifestPrefix = PlayRoute.assetManifest("");
+  if (pathname.startsWith(manifestPrefix))
+    return assetManifest(decodeURIComponent(pathname.slice(manifestPrefix.length)));
   const worldPrefix = PlayRoute.world("");
   if (pathname.startsWith(worldPrefix)) return world(decodeURIComponent(pathname.slice(worldPrefix.length)));
+  const library = fixtureLibraryAnswer(route, init);
+  if (library) return library;
   // Likes, tickets and invites answer signed out, even for the fixture account: no game's page signs in here.
   return SIGNED_OUT;
 };
