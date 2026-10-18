@@ -289,6 +289,12 @@ const FIXTURE_SAFE = [
   "studio:play.close",
   // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
   "studio:play.control",
+  // The bar's layer says what holds it up; no socket.
+  "studio:play.bar",
+  // A game's comments: a fixture launch answers from its own comments (`dev/fixture-play.ts`).
+  "studio:play.comments",
+  "studio:play.comment",
+  "studio:play.uncomment",
   // Play's people: a fixture launch answers from its own people (`dev/fixture-play.ts`), signed out
   // unless the launch asks for its fixture account, and an avatar "upload" stays in memory.
   "studio:play.me",

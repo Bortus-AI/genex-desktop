@@ -171,6 +171,32 @@ test("snapshot, logs and capture shortcuts build the protocol operations with it
   assert.throws(() => parseStudioDevArgs(["capture", "--profile", "p", "--name", "../private"]));
 });
 
+test("Play's bar layer and game view are surfaces of their own, and the pointer moves only to a point on one", () => {
+  assert.deepEqual(parseStudioDevArgs(["snapshot", "--profile", "p", "--surface", "play-bar"]).operation, {
+    method: "snapshot",
+    params: { surface: "play-bar", limit: 150 },
+  });
+  assert.deepEqual(
+    parseOperation('{"method":"click","params":{"surface":"play-bar","selector":"[data-play-comments]"}}'),
+    {
+      method: "click",
+      params: { surface: "play-bar", selector: "[data-play-comments]" },
+    },
+  );
+  assert.deepEqual(parseOperation('{"method":"move","params":{"surface":"play-game","x":12,"y":2}}'), {
+    method: "move",
+    params: { surface: "play-game", x: 12, y: 2 },
+  });
+  const refused = [
+    '{"method":"snapshot","params":{"surface":"play-game"}}',
+    '{"method":"click","params":{"surface":"game","selector":"button"}}',
+    '{"method":"move","params":{"surface":"play-game","x":-1,"y":2}}',
+    '{"method":"move","params":{"surface":"play-game","x":1,"y":2,"script":"x()"}}',
+    '{"method":"move","params":{"surface":"keychain","x":1,"y":2}}',
+  ];
+  for (const request of refused) assert.throws(() => parseOperation(request), request);
+});
+
 test("the CLI prints the fixture list as JSON and reports errors as JSON with exit 1", () => {
   const run = (...args: string[]) =>
     spawnSync(process.execPath, ["scripts/studio-dev.ts", ...args], { encoding: "utf8" });
