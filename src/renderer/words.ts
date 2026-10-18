@@ -1976,6 +1976,8 @@ export const FINISH_CHECK_WORDS = {
 export const BUILD_TABS_WORDS = {
   /** The track's name for a screen reader. */
   tabs: "Builds",
+  /** The picker's name for a screen reader: the open build, and how many there are to pick from. */
+  picker: (name: string, count: number) => `${name}, one of ${count} builds`,
 } as const;
 
 export const BUILD_HISTORY_WORDS = {
