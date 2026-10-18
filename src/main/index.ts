@@ -180,7 +180,7 @@ import { appLookAccess } from "./app-look-access.ts";
 import { layoutFor } from "./core/layout.ts";
 import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
-import { TITLEBAR_HEIGHT, windowChrome } from "./window-chrome.ts";
+import { titleBarOverlay, windowChrome } from "./window-chrome.ts";
 import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import type { WindowControlColors } from "../shared/studio-api.ts";
@@ -841,7 +841,7 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
 function paintWindowControls(colors: WindowControlColors): void {
   windowControls = colors;
   if (process.platform === StudioPlatform.Mac || !window || window.isDestroyed()) return;
-  window.setTitleBarOverlay({ ...colors, height: TITLEBAR_HEIGHT });
+  window.setTitleBarOverlay(titleBarOverlay(process.platform, colors));
 }
 
 async function createWindow(studio: StudioCore): Promise<BrowserWindow> {

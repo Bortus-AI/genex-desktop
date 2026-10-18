@@ -1125,7 +1125,7 @@
 /* Native window controls, by the platform main reports (`data-platform` on the root). macOS draws its
  * traffic lights in the leading 72px of the headers, so the sidebar toggle sits at 80px whether or not
  * the sidebar is open. Windows and Linux draw minimise, maximise and close over the trailing edge
- * (Electron's titleBarOverlay); the header under them leaves that width free. */
+ * (Electron's titleBarOverlay); the header under them, Home's too, leaves that width free. */
 :root[data-platform="win32"],
 :root[data-platform="linux"] {
   --window-controls-end: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 144px)));

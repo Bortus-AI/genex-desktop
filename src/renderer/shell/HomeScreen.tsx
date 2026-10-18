@@ -153,7 +153,7 @@ function HomeScreen({
     <section data-home="" data-file-drop-zone aria-label="Home" className="home-layer">
       {/* Only home at rest has it: the first message's transition fades it out with the rest. */}
       <HomeBackground covered={chrome.workspaceCovered} />
-      <div className="home-header titlebar-drag">
+      <div className="home-header titlebar-drag window-controls-end">
         {chrome.sidebarHidden && <ShowSidebarButton onToggle={chrome.toggleSidebar} />}
         <HomeBackdropButton picked={model.selected} />
       </div>
