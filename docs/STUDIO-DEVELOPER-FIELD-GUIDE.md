@@ -353,9 +353,10 @@ finish-check (four Loops written after the start, one per finish check look: Don
 the Builds history, Not yet after one no, and the newest Checking),
 paused-build (a Loop a usage limit paused and resumed, written after the start: one worker's try
 Paused, one Added after the resume, one Left out by the lead's stop),
-building-card (a 4h Loop still going after a finished one, written after the start, for the chat's
+building-card (a 4h Loop still going after five finished ones, written after the start, for the chat's
 Building card and its parts: two added, one working with its time left, one restarted on one row,
-one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds has two tabs),
+one waiting; `[data-build-checklist]` open, `[data-build-toggle]` closes it; Builds holds its six
+builds in the picker `[data-build-picker]`),
 stills-game (Pine valley, a Blender scene with no web page, whose finished Loop kept the lead's two
 renders as proof: Live's run pictures, `[data-live-view="stills"]` `[data-live-still]`; and
 Mountain pass, a Blender game with no run, whose Live says where pictures come from),
@@ -544,6 +545,12 @@ recovery, learning navigation callbacks, new-row versus history motion, light/da
 and reduced motion. Evidence lives in `.studio-dev/evidence/results-ui/`. Pair with
 `run-chat-ui.mjs` and `run-chat-feedback-ui.mjs` for real host reads, history/streaming and Studio
 navigation; component fixtures do not prove account access or native game layering.
+
+`node tests/e2e/run-builds-bar-ui.mjs` renders the production Builds bar with synthetic builds:
+tabs up to three, the picker past them or in a narrow bar (never flipped by Play's label), focus
+following the swap, the list's order, open row, rows, Escape, ten rows without scrolling, the fade
+and shadow past ten, and the open row shown on opening (focused when opened by keyboard). Evidence
+lives in `.studio-dev/evidence/builds-bar-ui/`.
 
 Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's account in its
 Connect band and checks that a failed connect keeps its reason after the status is read again. It does not

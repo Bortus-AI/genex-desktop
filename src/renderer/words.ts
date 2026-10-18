@@ -1723,10 +1723,22 @@ export const TRANSCRIPT_WORDS = {
   /** A game's engine link (`engine_linked`): one line with Undo, then what Undo did. */
   engineLinked: (game: string | undefined, engine: string, project: string) =>
     `${game ?? "This game"} now builds in ${engine} · ${project}`,
-  engineUndone: (game: string | undefined, restored: string | undefined) =>
-    restored
-      ? `Undone. ${game ?? "This game"} builds in ${restored} again.`
-      : `Undone. ${game ?? "This game"} is a web game again.`,
+  /** A link whose plugin also set the project up for Genex: the same one line, the set-up first. */
+  engineSetUpAndLinked: (game: string | undefined, engine: string, project: string) =>
+    `Set up ${project} for Genex · ${game ?? "This game"} now builds in ${engine}`,
+  /** What Undo did: where the game builds now, and the project whose set-up it also took back. */
+  engineUndone: (
+    game: string | undefined,
+    restored: string | undefined,
+    setUp: { undone?: string; kept?: string } = {},
+  ) => {
+    const now = restored
+      ? `Undone. ${game ?? "This game"} builds in ${restored} again`
+      : `Undone. ${game ?? "This game"} is a web game again`;
+    if (setUp.undone) return `${now}, and ${setUp.undone} is no longer set up for Genex.`;
+    if (setUp.kept) return `${now}. ${setUp.kept} stays set up for Genex: another game uses it.`;
+    return `${now}.`;
+  },
   engineUndo: "Undo",
   engineUndoTitle: "Take this back: the game builds where it did before",
   /** An agent went ahead of the person in an app a plugin's lock guards (`agent_went_ahead`): said once. */
@@ -1976,6 +1988,8 @@ export const FINISH_CHECK_WORDS = {
 export const BUILD_TABS_WORDS = {
   /** The track's name for a screen reader. */
   tabs: "Builds",
+  /** The picker's name for a screen reader: the open build, and how many there are to pick from. */
+  picker: (name: string, count: number) => `${name}, one of ${count} builds`,
 } as const;
 
 export const BUILD_HISTORY_WORDS = {

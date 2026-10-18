@@ -105,7 +105,7 @@ import { EngineId } from "../../shared/providers.ts";
 import { EngineKind, EngineStatusCode, LoginSource } from "../../shared/engine-descriptor.ts";
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
 import { ContextSource } from "../../shared/context.ts";
-import { EngineFailureKind, StopReason } from "../../shared/engine-requests.ts";
+import { EngineFailureKind, isInterview, StopReason } from "../../shared/engine-requests.ts";
 import { SessionCostLedger, sessionTotals, turnShare } from "./session-cost.ts";
 import { AccountId, accountsRoot, SubscriptionAccounts } from "./subscription-accounts.ts";
 
@@ -1409,7 +1409,7 @@ export class ClaudeCodeEngine implements Engine {
   #observeSystem(message: Record<string, unknown>, run: RunState, request: DelegateRequest, stream: unknown): void {
     if (message.subtype === SdkSystemSubtype.Init) {
       readInit(message, run);
-      run.feed?.initialized(message, Boolean(request.interviewTools?.length));
+      run.feed?.initialized(message, isInterview(request.interviewTools));
     }
     // The mode the session really runs in: Auto falls back to Manual where the plan or the model
     // cannot use it, and a plan approval or a picker change moves it mid-turn.
