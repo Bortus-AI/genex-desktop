@@ -178,6 +178,17 @@ describe("Play card menu: the store's manage", () => {
     assert.deepEqual(heard, [{ gameId: "id-b", next: null }]);
   });
 
+  it("never shows a deleted game again, even from a page that was read before it went", async () => {
+    const shown = [game("a"), game("b")];
+    const { store } = storeWith(shown, async () => DONE);
+    await store.loadFeed(PlayCategory.Featured);
+    await store.manage(shown[1] as PlayGame, { kind: PlayChangeKind.Delete });
+    await store.loadFeed(PlayCategory.Featured, { force: true });
+    await store.loadFeed(PlayCategory.Arcade);
+    assert.deepEqual(slugs(store.getState().feeds[PlayCategory.Featured]?.games), ["a"]);
+    assert.deepEqual(slugs(store.getState().feeds[PlayCategory.Arcade]?.games), ["a"]);
+  });
+
   it("changes nothing on screen when genex.games refuses, and passes the failure on", async () => {
     const shown = [game("a")];
     const { store, heard } = storeWith(shown, () => Promise.reject(new Error("HTTP 403")));

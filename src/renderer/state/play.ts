@@ -374,9 +374,22 @@ function managing(api: PlayApi, shown: (game: PlayGame, next: PlayGame | null) =
 /** Told a game changed from a card's menu, with its card after (null once it left the catalog). */
 export type GameChangeListener = (gameId: string, next: PlayGame | null) => void;
 
-/** Show a game's change on every card and in Recent (kept in `storage`), and tell `onGameChanged`. */
-function showing(store: StoreApi<PlayState>, storage: KeyValueStorage | null, onGameChanged: GameChangeListener) {
+/** A page without the games that left the catalog from a card's menu: a read begun before cannot bring one back. */
+const withoutGone = (page: PlayFeedPage, gone: ReadonlySet<string>): PlayFeedPage =>
+  gone.size === 0 ? page : { ...page, games: page.games.filter((game) => !gone.has(game.id)) };
+
+/**
+ * Show a game's change on every card and in Recent (kept in `storage`), remember one that left the
+ * catalog in `gone`, and tell `onGameChanged`.
+ */
+function showing(
+  store: StoreApi<PlayState>,
+  storage: KeyValueStorage | null,
+  gone: Set<string>,
+  onGameChanged: GameChangeListener,
+) {
   return (game: PlayGame, next: PlayGame | null): void => {
+    if (!next) gone.add(game.id);
     store.setState((state) => gameChanged(state, game, next), true);
     writeRecent(store.getState().recent, storage);
     onGameChanged(game.id, next);
@@ -398,6 +411,8 @@ export function createPlayStore(
   const inFlight = new Map<string, Promise<void>>();
   /** Each tab's first-page reads so far: a further page read before the latest one lands nowhere. */
   const firstReads = new Map<PlayCategory, number>();
+  /** The games unpublished or deleted from a card's menu, which no later page shows again. */
+  const gone = new Set<string>();
 
   const loadShelves = async (): Promise<void> => {
     try {
@@ -416,7 +431,7 @@ export function createPlayStore(
     const stale = () => more && firstReads.get(category) !== generation;
     set((state) => feedRequested(state, category, more));
     try {
-      const page = await api.playFeed({ category, cursor });
+      const page = withoutGone(await api.playFeed({ category, cursor }), gone);
       set((state) => (stale() ? moreDropped(state, category) : feedLoaded(state, category, page, more, now())));
     } catch {
       set((state) => feedFailed(state, category, more));
@@ -475,7 +490,7 @@ export function createPlayStore(
     }
   };
 
-  const shown = showing(store, storage, onGameChanged);
+  const shown = showing(store, storage, gone, onGameChanged);
   const manage = managing(api, shown);
 
   return Object.assign(store, {

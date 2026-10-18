@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { setImmediate } from "node:timers/promises";
 import {
   FIXTURE_ACCOUNT_TOKEN,
   FixtureAccount,
@@ -342,6 +343,33 @@ describe("profiles", () => {
     );
     assert.equal(profile.status, FriendStatus.Incoming);
     assert.equal((await people.profile("u1")).status, FriendStatus.Self);
+  });
+
+  it("keeps nothing of a profile read under way when a game on it changed", async () => {
+    const held: Array<() => void> = [];
+    let holding = true;
+    let reads = 0;
+    const people = playPeople({
+      request: async (route, init) => {
+        if (route === PeopleRoute.user("u2")) {
+          reads += 1;
+          if (holding) await new Promise<void>((resolve) => held.push(resolve));
+        }
+        return api({ route, method: init.method ?? "GET", ...init });
+      },
+      token: async () => TOKEN,
+      now: () => 0,
+      upload: async () => 200,
+      web: PLAY_ORIGIN.web,
+    });
+    const reading = people.profile("u2");
+    await setImmediate();
+    people.forgetProfiles();
+    holding = false;
+    for (const answer of held.splice(0)) answer();
+    await reading;
+    await people.profile("u2");
+    assert.equal(reads, 2, "read again: the one under way began before the change");
   });
 
   it("lists their friends, people the viewer knows first, each with their game, games and since when", async () => {

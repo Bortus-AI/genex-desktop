@@ -7,6 +7,7 @@ import { useState } from "react";
 import {
   categoriesShelf,
   categoriesTags,
+  isPlayTag,
   PlayChangeKind,
   shelfTags,
   shelfTagsMax,
@@ -27,7 +28,8 @@ const tagName = (tag: string): string => (isPlayCategory(tag) ? PLAY_WORDS.categ
 
 /** Choose a game's shelf and tags. */
 export function TagsDialog({ game, onClose, returnFocus }: CardDialogProps): JSX.Element {
-  const stored = curationOf(game).categories;
+  // An older tag in a shape Save tags may not send stays off the list, so a save never fails on it.
+  const stored = curationOf(game).categories.filter((category) => isPlayTag(category));
   const [shelf, setShelf] = useState<PlayShelf>(() => categoriesShelf(stored));
   const [tags, setTags] = useState<string[]>(() => categoriesTags(stored));
   const save = useChange(game, onClose, WORDS.failed);

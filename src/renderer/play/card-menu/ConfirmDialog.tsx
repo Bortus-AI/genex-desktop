@@ -12,6 +12,15 @@ import { useChange } from "./use-change.ts";
 
 const WORDS = PLAY_CARD_MENU_WORDS;
 
+/** Where the focus goes once the card holding `from` is gone: the next card's cover, else the one before, else its grid. */
+function nextFocus(from: HTMLElement | null): HTMLElement | null {
+  const card = from?.closest("article");
+  const beside = card?.nextElementSibling ?? card?.previousElementSibling;
+  const cover = beside?.querySelector("button");
+  if (cover instanceof HTMLElement) return cover;
+  return card?.parentElement ?? null;
+}
+
 /** Confirm taking a game off Play: unpublishing it, or deleting it for good. */
 export function ConfirmDialog({
   action,
@@ -22,8 +31,14 @@ export function ConfirmDialog({
   const remove = action === PlayCardAction.Delete;
   const words = remove ? WORDS.remove : WORDS.unpublish;
   const save = useChange(game, onClose, words.failed);
-  const confirm = () =>
-    void save.run({ kind: remove ? PlayChangeKind.Delete : PlayChangeKind.Unpublish }, () => words.done(game.title));
+  const confirm = () => {
+    // The game's card leaves with it, ⋯ and dialog too: the focus goes to the card beside it.
+    const landing = nextFocus(returnFocus.current);
+    void save.run({ kind: remove ? PlayChangeKind.Delete : PlayChangeKind.Unpublish }, () => {
+      requestAnimationFrame(() => landing?.focus());
+      return words.done(game.title);
+    });
+  };
   return (
     <DialogSurface
       title={words.title(game.title)}

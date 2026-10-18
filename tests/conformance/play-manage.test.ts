@@ -400,12 +400,12 @@ describe("Play's manage channels", () => {
   type Listener = (event: IpcSender, payload: unknown) => Promise<IpcResult>;
   const studio = { sender: "studio", senderFrame: "main-frame" };
 
-  /** Play's channels with only manage live: every call it gets is kept. */
-  function channels() {
+  /** Play's channels with only manage live: every call it gets is kept; `sender` is who calls. */
+  function channels(sender: IpcSender = studio) {
     const listeners = new Map<string, Listener>();
     const handle = createIpcHandle(
       { handle: (channel, listener) => listeners.set(channel, listener) },
-      { fixture: true, isStudioUi: () => true },
+      { fixture: true, isStudioUi: (event) => event === studio },
     );
     const asked: unknown[][] = [];
     const record =
@@ -430,10 +430,24 @@ describe("Play's manage channels", () => {
     const invoke = (channel: string, payload?: unknown) => {
       const listener = listeners.get(channel);
       assert.ok(listener, `${channel} is not registered`);
-      return listener(studio, payload);
+      return listener(sender, payload);
     };
     return { invoke, asked };
   }
+
+  it("answer only Studio's own window: a game's or a plugin page's frame changes no game", async () => {
+    const { invoke, asked } = channels({ sender: "game", senderFrame: "game-frame" });
+    const image = picture(PlayCoverType.Png);
+    assert.equal(
+      (await invoke("studio:play.manage", { gameId: GAME, change: { kind: PlayChangeKind.Delete } })).ok,
+      false,
+    );
+    assert.equal(
+      (await invoke("studio:play.cover", { gameId: GAME, image, contentType: PlayCoverType.Png })).ok,
+      false,
+    );
+    assert.deepEqual(asked, []);
+  });
 
   it("hand manage a well-formed id, change and picture, in a fixture launch too", async () => {
     const { invoke, asked } = channels();

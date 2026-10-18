@@ -96,6 +96,9 @@ const SHELF_TAGS_MAX = 2;
 /** A tag genex.games stores: a short lowercase word, which a game may carry from before its shelf's list. */
 const TAG_SHAPE = /^[a-z0-9][a-z0-9-]{0,39}$/;
 
+/** Whether a value is a tag Save tags may send. */
+export const isPlayTag = (value: string): boolean => TAG_SHAPE.test(value);
+
 /** The tabs a shelf opens on or names itself by, which are no tags of their own. */
 const MARKERS = new Set<string>([PlayCategory.Featured, PlayShelf.Tools, PlayShelf.Assets, PlayShelf.Games]);
 
@@ -131,7 +134,7 @@ export function isTaggedCategories(categories: unknown): categories is string[] 
   const shelf = categoriesShelf(categories);
   const tags = categoriesTags(categories);
   return (
-    tags.every((tag) => TAG_SHAPE.test(tag)) &&
+    tags.every(isPlayTag) &&
     new Set(tags).size === tags.length &&
     tags.length <= shelfTagsMax(shelf) &&
     categories.join() === taggedCategories(shelf, tags).join()

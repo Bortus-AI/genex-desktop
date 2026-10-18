@@ -532,6 +532,8 @@ export function playPeople(given: PeopleDeps) {
   const profiles = new Map<string, { at: number; profile: Omit<PlayProfile, "status"> }>();
   /** Whose reads `profiles` keeps: an answer may differ for the viewer, so a new sign-in starts empty. */
   let viewer: string | undefined;
+  /** Bumped by `forgetProfiles`: a read that started before it keeps nothing of what it read. */
+  let generation = 0;
 
   /** The viewer's relationship with `id`: Self, the API's status, or None while signed out. */
   const statusOf = async (id: string): Promise<FriendStatus> => {
@@ -553,9 +555,10 @@ export function playPeople(given: PeopleDeps) {
     }
     const kept = profiles.get(id);
     const fresh = kept && now() - kept.at < PROFILE_TTL_MS ? kept.profile : null;
+    const started = generation;
     const read = fresh ?? (await readProfile(id));
-    // A sign-in that changed during the read keeps nothing of it.
-    if (!fresh && viewer === current) profiles.set(id, { at: now(), profile: read });
+    // A sign-in that changed during the read, or a game changed since it began, keeps nothing of it.
+    if (!fresh && viewer === current && started === generation) profiles.set(id, { at: now(), profile: read });
     return { ...read, status: await statusOf(id) };
   };
 
@@ -594,7 +597,10 @@ export function playPeople(given: PeopleDeps) {
     ...handleCalls(deps, account),
     profile,
     /** Drop the profiles kept: a game on one changed, so the next look reads it afresh. */
-    forgetProfiles: (): void => profiles.clear(),
+    forgetProfiles: (): void => {
+      generation++;
+      profiles.clear();
+    },
     ...friendCalls(deps, account.auth),
   };
 }
