@@ -29,7 +29,11 @@ the setup screen opens on `git-missing`. What differs from macOS:
   Windows PowerShell run per batch); `icacls`, the fallback where PowerShell is locked down,
   rewrites everything under the folder as well. Each Genex records its folders in
   `%LOCALAPPDATA%\genex-sandbox-grants\<pid>.json` and revokes only those no other running Genex
-  records.
+  records. The grants go to the sandbox user's SID, asked of `srt-win user status` up to three
+  times and kept once found; without it the apply fails, saying so. A long-lived process (the
+  harness) gets the entries set again just before it starts, since it walks every one of those
+  folders first, and a harness that exits during boot logs `icacls` for each folder from the
+  profile down to its files.
 - Neither `spawn()`'s environment nor stdin reaches the child: each run's variables
   (`windowsRunEnv`) go to an env file in scratch and its stdin to a file, each deleted by the
   command as it reads it. The host sends nothing down the stdin pipe the command swaps away. The harness hears the host over a loopback inbox

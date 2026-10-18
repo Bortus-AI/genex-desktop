@@ -43,9 +43,11 @@ import {
   msysPath,
   msysPathList,
   renderEnvFile,
+  sandboxSidOnce,
   setupGaps,
   srtWinExecFailure,
   srtWinPath,
+  windowsAccessReport,
   windowsGrantHolders,
   windowsRunEnv,
   writeDeniesBeyondRead,
@@ -260,10 +262,49 @@ describe("read-attributes grants above each root", () => {
     assert.deepEqual(calls, [["1", at("AppData"), FolderAceOp.Grant]]);
   });
 
-  it("grants nothing while the sandbox user does not exist yet", async () => {
+  it("fails, saying why, without the sandbox user's id, rather than leave its folders closed", async () => {
+    // A sync follows a successful initialize, so the user exists. A missing id used to skip every
+    // grant silently, and the harness then stopped at its first walk: EPERM, lstat C:\Users\…\AppData.
     const calls: string[][] = [];
-    await holder(await tmpDir("windows-grants-"), 1, calls, { sid: async () => null }).sync([at("AppData")]);
+    const grants = holder(await tmpDir("windows-grants-"), 1, calls, { sid: async () => null });
+    await assert.rejects(grants.sync([at("AppData")]), /could not read the sandbox user's id/);
     assert.deepEqual(calls, []);
+  });
+
+  it("asks again for the sandbox user's id when a probe comes back empty, and keeps it once found", async () => {
+    const answers = [null, "S-1-5-21-9"];
+    let asked = 0;
+    const sid = sandboxSidOnce(async () => {
+      asked++;
+      return answers.shift() ?? null;
+    }, 0);
+    assert.equal(await sid(), "S-1-5-21-9");
+    assert.equal(await sid(), "S-1-5-21-9");
+    assert.equal(asked, 2, "a found id is never asked for again");
+    let none = 0;
+    const missing = sandboxSidOnce(async () => {
+      none++;
+      return null;
+    }, 0);
+    assert.equal(await missing(), null);
+    assert.equal(none, 3, "three probes, then the caller says why it stops");
+  });
+
+  it("lists who may open each folder from the profile down to the files, for the log", async () => {
+    const listed: string[] = [];
+    const lines = await windowsAccessReport(PROFILE, [at("AppData", "Local", "genex", "app-1")], async (dir) => {
+      listed.push(dir);
+      return `${dir} PC\\srt-sandbox:(RA)\r\n\r\nSuccessfully processed 1 files\r\n`;
+    });
+    assert.deepEqual(listed, [
+      PROFILE,
+      at("AppData"),
+      at("AppData", "Local"),
+      at("AppData", "Local", "genex"),
+      at("AppData", "Local", "genex", "app-1"),
+    ]);
+    assert.equal(lines.length, listed.length * 2, "blank lines are dropped");
+    assert.equal(lines[2], `${at("AppData")} PC\\srt-sandbox:(RA)`);
   });
 });
 
@@ -809,6 +850,17 @@ describe("the grant session", () => {
     assert.deepEqual(synced.at(-1), synced[0], "every folder is granted again after the regrant");
   });
 
+  it("sets the folders above the roots again for a process that outlives the call, and only once applied", async () => {
+    const s = session();
+    await s.session.refreshAncestors();
+    assert.deepEqual(s.ancestors.synced, [], "nothing is applied yet");
+    await s.session.join({}, { grants: { write: [WS], read: [] }, config: BASE_CONFIG });
+    await s.session.refreshAncestors();
+    assert.equal(s.ancestors.synced.length, 2);
+    assert.deepEqual(s.ancestors.synced[1], s.ancestors.synced[0]);
+    assert.deepEqual(s.runtime.calls, ["initialize"], "no reset, no initialize: srt's own grants stand");
+  });
+
   it("a failed grant above the roots undoes the initialize and fails the join", async () => {
     const runtime = fakeSessionRuntime();
     const ancestors: AncestorGrants = {
@@ -1201,6 +1253,20 @@ describe("ProcessSandbox on Windows", () => {
     const envFiles = async () => (await readdir(w.sandbox.scratchDir)).filter((name) => name.startsWith(".env-"));
     for (let tick = 0; tick < ENV_FILE_POLLS && (await envFiles()).length > 0; tick++) await delay(POLL_MS);
     assert.deepEqual(await envFiles(), []);
+  });
+
+  it("sets the folders above the roots again before a long-lived process, never before a run", async () => {
+    // The harness walks every folder from the drive down to its bootstrap before running a line;
+    // anything that rewrote one of them since the apply stops it there.
+    const w = await windowsSandbox();
+    const synced = () => w.session.ancestors.synced.length;
+    const before = synced();
+    await w.sandbox.run({ command: "true", cwd: w.workspace });
+    assert.equal(synced(), before, "a run uses the grants as applied");
+    const { child } = await w.sandbox.spawnLongLived({ command: "true", cwd: w.workspace });
+    await new Promise((resolve) => child.once("close", resolve));
+    assert.equal(synced(), before + 1);
+    assert.equal(w.session.session.active, 0);
   });
 
   it("dispose leaves the session, which takes back the instance's grants", async () => {

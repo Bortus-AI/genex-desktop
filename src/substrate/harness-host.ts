@@ -13,6 +13,7 @@
  *    restarts, appending `workspace_restored`.
  */
 import type { ChildProcess } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { atomicWriteJson, ensureDir, listJsonFiles, readJson } from "./fsx.ts";
 import { shortId } from "./ids.ts";
@@ -35,7 +36,7 @@ import {
 } from "../shared/protocol.ts";
 import { StudioPlatform } from "../shared/boot.ts";
 import { type ProcessSandbox, killChild, shellQuote } from "./spawn.ts";
-import { longPath } from "./windows-sandbox.ts";
+import { longPath, windowsAccessReport } from "./windows-sandbox.ts";
 import { HarnessInbox } from "./harness-inbox.ts";
 import { rpcDeadlineMs } from "./rpc-deadlines.ts";
 
@@ -410,6 +411,18 @@ export class HarnessHost {
     killChild(child, this.#platform);
   }
 
+  /**
+   * Windows, sandboxed: who may open each folder from the profile down to the harness's files, in
+   * the log after a boot that exited. Its sandbox user walks every one of them before it runs a line.
+   */
+  async #logBootAccess(): Promise<void> {
+    if (this.#platform !== StudioPlatform.Windows || !this.options.sandbox.enabled) return;
+    const long = (p: string) => longPath(p, this.#platform);
+    const paths = [path.dirname(long(this.options.bootstrap)), long(this.options.workspace)];
+    const lines = await windowsAccessReport(long(os.homedir()), paths).catch(() => []);
+    for (const line of lines) this.options.onLog?.(`[host] ${line}`, "stderr");
+  }
+
   get #platform(): NodeJS.Platform {
     return this.options.platform ?? process.platform;
   }
@@ -623,6 +636,7 @@ export class HarnessHost {
     this.#readyWaiters = [];
     const said = this.#stderrTail;
     for (const waiter of waiters) waiter.reject(new Error(MESSAGE.ExitedDuringBoot(code, signal, said)));
+    if (waiters.length > 0) void this.#logBootAccess();
     for (const [, pending] of this.#pendingDispatch) pending.reject(new Error(MESSAGE.Exited));
     this.#pendingDispatch.clear();
 

@@ -308,7 +308,10 @@ async function asWindowsSetupProblem(error: unknown, dependencyErrors: () => Pro
 }
 
 /** What a launch needs from a run or a long-lived start. */
-type LaunchRequest = Pick<RunRequest, "command" | "cwd" | "env" | "label" | "policy" | "stdin" | "confine">;
+type LaunchRequest = Pick<RunRequest, "command" | "cwd" | "env" | "label" | "policy" | "stdin" | "confine"> & {
+  /** A process that outlives this call (the harness): Windows sets the folder grants above its roots again first. */
+  longLived?: boolean;
+};
 
 /** How one process starts: the program, its arguments, its environment, and whether srt wraps it. */
 interface LaunchPlan {
@@ -703,7 +706,7 @@ export class ProcessSandbox {
     // Held open until the process is gone, as `run` holds it for the length of a run.
     const close = await this.#openDomains(request.policy);
     try {
-      const plan = await this.#launchPlan(request);
+      const plan = await this.#launchPlan({ ...request, longLived: true });
       const done = () => {
         plan.release?.();
         close();
@@ -810,6 +813,7 @@ export class ProcessSandbox {
     try {
       if (!backend.session.covers(needed))
         throw new SandboxLaunchError(SandboxLaunchCode.NotGranted, [...needed.write, ...needed.read].join(", "));
+      if (request.longLived) await backend.session.refreshAncestors();
       const cwd = longPath(request.cwd, this.#platform);
       const command = `${await this.#runPrelude(backend, request, files)} ${request.command}`;
       const wrapped = await manager

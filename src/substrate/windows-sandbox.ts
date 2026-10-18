@@ -79,6 +79,9 @@ const DRIVE_PATH = /^[A-Za-z]:[\\/]/;
  */
 const GRANT_ATTEMPTS = 3;
 const GRANT_RETRY_MS = 1 * SECOND_MS;
+/** Asks of `srt-win user status` for the sandbox user's SID, once it is set up, before giving up. */
+const SID_ATTEMPTS = 3;
+const SID_RETRY_MS = 1 * SECOND_MS;
 /** A shell variable name the env file may assign. */
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 /**
@@ -122,6 +125,7 @@ const MESSAGE = {
   AncestorGrant: (dir: string, error: unknown) =>
     `could not let the sandbox user see the folder ${dir}: ${errorMessage(error)}`,
   NoAnswer: "no answer for this folder",
+  NoSandboxSid: "could not read the sandbox user's id from srt-win, so the folders above its grants stay closed to it",
   NoMembers: "the Windows sandbox session has no members",
   UserNotSetUp: (user: boolean, cred: boolean) => `Sandbox user is not provisioned (user=${user}, cred=${cred}).`,
   FiltersNotSetUp: "WFP filters are not installed for the sandbox user.",
@@ -194,6 +198,33 @@ export function ancestorDirs(profile: string, roots: readonly string[]): string[
   }
   const covered = (dir: string) => roots.some((root) => insideWindowsPath(root, dir));
   return [...found.values()].filter((dir) => !covered(dir)).sort((a, b) => a.length - b.length);
+}
+
+/** One folder's `icacls` listing, or why there is none. */
+async function icaclsListing(dir: string): Promise<string> {
+  try {
+    return (await run("icacls", [dir], TOOL_RUN)).stdout;
+  } catch (error) {
+    return `${dir}: ${errorMessage(error)}`;
+  }
+}
+
+/**
+ * Who may open each folder from the profile down to `paths`, as `icacls` lists it: the profile,
+ * every folder between it and each path, and the paths, one line per entry. It goes in the log when
+ * a sandboxed process could not walk to its files, which only a person's own PC has shown.
+ */
+export async function windowsAccessReport(
+  profile: string,
+  paths: readonly string[],
+  listing: (dir: string) => Promise<string> = icaclsListing,
+): Promise<string[]> {
+  const dirs = [profile, ...ancestorDirs(profile, paths), ...paths];
+  const lines: string[] = [];
+  for (const dir of dirs) {
+    lines.push(...(await listing(dir)).split(/\r?\n/).filter((line) => line.trim()));
+  }
+  return lines;
 }
 
 /**
@@ -563,7 +594,7 @@ function processAlive(pid: number): boolean {
 
 /** How the default ancestor grants reach Windows: the sandbox user's SID and a folder-only editor. */
 export interface AncestorGrantDeps {
-  /** The `srt-sandbox` SID, or null while the sandbox is not provisioned. */
+  /** The `srt-sandbox` SID, or null when it cannot be read (a sync only runs once it is set up). */
   sid: () => Promise<string | null>;
   /** Applies a batch of entry changes, each to its folder alone (default {@link editFolderAces}). */
   edit?: FolderAceEditor;
@@ -610,8 +641,10 @@ export function ancestorGrants(holders: string, deps: AncestorGrantDeps): Ancest
   };
   return {
     async sync(dirs) {
+      // A sync follows a successful initialize, so the user exists: without its SID, every
+      // process started now would fail to open the folders above its grants (EPERM on AppData).
       const sid = await deps.sid();
-      if (!sid) return;
+      if (!sid) throw new Error(MESSAGE.NoSandboxSid);
       const previous = readRecord(recordFile) ?? { sid, dirs: [] };
       const had = new Set(previous.dirs.map(pathKey));
       await save({ sid, dirs: [...previous.dirs, ...dirs.filter((dir) => !had.has(pathKey(dir)))] });
@@ -846,6 +879,18 @@ export class WindowsSandboxSession {
     };
   }
 
+  /**
+   * Set the read-attributes grants above the applied roots again, for a caller that holds the
+   * session ({@link acquire}) and is about to start a process that must outlive it: anything that
+   * rewrote one of those folders' entries since the apply (another holder's srt-win pass) would
+   * otherwise stop it at its first path walk. A folder that still has its entry is left untouched.
+   */
+  async refreshAncestors(): Promise<void> {
+    const applied = this.#applied;
+    if (!applied) return;
+    await this.#deps.ancestors.sync(ancestorDirs(this.#deps.profile, [...applied.write, ...applied.read]));
+  }
+
   /** Resolves once no regrant is queued or being applied (tests, quit). */
   async settled(): Promise<void> {
     while (this.#applying || (this.#queued && this.#active === 0)) await (this.#applying ?? this.#regrant());
@@ -995,6 +1040,25 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
 }
 
 /**
+ * The sandbox user's SID by `lookup`, asked up to {@link SID_ATTEMPTS} times (a status probe can
+ * time out while Windows scans a freshly installed srt-win) and kept once found: the user keeps its
+ * SID until it is removed, which no running Genex does.
+ */
+export function sandboxSidOnce(
+  lookup: () => Promise<string | null>,
+  retryMs: number = SID_RETRY_MS,
+): () => Promise<string | null> {
+  let found: string | null = null;
+  return async () => {
+    for (let attempt = 1; !found && attempt <= SID_ATTEMPTS; attempt++) {
+      if (attempt > 1) await sleep(retryMs);
+      found = await lookup();
+    }
+    return found;
+  };
+}
+
+/**
  * Let the sandbox user open the folders srt-win starts from: initialize's egress check runs
  * srt-win as that user before it applies any grant, and a per-user install (Squirrel's, under
  * `%LOCALAPPDATA%`) sits in the profile, where that user may open nothing, so Windows refused it
@@ -1076,7 +1140,7 @@ export function windowsSessionFor(
   const existing = sessions.get(runtime);
   if (existing) return existing;
   const holders = windowsGrantHolders(options.profile);
-  const ancestors = ancestorGrants(holders, { sid: () => srtSandboxSid(options.srtWin) });
+  const ancestors = ancestorGrants(holders, { sid: sandboxSidOnce(() => srtSandboxSid(options.srtWin)) });
   const srtWinDir = win.dirname(options.srtWin);
   const launchDirs = insideWindowsPath(options.installDir, srtWinDir)
     ? [options.installDir]
