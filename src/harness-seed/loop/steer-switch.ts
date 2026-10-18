@@ -57,6 +57,14 @@ export function changesSettings(item: AnyRecord, asked: AnyRecord): boolean {
 }
 
 /**
+ * Does `item` change the Loop itself from what `asked` runs: on or off, its hours, roles or plan
+ * review, or a new mood board? Another engine, model or effort is not the Loop.
+ */
+export function changesLoop(item: AnyRecord, asked: AnyRecord): boolean {
+  return commissionKey(item) !== commissionKey(asked) || Boolean(item.autopilot?.frames?.length);
+}
+
+/**
  * How `item`, sent while the turn answering `action` works, joins it: as words, as a switch, or not
  * at all. A message that settles the same things the turn runs on joins as words.
  */

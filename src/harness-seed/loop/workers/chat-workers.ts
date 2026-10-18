@@ -106,6 +106,16 @@ export function runningChatWorkers(threadId: string, turn: string): number {
   return open.pool.state.records.filter(isWorking).length;
 }
 
+/**
+ * Would a Loop in the game folder take this turn's workers over as they are now (carry.ts
+ * `carriedEnd`)? Not while one of them writes in the game folder itself: the launch lets it finish.
+ */
+export function chatWorkersCarry(threadId: string, turn: string): boolean {
+  const open = pools.get(threadId);
+  if (!open || open.turn !== turn) return false;
+  return carriedEnd(open.pool) === WorkersEnd.Carry;
+}
+
 /** The worker grant a chat turn's delegation carries: the six tools, while its pool is open. */
 export function chatWorkersGrant(threadId: string, turn: string | undefined): AnyRecord {
   const open = pools.get(threadId);

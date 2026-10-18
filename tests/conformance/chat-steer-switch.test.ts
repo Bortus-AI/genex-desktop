@@ -11,7 +11,12 @@ import type { DelegateResult } from "../../src/substrate/engines/types.ts";
 import { MessageQueue, messageQueueState } from "../../src/harness-seed/loop/message-queue.ts";
 import { type LegSwitch, steeredCall, type TurnSwitches } from "../../src/harness-seed/loop/chat-steer.ts";
 import { steeredTurnPrompt, withSteers } from "../../src/harness-seed/loop/chat-steer-prompts.ts";
-import { afterCommandPrompt, switchedTurnPrompt } from "../../src/harness-seed/loop/steer-switch-prompts.ts";
+import { changesLoop } from "../../src/harness-seed/loop/steer-switch.ts";
+import {
+  afterCommandPrompt,
+  SWITCH_NOTES,
+  switchedTurnPrompt,
+} from "../../src/harness-seed/loop/steer-switch-prompts.ts";
 
 const deferred = <T = void>() => {
   let resolve!: (value: T) => void;
@@ -95,10 +100,14 @@ function legUntilCut(q: ReturnType<typeof cuttingQueue>, started: { resolve(): v
   return cut.promise.then(() => result);
 }
 
-/** Test switches: the Loop or another engine changes the turn; each switch leg is recorded by what it runs on. */
-function switchesFor(calls: any[], applied: any[] = []): TurnSwitches {
+/**
+ * Test switches: the Loop or another engine changes the turn, the Loop as the real rule weighs it
+ * against `asked`; each switch leg is recorded by what it runs on.
+ */
+function switchesFor(calls: any[], applied: any[] = [], asked: Record<string, unknown> = {}): TurnSwitches {
   return {
     changes: (item) => Boolean(item.autopilot) || item.engine === "codex",
+    changesLoop: (item) => changesLoop(item, asked),
     takes: () => true,
     apply: async (item): Promise<LegSwitch> => {
       applied.push(item.text);
@@ -185,7 +194,7 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     q.queue.stop();
   });
 
-  it("a switch outranks a launch or a question the cut leg recorded: it is dropped and the session goes on", async () => {
+  it("a Loop switch outranks a launch or a question the cut leg recorded: it is dropped, the session told so, and goes on", async () => {
     const calls: any[] = [],
       started = deferred(),
       results: DelegateResult[] = [];
@@ -209,6 +218,39 @@ describe("a message that changes how the turn runs: the turn goes on with its se
     await until(() => q.state("build the boss")?.state === "handled");
     assert.equal(calls.length, 2, "the session went on");
     assert.deepEqual(results[0].studioToolCalls, [], "the launch on the old settings is dropped");
+    assert.ok(String(calls[1].prompt).includes(SWITCH_NOTES.dropped(["start_autopilot"])), "and the session is told");
+    q.queue.stop();
+  });
+
+  it("another engine, model or effort keeps a launch the cut leg recorded: the turn ends and the build starts", async () => {
+    const calls: any[] = [],
+      started = deferred(),
+      results: DelegateResult[] = [];
+    const q = cuttingQueue(async (action, steer) => {
+      if (action.text !== "build the boss") return;
+      results.push(
+        await steeredCall({ cancelled: false }, steer, {
+          prompt: "PROMPT",
+          call: async (prompt, resume) => {
+            calls.push({ prompt, resume, on: "start" });
+            const launched = { studioToolCalls: [{ name: "start_autopilot", args: { goal: "boss" } }] };
+            return legUntilCut(q, started, stopped("s1", 2, launched));
+          },
+          switches: switchesFor(calls, [], { autopilot: { hours: 2 } }),
+        }),
+      );
+    });
+    await q.send("build the boss", { autopilot: { hours: 2 } });
+    await started.promise;
+    await q.send("let codex take it", { engine: "codex", autopilot: { hours: 2 } });
+    await until(() => q.state("build the boss")?.state === "handled");
+    assert.equal(calls.length, 1, "nothing ran after the launch");
+    assert.deepEqual(
+      results[0].studioToolCalls?.map((call) => call.name),
+      ["start_autopilot"],
+      "the launch goes out",
+    );
+    assert.notEqual(q.state("let codex take it")?.state, "delivered", "the message waits for what comes next");
     q.queue.stop();
   });
 

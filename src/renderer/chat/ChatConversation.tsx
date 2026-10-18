@@ -5,6 +5,7 @@
 import { memo, useMemo, useRef, useCallback, type JSX, type ReactNode } from "react";
 import { PerformanceBoundary } from "../performance.tsx";
 import { PerformanceComponent } from "../../shared/performance.ts";
+import { QueueState } from "../../shared/message-queue.ts";
 import { EntryKind } from "../chat-entries.ts";
 import { QueuedMessage, SendingMessage } from "../panels/QueuedMessage.tsx";
 import { MessageOrigin } from "../../shared/protocol.ts";
@@ -230,6 +231,7 @@ const ConversationContent = memo(function ConversationContent({
               transcript={transcript}
               sends={sends}
               still={loading}
+              onNotice={onNotice}
             />
           )}
         </ChatScroll>
@@ -297,20 +299,22 @@ const savedFrom = (sends: ConversationSends, clientId: string): boolean =>
 
 /**
  * Follow-ups that wait below the current work until it reads them, then those still being sent;
- * each reads Sending… either way. A waiting message keeps the place of the bubble it was sent as;
- * delivered, it closes here as it opens where it was read.
+ * each reads Sending… either way, and one no turn has taken yet can be removed. A waiting message
+ * keeps the place of the bubble it was sent as; delivered, it closes here as it opens where it was read.
  */
 function WaitingFollowUps({
   threadId,
   transcript,
   sends,
   still,
+  onNotice,
 }: {
   threadId: string;
   transcript: ThreadTranscript;
   sends: ConversationSends;
   /** The chat is loading: its waiting messages are simply there. */
   still: boolean;
+  onNotice: Notify;
 }): JSX.Element {
   const waiting = transcript.waitingEntries.flatMap((entry): PresenceChild[] => {
     const queued = transcript.queuedByEvent.get(entry.id);
@@ -323,8 +327,10 @@ function WaitingFollowUps({
           <QueuedMessage
             threadId={threadId}
             messageId={queued.messageId}
+            sending={queued.state === QueueState.Steering}
             text={entry.text}
             {...(images ? { images: { count: images.count } } : {})}
+            onNotice={onNotice}
           />
         ),
       },

@@ -7,8 +7,9 @@
  * whose rows arrive only once a call has ended, its activity alone, never its rows (one it mirrors
  * unanswered would hold every cut to the cap): Codex's tool item starting (`Tool`) until an item
  * completes (`Thinking`), OpenCode's step starting (`Working`, opencode-events.ts) until it
- * finishes (`Thinking`). A cut waits for that to end, never longer than
- * `STEER_CUT_MAX_WAIT_MS`. Stop, a session's deadline and `engine.interrupt` never come through
+ * finishes (`Thinking`). A call waiting for the person's answer to its permission card has not
+ * started (`noteAsking`): a cut does not wait for that answer. A cut waits for the rest to end, never
+ * longer than `STEER_CUT_MAX_WAIT_MS`. Stop, a session's deadline and `engine.interrupt` never come through
  * here: they abort at once.
  */
 import { ChatActivityPhase } from "../../shared/chat-activity.ts";
@@ -42,18 +43,34 @@ export interface ToolsInFlight {
   spans: number;
   /** Whether its engine's activity says when a call starts (`SPANS_FROM_ACTIVITY`). */
   readonly readsActivity: boolean;
+  /** Calls waiting for the person's answer to their permission card, by id: not started yet. */
+  readonly asking: Set<string>;
   /** Who hears, once each, that nothing is in flight any more. */
   readonly idle: Set<() => void>;
 }
 
 /** Nothing in flight yet, for a session on `engine`. */
 export function toolsInFlight(engine: string): ToolsInFlight {
-  return { ids: new Set(), spans: 0, readsActivity: SPANS_FROM_ACTIVITY.has(engine), idle: new Set() };
+  return {
+    ids: new Set(),
+    spans: 0,
+    readsActivity: SPANS_FROM_ACTIVITY.has(engine),
+    asking: new Set(),
+    idle: new Set(),
+  };
 }
 
-/** Whether a tool call (or, for an engine that says no more, a step) is in flight now. */
+/** Whether a tool call (or, for an engine that says no more, a step) is in flight now; one still asking is not. */
 export function toolsRunning(tools: ToolsInFlight): boolean {
-  return tools.ids.size > 0 || tools.spans > 0;
+  return tools.spans > 0 || [...tools.ids].some((id) => !tools.asking.has(id));
+}
+
+/** A call's permission card is waiting for the person (`asking`), or was answered. */
+export function noteAsking(tools: ToolsInFlight, toolUseId: string, asking: boolean): void {
+  const before = toolsRunning(tools);
+  if (asking) tools.asking.add(toolUseId);
+  else tools.asking.delete(toolUseId);
+  if (before && !toolsRunning(tools)) heardIdle(tools);
 }
 
 /** One event of the session, read for what it starts and ends; who waits hears it once nothing is left. */
@@ -67,7 +84,11 @@ export function noteEvent(tools: ToolsInFlight, event: DelegateEvent): void {
   } else if (event.type === DelegateEventType.User) {
     for (const id of partIds(payload, ANSWER_PART)) tools.ids.delete(id);
   }
-  if (!before || toolsRunning(tools)) return;
+  if (before && !toolsRunning(tools)) heardIdle(tools);
+}
+
+/** Who waits for nothing to be in flight hears it, once each. */
+function heardIdle(tools: ToolsInFlight): void {
   const waiting = [...tools.idle];
   tools.idle.clear();
   for (const hear of waiting) hear();

@@ -426,13 +426,15 @@ test("restart: a message handed over but unread runs on its own; one read by a c
   again.stop();
 });
 
-test("restart: a switch the cut-short turn read gets a turn of its own after its replay, with what was read after it", async () => {
+test("restart: a switch the cut-short turn read gets a turn of its own after its replay, with what was read after it; a command it read stays read", async () => {
   const f = steerFixture();
   const { append, receive } = writtenLog(f);
   receive("a", "build a pond", { engine: "claude-code" });
   append("coordinator_message_processing", { messageId: "a" });
   receive("b", "and ducks", { engine: "claude-code" });
   append("coordinator_message_delivered", { messageId: "b", into: "a", how: "native" });
+  receive("x", "/clear", { engine: "claude-code" });
+  append("coordinator_message_delivered", { messageId: "x", into: "a", how: "interrupt" });
   receive("c", "make it in the loop", { engine: "claude-code", autopilot: { hours: null } });
   append("coordinator_message_delivered", { messageId: "c", into: "a", how: "interrupt" });
   receive("d", "with a boss", { engine: "claude-code", autopilot: { hours: null } });
@@ -450,6 +452,7 @@ test("restart: a switch the cut-short turn read gets a turn of its own after its
   ]);
   await until(() => f.state("d")?.state === "handled");
   assert.equal(f.state("b")!.state, "delivered", "words ride with the replay, once");
+  assert.equal(f.state("x")!.state, "delivered", "a command it read is never run twice");
   queue.stop();
 });
 
@@ -703,6 +706,34 @@ test("a runner that takes no switches leaves such a message for a turn of its ow
   await until(() => seen.length === 2);
   assert.deepEqual(seen, ["build the level", "make it in the loop"]);
   assert.equal(f.state(f.idOf("and add fog"))!.state, "delivered");
+  queue.stop();
+});
+
+test("a later session of the turn that takes no switches leaves such a message for a turn of its own", async () => {
+  const f = steerFixture(),
+    open = deferred(),
+    release = deferred(),
+    seen: string[] = [];
+  const queue = new MessageQueue(f.host as never, async (a: any, steer: any) => {
+    seen.push(a.text);
+    if (a.text !== "build the level") return;
+    // Its first session takes switches; the one it goes on in (a new kind's) takes none.
+    await steer.open({ switches: true, takes: () => true });
+    await steer.close({ steered: [] });
+    await steer.open();
+    open.resolve();
+    await release.promise;
+    await steer.close({ steered: [] });
+  });
+  await queue.enqueue({ ...f.send("build the level"), engine: "claude-code" } as never);
+  await open.promise;
+  await queue.enqueue({ ...f.send("make it in the loop"), engine: "claude-code", autopilot: {} } as never);
+  await new Promise((r) => setImmediate(r));
+  assert.equal(f.asked.length, 0, "never handed to a session that cannot go on with it");
+  assert.equal(f.state(f.idOf("make it in the loop"))!.state, "queued");
+  release.resolve();
+  await until(() => seen.length === 2);
+  assert.deepEqual(seen, ["build the level", "make it in the loop"]);
   queue.stop();
 });
 

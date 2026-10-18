@@ -18,6 +18,7 @@ import {
   WorkersEnd,
 } from "../../src/harness-seed/loop/workers/carry.ts";
 import {
+  chatWorkersCarry,
   chatWorkerTool,
   runningChatWorkers,
   withChatWorkers,
@@ -248,5 +249,31 @@ describe("a chat turn's workers as the turn ends", () => {
       return "answered";
     });
     assert.equal(runningChatWorkers(THREAD, "msg-3"), 0);
+  });
+
+  it("what the session is told matches what the launch does: a writer in the game folder is let finish, never carried", async () => {
+    const repo = await gameRepo();
+    const host = poolHost(repo);
+    const seat = {
+      threadId: THREAD,
+      turn: "msg-4",
+      engine: CLAUDE,
+      project: PROJECT,
+      gameDir: repo,
+      folderLabel: "AI Games/garden",
+      facts: [{ id: "unity-project", path: "." }],
+    };
+    const carries: boolean[] = [];
+    await withChatWorkers(host.recorder.ctx as never, seat, async () => {
+      await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: COPY });
+      await settle();
+      carries.push(chatWorkersCarry(THREAD, "msg-4"));
+      await chatWorkerTool({ threadId: THREAD, turn: "msg-4", name: WorkerTool.Start, args: IN_PLACE });
+      await settle();
+      carries.push(chatWorkersCarry(THREAD, "msg-4"));
+      return "answered";
+    });
+    assert.deepEqual(carries, [true, false]);
+    assert.equal(chatWorkersCarry(THREAD, "msg-5"), false, "another turn's pool is not this one");
   });
 });

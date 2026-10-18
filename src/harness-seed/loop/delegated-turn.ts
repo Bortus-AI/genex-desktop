@@ -26,7 +26,7 @@ import { afterLoopRunNote } from "./after-loop-run-prompts.ts";
 import { commissionHours, reopenAsked, reopens } from "./reopen-run.ts";
 import { type ReopenGrant, reopenRunTool } from "./reopen-run-prompts.ts";
 import { type LegSwitch, steeredCall, type TurnSwitches } from "./chat-steer.ts";
-import { changesSettings } from "./steer-switch.ts";
+import { changesLoop, changesSettings } from "./steer-switch.ts";
 import { type DescribedEngine, endsTurnFor, switchedSettings, switchNotes, type TurnSettings } from "./turn-switch.ts";
 import * as chatWorkerParts from "./workers/chat-workers.ts";
 import { WorkersEnd } from "./workers/carry.ts";
@@ -341,7 +341,7 @@ async function afterDelegation(ctx: HarnessCtx, seat: Seat, delegation: Delegati
   // Said after the builder's own report, which it follows from.
   if (saved) await sayInTurn(ctx, turnId, saved);
   // A turn that changed what the project is goes on by itself, with the tools for its new kind.
-  return continueOnNewFacts(ctx, options, handoff, { result, outcome });
+  return continueOnNewFacts(ctx, seat, { result, outcome });
 }
 
 // ── switch: a message sent while the turn works may change how it runs ──
@@ -401,6 +401,7 @@ function turnSwitches(ctx: HarnessCtx, seat: Seat): TurnSwitches | undefined {
   if (!seat.asked) return undefined;
   return {
     changes: (item) => changesSettings(item, seat.asked ?? {}),
+    changesLoop: (item) => changesLoop(item, seat.asked ?? {}),
     takes: (item) => !endsTurnFor(settingsOf(seat.options), item, seat.described),
     apply: (item) => switchSeat(ctx, seat, item),
   };
@@ -430,7 +431,7 @@ async function switchSeat(ctx: HarnessCtx, seat: Seat, item: AnyRecord): Promise
     launchTool: handoff.launchTool?.name ?? null,
     reopening,
     workers: runningWorkers(options),
-    workersCarry: loopProfileOf(handoff.descriptor ?? {}) === LoopProfile.Open,
+    workersCarry: loopProfileOf(handoff.descriptor ?? {}) === LoopProfile.Open && workersCarry(options),
   });
   Object.assign(seat, { options, handoff, briefFor, asked: item });
   rescopeWorkers(options, handoff);
@@ -453,6 +454,13 @@ function rescopeWorkers(options: DelegatedOptions, handoff: Handoff): void {
     effort,
     commission: handoff.commission,
   });
+}
+
+/** Would a Loop in the game folder take this turn's workers over (never when a kept workers module cannot say)? */
+function workersCarry(options: DelegatedOptions): boolean {
+  const carries = (chatWorkerParts as AnyRecord).chatWorkersCarry;
+  if (typeof carries !== "function" || !options.steer) return false;
+  return carries(options.threadId, options.steer.messageId) === true;
 }
 
 /** The workers this chat's turn started that are still working (none when a kept workers module cannot say). */
@@ -535,12 +543,8 @@ function endedWithSession(options: DelegatedOptions, turn: FinishedTurn): boolea
  * that did not end as it should, one whose facts are the same (a folder with no kind that took the
  * web starter included) and one whose game still has no facts end as they did.
  */
-async function continueOnNewFacts(
-  ctx: HarnessCtx,
-  options: DelegatedOptions,
-  handoff: Handoff,
-  turn: FinishedTurn,
-): Promise<TurnOutcome> {
+async function continueOnNewFacts(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn): Promise<TurnOutcome> {
+  const { options, handoff } = seat;
   if (!endedWithSession(options, turn)) return turn.outcome;
   const game = await gameAtTurnEnd(ctx, handoff);
   // Still no facts (files of its own that no rule knows give no kind): nothing new to go on with.
@@ -552,7 +556,9 @@ async function continueOnNewFacts(
   if (waited === ReadyWait.Stopped) return { stopped: TurnStop.Aborted, round: 0, engine: options.engine };
   if (waited === ReadyWait.Ended) return turn.outcome;
   const launch = next.launchTool ? toolCall(options.engine, next.launchTool.name) : undefined;
-  return goOnInSession(ctx, options, next, turn, factsReadyPrompt(servedFactsOf(game), launch));
+  // The seat runs on the new kind from now on: a switch sent meanwhile starts from it.
+  Object.assign(seat, { handoff: next, briefFor: await briefWriter(ctx, options, next) });
+  return goOnInSession(ctx, seat, turn, factsReadyPrompt(servedFactsOf(game), launch));
 }
 
 /** The engine project a game is linked to, or null: a web game, or a folder whose project isn't linked. */
@@ -608,32 +614,29 @@ async function withFactsNow(ctx: HarnessCtx, handoff: Handoff, game: Handoff["de
 
 /**
  * The same session, told `prompt` (its project's new kind), goes on as
- * the chat's current turn (a message sent while it waited joins it), recorded and reported like the
- * turn's first leg. A session that cannot be resumed starts afresh from a brief for the handoff as
- * it is now, never the brief of the kind the turn started with.
+ * the chat's current turn (a message sent while it waited joins it, a switch too), recorded and
+ * reported like the turn's first leg, on the settings it ends on. A session that cannot be resumed
+ * starts afresh from a brief for the handoff as it is now, never the brief of the kind the turn
+ * started with.
  */
-async function goOnInSession(
-  ctx: HarnessCtx,
-  options: DelegatedOptions,
-  handoff: Handoff,
-  turn: FinishedTurn,
-  prompt: string,
-): Promise<TurnOutcome> {
-  const { turnId, engine } = options;
-  const briefFor = await briefWriter(ctx, options, handoff);
-  const callId = await recordDelegateRequest(ctx, options, handoff);
-  const before = await contentStamps(ctx, handoff.project);
+async function goOnInSession(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn, prompt: string): Promise<TurnOutcome> {
+  const callId = await recordDelegateRequest(ctx, seat.options, seat.handoff);
+  const before = await contentStamps(ctx, seat.handoff.project);
+  const switches = turnSwitches(ctx, seat);
   let result: DelegateResult;
   try {
-    result = await steeredCall(ctx, options.steer, {
+    result = await steeredCall(ctx, seat.options.steer, {
       prompt,
       resume: turn.result.sessionId ?? null,
-      call: (text, resume, images) => delegate(ctx, options, handoff, text, resume, images),
-      fresh: () => `${briefFor(false)}\n\n${prompt}`,
+      call: (text, resume, images) => delegate(ctx, seat.options, seat.handoff, text, resume, images),
+      fresh: () => `${seat.briefFor(false)}\n\n${prompt}`,
+      ...(switches ? { switches } : {}),
     });
   } catch (err: any) {
-    return handleDelegateFailure(ctx, options, handoff.project, callId, err);
+    return handleDelegateFailure(ctx, seat.options, seat.handoff.project, callId, err);
   }
+  const { options, handoff } = seat;
+  const { turnId, engine } = options;
   await recordDelegateResult(ctx, turnId, callId, result);
   await bookmarkSession(ctx, options, handoff.project, result);
   if (result.stopReason === StopReason.Stopped) {

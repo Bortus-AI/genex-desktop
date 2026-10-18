@@ -11,6 +11,7 @@ import { describe, it } from "node:test";
 import { BRIDGE_TOOL_DEADLINE_MS } from "../../src/substrate/engines/studio-bridge.ts";
 import {
   cutAtNextStep,
+  noteAsking,
   noteEvent,
   STEER_CUT_MAX_WAIT_MS,
   toolsInFlight,
@@ -263,6 +264,32 @@ describe("a cut waits for the tools in flight", () => {
     noteEvent(running.tools, answers("b"));
     await settle();
     assert.equal(running.abort.signal.aborted, true);
+  });
+
+  it("a call waiting for the person's answer to its permission card is not in flight: the cut lands at once", async () => {
+    const running = session();
+    noteEvent(running.tools, calls("ask"));
+    noteAsking(running.tools, "ask", true);
+    cutAtNextStep(running, heldClock().sleep);
+    assert.equal(running.abort.signal.aborted, true, "never waits for the person to answer the card");
+
+    const working = session();
+    noteEvent(working.tools, calls("bash", "ask"));
+    cutAtNextStep(working, heldClock().sleep);
+    noteAsking(working.tools, "ask", true);
+    noteEvent(working.tools, answers("bash"));
+    await settle();
+    assert.equal(working.abort.signal.aborted, true, "lands once the running call ended, the card still open");
+
+    const answered = session();
+    noteEvent(answered.tools, calls("ask"));
+    noteAsking(answered.tools, "ask", true);
+    noteAsking(answered.tools, "ask", false);
+    cutAtNextStep(answered, heldClock().sleep);
+    assert.equal(answered.abort.signal.aborted, false, "allowed: the call now runs, and the cut waits for it");
+    noteEvent(answered.tools, answers("ask"));
+    await settle();
+    assert.equal(answered.abort.signal.aborted, true);
   });
 
   it("a call that never answers is cut anyway once the cap passed, longer than one bridge call may take", async () => {

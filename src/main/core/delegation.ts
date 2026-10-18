@@ -49,6 +49,7 @@ import { git } from "../../substrate/snapshots.ts";
 import {
   DelegateEventType,
   EngineError,
+  type DelegatePermissions,
   type DelegateRequest,
   type DelegateResult,
   type LiveToolResult,
@@ -113,7 +114,7 @@ import { FolderHolds, kindPending, type ProjectFact } from "../../shared/project
 import { CapabilityAudience } from "../planning-capabilities.ts";
 import type { ConnectorCallOptions } from "./plugin-tools.ts";
 import { type PersonWrote, personWroteWatch, workerHolder } from "./plugin-locks.ts";
-import { noteEvent, type ToolsInFlight, toolsInFlight } from "./steer-cut.ts";
+import { noteAsking, noteEvent, type ToolsInFlight, toolsInFlight } from "./steer-cut.ts";
 import { type ToolOffered, toolAllowRule } from "../../substrate/plugins/tool-allow.ts";
 import { type RunCreditCap, runCreditCap } from "./run-credits.ts";
 import { checkpointWords } from "./plugin-hooks.ts";
@@ -2595,7 +2596,7 @@ export class DelegationService {
       ...(p.compact ? { compact: true } : {}),
       ...(extraReads.length ? { extraReads } : {}),
       ...(denyReads.length ? { denyReads } : {}),
-      ...askFields(reach),
+      ...askFields(reach, session.tools),
       ...(p.interviewTools?.length ? { interviewTools: p.interviewTools } : {}),
       ...this.#coordinatorFields(p),
       ...(Array.isArray(p.images) && p.images.length
@@ -3272,12 +3273,24 @@ function callRunField(
 
 /**
  * How the session asks, if it does: the chat's own session's permissions, a lead's or coordinator's,
- * or a worker's seat in the chat's mode.
+ * or a worker's seat in the chat's mode. A chat turn's call waiting for the person's answer is not
+ * in flight for a cut (`noteAsking`): a message that switches the turn does not wait for the card.
  */
-function askFields({ person, lead, worker }: SessionReach): Partial<DelegateRequest> {
+function askFields({ person, lead, worker }: SessionReach, tools?: ToolsInFlight): Partial<DelegateRequest> {
   if (worker) return { worker };
-  if (person) return { permissions: person.request };
+  if (person) return { permissions: tools ? askingNoted(person.request, tools) : person.request };
   return lead ? { leadAsks: lead.request } : {};
+}
+
+/** The chat's permissions, each question noted as asking while its card waits for the person. */
+function askingNoted(permissions: DelegatePermissions, tools: ToolsInFlight): DelegatePermissions {
+  return {
+    ...permissions,
+    ask: (request, signal) => {
+      noteAsking(tools, request.toolUseId, true);
+      return permissions.ask(request, signal).finally(() => noteAsking(tools, request.toolUseId, false));
+    },
+  };
 }
 
 /** A chat turn's session on an engine that reads messages mid-turn: its engine says once whether it takes them. */

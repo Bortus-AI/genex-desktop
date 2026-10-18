@@ -15,7 +15,7 @@ import { steeredTurnPrompt, withSteers } from "./chat-steer-prompts.ts";
 import type { QueueAction, SteerHandle } from "./message-queue.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
 import { isSlashText, type OpenOptions } from "./steer-switch.ts";
-import { afterCommandPrompt, switchedTurnPrompt } from "./steer-switch-prompts.ts";
+import { afterCommandPrompt, SWITCH_NOTES, switchedTurnPrompt } from "./steer-switch-prompts.ts";
 import { EngineFailure, StopReason } from "./outage.ts";
 import type { DelegateImage, DelegateResult } from "../types/host-api.d.ts";
 
@@ -59,6 +59,11 @@ export interface TurnSwitches {
   changes(item: QueueAction): boolean;
   /** Can this turn go on with it at all? One it cannot (another runner's engine) gets a turn of its own. */
   takes(item: QueueAction): boolean;
+  /**
+   * Does it change the Loop itself (on or off, hours, roles, plan review, a mood board)? Only that
+   * outranks a launch or a question the session already recorded; without it, every change does.
+   */
+  changesLoop?(item: QueueAction): boolean;
   /** Go on with this message's settings: how the legs run from now on. */
   apply(item: QueueAction): Promise<LegSwitch>;
 }
@@ -377,8 +382,7 @@ async function afterLeg(turn: TurnLegs, outcome: LegOutcome): Promise<DelegateRe
   turn.interrupted = await steer.close(result);
   turn.last = result;
   const ours = turn.interrupted.length > 0 && !ctx.cancelled && cutForSteer(outcome);
-  // A switch outranks what the leg recorded: a launch or a question asked on the old settings is dropped.
-  const recorded = ours && switchedSettings(turn) ? [] : result?.studioToolCalls;
+  const recorded = keptCalls(turn, ours, result);
   if (result) turn.legs.push({ ...result, studioToolCalls: recorded ?? [] });
   if (ours && !recorded?.length) return null;
   // Commands are still owed, or what they leave to do: the turn goes on after a leg that ended well.
@@ -393,6 +397,18 @@ async function afterLeg(turn: TurnLegs, outcome: LegOutcome): Promise<DelegateRe
   // message waits for the next one (the answer, or the build it launched) instead.
   if (ours) return { ...ended, ok: true, stopReason: StopReason.Completed };
   return ended;
+}
+
+/**
+ * The launch or question calls a leg recorded that still go out. The Loop changed (the leg was cut
+ * for it): they were made on the old Loop, so they are dropped and the session is told so. Any other
+ * change keeps them: the build starts on the newest settings.
+ */
+function keptCalls(turn: TurnLegs, cutForTurn: boolean, result: DelegateResult | undefined) {
+  const dropped = cutForTurn && loopSwitched(turn) ? (result?.studioToolCalls ?? []) : [];
+  if (!dropped.length) return result?.studioToolCalls;
+  turn.notes.push(SWITCH_NOTES.dropped(dropped.map((call) => call.name)));
+  return [];
 }
 
 /** Each message once, in the order first met: a command is both taken and unread. */
@@ -415,11 +431,12 @@ function owedBack(turn: TurnLegs): QueueAction[] {
   return [...turn.commands.splice(0), ...turn.afterCommands.splice(0)];
 }
 
-/** Does a message the last leg was cut for change the settings the turn runs on? */
-function switchedSettings(turn: TurnLegs): boolean {
+/** Does a message the last leg was cut for change the Loop the turn runs on (any setting, for a runner that cannot say)? */
+function loopSwitched(turn: TurnLegs): boolean {
   const { switches } = turn.options;
   if (!switches) return false;
-  return turn.interrupted.some((item) => !isSlashText(item.text) && switches.changes(item));
+  const changesLoop = (item: QueueAction) => switches.changesLoop?.(item) ?? true;
+  return turn.interrupted.some((item) => !isSlashText(item.text) && switches.changes(item) && changesLoop(item));
 }
 
 /** The leg ended because the host interrupted it to hand it messages, not on its own. */

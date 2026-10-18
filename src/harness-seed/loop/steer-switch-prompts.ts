@@ -52,6 +52,8 @@ export const SWITCH_NOTES = {
   moodBoard: (count: number) => `They sent a new mood board (${count} picture${count === 1 ? "" : "s"}) for the build.`,
   workersCarry: (count: number) =>
     `${count} worker${count === 1 ? " you started is" : "s you started are"} still working: a build you start takes ${count === 1 ? "it" : "them"} over and they keep going.`,
+  dropped: (tools: readonly string[]) =>
+    `The ${tools.join(" and ")} call you made before this change did not go out: make it again if it still fits the new settings.`,
   workersLand: (count: number) =>
     `${count} worker${count === 1 ? " you started is" : "s you started are"} still working: wait for ${count === 1 ? "it" : "them"} (${WorkerTool.Wait}) and mark what ${count === 1 ? "it" : "they"} made (${WorkerTool.Mark}) before you start a build. When the build starts, a worker writing in the game folder itself is waited for; any other still working stops.`,
 } as const;

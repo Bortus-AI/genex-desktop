@@ -1,4 +1,7 @@
-/** A follow-up sent while the chat works waits below that work as Sending…, with nothing to withdraw. */
+/**
+ * A follow-up sent while the chat works waits below that work as Sending…: one no turn has taken yet
+ * can be removed, one handed to the running turn no longer can.
+ */
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { build, type Plugin } from "esbuild";
@@ -48,15 +51,17 @@ async function waitingMessages() {
 /** The line under a message: its markup inside the message's own element. */
 const lineOf = (markup: string): string => markup.replace(/^<div[^>]*>/, "").replace(/<\/div>$/, "");
 
-test("a waiting follow-up reads Sending…, offers nothing to remove, and keeps the line of a message on its way", async () => {
+test("a waiting follow-up reads Sending…, offers Remove until a turn takes it, and keeps the line of a message on its way", async () => {
   const { QueuedMessage, SendingMessage, createElement, renderToStaticMarkup } = await waitingMessages();
-  const waiting: string = renderToStaticMarkup(
-    createElement(QueuedMessage, { threadId: "chat-a", messageId: "m1", text: "and add rain" }),
-  );
+  const props = { threadId: "chat-a", messageId: "m1", text: "and add rain", onNotice: () => {} };
+  const waiting: string = renderToStaticMarkup(createElement(QueuedMessage, props));
   assert.match(waiting, /^<div data-queued-message="m1"/, "smoke runners still find it by its message");
   assert.match(waiting, new RegExp(`<span role="status">${CHAT_WORDS.sendingMessage}</span>`));
   assert.doesNotMatch(waiting, /Queued/);
-  assert.doesNotMatch(waiting, /<button/, "no Remove, nor any other control");
+  assert.match(waiting, /aria-label="Remove queued message"/, "one no turn took yet can be withdrawn");
+  const handed: string = renderToStaticMarkup(createElement(QueuedMessage, { ...props, sending: true }));
+  assert.match(handed, new RegExp(`<span role="status">${CHAT_WORDS.sendingMessage}</span>`));
+  assert.doesNotMatch(handed, /<button/, "handed to the running turn: nothing to withdraw");
   const onItsWay: string = renderToStaticMarkup(createElement(SendingMessage, { text: "and add rain" }));
-  assert.equal(lineOf(waiting), lineOf(onItsWay), "nothing moves when a message on its way starts to wait");
+  assert.equal(lineOf(handed), lineOf(onItsWay), "nothing moves when a message on its way starts to wait");
 });

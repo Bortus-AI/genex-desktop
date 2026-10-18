@@ -25,8 +25,8 @@ project, and graph: a request to wait for the remaining workers could start a se
   or one that cannot join, waits for the current response and for the build to close — the run
   itself, never the learning pass after it; other chats remain independent. The transcript
   shows follow-ups in muted bubbles below the current work, reading Sending… until they are read,
-  whether handed over or waiting: there is no Queued label and no Remove (the harness keeps
-  edit/hold/remove for older clients).
+  whether handed over or waiting: there is no Queued label, and only one still waiting (not
+  handed over) offers Remove (the harness keeps edit/hold for older clients).
   Receipt, processing, completion, edit and removal have separate append-only events. Editing
   holds dispatch until saved or cancelled; that hold survives restart. Unanswered messages replay
   on boot, including updated text and attachments. A message cut off mid-answer is retried once
@@ -199,7 +199,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   words: Claude Code keeps the SDK input open (an async-iterable prompt,
   `substrate/engines/claude-steer.ts`) and pushes the message with `priority: "next"`,
   `origin: {kind: "human"}` and a uuid; the LocalSessions engines (Bonsai, OpenRouter, a local
-  server) read it at the top of their next round (`substrate/engines/local-session-steer.ts`). The
+  server) read it at the top of their next round (`substrate/engines/local-session-steer.ts`). Ollama
+  is the exception: its turn runs in the harness's own tool loop (`tool-loop.ts`), which takes no
+  messages, so one sent meanwhile waits below it (removable) for a turn of its own. The
   CLI folds it in at the next tool result, or runs it as a follow-up turn of the same session when
   it arrives during the final answer. Its `command_lifecycle` `started` frame is the moment it was
   read: the engine emits `steer_delivered`, and the host appends `coordinator_message_delivered
@@ -254,9 +256,9 @@ chat turn; messages go to the run's lead ([live chat](#live-chat-during-a-build)
   a message delivered into a turn still owed its answer. That message rides in the turn's replay
   (`steer.carried`, in its first prompt) instead of being asked again; one delivered into a
   finished turn, or into one a second restart cut off (never retried: `MESSAGE_ATTEMPTS`), stays
-  settled with it. One that switched that turn (a slash command, the Loop, another model) and all
-  it read after it get turns of their own after the replay instead, which runs on the turn's own
-  settings (a command that had run runs again). A turn that began before the replay reached its chat takes none of the replayed
+  settled with it. One that switched that turn (the Loop, another model) and all it read after it
+  get turns of their own after the replay instead, which runs on the turn's own settings; a slash
+  command it read stays read, never run twice. A turn that began before the replay reached its chat takes none of the replayed
   messages, and removing a replayed turn gives what it had read a turn of its own.
 
 `steeredCall` knows only "the session that is the chat's current turn"; the run's lead answers

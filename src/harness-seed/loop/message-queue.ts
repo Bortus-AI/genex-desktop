@@ -4,7 +4,7 @@ import { HostMethod } from "./host-methods.ts";
 import { EventKind, RunEvent } from "./run-events.ts";
 import { personWrote } from "./person-wrote.ts";
 import { SteerDelivery } from "./steer-delivery.ts";
-import { JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
+import { isSlashText, JoinKind, joinKindOf, type OpenOptions } from "./steer-switch.ts";
 
 /**
  * This queue hands a message to a run's lead while its build runs (live chat, `beforeProcess`
@@ -395,9 +395,9 @@ export class MessageQueue {
   /**
    * Put one unsettled message back on the queue, unless a restart has already cut it off twice. One
    * read by a turn a restart cut short goes in front of that turn's replay; one that switched how
-   * that turn ran (a slash command, the Loop, another model) gets a turn of its own after it instead,
-   * with all that turn read after it: the replay runs on the turn's own settings, which the switch
-   * changed. A slash command that had run runs again.
+   * that turn ran (the Loop, another model) gets a turn of its own after it instead, with all that
+   * turn read after it: the replay runs on the turn's own settings, which the switch changed. A slash
+   * command it read stays read, never run twice (it may have cleared the session).
    */
   async #restoreMessage(
     threadId: string,
@@ -407,7 +407,7 @@ export class MessageQueue {
   ): Promise<void> {
     if (message.state === MessageState.Delivered) {
       const replayed = this.#replayedTurnOf(thread, message);
-      if (!replayed) return;
+      if (!replayed || isSlashText(message.action?.text)) return;
       const own =
         split.has(replayed.messageId as string) || joinKindOf(message.action ?? {}, replayed) === JoinKind.Switch;
       if (!own) {
@@ -694,10 +694,9 @@ export class MessageQueue {
       if (!isCurrent(thread, turn)) return [];
       turn.open = true;
       turn.expecting = true;
-      if (options?.switches) {
-        turn.switches = true;
-        turn.accepts = options.takes ?? null;
-      }
+      // Each session says what it takes as it opens: a later leg of the turn may take no switches.
+      turn.switches = Boolean(options?.switches);
+      turn.accepts = options?.switches ? (options.takes ?? null) : null;
       const joined = this.#inOrder(thread, [...turn.pending.splice(0), ...this.#joinable(threadId, thread, turn)]);
       for (const item of joined) turn.taken.set(item.messageId as string, { item, how: SteerDelivery.Prompt });
       return joined;
