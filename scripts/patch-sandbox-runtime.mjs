@@ -6,6 +6,8 @@
  *    check (seconds on a fresh process) and the folder grants and deny stamps (which scale with
  *    the folders) with `spawnSync`; on Electron's main thread that froze the start window into
  *    "Not Responding". The same srt-win calls run through SRT's own `runSrtWinAsync` instead.
+ * 3. Those steps report how long they took (`setStudioStepLog`), so Genex's log shows which part
+ *    of a slow start the time went to.
  *
  * Policy generation, arguments and outcomes are untouched. */
 import { createRequire } from "node:module";
@@ -34,13 +36,26 @@ async function patchFile(dist, file, marker, patch) {
 const WHICH_MARKER = "// Studio: absolute executable lookup";
 const ASYNC_MARKER = "// Studio: srt-win off the event loop";
 
-/** The async twins of SRT's `grantWindowsAcl` and `stampWindowsAcl`: same arguments, same errors. */
+/**
+ * The async twins of SRT's `grantWindowsAcl` and `stampWindowsAcl` (same arguments, same errors),
+ * and the step log they and the egress check report to.
+ */
 const ACL_ASYNC = `
 ${ASYNC_MARKER}: initialize() grants and stamps through these.
+let studioStepLog;
+/** Genex's log of how long each srt-win step of initialize took: \`(step, ms)\`. */
+export function setStudioStepLog(log) {
+    studioStepLog = log;
+}
+function studioStep(step, started) {
+    studioStepLog?.(step, Date.now() - started);
+}
 export async function grantWindowsAclAsync(opts) {
     const holder = opts.holderPid ?? process.pid;
     const stdin = JSON.stringify({ read: opts.read, write: opts.write });
+    const started = Date.now();
     const r = await runSrtWinAsync(['acl', 'grant', '--holder-pid', \`\${holder}\`, '--sandbox-user-sid', opts.sandboxUserSid], { timeoutMs: 60000, stdin, srtWin: opts.srtWin });
+    studioStep('acl grant', started);
     logForDebugging(\`[Sandbox Windows] acl grant exit=\${r.status}: \${r.stderr || r.stdout}\`);
     if (r.status !== 0) {
         throw new WindowsSandboxError('acl_grant_failed', \`srt-win acl grant exited \${r.status}: \${r.stderr || r.stdout}\`);
@@ -49,7 +64,9 @@ export async function grantWindowsAclAsync(opts) {
 export async function stampWindowsAclAsync(opts) {
     const holder = opts.holderPid ?? process.pid;
     const stdin = JSON.stringify({ denyRead: opts.denyRead, denyWrite: opts.denyWrite });
+    const started = Date.now();
     const r = await runSrtWinAsync(['acl', 'stamp', '--holder-pid', \`\${holder}\`, '--sandbox-user-sid', opts.sandboxUserSid], { timeoutMs: 60000, stdin, srtWin: opts.srtWin });
+    studioStep('acl stamp', started);
     logForDebugging(\`[Sandbox Windows] acl stamp exit=\${r.status}: \${r.stderr || r.stdout}\`);
     if (r.status !== 0) {
         throw new WindowsSandboxError('acl_stamp_failed', \`srt-win acl stamp exited \${r.status} \` +
@@ -93,7 +110,11 @@ export async function patchSandboxRuntime() {
       [
         [
           verify,
-          `${ASYNC_MARKER}: the egress check.\n        const r = await runSrtWinAsync(['wfp', 'verify', '--target', target], {`,
+          `${ASYNC_MARKER}: the egress check.\n        const started = Date.now();\n        const r = await runSrtWinAsync(['wfp', 'verify', '--target', target], {`,
+        ],
+        [
+          "logForDebugging(`[Sandbox Windows] wfp verify exit=",
+          "studioStep('wfp verify', started);\n        logForDebugging(`[Sandbox Windows] wfp verify exit=",
         ],
       ],
       "srt-win's egress check",
@@ -122,6 +143,6 @@ export async function patchSandboxRuntime() {
     "index.js",
     ASYNC_MARKER,
     (original) =>
-      `${original}\n${ASYNC_MARKER}.\nexport { grantWindowsAclAsync, stampWindowsAclAsync } from './sandbox/windows-sandbox-utils.js';\n`,
+      `${original}\n${ASYNC_MARKER}.\nexport { grantWindowsAclAsync, stampWindowsAclAsync, setStudioStepLog } from './sandbox/windows-sandbox-utils.js';\n`,
   );
 }

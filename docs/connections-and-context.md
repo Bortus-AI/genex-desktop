@@ -647,6 +647,10 @@ Absolute-path lookup checks filesystem executability without a one-second `which
 Windows `initialize()` runs srt-win's egress check, folder grants and deny stamps through SRT's own
 async runner instead of `spawnSync`, which froze the start window ("Not Responding") on Electron's
 main thread; `sandbox-windows-start.test.ts` fails on Windows CI when the start holds the event loop.
+Those steps report their times (`setStudioStepLog`); with the session's own steps and the core's
+boot marks they land in `studio.log`, so a slow start names its slow step. The core's Windows
+sandbox starts in the background (`startInBackground`): `create` refuses only what Set up fixes,
+the window opens on the games, and every launch waits for the rest or retries a failed start.
 The patch changes neither sandbox policy nor command execution. Re-review on dependency changes.
 
 External provider clean-profile acceptance: after rebuilding the package, run

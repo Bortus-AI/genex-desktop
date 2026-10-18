@@ -990,6 +990,9 @@ export class StudioCore {
       ],
       readableRoots: [this.options.paths.resources],
       enabled: this.options.sandbox ?? true,
+      // Windows: the window opens on the games while the network check and folder grants finish.
+      startInBackground: true,
+      log: (line) => this.options.onLog?.(`[sandbox] ${line}`, "stderr"),
       // A Finder-launched app has no npm on its PATH; every build the studio ever ran exited 127.
       toolPath: async () => (await toolchain()).path,
     });

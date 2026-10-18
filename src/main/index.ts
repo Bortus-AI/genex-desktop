@@ -720,6 +720,8 @@ async function createCore(userData: string): Promise<StudioCore> {
     appVersion: app.getVersion(),
     markBoot: (step) => {
       performanceRecorder.mark(step);
+      // Which step a slow start spent its time on, in every log a person can send.
+      studioLog.write("main", `start: ${step} at ${Math.round(performance.now())} ms`);
       const next = startStepAfter(step);
       if (next) bootGate.progress(next);
     },
@@ -1792,7 +1794,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
 /** The studio is up: the window hears it, the log says so, and rows a closed app left unsent go. */
 function announceReady(userData: string): void {
   pushUiEvent({ type: UiEvent.StudioReady, payload: { userData } });
-  studioLog.write("main", "studio ready");
+  studioLog.write("main", `studio ready at ${Math.round(performance.now())} ms`);
   // Rows a closed app left unsent go now, or are dropped once a week old.
   void runSharing.flush().catch((err) => studioLog.write("main", errorMessage(err)));
 }

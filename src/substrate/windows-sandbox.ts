@@ -757,6 +757,8 @@ export interface WindowsSessionDeps {
    * answers how to take that back, which a failed initialize does.
    */
   launcher?: () => Promise<() => void>;
+  /** Where the session says how long each step of a start took (Genex's log). */
+  log?: (line: string) => void;
 }
 
 /** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
@@ -911,10 +913,11 @@ export class WindowsSandboxSession {
    * folder, which can walk the whole user profile, so a retry repeats that walk.
    */
   async #initialize(config: SandboxRuntimeConfig): Promise<void> {
-    const release = this.#started ? undefined : await this.#deps.launcher?.();
+    const launcher = this.#started ? undefined : this.#deps.launcher;
+    const release = launcher ? await this.#timed("launcher folders", launcher) : undefined;
     for (let attempt = 1; ; attempt++) {
       try {
-        await this.#deps.runtime.initialize(config);
+        await this.#timed("initialize", () => this.#deps.runtime.initialize(config));
         this.#started = true;
         return;
       } catch (error) {
@@ -923,6 +926,18 @@ export class WindowsSandboxSession {
         release?.();
         throw error;
       }
+    }
+  }
+
+  /** Run `step`, logging how long it took whether it ends or throws. */
+  async #timed<T>(step: string, run: () => Promise<T>): Promise<T> {
+    const log = this.#deps.log;
+    if (!log) return run();
+    const started = performance.now();
+    try {
+      return await run();
+    } finally {
+      log(`${step}: ${Math.round(performance.now() - started)} ms`);
     }
   }
 
@@ -982,7 +997,8 @@ export class WindowsSandboxSession {
    */
   async #grantAncestors(grants: WindowsGrants): Promise<void> {
     try {
-      await this.#deps.ancestors.sync(ancestorDirs(this.#deps.profile, [...grants.write, ...grants.read]));
+      const dirs = ancestorDirs(this.#deps.profile, [...grants.write, ...grants.read]);
+      await this.#timed("folders above the grants", () => this.#deps.ancestors.sync(dirs));
     } catch (error) {
       await this.#deps.runtime.reset().catch(() => {});
       throw error;
@@ -1152,6 +1168,12 @@ export async function windowsDependencyErrors(srtWin: string = srtWinPath()): Pr
 
 const sessions = new WeakMap<object, WindowsSandboxSession>();
 
+/** Hand srt-win's own step times (the network check, the folder grants) to `log`: Genex's patch adds them. */
+async function logSrtSteps(log: (line: string) => void): Promise<void> {
+  const srt = await import(SRT_PACKAGE).catch(() => null);
+  srt?.setStudioStepLog?.((step: string, ms: number) => log(`srt-win ${step}: ${ms} ms`));
+}
+
 /**
  * The process's one session for `runtime` (sandbox-runtime's singleton), created by the first
  * `ProcessSandbox` to need it. Its ancestor grants are recorded under {@link windowsGrantHolders}
@@ -1159,7 +1181,7 @@ const sessions = new WeakMap<object, WindowsSandboxSession>();
  */
 export function windowsSessionFor(
   runtime: SessionRuntime,
-  options: { profile: string; srtWin: string; installDir: string },
+  options: { profile: string; srtWin: string; installDir: string; log?: (line: string) => void },
 ): WindowsSandboxSession {
   const existing = sessions.get(runtime);
   if (existing) return existing;
@@ -1170,7 +1192,15 @@ export function windowsSessionFor(
     ? [options.installDir]
     : [options.installDir, srtWinDir];
   const launcher = () => grantLauncherFolders(options.srtWin, launchDirs);
-  const session = new WindowsSandboxSession({ runtime, profile: options.profile, ancestors, launcher });
+  const log = options.log;
+  if (log) void logSrtSteps(log);
+  const session = new WindowsSandboxSession({
+    runtime,
+    profile: options.profile,
+    ancestors,
+    launcher,
+    ...(log ? { log } : {}),
+  });
   process.once("exit", () => ancestors.revokeAllSync());
   sessions.set(runtime, session);
   return session;

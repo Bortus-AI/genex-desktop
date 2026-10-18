@@ -812,13 +812,15 @@ function fakeAncestors() {
 function session(options: { realDenies?: boolean; profile?: string } = {}) {
   const runtime = fakeSessionRuntime();
   const ancestors = fakeAncestors();
+  const logged: string[] = [];
   const value = new WindowsSandboxSession({
     runtime: runtime.runtime,
     profile: options.profile ?? PROFILE,
     ancestors: ancestors.ancestors,
     ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths] }),
+    log: (line) => logged.push(line),
   });
-  return { session: value, runtime, ancestors };
+  return { session: value, runtime, ancestors, logged };
 }
 
 const GAMES = at("AI Games");
@@ -1088,6 +1090,15 @@ describe("the grant session", () => {
     assert.deepEqual(s.runtime.last().network.allowedDomains, []);
   });
 
+  it("logs how long srt's initialize and the folders above the roots took", async () => {
+    const s = session();
+    await s.session.join({}, { grants: { write: [WS], read: [] }, config: BASE_CONFIG });
+    assert.deepEqual(
+      s.logged.map((line) => line.replace(/\d+ ms$/, "N ms")),
+      ["initialize: N ms", "folders above the grants: N ms"],
+    );
+  });
+
   it("dispose resets and takes back the folders above the roots", async () => {
     const s = session();
     await s.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
@@ -1112,6 +1123,10 @@ async function windowsSandbox(
     initializeError?: object;
     bash?: string | null;
     dependencyErrors?: () => Promise<string[]>;
+    startInBackground?: boolean;
+    /** Hold srt's initialize until the returned open is called. */
+    holdInitialize?: boolean;
+    failInitializeIn?: { subcommand: string; code: string };
   } = {},
 ) {
   const root = realpathSync.native(await tmpDir("windows-launch-"));
@@ -1121,6 +1136,9 @@ async function windowsSandbox(
   const bash = options.bash === undefined ? await testBash() : options.bash;
   const wraps: WrapCall[] = [];
   const s = session({ realDenies: true, profile: root });
+  const openInitialize = options.holdInitialize ? s.runtime.hold() : () => {};
+  if (options.failInitializeIn)
+    s.runtime.failInitializeIn(options.failInitializeIn.subcommand, options.failInitializeIn.code);
   if (options.initializeError) {
     const error = options.initializeError;
     s.runtime.runtime.initialize = async () => {
@@ -1154,8 +1172,9 @@ async function windowsSandbox(
     platform: "win32",
     windows: { bash, session: s.session, profile: root, dependencyErrors: options.dependencyErrors },
     toolPath: async () => "",
+    ...(options.startInBackground ? { startInBackground: true } : {}),
   });
-  return { sandbox, root, workspace, secrets, wraps, session: s };
+  return { sandbox, root, workspace, secrets, wraps, session: s, openInitialize };
 }
 
 describe("ProcessSandbox on Windows", () => {
@@ -1380,6 +1399,57 @@ describe("ProcessSandbox on Windows", () => {
         (error: unknown) => !(error instanceof SandboxUnavailableError) && /proxy port in use/.test(String(error)),
       );
     }
+  });
+});
+
+describe("ProcessSandbox on Windows, started in the background", () => {
+  const ready = async () => [];
+
+  it("is created while srt still initializes, and a run waits for the start", async () => {
+    const w = await windowsSandbox({ startInBackground: true, holdInitialize: true, dependencyErrors: ready });
+    let finished = false;
+    const run = w.sandbox.run({ command: "printf started", cwd: w.workspace }).then((result) => {
+      finished = true;
+      return result;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(finished, false, "the run waits for the start");
+    assert.deepEqual(w.session.runtime.calls, ["initialize"], "the one start, shared by the run");
+    w.openInitialize();
+    const result = await run;
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "started");
+    assert.deepEqual(w.session.runtime.calls, ["initialize"]);
+    await w.sandbox.dispose();
+  });
+
+  it("still refuses at once what Set up fixes: no sandbox user, no Git for Windows", async () => {
+    const unprovisioned = "Sandbox user is not provisioned (user=false, cred=false).";
+    await assert.rejects(
+      windowsSandbox({ startInBackground: true, dependencyErrors: async () => [unprovisioned] }),
+      (error: unknown) =>
+        error instanceof SandboxUnavailableError && error.problem.code === SandboxProblemCode.NotProvisioned,
+    );
+    await assert.rejects(
+      windowsSandbox({ startInBackground: true, bash: null, dependencyErrors: ready }),
+      (error: unknown) =>
+        error instanceof SandboxUnavailableError && error.problem.code === SandboxProblemCode.GitMissing,
+    );
+  });
+
+  it("a start that failed behind the window is tried again by the next run", async () => {
+    const w = await windowsSandbox({
+      startInBackground: true,
+      dependencyErrors: ready,
+      failInitializeIn: { subcommand: "acl", code: "acl_grant_failed" },
+    });
+    // The start behind the window fails first; a run that came during it would report that failure.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const result = await w.sandbox.run({ command: "printf again", cwd: w.workspace });
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(result.stdout, "again");
+    assert.deepEqual(w.session.runtime.calls, ["initialize", "initialize"]);
+    await w.sandbox.dispose();
   });
 });
 
