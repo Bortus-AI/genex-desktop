@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { seedFinishCheck } from "../../src/main/dev/fixture-finish-check.ts";
+import { LOOP_END_GAMES, loopEnds, seedFinishCheck } from "../../src/main/dev/fixture-finish-check.ts";
 import { FixtureName, isFixtureName } from "../../src/main/dev/fixture-kit.ts";
 import { projectBuildGraph } from "../../src/renderer/build-progress.ts";
 import { EntryKind, toEntries } from "../../src/renderer/chat-entries.ts";
@@ -13,7 +13,9 @@ import { finishCheckFace } from "../../src/renderer/run-tree.ts";
 import { FINISH_CHECK_WORDS } from "../../src/renderer/words.ts";
 import { type FinishCheckNode, FinishCheckState, GraphNodeKind } from "../../src/renderer/run-graph.ts";
 import { CustomEvent, customRecord } from "../../src/shared/custom-events.ts";
+import { CHAT_PAGE_SIZE } from "../../src/shared/chat-history.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
+import { StopWhy } from "../../src/shared/finish-check.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const GAME = "fixture-game";
@@ -96,4 +98,31 @@ it("seeds four Loops whose finish checks stand at each of the four looks", async
   const before = log.length;
   await seedFinishCheck(core as never, GAME, THREAD);
   assert.equal(log.length, before, "seeding again writes nothing");
+});
+
+it("ends a Loop with something still to fix each other way: its hours, the person's Stop, and past the chat's first page", () => {
+  const cardOf = (events: EventData[]) => {
+    const log = events.map(
+      (data, index): EventEnvelope => ({
+        id: `e${String(index + 1).padStart(5, "0")}`,
+        thread_id: THREAD,
+        session_id: null,
+        turn_id: null,
+        created_at: new Date(START + (index + 1) * 1000).toISOString(),
+        data,
+      }),
+    );
+    // What a chat opened after a restart reads: its newest page only.
+    return toEntries(log.slice(-CHAT_PAGE_SIZE)).find((entry) => entry.kind === EntryKind.Morning);
+  };
+  const ends = new Map(loopEnds().map(({ game, events }) => [game.name, cardOf(events)]));
+  const timeUp = ends.get(LOOP_END_GAMES.TimeUp.name);
+  assert.ok(timeUp?.kind === EntryKind.Morning);
+  assert.deepEqual([timeUp.stillToFix?.why, timeUp.stillToFix?.hours, timeUp.latest], [StopWhy.Time, 5, true]);
+  const stopped = ends.get(LOOP_END_GAMES.Stopped.name);
+  assert.ok(stopped?.kind === EntryKind.Morning);
+  assert.equal(stopped.stillToFix, undefined, "a Stop pauses: the card keeps Resume and no list");
+  const long = ends.get(LOOP_END_GAMES.Long.name);
+  assert.ok(long?.kind === EntryKind.Morning);
+  assert.deepEqual([long.stillToFix?.why, long.stillToFix?.hours], [StopWhy.Time, 2], "its start is off the page");
 });

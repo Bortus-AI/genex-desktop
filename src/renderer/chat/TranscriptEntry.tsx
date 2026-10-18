@@ -2,10 +2,10 @@
  * One entry of the transcript, drawn by its kind (`chat-entries.ts` decides what the entries are).
  */
 import { type JSX, memo, useCallback, useMemo } from "react";
-import { type Entry, EntryAction, EntryKind } from "../chat-entries.ts";
+import { type Entry, EntryAction, EntryKind, type MorningEntry } from "../chat-entries.ts";
 import { ExportReview } from "./ExportReview.tsx";
 import { type ConversationEntry, WORK_KIND } from "./conversation-entries.ts";
-import { keepBuilding } from "../keep-building.ts";
+import { keepBuilding, keepsBuildingIn } from "../keep-building.ts";
 import { MorningCard } from "../panels/MorningCard.tsx";
 import { FileText } from "../ui/FileText.tsx";
 import { Icon } from "../ui/icons.tsx";
@@ -38,11 +38,14 @@ import { WorkLog } from "./WorkLog.tsx";
 const resumable = (runId: string | null | undefined, context: TranscriptContext): runId is string =>
   Boolean(runId) && runId === context.pausedRunId && !context.activeRunId;
 
-/** Keep building on what a run left, in this chat. */
-const keepFor =
-  (threadId: string) =>
-  (notDone: string[]): void =>
-    keepBuilding({ threadId, notDone });
+/**
+ * Keep building on what a run left, in this chat: only from its newest result card, and only while
+ * nothing of the chat runs or waits paused (a Resume belongs to that run).
+ */
+function keepFor(entry: MorningEntry, context: TranscriptContext): ((notDone: string[]) => void) | null {
+  const { threadId } = context;
+  return threadId && keepsBuildingIn(entry, context) ? (notDone) => keepBuilding({ threadId, notDone }) : null;
+}
 
 export interface TranscriptContext {
   /** The run this chat is building right now, if any. */
@@ -146,7 +149,7 @@ export const TranscriptEntry = memo(function TranscriptEntry({
           paused={!entry.superseded && resumable(entry.runId, context)}
           handedOff={entry.handedOff}
           stillToFix={entry.stillToFix ?? null}
-          onKeepBuilding={context.threadId ? keepFor(context.threadId) : null}
+          onKeepBuilding={keepFor(entry, context)}
           project={entry.project ?? context.project}
           commit={entry.commit}
           before={entry.before}

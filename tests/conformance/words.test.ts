@@ -195,7 +195,7 @@ describe("the finish check's words", () => {
     assert.equal(FINISH_CHECK_WORDS.leftWord(2), "2 things left");
     assert.match(
       STILL_TO_FIX_WORDS.ask(["The lap timer resets"]),
-      /^Keep building: fix what's left\.\n- The lap timer resets$/,
+      /^Keep building: fix what’s left\.\n- The lap timer resets$/,
     );
     const words = [
       FINISH_CHECK_WORDS.name,
@@ -251,8 +251,8 @@ describe("statusWords", () => {
       short: "The lead",
     });
     assert.deepEqual(statusWords(`${run} · lead in place finishing`), {
-      line: "A reviewer is checking the lead's finish",
-      short: "Checking",
+      line: "A second AI is looking at your game",
+      short: "Final look",
     });
   });
 

@@ -2,13 +2,13 @@
  * The card of the Loop's final look, the last node of a run's tree: before the Loop calls it done,
  * a second AI looks at the game. The card shows where that stands now and nothing of the rounds
  * before it: looking, what is still to fix (and that the Loop keeps working on it, or Keep building
- * once it stopped), all done, or that it couldn't look.
+ * once it ended, as the chat's result card offers it), all done, or that it couldn't look.
  */
 import type { JSX } from "react";
 import { FinishCheckStep } from "../../../shared/finish-check.ts";
 import { StillToFix } from "../../chat/StillToFixCard.tsx";
 import { FinishCheckState, type FinishCheckNode, type FinishRound, GraphNodeKind } from "../../run-graph.ts";
-import { currentRound, finishCheckFace, finishPanelTone, leftOf, roundNoteOf } from "../../run-tree.ts";
+import { currentRound, endedOnNo, finishCheckFace, finishPanelTone, leftOf, roundNoteOf } from "../../run-tree.ts";
 import { Tone } from "../../run-steps.ts";
 import { FINISH_CHECK_WORDS } from "../../words.ts";
 import { Panel, Para } from "./chrome.tsx";
@@ -27,17 +27,17 @@ function Now({
   onKeepBuilding: InspectorProps["onKeepBuilding"];
 }): JSX.Element {
   if (!round) return <Para>{FINISH_CHECK_WORDS.about}</Para>;
-  if (round.step === FinishCheckStep.Checking) return <Para>{FINISH_CHECK_WORDS.checking}.</Para>;
-  if (round.step === FinishCheckStep.Unanswered) return <Para>{FINISH_CHECK_WORDS.unanswered}.</Para>;
+  if (round.step === FinishCheckStep.Checking) return <Para>{FINISH_CHECK_WORDS.checkingCard}</Para>;
+  if (round.step === FinishCheckStep.Unanswered) return <Para>{FINISH_CHECK_WORDS.unansweredCard}</Para>;
   if (round.step === FinishCheckStep.Accepted)
     return round.done.length ? (
       <StillToFix done={round.done} notDone={[]} title={null} />
     ) : (
-      <Para>{FINISH_CHECK_WORDS.doneWord}.</Para>
+      <Para>{FINISH_CHECK_WORDS.doneCard}</Para>
     );
   const left = leftOf(round);
-  const note = roundNoteOf(round, node);
-  const keep = round.stopped && onKeepBuilding ? () => onKeepBuilding(left) : null;
+  const keep = endedOnNo(round, node) && onKeepBuilding ? () => onKeepBuilding(left) : null;
+  const note = keep ? null : roundNoteOf(round, node);
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <StillToFix done={round.done} notDone={left} title={null} onKeepBuilding={keep} />

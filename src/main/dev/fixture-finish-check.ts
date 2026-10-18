@@ -7,12 +7,18 @@
  * checking now (Checking), so Builds opens on it.
  * The other three are in the Builds history.
  *
+ * Three more games each end a Loop with something still to fix another way, as the harness closes
+ * them (`run_finished.stillToFix`): a timed one whose hours ran out, one the person stopped (a pause,
+ * which keeps Resume and no list), and a long one whose start lies beyond the chat's first page.
+ *
  * It is written once the app has started: the start closes every run an earlier app left open, so
  * a Loop still going written before it would read as stopped.
  */
-import { CustomEvent, customRecord } from "../../shared/custom-events.ts";
+import { CustomEvent, customEventData, customRecord } from "../../shared/custom-events.ts";
 import { type EventData, EventKind } from "../../shared/event-log.ts";
-import { FinishCheckStep, MAX_FINISH_REJECTIONS } from "../../shared/finish-check.ts";
+import { CHAT_PAGE_SIZE } from "../../shared/chat-history.ts";
+import { HOUR_MS } from "../../shared/duration.ts";
+import { FinishCheckStep, MAX_FINISH_REJECTIONS, StopWhy } from "../../shared/finish-check.ts";
 import { EngineId } from "../../shared/providers.ts";
 import { ExecutionStatus } from "../../shared/run-state.ts";
 import { poolWorkerId, WorkerEnd, WorkerIsolation, WorkerVerdict } from "../../shared/workers.ts";
@@ -34,6 +40,20 @@ const STILL_MET = "The car holds the road and the track reads fast, as before.";
 const WHY_YES =
   "A full lap runs from start to the finish line, the timer counts on screen, and the car holds the road.";
 
+/** The timed Loops' hours. */
+const LOOP_HOURS = 5;
+const LONG_LOOP_HOURS = 2;
+/** Records between the long Loop's start and its close: more than a chat page holds. */
+const LONG_LOOP_NOISE = CHAT_PAGE_SIZE + 40;
+const DONE_ITEMS = ["The car is ported", "The track is built", "A full lap runs"];
+
+/** The games whose Loops end another way, each with its own chat. */
+export const LOOP_END_GAMES = {
+  TimeUp: { name: "fixture-time-up", title: "Time Up Racer" },
+  Stopped: { name: "fixture-stopped", title: "Stopped Racer" },
+  Long: { name: "fixture-long-loop", title: "Long Racer" },
+} as const;
+
 /** Records of one run. */
 type Scoped = ReturnType<typeof fixtureRun>;
 
@@ -43,12 +63,17 @@ const said = (role: "user" | "assistant", content: string): EventData => ({
 });
 
 /** A Loop's start with two workers whose work is in the game, as every Loop of the fixture begins. */
-function loopStart(run: Scoped): EventData[] {
+function loopStart(run: Scoped, hours: number | null = LOOP_HOURS): EventData[] {
   const car = { workerId: poolWorkerId("w1"), title: "Port the car", isolation: WorkerIsolation.Copy };
   const track = { workerId: poolWorkerId("w2"), title: "Build the track", isolation: WorkerIsolation.Copy };
   return [
     said("user", GOAL),
-    run(CustomEvent.RunStarted, { goal: GOAL, engine: EngineId.ClaudeCode, model: FIXTURE_MODEL }),
+    run(CustomEvent.RunStarted, {
+      goal: GOAL,
+      engine: EngineId.ClaudeCode,
+      model: FIXTURE_MODEL,
+      ...(hours === null ? {} : { budgets: { wallClockMs: hours * HOUR_MS } }),
+    }),
     run(CustomEvent.AutopilotStarted, { director: true, maxParallel: 2, facets: [], workerRecords: true }),
     ...[car, track].flatMap((worker) => [
       run(CustomEvent.WorkerStarted, { ...worker, task: `${worker.title}, then report.` }),
@@ -104,7 +129,7 @@ function doneLoop(project: string): EventData[] {
 function stoppedLoop(project: string): EventData[] {
   const run = fixtureRun({ runId: STOPPED_RUN, project });
   const met = [STILL_MET];
-  const done = ["The car is ported", "The track is built", "A full lap runs"];
+  const done = DONE_ITEMS;
   return [
     ...loopStart(run),
     ...round(run, 1, no(met, 1, { notDone: [NO_FINISH_LINE, NO_TIMER], timeLeft: true })),
@@ -116,9 +141,73 @@ function stoppedLoop(project: string): EventData[] {
       landed: false,
       executionStatus: ExecutionStatus.Completed,
       stoppedBecause: TIMER_RESETS,
-      summary: `Not done: ${TIMER_RESETS}`,
+      summary: `Still to fix: ${TIMER_RESETS}`,
+      stillToFix: { done, notDone: [TIMER_RESETS], why: StopWhy.Stuck, hours: LOOP_HOURS },
     }),
   ];
+}
+
+/** A timed Loop's last no with time left, naming what is done and the timer still to fix. */
+const lastNo = (run: Scoped) =>
+  round(run, 1, no([STILL_MET], 1, { notDone: [TIMER_RESETS], done: DONE_ITEMS, timeLeft: true }));
+
+/** A timed Loop whose hours ran out after a no: its close lists what is left and says its hours ran out. */
+function timeUpLoop(project: string, hours = LOOP_HOURS, between: EventData[] = []): EventData[] {
+  const run = fixtureRun({ runId: `fixture-finish-time-up-${project}`, project });
+  return [
+    ...loopStart(run, hours),
+    ...between,
+    ...lastNo(run),
+    run(CustomEvent.RunFinished, {
+      victory: false,
+      landed: false,
+      executionStatus: ExecutionStatus.Completed,
+      stoppedBecause: "the time ran out",
+      summary: `Still to fix: ${TIMER_RESETS}`,
+      notDone: [TIMER_RESETS],
+      stillToFix: { done: DONE_ITEMS, notDone: [TIMER_RESETS], why: StopWhy.Time, hours },
+    }),
+  ];
+}
+
+/** A Loop the person stopped after a no: a pause, which keeps its reason and Resume, with no list. */
+function stoppedByPersonLoop(project: string): EventData[] {
+  const run = fixtureRun({ runId: `fixture-finish-stopped-${project}`, project });
+  return [
+    ...loopStart(run),
+    ...lastNo(run),
+    run(CustomEvent.RunFinished, {
+      victory: false,
+      landed: false,
+      executionStatus: ExecutionStatus.Paused,
+      stoppedBecause: "stopped by the user",
+    }),
+    run(CustomEvent.AutopilotPaused, {}),
+  ];
+}
+
+/** Each other game's Loop, as the harness would have closed it. */
+export function loopEnds(): Array<{ game: { name: string; title: string }; events: EventData[] }> {
+  const noise = Array.from({ length: LONG_LOOP_NOISE }, () =>
+    customEventData(CustomEvent.FixtureNoise, { note: "Pushes the Loop's start past the chat's first page" }),
+  );
+  const { Long, Stopped, TimeUp } = LOOP_END_GAMES;
+  return [
+    { game: TimeUp, events: timeUpLoop(TimeUp.name) },
+    { game: Stopped, events: stoppedByPersonLoop(Stopped.name) },
+    { game: Long, events: timeUpLoop(Long.name, LONG_LOOP_HOURS, noise) },
+  ];
+}
+
+/** Writes the other games' Loops once each; a profile reused after its first start keeps them. */
+export async function seedLoopEnds(core: StudioCore): Promise<void> {
+  for (const { game, events } of loopEnds()) {
+    if (!(await core.games.exists(game.name))) await core.games.makeEmpty(game.name, { title: game.title });
+    const thread = await core.threadForGame(game.name);
+    const written = await core.store.listEvents(thread);
+    if (!written.some((e) => customRecord(e.data)?.event_type === CustomEvent.RunFinished))
+      await core.append(events, thread);
+  }
 }
 
 /** The Loop sent back once with two reasons; its lead goes on working. */

@@ -1,14 +1,15 @@
 /**
  * The finish check in the chat: while the Loop works its rounds say nothing; once the run ends
- * without the reviewer's yes, its result card lists what the last no found done and still to fix.
+ * without the reviewer's yes (not a pause), its result card lists what the harness wrote on the close:
+ * what the last no found done and still to fix, why the Loop stopped, and its hours.
  */
 import assert from "node:assert/strict";
 import { it } from "node:test";
-import { EntryKind, StopWhy, stopWhyLine, toEntries } from "../../src/renderer/chat-entries.ts";
+import { EntryKind, stopWhyLine, toEntries } from "../../src/renderer/chat-entries.ts";
 import { morningWords } from "../../src/renderer/morning-words.ts";
 import { CustomEvent } from "../../src/shared/custom-events.ts";
 import type { EventData, EventEnvelope } from "../../src/shared/event-log.ts";
-import { FinishCheckStep, MAX_FINISH_REJECTIONS } from "../../src/shared/finish-check.ts";
+import { FinishCheckStep, MAX_FINISH_REJECTIONS, StopWhy } from "../../src/shared/finish-check.ts";
 
 const RUN = "r-loop";
 
@@ -28,6 +29,15 @@ const check = (id: number, round: number, step: string, extra: Record<string, un
 const NO_FINISH_LINE = "The track has no finish line, so a lap never ends.";
 const NO_TIMER = "The lap timer isn't on screen in any shot.";
 
+/** What the harness writes on a Loop's close without a yes (`run_finished.stillToFix`). */
+const left = (extra: Record<string, unknown> = {}) => ({
+  done: [],
+  notDone: [NO_TIMER],
+  why: StopWhy.Stuck,
+  hours: null,
+  ...extra,
+});
+
 /** The result card's still-to-fix lists, when the log ends with one. */
 const stillToFixOf = (events: EventEnvelope[]) =>
   toEntries(events).flatMap((entry) => (entry.kind === EntryKind.Morning ? [entry.stillToFix ?? null] : []));
@@ -46,87 +56,65 @@ it("a round of the finish check says nothing in the chat while the Loop works", 
   assert.deepEqual(toEntries(log), [], "no line, no card, no activity row");
 });
 
-it("a run that ends without a yes lists its last no's done and still to fix on its result card", () => {
+it("a Loop's close without a yes lists what the harness wrote on it: done, still to fix, why and its hours", () => {
   const met = "The laps run, as accepted before.";
   const log = [
-    check(1, 1, FinishCheckStep.Rejected, {
-      reasons: [met],
-      done: ["Laps run"],
-      notDone: [NO_FINISH_LINE],
-      rejections: 1,
-    }),
-    check(2, 2, FinishCheckStep.Rejected, {
-      reasons: [met],
-      done: ["Laps run", "Finish line"],
-      notDone: [NO_TIMER],
-      rejections: 2,
-      stopped: true,
-    }),
-    finished(3, { victory: false }),
+    check(1, 1, FinishCheckStep.Rejected, { reasons: [met], done: ["Laps run"], notDone: [NO_TIMER], rejections: 3 }),
+    finished(2, { victory: false, executionStatus: "completed", stillToFix: left({ done: ["Laps run"] }) }),
   ];
-  assert.deepEqual(stillToFixOf(log), [
-    { done: ["Laps run", "Finish line"], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null },
-  ]);
-  const said = JSON.stringify(toEntries(log));
-  assert.ok(!said.includes(met), "what the reviewer checked is never listed");
-
-  const yes = [
-    check(1, 1, FinishCheckStep.Rejected, { reasons: [met], notDone: [NO_TIMER], rejections: 1 }),
-    check(2, 2, FinishCheckStep.Accepted, { reasons: ["Laps run and the timer shows."] }),
-    finished(3, { victory: true }),
-  ];
-  assert.deepEqual(stillToFixOf(yes), [null], "a yes leaves nothing to fix");
-  const older = [
-    check(1, 1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 3, stopped: true }),
-    finished(2),
-  ];
-  assert.deepEqual(stillToFixOf(older), [null], "an older record that names nothing not done keeps the card as it was");
-  assert.deepEqual(stillToFixOf([finished(1)]), [null], "a run no reviewer checked has no list");
+  assert.deepEqual(stillToFixOf(log), [{ done: ["Laps run"], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null }]);
+  assert.ok(!JSON.stringify(toEntries(log)).includes(met), "what the reviewer checked is never listed");
+  assert.deepEqual(stillToFixOf([finished(1, { victory: true, stillToFix: left() })]), [null], "a yes leaves nothing");
+  assert.deepEqual(stillToFixOf([finished(1)]), [null], "a close that names nothing left has no list");
 });
 
-it("a reopened run's next close starts clean: an earlier ask's no is not listed again", () => {
-  const log = [
-    check(1, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 3, stopped: true }),
-    finished(2),
-    finished(3),
-  ];
-  assert.deepEqual(stillToFixOf(log), [{ done: [], notDone: [NO_TIMER], why: StopWhy.Stuck, hours: null }, null]);
+it("a paused close keeps its own reason and Resume: no list, whatever it carries, even after a Stop", () => {
+  const stop = { stoppedBecause: "stopped by the user", stillToFix: left({ why: StopWhy.Person }) };
+  for (const pause of [{ executionStatus: "paused" }, { paused: true }]) {
+    const no = check(1, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 1 });
+    const entries = toEntries([no, finished(2, { ...stop, ...pause })]);
+    const card = entries.find((entry) => entry.kind === EntryKind.Morning);
+    assert.ok(card && card.kind === EntryKind.Morning, JSON.stringify(pause));
+    assert.equal(card.stillToFix, undefined, "no Almost there on a pause");
+    assert.equal(card.stoppedBecause, "stopped by the user", "the pause's own reason stays");
+  }
 });
 
-it("the card says why the Loop stopped: its hours ran out, the person stopped it, or it ended another way", () => {
-  const HOUR = 3_600_000;
-  const started = custom(1, CustomEvent.RunStarted, {
-    runId: RUN,
-    project: "valley",
-    budgets: { wallClockMs: 5 * HOUR },
-  });
-  const no = (id: number) =>
-    check(id, 1, FinishCheckStep.Rejected, { reasons: [], notDone: [NO_TIMER], rejections: 1, timeLeft: true });
-  const whyOf = (events: EventEnvelope[]) => stillToFixOf(events).map((card) => card && [card.why, card.hours]);
-  assert.deepEqual(whyOf([started, no(2), finished(5 * HOUR)]), [[StopWhy.Time, 5]], "it ended at its five hours");
+it("the card is the close's own: a page that lost the run's start and its checks still shows it whole", () => {
+  const close = finished(9, { executionStatus: "completed", stillToFix: left({ why: StopWhy.Time, hours: 5 }) });
+  assert.deepEqual(stillToFixOf([close]), [{ done: [], notDone: [NO_TIMER], why: StopWhy.Time, hours: 5 }]);
+});
+
+it("only the chat's newest result card is the latest, the one that offers Keep building", () => {
+  const latest = (events: EventEnvelope[]) =>
+    toEntries(events).flatMap((entry) => (entry.kind === EntryKind.Morning ? [entry.latest === true] : []));
+  const other = custom(3, CustomEvent.RunFinished, { runId: "r-next", project: "valley", stillToFix: left() });
+  assert.deepEqual(latest([finished(1, { stillToFix: left() }), other]), [false, true]);
+  assert.deepEqual(latest([finished(1, { stillToFix: left() })]), [true]);
+});
+
+it("a close's list it cannot trust says nothing", () => {
+  const hostile: Array<[string, unknown]> = [
+    ["no list", { why: StopWhy.Stuck }],
+    ["an empty list", { notDone: [], why: StopWhy.Stuck }],
+    ["items that are not words", { notDone: [3], why: StopWhy.Stuck }],
+    ["an unknown why", { notDone: [NO_TIMER], why: "bored" }],
+    ["not a record", "fix it"],
+  ];
+  for (const [name, stillToFix] of hostile) assert.deepEqual(stillToFixOf([finished(1, { stillToFix })]), [null], name);
+  const odd = stillToFixOf([finished(1, { stillToFix: { notDone: [NO_TIMER], why: StopWhy.Ended, hours: -2 } })]);
   assert.deepEqual(
-    whyOf([started, no(2), finished(HOUR)]),
-    [[StopWhy.Ended, 5]],
-    "an hour in, it ended some other way",
+    odd,
+    [{ done: [], notDone: [NO_TIMER], why: StopWhy.Ended, hours: null }],
+    "hours that don't read are none",
   );
-  assert.deepEqual(
-    whyOf([started, no(2), finished(HOUR, { executionStatus: "cancelled" })]),
-    [[StopWhy.Person, 5]],
-    "the person's Stop",
-  );
+});
+
+it("the card says why the Loop stopped in the person's words", () => {
   assert.equal(stopWhyLine(StopWhy.Time, 5), "Your 5 hours ran out before this was fixed.");
   assert.equal(stopWhyLine(StopWhy.Time, 0.5), "Your 30 minutes ran out before this was fixed.");
   assert.match(stopWhyLine(StopWhy.Stuck, null), /kept getting this wrong/);
-});
-
-it("a record it cannot place says nothing", () => {
-  const hostile: Array<[string, Record<string, unknown>]> = [
-    ["no run", { round: 1, step: FinishCheckStep.Rejected, notDone: [NO_TIMER] }],
-    ["an unknown step", { runId: RUN, round: 1, step: "maybe", notDone: [NO_TIMER] }],
-    ["reasons that are not strings", { runId: RUN, round: 1, step: FinishCheckStep.Rejected, reasons: [3] }],
-  ];
-  for (const [name, payload] of hostile)
-    assert.deepEqual(stillToFixOf([custom(1, CustomEvent.FinishCheck, payload), finished(2)]), [null], name);
+  assert.match(stopWhyLine(StopWhy.Person, null), /^You stopped it/);
 });
 
 it("a run paused while the reviewer is checking reads in the graph as not yet: no reviewer is at work", async () => {

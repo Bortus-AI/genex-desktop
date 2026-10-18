@@ -15416,4 +15416,46 @@ describe("the reviewer's no's in a Loop that still has time", () => {
     assert.equal(stopped?.stopped, true);
     assert.deepEqual([stopped?.reasons, stopped?.notDone], [[MET], [NOT_DONE]]);
   });
+
+  it("FC3. the chat rebuilt a stopped Loop's Almost there card from records a reopened page could lose: the close carries the list, why it stopped and its hours", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const { reviewerAnswer } = await import("../helpers/reviewer.ts");
+    const { MAX_FINISH_REJECTIONS, StopWhy } = await import("../../src/harness-seed/loop/finish-contract.ts");
+    const dir = await gameWithProof("nos-card-");
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ tool }) => {
+          for (let n = 0; n < MAX_FINISH_REJECTIONS; n++) await tool("finish", CLAIM);
+          return undefined;
+        },
+      ],
+    });
+    for (let n = 0; n < MAX_FINISH_REJECTIONS; n++)
+      host.reviews.push(reviewerAnswer("no", [MET], "claude-code", [NOT_DONE], ["Laps run"]));
+    const report = await host.start();
+    assert.deepEqual(report.stillToFix, { done: ["Laps run"], notDone: [NOT_DONE], why: StopWhy.Stuck, hours: null });
+  });
+
+  it("FC4. a Loop the person stopped after a no paused, and its card offered Keep building beside Resume: a pause carries no list", async () => {
+    const { loopHost } = await import("../helpers/loop-host.ts");
+    const { reviewerAnswer } = await import("../helpers/reviewer.ts");
+    const dir = await gameWithProof("stop-after-no-");
+    const host = loopHost({
+      dir,
+      facts: [{ id: "web-game", path: "." }],
+      turns: [
+        async ({ host, tool }) => {
+          await tool("finish", CLAIM);
+          host.rec.cancel();
+          return undefined;
+        },
+      ],
+    });
+    host.reviews.push(reviewerAnswer("no", [MET], "claude-code", [NOT_DONE]));
+    const report = await host.start();
+    assert.equal(report.executionStatus, "paused", "a Stop pauses the Loop for a Resume");
+    assert.equal(report.stillToFix, undefined);
+  });
 });
