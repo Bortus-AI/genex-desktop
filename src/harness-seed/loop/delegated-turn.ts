@@ -382,11 +382,22 @@ interface Seat {
   ran?: { engine: string; model?: string };
 }
 
-/** The seat's call: one leg on its settings now, remembered as the engine and model its session is on. */
+/** The engine and model these options run a leg on. */
+const ranOn = (options: DelegatedOptions): { engine: string; model?: string } => ({
+  engine: options.engine,
+  ...(options.model ? { model: options.model } : {}),
+});
+
+/**
+ * The seat's call: one leg on its settings now, remembered as the engine and model its session is
+ * on once it answered (a leg cut off before it started made no session).
+ */
 function seatCall(ctx: HarnessCtx, seat: Seat): SessionCall {
-  return (prompt, resume, images) => {
-    seat.ran = { engine: seat.options.engine, ...(seat.options.model ? { model: seat.options.model } : {}) };
-    return delegate(ctx, seat.options, seat.handoff, prompt, resume, images);
+  return async (prompt, resume, images) => {
+    const on = ranOn(seat.options);
+    const result = await delegate(ctx, seat.options, seat.handoff, prompt, resume, images);
+    seat.ran = on;
+    return result;
   };
 }
 
@@ -413,7 +424,7 @@ async function seatOf(
   const described = switches ? await ctx.call(HostMethod.EngineDescribe, {}).catch(() => []) : [];
   const taken = switches ? asked : null;
   const engines = Array.isArray(described) ? described : [];
-  return { options, handoff, briefFor, asked: taken, described: engines, firstAsked: taken };
+  return { options, handoff, briefFor, asked: taken, described: engines, firstAsked: taken, ran: ranOn(options) };
 }
 
 /** The settings a seat runs on, as a switch weighs them. */
@@ -657,11 +668,13 @@ async function goOnInSession(ctx: HarnessCtx, seat: Seat, turn: FinishedTurn, pr
   const callId = await recordDelegateRequest(ctx, seat.options, seat.handoff);
   const before = await contentStamps(ctx, seat.handoff.project);
   const switches = turnSwitches(ctx, seat);
+  // A switch to another engine followed as the last leg ended: its session is not this engine's.
+  const resumes = seat.ran?.engine === undefined || seat.ran.engine === seat.options.engine;
   let result: DelegateResult;
   try {
     result = await steeredCall(ctx, seat.options.steer, {
-      prompt,
-      resume: turn.result.sessionId ?? null,
+      prompt: resumes ? prompt : `${seat.briefFor(false)}\n\n${prompt}`,
+      resume: resumes ? (turn.result.sessionId ?? null) : null,
       call: seatCall(ctx, seat),
       fresh: () => `${seat.briefFor(false)}\n\n${prompt}`,
       ...(switches ? { switches } : {}),
