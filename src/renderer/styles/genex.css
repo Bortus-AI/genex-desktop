@@ -58,9 +58,6 @@
   background: var(--green);
   box-shadow: 0 0 0 3px var(--green-tint);
 }
-.genex-note[data-quiet] {
-  color: var(--ink-3);
-}
 .genex-note {
   margin-block-start: 12px;
   color: var(--orange);
@@ -225,6 +222,9 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: genex-connect-shine 3.2s ease-in-out infinite;
+}
+.genex-connect[data-offscreen] .genex-connect-shine {
+  animation-play-state: paused;
 }
 @keyframes genex-connect-shine {
   0% {

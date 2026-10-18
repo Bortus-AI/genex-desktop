@@ -69,6 +69,7 @@ export function useGenexStatus(plugin: PluginInfo, project: string | null | unde
       latest.current++;
       setStatus(null);
       setReadError("");
+      setActionError("");
       return;
     }
     void refresh();

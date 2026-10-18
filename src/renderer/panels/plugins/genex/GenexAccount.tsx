@@ -102,7 +102,7 @@ function creditsValue(credits: CreditsView): string | null {
 
 const outOfCredits = (credits: CreditsView): boolean => credits.kind === CreditsKind.Count && credits.count <= 0;
 
-/** The balance, its unit and Get credits, which opens genex.games' plans. */
+/** The balance, its unit and Get credits, which opens genex.games' plans (an unlimited account needs none). */
 function Balance({ credits }: { credits: CreditsView }): JSX.Element | null {
   const web = usePlayWeb();
   const value = creditsValue(credits);
@@ -112,11 +112,13 @@ function Balance({ credits }: { credits: CreditsView }): JSX.Element | null {
       <CreditsShard size={18} />
       <span className="genex-connect-balance">{value}</span>
       {credits.kind === CreditsKind.Count && (
-        <span className="genex-connect-text">{GENEX_WORDS.creditsTab.unit(credits.count)}</span>
+        <>
+          <span className="genex-connect-text">{GENEX_WORDS.creditsTab.unit(credits.count)}</span>
+          <Button variant="play-tint" onClick={() => void window.studio.openUrl(creditsPlansUrl(web))}>
+            {GENEX_WORDS.creditsTab.getCredits}
+          </Button>
+        </>
       )}
-      <Button variant="play-tint" onClick={() => void window.studio.openUrl(creditsPlansUrl(web))}>
-        {GENEX_WORDS.creditsTab.getCredits}
-      </Button>
     </div>
   );
 }

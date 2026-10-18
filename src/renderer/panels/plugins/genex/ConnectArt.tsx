@@ -249,6 +249,8 @@ function startLoop(
     {
       visible: (value) => {
         visible = value;
+        // The label's shine rests with the lines while the band is scrolled away.
+        band.toggleAttribute("data-offscreen", !value);
       },
       schedule,
       recolor: () => {

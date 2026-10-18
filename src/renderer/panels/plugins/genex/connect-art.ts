@@ -19,7 +19,8 @@ export interface ArtPoint {
 /**
  * The tools whose logos float in the band, each at its place in the logos' field as fractions of
  * its width and height: a loose cloud whose lines fan into the action, passing as few other logos as
- * they can (the band keeps every line clear of every logo anyway). GPT Image's logo is the chat app's, which reads as out of place here; the list below keeps it.
+ * they can (the band keeps every line clear of every logo anyway). GPT Image's logo is the chat
+ * app's, which reads as out of place here; the page's tools list further down keeps it.
  */
 export const BAND_SPOTS: ReadonlyMap<GenexTool, ArtPoint> = new Map([
   [GenexTool.Tripo, { x: 0.05, y: 0.32 }],
