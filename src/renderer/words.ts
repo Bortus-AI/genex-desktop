@@ -74,6 +74,8 @@ import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
 import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
+import { AssetScope } from "../shared/asset-library.ts";
+import { AssetTag, KindChoice } from "./play/asset-tiles.ts";
 
 export type ToolIcon = "think" | "write" | "run" | "read" | "see" | "game";
 
@@ -4468,6 +4470,42 @@ export const AVATAR_WORDS = {
     [AvatarGear.Sigil]: "Sigil",
     [AvatarGear.Scar]: "Scar",
   } satisfies Record<AvatarGear, string | null>,
+} as const;
+
+/** Play's Assets shelf as square tiles (`play/PlayAssets.tsx`). */
+export const PLAY_ASSET_WORDS = {
+  kindsLabel: "Kinds of asset",
+  kinds: {
+    [KindChoice.All]: "All",
+    [KindChoice.Model]: "3D",
+    [KindChoice.Image]: "Images",
+    [KindChoice.Sound]: "Sounds",
+    [KindChoice.Video]: "Videos",
+  } satisfies Record<KindChoice, string>,
+  /** What a kind's grid holds, as its messages name it. */
+  nouns: {
+    [KindChoice.All]: "assets",
+    [KindChoice.Model]: "3D assets",
+    [KindChoice.Image]: "images",
+    [KindChoice.Sound]: "sounds",
+    [KindChoice.Video]: "videos",
+  } satisfies Record<KindChoice, string>,
+  scopesLabel: "Whose assets",
+  scopes: { [AssetScope.Everyone]: "Everyone", [AssetScope.Mine]: "Mine" } satisfies Record<AssetScope, string>,
+  tags: { [AssetTag.Saved]: "Saved", [AssetTag.Shared]: "Shared" } satisfies Record<AssetTag, string>,
+  open: (title: string) => `Open ${title}`,
+  play: (title: string) => `Play ${title}`,
+  pause: (title: string) => `Pause ${title}`,
+  playFailed: "Couldn’t play this sound.",
+  use: "Use",
+  addLabel: (title: string) => `Use ${title} in one of your games`,
+  adding: "Adding…",
+  addTo: "Add to",
+  added: (game: string) => `Added to ${game}`,
+  addFailed: (game: string) => `Couldn’t add it to ${game}. Try again in a moment.`,
+  signedOut: "Sign in to Genex to see your assets",
+  signIn: "Sign in",
+  mineEmpty: "Assets you make with Genex show up here.",
 } as const;
 
 /** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */

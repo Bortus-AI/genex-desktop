@@ -236,6 +236,8 @@ const glyphs = {
       <path d="M9 4h6M10 4v5l-3.2 3.4V15h10.4v-2.6L14 9V4M12 15v5.5" />
     </g>
   ),
+  /** A ribbon bookmark: Saved. A tag fills it (`[data-icon="bookmark"] path { fill }`). */
+  bookmark: <path d="M7 4.5h10a1 1 0 0 1 1 1V20l-6-4.2L6 20V5.5a1 1 0 0 1 1-1z" />,
   image: (
     <>
       <rect x="3.5" y="4.5" width="17" height="15" rx="3.5" />
