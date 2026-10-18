@@ -105,6 +105,7 @@ function item(over: Partial<GenexCatalogItem> & { slug: string }): GenexCatalogI
     description: "",
     shelf: PlayShelf.Games,
     authorId: "someone",
+    authorName: "Someone",
     thumbnailUrl: null,
     playsCount: 0,
     remixable: true,

@@ -155,7 +155,7 @@ const TOOLS: FixtureGame[] = [
     hue: 30,
   },
 ];
-/** The Assets shelf: single models, no tabs of its own. */
+/** The Assets shelf: single models, a sound and a picture, no tabs of its own. */
 const ASSETS: FixtureGame[] = [
   {
     slug: "stone-fireplace",
@@ -183,6 +183,24 @@ const ASSETS: FixtureGame[] = [
     categories: ["assets"],
     assetKind: "3d",
     hue: 15,
+  },
+  {
+    slug: "crowd-cheer",
+    title: "Crowd cheer after a goal",
+    author: "Rabneba",
+    plays: 21,
+    categories: ["assets"],
+    assetKind: "sound",
+    hue: 210,
+  },
+  {
+    slug: "mossy-stone-wall",
+    title: "Mossy stone wall",
+    author: "Gab",
+    plays: 18,
+    categories: ["assets"],
+    assetKind: "image",
+    hue: 120,
   },
 ];
 const CATALOG = [...GAMES, ...MORE, ...TOOLS, ...ASSETS];

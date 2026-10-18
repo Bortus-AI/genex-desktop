@@ -384,6 +384,22 @@ describe("Play gallery calls", () => {
     );
   });
 
+  it("lists the whole catalog with each item's shelf, asset kind and maker's name", async () => {
+    const items = [
+      { ...item({ id: "a1", slug: "crowd-cheer", title: "Crowd Cheer", categories: ["assets"] }), assetKind: "sound" },
+      item({ id: "g1", slug: "ocean-racer", title: "Ocean Racer" }),
+    ].map((entry) => ({ ...entry, author: "Simeon M" }));
+    const { gallery } = rig(() => ok({ items }));
+    const listed = await gallery.mentionItems();
+    assert.deepEqual(
+      listed.map(({ slug, shelf, assetKind, authorName }) => ({ slug, shelf, assetKind, authorName })),
+      [
+        { slug: "crowd-cheer", shelf: PlayShelf.Assets, assetKind: LibraryKind.Sound, authorName: "Simeon M" },
+        { slug: "ocean-racer", shelf: PlayShelf.Games, assetKind: null, authorName: "Simeon M" },
+      ],
+    );
+  });
+
   it("searches the shelf it is asked about, games when it names none it knows", async () => {
     const items = [
       item({ id: "g1", slug: "ocean-racer", title: "Ocean Racer" }),
