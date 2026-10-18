@@ -25,7 +25,9 @@ import {
   shareLineShown,
   shareThumbs,
   tallyShares,
+  closedBeforeShare,
 } from "../../src/renderer/panels/plugins/genex/publish-share.ts";
+import { shareInBatches } from "../../src/shared/asset-library.ts";
 
 const LIVE = { projectId: "p1", slug: "chitin-hut", live: true };
 
@@ -151,6 +153,34 @@ describe("Publish's share line: how the shares went", () => {
       first,
     );
     assert.deepEqual(again, { shared: 2, checking: 0, missed: ["b.glb"] });
+  });
+
+  it("remembers a share asked for but not run when Publish closed, and nothing else", () => {
+    assert.equal(closedBeforeShare(true, false, 3), true);
+    assert.equal(closedBeforeShare(true, true, 3), false, "it ran");
+    assert.equal(closedBeforeShare(false, false, 3), false, "the switch was off");
+    assert.equal(closedBeforeShare(true, false, 0), false, "nothing to share");
+  });
+
+  it("sends more than one call carries in runs, every file answered", async () => {
+    const many = Array.from({ length: 120 }, (_, i) => ({ file: `assets/${i}.glb`, name: `A${i}` }));
+    const calls: number[] = [];
+    const outcomes = await shareInBatches(async (run) => {
+      calls.push(run.length);
+      return run.map((item) => ({ file: item.file, shared: LIVE }));
+    }, many);
+    assert.deepEqual(calls, [50, 50, 20]);
+    assert.equal(outcomes.length, 120);
+  });
+
+  it("leaves out a miss no retry can fix: no orange line and no Try again for it", () => {
+    const tally = tallyShares([
+      { file: "a.glb", shared: LIVE },
+      { file: "song.mp3", miss: ShareMiss.KindNotShareable },
+      { file: "drop.glb", miss: ShareMiss.NotShareable },
+    ]);
+    assert.deepEqual(shareLine(tally), { line: ShareLine.Shared, count: 1 });
+    assert.deepEqual(retryItems(items, tally), []);
   });
 
   it("counts every file of a batch that got no answer as missed, keeping what went before", () => {

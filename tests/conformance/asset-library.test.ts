@@ -70,6 +70,7 @@ describe("library rows", () => {
       fileUrl: "https://assets.genex.technology/generations/x/audio.mp3",
       saved: true,
       shared: { projectId: "p1", slug: "stadium-crowd", live: false },
+      shareable: true,
       createdAt: "2026-10-17T00:00:00Z",
     });
   });
@@ -315,6 +316,44 @@ describe("a game's files and the library", () => {
     assert.deepEqual(outcome, { file: "assets/drop.png", miss: ShareMiss.NotShareable });
   });
 
+  it("hides Save and Share when genex.games doesn't filter by id yet (an older genex.games)", async () => {
+    const older: GalleryRequest = async (route, init) => {
+      if (!route.startsWith(LibraryRoute.List)) return fixturePlayRequest(route, init);
+      // An older list ignores `ids` and answers the newest rows.
+      return ok({ generations: [{ id: "cmolderrow00000001", kind: "model", prompt: "x", createdAt: "2026-10-01" }] });
+    };
+    const game = await gameRig(root, [asset("assets/drop.png", { source: "imported" })], FixtureAccount.Full, {
+      request: older,
+    });
+    const { states, unread } = await game.sharing.states("g");
+    assert.equal(unread, true);
+    assert.equal(states[0]?.saveable, false);
+  });
+
+  it("keeps each saved file's link as it lands, so a later file's failure doesn't undo it", async () => {
+    let sends = 0;
+    const flaky: GalleryRequest = async (route, init) => {
+      if (route === LibraryRoute.Import && (sends += 1) === 2) return { status: 503, body: null };
+      return fixturePlayRequest(route, init);
+    };
+    const game = await gameRig(
+      root,
+      [asset("assets/a.png", { source: "imported" }), asset("assets/b.png", { source: "imported" })],
+      FixtureAccount.Full,
+      { request: flaky },
+    );
+    await assert.rejects(game.sharing.save("g", ["assets/a.png", "assets/b.png"], true));
+    const after = await game.sharing.states("g");
+    assert.equal(after.states.find((state) => state.file === "assets/a.png")?.saved, true);
+    assert.equal(after.states.find((state) => state.file === "assets/b.png")?.saved, false);
+  });
+
+  it("offers no Share for a library asset genex.games won't share (sent from a file, or music)", () => {
+    assert.equal(toLibraryAsset({ id: GEN, kind: "model", provider: "upload" })?.shareable, false);
+    assert.equal(toLibraryAsset({ id: GEN, kind: "music", provider: "suno" })?.shareable, false);
+    assert.equal(toLibraryAsset({ id: GEN, kind: "model", provider: "tripo" })?.shareable, true);
+  });
+
   it("refuses a file that is not one of the game's assets before reading or sending anything", async () => {
     const game = await gameRig(root, [asset("assets/genex/a/hut.glb", { generationId: FixtureGenerationId.Hut })]);
     for (const file of ["../../etc/passwd", "/etc/passwd", "assets/other.png", "src/main.js"]) {
@@ -430,9 +469,17 @@ describe("a game's Save, Share and Add when things overlap or break", () => {
   it("refuses to send a file whose type genex.games does not take, before reading it", async () => {
     const file = "assets/notes.fbx";
     const game = await gameRig(root, [asset(file, { source: "imported", kind: "model" })]);
-    await assert.rejects(game.sharing.save("g", [file], true), /genex.games doesn't take/);
+    await assert.rejects(game.sharing.save("g", [file], true), /genex.games takes GLB/);
     assert.deepEqual(game.reads, []);
     assert.equal(game.routes.includes(LibraryRoute.Import), false);
+  });
+
+  it("refuses to send a picture over 32 MB before reading it, and offers no Save for it", async () => {
+    const file = "assets/huge.png";
+    const game = await gameRig(root, [asset(file, { source: "imported", bytes: 40 * 1024 * 1024 })]);
+    assert.equal((await game.sharing.states("g")).states[0]?.saveable, false);
+    await assert.rejects(game.sharing.save("g", [file], true), /up to 32 MB/);
+    assert.deepEqual(game.reads, []);
   });
 
   it("neither reads, sends, downloads nor writes for a game the launch's policy refuses", async () => {

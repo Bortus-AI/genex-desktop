@@ -306,6 +306,12 @@
 .publish-share-line[data-publish-share-outcome="missed"] {
   color: var(--orange);
 }
+/* Share now: the compact size of Try again, in Play's tint (a notice, not an error). */
+.publish-share-now {
+  height: 26px;
+  padding-inline: 10px;
+  font-size: 12px;
+}
 /* Try again in the line's own orange, on its tint. */
 .publish-share-retry {
   height: 26px;

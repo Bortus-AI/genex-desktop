@@ -54,6 +54,8 @@ export interface LibraryAsset {
   fileUrl: string | null;
   saved: boolean;
   shared: SharedAsset | null;
+  /** genex.games takes a share of it: Genex made it (not sent from a file, nor made from one) and its kind may go on Play (not music). */
+  shareable: boolean;
   createdAt: string;
 }
 
@@ -74,6 +76,28 @@ export interface LibraryQuery {
 export interface LibraryPage {
   assets: LibraryAsset[];
   nextCursor: string | null;
+}
+
+/** How many files one Save or Share call carries; more go in runs of this many ({@link inBatches}). */
+export const LIBRARY_BATCH_MAX = 50;
+
+/** `items` in runs of at most {@link LIBRARY_BATCH_MAX}, in order: what Save and Share send call by call. */
+export function inBatches<T>(items: readonly T[]): T[][] {
+  const runs: T[][] = [];
+  for (let start = 0; start < items.length; start += LIBRARY_BATCH_MAX) {
+    runs.push(items.slice(start, start + LIBRARY_BATCH_MAX));
+  }
+  return runs;
+}
+
+/** Share `items` run by run; every file gets its outcome. */
+export async function shareInBatches(
+  share: (items: ShareItem[]) => Promise<ShareOutcome[]>,
+  items: readonly ShareItem[],
+): Promise<ShareOutcome[]> {
+  const outcomes: ShareOutcome[] = [];
+  for (const run of inBatches(items)) outcomes.push(...(await share(run)));
+  return outcomes;
 }
 
 /** How many generations one state read asks about; genex.games answers at most as many. */
@@ -158,8 +182,17 @@ export const SENDABLE_TYPES: ReadonlySet<string> = new Set([
   "video/mp4",
 ]);
 
-/** Whether Save can send a game file to the library: genex.games takes its type. */
-export const isSendable = (file: string): boolean => SENDABLE_TYPES.has(ASSET_PREVIEW_MIME[assetExtension(file)] ?? "");
+/** The largest file genex.games takes from the app: a model or a video, else a picture or a sound. */
+const SEND_MAX_BYTES = { large: 64 * 1024 * 1024, small: 32 * 1024 * 1024 } as const;
+const LARGE_TYPES: ReadonlySet<string> = new Set(["model/gltf-binary", "video/mp4"]);
+
+/** The largest `file` genex.games takes when Save sends it. */
+export const sendMaxBytes = (file: string): number =>
+  LARGE_TYPES.has(ASSET_PREVIEW_MIME[assetExtension(file)] ?? "") ? SEND_MAX_BYTES.large : SEND_MAX_BYTES.small;
+
+/** Whether Save can send a game file to the library: genex.games takes its type and its size. */
+export const isSendable = (file: string, bytes = 0): boolean =>
+  SENDABLE_TYPES.has(ASSET_PREVIEW_MIME[assetExtension(file)] ?? "") && bytes <= sendMaxBytes(file);
 
 /** A file's library kind, or null for one the library takes no kind of. */
 export const libraryKindOf = (asset: Pick<ProjectAsset, "kind">): LibraryKind | null => LIBRARY_KIND_OF[asset.kind];

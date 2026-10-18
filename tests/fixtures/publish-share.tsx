@@ -87,6 +87,7 @@ const library: LibraryAsset[] = FILES.filter((entry) => !("mine" in entry)).map(
   fileUrl: null,
   saved: false,
   shared: null,
+  shareable: true,
   createdAt: AT,
 }));
 

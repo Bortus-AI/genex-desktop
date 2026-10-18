@@ -47,6 +47,23 @@ function ShareRow({ share }: { share: PublishShare }): JSX.Element {
   );
 }
 
+/** Publish closed before an asked-for share ran: one line and Share now, never a silent drop. */
+function NotSharedRow({ share }: { share: PublishShare }): JSX.Element {
+  return (
+    <p className="publish-share-line" role="status" data-publish-share-outcome="not-shared">
+      {WORDS.notShared(share.count)}
+      <Button
+        variant="play-tint"
+        className="publish-share-now"
+        aria-label={WORDS.shareNowLabel(share.count)}
+        onClick={share.shareNow}
+      >
+        {WORDS.shareNow}
+      </Button>
+    </p>
+  );
+}
+
 /** The success screen's one line: sharing, done with a bare ✓, or what missed with Try again. */
 function ShareOutcomeLine({ share }: { share: PublishShare }): JSX.Element {
   if (share.run === ShareRun.Sharing)
@@ -81,6 +98,8 @@ export function PublishShareLine({
   share: PublishShare;
   celebrate: boolean;
 }): JSX.Element | null {
-  if (celebrate) return share.run === ShareRun.Idle ? null : <ShareOutcomeLine share={share} />;
+  if (share.run !== ShareRun.Idle) return <ShareOutcomeLine share={share} />;
+  if (celebrate) return null;
+  if (share.missedBefore) return <NotSharedRow share={share} />;
   return share.shown ? <ShareRow share={share} /> : null;
 }

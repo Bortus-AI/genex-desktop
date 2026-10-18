@@ -42,6 +42,8 @@ const STUDIO_UI_ONLY = [
   "studio:permissions.",
   "studio:jobs.",
   "studio:app-look.",
+  // Save, Share and Add write into a game and publish to genex.games under the person's account.
+  "studio:assets.",
 ];
 
 /**

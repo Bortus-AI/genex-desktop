@@ -4,13 +4,14 @@
  * pictures, and the share itself, run once when the game goes live with the switch on.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GameLibraryStates } from "../../../../shared/asset-library.ts";
+import { type GameLibraryStates, shareInBatches } from "../../../../shared/asset-library.ts";
 import { GenexAccountStatus } from "../../../../shared/genex-account.ts";
 import type { ProjectAsset } from "../../../../shared/game-assets.ts";
 import { usePeople } from "../../../state/hooks.ts";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import {
   allMissed,
+  closedBeforeShare,
   NO_SHARES,
   retryItems,
   type ShareTally,
@@ -19,6 +20,9 @@ import {
   shareThumbs,
   tallyShares,
 } from "./publish-share.ts";
+
+/** Games whose Publish closed with the switch on before the share ran (this launch). */
+const closedUnshared = new Set<string>();
 
 /** Where the share stands: not run, under way, or answered. */
 export const ShareRun = { Idle: "idle", Sharing: "sharing", Done: "done" } as const;
@@ -91,12 +95,25 @@ export function usePublishShare(project: string) {
   const [run, setRun] = useState<ShareRun>(ShareRun.Idle);
   const [tally, setTally] = useState<ShareTally>(NO_SHARES);
   const started = useRef(false);
+  // Publish closed with the switch on before the share ran: say so, never drop it silently.
+  const [unsharedBefore] = useState(() => closedUnshared.has(project));
+  const leaving = useRef({ on, count: items.length });
+  leaving.current = { on, count: items.length };
+  useEffect(
+    () => () => {
+      const { on: wanted, count } = leaving.current;
+      if (closedBeforeShare(wanted, started.current, count)) closedUnshared.add(project);
+    },
+    [project],
+  );
 
   const send = useCallback(
     async (batch: typeof items, before: ShareTally): Promise<void> => {
+      closedUnshared.delete(project);
+      started.current = true;
       setRun(ShareRun.Sharing);
       try {
-        setTally(tallyShares(await window.studio.assetShare(project, batch), before));
+        setTally(tallyShares(await shareInBatches((run) => window.studio.assetShare(project, run), batch), before));
       } catch {
         setTally(allMissed(batch, before));
       }
@@ -118,8 +135,10 @@ export function usePublishShare(project: string) {
     setTally(NO_SHARES);
   }, []);
   const retry = () => void send(retryItems(items, tally), tally);
+  const shareNow = () => void send(items, NO_SHARES);
   const shown = shareLineShown(signedIn, states);
-  return { shown, count: items.length, thumbs, on, setOn, run, tally, start, reset, retry };
+  const missedBefore = unsharedBefore && shown && run === ShareRun.Idle;
+  return { shown, count: items.length, thumbs, on, setOn, run, tally, start, reset, retry, shareNow, missedBefore };
 }
 
 export type PublishShare = ReturnType<typeof usePublishShare>;

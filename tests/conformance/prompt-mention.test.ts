@@ -201,6 +201,7 @@ function libraryAsset(over: Partial<LibraryAsset> & { id: string; title: string 
     fileUrl: `https://assets.genex.technology/generations/${over.id}/file.glb`,
     saved: false,
     shared: null,
+    shareable: true,
     createdAt: "2026-10-17T09:00:00.000Z",
     ...over,
   };

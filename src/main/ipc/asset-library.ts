@@ -3,6 +3,7 @@ import {
   type AddSource,
   isGenerationId,
   isLibraryKind,
+  LIBRARY_BATCH_MAX,
   LIBRARY_IDS_MAX,
   type LibraryQuery,
   SHARE_NAME_MAX,
@@ -18,10 +19,9 @@ const MESSAGE = {
   fileRequired: "a game file is required",
   badSource: "not a library asset or a shared asset",
   badName: "a name for Play is required",
+  tooMany: `at most ${LIBRARY_BATCH_MAX} files at once`,
 } as const;
 
-/** How many files one Save or Share takes; the canvas selects no more at once. */
-const BATCH_MAX = 50;
 const FILE_MAX = 1024;
 
 /** What the asset library's channels answer from. */
@@ -54,12 +54,15 @@ function readFile(value: unknown): string {
 
 function readFiles(value: unknown): string[] {
   if (!Array.isArray(value) || value.length === 0) throw new Error(MESSAGE.fileRequired);
-  return value.slice(0, BATCH_MAX).map(readFile);
+  // Never cut a batch short without saying so: the renderer sends runs of at most this many.
+  if (value.length > LIBRARY_BATCH_MAX) throw new Error(MESSAGE.tooMany);
+  return value.map(readFile);
 }
 
 function readShareItems(value: unknown): ShareItem[] {
   if (!Array.isArray(value) || value.length === 0) throw new Error(MESSAGE.fileRequired);
-  return value.slice(0, BATCH_MAX).map((item) => {
+  if (value.length > LIBRARY_BATCH_MAX) throw new Error(MESSAGE.tooMany);
+  return value.map((item) => {
     const raw = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
     const name = typeof raw.name === "string" ? raw.name.trim().slice(0, SHARE_NAME_MAX) : "";
     if (!name) throw new Error(MESSAGE.badName);

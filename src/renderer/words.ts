@@ -4581,6 +4581,9 @@ export const PUBLISH_SHARE_WORDS = {
   missed: (count: number) => `${count} couldn’t be shared`,
   tryAgain: "Try again",
   tryAgainLabel: "Share the assets that couldn’t be shared again",
+  notShared: (count: number) => `${plural(count, "asset")} not on Play yet`,
+  shareNow: "Share now",
+  shareNowLabel: (count: number) => `Share its ${plural(count, "asset")} on Play now`,
 } as const;
 
 /** The @ picker in the prompt bar (`ui/MentionPanel.tsx`). */

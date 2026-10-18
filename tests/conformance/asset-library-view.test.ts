@@ -239,6 +239,7 @@ describe("search", () => {
       fileUrl: null,
       saved: false,
       shared: null,
+      shareable: true,
       createdAt: "2026-10-17T00:00:00Z",
     });
     const inGame = generationsInGame(

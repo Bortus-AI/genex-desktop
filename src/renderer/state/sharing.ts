@@ -11,10 +11,12 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   type GameLibraryStates,
+  inBatches,
   type ShareItem,
   ShareMiss,
   type ShareOutcome,
   type SharedAsset,
+  shareInBatches,
 } from "../../shared/asset-library.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
@@ -221,14 +223,15 @@ export function createSharingStore(
   return Object.assign(store, {
     read: (project: string) => readerOf(project).request(),
     async save(project: string, files: string[], saved: boolean): Promise<void> {
-      apply(await api.assetSave(project, files, saved));
+      for (const run of inBatches(files)) apply(await api.assetSave(project, run, saved));
     },
     async share(project: string, items: ShareItem[]): Promise<void> {
       const files = items.map((item) => item.file);
       store.setState((state) => sharesStarted(state, project, items), true);
       timers.setTimeout(() => store.setState((state) => sharesChecking(state, project, files), true), SEND_STEP_MS);
       const seen = new Promise<void>((done) => timers.setTimeout(done, STEPS_SHOWN_MS));
-      const [outcomes] = await Promise.all([api.assetShare(project, items).catch(() => failed(items)), seen]);
+      const sent = shareInBatches((run) => api.assetShare(project, run).catch(() => failed(run)), items);
+      const [outcomes] = await Promise.all([sent, seen]);
       store.setState((state) => sharesAnswered(state, project, outcomes), true);
       fadeLive(project, filesAt(store.getState(), project, files, ShareStep.Live));
       const checking = outcomes.filter((outcome) => "miss" in outcome && outcome.miss === ShareMiss.Checking);

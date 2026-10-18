@@ -14,6 +14,12 @@ import {
 } from "../../../../shared/asset-library.ts";
 import type { ProjectAsset } from "../../../../shared/game-assets.ts";
 
+/**
+ * Whether Publish closed with the switch on before the share ran: the game may go live without its
+ * assets, so the next time the dialog opens it says so and offers Share now.
+ */
+export const closedBeforeShare = (on: boolean, started: boolean, count: number): boolean => on && !started && count > 0;
+
 /** How many of the shared assets the line shows as pictures. */
 export const SHARE_THUMBS_MAX = 3;
 
@@ -67,13 +73,19 @@ export interface ShareTally {
 /** No shares yet. */
 export const NO_SHARES: ShareTally = { shared: 0, checking: 0, missed: [] };
 
-/** The tally of one batch of shares, added to the one before it (a retry's files were its misses). */
+/** Misses no retry can turn into a share (genex.games takes no shares of the kind, or the file isn't Genex's). */
+const FINAL_MISSES: ReadonlySet<ShareMiss> = new Set([ShareMiss.KindNotShareable, ShareMiss.NotShareable]);
+
+/**
+ * The tally of one batch of shares, added to the one before it (a retry's files were its misses). A
+ * miss no retry can fix is left out: it is neither on Play nor worth a Try again.
+ */
 export function tallyShares(outcomes: readonly ShareOutcome[], before: ShareTally = NO_SHARES): ShareTally {
   const tally: ShareTally = { shared: before.shared, checking: before.checking, missed: [] };
   for (const outcome of outcomes) {
     if ("shared" in outcome) tally.shared += 1;
     else if (outcome.miss === ShareMiss.Checking) tally.checking += 1;
-    else tally.missed.push(outcome.file);
+    else if (!FINAL_MISSES.has(outcome.miss)) tally.missed.push(outcome.file);
   }
   return tally;
 }

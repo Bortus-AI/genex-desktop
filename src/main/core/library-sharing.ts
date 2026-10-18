@@ -17,6 +17,7 @@ import {
   type GameLibraryStates,
   isGenerationId,
   isSendable,
+  sendMaxBytes,
   LIBRARY_IDS_MAX,
   type LibraryAsset,
   LibraryKind,
@@ -51,12 +52,17 @@ const MEDIA_KIND: Readonly<Record<string, LibraryKind>> = {
   video: LibraryKind.Video,
 };
 
+/** A generation id no generation has: the read that proves the account and genex.games' id filter. */
+const PROBE_GENERATION_ID = "probe-no-generation";
+
 const MESSAGE = {
   notInGame: "That file isn't one of this game's assets.",
+  olderLibrary: "genex.games can't save or share from the app yet.",
   notFound: "That asset isn't in your library.",
   noFile: "genex.games has no file for that asset.",
   notWebGame: "Code assets are for web games.",
-  notSendable: "genex.games doesn't take files of that type.",
+  notSendable:
+    "genex.games takes GLB, PNG, JPEG, WebP, MP3, WAV, OGG and MP4 files, pictures and sounds up to 32 MB, models and videos up to 64 MB.",
 } as const;
 
 /** The library has no such generation (deleted, or never this account's): nothing to add. */
@@ -217,10 +223,14 @@ async function knownFiles(deps: LibrarySharingDeps, project: string): Promise<Kn
 /** The library's word on these generations, by id. */
 async function lookup(deps: LibrarySharingDeps, ids: readonly string[]): Promise<Map<string, LibraryAsset>> {
   const found = new Map<string, LibraryAsset>();
-  // With nothing to ask about no read would notice a signed-out account, which can't save either.
-  if (ids.length === 0) await deps.library().requireSignIn();
-  for (let start = 0; start < ids.length; start += LIBRARY_IDS_MAX) {
-    const page = await deps.library().list({ ids: ids.slice(start, start + LIBRARY_IDS_MAX) });
+  // With nothing to ask about, one read of an id no generation has still proves the account is
+  // signed in and that genex.games filters by id (below): an older genex.games can't save files.
+  const asked = ids.length > 0 ? ids : [PROBE_GENERATION_ID];
+  for (let start = 0; start < asked.length; start += LIBRARY_IDS_MAX) {
+    const run = asked.slice(start, start + LIBRARY_IDS_MAX);
+    const page = await deps.library().list({ ids: run });
+    // An older genex.games ignores `ids` and answers the newest rows: it has no Save or Share for the app.
+    if (page.assets.some((asset) => !run.includes(asset.id))) throw new Error(MESSAGE.olderLibrary);
     for (const asset of page.assets) found.set(asset.id, asset);
   }
   return found;
@@ -238,8 +248,8 @@ async function readStates(deps: LibrarySharingDeps, project: string): Promise<Ga
       generationId: entry ? entry.id : null,
       saved: entry?.saved ?? false,
       shared: entry?.shared ?? null,
-      saveable: found !== null && (Boolean(entry) || (!generationId && isSendable(asset.file))),
-      shareable: Boolean(entry) && !sent,
+      saveable: found !== null && (Boolean(entry) || (!generationId && isSendable(asset.file, asset.bytes))),
+      shareable: Boolean(entry?.shareable) && !sent,
     };
   });
   return { project, states, unread: found === null };
@@ -255,22 +265,24 @@ async function saveFiles(
 ): Promise<GameLibraryStates> {
   const dir = await deps.gameDir(project);
   const known = await knownFiles(deps, project);
-  const sent: Record<string, LibraryLink> = {};
   for (const file of files) {
     const match = known.find((entry) => entry.asset.file === file);
     if (!match) throw new Error(MESSAGE.notInGame);
     if (match.generationId) await deps.library().setSaved(match.generationId, saved);
-    else if (saved) sent[file] = { generationId: await sendFile(deps, dir, match.asset), sent: true };
+    else if (saved) {
+      const generationId = await sendFile(deps, dir, match.asset);
+      // Each link as its file lands, so a later file's failure never leaves this one looking unsaved.
+      await turn(linksTurn(dir), () => writeLinks(dir, { [file]: { generationId, sent: true } }));
+    }
   }
-  if (Object.keys(sent).length > 0) await turn(linksTurn(dir), () => writeLinks(dir, sent));
   return readStates(deps, project);
 }
 
 /** A game file sent to the library, saved under what it was made from (else its name); its generation. */
 async function sendFile(deps: LibrarySharingDeps, dir: string, asset: ProjectAsset): Promise<string> {
   // Checked before the file is read: genex.games would refuse it after the upload.
-  if (!isSendable(asset.file)) throw new Error(MESSAGE.notSendable);
-  const read = await deps.readFile(dir, asset.file, LIBRARY_FILE_MAX_BYTES);
+  if (!isSendable(asset.file, asset.bytes)) throw new Error(MESSAGE.notSendable);
+  const read = await deps.readFile(dir, asset.file, sendMaxBytes(asset.file));
   const filename = asset.file.split("/").at(-1) ?? asset.file;
   const title = asset.prompt ?? filename;
   return deps.library().send({ filename, contentType: read.mimeType, bytes: read.data, title });

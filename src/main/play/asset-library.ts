@@ -56,6 +56,11 @@ const FILE_HOSTS: ReadonlySet<string> = new Set([
 /** A generation's own file, by the role genex.games stores it under, most wanted first. */
 const MAIN_FILE_ROLES = ["model-glb", "image-main", "audio-sfx", "video-mp4"] as const;
 
+/** The provider genex.games records for a file sent from a person's own Mac. Wire value. */
+const UPLOAD_PROVIDER = "upload";
+/** Generation kinds genex.games takes no shares of (music: its provider's terms). */
+const UNSHAREABLE_KINDS: ReadonlySet<string> = new Set(["music"]);
+
 /** genex.games' generation kinds by the library kind they file under (anything else is 3D). */
 const KIND_OF_GENERATION: Readonly<Record<string, LibraryKind>> = {
   image: LibraryKind.Image,
@@ -127,6 +132,7 @@ export function toLibraryAsset(item: unknown, local = false): LibraryAsset | nul
     fileUrl: mainFile(item.files),
     saved: typeof item.savedAt === "string",
     shared: sharedOf(item.sharedAsset),
+    shareable: item.provider !== UPLOAD_PROVIDER && !UNSHAREABLE_KINDS.has(String(item.kind)),
     createdAt,
   };
 }
@@ -242,12 +248,7 @@ export function assetLibrary(deps: LibraryDeps) {
     return id;
   };
 
-  /** Throws {@link SignInNeeded} unless the account is signed in; asks genex.games nothing. */
-  const requireSignIn = async (): Promise<void> => {
-    await auth();
-  };
-
-  return { list, setSaved, share, unshare, send, requireSignIn };
+  return { list, setSaved, share, unshare, send };
 }
 
 /** The project id a share's answer names, under either of the names genex.games uses. */
