@@ -52,6 +52,16 @@ export interface LibraryAsset {
   thumbnailUrl: string | null;
   /** The file itself (a GLB, picture, sound or video), or null when genex.games lists none. */
   fileUrl: string | null;
+  /**
+   * What that file is, by the role genex.games keeps it under or its extension: a 3D asset whose
+   * model is off the asset hosts may keep its preview picture. Null when neither says, or no file.
+   */
+  fileKind: LibraryKind | null;
+  /**
+   * The format that file was found to be, as an extension (`glb`, `fbx`): its content type's, its
+   * `ext`, its address's or its role's. Null when nothing says.
+   */
+  fileFormat: string | null;
   saved: boolean;
   shared: SharedAsset | null;
   /** genex.games takes a share of it: Genex made it (not sent from a file, nor made from one) and its kind may go on Play (not music). */
@@ -80,6 +90,20 @@ export function libraryFileUrl(value: unknown): string | null {
     return null;
   }
 }
+
+/** Why main read no file for a tile's picture. Wire values; the renderer decides what each means. */
+export const LibraryFileMiss = {
+  /** Over the picture's cap: the same file is refused again. */
+  TooLarge: "too-large",
+  /** Not on genex.games' asset hosts, a redirect, or a 4xx other than 408/429: asked again, refused again. */
+  Refused: "refused",
+  /** Anything that may pass: a 5xx, a 408 or 429, a timeout, the network. */
+  Unavailable: "unavailable",
+} as const;
+export type LibraryFileMiss = (typeof LibraryFileMiss)[keyof typeof LibraryFileMiss];
+
+/** A tile's picture file as main answers it: its bytes, or why there are none. */
+export type LibraryFileAnswer = { bytes: Uint8Array<ArrayBuffer> } | { miss: LibraryFileMiss };
 
 /** What to read from the library. */
 export interface LibraryQuery {
