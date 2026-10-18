@@ -22,11 +22,11 @@ Genex's moments never ask.
 
 ## Loops in place
 
-Except for web games at the folder's root (Blender files allowed), the chat leads the
-Loop in place on Claude Code, Codex or OpenCode. It keeps save points, starts workers, pauses if
-blocked and claims finish; a reviewer checks (no's stop it; timed Loops only near the end). Plugins add steps, reviewer
-pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web game; Unreal and Godot
-projects outside the game get no Loop or Rewind.
+Except for web games at the folder's root (Blender files allowed), the chat leads the Loop in
+place (Claude Code, Codex or OpenCode). It keeps save points, starts workers, pauses if blocked,
+claims finish; a reviewer checks (no's stop it, timed Loops only late). Plugins add steps, reviewer
+pictures and editor locks: while you use an editor, agents wait. A linked engine game is no web
+game; Unreal and Godot projects outside it get no Loop or Rewind.
 
 ## Unreal
 
