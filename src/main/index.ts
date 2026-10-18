@@ -147,7 +147,8 @@ import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
-import { wirePlayViewer } from "./play/viewer-view.ts";
+import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
+import { type PlayComments, playComments } from "./play/comments.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
@@ -1058,7 +1059,19 @@ function popShareMenu(url: string, at: PlayPoint | undefined): void {
   new ShareMenu({ urls: [url] }).popup({ window: win, ...at });
 }
 
-/** Play's full-screen viewer in `win`: a published game, the studio's small menu over its corner. */
+/** A Play game's comments on genex.games, as the Genex account (a fixture launch's own comments). */
+function playCommentsFor(studio: StudioCore): PlayComments {
+  const account = genexAccountFor(studio);
+  return playComments({
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    me: async () => (await playAccountFor(studio).people.me())?.id ?? null,
+  });
+}
+
+/** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
     win,
@@ -1071,6 +1084,9 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     offline: fixtureNativePolicy ? { gamePage: fixtureGamePage } : null,
     micPreload: path.join(distRoot, "preload", "play-mic.cjs"),
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
+    barPage: path.join(distRoot, "renderer", "play-bar.html"),
+    barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
+    comments: playCommentsFor(studio),
   });
 }
 
@@ -1374,6 +1390,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   const handle = createIpcHandle(ipcMain, {
     fixture: fixtureNativePolicy,
     isStudioUi: isStudioWindow,
+    isPlayBar: isPlayBarPage,
     performance: performanceRecorder,
   });
   registerPerformanceIpc(handle, performanceRecorder);
@@ -1497,6 +1514,13 @@ async function main(): Promise<void> {
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */
 function isStudioWindow(event: { sender: unknown; senderFrame: unknown }): boolean {
   return event.sender === window?.webContents && event.senderFrame === window?.webContents.mainFrame;
+}
+
+/** Whether an IPC call came from Play's bar layer's own page, over a game in the studio window. */
+function isPlayBarPage(event: { sender: unknown; senderFrame: unknown }): boolean {
+  const bar = window && !window.isDestroyed() ? playViewsOf(window)?.bar() : null;
+  if (!bar || bar.webContents.isDestroyed()) return false;
+  return event.sender === bar.webContents && event.senderFrame === bar.webContents.mainFrame;
 }
 
 /** A Dock click with no window open: the studio, or the setup screen while the sandbox waits. */

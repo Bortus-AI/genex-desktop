@@ -66,6 +66,8 @@ import {
   initialPlay,
   installAnswered,
   onlineCounted,
+  PlayPage,
+  remixClosed,
   remixEnded,
   remixFailureTold,
   remixOpened,
@@ -185,9 +187,9 @@ function fakeApi(handlers: Partial<PlayApi> = {}) {
       calls.online.push(slugs);
       return handlers.playOnline ? handlers.playOnline(slugs) : Promise.resolve({});
     },
-    playOpen: (slug) => {
+    playOpen: (slug, title) => {
       calls.open.push(slug);
-      return handlers.playOpen ? handlers.playOpen(slug) : Promise.resolve();
+      return handlers.playOpen ? handlers.playOpen(slug, title) : Promise.resolve();
     },
     playClose: () => {
       calls.close += 1;
@@ -434,6 +436,12 @@ describe("Play's viewer cover", () => {
       guestCard: false,
       facts: null,
       mic: null,
+      title: "A",
+      multiplayer: false,
+      shown: true,
+      comments: null,
+      signedIn: true,
+      remixing: false,
     };
     const drawn = viewerAfter(fresh, { slug: "a", openId: 2, phase: PlayViewerPhase.Loading, bar });
     assert.deepEqual(drawn?.bar, bar);
@@ -456,11 +464,11 @@ describe("Play's viewer cover", () => {
     assert.equal(viewerAfter(shown, { slug: "a", openId: 1, phase: PlayViewerPhase.Failed }), shown);
   });
 
-  it("lets the window's drag regions under the header go only while the game lies over them", () => {
+  it("lets the window's drag regions go while a game is open, its bar's layer over them", () => {
     assert.equal(nativeViewsUp(null), false);
-    assert.equal(nativeViewsUp(shown), false, "loading: the game's view is not shown yet");
+    assert.equal(nativeViewsUp(shown), true, "loading: the bar's layer lies over the cover");
     assert.equal(nativeViewsUp({ ...shown, phase: PlayViewerPhase.Playing }), true);
-    assert.equal(nativeViewsUp({ ...shown, phase: PlayViewerPhase.Failed }), false, "the game's view is hidden");
+    assert.equal(nativeViewsUp({ ...shown, phase: PlayViewerPhase.Failed }), true, "the bar stays over the failure");
   });
 
   it("leaves on Esc only while the cover or the failure is up, never under a game being played", () => {
@@ -536,6 +544,12 @@ describe("Play's loader and header", () => {
       guestCard: false,
       facts: null,
       mic: null,
+      title: "A",
+      multiplayer: false,
+      shown: true,
+      comments: null,
+      signedIn: true,
+      remixing: false,
     };
     assert.equal(noteOn(undefined, PlayControl.Share), null);
     assert.equal(noteOn(bar, PlayControl.Share), null);
@@ -562,6 +576,12 @@ describe("Play's loader and header", () => {
       guestCard: false,
       facts: null,
       mic: null,
+      title: "A",
+      multiplayer: false,
+      shown: true,
+      comments: null,
+      signedIn: true,
+      remixing: false,
     };
     const liked = { ...bar, liked: true, likes: 4 };
     assert.equal(justLiked(bar, liked), true);
@@ -683,6 +703,27 @@ describe("Play state actions", () => {
     assert.equal(installAnswered(answered), answered, "nothing waiting: the same state");
     const later = viewerReported(answered, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed });
     assert.equal(later.installAsked, false, "a later closing asks nothing again");
+  });
+
+  it("makes a copy only for the viewer shown closing for its bar's Remix", () => {
+    const opened = gameOpened(initialPlay(), entry("a"));
+    const shown = viewerReported(opened, { slug: "a", openId: 1, phase: PlayViewerPhase.Playing }).viewer;
+    const closing = { slug: "a", openId: 1, phase: PlayViewerPhase.Closed };
+    assert.equal(remixClosed(shown, { ...closing, remix: true }), true);
+    assert.equal(remixClosed(shown, closing), false, "a plain closing");
+    assert.equal(remixClosed(shown, { ...closing, openId: 2, remix: true }), false, "another opening");
+    assert.equal(remixClosed(shown, { ...closing, slug: "b", remix: true }), false, "another game");
+    assert.equal(remixClosed(null, { ...closing, remix: true }), false, "nothing shown");
+  });
+
+  it("shows the maker's profile when their name closed the viewer, and only for the viewer shown", () => {
+    const opened = gameOpened(initialPlay(), entry("a"));
+    const named = viewerReported(opened, { slug: "a", openId: 1, phase: PlayViewerPhase.Playing });
+    const closed = viewerReported(named, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed, profile: "u-maker" });
+    assert.equal(closed.viewer, null);
+    assert.deepEqual(closed.view, { page: PlayPage.Profile, userId: "u-maker", from: PlayPage.Shelf });
+    const again = viewerReported(closed, { slug: "a", openId: 1, phase: PlayViewerPhase.Closed, profile: "u-other" });
+    assert.equal(again, closed, "a viewer already gone shows nobody");
   });
 
   it("holds a remix's failure until the shell has told it", () => {

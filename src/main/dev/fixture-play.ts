@@ -7,6 +7,7 @@
  */
 import { FEED_PAGE_SIZE, type GalleryAnswer, type GalleryRequest, PlayRoute } from "../play/gallery.ts";
 import { fixtureLibraryAnswer } from "./fixture-asset-library.ts";
+import { fixtureCommentCount, fixtureCommentsAnswer } from "./fixture-comments.ts";
 import { categoriesShelf, PlayMobileSupport } from "../../shared/play-manage.ts";
 import { PlayShelf } from "../../shared/play.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
@@ -306,7 +307,8 @@ function world(slug: string): GalleryAnswer {
   const game = listed().find((candidate) => candidate.slug === slug);
   if (!game) return NOT_FOUND;
   const liked = likes.get(slug) === true;
-  return ok({ item: { ...game, likesCount: 3 + (liked ? 1 : 0), likedByMe: liked } });
+  const facts = { likesCount: 3 + (liked ? 1 : 0), likedByMe: liked, commentsCount: fixtureCommentCount(game.id) };
+  return ok({ item: { ...game, ...facts } });
 }
 
 /** The search catalog: every fixture game in its slim shape, the author a name. */
@@ -350,6 +352,8 @@ export const fixturePlayRequest: GalleryRequest = async (route, init) => {
     fixturePeopleAnswer(route, init, catalog) ??
     manage.answer(route, init);
   if (people) return people;
+  const comments = fixtureCommentsAnswer(route, init);
+  if (comments) return comments;
   if (route === PlayRoute.Referral && fixtureAccountOf(init.token)) return ok(fixtureReferral());
   const [pathname = "", search = ""] = route.split("?");
   const query = new URLSearchParams(search);

@@ -41,7 +41,7 @@ const QUERY_MAX = 80;
 const FIRST_PAGE_TTL_MS = MINUTE_MS;
 /** HTTP statuses Play reads. A game page that answered without a game reads as a bad gateway. */
 const HTTP_OK = 200;
-const HTTP_UNAUTHORIZED = 401;
+export const HTTP_UNAUTHORIZED = 401;
 const BAD_GATEWAY = 502;
 /** The longest cursor the gallery hands out (an id), with room to spare; ids and codes are held to it too. */
 const CURSOR_MAX = 64;
@@ -166,6 +166,8 @@ export interface PlayWorld {
   plays: number;
   /** Players in it now; null for a single-player game or an unknown count. */
   online: number | null;
+  /** How many comments it has. */
+  comments: number;
 }
 
 /** Whether a value is a plain object, as the API's JSON objects are. */
@@ -389,8 +391,8 @@ export function visibleShelves(body: unknown): PlayShelves {
   };
 }
 
-/** A cursor as the gallery hands them out: an id, nothing else. */
-const isCursor = (value: unknown): value is string =>
+/** A cursor as the gallery hands them out: an id, nothing else. Comment ids are held to it too. */
+export const isCursor = (value: unknown): value is string =>
   typeof value === "string" && value.length <= CURSOR_MAX && /^[A-Za-z0-9_-]+$/.test(value);
 
 /** A GET that throws {@link GalleryError} for any answer but a 2xx. */
@@ -566,6 +568,7 @@ function accountCalls(deps: GalleryDeps) {
       authorId: game.author.id,
       plays,
       online,
+      comments: count(item.commentsCount),
     };
   };
 

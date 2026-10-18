@@ -67,7 +67,7 @@ import {
   type LibraryStore,
 } from "./library.ts";
 import { createPluginsStore, PLUGIN_INDEX_POLL_MS, type PluginsStore } from "./plugins.ts";
-import { createPlayStore, type PlayStore, remixProgressed, viewerReported } from "./play.ts";
+import { createPlayStore, type PlayStore, remixClosed, remixProgressed, viewerReported } from "./play.ts";
 import { createPeopleStore, type PeopleStore } from "./people.ts";
 import { createSharingStore, type SharingStore } from "./sharing.ts";
 import {
@@ -368,6 +368,8 @@ function bootstrapper(api: StudioApi, stores: Stores, storage: KeyValueStorage |
 function applyUiEvent({ agentScreens, threads, layout, library, update, play }: Stores, event: UiEvent): void {
   switch (event.type) {
     case UiEvent.PlayViewer:
+      // The bar's Remix closed the viewer: the copy is made of the game it showed, as a card's is.
+      if (remixClosed(play.getState().viewer, event.payload)) void play.remixViewed();
       play.setState((state) => viewerReported(state, event.payload), true);
       break;
     case UiEvent.PlayRemix:
