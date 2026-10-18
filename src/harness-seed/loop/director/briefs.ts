@@ -267,7 +267,7 @@ function rulesThatNeverMove(run: Run, loop: DirectorLoop, leads: boolean): strin
  */
 function completionWords(run: Run): string {
   if (durationCommission(run))
-    return `The hours are a cap: call finish with victory=yes once the goal is reached (a reviewer's yes ends the build); a finish claiming nothing waits for the wrap-up unless the user asks. On a no, ${stopRuleWords(false, "new commits")}`;
+    return `The hours are a cap: call finish with victory=yes once the goal is reached (a reviewer's yes ends the build); a finish that claims nothing waits for the wrap-up, unless the user asks. On a no, ${stopRuleWords(false, "new commits")}`;
   const words =
     "Finish once required outcomes are verified; time is a ceiling. Report blockers instead of optional polish.";
   return goalCommission(run) ? `${words} ${SHIP_DEFECTS_NOT_POLISH}` : words;

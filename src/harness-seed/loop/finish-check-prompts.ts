@@ -21,7 +21,7 @@ export function stopRuleWords(untilFinish: boolean | null, newWork = "a new save
   const left = minutes(FINISH_TIME_LEFT_MS);
   if (untilFinish === true) return `${max} no's in a row stop the Loop.`;
   if (untilFinish === null)
-    return `${max} no's in a row stop the Loop once ${left} minutes or less are left (an ∞ Loop: any time).`;
+    return `${max} no's in a row stop the Loop with ${left} minutes or less left (an ∞ Loop: any time).`;
   return `while over ${left} minutes are left, no's never stop the Loop: keep fixing, and after ${max} in a row a new claim needs ${newWork} and new proof. With less left, ${max} in a row stop it.`;
 }
 
