@@ -26,6 +26,7 @@ import { HostMethod } from "../host-methods.ts";
 import { readFinishLog } from "../finish-log.ts";
 import { ExecutionStatus } from "../run-events.ts";
 import { CLIP_REASON, clipMarked, hasText } from "../text.ts";
+import { timeLeftOf } from "../time-cap.ts";
 import { LeadEndReason } from "./lead-contract.ts";
 import { type Lead, type LeadTurn, saveLead } from "./lead-journal.ts";
 import { LEAD_FINISH } from "./lead-finish-prompts.ts";
@@ -123,6 +124,7 @@ async function check(
       relayed: log.relayed,
       ended: () => Boolean(lead.end),
       abandoned: () => turnOver(lead, call.turn),
+      timeLeft: () => timeLeftOf(lead.run, lead.softDeadline, lead.clock.now()),
       keep: () => saveLead(lead),
     },
     claim,

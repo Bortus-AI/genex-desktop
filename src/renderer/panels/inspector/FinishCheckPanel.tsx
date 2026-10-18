@@ -2,13 +2,13 @@
  * The card of the finish check, the last node of a run's tree: when the lead says the Loop is
  * done, a reviewer that did none of the work checks the proof first. Until it runs, the card says
  * only that; then it lists every round, newest first, under the design's headings: the reviewer
- * at work, why not yet, why yes, what isn't done.
+ * at work, why not yet, why yes, what isn't done (`finishRoundLists`).
  */
 import type { JSX } from "react";
 import { FinishCheckStep } from "../../../shared/finish-check.ts";
 import { FinishCheckState, type FinishCheckNode, type FinishRound, GraphNodeKind } from "../../run-graph.ts";
 import { Tone } from "../../run-steps.ts";
-import { finishCheckFace, finishPanelTone, reasonTone, roundNoteOf } from "../../run-tree.ts";
+import { finishCheckFace, finishPanelTone, finishRoundLists, roundNoteOf } from "../../run-tree.ts";
 import { FINISH_CHECK_WORDS } from "../../words.ts";
 import { Panel, Para, Quote, Section } from "./chrome.tsx";
 import { GraphSelection } from "./selection.ts";
@@ -23,15 +23,6 @@ const MARKER_CLASS: Record<Tone, string> = {
   [Tone.Orange]: "marker:text-orange",
   [Tone.Muted]: "marker:text-ink-3",
 };
-
-/** A round's heading by how it ended. */
-function headingOf(round: FinishRound): string {
-  const { heading } = FINISH_CHECK_WORDS;
-  if (round.step === FinishCheckStep.Checking) return heading.reviewer;
-  if (round.step === FinishCheckStep.Accepted) return heading.whyYes;
-  if (round.step === FinishCheckStep.Unanswered) return FINISH_CHECK_WORDS.unanswered;
-  return round.stopped ? heading.notDone : heading.whyNotYet;
-}
 
 /** The reviewer's reasons, numbered in the round's ink, in the list markup the cards already use. */
 function Reasons({ reasons, tone }: { reasons: string[]; tone: Tone }): JSX.Element | null {
@@ -52,19 +43,27 @@ function RoundNote({ round, node }: { round: FinishRound; node: FinishCheckNode 
   return note.quiet ? <Para quiet>{note.text}</Para> : <Para>{note.text}</Para>;
 }
 
-/** One round of the check: its heading, the lead's claim while the reviewer looks, the reasons and what follows. */
+/**
+ * One round of the check: a section for each of its lists (why not yet, then what isn't done), the
+ * lead's claim while the reviewer looks, and what follows under the last.
+ */
 function RoundSection({ round, node, goal }: { round: FinishRound; node: FinishCheckNode; goal: string }): JSX.Element {
-  const heading = headingOf(round);
-  const label = node.rounds.length > 1 ? FINISH_CHECK_WORDS.roundHeading(heading, round.round) : heading;
+  const lists = finishRoundLists(round);
+  const labelOf = (heading: string) =>
+    node.rounds.length > 1 ? FINISH_CHECK_WORDS.roundHeading(heading, round.round) : heading;
   const checking = round.step === FinishCheckStep.Checking;
   return (
-    <Section label={label}>
-      {checking ? <Para>{FINISH_CHECK_WORDS.reviewerIs}</Para> : null}
-      {checking && round.claim ? <Quote label={FINISH_CHECK_WORDS.claimLabel}>{round.claim}</Quote> : null}
-      {checking && goal ? <Quote label={FINISH_CHECK_WORDS.yourRequest}>{goal}</Quote> : null}
-      <Reasons reasons={round.reasons} tone={reasonTone(round)} />
-      <RoundNote round={round} node={node} />
-    </Section>
+    <>
+      {lists.map((list, index) => (
+        <Section key={list.heading} label={labelOf(list.heading)}>
+          {checking ? <Para>{FINISH_CHECK_WORDS.reviewerIs}</Para> : null}
+          {checking && round.claim ? <Quote label={FINISH_CHECK_WORDS.claimLabel}>{round.claim}</Quote> : null}
+          {checking && goal ? <Quote label={FINISH_CHECK_WORDS.yourRequest}>{goal}</Quote> : null}
+          <Reasons reasons={list.items} tone={list.tone} />
+          {index === lists.length - 1 ? <RoundNote round={round} node={node} /> : null}
+        </Section>
+      ))}
+    </>
   );
 }
 

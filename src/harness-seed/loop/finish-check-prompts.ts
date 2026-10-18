@@ -163,6 +163,7 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
     [
       "## Your answer",
       `End with one JSON object: ${ANSWER_FORMAT}.`,
+      'In "reasons", say briefly what you checked and what you found, met or not. In "notDone", on a no, name each thing the person asked for that the proof does not show yet, one item each and concretely, and nothing that is met; on a yes it is empty.',
       "Say no when the proof does not show it; say what is missing, concretely.",
     ].join("\n"),
   ]
@@ -170,12 +171,22 @@ export function reviewerBrief(input: ReviewerBriefInput): string {
     .join("\n\n");
 }
 
+/** A no's reasons, then what it found not done. */
+const noWords = (reasons: readonly string[], notDone: readonly string[]): string =>
+  [reasons.join(" "), notDone.length ? `Not done: ${notDone.join(" ")}` : ""].filter(Boolean).join(" ");
+
 /** What the lead is answered after a check that did not end the Loop, or that stopped it. */
 export const FINISH_ANSWER = {
-  rejected: (count: number, max: number, reasons: readonly string[]) =>
-    `The reviewer did not accept that the goal is reached (${count} of ${max} in a row): ${reasons.join(" ")} Work on them, then call finish again with new proof. ${max} in a row stop the Loop.`,
-  stopped: (max: number, reasons: readonly string[]) =>
-    `The reviewer did not accept that the goal is reached (${max} of ${max} in a row): ${reasons.join(" ")} The Loop stops here with what isn't done.`,
+  rejected: (count: number, max: number, reasons: readonly string[], notDone: readonly string[] = []) =>
+    `The reviewer did not accept that the goal is reached (${count} of ${max} in a row): ${noWords(reasons, notDone)} Work on them, then call finish again with new proof. ${max} in a row stop the Loop.`,
+  /** A no in a timed Loop with time left: no row of no's stops it. */
+  goesOn: (count: number, reasons: readonly string[], notDone: readonly string[] = []) =>
+    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop has time left, so it goes on: work on what isn't done, then call finish again with proof made since this no (a close picture of each point).`,
+  stopped: (count: number, reasons: readonly string[], notDone: readonly string[] = []) =>
+    `The reviewer did not accept that the goal is reached (${count} in a row): ${noWords(reasons, notDone)} The Loop stops here with what isn't done.`,
+  /** A claim turned back before any check: after the row of no's the Loop went on past, its proof is no newer than the last no. */
+  staleProof: (max: number) =>
+    `After ${max} no's in a row the Loop went on, so a claim needs proof made since the last no, and none of the files you named is newer than it. Work on what isn't done, then call finish with a close picture or a report of each point made since then.`,
   unanswered: (why: string) =>
     `The reviewer could not answer (${why}). Your claim is neither accepted nor counted; call finish again when ready.`,
   alreadyClosed:

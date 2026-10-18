@@ -222,7 +222,9 @@ function finishCheckLine(node: FinishCheckNode): string {
   const newest = currentRound(node);
   if (!newest) return FINISH_CHECK_WORDS.placeholder;
   if (newest.step === FinishCheckStep.Unanswered) return FINISH_CHECK_WORDS.unanswered;
-  return FINISH_CHECK_WORDS.roundWord(node.reasons.length, node.rejections);
+  const found = newest.notDone.length || node.reasons.length;
+  if (newest.timeLeft) return FINISH_CHECK_WORDS.inARowWord(found, node.rejections);
+  return FINISH_CHECK_WORDS.roundWord(found, node.rejections);
 }
 
 /** What the finish check's node says, in the owner's four states (Not yet, Checking, Done, Stopped). */
@@ -287,6 +289,33 @@ export function reasonTone(round: FinishRound): Tone {
   return round.stopped ? Tone.Red : Tone.Orange;
 }
 
+/** One list on a round of the finish check's card: its heading, the reviewer's lines and their ink. */
+export interface FinishRoundList {
+  heading: string;
+  items: string[];
+  tone: Tone;
+}
+
+/**
+ * A round's lists on the card, under the design's headings: the reviewer at work, no answer, why
+ * yes; after a no, why not yet (its reasons) and what isn't done (what it named not done, red once
+ * the no's stopped the Loop). A no whose record names nothing not done lists its reasons alone, as
+ * what isn't done once it stopped.
+ */
+export function finishRoundLists(round: FinishRound): FinishRoundList[] {
+  const { heading } = FINISH_CHECK_WORDS;
+  if (round.step === FinishCheckStep.Checking) return [{ heading: heading.reviewer, items: [], tone: Tone.Muted }];
+  if (round.step === FinishCheckStep.Accepted)
+    return [{ heading: heading.whyYes, items: round.reasons, tone: Tone.Green }];
+  if (round.step === FinishCheckStep.Unanswered)
+    return [{ heading: FINISH_CHECK_WORDS.unanswered, items: [], tone: Tone.Muted }];
+  const ink = reasonTone(round);
+  if (!round.notDone.length)
+    return [{ heading: round.stopped ? heading.notDone : heading.whyNotYet, items: round.reasons, tone: ink }];
+  const why = round.reasons.length ? [{ heading: heading.whyNotYet, items: round.reasons, tone: Tone.Orange }] : [];
+  return [...why, { heading: heading.notDone, items: round.notDone, tone: ink }];
+}
+
 /** The line under one round on the finish check's card, and whether it reads quietly. */
 export interface RoundNote {
   text: string;
@@ -296,7 +325,8 @@ export interface RoundNote {
 /**
  * The line under a round's reasons on the card: why a round had no answer, a yes with no reasons,
  * a stop's pointer to the report, or, for the current ask's newest no, what follows (more no's stop
- * the Loop while it runs; once it is over, that it ended before another check). Null for none.
+ * the Loop while it runs, or it keeps working with time left; once it is over, that it ended before
+ * another check). Null for none.
  */
 export function roundNoteOf(round: FinishRound, node: FinishCheckNode): RoundNote | null {
   if (round.step === FinishCheckStep.Unanswered) return round.why ? { text: round.why, quiet: false } : null;
@@ -306,6 +336,7 @@ export function roundNoteOf(round: FinishRound, node: FinishCheckNode): RoundNot
   if (round.stopped) return { text: FINISH_CHECK_WORDS.reportInChat, quiet: true };
   if (round.round !== node.round) return null;
   if (node.over) return { text: FINISH_CHECK_WORDS.endedAfterNo, quiet: true };
+  if (round.timeLeft) return { text: FINISH_CHECK_WORDS.timeLeftNote, quiet: true };
   return node.rejections < MAX_FINISH_REJECTIONS
     ? { text: FINISH_CHECK_WORDS.moreNos(node.rejections), quiet: true }
     : null;

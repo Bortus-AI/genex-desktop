@@ -25,6 +25,7 @@ import {
   finishCheckFace,
   finishCheckLook,
   finishPanelTone,
+  finishRoundLists,
   reasonTone,
   roundNoteOf,
 } from "../../src/renderer/run-tree.ts";
@@ -318,6 +319,44 @@ describe("the finish check on the Builds graph", () => {
       text: FINISH_CHECK_WORDS.endedAfterNo,
       quiet: true,
     });
+  });
+
+  it("a no keeps what isn't done apart from the reviewer's reasons, and one with time left says the Loop keeps working", () => {
+    seq = 0;
+    const met = "The laps run and the finish screen shows, as accepted before.";
+    const goesOn = [
+      ...loopOpened(),
+      check(1, FinishCheckStep.Checking, { claim: CLAIM }),
+      check(1, FinishCheckStep.Rejected, {
+        reasons: [met],
+        notDone: [NO_TIMER],
+        rejections: MAX_FINISH_REJECTIONS,
+        timeLeft: true,
+      }),
+    ];
+    const node = finishCheckOf(buildRunGraph(goesOn));
+    assert.ok(node);
+    assert.equal(node.state, FinishCheckState.NotYet, "a no with time left never reads as stopped");
+    const round = node.rounds[0] as FinishRound;
+    assert.deepEqual([round.reasons, round.notDone, round.timeLeft], [[met], [NO_TIMER], true]);
+    assert.deepEqual(finishRoundLists(round), [
+      { heading: FINISH_CHECK_WORDS.heading.whyNotYet, items: [met], tone: Tone.Orange },
+      { heading: FINISH_CHECK_WORDS.heading.notDone, items: [NO_TIMER], tone: Tone.Orange },
+    ]);
+    assert.deepEqual(roundNoteOf(round, node), { text: FINISH_CHECK_WORDS.timeLeftNote, quiet: true });
+    assert.equal(finishCheckFace(node).word, FINISH_CHECK_WORDS.inARowWord(1, 1), "the graph counts its own no's");
+
+    const older = finishCheckOf(
+      buildRunGraph([
+        ...loopOpened(),
+        check(1, FinishCheckStep.Rejected, { reasons: [NO_TIMER], rejections: 3, stopped: true }),
+      ]),
+    );
+    assert.deepEqual(
+      finishRoundLists(older?.rounds[0] as FinishRound),
+      [{ heading: FINISH_CHECK_WORDS.heading.notDone, items: [NO_TIMER], tone: Tone.Red }],
+      "a record with reasons alone lists them as before",
+    );
   });
 
   it("a lead that claims through a finish check is a tree from its start: nothing moves at its first claim", () => {

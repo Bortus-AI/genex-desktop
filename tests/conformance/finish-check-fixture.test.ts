@@ -67,6 +67,17 @@ it("seeds four Loops whose finish checks stand at each of the four looks", async
   );
   const notYet = states.find((node) => node.state === FinishCheckState.NotYet);
   assert.deepEqual([notYet?.round, notYet?.reasons.length], [1, 2], "Not yet after its first no, with two reasons");
+  const stopped = states.find((node) => node.state === FinishCheckState.Stopped);
+  assert.deepEqual(
+    stopped?.rounds.map((round) => [round.timeLeft, round.stopped, round.notDone.length > 0]),
+    [
+      [true, false, true],
+      [true, false, true],
+      [true, false, true],
+      [false, true, true],
+    ],
+    "the timed Loop went on past its no's with time left, and the next stopped it",
+  );
   const newest = projectBuildGraph(log, THREAD, [], core.layout.runs);
   const shown = newest?.nodes.find((n): n is FinishCheckNode => n.kind === GraphNodeKind.FinishCheck);
   assert.equal(shown?.state, FinishCheckState.Checking, "Builds opens on the Loop being checked");

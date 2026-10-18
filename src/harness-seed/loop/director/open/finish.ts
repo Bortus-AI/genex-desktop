@@ -22,6 +22,7 @@ import {
   type FinishOutcome,
   type FinishTally,
   finishAnswer,
+  notDoneOf,
   tallyOf,
 } from "../../finish-check.ts";
 import { FinishCheckStep, LEAD_CALL_MS } from "../../finish-contract.ts";
@@ -30,6 +31,7 @@ import { GAPS_FIRST_MIN_MS, remainingOf } from "../../finish-remaining.ts";
 import { fireHooks, HookEvent, runScope } from "../../hooks.ts";
 import { HOOK_PROMPTS } from "../../hooks-prompts.ts";
 import { CLIP_REASON, clipMarked, hasText } from "../../text.ts";
+import { timeLeftOf } from "../../time-cap.ts";
 import { minutes, SECOND_MS, sleep } from "../../time.ts";
 import { closeUnderWay, holdFinish, releaseFinish } from "../close-latch.ts";
 import { heldTurnEnding } from "../held-words.ts";
@@ -125,6 +127,7 @@ async function check(loopRun: LoopRun, claim: FinishClaim, started: number): Pro
       ended: () => closing(loopRun),
       abandoned: () => turnLost(loopRun, turn),
       lapsed: lapsedSince(loopRun),
+      timeLeft: () => timeLeftOf(run, loopRun.softDeadline, clock.now()),
       keep: () => loopRun.saveJournal(),
     },
     claim,
@@ -155,7 +158,7 @@ function endOf(loopRun: LoopRun, outcome: FinishOutcome): { end: OpenEnd; told: 
   if (outcome.step === FinishCheckStep.Unanswered && outcome.seatless)
     return { end: { victory: false, because: FINISH_REPORT.noReviewer, checked: true }, told: OPEN_WORDS.noReviewer };
   if (outcome.step !== FinishCheckStep.Rejected || !outcome.stop) return null;
-  const end = { victory: false, because: FINISH_REPORT.notAccepted, notDone: outcome.reasons, checked: true };
+  const end = { victory: false, because: FINISH_REPORT.notAccepted, notDone: notDoneOf(outcome), checked: true };
   return { end, told: finishAnswer(outcome) };
 }
 

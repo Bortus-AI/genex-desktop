@@ -7,7 +7,7 @@ import { type AppLookAccessKind, JobTool } from "../shared/jobs.ts";
 import { type ChatJudgeResultPayload, readChatJudgeResult } from "../shared/chat-judge.ts";
 import { type WorkerLine, workerEndLine, workerLineEnded, workerStartLine } from "./chat/worker-lines.ts";
 import { workerKeyOf } from "../shared/run-graph-events.ts";
-import { type FinishRecord, FinishCheckStep, finishRecordOf } from "../shared/finish-check.ts";
+import { type FinishRecord, FinishCheckStep, finishRecordOf, MAX_FINISH_REJECTIONS } from "../shared/finish-check.ts";
 /**
  * The chat transcript as entries: the thread's event log read once, oldest first, into the
  * bubbles, tool-chip groups, narration lines and cards the chat draws. Pure — `chat/transcript.ts`
@@ -1332,14 +1332,19 @@ function pushWorkerLine(chat: ChatDraft, id: string, key: string, line: WorkerLi
   chat.workerLines.set(key, { entry, line });
 }
 
-/** A finish check round's line: the reviewer at work, its yes, its no with the first reason, a stop, or no answer. */
+/**
+ * A finish check round's line: the reviewer at work, its yes, its no with the first thing it found
+ * not done (a record that names none, its first reason), a stop with what isn't done, or no answer.
+ */
 function finishLine(check: FinishRecord): string {
   const { chat } = FINISH_CHECK_WORDS;
   if (check.step === FinishCheckStep.Checking) return chat.checking;
   if (check.step === FinishCheckStep.Accepted) return chat.accepted;
   if (check.step === FinishCheckStep.Unanswered) return chat.unanswered(check.why ?? "");
-  if (check.stopped) return chat.stopped(check.reasons.join(" "));
-  return chat.rejected(check.rejections ?? 1, check.reasons[0] ?? "");
+  const notDone = check.notDone.length ? check.notDone : check.reasons;
+  if (check.stopped) return chat.stopped(notDone.join(" "), check.rejections ?? MAX_FINISH_REJECTIONS);
+  if (check.timeLeft) return chat.goesOn(check.rejections ?? 1, notDone[0] ?? "");
+  return chat.rejected(check.rejections ?? 1, notDone[0] ?? "");
 }
 
 /**

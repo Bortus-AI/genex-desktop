@@ -1930,6 +1930,8 @@ export const FINISH_CHECK_WORDS = {
   /** The node's line after a no: how many reasons, and which no in a row it was (the card numbers each claim instead). */
   roundWord: (reasons: number, rejections: number) =>
     `${plural(reasons, "reason")} · round ${rejections} of ${MAX_FINISH_REJECTIONS}`,
+  /** The node's line after a no the Loop had time left at: no count of no's stops it then. */
+  inARowWord: (reasons: number, rejections: number) => `${plural(reasons, "reason")} · ${rejections} in a row`,
   doneWord: "Reviewer said yes",
   stoppedWord: `${MAX_FINISH_REJECTIONS} no's in a row`,
   unanswered: "The reviewer couldn't answer",
@@ -1952,6 +1954,8 @@ export const FINISH_CHECK_WORDS = {
     const nos = left === 1 ? "no" : "no's";
     return `${capitalise(spelledCount(left))} more ${nos} in a row and the Loop stops with a report.`;
   },
+  /** After a no the Loop had time left at: it goes on whatever the count. */
+  timeLeftNote: "The Loop has time left, so it keeps working on what isn't done.",
   /** After a no, once the Loop has ended some other way. */
   endedAfterNo: "The Loop ended before another check.",
   reportInChat: "The report is in the chat.",
@@ -1963,8 +1967,11 @@ export const FINISH_CHECK_WORDS = {
       reason
         ? `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}): ${reason}`
         : `The reviewer sent the work back (${rejections} of ${MAX_FINISH_REJECTIONS}).`,
-    stopped: (notDone: string) =>
-      `The reviewer said no ${spelledCount(MAX_FINISH_REJECTIONS)} times in a row, so the Loop stopped.${notDone ? ` Not done: ${notDone}` : ""}`,
+    /** A no the Loop had time left at: it keeps working, whatever the count. */
+    goesOn: (rejections: number, reason: string) =>
+      `The reviewer sent the work back${rejections > 1 ? ` (${rejections} in a row)` : ""}. The Loop has time left, so it keeps working${reason ? `: ${reason}` : "."}`,
+    stopped: (notDone: string, rejections: number = MAX_FINISH_REJECTIONS) =>
+      `The reviewer said no ${spelledCount(rejections)} times in a row, so the Loop stopped.${notDone ? ` Not done: ${notDone}` : ""}`,
     unanswered: (why: string) => (why ? `The reviewer couldn't answer: ${why}` : "The reviewer couldn't answer."),
   },
 } as const;

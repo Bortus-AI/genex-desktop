@@ -4278,3 +4278,44 @@ describe("the one Loop's reads of the game folder", () => {
     assert.ok((await readFile(index)).equals(before), "the folder's index is as it was");
   });
 });
+
+describe("the open lead's finish words", () => {
+  it("a timed Loop's no's stop it only once little time is left, an ∞ Loop's at the cap, and a picture outranks the files", async () => {
+    const { FINISH_TIME_LEFT_MS, MAX_FINISH_REJECTIONS } = await import(
+      "../../src/harness-seed/loop/finish-contract.ts"
+    );
+    const finishLine = (untilFinish: boolean) =>
+      openBrief({
+        goal: "A level.",
+        folder: "/games/level",
+        folderLabel: "level",
+        facts: GODOT,
+        holds: null,
+        carried: [],
+        references: [],
+        workerTypes: [],
+        appSaved: false,
+        restart: false,
+        cppRestart: false,
+        judge: false,
+        savePoints: [],
+        now: 0,
+        softDeadline: 60 * MINUTE,
+        finalDeadline: 60 * MINUTE,
+        untilFinish,
+        skills: [],
+      })
+        .split("\n\n")
+        .find((one) => one.startsWith("FINISH:")) ?? "";
+    const timed = finishLine(false);
+    const endless = finishLine(true);
+    assert.ok(
+      timed.includes(`more than ${FINISH_TIME_LEFT_MS / MINUTE} minutes are left its no's never stop the Loop`),
+    );
+    assert.match(timed, /a new claim needs proof made since the last no/);
+    assert.ok(endless.includes(`${MAX_FINISH_REJECTIONS} no's in a row stop the Loop.`));
+    assert.doesNotMatch(endless, /never stop/);
+    for (const line of [timed, endless])
+      assert.match(line, /A picture of the running project outranks what its files say/);
+  });
+});

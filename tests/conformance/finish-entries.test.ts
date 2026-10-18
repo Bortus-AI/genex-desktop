@@ -74,6 +74,39 @@ it("one chat line per check, rewritten by its verdict", () => {
   assert.deepEqual(routine, [], "never folded into an activity row");
 });
 
+it("a stop lists only what the reviewer found not done; a no with time left says the Loop keeps working", () => {
+  const met = "The laps run, as accepted before.";
+  const log = [
+    check(1, 1, FinishCheckStep.Checking),
+    check(2, 1, FinishCheckStep.Rejected, { reasons: [met], notDone: [NO_TIMER], rejections: 1 }),
+    check(3, 2, FinishCheckStep.Checking),
+    check(4, 2, FinishCheckStep.Rejected, {
+      reasons: [met],
+      notDone: [NO_TIMER],
+      rejections: MAX_FINISH_REJECTIONS,
+      timeLeft: true,
+    }),
+    check(5, 3, FinishCheckStep.Checking),
+    check(6, 3, FinishCheckStep.Rejected, {
+      reasons: [met],
+      notDone: [NO_FINISH_LINE, NO_TIMER],
+      rejections: MAX_FINISH_REJECTIONS + 1,
+      stopped: true,
+    }),
+  ];
+  assert.deepEqual(finishLines(log), [
+    [`The reviewer sent the work back (1 of ${MAX_FINISH_REJECTIONS}): ${NO_TIMER}`, false],
+    [FINISH_CHECK_WORDS.chat.goesOn(MAX_FINISH_REJECTIONS, NO_TIMER), false],
+    [FINISH_CHECK_WORDS.chat.stopped(`${NO_FINISH_LINE} ${NO_TIMER}`, MAX_FINISH_REJECTIONS + 1), true],
+  ]);
+  assert.match(FINISH_CHECK_WORDS.chat.goesOn(MAX_FINISH_REJECTIONS, NO_TIMER), /time left, so it keeps working/);
+  assert.match(FINISH_CHECK_WORDS.chat.stopped(NO_TIMER, MAX_FINISH_REJECTIONS + 1), /said no four times in a row/);
+  const said = finishLines(log)
+    .map(([text]) => text)
+    .join(" ");
+  assert.ok(!said.includes(met), "what the reviewer accepted is never listed as not done");
+});
+
 it("a record it cannot place says nothing", () => {
   const hostile: Array<[string, Record<string, unknown>]> = [
     ["no run", { round: 1, step: FinishCheckStep.Checking }],
