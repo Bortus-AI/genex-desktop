@@ -33,8 +33,9 @@ export type IpcHandler<C extends StudioInvokeChannel> = (
 
 // Plugin panels, connectors and terminals may run arbitrary local programs, and a chat's permission
 // mode and answers say what Claude may do on this Mac; a job's Stop ends a
-// process and Open Privacy settings opens System Settings. Only Studio's own main frame may reach
-// them, never a plugin page or a game's frame.
+// process and Open Privacy settings opens System Settings; Play's card menu unpublishes, deletes
+// and changes published games on the Genex account. Only Studio's own main frame may reach them,
+// never a plugin page or a game's frame.
 const STUDIO_UI_ONLY = [
   "studio:plugins.",
   "studio:mcp.",
@@ -42,6 +43,8 @@ const STUDIO_UI_ONLY = [
   "studio:permissions.",
   "studio:jobs.",
   "studio:app-look.",
+  "studio:play.manage",
+  "studio:play.cover",
 ];
 
 /**
