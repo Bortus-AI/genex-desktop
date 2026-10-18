@@ -5,6 +5,12 @@ import type { HistoryEntry } from "../../build-progress.ts";
 export const MAX_BUILD_TABS = 3;
 /** The narrowest a tab may be and still read as a name (about 16 characters), in px. */
 export const READABLE_TAB_PX = 150;
+/**
+ * What the bar keeps for Play whatever its label reads ("Play", "Play latest", "Opening…"): the
+ * widest, with the bar's padding and the gap before it, in px. Measured off the label, pressing Play
+ * near the edge would swap tabs for the picker and back.
+ */
+export const PLAY_ROOM_PX = 160;
 
 /** The bar's two shapes. */
 export const BuildBarShape = { Tabs: "tabs", Picker: "picker" } as const;
@@ -13,7 +19,7 @@ export type BuildBarShape = (typeof BuildBarShape)[keyof typeof BuildBarShape];
 /**
  * Tabs for up to three builds while each has room to read; more builds, or a panel too narrow for
  * their names, get the picker. One build is always its own tab: there is nothing to pick between.
- * `room` is the bar's width left of Play, in px.
+ * `room` is the bar's width less `PLAY_ROOM_PX`, in px.
  */
 export function buildBarShape(count: number, room: number): BuildBarShape {
   if (count > MAX_BUILD_TABS) return BuildBarShape.Picker;

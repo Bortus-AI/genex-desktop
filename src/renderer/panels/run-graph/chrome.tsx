@@ -1,5 +1,5 @@
 /** The Builds tab's bar of the chat's builds, its Play button, and the zoom pill in the canvas corner. */
-import type { JSX, KeyboardEvent, ReactNode } from "react";
+import type { JSX, KeyboardEvent, ReactNode, RefObject } from "react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { RunState } from "../../../shared/run-state.ts";
 import { buildWhen, type HistoryEntry, historyLabel, isNewestBuild } from "../../build-progress.ts";
@@ -18,7 +18,7 @@ import { isRovingKey, RovingAxis, rovingTarget } from "../../ui/roving-focus.ts"
 import { useMoreBelow } from "../../ui/scroll-fade.ts";
 import { StatusOrb } from "../../ui/StatusOrb.tsx";
 import { BUILD_TABS_WORDS as WORDS } from "../../words.ts";
-import { BuildBarShape, buildBarShape, newestFirst } from "./bar-shape.ts";
+import { BuildBarShape, buildBarShape, newestFirst, PLAY_ROOM_PX } from "./bar-shape.ts";
 
 /** The chat's builds as the bar's tabs: which one is on show, and the way to show another. */
 export interface BuildTabs {
@@ -159,6 +159,33 @@ function BuildRow({ build, name }: { build: HistoryEntry; name: string }): JSX.E
 }
 
 /**
+ * On opening, the list shows the open build's row: scrolled into view above the fade, and focused
+ * when the list was opened from the keyboard, so the arrows go on from there.
+ */
+function useOpenRowShown() {
+  const list = useRef<HTMLDivElement | null>(null);
+  const byKeyboard = useRef(false);
+  const onOpenChange = (isOpen: boolean): void => {
+    if (!isOpen) return;
+    // A frame later Radix has mounted the list and focused it (or its first row); take over from there.
+    requestAnimationFrame(() => {
+      const row = list.current?.querySelector<HTMLElement>('[data-state="checked"]');
+      row?.scrollIntoView({ block: "nearest" });
+      if (byKeyboard.current) row?.focus({ preventScroll: true });
+    });
+  };
+  const trigger = {
+    onPointerDown: (): void => {
+      byKeyboard.current = false;
+    },
+    onKeyDown: (): void => {
+      byKeyboard.current = true;
+    },
+  };
+  return { list, onOpenChange, trigger };
+}
+
+/**
  * Past three builds (or with too little room for three readable tabs) the bar holds one picker: the
  * open build's mark, whole name and clock, then ⌄ and how many builds the chat has. Its list drops
  * under it, newest first, the open build's row filled.
@@ -168,11 +195,13 @@ function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Ele
   const shown = builds.find((build) => build.runId === open) ?? builds.at(-1);
   const name = shown ? tabName(builds, shown) : "";
   const moreBelow = useMoreBelow<HTMLDivElement>();
+  const { list, onOpenChange, trigger } = useOpenRowShown();
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
+          {...trigger}
           data-build-picker={shown?.runId}
           title={`${name}\n${said}`}
           aria-label={WORDS.picker(name, builds.length)}
@@ -187,7 +216,14 @@ function BuildPicker({ tabs, said }: { tabs: BuildTabs; said: string }): JSX.Ele
           </span>
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent ref={moreBelow} align="start" className="build-picker-menu scroll-fade">
+      <DropdownMenuContent
+        ref={(node) => {
+          list.current = node;
+          return moreBelow(node);
+        }}
+        align="start"
+        className="build-picker-menu"
+      >
         <DropdownMenuRadioGroup value={open ?? ""} onValueChange={onOpen}>
           {newestFirst(builds).map((build) => (
             <BuildRow key={build.runId} build={build} name={tabName(builds, build)} />
@@ -212,6 +248,26 @@ function useRoom(): [number, (element: HTMLElement | null) => (() => void) | und
 }
 
 /**
+ * When the bar swaps its tabs for the picker (or back) while one of them has focus, focus goes to
+ * the control that takes its place instead of falling to the page.
+ */
+function useFocusFollows(slot: RefObject<HTMLDivElement | null>, picker: boolean): void {
+  const shown = useRef(picker);
+  const follow = useRef(false);
+  if (shown.current !== picker) {
+    // Read while rendering, before the swap takes the focused control out of the page.
+    follow.current = Boolean(slot.current?.contains(document.activeElement));
+    shown.current = picker;
+  }
+  useLayoutEffect(() => {
+    if (!follow.current) return;
+    follow.current = false;
+    const next = picker ? "[data-build-picker]" : '[role="tab"][aria-selected="true"]';
+    slot.current?.querySelector<HTMLElement>(next)?.focus();
+  }, [picker, slot]);
+}
+
+/**
  * The bar over the graph: the chat's builds and Play. Up to three builds are tabs on one track, the
  * newest on the right; more, or a panel too narrow for their names, are one picker. Play keeps
  * its place at the right end whatever the left holds. The open build's status ("Building · 9 of
@@ -227,11 +283,17 @@ export function BuildStatus({
   action: ReactNode;
 }): JSX.Element {
   const said = status.rest ? `${status.strong} · ${status.rest}` : status.strong;
-  const [room, measure] = useRoom();
-  const picker = buildBarShape(tabs.builds.length, room) === BuildBarShape.Picker;
+  const [width, measure] = useRoom();
+  const picker = buildBarShape(tabs.builds.length, width - PLAY_ROOM_PX) === BuildBarShape.Picker;
+  const slot = useRef<HTMLDivElement>(null);
+  useFocusFollows(slot, picker);
   return (
-    <div data-testid="build-status" className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2">
-      <div ref={measure} className="flex min-w-0 flex-1 items-center">
+    <div
+      ref={measure}
+      data-testid="build-status"
+      className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-2"
+    >
+      <div ref={slot} className="flex min-w-0 flex-1 items-center">
         {picker ? <BuildPicker tabs={tabs} said={said} /> : <BuildTabTrack tabs={tabs} said={said} />}
       </div>
       {action}

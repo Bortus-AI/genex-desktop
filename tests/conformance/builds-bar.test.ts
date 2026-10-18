@@ -15,6 +15,7 @@ import {
   newestFirst,
   READABLE_TAB_PX,
 } from "../../src/renderer/panels/run-graph/bar-shape.ts";
+import { keyTakenElsewhere } from "../../src/renderer/panels/keyboard.ts";
 import { RunState } from "../../src/shared/run-state.ts";
 
 const NOW = new Date(2026, 9, 18, 16, 30);
@@ -151,4 +152,14 @@ test("Play stays on the bar for every build: its own build, else Live as the gam
   barPlay(false, play, showLive)?.();
   assert.deepEqual(played, ["build", "live"]);
   assert.equal(barPlay(false, play, undefined), null, "nothing to play and no Live to show");
+});
+
+test("an Escape the picker's open list already took leaves the graph's open card alone", () => {
+  const escape = { key: "Escape", target: null };
+  assert.equal(keyTakenElsewhere({ ...escape, defaultPrevented: true }), true, "the menu closed; the card stays");
+  assert.equal(
+    keyTakenElsewhere({ ...escape, defaultPrevented: false }),
+    false,
+    "nothing else took it: the card closes",
+  );
 });

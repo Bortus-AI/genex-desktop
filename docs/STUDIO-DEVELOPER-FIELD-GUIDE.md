@@ -546,6 +546,12 @@ and reduced motion. Evidence lives in `.studio-dev/evidence/results-ui/`. Pair w
 `run-chat-ui.mjs` and `run-chat-feedback-ui.mjs` for real host reads, history/streaming and Studio
 navigation; component fixtures do not prove account access or native game layering.
 
+`node tests/e2e/run-builds-bar-ui.mjs` renders the production Builds bar with synthetic builds:
+tabs up to three, the picker past them or in a narrow bar (never flipped by Play's label), focus
+following the swap, the list's order, open row, rows, Escape, ten rows without scrolling, the fade
+and shadow past ten, and the open row shown on opening (focused when opened by keyboard). Evidence
+lives in `.studio-dev/evidence/builds-bar-ui/`.
+
 Genex account regressions: `run-genex-account-ui.mjs` renders the Genex page's account in its
 Connect band and checks that a failed connect keeps its reason after the status is read again. It does not
 establish real browser/Keychain authorization.

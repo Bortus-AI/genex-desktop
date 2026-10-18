@@ -5892,12 +5892,27 @@ a:focus-visible {
   width: 440px;
   min-width: var(--radix-dropdown-menu-trigger-width);
   max-width: calc(100vw - 24px);
-  max-height: min(328px, var(--radix-dropdown-menu-content-available-height));
+  /* Ten rows, the list's 4px padding and its edge: a tenth build does not scroll. */
+  max-height: min(calc(10 * 32px + 10px), var(--radix-dropdown-menu-content-available-height));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* While more rows lie below, the last one shown fades into the list's fill. Drawn over it rather
+ * than masked, so the menu keeps its shadow. */
+.build-picker-menu[data-more]::after {
+  content: "";
+  position: sticky;
+  bottom: 0;
+  display: block;
+  height: 32px;
+  margin-top: -32px;
+  background: linear-gradient(to bottom, transparent, var(--popover));
+  pointer-events: none;
+}
 .build-row {
   height: 32px;
+  /* A row scrolled into view clears the fade and the list's 4px padding, so the next-to-last ends it. */
+  scroll-margin-block-end: 36px;
   gap: 8px;
   padding-block: 0;
   font-family: var(--font-family-content);
