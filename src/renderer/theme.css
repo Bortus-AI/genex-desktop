@@ -5853,8 +5853,80 @@ a:focus-visible {
   border-radius: 50%;
   background: var(--ink-3);
 }
+/* Past three builds the track becomes one picker of the same height and edge: the open build's
+ * whole name, then ⌄ and the count. Its list is the shared dropdown with one-line rows. */
+.build-picker {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 520px;
+  height: 32px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 0 10px;
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-quick);
+}
+.build-picker:hover,
+.build-picker[data-state="open"] {
+  background: var(--control-hover, var(--hover));
+}
+.build-picker-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 3px;
+  margin-inline-start: 2px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+.build-picker-menu {
+  width: 440px;
+  min-width: var(--radix-dropdown-menu-trigger-width);
+  max-width: calc(100vw - 24px);
+  max-height: min(328px, var(--radix-dropdown-menu-content-available-height));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.build-row {
+  height: 32px;
+  gap: 8px;
+  padding-block: 0;
+  font-family: var(--font-family-content);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+/* The open build's row keeps the highlight's fill at rest, so the list shows which one is on show. */
+.build-row[data-state="checked"] {
+  background: var(--control-hover, var(--hover));
+  color: var(--ink);
+}
+.build-row-mark {
+  display: inline-flex;
+  width: 14px;
+  flex: none;
+  justify-content: center;
+  color: var(--ink-3);
+}
+.build-row-when {
+  flex: none;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
 @media (prefers-reduced-motion: reduce) {
-  .build-tab {
+  .build-tab,
+  .build-picker {
     transition: none;
   }
 }

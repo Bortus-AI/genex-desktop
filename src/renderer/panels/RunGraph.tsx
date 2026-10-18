@@ -39,6 +39,7 @@ import { leadFrameOf } from "../state/agent-screens.ts";
 import { useAgentScreens } from "../state/hooks.ts";
 import { GraphSelection, isPartSelection, partOf, partSelection } from "./inspector/selection.ts";
 import { type Notify, notifyProblem } from "../state/toasts.ts";
+import { barPlay } from "./run-graph/bar-shape.ts";
 import { BuildStatus, type BuildTabs, PlayButton, ZoomPill } from "./run-graph/chrome.tsx";
 import { GateButton, GateTip, gateWords } from "./run-graph/gates.tsx";
 import {
@@ -310,6 +311,7 @@ export const RunGraph = memo(function RunGraph({
   useGraphKeys(overlays, camera.fitAll, step);
   const actions = useCanvasActions(overlays, camera.moved);
   const { hasBuild, play, openJob } = useBuildActions(project, model, { onShowLive, onShowAsset, onNotice });
+  const playBar = barPlay(hasBuild, play, onShowLive);
 
   // Keep the viewport mounted for measurements/listeners while hiding non-authoritative fallback totals.
   return (
@@ -324,8 +326,8 @@ export const RunGraph = memo(function RunGraph({
           model={model}
           tabs={tabs}
           action={
-            hasBuild ? (
-              <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={play} />
+            playBar ? (
+              <PlayButton quiet={graph.active} label={graph.active ? "Play latest" : "Play"} onPlay={playBar} />
             ) : null
           }
         />
