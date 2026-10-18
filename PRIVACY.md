@@ -31,7 +31,11 @@ Installed macOS and Windows release builds ask update.electronjs.org (run by the
 project) hourly whether a newer release exists, sending the app version, platform and
 architecture, and download it from GitHub Releases. Installed Linux release builds ask the GitHub
 API for the latest published release every six hours (and when you choose Check for Updates),
-which sends nothing beyond the request itself; the download is yours to start. Development
+which sends nothing beyond the request itself; the download is yours to start. The `.deb` and
+`.rpm` add the Genex package repository (packages.genex.games, served by Cloudflare), so your
+system's package manager asks it for updates on its own schedule, as it does every repository;
+those copies then ask GitHub nothing. Removing Genex removes the repository; to keep it out, put
+`repo=off` in `/etc/default/genex` before installing. Development
 builds and builds you package yourself under another name do not check.
 
 The catalog downloads listings and pinned plugin packages anonymously from its configured

@@ -85,6 +85,7 @@ import {
   autoUpdateDecision,
   createUpdateAnnouncer,
   createUpdateChecker,
+  installedFromGenexRepository,
   startAutoUpdate,
   updateCheckNote,
   watchInstaller,
@@ -498,6 +499,7 @@ const updateDecision = autoUpdateDecision({
   developerLaunch: Boolean(dev),
   testLaunch: isSmoke || isSelfTest,
   productName: app.getName(),
+  systemPackages: process.platform === "linux" && installedFromGenexRepository(process.execPath, existsSync),
 });
 /** The installer's checks, watched from launch so Check for Updates never collides with one (./auto-update.ts). */
 const installer = watchInstaller(autoUpdater);
@@ -1614,6 +1616,11 @@ async function reopenWindow(): Promise<void> {
 function checkForUpdates(): void {
   if (!updateDecision.start) return;
   const log = (line: string) => studioLog.write("update", line);
+  // Linux from the Genex package repository: apt or dnf brings the next version.
+  if (updateDecision.mode === UpdateMode.System) {
+    log("updates come from the system's package manager");
+    return;
+  }
   if (updateDecision.mode === UpdateMode.Notify) {
     // Linux: ask GitHub now and every few hours; a newer release announces itself.
     const ask = () => void updateChecker.check().then((result) => log(`release check: ${result.status}`));
