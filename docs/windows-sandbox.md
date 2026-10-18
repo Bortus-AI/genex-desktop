@@ -23,8 +23,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   grants the install folder (and srt-win's, when apart) for reading first
   (`grantLauncherFolders`), and a packaged app works from its install folder (`installedWorkingDir`).
 - The sandbox user reads nothing in the profile unless granted, so each folder between
-  `USERPROFILE` and a root gets `(RA)` (read attributes, no listing) after every apply, since
-  srt-win's deny stamps replace the entry. The entry names the `sandbox-runtime-users` group
+  `USERPROFILE` and a root gets `(S,RA)` (read attributes and synchronize, no listing) after every
+  apply, since srt-win's deny stamps replace the entry. Synchronize matters before Windows 11
+  24H2: Node's stat opens each folder there, and every synchronous open asks for it. The entry names the `sandbox-runtime-users` group
   (`srtAncestorGrantee`; the user itself outside it): every srt host, Claude Code's own shell
   sandbox among them, stamps and cleans up the user's entries, and its cleanup took Genex's on
   `AppData`. The entry is set on that folder alone

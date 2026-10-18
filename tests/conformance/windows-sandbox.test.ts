@@ -374,7 +374,7 @@ describe("an entry on one folder alone", () => {
     ]);
     assert.deepEqual(icacls, edits.map(icaclsArgs));
     assert.deepEqual(icacls, [
-      ["C:\\Users\\Семён\\AppData", "/grant", `*${SID}:(RA)`],
+      ["C:\\Users\\Семён\\AppData", "/grant", `*${SID}:(S,RA)`],
       ["C:\\Users\\Семён\\it's", "/remove:g", `*${SID}`],
     ]);
   });
@@ -404,7 +404,7 @@ describe("an entry on one folder alone, on Windows", {
     return readFileSync(file, "utf16le");
   };
   const GUESTS = "S-1-5-32-546";
-  const guestsRead = /\(A;;(?:0x80|LO);;;BG\)/;
+  const guestsRead = /\(A;;0x100080;;;BG\)/;
 
   it("edits each folder of a batch, any name, and says which one it could not", async () => {
     const root = realpathSync.native(await tmpDir("folder-ace-"));
@@ -445,7 +445,7 @@ describe("an entry on one folder alone, on Windows", {
     await mkdir(path.join(elsewhere, "moved"));
     await rename(path.join(elsewhere, "moved"), moved);
     const inheritedElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/;
-    const granted = /\(A;;(?:0x80|LO);;;BU\)/;
+    const granted = /\(A;;0x100080;;;BU\)/;
     assert.match(sddl(moved, root), inheritedElsewhere, "the moved folder kept what it inherited");
     const grants = ancestorGrants(path.join(root, "holders"), {
       sid: async () => USERS,
