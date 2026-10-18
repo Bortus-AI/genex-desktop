@@ -3563,7 +3563,7 @@ export const GENEX_WORDS = {
     offLabel: "Connect Genex",
     /** The Connect band's offer, with the plugin off or its account not yet connected. */
     offerTitle: "The best game dev tools, in one click",
-    offerText: "Optional and always up to date. You can always build on your own subscription.",
+    offerText: "Extend your agent with up-to-date tools for 3D, textures, sound and video. Always optional.",
     retryTitle: "Reconnect your Genex account",
     retryText: "Your saved sign-in couldn’t be opened on this Mac. Sign in again in your browser.",
     /** Connect turns the plugin on and signs in to Genex: the saved sign-in, or the browser. */
@@ -3587,7 +3587,6 @@ export const GENEX_WORDS = {
     connected: "Connected",
     disconnect: "Disconnect",
     unlimited: "Unlimited",
-    shared: "One balance for all your games. Failed generations are refunded.",
     outOfCredits: "Games still build with procedural assets and Local Blender.",
     paused: (kinds: string) => `Paused on Genex right now: ${kinds}.`,
   },

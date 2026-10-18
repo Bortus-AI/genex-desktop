@@ -102,6 +102,11 @@
   color: var(--ink);
   outline-color: var(--stats-line);
   pointer-events: none;
+  --connect-light-boost: 1;
+}
+:root[data-theme="light"] .genex-connect-lines {
+  outline-color: var(--accent-primary);
+  --connect-light-boost: 2.4;
 }
 .genex-connect-field {
   position: relative;

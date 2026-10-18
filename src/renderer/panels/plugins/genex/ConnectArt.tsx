@@ -65,10 +65,21 @@ type LoopInput = { state: ConnectArtState; heat: number; travel: number };
 
 const rgba = ([r, g, b]: Rgb, alpha: number): string => `rgb(${r} ${g} ${b} / ${alpha})`;
 
-/** The line's colour (`color`) and the light's (`outline-color`), as the theme sets them. */
-function readColors(canvas: HTMLCanvasElement): { line: Rgb; flow: Rgb } {
+/** The theme's colours for the art, read back from the canvas' CSS. */
+type ArtColors = { line: Rgb; flow: Rgb; boost: number };
+
+/**
+ * The line's colour (`color`), the light's (`outline-color`) and how much stronger the light shows
+ * (`--connect-light-boost`): a pale band needs more of it than a dark one to be seen.
+ */
+function readColors(canvas: HTMLCanvasElement): ArtColors {
   const style = getComputedStyle(canvas);
-  return { line: toRgb(style.color), flow: toRgb(style.outlineColor) };
+  const boost = Number.parseFloat(style.getPropertyValue("--connect-light-boost"));
+  return {
+    line: toRgb(style.color),
+    flow: toRgb(style.outlineColor),
+    boost: Number.isFinite(boost) && boost > 0 ? boost : 1,
+  };
 }
 
 /**
@@ -116,12 +127,13 @@ function trace(ctx: CanvasRenderingContext2D, from: ArtPoint, to: ArtPoint, star
  * One frame: every line from just clear of its logo, then the light running along it as a short
  * run of dashes, like bits on a wire.
  */
-function paint(ctx: CanvasRenderingContext2D, lines: Lines, input: LoopInput, colors: { line: Rgb; flow: Rgb }) {
+function paint(ctx: CanvasRenderingContext2D, lines: Lines, input: LoopInput, colors: ArtColors) {
   const connected = input.state === ConnectArtState.Connected;
   const pulses = pulsesPerLine(input.state);
   const lit = connected || input.state === ConnectArtState.SigningIn;
   const line = connected ? rgba(colors.flow, CONNECTED_LINE_ALPHA) : rgba(colors.line, LINE_ALPHA);
-  const light = rgba(colors.flow, lit ? LIT_ALPHA : RESTING_ALPHA + input.heat * HEATED_ALPHA);
+  const strength = lit ? LIT_ALPHA : RESTING_ALPHA + input.heat * HEATED_ALPHA;
+  const light = rgba(colors.flow, Math.min(1, strength * colors.boost));
   ctx.lineWidth = 1;
   ctx.lineCap = "butt";
   for (const [index, { at, start }] of lines.from.entries()) {

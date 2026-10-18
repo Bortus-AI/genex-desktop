@@ -131,7 +131,6 @@ function Connected({
   busy: boolean;
 }): JSX.Element {
   const empty = outOfCredits(view.credits);
-  const counted = creditsValue(view.credits) !== null && view.credits.kind !== CreditsKind.Unlimited;
   return (
     <>
       <div className="genex-connect-head">
@@ -145,11 +144,7 @@ function Connected({
       </div>
       {view.identity && <p className="genex-connect-text">{view.identity}</p>}
       <Balance credits={view.credits} />
-      {counted && (
-        <p className="genex-note" data-quiet={!empty || undefined}>
-          {empty ? WORDS.outOfCredits : WORDS.shared}
-        </p>
-      )}
+      {empty && <p className="genex-note">{WORDS.outOfCredits}</p>}
       {view.paused.length > 0 && <p className="genex-note">{WORDS.paused(view.paused.join(", "))}</p>}
     </>
   );
