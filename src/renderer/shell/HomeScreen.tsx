@@ -29,6 +29,7 @@ import { PromptBar, type ComposerExtras } from "../ui/PromptBar.tsx";
 import { withViewTransition } from "../ui/view-transition.ts";
 import type { ComposerHandoff } from "./use-composer-handoff.ts";
 import { useHomeComposerModel } from "./use-home-composer.ts";
+import { useHomeUnderControls } from "../window-controls.ts";
 import type { ShellChrome } from "./use-shell-chrome.ts";
 import { HomeBackdropButton } from "./HomeBackdropButton.tsx";
 import { HomeFolderChip } from "./HomeFolderChip.tsx";
@@ -77,6 +78,8 @@ export function HomeLayer({
   under: boolean;
 }): JSX.Element | null {
   const { shown, launch } = useHomeShown();
+  // Home at rest, with nothing over it: its background is what lies under the window controls.
+  useHomeUnderControls(shown && launch === null && !under && !props.chrome.workspaceCovered);
   if (!shown) return null;
   return (
     <div className="contents" inert={under}>

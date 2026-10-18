@@ -175,8 +175,8 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   `failed`: Try again, the report, Quit (`studio:boot.quit`). Other failures show the error
   dialog and exit; smoke and developer launches fail. The window's title bar comes from
   [`src/main/window-chrome.ts`](../../src/main/window-chrome.ts): `hiddenInset` on macOS
-  (lights on the headers' line), a themed 48 px `titleBarOverlay` on Windows (see-through) and
-  Linux (`studio:window.controls`).
+  (lights centred on headers), a themed 48 px `titleBarOverlay` on Windows (see-through on
+  Home) and Linux (`studio:window.controls`).
 - [`src/main/studio-core.ts`](../../src/main/studio-core.ts) keeps the core's lifecycle, the event
   log's front door, settings and public methods. It assembles the EventStore, snapshots,
   `GameWorkspaces`, the engine registry, the preview pool and the `HarnessHost`.

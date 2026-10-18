@@ -19,7 +19,7 @@ import {
   type SandboxProblem,
 } from "../../src/shared/boot.ts";
 import { FEEDBACK_TEXT_MAX_CHARS, type FeedbackDraft, FeedbackScreen } from "../../src/shared/feedback.ts";
-import type { WindowControlColors } from "../../src/shared/studio-api.ts";
+import type { WindowControls } from "../../src/shared/studio-api.ts";
 import { SandboxUnavailableError } from "../../src/substrate/sandbox-unavailable.ts";
 
 const PROBLEM: SandboxProblem = {
@@ -353,7 +353,7 @@ function bootIpc(fixture: boolean, platform: string = StudioPlatform.Linux) {
       return { cancelled: false };
     },
   });
-  const painted: WindowControlColors[] = [];
+  const painted: WindowControls[] = [];
   const reports: FeedbackDraft[] = [];
   const quits: string[] = [];
   registerBootIpc(handle, {
@@ -442,16 +442,14 @@ describe("boot IPC", () => {
     assert.match(reports[0]?.text ?? "", /^Genex couldn't start/);
   });
 
-  it("paints the window controls with two hex colours", async () => {
+  it("paints the window controls with two hex colours, see-through or not", async () => {
     const { painted, invoke } = bootIpc(true);
-    assert.deepEqual(await invoke("studio:window.controls", { color: "#1d1d1f", symbolColor: "#F5F5F7" }), {
-      ok: true,
-      value: undefined,
-    });
-    assert.deepEqual(painted, [{ color: "#1d1d1f", symbolColor: "#F5F5F7" }]);
+    const controls = { color: "#1d1d1f", symbolColor: "#F5F5F7", seeThrough: true };
+    assert.deepEqual(await invoke("studio:window.controls", controls), { ok: true, value: undefined });
+    assert.deepEqual(painted, [controls]);
   });
 
-  it("refuses anything but two #rrggbb colours, and paints nothing", async () => {
+  it("refuses anything but two #rrggbb colours and a see-through flag, and paints nothing", async () => {
     const { painted, invoke } = bootIpc(false);
     for (const payload of [
       undefined,
@@ -464,6 +462,10 @@ describe("boot IPC", () => {
       { color: "#fff", symbolColor: "#ffffff" },
       { color: "#000000; background: url(x)", symbolColor: "#ffffff" },
       { color: "#00000000", symbolColor: "#ffffff" },
+      { color: "#000000", symbolColor: "#ffffff" },
+      { color: "#000000", symbolColor: "#ffffff", seeThrough: "true" },
+      { color: "#000000", symbolColor: "#ffffff", seeThrough: 1 },
+      { color: "#00000000", symbolColor: "#ffffff", seeThrough: true },
     ]) {
       const result = await invoke("studio:window.controls", payload);
       assert.equal(result.ok, false, JSON.stringify(payload));

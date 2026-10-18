@@ -180,10 +180,9 @@ import { appLookAccess } from "./app-look-access.ts";
 import { layoutFor } from "./core/layout.ts";
 import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
-import { titleBarOverlay, windowChrome } from "./window-chrome.ts";
+import { windowControlsPainter } from "./window-chrome.ts";
 import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
-import type { WindowControlColors } from "../shared/studio-api.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { longPath } from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
@@ -456,8 +455,8 @@ const bootGate = createBootGate(
       }
     : {},
 );
-/** The theme's colours for the Windows and Linux window controls, as the renderer last sent them. */
-let windowControls: WindowControlColors | undefined;
+/** The Windows and Linux window controls, in the theme's colours the renderer last sent. */
+const windowControls = windowControlsPainter(process.platform);
 // `keepAwake.held` doubles as the run-active signal for close/quit below.
 const keepAwake = new KeepAwake(powerSaveBlocker);
 /**
@@ -821,7 +820,7 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
   return {
     ...MAIN_WINDOW,
     backgroundColor: nativeTheme.shouldUseDarkColors ? WINDOW_BACKGROUND.dark : WINDOW_BACKGROUND.light,
-    ...windowChrome(process.platform, windowControls),
+    ...windowControls.chrome(),
     show: false,
     // Fixed-size acceptance must not depend on the current display's work-area height.
     ...(isSmoke ? { enableLargerThanScreen: true } : {}),
@@ -835,13 +834,6 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
       nodeIntegration: false,
     },
   };
-}
-
-/** Repaint the Windows and Linux title-bar controls in the theme's colours; macOS draws its own. */
-function paintWindowControls(colors: WindowControlColors): void {
-  windowControls = colors;
-  if (process.platform === StudioPlatform.Mac || !window || window.isDestroyed()) return;
-  window.setTitleBarOverlay(titleBarOverlay(process.platform, colors));
 }
 
 async function createWindow(studio: StudioCore): Promise<BrowserWindow> {
@@ -1543,7 +1535,7 @@ async function main(): Promise<void> {
   registerBootIpc(bootHandle, {
     gate: bootGate,
     report: (draft) => sendFeedback(draft, bootFeedbackSources()),
-    setWindowControls: paintWindowControls,
+    setWindowControls: (controls) => windowControls.paint(window, controls),
     quit: () => app.quit(),
   });
   registerUpdateIpc(bootHandle, {

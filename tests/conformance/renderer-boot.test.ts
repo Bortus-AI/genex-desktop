@@ -18,7 +18,7 @@ import {
   type SandboxSetupResult,
 } from "../../src/shared/boot.ts";
 import { BootView, bootView, canSetUp, createBoot, SetupReport } from "../../src/renderer/state/boot.ts";
-import { windowControlColors } from "../../src/renderer/window-controls.ts";
+import { setHomeUnderControls, syncWindowControls, windowControlColors } from "../../src/renderer/window-controls.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
 const PROBLEM: SandboxProblem = {
@@ -437,5 +437,40 @@ describe("window control colours", () => {
       { "--background": "#1d1d1f", "--foreground": "color-mix(in oklab, red, blue)" },
     ];
     for (const values of unusable) assert.equal(windowControlColors(style(values)), null, JSON.stringify(values));
+  });
+
+  it("say whether Home's background lies under the controls, and send again only when that changes", () => {
+    const fake = fakeStudioApi();
+    const theme = style({ "--background": "#1d1d1f", "--foreground": "#dee0e2" });
+    const stop = syncWindowControls(fake.api, StudioPlatform.Windows, () => theme);
+    try {
+      setHomeUnderControls(true);
+      setHomeUnderControls(true);
+      setHomeUnderControls(false);
+    } finally {
+      stop();
+      setHomeUnderControls(false);
+    }
+    setHomeUnderControls(true);
+    setHomeUnderControls(false);
+    const colors = { color: "#1d1d1f", symbolColor: "#dee0e2" };
+    assert.deepEqual(
+      fake.callsOf("setWindowControls").map(([controls]) => controls),
+      [
+        { ...colors, seeThrough: false },
+        { ...colors, seeThrough: true },
+        { ...colors, seeThrough: false },
+      ],
+    );
+  });
+
+  it("send nothing on macOS, which draws its own lights", () => {
+    const fake = fakeStudioApi();
+    const theme = style({ "--background": "#1d1d1f", "--foreground": "#dee0e2" });
+    const stop = syncWindowControls(fake.api, StudioPlatform.Mac, () => theme);
+    setHomeUnderControls(true);
+    stop();
+    setHomeUnderControls(false);
+    assert.deepEqual(fake.callsOf("setWindowControls"), []);
   });
 });
