@@ -26,6 +26,8 @@ import {
   shareThumbs,
   tallyShares,
   closedBeforeShare,
+  CelebrationStep,
+  celebrationStep,
 } from "../../src/renderer/panels/plugins/genex/publish-share.ts";
 import { shareInBatches } from "../../src/shared/asset-library.ts";
 
@@ -153,6 +155,18 @@ describe("Publish's share line: how the shares went", () => {
       first,
     );
     assert.deepEqual(again, { shared: 2, checking: 0, missed: ["b.glb"] });
+  });
+
+  it("resets only when a celebration ends, so Share now keeps its line through the reads after it", () => {
+    assert.equal(celebrationStep(false, true), CelebrationStep.Start);
+    assert.equal(celebrationStep(true, true), CelebrationStep.Start, "the share still runs once: start is guarded");
+    assert.equal(celebrationStep(true, false), CelebrationStep.Reset);
+    assert.equal(celebrationStep(false, false), CelebrationStep.None, "a re-read after Share now clears nothing");
+  });
+
+  it("shows no ✓ line when every share was one no retry can fix", () => {
+    const tally = tallyShares([{ file: "song.mp3", miss: ShareMiss.KindNotShareable }]);
+    assert.deepEqual(shareLine(tally), { line: ShareLine.None, count: 0 });
   });
 
   it("remembers a share asked for but not run when Publish closed, and nothing else", () => {

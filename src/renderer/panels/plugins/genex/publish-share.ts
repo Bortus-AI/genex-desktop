@@ -101,13 +101,31 @@ export const allMissed = (items: readonly ShareItem[], before: ShareTally = NO_S
 export const retryItems = (items: readonly ShareItem[], tally: ShareTally): ShareItem[] =>
   items.filter((item) => tally.missed.includes(item.file));
 
-/** How the line reads after the shares: what missed, else what is on Play (or will be once checked). */
-export const ShareLine = { Missed: "missed", Checking: "checking", Shared: "shared" } as const;
+/**
+ * How the line reads after the shares: what missed, else what is on Play (or will be once
+ * checked), else nothing (every share was one no retry can fix).
+ */
+export const ShareLine = { Missed: "missed", Checking: "checking", Shared: "shared", None: "none" } as const;
 export type ShareLine = (typeof ShareLine)[keyof typeof ShareLine];
 
 /** Which line the tally gets, and the count it says. */
 export function shareLine(tally: ShareTally): { line: ShareLine; count: number } {
   if (tally.missed.length > 0) return { line: ShareLine.Missed, count: tally.missed.length };
   const count = tally.shared + tally.checking;
+  if (count === 0) return { line: ShareLine.None, count };
   return { line: tally.checking > 0 ? ShareLine.Checking : ShareLine.Shared, count };
+}
+
+/** What the share does as the dialog's success comes and goes. */
+export const CelebrationStep = { Start: "start", Reset: "reset", None: "none" } as const;
+export type CelebrationStep = (typeof CelebrationStep)[keyof typeof CelebrationStep];
+
+/**
+ * The share's step for the dialog's success `was` → `now`: start while it celebrates (the share
+ * runs once), reset only when a celebration ends, so a share pressed outside one (Share now) keeps
+ * its line through the reads that follow it.
+ */
+export function celebrationStep(was: boolean, now: boolean): CelebrationStep {
+  if (now) return CelebrationStep.Start;
+  return was ? CelebrationStep.Reset : CelebrationStep.None;
 }

@@ -90,6 +90,18 @@ app.whenReady().then(async()=>{
    assert.deepEqual(retried.shares[1],NAMES.slice(0,2));
    assert.deepEqual(retried.line,{outcome:'shared',text:'5 assets on Play',action:null});
   }
+  // Closed with the switch on before it went live: reopening says so, and Share now's line stays
+  // through the re-read that follows it (misses with Try again; then a bare ✓, no row back).
+  for (const mode of ['misses','live']) {
+   await step(mode+'Closing','window.shareRig.open()');
+   await step(mode+'ClosingOn','window.shareRig.toggle()');
+   const reopened=await step(mode+'Reopened','window.shareRig.reopen()');
+   assert.deepEqual(reopened.line,{outcome:'not-shared',text:'5 assets not on Play yet',action:'Share now'});
+   if (mode==='misses') report.notShared=await capture('dark-not-shared');
+   const now=await step(mode+'SharedNow','window.shareRig.shareNow("'+mode+'")');
+   assert.deepEqual(now.shares,[NAMES]);
+   assert.deepEqual(now.line,mode==='misses'?{outcome:'missed',text:'2 couldn’t be shared',action:'Try again'}:{outcome:'shared',text:'5 assets on Play',action:null});
+  }
   // The switch left off: going live shares nothing and says nothing.
   await step('offAgain','window.shareRig.open()');
   const quiet=await step('offLive','window.shareRig.publish()');

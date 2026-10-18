@@ -232,4 +232,24 @@ async function retry() {
   return sample();
 }
 
-Object.assign(window, { shareRig: { open, toggle, publish, retry, sample } });
+/** Close the dialog before the game goes live and open it again, the files as they stand. */
+async function reopen() {
+  flushSync(() => root.render(null));
+  await settle(2);
+  flushSync(() => root.render(<GenexPublishDialog plugin={genex} project={GAME} onClose={() => {}} />));
+  for (let i = 0; i < 100 && !document.querySelector("[data-publish-share-outcome='not-shared']"); i++) await frame();
+  await settle();
+  return sample();
+}
+
+/** Press Share now, then wait past the library's re-read that follows the share. */
+async function shareNow(mode: "live" | "misses" = "live") {
+  shareMode = mode;
+  document.querySelector<HTMLButtonElement>(".publish-share-now")?.click();
+  for (let i = 0; i < 200 && shares.length === 0; i++) await frame();
+  await wait(500);
+  await settle(20);
+  return sample();
+}
+
+Object.assign(window, { shareRig: { open, toggle, publish, retry, reopen, shareNow, sample } });

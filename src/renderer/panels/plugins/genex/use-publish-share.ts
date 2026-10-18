@@ -11,6 +11,8 @@ import { usePeople } from "../../../state/hooks.ts";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import {
   allMissed,
+  CelebrationStep,
+  celebrationStep,
   closedBeforeShare,
   NO_SHARES,
   retryItems,
@@ -96,7 +98,7 @@ export function usePublishShare(project: string) {
   const [tally, setTally] = useState<ShareTally>(NO_SHARES);
   const started = useRef(false);
   // Publish closed with the switch on before the share ran: say so, never drop it silently.
-  const [unsharedBefore] = useState(() => closedUnshared.has(project));
+  const [unsharedBefore, setUnsharedBefore] = useState(() => closedUnshared.has(project));
   const leaving = useRef({ on, count: items.length });
   leaving.current = { on, count: items.length };
   useEffect(
@@ -110,6 +112,7 @@ export function usePublishShare(project: string) {
   const send = useCallback(
     async (batch: typeof items, before: ShareTally): Promise<void> => {
       closedUnshared.delete(project);
+      setUnsharedBefore(false);
       started.current = true;
       setRun(ShareRun.Sharing);
       try {
@@ -150,9 +153,12 @@ export type PublishShare = ReturnType<typeof usePublishShare>;
 export function useShareWhenLive(project: string, celebrate: boolean): PublishShare {
   const share = usePublishShare(project);
   const { start, reset } = share;
+  const was = useRef(celebrate);
   useEffect(() => {
-    if (celebrate) start();
-    else reset();
+    const step = celebrationStep(was.current, celebrate);
+    was.current = celebrate;
+    if (step === CelebrationStep.Start) start();
+    if (step === CelebrationStep.Reset) reset();
   }, [celebrate, start, reset]);
   return share;
 }

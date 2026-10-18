@@ -65,7 +65,7 @@ function NotSharedRow({ share }: { share: PublishShare }): JSX.Element {
 }
 
 /** The success screen's one line: sharing, done with a bare ✓, or what missed with Try again. */
-function ShareOutcomeLine({ share }: { share: PublishShare }): JSX.Element {
+function ShareOutcomeLine({ share }: { share: PublishShare }): JSX.Element | null {
   if (share.run === ShareRun.Sharing)
     return (
       <p className="publish-share-line" role="status" data-publish-share-outcome="sharing">
@@ -73,6 +73,7 @@ function ShareOutcomeLine({ share }: { share: PublishShare }): JSX.Element {
       </p>
     );
   const { line, count } = shareLine(share.tally);
+  if (line === ShareLine.None) return null;
   if (line === ShareLine.Missed)
     return (
       <p className="publish-share-line" role="alert" data-publish-share-outcome={line}>
