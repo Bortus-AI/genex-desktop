@@ -14,7 +14,7 @@ import { STLLoader } from "three/addons/loaders/STLLoader.js";
 import { PLYLoader } from "three/addons/loaders/PLYLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
-import { assetCompanion, assetExtension, assetPreviewMode } from "../shared/asset-preview.ts";
+import { assetCompanion, assetExtension, assetPreviewMode, PreviewFailure } from "../shared/asset-preview.ts";
 import { assetFormat } from "../shared/game-assets.ts";
 
 /** The most memory a model's own files may take in the preview. */
@@ -112,7 +112,7 @@ function createManager(v) {
     throw new Error(MESSAGE.missingResource(fileName(url)));
   });
   manager.onError = (url) => {
-    if (!v.disposed) v.onError(new Error(MESSAGE.undecodable(fileName(url))));
+    if (!v.disposed) v.onError(new Error(MESSAGE.undecodable(fileName(url))), PreviewFailure.File);
   };
   return manager;
 }
@@ -131,7 +131,7 @@ function createKtx(v, renderer) {
         const worker = new Worker(new URL("./decoders/basis/worker.js", location.href));
         worker.addEventListener("error", (event) => {
           event.preventDefault();
-          if (!v.disposed) v.onError(new Error(MESSAGE.decoderFailed(event.message)));
+          if (!v.disposed) v.onError(new Error(MESSAGE.decoderFailed(event.message)), PreviewFailure.Interrupted);
           ktx.dispose();
         });
         const transcoderBinary = ktx.transcoderBinary.slice(0);
@@ -475,7 +475,8 @@ function viewerControls(v, resize) {
 
 /**
  * A viewer for `file` in `host`. `motions` are animation-only files of the same rig, each `{file,
- * name}`: their clips play on the model after its own.
+ * name}`: their clips play on the model after its own. `onError(error, failure)` names why as a
+ * `PreviewFailure`: the file itself, or something around it that may pass.
  */
 export function createAssetViewer(
   host,
@@ -521,17 +522,18 @@ export function createAssetViewer(
   const resize = startLoop(v);
   renderer.domElement.addEventListener("webglcontextlost", (event) => {
     event.preventDefault();
-    if (!v.disposed) onError(new Error(MESSAGE.contextLost));
+    if (!v.disposed) onError(new Error(MESSAGE.contextLost), PreviewFailure.Interrupted);
   });
   v.loadTimer = setTimeout(() => {
     if (!v.disposed) {
-      onError(new Error(MESSAGE.timedOut));
+      onError(new Error(MESSAGE.timedOut), PreviewFailure.Interrupted);
       v.ktx.dispose();
     }
   }, DECODE_TIMEOUT_MS);
+  // A file that fails to load or parse fails the same way again.
   void load(v)
     .catch((error) => {
-      if (!v.disposed) onError(error);
+      if (!v.disposed) onError(error, PreviewFailure.File);
     })
     .finally(() => clearTimeout(v.loadTimer));
   return viewerControls(v, resize);

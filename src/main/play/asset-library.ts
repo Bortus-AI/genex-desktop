@@ -8,6 +8,7 @@ import {
   isLibraryKind,
   LIBRARY_IDS_MAX,
   libraryFileUrl,
+  libraryKindOf,
   LIBRARY_QUERY_MAX,
   type LibraryAsset,
   LibraryKind,
@@ -18,6 +19,7 @@ import {
   ShareMiss,
 } from "../../shared/asset-library.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
+import { assetKind } from "../../shared/game-assets.ts";
 import { isPlaySlug } from "../../shared/play.ts";
 import { GalleryError, type GalleryRequest, imageUrl, isRecord, SignInNeeded, text } from "./gallery.ts";
 import type { PeopleDeps } from "./people.ts";
@@ -52,8 +54,16 @@ const ID_MAX = 64;
 /** genex.games' wire status of a project on Play. */
 const PUBLISHED = "published";
 
-/** A generation's own file, by the role genex.games stores it under, most wanted first. */
-const MAIN_FILE_ROLES = ["model-glb", "image-main", "audio-sfx", "video-mp4"] as const;
+/**
+ * A generation's own file, by the role genex.games stores it under, most wanted first, and the kind
+ * of file each role holds. Wire values.
+ */
+const MAIN_FILE_ROLES = [
+  { role: "model-glb", kind: LibraryKind.Model },
+  { role: "image-main", kind: LibraryKind.Image },
+  { role: "audio-sfx", kind: LibraryKind.Sound },
+  { role: "video-mp4", kind: LibraryKind.Video },
+] as const satisfies readonly { role: string; kind: LibraryKind }[];
 
 /** The provider genex.games records for a file sent from a person's own Mac. Wire value. */
 const UPLOAD_PROVIDER = "upload";
@@ -81,16 +91,31 @@ export interface LibraryFile {
   title: string;
 }
 
-/** The file genex.games keeps a generation as: its main role's, else the first with an address. */
-function mainFile(files: unknown): string | null {
+/** A generation's file and what it is; `kind` is null when neither its role nor its extension says. */
+interface MainFile {
+  url: string;
+  kind: LibraryKind | null;
+}
+
+/** What a file is by its address's extension (a role name has none), or null. */
+function kindOfAddress(url: string): LibraryKind | null {
+  const name = new URL(url).pathname.split("/").at(-1) ?? "";
+  return libraryKindOf({ kind: assetKind(name) });
+}
+
+/**
+ * The file genex.games keeps a generation as, and what it is: its main role's, else the first with
+ * an address (a model's preview picture, when the model itself is off the asset hosts).
+ */
+function mainFile(files: unknown): MainFile | null {
   const list = Array.isArray(files) ? files.filter(isRecord) : [];
-  for (const role of MAIN_FILE_ROLES) {
+  for (const { role, kind } of MAIN_FILE_ROLES) {
     const url = libraryFileUrl(list.find((file) => file.role === role)?.url);
-    if (url) return url;
+    if (url) return { url, kind };
   }
   for (const file of list) {
     const url = libraryFileUrl(file.url);
-    if (url) return url;
+    if (url) return { url, kind: kindOfAddress(url) };
   }
   return null;
 }
@@ -111,12 +136,14 @@ export function toLibraryAsset(item: unknown, local = false): LibraryAsset | nul
   if (!isRecord(item) || !isGenerationId(item.id)) return null;
   const kind = typeof item.kind === "string" ? (KIND_OF_GENERATION[item.kind] ?? LibraryKind.Model) : LibraryKind.Model;
   const createdAt = typeof item.createdAt === "string" ? item.createdAt : "";
+  const file = mainFile(item.files);
   return {
     id: item.id,
     kind,
     title: text(item.prompt, TITLE_MAX).split("\n")[0]?.trim() ?? "",
     thumbnailUrl: imageUrl(item.thumbnailUrl, local),
-    fileUrl: mainFile(item.files),
+    fileUrl: file?.url ?? null,
+    fileKind: file?.kind ?? null,
     saved: typeof item.savedAt === "string",
     shared: sharedOf(item.sharedAsset),
     shareable: item.provider !== UPLOAD_PROVIDER && !UNSHAREABLE_KINDS.has(String(item.kind)),
@@ -254,18 +281,32 @@ const DOWNLOAD_MESSAGE = {
   failed: (status: number) => `genex.games answered ${status} for that file.`,
 } as const;
 
+/** A signal that aborts once `ms` passed (`AbortSignal.timeout`); a test hands in one it aborts itself. */
+export type DownloadTimeout = (ms: number) => AbortSignal;
+
 /**
  * The network download: only from genex.games' asset hosts, no redirects, never more than
  * `maxBytes` read (a lying or missing Content-Length is caught while reading), in a bounded wait.
  */
-export function networkDownload(fetchImpl: typeof fetch, timeoutMs = DOWNLOAD_TIMEOUT_MS): LibraryDownload {
+export function networkDownload(
+  fetchImpl: typeof fetch,
+  timeoutMs = DOWNLOAD_TIMEOUT_MS,
+  timeout: DownloadTimeout = (ms) => AbortSignal.timeout(ms),
+): LibraryDownload {
   return async (url, maxBytes) => {
     const checked = libraryFileUrl(url);
     if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
-    const res = await fetchImpl(checked, { redirect: "error", signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok || !res.body) throw new Error(DOWNLOAD_MESSAGE.failed(res.status));
+    const res = await fetchImpl(checked, { redirect: "error", signal: timeout(timeoutMs) });
+    // A body refused unread is cancelled, so its connection is let go of rather than left open.
+    if (!res.ok || !res.body) {
+      await res.body?.cancel();
+      throw new Error(DOWNLOAD_MESSAGE.failed(res.status));
+    }
     const declared = Number(res.headers.get("content-length") ?? "0");
-    if (declared > maxBytes) throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+    if (declared > maxBytes) {
+      await res.body.cancel();
+      throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+    }
     return readCapped(res.body, maxBytes);
   };
 }
@@ -283,6 +324,14 @@ export function libraryPictureFile(download: LibraryDownload): LibraryPictureFil
     if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
     return new Uint8Array(await download(checked, LIBRARY_PICTURE_MAX_BYTES));
   };
+}
+
+/** A tile's picture file from genex.games' asset hosts over `fetchImpl`, in {@link LIBRARY_PICTURE_TIMEOUT_MS}. */
+export function networkPictureFile(
+  fetchImpl: typeof fetch,
+  timeout: DownloadTimeout = (ms) => AbortSignal.timeout(ms),
+): LibraryPictureFile {
+  return libraryPictureFile(networkDownload(fetchImpl, LIBRARY_PICTURE_TIMEOUT_MS, timeout));
 }
 
 /** A body's bytes, refusing it the moment it passes `maxBytes`. */

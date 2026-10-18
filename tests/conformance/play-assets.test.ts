@@ -33,7 +33,14 @@ import {
 } from "../../src/renderer/play/asset-tiles.ts";
 import { CardTag } from "../../src/renderer/asset-library-view.ts";
 import { FeedStatus } from "../../src/renderer/play/play-model.ts";
-import { PICTURES_AT_ONCE, pictureQueue, viewerFileOf } from "../../src/renderer/play/tile-pictures.ts";
+import {
+  PICTURE_RETRY_MS,
+  PICTURES_AT_ONCE,
+  pictureQueue,
+  viewerFileOf,
+} from "../../src/renderer/play/tile-pictures.ts";
+import { SnapshotError } from "../../src/renderer/asset-snapshot.ts";
+import { PreviewFailure } from "../../src/shared/asset-preview.ts";
 import { assetViewChosen, createPlayStore, FEED_STALE_MS, initialPlay } from "../../src/renderer/state/play.ts";
 import { fakeStudioApi } from "../helpers/fake-studio-api.ts";
 
@@ -75,6 +82,7 @@ function asset(over: Partial<LibraryAsset> & { id: string }): LibraryAsset {
     title: over.id,
     thumbnailUrl: null,
     fileUrl: `https://assets.genex.technology/generations/${over.id}/file.glb`,
+    fileKind: LibraryKind.Model,
     saved: false,
     shared: null,
     shareable: true,
@@ -137,6 +145,7 @@ describe("Assets shelf: tiles", () => {
       coverUrl: null,
       kind: LibraryKind.Sound,
       fileUrl: null,
+      fileKind: null,
       source: { slug: "crowd-cheer" },
       slug: "crowd-cheer",
       tag: null,
@@ -212,8 +221,21 @@ describe("Assets shelf: a tile's picture", () => {
 
   it("shows an image with no cover as its own file", () => {
     const file = `${FILES}/gen-dusk-0007/image-main`;
-    const tile = libraryTile(asset({ id: "gen-dusk-0007", kind: LibraryKind.Image, fileUrl: file }));
+    const tile = libraryTile(
+      asset({ id: "gen-dusk-0007", kind: LibraryKind.Image, fileUrl: file, fileKind: LibraryKind.Image }),
+    );
     assert.deepEqual(tilePicture(tile), { from: PictureFrom.Image, url: file });
+  });
+
+  it("shows the file a 3D asset keeps as a picture when that file is a picture, never reading it as a model", () => {
+    // Its model is off genex.games' hosts, so the file the library keeps for it is its preview picture.
+    const file = `${FILES}/gen-sword-0010/preview.png`;
+    const tile = libraryTile(asset({ id: "gen-sword-0010", fileUrl: file, fileKind: LibraryKind.Image }));
+    assert.deepEqual(tilePicture(tile), { from: PictureFrom.Image, url: file });
+    const unknown = libraryTile(
+      asset({ id: "gen-sword-0011", fileUrl: `${FILES}/gen-sword-0011/extra`, fileKind: null }),
+    );
+    assert.equal(tilePicture(unknown), null, "a file nothing says is a model or a picture keeps the glyph");
   });
 
   it("draws a 3D asset with no cover from its model file", () => {
@@ -224,8 +246,8 @@ describe("Assets shelf: a tile's picture", () => {
 
   it("keeps the glyph for a sound, a video, a tile that knows no file, and a file off genex.games' hosts", () => {
     const bare = (over: Partial<LibraryAsset>) => tilePicture(libraryTile(asset({ id: "gen-bare-0009", ...over })));
-    assert.equal(bare({ kind: LibraryKind.Sound, fileUrl: `${FILES}/x/audio-sfx` }), null);
-    assert.equal(bare({ kind: LibraryKind.Video, fileUrl: `${FILES}/x/video-mp4` }), null);
+    assert.equal(bare({ kind: LibraryKind.Sound, fileUrl: `${FILES}/x/audio-sfx`, fileKind: LibraryKind.Sound }), null);
+    assert.equal(bare({ kind: LibraryKind.Video, fileUrl: `${FILES}/x/video-mp4`, fileKind: LibraryKind.Video }), null);
     assert.equal(bare({ fileUrl: null }), null);
     for (const fileUrl of [
       "https://tripo-data.rg1.data.tripo3d.com/x/model.glb",
@@ -234,7 +256,7 @@ describe("Assets shelf: a tile's picture", () => {
       "data:image/png;base64,AAAA",
     ]) {
       assert.equal(bare({ fileUrl }), null, fileUrl);
-      assert.equal(bare({ kind: LibraryKind.Image, fileUrl }), null, fileUrl);
+      assert.equal(bare({ kind: LibraryKind.Image, fileUrl, fileKind: LibraryKind.Image }), null, fileUrl);
     }
     const [noCover] = catalogTiles([catalogItem({ slug: "no-cover" })], KindChoice.All);
     assert.ok(noCover);
@@ -301,16 +323,44 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
     assert.deepEqual(hand.started, ["a"]);
   });
 
-  it("tries a file that could not be drawn only once", async () => {
+  it("tries a file that itself cannot be drawn only once, however long the session runs", async () => {
     const hand = handDraws();
-    const queue = pictureQueue(hand.draw);
+    const clock = { at: 0 };
+    const queue = pictureQueue(hand.draw, { now: () => clock.at });
     const failed = assert.rejects(queue.request("broken", live()), /not a GLB/);
     await new Promise((resolve) => setImmediate(resolve));
-    await hand.settle("broken", new Error("not a GLB"));
+    await hand.settle("broken", new SnapshotError(PreviewFailure.File, new Error("not a GLB")));
     await failed;
+    clock.at += 100 * PICTURE_RETRY_MS;
     await assert.rejects(queue.request("broken", live()));
     assert.deepEqual(hand.started, ["broken"]);
   });
+
+  for (const [label, error] of [
+    ["the network or main failed (offline, a timeout, a 5xx)", new Error("genex.games answered 503 for that file.")],
+    ["the graphics context was lost", new SnapshotError(PreviewFailure.Interrupted, new Error("context lost"))],
+    ["decoding ran out of time", new SnapshotError(PreviewFailure.Interrupted, new Error("timed out"))],
+  ] as const) {
+    it(`draws again, after a short rest, a picture whose draw failed because ${label}`, async () => {
+      const hand = handDraws();
+      const clock = { at: 0 };
+      const queue = pictureQueue(hand.draw, { now: () => clock.at });
+      const failed = assert.rejects(queue.request("a", live()));
+      await new Promise((resolve) => setImmediate(resolve));
+      await hand.settle("a", error);
+      await failed;
+      clock.at += PICTURE_RETRY_MS - 1;
+      await assert.rejects(queue.request("a", live()), "not again while it rests");
+      assert.deepEqual(hand.started, ["a"]);
+      clock.at += 1;
+      const again = queue.request("a", live());
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(hand.started, ["a", "a"], "the tile next on screen asks again");
+      await hand.settle("a", "pic-a");
+      assert.equal(await again, "pic-a");
+      assert.equal(queue.drawn("a"), "pic-a");
+    });
+  }
 
   it("never draws a picture whose tile left the screen before its turn, and frees its place", async () => {
     const hand = handDraws();

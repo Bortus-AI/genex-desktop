@@ -199,6 +199,7 @@ function libraryAsset(over: Partial<LibraryAsset> & { id: string; title: string 
     kind: LibraryKind.Model,
     thumbnailUrl: `https://assets.genex.technology/thumbs/${over.id}.webp`,
     fileUrl: `https://assets.genex.technology/generations/${over.id}/file.glb`,
+    fileKind: LibraryKind.Model,
     saved: false,
     shared: null,
     shareable: true,

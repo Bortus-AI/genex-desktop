@@ -16,11 +16,14 @@ import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { FixtureAccount, fixtureAccountToken } from "../../src/main/dev/fixture-people.ts";
 import {
   assetLibrary,
+  type LibraryDownload,
   LIBRARY_PICTURE_MAX_BYTES,
+  LIBRARY_PICTURE_TIMEOUT_MS,
   libraryListRoute,
   libraryPictureFile,
   LibraryRoute,
   networkDownload,
+  networkPictureFile,
   toLibraryAsset,
 } from "../../src/main/play/asset-library.ts";
 import { type GalleryAnswer, type GalleryRequest, SignInNeeded } from "../../src/main/play/gallery.ts";
@@ -70,6 +73,7 @@ describe("library rows", () => {
       title: "Stadium crowd erupting",
       thumbnailUrl: "https://assets.genex.technology/thumb.webp",
       fileUrl: "https://assets.genex.technology/generations/x/audio.mp3",
+      fileKind: LibraryKind.Sound,
       saved: true,
       shared: { projectId: "p1", slug: "stadium-crowd", live: false },
       shareable: true,
@@ -93,7 +97,37 @@ describe("library rows", () => {
       files: [{ role: "model-glb", url: "https://evil.example/x.glb" }],
     });
     assert.equal(row?.fileUrl, null);
+    assert.equal(row?.fileKind, null);
     assert.equal(row?.kind, LibraryKind.Model);
+  });
+
+  it("says what the file it keeps is: by the role genex.games keeps it under, else by its extension", () => {
+    const HOST = "https://assets.genex.technology/generations/x";
+    const fileOf = (files: unknown) => {
+      const row = toLibraryAsset({ id: GEN, kind: "model", files });
+      return { url: row?.fileUrl, kind: row?.fileKind };
+    };
+    assert.deepEqual(fileOf([{ role: "model-glb", url: `${HOST}/model-glb` }]), {
+      url: `${HOST}/model-glb`,
+      kind: LibraryKind.Model,
+    });
+    assert.deepEqual(fileOf([{ role: "image-main", url: `${HOST}/image-main` }]), {
+      url: `${HOST}/image-main`,
+      kind: LibraryKind.Image,
+    });
+    // The model is off genex.games' hosts, so the file kept is its preview: a picture, not a model.
+    const preview = [
+      { role: "model-glb", url: "https://tripo-data.example/x/model.glb" },
+      { role: "preview", url: `${HOST}/preview.png?v=2` },
+    ];
+    assert.deepEqual(fileOf(preview), { url: `${HOST}/preview.png?v=2`, kind: LibraryKind.Image });
+    assert.deepEqual(fileOf([{ role: "rigged", url: `${HOST}/knight.FBX` }]), {
+      url: `${HOST}/knight.FBX`,
+      kind: LibraryKind.Model,
+    });
+    assert.deepEqual(fileOf([{ role: "extra", url: `${HOST}/extra` }]), { url: `${HOST}/extra`, kind: null });
+    assert.deepEqual(fileOf([{ role: "notes", url: `${HOST}/notes.txt` }]), { url: `${HOST}/notes.txt`, kind: null });
+    assert.deepEqual(fileOf(undefined), { url: null, kind: null });
   });
 
   for (const [label, url] of [
@@ -172,6 +206,49 @@ describe("the library's calls", () => {
   });
 });
 
+/** A fetch that records every address asked and answers with `answer`. */
+function recordingFetch(answer: (url: string, init: RequestInit | undefined) => Promise<Response> | Response) {
+  const asked: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    asked.push(url);
+    return answer(url, init);
+  }) as typeof fetch;
+  return { asked, fetchImpl };
+}
+
+/**
+ * A body of `chunks` chunks of `size` bytes that counts how many were read, and says whether it was
+ * let go of (cancelled); nothing is read ahead.
+ */
+function countedBody(chunks: number, size: number) {
+  const counted = { read: 0, cancelled: false };
+  const body = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (counted.read >= chunks) return controller.close();
+        counted.read += 1;
+        controller.enqueue(new Uint8Array(size));
+      },
+      cancel() {
+        counted.cancelled = true;
+      },
+    },
+    { highWaterMark: 0 },
+  );
+  return { counted, body };
+}
+
+/** A download that records every address asked and answers a few bytes. */
+function recordingDownload() {
+  const asked: string[] = [];
+  const download: LibraryDownload = async (url) => {
+    asked.push(url);
+    return new Uint8Array(4);
+  };
+  return { asked, download };
+}
+
 describe("downloads", () => {
   it("refuses an address off genex.games' hosts before any request", async () => {
     let fetched = 0;
@@ -188,34 +265,20 @@ describe("downloads", () => {
     await assert.rejects(download(FILE_URL, 10), /too large/);
     assert.equal((await download(FILE_URL, 64)).byteLength, 64);
   });
+
+  it("lets go of a body it refuses unread: an error status, or a size said to be over the cap", async () => {
+    const failing = countedBody(4, 4);
+    const refused = recordingFetch(() => new Response(failing.body, { status: 503 }));
+    await assert.rejects(networkDownload(refused.fetchImpl)(FILE_URL, 64));
+    assert.equal(failing.counted.read, 0);
+    assert.equal(failing.counted.cancelled, true, "a refused answer's body is cancelled, not left open");
+    const declared = countedBody(4, 4);
+    const big = recordingFetch(() => new Response(declared.body, { headers: { "content-length": "65" } }));
+    await assert.rejects(networkDownload(big.fetchImpl)(FILE_URL, 64));
+    assert.equal(declared.counted.read, 0);
+    assert.equal(declared.counted.cancelled, true, "a body said to be too large is cancelled, not left open");
+  });
 });
-
-/** A fetch that records every address asked and answers with `answer`. */
-function recordingFetch(answer: (url: string, init: RequestInit | undefined) => Promise<Response> | Response) {
-  const asked: string[] = [];
-  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
-    const url = String(input);
-    asked.push(url);
-    return answer(url, init);
-  }) as typeof fetch;
-  return { asked, fetchImpl };
-}
-
-/** A body of `chunks` chunks of `size` bytes that counts how many were read; nothing is read ahead. */
-function countedBody(chunks: number, size: number) {
-  const counted = { read: 0 };
-  const body = new ReadableStream<Uint8Array>(
-    {
-      pull(controller) {
-        if (counted.read >= chunks) return controller.close();
-        counted.read += 1;
-        controller.enqueue(new Uint8Array(size));
-      },
-    },
-    { highWaterMark: 0 },
-  );
-  return { counted, body };
-}
 
 describe("a tile's picture file", () => {
   const EVIL = "https://evil.example/x.glb";
@@ -236,13 +299,20 @@ describe("a tile's picture file", () => {
     ["an object", { url: FILE_URL }],
   ] as const) {
     it(`refuses ${label} before any request`, async () => {
-      const { asked, fetchImpl } = recordingFetch(() => new Response(new Uint8Array(4)));
-      await assert.rejects(libraryPictureFile(networkDownload(fetchImpl))(url));
+      const { asked, download } = recordingDownload();
+      await assert.rejects(libraryPictureFile(download)(url));
       assert.deepEqual(asked, []);
     });
   }
 
-  it("reads a file on genex.games' asset hosts", async () => {
+  it("reads a file on genex.games' asset hosts, at most its cap", async () => {
+    const sizes: number[] = [];
+    const download: LibraryDownload = async (_url, maxBytes) => {
+      sizes.push(maxBytes);
+      return new Uint8Array(4);
+    };
+    await libraryPictureFile(download)(FILE_URL);
+    assert.deepEqual(sizes, [LIBRARY_PICTURE_MAX_BYTES]);
     const { asked, fetchImpl } = recordingFetch(() => new Response(new Uint8Array([0x67, 0x6c, 0x54, 0x46])));
     const bytes = await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL);
     assert.deepEqual([...bytes], [0x67, 0x6c, 0x54, 0x46]);
@@ -275,16 +345,27 @@ describe("a tile's picture file", () => {
     const quiet = recordingFetch(() => new Response(lying.body));
     await assert.rejects(libraryPictureFile(networkDownload(quiet.fetchImpl))(FILE_URL), /too large/);
     assert.ok(lying.counted.read <= LIBRARY_PICTURE_MAX_BYTES / MIB + 1, `read ${lying.counted.read} MiB`);
+    assert.equal(lying.counted.cancelled, true, "the rest of a body past the cap is let go of");
   });
 
-  it("gives up on a host that never answers once its wait is over", async () => {
-    const { fetchImpl } = recordingFetch(
+  it("gives up on a host that never answers once a picture's wait is over", async () => {
+    const waits: number[] = [];
+    const over = new AbortController();
+    const timeout = (ms: number): AbortSignal => {
+      waits.push(ms);
+      return over.signal;
+    };
+    const { asked, fetchImpl } = recordingFetch(
       (_url, init) =>
         new Promise<Response>((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
         }),
     );
-    await assert.rejects(libraryPictureFile(networkDownload(fetchImpl, 10))(FILE_URL));
+    const reading = networkPictureFile(fetchImpl, timeout)(FILE_URL);
+    assert.deepEqual(asked, [FILE_URL]);
+    assert.deepEqual(waits, [LIBRARY_PICTURE_TIMEOUT_MS], "a picture's read waits the picture's own time");
+    over.abort(new DOMException("The wait is over.", "TimeoutError"));
+    await assert.rejects(reading, { name: "TimeoutError" });
   });
 });
 

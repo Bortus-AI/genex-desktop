@@ -55,3 +55,12 @@ export function assetCompanion(base: string, uri: string): string {
   if (!root.every((part, i) => result[i] === part)) throw new Error("Model resource leaves its asset folder.");
   return result.join("/");
 }
+
+/** Why the model viewer could not draw its file. Codes, never shown. */
+export const PreviewFailure = {
+  /** The file itself: not the format it claims, malformed, or a part of it that will not decode. Drawing it again fails again. */
+  File: "file",
+  /** Something around the file that may pass: the graphics context was lost, a decoder failed, decoding ran out of time. */
+  Interrupted: "interrupted",
+} as const;
+export type PreviewFailure = (typeof PreviewFailure)[keyof typeof PreviewFailure];

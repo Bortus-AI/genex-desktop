@@ -52,6 +52,11 @@ export interface LibraryAsset {
   thumbnailUrl: string | null;
   /** The file itself (a GLB, picture, sound or video), or null when genex.games lists none. */
   fileUrl: string | null;
+  /**
+   * What that file is, by the role genex.games keeps it under or its extension: a 3D asset whose
+   * model is off the asset hosts may keep its preview picture. Null when neither says, or no file.
+   */
+  fileKind: LibraryKind | null;
   saved: boolean;
   shared: SharedAsset | null;
   /** genex.games takes a share of it: Genex made it (not sent from a file, nor made from one) and its kind may go on Play (not music). */

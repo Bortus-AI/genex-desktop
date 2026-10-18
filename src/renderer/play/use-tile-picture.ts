@@ -41,8 +41,8 @@ const pictures = pictureQueue(drawModel);
 
 /**
  * The picture drawn from the 3D file at `url` for the tile `ref` holds: kept, or asked for while the
- * tile is on screen (a tile that leaves before its turn gives its turn up). Null until it is drawn,
- * or when it cannot be.
+ * tile is on screen (a tile that leaves before its turn gives its turn up; one whose draw failed for a
+ * reason that may pass asks again when next on screen). Null until it is drawn, or when it cannot be.
  */
 function useDrawnPicture(url: string | null, ref: RefObject<HTMLElement | null>): string | null {
   const [picture, setPicture] = useState(() => (url ? (pictures.drawn(url) ?? null) : null));
@@ -61,7 +61,8 @@ function useDrawnPicture(url: string | null, ref: RefObject<HTMLElement | null>)
           if (mounted) setPicture(drawn);
         },
         () => {
-          // Left the screen before its turn (it asks again when back), or the file cannot be drawn.
+          // Left the screen before its turn, or a draw failed for a reason that may pass (it asks again
+          // when next on screen), or the file itself cannot be drawn.
           if (asking === controller) asking = null;
         },
       );

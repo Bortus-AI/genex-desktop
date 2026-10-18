@@ -48,6 +48,8 @@ export interface AssetTile {
   kind: LibraryKind | null;
   /** The file itself, which a sound tile plays; null when the tile does not know it. */
   fileUrl: string | null;
+  /** What that file is (a 3D asset may keep a picture); null when nothing says, or no file. */
+  fileKind: LibraryKind | null;
   /** What Add copies into a game. */
   source: AddSource;
   /** The page on Play the cover opens, or null for an asset with none. */
@@ -93,6 +95,7 @@ export function gameTile(game: PlayGame): AssetTile {
     coverUrl: game.coverUrl,
     kind: game.assetKind,
     fileUrl: null,
+    fileKind: null,
     source: { slug: game.slug },
     slug: game.slug,
     tag: null,
@@ -108,6 +111,7 @@ export function catalogTile(item: GenexCatalogItem): AssetTile {
     coverUrl: item.thumbnailUrl,
     kind: item.assetKind,
     fileUrl: null,
+    fileKind: null,
     source: { slug: item.slug },
     slug: item.slug,
     tag: null,
@@ -123,6 +127,7 @@ export function libraryTile(asset: LibraryAsset): AssetTile {
     coverUrl: asset.thumbnailUrl,
     kind: asset.kind,
     fileUrl: asset.fileUrl,
+    fileKind: asset.fileKind,
     source: { generationId: asset.id },
     slug: asset.shared?.live ? asset.shared.slug : null,
     tag: cardTagOf(asset),
@@ -140,16 +145,16 @@ export interface TilePicture {
 }
 
 /**
- * A tile's picture: its cover; else, for a file on genex.games' asset hosts, an image's own file or
- * a preview drawn from a 3D file. Null keeps the kind's glyph: a sound, a video, a tile that knows no
- * file, a file anywhere else.
+ * A tile's picture: its cover; else, for a file on genex.games' asset hosts, by what that file is
+ * (not the asset's kind): a picture as itself, a 3D file as a preview drawn from it. Null keeps the
+ * kind's glyph: a sound, a video, a file nothing names, a tile that knows no file, a file anywhere else.
  */
-export function tilePicture(tile: Pick<AssetTile, "coverUrl" | "kind" | "fileUrl">): TilePicture | null {
+export function tilePicture(tile: Pick<AssetTile, "coverUrl" | "fileUrl" | "fileKind">): TilePicture | null {
   if (tile.coverUrl) return { from: PictureFrom.Image, url: tile.coverUrl };
   const file = libraryFileUrl(tile.fileUrl);
   if (!file) return null;
-  if (tile.kind === LibraryKind.Image) return { from: PictureFrom.Image, url: file };
-  if (tile.kind === LibraryKind.Model) return { from: PictureFrom.Model, url: file };
+  if (tile.fileKind === LibraryKind.Image) return { from: PictureFrom.Image, url: file };
+  if (tile.fileKind === LibraryKind.Model) return { from: PictureFrom.Model, url: file };
   return null;
 }
 
