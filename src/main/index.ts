@@ -44,7 +44,7 @@ import { type ThreadStatusMap, UiEvent } from "../shared/ui-events.ts";
 import { onSoundShortcut } from "./game-sound.ts";
 import type { GameFullScreen } from "./game-full-screen.ts";
 import { wireGameFullScreen } from "./full-screen-view.ts";
-import { BootReason, HarnessState } from "../shared/protocol.ts";
+import { HarnessState } from "../shared/protocol.ts";
 import { ClaudeCodeEngine } from "../substrate/engines/claude-code.ts";
 import { CodexEngine } from "../substrate/engines/codex.ts";
 import { configureCodingClis, resolveCodingCli } from "../substrate/engines/external-cli.ts";
@@ -65,7 +65,7 @@ import {
   shutdownSteps,
   type ShutdownStep,
 } from "./app-lifecycle.ts";
-import { createBootGate } from "./boot-gate.ts";
+import { createBootGate, startStepAfter } from "./boot-gate.ts";
 import {
   activateChatFixture,
   DevProviders,
@@ -175,7 +175,7 @@ import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../subs
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
 import { TITLEBAR_HEIGHT, windowChrome } from "./window-chrome.ts";
 import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
-import { BootPhase, StudioPlatform, type SandboxProblem } from "../shared/boot.ts";
+import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import type { WindowControlColors } from "../shared/studio-api.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { longPath } from "../substrate/windows-sandbox.ts";
@@ -230,8 +230,6 @@ const PLUGIN_ICON_CSP = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
 const MESSAGE = {
   devLaunchRefused: "Developer launch requires a developer build and owned launch configuration",
   couldNotStart: "The studio could not start",
-  harnessWouldNotBoot: "Its harness would not boot, even after rewinding to the last version that worked.",
-  resetHarness: "Reset harness to shipped version",
   quit: "Quit",
   linkNotOpened: "That link could not be opened",
   pluginUnavailable: "Plugin unavailable",
@@ -712,7 +710,11 @@ async function createCore(userData: string): Promise<StudioCore> {
     execPath: process.execPath,
     runAsNode: true,
     appVersion: app.getVersion(),
-    markBoot: (step) => performanceRecorder.mark(step),
+    markBoot: (step) => {
+      performanceRecorder.mark(step);
+      const next = startStepAfter(step);
+      if (next) bootGate.progress(next);
+    },
     onUiEvent: pushUiEvent,
     onAutoResumePending: (pending) => (pending ? resumeAwake.hold() : resumeAwake.release()),
     onLog: (line, stream) => {
@@ -851,6 +853,9 @@ async function createWindow(studio: StudioCore): Promise<BrowserWindow> {
  */
 async function createSetupWindow(): Promise<BrowserWindow> {
   const win = new BrowserWindow(studioWindowOptions());
+  // The window's own questions are answered only once it is the studio window, which its first
+  // question can be before it has loaded.
+  window = win;
   performanceRecorder.mark("window-created");
   win.on("unresponsive", () => studioLog.write("main", "studio window unresponsive"));
   collectRendererConsole(win);
@@ -1447,6 +1452,7 @@ async function main(): Promise<void> {
     gate: bootGate,
     report: (draft) => sendFeedback(draft, bootFeedbackSources()),
     setWindowControls: paintWindowControls,
+    quit: () => app.quit(),
   });
   registerUpdateIpc(bootHandle, {
     updates,
@@ -1633,10 +1639,31 @@ interface StartedStudio {
  */
 async function startStudio(): Promise<StartedStudio | null> {
   // The sandbox-setup fixture shows the screen over a real, ready core; its Retry just opens it.
-  if (fixtureProviders && dev?.fixture === FixtureName.SandboxSetup)
-    bootGate.hold(FIXTURE_SANDBOX_PROBLEM, async () => {});
+  if (showsFixtureSetup()) bootGate.hold(FIXTURE_SANDBOX_PROBLEM, async () => {});
+  if (opensWhileStarting()) openStartWindow();
   const studio = await coreOrSetup();
   return studio ? launchStudio(studio) : null;
+}
+
+/** The sandbox-setup fixture, which holds a ready core on the setup screen. */
+function showsFixtureSetup(): boolean {
+  return fixtureProviders && dev?.fixture === FixtureName.SandboxSetup;
+}
+
+/** A Windows launch a person watches: its core starts slowly enough to need a window first. */
+function opensWhileStarting(): boolean {
+  return process.platform === StudioPlatform.Windows && !dev && !isSmoke;
+}
+
+/**
+ * Open the window before the core: on Windows its start can take most of a minute (the protected
+ * workspace checks the network and sets folder access), and with no window there was nothing on
+ * screen. The window says which step the start is on until the studio's own window replaces it,
+ * or turns into the setup screen.
+ */
+function openStartWindow(): void {
+  bootGate.starting(StartStep.Games);
+  createSetupWindow().catch((err) => studioLog.write("main", `start window: ${errorMessage(err)}`));
 }
 
 /**
@@ -1663,6 +1690,8 @@ async function coreOrSetup(): Promise<StudioCore | null> {
 async function openSandboxSetup(problem: SandboxProblem): Promise<void> {
   studioLog.write("main", `sandbox unavailable: ${problem.code} ${problem.details.join("; ")}`);
   bootGate.hold(problem, retryStartup);
+  // The window opened for the start asks again until the start ends, and shows the setup screen.
+  if (window && !window.isDestroyed()) return;
   window = await createSetupWindow();
 }
 
@@ -1671,10 +1700,7 @@ async function openSandboxSetup(problem: SandboxProblem): Promise<void> {
  * the gate, which shows the new problem; once it starts, the studio window replaces the setup one.
  */
 async function retryStartup(): Promise<void> {
-  const studio = await createCore(userDataRoot);
-  const setup = window;
-  await launchStudio(studio);
-  if (setup && setup !== window && !setup.isDestroyed()) setup.destroy();
+  await launchStudio(await createCore(userDataRoot));
 }
 
 /** Report a start-up failure and quit, as a launch always has for anything but the sandbox. */
@@ -1696,18 +1722,20 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     // the engines the last launch checked. After a fixture's engines are in place.
     const engines = startEngineBoot(studio);
     registerIpc(studio, engines);
+    // The studio's window asks first thing: it opens on the studio, not on the screen before it.
+    if (!showsFixtureSetup()) bootGate.ready();
+    const before = window;
     const win = await createWindow(studio);
     window = win;
+    // The start or setup window this launch opened first gives way to the studio's.
+    if (before && before !== win && !before.isDestroyed()) before.destroy();
     // First launch opens on an empty library, with no game chat to select.
     if (fixture?.project) await seedFixtureModel(win, fixture.threadId);
     const booted = await startHarness(studio);
     if (!booted) return null;
     if (fixture) await activateChatFixture(studio, fixture);
     if (fixture?.project) await openFixtureGame(win, fixture.project);
-    pushUiEvent({ type: UiEvent.StudioReady, payload: { userData } });
-    studioLog.write("main", "studio ready");
-    // Rows a closed app left unsent go now, or are dropped once a week old.
-    void runSharing.flush().catch((err) => studioLog.write("main", errorMessage(err)));
+    announceReady(userData);
     const view = requirePreview();
     if (dev && __STUDIO_DEV_BUILD__) devRuntime = await startDevRuntime(dev, studio, win, view);
     return { core: studio, window: win, preview: view };
@@ -1715,6 +1743,14 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     failStartup(err);
     return null;
   }
+}
+
+/** The studio is up: the window hears it, the log says so, and rows a closed app left unsent go. */
+function announceReady(userData: string): void {
+  pushUiEvent({ type: UiEvent.StudioReady, payload: { userData } });
+  studioLog.write("main", "studio ready");
+  // Rows a closed app left unsent go now, or are dropped once a week old.
+  void runSharing.flush().catch((err) => studioLog.write("main", errorMessage(err)));
 }
 
 /** The game view `createWindow` attached; every started window has one. */
@@ -1788,8 +1824,8 @@ async function openFixtureGame(win: BrowserWindow, project: string): Promise<voi
 }
 
 /**
- * Boot the harness. A normal launch that cannot boot offers to reset it to the shipped version;
- * false when the user chose to quit instead.
+ * Boot the harness; false when it would not, and the window says so instead of the studio. A
+ * developer or smoke launch throws, as its runner reads the failure from stderr.
  */
 async function startHarness(studio: StudioCore): Promise<boolean> {
   try {
@@ -1798,24 +1834,25 @@ async function startHarness(studio: StudioCore): Promise<boolean> {
     return true;
   } catch (err) {
     if (dev || isSmoke) throw err;
-    // Not the synchronous box: that one stops the main process until it is answered, so the open
-    // window behind it could neither sign in, nor load Play, nor list models.
-    const { response: choice } = await dialog.showMessageBox({
-      type: "error",
-      message: MESSAGE.couldNotStart,
-      detail: `${MESSAGE.harnessWouldNotBoot}\n\n${errorMessage(err)}`,
-      buttons: [MESSAGE.resetHarness, MESSAGE.quit],
-      defaultId: 0,
-      cancelId: 1,
-    });
-    if (choice !== 0) {
-      app.exit(1);
-      return false;
-    }
-    // A failure here reaches the error box below: nothing else is left to try.
-    await studio.start(BootReason.ColdStart, { resetHarness: true });
-    return true;
+    await showStartFailure(studio, err);
+    return false;
   }
+}
+
+/**
+ * Hold the window on "Genex couldn't start" with the harness's error, Try again, a report and Quit,
+ * and load it again to show that. It was an error box over the window, which quit the app when it
+ * was closed. Try again boots the harness again and finishes the launch; a failure there shows its
+ * own words.
+ */
+async function showStartFailure(studio: StudioCore, err: unknown): Promise<void> {
+  const failure = errorMessage(err);
+  studioLog.write("main", `harness would not start: ${failure}`);
+  bootGate.fail(failure, async () => {
+    await studio.start();
+    announceReady(userDataRoot);
+  });
+  if (window && !window.isDestroyed()) await window.loadFile(path.join(distRoot, "renderer", "index.html"));
 }
 
 /** The developer runtime, once the renderer shows its threads. */

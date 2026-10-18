@@ -260,6 +260,8 @@ export interface StudioApi {
   setUpSandbox(): Promise<SandboxSetupResult>;
   /** Send the team a report of a Set up that failed with `error`, with this build's recent log; throws when it was not taken. */
   reportSandboxSetup(error: string): Promise<void>;
+  /** Quit the app from the screen of a studio that would not start. */
+  quitFromBoot(): Promise<void>;
   /** Paint the Windows and Linux window controls (`titleBarOverlay`) in the theme's colours; macOS ignores it. */
   setWindowControls(colors: WindowControlColors): Promise<void>;
   /** The new version of the app downloaded in the background, or null; `onEvent` announces later ones. */

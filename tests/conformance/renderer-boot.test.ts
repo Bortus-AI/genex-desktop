@@ -10,6 +10,7 @@ import {
   SandboxProblemCode,
   SandboxSetupOutcome,
   SandboxTool,
+  StartStep,
   StudioPlatform,
   linuxInstallCommands,
   type BootState,
@@ -302,6 +303,119 @@ describe("Set up on Windows", () => {
     await controller.load();
     await Promise.all([controller.setUp(), controller.setUp()]);
     assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+});
+
+/** A Windows window that opened while the core starts: main answers `answers` in turn, then the last one. */
+function startingBoot(answers: BootState[], retries: BootState[] = []) {
+  const fake = fakeStudioApi();
+  const asked = [...answers];
+  fake.stub("bootState", async () => (asked.length > 1 ? asked.shift() : asked[0]) as BootState);
+  fake.stub("retrySandboxSetup", async () => retries.shift() ?? WINDOWS_READY);
+  fake.stub("setUpSandbox", async () => ({ outcome: SandboxSetupOutcome.Installed, state: WINDOWS_READY }));
+  let started = 0;
+  const waits: number[] = [];
+  const controller = createBoot(fake.api, {
+    onReady: () => {
+      started++;
+    },
+    wait: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  return { fake, controller, started: () => started, waits };
+}
+
+const starting = (step: StartStep): BootState => ({
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.Starting,
+  sandbox: null,
+  step,
+});
+const FAILURE = "EPERM: operation not permitted, lstat 'C:\\Users\\USER\\AppData'";
+const FAILED: BootState = {
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.Failed,
+  sandbox: null,
+  failure: FAILURE,
+};
+
+describe("a window that opens while the studio starts", () => {
+  it("says which step the core is on, and follows it", async () => {
+    const { controller, waits } = startingBoot([
+      starting(StartStep.Games),
+      starting(StartStep.Workspace),
+      starting(StartStep.Studio),
+      WINDOWS_SETUP,
+    ]);
+    const steps: Array<StartStep | null> = [];
+    controller.store.subscribe((state) => {
+      if (bootView(state) === BootView.Starting) steps.push(state.step);
+    });
+    await controller.start();
+    assert.deepEqual(steps, [StartStep.Games, StartStep.Workspace, StartStep.Studio]);
+    assert.equal(waits.length, 3, "one wait before each new question");
+  });
+
+  it("goes on to the setup screen a start ends on, and runs Set up there by itself", async () => {
+    const { controller, fake } = startingBoot([starting(StartStep.Workspace), WINDOWS_SETUP]);
+    await controller.start();
+    assert.equal(fake.callsOf("setUpSandbox").length, 1);
+  });
+
+  it("does not start the studio when the core is ready: main opens it in its own window", async () => {
+    const { controller, started } = startingBoot([starting(StartStep.Studio), WINDOWS_READY]);
+    await controller.start();
+    assert.equal(started(), 0);
+    assert.equal(bootView(controller.store.getState()), BootView.Starting);
+  });
+});
+
+describe("a studio that would not start", () => {
+  it("shows why, in the window, and does not start the studio", async () => {
+    const { controller, started } = startingBoot([FAILED]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.Failed);
+    assert.equal(state.error, FAILURE);
+    assert.equal(started(), 0);
+  });
+
+  it("Try again starts the studio once main says it is ready", async () => {
+    const { controller, started, fake } = startingBoot([FAILED]);
+    await controller.start();
+    await controller.retry();
+    assert.equal(bootView(controller.store.getState()), BootView.Studio);
+    assert.equal(started(), 1);
+    assert.equal(fake.callsOf("retrySandboxSetup").length, 1);
+  });
+
+  it("a Try again that fails again shows the new words", async () => {
+    const again: BootState = { ...FAILED, failure: "harness exited during boot" };
+    const { controller } = startingBoot([FAILED], [again]);
+    await controller.start();
+    await controller.retry();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.Failed);
+    assert.equal(state.error, "harness exited during boot");
+  });
+
+  it("sends its failure as a report", async () => {
+    const { controller, fake } = startingBoot([FAILED]);
+    const reports: string[] = [];
+    fake.stub("reportSandboxSetup", async (text) => {
+      reports.push(text);
+    });
+    await controller.start();
+    await controller.report();
+    assert.deepEqual(reports, [FAILURE]);
+  });
+
+  it("Quit asks main to quit", async () => {
+    const { controller, fake } = startingBoot([FAILED]);
+    await controller.start();
+    await controller.quit();
+    assert.equal(fake.callsOf("quitFromBoot").length, 1);
   });
 });
 

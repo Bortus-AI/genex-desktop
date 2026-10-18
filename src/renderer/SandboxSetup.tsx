@@ -4,10 +4,12 @@
  * install it (or, where AppArmor blocks the isolation, the command that allows it), and offers Retry, which re-runs core startup in main (`state/boot.ts`). On Windows,
  * where the missing piece is a one-time install, the window runs it by itself instead: "Setting up
  * Genex" over the installer's animation while Windows asks for approval, then the studio.
+ * The same card says which step a Windows start is on ("Starting Genex"), and that the studio
+ * would not start ("Genex couldn't start") with Try again, a report and Quit.
  * `BootRoot` chooses between these, the studio itself, and nothing while main has not answered yet.
  */
-import { type JSX, useState } from "react";
-import { type InstallCommand, type SandboxProblem, toolPackage } from "../shared/boot.ts";
+import { type JSX, type ReactNode, useState } from "react";
+import { type InstallCommand, type SandboxProblem, StartStep, toolPackage } from "../shared/boot.ts";
 import { App } from "./App.tsx";
 import { useAppLoaderDismissal } from "./app-loader.ts";
 import { type Boot, BootView, bootView, canSetUp, SetupReport } from "./state/boot.ts";
@@ -24,9 +26,24 @@ export function BootRoot({ boot }: { boot: Boot }): JSX.Element | null {
   const installable = useBoot(boot.store, canSetUp);
   const settingUp = useBoot(boot.store, (s) => s.settingUp);
   const report = useBoot(boot.store, (s) => s.report);
-  // The studio dismisses the startup loader once its own first screen is drawn; the setup screen is drawn now.
-  useAppLoaderDismissal(view === BootView.SandboxSetup);
+  const step = useBoot(boot.store, (s) => s.step);
+  // The studio dismisses the startup loader once its own first screen is drawn; the others are drawn now.
+  useAppLoaderDismissal(view !== BootView.Studio && view !== BootView.Loading);
   if (view === BootView.Studio) return <App />;
+  // Try again starts the studio again: the card says so until it opens, or fails again.
+  if (view === BootView.Starting || (view === BootView.Failed && retrying))
+    return <StartingCard step={step ?? StartStep.Studio} />;
+  if (view === BootView.Failed) {
+    return (
+      <StartFailed
+        error={error}
+        report={report}
+        onRetry={() => void boot.retry()}
+        onReport={() => void boot.report()}
+        onQuit={() => void boot.quit()}
+      />
+    );
+  }
   if (view === BootView.Loading || !problem) return null;
   if (installable) {
     return (
@@ -61,6 +78,96 @@ const WINDOWS_CARD = {
 /** The installer's animation (forge's Squirrel `loadingGif`), so setup looks like the installer's next moment. */
 const INSTALLING_ANIMATION = { backgroundImage: "url(media/installing.gif)" } as const;
 
+/**
+ * The installer's ripple animation filling the window, and a card at its bottom left with `title`
+ * and what follows it: the Windows setup, start and start-failure screens.
+ */
+function AnimationCard({
+  selector,
+  titleId,
+  title,
+  children,
+}: {
+  selector: Record<`data-${string}`, string>;
+  titleId: string;
+  title: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div
+      {...selector}
+      style={INSTALLING_ANIMATION}
+      className="relative h-full overflow-hidden bg-canvas bg-cover bg-center [image-rendering:pixelated]"
+    >
+      {/* The window has no title bar of its own: the top strip moves it, as the headers do. */}
+      <div className="titlebar-drag absolute inset-x-0 top-0 h-12" />
+      <section
+        aria-labelledby={titleId}
+        aria-live="polite"
+        className="absolute right-6 bottom-8 left-6 flex max-w-[360px] flex-col gap-2 rounded-[14px] bg-surface px-5 py-[18px] shadow-raised [image-rendering:auto]"
+      >
+        <h1 id={titleId} className="text-lg font-medium text-ink">
+          {title}
+        </h1>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+/** What is going on right now, after a softly pulsing dot. */
+function WorkingLine({ text }: { text: string }): JSX.Element {
+  return (
+    <p className="flex items-center gap-2 font-mono text-sm text-ink-3">
+      <span className="size-[7px] rounded-full bg-accent-primary animate-[records-pulse_1.4s_ease-in-out_infinite] motion-reduce:animate-none" />
+      {text}
+    </p>
+  );
+}
+
+/** A Windows start before its studio opens: "Starting Genex" and the step it is on. */
+export function StartingCard({ step }: { step: StartStep }): JSX.Element {
+  return (
+    <AnimationCard selector={{ "data-boot-starting": step }} titleId="boot-starting-title" title={WORDS.starting.title}>
+      <p className="text-ink-2">{WORDS.starting.line}</p>
+      <WorkingLine text={WORDS.starting.step[step]} />
+    </AnimationCard>
+  );
+}
+
+/** A studio whose harness would not start: Try again, a report, Quit, and the raw error under Details. */
+export function StartFailed({
+  error,
+  report,
+  onRetry,
+  onReport,
+  onQuit,
+}: {
+  error: string | null;
+  report: SetupReport;
+  onRetry: () => void;
+  onReport: () => void;
+  onQuit: () => void;
+}): JSX.Element {
+  const words = WORDS.startFailed;
+  return (
+    <AnimationCard selector={{ "data-boot-failed": "" }} titleId="boot-failed-title" title={words.title}>
+      <p className="text-orange">{words.line}</p>
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <Button variant="default" data-boot-try-again onClick={onRetry}>
+          {words.tryAgain}
+        </Button>
+        {error !== null && <ReportAction report={report} onReport={onReport} />}
+        <Button variant="ghost" data-boot-quit onClick={onQuit}>
+          {words.quit}
+        </Button>
+      </div>
+      {report === SetupReport.Failed && <p className="text-sm text-orange">{WORDS.windows.failed.reportFailed}</p>}
+      {error !== null && <ErrorDetails error={error} />}
+    </AnimationCard>
+  );
+}
+
 function windowsStep(settingUp: boolean, error: string | null): WindowsStep {
   if (settingUp) return WindowsStep.SettingUp;
   return error === null ? WindowsStep.NeedsOk : WindowsStep.Failed;
@@ -90,41 +197,24 @@ export function WindowsSetup({
   const step = windowsStep(settingUp, error);
   const words = WINDOWS_CARD[step];
   return (
-    <div
-      data-sandbox-setup={problem.code}
-      data-windows-setup={step}
-      style={INSTALLING_ANIMATION}
-      className="relative h-full overflow-hidden bg-canvas bg-cover bg-center [image-rendering:pixelated]"
+    <AnimationCard
+      selector={{ "data-sandbox-setup": problem.code, "data-windows-setup": step }}
+      titleId="windows-setup-title"
+      title={words.title}
     >
-      {/* The window has no title bar of its own: the top strip moves it, as the headers do. */}
-      <div className="titlebar-drag absolute inset-x-0 top-0 h-12" />
-      <section
-        aria-labelledby="windows-setup-title"
-        aria-live="polite"
-        className="absolute right-6 bottom-8 left-6 flex max-w-[360px] flex-col gap-2 rounded-[14px] bg-surface px-5 py-[18px] shadow-raised [image-rendering:auto]"
-      >
-        <h1 id="windows-setup-title" className="text-lg font-medium text-ink">
-          {words.title}
-        </h1>
-        <p className={step === WindowsStep.Failed ? "text-orange" : "text-ink-2"}>{words.line}</p>
-        {step === WindowsStep.SettingUp && (
-          <p className="flex items-center gap-2 font-mono text-sm text-ink-3">
-            <span className="size-[7px] rounded-full bg-accent-primary animate-[records-pulse_1.4s_ease-in-out_infinite] motion-reduce:animate-none" />
-            {WORDS.windows.settingUp.step}
-          </p>
-        )}
-        {step === WindowsStep.NeedsOk && (
-          <div className="pt-2">
-            <Button variant="default" data-sandbox-set-up onClick={onSetUp}>
-              {WORDS.windows.needsOk.setUp}
-            </Button>
-          </div>
-        )}
-        {step === WindowsStep.Failed && error !== null && (
-          <SetupFailed error={error} report={report} onSetUp={onSetUp} onReport={onReport} />
-        )}
-      </section>
-    </div>
+      <p className={step === WindowsStep.Failed ? "text-orange" : "text-ink-2"}>{words.line}</p>
+      {step === WindowsStep.SettingUp && <WorkingLine text={WORDS.windows.settingUp.step} />}
+      {step === WindowsStep.NeedsOk && (
+        <div className="pt-2">
+          <Button variant="default" data-sandbox-set-up onClick={onSetUp}>
+            {WORDS.windows.needsOk.setUp}
+          </Button>
+        </div>
+      )}
+      {step === WindowsStep.Failed && error !== null && (
+        <SetupFailed error={error} report={report} onSetUp={onSetUp} onReport={onReport} />
+      )}
+    </AnimationCard>
   );
 }
 
@@ -174,13 +264,20 @@ function SetupFailed({
         <ReportAction report={report} onReport={onReport} />
       </div>
       {report === SetupReport.Failed && <p className="text-sm text-orange">{words.reportFailed}</p>}
-      <details className="settings-disclosure text-sm text-ink-3">
-        <summary>{WORDS.details}</summary>
-        <pre className="mt-2 max-h-24 overflow-auto font-mono text-micro whitespace-pre-wrap break-words select-text">
-          {error}
-        </pre>
-      </details>
+      <ErrorDetails error={error} />
     </>
+  );
+}
+
+/** The raw error, folded under Details and selectable for copying. */
+function ErrorDetails({ error }: { error: string }): JSX.Element {
+  return (
+    <details className="settings-disclosure text-sm text-ink-3">
+      <summary>{WORDS.details}</summary>
+      <pre className="mt-2 max-h-24 overflow-auto font-mono text-micro whitespace-pre-wrap break-words select-text">
+        {error}
+      </pre>
+    </details>
   );
 }
 

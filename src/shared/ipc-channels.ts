@@ -30,6 +30,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:boot.retry": "retrySandboxSetup",
   "studio:boot.setup": "setUpSandbox",
   "studio:boot.report": "reportSandboxSetup",
+  "studio:boot.quit": "quitFromBoot",
   "studio:window.controls": "setWindowControls",
   "studio:update": "readyUpdate",
   "studio:update.restart": "restartToUpdate",
@@ -258,6 +259,7 @@ export interface StudioInvokePayloads {
   "studio:boot.retry": undefined;
   "studio:boot.setup": undefined;
   "studio:boot.report": { error: string };
+  "studio:boot.quit": undefined;
   "studio:window.controls": Arg<"setWindowControls", 0>;
   "studio:update": undefined;
   "studio:update.restart": undefined;

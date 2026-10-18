@@ -22,7 +22,7 @@
 import { InteractionObjective, InteractionSource } from "../shared/run-summary.ts";
 import type { GameEngine } from "../shared/game-engine.ts";
 import { WorkerStopCode } from "../shared/workers.ts";
-import { type PackageManager, type SandboxProblemCode, StudioPlatform } from "../shared/boot.ts";
+import { type PackageManager, type SandboxProblemCode, type StartStep, StudioPlatform } from "../shared/boot.ts";
 import { ChatFileOpen } from "../shared/chat-files.ts";
 import { sizeWords } from "../shared/byte-size.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
@@ -3292,6 +3292,23 @@ export const SANDBOX_SETUP_WORDS = {
       sent: "Report sent",
       reportFailed: "The report didn’t send. Try again in a moment.",
     },
+  },
+  /** A Windows window opened before the core: what the start is doing, by `StartStep`. */
+  starting: {
+    title: "Starting Genex",
+    line: "Getting your games and the protected workspace ready.",
+    step: {
+      games: "Reading your games",
+      workspace: "Starting the protected workspace",
+      studio: "Opening the studio",
+    } satisfies Record<StartStep, string>,
+  },
+  /** The studio's harness would not start: its error, Try again, a report and Quit. */
+  startFailed: {
+    title: "Genex couldn’t start",
+    line: "The part of Genex that runs your agents didn’t start.",
+    tryAgain: "Try again",
+    quit: "Quit",
   },
   stillFailing: "Studio still couldn’t start:",
   details: "Details",

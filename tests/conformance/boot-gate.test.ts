@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createBootGate } from "../../src/main/boot-gate.ts";
+import { createBootGate, startStepAfter } from "../../src/main/boot-gate.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerBootIpc } from "../../src/main/ipc/boot.ts";
 import {
@@ -13,6 +13,7 @@ import {
   SandboxProblemCode,
   SandboxSetupOutcome,
   SandboxTool,
+  StartStep,
   StudioPlatform,
   linuxInstallCommands,
   type SandboxProblem,
@@ -117,6 +118,69 @@ describe("boot gate", () => {
     attempt.resolve();
     assert.deepEqual(await first, await second);
     assert.equal(attempts, 1);
+  });
+});
+
+describe("starting and a studio that would not start", () => {
+  it("moves the starting window on at the core's games and sandbox marks", () => {
+    assert.equal(startStepAfter("core:settings"), null);
+    assert.equal(startStepAfter("core:games"), StartStep.Workspace);
+    assert.equal(startStepAfter("core:sandbox"), StartStep.Studio);
+  });
+
+  it("says which step a starting core is on, and only while it is starting", () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    gate.progress(StartStep.Workspace);
+    assert.equal(gate.state().phase, BootPhase.Ready, "a launch with no starting window stays ready");
+    gate.starting(StartStep.Games);
+    assert.deepEqual(gate.state(), {
+      platform: StudioPlatform.Windows,
+      phase: BootPhase.Starting,
+      sandbox: null,
+      step: StartStep.Games,
+    });
+    gate.progress(StartStep.Workspace);
+    assert.equal(gate.state().step, StartStep.Workspace);
+    gate.ready();
+    assert.deepEqual(gate.state(), { platform: StudioPlatform.Windows, phase: BootPhase.Ready, sandbox: null });
+    gate.progress(StartStep.Studio);
+    assert.equal(gate.state().phase, BootPhase.Ready);
+  });
+
+  it("holds on the failure with its words, and Try again that works opens the studio", async () => {
+    const gate = createBootGate(StudioPlatform.Mac);
+    let attempts = 0;
+    gate.fail("harness exited during boot", async () => {
+      attempts++;
+    });
+    assert.deepEqual(gate.state(), {
+      platform: StudioPlatform.Mac,
+      phase: BootPhase.Failed,
+      sandbox: null,
+      failure: "harness exited during boot",
+    });
+    assert.deepEqual(await gate.retry(), { platform: StudioPlatform.Mac, phase: BootPhase.Ready, sandbox: null });
+    assert.equal(attempts, 1);
+  });
+
+  it("a Try again that fails again shows the new failure instead of rejecting", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    gate.fail("first", async () => {
+      throw new Error("EPERM: lstat AppData");
+    });
+    const after = await gate.retry();
+    assert.equal(after.phase, BootPhase.Failed);
+    assert.equal(after.failure, "EPERM: lstat AppData");
+  });
+
+  it("a startup attempt that ends on a new hold keeps it, rather than opening the studio", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    gate.hold(NOT_PROVISIONED, async () => {
+      gate.fail("harness exited during boot", async () => {});
+    });
+    const after = await gate.retry();
+    assert.equal(after.phase, BootPhase.Failed);
+    assert.equal(after.failure, "harness exited during boot");
   });
 });
 
@@ -258,17 +322,19 @@ function bootIpc(fixture: boolean, platform: string = StudioPlatform.Linux) {
   });
   const painted: WindowControlColors[] = [];
   const reports: FeedbackDraft[] = [];
+  const quits: string[] = [];
   registerBootIpc(handle, {
     gate,
     report: async (draft) => void reports.push(draft),
     setWindowControls: (colors) => void painted.push(colors),
+    quit: () => void quits.push("quit"),
   });
   const invoke = (channel: string, payload?: unknown) => {
     const listener = listeners.get(channel);
     assert.ok(listener, `${channel} is not registered`);
     return listener({ sender: "studio", senderFrame: "main" }, payload);
   };
-  return { gate, painted, reports, invoke, installs };
+  return { gate, painted, reports, invoke, installs, quits };
 }
 
 describe("boot IPC", () => {
@@ -328,6 +394,19 @@ describe("boot IPC", () => {
       assert.equal(result.ok, false, JSON.stringify(payload));
     }
     assert.equal(reports.length, 1);
+  });
+
+  it("quits on Quit, which a start that failed offers", async () => {
+    const { invoke, quits } = bootIpc(true);
+    assert.deepEqual(await invoke("studio:boot.quit"), { ok: true, value: undefined });
+    assert.equal(quits.length, 1);
+  });
+
+  it("names a studio that would not start in its report, not a setup", async () => {
+    const { gate, invoke, reports } = bootIpc(false);
+    gate.fail("harness exited during boot", async () => {});
+    await invoke("studio:boot.report", { error: "harness exited during boot" });
+    assert.match(reports[0]?.text ?? "", /^Genex couldn't start/);
   });
 
   it("paints the window controls with two hex colours", async () => {

@@ -5,6 +5,10 @@
  * Retry re-runs core startup in main (and on Windows, Set up installs it first); once it is,
  * `onReady` starts the studio, exactly once. On Windows the first start runs Set up by itself, so
  * a person sees only "Setting up Genex" and Windows' own prompt.
+ *
+ * A Windows window opens before the core: it says which step the start is on, asking again until
+ * the start ends, and main opens the studio in a window of its own. A studio whose harness would
+ * not start stays on its failure, with Try again, a report and Quit.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
@@ -14,8 +18,10 @@ import {
   SandboxProblemCode,
   SandboxSetupOutcome,
   type SandboxSetupResult,
+  type StartStep,
   StudioPlatform,
 } from "../../shared/boot.ts";
+import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import type { StudioApi } from "../../shared/studio-api.ts";
 
@@ -24,11 +30,16 @@ const MESSAGE = {
   stillNotSetUp: "The install finished, but Windows still reports the protected workspace as not set up.",
 } as const;
 
+/** How long a starting window waits before it asks main again which step the start is on. */
+const START_POLL_MS = SECOND_MS / 2;
+
 /** What the window shows for the boot state. */
 export const BootView = {
   Loading: "loading",
   SandboxSetup: "sandbox-setup",
   Studio: "studio",
+  Starting: "starting",
+  Failed: "failed",
 } as const;
 export type BootView = (typeof BootView)[keyof typeof BootView];
 
@@ -46,13 +57,15 @@ export interface BootStoreState {
   platform: string | null;
   phase: BootPhase | null;
   problem: SandboxProblem | null;
+  /** What a starting core is doing, while the phase is Starting. */
+  step: StartStep | null;
   /** A Retry is running. */
   retrying: boolean;
   /** Set up (Windows) is waiting on the install and its administrator prompt. */
   settingUp: boolean;
   /** The last Set up ended with the administrator prompt dismissed. */
   setupCancelled: boolean;
-  /** Why the last Retry or Set up failed, other than the sandbox still being unavailable. */
+  /** Why the last Retry or Set up failed (other than the sandbox still being unavailable), or why the studio would not start. */
   error: string | null;
   /** The report of the last failed Set up. */
   report: SetupReport;
@@ -62,6 +75,7 @@ export const initialBoot = (): BootStoreState => ({
   platform: null,
   phase: null,
   problem: null,
+  step: null,
   retrying: false,
   settingUp: false,
   setupCancelled: false,
@@ -69,17 +83,18 @@ export const initialBoot = (): BootStoreState => ({
   report: SetupReport.Idle,
 });
 
-/** Main answered: its platform, its phase and the setup problem, if any. */
+/** Main answered: its platform, its phase, the step a start is on, the setup problem and why a start failed, if any. */
 export function bootAnswered(state: BootStoreState, boot: BootState): BootStoreState {
   return {
     ...state,
     platform: boot.platform,
     phase: boot.phase,
     problem: boot.sandbox,
+    step: boot.step ?? null,
     retrying: false,
     settingUp: false,
     setupCancelled: false,
-    error: null,
+    error: boot.phase === BootPhase.Failed ? (boot.failure ?? null) : null,
   };
 }
 
@@ -124,6 +139,8 @@ export function canSetUp(state: Pick<BootStoreState, "platform" | "problem">): b
 export function bootView(state: BootStoreState): BootView {
   if (state.phase === BootPhase.Ready) return BootView.Studio;
   if (state.phase === BootPhase.SandboxSetup) return BootView.SandboxSetup;
+  if (state.phase === BootPhase.Starting) return BootView.Starting;
+  if (state.phase === BootPhase.Failed) return BootView.Failed;
   return BootView.Loading;
 }
 
@@ -143,8 +160,24 @@ export interface Boot {
   retry(): Promise<void>;
   /** Install the Windows sandbox, then start; presses while one runs share it. */
   setUp(): Promise<void>;
-  /** Send the team the last Set up's error with this build's log; presses while one sends share it. */
+  /** Send the team the last Set up's error (or the start's failure) with this build's log; presses while one sends share it. */
   report(): Promise<void>;
+  /** Quit the app, from the screen of a studio that would not start. */
+  quit(): Promise<void>;
+}
+
+export interface BootOptions {
+  onReady(): void;
+  /** Wait between questions while the core starts; a timer unless a test holds the clock. */
+  wait?: (ms: number) => Promise<void>;
+}
+
+/** The window's own clock: run `run` after `ms`. */
+const later = (run: () => void, ms: number): unknown => globalThis.setTimeout(run, ms);
+
+/** A wait on the window's own clock. */
+function timer(ms: number): Promise<void> {
+  return new Promise((done) => later(done, ms));
 }
 
 /** One run at a time of `run`: calls while it runs share it. */
@@ -159,9 +192,10 @@ function shared(run: () => Promise<void>): () => Promise<void> {
 }
 
 export function createBoot(
-  api: Pick<StudioApi, "bootState" | "retrySandboxSetup" | "setUpSandbox" | "reportSandboxSetup">,
-  options: { onReady(): void },
+  api: Pick<StudioApi, "bootState" | "retrySandboxSetup" | "setUpSandbox" | "reportSandboxSetup" | "quitFromBoot">,
+  options: BootOptions,
 ): Boot {
+  const wait = options.wait ?? timer;
   const store = createStore<BootStoreState>()(() => initialBoot());
   let started = false;
   const startOnce = (boot: BootState): void => {
@@ -175,13 +209,27 @@ export function createBoot(
     startOnce(boot);
     store.setState((state) => bootAnswered(state, boot), true);
   };
-  const ask = async (): Promise<BootState> => {
-    // A main that cannot say (an older build, a closing window) must not strand the window: the
-    // studio starts, and its own bootstrap reports what is wrong.
-    const boot = await api
+  // A main that cannot say (an older build, a closing window) must not strand the window: the
+  // studio starts, and its own bootstrap reports what is wrong.
+  const read = (): Promise<BootState> =>
+    api
       .bootState()
       .catch((): BootState => ({ platform: store.getState().platform ?? "", phase: BootPhase.Ready, sandbox: null }));
+  const ask = async (): Promise<BootState> => {
+    const boot = await read();
     answered(boot);
+    return boot;
+  };
+  // Ask again while the core starts. A start that ends ready opens the studio in a window of its
+  // own, which replaces this one, so this window keeps saying it is starting and starts nothing.
+  const followStart = async (first: BootState): Promise<BootState | null> => {
+    let boot = first;
+    while (boot.phase === BootPhase.Starting) {
+      await wait(START_POLL_MS);
+      boot = await read();
+      if (boot.phase === BootPhase.Ready) return null;
+      answered(boot);
+    }
     return boot;
   };
   const load = async (): Promise<void> => {
@@ -219,8 +267,9 @@ export function createBoot(
   };
   const setUp = shared(runSetUp);
   const start = async (): Promise<void> => {
-    const boot = await ask();
-    if (canSetUp(store.getState()) && !boot.setupTried) await setUp();
+    const boot = await followStart(await ask());
+    if (boot && canSetUp(store.getState()) && !boot.setupTried) await setUp();
   };
-  return { store, load, start, retry: shared(runRetry), setUp, report: shared(runReport) };
+  const quit = (): Promise<void> => api.quitFromBoot();
+  return { store, load, start, retry: shared(runRetry), setUp, report: shared(runReport), quit };
 }

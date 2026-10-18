@@ -135,6 +135,8 @@ const FIXTURE_SAFE = [
   // Boot reads main's state; Retry re-runs core startup, which a fixture profile may do.
   "studio:boot",
   "studio:boot.retry",
+  // Quit, from the screen of a studio that would not start, closes only this app.
+  "studio:boot.quit",
   // Recolours this window's own title-bar controls; nothing outside the window changes.
   "studio:window.controls",
   // Reads which update main holds; a fixture profile never downloads one (update-ready seeds a stand-in).
