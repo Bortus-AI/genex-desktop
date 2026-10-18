@@ -55,6 +55,9 @@ const WORDS = PLAY_ASSET_WORDS;
 const PLACEHOLDERS = 10;
 /** A search of the person's library waits for this pause in typing, as Play's search does. */
 const SEARCH_DEBOUNCE_MS = 200;
+/** Use's inset from the tile's edges, and on a sound tile its start, past the play button (`play-assets.css`). */
+const USE_INSET_PX = 8;
+const SOUND_USE_START_PX = 44;
 
 const KIND_ITEMS: readonly ViewSwitcherItem<KindChoice>[] = KIND_CHOICES.map((key) => ({
   key,
@@ -149,6 +152,12 @@ async function addTo(tile: AssetTile, game: GameProject): Promise<void> {
   }
 }
 
+/** Use's menu spans the whole tile: Use's own width, and the tile's edges Use leaves free. */
+const menuWidth = (kind: LibraryKind | null): string => {
+  const start = kind === LibraryKind.Sound ? SOUND_USE_START_PX : USE_INSET_PX;
+  return `max(200px, calc(var(--radix-dropdown-menu-trigger-width) + ${start + USE_INSET_PX}px))`;
+};
+
 /** Use, at the tile's foot while hovered: a small menu of the person's games to add the asset to. */
 function UseMenu({ tile }: { tile: AssetTile }): JSX.Element | null {
   const games = useLibrary((s) => s.games);
@@ -175,7 +184,13 @@ function UseMenu({ tile }: { tile: AssetTile }): JSX.Element | null {
           {busy ? WORDS.adding : WORDS.use}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="play-asset-menu">
+      <DropdownMenuContent
+        align="end"
+        sideOffset={USE_INSET_PX}
+        alignOffset={-USE_INSET_PX}
+        className="play-asset-menu"
+        style={{ minWidth: menuWidth(tile.kind) }}
+      >
         <DropdownMenuLabel>{WORDS.addTo}</DropdownMenuLabel>
         {targets.map((game) => (
           <DropdownMenuItem key={game.name} data-play-asset-add={game.name} onSelect={() => add(game)}>
