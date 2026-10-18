@@ -11,6 +11,7 @@
  * GENEX_WINDOWS_SANDBOX=ready). `windows-sandbox.test.ts` covers the same rules everywhere with fakes.
  */
 import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
@@ -23,7 +24,7 @@ import { after, before, describe, it } from "node:test";
 import { HarnessInbox } from "../../src/substrate/harness-inbox.ts";
 import { SandboxLaunchCode, SandboxLaunchError } from "../../src/substrate/sandbox-unavailable.ts";
 import { ProcessSandbox, killChild } from "../../src/substrate/spawn.ts";
-import { tmpDir } from "../helpers/tmp.ts";
+import { removeTree, tmpDir } from "../helpers/tmp.ts";
 
 /** Why this machine cannot run the suite, or false when it can. */
 function skipReason(): string | false {
@@ -243,6 +244,36 @@ describe("Windows sandbox: environment", { skip: SKIP, timeout: TEST_TIMEOUT_MS 
     );
     assert.equal(git.code, 0, git.stderr);
     assert.match(git.stdout, /first/);
+  });
+
+  it("still opens a workspace under AppData after another srt host stamps and restores beside it", async (t) => {
+    // Claude Code 2.1 runs sandbox-runtime's own Windows sandbox as the same srt-sandbox user, so
+    // its grants, deny stamps and their cleanup land on the folders above Genex's grants.
+    const srt = await import("@anthropic-ai/sandbox-runtime");
+    const srtWin = srt.resolveSrtWin();
+    const status = await srt.getWindowsSandboxUserStatusAsync({ srtWin });
+    t.diagnostic(`sandbox user ${status.sid}, group ${status.groupSid}, in group ${status.inSandboxGroup}`);
+    const appData = path.join(os.homedir(), "AppData");
+    const local = process.env.LOCALAPPDATA ?? path.join(appData, "Local");
+    const tag = `genex-other-host-${process.pid}`;
+    const theirs = [path.join(appData, tag), path.join(local, tag), path.join(os.homedir(), tag)];
+    for (const dir of theirs) await mkdir(dir, { recursive: true });
+    const holder = spawn(process.execPath, ["-e", "setInterval(() => {}, 1e6)"], { stdio: "ignore" });
+    assert.ok(status.sid, "the sandbox user has a SID");
+    const acl = { sandboxUserSid: status.sid, holderPid: holder.pid, srtWin };
+    try {
+      srt.grantWindowsAcl({ ...acl, read: [theirs[2]], write: [theirs[1]] });
+      srt.stampWindowsAcl({ ...acl, denyRead: [theirs[0]], denyWrite: [] });
+      srt.restoreWindowsAcl(acl);
+      srt.revokeWindowsAcl(acl);
+    } finally {
+      holder.kill();
+      for (const dir of theirs) await removeTree(dir);
+    }
+    t.diagnostic(execFileSync("icacls", [appData], { encoding: "utf8" }));
+    await writeFile(path.join(workspace, "after-other.cjs"), 'module.exports = "after-other-ok";');
+    const node = await inside(`node -e 'console.log(require("./after-other.cjs"))'`);
+    assert.equal(node.stdout.trim(), "after-other-ok", node.stderr);
   });
 
   it("boots an Electron-as-Node entry installed under %LOCALAPPDATA%, which spawns Git", {
