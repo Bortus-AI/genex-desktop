@@ -1104,7 +1104,8 @@ export async function grantLauncherFolders(srtWin: string, dirs: readonly string
     }
   };
   try {
-    srt.grantWindowsAcl({ ...acl, read: [...dirs], write: [] });
+    // The async grant (patched into sandbox-runtime): a sync one holds the start window's thread.
+    await srt.grantWindowsAclAsync({ ...acl, read: [...dirs], write: [] });
   } catch {
     release();
   }

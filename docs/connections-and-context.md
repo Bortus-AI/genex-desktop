@@ -642,9 +642,12 @@ Package inspection checks both ASAR and unpacked resources for Codex/Claude nati
 The packaged smoke matrix uses isolated discovery roots for neither/one/both providers and scripted
 status/structured execution. Live subscription execution is separate: explicitly select GPT-5.6-Sol,
 never Astra. A fixture or successful version probe is not live Claude SDK compatibility evidence.
-The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.73 absolute-path lookup at
-install/build time; it checks filesystem executability without a one-second `which` subprocess.
-It changes neither sandbox policy nor command execution. Re-review on dependency changes.
+The version-guarded `scripts/patch-sandbox-runtime.mjs` fixes SRT 0.0.73 at install/build time.
+Absolute-path lookup checks filesystem executability without a one-second `which` subprocess.
+Windows `initialize()` runs srt-win's egress check, folder grants and deny stamps through SRT's own
+async runner instead of `spawnSync`, which froze the start window ("Not Responding") on Electron's
+main thread; `sandbox-windows-start.test.ts` fails on Windows CI when the start holds the event loop.
+The patch changes neither sandbox policy nor command execution. Re-review on dependency changes.
 
 External provider clean-profile acceptance: after rebuilding the package, run
 `STUDIO_ACCEPT_CODEX=/absolute/external/codex STUDIO_ACCEPT_CLAUDE=/absolute/external/claude node tests/e2e/run-clean-provider-profiles.mjs`.

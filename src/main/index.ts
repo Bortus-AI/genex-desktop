@@ -182,7 +182,7 @@ import { longPath } from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
-import { SECOND_MS } from "../shared/duration.ts";
+import { MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { EVAL_LANE_EXIT } from "../shared/eval-lane.ts";
 import { EngineId } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
@@ -219,6 +219,12 @@ const HYDRATION_POLL_MS = 100;
 /** How long a fixture session may take to open its game from the sidebar, and how often it looks. */
 const FIXTURE_OPEN_TIMEOUT_MS = 15 * SECOND_MS;
 const FIXTURE_OPEN_POLL_MS = 50;
+/**
+ * How long a start the window watches may take before it offers Try again, a report and Quit. A
+ * healthy one takes under a minute; srt-win's own limits (the egress check, each folder grant) end
+ * a stuck step within a few, and the start goes on behind the offer.
+ */
+const START_TIMEOUT_MS = 3 * MINUTE_MS;
 /** What a hydrated renderer shows: the threads, or the sandbox setup screen. */
 const HYDRATED = "nav [data-thread], [data-sandbox-setup]";
 /** The model the local Bonsai acceptance runs when none is named. */
@@ -255,6 +261,8 @@ const MESSAGE = {
   keepsCrashing: "The studio window keeps crashing",
   keepsCrashingDetail: "Work in progress continues in the background.",
   reload: "Reload",
+  startTookTooLong: (minutes: number) =>
+    `The protected workspace was still starting after ${minutes} minutes. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.`,
 } as const;
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1664,6 +1672,26 @@ function opensWhileStarting(): boolean {
 function openStartWindow(): void {
   bootGate.starting(StartStep.Games);
   createSetupWindow().catch((err) => studioLog.write("main", `start window: ${errorMessage(err)}`));
+  setTimeout(startTookTooLong, START_TIMEOUT_MS).unref();
+}
+
+/**
+ * A start still running at {@link START_TIMEOUT_MS}: the window shows it as failed, with Try again
+ * (which restarts Genex: the running start cannot be taken back), a report and Quit. The start goes
+ * on, and a studio that comes up still replaces the window.
+ */
+function startTookTooLong(): void {
+  const { step } = bootGate.state();
+  const shown = bootGate.overdue(MESSAGE.startTookTooLong(START_TIMEOUT_MS / MINUTE_MS), async () => {
+    app.relaunch();
+    app.exit(0);
+  });
+  if (shown) studioLog.write("main", `start still running after ${START_TIMEOUT_MS / SECOND_MS} s (${step})`);
+}
+
+/** Load the window again for a new boot state: one showing a failure no longer asks main. */
+async function reshowBoot(): Promise<void> {
+  if (window && !window.isDestroyed()) await window.loadFile(path.join(distRoot, "renderer", "index.html"));
 }
 
 /**
@@ -1678,6 +1706,7 @@ async function coreOrSetup(): Promise<StudioCore | null> {
   } catch (err) {
     const showsSetup = err instanceof SandboxUnavailableError && !isSmoke && !dev;
     if (showsSetup) await openSandboxSetup(err.problem);
+    else if (opensWhileStarting()) await showCoreFailure(err);
     else failStartup(err);
     return null;
   }
@@ -1689,10 +1718,25 @@ async function coreOrSetup(): Promise<StudioCore | null> {
  */
 async function openSandboxSetup(problem: SandboxProblem): Promise<void> {
   studioLog.write("main", `sandbox unavailable: ${problem.code} ${problem.details.join("; ")}`);
+  const shownFailed = bootGate.state().phase === BootPhase.Failed;
   bootGate.hold(problem, retryStartup);
-  // The window opened for the start asks again until the start ends, and shows the setup screen.
-  if (window && !window.isDestroyed()) return;
+  // The window opened for the start asks again until the start ends, and shows the setup screen;
+  // one already showing the start as failed (it took too long) has stopped asking.
+  if (window && !window.isDestroyed()) {
+    if (shownFailed) await reshowBoot();
+    return;
+  }
   window = await createSetupWindow();
+}
+
+/**
+ * A watched start whose core failed for a reason other than the sandbox: the window shows it with
+ * Try again (the core's start again), a report and Quit, instead of an error box that quits.
+ */
+async function showCoreFailure(err: unknown): Promise<void> {
+  logStartupFailure(err);
+  bootGate.fail(errorMessage(err), retryStartup);
+  await reshowBoot();
 }
 
 /**
@@ -1852,7 +1896,7 @@ async function showStartFailure(studio: StudioCore, err: unknown): Promise<void>
     await studio.start();
     announceReady(userDataRoot);
   });
-  if (window && !window.isDestroyed()) await window.loadFile(path.join(distRoot, "renderer", "index.html"));
+  await reshowBoot();
 }
 
 /** The developer runtime, once the renderer shows its threads. */
@@ -1895,8 +1939,13 @@ function signInOnScreen(): boolean {
   );
 }
 
-function reportStartupFailure(err: unknown): void {
+/** Write a start-up failure to the log. */
+function logStartupFailure(err: unknown): void {
   studioLog.write("main", `startup failed: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+}
+
+function reportStartupFailure(err: unknown): void {
+  logStartupFailure(err);
   if (dev || isSmoke) {
     console.error("Fixture/development startup failed", err);
     console.error("Renderer startup diagnostics", JSON.stringify(rendererConsole.slice(-20)));

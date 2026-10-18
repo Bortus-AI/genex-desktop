@@ -170,10 +170,10 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
   `studio:boot.setup` (native,
   [`src/substrate/windows-sandbox-setup.ts`](../../src/substrate/windows-sandbox-setup.ts), one
   UAC prompt) by itself; failures offer `studio:boot.report` (native). Windows opens that window
-  before the core (phase `starting`, stepped by boot marks). A harness that would not start holds
-  the gate on `failed`: Try again, the report, Quit (`studio:boot.quit`). Other startup failures
-  show the error dialog and exit; smoke and developer launches fail (the `sandbox-setup` fixture
-  shows the screen over a ready core). The window's title bar comes from
+  before the core (phase `starting`, stepped by boot marks). A harness that would not start, a
+  core failing there, or a start past three minutes (Try again relaunches) holds the gate on
+  `failed`: Try again, the report, Quit (`studio:boot.quit`). Other failures show the error
+  dialog and exit; smoke and developer launches fail. The window's title bar comes from
   [`src/main/window-chrome.ts`](../../src/main/window-chrome.ts): `hiddenInset` on macOS
   (lights on the headers' line), a themed 48 px `titleBarOverlay` on Windows and Linux
   (`studio:window.controls`).

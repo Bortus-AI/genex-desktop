@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createBootGate, startStepAfter } from "../../src/main/boot-gate.ts";
+import { type BootGate, createBootGate, startStepAfter } from "../../src/main/boot-gate.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { registerBootIpc } from "../../src/main/ipc/boot.ts";
 import {
@@ -171,6 +171,39 @@ describe("starting and a studio that would not start", () => {
     const after = await gate.retry();
     assert.equal(after.phase, BootPhase.Failed);
     assert.equal(after.failure, "EPERM: lstat AppData");
+  });
+
+  it("a start still running at its limit shows as failed, and Try again runs the restart it was given", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    let restarts = 0;
+    const restart = async () => {
+      restarts++;
+    };
+    gate.starting(StartStep.Workspace);
+    assert.equal(gate.overdue("still starting after 3 minutes", restart), true);
+    assert.equal(gate.state().phase, BootPhase.Failed);
+    assert.equal(gate.state().failure, "still starting after 3 minutes");
+    await gate.retry();
+    assert.equal(restarts, 1);
+  });
+
+  it("a start that ended before its limit is left as it ended", () => {
+    const ended = [
+      (gate: BootGate) => gate.ready(),
+      (gate: BootGate) => gate.hold(NOT_PROVISIONED, async () => {}),
+      (gate: BootGate) => gate.fail("harness exited during boot", async () => {}),
+    ];
+    for (const end of ended) {
+      const gate = createBootGate(StudioPlatform.Windows);
+      gate.starting(StartStep.Games);
+      end(gate);
+      const before = gate.state();
+      assert.equal(
+        gate.overdue("still starting", async () => {}),
+        false,
+      );
+      assert.deepEqual(gate.state(), before);
+    }
   });
 
   it("a startup attempt that ends on a new hold keeps it, rather than opening the studio", async () => {

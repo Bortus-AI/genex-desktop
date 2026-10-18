@@ -47,6 +47,8 @@ export interface BootGate {
   hold(problem: SandboxProblem, attempt: () => Promise<void>): void;
   /** Show that the studio would not start, with `error`; Try again runs `attempt`, and a failure there shows its own words. */
   fail(error: string, attempt: () => Promise<void>): void;
+  /** A start still running at its limit shows as failed, as {@link fail}; nothing once the gate is past starting. */
+  overdue(error: string, attempt: () => Promise<void>): boolean;
   /** Run the held attempt; the state after it. */
   retry(): Promise<BootState>;
   /** Install the sandbox, then retry; throws when there is nothing to set up or the install fails. */
@@ -151,6 +153,11 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
       holds++;
       state = { platform, phase: BootPhase.Failed, sandbox: null, failure: error };
       attempt = next;
+    },
+    overdue(error, next) {
+      if (state.phase !== BootPhase.Starting) return false;
+      this.fail(error, next);
+      return true;
     },
     retry,
     setUp() {
