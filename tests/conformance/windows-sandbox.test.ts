@@ -42,6 +42,7 @@ import {
   keepWindowsDenies,
   msysPath,
   msysPathList,
+  granteeOf,
   renderEnvFile,
   sandboxSidOnce,
   setupGaps,
@@ -269,6 +270,15 @@ describe("read-attributes grants above each root", () => {
     const grants = holder(await tmpDir("windows-grants-"), 1, calls, { sid: async () => null });
     await assert.rejects(grants.sync([at("AppData")]), /could not read the sandbox user's id/);
     assert.deepEqual(calls, []);
+  });
+
+  it("names the sandbox users' group in the folder grants, which other srt hosts' cleanup leaves alone", () => {
+    const user = "S-1-5-21-1-1001";
+    const group = "S-1-5-21-1-1002";
+    assert.equal(granteeOf({ sid: user, groupSid: group, inSandboxGroup: true }), group);
+    assert.equal(granteeOf({ sid: user, groupSid: group, inSandboxGroup: false }), user, "not a member yet");
+    assert.equal(granteeOf({ sid: user }), user, "an srt-win that names no group");
+    assert.equal(granteeOf({}), null, "no sandbox user yet");
   });
 
   it("asks again for the sandbox user's id when a probe comes back empty, and keeps it once found", async () => {

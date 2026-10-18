@@ -24,13 +24,15 @@ the setup screen opens on `git-missing`. What differs from macOS:
   (`grantLauncherFolders`), and a packaged app works from its install folder (`installedWorkingDir`).
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(RA)` (read attributes, no listing) after every apply, since
-  srt-win's deny stamps replace the entry. The entry is set on that folder alone
+  srt-win's deny stamps replace the entry. The entry names the `sandbox-runtime-users` group
+  (`srtAncestorGrantee`; the user itself outside it): every srt host, Claude Code's own shell
+  sandbox among them, stamps and cleans up the user's entries, and its cleanup took Genex's on
+  `AppData`. The entry is set on that folder alone
   ([`windows-folder-ace.ts`](../src/substrate/windows-folder-ace.ts): `SetFileSecurityW` from one
   Windows PowerShell run per batch); `icacls`, the fallback where PowerShell is locked down,
   rewrites everything under the folder as well. Each Genex records its folders in
   `%LOCALAPPDATA%\genex-sandbox-grants\<pid>.json` and revokes only those no other running Genex
-  records. The sandbox user's SID is asked of srt-win up to three times; without it the apply
-  fails. The harness gets the entries set again just before it starts, and one that exits during
+  records. The SID is asked of srt-win up to three times; without it the apply fails. The harness gets the entries set again just before it starts, and one that exits during
   boot logs `icacls` for each folder from the profile down to its files.
 - Neither `spawn()`'s environment nor stdin reaches the child: each run's variables
   (`windowsRunEnv`) go to an env file in scratch and its stdin to a file, each deleted by the
@@ -71,8 +73,8 @@ CLI and gcloud, and the Chrome, Edge, Brave, Firefox and Opera profiles.
 ## Residual risks
 
 srt-win is alpha. Every srt host on the machine shares the
-`srt-sandbox` SID and so each other's grants and denies; revoking an `(RA)` grant also removes
-one another host made there (fail closed). DNS still resolves; the proxy token is on the
+`srt-sandbox` SID and so each other's grants and denies. Claude Code's tool-less sessions (usage,
+model list, judge) run without its own sandbox on Windows (`toollessSandbox`). DNS still resolves; the proxy token is on the
 runner's command line. A folder opened while the harness runs is writable only after it next
 stops. srt-win's own entries are inheritable, so each apply and reset re-propagates them through
 everything under the folder they are on, holding each folder open meanwhile; its deny stamp on a

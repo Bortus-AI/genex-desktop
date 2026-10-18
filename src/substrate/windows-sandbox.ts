@@ -594,7 +594,7 @@ function processAlive(pid: number): boolean {
 
 /** How the default ancestor grants reach Windows: the sandbox user's SID and a folder-only editor. */
 export interface AncestorGrantDeps {
-  /** The `srt-sandbox` SID, or null when it cannot be read (a sync only runs once it is set up). */
+  /** Whom the grants name (`srtAncestorGrantee`), or null when it cannot be read (a sync only runs once it is set up). */
   sid: () => Promise<string | null>;
   /** Applies a batch of entry changes, each to its folder alone (default {@link editFolderAces}). */
   edit?: FolderAceEditor;
@@ -612,7 +612,7 @@ export interface AncestorGrantDeps {
 
 /**
  * The ancestor grants, set as the real user (who owns their profile's folders) on each folder
- * alone, addressed to the sandbox user by SID.
+ * alone, addressed by SID to the sandbox user's group (or the user, outside it).
  *
  * Every Genex on the machine shares the one sandbox user, and so the one grant on each folder: a
  * dev profile runs beside the app, and CI runs test files side by side. Each process records its
@@ -1040,6 +1040,29 @@ export async function srtSandboxSid(srtWin: string): Promise<string | null> {
 }
 
 /**
+ * Whom the ancestor grants name: the sandbox users' group when `srt-sandbox` is in it, else the
+ * user. Every srt host on the machine (Claude Code 2.1 runs one for its own shell) stamps, grants
+ * and cleans up entries for the user's SID, and its cleanup took Genex's entry on `AppData` with
+ * its own, so the harness's boot failed with EPERM there. srt-win leaves the group's entries alone,
+ * and Windows checks them for every process that runs as the user.
+ */
+export async function srtAncestorGrantee(srtWin: string): Promise<string | null> {
+  try {
+    const srt = await import(SRT_PACKAGE);
+    const status = await srt.getWindowsSandboxUserStatusAsync({ srtWin: srt.resolveSrtWin({ path: srtWin }) });
+    return granteeOf(status);
+  } catch {
+    return null;
+  }
+}
+
+/** The group's SID when the sandbox user is in it, else the user's own; null before it exists. */
+export function granteeOf(status: { sid?: string; groupSid?: string; inSandboxGroup?: boolean }): string | null {
+  if (status.inSandboxGroup && status.groupSid) return status.groupSid;
+  return status.sid ?? null;
+}
+
+/**
  * The sandbox user's SID by `lookup`, asked up to {@link SID_ATTEMPTS} times (a status probe can
  * time out while Windows scans a freshly installed srt-win) and kept once found: the user keeps its
  * SID until it is removed, which no running Genex does.
@@ -1140,7 +1163,7 @@ export function windowsSessionFor(
   const existing = sessions.get(runtime);
   if (existing) return existing;
   const holders = windowsGrantHolders(options.profile);
-  const ancestors = ancestorGrants(holders, { sid: sandboxSidOnce(() => srtSandboxSid(options.srtWin)) });
+  const ancestors = ancestorGrants(holders, { sid: sandboxSidOnce(() => srtAncestorGrantee(options.srtWin)) });
   const srtWinDir = win.dirname(options.srtWin);
   const launchDirs = insideWindowsPath(options.installDir, srtWinDir)
     ? [options.installDir]
