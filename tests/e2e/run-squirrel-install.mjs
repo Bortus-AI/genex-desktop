@@ -110,10 +110,10 @@ async function bundledGitRuns(exe) {
  * single-instance lock, so it may be the one that gets there, and a second start only hands over
  * to it. A logged startup or setup failure ends the wait at once.
  */
-async function startsTheStudio(exe, from) {
+async function startsTheStudio(exe, from, env = process.env) {
   const newLog = () => (existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").slice(from) : "");
   const started = Date.now();
-  spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
+  spawn(exe, [], { detached: true, stdio: "ignore", env }).unref();
   const log = await settle(async () => {
     const text = newLog();
     return STUDIO_READY_LOG.test(text) || STARTUP_FAILED_LOG.test(text) ? text : null;
@@ -172,6 +172,16 @@ check(
   studio.ok,
   studio.detail,
 );
+
+// Again with only the app's own Git, as on a PC without Git: the harness boots from the profile
+// through the bundled Git Bash, which the package job's chat turn (from out\) does not cover.
+await closeInstalledCopies();
+const logBeforeRestart = existsSync(STUDIO_LOG) ? readFileSync(STUDIO_LOG, "utf8").length : 0;
+const bundledOnly = { ...process.env, STUDIO_WINDOWS_BUNDLED_GIT_ONLY: "1" };
+const again = exe
+  ? await startsTheStudio(exe, logBeforeRestart, bundledOnly)
+  : { ok: false, detail: "no installed app" };
+check("a start with only the app's own Git boots the harness from the installed folder", again.ok, again.detail);
 
 await closeInstalledCopies();
 await run(path.join(installDir, "Update.exe"), ["--uninstall", "-s"], { timeout: SETUP_TIMEOUT_MS }).catch((error) => {
