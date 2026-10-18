@@ -66,13 +66,15 @@ export class DesktopControl {
     if (value.error) throw new DevError(value.error);
     return value;
   }
-  async click(wc: WebContents, params: { selector: string; scope?: string }) {
-    const { x, y } = await this.inspect(wc, params);
-    await this.cdp(wc, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  async click(wc: WebContents, params: { selector: string; scope?: string; modifiers?: string[] }) {
+    const { x, y } = await this.inspect(wc, { selector: params.selector, scope: params.scope });
+    const modifiers = (params.modifiers ?? []).reduce((n, k) => n | (CDP_MODIFIER[k] ?? 0), 0);
+    await this.cdp(wc, "Input.dispatchMouseEvent", { type: "mouseMoved", x, y, modifiers });
     await this.cdp(wc, "Input.dispatchMouseEvent", {
       type: "mousePressed",
       x,
       y,
+      modifiers,
       button: "left",
       buttons: 1,
       clickCount: 1,
@@ -81,6 +83,7 @@ export class DesktopControl {
       type: "mouseReleased",
       x,
       y,
+      modifiers,
       button: "left",
       buttons: 0,
       clickCount: 1,
