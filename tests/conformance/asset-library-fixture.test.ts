@@ -61,7 +61,7 @@ function sharingOnFixture() {
   });
   const deps: LibrarySharingDeps = {
     library: () => library,
-    gameDir: () => root,
+    gameDir: async () => root,
     webGame: async () => true,
     assets: async () => ({ project: "fixture-game", assets: listed(), truncated: false, skipped: [] }),
     readFile: async () => ({ mimeType: "image/png", data: new Uint8Array(3) }),

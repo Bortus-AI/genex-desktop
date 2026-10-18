@@ -81,8 +81,8 @@ interface LinksFile {
 /** What the sharing needs from the core and the network. */
 export interface LibrarySharingDeps {
   library(): AssetLibrary;
-  /** A game's folder by its library name. */
-  gameDir(project: string): string;
+  /** A game's folder by its library name; rejects a game the launch's project policy refuses. */
+  gameDir(project: string): Promise<string>;
   /** Whether the game takes three.js code modules (a web game). */
   webGame(project: string): Promise<boolean>;
   /** The game's assets as the Assets tab lists them. */
@@ -204,7 +204,8 @@ interface KnownFile {
 
 /** Each library file of the game with the generation it is (or null). */
 async function knownFiles(deps: LibrarySharingDeps, project: string): Promise<KnownFile[]> {
-  const [inventory, links] = await Promise.all([deps.assets(project), readLinks(deps.gameDir(project))]);
+  const dir = await deps.gameDir(project);
+  const [inventory, links] = await Promise.all([deps.assets(project), readLinks(dir)]);
   return libraryFiles(inventory).map((asset) => {
     const link = links.files[asset.file];
     const generationId = asset.generationId ?? link?.generationId ?? null;
@@ -251,7 +252,7 @@ async function saveFiles(
   files: readonly string[],
   saved: boolean,
 ): Promise<GameLibraryStates> {
-  const dir = deps.gameDir(project);
+  const dir = await deps.gameDir(project);
   const known = await knownFiles(deps, project);
   const sent: Record<string, LibraryLink> = {};
   for (const file of files) {
@@ -322,10 +323,10 @@ async function addGeneration(
   project: string,
   generationId: string,
 ): Promise<AddOutcome> {
+  const dir = await deps.gameDir(project);
   const entry = (await lookup(deps, [generationId])).get(generationId);
   if (!entry) throw new NotInLibrary();
   if (!entry.fileUrl) throw new Error(MESSAGE.noFile);
-  const dir = deps.gameDir(project);
   const bytes = await deps.download(entry.fileUrl, LIBRARY_FILE_MAX_BYTES);
   const file = await place(dir, AddFolder.Library, downloadName(entry.fileUrl, entry.id, entry.kind), bytes);
   await turn(linksTurn(dir), () => writeLinks(dir, { [file]: { generationId, sent: false } }));
@@ -334,10 +335,10 @@ async function addGeneration(
 
 /** A shared asset: its file when it has one (Genex made it), else its code module (web games). */
 async function addShared(deps: LibrarySharingDeps, project: string, slug: string): Promise<AddOutcome> {
+  const dir = await deps.gameDir(project);
   const manifest = await deps.manifest(slug);
   const asset = fieldOf(fieldOf(manifest, "manifest"), "asset");
   const fileUrl = libraryFileUrl(fieldOf(asset, "fileUrl"));
-  const dir = deps.gameDir(project);
   if (fileUrl) {
     const bytes = await deps.download(fileUrl, LIBRARY_FILE_MAX_BYTES);
     const name = downloadName(fileUrl, slug, MEDIA_KIND[String(fieldOf(asset, "media"))] ?? LibraryKind.Model);

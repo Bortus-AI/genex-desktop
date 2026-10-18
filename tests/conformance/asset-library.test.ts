@@ -187,15 +187,23 @@ describe("share names", () => {
   });
 });
 
+/** What a test changes about a game's rig. */
+interface RigOptions {
+  /** Answers a library route itself first; null leaves it to the fixture. */
+  request?: (route: string, init: Parameters<GalleryRequest>[1]) => Promise<GalleryAnswer> | null;
+  /** The game's folder is refused, as the launch's project policy refuses one. */
+  refused?: boolean;
+}
+
 /**
  * A game folder with an asset list the test controls, over the fixture's library; every library
- * route asked is kept, and `request` may answer a route itself first.
+ * route asked and every download is kept.
  */
 async function gameRig(
   root: string,
   assets: ProjectAsset[],
   account: FixtureAccount | null = FixtureAccount.Full,
-  request?: (route: string, init: Parameters<GalleryRequest>[1]) => Promise<GalleryAnswer> | null,
+  { request, refused = false }: RigOptions = {},
 ) {
   const dir = path.join(root, `game-${Math.random().toString(36).slice(2)}`);
   await mkdir(path.join(dir, "assets"), { recursive: true });
@@ -214,9 +222,13 @@ async function gameRig(
     localImages: true,
   });
   const reads: string[] = [];
+  const downloads: string[] = [];
   const deps: LibrarySharingDeps = {
     library: () => library,
-    gameDir: () => dir,
+    gameDir: async () => {
+      if (refused) throw new Error("outside the owned games");
+      return dir;
+    },
     webGame: async () => true,
     assets: async (): Promise<ProjectAssets> => ({ project: "g", assets, truncated: false, skipped: [] }),
     readFile: async (_dir, file) => {
@@ -224,10 +236,13 @@ async function gameRig(
       return { mimeType: "image/png", data: new Uint8Array(3) };
     },
     manifest: async () => ({ manifest: { asset: { media: "glb", fileUrl: FILE_URL } } }),
-    download: fixtureDownload,
+    download: (url, maxBytes) => {
+      downloads.push(url);
+      return fixtureDownload(url, maxBytes);
+    },
     vendorModule: async () => null,
   };
-  return { dir, sharing: librarySharing(deps), reads, routes };
+  return { dir, sharing: librarySharing(deps), reads, routes, downloads };
 }
 
 const asset = (file: string, extra: Partial<ProjectAsset> = {}): ProjectAsset => ({
@@ -391,8 +406,10 @@ describe("a game's Save, Share and Add when things overlap or break", () => {
         asset(lantern, { generationId: FixtureGenerationId.Lantern }),
       ],
       FixtureAccount.Full,
-      (route) =>
-        route === LibraryRoute.share(FixtureGenerationId.Lantern) ? Promise.reject(new Error("offline")) : null,
+      {
+        request: (route) =>
+          route === LibraryRoute.share(FixtureGenerationId.Lantern) ? Promise.reject(new Error("offline")) : null,
+      },
     );
     const outcomes = await game.sharing.share("g", [
       { file: strider, name: "Silt strider" },
@@ -402,15 +419,29 @@ describe("a game's Save, Share and Add when things overlap or break", () => {
     assert.deepEqual(outcomes[1], { file: lantern, miss: ShareMiss.Failed });
   });
 
+  it("neither reads, sends, downloads nor writes for a game the launch's policy refuses", async () => {
+    const file = "assets/refused.png";
+    const game = await gameRig(root, [asset(file, { source: "imported" })], FixtureAccount.Full, { refused: true });
+    await assert.rejects(game.sharing.save("g", [file], true));
+    await assert.rejects(game.sharing.add("g", { generationId: FixtureGenerationId.Lantern }));
+    await assert.rejects(game.sharing.add("g", { slug: "giant-mushroom" }));
+    assert.deepEqual(game.reads, []);
+    assert.deepEqual(game.downloads, []);
+    assert.equal(game.routes.includes(LibraryRoute.Import), false);
+    assert.deepEqual(await readdir(game.dir), ["assets"]);
+    assert.deepEqual(await readdir(path.join(game.dir, "assets")), ["refused.png"]);
+  });
+
   it("adds a library file whose address names it with a broken escape under its own name", async () => {
     const broken = "https://assets.genex.technology/generations/x/%E0%A4%A.glb";
-    const game = await gameRig(root, [], FixtureAccount.Full, (route) =>
-      route.startsWith(`${LibraryRoute.List}?`)
-        ? Promise.resolve(
-            ok({ generations: [{ id: GEN, kind: "model", files: [{ role: "model-glb", url: broken }] }] }),
-          )
-        : null,
-    );
+    const game = await gameRig(root, [], FixtureAccount.Full, {
+      request: (route) =>
+        route.startsWith(`${LibraryRoute.List}?`)
+          ? Promise.resolve(
+              ok({ generations: [{ id: GEN, kind: "model", files: [{ role: "model-glb", url: broken }] }] }),
+            )
+          : null,
+    });
     const { files } = await game.sharing.add("g", { generationId: GEN });
     assert.match(files[0] ?? "", new RegExp(`^assets/library/[0-9a-f-]{36}/${GEN}\\.glb$`));
   });

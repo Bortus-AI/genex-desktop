@@ -979,7 +979,12 @@ function playAccountFor(studio: StudioCore): NonNullable<typeof playAccount> {
 function librarySharingFor(studio: StudioCore): LibrarySharing {
   gameLibrary ??= librarySharing({
     library: () => playAccountFor(studio).library,
-    gameDir: (project) => studio.games.dirFor(project),
+    // Add and Save write into the game: only a game this launch's project policy allows.
+    gameDir: async (project) => {
+      const dir = studio.games.dirFor(project);
+      await studio.assertProjectAllowed(dir);
+      return dir;
+    },
     webGame: async (project) => !(await studio.games.list()).find((game) => game.name === project)?.engine,
     assets: (project) => studio.projectAssets(project),
     readFile: (dir, file, maxBytes) => readAssetPreview(dir, file, [], maxBytes),
