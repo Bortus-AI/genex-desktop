@@ -131,29 +131,14 @@ describe("the library's calls", () => {
       { status: 429, body: null },
     ];
     const { library, calls } = rig(() => answers.shift() ?? ok({}));
-    assert.deepEqual(await library.share(GEN, " Giant mushroom ", null), {
+    assert.deepEqual(await library.share(GEN, " Giant mushroom "), {
       shared: { projectId: "p9", slug: "giant-mushroom", live: true },
     });
     assert.deepEqual(calls[0]?.body, { name: "Giant mushroom" });
-    assert.deepEqual(await library.share(GEN, "x", null), { miss: ShareMiss.Checking });
-    assert.deepEqual(await library.share(GEN, "x", null), { miss: ShareMiss.Refused, detail: "Not for Play." });
-    assert.deepEqual(await library.share(GEN, "x", null), { miss: ShareMiss.KindNotShareable });
-    assert.deepEqual(await library.share(GEN, "x", null), { miss: ShareMiss.TooMany });
-  });
-
-  it("puts a page taken off Play back instead of making a second one", async () => {
-    const { library, calls } = rig((route) =>
-      route === LibraryRoute.share(GEN)
-        ? { status: 409, body: { error: "asset_unshared", projectId: "p3" } }
-        : ok({ project: { id: "p3", slug: "chitin-hut", status: "published" } }),
-    );
-    assert.deepEqual(await library.share(GEN, "Chitin hut", null), {
-      shared: { projectId: "p3", slug: "chitin-hut", live: true },
-    });
-    assert.deepEqual(
-      calls.map((call) => call.route),
-      [LibraryRoute.share(GEN), LibraryRoute.reshare("p3")],
-    );
+    assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.Checking });
+    assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.Refused, detail: "Not for Play." });
+    assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.KindNotShareable });
+    assert.deepEqual(await library.share(GEN, "x"), { miss: ShareMiss.TooMany });
   });
 
   it("sends a file: asks for a place, uploads the bytes there, then marks it done", async () => {
@@ -264,6 +249,7 @@ describe("a game's files and the library", () => {
       generationId: null,
       saved: false,
       shared: null,
+      saveable: true,
       shareable: false,
     });
   });
@@ -308,6 +294,16 @@ describe("a game's files and the library", () => {
     assert.ok(shared && "shared" in shared && shared.shared.live);
     const after = await game.sharing.unshare("g", file);
     assert.equal(after.states[0]?.shared?.live, false);
+    const [again] = await game.sharing.share("g", [{ file, name: "Giant mushroom tree" }]);
+    assert.ok(again && "shared" in again && again.shared.live);
+    assert.equal(again.shared.projectId, shared.shared.projectId, "the same page comes back, not a second one");
+  });
+
+  it("offers Save only for a file genex.games takes, and nothing while signed out", async () => {
+    const game = await gameRig(root, [asset("assets/notes.fbx", { source: "imported", kind: "model" })]);
+    assert.equal((await game.sharing.states("g")).states[0]?.saveable, false);
+    const out = await gameRig(root, [asset("assets/genex/a/hut.glb", { generationId: FixtureGenerationId.Hut })], null);
+    assert.equal((await out.sharing.states("g")).states[0]?.saveable, false);
   });
 
   it("adds a library generation into a folder of its own and links it", async () => {

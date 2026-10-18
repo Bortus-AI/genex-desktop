@@ -15,6 +15,7 @@ import {
   type AssetLibraryState,
   type GameLibraryStates,
   isGenerationId,
+  isSendable,
   LIBRARY_IDS_MAX,
   type LibraryAsset,
   LibraryKind,
@@ -173,6 +174,7 @@ async function readStates(deps: LibrarySharingDeps, project: string): Promise<Ga
       generationId: entry ? entry.id : null,
       saved: entry?.saved ?? false,
       shared: entry?.shared ?? null,
+      saveable: found !== null && (Boolean(entry) || (!generationId && isSendable(asset.file))),
       shareable: Boolean(entry) && !sent,
     };
   });
@@ -227,7 +229,7 @@ async function shareFiles(
 async function shareOne(deps: LibrarySharingDeps, state: AssetLibraryState, name: string): Promise<ShareAnswer> {
   if (!state.generationId || !state.shareable) return { miss: ShareMiss.NotShareable };
   if (state.shared?.live) return { shared: state.shared };
-  return deps.library().share(state.generationId, name, state.shared);
+  return deps.library().share(state.generationId, name);
 }
 
 /** Take a file's shared page off Play. */

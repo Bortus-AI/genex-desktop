@@ -28,13 +28,11 @@ export const LibraryRoute = {
   share: (id: string) => `/api/generations/${encodeURIComponent(id)}/publish-asset`,
   importDone: (id: string) => `/api/generations/import/${encodeURIComponent(id)}/complete`,
   unshare: (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}/unpublish`,
-  reshare: (projectId: string) => `/api/projects/${encodeURIComponent(projectId)}/publish`,
 } as const;
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_ACCEPTED = 202;
 const HTTP_FORBIDDEN = 403;
-const HTTP_CONFLICT = 409;
 const HTTP_TOO_MANY = 429;
 const TITLE_MAX = 300;
 /** How long one library file may take to download. */
@@ -140,14 +138,6 @@ export function libraryListRoute(query: LibraryQuery): string {
 /** A share's answer: the page on Play, or why there is none. */
 export type ShareAnswer = { shared: SharedAsset } | { miss: ShareMiss; detail?: string };
 
-/** The page a share was refused for because it was taken off Play before, or "". */
-function unsharedProject(answer: { status: number; body: unknown }): string {
-  const unshared = isRecord(answer.body) && answer.body.error === "asset_unshared";
-  return answer.status === HTTP_CONFLICT && unshared
-    ? text((answer.body as Record<string, unknown>).projectId, ID_MAX)
-    : "";
-}
-
 /** A share's answer as the page it made, or why there is none. */
 function shareAnswer(answer: { status: number; body: unknown }): ShareAnswer {
   if (answer.status < 200 || answer.status >= 300 || answer.status === HTTP_ACCEPTED) {
@@ -205,16 +195,15 @@ export function assetLibrary(deps: LibraryDeps) {
     await call(LibraryRoute.generation(id), { method: "PATCH", body: { saved } });
   };
 
-  /** Put a generation on Play under `name`; a page it had before is put back instead. */
-  const share = async (id: string, name: string, before: SharedAsset | null): Promise<ShareAnswer> => {
+  /**
+   * Put a generation on Play under `name`. genex.games answers the page it has when the asset is on
+   * Play already, and puts a page it took off Play back, so a share never makes a second page.
+   */
+  const share = async (id: string, name: string): Promise<ShareAnswer> => {
     if (!isGenerationId(id)) return { miss: ShareMiss.Failed };
-    const route = before ? LibraryRoute.reshare(before.projectId) : LibraryRoute.share(id);
-    const body = before ? {} : { name: name.trim().slice(0, SHARE_NAME_MAX) };
-    const answer = await request(route, { method: "POST", token: await auth(), body });
+    const body = { name: name.trim().slice(0, SHARE_NAME_MAX) };
+    const answer = await request(LibraryRoute.share(id), { method: "POST", token: await auth(), body });
     if (answer.status === HTTP_UNAUTHORIZED) throw new SignInNeeded();
-    // An older genex.games names a page it took off Play instead of putting it back: put it back here.
-    const earlier = before ? "" : unsharedProject(answer);
-    if (earlier) return share(id, name, { projectId: earlier, slug: "", live: false });
     return shareAnswer(answer);
   };
 

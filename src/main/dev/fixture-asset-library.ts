@@ -214,6 +214,8 @@ function share(row: FixtureGeneration, body: unknown): GalleryAnswer {
     };
   }
   if (row.provider === "upload") return refused(BAD_REQUEST, "upload_not_shareable");
+  // genex.games puts a page it took off Play back, and answers the page it has: one page per asset.
+  if (row.shared) row.shared.status = "published";
   if (row.shared?.status === "published")
     return ok({ ...row.shared, title: name, worldUrl: `https://genex.games/world/${row.shared.slug}` });
   const slug = slugOf(name);

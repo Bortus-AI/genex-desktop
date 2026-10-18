@@ -7,7 +7,8 @@
  * on Play for everyone; stop sharing takes it off again. A file Genex did not make can be saved but
  * not shared.
  */
-import type { AssetKind, ProjectAsset } from "./game-assets.ts";
+import { ASSET_PREVIEW_MIME } from "./asset-preview.ts";
+import { type AssetKind, assetExtension, type ProjectAsset } from "./game-assets.ts";
 
 /** An asset filter's kinds, in genex.games' wire spelling (the `type` of `/api/generations`). */
 export const LibraryKind = { Model: "3d", Image: "image", Sound: "sound", Video: "video" } as const;
@@ -97,6 +98,8 @@ export interface AssetLibraryState {
   generationId: string | null;
   saved: boolean;
   shared: SharedAsset | null;
+  /** Save can act on it: it is in the library, or it is a kind genex.games takes from the app. */
+  saveable: boolean;
   /** Share can act on it: Genex made it. */
   shareable: boolean;
 }
@@ -142,6 +145,21 @@ export type AddSource = { generationId: string } | { slug: string };
 export interface AddOutcome {
   files: string[];
 }
+
+/** The file types genex.games takes when Save sends a file Genex did not make. */
+export const SENDABLE_TYPES: ReadonlySet<string> = new Set([
+  "model/gltf-binary",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "audio/mpeg",
+  "audio/wav",
+  "audio/ogg",
+  "video/mp4",
+]);
+
+/** Whether Save can send a game file to the library: genex.games takes its type. */
+export const isSendable = (file: string): boolean => SENDABLE_TYPES.has(ASSET_PREVIEW_MIME[assetExtension(file)] ?? "");
 
 /** A file's library kind, or null for one the library takes no kind of. */
 export const libraryKindOf = (asset: Pick<ProjectAsset, "kind">): LibraryKind | null => LIBRARY_KIND_OF[asset.kind];
