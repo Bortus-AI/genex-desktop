@@ -49,6 +49,8 @@ interface Entry {
   visible: boolean;
   dirty: boolean;
   surface: Surface;
+  /** Its piece's pipeline failed to build: it shows its colour and never moves. */
+  failed: boolean;
 }
 
 /** A plate on the painter. */
@@ -100,7 +102,7 @@ const clockState = (entry: Entry): PlateClockState => ({
   visible: entry.visible,
   dirty: entry.dirty,
   animating: entry.animating,
-  still: entry.surface !== null && "ctx" in entry.surface,
+  still: entry.failed || (entry.surface !== null && "ctx" in entry.surface),
   reduced,
   resting: resting(),
   covered: entry.canvas.closest("[inert]") !== null,
@@ -146,6 +148,9 @@ function surfaceOf(entry: Entry, context: PlateGpu | null): Surface {
 
 /** Paint one plate: a still now, or its GPU draw for this frame's submission. */
 function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
+  // The canvas is set up for the GPU only once its piece's pipeline is ready: a configured canvas
+  // shows black until its first draw, which a cold shader cache can hold back.
+  if (context && !entry.surface && !pieceReady(entry, context)) return null;
   const size = fit(entry.canvas);
   const surface = surfaceOf(entry, context);
   // No surface at all (a canvas the GPU had cannot turn 2D): nothing to draw, stop asking.
@@ -159,12 +164,24 @@ function paint(entry: Entry, context: PlateGpu | null): PlateDraw | null {
     return null;
   }
   if (!context) return null;
+  if (!pieceReady(entry, context)) return null;
   const pipeline = plateGpuPipeline(context, entry.recipe.sceneIndex, wake);
-  // Still building: it wakes the clock when ready. Failed for good: stop asking, the plate keeps its colour.
-  if (pipeline === undefined) return null;
-  entry.dirty = false;
   if (!pipeline) return null;
+  entry.dirty = false;
   return { canvas: surface.gpu, pipeline, recipe: entry.recipe, seconds: entry.t, paper: onPaper(), ...size };
+}
+
+/**
+ * Whether the plate's piece has its pipeline. Still building: no (it wakes the clock when ready).
+ * Failed for good: no, and the plate stops asking and stops moving; it keeps its colour.
+ */
+function pieceReady(entry: Entry, context: PlateGpu): boolean {
+  const pipeline = plateGpuPipeline(context, entry.recipe.sceneIndex, wake);
+  if (pipeline === null) {
+    entry.failed = true;
+    entry.dirty = false;
+  }
+  return Boolean(pipeline);
 }
 
 /** One frame: move the clocks of plates that run, then paint the ones that are due. */
@@ -225,13 +242,23 @@ if (typeof matchMedia === "function")
  * pipeline) until it first lights; then it paints when it is in view.
  */
 export function mountPlate(canvas: HTMLCanvasElement, recipe: PlateRecipe): PlateHandle {
-  const entry: Entry = { canvas, recipe, t: STILL_TIME, animating: false, visible: false, dirty: false, surface: null };
+  const entry: Entry = {
+    canvas,
+    recipe,
+    t: STILL_TIME,
+    animating: false,
+    visible: false,
+    dirty: false,
+    surface: null,
+    failed: false,
+  };
   entries.add(entry);
   byCanvas.set(canvas, entry);
   visibility().observe(canvas);
   return {
     set(next) {
       entry.recipe = next;
+      entry.failed = false;
       // Unlit, the new look is drawn when it lights.
       entry.dirty = entry.animating;
       wake();

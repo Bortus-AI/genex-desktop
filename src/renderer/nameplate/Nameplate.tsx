@@ -80,13 +80,19 @@ function Sparkles(): JSX.Element {
 
 /**
  * Whether the pointer is over a `hover` plate: what lights it. `dim` (its menu open) puts it out and
- * forgets the pointer, which an open menu keeps from leaving.
+ * forgets the pointer, which an open menu keeps from leaving; closing it looks again.
  */
-function useLit(hover: boolean, dim: boolean) {
+function useLit(hover: boolean, dim: boolean, plate: { current: HTMLDivElement | null }) {
   const [pointer, setPointer] = useState(false);
+  // An open menu forgets the pointer; once it closes, a pointer still on the plate lights it again.
   useEffect(() => {
-    if (dim) setPointer(false);
-  }, [dim]);
+    if (dim) {
+      setPointer(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => setPointer(plate.current?.matches(":hover") ?? false));
+    return () => cancelAnimationFrame(frame);
+  }, [dim, plate]);
   const events = hover ? { onPointerEnter: () => setPointer(true), onPointerLeave: () => setPointer(false) } : {};
   return { lit: !dim && (!hover || pointer), events };
 }
@@ -110,9 +116,11 @@ export function Nameplate({
   dim?: boolean;
   children: ReactNode;
 }): JSX.Element {
-  const { lit, events } = useLit(hover, dim);
+  const plate = useRef<HTMLDivElement>(null);
+  const { lit, events } = useLit(hover, dim, plate);
   return (
     <div
+      ref={plate}
       className={className ? `nameplate ${className}` : "nameplate"}
       style={plateStyle(recipe)}
       data-nameplate
