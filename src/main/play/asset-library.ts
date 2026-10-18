@@ -7,8 +7,9 @@ import {
   isGenerationId,
   isLibraryKind,
   LIBRARY_IDS_MAX,
+  type LibraryFileAnswer,
+  LibraryFileMiss,
   libraryFileUrl,
-  libraryKindOf,
   LIBRARY_QUERY_MAX,
   type LibraryAsset,
   LibraryKind,
@@ -19,7 +20,7 @@ import {
   ShareMiss,
 } from "../../shared/asset-library.ts";
 import { MINUTE_MS } from "../../shared/duration.ts";
-import { assetKind } from "../../shared/game-assets.ts";
+import { ASSET_FORMATS, type AssetFormat, type AssetPreviewMode } from "../../shared/game-assets.ts";
 import { isPlaySlug } from "../../shared/play.ts";
 import { GalleryError, type GalleryRequest, imageUrl, isRecord, SignInNeeded, text } from "./gallery.ts";
 import type { PeopleDeps } from "./people.ts";
@@ -35,6 +36,8 @@ export const LibraryRoute = {
 } as const;
 
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_CLIENT_ERROR = 400;
+const HTTP_SERVER_ERROR = 500;
 const HTTP_ACCEPTED = 202;
 const HTTP_FORBIDDEN = 403;
 const HTTP_TOO_MANY = 429;
@@ -91,16 +94,53 @@ export interface LibraryFile {
   title: string;
 }
 
-/** A generation's file and what it is; `kind` is null when neither its role nor its extension says. */
+/** A generation's file and what it is; `kind` is null when nothing says, or it is no file a tile shows. */
 interface MainFile {
   url: string;
   kind: LibraryKind | null;
 }
 
-/** What a file is by its address's extension (a role name has none), or null. */
-function kindOfAddress(url: string): LibraryKind | null {
+/**
+ * A file's kind by the viewer the format table shows it in: a model, a picture an `<img>` shows, a
+ * sound, a video. A texture only the model viewer reads (HDR, EXR, KTX2) or an authoring file has none.
+ */
+const KIND_OF_PREVIEW: Readonly<Partial<Record<AssetPreviewMode, LibraryKind>>> = {
+  model: LibraryKind.Model,
+  image: LibraryKind.Image,
+  audio: LibraryKind.Sound,
+  video: LibraryKind.Video,
+};
+
+const kindOfFormat = (format: AssetFormat): LibraryKind | null => KIND_OF_PREVIEW[format.preview] ?? null;
+
+/** The kind a content type names, or undefined when it names no format or formats of several kinds (`application/octet-stream`). */
+function kindOfType(value: unknown): LibraryKind | null | undefined {
+  if (typeof value !== "string") return undefined;
+  const type = value.split(";")[0]?.trim().toLowerCase() ?? "";
+  const named = Object.values(ASSET_FORMATS).filter((format) => format.mime === type);
+  const kinds = new Set(named.map(kindOfFormat));
+  return kinds.size === 1 ? [...kinds][0] : undefined;
+}
+
+/** The kind an extension (`glb`, `.GLB`) names, or undefined for one the format table does not know. */
+function kindOfExtension(value: unknown): LibraryKind | null | undefined {
+  if (typeof value !== "string") return undefined;
+  const ext = value.replace(/^\./, "").toLowerCase();
+  const format = Object.hasOwn(ASSET_FORMATS, ext) ? ASSET_FORMATS[ext] : undefined;
+  return format ? kindOfFormat(format) : undefined;
+}
+
+/**
+ * What a listed file is: by its content type, else its row's `ext`, else its address's extension
+ * (genex.games' addresses often end in a role name), else the kind its role holds.
+ */
+function kindOfFile(file: Record<string, unknown>, url: string, roleKind: LibraryKind | null): LibraryKind | null {
   const name = new URL(url).pathname.split("/").at(-1) ?? "";
-  return libraryKindOf({ kind: assetKind(name) });
+  const addressExt = name.includes(".") ? name.split(".").at(-1) : undefined;
+  for (const kind of [kindOfType(file.contentType), kindOfExtension(file.ext), kindOfExtension(addressExt)]) {
+    if (kind !== undefined) return kind;
+  }
+  return roleKind;
 }
 
 /**
@@ -110,12 +150,13 @@ function kindOfAddress(url: string): LibraryKind | null {
 function mainFile(files: unknown): MainFile | null {
   const list = Array.isArray(files) ? files.filter(isRecord) : [];
   for (const { role, kind } of MAIN_FILE_ROLES) {
-    const url = libraryFileUrl(list.find((file) => file.role === role)?.url);
-    if (url) return { url, kind };
+    const file = list.find((row) => row.role === role);
+    const url = libraryFileUrl(file?.url);
+    if (file && url) return { url, kind: kindOfFile(file, url, kind) };
   }
   for (const file of list) {
     const url = libraryFileUrl(file.url);
-    if (url) return { url, kind: kindOfAddress(url) };
+    if (url) return { url, kind: kindOfFile(file, url, null) };
   }
   return null;
 }
@@ -281,6 +322,23 @@ const DOWNLOAD_MESSAGE = {
   failed: (status: number) => `genex.games answered ${status} for that file.`,
 } as const;
 
+/** A download refused for the file itself or by genex.games, and why; its words are the reason in English. */
+export class DownloadRefused extends Error {
+  readonly miss: LibraryFileMiss;
+  constructor(miss: LibraryFileMiss, message: string) {
+    super(message);
+    this.miss = miss;
+  }
+}
+
+/** How genex.games' answer status reads: a 4xx is the file's own (asked again, refused again), anything else may pass. */
+const missOfStatus = (status: number): LibraryFileMiss =>
+  status >= HTTP_CLIENT_ERROR && status < HTTP_SERVER_ERROR ? LibraryFileMiss.Refused : LibraryFileMiss.Unavailable;
+
+/** Why a download failed: its refusal, or one that may pass (the network, a timeout). */
+const missOf = (error: unknown): LibraryFileMiss =>
+  error instanceof DownloadRefused ? error.miss : LibraryFileMiss.Unavailable;
+
 /** A signal that aborts once `ms` passed (`AbortSignal.timeout`); a test hands in one it aborts itself. */
 export type DownloadTimeout = (ms: number) => AbortSignal;
 
@@ -295,34 +353,39 @@ export function networkDownload(
 ): LibraryDownload {
   return async (url, maxBytes) => {
     const checked = libraryFileUrl(url);
-    if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
+    if (!checked) throw new DownloadRefused(LibraryFileMiss.Refused, DOWNLOAD_MESSAGE.notOurs);
     const res = await fetchImpl(checked, { redirect: "error", signal: timeout(timeoutMs) });
     // A body refused unread is cancelled, so its connection is let go of rather than left open.
     if (!res.ok || !res.body) {
       await res.body?.cancel();
-      throw new Error(DOWNLOAD_MESSAGE.failed(res.status));
+      throw new DownloadRefused(missOfStatus(res.status), DOWNLOAD_MESSAGE.failed(res.status));
     }
     const declared = Number(res.headers.get("content-length") ?? "0");
     if (declared > maxBytes) {
       await res.body.cancel();
-      throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+      throw new DownloadRefused(LibraryFileMiss.TooLarge, DOWNLOAD_MESSAGE.tooLarge);
     }
     return readCapped(res.body, maxBytes);
   };
 }
 
-/** A library file's bytes for a tile's picture, from any address the renderer names. */
-export type LibraryPictureFile = (url: unknown) => Promise<Uint8Array<ArrayBuffer>>;
+/** A library file's bytes for a tile's picture, from any address the renderer names, or why there are none. */
+export type LibraryPictureFile = (url: unknown) => Promise<LibraryFileAnswer>;
 
 /**
  * A tile's picture file through `download`: only an https file on genex.games' asset hosts (checked
- * before anything is asked), at most {@link LIBRARY_PICTURE_MAX_BYTES}.
+ * before anything is asked), at most {@link LIBRARY_PICTURE_MAX_BYTES}. A refusal is answered as its
+ * code, since only an error's words cross IPC.
  */
 export function libraryPictureFile(download: LibraryDownload): LibraryPictureFile {
   return async (url) => {
     const checked = libraryFileUrl(url);
-    if (!checked) throw new Error(DOWNLOAD_MESSAGE.notOurs);
-    return new Uint8Array(await download(checked, LIBRARY_PICTURE_MAX_BYTES));
+    if (!checked) return { miss: LibraryFileMiss.Refused };
+    try {
+      return { bytes: new Uint8Array(await download(checked, LIBRARY_PICTURE_MAX_BYTES)) };
+    } catch (error) {
+      return { miss: missOf(error) };
+    }
   };
 }
 
@@ -345,7 +408,7 @@ async function readCapped(body: ReadableStream<Uint8Array>, maxBytes: number): P
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw new Error(DOWNLOAD_MESSAGE.tooLarge);
+      throw new DownloadRefused(LibraryFileMiss.TooLarge, DOWNLOAD_MESSAGE.tooLarge);
     }
     chunks.push(value);
   }

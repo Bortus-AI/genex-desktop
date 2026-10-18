@@ -86,6 +86,20 @@ export function libraryFileUrl(value: unknown): string | null {
   }
 }
 
+/** Why main read no file for a tile's picture. Wire values; the renderer decides what each means. */
+export const LibraryFileMiss = {
+  /** Over the picture's cap: the same file is refused again. */
+  TooLarge: "too-large",
+  /** Not on genex.games' asset hosts, or genex.games refused it (a 4xx): asked again, refused again. */
+  Refused: "refused",
+  /** Anything that may pass: a 5xx, a timeout, the network. */
+  Unavailable: "unavailable",
+} as const;
+export type LibraryFileMiss = (typeof LibraryFileMiss)[keyof typeof LibraryFileMiss];
+
+/** A tile's picture file as main answers it: its bytes, or why there are none. */
+export type LibraryFileAnswer = { bytes: Uint8Array<ArrayBuffer> } | { miss: LibraryFileMiss };
+
 /** What to read from the library. */
 export interface LibraryQuery {
   /** Words the title must contain. */

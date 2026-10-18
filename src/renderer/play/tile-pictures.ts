@@ -4,6 +4,7 @@
  * again; one whose draw failed for a reason that may pass is, after a short rest), and the name the
  * model viewer reads a file under. `use-tile-picture.ts` draws them.
  */
+import { LibraryFileMiss } from "../../shared/asset-library.ts";
 import { assetExtension, assetPreviewMode } from "../../shared/asset-preview.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { fileUndrawable } from "../asset-snapshot.ts";
@@ -21,6 +22,7 @@ export const PICTURE_RETRY_MS = 30 * SECOND_MS;
 const MESSAGE = {
   undrawable: "This file could not be drawn.",
   resting: "This file's picture is tried again shortly.",
+  missed: (miss: LibraryFileMiss) => `The file was not read (${miss}).`,
 } as const;
 
 /**
@@ -32,6 +34,22 @@ export function viewerFileOf(url: string): string {
   const own = name.toLowerCase();
   return assetPreviewMode(own) === "model" ? `model.${assetExtension(own)}` : "model.glb";
 }
+
+/** A tile's picture file main did not read, and why. */
+export class PictureFileMissed extends Error {
+  readonly miss: LibraryFileMiss;
+  constructor(miss: LibraryFileMiss) {
+    super(MESSAGE.missed(miss));
+    this.miss = miss;
+  }
+}
+
+/**
+ * Whether a draw failed for the file itself, so drawing it again would fail again: the viewer could
+ * not read it, or main refused it (too large, or genex.games refused it). Anything else may pass.
+ */
+const theFilesFault = (error: unknown): boolean =>
+  fileUndrawable(error) || (error instanceof PictureFileMissed && error.miss !== LibraryFileMiss.Unavailable);
 
 /** A session's drawn pictures, and the turns of those still to draw. */
 export interface PictureQueue {
@@ -87,7 +105,7 @@ function drawPlaces(atOnce: number): DrawPlaces {
 
 /**
  * Pictures made by `draw`, at most `atOnce` at a time, the last `kept` of them kept. A draw that
- * rejects with a file that itself cannot be drawn ({@link fileUndrawable}) is not tried again; any
+ * rejects with a file that itself cannot be drawn ({@link theFilesFault}) is not tried again; any
  * other failure rests the file for {@link PICTURE_RETRY_MS} by `now`.
  */
 export function pictureQueue(
@@ -123,7 +141,7 @@ export function pictureQueue(
 
   /** Remember why `url` was not drawn: never again for the file itself, else after a rest. */
   const miss = (url: string, error: unknown): void => {
-    if (fileUndrawable(error)) failed.add(url);
+    if (theFilesFault(error)) failed.add(url);
     else resting.set(url, now() + PICTURE_RETRY_MS);
   };
 

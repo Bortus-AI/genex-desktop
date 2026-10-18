@@ -6,11 +6,11 @@
  */
 import type { RefObject } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { ASSET_PREVIEW_MIME, assetExtension } from "../../shared/asset-preview.ts";
+import { ASSET_PREVIEW_MIME, assetExtension, PreviewFileError } from "../../shared/asset-preview.ts";
 import { viewerSnapshot } from "../asset-snapshot.ts";
 import { studio } from "../state/studio.ts";
 import { type AssetTile, PictureFrom, tilePicture } from "./asset-tiles.ts";
-import { pictureQueue, viewerFileOf } from "./tile-pictures.ts";
+import { PictureFileMissed, pictureQueue, viewerFileOf } from "./tile-pictures.ts";
 
 /** A drawn picture's side in CSS pixels: a tile's widest in the usual window. */
 const PICTURE_PX = 256;
@@ -21,14 +21,17 @@ const MESSAGE = { notTheFile: "A tile's model reads only its own file." } as con
 
 /** Read a library model through main and draw it; a resource it names beside itself is not read. */
 async function drawModel(url: string): Promise<string> {
-  const data = await studio().api.assetLibraryFile(url);
+  const answer = await studio().api.assetLibraryFile(url);
+  if ("miss" in answer) throw new PictureFileMissed(answer.miss);
+  const data = answer.bytes;
   const file = viewerFileOf(url);
   const mimeType = ASSET_PREVIEW_MIME[assetExtension(file)] ?? UNKNOWN_TYPE;
   return viewerSnapshot({
     file,
     companions: [],
     read: async (name) => {
-      if (name !== file) throw new Error(MESSAGE.notTheFile);
+      // A model that needs files beside it is one a tile cannot draw, however often it asks.
+      if (name !== file) throw new PreviewFileError(MESSAGE.notTheFile);
       return { mimeType, data };
     },
     width: PICTURE_PX,

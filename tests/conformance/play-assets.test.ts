@@ -11,7 +11,13 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AssetScope, type LibraryAsset, LibraryKind, type LibraryPage } from "../../src/shared/asset-library.ts";
+import {
+  AssetScope,
+  type LibraryAsset,
+  LibraryFileMiss,
+  LibraryKind,
+  type LibraryPage,
+} from "../../src/shared/asset-library.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
 import type { GenexCatalogItem } from "../../src/shared/mention-corpus.ts";
 import { type PlayGame, PlayShelf } from "../../src/shared/play.ts";
@@ -36,6 +42,7 @@ import { FeedStatus } from "../../src/renderer/play/play-model.ts";
 import {
   PICTURE_RETRY_MS,
   PICTURES_AT_ONCE,
+  PictureFileMissed,
   pictureQueue,
   viewerFileOf,
 } from "../../src/renderer/play/tile-pictures.ts";
@@ -323,21 +330,56 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
     assert.deepEqual(hand.started, ["a"]);
   });
 
-  it("tries a file that itself cannot be drawn only once, however long the session runs", async () => {
+  it("never draws a picture whose tile left the screen before its turn, and frees its place", async () => {
     const hand = handDraws();
-    const clock = { at: 0 };
-    const queue = pictureQueue(hand.draw, { now: () => clock.at });
-    const failed = assert.rejects(queue.request("broken", live()), /not a GLB/);
-    await new Promise((resolve) => setImmediate(resolve));
-    await hand.settle("broken", new SnapshotError(PreviewFailure.File, new Error("not a GLB")));
-    await failed;
-    clock.at += 100 * PICTURE_RETRY_MS;
-    await assert.rejects(queue.request("broken", live()));
-    assert.deepEqual(hand.started, ["broken"]);
+    const queue = pictureQueue(hand.draw);
+    void queue.request("a", live());
+    void queue.request("b", live());
+    const leaving = new AbortController();
+    const left = queue.request("c", leaving.signal);
+    void queue.request("d", live());
+    leaving.abort();
+    await assert.rejects(left);
+    await hand.settle("a", "pic-a");
+    assert.deepEqual(hand.started, ["a", "b", "d"]);
+    assert.equal(queue.drawn("c"), undefined);
   });
 
+  it("forgets the oldest picture past what it keeps", async () => {
+    const queue = pictureQueue(async (url) => `pic-${url}`, { kept: 2 });
+    for (const url of ["a", "b", "c"]) await queue.request(url, live());
+    assert.equal(queue.drawn("a"), undefined);
+    assert.equal(queue.drawn("c"), "pic-c");
+  });
+});
+
+describe("Assets shelf: a picture that could not be drawn", () => {
+  const live = () => new AbortController().signal;
+
   for (const [label, error] of [
-    ["the network or main failed (offline, a timeout, a 5xx)", new Error("genex.games answered 503 for that file.")],
+    ["it is not a model the viewer reads", new SnapshotError(PreviewFailure.File, new Error("not a GLB"))],
+    ["main refused it as over the cap", new PictureFileMissed(LibraryFileMiss.TooLarge)],
+    ["genex.games refused it (a 4xx)", new PictureFileMissed(LibraryFileMiss.Refused)],
+  ] as const) {
+    it(`tries a file only once, however long the session runs, when ${label}`, async () => {
+      const hand = handDraws();
+      const clock = { at: 0 };
+      const queue = pictureQueue(hand.draw, { now: () => clock.at });
+      const failed = assert.rejects(queue.request("broken", live()));
+      await new Promise((resolve) => setImmediate(resolve));
+      await hand.settle("broken", error);
+      await failed;
+      clock.at += 100 * PICTURE_RETRY_MS;
+      const again = assert.rejects(queue.request("broken", live()));
+      await new Promise((resolve) => setImmediate(resolve));
+      assert.deepEqual(hand.started, ["broken"], "never drawn again");
+      await again;
+    });
+  }
+
+  for (const [label, error] of [
+    ["main could not read it for now (offline, a timeout, a 5xx)", new PictureFileMissed(LibraryFileMiss.Unavailable)],
+    ["something else went wrong on the way", new Error("structured clone failed")],
     ["the graphics context was lost", new SnapshotError(PreviewFailure.Interrupted, new Error("context lost"))],
     ["decoding ran out of time", new SnapshotError(PreviewFailure.Interrupted, new Error("timed out"))],
   ] as const) {
@@ -361,28 +403,6 @@ describe("Assets shelf: pictures drawn from 3D files", () => {
       assert.equal(queue.drawn("a"), "pic-a");
     });
   }
-
-  it("never draws a picture whose tile left the screen before its turn, and frees its place", async () => {
-    const hand = handDraws();
-    const queue = pictureQueue(hand.draw);
-    void queue.request("a", live());
-    void queue.request("b", live());
-    const leaving = new AbortController();
-    const left = queue.request("c", leaving.signal);
-    void queue.request("d", live());
-    leaving.abort();
-    await assert.rejects(left);
-    await hand.settle("a", "pic-a");
-    assert.deepEqual(hand.started, ["a", "b", "d"]);
-    assert.equal(queue.drawn("c"), undefined);
-  });
-
-  it("forgets the oldest picture past what it keeps", async () => {
-    const queue = pictureQueue(async (url) => `pic-${url}`, { kept: 2 });
-    for (const url of ["a", "b", "c"]) await queue.request(url, live());
-    assert.equal(queue.drawn("a"), undefined);
-    assert.equal(queue.drawn("c"), "pic-c");
-  });
 });
 
 describe("Assets shelf: the person's library, page by page", () => {

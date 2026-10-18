@@ -43,13 +43,15 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 - Assets are square tiles under two switchers: kind (All · 3D · Images · Sounds · Videos, a kind
   read from the whole catalog) and Everyone · Mine (the account's library, Saved/Shared tags, signed
   out a sign-in line). A tile with no thumbnail shows the file the library keeps, by what that file
-  is: a picture as itself (loaded as its tile nears the screen), a model drawn by the Assets tab's
-  viewer: main reads the file (`studio:assets.file`: https on genex.games' asset hosts, no
-  redirects, 32 MiB, one minute), tiles on screen draw two at a time, and each picture is kept for
-  the session. A file that itself cannot be drawn is not tried again; a draw that failed otherwise
-  (offline, a lost graphics context) is tried when its tile is next on screen, 30 s on. Until then,
-  and for sounds, the kind's glyph stays. Sounds with a known file play on the tile; Use (on hover) adds the asset to one of the
-  person's games (`studio:assets.add`). No Remix or plays on assets.
+  is (its content type, else its `ext`, else its address's extension): a picture an `<img>` shows,
+  loaded as its tile nears the screen, or a model drawn by the Assets tab's viewer. Main reads the
+  file (`studio:assets.file`: https on genex.games' asset hosts, no redirects, 32 MiB, one minute)
+  and answers a refusal as a code; tiles on screen draw two at a time, and each picture is kept for
+  the session. A file that is too large, refused (a 4xx) or unreadable as a model is not tried
+  again; one that failed otherwise (a 5xx, offline, a timeout, a lost graphics context) is tried
+  when its tile is next on screen, 30 s on. Until then, and for sounds, the kind's glyph stays.
+  Sounds with a known file play on the tile; Use (on hover) adds the asset to one of the person's
+  games (`studio:assets.add`). No Remix or plays on assets.
 - A card's five-second clip plays while hovered (after a short dwell). The first row of Games' feed
   plays up to four clips by itself, as genex.games' Featured grid does: after its covers and an
   idle moment, staggered, only while half in view and the window shows (none under the viewer);

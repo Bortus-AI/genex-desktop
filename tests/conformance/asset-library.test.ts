@@ -27,7 +27,13 @@ import {
   toLibraryAsset,
 } from "../../src/main/play/asset-library.ts";
 import { type GalleryAnswer, type GalleryRequest, SignInNeeded } from "../../src/main/play/gallery.ts";
-import { LibraryKind, libraryFileUrl, shareNameOf, ShareMiss } from "../../src/shared/asset-library.ts";
+import {
+  LibraryFileMiss,
+  LibraryKind,
+  libraryFileUrl,
+  shareNameOf,
+  ShareMiss,
+} from "../../src/shared/asset-library.ts";
 import type { ProjectAsset, ProjectAssets } from "../../src/shared/game-assets.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
 
@@ -99,35 +105,6 @@ describe("library rows", () => {
     assert.equal(row?.fileUrl, null);
     assert.equal(row?.fileKind, null);
     assert.equal(row?.kind, LibraryKind.Model);
-  });
-
-  it("says what the file it keeps is: by the role genex.games keeps it under, else by its extension", () => {
-    const HOST = "https://assets.genex.technology/generations/x";
-    const fileOf = (files: unknown) => {
-      const row = toLibraryAsset({ id: GEN, kind: "model", files });
-      return { url: row?.fileUrl, kind: row?.fileKind };
-    };
-    assert.deepEqual(fileOf([{ role: "model-glb", url: `${HOST}/model-glb` }]), {
-      url: `${HOST}/model-glb`,
-      kind: LibraryKind.Model,
-    });
-    assert.deepEqual(fileOf([{ role: "image-main", url: `${HOST}/image-main` }]), {
-      url: `${HOST}/image-main`,
-      kind: LibraryKind.Image,
-    });
-    // The model is off genex.games' hosts, so the file kept is its preview: a picture, not a model.
-    const preview = [
-      { role: "model-glb", url: "https://tripo-data.example/x/model.glb" },
-      { role: "preview", url: `${HOST}/preview.png?v=2` },
-    ];
-    assert.deepEqual(fileOf(preview), { url: `${HOST}/preview.png?v=2`, kind: LibraryKind.Image });
-    assert.deepEqual(fileOf([{ role: "rigged", url: `${HOST}/knight.FBX` }]), {
-      url: `${HOST}/knight.FBX`,
-      kind: LibraryKind.Model,
-    });
-    assert.deepEqual(fileOf([{ role: "extra", url: `${HOST}/extra` }]), { url: `${HOST}/extra`, kind: null });
-    assert.deepEqual(fileOf([{ role: "notes", url: `${HOST}/notes.txt` }]), { url: `${HOST}/notes.txt`, kind: null });
-    assert.deepEqual(fileOf(undefined), { url: null, kind: null });
   });
 
   for (const [label, url] of [
@@ -280,6 +257,68 @@ describe("downloads", () => {
   });
 });
 
+describe("a library row's file", () => {
+  it("says what the file it keeps is: by its content type, else its ext, else its address's extension, else its role", () => {
+    const HOST = "https://assets.genex.technology/generations/x";
+    const fileOf = (files: unknown) => {
+      const row = toLibraryAsset({ id: GEN, kind: "model", files });
+      return { url: row?.fileUrl, kind: row?.fileKind };
+    };
+    assert.deepEqual(fileOf([{ role: "model-glb", url: `${HOST}/model-glb` }]), {
+      url: `${HOST}/model-glb`,
+      kind: LibraryKind.Model,
+    });
+    assert.deepEqual(fileOf([{ role: "image-main", url: `${HOST}/image-main` }]), {
+      url: `${HOST}/image-main`,
+      kind: LibraryKind.Image,
+    });
+    // The model is off genex.games' hosts, so the file kept is its preview: a picture, not a model.
+    const preview = [
+      { role: "model-glb", url: "https://tripo-data.example/x/model.glb" },
+      { role: "preview", url: `${HOST}/preview.png?v=2` },
+    ];
+    assert.deepEqual(fileOf(preview), { url: `${HOST}/preview.png?v=2`, kind: LibraryKind.Image });
+    assert.deepEqual(fileOf([{ role: "rigged", url: `${HOST}/knight.FBX` }]), {
+      url: `${HOST}/knight.FBX`,
+      kind: LibraryKind.Model,
+    });
+    assert.deepEqual(fileOf([{ role: "extra", url: `${HOST}/extra` }]), { url: `${HOST}/extra`, kind: null });
+    assert.deepEqual(fileOf([{ role: "notes", url: `${HOST}/notes.txt` }]), { url: `${HOST}/notes.txt`, kind: null });
+    assert.deepEqual(fileOf(undefined), { url: null, kind: null });
+    // genex.games' addresses often end in a role name with no extension: its row's `ext` says.
+    assert.deepEqual(fileOf([{ role: "pbr-model", ext: "glb", url: `${HOST}/pbr-model` }]), {
+      url: `${HOST}/pbr-model`,
+      kind: LibraryKind.Model,
+    });
+    const kindOf = (file: Record<string, unknown>) => fileOf([{ url: `${HOST}/file`, ...file }]).kind;
+    assert.equal(kindOf({ role: "preview", contentType: "image/webp" }), LibraryKind.Image);
+    assert.equal(kindOf({ role: "preview", contentType: "IMAGE/PNG; charset=binary" }), LibraryKind.Image);
+    assert.equal(kindOf({ role: "model", contentType: "model/gltf-binary" }), LibraryKind.Model);
+    assert.equal(kindOf({ role: "rig", contentType: "application/octet-stream", ext: ".FBX" }), LibraryKind.Model);
+    assert.equal(kindOf({ role: "model-glb", contentType: "application/octet-stream" }), LibraryKind.Model);
+    assert.equal(kindOf({ role: "model-glb", contentType: "image/png" }), LibraryKind.Image, "the bytes' type wins");
+    assert.equal(kindOf({ role: "x", contentType: 42, ext: ["glb"] }), null);
+  });
+
+  it("names only a file a tile can show as a model or a picture: an authoring file or a GPU texture is neither", () => {
+    const HOST = "https://assets.genex.technology/generations/x";
+    const kindOf = (file: Record<string, unknown>) =>
+      toLibraryAsset({ id: GEN, kind: "model", files: [{ url: `${HOST}/file`, ...file }] })?.fileKind;
+    for (const ext of ["blend", "hdr", "exr", "ktx2", "bin", "uasset", "constructor", "__proto__"]) {
+      assert.equal(kindOf({ role: "x", ext }), null, ext);
+      assert.equal(kindOf({ role: "x", url: `${HOST}/file.${ext}` }), null, `.${ext}`);
+    }
+    for (const contentType of ["image/ktx2", "image/vnd.radiance", "image/x-exr"]) {
+      assert.equal(kindOf({ role: "image-main", contentType }), null, contentType);
+    }
+    for (const ext of ["png", "jpg", "webp", "gif", "avif", "svg"]) {
+      assert.equal(kindOf({ role: "x", ext }), LibraryKind.Image, ext);
+    }
+    for (const ext of ["glb", "gltf", "obj", "fbx", "stl", "ply"])
+      assert.equal(kindOf({ role: "x", ext }), LibraryKind.Model, ext);
+  });
+});
+
 describe("a tile's picture file", () => {
   const EVIL = "https://evil.example/x.glb";
 
@@ -300,7 +339,7 @@ describe("a tile's picture file", () => {
   ] as const) {
     it(`refuses ${label} before any request`, async () => {
       const { asked, download } = recordingDownload();
-      await assert.rejects(libraryPictureFile(download)(url));
+      assert.deepEqual(await libraryPictureFile(download)(url), { miss: LibraryFileMiss.Refused });
       assert.deepEqual(asked, []);
     });
   }
@@ -314,8 +353,8 @@ describe("a tile's picture file", () => {
     await libraryPictureFile(download)(FILE_URL);
     assert.deepEqual(sizes, [LIBRARY_PICTURE_MAX_BYTES]);
     const { asked, fetchImpl } = recordingFetch(() => new Response(new Uint8Array([0x67, 0x6c, 0x54, 0x46])));
-    const bytes = await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL);
-    assert.deepEqual([...bytes], [0x67, 0x6c, 0x54, 0x46]);
+    const answer = await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL);
+    assert.deepEqual("bytes" in answer ? [...answer.bytes] : answer, [0x67, 0x6c, 0x54, 0x46]);
     assert.deepEqual(asked, [FILE_URL]);
   });
 
@@ -328,7 +367,9 @@ describe("a tile's picture file", () => {
       asked.push(EVIL);
       return new Response(new Uint8Array(4));
     });
-    await assert.rejects(libraryPictureFile(networkDownload(fetchImpl))(FILE_URL));
+    assert.deepEqual(await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL), {
+      miss: LibraryFileMiss.Unavailable,
+    });
     assert.deepEqual(asked, [FILE_URL]);
   });
 
@@ -337,13 +378,14 @@ describe("a tile's picture file", () => {
     const big = recordingFetch(
       () => new Response(declared.body, { headers: { "content-length": String(LIBRARY_PICTURE_MAX_BYTES + 1) } }),
     );
-    await assert.rejects(libraryPictureFile(networkDownload(big.fetchImpl))(FILE_URL), /too large/);
+    const tooLarge = { miss: LibraryFileMiss.TooLarge };
+    assert.deepEqual(await libraryPictureFile(networkDownload(big.fetchImpl))(FILE_URL), tooLarge);
     assert.equal(declared.counted.read, 0);
     const MIB = 1024 * 1024;
     const chunks = LIBRARY_PICTURE_MAX_BYTES / MIB + 8;
     const lying = countedBody(chunks, MIB);
     const quiet = recordingFetch(() => new Response(lying.body));
-    await assert.rejects(libraryPictureFile(networkDownload(quiet.fetchImpl))(FILE_URL), /too large/);
+    assert.deepEqual(await libraryPictureFile(networkDownload(quiet.fetchImpl))(FILE_URL), tooLarge);
     assert.ok(lying.counted.read <= LIBRARY_PICTURE_MAX_BYTES / MIB + 1, `read ${lying.counted.read} MiB`);
     assert.equal(lying.counted.cancelled, true, "the rest of a body past the cap is let go of");
   });
@@ -365,7 +407,31 @@ describe("a tile's picture file", () => {
     assert.deepEqual(asked, [FILE_URL]);
     assert.deepEqual(waits, [LIBRARY_PICTURE_TIMEOUT_MS], "a picture's read waits the picture's own time");
     over.abort(new DOMException("The wait is over.", "TimeoutError"));
-    await assert.rejects(reading, { name: "TimeoutError" });
+    assert.deepEqual(await reading, { miss: LibraryFileMiss.Unavailable }, "a timeout may pass");
+  });
+});
+
+describe("a tile's picture file: why there is none", () => {
+  for (const [status, miss] of [
+    [404, LibraryFileMiss.Refused],
+    [403, LibraryFileMiss.Refused],
+    [410, LibraryFileMiss.Refused],
+    [500, LibraryFileMiss.Unavailable],
+    [503, LibraryFileMiss.Unavailable],
+  ] as const) {
+    it(`answers a ${status} as ${miss}: ${miss === LibraryFileMiss.Refused ? "the file's own" : "it may pass"}`, async () => {
+      const { fetchImpl } = recordingFetch(() => new Response("no", { status }));
+      assert.deepEqual(await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL), { miss });
+    });
+  }
+
+  it("answers a network failure as one that may pass", async () => {
+    const { fetchImpl } = recordingFetch(() => {
+      throw new TypeError("fetch failed");
+    });
+    assert.deepEqual(await libraryPictureFile(networkDownload(fetchImpl))(FILE_URL), {
+      miss: LibraryFileMiss.Unavailable,
+    });
   });
 });
 
