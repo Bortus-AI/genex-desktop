@@ -69,7 +69,7 @@ import { toEntries } from "../../src/renderer/chat-entries.ts";
 import { DirectorTool } from "../../src/harness-seed/loop/director/tool-specs.ts";
 import { WorkerTool } from "../../src/shared/workers.ts";
 import { APP_LOOK_TOOL_NAME, JobTool } from "../../src/shared/jobs.ts";
-import { connectorStep, showsPlayView, StepAction } from "../../src/renderer/chat/connector-steps.ts";
+import { connectorStep, showsPlayView, StepAction, startsPlay } from "../../src/renderer/chat/connector-steps.ts";
 import type { RunSummary } from "../../src/shared/run-summary.ts";
 import type { EventEnvelope } from "../../src/substrate/types.ts";
 
@@ -1198,6 +1198,18 @@ describe("tools", () => {
     assert.match(label("import_model", { file: "/tmp/bike.fbx", dest: "/Game/Bike", name: "SM_Bike" }), /SM_Bike/);
     assert.equal(showsPlayView(step(build, "motion_strip", { frames: 4, interval_s: 0.5 }), false), true);
     assert.equal(showsPlayView(step(build, "capture_play", { name: "jump" }), false), true);
+  });
+
+  it("describing one tool of a toolset reads as reading the toolset, never as calling that tool", () => {
+    const toolset = "EditorToolset.EditorAppToolset";
+    const described = connectorStep({ tool: "describe_toolset", toolset, toolName: "StartPIE" });
+    assert.deepEqual(described, {
+      action: StepAction.ReadToolset,
+      object: "EditorAppToolset",
+      tool: "describe_toolset",
+    });
+    assert.deepEqual([startsPlay(described), showsPlayView(described, false)], [false, false]);
+    assert.equal(connectorStep({ tool: "call_tool", toolset, toolName: "StartPIE" }).action, StepAction.Played);
   });
 
   it("folds a delegated minute into one closed line", () => {
