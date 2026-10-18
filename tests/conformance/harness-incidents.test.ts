@@ -9984,7 +9984,8 @@ describe("the Unreal lead's saves, crashes, owner words and end", () => {
       throw new Error("Stopped.");
     });
     const report = await runLead(host, { minutes: 20 });
-    assert.equal(report.executionStatus, "cancelled");
+    // A Stop pauses every Loop for a Resume: it ends as the person's stop, never as the plugins' halt.
+    assert.deepEqual([report.executionStatus, report.endReason], ["paused", "stopped"]);
     assert.doesNotMatch(String(report.stoppedBecause), /couldn't ask the game's plugins/);
   });
 

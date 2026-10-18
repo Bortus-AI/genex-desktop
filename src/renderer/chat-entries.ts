@@ -152,10 +152,10 @@ export const EntryAction = {
 } as const;
 export type EntryAction = (typeof EntryAction)[keyof typeof EntryAction];
 
-/** Why a Loop stopped, as the person reads it under "Almost there". */
-export function stopWhyLine(why: StopWhy, hours: number | null): string {
-  if (why === StopWhy.Time) return STILL_TO_FIX_WORDS.why.time(hours);
-  return STILL_TO_FIX_WORDS.why[why];
+/** Why a Loop stopped, as the person reads it under "Almost there"; `listed`: the card lists what is left. */
+export function stopWhyLine(why: StopWhy, hours: number | null, listed = true): string {
+  if (why !== StopWhy.Time) return STILL_TO_FIX_WORDS.why[why];
+  return listed ? STILL_TO_FIX_WORDS.why.time(hours) : STILL_TO_FIX_WORDS.why.timeUnlooked(hours);
 }
 
 /** What a run that ended without the reviewer's yes leaves for the person: its last no's lists, why it stopped, its hours. */
@@ -753,11 +753,18 @@ function userEntry(id: string, content: string): Entry {
   return { id, kind: EntryKind.User, text: note.text, about: NOTE_ABOUT };
 }
 
+/** The person spoke after the newest result: its Keep building is history, as Builds' is after a chat turn. */
+function retireLatestResult(chat: ChatDraft): void {
+  if (chat.latestResult) delete chat.latestResult.latest;
+  chat.latestResult = null;
+}
+
 function readMessages(chat: ChatDraft, eventId: string, data: Extract<EventData, { type: "messages" }>): void {
   for (const [messageIndex, message] of data.messages.entries()) {
     const messageId = `${eventId}-${messageIndex}`;
     if (message.role === "user") {
       for (const entry of chat.entries) if (awaitsAnswer(entry)) entry.pending = false;
+      retireLatestResult(chat);
       const bubble = userEntry(messageId, message.content);
       chat.entries.push(bubble);
       placeTagCard(chat, chat.tagged.queueIds.get(eventId), bubble);

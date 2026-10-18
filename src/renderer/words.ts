@@ -1642,13 +1642,22 @@ export const STILL_TO_FIX_WORDS = {
       hours === null
         ? "Its time ran out before this was fixed."
         : `Your ${loopSpan(hours)} ran out before this was fixed.`,
+    /** Its time ran out before the game had a final look, so nothing is listed. */
+    timeUnlooked: (hours: number | null) =>
+      hours === null
+        ? "Its time ran out before a final look at your game."
+        : `Your ${loopSpan(hours)} ran out before a final look at your game.`,
     stuck: "It kept getting this wrong, so it stopped to save your credits.",
     person: "You stopped it before this was fixed.",
     ended: "It stopped before this was fixed.",
   },
-  /** The message Keep building sends for the person. */
+  /** The message Keep building sends for the person: what is left, else to go on where it stopped. */
   ask: (notDone: readonly string[]) =>
-    ["Keep building: fix what’s left.", ...notDone.map((item) => `- ${item}`)].join("\n"),
+    notDone.length
+      ? ["Keep building: fix what’s left.", ...notDone.map((item) => `- ${item}`)].join("\n")
+      : "Keep building where you left off.",
+  /** Keep building in a game whose Loop can't run here: nothing was sent. */
+  noLoop: "Loop can’t run in this game yet, so Keep building can’t start it.",
 } as const;
 
 /**

@@ -1,3 +1,4 @@
+import type { KeepBuildingTap } from "../keep-building.ts";
 import { gridTransform } from "../canvas-view.ts";
 import { PerformanceComponent, PerformanceMarkName } from "../../shared/performance.ts";
 import { markPerformance, PerformanceBoundary } from "../performance.tsx";
@@ -68,7 +69,7 @@ interface Props {
   /** Follow up in chat: the composer takes a chip naming the node; null when there is no chat to reply in. */
   onReply: ((reply: Reply) => void) | null;
   /** Keep building on what the run left, in the chat that owns it; null when there is no chat. */
-  onKeepBuilding?: ((notDone: string[]) => void) | null;
+  onKeepBuilding?: KeepBuildingTap | null;
   /** The chat's builds, as the bar's tabs, and the one on show. */
   tabs?: BuildTabs | null;
   /** The stage's toast channel: this panel's own Play/Make it live refuse for ordinary reasons. */
@@ -404,7 +405,7 @@ function SelectedPanel({
   onStep: (dir: number) => void;
   onOpenJob: (job: AssetInfo) => void;
   onReply: Props["onReply"];
-  onKeepBuilding: ((notDone: string[]) => void) | null;
+  onKeepBuilding: KeepBuildingTap | null;
   onNotice: Props["onNotice"];
   onPlay: (() => Promise<void> | void) | null;
 }): JSX.Element {

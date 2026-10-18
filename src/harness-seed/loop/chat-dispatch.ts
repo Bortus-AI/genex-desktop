@@ -433,6 +433,7 @@ async function answerMessage(
   steer: SteerHandle | undefined,
 ): Promise<void> {
   const { turnId, existing, after, coordinated } = turn;
+  if (keepsBuilding(action) && (await keepBuildingNow(studio, ctx, action, turn))) return;
   // The Loop that came with it cannot continue this finished build: said once, not on every message.
   if (turn.loopUnused && firstLoopUnused(studio, String(existing?.runId)))
     await sayInTurn(ctx, turnId, REOPEN_MESSAGE.loopUnused);
@@ -455,6 +456,54 @@ async function answerMessage(
     ...(stopped ? { outcome: stopped } : {}),
   });
   await afterTheReply(studio, ctx, action, outcome, turn);
+}
+
+/** The person's Keep building tap (`AutopilotCommission.keepBuilding`), never a message the chat wrote itself. */
+function keepsBuilding(action: QueueAction): boolean {
+  return action.autopilot?.keepBuilding === true && !chatWrote(action);
+}
+
+/**
+ * Keep building, done without a turn deciding it: a finished build the chat may reopen goes on with
+ * the tap's words as its ask; with no build to go on from (the next Loop of a project worked in its
+ * own folder), the next Loop starts from that same goal. The turn ends at once. False when neither
+ * can, so the message is answered as any other.
+ */
+async function keepBuildingNow(
+  studio: Studio,
+  ctx: HarnessCtx,
+  action: QueueAction,
+  turn: AnswerTurn,
+): Promise<boolean> {
+  const commission = action.autopilot ?? action.loop;
+  const loopRun = turn.after ?? turn.coordinated;
+  const text = String(action.text ?? "");
+  const hours = commissionHours(commission);
+  if (loopRun && reopens(loopRun, commission)) {
+    await studio.host.call(HostMethod.TurnEnd, { turnId: turn.turnId, status: TurnStatus.Ok });
+    const models = sessionModels(action, turn.after, { hours });
+    await reopenOrSayWhy(studio, ctx, action, loopRun, { hours, text, models });
+    return true;
+  }
+  if (turn.existing) return false;
+  await studio.host.call(HostMethod.TurnEnd, { turnId: turn.turnId, status: TurnStatus.Ok });
+  await launchOrSayWhy(studio, ctx, action, await nextLoopSpec(studio.host, action, hours));
+  return true;
+}
+
+/** The next Loop Keep building starts: the last Loop's goal with what is left, on the message's Loop and models. */
+async function nextLoopSpec(host: Host, action: QueueAction, hours: number | null): Promise<AnyRecord> {
+  const last = latestRun(await host.call(HostMethod.EventsList, { threadId: action.threadId }).catch(() => []));
+  const before = typeof last?.goal === "string" ? last.goal.trim() : "";
+  const text = String(action.text ?? "").trim();
+  const roles = action.autopilot?.roles;
+  return {
+    goal: before ? `${before}\n\n${text}` : text,
+    ...(hours === null ? { untilSatisfied: true } : { hours }),
+    ...(action.engine ? { engine: action.engine } : {}),
+    ...(action.model ? { model: action.model } : {}),
+    ...(roles ? { roles } : {}),
+  };
 }
 
 /**

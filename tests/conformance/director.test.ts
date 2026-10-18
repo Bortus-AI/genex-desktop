@@ -2785,6 +2785,21 @@ describe("the director's finish claim", () => {
     assert.deepEqual(theirs.checks(), []);
   });
 
+  it("a timed build's finish once its hours are spent closes as its time running out, for its card", async () => {
+    const { finish } = await import("../../src/harness-seed/loop/director/integrate.ts");
+    const timed = { wallClockMs: 60 * 60_000, completionPolicy: "duration" };
+    const late = claimingLoopRun([]);
+    late.loopRun.run.budgets = timed;
+    late.loopRun.softDeadline = Date.now() - 60_000;
+    await finish(late.loopRun as never, { summary: "where it got to", land: "yes" });
+    assert.equal(late.closes[0]?.ended, StopWhy.Time, "the wrap-up's finish: the hours ran out");
+    const early = claimingLoopRun([], { finishing: true });
+    early.loopRun.run.budgets = timed;
+    await finish(early.loopRun as never, { summary: "as far as it got", land: "no", victory: "no" });
+    assert.equal(early.closes.length, 1, "the person's own finish closes it");
+    assert.equal(early.closes[0]?.ended, undefined, "a finish with hours left is no time-out");
+  });
+
   it("a claim with no time left in the lead's call for a reviewer is not counted, and the run goes on", async () => {
     const { finish } = await import("../../src/harness-seed/loop/director/integrate.ts");
     const { loopRun, rec, closes, checks } = claimingLoopRun([]);
@@ -3865,7 +3880,7 @@ describe("a director's run through the real core and harness", () => {
     });
   });
 
-  it("a time-out after a no makes no claim and names what the reviewer found not done", async () => {
+  it("a lead's session that ends after a no makes no claim and names what the reviewer found not done", async () => {
     const said: string[] = [];
     const { finished, reviewers } = await claimRun(
       "director-timed-out",

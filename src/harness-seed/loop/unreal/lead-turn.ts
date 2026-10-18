@@ -70,8 +70,9 @@ export type RunEnd = { status: ExecutionStatus; reason: LeadEndReason; why: stri
 
 /** The run's ends that come from outside its turns: the user's stop, the user's finish, Unreal gone for good. */
 export const RUN_ENDS = {
+  // The person's Stop pauses the run, as it does every Loop: Resume goes on from where it stopped.
   stopped: (): RunEnd => ({
-    status: ExecutionStatus.Cancelled,
+    status: ExecutionStatus.Paused,
     reason: LeadEndReason.Stopped,
     why: MESSAGE.StoppedByUser,
   }),
