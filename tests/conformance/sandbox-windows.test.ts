@@ -202,7 +202,12 @@ describe("Windows sandbox: identity and files", { skip: SKIP, timeout: TEST_TIME
   it("denies a folder directly in the profile without rewriting anything else in the profile", async (t) => {
     if (!sandboxGroup) return t.skip("no sandbox users' group here: srt-win stamps every deny");
     assert.match(sddl(profileSecret), new RegExp(`\\(D;OICI;FA;;;${sandboxGroup}\\)`), "denied, passed down");
-    assert.match(sddl(os.homedir()), new RegExp(`\\(D;;DC;;;${sandboxGroup}\\)`), "guarded by the profile alone");
+    // SDDL spells FILE_DELETE_CHILD (0x40) DT, the directory-service "delete tree" right of the same bit.
+    assert.match(
+      sddl(os.homedir()),
+      new RegExp(`\\(D;;(?:0x40|DT);;;${sandboxGroup}\\)`),
+      "guarded by the profile alone",
+    );
     assert.match(
       sddl(movedProbe),
       /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/,

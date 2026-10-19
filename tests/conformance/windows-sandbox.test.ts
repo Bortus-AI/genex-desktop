@@ -515,7 +515,12 @@ describe("an entry on one folder alone, on Windows", {
     assert.equal(await denies.sync(own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, passed down");
     assert.match(sddl(key, root), /\(D;ID;FA;;;BG\)/, "a file below it inherits the deny");
-    assert.match(sddl(above, root), /\(D;;DC;;;BG\)/, "its parent may not have it deleted, on that folder alone");
+    // SDDL spells FILE_DELETE_CHILD (0x40) DT, the directory-service "delete tree" right of the same bit.
+    assert.match(
+      sddl(above, root),
+      /\(D;;(?:0x40|DT);;;BG\)/,
+      "its parent may not have it deleted, on that folder alone",
+    );
     assert.match(sddl(moved, root), inheritedElsewhere, "nothing else under the parent was rewritten");
     await denies.revokeAll();
     for (const dir of [secret, key, above]) assert.doesNotMatch(sddl(dir, root), /\(D;[^)]*;;;BG\)/, dir);
