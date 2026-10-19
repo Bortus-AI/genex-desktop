@@ -113,6 +113,7 @@
   "tests/conformance/io-performance.test.ts",
   "tests/conformance/ipc-contract.test.ts",
   "tests/conformance/job-entries.test.ts",
+  "tests/conformance/job-output.test.ts",
   "tests/conformance/judge-rubrics.test.ts",
   "tests/conformance/known-secrets.test.ts",
   "tests/conformance/link-policy.test.ts",
