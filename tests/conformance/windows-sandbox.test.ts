@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import net from "node:net";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import { describe, it } from "node:test";
@@ -43,6 +43,7 @@ import {
   grantUnion,
   grantableToolDirs,
   grantsCover,
+  insideWindowsPath,
   keepWindowsDenies,
   msysPath,
   msysPathList,
@@ -56,6 +57,7 @@ import {
   setupGaps,
   srtWinExecFailure,
   srtWinPath,
+  toolDirEntries,
   windowsAccessReport,
   windowsDenyHolders,
   windowsGrantHolders,
@@ -552,10 +554,61 @@ describe("toolchain and deny paths", () => {
       "relative\\bin",
     ];
     const exists = (dir: string) => !dir.includes("missing");
-    assert.deepEqual(grantableToolDirs(entries, PROFILE, denied, exists), [
+    assert.deepEqual(grantableToolDirs(entries, PROFILE, denied, { exists, entries: () => null }), [
       at("AppData", "Roaming", "nvm", "v24.18.0"),
       at("scoop", "shims"),
     ]);
+  });
+
+  it("grants pnpm's home without its package store, so the grant walks none of the store's files", () => {
+    // srt-win's grant re-applies permissions through everything under a granted folder: granting
+    // pnpm's home whole walked every package the person ever installed with pnpm.
+    const pnpmHome = at("AppData", "Local", "pnpm");
+    const npmPrefix = at("AppData", "Roaming", "npm");
+    const listing: Record<string, string[]> = {
+      [pnpmHome]: ["pnpm.exe", "pnpm", "pnpm.cmd", "global", ".tools", "store"],
+      [`${pnpmHome}\\store`]: ["v3"],
+      [npmPrefix]: ["pnpm", "pnpm.cmd", "node_modules"],
+    };
+    const disk = { exists: () => true, entries: (dir: string) => listing[dir] ?? null };
+    const granted = grantableToolDirs([pnpmHome, npmPrefix], PROFILE, [], disk);
+    const store = `${pnpmHome}\\store`;
+    assert.ok(!granted.some((root) => insideWindowsPath(root, store)), granted.join("\n"));
+    assert.deepEqual(
+      new Set(granted),
+      new Set([
+        ...["pnpm.exe", "pnpm", "pnpm.cmd", "global", ".tools"].map((name) => `${pnpmHome}\\${name}`),
+        // npm's prefix holds no store: its node_modules are the global CLIs it runs (OpenCode among them).
+        npmPrefix,
+      ]),
+    );
+    // The home itself still gets the read-attributes entry, so Git Bash finds `pnpm` there.
+    assert.ok(ancestorDirs(PROFILE, granted).includes(pnpmHome));
+  });
+
+  it("grants a PATH folder whole when what it holds is no pnpm store, or cannot be listed", () => {
+    const tools = at("tools");
+    const unlisted = at("unlisted");
+    const listing: Record<string, string[]> = {
+      [tools]: ["tool.exe", "store"],
+      [`${tools}\\store`]: ["items.json"],
+    };
+    const disk = { exists: () => true, entries: (dir: string) => listing[dir] ?? null };
+    assert.deepEqual(grantableToolDirs([tools, unlisted], PROFILE, [], disk), [tools, unlisted]);
+  });
+
+  it("lists a PATH folder's files and folders but none of its links, whose targets a grant would open", async () => {
+    // srt-win grants a link's target: a link in pnpm's home to `~\.ssh` must not become a grant there.
+    const root = await tmpDir("tool-dir-entries-");
+    const home = path.join(root, "pnpm");
+    const secrets = path.join(root, ".ssh");
+    await mkdir(path.join(home, "global"), { recursive: true });
+    await mkdir(secrets);
+    await writeFile(path.join(home, "pnpm.exe"), "");
+    await symlink(secrets, path.join(home, "keys"), "junction");
+    const listed = toolDirEntries(home);
+    assert.deepEqual(listed?.sort(), ["global", "pnpm.exe"]);
+    assert.equal(toolDirEntries(path.join(root, "missing")), null);
   });
 
   it("drops a missing deny path only in the profile outside every grant, where nothing could read it anyway", () => {

@@ -99,6 +99,16 @@ const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  */
 const UNGRANTABLE_TOOL_DIRS = [["AppData", "Local", "Microsoft", "WindowsApps"]] as const;
 /**
+ * pnpm's package store, which pnpm keeps in its home (`%LOCALAPPDATA%\pnpm`, a PATH folder) unless
+ * told otherwise, one folder per layout version (`store\v3`, `store\v10`). It holds a file for every
+ * package any of the person's projects installed, and srt-win's grant re-applies permissions through
+ * everything under a granted folder, so granting the home whole walked all of them. No sandboxed
+ * command reads it: a sandboxed pnpm keeps its store in the sandbox user's own profile, and a global
+ * package's files are hardlinks into it, sharing one security descriptor with their `global` names.
+ */
+const PNPM_STORE = "store";
+const PNPM_STORE_LAYOUT = /^v\d+$/;
+/**
  * Variables that stay the sandbox user's own: its profile, its home and srt's proxy plumbing.
  * The caller may still set one of them explicitly; a value inherited from the studio never wins.
  */
@@ -237,17 +247,47 @@ export async function windowsAccessReport(
   return lines;
 }
 
+/** How {@link grantableToolDirs} sees the disk; each default is the real one. */
+export interface ToolDirDeps {
+  exists?: (dir: string) => boolean;
+  /** The names a folder holds, links left out; null when it cannot be listed (default {@link toolDirEntries}). */
+  entries?: (dir: string) => string[] | null;
+}
+
+/** The files and folders directly in `dir`, links left out (a grant opens a link's target); null when it cannot be read. */
+export function toolDirEntries(dir: string): string[] | null {
+  try {
+    return readdirSync(dir, { withFileTypes: true })
+      .filter((entry) => entry.isFile() || entry.isDirectory())
+      .map((entry) => entry.name);
+  } catch {
+    return null;
+  }
+}
+
+/** `dir`, or each of its entries but pnpm's store when it holds one ({@link PNPM_STORE}). */
+function withoutPnpmStore(dir: string, list: (dir: string) => string[] | null): string[] {
+  const names = list(dir) ?? [];
+  const store = names.find((name) => name.toLowerCase() === PNPM_STORE);
+  const layouts = store === undefined ? [] : (list(win.join(dir, store)) ?? []);
+  if (!layouts.some((name) => PNPM_STORE_LAYOUT.test(name))) return [dir];
+  return names.filter((name) => name !== store).map((name) => win.join(dir, name));
+}
+
 /**
  * The PATH folders under `profile` the sandbox user must read to run the toolchain (nvm, Volta,
  * Scoop, `%LOCALAPPDATA%\Programs`): existing folders only, never the profile or one of its
- * ancestors, never a folder that holds a denied path, never an ungrantable one.
+ * ancestors, never a folder that holds a denied path, never an ungrantable one. A folder that
+ * holds pnpm's store (pnpm's home) is granted entry by entry without it.
  */
 export function grantableToolDirs(
   entries: readonly string[],
   profile: string,
   denied: readonly string[],
-  exists: (dir: string) => boolean = existsSync,
+  deps: ToolDirDeps = {},
 ): string[] {
+  const exists = deps.exists ?? existsSync;
+  const list = deps.entries ?? toolDirEntries;
   const ungrantable = UNGRANTABLE_TOOL_DIRS.map((parts) => win.join(profile, ...parts));
   const grantable = (dir: string) =>
     win.isAbsolute(dir) &&
@@ -256,7 +296,11 @@ export function grantableToolDirs(
     !denied.some((deny) => insideWindowsPath(dir, deny)) &&
     !ungrantable.some((root) => insideWindowsPath(root, dir)) &&
     exists(dir);
-  return outermost(entries.filter(grantable), []);
+  const folders = outermost(entries.filter(grantable), []);
+  return outermost(
+    folders.flatMap((dir) => withoutPnpmStore(dir, list)),
+    [],
+  );
 }
 
 /** Where a deny path is judged: the session's grant roots and the real user's profile. */
