@@ -30,8 +30,14 @@ import { rm } from "node:fs/promises";
 import net from "node:net";
 import { setTimeout as sleep } from "node:timers/promises";
 import { CUA_DRIVER_RELEASE } from "../../scripts/vendor-cua-driver.ts";
-import { driverEnv } from "../../src/substrate/cua-driver-client.ts";
-import { bundledCuaDriver, daemonEndpoint, embeddedEnv, HOST_BUNDLE_ID } from "../../src/substrate/cua-embedded.ts";
+import { connectCuaDriver, driverEnv, GrantHolder } from "../../src/substrate/cua-driver-client.ts";
+import {
+  bundledCuaDriver,
+  daemonEndpoint,
+  embeddedCuaDriver,
+  embeddedEnv,
+  HOST_BUNDLE_ID,
+} from "../../src/substrate/cua-embedded.ts";
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const target = `${process.platform}-${process.arch}`;
@@ -254,6 +260,48 @@ async function authenticodeStatus(file) {
   return stdout.trim();
 }
 
+/** How many cua-driver.exe processes run on this PC. */
+async function driverProcessCount() {
+  const { stdout } = await promisify(execFile)("tasklist", [
+    "/FI",
+    "IMAGENAME eq cua-driver.exe",
+    "/FO",
+    "CSV",
+    "/NH",
+  ]).catch(() => ({ stdout: "" }));
+  return stdout.split("\n").filter((line) => line.toLowerCase().includes("cua-driver.exe")).length;
+}
+
+/**
+ * On Windows, the bundled driver as the app runs it: its own embedded daemon on a named pipe and
+ * the app's client (with its window probe) answer a real call, and stopping leaves no driver behind.
+ */
+async function windowsDriverCall(driver) {
+  const embedded = embeddedCuaDriver({ command: driver, args: [] }, { hostBundleId: HOST_BUNDLE_ID, env: driverEnv() });
+  let answered = "";
+  try {
+    const desktop = await connectCuaDriver(() => embedded.command(), { local: true, holder: GrantHolder.Host });
+    try {
+      const shot = await desktop.screenshot();
+      const focus = await desktop.focus();
+      answered = `screenshot ${shot.width}x${shot.height}; in front: ${focus.app?.bundleId ?? "no app"}`;
+    } finally {
+      await desktop.close();
+    }
+  } catch (error) {
+    answered = `failed: ${error instanceof Error ? error.message : String(error)}`;
+  }
+  await embedded.stop();
+  addCheck(
+    "the bundled cua-driver answers a real call over its named pipe",
+    answered.startsWith("screenshot"),
+    answered,
+  );
+  await sleep(1000);
+  const left = await driverProcessCount();
+  addCheck("no cua-driver.exe runs once it stops", left === 0, `${left} running`);
+}
+
 /**
  * The cua-driver every macOS and Windows build carries for computer control
  * (scripts/vendor-cua-driver.ts): the pinned version beside its license, and a daemon that starts
@@ -290,6 +338,7 @@ async function cuaDriverChecks() {
   if (process.platform === "win32") {
     const status = await authenticodeStatus(driver);
     addCheck("the bundled cua-driver carries cua's valid signature", status === "Valid", status);
+    await windowsDriverCall(driver);
     return;
   }
   if (!expectSigned) return;
