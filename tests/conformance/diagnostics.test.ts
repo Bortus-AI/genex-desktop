@@ -80,6 +80,18 @@ describe("the studio log", () => {
   it("scrubs a home folder only as a whole path segment", () => {
     assert.equal(scrubForLog(`${HOME}/a and ${HOME}else`, HOME), `~/a and ${HOME}else`);
   });
+
+  it("keeps the email scrubber's address boundaries and malformed-address behavior", () => {
+    const original = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
+    const samples = [
+      "prefix: user+tag.name@example.co.uk; next@other.test",
+      "a@b@c.example; dots..and-dashes@sub-domain.example",
+      "no@localhost a@b..invalid @missing.example local@.example",
+      "(name@example.com). another_name@123.456",
+      "before+name@example.com..after and trailing-name@domain.test-",
+    ];
+    for (const sample of samples) assert.equal(scrubForLog(sample, HOME), sample.replace(original, "[email]"));
+  });
 });
 
 function sources(overrides: Partial<DiagnosticsSources> = {}): DiagnosticsSources {
