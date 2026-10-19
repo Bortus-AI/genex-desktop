@@ -511,7 +511,7 @@ describe("an entry on one folder alone, on Windows", {
     await rename(path.join(elsewhere, "moved"), moved);
     const inheritedElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/;
     const denies = ownDenyStamps(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
-    const { own } = routeWindowsDenies({ read: [secret], write: [] }, { roots: [], profile: root });
+    const { own } = routeWindowsDenies({ read: [secret], write: [] });
     assert.equal(await denies.sync(own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, passed down");
     assert.match(sddl(key, root), /\(D;ID;FA;;;BG\)/, "a file below it inherits the deny");
@@ -907,7 +907,14 @@ function fakeOwnDenies(calls: string[], options: { available?: boolean } = {}) {
  * A session over fakes; `realDenies` keeps the real filter of missing deny paths, `ownDenies`
  * lets Genex set the denies outside the grants itself (`unavailable`: a PC where it cannot).
  */
-function session(options: { realDenies?: boolean; profile?: string; ownDenies?: boolean | "unavailable" } = {}) {
+function session(
+  options: {
+    realDenies?: boolean;
+    profile?: string;
+    ownDenies?: boolean | "unavailable";
+    exists?: (p: string) => boolean;
+  } = {},
+) {
   const runtime = fakeSessionRuntime();
   const ancestors = fakeAncestors();
   const own = fakeOwnDenies(runtime.calls, { available: options.ownDenies !== "unavailable" });
@@ -917,7 +924,8 @@ function session(options: { realDenies?: boolean; profile?: string; ownDenies?: 
     profile: options.profile ?? PROFILE,
     ancestors: ancestors.ancestors,
     ...(options.ownDenies ? { denies: own.denies } : {}),
-    ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths] }),
+    ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths], exists: () => true }),
+    ...(options.exists ? { exists: options.exists } : {}),
     log: (line) => logged.push(line),
   });
   return { session: value, runtime, ancestors, own, logged };
@@ -1241,11 +1249,14 @@ describe("the grant session", () => {
   });
 });
 
-describe("deny paths outside the grants", () => {
+describe("deny paths Genex sets itself", () => {
   // srt-win's stamp puts an inheritable FILE_DELETE_CHILD deny on every denied path's parent, and
   // Windows passes it down through everything under that parent, once per path: for `~\.ssh` or
-  // `~\.claude` the whole profile, which ran past srt-win's 60-second deadline on a large one.
+  // `~\.claude` the whole profile, for a game's `.claude` the whole game. A large profile or a few
+  // large games ran past srt-win's 60-second deadline.
   const PONG = at("AI Games", "Pong");
+  const NEVER_MADE = at("AI Games", "Pong", "never-made");
+  const exists = (p: string) => p !== NEVER_MADE;
   const denying = (denyRead: string[], denyWrite: string[] = []): SessionMember => ({
     grants: { write: [PONG], read: [] },
     config: { ...BASE_CONFIG, filesystem: { ...BASE_CONFIG.filesystem, denyRead, denyWrite } },
@@ -1256,31 +1267,37 @@ describe("deny paths outside the grants", () => {
     at("AppData", "Roaming", "Microsoft", "Credentials"),
     at("AI Games", "Pong", ".env"),
     "D:\\Keys\\deploy.pem",
+    NEVER_MADE,
   ];
-  const WRITE_ONLY = [at("AppData", "Local", "Roblox", "AssistantSettings"), at("AI Games", "Pong", "judge")];
+  const WRITE_ONLY = [at("AppData", "Local", "Roblox", "AssistantSettings"), at("AI Games", "Pong", ".claude")];
 
-  it("never hands srt-win a deny whose parent folder is in the profile outside every grant", async () => {
-    const s = session({ ownDenies: true });
+  it("never hands srt-win a deny on a path that exists, whose parent its stamp would walk whole", async () => {
+    const s = session({ ownDenies: true, exists });
     await s.session.join({}, denying(SECRETS, WRITE_ONLY));
     const sent = s.runtime.last().filesystem;
-    assert.deepEqual(sent.denyRead, [at("AI Games", "Pong", ".env"), "D:\\Keys\\deploy.pem"]);
-    assert.deepEqual(sent.denyWrite, [at("AI Games", "Pong", "judge")]);
+    assert.deepEqual(sent.denyRead, [NEVER_MADE], "only a path srt-win must make a placeholder for");
+    assert.deepEqual(sent.denyWrite, []);
     assert.deepEqual(s.own.synced, [
       [
         { path: PROFILE, deny: null, guard: true },
         { path: at(".claude"), deny: DenyAccess.Read, guard: false },
         { path: at(".ssh"), deny: DenyAccess.Read, guard: false },
+        { path: PONG, deny: null, guard: true },
+        { path: at("AI Games", "Pong", ".claude"), deny: DenyAccess.Write, guard: false },
+        { path: at("AI Games", "Pong", ".env"), deny: DenyAccess.Read, guard: false },
         { path: at("AppData", "Local", "Roblox"), deny: null, guard: true },
         { path: at("AppData", "Local", "Roblox", "AssistantSettings"), deny: DenyAccess.Write, guard: false },
         { path: at("AppData", "Roaming", "Microsoft"), deny: null, guard: true },
         { path: at("AppData", "Roaming", "Microsoft", "Credentials"), deny: DenyAccess.Read, guard: false },
+        { path: "D:\\Keys", deny: null, guard: true },
+        { path: "D:\\Keys\\deploy.pem", deny: DenyAccess.Read, guard: false },
       ],
     ]);
     assert.deepEqual(s.runtime.calls, ["own denies", "initialize"], "denied before srt-win grants anything");
   });
 
   it("leaves every deny to srt-win, as before, where Genex cannot set them itself", async () => {
-    const s = session({ ownDenies: "unavailable" });
+    const s = session({ ownDenies: "unavailable", exists });
     await s.session.join({}, denying(SECRETS, WRITE_ONLY));
     const sent = s.runtime.last().filesystem;
     assert.deepEqual(sent.denyRead, SECRETS);
@@ -1302,33 +1319,30 @@ describe("deny paths outside the grants", () => {
     assert.equal(s.own.revoked(), 2);
   });
 
-  it("routes by where a path really is: a link out of the profile, or the profile itself, stays with srt-win", () => {
+  it("denies a path where it really is, its spelling and links worked out", () => {
     const linked = at(".codex");
-    const realpath = (p: string) => (p === linked ? "D:\\dotfiles\\codex" : p);
+    const realpath = (p: string) => (p === linked ? "D:\\dotfiles\\codex" : path.win32.resolve(p));
     const routes = routeWindowsDenies(
-      { read: [linked, PROFILE, at(".aws"), at("AI Games", "Pong")], write: [at(".AWS")] },
-      { roots: [PONG], profile: PROFILE },
-      realpath,
+      { read: [linked, at("AppData", "..", ".aws")], write: [at(".AWS")] },
+      { realpath, exists: () => true },
     );
-    assert.deepEqual(routes.srt, { read: [linked, PROFILE, at("AI Games", "Pong")], write: [] });
+    assert.deepEqual(routes.srt, { read: [], write: [] });
     assert.deepEqual(routes.own, [
       { path: PROFILE, deny: null, guard: true },
       { path: at(".aws"), deny: DenyAccess.Read, guard: false },
+      { path: "D:\\dotfiles", deny: null, guard: true },
+      { path: "D:\\dotfiles\\codex", deny: DenyAccess.Read, guard: false },
     ]);
   });
 
-  it("leaves srt-win every path that is not in the profile outside the grants, however it is spelled", () => {
-    const scope = { roots: [PONG], profile: PROFILE };
+  it("leaves srt-win only what it must make, or what has no folder to guard", () => {
     const table: Array<[string, string]> = [
-      ["another user's profile with a shared prefix", "C:\\Users\\Annabel\\.ssh"],
-      ["an escape through ..", at("AppData", "..", "..", "Bob", ".ssh")],
-      ["into a grant through ..", at("Videos", "..", "AI Games", "Pong", ".env")],
-      ["a grant spelled in another case", "c:\\users\\ann\\ai games\\pong\\.env"],
-      ["another drive", "D:\\Users\\Ann\\.ssh"],
-      ["the profile itself", PROFILE],
+      ["a path that does not exist yet (srt-win makes its placeholder)", NEVER_MADE],
+      ["a drive root", "D:\\"],
+      ["a network share", "\\\\nas\\keys\\deploy.pem"],
     ];
     for (const [label, denied] of table) {
-      const routes = routeWindowsDenies({ read: [denied], write: [denied] }, scope, (p) => p);
+      const routes = routeWindowsDenies({ read: [denied], write: [denied] }, { realpath: (p) => p, exists });
       assert.deepEqual(routes, { srt: { read: [denied], write: [denied] }, own: [] }, label);
     }
   });

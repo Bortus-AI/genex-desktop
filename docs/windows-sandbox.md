@@ -52,12 +52,14 @@ the setup screen opens on `git-missing`. What differs from macOS:
   dropped, since srt-win would create a placeholder; off the profile it is kept. srt-win's
   `argv_too_long`, `srt_win_timeout` and exit 16 `mapped_drive_cwd` become `SandboxLaunchError`
   codes.
-- Genex sets the denies in the profile outside every grant itself (`routeWindowsDenies`,
-  `ownDenyStamps`), before srt-win grants anything. srt-win's stamp puts an inheritable
-  FILE_DELETE_CHILD deny on each denied path's parent, which Windows passes down through
-  everything under it, once per path: for `.ssh` or `.claude` the whole profile, past srt-win's
-  60-second deadline on a large one
-  ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)). Genex denies the path to the sandbox
+- Genex sets every deny on a path that exists itself (`routeWindowsDenies`, `ownDenyStamps`),
+  before srt-win grants anything. srt-win's stamp puts an inheritable FILE_DELETE_CHILD deny on
+  each denied path's parent, which Windows passes down through everything under it, once per
+  path: for `.ssh` or `.claude` the whole profile, for a game's `.claude` the whole game, past
+  srt-win's 60-second deadline on a large profile or a few large games
+  ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)).
+  That stamp runs in the background start behind the open window, so its timeout replaced an idle
+  window with "Genex couldn't start". Genex denies the path, where it really is, to the sandbox
   users' group, passed down through what is under the path alone, and FILE_DELETE_CHILD on its
   parent folder alone (the shape
   [sandbox-runtime#523](https://github.com/anthropic-experimental/sandbox-runtime/pull/523) proposes), with
@@ -68,8 +70,7 @@ the setup screen opens on `git-missing`. What differs from macOS:
   every edit makes a path what all running holders need, and a gone holder's entries go on the
   next sync. A per-command deny Genex already sets is not sent again. Without the group, where
   PowerShell cannot run the batch or the running user holds the SID, srt-win stamps every deny as
-  before. srt-win keeps the denies inside a grant (a missing one needs its placeholder) and off
-  the profile.
+  before. srt-win keeps a missing deny path (it makes its placeholder), a drive root and a share.
 - `killChild` kills the srt-win broker, whose job ends the tree; `HarnessHost.stop()` sends
   `shutdown` and kills only after the grace.
 
@@ -94,8 +95,8 @@ The terminal panel still opens an installed Git Bash, else PowerShell.
 `ProcessSandbox`'s base deny list (`baseDenyRead` in `spawn.ts`) is macOS and Linux's. Windows has its own list
 (`windowsDenyRead`): `.ssh`, `.aws`, `.azure`, `.kube`, `.docker`, `.config\gh`,
 `.git-credentials`, `_netrc`, the `%APPDATA%`/`%LOCALAPPDATA%` credential and DPAPI stores, GitHub
-CLI and gcloud, and the Chrome, Edge, Brave, Firefox and Opera profiles. Those that exist sit in
-the profile outside every grant, so Genex sets them itself.
+CLI and gcloud, and the Chrome, Edge, Brave, Firefox and Opera profiles. Genex sets those that
+exist itself; a missing one outside every grant is not sent.
 
 ## Residual risks
 
@@ -105,7 +106,7 @@ model list, judge) run without its own sandbox on Windows (`toollessSandbox`). D
 runner's command line. A folder opened while the harness runs is writable only after it next
 stops. srt-win's own entries are inheritable, so each apply and reset re-propagates them through
 everything under the folder they are on, holding each folder open meanwhile, and its stamp of a
-deny inside a grant does so under that deny's parent. Genex's own deny still passes down through
+missing deny path (or a per-command one) does so under that path's parent. Genex's own deny still passes down through
 everything under its path (a large browser profile takes the longest), within srt-win's 60-second
 deadline for the batch. Two Genex editing one folder's entries at the same moment can lose one
 edit until the next sync, and a deny a crashed Genex left stays (still denying) until a Genex next

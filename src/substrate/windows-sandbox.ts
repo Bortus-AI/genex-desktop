@@ -15,9 +15,9 @@
  *    They are granted after srt-win initializes, every time: its deny stamp puts a deny on each
  *    denied path's parent that replaces the sandbox user's entry there (userData, the parent of
  *    the secrets folder, lost its grant that way), and its reset removes that entry.
- *  - A deny in the profile outside every grant is Genex's own ({@link ownDenyStamps}): srt-win's
- *    stamp re-propagates permissions through everything under each denied path's parent, which for
- *    `~\.ssh` is the whole profile.
+ *  - A deny on a path that exists is Genex's own ({@link ownDenyStamps}): srt-win's stamp
+ *    re-propagates permissions through everything under each denied path's parent, which for
+ *    `~\.ssh` is the whole profile and for a game's `.claude` the whole game.
  *  - The environment given to `spawn()` never reaches the child: it starts with the sandbox
  *    user's own. A run's variables travel in an env file in its scratch folder that the command
  *    sources first and deletes ({@link renderEnvFile}).
@@ -738,12 +738,13 @@ function takeBack(records: readonly GrantRecord[], keep: ReadonlySet<string>): F
 //
 // srt-win's stamp puts an inheritable FILE_DELETE_CHILD deny on the parent of every path it
 // denies, and Windows passes that down through everything under the parent, once per denied path.
-// For `~\.ssh` or `~\.claude` the parent is the profile, and a large one took longer than srt-win's
-// 60-second deadline. Where a deny is in the profile outside every grant, Genex sets it itself, as
-// upstream sandbox-runtime proposes to (anthropic-experimental/sandbox-runtime#523): the deny on
-// the path, passed down through what is under it, and FILE_DELETE_CHILD denied on its parent
-// folder alone, which walks nothing. They name the sandbox users' group: srt-win's recompose of a
-// path drops every explicit entry for the user's own SID, whoever set it.
+// For `~\.ssh` or `~\.claude` the parent is the profile, for a game's `.claude` the whole game, and
+// a large profile or a few large games took longer than srt-win's 60-second deadline. Genex sets
+// every deny on a path that exists itself, as upstream sandbox-runtime proposes to
+// (anthropic-experimental/sandbox-runtime#523): the deny on the path, passed down through what is
+// under it, and FILE_DELETE_CHILD denied on its parent folder alone, which walks nothing. They name
+// the sandbox users' group: srt-win's recompose of a path drops every explicit entry for the
+// user's own SID, whoever set it.
 
 /**
  * What Genex keeps denied on one path, for the sandbox users' group: a deny on the path, passed
@@ -784,31 +785,40 @@ function mergeEntries(entries: readonly OwnDenyEntry[]): OwnDenyEntry[] {
   return [...merged.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, entry]) => entry);
 }
 
-/**
- * Whether Genex denies `real` itself: in the profile (not the profile itself) and outside every
- * grant. A path in a grant keeps srt-win's stamp (a missing one needs its placeholder; the grant's
- * own apply walks that folder anyway), and so does one off the profile.
- */
-function deniedByGenex(real: string, scope: DenyScope): boolean {
-  const inProfile = insideWindowsPath(scope.profile, real) && pathKey(real) !== pathKey(scope.profile);
-  return inProfile && !scope.roots.some((root) => insideWindowsPath(root, real));
+/** A network share (`\\server\share\…`): srt-win leaves a missing one alone, and Genex sets nothing there. */
+const UNC_PATH = /^[\\/]{2}/;
+
+/** How {@link routeWindowsDenies} sees the disk; each default is the real one. */
+export interface DenyRouteDeps {
+  /** Where a path really is (default: Windows' own resolution, links followed, {@link longPath}). */
+  realpath?: (p: string) => string;
+  exists?: (p: string) => boolean;
 }
 
 /**
- * Split the session's deny paths between srt-win and Genex ({@link deniedByGenex}), judging each
- * where it really is (`realpath`, by default Windows' own resolution, links followed): a link out
- * of the profile is srt-win's, as its stamp follows it.
+ * Whether Genex denies `real` itself: a path that exists, on a drive, with a folder above it to
+ * guard. srt-win keeps a missing one, which needs its placeholder, and a drive root or a share.
+ */
+function deniedByGenex(real: string, exists: (p: string) => boolean): boolean {
+  const guardable = !UNC_PATH.test(real) && pathKey(win.dirname(real)) !== pathKey(real);
+  return guardable && exists(real);
+}
+
+/**
+ * Split the session's deny paths between srt-win and Genex ({@link deniedByGenex}), each judged and
+ * denied where it really is: a link is denied at its target, as srt-win's stamp would.
  */
 export function routeWindowsDenies(
   deny: { read: readonly string[]; write: readonly string[] },
-  scope: DenyScope,
-  realpath: (p: string) => string = (p) => longPath(p),
+  deps: DenyRouteDeps = {},
 ): DenyRoutes {
+  const realpath = deps.realpath ?? ((p: string) => longPath(p));
+  const exists = deps.exists ?? existsSync;
   const srt = { read: [] as string[], write: [] as string[] };
   const own: OwnDenyEntry[] = [];
   const route = (p: string, access: DenyAccess, sent: string[]) => {
     const real = realpath(p);
-    if (!deniedByGenex(real, scope)) {
+    if (!deniedByGenex(real, exists)) {
       sent.push(p);
       return;
     }
@@ -1039,10 +1049,12 @@ export interface WindowsSessionDeps {
   launcher?: () => Promise<() => void | Promise<void>>;
   /** Where the session says how long each step of a start took (Genex's log). */
   log?: (line: string) => void;
-  /** Genex's own denies for the paths outside every grant ({@link ownDenyStamps}); without it srt-win stamps them all. */
+  /** Genex's own denies for the paths that exist ({@link ownDenyStamps}); without it srt-win stamps them all. */
   denies?: OwnDenyStamps;
   /** Where a deny path really is (default: Windows' own resolution, {@link longPath}). */
   realpath?: (p: string) => string;
+  /** Whether a deny path exists (default: `existsSync`); srt-win makes the placeholder of one that does not. */
+  exists?: (p: string) => boolean;
 }
 
 /** Whether sandbox-runtime failed because srt-win's egress check (`wfp`) ran out of time. */
@@ -1075,7 +1087,7 @@ export class WindowsSandboxSession {
   #regrants = 0;
   /** An initialize succeeded, so its once-per-process egress check has run srt-win as the sandbox user. */
   #started = false;
-  /** The last apply left the denies outside the grants to Genex ({@link ownDenyStamps}), not srt-win. */
+  /** The last apply left the denies on paths that exist to Genex ({@link ownDenyStamps}), not srt-win. */
   #ownRouted = false;
 
   constructor(deps: WindowsSessionDeps) {
@@ -1265,7 +1277,7 @@ export class WindowsSandboxSession {
       this.#applied = null;
       if (wasApplied) await this.#deps.runtime.reset();
       const denies = [...this.#members.values()].flatMap(memberDenies);
-      const plan = await this.#denyOutsideGrants(grants);
+      const plan = await this.#denyOwn(grants);
       await this.#initialize(plan.config);
       await this.#grantAncestors(grants);
       this.#applied = grants;
@@ -1295,15 +1307,15 @@ export class WindowsSandboxSession {
   }
 
   /**
-   * Set the denies outside every grant Genex's own way ({@link routeWindowsDenies}), before srt-win
+   * Set the denies on paths that exist Genex's own way ({@link routeWindowsDenies}), before srt-win
    * grants anything, and answer the config that leaves srt-win the rest. Where Genex cannot set
    * them here, srt-win stamps every deny, as before.
    */
-  async #denyOutsideGrants(grants: WindowsGrants): Promise<{ config: SandboxRuntimeConfig; own: OwnDenyEntry[] }> {
+  async #denyOwn(grants: WindowsGrants): Promise<{ config: SandboxRuntimeConfig; own: OwnDenyEntry[] }> {
     const denies = this.#deps.denies;
     if (denies) {
       const plan = this.#plan(grants, true);
-      this.#ownRouted = await this.#timed("denies outside the grants", () => denies.sync(plan.own));
+      this.#ownRouted = await this.#timed("own denies", () => denies.sync(plan.own));
       if (this.#ownRouted) return plan;
     }
     this.#ownRouted = false;
@@ -1351,7 +1363,8 @@ export class WindowsSandboxSession {
         read,
       ),
     };
-    const routes = own ? routeWindowsDenies(deny, scope, this.#deps.realpath) : { srt: deny, own: [] };
+    const route = { realpath: this.#deps.realpath, exists: this.#deps.exists };
+    const routes = own ? routeWindowsDenies(deny, route) : { srt: deny, own: [] };
     const config = {
       ...latest,
       network: { ...latest.network, allowedDomains: domains },

@@ -14,7 +14,7 @@
  * at run time (no compiler). Where PowerShell may not do that (Constrained Language Mode), or
  * does not answer, the batch falls back to `icacls`: slow, but the same entries.
  *
- * The same script sets the deny entries Genex keeps itself for paths outside the sandbox's grants
+ * The same script sets the deny entries Genex keeps itself for the deny paths that exist
  * (`ownDenyStamps` in `windows-sandbox.ts`): a deny on the path, passed down to everything under
  * it, and a FILE_DELETE_CHILD deny on its parent folder alone. Those have no `icacls` fallback:
  * `icacls` would walk the parent, which is what they exist to avoid.
