@@ -96,8 +96,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const PLATFORMS: ReadonlySet<unknown> = new Set(NATIVE_PLATFORMS);
 const ARCHES: ReadonlySet<unknown> = new Set(Object.values(NativeArch));
-const isPlatform = (value: unknown): value is NativePlatform => PLATFORMS.has(value);
-const isArch = (value: unknown): value is NativeArch => ARCHES.has(value);
+/** Whether a value names a platform. */
+export const isNativePlatform = (value: unknown): value is NativePlatform => PLATFORMS.has(value);
+/** Whether a value names an architecture. */
+export const isNativeArch = (value: unknown): value is NativeArch => ARCHES.has(value);
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
@@ -132,7 +134,7 @@ function isPlainEntry(entry: string): boolean {
 }
 
 /** Whether `entry` is what `platform` launches: a Mac app bundle at the archive's root, a Windows `.exe`. */
-function launchesOn(platform: NativePlatform, entry: string): boolean {
+function entryRunsOn(platform: NativePlatform, entry: string): boolean {
   if (!isPlainEntry(entry)) return false;
   const parts = entry.split("/");
   if (platform === NativePlatform.Mac) return parts.length === 1 && entry.toLowerCase().endsWith(".app");
@@ -157,9 +159,9 @@ function identityOf(
   value: Record<string, unknown>,
 ): Pick<NativeBuild, "platform" | "arch" | "version" | "entry"> | null {
   const { platform, arch, version, entry } = value;
-  if (!isPlatform(platform) || !isArch(arch) || !archOn(platform, arch)) return null;
+  if (!isNativePlatform(platform) || !isNativeArch(arch) || !archOn(platform, arch)) return null;
   if (typeof version !== "string" || version.length > VERSION_MAX || !VERSION.test(version)) return null;
-  if (typeof entry !== "string" || !launchesOn(platform, entry)) return null;
+  if (typeof entry !== "string" || !entryRunsOn(platform, entry)) return null;
   return { platform, arch, version, entry };
 }
 
@@ -246,6 +248,9 @@ export function compareOsVersions(a: string, b: string): number {
   return 0;
 }
 
+/** Whether Genex launches native games on `host` at all. */
+export const launchesOn = (host: NativeHost): boolean => LAUNCH_PLATFORMS.has(host.platform);
+
 /** Whether `host` meets a build's minimum system. */
 const runsOn = (build: NativeBuild, host: NativeHost): boolean =>
   !build.minOs || compareOsVersions(host.osVersion, build.minOs) >= 0;
@@ -259,7 +264,7 @@ const translatesIntel = (host: NativeHost): boolean => host.arch === NativeArch.
  * where its minimum system is met. Nothing is offered where Genex cannot launch a game yet.
  */
 export function buildFor(builds: readonly NativeBuild[], host: NativeHost): NativeBuild | null {
-  if (!LAUNCH_PLATFORMS.has(host.platform)) return null;
+  if (!launchesOn(host)) return null;
   const fits = builds.filter((build) => build.platform === host.platform && runsOn(build, host));
   const own = fits.find((build) => build.arch === host.arch);
   const universal = fits.find((build) => build.arch === NativeArch.Universal);
@@ -270,3 +275,190 @@ export function buildFor(builds: readonly NativeBuild[], host: NativeHost): Nati
 /** Whether a game plays on `host` at all: in the viewer, or as a build this computer installs. */
 export const playableHere = (game: WithNative, host: NativeHost): boolean =>
   hasWebBuild(game) || buildFor(game.native?.builds ?? [], host) !== null;
+
+/** Where an install stands. Wire values: never rename one. */
+export const InstallPhase = {
+  /** Waiting for the install before it: one runs at a time. */
+  Queued: "queued",
+  Downloading: "downloading",
+  /** The archive's checksum is being checked. */
+  Verifying: "verifying",
+  /** The archive is being unpacked and the app inside checked. */
+  Unpacking: "unpacking",
+  Ready: "ready",
+  Failed: "failed",
+  Cancelled: "cancelled",
+} as const;
+export type InstallPhase = (typeof InstallPhase)[keyof typeof InstallPhase];
+
+/** Why an install failed. Wire values: never rename one; the words for each are the renderer's. */
+export const InstallFailure = {
+  /** Not enough free space for the download and the unpacked game. */
+  NoSpace: "no-space",
+  /** The archive is not the one the catalog names. */
+  Checksum: "checksum",
+  /** The download could not reach the build host or lost it; the bytes so far are kept. */
+  Network: "network",
+  /** The download stopped moving. */
+  Stalled: "stalled",
+  /** The archive names a file outside itself, or links out of the game. */
+  UnsafeArchive: "unsafe-archive",
+  /** The app is not signed, not even ad hoc. */
+  Unsigned: "unsigned",
+  /** The archive or what it unpacks to is larger than the catalog says. */
+  TooLarge: "too-large",
+  /** The app is not built for this computer's processor or system. */
+  UnsupportedOs: "unsupported-os",
+  /** The archive does not hold the app the catalog names. */
+  EntryMissing: "entry-missing",
+  /** The catalog offers no build for this computer. */
+  NotOffered: "not-offered",
+  /** Anything else: a step that failed for a reason none of the above names. */
+  Failed: "failed",
+} as const;
+export type InstallFailure = (typeof InstallFailure)[keyof typeof InstallFailure];
+
+const FAILURES: ReadonlySet<unknown> = new Set(Object.values(InstallFailure));
+/** Whether a value names an install failure. */
+export const isInstallFailure = (value: unknown): value is InstallFailure => FAILURES.has(value);
+
+/** A game installed on this computer, as Play shows it. */
+export interface InstalledGame {
+  slug: string;
+  /** Its name and cover when it was installed, for Storage and notifications. */
+  title: string;
+  coverUrl: string | null;
+  version: string;
+  platform: NativePlatform;
+  arch: NativeArch;
+  /** The space its installed version takes, in bytes (saves not counted). */
+  bytes: number;
+  /** ISO 8601. */
+  installedAt: string;
+  /** The last time it was played here, ISO 8601, or null. */
+  lastPlayedAt: string | null;
+}
+
+/** An install under way, or how the last one ended when it did not finish. */
+export interface InstallProgress {
+  slug: string;
+  version: string;
+  phase: InstallPhase;
+  /** Bytes of the archive downloaded so far, and its whole size. */
+  receivedBytes: number;
+  totalBytes: number;
+  /** About how long the download has left, or null while it is not known. */
+  etaMs: number | null;
+  /** Why it failed; null unless `phase` is failed. */
+  failure: InstallFailure | null;
+}
+
+/** Every installed game and every install under way or failed (`studio:play.installs`, `UiEvent.PlayInstalls`). */
+export interface NativeInstalls {
+  installed: InstalledGame[];
+  progress: InstallProgress[];
+  /** This computer, where Genex installs and plays native games; null where it does not. */
+  host: NativeHost | null;
+}
+
+/** No game installed and none installing, on a computer that plays no native game. */
+export const NO_INSTALLS: NativeInstalls = { installed: [], progress: [], host: null };
+
+/** Where a native game's session stands. Wire values: never rename one. */
+export const NativeSessionPhase = {
+  /** Its process started; its window has not appeared yet. */
+  Starting: "starting",
+  /** Its window is up: it is being played. */
+  Running: "running",
+  /** It could not start, or quit before its window appeared. */
+  Failed: "failed",
+} as const;
+export type NativeSessionPhase = (typeof NativeSessionPhase)[keyof typeof NativeSessionPhase];
+
+/** Why a native game did not start. Wire values: never rename one. */
+export const LaunchFailure = {
+  /** It is not installed on this computer. */
+  NotInstalled: "not-installed",
+  /** Its sandbox or its process could not start. */
+  StartFailed: "start-failed",
+  /** It quit before its window appeared. */
+  QuitEarly: "quit-early",
+} as const;
+export type LaunchFailure = (typeof LaunchFailure)[keyof typeof LaunchFailure];
+
+/** A native game being played in its own window, or one that failed to start. */
+export interface NativeSession {
+  slug: string;
+  phase: NativeSessionPhase;
+  /** When it started, ISO 8601: the page counts the minutes played from it. */
+  startedAt: string;
+  failure: LaunchFailure | null;
+}
+
+/** What the game page asks of a running game (`studio:play.session`). Wire values: never rename one. */
+export const SessionAction = {
+  /** Bring its window forward. */
+  Show: "show",
+  /** End it, and everything it started. */
+  Quit: "quit",
+} as const;
+export type SessionAction = (typeof SessionAction)[keyof typeof SessionAction];
+
+const SESSION_ACTIONS: ReadonlySet<unknown> = new Set(Object.values(SessionAction));
+/** Whether a value names a session action. */
+export const isSessionAction = (value: unknown): value is SessionAction => SESSION_ACTIONS.has(value);
+
+/** What the viewer's bar offers for a web game's native app (canvas board "WebFirst"). Wire values: never rename one. */
+export const NativeAppOffer = {
+  /** Not on this computer: the pill installs it. */
+  Install: "install",
+  /** Installing: the pill shows how far it has come. */
+  Installing: "installing",
+  /** Installed: the pill plays it in its own window, and the viewer gives way. */
+  Ready: "ready",
+} as const;
+export type NativeAppOffer = (typeof NativeAppOffer)[keyof typeof NativeAppOffer];
+
+/** The bar's native-app pill: what it offers, for which system, its size and an install's progress. */
+export interface PlayBarNative {
+  offer: NativeAppOffer;
+  platform: NativePlatform;
+  /** The installed game's size (its download's while not installed). */
+  bytes: number;
+  /** How far an install has come, whole percent; 0 otherwise. */
+  percent: number;
+}
+
+/** Whether an install is still going (queued, downloading, being checked or unpacked). */
+export const installUnderWay = (progress: InstallProgress | undefined): progress is InstallProgress =>
+  progress !== undefined &&
+  progress.phase !== InstallPhase.Ready &&
+  progress.phase !== InstallPhase.Failed &&
+  progress.phase !== InstallPhase.Cancelled;
+
+/**
+ * What the viewer's bar offers for a web game's native app on this computer, or null: a native-only
+ * game opens its page instead, and a game with no build here has nothing to offer.
+ */
+export function nativeAppOffer(
+  game: { slug: string; native?: PlayNative },
+  installs: NativeInstalls,
+): PlayBarNative | null {
+  if (!game.native?.web || !installs.host) return null;
+  const build = buildFor(game.native.builds, installs.host);
+  const installed = installs.installed.find((one) => one.slug === game.slug);
+  if (!build && !installed) return null;
+  const platform = installs.host.platform;
+  const progress = installs.progress.find((one) => one.slug === game.slug);
+  if (installUnderWay(progress)) {
+    const percent = progress.totalBytes > 0 ? Math.floor((progress.receivedBytes / progress.totalBytes) * 100) : 0;
+    return {
+      offer: NativeAppOffer.Installing,
+      platform,
+      bytes: build?.installedBytes ?? 0,
+      percent: Math.min(100, percent),
+    };
+  }
+  if (installed) return { offer: NativeAppOffer.Ready, platform, bytes: installed.bytes, percent: 0 };
+  return { offer: NativeAppOffer.Install, platform, bytes: build?.installedBytes ?? 0, percent: 0 };
+}

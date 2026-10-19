@@ -6,7 +6,7 @@
 import type { LibraryKind } from "./asset-library.ts";
 
 import type { PlayCuration } from "./play-manage.ts";
-import type { PlayNative } from "./play-native.ts";
+import type { PlayBarNative, PlayNative } from "./play-native.ts";
 
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
@@ -215,6 +215,8 @@ export const PlayControl = {
   MicDevices: "mic-devices",
   /** The maker's name: the viewer closes and the app shows their profile. */
   Maker: "maker",
+  /** The game's native app: install it, or play it in its own window (the viewer gives way). */
+  NativeApp: "native-app",
 } as const;
 export type PlayControl = (typeof PlayControl)[keyof typeof PlayControl];
 
@@ -294,6 +296,8 @@ export interface PlayBarState {
   signedIn: boolean | null;
   /** A remix is being made: Remix waits for it. */
   remixing: boolean;
+  /** The game's native app for this computer, beside Like; null when it has none. */
+  nativeApp: PlayBarNative | null;
 }
 
 /** A remix's name in the library, from the game it copies: what main adopts it as and Create shows while it is made. */

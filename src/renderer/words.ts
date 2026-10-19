@@ -35,6 +35,7 @@ import { LocalServerProblem } from "../shared/local-server.ts";
 import { COMPUTER_SETTING_QUESTION, type GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
+import { InstallFailure, LaunchFailure, NativePlatform } from "../shared/play-native.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
@@ -4471,6 +4472,91 @@ export const PLAY_CARD_MENU_WORDS = {
     } satisfies Record<PlayCoverRefusal, string>,
     failed: "Couldn’t change the cover.",
   },
+} as const;
+
+/** A native game: its card's badge, its own page and its card menu's local items (`play/GamePage.tsx`). */
+export const NATIVE_WORDS = {
+  platform: {
+    [NativePlatform.Mac]: "Mac",
+    [NativePlatform.Windows]: "Windows",
+    [NativePlatform.Linux]: "Linux",
+  } satisfies Record<NativePlatform, string>,
+  /** The systems a game was built for, read aloud and on its tile: "Mac and Windows". */
+  platforms: (names: readonly string[]) =>
+    names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`,
+  /** What is left of a download: "2 min left", "under a minute left". */
+  left: (etaMs: number | null) => {
+    if (etaMs === null) return "";
+    const minutes = Math.ceil(etaMs / 60_000);
+    return minutes <= 1 ? "under a minute left" : `${minutes} min left`;
+  },
+  downloading: (percent: number, left: string) => (left ? `${percent}% · ${left}` : `${percent}%`),
+  installedHere: "On this Mac",
+  update: (size: string) => `Update · ${size}`,
+  /** A profile's card for a game this computer has no build of. */
+  onlyOn: (platform: string) => `Only on ${platform}`,
+  // The game page.
+  by: "By",
+  stats: (plays: string, likes: string, updated: string | null) =>
+    [`${plays} plays`, `${likes} likes`, updated ? `Updated ${updated}` : null].filter(Boolean).join(" · "),
+  about: "About",
+  install: "Install",
+  installLabel: (title: string, size: string) => `Install ${title}, ${size}`,
+  installing: (percent: number) => `Installing… ${percent}%`,
+  installingLabel: (title: string) => `Installing ${title}`,
+  waiting: "Waiting for another install…",
+  checking: "Checking…",
+  cancel: "Cancel",
+  play: "Play",
+  playLabel: (title: string) => `Play ${title}`,
+  readyHere: (size: string) => `On this Mac · ${size}`,
+  showGame: "Show game",
+  quit: "Quit",
+  opening: "Opening in its own window…",
+  playingFor: (minutes: number) => `Playing in its own window · ${minutes} min`,
+  updateAndPlay: "Update and play",
+  playVersion: (version: string) => `Play version ${version} instead`,
+  onlyOnTitle: (platform: string) => `Only on ${platform}`,
+  noVersionFor: (platform: string) => `There’s no ${platform} version of this game yet.`,
+  notForThisMac: "Not for this Mac",
+  needsMacOs: (version: string) => `It needs macOS ${version} or later.`,
+  tryAgain: "Try again",
+  /** Why an install failed, one sentence each; no space says how much to free. */
+  installFailed: {
+    [InstallFailure.NoSpace]: (free: string) => `Couldn’t install: free ${free} on this Mac and try again.`,
+    [InstallFailure.Checksum]: () => "Couldn’t install: the download was damaged. Try again.",
+    [InstallFailure.Network]: () => "Couldn’t install: the download stopped. Check your connection and try again.",
+    [InstallFailure.Stalled]: () => "Couldn’t install: the download stopped. Check your connection and try again.",
+    [InstallFailure.UnsafeArchive]: () => "Couldn’t install: this game’s files aren’t safe to open.",
+    [InstallFailure.Unsigned]: () => "Couldn’t install: this game isn’t signed.",
+    [InstallFailure.TooLarge]: () => "Couldn’t install: this game is larger than it says.",
+    [InstallFailure.UnsupportedOs]: () => "Couldn’t install: this game doesn’t run on this Mac.",
+    [InstallFailure.EntryMissing]: () => "Couldn’t install: the download doesn’t hold the game.",
+    [InstallFailure.NotOffered]: () => "There’s no version of this game for this Mac.",
+    [InstallFailure.Failed]: () => "Couldn’t install. Try again.",
+  } satisfies Record<InstallFailure, (free: string) => string>,
+  launchFailed: {
+    [LaunchFailure.NotInstalled]: "It isn’t on this Mac any more. Install it again.",
+    [LaunchFailure.StartFailed]: "It couldn’t start on this Mac.",
+    [LaunchFailure.QuitEarly]: "It closed before it opened. Try again.",
+  } satisfies Record<LaunchFailure, string>,
+  singlePlayer: "Single player",
+  multiplayer: "Multiplayer",
+  madeWith: (engine: string) => `Made with ${engine}`,
+  /** Engine ids as people say them; another id is shown as it is spelled. */
+  engine: { unity: "Unity", godot: "Godot", unreal: "Unreal" } as Readonly<Record<string, string>>,
+  appleSiliconOnly: "Apple silicon only",
+  failedToLoad: "Couldn’t load this game.",
+  // The card menu's local items.
+  showInFinder: "Show in Finder",
+  removeFromMac: "Remove from this Mac",
+  removed: (title: string) => `${title} is removed from this Mac. Its saves stay.`,
+  removeFailed: "Couldn’t remove the game. Quit it first if it’s running.",
+  /** The viewer bar's pill for a web game's native app: "Mac app", "Mac app 38%", "Play Mac app". */
+  app: (platform: string) => `${platform} app`,
+  appInstalling: (platform: string, percent: number) => `${platform} app ${percent}%`,
+  playApp: (platform: string) => `Play ${platform} app`,
+  installAppLabel: (platform: string, size: string) => `Install the ${platform} app, ${size}`,
 } as const;
 
 /** Who took a check, for the sources that played the build. */

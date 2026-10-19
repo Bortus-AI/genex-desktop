@@ -18,6 +18,7 @@ import type { StudioApi } from "./studio-api.ts";
 import type { AddSource, ShareItem } from "./asset-library.ts";
 import type { ExportReview, GithubVersion } from "./plugins.ts";
 import type { PlayControl, PlayPoint, PlayShelf } from "./play.ts";
+import type { SessionAction } from "./play-native.ts";
 import type { PlayBarHold } from "./play-bar.ts";
 import type { PlayCoverType, PlayGameChange } from "./play-manage.ts";
 import type { AvatarStyle, FriendActionRequest, PresenceVisibility } from "./play-people.ts";
@@ -175,6 +176,15 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.online": "playOnline",
   "studio:play.open": "playOpen",
   "studio:play.game": "playGame",
+  "studio:play.install": "playInstall",
+  "studio:play.install-cancel": "playInstallCancel",
+  "studio:play.installs": "playInstalls",
+  "studio:play.uninstall": "playUninstall",
+  "studio:play.launch": "playLaunch",
+  "studio:play.session": "playSession",
+  "studio:play.sessions": "playSessions",
+  "studio:play.reveal-install": "playRevealInstall",
+  "studio:play.like": "playLike",
   "studio:play.close": "playClose",
   "studio:play.control": "playControl",
   "studio:play.bar": "playBar",
@@ -424,6 +434,15 @@ export interface StudioInvokePayloads {
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string; title: string };
   "studio:play.game": { slug: string };
+  "studio:play.install": { slug: string };
+  "studio:play.install-cancel": { slug: string };
+  "studio:play.installs": undefined;
+  "studio:play.uninstall": { slug: string };
+  "studio:play.launch": { slug: string };
+  "studio:play.session": { slug: string; action: SessionAction };
+  "studio:play.sessions": undefined;
+  "studio:play.reveal-install": { slug: string };
+  "studio:play.like": { slug: string; liked: boolean };
   "studio:play.close": undefined;
   "studio:play.control": { control: PlayControl; at?: PlayPoint };
   "studio:play.bar": PlayBarHold;

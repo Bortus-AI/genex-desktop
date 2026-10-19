@@ -10,12 +10,16 @@ import {
   buildFor,
   compareOsVersions,
   hasWebBuild,
+  InstallPhase,
   NATIVE_ARCHIVE_MAX_BYTES,
   NATIVE_BUILDS_MAX,
   NativeArch,
   type NativeBuild,
   type NativeHost,
   NativePlatform,
+  NativeAppOffer,
+  nativeAppOffer,
+  type NativeInstalls,
   nativeOf,
   parseNativeBuilds,
   platformsOf,
@@ -262,5 +266,53 @@ describe("This computer", () => {
     assert.equal(thisComputer("freebsd", "x64", "14.0"), undefined);
     assert.equal(thisComputer("darwin", "ppc", "10.5"), undefined);
     assert.equal(thisComputer("darwin", "arm64", ""), undefined);
+  });
+});
+
+describe("The viewer's native-app pill", () => {
+  const webFirst = { slug: "skate", native: { web: true, engine: "unity", builds: [build()] } };
+  const installs = (parts: Partial<NativeInstalls> = {}): NativeInstalls => ({
+    installed: [],
+    progress: [],
+    host: MAC_ARM,
+    ...parts,
+  });
+  const installed = {
+    slug: "skate",
+    title: "SKATE",
+    coverUrl: null,
+    version: "1.3.0",
+    platform: NativePlatform.Mac,
+    arch: NativeArch.Universal,
+    bytes: 1_300_000_000,
+    installedAt: "2026-10-19T00:00:00.000Z",
+    lastPlayedAt: null,
+  };
+
+  it("offers a web game's app to install, its progress while it installs, and Play once installed", () => {
+    assert.deepEqual(nativeAppOffer(webFirst, installs()), {
+      offer: NativeAppOffer.Install,
+      platform: NativePlatform.Mac,
+      bytes: 1_400_000_000,
+      percent: 0,
+    });
+    const downloading = {
+      slug: "skate",
+      version: "1.3.0",
+      phase: InstallPhase.Downloading,
+      receivedBytes: 456_000_000,
+      totalBytes: 1_200_000_000,
+      etaMs: null,
+      failure: null,
+    };
+    assert.equal(nativeAppOffer(webFirst, installs({ progress: [downloading] }))?.percent, 38);
+    assert.equal(nativeAppOffer(webFirst, installs({ installed: [installed] }))?.offer, NativeAppOffer.Ready);
+  });
+
+  it("offers nothing for a native-only game, a game with no build here, or where no native game plays", () => {
+    assert.equal(nativeAppOffer({ ...webFirst, native: { ...webFirst.native, web: false } }, installs()), null);
+    assert.equal(nativeAppOffer({ ...webFirst, native: { ...webFirst.native, builds: [] } }, installs()), null);
+    assert.equal(nativeAppOffer(webFirst, installs({ host: null })), null);
+    assert.equal(nativeAppOffer({ slug: "lost-cathedral" }, installs()), null);
   });
 });

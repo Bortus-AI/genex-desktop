@@ -78,6 +78,11 @@ export const FixtureName = {
    * generations (one not saved, one saved, one shared, a saved sound) and a picture dropped in.
    */
   AssetLibrary: "asset-library",
+  /**
+   * Play's native games for real: the fixture catalog's Mac apps built on this Mac (Xcode) and
+   * served from the profile's own files, Frigate installed and Puck Rush one version behind.
+   */
+  NativeGames: "native-games",
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 

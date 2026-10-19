@@ -152,9 +152,21 @@ is.
   (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window. A game with no web
   build and no build for this computer is left out of the tabs and search; its maker's profile
   still lists it.
-- A fixture launch's native games (Dust Runners, Iron Tide, Frigate, Puck Rush, Harbor Lights,
-  and SKATE's Mac app) download from `builds.genex.invalid`, which a fixture serves from its own
-  files.
+- Installing (`main/play/native-installs.ts`, `studio:play.install`, progress as
+  `UiEvent.PlayInstalls`): one install at a time, the rest queued; a free-space check (download,
+  unpacked game and 1 GiB); the archive streamed to `installed-games/.downloads/` (resumed by
+  range, given up after a minute without a byte), its sha256 checked, its zip directory read before
+  anything is unpacked (`native-zip.ts`: no entry or link outside it, nothing written through a
+  link, no more than the stated size), unpacked with `ditto --noqtn`, every link resolved inside it,
+  the app's signature (ad hoc is enough) and processor checked, then its bundle id set to
+  `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. Each
+  game keeps `installed-games/<slug>/<version>/` and `saves/`; `index.json` lists them. Removing a
+  game (refused while it runs) keeps its saves; an update keeps the running version until it quits.
+- Fixtures: every fixture launch has native games (Dust Runners, Iron Tide, Frigate, Puck Rush,
+  Harbor Lights, and SKATE's Mac app) on `builds.genex.invalid`, which never resolves. The
+  `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),
+  serves the archives from the profile at a few MB a second, and starts with Frigate installed and
+  Puck Rush one version behind.
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 

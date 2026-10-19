@@ -12,7 +12,16 @@ import { categoriesShelf, PlayMobileSupport } from "../../shared/play-manage.ts"
 import { PlayShelf } from "../../shared/play.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
 import { createFixtureManage } from "./fixture-manage.ts";
-import { type FixtureNative, fixtureNativeFields, LARGE, MEDIUM, macApp, SMALL, windowsApp } from "./fixture-native.ts";
+import {
+  type FixtureNative,
+  type FixtureNativeGame,
+  fixtureNativeFields,
+  LARGE,
+  MEDIUM,
+  macApp,
+  SMALL,
+  windowsApp,
+} from "./fixture-native.ts";
 import {
   type FixtureCatalog,
   fixtureAccountOf,
@@ -78,6 +87,8 @@ const GAMES: FixtureGame[] = [
     plays: 940,
     categories: ["games", "racing"],
     hue: 28,
+    // Its source is the author's own: no Remix.
+    private: true,
     native: { web: false, engine: "unity", builds: [macApp("Dust Runners", "1.3", LARGE)] },
   },
   {
@@ -87,6 +98,8 @@ const GAMES: FixtureGame[] = [
     plays: 1210,
     categories: ["games", "shooter"],
     hue: 245,
+    // Its source is the author's own: no Remix.
+    private: true,
     native: {
       web: false,
       engine: "unreal",
@@ -455,3 +468,9 @@ export function fixtureGamePage(slug: string): string {
   const page = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>html,body{margin:0;height:100%;background:#000;overflow:hidden;font:600 28px/1.2 -apple-system,system-ui,sans-serif;color:#fff}canvas{position:fixed;inset:0;width:100%;height:100%}h1{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;text-shadow:0 2px 24px #000}</style></head><body data-fixture-game="${slug}"><canvas id="c"></canvas><h1>${title}</h1><script>const c=document.getElementById("c"),x=c.getContext("2d");let t=0;function f(){c.width=innerWidth;c.height=innerHeight;const g=x.createLinearGradient(0,0,0,c.height);g.addColorStop(0,"hsl(${hue} 55% 18%)");g.addColorStop(1,"hsl(${(hue + 30) % 360} 60% 42%)");x.fillStyle=g;x.fillRect(0,0,c.width,c.height);x.fillStyle="hsl(${(hue + 50) % 360} 90% 72%)";x.beginPath();x.arc(c.width*(.5+.3*Math.sin(t/90)),c.height*.35,40,0,7);x.fill();t++;requestAnimationFrame(f)}f()</script></body></html>`;
   return `data:text/html;charset=utf-8,${encodeURIComponent(page)}`;
 }
+
+/** The fixture catalog's games with native builds, for the native-games fixture's archives. */
+export const fixtureNativeGames = (): FixtureNativeGame[] =>
+  CATALOG.flatMap((game) =>
+    game.native ? [{ slug: game.slug, title: game.title, hue: game.hue, native: game.native }] : [],
+  );

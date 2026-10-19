@@ -112,9 +112,8 @@ final class Game: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_ note: Notification) {
     window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 960, height: 540), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
     window.title = title
-    window.center()
-    let content = NSView(frame: window.contentView!.bounds)
-    content.autoresizingMask = [.width, .height]
+    window.contentMinSize = NSSize(width: 640, height: 360)
+    let content = window.contentView!
     if let device = MTLCreateSystemDefaultDevice() {
       let view = MTKView(frame: content.bounds, device: device)
       view.autoresizingMask = [.width, .height]
@@ -137,7 +136,8 @@ final class Game: NSObject, NSApplicationDelegate {
     label.frame.origin = NSPoint(x: (content.bounds.width - label.frame.width) / 2, y: (content.bounds.height - label.frame.height) / 2)
     label.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin, .maxYMargin]
     content.addSubview(label)
-    window.contentView = content
+    window.setContentSize(NSSize(width: 960, height: 540))
+    window.center()
     window.makeKeyAndOrderFront(nil)
     let silence = AVAudioSourceNode { _, _, _, buffers -> OSStatus in
       for buffer in UnsafeMutableAudioBufferListPointer(buffers) { memset(buffer.mData, 0, Int(buffer.mDataByteSize)) }
@@ -179,6 +179,8 @@ export interface FixtureAppSpec {
   version: string;
   /** `universal` carries both processors; otherwise one. */
   arch: "arm64" | "x86_64" | "universal";
+  /** Data to carry in `Contents/Resources`, signed with the rest (a game's levels, to give it a size). */
+  data?: { name: string; bytes: Uint8Array };
 }
 
 /** The Info.plist of the app `spec` describes. */
@@ -254,6 +256,10 @@ export async function buildFixtureApp(spec: FixtureAppSpec, dir: string, cache: 
   await mkdir(path.join(app, "Contents", "MacOS"), { recursive: true });
   await cp(program, path.join(app, "Contents", "MacOS", EXECUTABLE));
   await writeFile(path.join(app, "Contents", "Info.plist"), infoPlist(spec));
+  if (spec.data) {
+    await mkdir(path.join(app, "Contents", "Resources"), { recursive: true });
+    await writeFile(path.join(app, "Contents", "Resources", path.basename(spec.data.name)), spec.data.bytes);
+  }
   await exec("/usr/bin/codesign", ["--sign", "-", "--force", "--deep", app], { timeout: COMPILE_TIMEOUT_MS });
   return app;
 }

@@ -90,6 +90,8 @@ const NATIVE_CHANNELS = [
   // Open Privacy settings opens macOS System Settings.
   "studio:app-look.open-settings",
   // Share… pops the Mac's share menu (Messages, Mail, AirDrop), which hands the link to other apps.
+  // Finder shows an installed game's app: an external app.
+  "studio:play.reveal-install",
   "studio:play.share",
 ] as const satisfies readonly StudioInvokeChannel[];
 /**
@@ -293,6 +295,19 @@ const FIXTURE_SAFE = [
   "studio:play.close",
   // A game's own page reads the catalog like a card does; a fixture launch answers it (`dev/fixture-play.ts`).
   "studio:play.game",
+  // A native game's install writes into the profile's own installed-games folder; a fixture launch
+  // downloads its made-up games from its own files (`dev/fixture-native.ts`), so no socket opens.
+  "studio:play.install",
+  "studio:play.install-cancel",
+  "studio:play.installs",
+  "studio:play.uninstall",
+  // An installed game plays from the profile's own installed-games folder, in the game sandbox: in a
+  // fixture launch that is the fixture's stand-in app (`dev/fixture-native-app.ts`), never another app.
+  "studio:play.launch",
+  "studio:play.session",
+  "studio:play.sessions",
+  // A like from a game's page: a fixture launch's likes answer signed out (`dev/fixture-play.ts`).
+  "studio:play.like",
   // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
   "studio:play.control",
   // The bar's layer says what holds it up; no socket.

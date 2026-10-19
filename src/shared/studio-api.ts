@@ -9,6 +9,7 @@ import type {
   PlayShelves,
 } from "./play.ts";
 import type { PlayChangeResult, PlayCoverResult, PlayCoverType, PlayGameChange } from "./play-manage.ts";
+import type { NativeInstalls, NativeSession, SessionAction } from "./play-native.ts";
 import type { GenexCatalogItem } from "./mention-corpus.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
@@ -501,6 +502,24 @@ export interface StudioApi {
   playOpen(slug: string, title: string): Promise<void>;
   /** Play: a game's own page (a native game's, which has no web build to open): its card and what the page adds. */
   playGame(slug: string): Promise<PlayGameDetail>;
+  /** Play: install a game's build for this computer; how it goes arrives as `UiEvent.PlayInstalls`. */
+  playInstall(slug: string): Promise<void>;
+  /** Play: stop a game's install, waiting or under way, or forget how a failed one ended. */
+  playInstallCancel(slug: string): Promise<void>;
+  /** Play: every game installed on this computer and every install under way or failed. */
+  playInstalls(): Promise<NativeInstalls>;
+  /** Play: remove a game from this computer; its saves stay. */
+  playUninstall(slug: string): Promise<void>;
+  /** Play: play an installed game in its own window (a running one comes forward); how it goes arrives as `UiEvent.PlaySessions`. */
+  playLaunch(slug: string): Promise<void>;
+  /** Play: bring a running game forward, quit it, or forget how it failed to start. */
+  playSession(slug: string, action: SessionAction): Promise<void>;
+  /** Play: the games being played in their own windows, and the ones that failed to start. */
+  playSessions(): Promise<NativeSession[]>;
+  /** Play: show an installed game's app in Finder. */
+  playRevealInstall(slug: string): Promise<void>;
+  /** Play: like or unlike a game from its own page, as the Genex account; answers its likes after. */
+  playLike(slug: string, liked: boolean): Promise<{ liked: boolean; likes: number }>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */
