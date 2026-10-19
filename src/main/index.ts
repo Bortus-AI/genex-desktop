@@ -151,6 +151,7 @@ import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
 import { networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { thisComputer } from "./play/native-host.ts";
 import { createPlayManage, type PlayManage } from "./play/manage.ts";
 import { fixtureClone, gitClone, gitCloneCode, remixGame } from "./play/remix.ts";
 import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
@@ -961,13 +962,18 @@ function genexAccountPort(studio: StudioCore): GenexAccountPort {
   return pluginAccountPort(studio.plugins);
 }
 
-/** Play's catalog for this core: genex.games over the network, or a fixture launch's own answers. */
+/**
+ * Play's catalog for this core: genex.games over the network, or a fixture launch's own answers.
+ * It leaves out games this computer cannot play.
+ */
 function playCatalogFor(studio: StudioCore): PlayGallery {
+  const host = thisComputer();
   playCatalog ??= playGallery({
     request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
     token: genexAccountFor(studio).token,
     now: Date.now,
     localImages: fixtureNativePolicy,
+    ...(host ? { host } : {}),
   });
   return playCatalog;
 }

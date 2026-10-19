@@ -12,6 +12,7 @@ import { categoriesShelf, PlayMobileSupport } from "../../shared/play-manage.ts"
 import { PlayShelf } from "../../shared/play.ts";
 import { fixtureCreatorAnswer } from "./fixture-creator.ts";
 import { createFixtureManage } from "./fixture-manage.ts";
+import { type FixtureNative, fixtureNativeFields, LARGE, MEDIUM, macApp, SMALL, windowsApp } from "./fixture-native.ts";
 import {
   type FixtureCatalog,
   fixtureAccountOf,
@@ -39,6 +40,8 @@ interface FixtureGame {
   mobileSupport?: PlayMobileSupport;
   /** genex.games' crash reports found it desktop only. */
   desktopOnlyByReports?: boolean;
+  /** Its native builds, for a game made in an engine. */
+  native?: FixtureNative;
 }
 
 const GAMES: FixtureGame[] = [
@@ -64,6 +67,65 @@ const GAMES: FixtureGame[] = [
     online: 8,
     private: true,
     mobileSupport: PlayMobileSupport.DesktopOnly,
+    // A web game with a Mac app beside it: its card plays the web build, the bar offers the app.
+    native: { web: true, engine: "unity", builds: [macApp("SKATE", "2.1", LARGE)] },
+  },
+  // Native games: no web build, so a card opens the game's page.
+  {
+    slug: "dust-runners",
+    title: "Dust Runners",
+    author: "Kir",
+    plays: 940,
+    categories: ["games", "racing"],
+    hue: 28,
+    native: { web: false, engine: "unity", builds: [macApp("Dust Runners", "1.3", LARGE)] },
+  },
+  {
+    slug: "iron-tide",
+    title: "Iron Tide",
+    author: "achimala",
+    plays: 1210,
+    categories: ["games", "shooter"],
+    hue: 245,
+    native: {
+      web: false,
+      engine: "unreal",
+      builds: [macApp("Iron Tide", "0.9", MEDIUM), windowsApp("Iron Tide", "0.9", MEDIUM)],
+    },
+  },
+  {
+    slug: "frigate",
+    title: "Frigate",
+    author: "Gab",
+    plays: 1904,
+    categories: ["games", "multiplayer"],
+    hue: 170,
+    multiplayer: true,
+    online: 4,
+    native: {
+      web: false,
+      engine: "godot",
+      builds: [macApp("Frigate", "1.1", MEDIUM), windowsApp("Frigate", "1.1", MEDIUM)],
+    },
+  },
+  {
+    slug: "puck-rush",
+    title: "Puck Rush",
+    author: "Gab",
+    plays: 803,
+    categories: ["games", "sports"],
+    hue: 6,
+    native: { web: false, engine: "godot", builds: [macApp("Puck Rush", "1.3", SMALL)] },
+  },
+  // Only a Windows build: a Mac's tabs leave it out, and its maker's profile says so.
+  {
+    slug: "harbor-lights",
+    title: "Harbor Lights",
+    author: "Kir",
+    plays: 122,
+    categories: ["games", "exploration"],
+    hue: 205,
+    native: { web: false, engine: "unreal", builds: [windowsApp("Harbor Lights", "1.0", MEDIUM)] },
   },
   {
     slug: "sandstorm",
@@ -257,6 +319,7 @@ function baseItem(game: FixtureGame, index: number) {
     mobileAutoStatus: game.desktopOnlyByReports ? PlayMobileSupport.DesktopOnly : null,
     author: { id: fixtureAuthorId(game.author), name: game.author, image: null },
     ...(game.assetKind ? { assetKind: game.assetKind } : {}),
+    ...(game.native ? fixtureNativeFields(game.slug, game.native) : {}),
   };
 }
 
@@ -308,7 +371,16 @@ function world(slug: string): GalleryAnswer {
   if (!game) return NOT_FOUND;
   const liked = likes.get(slug) === true;
   const facts = { likesCount: 3 + (liked ? 1 : 0), likedByMe: liked, commentsCount: fixtureCommentCount(game.id) };
-  return ok({ item: { ...game, ...facts } });
+  return ok({ item: { ...game, ...facts, ...pageFacts(game.id) } });
+}
+
+/** What a native game's page adds: a longer description and screenshots, drawn in the game's hue. */
+function pageFacts(id: string): Record<string, unknown> {
+  const hue = HUES.get(id) ?? 0;
+  const fixture = CATALOG.find((game, index) => baseItem(game, index).id === id);
+  if (!fixture?.native) return {};
+  const about = `${fixture.title} is a fixture game made in an engine. It has no web build, so it installs on this Mac and plays in its own window.`;
+  return { description: about, shots: [40, 120, 200, 280].map((shift) => cover((hue + shift) % 360)) };
 }
 
 /** The search catalog: every fixture game in its slim shape, the author a name. */

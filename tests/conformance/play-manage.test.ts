@@ -497,7 +497,17 @@ describe("the fixture launch's genex.games", () => {
       changed: gallery.forget,
       localImages: true,
     });
-  const gamesTab = async () => (await gallery.feed({ category: PlayCategory.Featured })).games;
+  /** Every page of Featured: the fixture's catalog runs past its first page. */
+  const gamesTab = async (): Promise<PlayGame[]> => {
+    const games: PlayGame[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await gallery.feed({ category: PlayCategory.Featured, cursor });
+      games.push(...page.games);
+      cursor = page.nextCursor;
+    } while (cursor);
+    return games;
+  };
   const bySlug = async (slug: string): Promise<PlayGame> => {
     const found = (await gamesTab()).find((game) => game.slug === slug);
     assert.ok(found, `${slug} is in the catalog`);

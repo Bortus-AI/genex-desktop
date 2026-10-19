@@ -158,6 +158,7 @@ const METHODS = [
   "playRemix",
   "playOnline",
   "playOpen",
+  "playGame",
   "playClose",
   "playControl",
   "playBar",

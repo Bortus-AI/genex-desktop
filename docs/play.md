@@ -129,6 +129,35 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
   game takes the row. A failure is a toast, and Play comes back for a person still with it. A remix
   keeps its scripts off until a build fails and the person trusts it: the stage's Run setup scripts.
 
+## Native builds
+
+A game made in Unity, Godot or Unreal can carry a Mac app or a Windows program besides (or instead
+of) its web build. The app's copy of the contract is `src/shared/play-native.ts`; genex.games does
+not serve it yet, and every field is optional, so a server that sends none of it leaves Play as it
+is.
+
+- A gallery item (feed, search catalog, a profile's games, `/api/gallery/world/<slug>`) may add
+  `builds` (a list of rows), `web` (false when there is no web build; absent means there is one)
+  and `engine` (an engine id: `unity`, `godot`, `unreal`). The world item may add `shots` (https
+  images on Genex's image hosts, four at most) and `updatedAt`. Multiplayer stays `multiplayer`.
+- A build row: `platform` (`mac`, `windows`, `linux`), `arch` (`arm64`, `x64`, `universal` for a
+  Mac app), `version` (the author's build id), `sizeBytes` (the archive), `installedBytes`
+  (unpacked), `sha256` (hex of the archive), `url`, `entry` (what runs, from the archive's root: a
+  `.app` bundle at the root for a Mac, an `.exe` for Windows), optional `minOs` (`13.0`,
+  `10.0.19041`) and `publishedAt`. The archive is a zip; its `url` is https on a build host the app
+  trusts (`NATIVE_BUILD_HOSTS`, empty until genex.games names its build CDN), with no port or
+  credentials, and answers `Range`. A row with anything off is dropped, the rest kept.
+- The build a computer installs is its platform's for its own processor, else a universal Mac app,
+  else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
+  (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window. A game with no web
+  build and no build for this computer is left out of the tabs and search; its maker's profile
+  still lists it.
+- A fixture launch's native games (Dust Runners, Iron Tide, Frigate, Puck Rush, Harbor Lights,
+  and SKATE's Mac app) download from `builds.genex.invalid`, which a fixture serves from its own
+  files.
+- `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
+  description, screenshots and when it changed.
+
 ## Where to work
 
 `src/renderer/play/`, `src/renderer/state/play.ts` and `people.ts`, `src/renderer/avatars/`,

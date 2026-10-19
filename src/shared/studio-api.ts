@@ -3,6 +3,7 @@ import type {
   PlayFeedPage,
   PlayFeedRequest,
   PlayGame,
+  PlayGameDetail,
   PlayPoint,
   PlayShelf,
   PlayShelves,
@@ -498,6 +499,8 @@ export interface StudioApi {
   playOnline(slugs: string[]): Promise<Record<string, number>>;
   /** Play: open a game full screen in the viewer, its bar showing `title`; how it goes arrives as `UiEvent.PlayViewer`. */
   playOpen(slug: string, title: string): Promise<void>;
+  /** Play: a game's own page (a native game's, which has no web build to open): its card and what the page adds. */
+  playGame(slug: string): Promise<PlayGameDetail>;
   /** Play: close the viewer. */
   playClose(): Promise<void>;
   /** Play: one of the viewer header's controls (Like, Share, Exit…); main answers with `UiEvent.PlayViewer`. */

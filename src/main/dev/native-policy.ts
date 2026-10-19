@@ -291,6 +291,8 @@ const FIXTURE_SAFE = [
   "studio:play.online",
   "studio:play.open",
   "studio:play.close",
+  // A game's own page reads the catalog like a card does; a fixture launch answers it (`dev/fixture-play.ts`).
+  "studio:play.game",
   // The viewer header's controls: a fixture launch's likes, tickets and invites answer signed out, even with its account.
   "studio:play.control",
   // The bar's layer says what holds it up; no socket.

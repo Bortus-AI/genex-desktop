@@ -94,6 +94,10 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
     shown.open(payload.slug, payload.title);
   });
   handle("studio:play.close", async () => viewer()?.close());
+  handle("studio:play.game", (payload) => {
+    if (!isPlaySlug(payload?.slug)) throw new Error(MESSAGE.badSlug);
+    return gallery.game(payload.slug);
+  });
   // The bar names a control (and where it is, for a menu); the viewer acts only on one it knows.
   handle("studio:play.control", async (payload) => viewer()?.control(payload?.control, readPlayPoint(payload?.at)));
   handle("studio:play.bar", async (payload) => viewer()?.hold(payload));

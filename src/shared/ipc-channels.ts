@@ -174,6 +174,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.remix": "playRemix",
   "studio:play.online": "playOnline",
   "studio:play.open": "playOpen",
+  "studio:play.game": "playGame",
   "studio:play.close": "playClose",
   "studio:play.control": "playControl",
   "studio:play.bar": "playBar",
@@ -422,6 +423,7 @@ export interface StudioInvokePayloads {
   "studio:play.remix": { slug: string };
   "studio:play.online": { slugs: string[] };
   "studio:play.open": { slug: string; title: string };
+  "studio:play.game": { slug: string };
   "studio:play.close": undefined;
   "studio:play.control": { control: PlayControl; at?: PlayPoint };
   "studio:play.bar": PlayBarHold;

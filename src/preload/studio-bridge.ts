@@ -214,6 +214,7 @@ function playCalls(bridge: BridgeCalls) {
     playRemix: (slug) => invoke("studio:play.remix", { slug }),
     playOnline: (slugs) => invoke("studio:play.online", { slugs }),
     playOpen: (slug, title) => invoke("studio:play.open", { slug, title }),
+    playGame: (slug) => invoke("studio:play.game", { slug }),
     playClose: () => invoke("studio:play.close"),
     playControl: (control, at) => invoke("studio:play.control", { control, at }),
     playBar: (hold) => invoke("studio:play.bar", hold),

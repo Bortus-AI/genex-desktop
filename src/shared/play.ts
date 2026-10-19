@@ -6,6 +6,7 @@
 import type { LibraryKind } from "./asset-library.ts";
 
 import type { PlayCuration } from "./play-manage.ts";
+import type { PlayNative } from "./play-native.ts";
 
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
@@ -128,6 +129,20 @@ export interface PlayGame {
   assetKind: LibraryKind | null;
   /** What the card menu reads (mobile flag, tags, remixing); a search's card carries none, so it has no menu. */
   curation?: PlayCuration;
+  /** Its native builds, once the API names any: absent for a web game, as every game was before. */
+  native?: PlayNative;
+}
+
+/** A game's own page (`studio:play.game`): its card with what its page adds. */
+export interface PlayGameDetail extends PlayGame {
+  likes: number;
+  /** The signed-in account likes it. */
+  liked: boolean;
+  comments: number;
+  /** Up to four screenshots, https images on Genex's hosts. */
+  shots: string[];
+  /** When it last changed, ISO 8601, or null when the API does not say. */
+  updatedAt: string | null;
 }
 
 /** One page of a tab. */
