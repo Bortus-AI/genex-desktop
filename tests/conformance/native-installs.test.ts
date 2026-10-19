@@ -177,7 +177,14 @@ describe("Play's native installer", { skip: SKIP }, () => {
     await exec("/usr/bin/codesign", ["--verify", "--deep", "--strict", app]);
     assert.deepEqual((await readdir(path.join(root, "dust-runners"))).sort(), ["1.0", SAVES]);
     assert.deepEqual(outcomes, [
-      { slug: "dust-runners", title: "dust runners", version: "1.0", platform: NativePlatform.Mac, failure: null },
+      {
+        slug: "dust-runners",
+        title: "dust runners",
+        version: "1.0",
+        platform: NativePlatform.Mac,
+        failure: null,
+        neededBytes: build.sizeBytes + build.installedBytes,
+      },
     ]);
     const record = await installs.record("dust-runners");
     assert.equal(record?.executable, "Contents/MacOS/Game");
