@@ -202,8 +202,8 @@ generation for the film.
 These need an owner decision before public distribution; see
 [release readiness](docs/release-readiness.md#distribution-and-open-source).
 
-- Genex UI sources: components, theme tokens, the wordmark and the catalog-search engine were
-  adapted from the owner's `genex-cli-threejs` web app (`src/renderer/ui/GENEX-SOURCES.md`).
+- Genex UI sources: components, theme tokens, the wordmark, the coin mark and the catalog-search
+  engine were adapted from the owner's `genex-cli-threejs` web app (`src/renderer/ui/GENEX-SOURCES.md`).
   The owner's contributed adaptations are covered by the root MIT license. Genex's name and
   logo identify the product; the code license does not grant trademark rights.
 - The Genex guide https://genex.games/SKILL.md, vendored as `src/plugins/genex/skills/genex`:
