@@ -3,6 +3,7 @@
  * games being played: the game page's one primary block (install, installing, play, playing,
  * update, elsewhere, failed) and the badge on its card. Pure, so it is tested without a window.
  */
+import { MINUTE_MS } from "../../shared/duration.ts";
 import type { PlayGame } from "../../shared/play.ts";
 import {
   buildFor,
@@ -133,4 +134,4 @@ export const opensPage = (game: Pick<PlayGame, "native">): boolean => !hasWebBui
 
 /** Whole minutes since `startedAt` at `now`. */
 export const minutesSince = (startedAt: string, now: number): number =>
-  Math.max(0, Math.floor((now - Date.parse(startedAt)) / 60_000));
+  Math.max(0, Math.floor((now - Date.parse(startedAt)) / MINUTE_MS));

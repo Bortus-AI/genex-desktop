@@ -152,7 +152,8 @@ import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
 import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
 import { thisComputer } from "./play/native-host.ts";
-import { type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
+import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
+import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
 import { type NativeSessions, nativeSessions } from "./play/native-launch.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
@@ -209,7 +210,8 @@ import { longPath } from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
-import { MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
+import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
+import { CustomEvent, customEventData } from "../shared/custom-events.ts";
 import { EVAL_LANE_EXIT } from "../shared/eval-lane.ts";
 import { EngineId } from "../shared/providers.ts";
 import { TerminalKind } from "../shared/terminal.ts";
@@ -999,8 +1001,42 @@ function playInstallsFor(studio: StudioCore): NativeInstaller | null {
     },
     // A game being played keeps its installed version until it quits.
     inUse: (slug) => nativeLauncher?.playing(slug) ?? false,
+    // The notifications feed reads the log: how an install ended is written there (Studio's thread).
+    outcome: (outcome) => void recordInstall(studio, outcome),
   });
   return nativeInstaller;
+}
+
+/** An install's end in the log, for the notifications feed: ready to play, or why it failed. */
+async function recordInstall(studio: StudioCore, outcome: InstallOutcome): Promise<void> {
+  const { slug, title, version, platform, failure, neededBytes } = outcome;
+  const about = { slug, title, version, platform };
+  const event = failure
+    ? customEventData(CustomEvent.PlayInstallFailed, { ...about, failure, neededBytes })
+    : customEventData(CustomEvent.PlayInstallFinished, about);
+  await studio.append([event]).catch((error: unknown) => studioLog.write("main", `play install notice: ${error}`));
+}
+
+/** How often installed games are checked for a newer build, and how long after start the first check waits. */
+const UPDATE_CHECK_EVERY_MS = 6 * HOUR_MS;
+const UPDATE_CHECK_FIRST_MS = 20 * SECOND_MS;
+
+/** Check installed games for newer builds now and then; each newer version is told once, in the log. */
+function watchNativeUpdates(studio: StudioCore): void {
+  const host = thisComputer();
+  const installs = playInstallsFor(studio);
+  if (!host || !installs) return;
+  const check = () =>
+    void checkNativeUpdates({
+      root: studio.layout.installedGames,
+      host,
+      installed: async () => (await installs.state()).installed,
+      game: (slug) => playCatalogFor(studio).game(slug),
+      tell: (update) =>
+        studio.append([customEventData(CustomEvent.PlayUpdateAvailable, { ...update, platform: host.platform })]),
+    }).catch((error: unknown) => studioLog.write("main", `play updates: ${error}`));
+  setTimeout(check, UPDATE_CHECK_FIRST_MS).unref();
+  setInterval(check, UPDATE_CHECK_EVERY_MS).unref();
 }
 
 /**
@@ -1046,6 +1082,7 @@ async function prepareNativeGames(studio: StudioCore): Promise<void> {
   }
   await playSessionsFor(studio)?.reconcile();
   await playInstallsFor(studio)?.reconcile();
+  watchNativeUpdates(studio);
 }
 
 /**

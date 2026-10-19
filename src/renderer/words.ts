@@ -73,7 +73,7 @@ import {
   JobTool,
 } from "../shared/jobs.ts";
 import { type ScreenAct, ScreenDeed } from "../shared/agent-screen.ts";
-import { HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
+import { DAY_MS, HOUR_MS, MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { type ConnectorStep, StepAction } from "./chat/connector-steps.ts";
 import { MentionMiss } from "../shared/prompt-mention.ts";
 import { AssetScope, LibraryKind } from "../shared/asset-library.ts";
@@ -2331,6 +2331,9 @@ export const NOTICE_WORDS = {
   buildNothingNew: "Build finished without a new version.",
   newGame: "New game",
   harness: "Harness",
+  /** A game from Play, installed while the person was elsewhere, and a newer build of one installed. */
+  readyToPlay: "Ready to play on this Mac.",
+  newVersion: (size: string) => `New version · ${size}. It updates when you play.`,
 } as const;
 
 /** A plugin's permission question as a row: its own prompt when it wrote one. */
@@ -2998,6 +3001,21 @@ export const STORAGE_WORDS = {
   none: "None",
   keep: "Keep",
   freedNothing: "There was nothing to free.",
+} as const;
+
+/** Settings → Storage's games from Play (`panels/InstalledGamesSection.tsx`). */
+export const INSTALLED_GAMES_WORDS = {
+  title: "Games from Play",
+  total: (count: number, size: string) => `${count === 1 ? "1 game" : `${count} games`} · ${size}`,
+  /** When a game was last played here: "Played today", "Played 3 days ago", "Not played yet". */
+  played: (at: string | null, now: number) => {
+    if (!at) return "Not played yet";
+    const days = Math.floor((now - Date.parse(at)) / DAY_MS);
+    if (days < 1) return "Played today";
+    return days === 1 ? "Played yesterday" : `Played ${days} days ago`;
+  },
+  remove: "Remove",
+  savesStay: "Saves stay when you remove a game. Getting it again starts where you left off.",
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */
@@ -4487,7 +4505,7 @@ export const NATIVE_WORDS = {
   /** What is left of a download: "2 min left", "under a minute left". */
   left: (etaMs: number | null) => {
     if (etaMs === null) return "";
-    const minutes = Math.ceil(etaMs / 60_000);
+    const minutes = Math.ceil(etaMs / MINUTE_MS);
     return minutes <= 1 ? "under a minute left" : `${minutes} min left`;
   },
   downloading: (percent: number, left: string) => (left ? `${percent}% · ${left}` : `${percent}%`),

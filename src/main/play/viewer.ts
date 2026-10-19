@@ -456,6 +456,11 @@ function viewerCalls(loop: ViewerLoop, heldEsc: ReturnType<typeof heldEscape>) {
       if (ctx.session() && reveal.layout() !== BarLayout.Hidden) deps.bar.show(barBounds(deps, reveal.layout()));
     },
     ...viewerComments(ctx),
+    /** An install changed: the bar's native-app pill reads what it offers again. */
+    nativeChanged: (): void => {
+      const s = ctx.session();
+      if (s) void readNativeApp(ctx, s.epoch);
+    },
     /** The slug on screen, or null. */
     showing: (): string | null => ctx.session()?.slug ?? null,
   };
@@ -563,10 +568,6 @@ export function playViewer(deps: PlayViewerDeps) {
       if (!session) return;
       session.state = { ...session.state, remixing: remixes > 0 };
       ctx.draw();
-    },
-    /** An install changed: the bar's native-app pill reads what it offers again. */
-    nativeChanged: (): void => {
-      if (session) void readNativeApp(ctx, session.epoch);
     },
     ...viewerCalls(loop, heldEsc),
   };

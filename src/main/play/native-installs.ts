@@ -62,6 +62,8 @@ export interface InstallOutcome {
   platform: NativePlatform;
   /** Null when it is ready to play. */
   failure: InstallFailure | null;
+  /** The space the download and the game take together: what a full disk must free. */
+  neededBytes: number;
 }
 
 /** What the installer works with. */
@@ -220,7 +222,15 @@ export class NativeInstaller {
   /** Tell how an install ended. */
   #tell(job: Pick<Job, "slug" | "build" | "game">, failure: InstallFailure | null): void {
     const { slug, game, build } = job;
-    this.#deps.outcome?.({ slug, title: game.title, version: build.version, platform: build.platform, failure });
+    const neededBytes = build.sizeBytes + build.installedBytes;
+    this.#deps.outcome?.({
+      slug,
+      title: game.title,
+      version: build.version,
+      platform: build.platform,
+      failure,
+      neededBytes,
+    });
   }
 
   /** A failed install: its progress says why until the next try, and the outcome is told. */

@@ -162,6 +162,17 @@ is.
   `games.genex.play.<slug>` and signed again ad hoc, so it can only write its own preferences. Each
   game keeps `installed-games/<slug>/<version>/` and `saves/`; `index.json` lists them. Removing a
   game (refused while it runs) keeps its saves; an update keeps the running version until it quits.
+- Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
+  the app read-only, `saves/` its HOME and `CFFIXED_USER_HOME`, its own preference domain, its
+  `NSIRD_` atomic-save folder, window, GPU and sound, no network). Genex finds its window by pid and
+  brings it forward (macOS does not); the page's Quit asks it to quit, then ends its process tree;
+  quitting Genex ends every game, and the next start ends a leftover only while it is the same
+  process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
+  gives way), and opening a game whose app runs brings the app forward.
+- Notices: an install finished or failed, and a newer build of an installed game (checked at start
+  and every six hours, once per version), are written to the log (`play_install_finished`,
+  `play_install_failed`, `play_update_available`); the feed shows them as Play rows that open the
+  game's page. Settings › Storage lists installed games with Remove; they are not a "Free up" kind.
 - Fixtures: every fixture launch has native games (Dust Runners, Iron Tide, Frigate, Puck Rush,
   Harbor Lights, and SKATE's Mac app) on `builds.genex.invalid`, which never resolves. The
   `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),

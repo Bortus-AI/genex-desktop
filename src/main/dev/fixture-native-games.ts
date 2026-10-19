@@ -4,6 +4,8 @@
  * Frigate installed and Puck Rush installed one version behind the catalog, through the real
  * installer. A reused profile keeps what it has installed.
  */
+import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { PlayGameDetail } from "../../shared/play.ts";
 import { type NativeHost, parseNativeBuilds } from "../../shared/play-native.ts";
@@ -32,6 +34,8 @@ const PUCK_RUSH_BEFORE: FixtureBuildSpec = {
   ...macApp("Puck Rush", "1.2", SMALL),
   publishedAt: "2026-10-01T09:00:00.000Z",
 };
+/** The marker a profile's first preparation leaves: what it installs at start is installed once. */
+const SEEDED = ".installed-at-start";
 /** The games a fresh native-games profile has installed. */
 const INSTALLED_AT_START = ["frigate"] as const;
 
@@ -80,8 +84,13 @@ export async function prepareNativeGamesFixture(deps: NativeGamesFixtureDeps): P
   await installAtStart(deps);
 }
 
-/** Install Frigate and the older Puck Rush in a profile that has neither yet. */
+/**
+ * Install Frigate and the older Puck Rush in a fresh profile, once: a reused profile keeps what the
+ * person installed or removed since (a marker in the fixture's folder says it was done).
+ */
 async function installAtStart(deps: NativeGamesFixtureDeps): Promise<void> {
+  const marker = path.join(deps.dir, SEEDED);
+  if (existsSync(marker)) return;
   const before = async (slug: string): Promise<PlayGameDetail> => {
     const page = await deps.page(slug);
     if (slug !== "puck-rush" || !page.native) return page;
@@ -103,4 +112,5 @@ async function installAtStart(deps: NativeGamesFixtureDeps): Promise<void> {
     await installer.install(slug);
     await installer.idle();
   }
+  await writeFile(marker, new Date().toISOString());
 }

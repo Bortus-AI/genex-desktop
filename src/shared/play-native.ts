@@ -462,3 +462,11 @@ export function nativeAppOffer(
   if (installed) return { offer: NativeAppOffer.Ready, platform, bytes: installed.bytes, percent: 0 };
   return { offer: NativeAppOffer.Install, platform, bytes: build?.installedBytes ?? 0, percent: 0 };
 }
+
+/** What a Play install's notice records: the game and the version (`CustomEvent.PlayInstall*`). */
+export interface PlayInstallPayload {
+  slug?: string;
+  title?: string;
+  version?: string;
+  platform?: NativePlatform;
+}
