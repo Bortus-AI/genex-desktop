@@ -1875,6 +1875,7 @@ export const WORKER_STOP_WORDS = {
   [WorkerStopCode.RunEnded]: "The Loop ended first",
   [WorkerStopCode.StoppedByLead]: "The lead stopped it",
   [WorkerStopCode.Error]: "It ran into an error",
+  [WorkerStopCode.SandboxUnavailable]: "Claude Code can't run workers on this computer yet",
 } as const satisfies Record<WorkerStopCode, string>;
 
 /** Text as a sentence: its first letter capitalized, and a full stop when it has no end of its own. */
