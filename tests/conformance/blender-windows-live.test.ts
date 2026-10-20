@@ -1,6 +1,6 @@
-// TEMPORARY Windows check for the Blender-on-Windows work: the real Local Blender manifest installs
-// its pinned zip and runs a model job in the process sandbox, through PluginNativeServices as the
-// app wires it. Removed before the PR leaves draft.
+// Local Blender on Windows for real: its manifest's pinned zip (about 400 MB, downloaded) installs, and a
+// model job runs in the process sandbox through PluginNativeServices as the app wires it. Windows
+// only, and opt-in (`STUDIO_NETWORK_TESTS=1`): it reaches download.blender.org.
 import assert from "node:assert/strict";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -23,7 +23,9 @@ body.data.materials.append(mat)
 `;
 
 it("installs Blender and runs a model job sandboxed on Windows", {
-  skip: process.platform !== "win32",
+  skip:
+    (process.platform !== "win32" || process.env.STUDIO_NETWORK_TESTS !== "1") &&
+    "Windows with STUDIO_NETWORK_TESTS=1 only",
   timeout: 20 * 60_000,
 }, async () => {
   const root = await tmpDir("bwin-");
@@ -62,8 +64,6 @@ it("installs Blender and runs a model job sandboxed on Windows", {
         { method: source, name: "install", signal: new AbortController().signal },
         (e) => void e,
       );
-    const before = await call("runtime.detect", { runtime: "blender" }, "tool");
-    console.log("before install", JSON.stringify(before));
     const t0 = Date.now();
     const installed = await call("runtime.install", { runtime: "blender" });
     console.log("install", Date.now() - t0, "ms", JSON.stringify(installed));
