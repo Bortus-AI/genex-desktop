@@ -114,6 +114,35 @@ identity, catalog and service disclosures. Never publish the existing private hi
 visibility: use the owner's approved, independently reviewed source/history route. Current-tree
 cleanup does not erase old refs, PR diffs, Actions logs or artifacts.
 
+### Release canary
+
+`canary.yml` checks a published release the way people get it: on `release: published`, every
+Monday on the latest release, and by hand with a tag. Each machine downloads from the public link
+(waiting up to 20 minutes for it to serve the tag), checks the file against `SHA256SUMS`, installs
+as a person does (a quarantined DMG into `/Applications`, `Genex-Setup.exe` with Mark of the Web, the
+deb or rpm whose repository must then offer the version), times a flag-free first start to
+`studio ready` in `studio.log`, and runs the release's own `run-electron-e2e.mjs --packaged` on the
+installed app until the self test's sandboxed chat turn has reported (`scripts/canary/`). Machines:
+macOS 26 and 15, Ubuntu 26.04 and 24.04 and Windows Server 2025 on GitHub-hosted runners, Fedora
+(install and repository only, in a container), and with `CANARY_AZURE=on` Windows 11 and 10 on
+Azure VMs made for the run and deleted after it. Every Windows machine starts Genex as its
+administrator on a lived-in profile (`lived-in-profile.ts`), whose first start sets the sandbox up;
+the Azure machines then log a standard user on at its own desktop, with a lived-in profile too, and
+run it again. A GitHub runner cannot: an account started inside the runner's session cannot set up
+that session's objects for the sandbox's runner. Logs, crash dumps and screenshots are run artifacts for 30 days.
+A failing release gets one issue labelled `canary`, assigned to whoever published it; a passing
+run closes it. The canary only reports: pulling a release stays the owner's call.
+
+Azure setup, once: the subscription owner runs `scripts/canary/azure-setup.sh` in Cloud Shell. It
+creates an app registration whose only credential is GitHub's OIDC token for the `canary`
+environment, gives it Contributor on the subscription, and sets a budget alert. Its three IDs go
+in the `canary` environment's variables (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`); `CANARY_WIN11_IMAGE`, `CANARY_WIN10_IMAGE`, `CANARY_AZURE_SIZE` and
+`CANARY_AZURE_LOCATION` (regions, comma-separated) override the defaults. Without them the job
+takes the first two-core size its quota allows, in the first region that accepts it. Windows 11
+and 10 images need a qualifying Windows license (Microsoft 365 Business Premium, E3/E5, Windows
+Enterprise or Visual Studio); Windows Server images carry their own.
+
 ## Automatic updates
 
 Installed macOS and Windows copies ask update.electronjs.org hourly, which serves the newest
