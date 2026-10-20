@@ -22,6 +22,7 @@ import {
   listsPlatforms,
   makeAppAsk,
   makesApps,
+  rebuildAsk,
   PlatformEnd,
   type PlatformRow,
   platformRows,
@@ -63,7 +64,13 @@ const NOTE: Partial<Record<PlatformEnd, { text: string; label: (name: string) =>
   [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => `${name}: ${WORDS.failed}` },
 };
 
-/** What a row ends with: a note ("Coming soon", "On Genex"…), Make with agent, or that the agent was asked. */
+/** The agent's presses a row may end with: making an app, or building one again. */
+const ASK: Partial<Record<PlatformEnd, { text: string; label: (name: string) => string }>> = {
+  [PlatformEnd.Make]: { text: WORDS.make, label: WORDS.makeLabel },
+  [PlatformEnd.Rebuild]: { text: WORDS.rebuild, label: WORDS.rebuildLabel },
+};
+
+/** What a row ends with: a note ("Coming soon", "On Genex"…), an ask for the agent, or that the agent was asked. */
 function End({
   row,
   asked,
@@ -71,7 +78,7 @@ function End({
 }: {
   row: PlatformRow;
   asked: boolean;
-  onMake: (target: PublishTarget) => void;
+  onMake: (target: PublishTarget, end: PlatformEnd) => void;
 }): JSX.Element | null {
   const note = NOTE[row.end];
   if (note)
@@ -80,7 +87,8 @@ function End({
         {note.text}
       </span>
     );
-  if (row.end !== PlatformEnd.Make) return null;
+  const ask = ASK[row.end];
+  if (!ask) return null;
   if (asked)
     return (
       <span className="genex-publish-platform-note" role="status" data-publish-platform-asked={row.target}>
@@ -91,11 +99,12 @@ function End({
     <button
       type="button"
       className="genex-publish-platform-make"
-      aria-label={WORDS.makeLabel(row.name)}
+      aria-label={ask.label(row.name)}
       data-publish-platform-make={row.target}
-      onClick={() => onMake(row.target)}
+      data-end={row.end}
+      onClick={() => onMake(row.target, row.end)}
     >
-      {WORDS.make}
+      {ask.text}
       <Icon name="chevron-right" size={12} />
     </button>
   );
@@ -109,7 +118,7 @@ function Row({
 }: {
   row: PlatformRow;
   asked: boolean;
-  onMake: (target: PublishTarget) => void;
+  onMake: (target: PublishTarget, end: PlatformEnd) => void;
 }): JSX.Element {
   return (
     <li className="genex-publish-platform" data-publish-platform={row.target} data-state={row.state}>
@@ -131,12 +140,15 @@ function Row({
 export function PublishPlatforms({
   project,
   platforms,
+  behind = false,
   shown,
   native,
 }: {
   project: string;
-  /** The game folder's platforms (`usePublishPlatforms`), null until read. */
+  /** The game folder's platforms as the Genex plugin can send them (`gateByPlugin`), null until read. */
   platforms: PublishPlatform[] | null;
+  /** The installed Genex plugin is from before apps: the line says to update it. */
+  behind?: boolean;
   shown: boolean;
   /** How the last Publish's apps went, from the publish record. */
   native?: GenexNativeRecord | undefined;
@@ -148,10 +160,11 @@ export function PublishPlatforms({
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
   const [asked, setAsked] = useState<ReadonlySet<PublishTarget>>(() => new Set());
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
-  const reach = reachLine(platforms);
+  const reach = reachLine(platforms, behind);
   const listing = listingLine(platforms, native);
-  const make = (target: PublishTarget): void => {
-    composeInChat({ project, text: makeAppAsk(target, title), send: true });
+  const make = (target: PublishTarget, end: PlatformEnd): void => {
+    const text = end === PlatformEnd.Rebuild ? rebuildAsk(target, title) : makeAppAsk(target, title);
+    composeInChat({ project, text, send: true });
     setAsked((before) => new Set(before).add(target));
   };
   return (

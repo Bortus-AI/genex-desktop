@@ -37,7 +37,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "unityNoApp" | "unitySoon";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "unityNoApp" | "unitySoon" | "unityOldPlugin";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -76,6 +76,7 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   appsHeld: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
   unityNoApp: () => [web(false), mac(PublishPlatformState.Missing), windows],
   unitySoon: () => [web(false), mac(PublishPlatformState.Ready), windows],
+  unityOldPlugin: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
 };
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
@@ -102,7 +103,8 @@ const state = (): GenexPublishState => ({
   connected: true,
   slug: GAME,
   status: "draft",
-  native: appsOf(scene),
+  // A Genex plugin from before apps answers no record of them.
+  ...(scene === "unityOldPlugin" ? {} : { native: appsOf(scene) }),
 });
 const fake = fakeStudioApi();
 fake.stub("pluginAction", async (_id, name) => (name === GenexAction.PublishStatus ? state() : {}));

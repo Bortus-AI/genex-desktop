@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "genex",
-  "version": "1.10.17",
+  "version": "1.10.18",
   "name": "Genex plugin",
   "publisher": "Genex",
   "description": "3D models, characters, sound and art for your games, made in chat with Genex credits. Coding stays on your own provider.",
@@ -129,6 +129,10 @@
       },
       "confirmation": "Add the listed pinned Genex packages. Multiplayer includes its player-identity dependency. A template game gets Studio's built-in copies in its import map; any other game installs them with its own package manager, with the npm registry open for that command only.",
       "host": "genex-package"
+    },
+    {
+      "name": "publishing-apps",
+      "text": "A game made in Unity, Godot or Unreal reaches Genex players as its Mac and Windows apps, which people install from Play in the Genex desktop app: Genex publishes them, so never send the person to itch.io or another store for this. To publish one, build the player app into the game's folder (Unity: a macOS build at unity/Builds/Mac/<Game>.app, a Windows build at unity/Builds/Windows/<Game>.exe; Godot and Unreal: their export into a Builds folder of the project), check that it starts, then tell the person to press Publish on the stage strip. Its window lists the Web, Mac and Windows builds it found and sends each ready one to genex.games, listing the game in the gallery; you do not run any publish command yourself. An app built before the game's last change is not sent: when the person asks to build it again, rebuild it the same way. Say plainly when a build is ready to publish."
     },
     {
       "name": "cover",

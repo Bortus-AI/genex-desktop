@@ -3131,6 +3131,13 @@ export const PUBLISH_PLATFORM_WORDS = {
   /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
   makeFirst: "Make a Mac or Windows app first, then publish it here.",
   appsSoon: "Publishing Mac and Windows apps comes with the next Genex update.",
+  /** A built app older than the game's last change: the agent builds it again. */
+  rebuild: "Build again",
+  rebuildLabel: (name: string) => `Build the ${name} again with the agent`,
+  rebuildAsk: (players: string, title: string) => `Build the ${players} app of ${title} again so I can publish it.`,
+  rebuildFirst: (app: string) => `The ${app} is older than your last change: build it again, then publish.`,
+  /** The installed Genex plugin is from before apps: its update sends them. */
+  updateGenex: "Update the Genex plugin in Plugins to publish apps.",
   notListed: "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.",
 } as const;
 

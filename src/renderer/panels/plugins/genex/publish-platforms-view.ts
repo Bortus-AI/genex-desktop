@@ -20,6 +20,8 @@ export const PlatformEnd = {
   Soon: "soon",
   /** Not made: the agent can make it. */
   Make: "make",
+  /** Built before the game's last change: the agent can build it again. */
+  Rebuild: "rebuild",
   /** Publish is sending it now. */
   Sending: "sending",
   /** On Genex: this build is what desktop players get. */
@@ -66,9 +68,13 @@ function sendEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): P
   return native?.failed.some(forRow(row)) ? PlatformEnd.Failed : PlatformEnd.None;
 }
 
-/** What a native row offers: making it while missing, "Coming soon" while it cannot go, else how its send stands. */
+/**
+ * What a native row offers: making it while missing, building it again while it is older than the
+ * game, "Coming soon" while it cannot go, else how its send stands.
+ */
 function nativeEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
   if (row.state === PublishPlatformState.Missing) return PlatformEnd.Make;
+  if (row.state === PublishPlatformState.Stale) return PlatformEnd.Rebuild;
   return row.uploads ? sendEnd(row, native) : PlatformEnd.Soon;
 }
 
@@ -155,17 +161,26 @@ const noWebBuild = (platforms: readonly PublishPlatform[]): boolean =>
 export const nothingToPublish = (platforms: readonly PublishPlatform[]): boolean =>
   noWebBuild(platforms) && sendingPlayers(platforms).length === 0;
 
-/** Why a game with nothing to send waits: no app made yet, or apps Studio cannot send yet. */
-function waitingLine(platforms: readonly PublishPlatform[]): string {
+/**
+ * Why a game with nothing to send waits: an app older than the game, a Genex plugin from before
+ * apps, apps Studio cannot send yet, or no app made yet.
+ */
+function waitingLine(platforms: readonly PublishPlatform[], behind: boolean): string {
+  const stale = platforms.filter((row) => isNative(row) && row.state === PublishPlatformState.Stale);
+  if (stale.length > 0) return WORDS.rebuildFirst(WORDS.apps(stale.map((row) => playersOf(row.target))));
+  if (behind) return WORDS.updateGenex;
   const built = platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
   return built ? WORDS.appsSoon : WORDS.makeFirst;
 }
 
-/** The line under the rows: the apps Publish sends too, and whose players get the web version. */
-export function reachLine(platforms: readonly PublishPlatform[]): string | null {
+/**
+ * The line under the rows: the apps Publish sends too, and whose players get the web version; for a
+ * game with nothing to send, why. `behind`: the Genex plugin is too old to send its apps.
+ */
+export function reachLine(platforms: readonly PublishPlatform[], behind = false): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
   if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
-  if (nothingToPublish(platforms)) return waitingLine(platforms);
+  if (nothingToPublish(platforms)) return waitingLine(platforms, behind);
   if (web?.state !== PublishPlatformState.Ready) return null;
   const native = platforms.filter(isNative);
   const sending = sendingPlayers(platforms);
@@ -192,3 +207,20 @@ const playersOf = (target: PublishTarget): string => (target === PublishTarget.W
 
 /** What "Make with agent" sends through the game's chat for a platform. */
 export const makeAppAsk = (target: PublishTarget, title: string): string => WORDS.makeAsk(playersOf(target), title);
+
+/** What "Build again" sends through the game's chat for a platform. */
+export const rebuildAsk = (target: PublishTarget, title: string): string => WORDS.rebuildAsk(playersOf(target), title);
+
+/**
+ * The rows as the installed Genex plugin can send them: an app goes only through a plugin whose
+ * record says it can (`native.supported`), and a plugin from before apps answers no record. `behind`
+ * when Studio could send an app that the plugin cannot: updating the plugin is what is missing.
+ */
+export function gateByPlugin(
+  platforms: readonly PublishPlatform[],
+  native: GenexNativeRecord | undefined,
+): { platforms: PublishPlatform[]; behind: boolean } {
+  if (native?.supported === true) return { platforms: [...platforms], behind: false };
+  const behind = platforms.some((row) => isNative(row) && row.uploads);
+  return { platforms: platforms.map((row) => (isNative(row) ? { ...row, uploads: false } : row)), behind };
+}

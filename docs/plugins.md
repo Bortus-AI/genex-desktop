@@ -3052,8 +3052,9 @@ Genex:
   Windows app. `main/core/native-builds.ts` finds the builds from the binaries themselves (a
   `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
   the walk capped). A row says what its build runs on, when it was built and its size; "Built
-  before your last change" when the game's sources (outside builds, caches and history) changed more
-  than a minute after it; or "Not made yet" with Make with agent, which sends "Make a <Platform> app
+  before your last change" with Build again when the game's sources changed more than a minute after
+  it (builds, caches, history, hidden files, notes and logs, and Unity's `UserSettings` do not count);
+  or "Not made yet" with Make with agent, which sends "Make a <Platform> app
   of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
   cover does) and keeps the dialog open, the row then saying "Asked the agent". A ready app goes
   with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
@@ -3065,6 +3066,10 @@ Genex:
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
+  The dialog sends apps only through an installed Genex plugin whose record says it can
+  (`native.supported`, `gateByPlugin`): a profile still on a plugin from before apps is told to
+  update it in Plugins. The plugin's `publishing-apps` skill tells the game's agent how to build an
+  app for Publish, and never to send the person to another store.
   A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
   on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish
   Mac app" and runs `studio:plugins.genex-publish-apps` (`publishAppsFromDialog`, no web copy, no
