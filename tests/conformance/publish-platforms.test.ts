@@ -1,0 +1,185 @@
+/**
+ * The Publish dialog's platform rows: the web build as Publish sends it, and the Mac and Windows apps
+ * the game folder holds, ready, built before the game's last change, or not made. A built app shows
+ * "Coming soon" until genex.games takes apps, and its players are told they get the web version; an
+ * app not made offers to ask the agent, in the game's own words.
+ */
+import assert from "node:assert/strict";
+import { mkdir, utimes, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { describe, it } from "node:test";
+import { publishPlatforms } from "../../src/main/core/publish-platforms.ts";
+import { MINUTE_MS } from "../../src/shared/duration.ts";
+import { CoreFact } from "../../src/shared/project-facts.ts";
+import { NativeArch } from "../../src/shared/play-native.ts";
+import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../src/shared/publish-platforms.ts";
+import {
+  listsPlatforms,
+  makeAppAsk,
+  PlatformEnd,
+  platformRows,
+  reachLine,
+} from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
+import { tmpDir } from "../helpers/tmp.ts";
+
+const CPU_ARM64 = 0x0100000c;
+const CPU_X86_64 = 0x01000007;
+const T0 = Date.parse("2026-10-20T08:00:00Z");
+
+/** A universal Mac app at `dir/name.app`, its program written at `at`. */
+async function macApp(dir: string, name: string, at: number): Promise<void> {
+  const bundle = path.join(dir, `${name}.app`, "Contents");
+  await mkdir(path.join(bundle, "MacOS"), { recursive: true });
+  await writeFile(
+    path.join(bundle, "Info.plist"),
+    "<plist><dict><key>CFBundleExecutable</key><string>Game</string></dict></plist>",
+  );
+  const header = Buffer.alloc(8 + 2 * 20);
+  header.writeUInt32BE(0xcafebabe, 0);
+  header.writeUInt32BE(2, 4);
+  header.writeUInt32BE(CPU_ARM64, 8);
+  header.writeUInt32BE(CPU_X86_64, 28);
+  const program = path.join(bundle, "MacOS", "Game");
+  await writeFile(program, header);
+  await utimes(program, new Date(at), new Date(at));
+}
+
+/** A source file of the game, last changed at `at`. */
+async function source(root: string, file: string, at: number): Promise<void> {
+  await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+  await writeFile(path.join(root, file), "// the game");
+  await utimes(path.join(root, file), new Date(at), new Date(at));
+}
+
+/** A core that lists one game with `facts`, in `dir`. */
+function coreWith(name: string, dir: string, facts: Array<{ id: string; path: string }>) {
+  return {
+    games: { list: async () => [{ name, facts }] },
+    pluginBinding: async (project?: string) => (project === name ? { project: name, directory: dir } : undefined),
+  } as unknown as Parameters<typeof publishPlatforms>[0];
+}
+
+const byTarget = (rows: PublishPlatform[]) => Object.fromEntries(rows.map((row) => [row.target, row]));
+
+describe("Publish's platform rows from the game folder", () => {
+  it("lists the web build, a ready Mac app and a Windows app not made yet", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await source(root, "src/main.js", T0);
+    await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0 + 10 * MINUTE_MS);
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, []), "dust"));
+    assert.deepEqual(
+      [rows.web.state, rows.web.uploads],
+      [PublishPlatformState.Ready, true],
+      "a web game's own build is what Publish sends",
+    );
+    assert.equal(rows.mac.state, PublishPlatformState.Ready);
+    assert.equal(rows.mac.arch, NativeArch.Universal);
+    assert.ok(rows.mac.bytes > 0);
+    assert.equal(rows.mac.uploads, false, "genex.games does not take apps yet");
+    assert.deepEqual(
+      [rows.windows.state, rows.windows.bytes, rows.windows.builtAt],
+      [PublishPlatformState.Missing, 0, null],
+    );
+  });
+
+  it("calls an app built before the game's last change old, and an engine game's web row not made", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0);
+    await source(root, "Assets/Scripts/Player.cs", T0 + 20 * MINUTE_MS);
+    const engine = [{ id: CoreFact.UnrealProject, path: "." }];
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, engine), "dust"));
+    assert.equal(rows.mac.state, PublishPlatformState.Stale);
+    assert.deepEqual([rows.web.state, rows.web.uploads], [PublishPlatformState.Missing, false]);
+  });
+
+  it("keeps an app built within a minute of the last change ready, whatever the engine's caches do", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0);
+    await source(root, "Assets/Scripts/Player.cs", T0 + 30_000);
+    // An engine's own caches and history change all the time: they are not the game's change.
+    await source(root, "Library/ShaderCache/a.bin", T0 + 40 * MINUTE_MS);
+    await source(root, ".git/index", T0 + 40 * MINUTE_MS);
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, []), "dust"));
+    assert.equal(rows.mac.state, PublishPlatformState.Ready);
+  });
+
+  it("refuses a game that is not in the library", async () => {
+    const root = await tmpDir("publish-platforms-");
+    const core = coreWith("dust", root, []);
+    await assert.rejects(publishPlatforms(core, "elsewhere"));
+    await assert.rejects(publishPlatforms(core, "../dust"));
+    await assert.rejects(publishPlatforms(core, 7));
+  });
+});
+
+const NOW = T0 + 5 * MINUTE_MS;
+const WEB: PublishPlatform = {
+  target: PublishTarget.Web,
+  state: PublishPlatformState.Ready,
+  arch: null,
+  bytes: 0,
+  builtAt: null,
+  uploads: true,
+};
+const MAC: PublishPlatform = {
+  target: PublishTarget.Mac,
+  state: PublishPlatformState.Ready,
+  arch: NativeArch.Universal,
+  bytes: 1.4 * 1024 ** 3,
+  builtAt: new Date(T0).toISOString(),
+  uploads: false,
+};
+const WINDOWS: PublishPlatform = {
+  target: PublishTarget.Windows,
+  state: PublishPlatformState.Missing,
+  arch: null,
+  bytes: 0,
+  builtAt: null,
+  uploads: false,
+};
+
+describe("Publish's platform rows as the dialog says them", () => {
+  it("says what each build runs on, when it was built, its size and what the row offers", () => {
+    const rows = platformRows([WEB, MAC, WINDOWS], NOW);
+    assert.deepEqual(
+      rows.map((row) => [row.name, row.detail, row.end]),
+      [
+        ["Web", "Plays right away", PlatformEnd.None],
+        ["Mac app", "Apple silicon and Intel · built 5 min ago", PlatformEnd.Soon],
+        ["Windows app", "Not made yet", PlatformEnd.Make],
+      ],
+    );
+    assert.match(rows[1]?.size ?? "", /GB/);
+    assert.equal(rows[2]?.size, null);
+    const stale = platformRows([{ ...MAC, state: PublishPlatformState.Stale }], NOW)[0];
+    assert.equal(stale?.detail, "Built before your last change");
+    const sent = platformRows([{ ...MAC, uploads: true }], NOW)[0];
+    assert.equal(sent?.end, PlatformEnd.None, "an app Publish sends offers nothing more");
+  });
+
+  it("says when a build was made in words a person reads", () => {
+    const at = (ms: number) => platformRows([{ ...MAC, builtAt: new Date(NOW - ms).toISOString() }], NOW)[0]?.detail;
+    assert.equal(at(10_000), "Apple silicon and Intel · built just now");
+    assert.equal(at(3 * 60 * MINUTE_MS), "Apple silicon and Intel · built 3 hours ago");
+    assert.equal(at(2 * 24 * 60 * MINUTE_MS), "Apple silicon and Intel · built 2 days ago");
+  });
+
+  it("lists platforms for an engine game or a folder with an app, and not for a plain web game", () => {
+    assert.equal(listsPlatforms([WEB, { ...MAC, state: PublishPlatformState.Missing }, WINDOWS], false), false);
+    assert.equal(listsPlatforms([WEB, { ...MAC, state: PublishPlatformState.Missing }, WINDOWS], true), true);
+    assert.equal(listsPlatforms([WEB, MAC, WINDOWS], false), true);
+  });
+
+  it("tells which players get the web version while Publish sends only the web build", () => {
+    assert.equal(reachLine([WEB, MAC, WINDOWS]), "Mac and Windows players get the web version.");
+    assert.equal(reachLine([WEB, { ...MAC, uploads: true }, WINDOWS]), "Windows players get the web version.");
+    assert.equal(reachLine([{ ...WEB, state: PublishPlatformState.Missing }, MAC, WINDOWS]), null);
+  });
+
+  it("asks the agent for an app in the game's own name", () => {
+    assert.equal(
+      makeAppAsk(PublishTarget.Windows, "Dust Runners"),
+      "Make a Windows app of Dust Runners so I can publish it for Windows players.",
+    );
+  });
+});

@@ -2,7 +2,8 @@
  * The native-games fixture: the fixture catalog's Mac apps built on this Mac (`fixture-native-app.ts`)
  * and zipped into the profile, so its build host serves real archives; then, in a fresh profile,
  * Frigate installed and Puck Rush installed one version behind the catalog, through the real
- * installer. A reused profile keeps what it has installed.
+ * installer, and a Mac build of the library's own game in its folder, so Publish lists its
+ * platforms. A reused profile keeps what it has installed.
  */
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
@@ -38,6 +39,8 @@ const PUCK_RUSH_BEFORE: FixtureBuildSpec = {
 const SEEDED = ".installed-at-start";
 /** The games a fresh native-games profile has installed. */
 const INSTALLED_AT_START = ["frigate"] as const;
+/** Where in the library game's folder its Mac build goes, as an engine's build would. */
+const LIBRARY_BUILD = path.join("Builds", "Mac");
 
 /** What preparing the fixture needs from the launch. */
 export interface NativeGamesFixtureDeps {
@@ -49,6 +52,8 @@ export interface NativeGamesFixtureDeps {
   games: readonly FixtureNativeGame[];
   /** A game's page from the fixture catalog. */
   page(slug: string): Promise<PlayGameDetail>;
+  /** The library game's folder and title: a Mac build of it goes there once. */
+  libraryGame?: { dir: string; title: string };
 }
 
 /** Make the archives, then install what a fresh profile starts with. */
@@ -82,6 +87,20 @@ export async function prepareNativeGamesFixture(deps: NativeGamesFixtureDeps): P
     [{ slug: "puck-rush", build: PUCK_RUSH_BEFORE }],
   );
   await installAtStart(deps);
+  await buildLibraryGame(deps, cache);
+}
+
+/** A Mac build of the library's own game in its folder, once: Publish then lists a ready Mac app. */
+async function buildLibraryGame(deps: NativeGamesFixtureDeps, cache: string): Promise<void> {
+  const game = deps.libraryGame;
+  if (!game) return;
+  const into = path.join(game.dir, LIBRARY_BUILD);
+  if (existsSync(into)) return;
+  await buildFixtureApp(
+    { title: game.title, bundleId: "games.genex.fixture.library", hue: 200, version: "1.0", arch: "universal" },
+    into,
+    cache,
+  );
 }
 
 /**

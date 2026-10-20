@@ -1,4 +1,5 @@
 /** Plugins: the trust dialogs, reviewed actions, consent answers, and installing from any origin. */
+import { publishPlatforms } from "../core/publish-platforms.ts";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { type BrowserWindow, dialog } from "electron";
@@ -120,6 +121,7 @@ export function registerPluginsIpc(handle: IpcHandle, deps: PluginsIpcDeps): voi
   handle("studio:plugins.choose-file", async (p) => chooseFile(p?.id, p?.request));
   // Studio's own Publish dialog: its Publish press is the consent to the files it lists, so nothing asks again.
   handle("studio:plugins.genex-publish-review", async (p) => publishReview(core, p?.project));
+  handle("studio:plugins.genex-publish-platforms", async (p) => publishPlatforms(core, p?.project));
   handle("studio:plugins.genex-publish", async (p) => publishFromDialog(core, p?.project, p?.review, p?.title));
   handle("studio:plugins.install", async (p) => installPlugin(ctx, p.id));
   handle("studio:plugins.index", async (p) => requireMarketplace(ctx).index(p?.refresh === true, core.plugins.list()));

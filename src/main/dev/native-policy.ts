@@ -277,6 +277,8 @@ const FIXTURE_SAFE = [
   "studio:plugins.action",
   // Publish's file list: the same export Export makes, into the profile's scratch, then removed.
   "studio:plugins.genex-publish-review",
+  // Publish's platform rows: what the game folder holds, read only.
+  "studio:plugins.genex-publish-platforms",
   "studio:plugins.index",
   "studio:plugins.watch",
   // A local plugin's grants live in the profile's install record; no dialog, no socket.

@@ -86,6 +86,9 @@ export const FixtureName = {
 } as const;
 export type FixtureName = (typeof FixtureName)[keyof typeof FixtureName];
 
+/** The library game every fixture but the first launch opens on. */
+export const FIXTURE_GAME = "fixture-game";
+
 /** The one list of named fixtures; scripts/studio-dev.ts validates and lists from it. */
 export const FIXTURE_NAMES: readonly FixtureName[] = Object.values(FixtureName);
 

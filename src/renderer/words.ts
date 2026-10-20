@@ -35,7 +35,8 @@ import { LocalServerProblem } from "../shared/local-server.ts";
 import { COMPUTER_SETTING_QUESTION, type GithubLookupProblem } from "../shared/plugins.ts";
 import type { GenexPublishPhase } from "../shared/genex.ts";
 import { PlayCategory, PlayNote, PlayShelf, RemixStep } from "../shared/play.ts";
-import { InstallFailure, LaunchFailure, NativePlatform } from "../shared/play-native.ts";
+import { InstallFailure, LaunchFailure, NativeArch, NativePlatform } from "../shared/play-native.ts";
+import { PublishTarget } from "../shared/publish-platforms.ts";
 import { CreditKind } from "../shared/play-credits.ts";
 import { AvatarBody, AvatarEyes, AvatarGear, BlockState } from "../shared/avatar-recipe.ts";
 import { HANDLE_LENGTH, HandleState } from "../shared/handle.ts";
@@ -3016,6 +3017,53 @@ export const INSTALLED_GAMES_WORDS = {
   },
   remove: "Remove",
   savesStay: "Saves stay when you remove a game. Getting it again starts where you left off.",
+} as const;
+
+/** The Publish dialog's platform rows (`panels/plugins/genex/PublishPlatforms.tsx`). */
+export const PUBLISH_PLATFORM_WORDS = {
+  label: "Platforms",
+  name: {
+    [PublishTarget.Web]: "Web",
+    [PublishTarget.Mac]: "Mac app",
+    [PublishTarget.Windows]: "Windows app",
+  } satisfies Record<PublishTarget, string>,
+  /** The players a native row is for, in the ask and the reach line: "Mac", "Windows". */
+  players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows" },
+  webReady: "Plays right away",
+  webMissing: "Not set up for the web",
+  /** What a build runs on, by its processors. */
+  arch: {
+    [PublishTarget.Mac]: {
+      [NativeArch.Universal]: "Apple silicon and Intel",
+      [NativeArch.Arm64]: "Apple silicon",
+      [NativeArch.X64]: "Intel",
+    },
+    [PublishTarget.Windows]: {
+      [NativeArch.Universal]: "64-bit PCs",
+      [NativeArch.Arm64]: "Arm PCs",
+      [NativeArch.X64]: "64-bit PCs",
+    },
+  } satisfies Record<typeof PublishTarget.Mac | typeof PublishTarget.Windows, Record<NativeArch, string>>,
+  /** When a build was made: "built just now", "built 5 min ago", "built 3 hours ago". */
+  built: (at: string, now: number) => {
+    const ms = Math.max(0, now - Date.parse(at));
+    if (ms < MINUTE_MS) return "built just now";
+    if (ms < HOUR_MS) return `built ${Math.floor(ms / MINUTE_MS)} min ago`;
+    if (ms < DAY_MS) return `built ${plural(Math.floor(ms / HOUR_MS), "hour")} ago`;
+    return `built ${plural(Math.floor(ms / DAY_MS), "day")} ago`;
+  },
+  stale: "Built before your last change",
+  missing: "Not made yet",
+  /** A built app genex.games does not take yet: it shows, and Publish sends the web version. */
+  soon: "Coming soon",
+  soonLabel: (name: string) => `${name}: publishing it is coming soon`,
+  make: "Make with agent",
+  makeLabel: (name: string) => `Make the ${name} with the agent`,
+  /** What "Make with agent" leaves in the game's chat, unsent. */
+  makeAsk: (players: string, title: string) =>
+    `Make a ${players} app of ${title} so I can publish it for ${players} players.`,
+  /** Who plays what once it is published: "Mac and Windows players get the web version." */
+  reach: (players: string) => `${players} players get the web version.`,
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */

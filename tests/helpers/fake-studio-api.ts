@@ -36,6 +36,7 @@ const METHODS = [
   "pluginAction",
   "pluginChooseFile",
   "genexPublishReview",
+  "genexPublishPlatforms",
   "genexPublish",
   "pluginsIndex",
   "pluginInstallGithub",

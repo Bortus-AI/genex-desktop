@@ -106,6 +106,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.action": "pluginAction",
   "studio:plugins.choose-file": "pluginChooseFile",
   "studio:plugins.genex-publish-review": "genexPublishReview",
+  "studio:plugins.genex-publish-platforms": "genexPublishPlatforms",
   "studio:plugins.genex-publish": "genexPublish",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
@@ -363,6 +364,7 @@ export interface StudioInvokePayloads {
   "studio:plugins.action": { id: string; name: string; args: unknown; project?: string; ticket?: string };
   "studio:plugins.choose-file": { id: string; request: Arg<"pluginChooseFile", 1> };
   "studio:plugins.genex-publish-review": { project: string };
+  "studio:plugins.genex-publish-platforms": { project: string };
   "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };

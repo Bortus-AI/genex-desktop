@@ -325,6 +325,7 @@ function pluginCalls(bridge: BridgeCalls) {
       invoke("studio:plugins.action", { id, name, args, project, ticket }),
     pluginChooseFile: (id, request) => invoke("studio:plugins.choose-file", { id, request }),
     genexPublishReview: (project) => invoke("studio:plugins.genex-publish-review", { project }),
+    genexPublishPlatforms: (project) => invoke("studio:plugins.genex-publish-platforms", { project }),
     genexPublish: (project, review, title) => invoke("studio:plugins.genex-publish", { project, review, title }),
     pluginsIndex: (refresh) => invoke("studio:plugins.index", { refresh }),
     pluginInstallGithub: (spec) => invoke("studio:plugins.install-github", { spec }),

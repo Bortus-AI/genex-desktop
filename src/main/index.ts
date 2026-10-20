@@ -70,6 +70,7 @@ import {
   activateChatFixture,
   DevProviders,
   FIRST_LAUNCH_STATUS,
+  FIXTURE_GAME,
   FIXTURE_SANDBOX_PROBLEM,
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
@@ -1078,11 +1079,18 @@ async function prepareNativeGames(studio: StudioCore): Promise<void> {
       host,
       games: fixtureNativeGames(),
       page: (slug) => playCatalogFor(studio).game(slug),
+      libraryGame: await libraryGameOf(studio),
     });
   }
   await playSessionsFor(studio)?.reconcile();
   await playInstallsFor(studio)?.reconcile();
   watchNativeUpdates(studio);
+}
+
+/** The fixture's library game: its folder and title, for its Mac build. */
+async function libraryGameOf(studio: StudioCore): Promise<{ dir: string; title: string } | undefined> {
+  const game = (await studio.games.list()).find((listed) => listed.name === FIXTURE_GAME);
+  return game ? { dir: game.dir, title: game.title || game.name } : undefined;
 }
 
 /**

@@ -176,8 +176,9 @@ is.
 - Fixtures: every fixture launch has native games (Dust Runners, Iron Tide, Frigate, Puck Rush,
   Harbor Lights, and SKATE's Mac app) on `builds.genex.invalid`, which never resolves. The
   `native-games` fixture builds their Mac apps on this Mac (Xcode, `dev/fixture-native-app.ts`),
-  serves the archives from the profile at a few MB a second, and starts with Frigate installed and
-  Puck Rush one version behind.
+  serves the archives from the profile at a few MB a second, and starts with Frigate installed,
+  Puck Rush one version behind, and a Mac build in the library game's `Builds/Mac`, so its Publish
+  dialog lists platforms ([Genex publish](plugins.md#first-party-privileges)).
 - `studio:play.game` reads a game's own page (`StudioApi.playGame`): its card, likes, comments,
   description, screenshots and when it changed.
 

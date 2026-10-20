@@ -3012,6 +3012,19 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
+  platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
+  `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app and
+  Windows app. `main/core/native-builds.ts` finds the builds from the binaries themselves (a
+  `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
+  the walk capped). A row says what its build runs on, when it was built and its size; "Built
+  before your last change" when the game's sources (outside builds, caches and history) changed more
+  than a minute after it; or "Not made yet" with Make with agent, which closes the dialog and leaves
+  "Make a <Platform> app of <Game> so I can publish it for <Platform> players." in the game's chat,
+  unsent. genex.games takes no native builds yet: a built app says "Coming soon" (`uploads: false`),
+  the line under the rows says its players get the web version, and Publish itself stays with games
+  served as web games. A web game with no app shows no rows. L4: `npm run test:ui --
+  publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose

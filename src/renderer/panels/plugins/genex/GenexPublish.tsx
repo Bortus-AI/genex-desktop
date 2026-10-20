@@ -57,6 +57,7 @@ import { useGenexStatus } from "./use-genex-status.ts";
 import { CoverControls, CoverMedia, CoverTool } from "./PublishCover.tsx";
 import { CoverKind, type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
+import { PublishPlatforms } from "./PublishPlatforms.tsx";
 import { PublishShareLine } from "./PublishShare.tsx";
 import { useShareWhenLive } from "./use-publish-share.ts";
 
@@ -686,7 +687,7 @@ export function GenexPublishDialog({
       headerHidden
       className="genex-publish-dialog"
     >
-      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} />
+      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} onLeave={onClose} />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </DialogSurface>
   );
@@ -708,19 +709,22 @@ function useCelebration(view: PublishView, publishing: boolean): boolean {
 
 /**
  * The read record: the banner with the game's name and where it is, then what the moment needs:
- * the running attempt's progress, the celebration and link once it just went live, the link of a
- * live game, or a failed attempt's line, and the presses.
+ * the platforms a game with an app is built for, the running attempt's progress, the celebration
+ * and link once it just went live, the link of a live game, or a failed attempt's line, and the presses.
  */
 function PublishBody({
   view,
   record,
   project,
   cover,
+  onLeave,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   project: string;
   cover: PublishCover;
+  /** Closes the dialog, for a press that continues in the game's chat. */
+  onLeave: () => void;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -757,6 +761,7 @@ function PublishBody({
             {problem}
           </p>
         ))}
+        <PublishPlatforms project={project} onLeave={onLeave} shown={!celebrate} />
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />
