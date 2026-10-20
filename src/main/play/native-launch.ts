@@ -3,7 +3,8 @@
  * most one per game. Genex owns the process: the game page brings its window forward or quits it,
  * quitting Genex ends every game, and a record per game on disk lets the next start end one an
  * earlier Genex left running (only while its process is still that one). A game that quits before
- * its window appears failed to start; its last output goes to the log, never on screen.
+ * its window appears failed to start; its last output goes to the log, never on screen. A game opens
+ * full screen with its engine's own argument, unless its app asks for a window.
  * Electron-free: the spawn, the window checks, the signals and the clock are deps.
  */
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -11,7 +12,7 @@ import path from "node:path";
 import type { Readable } from "node:stream";
 import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { isPlaySlug } from "../../shared/play.ts";
-import { LaunchFailure, type NativeSession, NativeSessionPhase } from "../../shared/play-native.ts";
+import { LaunchFailure, NativeEngine, type NativeSession, NativeSessionPhase } from "../../shared/play-native.ts";
 import type { JobClock, JobProbe } from "../../substrate/job-process.ts";
 import { removeOwnedFolder } from "../../substrate/storage-folders.ts";
 import type { NativeGameRequest } from "../../substrate/plugins/native-process.ts";
@@ -30,6 +31,19 @@ const SESSIONS = ".sessions";
 const SCRATCH = ".scratch-";
 
 const MESSAGE = { BadSlug: "not a game address" } as const;
+
+/** Each engine's own command-line argument for opening its game full screen. */
+const FULLSCREEN_ARGS: ReadonlyMap<string, readonly string[]> = new Map(
+  Object.entries({
+    [NativeEngine.Unity]: ["-screen-fullscreen", "1"],
+    [NativeEngine.Godot]: ["--fullscreen"],
+    [NativeEngine.Unreal]: ["-fullscreen"],
+  } satisfies Record<NativeEngine, readonly string[]>),
+);
+
+/** What a game is started with: full screen in its engine's own way, or nothing for a window or an unknown engine. */
+export const launchArgs = (record: Pick<InstallRecord, "engine" | "windowed">): string[] =>
+  record.windowed || !record.engine ? [] : [...(FULLSCREEN_ARGS.get(record.engine) ?? [])];
 
 /** A started game process: what the launcher reads of it. */
 export interface GameProcess {
@@ -180,7 +194,8 @@ export class NativeSessions {
     await mkdir(saves, { recursive: true });
     const scratch = await mkdtemp(path.join(this.#deps.root, `${SCRATCH}${slug}-`));
     const { bundleId, bundleName } = record;
-    const request = { binary: path.join(app, record.executable), app, saves, scratch, bundleId, bundleName };
+    const binary = path.join(app, record.executable);
+    const request = { binary, app, saves, scratch, bundleId, bundleName, args: launchArgs(record) };
     try {
       const child = await this.#deps.spawn(request);
       if (!child.pid) throw new Error("the game did not start");

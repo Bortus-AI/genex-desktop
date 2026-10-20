@@ -543,6 +543,18 @@ export interface GenexCoverRecord {
   clip?: GenexCoverClip | null;
   /** How the last clip send went; null before any. */
   clipLast?: GenexCoverSent | null;
+  /** When the agent itself last kept a shot and a clip; absent from a plugin older than this. */
+  agentTook?: GenexCoverAgentTook;
+}
+
+/**
+ * When the agent itself last kept the game's cover shot and clip (`genex__cover` shoot and clip),
+ * ISO; a kind it never took is absent. Studio's own takes and a publish's shot leave it, so Publish
+ * knows a frame the person asked the agent for has come (`covers/<project>/agent.json`).
+ */
+export interface GenexCoverAgentTook {
+  shot?: string;
+  clip?: string;
 }
 
 /** The game's kept cover clip (`covers/<project>/clip.json`), beside its video: five seconds of real play. */

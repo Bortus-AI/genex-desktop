@@ -5,6 +5,7 @@ import { isAccountId, isAvatarStyle, isFriendAction, isPresenceVisibility } from
 import { isStatsPeriod } from "../../shared/play-stats.ts";
 import { isPlayCoverType, isPlayGameChange, isPlayGameId } from "../../shared/play-manage.ts";
 import type { CreatorStats } from "../play/creator-stats.ts";
+import type { GameLinks } from "../play/game-links.ts";
 import type { GenexCredits } from "../play/credits.ts";
 import type { PlayGallery, PlayWorld } from "../play/gallery.ts";
 import type { PlayManage } from "../play/manage.ts";
@@ -57,6 +58,8 @@ export interface PlayIpcDeps {
   sessions(): NativeSessions | null;
   /** Show a file in Finder (`shell.showItemInFolder`). */
   reveal(file: string): void;
+  /** The game a `genex://` link asked to open, waiting for the page. */
+  gameLinks: Pick<GameLinks, "take">;
 }
 
 /** Register Play's channels: the catalog's reads, Remix and the viewer. */
@@ -109,6 +112,7 @@ export function registerPlayIpc(handle: IpcHandle, deps: PlayIpcDeps): void {
     shown.open(payload.slug, payload.title);
   });
   handle("studio:play.close", async () => viewer()?.close());
+  handle("studio:play.take-game-link", async () => deps.gameLinks.take());
   handle("studio:play.game", (payload) => {
     if (!isPlaySlug(payload?.slug)) throw new Error(MESSAGE.badSlug);
     return gallery.game(payload.slug);
