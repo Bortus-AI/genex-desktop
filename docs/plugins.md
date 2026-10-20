@@ -3029,7 +3029,7 @@ Genex:
   path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
   and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
-  and a stale build stays. While the pinned CLI is older than `genex native` (1.36.10), nothing is
+  and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
   A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
   on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish

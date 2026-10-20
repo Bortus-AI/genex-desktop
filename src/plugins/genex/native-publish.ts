@@ -18,7 +18,7 @@ import {
 const require = createRequire(import.meta.url);
 
 /** The first Genex CLI with `genex native`: an older pin sends no app. */
-const NATIVE_CLI = [1, 36, 10] as const;
+const NATIVE_CLI = [1, 36, 11] as const;
 /** The most apps one publish sends: a Mac app and a Windows program, each at most twice over. */
 const NATIVE_UPLOADS_MAX = 4;
 /** What a failure keeps of the CLI's words. */
@@ -27,7 +27,7 @@ const FAILURE_CHARS = 400;
 const MESSAGE = { NotABuild: "Genex answered without the build it published" } as const;
 
 /**
- * Whether CLI `version` has `genex native`. A prerelease comes before its release (`1.36.10-dev.4`
+ * Whether CLI `version` has `genex native`. A prerelease comes before its release (`1.36.11-dev.4`
  * may predate the command), so only a later release's prerelease counts.
  */
 export function hasNativeCommand(version: string): boolean {

@@ -16,10 +16,20 @@ import { hasNativeCommand, nativeUploads, sendNativeBuild, sentBuild } from "../
 import { tmpDir } from "../helpers/tmp.ts";
 
 describe("which CLI sends apps", () => {
-  it("is release 1.36.10 or newer: a dev build of 1.36.10 may predate the command", () => {
-    for (const version of ["1.36.10", "1.36.11", "1.36.11-dev.2", "1.37.0", "2.0.0"])
+  it("is release 1.36.11 or newer: 1.36.10 has no `genex native`, and a dev build may predate it", () => {
+    for (const version of ["1.36.11", "1.36.12", "1.36.12-dev.2", "1.37.0", "2.0.0"])
       assert.equal(hasNativeCommand(version), true, version);
-    for (const version of ["1.36.10-dev.4", "1.36.9", "1.36.9-dev.949", "1.35.40", "0.99.99", "", "latest", "1.36.10x"])
+    for (const version of [
+      "1.36.10",
+      "1.36.11-dev.4",
+      "1.36.10-dev.4",
+      "1.36.9",
+      "1.35.40",
+      "0.99.99",
+      "",
+      "latest",
+      "1.36.11x",
+    ])
       assert.equal(hasNativeCommand(version), false, version);
   });
 });
