@@ -1669,6 +1669,18 @@ async function windowsSandbox(
 }
 
 describe("ProcessSandbox on Windows", () => {
+  it("keeps the broker readable after a later folder resets the session", async () => {
+    const w = await windowsSandbox();
+    const brokerDir = path.dirname(srtWinPath());
+    const readable = () => w.session.runtime.last().filesystem.allowRead ?? [];
+    assert.ok(readable().includes(brokerDir), "the broker folder needs a session read grant");
+    const later = path.join(w.root, "later");
+    await mkdir(later);
+    w.sandbox.allowWrite(later);
+    await w.session.session.settled();
+    assert.ok(readable().includes(brokerDir), "reset must not discard the broker's read grant");
+  });
+
   it("runs under Git Bash with the caller's environment from an env file it deletes first", async () => {
     const w = await windowsSandbox();
     const hostile = "it's $(echo ran) `echo ran`";

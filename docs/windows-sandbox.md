@@ -29,6 +29,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   program and working folder as that user. A per-user install lives in the profile, so the session
   grants the install folder (and srt-win's, when apart) for reading first
   (`grantLauncherFolders`), and a packaged app works from its install folder (`installedWorkingDir`).
+  A broker outside the install folder also stays in the session's read roots: a reset revokes
+  its bootstrap grant, so a later folder must not leave the next sandboxed command unable to start it.
   It asks srt-win for the user's SID up to three times; without that grant the check fails with
   "CreateProcessWithLogonW(srt-sandbox): Access is denied", so the log says why one was not made.
   The same refusal comes from a disabled Secondary Logon service (`seclogon`).

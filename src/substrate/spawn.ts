@@ -689,8 +689,12 @@ export class ProcessSandbox {
     const toolDirs = [(await this.toolPath()) ?? "", process.env.PATH ?? ""].flatMap((value) => value.split(";"));
     const gitRoot = gitRootOf(bash);
     const installDir = path.dirname(longPath(process.execPath, this.#platform));
+    const srtWin = srtWinPath();
+    const srtWinDir = path.dirname(longPath(srtWin, this.#platform));
     const read = [
       installDir,
+      // reset() revokes the bootstrap grant too; an external broker must stay readable after regrants.
+      ...(insideWindowsPath(installDir, srtWinDir) ? [] : [srtWinDir]),
       ...grantableToolDirs(toolDirs, profile, this.policy.denyRead),
       ...(insideWindowsPath(profile, gitRoot) ? [gitRoot] : []),
     ];
@@ -698,7 +702,7 @@ export class ProcessSandbox {
       this.#seams.session ??
       windowsSessionFor(runtime, {
         profile,
-        srtWin: srtWinPath(),
+        srtWin,
         installDir,
         ...(this.#log ? { log: this.#log } : {}),
       });
