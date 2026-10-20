@@ -133,7 +133,8 @@ macOS 26 and 15, Ubuntu 26.04 and 24.04 and Windows Server 2025 on GitHub-hosted
 Azure VMs made for the run and deleted after it. Every Windows machine starts Genex as its
 administrator on a lived-in profile (`lived-in-profile.ts`), whose first start sets the sandbox up;
 the Azure machines then log a standard user on at its own desktop, with a lived-in profile too, and
-run it again. A GitHub runner cannot: an account started inside the runner's session cannot set up
+run it again. An owner's run whose script never starts fails its machine as `owner run did not
+start`, and the standard user's run, which needs that sandbox, is skipped. A GitHub runner cannot: an account started inside the runner's session cannot set up
 that session's objects for the sandbox's runner. Logs, crash dumps and screenshots are run artifacts for 30 days.
 A failing release gets one issue labelled `canary`, assigned to whoever published it; a passing
 run closes it. The canary only reports: pulling a release stays the owner's call.

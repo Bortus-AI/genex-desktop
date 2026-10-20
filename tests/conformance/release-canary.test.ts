@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { AGENT_CHECKS, agentChecksDone, agentVerdict, readSelfTest } from "../../scripts/canary/agent-command.ts";
-import { sizesWithRoom } from "../../scripts/canary/azure.ts";
+import { ownerResult, sizesWithRoom } from "../../scripts/canary/azure.ts";
 import { readStart } from "../../scripts/canary/first-start.ts";
 import {
   assetTag,
@@ -23,6 +23,8 @@ import {
   machinePassed,
   mergeMachines,
   Persona,
+  RESULT_FILE,
+  readResult,
   StepOutcome,
 } from "../../scripts/canary/results.ts";
 import { tmpDir } from "../helpers/tmp.ts";
@@ -257,6 +259,54 @@ describe("release canary Azure size", () => {
     assert.deepEqual(sizesWithRoom([usage("cores", 8, 10), usage("standardDASv5Family", 0, 10)]), ["Standard_D2as_v5"]);
     assert.deepEqual(sizesWithRoom([usage("cores", 10, 10), usage("standardDASv5Family", 0, 10)]), []);
     assert.deepEqual(sizesWithRoom([]), []);
+  });
+});
+
+describe("release canary Azure owner run", () => {
+  const standardUser: MachineResult = {
+    machine: "windows-10",
+    kind: PackageKind.Exe,
+    tag: "v0.1.12",
+    steps: [
+      {
+        step: CanaryStep.AgentCommand,
+        outcome: StepOutcome.Fail,
+        persona: Persona.StandardUser,
+        detail: "never reported: harness boots inside the sandbox",
+      },
+    ],
+  };
+
+  /** A VM's evidence as azure.ts unzips it: one folder per persona that wrote a result. */
+  async function evidence(results: Partial<Record<Persona, MachineResult>>): Promise<string> {
+    const dir = await tmpDir("canary-azure-");
+    for (const [persona, result] of Object.entries(results)) {
+      await mkdir(path.join(dir, persona), { recursive: true });
+      await writeFile(path.join(dir, persona, RESULT_FILE), JSON.stringify(result));
+    }
+    return dir;
+  }
+
+  test("an owner run that left no result fails the machine as the owner's, not as Genex's", async () => {
+    const dir = await evidence({ [Persona.StandardUser]: standardUser });
+    const owner = await ownerResult(dir, "windows-10", "v0.1.12");
+    assert.equal(machinePassed(owner), false);
+    assert.deepEqual(
+      owner.steps.map((step) => [step.persona, step.step, step.outcome]),
+      [[Persona.Owner, CanaryStep.Link, StepOutcome.Fail]],
+    );
+    assert.match(owner.steps[0]?.detail ?? "", /owner run did not start/);
+    assert.deepEqual(await readResult(path.join(dir, Persona.Owner, RESULT_FILE)), owner, "the report reads it");
+  });
+
+  test("an owner run that wrote its result is left as it was, passing or not", async () => {
+    const passed: MachineResult = {
+      ...standardUser,
+      steps: [{ step: CanaryStep.FirstStart, outcome: StepOutcome.Pass, persona: Persona.Owner, detail: "ok" }],
+    };
+    const dir = await evidence({ [Persona.Owner]: passed });
+    assert.deepEqual(await ownerResult(dir, "windows-10", "v0.1.12"), passed);
+    assert.deepEqual(await readResult(path.join(dir, Persona.Owner, RESULT_FILE)), passed);
   });
 });
 

@@ -9,12 +9,22 @@
 //
 // The phases on the VM are scripts/canary/windows/azure-vm.ps1.
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { HOUR_MS, MINUTE_MS } from "../../src/shared/duration.ts";
-import { machinePassed, RESULT_FILE, readResult } from "./results.ts";
+import { PackageKind } from "./links.ts";
+import {
+  CanaryStep,
+  type MachineResult,
+  machinePassed,
+  Persona,
+  RESULT_FILE,
+  readResult,
+  recorder,
+  StepOutcome,
+} from "./results.ts";
 import { sh } from "./shell.ts";
 
 /** Every canary resource group carries this tag, and an expiry the sweep honours. */
@@ -29,6 +39,10 @@ const OWNER_NAME = "genexowner";
 const AZURE_PROFILE_FILES = 60_000;
 const USER_NAME = "canary-user";
 const CONTAINER = "evidence";
+const MESSAGE = {
+  ownerDidNotStart:
+    "owner run did not start: it left no result.json (owner.out.log has what it printed), so the sandbox was never set up",
+} as const;
 /**
  * Two-core, 8 GB sizes (a modest laptop) by preference, with the quota family each draws on. A new
  * subscription has room in some families and none in others, so the run takes the first with room.
@@ -360,6 +374,7 @@ async function runMachine(
       "-o": "none",
     });
     await sh("unzip", ["-q", "-o", zip, "-d", options.evidence]);
+    await ownerResult(options.evidence, options.machine, options.tag);
     if (!(await allPassed(options.evidence))) process.exitCode = 1;
   } catch (error) {
     await writeFile(path.join(options.evidence, "azure-error.txt"), String(error));
@@ -367,6 +382,29 @@ async function runMachine(
   } finally {
     if (group) await sh("az", ["group", "delete", "-n", group, "--yes", "--no-wait"]);
   }
+}
+
+/**
+ * The owner's result in a VM's evidence (azure-vm.ps1 keeps it in a folder named after the persona),
+ * or a failed stand-in written in its place when the owner's run left none: its first start is what
+ * sets the sandbox up, so a machine whose owner never ran fails as such, not as the standard user's.
+ */
+export async function ownerResult(evidence: string, machine: string, tag: string): Promise<MachineResult> {
+  const dir = path.join(evidence, Persona.Owner);
+  const file = path.join(dir, RESULT_FILE);
+  const written = await access(file).then(
+    () => true,
+    () => false,
+  );
+  if (written) return readResult(file);
+  const record = recorder(dir, { machine, kind: PackageKind.Exe, tag });
+  await record.add({
+    step: CanaryStep.Link,
+    outcome: StepOutcome.Fail,
+    persona: Persona.Owner,
+    detail: MESSAGE.ownerDidNotStart,
+  });
+  return record.result;
 }
 
 /** Whether every result.json the VM sent back passed (none at all is a failure). */
