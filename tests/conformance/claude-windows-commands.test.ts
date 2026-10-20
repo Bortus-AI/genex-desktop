@@ -229,6 +229,33 @@ describe("Claude Code on Windows runs its commands in Genex's sandbox", () => {
     assert.equal(sandboxes.disposed(), 1, "the session's sandbox goes when the session does");
   });
 
+  it("an unattended builder's box never writes the studio's secrets, either CLI's sign-in home or the borrowed login", async () => {
+    const f = await fixture();
+    const systemHome = path.join(f.root, "dot-claude");
+    await mkdir(systemHome, { recursive: true });
+    await writeFile(path.join(systemHome, ".credentials.json"), "{}");
+    const secrets = path.join(f.root, "secrets");
+    const sandboxes = fakeSandboxes();
+    const engine = new ClaudeCodeEngine({
+      resolveCli: fixtureCodingCli,
+      // No sign-in of the studio's own: the session borrows the person's (`systemHome`).
+      engineHome: path.join(f.root, "no-studio-login"),
+      systemHome,
+      queryFn: scriptedClaude([{ tool: "run_command", args: { command: "true" } }]).queryFn,
+      protectedPaths: [secrets],
+      platform: "win32",
+      scratchRoot: path.join(f.root, "scratch"),
+      commandSandbox: sandboxes.create,
+    });
+    await engine.delegate({ prompt: "build", cwd: f.copy } as never);
+    const [box] = sandboxes.made;
+    assert.ok(box, "the command ran in Genex's sandbox");
+    for (const dir of [secrets, path.join(os.homedir(), ".codex"), path.join(os.homedir(), ".claude"), systemHome]) {
+      assert.ok(box.denyWrite?.includes(dir), `never writes ${dir}`);
+      assert.ok(box.secretPaths.includes(dir) || dir === systemHome, `never reads ${dir}`);
+    }
+  });
+
   it("Bypass writes the home folder too, as Claude Code's Bypass box did", async () => {
     const f = await fixture();
     const { sandboxes } = await session(f, "win32", { worker: seat(f, PermissionMode.Bypass) }, [
