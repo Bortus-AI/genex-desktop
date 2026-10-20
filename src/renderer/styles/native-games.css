@@ -119,7 +119,7 @@
   font-weight: 500;
   line-height: 36px;
   letter-spacing: -0.02em;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .game-by {
   font-size: 14px;
@@ -293,7 +293,8 @@
   outline-offset: 2px;
 }
 
-/* The tiles: a mark and one line each, never a second. */
+/* The tiles: a mark and a line each; a long one ("Made with Unreal", "Mac · Apple silicon only")
+   takes a second line in the narrow column rather than being cut, and its row grows with it. */
 .game-tiles {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -322,11 +323,14 @@
   color: color-mix(in oklab, var(--people-tint-color) 55%, var(--ink));
 }
 .game-tile-text {
+  display: -webkit-box;
   min-width: 0;
   overflow: hidden;
   font-size: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 18px;
+  overflow-wrap: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 /* ── The viewer bar's native-app pill (canvas board "WebFirst"): an install's progress as a ring ── */
