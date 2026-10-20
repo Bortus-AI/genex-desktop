@@ -21,6 +21,7 @@ import {
   type SandboxSetupResult,
   StartStep,
 } from "../shared/boot.ts";
+import type { DataMoveProgress } from "../shared/data-folder.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 
@@ -54,6 +55,13 @@ export interface BootGate {
    * runs `attempt`, and a failure there shows its own words.
    */
   agentsFailed(error: string, attempt: () => Promise<void>): void;
+  /** Genex is moving its data before it starts again: the window shows how far. */
+  moving(progress: DataMoveProgress): void;
+  /**
+   * The folder Genex keeps its data in is not there: the window names it, with Try again (which
+   * runs `attempt`, throwing while it is still missing) and Quit.
+   */
+  dataMissing(dir: string, attempt: () => Promise<void>): void;
   /** A start still running at its limit shows as failed, as {@link fail}; nothing once the gate is past starting. */
   overdue(error: string, attempt: () => Promise<void>): boolean;
   /** Run the held attempt; the state after it. */
@@ -81,9 +89,9 @@ export function startStepAfter(mark: string): StartStep | null {
 /** What a Set up runs instead of the install once one has gone through this launch. */
 const ALREADY_INSTALLED = async (): Promise<SandboxInstall> => ({ cancelled: false });
 
-/** Showing a failure whose Try again shows the next one's words: the studio's, or its agents'. */
+/** Showing a failure whose Try again shows the next one's words: the studio's, its agents', or a missing data folder's. */
 function showsFailure(state: BootState): boolean {
-  return state.phase === BootPhase.Failed || state.failure !== undefined;
+  return state.phase === BootPhase.Failed || state.phase === BootPhase.DataMissing || state.failure !== undefined;
 }
 
 /** Held on the problem Set up fixes: a sandbox that has not been provisioned yet. */
@@ -170,6 +178,14 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
     agentsFailed(error, next) {
       holds++;
       state = { ...ready, failure: error };
+      attempt = next;
+    },
+    moving(progress) {
+      state = { platform, phase: BootPhase.Moving, sandbox: null, move: progress };
+    },
+    dataMissing(dir, next) {
+      holds++;
+      state = { platform, phase: BootPhase.DataMissing, sandbox: null, dataFolder: dir };
       attempt = next;
     },
     overdue(error, next) {

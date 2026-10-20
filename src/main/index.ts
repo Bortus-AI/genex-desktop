@@ -176,6 +176,12 @@ import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
 import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
+import { DATA_FOLDER_FILE, DataLaunchKind, defaultDataDir, thisDataLaunch } from "./data-folder.ts";
+import { createDataFolderChoices } from "./data-folder-choice.ts";
+import { registerDataFolderIpc } from "./ipc/data-folder.ts";
+import { freeBytes, measureData } from "../substrate/data-move.ts";
+import { lockDownFolder, windowsDriveFacts } from "../substrate/windows-drive.ts";
+import { removeLeftover, runDataMove } from "./data-move-launch.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
@@ -194,11 +200,18 @@ import { layoutFor } from "./core/layout.ts";
 import { appLookRun, macAppLook, stubAppLook, unsupportedAppLook } from "../substrate/app-look.ts";
 import { TerminalService, type TerminalHost } from "./terminal-service.ts";
 import { windowControlsPainter } from "./window-chrome.ts";
-import { appUserModelId, installedWorkingDir, runSquirrelStep, squirrelStartup } from "./windows-install.ts";
+import {
+  appUserModelId,
+  installedWorkingDir,
+  installRoot,
+  runSquirrelStep,
+  squirrelStartup,
+} from "./windows-install.ts";
+import { samePath } from "../substrate/paths.ts";
 import { BootPhase, type SandboxProblem, StartStep, StudioPlatform } from "../shared/boot.ts";
 import { SandboxUnavailableError } from "../substrate/sandbox-unavailable.ts";
 import { type Painter, paintWhileUsed } from "../substrate/paint-while-used.ts";
-import { longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
+import { ensureHostGit, longPath, takeBackSandboxEntries } from "../substrate/windows-sandbox.ts";
 import { installWindowsSandbox } from "../substrate/windows-sandbox-setup.ts";
 import { toolchain } from "../substrate/toolchain.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -209,6 +222,7 @@ import { TerminalKind } from "../shared/terminal.ts";
 import {
   flagValue,
   hasFlag,
+  isNormalLaunch,
   linuxSecretStorageSwitches,
   quitsWhenLastWindowCloses,
   StudioFlag,
@@ -281,6 +295,7 @@ const MESSAGE = {
   keepsCrashing: "The studio window keeps crashing",
   keepsCrashingDetail: "Work in progress continues in the background.",
   reload: "Reload",
+  dataFolderStillMissing: (dir: string) => `${dir} is still not there.`,
   startTookTooLong: (minutes: number) =>
     `The protected workspace was still starting after ${minutes} minutes. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.`,
 } as const;
@@ -336,6 +351,10 @@ if (developerBuildUnlaunched || developerLaunchUnbacked) {
 }
 /** The normal profile's data folder, read before a developer or test launch moves userData. */
 const normalProfileData = app.getPath("userData");
+/** Electron's own default data folder, which holds the record of where the person moved the data. */
+const defaultData = defaultDataDir(app.getPath("appData"), app.getName());
+/** What `boot.ts` decided about this launch's data: in place, moved, to move now, or missing. */
+const dataLaunch = thisDataLaunch(defaultData);
 const dev =
   devLaunchConfig !== undefined && __STUDIO_DEV_BUILD__
     ? (await import("./dev/launch-context.ts")).initializeLaunch(__STUDIO_DEV_BUILD__, devLaunchConfig)
@@ -1465,6 +1484,34 @@ function bootFeedbackSources(): FeedbackSources {
   };
 }
 
+/** Settings → Storage's data folder: the person's own launch on Windows may move it, with Genex restarting to do so. */
+function dataFolderChoices(studio: StudioCore) {
+  const windows = process.platform === StudioPlatform.Windows;
+  return createDataFolderChoices({
+    platform: process.platform,
+    normal: isNormalLaunch(process.argv),
+    defaultDir: defaultData,
+    dataDir: userDataRoot,
+    occupied: async () => [
+      studio.layout.gamesRoot,
+      ...(await studio.games.list()).map((game) => game.dir),
+      installRoot(process.execPath),
+    ],
+    busy: () => keepAwake.held || studio.budget.userInFlight > 0,
+    drive: windows ? windowsDriveFacts : async () => null,
+    lockDown: windows ? lockDownFolder : async () => {},
+    measure: () => measureData(userDataRoot, samePath(userDataRoot, defaultData) ? [DATA_FOLDER_FILE] : []),
+    free: freeBytes,
+    // After the answer reaches the window: quitting stops the core, the relaunch moves the files.
+    restart: () =>
+      setImmediate(() => {
+        app.relaunch();
+        app.quit();
+      }),
+    log: (line) => studioLog.write("main", line),
+  });
+}
+
 /** The coding-CLI installs Settings offers: busy while a sign-in, a run or a turn is under way. */
 function cliInstalls(studio: StudioCore) {
   return createCliInstalls({
@@ -1578,6 +1625,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   });
   registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel, web: playOrigin.web });
+  registerDataFolderIpc(handle, { choices: dataFolderChoices(studio), window: () => window });
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, {
     gallery: playCatalogFor(studio),
@@ -1624,6 +1672,7 @@ async function main(): Promise<void> {
     }),
   });
   addCheckForUpdatesMenuItem();
+  if (await settleDataFolder()) return;
   const started = await startStudio();
   if (isSmoke) {
     if (started) app.exit(await runSmokeLaunch(started));
@@ -1632,6 +1681,62 @@ async function main(): Promise<void> {
   // The setup screen checks too: a release that fixes the sandbox problem can arrive through it.
   checkForUpdates();
   if (!dev) app.on("activate", reopenWindow);
+}
+
+/**
+ * A launch that moves Genex's data, or cannot find it, does only that: the start window shows the
+ * move, then Genex starts again; or it names the missing folder, with Try again and Quit. True
+ * when this launch was one of those.
+ */
+async function settleDataFolder(): Promise<boolean> {
+  if (dataLaunch.kind === DataLaunchKind.Move) {
+    await moveDataAndRestart(dataLaunch.from, dataLaunch.to);
+    return true;
+  }
+  if (dataLaunch.kind === DataLaunchKind.Missing) {
+    await waitForDataFolder(dataLaunch.dir);
+    return true;
+  }
+  if (dataLaunch.kind === DataLaunchKind.Moved)
+    void removeLeftover(defaultData, dataLaunch.dir, (line) => studioLog.write("main", line));
+  return false;
+}
+
+/** Move the data with the start window showing how far, then start Genex again; quitting waits for it. */
+async function moveDataAndRestart(from: string, to: string): Promise<void> {
+  bootGate.moving({ to, done: 0, total: 0 });
+  const win = await createSetupWindow();
+  // Closing the window must not stop a copy half-way; the window goes when Genex starts again.
+  win.on("close", (event) => event.preventDefault());
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    studioLog.write("main", line);
+  };
+  const outcome = await runDataMove({
+    from,
+    to,
+    defaultDir: defaultData,
+    progress: (progress) => bootGate.moving(progress),
+    log,
+    ...(process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {}),
+  });
+  // The lines go in the log of the folder Genex now starts from, where a report reads them.
+  const kept = openStudioLog(path.join(outcome.moved ? to : from, "logs"), { home: app.getPath("home") });
+  for (const line of lines) kept.write("main", line);
+  app.relaunch();
+  app.exit(0);
+}
+
+/** Name the missing data folder with Try again (Genex starts again once it is there) and Quit. */
+async function waitForDataFolder(dir: string): Promise<void> {
+  studioLog.write("main", `data folder: ${dir} is not there`);
+  bootGate.dataMissing(dir, async () => {
+    if (!existsSync(dir)) throw new Error(MESSAGE.dataFolderStillMissing(dir));
+    app.relaunch();
+    app.exit(0);
+  });
+  window = await createSetupWindow();
 }
 
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */

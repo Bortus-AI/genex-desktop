@@ -5,11 +5,13 @@
  * where the missing piece is a one-time install, the window runs it by itself instead: "Setting up
  * Genex" over the installer's animation while Windows asks for approval, then the studio.
  * The same card says which step a Windows start is on ("Starting Genex"), and that the studio
- * would not start ("Genex couldn't start") with Try again, a report and Quit.
+ * would not start ("Genex couldn't start") with Try again, a report and Quit. It also shows Genex
+ * moving its files to the folder chosen in Settings → Storage, and a data folder that is not there.
  * `BootRoot` chooses between these, the studio itself, and nothing while main has not answered yet.
  */
 import { type JSX, type ReactNode, useState } from "react";
 import { type InstallCommand, type SandboxProblem, StartStep, toolPackage, WindowsSetupNeed } from "../shared/boot.ts";
+import type { DataMoveProgress } from "../shared/data-folder.ts";
 import { App } from "./App.tsx";
 import { useAppLoaderDismissal } from "./app-loader.ts";
 import { type Boot, BootView, bootView, canSetUp, SetupReport } from "./state/boot.ts";
@@ -27,12 +29,26 @@ export function BootRoot({ boot }: { boot: Boot }): JSX.Element | null {
   const settingUp = useBoot(boot.store, (s) => s.settingUp);
   const report = useBoot(boot.store, (s) => s.report);
   const step = useBoot(boot.store, (s) => s.step);
+  const move = useBoot(boot.store, (s) => s.move);
+  const dataFolder = useBoot(boot.store, (s) => s.dataFolder);
   // The studio dismisses the startup loader once its own first screen is drawn; the others are drawn now.
   useAppLoaderDismissal(view !== BootView.Studio && view !== BootView.Loading);
   if (view === BootView.Studio) return <App />;
   // Try again starts the studio again: the card says so until it opens, or fails again.
   if (view === BootView.Starting || (view === BootView.Failed && retrying))
     return <StartingCard step={step ?? StartStep.Studio} />;
+  if (view === BootView.Moving && move) return <MovingCard move={move} />;
+  if (view === BootView.DataMissing && dataFolder !== null) {
+    return (
+      <DataMissingCard
+        dir={dataFolder}
+        error={error}
+        retrying={retrying}
+        onRetry={() => void boot.retry()}
+        onQuit={() => void boot.quit()}
+      />
+    );
+  }
   if (view === BootView.Failed) {
     return (
       <StartFailed
@@ -131,6 +147,48 @@ export function StartingCard({ step }: { step: StartStep }): JSX.Element {
     <AnimationCard selector={{ "data-boot-starting": step }} titleId="boot-starting-title" title={WORDS.starting.title}>
       <p className="text-ink-2">{WORDS.starting.line}</p>
       <WorkingLine text={WORDS.starting.step[step]} />
+    </AnimationCard>
+  );
+}
+
+/** Genex moving its files before it starts again: where to, and how far. */
+export function MovingCard({ move }: { move: DataMoveProgress }): JSX.Element {
+  const words = WORDS.moving;
+  return (
+    <AnimationCard selector={{ "data-boot-moving": "" }} titleId="boot-moving-title" title={words.title}>
+      <p className="text-ink-2">{words.line(move.to)}</p>
+      <WorkingLine text={move.total > 0 ? words.progress(move.done, move.total) : words.counting} />
+    </AnimationCard>
+  );
+}
+
+/** The folder Genex keeps its files in is not there: which one, Try again and Quit. */
+export function DataMissingCard({
+  dir,
+  error,
+  retrying,
+  onRetry,
+  onQuit,
+}: {
+  dir: string;
+  error: string | null;
+  retrying: boolean;
+  onRetry: () => void;
+  onQuit: () => void;
+}): JSX.Element {
+  const words = WORDS.dataMissing;
+  return (
+    <AnimationCard selector={{ "data-boot-data-missing": "" }} titleId="boot-data-missing-title" title={words.title}>
+      <p className="text-ink-2">{words.line(dir)}</p>
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <Button variant="default" data-boot-try-again disabled={retrying} onClick={onRetry}>
+          {retrying ? words.checking : words.tryAgain}
+        </Button>
+        <Button variant="ghost" data-boot-quit onClick={onQuit}>
+          {words.quit}
+        </Button>
+      </div>
+      {error !== null && <p className="text-sm text-orange">{error}</p>}
     </AnimationCard>
   );
 }

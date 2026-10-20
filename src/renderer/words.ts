@@ -27,6 +27,7 @@ import { ChatFileOpen } from "../shared/chat-files.ts";
 import { sizeWords } from "../shared/byte-size.ts";
 import { homePath, pathLeaf } from "../shared/path-label.ts";
 import { freeableBytes, StorageKind, type StorageFreed, type StorageSpace } from "../shared/storage-space.ts";
+import { DataFolderProblem } from "../shared/data-folder.ts";
 import { SkippedBy, type SkippedFile } from "../shared/chat-rewind.ts";
 import { LiveBehindReason } from "../shared/live-behind.ts";
 import { PlayCardAction, PlayCoverRefusal, PlayMobileSupport } from "../shared/play-manage.ts";
@@ -3046,6 +3047,36 @@ export const STORAGE_WORDS = {
   freedNothing: "There was nothing to free.",
 } as const;
 
+/** Settings → Storage's data folder (Windows): where Genex keeps its files, and moving them. */
+export const DATA_FOLDER_WORDS = {
+  title: "Where Genex keeps its files",
+  hint: "Build copies, pictures, chats and sign-ins. Genex restarts to move them; your games stay where they are.",
+  change: "Change…",
+  checking: "Checking…",
+  keep: "Keep here",
+  move: "Move and restart",
+  moveTitle: (bytes: number, to: string) => `Move ${unbrokenSize(bytes)} to ${to}?`,
+  moveBody: "Genex closes, moves its files and opens again. On another drive this can take a few minutes.",
+  failed: (to: string, problem: DataFolderProblem) => `Couldn’t move to ${to}. ${DATA_FOLDER_PROBLEM_WORDS[problem]}`,
+} as const;
+
+/** Why a picked folder can't hold Genex's files, or why a move didn't happen, by `DataFolderProblem`. */
+export const DATA_FOLDER_PROBLEM_WORDS = {
+  [DataFolderProblem.Unsupported]: "Moving Genex’s files isn’t available here.",
+  [DataFolderProblem.Busy]: "Stop your builds and replies first, then move.",
+  [DataFolderProblem.Same]: "Genex already keeps its files there.",
+  [DataFolderProblem.Overlaps]: "Pick a folder outside Genex’s files, your games and Genex’s install.",
+  [DataFolderProblem.Network]: "Pick a folder on this computer, not on a network drive.",
+  [DataFolderProblem.Removable]: "Pick a drive inside this computer, not a USB stick.",
+  [DataFolderProblem.FileSystem]: "That drive can’t keep files private to you (FAT32 or exFAT). Pick an NTFS drive.",
+  [DataFolderProblem.NotEmpty]: "That folder already has files. Pick an empty one.",
+  [DataFolderProblem.NoSpace]: "There isn’t enough free space there.",
+  [DataFolderProblem.Unwritable]: "Genex couldn’t make that folder private to you.",
+  [DataFolderProblem.InUse]: "A file was in use. Close other programs and try again.",
+  [DataFolderProblem.Missing]: "That folder was gone when Genex restarted.",
+  [DataFolderProblem.Failed]: "Something went wrong. Try again.",
+} as const satisfies Record<DataFolderProblem, string>;
+
 /** Each kind of space freeing deletes: its name and what it is. */
 export const STORAGE_KIND_WORDS = {
   [StorageKind.Copies]: { label: "Build copies", about: "Folders Genex made to run and show builds." },
@@ -3434,6 +3465,21 @@ export const SANDBOX_SETUP_WORDS = {
       workspace: "Starting the protected workspace",
       studio: "Opening the studio",
     } satisfies Record<StartStep, string>,
+  },
+  /** Genex moving its files to the folder chosen in Settings → Storage, then starting again. */
+  moving: {
+    title: "Moving your Genex files",
+    line: (to: string) => `To ${to}. Genex opens again when it’s done.`,
+    counting: "Counting files",
+    progress: (done: number, total: number) => `${sizeWords(done)} of ${sizeWords(total)}`,
+  },
+  /** The folder Genex keeps its files in is not there (its drive is unplugged). */
+  dataMissing: {
+    title: "Genex can’t find its files",
+    line: (dir: string) => `They’re in ${dir}. Connect that drive, then try again.`,
+    tryAgain: "Try again",
+    checking: "Checking…",
+    quit: "Quit",
   },
   /** The studio's harness would not start: its error, Try again, a report and Quit. */
   startFailed: {

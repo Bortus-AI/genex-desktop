@@ -61,6 +61,10 @@ const NATIVE_CHANNELS = [
   "studio:game.location.pick",
   // Settings → Games opens the native folder picker.
   "studio:games-root.choose",
+  // Settings → Storage's data folder: the native folder picker, then moving the normal profile's
+  // files and restarting Genex.
+  "studio:data-folder.choose",
+  "studio:data-folder.move",
   "studio:pull-model",
   "studio:models.lookup",
   // Delete removes model files from this Mac, or asks the person's own Ollama to delete one.
@@ -181,6 +185,9 @@ const FIXTURE_SAFE = [
   // What freeing space deletes, and deleting it: git in the games' folders, Genex's own copies.
   "studio:storage",
   "studio:storage.free",
+  // Where Genex keeps its files: a developer or test launch answers with its own folder and reads
+  // nothing of the normal profile's.
+  "studio:data-folder",
   "studio:game.engine.undo",
   // Stops a process this profile's own agent started; nothing outside the profile changes.
   "studio:jobs.stop",
