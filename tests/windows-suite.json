@@ -54,6 +54,7 @@
   "tests/conformance/contractor-containment.test.ts",
   "tests/conformance/conversation-presentation.test.ts",
   "tests/conformance/core-capture.test.ts",
+  "tests/conformance/core-sandbox-start.test.ts",
   "tests/conformance/core-serial.test.ts",
   "tests/conformance/core-surface.test.ts",
   "tests/conformance/cua-embedded.test.ts",
