@@ -88,9 +88,10 @@ describe("the scripted Anthropic stand-in", () => {
           "message_stop",
         ],
       );
-      const delta = stream[2]?.data.delta as { partial_json: string };
-      assert.deepEqual(JSON.parse(delta.partial_json), { command: COMMAND });
-      assert.equal((stream[4]?.data.delta as { stop_reason: string }).stop_reason, "tool_use");
+      const [, , input, , end] = stream;
+      assert.ok(input && end, "every event arrived");
+      assert.deepEqual(JSON.parse((input.data.delta as { partial_json: string }).partial_json), { command: COMMAND });
+      assert.equal((end.data.delta as { stop_reason: string }).stop_reason, "tool_use");
     } finally {
       await fake.close();
     }

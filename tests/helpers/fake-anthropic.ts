@@ -73,20 +73,24 @@ export async function startFakeAnthropic(options: FakeAnthropicOptions): Promise
     };
   };
 
+  /** The answer to one request: a token count, a scripted reply, or an empty answer to anything else. */
+  const answer = (request: FakeAnthropicRequest): { json: unknown } | { stream: ReturnType<typeof reply> } => {
+    const post = request.method === "POST";
+    if (post && request.path.endsWith("/v1/messages/count_tokens")) return { json: { input_tokens: 10 } };
+    // Anything else the CLI asks on the way (a profile, settings, a model list): an empty answer.
+    if (!post || !request.path.endsWith("/v1/messages")) return { json: {} };
+    const messages = (request.body ?? {}) as MessagesBody;
+    const scripted = reply(messages);
+    return messages.stream ? { stream: scripted } : { json: message(scripted.blocks, scripted.stop) };
+  };
+
   const server = createServer((req, res) => {
     void readBody(req).then((raw) => {
-      const path = (req.url ?? "/").split("?")[0] ?? "/";
-      const body = parse(raw);
-      requests.push({ method: req.method ?? "GET", path, body });
-      if (req.method === "POST" && path.endsWith("/v1/messages/count_tokens")) return json(res, { input_tokens: 10 });
-      if (req.method === "POST" && path.endsWith("/v1/messages")) {
-        const messages = (body ?? {}) as MessagesBody;
-        const { blocks, stop } = reply(messages);
-        if (messages.stream) return stream(res, blocks, stop);
-        return json(res, message(blocks, stop));
-      }
-      // Anything else the CLI asks on the way (a profile, settings, a model list): an empty answer.
-      return json(res, {});
+      const request = { method: req.method ?? "GET", path: (req.url ?? "/").split("?")[0] ?? "/", body: parse(raw) };
+      requests.push(request);
+      const answered = answer(request);
+      if ("stream" in answered) stream(res, answered.stream.blocks, answered.stream.stop);
+      else json(res, answered.json);
     });
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -104,34 +108,32 @@ export async function startFakeAnthropic(options: FakeAnthropicOptions): Promise
   };
 }
 
+/** A tool result block, as the CLI sends one back. */
+type ResultBlock = { type?: string; tool_use_id?: string; content?: unknown };
+
+/** The scripted call's result block in a conversation, or null when it has none yet. */
+function scriptedResult(body: MessagesBody): ResultBlock | null {
+  const blocks = (body.messages ?? []).flatMap((message) =>
+    Array.isArray(message.content) ? (message.content as ResultBlock[]) : [],
+  );
+  return blocks.find((block) => block.type === "tool_result" && block.tool_use_id === SCRIPTED_CALL_ID) ?? null;
+}
+
 /** The scripted call's result as the CLI last sent it, its text blocks joined. */
 function resultText(requests: readonly FakeAnthropicRequest[]): string | null {
   for (const request of [...requests].reverse()) {
-    const messages = ((request.body ?? {}) as MessagesBody).messages ?? [];
-    for (const message of messages) {
-      if (!Array.isArray(message.content)) continue;
-      for (const block of message.content as Array<{ type?: string; tool_use_id?: string; content?: unknown }>) {
-        if (block.type !== "tool_result" || block.tool_use_id !== SCRIPTED_CALL_ID) continue;
-        if (typeof block.content === "string") return block.content;
-        if (Array.isArray(block.content))
-          return block.content.map((part: { text?: unknown }) => String(part.text ?? "")).join("\n");
-      }
-    }
+    const block = scriptedResult((request.body ?? {}) as MessagesBody);
+    if (!block) continue;
+    if (typeof block.content === "string") return block.content;
+    const parts = Array.isArray(block.content) ? (block.content as Array<{ text?: unknown }>) : [];
+    return parts.map((part) => String(part.text ?? "")).join("\n");
   }
   return null;
 }
 
 /** Whether the conversation already holds the scripted call's result. */
 function sawResult(body: MessagesBody): boolean {
-  return (body.messages ?? []).some(
-    (message) =>
-      Array.isArray(message.content) &&
-      message.content.some(
-        (block) =>
-          (block as { type?: string; tool_use_id?: string }).type === "tool_result" &&
-          (block as { tool_use_id?: string }).tool_use_id === SCRIPTED_CALL_ID,
-      ),
-  );
+  return scriptedResult(body) !== null;
 }
 
 function message(blocks: ReplyBlock[], stop: string) {
