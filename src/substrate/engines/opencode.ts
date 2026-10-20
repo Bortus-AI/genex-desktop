@@ -995,26 +995,39 @@ async function* runOpenCode(invocation: OpenCodeInvocation): AsyncGenerator<Reco
   if (!binary) throw new EngineError(EngineFailureKind.Unavailable, EngineId.OpenCode, MESSAGE.NotInstalled);
   const sandbox = await ProcessSandbox.create(invocation.sandbox);
   try {
-    const command = [binary, ...invocation.argv].map(shellQuote).join(" ");
-    const { child } = await sandbox.spawnLongLived({
-      command,
-      cwd: invocation.cwd,
-      env: invocation.env,
-      label: `opencode:${path.basename(invocation.cwd)}`,
-      policy: { allowedDomains: invocation.domains },
-    });
-    yield* childEvents(child, invocation);
+    yield* openCodeEvents(sandbox, binary, invocation);
   } finally {
     await sandbox.dispose().catch(() => {});
   }
 }
 
+/**
+ * Start `binary` with the invocation's argv in `sandbox` and yield its events. The prompt is the
+ * sandbox's to deliver: on Windows srt-win does not pass stdin on, so a prompt written to the
+ * child never reached the CLI ("You must provide a message").
+ */
+export async function* openCodeEvents(
+  sandbox: Pick<ProcessSandbox, "spawnLongLived">,
+  binary: string,
+  invocation: Omit<OpenCodeInvocation, "sandbox">,
+): AsyncGenerator<Record<string, unknown>> {
+  const command = [binary, ...invocation.argv].map(shellQuote).join(" ");
+  const { child } = await sandbox.spawnLongLived({
+    command,
+    cwd: invocation.cwd,
+    env: invocation.env,
+    label: `opencode:${path.basename(invocation.cwd)}`,
+    policy: { allowedDomains: invocation.domains },
+    stdin: invocation.prompt,
+  });
+  yield* childEvents(child, invocation);
+}
+
 /** The child's stdout as events, stopping it on abort; a silent non-zero exit throws stderr's words. */
 async function* childEvents(
   child: ChildProcess,
-  invocation: OpenCodeInvocation,
+  invocation: Pick<OpenCodeInvocation, "signal">,
 ): AsyncGenerator<Record<string, unknown>> {
-  child.stdin?.end(invocation.prompt);
   let stderr = "";
   child.stderr?.setEncoding("utf8");
   child.stderr?.on("data", (chunk: string) => {
