@@ -31,6 +31,7 @@
   "tests/conformance/chat-checkpoints.test.ts",
   "tests/conformance/chat-deltas.test.ts",
   "tests/conformance/chat-feedback.test.ts",
+  "tests/conformance/chat-files.test.ts",
   "tests/conformance/chat-history.test.ts",
   "tests/conformance/chat-labels.test.ts",
   "tests/conformance/chat-panel-state.test.ts",

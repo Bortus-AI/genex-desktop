@@ -285,7 +285,7 @@ test("a name is read the way the chat wrote it, and clipped names are not files"
 });
 
 function fixture() {
-  const root = realpathSync(mkdtempSync(path.join(tmpdir(), "chat-files-")));
+  const root = realpathSync.native(mkdtempSync(path.join(tmpdir(), "chat-files-")));
   const home = path.join(root, "home");
   const game = path.join(home, "AI Games", "rift");
   const env = {
