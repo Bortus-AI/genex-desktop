@@ -16,6 +16,7 @@ import {
   gitHubSignIn,
   gitHubToken,
   ownerResult,
+  signInCommands,
   signInDue,
   sizesWithRoom,
   triesElsewhere,
@@ -411,6 +412,19 @@ describe("release canary Azure sign-in", () => {
     assert.equal(signInDue(null, 0), true);
     assert.equal(signInDue(0, 4 * MINUTE_MS), false);
     assert.equal(signInDue(0, 5 * MINUTE_MS), true);
+  });
+
+  test("a new sign-in drops the cached Azure token first, so az never renews it with a stale OIDC token", () => {
+    // Run 39448423868: a run-command call 55 minutes into the job failed AADSTS700024. az had kept
+    // azure/login's first Azure token and, renewing it near its expiry, used the latest OIDC token,
+    // which had expired 12 minutes earlier.
+    const signIn = { requestUrl: "u", requestToken: "r", clientId: "c", tenantId: "t", subscriptionId: "s" };
+    const commands = signInCommands(signIn, "oidc");
+    assert.deepEqual(commands[0], ["account", "clear"]);
+    const login = commands.findIndex((args) => args[0] === "login");
+    assert.ok(login > 0, "the sign-in comes after the cache is cleared");
+    assert.ok(commands[login]?.includes("oidc"));
+    assert.deepEqual(commands.at(-1), ["account", "set", "-s", "s"]);
   });
 });
 
