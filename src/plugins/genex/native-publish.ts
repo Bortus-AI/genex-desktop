@@ -8,7 +8,12 @@
 import { lstat, realpath } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import type { GenexNativeFailure, GenexNativeSent } from "../../shared/genex.ts";
+import {
+  type GenexNativeFailure,
+  type GenexNativeListing,
+  type GenexNativeSent,
+  GenexListingState,
+} from "../../shared/genex.ts";
 
 const require = createRequire(import.meta.url);
 
@@ -21,15 +26,19 @@ const FAILURE_CHARS = 400;
 
 const MESSAGE = { NotABuild: "Genex answered without the build it published" } as const;
 
-/** Whether CLI `version` has `genex native`: a prerelease of the first such version counts as it. */
+/**
+ * Whether CLI `version` has `genex native`. A prerelease comes before its release (`1.36.10-dev.4`
+ * may predate the command), so only a later release's prerelease counts.
+ */
 export function hasNativeCommand(version: string): boolean {
-  const parts = /^(\d+)\.(\d+)\.(\d+)/.exec(version)?.slice(1).map(Number);
-  if (!parts) return false;
+  const match = /^(\d+)\.(\d+)\.(\d+)(-.+)?$/.exec(version);
+  if (!match) return false;
+  const parts = match.slice(1, 4).map(Number);
   for (const [at, wanted] of NATIVE_CLI.entries()) {
     const part = parts[at] ?? 0;
     if (part !== wanted) return part > wanted;
   }
-  return true;
+  return match[4] === undefined;
 }
 
 /** Whether the CLI Studio ships can send apps; none found (a plugin package without it) sends none. */
@@ -112,8 +121,22 @@ function failureWords(error: unknown): string {
   return (marked ?? lines.at(-1) ?? "").replace(/^✗\s*/, "").slice(0, FAILURE_CHARS);
 }
 
-/** What became of one app. */
-export type NativeOutcome = { sent: GenexNativeSent } | { failed: GenexNativeFailure };
+const LISTING_STATES: ReadonlySet<unknown> = new Set(Object.values(GenexListingState));
+/** The most of Genex's words on a held or refused listing kept. */
+const LISTING_DETAIL_CHARS = 400;
+
+/** Genex's answer to the listing a `--gallery` publish asked for, or undefined when it gave none. */
+export function listingOf(answer: unknown): GenexNativeListing | undefined {
+  const listing = isRecord(answer) ? answer.listing : undefined;
+  if (!isRecord(listing) || !LISTING_STATES.has(listing.state)) return undefined;
+  const detail = typeof listing.detail === "string" ? listing.detail.slice(0, LISTING_DETAIL_CHARS) : null;
+  return { state: listing.state as GenexNativeListing["state"], detail };
+}
+
+/** What became of one app, and of the listing it carried. */
+export type NativeOutcome = ({ sent: GenexNativeSent } | { failed: GenexNativeFailure }) & {
+  listing?: GenexNativeListing;
+};
 
 /** Send one app with `send` (the CLI run), as an outcome: a failure is kept, never thrown. */
 export async function sendNativeBuild(
@@ -121,9 +144,12 @@ export async function sendNativeBuild(
   send: (target: string) => Promise<unknown>,
 ): Promise<NativeOutcome> {
   try {
-    const sent = sentBuild(await send(upload.target));
-    if (sent) return { sent };
-    return { failed: { platform: upload.platform, arch: "", error: MESSAGE.NotABuild } };
+    const answer = await send(upload.target);
+    const sent = sentBuild(answer);
+    const listing = listingOf(answer);
+    const listed = listing ? { listing } : {};
+    if (sent) return { sent, ...listed };
+    return { failed: { platform: upload.platform, arch: "", error: MESSAGE.NotABuild }, ...listed };
   } catch (error) {
     return { failed: { platform: upload.platform, arch: "", error: failureWords(error) } };
   }

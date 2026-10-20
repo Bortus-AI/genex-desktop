@@ -20,6 +20,7 @@ const NATIVE_CHANNELS = [
   "studio:plugins.choose-file",
   // Publish from Studio's dialog uploads the game to Genex with the user's real account.
   "studio:plugins.genex-publish",
+  "studio:plugins.genex-publish-apps",
   "studio:subscription.signin",
   "studio:subscription.forget-studio-login",
   // A subscription's accounts: listing asks each account's CLI for its email; choosing one changes

@@ -189,7 +189,8 @@ profile; the clip is uploaded to Genex only with a publish.
 
 When Publish lists a game's Mac or Windows app as ready, the same press also uploads that app (the
 build in the game folder, zipped) to genex.games once the web version is live, where people
-playing in the Genex desktop app can install it.
+playing in the Genex desktop app can install it. A game with no web version is published as its
+apps alone, and listed in the gallery under the name shown in Publish.
 
 A plugin's staged upload requires a second review showing every included and excluded file.
 Approve only after checking that list and the contents. An unlisted draft is still uploaded to

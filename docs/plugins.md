@@ -3031,8 +3031,15 @@ Genex:
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.10), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
-  Publish itself stays with games served as web games. A web game with no app shows no rows. L4:
-  `npm run test:ui -- publish-platforms-ui`.
+  A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
+  on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish
+  Mac app" and runs `studio:plugins.genex-publish-apps` (`publishAppsFromDialog`, no web copy, no
+  `assertPublishable`) → the plugin's `publish-apps` (`publishAppsOnly`): the hosted project is made
+  the first time, each app goes with `genex native publish`, the first that goes carrying
+  `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
+  Listed, the record turns public with the game's genex.games page as its link; held for review or
+  not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
+  stays off for it. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose

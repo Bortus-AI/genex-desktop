@@ -3075,6 +3075,13 @@ export const PUBLISH_PLATFORM_WORDS = {
   sentLabel: (name: string) => `${name}: on Genex for desktop players`,
   failed: "Not sent",
   failedLine: (name: string, error: string) => `Couldn’t send the ${name}: ${error}`,
+  /** A game with only apps: its main press, who can play it, and how its listing went. */
+  publishApps: (apps: string) => `Publish ${apps}`,
+  onlyPlayers: (players: string) => `Only ${players} players can play it.`,
+  held: "Genex is reviewing the game before it shows in the gallery.",
+  /** The quiet line under the press of a game with only apps. */
+  appsHint: "People playing in the Genex app can install it.",
+  notListed: "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.",
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */

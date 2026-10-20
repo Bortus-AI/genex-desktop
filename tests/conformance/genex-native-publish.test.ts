@@ -9,15 +9,17 @@ import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { realpath } from "node:fs/promises";
+import { after } from "node:test";
 import { GenexTools } from "../../src/plugins/genex/adapter.ts";
+import { type GenexFixtureApi, startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
 import { hasNativeCommand, nativeUploads, sendNativeBuild, sentBuild } from "../../src/plugins/genex/native-publish.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 describe("which CLI sends apps", () => {
-  it("is 1.36.10 or newer, a prerelease of it included", () => {
-    for (const version of ["1.36.10", "1.36.10-dev.4", "1.36.11", "1.37.0", "2.0.0"])
+  it("is release 1.36.10 or newer: a dev build of 1.36.10 may predate the command", () => {
+    for (const version of ["1.36.10", "1.36.11", "1.36.11-dev.2", "1.37.0", "2.0.0"])
       assert.equal(hasNativeCommand(version), true, version);
-    for (const version of ["1.36.9", "1.36.9-dev.949", "1.35.40", "0.99.99", "", "latest"])
+    for (const version of ["1.36.10-dev.4", "1.36.9", "1.36.9-dev.949", "1.35.40", "0.99.99", "", "latest", "1.36.10x"])
       assert.equal(hasNativeCommand(version), false, version);
   });
 });
@@ -126,11 +128,12 @@ describe("one app sent", () => {
 });
 
 /**
- * Genex's tools with a stand-in for the CLI: a preload that answers `genex native publish` itself,
- * as the real command does under `--json`, and logs each run's arguments. An app whose path names
- * "Broken" fails the way the CLI does, on stderr with a non-zero exit.
+ * Genex's tools with a stand-in for the CLI: a preload that answers `genex init` and `genex native
+ * publish` itself, as the real commands do (`--json`: one object, exit 1 for a refused listing), and
+ * logs each run's arguments. An app whose path names "Broken" fails on stderr with a non-zero exit;
+ * one naming "Held" or "Refused" gets that answer to its `--gallery` listing.
  */
-async function toolsWithStandIn(sendsApps = true) {
+async function toolsWithStandIn(sendsApps = true, api = "http://127.0.0.1:9") {
   const root = await realpath(await tmpDir("genex-native-tools-"));
   const log = path.join(root, "runs.jsonl");
   const standIn = path.join(root, "native-cli.mjs");
@@ -143,20 +146,33 @@ async function toolsWithStandIn(sendsApps = true) {
   };
   await writeFile(
     standIn,
-    `import { appendFileSync } from "node:fs";
+    `import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 appendFileSync(${JSON.stringify(log)}, JSON.stringify({ args, cwd: process.cwd(), home: process.env.HOME }) + "\\n");
+if (args[0] === "init") {
+  mkdirSync(".genex", { recursive: true });
+  writeFileSync(".genex/project.json", JSON.stringify({ slug: "dust-runners", id: "p1", status: "draft" }));
+  process.exit(0);
+}
 const target = args[args.indexOf("publish") + 1] ?? "";
 if (target.includes("Broken")) {
   process.stderr.write("› Zipping…\\n✗ Couldn't get an upload token (HTTP 413).\\n");
   process.exit(1);
 }
 const windows = !target.endsWith(".app");
-process.stdout.write(JSON.stringify({ build: { ...${JSON.stringify(answer)}, ...(windows ? { platform: "windows", arch: "x64" } : {}) }, engine: "unity" }));
-process.exit(0);
+const listing = !args.includes("--gallery")
+  ? undefined
+  : target.includes("Refused")
+    ? { state: "refused", category: "spam", detail: "The title reads as an ad." }
+    : target.includes("Held")
+      ? { state: "held", category: null, detail: null }
+      : { state: "published", slug: "dust-runners" };
+const build = { ...${JSON.stringify(answer)}, ...(windows ? { platform: "windows", arch: "x64" } : {}) };
+process.stdout.write(JSON.stringify({ build, engine: "unity", ...(listing ? { listing } : {}) }));
+process.exit(listing?.state === "refused" ? 1 : 0);
 `,
   );
-  const genex = new GenexTools(path.join(root, "host"), "http://127.0.0.1:9", {
+  const genex = new GenexTools(path.join(root, "host"), api, {
     credentials: { get: async () => "fixture-token", set: async () => {}, clear: async () => {} },
     preload: standIn,
     sendsApps,
@@ -206,5 +222,82 @@ describe("a publish's apps sent through the CLI", () => {
     assert.deepEqual(await runs(), []);
     const { native } = await genex.publishView("dust");
     assert.deepEqual(native, { supported: false, sending: false, sent: [], failed: [] });
+  });
+});
+
+const servers: GenexFixtureApi[] = [];
+after(async () => {
+  await Promise.all(servers.map((server) => server.close()));
+});
+
+/** A fixture Genex API: the signed-in session and accepted terms, nothing else. */
+async function fixtureApi(): Promise<string> {
+  const server = await startGenexFixtureApi(() => undefined);
+  servers.push(server);
+  return server.url;
+}
+
+describe("a game with only apps, published", () => {
+  const app = (name: string) => ({ target: `/game/Builds/Mac/${name}.app`, platform: "mac" as const });
+  const WINDOWS = { target: "/game/Builds/Windows", platform: "windows" as const };
+
+  it("gets its hosted project, goes up app by app, and is listed with the first", async () => {
+    const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
+    const started = await genex.publishAppsOnly("dust", [app("Dust Runners"), WINDOWS], "Dust Runners");
+    assert.equal(started.job?.state, "running");
+    const state = await genex.publishWait("dust");
+    const calls = (await runs()).map((call) =>
+      call.args.filter((arg) => !arg.startsWith("--env") && arg !== "--api-url"),
+    );
+    assert.equal(calls[0]?.[0], "init", "the hosted project is made first");
+    assert.deepEqual(calls[1]?.slice(0, 6), [
+      "native",
+      "publish",
+      app("Dust Runners").target,
+      "--gallery",
+      "--title",
+      "Dust Runners",
+    ]);
+    assert.equal(calls[2]?.includes("--gallery"), false, "listed once");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.equal(state.status, "published");
+    assert.equal(state.galleryUrl, "https://genex.games/dust-runners");
+    assert.equal(state.title, "Dust Runners");
+    assert.deepEqual(state.native?.listing, { state: "published", detail: null });
+    assert.deepEqual(
+      state.native?.sent.map((sent) => sent.platform),
+      ["mac", "windows"],
+    );
+  });
+
+  it("keeps the apps live but fails the publish when Genex refuses the listing, in its words", async () => {
+    const { genex } = await toolsWithStandIn(true, await fixtureApi());
+    await genex.publishAppsOnly("dust", [app("Refused")], "Dust Runners");
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "failed");
+    assert.equal(state.job?.error, "The title reads as an ad.");
+    assert.equal(state.native?.sent.length, 1, "the build itself is live");
+    assert.equal(state.status, "draft");
+  });
+
+  it("says a held listing, and fails when no app went", async () => {
+    const held = await toolsWithStandIn(true, await fixtureApi());
+    await held.genex.publishAppsOnly("dust", [app("Held")], "Dust Runners");
+    const waiting = await held.genex.publishWait("dust");
+    assert.equal(waiting.job?.state, "done");
+    assert.deepEqual(waiting.native?.listing, { state: "held", detail: null });
+    assert.notEqual(waiting.status, "published");
+    const broken = await toolsWithStandIn(true, await fixtureApi());
+    await broken.genex.publishAppsOnly("dust", [{ target: "/game/Builds/Windows Broken", platform: "windows" }]);
+    const failed = await broken.genex.publishWait("dust");
+    assert.equal(failed.job?.state, "failed");
+    assert.equal(failed.job?.error, "Couldn't get an upload token (HTTP 413).");
+  });
+
+  it("refuses a publish with no app, or with a CLI that cannot send apps", async () => {
+    const { genex } = await toolsWithStandIn(true, await fixtureApi());
+    await assert.rejects(genex.publishAppsOnly("dust", []), /no Mac or Windows app/);
+    const older = await toolsWithStandIn(false, await fixtureApi());
+    await assert.rejects(older.genex.publishAppsOnly("dust", [app("Dust Runners")]), /no Mac or Windows app/);
   });
 });

@@ -95,6 +95,9 @@ export function usePublishRecord(plugin: PluginInfo, project: string | null) {
     /** Publish under `title`: the press is the consent to exactly the listed files. */
     publish: (title: string): Promise<void> =>
       run(Pressing.Publish, async () => window.studio.genexPublish(game, await currentFiles(), title)),
+    /** Publish a game that has only apps under `title`: the press is the consent to the apps its rows name. */
+    publishApps: (title: string): Promise<void> =>
+      run(Pressing.Publish, () => window.studio.genexPublishApps(game, title)),
     /**
      * Publish again while Studio cannot tell whether the last upload reached Genex: settle that
      * upload (`again` names it), then publish under `title` as Publish does.

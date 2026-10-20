@@ -101,12 +101,24 @@ app.whenReady().then(async()=>{
   assert.deepEqual(refused.failures,["Couldn’t send the Mac app: Couldn't get an upload token (HTTP 413)."]);
   assert.equal(refused.overflow,false);
   report.appsFailed=await capture('dark-apps-failed');
+  // A game with only a Mac app (no web build): Publish publishes the app under its own words.
+  const only=await step('appsOnly','window.platformsRig.open({scene:"appsOnly"})');
+  assert.equal(only.primary,'Publish Mac app');
+  assert.equal(only.reach,'Only Mac players can play it.');
+  assert.equal(only.rows[0].detail,'Not set up for the web');
+  assert.equal(only.hint,'People playing in the Genex app can install it.');
+  report.appsOnly=await capture('dark-apps-only');
+  const pressed=await step('appsOnlyPress','window.platformsRig.press()');
+  assert.deepEqual(pressed.published,[{via:'apps',title:'Dust Runners'}],'the apps go, never a web copy');
+  const held=await step('appsHeld','window.platformsRig.open({scene:"appsHeld"})');
+  assert.deepEqual(held.failures,['Genex is reviewing the game before it shows in the gallery.']);
+  assert.equal(held.rows[1].end,'On Genex');
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

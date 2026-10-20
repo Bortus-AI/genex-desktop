@@ -15,8 +15,11 @@ import { CoreFact } from "../../src/shared/project-facts.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../src/shared/publish-platforms.ts";
 import {
+  appsLabel,
   failureLines,
+  listingLine,
   listsPlatforms,
+  onlyApps,
   makeAppAsk,
   PlatformEnd,
   platformRows,
@@ -236,6 +239,38 @@ describe("Publish's platform rows as the dialog says them", () => {
       "Couldn’t send the Mac app: Couldn't get an upload token (HTTP 413).",
     ]);
     assert.deepEqual(failureLines([WEB, ready, WINDOWS], record({})), []);
+  });
+
+  it("publishes a game that has only apps as its apps, and says how its listing went", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const ready = { ...MAC, uploads: true };
+    assert.equal(onlyApps([noWeb, ready, WINDOWS]), true);
+    assert.equal(onlyApps([WEB, ready, WINDOWS]), false, "a web game publishes as one");
+    assert.equal(onlyApps([noWeb, MAC, WINDOWS]), false, "an app that cannot go is nothing to publish");
+    assert.equal(appsLabel([noWeb, ready, WINDOWS]), "Publish Mac app");
+    assert.equal(appsLabel([noWeb, ready, WINDOWS_READY]), "Publish Mac and Windows apps");
+    assert.equal(reachLine([noWeb, ready, WINDOWS]), "Only Mac players can play it.");
+    const record = (over: Partial<GenexNativeRecord>): GenexNativeRecord => ({
+      supported: true,
+      sending: false,
+      sent: [
+        { platform: "mac", arch: "universal", version: "1", sizeBytes: 1, publishedAt: new Date(NOW).toISOString() },
+      ],
+      failed: [],
+      ...over,
+    });
+    const rows = [noWeb, ready, WINDOWS];
+    assert.equal(listingLine(rows, record({ listing: { state: "published", detail: null } })), null);
+    assert.equal(
+      listingLine(rows, record({ listing: { state: "held", detail: null } })),
+      "Genex is reviewing the game before it shows in the gallery.",
+    );
+    assert.equal(
+      listingLine(rows, record({})),
+      "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.",
+    );
+    assert.equal(listingLine(rows, record({ sending: true })), null, "nothing is said while the apps go");
+    assert.equal(listingLine([WEB, ready, WINDOWS], record({})), null, "a web game is listed by its web publish");
   });
 
   it("asks the agent for an app in the game's own name", () => {

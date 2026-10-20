@@ -108,6 +108,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:plugins.genex-publish-review": "genexPublishReview",
   "studio:plugins.genex-publish-platforms": "genexPublishPlatforms",
   "studio:plugins.genex-publish": "genexPublish",
+  "studio:plugins.genex-publish-apps": "genexPublishApps",
   "studio:plugins.index": "pluginsIndex",
   "studio:plugins.install-github": "pluginInstallGithub",
   "studio:plugins.lookup-github": "pluginLookupGithub",
@@ -366,6 +367,7 @@ export interface StudioInvokePayloads {
   "studio:plugins.genex-publish-review": { project: string };
   "studio:plugins.genex-publish-platforms": { project: string };
   "studio:plugins.genex-publish": { project: string; review: ExportReview; title?: string };
+  "studio:plugins.genex-publish-apps": { project: string; title?: string };
   "studio:plugins.index": { refresh?: boolean };
   "studio:plugins.install-github": { spec: string };
   "studio:plugins.lookup-github": { link: string; version?: GithubVersion };

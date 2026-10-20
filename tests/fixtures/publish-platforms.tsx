@@ -37,7 +37,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -72,6 +72,8 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   appsSending: sendingApps,
   appsSent: sendingApps,
   appsFailed: sendingApps,
+  appsOnly: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
+  appsHeld: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
 };
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
@@ -81,6 +83,10 @@ function appsOf(of: Scene): GenexNativeRecord {
   if (of === "appsSent") record.sent.push({ platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1, publishedAt: at });
   if (of === "appsFailed")
     record.failed.push({ platform: "mac", arch: "", error: "Couldn't get an upload token (HTTP 413)." });
+  if (of === "appsHeld") {
+    record.sent.push({ platform: "mac", arch: "universal", version: "1", sizeBytes: 1, publishedAt: at });
+    record.listing = { state: "held", detail: null };
+  }
   return record;
 }
 
@@ -99,6 +105,14 @@ const state = (): GenexPublishState => ({
 const fake = fakeStudioApi();
 fake.stub("pluginAction", async (_id, name) => (name === GenexAction.PublishStatus ? state() : {}));
 fake.stub("genexPublishPlatforms", async () => SCENES[scene]());
+const published: Array<{ via: string; title?: string }> = [];
+fake.stub("genexPublishApps", async (_project, title) => {
+  published.push({ via: "apps", ...(title ? { title } : {}) });
+});
+fake.stub("genexPublish", async () => {
+  published.push({ via: "web" });
+});
+fake.stub("genexPublishReview", async () => ({ included: ["index.html"], excluded: [] }));
 // The row that shares a game's assets on Play reads them too: this game has none.
 fake.stub("assetLibraryStates", async () => ({ project: GAME, states: [], unread: false }));
 fake.stub("projectAssets", async () => ({ project: GAME, assets: [], truncated: false, skipped: [] }));
@@ -134,6 +148,9 @@ function sample() {
     listed: Boolean(list),
     rows,
     reach: list?.querySelector(".genex-publish-reach")?.textContent ?? null,
+    primary: document.querySelector<HTMLElement>(".genex-publish-primary")?.textContent ?? null,
+    hint: content?.querySelector(":scope > .genex-publish-hint")?.textContent ?? null,
+    published: [...published],
     failures: [...(list?.querySelectorAll<HTMLElement>(".genex-publish-platform-failure") ?? [])].map(
       (line) => line.textContent ?? "",
     ),
@@ -152,6 +169,7 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   scene = options.scene ?? "engine";
   closed = 0;
   composed.length = 0;
+  published.length = 0;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);
   const engine = scene === "web" ? {} : { engine: { id: "unity", project: "." } };
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
@@ -175,6 +193,14 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   return sample();
 }
 
+/** Press the main button, as a person would, and let the press settle. */
+async function press() {
+  document.querySelector<HTMLButtonElement>(".genex-publish-primary")?.click();
+  for (let i = 0; i < 100 && published.length === 0; i++) await frame();
+  await settle();
+  return sample();
+}
+
 /** Press a row's Make with agent. */
 async function make(target: PublishTarget) {
   document.querySelector<HTMLButtonElement>(`[data-publish-platform-make="${target}"]`)?.click();
@@ -182,4 +208,4 @@ async function make(target: PublishTarget) {
   return sample();
 }
 
-Object.assign(window, { platformsRig: { open, make, sample } });
+Object.assign(window, { platformsRig: { open, make, press, sample } });

@@ -221,6 +221,12 @@ export interface StudioApi {
    * the files in `review`; `title` is the name players see.
    */
   genexPublish(project: string, review: ExportReview, title?: string): Promise<void>;
+  /**
+   * Publish a game that has only apps (no web build) from Studio's Publish dialog: its ready Mac and
+   * Windows apps go to Genex and the game is listed under `title`. The press, under the rows it names,
+   * is the consent.
+   */
+  genexPublishApps(project: string, title?: string): Promise<void>;
   pluginsIndex(refresh?: boolean): Promise<PluginIndexView>;
   pluginInstallGithub(spec: string): Promise<void>;
   /** What a pasted GitHub link leads to, pinned to one exact commit; nothing is installed. */

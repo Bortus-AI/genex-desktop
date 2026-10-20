@@ -18,6 +18,7 @@ import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 import {
   failureLines,
+  listingLine,
   listsPlatforms,
   makeAppAsk,
   PlatformEnd,
@@ -36,7 +37,7 @@ const MARK: Readonly<Record<PublishTarget, IconName>> = {
 };
 
 /** The game folder's platforms, read once as the dialog opens; null until read or when unreadable. */
-function usePublishPlatforms(project: string): PublishPlatform[] | null {
+export function usePublishPlatforms(project: string): PublishPlatform[] | null {
   const [platforms, setPlatforms] = useState<PublishPlatform[] | null>(null);
   useAsyncEffect(
     (alive) => {
@@ -128,20 +129,23 @@ function Row({
  */
 export function PublishPlatforms({
   project,
+  platforms,
   shown,
   native,
 }: {
   project: string;
+  /** The game folder's platforms (`usePublishPlatforms`), null until read. */
+  platforms: PublishPlatform[] | null;
   shown: boolean;
   /** How the last Publish's apps went, from the publish record. */
   native?: GenexNativeRecord | undefined;
 }): JSX.Element | null {
   const engineGame = useLibrary((s) => Boolean(s.games.find((g) => g.name === project)?.engine));
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
-  const platforms = usePublishPlatforms(project);
   const [asked, setAsked] = useState<ReadonlySet<PublishTarget>>(() => new Set());
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
   const reach = reachLine(platforms);
+  const listing = listingLine(platforms, native);
   const make = (target: PublishTarget): void => {
     composeInChat({ project, text: makeAppAsk(target, title), send: true });
     setAsked((before) => new Set(before).add(target));
@@ -158,6 +162,7 @@ export function PublishPlatforms({
           {line}
         </p>
       ))}
+      {listing && <p className="genex-publish-platform-failure">{listing}</p>}
       {reach && <p className="genex-publish-reach">{reach}</p>}
     </div>
   );

@@ -5,7 +5,7 @@
  * Genex or was not sent. Pure: the dialog draws it, tests read it.
  */
 import { sizeWords } from "../../../../shared/byte-size.ts";
-import type { GenexNativeRecord } from "../../../../shared/genex.ts";
+import { GenexListingState, type GenexNativeRecord } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { NATIVE_WORDS, PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 
@@ -107,12 +107,39 @@ export function platformRows(
 export const listsPlatforms = (platforms: readonly PublishPlatform[], engineGame: boolean): boolean =>
   engineGame || platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
 
+/** The players of the apps Publish sends: "Mac", "Windows". */
+const sendingPlayers = (platforms: readonly PublishPlatform[]): string[] =>
+  platforms.filter((row) => isNative(row) && row.uploads).map((row) => playersOf(row.target));
+
+/** Whether the game has only apps to publish: no web build, and an app Publish can send. */
+export const onlyApps = (platforms: readonly PublishPlatform[]): boolean =>
+  platforms.some((row) => row.target === PublishTarget.Web && row.state === PublishPlatformState.Missing) &&
+  sendingPlayers(platforms).length > 0;
+
+/** The main press of a game with only apps: "Publish Mac app", "Publish Mac and Windows apps". */
+export const appsLabel = (platforms: readonly PublishPlatform[]): string =>
+  WORDS.publishApps(WORDS.apps(sendingPlayers(platforms)));
+
+/**
+ * How the listing of a game with only apps went, once its apps went: held for review, or not listed
+ * at all; nothing when it was listed, while they go, or for a game listed by its web publish.
+ */
+export function listingLine(
+  platforms: readonly PublishPlatform[],
+  native: GenexNativeRecord | undefined,
+): string | null {
+  if (!onlyApps(platforms) || !native || native.sending || native.sent.length === 0) return null;
+  if (native.listing?.state === GenexListingState.Held) return WORDS.held;
+  return native.listing ? null : WORDS.notListed;
+}
+
 /** The line under the rows: the apps Publish sends too, and whose players get the web version. */
 export function reachLine(platforms: readonly PublishPlatform[]): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
+  if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
   if (web?.state !== PublishPlatformState.Ready) return null;
   const native = platforms.filter(isNative);
-  const sending = native.filter((row) => row.uploads).map((row) => playersOf(row.target));
+  const sending = sendingPlayers(platforms);
   const webOnly = native.filter((row) => !row.uploads).map((row) => playersOf(row.target));
   const lines = [
     sending.length > 0 ? WORDS.alsoSends(WORDS.apps(sending)) : null,
