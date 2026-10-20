@@ -21,6 +21,7 @@ import {
   MultiplayerPress,
   multiplayerPress,
   showsMultiplayer,
+  takesEngineMultiplayer,
   toolbarTip,
   toolbarUpdateStatus,
   visibleToolbarEntries,
@@ -506,9 +507,18 @@ export interface GameMultiplayer {
   multiplayer: boolean;
 }
 
-/** Whether Multiplayer stands on the strip for this game (`showsMultiplayer`): never on an engine's web export. */
+/**
+ * Whether Multiplayer stands on the strip for this game (`showsMultiplayer`): on an engine's web
+ * export only when its engine's project takes Genex's multiplayer (a Godot game).
+ */
 const multiplayerOn = (publish: boolean, emptyGame: boolean, game: GameMultiplayer, kind: GameKind): boolean =>
-  showsMultiplayer({ publish, emptyGame, ...game, webExport: webFolderOf(kind) !== null });
+  showsMultiplayer({
+    publish,
+    emptyGame,
+    ...game,
+    webExport: webFolderOf(kind) !== null,
+    engineMultiplayer: takesEngineMultiplayer(kind),
+  });
 
 export function PluginToolbar({
   plugins,
