@@ -3074,8 +3074,10 @@ Genex:
   Listed, the record turns public with the game's genex.games page as its link; held for review or
   not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
   stays off for it. Like a web publish, it takes the cover again as it starts and sends it once its
-  apps are on Genex (`#reshoot`, then the cover step); the clip is not sent, since Genex matches a
-  clip to a web build such a project lacks. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+  apps are on Genex (`#reshoot`, then the cover step). Its clip names as its build the first 40
+  characters of a sent app's archive sha256 (`appClipCommit`, from `native.json`), which Genex
+  matches as a prefix where a web game's names its staging commit; a stand that refuses it leaves a
+  `failed` clip record, sent again by the next publish, and the picture stands. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose

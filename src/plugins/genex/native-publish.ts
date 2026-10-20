@@ -24,6 +24,11 @@ const NATIVE_UPLOADS_MAX = 4;
 /** What a failure keeps of the CLI's words. */
 const FAILURE_CHARS = 400;
 
+/** How much of an app's archive hash a clip names as its build: the most `genex cover --commit` takes. */
+const CLIP_COMMIT_CHARS = 40;
+/** A sha256 as hex. */
+const SHA256_HEX = /^[0-9a-f]{64}$/i;
+
 const MESSAGE = { NotABuild: "Genex answered without the build it published" } as const;
 
 /**
@@ -99,7 +104,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 export function sentBuild(answer: unknown): GenexNativeSent | null {
   const build = isRecord(answer) ? answer.build : undefined;
   if (!isRecord(build)) return null;
-  const { platform, arch, version, sizeBytes, publishedAt } = build;
+  const { platform, arch, version, sizeBytes, sha256, publishedAt } = build;
   const words = [platform, arch, version, publishedAt].every((value) => typeof value === "string");
   if (!words || typeof sizeBytes !== "number") return null;
   return {
@@ -107,8 +112,18 @@ export function sentBuild(answer: unknown): GenexNativeSent | null {
     arch: String(arch),
     version: String(version),
     sizeBytes,
+    ...(typeof sha256 === "string" && SHA256_HEX.test(sha256) ? { sha256: sha256.toLowerCase() } : {}),
     publishedAt: String(publishedAt),
   };
+}
+
+/**
+ * The build a clip of a game with only apps names (`genex cover --commit`): the start of the first
+ * sent app's archive hash, which Genex matches as a prefix. Undefined when no sent app has one.
+ */
+export function appClipCommit(sent: readonly GenexNativeSent[]): string | undefined {
+  const hash = sent.map((app) => app.sha256).find((value) => typeof value === "string" && SHA256_HEX.test(value));
+  return hash?.slice(0, CLIP_COMMIT_CHARS);
 }
 
 /** The CLI's own words for a failure: its last `✗` line, else its last line, kept short. */

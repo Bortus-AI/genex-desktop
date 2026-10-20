@@ -598,6 +598,8 @@ export interface GenexNativeSent {
   arch: string;
   version: string;
   sizeBytes: number;
+  /** The archive's sha256 as Genex keeps it: the build a clip of a game with only apps names. */
+  sha256?: string;
   publishedAt: string;
 }
 
