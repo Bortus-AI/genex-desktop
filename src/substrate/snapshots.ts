@@ -18,7 +18,7 @@
  * the `afterRestore` hook where an install step would go.
  */
 import { constants } from "node:fs";
-import { copyFile, cp, lstat, mkdir, readdir, symlink, writeFile } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ensureDir, pathExists } from "./fsx.ts";
 import { shortId } from "./ids.ts";
@@ -30,6 +30,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { startWithRecovery } from "./process-start.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { SECOND_MS } from "../shared/duration.ts";
 import { hostGitArgs, hostGitConfig, hostGitEnv } from "./git-policy.ts";
 
 const execFileAsync = promisify(execFile);
@@ -216,7 +217,7 @@ export async function git(
   dir: string,
   args: string[],
   env: Record<string, string> = {},
-  input?: string,
+  input?: string | Buffer,
 ): Promise<string> {
   const environment = hostGitEnv({ ...GIT_ENV, ...env });
   const config = await hostGitConfig(dir, environment);
@@ -274,18 +275,72 @@ export async function resolveCommit(dir: string, revision: string): Promise<stri
   return hash;
 }
 
+/** The commit message of a repository's first commit. */
+const INITIAL_COMMIT = "substrate: initial";
+
+/**
+ * Git's bulk check-in for one call: every blob past `core.bigFileThreshold` (here every non-empty
+ * file) streams into a single pack instead of a loose object file of its own. A first commit of a
+ * folder with thousands of files (an adopted game) otherwise creates, writes and renames a file per
+ * file, slow wherever each file operation costs milliseconds. Set through the environment, so `add`
+ * stays the subcommand `hostGitArgs` reads; a Git older than 2.31 ignores it and writes loose objects.
+ */
+const ONE_PACK_ENV = { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.bigFileThreshold", GIT_CONFIG_VALUE_0: "1" };
+
 /** `git init` + an initial commit if the directory is not a repo yet. */
 export async function ensureRepo(dir: string): Promise<void> {
   await ensureDir(dir);
   if (await pathExists(path.join(dir, ".git"))) return;
   await git(dir, ["init", "-q", "-b", "main"]);
-  await stagePublicChanges(dir);
-  await git(dir, ["commit", "-q", "--allow-empty", "-m", "substrate: initial"]);
+  await stagePublicChanges(dir, ONE_PACK_ENV);
+  await git(dir, ["commit", "-q", "--allow-empty", "-m", INITIAL_COMMIT]);
+}
+
+/**
+ * A new repository in `dir` whose first commit holds `files` (POSIX paths inside `fromDir`), laid
+ * down by git: it commits the bytes read here from `fromDir` (`fast-import`, one pack) and then
+ * checks the files out itself. Nothing written into `dir` is read back, by this process or by git:
+ * right after an install, Windows held the first read of each file Genex had just copied for
+ * minutes, and the harness workspace's first commit read back all of them.
+ */
+export async function checkOutNewRepo(fromDir: string, dir: string, files: readonly string[]): Promise<void> {
+  await ensureDir(dir);
+  await git(dir, ["init", "-q", "-b", "main"]);
+  await git(dir, ["fast-import", "--quiet", "--done"], {}, await firstCommitStream(fromDir, files));
+  await git(dir, ["reset", "-q", "--hard", "HEAD"]);
+}
+
+/** A `git fast-import` stream of one commit on `main` holding `files` as `fromDir` has them. */
+async function firstCommitStream(fromDir: string, files: readonly string[]): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  const entries: string[] = [];
+  for (const [index, rel] of files.entries()) {
+    const file = path.join(fromDir, ...rel.split("/"));
+    const bytes = await readFile(file);
+    const executable = process.platform !== StudioPlatform.Windows && ((await lstat(file)).mode & 0o111) !== 0;
+    chunks.push(Buffer.from(`blob\nmark :${index + 1}\ndata ${bytes.length}\n`), bytes, Buffer.from("\n"));
+    entries.push(`M ${executable ? "100755" : "100644"} :${index + 1} ${fastImportPath(rel)}\n`);
+  }
+  const when = `${Math.floor(Date.now() / SECOND_MS)} +0000`;
+  const who = `${STUDIO_COMMITTER.name} <${STUDIO_COMMITTER.email}> ${when}`;
+  const messageBytes = Buffer.byteLength(INITIAL_COMMIT);
+  chunks.push(
+    Buffer.from(
+      `commit refs/heads/main\nauthor ${who}\ncommitter ${who}\ndata ${messageBytes}\n${INITIAL_COMMIT}\n${entries.join("")}\ndone\n`,
+    ),
+  );
+  return Buffer.concat(chunks);
+}
+
+/** A path as a `fast-import` file command takes it: quoted, C-style, when it holds a quote, backslash or line break. */
+function fastImportPath(rel: string): string {
+  if (!/["\\\n]/.test(rel)) return rel;
+  return `"${rel.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n")}"`;
 }
 
 /** Environment files never enter host-created commits, even when an adopted folder has no ignore file. */
-async function stagePublicChanges(dir: string): Promise<void> {
-  await git(dir, ["add", "-A"]);
+async function stagePublicChanges(dir: string, env: Record<string, string> = {}): Promise<void> {
+  await git(dir, ["add", "-A"], env);
 }
 
 /** One `git ls-tree -r -l -z` entry of a file: its size and path (a nested repository's pointer is no blob). */
