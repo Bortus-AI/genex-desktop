@@ -242,31 +242,32 @@ function PassesAllowDown($acl) {
 # Whether nothing under the path is open to anyone the sandbox user may be: every entry is owned
 # by and allows only SYSTEM, the Administrators or the person running Genex, whatever it inherited
 # (a folder moved in keeps what it inherited elsewhere until a walk) and whether its DACL is
-# protected or not. Reading each entry's owner and DACL opens it for READ_CONTROL alone, far
-# cheaper than a walk, which rewrites every entry. A link is checked, never followed; an entry
-# that cannot be read, or anything else unsure, answers no.
+# protected or not. Reading each entry's owner and DACL opens it for READ_CONTROL alone, and most
+# entries share one descriptor, judged once: Chrome's 15,000-entry profile took 1.5 s, its walk
+# 17 s. A link is checked, never followed; an entry that cannot be read, or anything else unsure,
+# answers no. Inline on purpose: a PowerShell function call per entry more than doubled the time.
 function ClosedBelow($dir) {
   $folders = New-Object Collections.Generic.Stack[string]
   $folders.Push($dir)
+  $judged = New-Object Collections.Generic.HashSet[string]
+  $needed = 0
   while ($folders.Count -gt 0) {
     foreach ($item in (New-Object IO.DirectoryInfo $folders.Pop()).EnumerateFileSystemInfos()) {
-      if (-not (Closed $item.FullName)) { return $false }
+      if (-not $api::GetFileSecurityW($item.FullName, $OWNER_AND_DACL, $SCAN_BUFFER, $SCAN_BUFFER.Length, [ref]$needed)) { return $false }
+      $descriptor = [Convert]::ToBase64String($SCAN_BUFFER, 0, $needed)
+      if (-not $judged.Contains($descriptor)) {
+        $sd = New-Object Security.AccessControl.RawSecurityDescriptor($SCAN_BUFFER, 0)
+        if ($null -eq $sd.DiscretionaryAcl -or $UNREACHED -notcontains $sd.Owner) { return $false }
+        foreach ($ace in $sd.DiscretionaryAcl) {
+          if ($ace -isnot [Security.AccessControl.QualifiedAce]) { return $false }
+          $allow = $ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed
+          if ($allow -and $UNREACHED -notcontains $ace.SecurityIdentifier) { return $false }
+        }
+        [void]$judged.Add($descriptor)
+      }
       $folder = ($item.Attributes -band [IO.FileAttributes]'Directory, ReparsePoint') -eq [IO.FileAttributes]::Directory
       if ($folder) { $folders.Push($item.FullName) }
     }
-  }
-  return $true
-}
-function Closed($path) {
-  $needed = 0
-  $ok = $api::GetFileSecurityW($path, $OWNER_AND_DACL, $SCAN_BUFFER, $SCAN_BUFFER.Length, [ref]$needed)
-  if (-not $ok) { return $false }
-  $sd = New-Object Security.AccessControl.RawSecurityDescriptor($SCAN_BUFFER, 0)
-  if ($null -eq $sd.DiscretionaryAcl -or $UNREACHED -notcontains $sd.Owner) { return $false }
-  foreach ($ace in $sd.DiscretionaryAcl) {
-    if ($ace -isnot [Security.AccessControl.QualifiedAce]) { return $false }
-    $allow = $ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed
-    if ($allow -and $UNREACHED -notcontains $ace.SecurityIdentifier) { return $false }
   }
   return $true
 }
