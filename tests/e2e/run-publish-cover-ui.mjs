@@ -84,8 +84,8 @@ app.whenReady().then(async()=>{
   report.field=await capture('another-field');
   const made=await step('made','window.publishCover.make("closer on the snowball at sunset")');
   const ASK='Make another Genex cover for this game: closer on the snowball at sunset';
-  // Sent through the chat's own send; a chat with no model to send to keeps it in its composer.
-  assert.ok(made.sends.includes(ASK)||made.prompt===ASK,'the ask reached the chat: '+JSON.stringify(made));
+  // Sent through the chat's own send, with the chat's model.
+  assert.ok(made.sends.includes(ASK),'the chat sent the ask: '+JSON.stringify(made));
   assert.equal(made.dialog,false,'the dialog closes into the chat');
   report.asked=await capture('asked');
   // Opened again before the frame comes: the banner says the agent is at it, with no time yet.
@@ -93,8 +93,11 @@ app.whenReady().then(async()=>{
   assert.equal(waiting.busy,'Making a cover','never timed: no time left shown');
   assert.equal(waiting.hint,'The agent is making it in the chat. It shows here when it’s ready.');
   report.making=await capture('making');
+  // Studio's own take after a turn is a new kept frame, but not the one asked for.
+  const studio=await step('studio','window.publishCover.studioTake("b")');
+  assert.equal(studio.busy,'Making a cover','a take by Studio ends no wait');
   const arrived=await step('arrived','window.publishCover.arrive("c",150000)');
-  assert.equal(arrived.busy,null,'a new frame ends the wait');
+  assert.equal(arrived.busy,null,'the frame the agent took ends the wait');
   assert.equal(arrived.another,'picture');
   // The next ask counts down from how long that one took.
   await step('again','window.publishCover.press("[data-genex-another-cover]")');
@@ -106,6 +109,15 @@ app.whenReady().then(async()=>{
   await step('light','window.publishCover.theme("light")');
   report.timedLight=await capture('making-timed-light');
   await step('dark','window.publishCover.theme("dark")');
+  // A chat with no model sends nothing: nothing runs, so Publish waits for nothing.
+  await step('unsent-open','window.publishCover.open({kept:"a",candidates:["a"],model:false})');
+  await step('unsent-another','window.publishCover.press("[data-genex-another-cover]")');
+  const unsent=await step('unsent','window.publishCover.make("")');
+  assert.equal(unsent.dialog,false);
+  assert.deepEqual(unsent.sends,[],'nothing was sent');
+  const idle=await step('idle','window.publishCover.reopen()');
+  assert.equal(idle.busy,null,'an ask the chat did not send shows no wait');
+  assert.equal(idle.another,'picture');
   // A kept clip plays behind its switch, and Another asks for a clip there.
   const clip=await step('clip','window.publishCover.open({kept:"a",candidates:["a"],clip:true})');
   assert.deepEqual(clip.show,['false','true'],'the clip shows first');

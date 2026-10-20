@@ -1,14 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  COVER_MAKING_MS,
   type CoverAskMemory,
   CoverKind,
   coverMinutesLeft,
   readCoverAsks,
+  rememberCoverAsk,
   settleCoverAsk,
   writeCoverAsks,
 } from "../../src/renderer/panels/plugins/genex/cover-asks.ts";
-import { COVER_MAKING_MS } from "../../src/renderer/panels/plugins/genex/genex-publish-view.ts";
 import type { GenexCoverRecord } from "../../src/shared/genex.ts";
 import { MINUTE_MS, SECOND_MS } from "../../src/shared/duration.ts";
 import { storageKeyFor, type KeyValueStorage } from "../../src/renderer/storage.ts";
@@ -51,45 +52,67 @@ const asked = (kind: CoverKind = CoverKind.Picture, took: CoverAskMemory["took"]
   took,
 });
 
-test("a new frame answers the ask: how long it took is kept for that kind, and the ask is done", () => {
-  const arrived = record({ shot: shot(NEW, AT + 150 * SECOND_MS) });
-  assert.deepEqual(settleCoverAsk(asked(), arrived, AT + 10 * MINUTE_MS), {
-    ask: null,
-    took: { [CoverKind.Picture]: 150 * SECOND_MS },
-  });
-  const clipAsk = { ask: { kind: CoverKind.Clip, from: OLD, at: AT }, took: { [CoverKind.Picture]: 60 * SECOND_MS } };
-  const clipArrived = record({ clip: clip(NEW, AT + 90 * SECOND_MS) });
+test("a frame the agent took after the ask answers it: how long it took is kept for that kind", () => {
+  const studioTake = record({ shot: shot(NEW, AT + 30 * SECOND_MS), agentTook: {} });
+  const waiting = asked();
+  assert.equal(settleCoverAsk(waiting, studioTake, AT + MINUTE_MS), waiting, "Studio's own new frame answers nothing");
+  const earlier = record({ shot: shot(NEW, AT - SECOND_MS), agentTook: { shot: iso(AT - SECOND_MS) } });
+  assert.equal(settleCoverAsk(waiting, earlier, AT + MINUTE_MS), waiting, "the agent's frame from before the ask");
+  const agent = record({ shot: shot(NEW, AT + 200 * SECOND_MS), agentTook: { shot: iso(AT + 150 * SECOND_MS) } });
   assert.deepEqual(
-    settleCoverAsk(clipAsk, clipArrived, AT + 2 * MINUTE_MS),
+    settleCoverAsk(waiting, agent, AT + 10 * MINUTE_MS),
+    { ask: null, took: { [CoverKind.Picture]: 150 * SECOND_MS } },
+    "timed by the agent's frame, though Studio took another after it",
+  );
+  const clipAsk = { ask: { kind: CoverKind.Clip, from: OLD, at: AT }, took: { [CoverKind.Picture]: 60 * SECOND_MS } };
+  assert.equal(
+    settleCoverAsk(clipAsk, record({ agentTook: { shot: iso(AT + 30 * SECOND_MS) } }), AT + MINUTE_MS),
+    clipAsk,
+    "the agent's new shot does not answer a clip",
+  );
+  assert.deepEqual(
+    settleCoverAsk(clipAsk, record({ agentTook: { clip: iso(AT + 90 * SECOND_MS) } }), AT + 2 * MINUTE_MS),
     { ask: null, took: { [CoverKind.Picture]: 60 * SECOND_MS, [CoverKind.Clip]: 90 * SECOND_MS } },
     "a clip's time is its own",
   );
-  const first = { ask: { kind: CoverKind.Picture, from: null, at: AT }, took: {} };
   assert.deepEqual(
-    settleCoverAsk(first, record({ shot: shot(NEW, AT + 40 * SECOND_MS) }), AT + MINUTE_MS),
-    { ask: null, took: { [CoverKind.Picture]: 40 * SECOND_MS } },
-    "asked with no frame yet, the first one answers",
+    settleCoverAsk(waiting, record({ agentTook: { shot: iso(AT + COVER_MAKING_MS) } }), AT + COVER_MAKING_MS),
+    { ask: null, took: {} },
+    "an answer past the wait ends the ask untimed",
   );
 });
 
-test("a waiting ask stays until its frame comes, and is dropped unmeasured after a while", () => {
+test("a waiting ask stays until the agent's frame comes, and is dropped unmeasured after a while", () => {
   const waiting = asked(CoverKind.Picture, { [CoverKind.Picture]: 2 * MINUTE_MS });
+  const nothingYet = record({ agentTook: {} });
+  assert.equal(settleCoverAsk(waiting, nothingYet, AT + MINUTE_MS), waiting, "nothing changes");
+  assert.deepEqual(
+    settleCoverAsk(waiting, nothingYet, AT + COVER_MAKING_MS),
+    { ask: null, took: { [CoverKind.Picture]: 2 * MINUTE_MS } },
+    "given up: the last time stays",
+  );
+  const none = { ask: null, took: {} };
+  assert.equal(settleCoverAsk(none, nothingYet, AT), none, "nothing asked");
+});
+
+test("from a plugin that does not say who took a frame, any new frame of the kind answers", () => {
+  const waiting = asked();
   assert.equal(settleCoverAsk(waiting, record(), AT + MINUTE_MS), waiting, "same frame: nothing changes");
   assert.equal(
     settleCoverAsk(waiting, record({ clip: clip(NEW, AT + 30 * SECOND_MS) }), AT + MINUTE_MS),
     waiting,
     "a new clip does not answer a picture",
   );
+  assert.deepEqual(settleCoverAsk(waiting, record({ shot: shot(NEW, AT + 150 * SECOND_MS) }), AT + 10 * MINUTE_MS), {
+    ask: null,
+    took: { [CoverKind.Picture]: 150 * SECOND_MS },
+  });
+  const first = { ask: { kind: CoverKind.Picture, from: null, at: AT }, took: {} };
   assert.deepEqual(
-    settleCoverAsk(waiting, record(), AT + COVER_MAKING_MS),
-    { ask: null, took: { [CoverKind.Picture]: 2 * MINUTE_MS } },
-    "given up: the last time stays",
+    settleCoverAsk(first, record({ shot: shot(NEW, AT + 40 * SECOND_MS) }), AT + MINUTE_MS),
+    { ask: null, took: { [CoverKind.Picture]: 40 * SECOND_MS } },
+    "asked with no frame yet, the first one answers",
   );
-  const none = { ask: null, took: {} };
-  assert.equal(settleCoverAsk(none, record(), AT), none, "nothing asked");
-});
-
-test("a frame that cannot be timed against the ask ends it without a time", () => {
   const cases = [
     { name: "taken before the ask", takenAt: iso(AT - SECOND_MS) },
     { name: "taken past the wait", takenAt: iso(AT + COVER_MAKING_MS) },
@@ -97,7 +120,7 @@ test("a frame that cannot be timed against the ask ends it without a time", () =
   ];
   for (const { name, takenAt } of cases) {
     const arrived = record({ shot: { ...shot(NEW, AT), takenAt } });
-    assert.deepEqual(settleCoverAsk(asked(), arrived, AT + MINUTE_MS), { ask: null, took: {} }, name);
+    assert.deepEqual(settleCoverAsk(waiting, arrived, AT + MINUTE_MS), { ask: null, took: {} }, name);
   }
 });
 
@@ -130,6 +153,14 @@ test("a game's asks are kept under its own key and read back", () => {
   assert.ok(storage.items.has(storageKeyFor.coverAsks("snow-game")));
   assert.deepEqual(readCoverAsks("snow-game", storage), memory);
   assert.deepEqual(readCoverAsks("other-game", storage), { ask: null, took: {} }, "another game asked nothing");
+});
+
+test("an ask is kept once the chat sent it, beside the times already kept", () => {
+  const storage = memoryStorage();
+  writeCoverAsks("snow-game", { ask: null, took: { [CoverKind.Clip]: 80 * SECOND_MS } }, storage);
+  const ask = { kind: CoverKind.Picture, from: OLD, at: AT };
+  assert.deepEqual(rememberCoverAsk("snow-game", ask, storage), { ask, took: { [CoverKind.Clip]: 80 * SECOND_MS } });
+  assert.deepEqual(readCoverAsks("snow-game", storage), { ask, took: { [CoverKind.Clip]: 80 * SECOND_MS } });
 });
 
 test("a kept value that is not an ask reads as nothing asked, and keeps what is sound", () => {
