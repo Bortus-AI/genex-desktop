@@ -611,36 +611,111 @@ describe("an entry on one folder alone, on Windows", {
     assert.match(sddl(moved, root), inheritedElsewhere, "nor by the take-back");
   });
 
+  /** The running user's SID, as `whoami` says it. */
+  const runningUser = () => {
+    const sid = /"(S-1-[^"]+)"/.exec(execFileSync("whoami", ["/user", "/fo", "csv", "/nh"], { encoding: "utf8" }))?.[1];
+    assert.ok(sid, "the running user's SID");
+    return sid;
+  };
+  /** A folder like a browser profile: only its owner, SYSTEM and the Administrators, passed down. */
+  const ownerOnly = (dir: string) => {
+    const closed = [`*${runningUser()}:(OI)(CI)(F)`, "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)"];
+    execFileSync("icacls", [dir, "/inheritance:r", "/grant:r", ...closed], { stdio: "ignore" });
+  };
+  const denyLater = (dir: string): FolderOwnEdit => ({
+    dir,
+    sid: GUESTS,
+    op: FolderAceOp.Own,
+    deny: DenyAccess.Read,
+    guard: false,
+    grant: null,
+    allows: false,
+    walk: OwnWalk.Later,
+  });
+
   it("denies a folder only its owner may open on that folder alone at first, and passes it down later", async () => {
     // A lived-in Windows 11 profile: passing the deny down Chrome's profile took 17 s of the first
     // start, although only its owner, SYSTEM and the Administrators could open anything in it.
     const root = realpathSync.native(await tmpDir("folder-deny-closed-"));
     const secret = path.join(root, "above", "User Data");
-    const moved = path.join(secret, "Default", "moved");
-    const elsewhere = path.join(root, "elsewhere");
-    await mkdir(path.dirname(moved), { recursive: true });
-    await mkdir(elsewhere);
-    const me = /"(S-1-[^"]+)"/.exec(execFileSync("whoami", ["/user", "/fo", "csv", "/nh"], { encoding: "utf8" }))?.[1];
-    assert.ok(me, "the running user's SID");
-    const closed = [`*${me}:(OI)(CI)(F)`, "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)"];
-    execFileSync("icacls", [secret, "/inheritance:r", "/grant:r", ...closed], { stdio: "ignore" });
-    // A folder moved in keeps what it inherited where it was made until a walk works it out again.
-    execFileSync("icacls", [elsewhere, "/grant", `*${GUESTS}:(OI)(CI)(RA)`], { stdio: "ignore" });
-    await mkdir(path.join(elsewhere, "moved"));
-    await rename(path.join(elsewhere, "moved"), moved);
-    const inheritedElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/;
+    const before = path.join(secret, "Default", "Cookies");
+    await mkdir(path.dirname(before), { recursive: true });
+    await writeFile(before, "before");
+    ownerOnly(secret);
     const denies = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
     assert.equal(await denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, to pass down");
-    assert.match(sddl(moved, root), inheritedElsewhere, "nothing under it was walked during the start");
-    const later = path.join(secret, "Default", "Cookies");
+    assert.doesNotMatch(sddl(before, root), /;;;BG\)/, "nothing under it was walked during the start");
+    const later = path.join(secret, "Default", "Login Data");
     await writeFile(later, "later");
     assert.match(sddl(later, root), /\(D;ID;FA;;;BG\)/, "a file made in it meanwhile inherits the deny");
     await denies.walkDeferred();
-    assert.doesNotMatch(sddl(moved, root), inheritedElsewhere, "the walk later works it out again");
-    assert.match(sddl(moved, root), /\(D;ID;FA;;;BG\)/, "and passes the deny down");
+    assert.match(sddl(before, root), /\(D;ID;FA;;;BG\)/, "the walk later passes the deny down");
     await denies.revokeAll();
     assert.doesNotMatch(sddl(secret, root), /\(D;[^)]*;;;BG\)/);
+  });
+
+  // The walk may wait only where the sandbox user can open nothing under the path with or without
+  // it. Each of these opens something to it (BUILTIN\Users, which it is in), so the walk runs now.
+  const hostile: Array<[string, (secret: string, root: string) => Promise<void>]> = [
+    [
+      "a folder moved in with an allow it inherited elsewhere",
+      async (secret, root) => {
+        const elsewhere = path.join(root, "elsewhere");
+        await mkdir(path.join(elsewhere, "moved"), { recursive: true });
+        execFileSync("icacls", [elsewhere, "/grant", `*${USERS}:(OI)(CI)(RX)`], { stdio: "ignore" });
+        await rename(path.join(elsewhere, "moved"), path.join(secret, "Default", "moved"));
+      },
+    ],
+    [
+      "a file of its own allowing Users",
+      async (secret) => {
+        const file = path.join(secret, "Default", "shared.txt");
+        await writeFile(file, "shared");
+        execFileSync("icacls", [file, "/grant", `*${USERS}:(R)`], { stdio: "ignore" });
+      },
+    ],
+    [
+      "a protected folder allowing Users",
+      async (secret) => {
+        const folder = path.join(secret, "Default", "protected");
+        await mkdir(folder);
+        execFileSync("icacls", [folder, "/inheritance:d", "/grant", `*${USERS}:(OI)(CI)(RX)`], { stdio: "ignore" });
+      },
+    ],
+    [
+      "a file Everyone may read, deep down",
+      async (secret) => {
+        const file = path.join(secret, "Default", "a", "b", "c.txt");
+        await mkdir(path.dirname(file), { recursive: true });
+        await writeFile(file, "deep");
+        execFileSync("icacls", [file, "/grant", "*S-1-1-0:(R)"], { stdio: "ignore" });
+      },
+    ],
+  ];
+  for (const [shape, plant] of hostile) {
+    it(`passes a deny down at once over ${shape}`, async () => {
+      const root = realpathSync.native(await tmpDir("folder-deny-open-"));
+      const secret = path.join(root, "User Data");
+      await mkdir(path.join(secret, "Default"), { recursive: true });
+      ownerOnly(secret);
+      await plant(secret, root);
+      const outcomes = await folderOwnEditor()([denyLater(secret)]);
+      assert.equal(outcomes?.[0]?.ok, true, JSON.stringify(outcomes));
+      assert.equal(outcomes?.[0]?.ok && outcomes[0].deferred, undefined, "the walk did not wait");
+      assert.match(sddl(path.join(secret, "Default"), root), /\(D;ID;FA;;;BG\)/, "it was passed down");
+      await folderOwnEditor()([{ ...denyLater(secret), deny: null, walk: undefined }]);
+    });
+  }
+
+  it("passes a deny down at once where the folder itself passes Users an allow", async () => {
+    const root = realpathSync.native(await tmpDir("folder-deny-open-"));
+    const secret = path.join(root, "User Data");
+    await mkdir(path.join(secret, "Default"), { recursive: true });
+    openToUsers(secret);
+    const outcomes = await folderOwnEditor()([denyLater(secret)]);
+    assert.equal(outcomes?.[0]?.ok && outcomes[0].deferred, undefined);
+    assert.match(sddl(path.join(secret, "Default"), root), /\(D;ID;FA;;;BG\)/);
   });
 
   it("grants a folder and what is in it, and the folder entry above the grants comes and goes beside it", async () => {

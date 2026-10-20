@@ -17,9 +17,9 @@
  * The same script sets the entries Genex keeps itself for the sandbox users' group (`ownAclEntries`
  * in `windows-sandbox.ts`): a grant on each folder the sandbox may use and a deny on each path it
  * may not, each passed down to everything under its path, and a FILE_DELETE_CHILD deny on a denied
- * path's parent folder alone. A deny is passed down only where the path passes some allow down to
- * a group the sandbox user may be in: a browser profile that only its owner, SYSTEM and the
- * Administrators may open needs none, and walking one took 17 s on a lived-in Windows 11 profile.
+ * path's parent folder alone. A deny on a path the sandbox user can open nothing under anyway (a
+ * browser profile only its owner, SYSTEM and the Administrators may open, checked entry by entry)
+ * waits for its walk ({@link OwnWalk}): walking one took 17 s of a lived-in Windows 11 first start.
  * Those have no `icacls` fallback: `icacls` would walk a denied path's parent, which is what they
  * exist to avoid.
  */
@@ -66,8 +66,10 @@ export interface FolderAceEdit {
 /** When an own edit passes the path's entries down through everything under it. */
 export const OwnWalk = {
   /**
-   * Now, unless the path passes no allow down to a group the sandbox user may be in, before or
-   * after the edit: then the path alone is written now and the outcome says the walk is `deferred`.
+   * Now, unless the sandbox user can open nothing under the path either way: the path passes no
+   * allow down to anyone it may be, before or after the edit, and every entry under it is owned by
+   * and allows only SYSTEM, the Administrators or the person running Genex. Then the path alone is
+   * written now and the outcome says the walk is `deferred`.
    */
   Later: "later",
   /** Now, even when the path's entries are already the edit's: a walk deferred earlier. */
@@ -162,6 +164,9 @@ foreach ($native in @(
 }
 $api = $type.CreateType()
 $DACL = 4
+# OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION, and room for any one entry's answer to them.
+$OWNER_AND_DACL = 5
+$SCAN_BUFFER = New-Object byte[] 65536
 # FILE_READ_ATTRIBUTES | SYNCHRONIZE
 $READ_ATTRIBUTES = 0x100080
 # What a deny refuses: FILE_ALL_ACCESS, as srt-win's read deny; or srt-win's write deny (write
@@ -224,9 +229,6 @@ function Entry($flags, $qualifier, $mask, $sid) {
 }
 # Whether the path passes an allow down to anyone the sandbox user may be: only SYSTEM, the
 # Administrators and the person running Genex never are (it is a standard user in BUILTIN\\Users).
-# Where it passes none, before or after the edit, nothing under the path is open to the sandbox
-# user through it, so the walk can wait: the path alone is written now, which every file made in
-# it later inherits. The walk still comes, for what was moved in with an allow it inherited elsewhere.
 function PassesAllowDown($acl) {
   foreach ($ace in $acl) {
     if (([int]$ace.AceFlags -band $INHERITS) -eq 0) { continue }
@@ -236,6 +238,45 @@ function PassesAllowDown($acl) {
     return $true
   }
   return $false
+}
+# Whether nothing under the path is open to anyone the sandbox user may be: every entry is owned
+# by and allows only SYSTEM, the Administrators or the person running Genex, whatever it inherited
+# (a folder moved in keeps what it inherited elsewhere until a walk) and whether its DACL is
+# protected or not. Reading each entry's owner and DACL opens it for READ_CONTROL alone, far
+# cheaper than a walk, which rewrites every entry. A link is checked, never followed; an entry
+# that cannot be read, or anything else unsure, answers no.
+function ClosedBelow($dir) {
+  $folders = New-Object Collections.Generic.Stack[string]
+  $folders.Push($dir)
+  while ($folders.Count -gt 0) {
+    foreach ($item in (New-Object IO.DirectoryInfo $folders.Pop()).EnumerateFileSystemInfos()) {
+      if (-not (Closed $item.FullName)) { return $false }
+      $folder = ($item.Attributes -band [IO.FileAttributes]'Directory, ReparsePoint') -eq [IO.FileAttributes]::Directory
+      if ($folder) { $folders.Push($item.FullName) }
+    }
+  }
+  return $true
+}
+function Closed($path) {
+  $needed = 0
+  $ok = $api::GetFileSecurityW($path, $OWNER_AND_DACL, $SCAN_BUFFER, $SCAN_BUFFER.Length, [ref]$needed)
+  if (-not $ok) { return $false }
+  $sd = New-Object Security.AccessControl.RawSecurityDescriptor($SCAN_BUFFER, 0)
+  if ($null -eq $sd.DiscretionaryAcl -or $UNREACHED -notcontains $sd.Owner) { return $false }
+  foreach ($ace in $sd.DiscretionaryAcl) {
+    if ($ace -isnot [Security.AccessControl.QualifiedAce]) { return $false }
+    $allow = $ace.AceQualifier -eq [Security.AccessControl.AceQualifier]::AccessAllowed
+    if ($allow -and $UNREACHED -notcontains $ace.SecurityIdentifier) { return $false }
+  }
+  return $true
+}
+# Whether the walk under the path can wait: the path passes no allow down to anyone the sandbox
+# user may be, before or after the edit, and nothing under it is open to them either
+# (ClosedBelow). The sandbox user can then open nothing under the path with or without the
+# walk, so the path alone is written now, which everything made in it later inherits.
+function WalkCanWait($dir, $before, $acl) {
+  if ($before -or (PassesAllowDown $acl)) { return $false }
+  try { return ClosedBelow $dir } catch { return $false }
 }
 # The SID's denies (and, with allows set, its passed-down allows) made exactly the edit's: denies
 # first, then the allow after every explicit deny (the canonical order); the read-attributes
@@ -257,8 +298,8 @@ function Own($acl, $sid, $edit) {
     $acl.InsertAce($at, $ace)
   }
   if ((Shapes $had $true) -eq (Shapes ($denies + $allows) $true)) { return 'folder' }
-  if ($edit.walk -ne '${OwnWalk.Later}' -or $passedDown -or (PassesAllowDown $acl)) { return 'tree' }
-  return 'deferred'
+  if ($edit.walk -eq '${OwnWalk.Later}' -and (WalkCanWait $edit.dir $passedDown $acl)) { return 'deferred' }
+  return 'tree'
 }
 # By name, with the path's explicit entries alone: Windows works out again what it inherits and
 # passes its inheritable entries down through everything under it, as srt-win's stamp does.
