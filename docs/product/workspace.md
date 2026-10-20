@@ -36,7 +36,8 @@ administrator prompt (two if Secondary Logon is off).
 - **Home's first message** starts a game the model names, where the chip says
   ([its kind](projects-engines.md)). Duplicates never overwrite; a greeting stays **Untitled game** until an idea. **New game**, the Games **+** and Command-N open home.
 - **Settings → Games** moves new games to an empty folder (default `~/AI Games`);
-  **Storage** frees older builds, keeping paused and latest finished.
+  **Storage** frees older builds, keeping paused and latest finished, and on Windows moves
+  Genex's data to another drive ([how](../windows-sandbox.md#data-folder-on-another-drive)).
 - **Settings → Privacy**: Share build metrics (off by default), its preview and delete, and
   policy links ([PRIVACY](../../PRIVACY.md)).
 - Home's **Open a folder…** inspects before writing (Claude settings and hooks trusted unless

@@ -168,6 +168,32 @@ reads every executable and DLL in the package and fails on a runtime import with
 CLI and gcloud, and the Chrome, Edge, Brave, Firefox and Opera profiles. Genex sets those that
 exist itself; a missing one outside every grant is not sent.
 
+## Data folder on another drive
+
+Settings → Storage's **Where Genex keeps its files** moves all of Genex's data (Electron's
+userData, the core's folders and Chromium's) off the profile. The default folder
+(`%APPDATA%\Genex`) then keeps only `data-folder.json`
+([`data-folder.ts`](../src/main/data-folder.ts)), which `boot.ts` reads before anything reads
+userData and points userData and sessionData at. A picked folder is refused when it overlaps
+Genex's data, a game or the install, sits on a network or removable drive or a file system
+without permissions (CIM's `Win32_LogicalDisk`), holds files, or lacks room; a drive's root or a
+folder with files gets a `Genex` folder. Move and restart makes the folder, locks it down
+(`icacls /inheritance:r`, granting only the account, LocalSystem and Administrators; `whoami` and
+`icacls` run from System32, never Git's look-alikes), records `moveTo` and restarts.
+
+The next person's launch runs on `%TEMP%\genex-data-move`, so nothing holds the old files, and
+moves them ([`data-move-launch.ts`](../src/main/data-move-launch.ts)): renamed on one volume,
+copied with progress and then removed across volumes. The entries are recorded first, so a Genex
+closed part-way carries on. `projects.json` and `games-root.json` are rebased, build copies'
+`.git` files repointed and `git worktree repair` run, then the folder is recorded and Genex
+relaunches. A failure leaves everything and records why for Storage; a missing folder shows Try
+again and Quit. Developer, test and installer launches follow a finished move and never start one.
+
+A second drive's root lets every signed-in user, the sandbox user included, change what is under
+it; the lock-down keeps the moved data as closed as the profile, and `ancestorDirs` gives the
+read-attributes grant from the data folder down to each root inside it, as it does under the
+profile. `data-folder-windows.test.ts` proves the move and the sandbox on the runner's D:.
+
 ## Residual risks
 
 srt-win is alpha. Every srt host on the machine shares the

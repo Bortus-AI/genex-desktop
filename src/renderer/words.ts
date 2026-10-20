@@ -3050,7 +3050,7 @@ export const STORAGE_WORDS = {
 /** Settings → Storage's data folder (Windows): where Genex keeps its files, and moving them. */
 export const DATA_FOLDER_WORDS = {
   title: "Where Genex keeps its files",
-  hint: "Build copies, pictures, chats and sign-ins. Genex restarts to move them; your games stay where they are.",
+  hint: "Build copies, pictures, chats and sign-ins. Your games stay where they are.",
   change: "Change…",
   checking: "Checking…",
   keep: "Keep here",
@@ -3469,7 +3469,7 @@ export const SANDBOX_SETUP_WORDS = {
   /** Genex moving its files to the folder chosen in Settings → Storage, then starting again. */
   moving: {
     title: "Moving your Genex files",
-    line: (to: string) => `To ${to}. Genex opens again when it’s done.`,
+    line: (to: string) => `To ${to}. Genex reopens when it’s done.`,
     counting: "Counting files",
     progress: (done: number, total: number) => `${sizeWords(done)} of ${sizeWords(total)}`,
   },
