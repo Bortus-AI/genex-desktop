@@ -59,6 +59,23 @@ it("host staging of a nested repository also excludes newly introduced environme
   assert.ok(!staged.includes(".env.local"));
 });
 
+it("a game folder with paths past Windows' 260 characters snapshots and restores", async () => {
+  const dir = await tmpDir();
+  const deep = path.join(dir, ...Array.from({ length: 8 }, (_, i) => `folder-with-a-long-name-${i}-xxxxxxxx`));
+  await mkdir(deep, { recursive: true });
+  const file = path.join(deep, "a-file-name-that-pushes-the-path-past-max-path.js");
+  assert.ok(file.length > 300, `${file.length} characters`);
+  await writeFile(file, "deep\n");
+  const engine = new SnapshotEngine([{ name: "game", dir }]);
+  await engine.init();
+  const before = await engine.snapshot({ scope: SnapshotScope.Game, gameWorkspace: "game", reason: "save" });
+  await writeFile(file, "changed\n");
+  await writeFile(path.join(deep, "later.js"), "made after the save\n");
+  await engine.restore(before, { gameWorkspace: "game" });
+  assert.equal(await readFile(file, "utf8"), "deep\n");
+  assert.equal(await exists(path.join(deep, "later.js")), false);
+});
+
 /**
  * A project folder holding the user's own game one level down, as a repository of its own with
  * its own build and its own packages — a shape that can lose a run's work. Git records `wreckage/` as a pointer, not as files.
