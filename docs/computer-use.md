@@ -265,7 +265,8 @@ transparent overlays such as a game overlay over the whole screen) and its app l
 installed app, so the studio asks Windows itself through the window probe
 ([`windows-window-probe.ts`](../src/substrate/windows-window-probe.ts)): Windows PowerShell running a
 fixed script, handed over as `-EncodedCommand` (no file, so no execution policy), that uses only .NET's
-UI Automation, Windows Forms and process reads (nothing compiled). It answers which app is in front
+UI Automation, Windows Forms and process reads: nothing compiled and no cmdlet, as a first cmdlet
+makes PowerShell prepare every installed module for first use (over 20 s on a fresh machine). It answers which app is in front
 and whether its focused field is a password field (UI Automation's `IsPassword`, asked again a moment
 later when focus is on no text field, as Chromium's accessibility wakes on first asking), and which
 app a click at a point reaches (the element there, up to its top-level window), with its window's

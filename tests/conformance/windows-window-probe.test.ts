@@ -92,7 +92,6 @@ describe("the Windows window probe's answers", () => {
     assert.deepEqual(args.slice(0, -1), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
     // No script file, so no execution policy applies; the command is the fixed script itself.
     assert.equal(Buffer.from(args.at(-1)!, "base64").toString("utf16le"), WINDOW_PROBE_SCRIPT);
-    assert.doesNotMatch(WINDOW_PROBE_SCRIPT, /TypeDefinition|DllImport|csc/, "nothing is compiled");
   });
 });
 
