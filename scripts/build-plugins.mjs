@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { cp, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { build } from "esbuild";
+import { bridgeLicenses } from "./vendor-genex-multiplayer.ts";
 import { inlinePanelFonts, inlinePanelSdk } from "../src/plugin-sdk/inline-panel-sdk.mjs";
 const require = createRequire(import.meta.url);
 
@@ -352,6 +353,7 @@ async function buildGodot(root, resources, sdk) {
     path.join(root, "node_modules/@genex-ai/multiplayer/dist/bridge.global.js"),
     path.join(godot, "multiplayer/genex-multiplayer-bridge.js"),
   );
+  await writeFile(path.join(godot, "multiplayer/genex-multiplayer-bridge.LICENSES.md"), await bridgeLicenses(root));
   await build({
     ...NODE_BACKEND,
     entryPoints: [path.join(source, "backend.ts")],

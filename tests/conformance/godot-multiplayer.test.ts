@@ -15,6 +15,7 @@ import type { PluginScalar } from "../../src/plugin-sdk/index.d.ts";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
 import { type GodotCall, GodotJob } from "../../src/plugins/godot/godot-run.ts";
 import {
+  BRIDGE_LICENSES_FILE,
   BRIDGE_PAGE_FILE,
   colyseusExtension,
   GenexSetting,
@@ -201,6 +202,7 @@ describe("Genex multiplayer in a Godot game", () => {
     const single = await godotGame();
     await single.exportGame();
     assert.equal(await exists(path.join(single.web, BRIDGE_PAGE_FILE)), false);
+    assert.equal(await exists(path.join(single.web, BRIDGE_LICENSES_FILE)), false);
     assert.doesNotMatch(await readFile(path.join(single.project, "export_presets.cfg"), "utf8"), /head_include/);
 
     const game = await godotGame();
@@ -210,6 +212,11 @@ describe("Genex multiplayer in a Godot game", () => {
       await readFile(path.join(game.web, BRIDGE_PAGE_FILE)),
       await readFile(MULTIPLAYER.bridge),
       "the SDK's bridge as Studio pins it",
+    );
+    assert.equal(
+      await readFile(path.join(game.web, BRIDGE_LICENSES_FILE), "utf8"),
+      await readFile(MULTIPLAYER.bridgeLicenses, "utf8"),
+      "with the licenses of what it bundles, which the bridge carries none of",
     );
   });
 });

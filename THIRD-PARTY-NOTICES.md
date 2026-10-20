@@ -340,10 +340,11 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-### @genex-ai/multiplayer 0.17.0
+### @genex-ai/multiplayer 0.17.1
 
 Bundled into `vendor/genex/`, the multiplayer SDK a game made from Studio's template maps in its import
-map. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
+map, and shipped as `genex-multiplayer-bridge.js` (its `dist/bridge.global.js`) beside a multiplayer
+Godot game's web export. Its package and repository (https://github.com/genex-games/genex) declare the MIT license
 without a license file. The MIT terms:
 
 Copyright (c) 2026 Genex

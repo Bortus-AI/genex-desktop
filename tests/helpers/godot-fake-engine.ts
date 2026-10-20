@@ -20,10 +20,11 @@ import { tmpDir } from "./tmp.ts";
 export const SCRIPTS = path.resolve("src/plugins/godot/scripts");
 export const TEMPLATES = path.resolve("src/plugins/godot/templates");
 export const ADDON = path.resolve("src/plugins/godot/addon/genex");
-/** Genex multiplayer as the plugin ships it: its addon, the SDK's bridge and the Colyseus license. */
+/** Genex multiplayer as the plugin ships it: its addon, the SDK's bridge (its licenses a fixture's) and the Colyseus license. */
 export const MULTIPLAYER = {
   addon: path.resolve("src/plugins/godot/addon/genex_multiplayer"),
   bridge: path.resolve("node_modules/@genex-ai/multiplayer/dist/bridge.global.js"),
+  bridgeLicenses: path.resolve("tests/fixtures/godot-multiplayer/genex-multiplayer-bridge.LICENSES.md"),
   license: path.resolve("src/plugins/godot/multiplayer/COLYSEUS-LICENSE"),
 };
 /** Godot 4.6.1's own version line. */

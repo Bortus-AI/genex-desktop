@@ -13,7 +13,7 @@ import { MINUTE_MS } from "../../shared/duration.ts";
 import { writeFileNoFollow } from "../../substrate/fsx.ts";
 import { type GodotInstall, type GodotVersion, versionName } from "./find-godot.ts";
 import { type GodotCall, GodotJob } from "./godot-run.ts";
-import { BRIDGE_PAGE_FILE, COLYSEUS_FOLDER, godotString } from "./multiplayer.ts";
+import { BRIDGE_LICENSES_FILE, BRIDGE_PAGE_FILE, COLYSEUS_FOLDER, godotString } from "./multiplayer.ts";
 
 /** The game's folder the export goes into, at the game's root. */
 export const WEB_EXPORT_FOLDER = "web";
@@ -142,11 +142,23 @@ export async function addWebPreset(project: string, linkMessage: string, options
   if (next !== presets) await writeFileNoFollow(file, next);
 }
 
-/** Genex's SDK bridge beside the exported page, from the copy the plugin ships; never through a link. */
-export async function copyBridge(folder: string, bridge: string, linkMessage: string): Promise<void> {
-  const target = path.join(folder, BRIDGE_PAGE_FILE);
-  await assertNoLink(target, linkMessage);
-  await writeFileNoFollow(target, await readFile(bridge));
+/**
+ * Genex's SDK bridge beside the exported page, with the licenses of what it bundles, from the
+ * copies the plugin ships; never through a link.
+ */
+export async function copyBridge(
+  folder: string,
+  shipped: { bridge: string; bridgeLicenses: string },
+  linkMessage: string,
+): Promise<void> {
+  for (const [name, from] of [
+    [BRIDGE_PAGE_FILE, shipped.bridge],
+    [BRIDGE_LICENSES_FILE, shipped.bridgeLicenses],
+  ] as const) {
+    const target = path.join(folder, name);
+    await assertNoLink(target, linkMessage);
+    await writeFileNoFollow(target, await readFile(from));
+  }
 }
 
 /** The export's folder, made when missing and marked for Godot to leave out of the project; never a link. */

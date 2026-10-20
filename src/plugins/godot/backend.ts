@@ -66,6 +66,8 @@ import { findProjects, readProject } from "./find-projects.ts";
 import { createProject, GodotTemplate } from "./new-project.ts";
 import { addonState, isSetUp, setUpGame } from "./genex-addon.ts";
 import {
+  BRIDGE_LICENSES_FILE,
+  BRIDGE_PAGE_FILE,
   type ColyseusRelease,
   colyseusRelease,
   installColyseus,
@@ -133,10 +135,9 @@ const isGodotTool = (name: string): name is GodotTool => TOOL_NAMES.has(name);
 const SCRIPTS_FOLDER = "scripts";
 const TEMPLATES_FOLDER = "templates";
 const ADDON_SOURCE = ["addon", "genex"];
-/** Genex's multiplayer addon, and the folder of the SDK bridge and the Colyseus license beside the backend. */
+/** Genex's multiplayer addon, and the folder of the SDK bridge, its licenses and the Colyseus license beside the backend. */
 const MULTIPLAYER_ADDON_SOURCE = ["addon", "genex_multiplayer"];
 const MULTIPLAYER_FOLDER = "multiplayer";
-const BRIDGE_FILE = "genex-multiplayer-bridge.js";
 const COLYSEUS_LICENSE_FILE = "COLYSEUS-LICENSE";
 /** What an observer's capture keeps free of the time Genex gives it: reading and handing back the pictures. */
 const OBSERVE_MARGIN_MS = 5 * SECOND_MS;
@@ -275,7 +276,13 @@ export type GodotBackendDeps = {
    * Genex multiplayer: the shipped addon (`addon/genex_multiplayer`), the SDK's bridge a web export
    * loads, the Colyseus license a project's copy carries, and the Colyseus release when a test pins another.
    */
-  multiplayer: { addon: string; bridge: string; license: string; release?: ColyseusRelease };
+  multiplayer: {
+    addon: string;
+    bridge: string;
+    bridgeLicenses: string;
+    license: string;
+    release?: ColyseusRelease;
+  };
 };
 
 type Handler = (args: Record<string, unknown>, context: PluginContext) => Promise<unknown>;
@@ -436,7 +443,7 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   const written = pack !== null && pack.mtimeMs >= started - EXPORT_CLOCK_SLACK_MS;
   const errors = readProblems(result.output).filter(isError);
   if (!written) throw new Error(MESSAGE.Web.Failed(problemLines(errors.slice(0, NOTED_PROBLEMS))));
-  if (multiplayer) await copyBridge(folder, deps.multiplayer.bridge, MESSAGE.Web.Link);
+  if (multiplayer) await copyBridge(folder, deps.multiplayer, MESSAGE.Web.Link);
   return (await readdir(folder)).filter((name) => !name.startsWith(".")).length;
 }
 
@@ -959,7 +966,8 @@ export const activate: Activate = () => {
     addon: path.join(here, ...ADDON_SOURCE),
     multiplayer: {
       addon: path.join(here, ...MULTIPLAYER_ADDON_SOURCE),
-      bridge: path.join(here, MULTIPLAYER_FOLDER, BRIDGE_FILE),
+      bridge: path.join(here, MULTIPLAYER_FOLDER, BRIDGE_PAGE_FILE),
+      bridgeLicenses: path.join(here, MULTIPLAYER_FOLDER, BRIDGE_LICENSES_FILE),
       license: path.join(here, MULTIPLAYER_FOLDER, COLYSEUS_LICENSE_FILE),
     },
   });

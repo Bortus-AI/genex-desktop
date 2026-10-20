@@ -57,6 +57,8 @@ const UNZIP_MS = 2 * MINUTE_MS;
 
 /** The page file the Web preset loads the SDK's bridge from, beside the exported page. */
 export const BRIDGE_PAGE_FILE = "genex-multiplayer-bridge.js";
+/** The licenses of everything the bridge bundles, beside it in the export (the bridge carries none). */
+export const BRIDGE_LICENSES_FILE = "genex-multiplayer-bridge.LICENSES.md";
 
 /** `project.godot`'s section of Genex's own settings, and the keys of the game's Genex project in it. */
 const GENEX_SECTION = "[genex]";
