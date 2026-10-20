@@ -19,6 +19,10 @@ the setup screen opens on `git-missing`. What differs from macOS:
   `initialize()` is tried a second time only when srt-win's egress check (`wfp`) times out; a
   timed-out ACL step fails at once, since a retry would repeat its walk under each folder srt-win
   grants and each denied path's parent.
+- Core startup awaits `ProcessSandbox.ensureReady()` before migrating or booting the harness.
+  A failed background sandbox start reports its original error without rewinding or reseeding
+  valid harness edits. A later Try again can retry initialization; broken harness code still
+  uses its existing recovery once the sandbox is ready.
 - The version-guarded [SRT patch](../scripts/patch-sandbox-runtime.mjs) runs initialization,
   failed-initialization rollback, launcher rollback and session reset ACL commands asynchronously.
   Revoke and restore each keep their holder PID, SID and best-effort outcomes; a slow cleanup must
