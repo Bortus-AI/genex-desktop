@@ -663,9 +663,13 @@ describe("an entry on one folder alone, on Windows", {
     assert.equal(await denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, to pass down");
     assert.doesNotMatch(sddl(before, root), /;;;BG\)/, "nothing under it was walked during the start");
-    const later = path.join(secret, "Default", "Login Data");
+    const later = path.join(secret, "Login Data");
     await writeFile(later, "later");
     assert.match(sddl(later, root), /\(D;ID;FA;;;BG\)/, "a file made in it meanwhile inherits the deny");
+    // One made deeper inherits its folder's entries, still the owner's only, until the walk.
+    const deeper = path.join(secret, "Default", "Login Data");
+    await writeFile(deeper, "later");
+    assert.doesNotMatch(sddl(deeper, root), /\(A;[^)]*;;;(?:BG|BU|WD|AU)\)/, "nothing opens it to the sandbox user");
     await denies.walkDeferred();
     assert.match(sddl(before, root), /\(D;ID;FA;;;BG\)/, "the walk later passes the deny down");
     await denies.revokeAll();
@@ -720,7 +724,7 @@ describe("an entry on one folder alone, on Windows", {
       const outcomes = await folderOwnEditor()([denyLater(secret)]);
       assert.equal(outcomes?.[0]?.ok, true, JSON.stringify(outcomes));
       assert.equal(outcomes?.[0]?.ok && outcomes[0].deferred, undefined, "the walk did not wait");
-      assert.match(sddl(path.join(secret, "Default"), root), /\(D;ID;FA;;;BG\)/, "it was passed down");
+      assert.match(sddl(path.join(secret, "Default"), root), /\(D;OICIID;FA;;;BG\)/, "it was passed down");
       await folderOwnEditor()([{ ...denyLater(secret), deny: null, walk: undefined }]);
     });
   }
@@ -732,7 +736,7 @@ describe("an entry on one folder alone, on Windows", {
     openToUsers(secret);
     const outcomes = await folderOwnEditor()([denyLater(secret)]);
     assert.equal(outcomes?.[0]?.ok && outcomes[0].deferred, undefined);
-    assert.match(sddl(path.join(secret, "Default"), root), /\(D;ID;FA;;;BG\)/);
+    assert.match(sddl(path.join(secret, "Default"), root), /\(D;OICIID;FA;;;BG\)/);
   });
 
   it("grants a folder and what is in it, and the folder entry above the grants comes and goes beside it", async () => {
