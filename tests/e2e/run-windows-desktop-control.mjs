@@ -44,7 +44,15 @@ const REFUSED = /refus|never driven|did not allow|password field/i;
  * UI Automation's own password flag can say what it is.
  */
 const PASSWORD_FORM =
-  "Add-Type -AssemblyName System.Windows.Forms; $f = New-Object Windows.Forms.Form; $f.Text = 'Genex password field'; $t = New-Object Windows.Forms.TextBox; $t.UseSystemPasswordChar = $true; $t.Dock = 'Fill'; $f.Controls.Add($t); $f.Add_Shown({ $f.Activate(); $t.Focus() }); [Windows.Forms.Application]::Run($f)";
+  "$PSModuleAutoLoadingPreference = 'None'; [void][Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms'); $f = [Windows.Forms.Form]::new(); $f.Text = 'Genex password field'; $t = [Windows.Forms.TextBox]::new(); $t.UseSystemPasswordChar = $true; $t.Dock = 'Fill'; $f.Controls.Add($t); $f.Add_Shown({ $f.Activate(); [void]$t.Focus() }); [Windows.Forms.Application]::Run($f)";
+/**
+ * The start of a PowerShell command that runs no cmdlet: a first cmdlet makes PowerShell prepare
+ * every installed module, which takes many seconds on a fresh machine. UI Automation is loaded.
+ */
+const DOTNET =
+  "$PSModuleAutoLoadingPreference = 'None'; foreach ($a in 'UIAutomationClient', 'UIAutomationTypes', 'WindowsBase', 'System.Windows.Forms') { [void][Reflection.Assembly]::LoadWithPartialName($a) }";
+/** A UI Automation element's rectangle, as left,top,right,bottom. */
+const RECT = '$r = $e.Current.BoundingRectangle; "$([int]$r.Left),$([int]$r.Top),$([int]$r.Right),$([int]$r.Bottom)"';
 const report = { at: new Date().toISOString(), checks: [], asked: [], failed: 0 };
 
 function check(name, ok, detail) {
@@ -82,11 +90,7 @@ async function running(image) {
   return stdout.toLowerCase().includes(image.toLowerCase());
 }
 
-/** GetWindowRect and FindWindow, for PowerShell. */
-const WIN32 =
-  'Add-Type -Namespace Genex -Name Win -MemberDefinition \'[DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out System.Drawing.Rectangle r); [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr FindWindow(string c, string t);\' -ReferencedAssemblies System.Drawing';
-
-/** A window's screen rectangle from PowerShell's answer: GetWindowRect fills left, top, right, bottom. */
+/** A window's screen rectangle from PowerShell's answer: left, top, right, bottom. */
 function rectOf(out) {
   const match = /^(-?\d+),(-?\d+),(-?\d+),(-?\d+)$/m.exec(out);
   return match ? { left: +match[1], top: +match[2], right: +match[3], bottom: +match[4] } : null;
@@ -95,18 +99,20 @@ function rectOf(out) {
 /** The screen rectangle of a process's main window (by process name), or null. */
 async function windowRect(processName) {
   return rectOf(
-    await powershell(`${WIN32}
-$p = Get-Process -Name '${processName}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-if ($p) { $r = New-Object System.Drawing.Rectangle; [void][Genex.Win]::GetWindowRect($p.MainWindowHandle, [ref]$r); "$($r.X),$($r.Y),$($r.Width),$($r.Height)" }`),
+    await powershell(`${DOTNET}
+foreach ($p in [Diagnostics.Process]::GetProcessesByName('${processName}')) {
+  if ($p.MainWindowHandle -ne [IntPtr]::Zero) { $e = [Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle); ${RECT}; break }
+}`),
   );
 }
 
 /** The screen rectangle of the top-level window with this exact title, or null. */
 async function titledRect(title) {
   return rectOf(
-    await powershell(`${WIN32}
-$h = [Genex.Win]::FindWindow($null, '${title}')
-if ($h -ne [IntPtr]::Zero) { $r = New-Object System.Drawing.Rectangle; [void][Genex.Win]::GetWindowRect($h, [ref]$r); "$($r.X),$($r.Y),$($r.Width),$($r.Height)" }`),
+    await powershell(`${DOTNET}
+$named = [Windows.Automation.PropertyCondition]::new([Windows.Automation.AutomationElement]::NameProperty, '${title}')
+$e = [Windows.Automation.AutomationElement]::RootElement.FindFirst([Windows.Automation.TreeScope]::Children, $named)
+if ($null -ne $e) { ${RECT} }`),
   );
 }
 
@@ -116,14 +122,16 @@ if ($h -ne [IntPtr]::Zero) { $r = New-Object System.Drawing.Rectangle; [void][Ge
  */
 async function toFront(target) {
   const which = typeof target === "number" ? String(target) : `'${target.replaceAll("'", "''")}'`;
-  await powershell(`[void](New-Object -ComObject WScript.Shell).AppActivate(${which})`);
+  await powershell(
+    `$PSModuleAutoLoadingPreference = 'None'; [void][Activator]::CreateInstance([Type]::GetTypeFromProgID('WScript.Shell')).AppActivate(${which})`,
+  );
   await sleep(700);
 }
 
 /** The primary screen's size in pixels. */
 async function screenSize() {
   const out = await powershell(
-    'Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; "$($b.Width),$($b.Height)"',
+    `${DOTNET}; $b = [Windows.Forms.Screen]::PrimaryScreen.Bounds; "$($b.Width),$($b.Height)"`,
   );
   const [width, height] = out.split(",").map(Number);
   return { width, height };
@@ -385,9 +393,11 @@ async function main() {
   const { control, call } = session(binary);
   const centre = await firstLook(call, binary);
   const notepad = await notepadStep(call, centre);
+  await chordStep(call, notepad);
+  // Notepad would sit over what opens next.
+  await run("taskkill", ["/IM", "notepad.exe", "/F"]).catch(() => {});
   await neverDrivenSteps(call, centre);
   await passwordStep(call, centre);
-  await chordStep(call, notepad);
   await stopStep(control, call);
   await crashStep(resources);
   await run("taskkill", ["/IM", "notepad.exe", "/F"]).catch(() => {});
