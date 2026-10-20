@@ -198,6 +198,14 @@ is.
   quitting Genex ends every game, and the next start ends a leftover only while it is the same
   process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
   gives way), and opening a game whose app runs brings the app forward.
+- Links (`main/play/game-links.ts`): the website's Open in Genex sends `genex://game/<slug>`.
+  The packaged app declares the scheme (`protocols` in `forge.config.cjs`, the Linux packages'
+  `x-scheme-handler/genex`) and registers it at start; macOS hands a link over `open-url`, Windows
+  and Linux start Genex with it (`second-instance`, or the first start's arguments). Only that exact
+  shape with a Play slug is taken. Main shows the window and keeps the newest link until the page
+  takes it once (`studio:play.take-game-link`, announced by `play.game-link`); the page then opens
+  the game's own page in Play (`use-game-links.ts`), which shows its own error when the game
+  cannot be read. Developer and test launches register nothing.
 - Notices: an install finished or failed, and a newer build of an installed game (checked at start
   and every six hours, once per version), are written to the log (`play_install_finished`,
   `play_install_failed`, `play_update_available`); the feed shows them as Play rows that open the
