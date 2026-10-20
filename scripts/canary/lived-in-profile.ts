@@ -106,7 +106,7 @@ async function main(): Promise<void> {
       files: { type: "string", default: String(DEFAULT_FILES) },
       "large-files": { type: "string", default: String(DEFAULT_LARGE_FILES) },
       "force-own-home": { type: "boolean", default: false },
-      "settle-minutes": { type: "string", default: String(SETTLE_CAP_MS / MINUTE_MS) },
+      "settle-minutes": { type: "string", default: "0" },
     },
   });
   if (!values.home) throw new Error("--home is required");
