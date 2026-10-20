@@ -14,6 +14,30 @@ import { GenexTools } from "../../src/plugins/genex/adapter.ts";
 import { type GenexFixtureApi, startGenexFixtureApi } from "../helpers/genex-fixture-api.ts";
 import { hasNativeCommand, nativeUploads, sendNativeBuild, sentBuild } from "../../src/plugins/genex/native-publish.ts";
 import { tmpDir } from "../helpers/tmp.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+
+/** A 1920x1080 PNG header: all the cover's checks read before Genex sees it. */
+const cover = (() => {
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(1920, 0);
+  header.writeUInt32BE(1080, 4);
+  header[8] = 8;
+  header[9] = 6;
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(header.length);
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([signature, length, Buffer.from("IHDR"), header, Buffer.alloc(4)]);
+})();
+/** The host's still of an engine game's cover reel, as `observe` answers it. */
+const COVER_STILL_ANSWER = {
+  mimeType: "image/png",
+  width: 1920,
+  height: 1080,
+  source: "compositor",
+  view: { demo: "genex-cover" },
+  stats: { lumaMean: 0.45, lumaStdDev: 0.21, nearBlackFraction: 0.08, litFraction: 0.97 },
+  preview: Buffer.from("jpeg preview"),
+};
 
 describe("which CLI sends apps", () => {
   it("is release 1.36.11 or newer: 1.36.10 has no `genex native`, and a dev build may predate it", () => {
@@ -164,6 +188,12 @@ if (args[0] === "init") {
   writeFileSync(".genex/project.json", JSON.stringify({ slug: "dust-runners", id: "p1", status: "draft" }));
   process.exit(0);
 }
+if (args[0] === "cover") {
+  // \`genex cover --json\` says who chose the cover; \`genex cover <file> --json\` sends one.
+  const sending = args[1] !== "--json";
+  process.stdout.write(JSON.stringify(sending ? { kind: "applied", coverUrl: "https://cdn.genex.technology/covers/dust.webp", coverSource: "agent" } : { coverUrl: null, coverSource: null }));
+  process.exit(0);
+}
 const target = args[args.indexOf("publish") + 1] ?? "";
 if (target.includes("Broken")) {
   process.stderr.write("› Zipping…\\n✗ Couldn't get an upload token (HTTP 413).\\n");
@@ -302,6 +332,47 @@ describe("a game with only apps, published", () => {
     const failed = await broken.genex.publishWait("dust");
     assert.equal(failed.job?.state, "failed");
     assert.equal(failed.job?.error, "Couldn't get an upload token (HTTP 413).");
+  });
+
+  it("takes the cover again as it starts and sends it once the apps are on Genex", async () => {
+    const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
+    let shots = 0;
+    const lens = {
+      invokedAt: Date.now(),
+      shoot: async () => {
+        shots++;
+        return { still: { ...COVER_STILL_ANSWER, image: cover } };
+      },
+    };
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    assert.equal(shots, 1, "the cover is taken inside the press's own call");
+    await genex.publishWait("dust");
+    // The cover goes on its own after the job is recorded: wait for its send to be written.
+    const sentCover = async () => (await runs()).some((call) => call.args[0] === "cover" && call.args[1] !== "--json");
+    for (let tries = 0; tries < 100 && !(await sentCover()); tries++) await sleep(50);
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.equal(state.cover?.shot?.width, 1920);
+    assert.equal(state.cover?.last?.kind, "applied", JSON.stringify(state.cover?.last));
+    assert.equal(state.cover?.last?.jobId, state.job?.id);
+    const order = (await runs()).map((call) => call.args[0]);
+    assert.ok(order.lastIndexOf("native") < order.lastIndexOf("cover"), "the apps go before the cover");
+  });
+
+  it("publishes its apps with no cover sent when there is none to take", async () => {
+    const { genex, runs } = await toolsWithStandIn(true, await fixtureApi());
+    const lens = {
+      invokedAt: Date.now(),
+      shoot: async () => ({ stillProblem: { code: "view_unknown", available: [] } }),
+    };
+    await genex.publishAppsOnly("dust", [app("Dust Runners")], "Dust Runners", lens);
+    const state = await genex.publishWait("dust");
+    assert.equal(state.job?.state, "done", JSON.stringify(state.job));
+    assert.equal(state.cover?.shot, null);
+    assert.ok(
+      !(await runs()).some((call) => call.args[0] === "cover" && call.args[1] !== "--json"),
+      "nothing uploaded",
+    );
   });
 
   it("refuses a publish with no app, or with a CLI that cannot send apps", async () => {
