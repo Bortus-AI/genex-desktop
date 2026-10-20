@@ -7,7 +7,8 @@
  * `capture` where granted, and a chat's interview tools (`ask_user`, the Loop's launch) — load with
  * the prompt. Live and connector tools, a large and varied set, stay deferred, and a blind judge
  * still brings its live tools in through tool search alone. The SDK's `query()` is injected: what
- * is proven is what the engine registered.
+ * is proven is what the engine registered. Opt-in (`STUDIO_CLAUDE_CLI_TESTS=1` with a `claude` the
+ * engine can find), the real CLI against `fake-anthropic.ts` shows the first request offers them.
  */
 import assert from "node:assert/strict";
 import { mkdir, realpath } from "node:fs/promises";
@@ -16,10 +17,16 @@ import { describe, it } from "node:test";
 import type { LiveToolSpec, StudioToolSpec } from "../../src/shared/engine-requests.ts";
 import { ClaudeCodeEngine } from "../../src/substrate/engines/claude-code.ts";
 import { fixtureCodingCli } from "../helpers/external-cli.ts";
+import { type FakeAnthropicRequest, startFakeAnthropic } from "../helpers/fake-anthropic.ts";
 import { alwaysLoaded, type ScriptedClaude, scriptedClaude } from "../helpers/scripted-claude.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 delete process.env.CLAUDE_CONFIG_DIR;
+
+const LIVE = process.env.STUDIO_CLAUDE_CLI_TESTS === "1";
+/** The real CLI's turn against the fake: a command that changes nothing, where one is offered. */
+const HARMLESS_COMMAND = "true";
+const CLI_DEADLINE_MS = 120_000;
 
 /** A tool declared as the harness declares its interview and live tools: one string field. */
 function spec(name: string): StudioToolSpec & LiveToolSpec {
@@ -45,6 +52,43 @@ async function session(request: Record<string, unknown>): Promise<ScriptedClaude
   await engine.delegate({ prompt: "build it", cwd, ...request } as never);
   assert.ok(scripted.options, "a session started");
   return scripted;
+}
+
+/** The tool names a Messages request offered. */
+function offered(request: FakeAnthropicRequest): string[] {
+  const tools = (request.body as { tools?: Array<{ name?: string }> } | null)?.tools ?? [];
+  return tools.map((tool) => String(tool.name));
+}
+
+/** One delegation through the real CLI; the tools of its first Messages request that offers any. */
+async function firstOffered(request: Record<string, unknown>): Promise<string[]> {
+  const root = await realpath(await tmpDir("studio-claude-tool-loading-cli-"));
+  const cwd = path.join(root, "game");
+  await mkdir(cwd, { recursive: true });
+  const saved = { ...process.env };
+  const fake = await startFakeAnthropic({ command: HARMLESS_COMMAND });
+  process.env.ANTHROPIC_BASE_URL = fake.baseUrl;
+  process.env.CLAUDE_CODE_OAUTH_TOKEN = "fake-token";
+  process.env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
+  try {
+    const engine = new ClaudeCodeEngine({
+      engineHome: path.join(root, "engine-home"),
+      systemHome: path.join(root, "no-system-login"),
+    });
+    const result = await engine.delegate({
+      prompt: "build it",
+      cwd,
+      timeoutMs: CLI_DEADLINE_MS,
+      ...request,
+    } as never);
+    assert.equal(result.ok, true, `${result.stopReason}: ${result.errorText ?? result.summary}`);
+    const first = fake.requests.find((r) => r.path.endsWith("/v1/messages") && offered(r).length > 0);
+    assert.ok(first, "the CLI sent a request that offers tools");
+    return offered(first);
+  } finally {
+    process.env = saved;
+    await fake.close();
+  }
 }
 
 const LIVE_TOOLS = [spec("press_key"), spec("connector__search")];
@@ -84,5 +128,18 @@ describe("a Claude session sees the studio tools it is expected to call from its
       }
     }
     assert.deepEqual(judge.options?.tools, ["ToolSearch"], "the blind judge loads them through tool search alone");
+  });
+});
+
+describe("the real Claude Code CLI offers them in its first request", {
+  skip: !LIVE && "STUDIO_CLAUDE_CLI_TESTS=1",
+}, () => {
+  it("a builder's checkpoint and capture, and a Loop chat's launch and ask_user", async () => {
+    const builder = await firstOffered({ onCapture: async () => "captured" });
+    for (const tool of ["mcp__studio__checkpoint", "mcp__studio__capture"])
+      assert.ok(builder.includes(tool), `builder: ${tool} in ${builder.join(", ")}`);
+    const chat = await firstOffered({ interviewTools: [spec("launch_build"), spec("ask_user")] });
+    for (const tool of ["mcp__studio__launch_build", "mcp__studio__ask_user"])
+      assert.ok(chat.includes(tool), `Loop chat: ${tool} in ${chat.join(", ")}`);
   });
 });
