@@ -84,8 +84,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   toolchain, a games folder full of `node_modules`), and took it back at every exit; its stamp
   puts an inheritable FILE_DELETE_CHILD deny on each denied path's parent, which Windows passes
   down through everything under it, once per path: for `.ssh` or `.claude` the whole profile, for
-  a game's `.claude` the whole game. Either ran past srt-win's 60-second deadline on a large
-  profile ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)),
+  a game's `.claude` the whole game. Either ran past srt-win's deadline (SRT's 60 seconds; two
+  minutes now, above) on a large profile ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)),
   in the background start behind the open window. Genex grants a folder to the sandbox users'
   group, passed down through what is under it (read and run, or with write and delete, without
   FILE_DELETE_CHILD, as srt-win's grants), and marks its write grants safe for Git, as srt-win
