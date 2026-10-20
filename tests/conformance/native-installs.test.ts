@@ -11,8 +11,9 @@ import { cp, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promi
 import path from "node:path";
 import { describe, it } from "node:test";
 import { promisify } from "node:util";
+import genexManifest from "../../src/plugins/genex/plugin.json" with { type: "json" };
 import { type InstallOutcome, nativeInstalls, SAVES } from "../../src/main/play/native-installs.ts";
-import { GAME_BUNDLE_PREFIX, runTool } from "../../src/main/play/native-unpack.ts";
+import { GAME_BUNDLE_PREFIX, runTool, WINDOWED_KEY } from "../../src/main/play/native-unpack.ts";
 import type { PlayGameDetail } from "../../src/shared/play.ts";
 import {
   InstallFailure,
@@ -33,7 +34,11 @@ const THIS_MAC: NativeHost = { platform: NativePlatform.Mac, arch: NativeArch.Ar
 const GB = 1024 ** 3;
 
 /** A minimal app: `/usr/bin/true` as its program (both processors), signed ad hoc unless `unsigned`. */
-async function makeApp(dir: string, title: string, options: { unsigned?: boolean; intelOnly?: boolean } = {}) {
+async function makeApp(
+  dir: string,
+  title: string,
+  options: { unsigned?: boolean; intelOnly?: boolean; windowed?: boolean } = {},
+) {
   const app = path.join(dir, `${title}.app`);
   await mkdir(path.join(app, "Contents", "MacOS"), { recursive: true });
   const program = path.join(app, "Contents", "MacOS", "Game");
@@ -41,6 +46,9 @@ async function makeApp(dir: string, title: string, options: { unsigned?: boolean
   else await cp("/usr/bin/true", program);
   const plist = `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>Game</string><key>CFBundleIdentifier</key><string>com.googlecode.iterm2</string><key>CFBundleName</key><string>${title}</string><key>CFBundlePackageType</key><string>APPL</string></dict></plist>`;
   await writeFile(path.join(app, "Contents", "Info.plist"), plist);
+  // What the agent does for a game that should open in a window: one key in its Info.plist.
+  if (options.windowed)
+    await exec("/usr/bin/plutil", ["-insert", WINDOWED_KEY, "-bool", "YES", path.join(app, "Contents", "Info.plist")]);
   if (options.unsigned) await exec("/usr/bin/codesign", ["--remove-signature", program]);
   else await exec("/usr/bin/codesign", ["--sign", "-", "--force", "--deep", app]);
   return app;
@@ -189,10 +197,43 @@ describe("Play's native installer", { skip: SKIP }, () => {
     const record = await installs.record("dust-runners");
     assert.equal(record?.executable, "Contents/MacOS/Game");
     assert.equal(record?.bundleName, "Dust Runners");
+    assert.deepEqual([record?.engine, record?.windowed], ["unity", false], "it opens full screen in Unity's way");
     assert.deepEqual(await readdir(path.join(root, ".downloads")), [], "the archive is not kept");
     await installs.install("dust-runners");
     await installs.idle();
     assert.equal(outcomes.length, 1, "installing the same version again does nothing");
+  });
+
+  it("records that a game asks for a window, and reads an older record as one that opens full screen", async () => {
+    const work = await tmpDir("native-app-");
+    const archive = await zipApp(await makeApp(work, "Dust Runners", { windowed: true }), path.join(work, "game.zip"));
+    const build = buildOf("dust-runners", archive);
+    const { installs, root } = await installer({ "dust-runners": [build] }, new Map([[build.url, archive]]));
+    await installs.install("dust-runners");
+    await installs.idle();
+    assert.equal((await installs.record("dust-runners"))?.windowed, true);
+    const skill = genexManifest.skills.find((one) => one.name === "publishing-apps");
+    assert.match(
+      skill && "text" in skill ? String(skill.text) : "",
+      new RegExp(WINDOWED_KEY),
+      "the agent is told the key",
+    );
+    const index = JSON.parse(await readFile(path.join(root, "index.json"), "utf8"));
+    const { engine: _engine, windowed: _windowed, ...older } = index.games["dust-runners"];
+    await writeFile(path.join(root, "index.json"), JSON.stringify({ ...index, games: { "dust-runners": older } }));
+    const again = nativeInstalls({
+      root,
+      host: THIS_MAC,
+      hosts: new Set([HOST]),
+      game: async (slug) => page(slug, [build]),
+      fetch,
+      run: runTool,
+      now: Date.now,
+      publish: () => {},
+      outcome: () => {},
+    });
+    const read = await again.record("dust-runners");
+    assert.deepEqual([read?.engine, read?.windowed], [null, false]);
   });
 
   it("installs an app zipped as `genex native publish` packs it, its extended attributes set aside", async () => {

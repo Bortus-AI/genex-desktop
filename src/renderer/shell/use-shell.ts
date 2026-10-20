@@ -9,6 +9,7 @@ import { Room, roomOf, projectOf } from "../state/threads.ts";
 import { useAutoOpenBuilds } from "../use-auto-open-builds.ts";
 import { useChatHistory } from "../use-chat-history.ts";
 import { useComposerHandoff } from "./use-composer-handoff.ts";
+import { useGameLinks } from "./use-game-links.ts";
 import { useNavigation } from "./use-navigation.ts";
 import { useShellChrome } from "./use-shell-chrome.ts";
 import { useShellNotices } from "./use-shell-notices.ts";
@@ -58,6 +59,7 @@ export function useShell() {
     navigation,
     views,
   );
+  useGameLinks(app, ready, chrome.setPlayOpen);
   // At home, the keyboard's composer is home's; the chat's stays mounted beneath it.
   const homeUp = room === Room.Home;
   useShellShortcuts(dialogs, chrome, navigation, homeUp ? handoff.homeComposer : handoff.composer);
