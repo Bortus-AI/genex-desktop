@@ -12,7 +12,7 @@
  * The prompt goes in on stdin; each stdout line is one event (`opencode-events.ts`); a session is
  * resumed by its id (`--session`). Studio tools arrive through the same bridge Codex uses.
  */
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
@@ -57,6 +57,7 @@ import type { PartialDelegateState } from "./common.ts";
 import { ProcessSandbox, type SandboxOptions, shellQuote } from "../spawn.ts";
 import { childEnv } from "../child-env.ts";
 import { credentialHomes, openCodeDataHome } from "../credential-homes.ts";
+import { spawnCommand } from "../command-launch.ts";
 import { stopChild } from "../process-tree.ts";
 import type { Usage } from "../types.ts";
 import { CodingCliState } from "../../shared/coding-cli.ts";
@@ -869,7 +870,12 @@ async function listOpenCodeModelsV2(binary: string, cwd: string): Promise<string
     vendor: "opencode",
     set: { OPENCODE_DISABLE_AUTOUPDATE: "1", OPENCODE_DISABLE_PROJECT_CONFIG: "1", OPENCODE_PASSWORD: password },
   });
-  const child = spawn(binary, ["serve", "--stdio", "--port", "0"], { cwd, env, stdio: ["pipe", "pipe", "ignore"] });
+  // OpenCode has no Windows installer: npm installs it as `opencode.cmd`, which only `spawnCommand` can start.
+  const child = spawnCommand(binary, ["serve", "--stdio", "--port", "0"], {
+    cwd,
+    env,
+    stdio: ["pipe", "pipe", "ignore"],
+  });
   try {
     const url = await serverReady(child);
     const authorization = `Basic ${Buffer.from(`${SERVER_USER}:${password}`).toString("base64")}`;
