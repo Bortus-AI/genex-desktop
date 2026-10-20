@@ -6,7 +6,7 @@
  * labels are tested without Electron.
  */
 import type { MenuItemConstructorOptions } from "electron";
-import { t } from "../shared/i18n.ts";
+import { t, tc } from "../shared/i18n.ts";
 
 /** What the menu needs from the running app. */
 export interface AppMenuOptions {
@@ -85,7 +85,7 @@ function editMenu(mac: boolean): MenuItemConstructorOptions {
     { role: "selectAll", label: t("Select All") },
   ];
   return {
-    label: t("Edit"),
+    label: tc("menu", "Edit"),
     submenu: [
       { role: "undo", label: t("Undo") },
       { role: "redo", label: t("Redo") },

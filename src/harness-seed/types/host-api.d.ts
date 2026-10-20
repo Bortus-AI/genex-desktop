@@ -1120,8 +1120,11 @@ export interface EngineDescriptor {
 }
 // ↑ src/shared/engine-descriptor.ts
 
+export type Locale = 'en' | 'ru' | 'es' | 'pt-BR' | 'de' | 'fr' | 'ja' | 'ko' | 'zh-Hans';
+// ↑ src/shared/locale.ts
+
 /** What Settings remembers: a language, or the computer's. */
-export type LanguageChoice = Locale | 'system';
+export type LanguageChoice = Locale | "system";
 // ↑ src/shared/locale.ts
 
 export interface StudioSettingsView {

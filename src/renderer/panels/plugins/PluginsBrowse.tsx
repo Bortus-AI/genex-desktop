@@ -5,7 +5,7 @@
  */
 import type { JSX, RefObject } from "react";
 import { GENEX_PLUGIN_ID } from "../../../shared/genex.ts";
-import { t } from "../../../shared/i18n.ts";
+import { t, tc } from "../../../shared/i18n.ts";
 import type { PluginIndexEntry, PluginIndexView, PluginInfo } from "../../../shared/plugins.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon } from "../../ui/icons.tsx";
@@ -36,7 +36,7 @@ function Installed({ installed, page, query }: { installed: PluginInfo[]; page: 
   const nothingShown = installed.filter((p) => pluginMatches(page, p)).length === 0;
   const credits = useGenexCredits(installed, pluginAccount(page.connections, GENEX_PLUGIN_ID), page.connections);
   return (
-    <Section title={t("Installed")} count={installed.length}>
+    <Section title={tc("heading", "Installed")} count={installed.length}>
       <PluginRows list={installed} page={page} credits={credits} />
       {nothingShown && (
         <p className="extensions-empty">

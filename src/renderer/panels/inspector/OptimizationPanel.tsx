@@ -1,6 +1,6 @@
 /** The card of the Optimization stage: each scenario measured before and after, and what was kept. */
 import type { JSX } from "react";
-import { t } from "../../../shared/i18n.ts";
+import { t, tc } from "../../../shared/i18n.ts";
 import {
   OptimizationOutcome,
   type OptimizationResultV1,
@@ -111,7 +111,7 @@ function ScenarioTable({ scenario }: { scenario: ScenarioResult }): JSX.Element 
             <th className="font-normal">{t("Measurement")}</th>
             <th className="font-normal">{t("Before")}</th>
             <th className="font-normal">{t("After")}</th>
-            <th className="font-normal">{t("Change")}</th>
+            <th className="font-normal">{tc("column", "Change")}</th>
           </tr>
         </thead>
         <tbody>

@@ -1,4 +1,4 @@
-import { t } from "../shared/i18n.ts";
+import { t, tc } from "../shared/i18n.ts";
 import { providerInfo } from "../shared/providers.ts";
 import type { ExportReview } from "../shared/plugins.ts";
 import type { PluginSuggestedPayload } from "../shared/project-tools.ts";
@@ -357,14 +357,14 @@ export const SYSTEM_TAG_WORDS: Record<SystemTag, string> = {
   [SystemTag.Fix]: t("Fix"),
   [SystemTag.Alive]: t("Alive"),
   [SystemTag.Waiting]: t("Waiting"),
-  [SystemTag.Update]: t("Update"),
+  [SystemTag.Update]: tc("tag", "Update"),
   [SystemTag.Plan]: t("Plan"),
   [SystemTag.Ask]: t("Ask"),
   [SystemTag.Stopped]: t("Stopped"),
   [SystemTag.Resumed]: t("Resumed"),
   [SystemTag.Reviewer]: t("Reviewer"),
   [SystemTag.Checked]: t("Checked"),
-  [SystemTag.Show]: t("Show"),
+  [SystemTag.Show]: tc("tag", "Show"),
   [SystemTag.Checkpoint]: t("Checkpoint"),
   [SystemTag.Engine]: t("Engine"),
 };

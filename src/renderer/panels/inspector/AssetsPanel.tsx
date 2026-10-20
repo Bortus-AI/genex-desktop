@@ -1,6 +1,6 @@
 /** The panel of the run's assets: every job a plugin was asked for, grouped by where it got to, and the modeller's work. */
 import type { JSX } from "react";
-import { t } from "../../../shared/i18n.ts";
+import { t, tc } from "../../../shared/i18n.ts";
 import type { AssetInfo, BlenderNode, RunGraph as RunGraphModel } from "../../run-graph.ts";
 import { runIdOf, truncate } from "../../run-graph.ts";
 import { AssetCardState } from "../../run-graph-assets.ts";
@@ -204,7 +204,7 @@ function jobGroups(jobs: AssetInfo[]): Array<[string, AssetInfo[]]> {
     [ASSET_JOB_WORDS.notFinishedGroup, jobs.filter((job) => job.state === AssetCardState.Unfinished)],
     [t("Not in your game yet"), made.filter((job) => job.inGame === false)],
     [t("In your game"), made.filter((job) => job.inGame)],
-    [t("Delivered"), made.filter((job) => job.inGame === undefined)],
+    [tc("asset group", "Delivered"), made.filter((job) => job.inGame === undefined)],
   ];
 }
 

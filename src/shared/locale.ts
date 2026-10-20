@@ -36,7 +36,7 @@ export const LOCALE_NAMES = {
 /** The choice that follows the computer's own language. */
 export const SYSTEM_LANGUAGE = "system" as const;
 /** What Settings remembers: a language, or the computer's. */
-export type LanguageChoice = Locale | typeof SYSTEM_LANGUAGE;
+export type LanguageChoice = Locale | "system";
 
 /** Whether a stored value is a choice this version understands. */
 export function isLanguageChoice(value: unknown): value is LanguageChoice {

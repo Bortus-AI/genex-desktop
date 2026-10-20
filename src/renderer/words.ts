@@ -2182,7 +2182,7 @@ export const TRANSCRIPT_WORDS = {
   reviewInHarness: t("Review in Harness"),
   seeInHarness: t("See in Harness"),
   /** the tags of a reviewer's and a builder's narration rows */
-  checkTag: t("Check"),
+  checkTag: tc("tag", "Check"),
   workerTag: t("Worker"),
   /** A job's line (`job_started`): Stop while it runs. */
   jobStop: t("Stop"),
@@ -3837,7 +3837,7 @@ export const ASSET_LIBRARY_WORDS = {
   openOnPlay: t("Open on Play"),
   stopSharing: t("Stop sharing"),
   /** A share's step line under its card, and how it ended. */
-  steps: { send: t("Send"), check: t("Check"), live: t("Live") },
+  steps: { send: t("Send"), check: tc("step", "Check"), live: t("Live") },
   stepsLabel: t("Sharing"),
   checking: t("Checking"),
   onPlay: t("On Play"),
@@ -4930,7 +4930,7 @@ export const PLAY_WORDS = {
     playsColumn: t("Plays"),
     playersColumn: t("Players"),
     dayByDayColumn: t("Day by day"),
-    changeColumn: t("Change"),
+    changeColumn: tc("column", "Change"),
     /** The strip's label while genex.games has no daily stats: the plays in total. */
     inTotal: t("In total"),
     unavailable: t("Daily stats arrive with the next genex.games update. Until then, your games’ plays in total."),
@@ -5322,7 +5322,7 @@ export const NATIVE_WORDS = {
     ]
       .filter(Boolean)
       .join(" · "),
-  about: t("About"),
+  about: tc("game page", "About"),
   install: t("Install"),
   installLabel: (title: string, size: string) => t("Install {title}, {size}", { title, size }),
   installing: (percent: number) => t("Installing… {percent}%", { percent }),
@@ -5426,7 +5426,7 @@ export const CHECK_WORDS = {
 /** A plugin's toolbar buttons while Studio bundles a newer version of it: pressing one opens Plugins at it. */
 export const PLUGIN_TOOLBAR_WORDS = {
   update: {
-    badge: t("Update"),
+    badge: tc("badge", "Update"),
     title: (plugin: string, version: string) =>
       t("The {plugin} plugin {version} is ready. Press to update it in Plugins.", { plugin, version }),
   },
@@ -5570,7 +5570,7 @@ export const ACCOUNT_WORDS = {
 export const NICKNAME_WORDS = {
   label: t("Your nickname and profile link"),
   states: {
-    [HandleState.Free]: t("Free"),
+    [HandleState.Free]: tc("nickname", "Free"),
     [HandleState.Taken]: t("Taken"),
     [HandleState.TooShort]: t("Too short"),
     [HandleState.TooLong]: t("Too long"),
