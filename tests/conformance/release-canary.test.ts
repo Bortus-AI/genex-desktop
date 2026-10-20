@@ -4,7 +4,7 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { AGENT_CHECKS, agentChecksDone, agentVerdict, readSelfTest } from "../../scripts/canary/agent-command.ts";
-import { ownerResult, sizesWithRoom } from "../../scripts/canary/azure.ts";
+import { gitHubSignIn, gitHubToken, ownerResult, signInDue, sizesWithRoom } from "../../scripts/canary/azure.ts";
 import { readStart } from "../../scripts/canary/first-start.ts";
 import {
   assetTag,
@@ -27,6 +27,7 @@ import {
   readResult,
   StepOutcome,
 } from "../../scripts/canary/results.ts";
+import { MINUTE_MS } from "../../src/shared/duration.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 const ASSETS = "https://github.com/genex-games/genex-desktop/releases/download";
@@ -307,6 +308,67 @@ describe("release canary Azure owner run", () => {
     const dir = await evidence({ [Persona.Owner]: passed });
     assert.deepEqual(await ownerResult(dir, "windows-10", "v0.1.12"), passed);
     assert.deepEqual(await readResult(path.join(dir, Persona.Owner, RESULT_FILE)), passed);
+  });
+});
+
+describe("release canary Azure sign-in", () => {
+  const actions = {
+    ACTIONS_ID_TOKEN_REQUEST_URL: "https://token.actions.example/id?api-version=2.0",
+    ACTIONS_ID_TOKEN_REQUEST_TOKEN: "request-token",
+    AZURE_CLIENT_ID: "client",
+    AZURE_TENANT_ID: "tenant",
+    AZURE_SUBSCRIPTION_ID: "subscription",
+  };
+
+  test("a job signs in again with a token of its own; outside Actions or without the IDs, nothing does", () => {
+    assert.deepEqual(gitHubSignIn(actions), {
+      requestUrl: actions.ACTIONS_ID_TOKEN_REQUEST_URL,
+      requestToken: "request-token",
+      clientId: "client",
+      tenantId: "tenant",
+      subscriptionId: "subscription",
+    });
+    assert.equal(gitHubSignIn({}), null);
+    assert.equal(gitHubSignIn({ ...actions, AZURE_CLIENT_ID: "" }), null);
+    assert.equal(gitHubSignIn({ ...actions, ACTIONS_ID_TOKEN_REQUEST_TOKEN: undefined }), null);
+  });
+
+  test("the fresh token is asked for Azure's audience with the job's request token", async () => {
+    const asked: Array<{ url: string; authorization: string | null }> = [];
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+      asked.push({ url: String(url), authorization: new Headers(init?.headers).get("authorization") });
+      return Response.json({ value: "oidc-token" });
+    };
+    const signIn = gitHubSignIn(actions);
+    assert.ok(signIn);
+    assert.equal(await gitHubToken(signIn, fetchImpl), "oidc-token");
+    const url = new URL(asked[0]?.url ?? "");
+    assert.equal(url.searchParams.get("api-version"), "2.0");
+    assert.equal(url.searchParams.get("audience"), "api://AzureADTokenExchange");
+    assert.equal(asked[0]?.authorization, "bearer request-token");
+  });
+
+  test("a refused or empty answer is an error, never a sign-in with no token", async () => {
+    const signIn = gitHubSignIn(actions);
+    assert.ok(signIn);
+    await assert.rejects(
+      gitHubToken(signIn, async () => new Response("no", { status: 403 })),
+      /HTTP 403/,
+    );
+    await assert.rejects(
+      gitHubToken(signIn, async () => Response.json({ value: "" })),
+      /no token/,
+    );
+    await assert.rejects(
+      gitHubToken(signIn, async () => Response.json({})),
+      /no token/,
+    );
+  });
+
+  test("az signs in again once the last sign-in is a few minutes old, the first time always", () => {
+    assert.equal(signInDue(null, 0), true);
+    assert.equal(signInDue(0, 4 * MINUTE_MS), false);
+    assert.equal(signInDue(0, 5 * MINUTE_MS), true);
   });
 });
 
