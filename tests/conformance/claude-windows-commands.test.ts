@@ -221,6 +221,7 @@ describe("Claude Code on Windows runs its commands in Genex's sandbox", () => {
     assert.equal(run?.command, "node --check main.js");
     assert.equal(run?.cwd, f.copy);
     assert.deepEqual(run?.policy?.allowedDomains ?? [], [], "a command has no network");
+    assert.equal(run?.policy?.denyRead, undefined, "the box holds the denies; none is stamped again per command");
     const [call] = scripted.calls;
     assert.equal(call?.isError, false);
     assert.match(call?.text ?? "", /ok from the box/);

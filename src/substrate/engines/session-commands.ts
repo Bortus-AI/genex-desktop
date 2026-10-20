@@ -45,9 +45,9 @@ export interface SessionCommand {
   signal: AbortSignal;
   timeoutMs: number;
   maxOutputBytes: number;
-  /** Denied for this run on top of the box's own lists. */
-  denyRead: readonly string[];
-  denyWrite: readonly string[];
+  /** Denied for this run on top of the box's own lists; none when the box's own hold it. */
+  denyRead?: readonly string[];
+  denyWrite?: readonly string[];
   /** The sandbox label: `<engine>:<session id>`. */
   label: string;
 }
@@ -86,13 +86,14 @@ export async function commandSandbox(
 
 /** Run one of the session's commands in its sandbox, with no network. */
 export function runSessionCommand(sandbox: CommandSandbox, call: SessionCommand): Promise<RunResult> {
+  const denies = call.denyRead || call.denyWrite;
   return sandbox.run({
     command: call.command,
     cwd: call.cwd,
     signal: call.signal,
     timeoutMs: call.timeoutMs,
     maxOutputBytes: call.maxOutputBytes,
-    policy: { denyRead: [...call.denyRead], denyWrite: [...call.denyWrite] },
+    ...(denies ? { policy: { denyRead: [...(call.denyRead ?? [])], denyWrite: [...(call.denyWrite ?? [])] } } : {}),
     label: call.label,
   });
 }
@@ -122,14 +123,14 @@ export function sessionShell(spec: ShellSpec): SessionShell {
   return {
     run: async (command, timeoutMs) => {
       made ??= commandSandbox(spec.box, spec.create);
+      // No per-command denies: the box holds the session's lists, and on Windows srt-win stamps a
+      // per-command deny again on every run, re-propagating the entries under its parent.
       return runSessionCommand(await made, {
         command,
         cwd: spec.box.cwd,
         signal: spec.signal,
         timeoutMs,
         maxOutputBytes: spec.maxOutputBytes,
-        denyRead: spec.box.secretPaths,
-        denyWrite: spec.box.denyWrite,
         label: spec.label,
       });
     },
