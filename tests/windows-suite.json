@@ -199,6 +199,7 @@
   "tests/conformance/preview-visibility.test.ts",
   "tests/conformance/process-start.test.ts",
   "tests/conformance/project-picker.test.ts",
+  "tests/conformance/provider-cli-launch.test.ts",
   "tests/conformance/provider-skills.test.ts",
   "tests/conformance/providers.test.ts",
   "tests/conformance/queued-message.test.ts",
