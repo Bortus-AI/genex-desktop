@@ -10,6 +10,7 @@ import { FixtureAccount, fixtureAccountToken } from "../../src/main/dev/fixture-
 import { fixturePlayRequest } from "../../src/main/dev/fixture-play.ts";
 import { createIpcHandle, type IpcResult, type IpcSender } from "../../src/main/ipc-handle.ts";
 import { type PlayIpcDeps, registerPlayIpc } from "../../src/main/ipc/play.ts";
+import { gameLinks } from "../../src/main/play/game-links.ts";
 import {
   type GalleryAnswer,
   GalleryError,
@@ -418,6 +419,7 @@ describe("Play's manage channels", () => {
     const unused = {} as unknown;
     registerPlayIpc(handle, {
       gallery: unused as PlayIpcDeps["gallery"],
+      gameLinks: gameLinks(),
       remix: async () => "",
       viewer: () => null,
       installs: () => null,

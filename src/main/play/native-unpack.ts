@@ -27,6 +27,12 @@ const TOOL = {
   Plutil: "/usr/bin/plutil",
 } as const;
 
+/**
+ * The Info.plist key a game's app sets (to true) to open in a window: Play opens every other game
+ * full screen. The agent sets it when the person asks for a window, then signs the app again.
+ */
+export const WINDOWED_KEY = "GenexWindowed";
+
 /** The prefix of every installed game's bundle id: Genex's own preference domains. */
 export const GAME_BUNDLE_PREFIX = "games.genex.play.";
 
@@ -60,6 +66,8 @@ export interface UnpackedApp {
   /** The bundle id it now has, and its name (what macOS names its temporary save folders after). */
   bundleId: string;
   bundleName: string;
+  /** The app asks to open in a window ({@link WINDOWED_KEY}), not full screen. */
+  windowed: boolean;
 }
 
 /** The processor names `lipo` reports that each architecture runs. */
@@ -173,8 +181,9 @@ export async function unpackMacBuild(
   const plist = path.join(app, "Contents", "Info.plist");
   const bundleId = `${GAME_BUNDLE_PREFIX}${game.slug}`;
   const bundleName = (await plistValue(run, plist, "CFBundleName")) || path.basename(executable);
+  const windowed = (await plistValue(run, plist, WINDOWED_KEY)) === "true";
   await tool(run, TOOL.Plutil, ["-replace", "CFBundleIdentifier", "-string", bundleId, plist], InstallFailure.Failed);
   await tool(run, TOOL.Codesign, ["--force", "--deep", "--sign", "-", app], InstallFailure.Unsigned);
   await tool(run, TOOL.Codesign, ["--verify", "--deep", "--strict", app], InstallFailure.Unsigned);
-  return { executable, bundleId, bundleName };
+  return { executable, bundleId, bundleName, windowed };
 }

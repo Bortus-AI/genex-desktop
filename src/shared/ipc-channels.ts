@@ -192,6 +192,7 @@ export const STUDIO_INVOKE_CHANNELS = {
   "studio:play.reveal-install": "playRevealInstall",
   "studio:play.like": "playLike",
   "studio:play.close": "playClose",
+  "studio:play.take-game-link": "playTakeGameLink",
   "studio:play.control": "playControl",
   "studio:play.bar": "playBar",
   "studio:play.comments": "playComments",
@@ -456,6 +457,7 @@ export interface StudioInvokePayloads {
   "studio:play.reveal-install": { slug: string };
   "studio:play.like": { slug: string; liked: boolean };
   "studio:play.close": undefined;
+  "studio:play.take-game-link": undefined;
   "studio:play.control": { control: PlayControl; at?: PlayPoint };
   "studio:play.bar": PlayBarHold;
   "studio:play.comments": { cursor: string | null };

@@ -228,6 +228,7 @@ function playCalls(bridge: BridgeCalls) {
     playRevealInstall: (slug) => invoke("studio:play.reveal-install", { slug }),
     playLike: (slug, liked) => invoke("studio:play.like", { slug, liked }),
     playClose: () => invoke("studio:play.close"),
+    playTakeGameLink: () => invoke("studio:play.take-game-link"),
     playControl: (control, at) => invoke("studio:play.control", { control, at }),
     playBar: (hold) => invoke("studio:play.bar", hold),
     playComments: (cursor) => invoke("studio:play.comments", { cursor }),

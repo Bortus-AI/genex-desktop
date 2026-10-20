@@ -3052,10 +3052,13 @@ Genex:
   Windows app. `main/core/native-builds.ts` finds the builds from the binaries themselves (a
   `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
   the walk capped). A row says what its build runs on, when it was built and its size; "Built
-  before your last change" when the game's sources (outside builds, caches and history) changed more
-  than a minute after it; or "Not made yet" with Make with agent, which sends "Make a <Platform> app
+  before your last change" with Build again when the game's sources changed more than a minute after
+  it (builds, caches, history, hidden files, notes and logs, and Unity's `UserSettings` do not count);
+  or "Not made yet" with Make with agent, which sends "Make a <Platform> app
   of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
-  cover does) and keeps the dialog open, the row then saying "Asked the agent". A ready app goes
+  cover does) and keeps the dialog open, the row then saying "Asked the agent". A Unity or Godot
+  game's missing web row offers the same for a web version (`webOfferFor`, `makeWebAsk`); an Unreal
+  game's says Unreal games don't run in a browser. A ready app goes
   with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
   the rows says "Publish also sends the Mac app."): once the web build is public, the plugin sends
   each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
@@ -3065,6 +3068,11 @@ Genex:
   `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
   and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
   sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
+  The dialog sends apps only through an installed Genex plugin whose record says it can
+  (`native.supported`, `gateByPlugin`): a profile still on a plugin from before apps is told to
+  update it in Plugins. The plugin's `publishing-apps` skill tells the game's agent how to build an
+  app or a web version (in `web/`) for Publish, how to make an app open in a window, and never to
+  send the person to another store.
   A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
   on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish
   Mac app" and runs `studio:plugins.genex-publish-apps` (`publishAppsFromDialog`, no web copy, no
@@ -3097,9 +3105,14 @@ Genex:
   turns settle (`use-cover-after-turns.ts`), and it records the `genex-clip` demo's clip when there is
   one. The banner flips between the record's `candidates` (the last four frames; `cover-pick` makes
   one the kept shot, pinned, which a publish sends without shooting again), shows a kept clip behind
-  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Make
-  sends "Make another Genex cover for this game: …" through the chat's own send
-  (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
+  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Ask
+  agent sends "Make another Genex cover for this game: …" through the chat's own send
+  (`renderer/compose-in-chat.ts`) and closes the dialog there. Once the chat really sent it, the ask
+  is kept per game on this Mac (`genex/cover-asks.ts`), so the banner opened again says one is being
+  made until the agent's own frame arrives: the record's `agentTook` (`covers/<project>/agent.json`,
+  set only by `genex__cover` shoot and clip, never by Studio's takes or a publish's shot). Roughly how
+  long is left shows once that game's last ask was timed (ask to `agentTook`; no number before one,
+  none once it runs over). A
   Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
 - A game that runs as its own program (a Unity, Godot or Unreal fact, or nothing served as a web

@@ -64,6 +64,8 @@ import {
   runShutdown,
   shutdownSteps,
   type ShutdownStep,
+  WindowClose,
+  windowClose,
 } from "./app-lifecycle.ts";
 import { createBootGate, startStepAfter } from "./boot-gate.ts";
 import {
@@ -156,6 +158,7 @@ import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
 import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
 import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
 import { checkNativeUpdates } from "./play/native-updates.ts";
@@ -332,6 +335,14 @@ function resourcesDir(): string {
   return inArchive.includes(marker) ? inArchive.replace(marker, `app.asar.unpacked${path.sep}`) : inArchive;
 }
 const resources = resourcesDir();
+
+/** `genex://game/<slug>` links (the website's Open in Genex), each held until the studio page takes it. */
+const gameLinkQueue = gameLinks();
+// macOS hands the app a link even as the link starts it, before it is ready: listen from the first moment.
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  gameLinkQueue.arrive(url);
+});
 
 // Squirrel's install, update and uninstall launches make or remove the shortcuts and exit before
 // anything else runs: no profile, no window (main/windows-install.ts).
@@ -1499,13 +1510,21 @@ function showWindow(win: BrowserWindow): void {
 
 function watchWindowLifecycle(win: BrowserWindow): void {
   // The preview's WebContentsView dies with its window — destroying it mid-run would blind (or
-  // kill) every remaining evidence pass. While a run is active, close means hide. A real quit is
-  // unaffected: before-quit releases the blocker before window close events fire. A restart into
-  // an update closes the windows first, so once the person agreed to end the run, close closes.
+  // kill) every remaining evidence pass. While a run is active, close hides on a Mac and asks the
+  // quit question elsewhere (`windowClose`). A real quit is unaffected: before-quit asks first and
+  // its yes sets quitConfirmed before window close events fire. A restart into an update closes
+  // the windows first, so once the person agreed to end the run, close closes.
   win.on("close", (event) => {
-    if (!keepAwake.held || quitConfirmed) return;
+    const action = windowClose({
+      platform: process.platform,
+      runActive: keepAwake.held,
+      quitConfirmed,
+      testLaunch: isSmoke || isSelfTest,
+    });
+    if (action === WindowClose.Close) return;
     event.preventDefault();
-    win.hide();
+    if (action === WindowClose.Hide) win.hide();
+    else app.quit();
   });
   win.on("closed", () => {
     window = null;
@@ -1749,6 +1768,7 @@ function playIpcDeps(studio: StudioCore): PlayIpcDeps {
     installs: () => playInstallsFor(studio),
     sessions: () => playSessionsFor(studio),
     reveal: (file) => shell.showItemInFolder(file),
+    gameLinks: gameLinkQueue,
   };
 }
 
@@ -1845,6 +1865,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!claimTheMac()) return;
+  answerGameLinks();
   await app.whenReady();
   performanceRecorder.mark("app-ready");
   const bootHandle = createIpcHandle(ipcMain, { fixture: fixtureNativePolicy, isStudioUi: isStudioWindow });
@@ -2084,8 +2105,37 @@ function claimTheMac(): boolean {
     app.exit(0);
     return false;
   }
-  if (!dev) app.on("second-instance", showExistingWindow);
+  if (!dev)
+    app.on("second-instance", (_event, argv) => {
+      showExistingWindow();
+      // Windows and Linux start Genex again with the link as an argument.
+      gameLinkQueue.arrive(gameLinkIn(argv));
+    });
   return true;
+}
+
+/**
+ * The real studio answers `genex://` links: the system starts it, or hands it, each one, and one it
+ * was started with waits for the page. A developer or test launch leaves the system's handler alone.
+ */
+function answerGameLinks(): void {
+  if (isSmoke || dev) return;
+  // An unpackaged Mac build is Electron's own app, which declares no scheme: it would take the
+  // links from an installed Genex, so only Windows and Linux name it with this folder.
+  if (app.isPackaged) app.setAsDefaultProtocolClient(GAME_LINK_SCHEME);
+  else if (process.platform !== "darwin")
+    app.setAsDefaultProtocolClient(GAME_LINK_SCHEME, process.execPath, [path.resolve(process.argv[1] ?? ".")]);
+  gameLinkQueue.arrive(gameLinkIn(process.argv));
+  gameLinkQueue.listen({
+    show: () => void showForLink(),
+    announce: () => pushUiEvent({ type: UiEvent.PlayGameLink, payload: {} }),
+  });
+}
+
+/** A game link arrived: the window comes forward, opened again if it was closed. */
+async function showForLink(): Promise<void> {
+  if (!window && app.isReady()) await reopenWindow();
+  showExistingWindow();
 }
 
 function showExistingWindow(): void {

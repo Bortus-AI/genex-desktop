@@ -303,6 +303,8 @@ const FIXTURE_SAFE = [
   "studio:play.online",
   "studio:play.open",
   "studio:play.close",
+  // The game a genex:// link named, held in main's memory: nothing is reached to answer it.
+  "studio:play.take-game-link",
   // A game's own page reads the catalog like a card does; a fixture launch answers it (`dev/fixture-play.ts`).
   "studio:play.game",
   // A native game's install writes into the profile's own installed-games folder; a fixture launch
