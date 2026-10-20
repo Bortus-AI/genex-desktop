@@ -401,16 +401,12 @@ async function passwordStep(call, look, probe) {
     const focused = await powershell(
       `${DOTNET}; $e = [Windows.Automation.AutomationElement]::FocusedElement; "$($e.Current.ControlType.ProgrammaticName)|$($e.Current.ClassName)|$($e.Current.IsPassword)|$($e.Current.FrameworkId)"`,
     );
-    // The same focus through Windows' own UI Automation (the COM client), not .NET's managed one.
-    const native = await powershell(
-      `$PSModuleAutoLoadingPreference = 'None'; $u = [Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]'ff48dba4-60ef-4201-aa87-54103eef594e')); $f = $u.GetFocusedElement(); "$($f.CurrentControlType)|$($f.CurrentClassName)|$($f.CurrentIsPassword)"`,
-    );
     const refused = await call({ action: "type", text: "hunter2" });
     check(
       "typing into a focused password field is refused",
       // The refusal's own words: the form's title also says "password field".
       /the focused field is a password field/i.test(refused.text),
-      { front, focused, native, said: refused.text.slice(0, 120) },
+      { front, focused, said: refused.text.slice(0, 160) },
     );
     await call({ action: "screenshot" });
   } else if (window)
