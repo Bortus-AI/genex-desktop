@@ -417,8 +417,8 @@ login output removes auth URLs, credential patterns and terminal string controls
 
 **Embedded terminal.** [`src/main/terminal-service.ts`](../../src/main/terminal-service.ts) owns at
 most four sessions, each node-pty in its own utility process; xterm.js loads lazily. Project shells
-resolve cwd from the library, use the account shell and login PATH (on Windows Git Bash, else
-PowerShell: [`src/main/terminal-shell.ts`](../../src/main/terminal-shell.ts)) and run with the user's
+resolve cwd from the library, use the account shell and login PATH (on Windows Git Bash, installed or
+Genex's own, else PowerShell: [`src/main/terminal-shell.ts`](../../src/main/terminal-shell.ts)) and run with the user's
 normal permissions. Games, plugins and the harness get no terminal API. A command a game reply offers
 runs only when the user presses Run: `studio:terminal.run` takes one command line (`runnableCommand`)
 as a `command` session (`commandShell`: the shell's `-c`, or PowerShell's `-Command`) in the game

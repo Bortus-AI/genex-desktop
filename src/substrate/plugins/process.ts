@@ -4,7 +4,7 @@ import { CallCutOff, type PluginBinding } from "../../shared/plugins.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { windowsBaseEnv } from "../child-env.ts";
-import { envPath, envValue } from "../toolchain.ts";
+import { envPath, envValue, isWindows } from "../toolchain.ts";
 
 /** What the backend bootstrap (`plugin-sdk/backend.mjs`) and the host say to each other. Wire values. */
 const MessageKind = {
@@ -30,7 +30,7 @@ const STOPPED_BEFORE = "Stopped before plugin invocation";
 const STDERR_LINE_CHARS = 4000;
 /** How long one plugin invocation may run unless its caller sets its own limit. */
 const DEFAULT_CALL_TIMEOUT_MS = 190 * SECOND_MS;
-/** A stopped backend gets this long after SIGTERM before SIGKILL. */
+/** A stopped backend gets this long after its stop (SIGTERM, or on Windows its channel closing) before it is ended. */
 const KILL_GRACE_MS = 3 * SECOND_MS;
 
 /** What a cut-off call answers, by why it was cut off; the backend's own end keeps its exit text. */
@@ -175,6 +175,8 @@ export class PluginProcess {
   readonly toolPath: (() => Promise<string>) | undefined;
   /** A bundled plugin's seed folder, named to the backend (`PLUGIN_SEED_ENV`). */
   readonly seed: string | undefined;
+  /** The computer the backend runs on, which decides how it is asked to stop. */
+  readonly platform: NodeJS.Platform;
   constructor(
     bootstrap: string,
     entry: string,
@@ -185,7 +187,12 @@ export class PluginProcess {
       invocation: PluginInvocation,
     ) => Promise<unknown>,
     failed: (error: string) => void,
-    options?: { onStderr?: (line: string) => void; toolPath?: () => Promise<string>; seed?: string },
+    options?: {
+      onStderr?: (line: string) => void;
+      toolPath?: () => Promise<string>;
+      seed?: string;
+      platform?: NodeJS.Platform;
+    },
   ) {
     this.bootstrap = bootstrap;
     this.entry = entry;
@@ -194,6 +201,7 @@ export class PluginProcess {
     this.onStderr = options?.onStderr;
     this.toolPath = options?.toolPath;
     this.seed = options?.seed;
+    this.platform = options?.platform ?? process.platform;
   }
   /** A backend's answer to one call: its result or its error. */
   #settle(m: BackendMessage) {
@@ -358,9 +366,22 @@ export class PluginProcess {
     this.#pending.clear();
     const c = this.#child;
     if (!c) return;
-    c.kill("SIGTERM");
+    this.#askToStop(c);
     const timer = setTimeout(() => c.kill("SIGKILL"), KILL_GRACE_MS);
     timer.unref();
     c.once("exit", () => clearTimeout(timer));
+  }
+  /**
+   * Asks the backend to stop its work and exit: SIGTERM, or on Windows, where any signal ends a
+   * process outright and leaves the programs its jobs started running, the closing of its channel,
+   * which the backend hears the same way.
+   */
+  #askToStop(c: ChildProcess) {
+    if (!isWindows(this.platform)) {
+      c.kill("SIGTERM");
+      return;
+    }
+    if (c.connected) c.disconnect();
+    else c.kill();
   }
 }
