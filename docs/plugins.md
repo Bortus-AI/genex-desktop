@@ -3073,7 +3073,9 @@ Genex:
   `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
   Listed, the record turns public with the game's genex.games page as its link; held for review or
   not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
-  stays off for it. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+  stays off for it. Like a web publish, it takes the cover again as it starts and sends it once its
+  apps are on Genex (`#reshoot`, then the cover step); the clip is not sent, since Genex matches a
+  clip to a web build such a project lacks. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose
@@ -3098,6 +3100,18 @@ Genex:
   (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
   Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
+- A game that runs as its own program (a Unity, Godot or Unreal fact, or nothing served as a web
+  page: `takenFromReel` in `main/core/cover-reel.ts`) cannot be photographed, so its builder renders
+  the cover inside the engine: the session that owns its build is told to (`appCoverGuidance`,
+  `cover-reel-prompts.ts`, added to the brief in `core/delegation.ts`), with no Genex tool needed:
+  `.studio/cover/cover.png` (1920x1080) and `.studio/cover/clip/0001.png` onward (five seconds at
+  30 fps, 960x540), or one `clip.mp4`/`clip.webm`. A plugin's `observe` with a `still` or a `clip`
+  of such a game takes it of its cover reel (`throughCoverReel`, through `ViewStillOptions.open`):
+  the media copied, by `lstat` and never through a link, sniffed and capped, into a folder of the
+  host's scratch (`cover-reels/`) beside a page whose `__studio` answers the `genex-cover` demo with
+  the picture and `genex-clip` with the frames played from `start()`, removed when the take ends.
+  So `cover-auto`, the banner and a publish work on it as on a web game. With no media, or for a
+  web game, the game is served as before.
 - The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
   thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
   answer carried a picture (`chat-entries.ts`, the tool read with or without `genex__` and

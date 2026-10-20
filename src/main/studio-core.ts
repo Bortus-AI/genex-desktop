@@ -52,7 +52,8 @@ import {
   NativeRuntimeState,
 } from "../shared/plugins.ts";
 import { EngineHostAction, type EngineLinkUndo, type EngineUndoSetUpArgs } from "../shared/game-engine.ts";
-import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { type ViewOpener, viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { type ReelView, throughCoverReel } from "./core/cover-reel.ts";
 import { viewClip, type ViewClipOptions } from "./core/view-clip.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
@@ -217,6 +218,8 @@ const HARNESS_CRASH_LOOP = { count: 3, windowMs: 5 * MINUTE_MS } as const;
 const GAMES_ROOT_FILE = "games-root.json";
 /** The folder in the sandbox's scratch where each engine plugin's sandbox job keeps its own. */
 const PLUGIN_JOBS_FOLDER = "plugin-jobs";
+/** The folder in the sandbox's scratch where an engine game's cover reel is staged for a still or clip. */
+const COVER_REEL_FOLDER = "cover-reels";
 /** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
 const ENGINE_SCRATCH_PREFIX = "genex-play-";
 
@@ -1211,7 +1214,10 @@ export class StudioCore {
    * the asked size, never Live, given back however it ends (`core/view-still.ts`).
    */
   #observeStill(binding: PluginBinding, still: PluginStillOrder): Promise<PluginStillAnswer> {
-    return viewStill(this.#previews, binding, still, this.options.pluginStill);
+    const view = still.demo === undefined ? {} : { stillDemo: still.demo };
+    return this.#throughReel(binding, view, (open) =>
+      viewStill(this.#previews, binding, still, { ...this.options.pluginStill, ...(open ? { open } : {}) }),
+    );
   }
 
   /**
@@ -1219,7 +1225,23 @@ export class StudioCore {
    * of its own at the asked size, never Live, given back however it ends (`core/view-clip.ts`).
    */
   #observeClip(binding: PluginBinding, clip: PluginClipOrder): Promise<PluginClipAnswer> {
-    return viewClip(this.#previews, binding, clip, this.options.pluginClip);
+    return this.#throughReel(binding, { clipDemo: clip.demo }, (open) =>
+      viewClip(this.#previews, binding, clip, { ...this.options.pluginClip, ...(open ? { open } : {}) }),
+    );
+  }
+
+  /**
+   * A still or clip of an engine game is taken of the cover its agent rendered in the engine
+   * (`core/cover-reel.ts`): a web page of a game that runs as an app shows nothing of it.
+   */
+  async #throughReel<A>(
+    binding: PluginBinding,
+    view: ReelView,
+    take: (open: ViewOpener | undefined) => Promise<A>,
+  ): Promise<A> {
+    const game = await this.games.kindOf(binding.project).catch(() => null);
+    const scratch = path.join(this.layout.scratch, COVER_REEL_FOLDER);
+    return throughCoverReel({ game, gameDir: binding.directory, scratch }, view, take);
   }
 
   /**
