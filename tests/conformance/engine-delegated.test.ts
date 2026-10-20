@@ -180,7 +180,7 @@ async function workerRequest() {
 }
 
 describe("claude code delegated engine", () => {
-  it("WIN-275: a worker whose sandbox the CLI cannot run here ends as sandbox_unavailable, its box still required", async () => {
+  it("WIN-275: a worker whose sandbox the CLI cannot run here ends as sandbox_unavailable, its box still required off Windows", async () => {
     const init = { type: "system", subtype: "init", model: "claude-sonnet-5", session_id: "refused", tools: [] };
     for (const platform of ["win32", "darwin"] as const)
       for (const initialized of [false, true])
@@ -193,6 +193,12 @@ describe("claude code delegated engine", () => {
           assert.equal(result.stopReason, StopReason.SandboxUnavailable, label);
           assert.ok(result.errorText?.includes(SANDBOX_REFUSAL), `${label}: the CLI's own reason is kept`);
           const sandbox = sdk.seen[0]?.sandbox as Record<string, unknown>;
+          // Windows: Claude Code's sandbox cannot start there, so Genex's runs the worker's
+          // commands (claude-windows-commands.test.ts) and the CLI has no box of its own to refuse.
+          if (platform === "win32") {
+            assert.equal(sandbox.enabled, false, `${label}: Genex's sandbox holds the commands`);
+            continue;
+          }
           assert.equal(sandbox.enabled, true, label);
           assert.equal(sandbox.failIfUnavailable, true, `${label}: never run without the box`);
         }
