@@ -113,12 +113,23 @@ app.whenReady().then(async()=>{
   const held=await step('appsHeld','window.platformsRig.open({scene:"appsHeld"})');
   assert.deepEqual(held.failures,['Genex is reviewing the game before it shows in the gallery.']);
   assert.equal(held.rows[1].end,'On Genex');
+  // A Unity game with no app yet, then with one Studio cannot send yet: its press waits and says why.
+  const unity=await step('unityNoApp','window.platformsRig.open({scene:"unityNoApp"})');
+  assert.equal(unity.listed,true);
+  assert.equal(unity.primaryDisabled,true);
+  assert.equal(unity.reach,'Make a Mac or Windows app first, then publish it here.');
+  assert.deepEqual(unity.rows.map((row)=>row.end),[null,'Make with agent','Make with agent']);
+  report.unityNoApp=await capture('dark-unity-no-app');
+  const soon=await step('unitySoon','window.platformsRig.open({scene:"unitySoon"})');
+  assert.equal(soon.primaryDisabled,true);
+  assert.equal(soon.rows[1].end,'Coming soon');
+  assert.equal(soon.reach,'Publishing Mac and Windows apps comes with the next Genex update.');
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

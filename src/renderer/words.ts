@@ -3081,6 +3081,9 @@ export const PUBLISH_PLATFORM_WORDS = {
   held: "Genex is reviewing the game before it shows in the gallery.",
   /** The quiet line under the press of a game with only apps. */
   appsHint: "People playing in the Genex app can install it.",
+  /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
+  makeFirst: "Make a Mac or Windows app first, then publish it here.",
+  appsSoon: "Publishing Mac and Windows apps comes with the next Genex update.",
   notListed: "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.",
 } as const;
 

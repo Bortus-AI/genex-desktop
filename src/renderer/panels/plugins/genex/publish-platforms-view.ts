@@ -6,6 +6,7 @@
  */
 import { sizeWords } from "../../../../shared/byte-size.ts";
 import { GenexListingState, type GenexNativeRecord } from "../../../../shared/genex.ts";
+import { CoreFact, type FactRef } from "../../../../shared/project-facts.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { NATIVE_WORDS, PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 
@@ -116,6 +117,16 @@ export const onlyApps = (platforms: readonly PublishPlatform[]): boolean =>
   platforms.some((row) => row.target === PublishTarget.Web && row.state === PublishPlatformState.Missing) &&
   sendingPlayers(platforms).length > 0;
 
+/** The facts of a project an engine builds apps from: Unity, Godot and Unreal games. */
+const APP_ENGINE_FACTS: ReadonlySet<string> = new Set([
+  CoreFact.UnityProject,
+  CoreFact.GodotProject,
+  CoreFact.UnrealProject,
+]);
+
+/** Whether a game is made in an engine that builds Mac and Windows apps (it gets Publish for them). */
+export const makesApps = (facts: readonly FactRef[]): boolean => facts.some((fact) => APP_ENGINE_FACTS.has(fact.id));
+
 /** The main press of a game with only apps: "Publish Mac app", "Publish Mac and Windows apps". */
 export const appsLabel = (platforms: readonly PublishPlatform[]): string =>
   WORDS.publishApps(WORDS.apps(sendingPlayers(platforms)));
@@ -133,10 +144,28 @@ export function listingLine(
   return native.listing ? null : WORDS.notListed;
 }
 
+/** Whether the game has no web build. */
+const noWebBuild = (platforms: readonly PublishPlatform[]): boolean =>
+  platforms.some((row) => row.target === PublishTarget.Web && row.state === PublishPlatformState.Missing);
+
+/**
+ * Whether Publish has nothing to send: a game made in an engine with no web build, and no app it can
+ * send (none made yet, or none while Studio's Genex CLI cannot send apps). Its press then waits.
+ */
+export const nothingToPublish = (platforms: readonly PublishPlatform[]): boolean =>
+  noWebBuild(platforms) && sendingPlayers(platforms).length === 0;
+
+/** Why a game with nothing to send waits: no app made yet, or apps Studio cannot send yet. */
+function waitingLine(platforms: readonly PublishPlatform[]): string {
+  const built = platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
+  return built ? WORDS.appsSoon : WORDS.makeFirst;
+}
+
 /** The line under the rows: the apps Publish sends too, and whose players get the web version. */
 export function reachLine(platforms: readonly PublishPlatform[]): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
   if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
+  if (nothingToPublish(platforms)) return waitingLine(platforms);
   if (web?.state !== PublishPlatformState.Ready) return null;
   const native = platforms.filter(isNative);
   const sending = sendingPlayers(platforms);

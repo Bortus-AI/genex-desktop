@@ -21,6 +21,7 @@ import {
   listingLine,
   listsPlatforms,
   makeAppAsk,
+  makesApps,
   PlatformEnd,
   type PlatformRow,
   platformRows,
@@ -140,7 +141,10 @@ export function PublishPlatforms({
   /** How the last Publish's apps went, from the publish record. */
   native?: GenexNativeRecord | undefined;
 }): JSX.Element | null {
-  const engineGame = useLibrary((s) => Boolean(s.games.find((g) => g.name === project)?.engine));
+  const engineGame = useLibrary((s) => {
+    const game = s.games.find((g) => g.name === project);
+    return Boolean(game?.engine) || makesApps(game?.facts ?? []);
+  });
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
   const [asked, setAsked] = useState<ReadonlySet<PublishTarget>>(() => new Set());
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;

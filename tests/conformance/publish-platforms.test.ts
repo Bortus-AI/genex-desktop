@@ -17,6 +17,8 @@ import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../..
 import {
   appsLabel,
   failureLines,
+  makesApps,
+  nothingToPublish,
   listingLine,
   listsPlatforms,
   onlyApps,
@@ -206,7 +208,11 @@ describe("Publish's platform rows as the dialog says them", () => {
       reachLine([WEB, { ...MAC, uploads: true }, WINDOWS_READY]),
       "Publish also sends the Mac and Windows apps.",
     );
-    assert.equal(reachLine([{ ...WEB, state: PublishPlatformState.Missing }, MAC, WINDOWS]), null);
+    assert.equal(
+      reachLine([{ ...WEB, state: PublishPlatformState.Missing }, MAC, WINDOWS]),
+      "Publishing Mac and Windows apps comes with the next Genex update.",
+      "a game with no web build says why its press waits",
+    );
   });
 
   it("says on an app's row that it is being sent, is on Genex, or was not sent and why", () => {
@@ -271,6 +277,26 @@ describe("Publish's platform rows as the dialog says them", () => {
     );
     assert.equal(listingLine(rows, record({ sending: true })), null, "nothing is said while the apps go");
     assert.equal(listingLine([WEB, ready, WINDOWS], record({})), null, "a web game is listed by its web publish");
+  });
+
+  it("offers Publish for apps to a Unity, Godot or Unreal game, by its facts", () => {
+    assert.equal(makesApps([{ id: CoreFact.UnityProject, path: "unity" }]), true);
+    assert.equal(makesApps([{ id: CoreFact.GodotProject, path: "godot" }]), true);
+    assert.equal(makesApps([{ id: CoreFact.UnrealProject, path: "." }]), true);
+    assert.equal(makesApps([{ id: CoreFact.WebGame, path: "." }]), false);
+    assert.equal(makesApps([{ id: CoreFact.BlenderAssets, path: "." }]), false);
+    assert.equal(makesApps([]), false);
+  });
+
+  it("says what a game made in an engine needs before Publish can send anything", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const noMac = { ...MAC, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
+    assert.equal(nothingToPublish([noWeb, noMac, WINDOWS]), true);
+    assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac or Windows app first, then publish it here.");
+    assert.equal(nothingToPublish([noWeb, MAC, WINDOWS]), true, "an app Studio cannot send yet");
+    assert.equal(reachLine([noWeb, MAC, WINDOWS]), "Publishing Mac and Windows apps comes with the next Genex update.");
+    assert.equal(nothingToPublish([noWeb, { ...MAC, uploads: true }, WINDOWS]), false);
+    assert.equal(nothingToPublish([WEB, noMac, WINDOWS]), false, "a web game publishes its web build");
   });
 
   it("asks the agent for an app in the game's own name", () => {

@@ -58,7 +58,7 @@ import { CoverControls, CoverMedia, CoverTool } from "./PublishCover.tsx";
 import { CoverKind, type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 import { PublishPlatforms, usePublishPlatforms } from "./PublishPlatforms.tsx";
-import { appsLabel, onlyApps } from "./publish-platforms-view.ts";
+import { appsLabel, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
 import type { PublishPlatform } from "../../../../shared/publish-platforms.ts";
 import { PublishShareLine } from "./PublishShare.tsx";
 import { useShareWhenLive } from "./use-publish-share.ts";
@@ -696,9 +696,18 @@ export function GenexPublishDialog({
 }
 
 /** The game folder's platforms, and the main press's words when the game has only apps ("Publish Mac app"). */
-function useAppsPublish(project: string): { platforms: PublishPlatform[] | null; apps: string | null } {
+function useAppsPublish(project: string): {
+  platforms: PublishPlatform[] | null;
+  apps: string | null;
+  waiting: boolean;
+} {
   const platforms = usePublishPlatforms(project);
-  return { platforms, apps: platforms && onlyApps(platforms) ? appsLabel(platforms) : null };
+  return {
+    platforms,
+    apps: platforms && onlyApps(platforms) ? appsLabel(platforms) : null,
+    // A game made in an engine with nothing to send yet: the rows say why, and the press waits.
+    waiting: platforms !== null && nothingToPublish(platforms),
+  };
 }
 
 /** The main press's own words: Save name while it celebrates, a game's apps, else the view's. */
@@ -746,7 +755,7 @@ function PublishBody({
   const failure = record.error ? { text: record.error, details: record.error } : view.failure;
   const open = () => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery });
   const opening = record.pressing === Pressing.Action;
-  const { platforms, apps } = useAppsPublish(project);
+  const { platforms, apps, waiting } = useAppsPublish(project);
   return (
     <div
       className="genex-publish-body"
@@ -784,6 +793,7 @@ function PublishBody({
             project={project}
             label={pressLabel(celebrate, apps)}
             apps={apps !== null}
+            waiting={waiting}
           />
         )}
         {!publishing && <Links view={view} project={project} onOpen={open} opening={opening} />}
@@ -886,6 +896,7 @@ function Presses({
   project,
   label,
   apps = false,
+  waiting = false,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
@@ -896,6 +907,8 @@ function Presses({
   label?: string;
   /** The game has only apps: the press publishes them instead of a web build. */
   apps?: boolean;
+  /** Nothing to send yet (a game made in an engine with no app it can send): the press waits. */
+  waiting?: boolean;
 }): JSX.Element {
   if (view.terms) {
     const terms = view.terms;
@@ -920,7 +933,7 @@ function Presses({
       className="genex-publish-primary"
       aria-label={apps && label ? label : view.primary.ariaLabel}
       aria-busy={publishing || undefined}
-      disabled={publishing || !view.canPublish || record.pressing !== Pressing.None}
+      disabled={publishing || waiting || !view.canPublish || record.pressing !== Pressing.None}
       onClick={() => void (apps ? record.publishApps(name) : record.publish(name))}
     >
       {publishing ? <BusyLabel view={view} /> : (label ?? view.primary.label)}

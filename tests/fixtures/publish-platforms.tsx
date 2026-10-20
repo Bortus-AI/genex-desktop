@@ -37,7 +37,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "unityNoApp" | "unitySoon";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -74,6 +74,8 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   appsFailed: sendingApps,
   appsOnly: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
   appsHeld: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
+  unityNoApp: () => [web(false), mac(PublishPlatformState.Missing), windows],
+  unitySoon: () => [web(false), mac(PublishPlatformState.Ready), windows],
 };
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
@@ -149,6 +151,7 @@ function sample() {
     rows,
     reach: list?.querySelector(".genex-publish-reach")?.textContent ?? null,
     primary: document.querySelector<HTMLElement>(".genex-publish-primary")?.textContent ?? null,
+    primaryDisabled: document.querySelector<HTMLButtonElement>(".genex-publish-primary")?.disabled ?? null,
     hint: content?.querySelector(":scope > .genex-publish-hint")?.textContent ?? null,
     published: [...published],
     failures: [...(list?.querySelectorAll<HTMLElement>(".genex-publish-platform-failure") ?? [])].map(

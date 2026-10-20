@@ -45,6 +45,7 @@ import { GenexPublishDialog, GenexSetupDialog, PublishSignInDialog } from "./plu
 import { webFolderOf } from "../../shared/project-workspace.ts";
 import { isGenexPublish, publishesWeb, stripEntries, studioPublishButton } from "./plugins/genex/genex-publish-view.ts";
 import { PublishTarget } from "../../shared/publish-platforms.ts";
+import { makesApps } from "./plugins/genex/publish-platforms-view.ts";
 import { useAsyncEffect } from "../use-async-effect.ts";
 import { useCoverAfterTurns } from "./plugins/genex/use-cover-after-turns.ts";
 import { PluginApproval } from "./PluginApproval.tsx";
@@ -533,7 +534,10 @@ function useStripEntries(
   holds?: FolderHolds,
 ) {
   const web = publishesWeb(facts, holds);
-  const apps = useReadyApps(project, web);
+  // A Unity, Godot or Unreal game gets Publish for its apps: its dialog says what it needs first.
+  const engine = !web && makesApps(facts);
+  const ready = useReadyApps(project, web || engine);
+  const apps = engine || ready;
   const entries = useMemo(
     () => stripEntries(plugins, project, facts, holds, apps),
     [plugins, project, facts, holds, apps],
