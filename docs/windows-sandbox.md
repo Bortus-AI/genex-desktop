@@ -43,7 +43,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   (`WindowsSetupNeed.LogonService`) the setup card names in one line. Set up sets it to Manual
   (`sc config seclogon start= demand`, [`windows-logon-service.ts`](../src/substrate/windows-logon-service.ts))
   through Windows PowerShell's `Start-Process -Verb RunAs` before srt-win's install. srt-win
-  elevates itself, so a PC that needs both sees two approval prompts. A service Set up could not
+  elevates itself, so a PC that needs both sees two approval prompts. On a standard account each
+  prompt asks for an administrator's password, and the setup card says so; the install is
+  machine-wide, so the standard account uses what the administrator approved. A service Set up could not
   turn on (a policy keeps it off) leaves the card saying how to do it in Services.
 - That egress check starts srt-win as the sandbox user before any grant, and Windows opens its
   program and working folder as that user. A per-user install lives in the profile, so the session
