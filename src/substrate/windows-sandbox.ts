@@ -222,20 +222,38 @@ export function grantsCover(applied: WindowsGrants, needed: WindowsGrants): bool
 
 /**
  * Every folder strictly between `profile` and a root, outermost first, for the read-attributes
- * grant. A folder that is itself a root, or inside one, is left out: the root's own inheritable
- * grant covers it, and taking the grant back later must never touch a root's entry.
+ * grant. Genex's data moved off the profile (Settings → Storage) sits in a folder as closed as the
+ * profile, which reads nothing but what is granted: for a root inside it, every folder from
+ * `dataRoot` itself down to the root counts too. A folder that is itself a root, or inside one, is
+ * left out: the root's own inheritable grant covers it, and taking the grant back later must never
+ * touch a root's entry.
  */
-export function ancestorDirs(profile: string, roots: readonly string[]): string[] {
+export function ancestorDirs(profile: string, roots: readonly string[], dataRoot?: string): string[] {
   const found = new Map<string, string>();
+  const add = (dir: string) => found.set(pathKey(dir), dir);
+  const data = dataRoot && !insideWindowsPath(profile, dataRoot) ? win.resolve(dataRoot) : null;
   for (const root of roots) {
-    if (!insideWindowsPath(profile, root)) continue;
-    for (let dir = win.dirname(win.resolve(root)); pathKey(dir) !== pathKey(profile); dir = win.dirname(dir)) {
-      if (!insideWindowsPath(profile, dir)) break;
-      found.set(pathKey(dir), dir);
-    }
+    if (insideWindowsPath(profile, root)) foldersBelow(profile, root, add);
+    else if (data && insideWindowsPath(data, root)) foldersFrom(data, root, add);
   }
   const covered = (dir: string) => roots.some((root) => insideWindowsPath(root, dir));
   return [...found.values()].filter((dir) => !covered(dir)).sort((a, b) => a.length - b.length);
+}
+
+/** Each folder strictly between `top` and `root`. */
+function foldersBelow(top: string, root: string, add: (dir: string) => void): void {
+  for (let dir = win.dirname(win.resolve(root)); pathKey(dir) !== pathKey(top); dir = win.dirname(dir)) {
+    if (!insideWindowsPath(top, dir)) break;
+    add(dir);
+  }
+}
+
+/** Each folder from `top` itself down to strictly above `root`. */
+function foldersFrom(top: string, root: string, add: (dir: string) => void): void {
+  for (let dir = win.dirname(win.resolve(root)); insideWindowsPath(top, dir); dir = win.dirname(dir)) {
+    add(dir);
+    if (pathKey(dir) === pathKey(top)) break;
+  }
 }
 
 /** One folder's `icacls` listing, or why there is none. */
@@ -1171,6 +1189,8 @@ export interface WindowsSessionDeps {
   runtime: SessionRuntime;
   /** The real user's profile folder (`USERPROFILE`). */
   profile: string;
+  /** Genex's data folder, when the person moved it off the profile ({@link ancestorDirs}). */
+  dataRoot?: string;
   ancestors: AncestorGrants;
   /** Filters deny paths before they reach srt-win ({@link keepWindowsDenies}). */
   keepDenies?: (paths: readonly string[], scope: DenyScope) => string[];
@@ -1343,7 +1363,9 @@ export class WindowsSandboxSession {
   async refreshAncestors(): Promise<void> {
     const applied = this.#applied;
     if (!applied) return;
-    await this.#deps.ancestors.sync(ancestorDirs(this.#deps.profile, [...applied.write, ...applied.read]));
+    await this.#deps.ancestors.sync(
+      ancestorDirs(this.#deps.profile, [...applied.write, ...applied.read], this.#deps.dataRoot),
+    );
   }
 
   /** Resolves once no regrant is queued or being applied (tests, quit). */
@@ -1475,7 +1497,7 @@ export class WindowsSandboxSession {
    */
   async #grantAncestors(grants: WindowsGrants): Promise<void> {
     try {
-      const dirs = ancestorDirs(this.#deps.profile, [...grants.write, ...grants.read]);
+      const dirs = ancestorDirs(this.#deps.profile, [...grants.write, ...grants.read], this.#deps.dataRoot);
       await this.#timed("folders above the grants", () => this.#deps.ancestors.sync(dirs));
     } catch (error) {
       await this.#deps.runtime.reset().catch(() => {});
@@ -1852,7 +1874,7 @@ async function logSrtSteps(log: (line: string) => void): Promise<void> {
  */
 export function windowsSessionFor(
   runtime: SessionRuntime,
-  options: { profile: string; srtWin: string; installDir: string; log?: (line: string) => void },
+  options: { profile: string; srtWin: string; installDir: string; dataRoot?: string; log?: (line: string) => void },
 ): WindowsSandboxSession {
   const existing = sessions.get(runtime);
   if (existing) return existing;
@@ -1876,6 +1898,7 @@ export function windowsSessionFor(
   const session = new WindowsSandboxSession({
     runtime,
     profile: options.profile,
+    ...(options.dataRoot ? { dataRoot: options.dataRoot } : {}),
     ancestors,
     own,
     launchDirs,

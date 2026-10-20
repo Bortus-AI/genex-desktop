@@ -157,6 +157,28 @@ describe("read-attributes grants above each root", () => {
     for (const [label, roots, expected] of table) assert.deepEqual(ancestorDirs(PROFILE, roots), expected, label);
   });
 
+  it("a data folder moved off the profile counts from the data folder itself down to each root inside it", () => {
+    const data = "D:\\Genex";
+    const table: Array<[string, string[], string[]]> = [
+      ["a root directly in it", ["D:\\Genex\\scratch"], ["D:\\Genex"]],
+      [
+        "a root deeper in it",
+        ["D:\\Genex\\reviewers\\call-1", "D:\\Genex\\scratch"],
+        ["D:\\Genex", "D:\\Genex\\reviewers"],
+      ],
+      ["a root on the same drive outside it", ["D:\\Games\\Pong"], []],
+      ["a folder that only shares its name's start", ["D:\\GenexOther\\x"], []],
+      ["the data folder itself as a root", [data], []],
+      ["case differs: spelled as the root is", ["d:\\genex\\runs"], ["d:\\genex"]],
+    ];
+    for (const [label, roots, expected] of table) assert.deepEqual(ancestorDirs(PROFILE, roots, data), expected, label);
+  });
+
+  it("a data folder still in the profile changes nothing", () => {
+    const roots = [at("AppData", "Roaming", "Genex", "scratch")];
+    assert.deepEqual(ancestorDirs(PROFILE, roots, at("AppData", "Roaming", "Genex")), ancestorDirs(PROFILE, roots));
+  });
+
   const DEAD_PID = 3;
   const SID = "S-1-5-21-9";
   const done = (edits: readonly FolderAceEdit[]) => edits.map(() => ({ ok: true }) as const);

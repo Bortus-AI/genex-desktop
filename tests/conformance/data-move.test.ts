@@ -44,7 +44,7 @@ async function tree(dir: string): Promise<Record<string, string>> {
   const walk = async (rel: string): Promise<void> => {
     const full = path.join(dir, rel);
     const info = await lstat(full);
-    if (info.isSymbolicLink()) out[rel] = `-> ${await readlink(full)}`;
+    if (info.isSymbolicLink()) out[rel] = `-> ${path.resolve(await readlink(full))}`;
     else if (info.isDirectory()) for (const name of await readdir(full)) await walk(path.join(rel, name));
     else out[rel] = await readFile(full, "utf8");
   };
@@ -103,7 +103,7 @@ test("a link is copied as a link: its target outside the folder is neither read,
   const before = await measureData(from, [RECORD]);
   assert.equal(before, 4096 + '{"version":1}'.length + "gitdir: /games/a/.git/worktrees/run-1\n".length);
   await moveData({ from, to, keep: [RECORD] }, ACROSS_VOLUMES);
-  assert.equal(await readlink(path.join(to, "scratch", "linked")), outside);
+  assert.equal(path.resolve(await readlink(path.join(to, "scratch", "linked"))), path.resolve(outside));
   assert.deepEqual(await readdir(outside), ["secret.txt"]);
   await removeEntries(from, ["scratch"]);
   assert.deepEqual(await readdir(outside), ["secret.txt"], "removing the original link leaves its target");

@@ -504,3 +504,64 @@ describe("window control colours", () => {
     assert.deepEqual(fake.callsOf("setWindowControls"), []);
   });
 });
+
+const MOVE_TO = "D:\\Genex";
+const moving = (done: number, total: number): BootState => ({
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.Moving,
+  sandbox: null,
+  move: { to: MOVE_TO, done, total },
+});
+const MISSING: BootState = {
+  platform: StudioPlatform.Windows,
+  phase: BootPhase.DataMissing,
+  sandbox: null,
+  dataFolder: MOVE_TO,
+};
+
+describe("a launch that moves Genex's files", () => {
+  it("follows the move from counting to the last byte, and starts nothing: main starts Genex again", async () => {
+    const { controller, started } = startingBoot([
+      moving(0, 0),
+      moving(0, 900),
+      moving(450, 900),
+      moving(900, 900),
+      WINDOWS_READY,
+    ]);
+    const seen: Array<[number, number]> = [];
+    controller.store.subscribe((state) => {
+      if (bootView(state) === BootView.Moving && state.move) seen.push([state.move.done, state.move.total]);
+    });
+    await controller.start();
+    assert.deepEqual(seen, [
+      [0, 0],
+      [0, 900],
+      [450, 900],
+      [900, 900],
+    ]);
+    assert.equal(controller.store.getState().move?.to, MOVE_TO);
+    assert.equal(started(), 0);
+  });
+});
+
+describe("a data folder that is not there", () => {
+  it("names the folder and starts nothing", async () => {
+    const { controller, started } = startingBoot([MISSING]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.DataMissing);
+    assert.equal(state.dataFolder, MOVE_TO);
+    assert.equal(state.error, null);
+    assert.equal(started(), 0);
+  });
+
+  it("a Try again while it is still missing says so and stays", async () => {
+    const still: BootState = { ...MISSING, failure: `${MOVE_TO} is still not there.` };
+    const { controller } = startingBoot([MISSING], [still]);
+    await controller.start();
+    await controller.retry();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.DataMissing);
+    assert.equal(state.error, `${MOVE_TO} is still not there.`);
+  });
+});

@@ -993,6 +993,7 @@ export class StudioCore {
         ),
       ],
       readableRoots: [this.options.paths.resources],
+      dataRoot: this.options.paths.userData,
       enabled: this.options.sandbox ?? true,
       // Windows: the window opens on the games while the network check and folder grants finish.
       startInBackground: true,
