@@ -119,6 +119,20 @@ if ($null -ne $e) { ${RECT} }`),
 }
 
 /**
+ * Minimize every window on the desktop that can be, as the person would before opening a window to
+ * work in: what this background runner opens next cannot take the front from them (the runner's own
+ * console, a dialog its image left open), so they are moved out of its way.
+ */
+async function clearDesktop() {
+  await powershell(`${DOTNET}
+$pattern = [Windows.Automation.WindowPattern]::Pattern
+foreach ($w in [Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children, [Windows.Automation.Condition]::TrueCondition)) {
+  try { $p = $w.GetCurrentPattern($pattern); if ($p.Current.CanMinimize) { $p.SetWindowVisualState([Windows.Automation.WindowVisualState]::Minimized) } } catch { }
+}`);
+  await sleep(700);
+}
+
+/**
  * Bring a window to the front, as the person would by clicking it in the taskbar: by its process id
  * or its title. A window launched from a background process can open behind another one.
  */
@@ -341,6 +355,7 @@ async function neverDrivenSteps(call, look, probe) {
     );
   } else check("the saved-passwords dialog opens (not on every Windows edition)", true, "no window: skipped");
   await run("taskkill", ["/IM", "rundll32.exe", "/F"]).catch(() => {});
+  await clearDesktop();
   launch("explorer.exe", ["ms-settings:"]);
   const settings = await untilWindow("ApplicationFrameHost", 20_000);
   if (settings) {
@@ -360,6 +375,7 @@ async function neverDrivenSteps(call, look, probe) {
 async function passwordStep(call, look, probe) {
   // Started as this runner's own child, not detached: what PowerShell says, and its exit, are kept
   // to say why no window opened.
+  await clearDesktop();
   const form = spawn(windowsPowerShell(process.env), ["-NoProfile", "-NonInteractive", "-Command", PASSWORD_FORM], {
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -385,12 +401,16 @@ async function passwordStep(call, look, probe) {
     const focused = await powershell(
       `${DOTNET}; $e = [Windows.Automation.AutomationElement]::FocusedElement; "$($e.Current.ControlType.ProgrammaticName)|$($e.Current.ClassName)|$($e.Current.IsPassword)|$($e.Current.FrameworkId)"`,
     );
+    // The same focus through Windows' own UI Automation (the COM client), not .NET's managed one.
+    const native = await powershell(
+      `$PSModuleAutoLoadingPreference = 'None'; $u = [Activator]::CreateInstance([Type]::GetTypeFromCLSID([Guid]'ff48dba4-60ef-4201-aa87-54103eef594e')); $f = $u.GetFocusedElement(); "$($f.CurrentControlType)|$($f.CurrentClassName)|$($f.CurrentIsPassword)"`,
+    );
     const refused = await call({ action: "type", text: "hunter2" });
     check(
       "typing into a focused password field is refused",
       // The refusal's own words: the form's title also says "password field".
       /the focused field is a password field/i.test(refused.text),
-      { front, focused, said: refused.text.slice(0, 200) },
+      { front, focused, native, said: refused.text.slice(0, 120) },
     );
     await call({ action: "screenshot" });
   } else if (window)
