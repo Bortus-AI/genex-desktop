@@ -2612,6 +2612,15 @@ interface McpKit {
   tool: typeof import("@anthropic-ai/claude-agent-sdk").tool;
   z: typeof import("zod").z;
 }
+/**
+ * Loads a tool with the prompt. Claude Code (2.1.304 on) defers MCP tools behind its tool search,
+ * offering their names but not their schemas, and a session that cannot see a tool its prompt
+ * relies on does not reliably look for it: the checkpoint, capture, a chat's interview tools and
+ * the studio's shell load from the first turn. Live and connector tools, a large and varied set,
+ * stay deferred.
+ */
+const LOAD_WITH_PROMPT = { alwaysLoad: true } as const;
+
 /** A tool's MCP answer: its text, then any pictures it came back with. */
 type ToolAnswer = {
   content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
@@ -2639,6 +2648,7 @@ function checkpointTool(kit: McpKit, request: Pick<DelegateRequest, "onEvent" | 
         return { content: [{ type: "text", text: CHECKPOINT_TOOL.failed(errorMessage(err)) }], isError: true };
       }
     },
+    LOAD_WITH_PROMPT,
   );
 }
 
@@ -2661,6 +2671,7 @@ function captureTool(kit: McpKit, onCapture: NonNullable<DelegateRequest["onCapt
         return { content: [{ type: "text" as const, text: `capture failed: ${errorMessage(err)}` }], isError: true };
       }
     },
+    LOAD_WITH_PROMPT,
   );
 }
 
@@ -2690,7 +2701,7 @@ function runCommandTool(kit: McpKit, shell: SessionShell) {
     },
     // The session's only shell is never deferred behind tool search (Claude Code 2.1.304 defers
     // MCP tools by default): a worker that cannot see its shell does not look for one.
-    { alwaysLoad: true },
+    LOAD_WITH_PROMPT,
   );
 }
 
@@ -2778,9 +2789,13 @@ function intakeTool(kit: McpKit, spec: StudioToolSpec) {
     const field = z.string().describe(prop.description ?? "");
     shape[key] = spec.parameters?.required?.includes(key) ? field : field.optional();
   }
-  return tool(spec.name, spec.description, shape, async () => ({
-    content: [{ type: "text" as const, text: intakeToolReply(spec.name) }],
-  }));
+  return tool(
+    spec.name,
+    spec.description,
+    shape,
+    async () => ({ content: [{ type: "text" as const, text: intakeToolReply(spec.name) }] }),
+    LOAD_WITH_PROMPT,
+  );
 }
 
 /** How the SDK is told to start the selected Claude, as `query` options. */
