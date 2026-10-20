@@ -56,7 +56,8 @@ import {
 import { drawRocket, ROCKET_FPS, ROCKET_FRAMES, ROCKET_GRID, rocketScene } from "./publish-rocket.ts";
 import { useGenexStatus } from "./use-genex-status.ts";
 import { CoverControls, CoverMedia, CoverTool } from "./PublishCover.tsx";
-import { CoverKind, type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
+import { CoverKind } from "./cover-asks.ts";
+import { type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 import { PublishPlatforms, usePublishPlatforms } from "./PublishPlatforms.tsx";
 import { appsLabel, gateByPlugin, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
@@ -208,6 +209,7 @@ function Banner({
   cover,
   shotKey,
   clipKey,
+  onAsked,
 }: {
   project: string;
   title: string;
@@ -220,6 +222,8 @@ function Banner({
   shotKey: string | null;
   /** The kept clip's hash, or null while the game has none. */
   clipKey: string | null;
+  /** Another cover went to the chat: the dialog closes there. */
+  onAsked: () => void;
 }): JSX.Element {
   const game = useLibrary((s) => s.games.find((g) => g.name === project));
   const shot = useBannerShot(project, `${view.outcome}:${shotKey ?? ""}`);
@@ -250,6 +254,7 @@ function Banner({
           disabled={publishing || !view.canAskCover}
           asking={asking}
           onAsking={setAsking}
+          onAsked={onAsked}
         />
       </div>
     </div>
@@ -690,7 +695,7 @@ export function GenexPublishDialog({
       headerHidden
       className="genex-publish-dialog"
     >
-      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} />
+      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} onClose={onClose} />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </DialogSurface>
   );
@@ -746,11 +751,13 @@ function PublishBody({
   record,
   project,
   cover,
+  onClose,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   project: string;
   cover: PublishCover;
+  onClose: () => void;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -781,6 +788,7 @@ function PublishBody({
         cover={cover}
         shotKey={record.state?.cover?.shot?.sha256 ?? null}
         clipKey={record.state?.cover?.clip?.sha256 ?? null}
+        onAsked={onClose}
       />
       <div className="genex-publish-content">
         {view.problems.map((problem) => (

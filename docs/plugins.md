@@ -1848,8 +1848,10 @@ run at its moments, their observers feed its finish check and their worker types
 `web` is `web-game` at the root. A game New game made lists `awaitingFirstBuild` until an answer
 in any of its chats, or a run on it, ends with the folder holding a kind (`core/build-ends.ts`);
 it stays built after. `multiplayer` is set while the game's package.json names
-`@genex-ai/multiplayer` or its page maps Studio's copy (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
-Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`).
+`@genex-ai/multiplayer`, its page maps Studio's copy, or its Godot project carries Genex's
+multiplayer addon (`godot/addons/genex_multiplayer/plugin.cfg`) (`usesGenexMultiplayer`); a build's end tells the game list when it changed. The stage strip's
+Multiplayer shows only on a built game that is not multiplayer (`showsMultiplayer`), and on an
+engine's web export only for a Godot game (`takesEngineMultiplayer`), whose project takes it.
 
 ### Workspace rules
 
@@ -3105,9 +3107,14 @@ Genex:
   turns settle (`use-cover-after-turns.ts`), and it records the `genex-clip` demo's clip when there is
   one. The banner flips between the record's `candidates` (the last four frames; `cover-pick` makes
   one the kept shot, pinned, which a publish sends without shooting again), shows a kept clip behind
-  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Make
-  sends "Make another Genex cover for this game: …" through the chat's own send
-  (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
+  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Ask
+  agent sends "Make another Genex cover for this game: …" through the chat's own send
+  (`renderer/compose-in-chat.ts`) and closes the dialog there. Once the chat really sent it, the ask
+  is kept per game on this Mac (`genex/cover-asks.ts`), so the banner opened again says one is being
+  made until the agent's own frame arrives: the record's `agentTook` (`covers/<project>/agent.json`,
+  set only by `genex__cover` shoot and clip, never by Studio's takes or a publish's shot). Roughly how
+  long is left shows once that game's last ask was timed (ask to `agentTook`; no number before one,
+  none once it runs over). A
   Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
 - A game that runs as its own program (a Unity, Godot or Unreal fact, or nothing served as a web
@@ -3176,7 +3183,8 @@ Genex:
   `package.json`: for `@genex-ai/embed-sdk` the tool maps Studio's copy in its page's import map
   (`/vendor/genex/embed-sdk/index.js`, which the build copies from the pinned devDependency) and
   loads `/vendor/genex/connect.js` after the map (`withGenexSdkImport`); its page must be a
-  regular file, never a link. Multiplayer is refused there. The paid tool and the package tool need consent; fixture profiles refuse
+  regular file, never a link. Multiplayer is refused there. A Godot game (`godot/project.godot`)
+  is refused with a pointer to `godot__multiplayer`: its multiplayer goes into its project. The paid tool and the package tool need consent; fixture profiles refuse
   both host steps (`studio:plugins.host-cli`, `studio:plugins.host-package`).
 - `genex__asset` accepts only each lane's own options (`LANE_OPTIONS`, `plugins/genex/request.ts`),
   and a refusal names them (`Unsupported Genex option for <op>`). Each lane's provider is fixed and
@@ -3363,10 +3371,35 @@ turn that only exported never continues as one for a new kind, and the session's
 game list its facts changed (`delegation.ts` `#announceKindTaken`). A game with no web game at its root plays and publishes its first web game in a
 folder (`webFolderOf`, `shared/project-workspace.ts`): Live's preview serves that folder's
 `index.html`, and Publish uploads the folder in the root's place; Multiplayer stays off for it, as
-the chat never edits a build. Godot writes the exported settings through its own temporary name
+the chat never edits a build, except for a Godot game, whose project takes it (below). Godot writes the exported settings through its own temporary name
 (`tmpproject.binary-*`) in macOS's per-user temporary folder, the one place outside the project an
 export may write (`writePrefixes` in the native profile: one name's prefix, never a folder). A web game a plugin's fact also
 claims is told to chats as a web build, never with the web template's rules.
+
+`multiplayer` (agent tool, `multiplayer.ts`; its `godot-multiplayer` file skill says how to write
+the online play) puts Genex multiplayer into the game's Godot project, web and native alike:
+- **The addon.** Genex's addon `addons/genex_multiplayer/` is a copy of the Genex SDK's
+  `sdks/godot` (`MULTIPLAYER_ADDON_SOURCE`). A changed file is kept as `.mine`. Its
+  `GenexMultiplayer` autoload goes into `project.godot`.
+- **The Genex project.** The game's slug (when given) and API go into `project.godot`'s `[genex]`
+  section. A native build joins that game; the web build reads its slug from the page.
+- **Matchmaking.** The `matchmaking` argument (checked: a preset, a win condition, numeric knobs)
+  goes into the game's `genex.json`, which `readGenexGameManifest` sends at publish with
+  `@genex-ai/multiplayer` at Studio's pin.
+- **The native GDExtension.** The official Colyseus GDExtension goes into `addons/colyseus/`:
+  - The release `godot-v0.18.5` is downloaded once into the plugin's storage, its archive checked
+    against its pinned sha256 before anything of it is unpacked. A mismatch is removed, never used.
+  - Only the release libraries for macOS, Windows x86_64 and Linux x86_64 are unpacked. Genex
+    writes its own `colyseus.gdextension` loading them in the editor too, plus its MIT license.
+  - A native part that couldn't be added is a note; the web part still stands.
+- **The web build.** Genex's Web preset gets the head include
+  `<script src="genex-multiplayer-bridge.js">` and leaves `addons/colyseus/*` out. Every export of
+  a game with the addon copies the pinned SDK's `bridge.global.js` beside the page, with `genex-multiplayer-bridge.LICENSES.md` (the licenses of what it bundles, made at build by `bridgeLicenses`), which the
+  addon's web backend drives through `window.GenexMultiplayerBridge`. The publish connect module
+  hands that bridge the page's one player (`setIdentity` with Studio's embed SDK) and puts the
+  game's slug into `window.__GENEX__`.
+- **Not yet.** Native play inside Studio's sandbox has no network, so online play is tested in an
+  exported build or on the published web page.
 
 These managed-job restrictions do not sandbox the plugin backend itself. It remains trusted
 executable code, as disclosed at installation. The isolated custom panel has no Node or IPC.
