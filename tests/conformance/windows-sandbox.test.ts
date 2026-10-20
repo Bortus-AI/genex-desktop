@@ -673,7 +673,7 @@ describe("an entry on one folder alone, on Windows", {
     await denies.walkDeferred();
     assert.match(sddl(before, root), /\(D;ID;FA;;;BG\)/, "the walk later passes the deny down");
     await denies.revokeAll();
-    assert.doesNotMatch(sddl(secret, root), /\(D;[^)]*;;;BG\)/);
+    for (const p of [secret, later, before]) assert.doesNotMatch(sddl(p, root), /\(D;[^)]*;;;BG\)/, p);
   });
 
   // The walk may wait only where the sandbox user can open nothing under the path with or without

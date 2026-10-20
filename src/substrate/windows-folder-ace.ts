@@ -342,6 +342,9 @@ function Edit($edit) {
   $sd.DiscretionaryAcl = $acl
   if ($how -eq 'tree') { WriteTree $edit.dir $sd; return }
   $script:deferred = $how -eq 'deferred'
+  # Written alone, the folder would drop its auto-inherited mark, and what is made in it meanwhile
+  # would take the deny as its own entry, which no later walk or take-back reaches.
+  if ($script:deferred) { $sd.SetFlags([Security.AccessControl.ControlFlags]([int]$sd.ControlFlags -bor [int][Security.AccessControl.ControlFlags]::DiscretionaryAclAutoInheritRequired)) }
   $out = New-Object byte[] $sd.BinaryLength
   $sd.GetBinaryForm($out, 0)
   $ok = $api::SetFileSecurityW($edit.dir, $DACL, $out); $code = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
