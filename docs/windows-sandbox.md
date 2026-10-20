@@ -29,6 +29,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   program and working folder as that user. A per-user install lives in the profile, so the session
   grants the install folder (and srt-win's, when apart) for reading first
   (`grantLauncherFolders`), and a packaged app works from its install folder (`installedWorkingDir`).
+  It asks srt-win for the user's SID up to three times; without that grant the check fails with
+  "CreateProcessWithLogonW(srt-sandbox): Access is denied", so the log says why one was not made.
+  The same refusal comes from a disabled Secondary Logon service (`seclogon`).
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(S,RA)` (read attributes and synchronize, no listing) after every
   apply, since srt-win's deny stamps replace the entry. Synchronize matters before Windows 11
@@ -70,7 +73,7 @@ the setup screen opens on `git-missing`. What differs from macOS:
   every edit makes a path what all running holders need, and a gone holder's entries go on the
   next sync. A per-command deny Genex already sets is not sent again. Without the group, where
   PowerShell cannot run the batch or the running user holds the SID, srt-win stamps every deny as
-  before. srt-win keeps a missing deny path (it makes its placeholder), a drive root and a share.
+  before, and the log says so (`own denies off`). srt-win keeps a missing deny path (it makes its placeholder), a drive root and a share.
 - `killChild` kills the srt-win broker, whose job ends the tree; `HarnessHost.stop()` sends
   `shutdown` and kills only after the grace.
 
