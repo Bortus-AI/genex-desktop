@@ -811,6 +811,7 @@ export class StudioCore {
       root: this.layout.jobs,
       spawn: this.options.jobSpawn ?? ((request) => this.sandbox.spawnLongLived(request)),
       probe: this.options.jobProbe,
+      onLog: (line) => this.options.onLog?.(line, "stderr"),
       onStarted: (record) => recordJobStarted(this, record),
       onEnded: (record) => recordJobEnded(this, record),
     });

@@ -469,6 +469,67 @@ it("on Windows, a new app start ends a left job's tree only when its start time 
   for (const id of Object.values(ids)) assert.equal((await service.get(GAME, id))?.state, JobState.Interrupted, id);
 });
 
+it("on Windows, a start time that could not be read at first is read again before a left job is given up", async () => {
+  const h = await harness({ sendSignals: false, platform: "win32" });
+  const id = "00000000-0000-4000-8000-000000000021";
+  const lostId = "00000000-0000-4000-8000-000000000022";
+  const started = "2030-01-01T00:00:00.1234567Z";
+  const left = (jobId: string, pid: number): JobRecord => ({
+    id: jobId,
+    title: "Dev server",
+    owner: owner(),
+    command: "npm run dev",
+    cwd: h.cwd,
+    startedAt: new Date(Date.UTC(2029, 11, 31)).toISOString(),
+    state: JobState.Running,
+    deadlineAt: new Date(Date.UTC(2030, 0, 1)).toISOString(),
+    pid,
+    procStart: started,
+    logFile: path.join(h.root, GAME, jobId, "output.log"),
+    logBytes: 0,
+    mode: PermissionMode.Auto,
+  });
+  for (const record of [left(id, 4_200_001), left(lostId, 4_200_002)]) {
+    await mkdir(path.join(h.root, GAME, record.id), { recursive: true });
+    await writeFile(path.join(h.root, GAME, record.id, "job.json"), JSON.stringify(record));
+  }
+  const reads = new Map<number, number>();
+  const ended: TreeKillCommand[] = [];
+  const logged: string[] = [];
+  const service = new JobService({
+    root: h.root,
+    spawn: async () => assert.fail("reconcile starts nothing"),
+    clock: h.clock,
+    platform: "win32",
+    probe: {
+      // PowerShell starting slowly while the app boots: the first read of 4200001 times out.
+      startTime: async (pid) => {
+        const count = (reads.get(pid) ?? 0) + 1;
+        reads.set(pid, count);
+        if (pid === 4_200_002 || count === 1) throw new Error("the start time reader timed out");
+        return started;
+      },
+    },
+    kill: () => assert.fail("Windows has no signals"),
+    endTree: async (command) => {
+      ended.push(command);
+    },
+    onLog: (line) => logged.push(line),
+  });
+  await service.reconcile();
+
+  assert.deepEqual(
+    ended.map((command) => command.args),
+    [["/PID", "4200001", "/T", "/F"]],
+    "the tree is ended once its start time is read",
+  );
+  assert.ok(
+    logged.some((line) => line.includes(lostId) && line.includes("4200002")),
+    `a left job whose start time never reads is said in the log: ${logged.join(" | ")}`,
+  );
+  assert.equal((await service.get(GAME, lostId))?.state, JobState.Interrupted);
+});
+
 it("on Windows, a job's start time is recorded so a later app start can end it", async () => {
   const probed: number[] = [];
   const h = await harness({
