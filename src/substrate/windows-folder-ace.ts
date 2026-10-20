@@ -284,7 +284,7 @@ Answer (ConvertTo-Json -InputObject @($outcomes) -Compress)
 `;
 
 /** Windows PowerShell by its full path: a folder on PATH must not stand in for it. */
-function powershell(env: NodeJS.ProcessEnv = process.env): string {
+export function windowsPowerShell(env: NodeJS.ProcessEnv = process.env): string {
   const systemRoot = env.SystemRoot || env.SYSTEMROOT || "C:\\Windows";
   return path.win32.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
@@ -297,7 +297,7 @@ export function folderAceCommand(
   const script = Buffer.from(FOLDER_ACE_SCRIPT, "utf16le").toString("base64");
   const payload = Buffer.from(JSON.stringify(edits), "utf8").toString("base64");
   return {
-    file: powershell(env),
+    file: windowsPowerShell(env),
     args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", script],
     env: { ...env, [EDITS_ENV]: payload },
   };
