@@ -1051,7 +1051,7 @@ export const ENGINE_ASSIST_TASK_MAX_CHARS = 300;
 
 /** Why `game.engine.assist` started nothing. */
 export const EngineAssistRefusal = {
-  /** No computer control on this computer: Windows, or a Mac with no desktop driver. */
+  /** No computer control on this computer: no desktop driver (Linux, or a development build without one). */
   Unavailable: "unavailable",
   /** The person said no to the task's card or to turning computer control on. */
   Declined: "declined",

@@ -255,21 +255,26 @@ it). Windows asks no grant, so none is checked: cua's own check takes no `prompt
 runs in the person's session because Genex started it, with no console window, and a minimal
 environment of Windows' own folders and the person's profile (`driverEnv`). On both systems its
 stdin is the app's lifetime pipe (`CUA_DRIVER_PARENT_LIVENESS_STDIN`), so a crashed app takes its
-daemon with it. Elevated (administrator) apps refuse the driver's input, and it says so; cua spells
-forward delete `delete` there, and the client translates.
+daemon with it. Elevated (administrator) apps refuse the driver's input, and it says so. cua spells
+forward delete `delete` there, and the client translates; it never presses the Windows key (the
+shell's: Start, Run and Search start any program), nor a key name cua does not know (cua would press
+its first letter).
 
 cua's Windows window list holds windows a click passes through (windows on other virtual desktops,
 transparent overlays such as a game overlay over the whole screen) and its app listing rescans every
 installed app, so the studio asks Windows itself through the window probe
 ([`windows-window-probe.ts`](../src/substrate/windows-window-probe.ts)): Windows PowerShell running a
-fixed script (one small C# class, compiled once per desktop session) that answers which app is in
-front and whether its focused field is a password field (UI Automation's `IsPassword`), and which app
-a click at a point reaches, resolved as cua resolves its own click (`WindowFromPoint`, then the root
-window). An app is its executable in lower case (`windowsAppId`: `notepad.exe`), shown by its file
-description (Notepad); a window no process can be read for is no app, which is refused. A probe that
-cannot start (PowerShell blocked by policy) stops the session from connecting; one that does not
-answer in 5 s is ended, and the action refused. Consent is per executable, so allowing File Explorer
-(`explorer.exe`, also the desktop and the taskbar) also allows the Control Panel windows it hosts.
+fixed script, handed over as `-EncodedCommand` (no file, so no execution policy), that uses only .NET's
+UI Automation, Windows Forms and process reads (nothing compiled). It answers which app is in front
+and whether its focused field is a password field (UI Automation's `IsPassword`, asked again a moment
+later when focus is on no text field, as Chromium's accessibility wakes on first asking), and which
+app a click at a point reaches (the element there, up to its top-level window), with its window's
+handle so the tree fallback skips cua's slow window list. It says its view of the primary screen
+when ready, and click points are scaled to it, whatever DPI awareness PowerShell has. An app is its
+executable in lower case (`windowsAppId`: `notepad.exe`), shown by its file description (Notepad); a
+window no process can be read for is no app, which is refused. A probe that cannot start (PowerShell
+blocked by policy) stops the session from connecting, saying the stage it reached; one that does not
+answer in 5 s is ended, and the action refused.
 
 A VM's driver is reached as
 `ssh -T lume@<ip> cua-driver mcp` when `GENEX_COMPUTER_VM` names the guest, where the guest's
@@ -308,9 +313,10 @@ environment, outside the ProcessSandbox, which would deny it the screen.
   driver): the next call retries without a new card. A stop ends it, and the next call asks again.
 - **Never driven.** The studio itself (so an agent cannot answer its own card), password managers,
   System Settings, Keychain Access and the system's password prompts; on Windows the same by
-  executable (`NEVER_DRIVEN_WINDOWS_APPS`), and every packaged app's frame
-  (`ApplicationFrameHost.exe`, which holds Settings and Windows Security among others, and from which
-  the studio cannot tell the app). Nothing is typed into a password field (macOS's secure input on a
+  executable (`NEVER_DRIVEN_WINDOWS_APPS`), every packaged app's frame (`ApplicationFrameHost.exe`,
+  which holds Settings and Windows Security among others, and from which the studio cannot tell the
+  app), the shell (Explorer, which is also the desktop and the taskbar, Start and Search: each can
+  start any program) and the driver's own cursor overlay. Nothing is typed into a password field (macOS's secure input on a
   Mac, UI Automation's password flag on Windows; where neither can say, a text field labelled as a
   password in the front window's tree, `AXTextField` or Windows' `Edit`). A click is checked against the app whose window is under the point, and a point no
   window covers is refused, never put down to the app in front; a drag is checked at both ends, so

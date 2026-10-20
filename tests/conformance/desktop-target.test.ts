@@ -152,6 +152,19 @@ describe("desktop target", () => {
       why: /never driven/,
     },
     {
+      // Explorer is the desktop, the taskbar, Run and File Explorer's address bar: it starts programs.
+      name: "a click in Windows Explorer, the shell",
+      under: { name: "Windows Explorer", bundleId: "explorer.exe", pid: 9 },
+      actions: [{ type: "click", x: 10, y: 10, px: true }],
+      why: /never driven/,
+    },
+    {
+      name: "a click that reaches the driver's own cursor overlay",
+      under: { name: "Cua Driver", bundleId: "cua-driver.exe", pid: 10 },
+      actions: [{ type: "click", x: 10, y: 10, px: true }],
+      why: /never driven/,
+    },
+    {
       name: "keys into a Windows credential prompt",
       focus: { app: { name: "Windows Security", bundleId: "credentialuibroker.exe", pid: 8 }, secure: false },
       actions: [{ type: "press", combo: "Return" }],

@@ -246,6 +246,7 @@ describe("cua-driver on Windows", () => {
   function windowsDriver(probed: {
     front?: () => ProbedApp | null;
     at?: (x: number, y: number) => ProbedApp | null;
+    process?: (pid: number) => ProbedApp | null;
     tree?: CuaAnswer;
   }) {
     const windows = [
@@ -287,24 +288,24 @@ describe("cua-driver on Windows", () => {
         asked.push("front");
         return probed.front?.() ?? null;
       },
-      at: async (x, y) => {
-        asked.push(`at ${x} ${y}`);
+      at: async (x, y, screen) => {
+        asked.push(`at ${x} ${y} of ${screen.width}x${screen.height}`);
         return probed.at?.(x, y) ?? null;
       },
-      process: async () => null,
+      process: async (pid) => probed.process?.(pid) ?? null,
       close: async () => {
         closed = true;
       },
     };
     return { driver: cuaDriver(connection, { windows: probe }), calls, asked, closed: () => closed };
   }
-  const NOTEPAD: ProbedApp = { pid: 40, exe: "Notepad.exe", name: "Notepad", secure: false };
+  const NOTEPAD: ProbedApp = { pid: 40, exe: "Notepad.exe", name: "Notepad", secure: false, window: 4001 };
+  const PASSWORDS: ProbedApp = { pid: 41, exe: "1Password.exe", name: "1Password", secure: null, window: 4101 };
 
   it("asks Windows which app is in front and which app a click reaches, named by executable", async () => {
     const { driver, calls, asked } = windowsDriver({
       front: () => NOTEPAD,
-      at: (x) =>
-        x < 1366 ? { ...NOTEPAD, secure: null } : { pid: 41, exe: "1Password.exe", name: "1Password", secure: null },
+      at: (x) => (x < 1366 ? { ...NOTEPAD, secure: null } : PASSWORDS),
     });
     await driver.screenshot();
     assert.deepEqual(await driver.focus(), {
@@ -313,8 +314,9 @@ describe("cua-driver on Windows", () => {
     });
     assert.deepEqual(await driver.appAt?.(100, 100), { name: "Notepad", bundleId: "notepad.exe", pid: 40 });
     assert.deepEqual(await driver.appAt?.(1000, 100), { name: "1Password", bundleId: "1password.exe", pid: 41 });
-    // Picture pixels become the screen's physical pixels, as the driver's own click maps them.
-    assert.deepEqual(asked.slice(1), ["at 200 200", "at 2000 200"]);
+    // Picture pixels become the screen's physical pixels, as the driver's own click maps them; the
+    // probe scales those to its own points from the screen's size.
+    assert.deepEqual(asked.slice(1), ["at 200 200 of 2732x1708", "at 2000 200 of 2732x1708"]);
     const slow = calls.filter((call) => call.tool === "list_apps" || call.tool === "get_window_state");
     assert.deepEqual(slow, [], "no installed-app scan and no tree read while UI Automation answers");
   });
@@ -324,7 +326,7 @@ describe("cua-driver on Windows", () => {
     const { driver } = windowsDriver({ front: () => front });
     assert.equal((await driver.focus()).app?.bundleId, "notepad.exe");
     // A key opened a credential prompt: the next action sees it at once.
-    front = { pid: 52, exe: "CredentialUIBroker.exe", name: "Credential Dialog Xaml Host", secure: true };
+    front = { pid: 52, exe: "CredentialUIBroker.exe", name: "Credential Dialog Xaml Host", secure: true, window: 5201 };
     assert.deepEqual(await driver.focus(), {
       app: { name: "Credential Dialog Xaml Host", bundleId: "credentialuibroker.exe", pid: 52 },
       secure: true,
@@ -333,7 +335,7 @@ describe("cua-driver on Windows", () => {
 
   it("names an app Windows gives no description for by its executable, and no app where it reads none", async () => {
     const { driver } = windowsDriver({
-      front: () => ({ pid: 7, exe: "Game.exe", name: "", secure: false }),
+      front: () => ({ pid: 7, exe: "Game.exe", name: "", secure: false, window: null }),
       at: () => null,
     });
     await driver.screenshot();
@@ -342,10 +344,17 @@ describe("cua-driver on Windows", () => {
     assert.equal((await windowsDriver({}).driver.focus()).app, null, "an app in front Windows cannot read is no app");
   });
 
-  it("reads a password field from the front window's tree only when UI Automation could not say", async () => {
+  it("reads a password field from the front window's tree, by its handle, only when UI Automation could not say", async () => {
     const unknown = { ...NOTEPAD, secure: null };
     const secure = async (tree: CuaAnswer, front: ProbedApp = unknown) =>
       (await windowsDriver({ front: () => front, tree }).driver.focus()).secure;
+    const fake = windowsDriver({ front: () => unknown });
+    await fake.driver.focus();
+    assert.deepEqual(
+      fake.calls.map((call) => [call.tool, call.args.window_id]),
+      [["get_window_state", 4001]],
+      "the window the probe named, without cua's slow window list",
+    );
     const rows = (text: string): CuaAnswer => ({ content: [{ type: "text", text }] });
     assert.equal(await secure(rows('- [1] Window "Sign in"\n  - [3] Edit "Password"')), true);
     assert.equal(await secure(rows('- [1] Window "Вход"\n  - [3] Edit "Пароль" [id=passwordBox]')), true);
@@ -357,6 +366,24 @@ describe("cua-driver on Windows", () => {
       true,
       "UI Automation's own flag wins over a tree that shows none",
     );
+  });
+
+  it("never presses the Windows key, nor a key name cua would press as its first letter", async () => {
+    const fake = windowsDriver({});
+    for (const keys of [["cmd", "r"], ["win"], ["meta", "s"], ["ctrl", "volumeup"], ["numpad5"], ["printscreen"]])
+      await assert.rejects(fake.driver.press(keys), /Windows key|not a key/, keys.join("+"));
+    await assert.rejects(
+      fake.driver.click(5, 5, { button: "left", count: 1, modifiers: ["cmd"] }),
+      /Windows key/,
+      "nor holds it under a click",
+    );
+    assert.deepEqual(
+      fake.calls.filter((c) => c.tool === "press_key" || c.tool === "click"),
+      [],
+      "nothing reached the driver",
+    );
+    for (const keys of [["ctrl", "s"], ["alt", "f4"], ["shift", "tab"], ["escape"], ["a"], ["F5"]])
+      await fake.driver.press(keys);
   });
 
   it("presses forward delete by Windows' name for it, leaves every other key as it is, and closes its probe", async () => {

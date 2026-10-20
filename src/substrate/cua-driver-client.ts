@@ -34,7 +34,13 @@ import {
 } from "./desktop-driver.ts";
 import { type MacApps, macApps } from "./mac-apps.ts";
 import { cuaWeb, refusalError } from "./cua-web.ts";
-import { type ProbedApp, probeCommand, type WindowsProbe, windowsProbe } from "./windows-window-probe.ts";
+import {
+  type ProbedApp,
+  probeCommand,
+  type ScreenSize,
+  type WindowsProbe,
+  windowsProbe,
+} from "./windows-window-probe.ts";
 import { randomUUID } from "node:crypto";
 
 /** The longest side of a desktop picture the model is shown: the driver's own default on macOS. */
@@ -89,6 +95,56 @@ const DRIVER_EXE = "cua-driver.exe";
  * is Backspace, so the studio says `forward_delete`).
  */
 const WINDOWS_KEYS: Readonly<Record<string, string>> = { forward_delete: "delete" };
+/**
+ * The named keys cua's Windows driver knows (its `key_name_to_vk`); it presses a name it does not
+ * know as the name's first letter (so `volumeup` with Ctrl would paste), so any other name is refused.
+ */
+const WINDOWS_NAMED_KEYS: ReadonlySet<string> = new Set([
+  "enter",
+  "return",
+  "tab",
+  "escape",
+  "esc",
+  "space",
+  "backspace",
+  "delete",
+  "del",
+  "insert",
+  "ins",
+  "home",
+  "end",
+  "pageup",
+  "pgup",
+  "pagedown",
+  "pgdn",
+  "up",
+  "down",
+  "left",
+  "right",
+  "f1",
+  "f2",
+  "f3",
+  "f4",
+  "f5",
+  "f6",
+  "f7",
+  "f8",
+  "f9",
+  "f10",
+  "f11",
+  "f12",
+  "ctrl",
+  "control",
+  "shift",
+  "alt",
+  "capslock",
+  "numlock",
+]);
+/**
+ * The Windows key, as cua names it. It belongs to the shell (Start, Run, Search can start any program),
+ * not to the app in front that the studio checked, so it is never pressed on Windows.
+ */
+const WINDOWS_SHELL_KEYS: ReadonlySet<string> = new Set(["cmd", "command", "win", "windows", "meta", "super"]);
 
 /** The whole primary display, the target of every action. */
 const DESKTOP = { kind: "desktop", display_id: "primary" } as const;
@@ -101,6 +157,9 @@ const MESSAGE = {
       "cua-driver needs Accessibility and Screen Recording: allow CuaDriver in System Settings → Privacy & Security, then try again",
   },
   noPicture: "cua-driver answered without a picture of the screen",
+  windowsKey:
+    "the Windows key opens the shell (Start, Run, Search), which can start any program: computer control never presses it — use Ctrl shortcuts or click in the app",
+  unknownKey: (key: string) => `"${key}" is not a key cua-driver can press on Windows`,
   failed: (tool: string, why: string) => `cua-driver ${tool} failed: ${why}`,
 } as const;
 
@@ -376,6 +435,15 @@ function desktopReads(call: CuaCall, options: { mac?: MacApps; secureInput?: () 
   };
 }
 
+/** A key as cua's Windows driver spells it; throws for the Windows key and a name it cannot press. */
+function windowsKey(key: string): string {
+  if ([...key].length === 1) return key;
+  const name = (WINDOWS_KEYS[key] ?? key).toLowerCase();
+  if (WINDOWS_SHELL_KEYS.has(name)) throw new Error(MESSAGE.windowsKey);
+  if (WINDOWS_NAMED_KEYS.has(name)) return name;
+  throw new Error(MESSAGE.unknownKey(key));
+}
+
 /** A probed Windows app as the studio names it: by its executable, shown by its file description. */
 function probedApp(probed: ProbedApp | null): DesktopApp | null {
   if (!probed) return null;
@@ -388,18 +456,35 @@ function probedApp(probed: ProbedApp | null): DesktopApp | null {
  * process, no executable) is no app, which the target refuses. Only the front window's tree comes
  * from cua; it stands in for UI Automation's password flag when that could not be read.
  */
-function windowsReads(call: CuaCall, probe: WindowsProbe): DesktopReads {
+function windowsReads(call: CuaCall, probe: WindowsProbe, screen: () => ScreenSize): DesktopReads {
   const windows = async (pid?: number): Promise<CuaWindow[]> =>
     (await listedWindows(call, pid)).filter((window) => !isDriverWindow(window));
-  const frontTree = (app: DesktopApp | null) => frontTreeOf(call, windows, app);
+  // The front window as the probe last named it: its tree is read by its handle, without cua's
+  // window list (a second or more on Windows).
+  let front: ProbedApp | null = null;
+  const frontTree = (app: DesktopApp | null): Promise<CuaAnswer | null> => {
+    const known = front !== null && app?.pid === front.pid ? front.window : null;
+    if (known === null) return frontTreeOf(call, windows, app);
+    return call("get_window_state", {
+      pid: front?.pid,
+      window_id: known,
+      include_screenshot: false,
+      include_accessibility_tree: true,
+      max_elements: MAX_ELEMENTS,
+    });
+  };
+  const probeFront = async (): Promise<ProbedApp | null> => {
+    front = await probe.front();
+    return front;
+  };
   return {
     appOfPid: async (pid) => probedApp(await probe.process(pid)),
-    appAt: async (x, y) => probedApp(await probe.at(x, y)),
-    frontApp: async () => probedApp(await probe.front()),
+    appAt: async (x, y) => probedApp(await probe.at(x, y, screen())),
+    frontApp: async () => probedApp(await probeFront()),
     focus: async () => {
-      const front = await probe.front();
-      const app = probedApp(front);
-      if (front?.secure !== null && front?.secure !== undefined) return { app, secure: front.secure };
+      const probed = await probeFront();
+      const app = probedApp(probed);
+      if (probed?.secure !== null && probed?.secure !== undefined) return { app, secure: probed.secure };
       const tree = await frontTree(app).catch(() => null);
       return { app, secure: tree !== null && hasPasswordField(tree) };
     },
@@ -432,8 +517,8 @@ export function cuaDriver(
   };
   const act = (tool: string, args: Record<string, unknown>) =>
     call(tool, { target: DESKTOP, delivery_mode: "foreground", ...args }).then(() => undefined);
-  const keyName = (key: string): string => (options.windows ? (WINDOWS_KEYS[key] ?? key) : key);
-  const reads = options.windows ? windowsReads(call, options.windows) : desktopReads(call, options);
+  const keyName = (key: string): string => (options.windows ? windowsKey(key) : key);
+  const reads = options.windows ? windowsReads(call, options.windows, () => screen) : desktopReads(call, options);
   return {
     screenshot: async (): Promise<DesktopShot> => {
       const answer = await call("get_desktop_state", { max_image_dimension: MAX_IMAGE_DIMENSION });
@@ -459,7 +544,7 @@ export function cuaDriver(
     appAt: (x, y) => reads.appAt((x * screen.width) / picture.width, (y * screen.height) / picture.height),
     // move_cursor takes no delivery mode, and a desktop target is its own scope.
     move: (x, y) => call("move_cursor", { target: DESKTOP, x, y }).then(() => undefined),
-    click: (x, y, o) =>
+    click: async (x, y, o) =>
       act("click", {
         x,
         y,
@@ -474,9 +559,9 @@ export function cuaDriver(
     drag: (from, to, button) => act("drag", { from_x: from.x, from_y: from.y, to_x: to.x, to_y: to.y, button }),
     scroll: (x, y, dx, dy) => act("scroll", { x, y, ...scrollOf(dx, dy) }),
     type: (text) => act("type_text", { text }),
-    press: (keys) => {
+    press: async (keys) => {
       const key = keys.at(-1);
-      if (!key) return Promise.resolve();
+      if (!key) return;
       return act("press_key", {
         key: keyName(key),
         ...(keys.length > 1 ? { modifiers: keys.slice(0, -1).map(keyName) } : {}),

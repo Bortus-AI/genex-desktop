@@ -77,10 +77,19 @@ export const NEVER_DRIVEN_BUNDLES: ReadonlySet<string> = new Set([
  * The same apps on Windows, by executable (`windowsAppId`). Every packaged app's window is a
  * frame of `ApplicationFrameHost.exe` (Settings and Windows Security among them), and the studio
  * cannot tell which app a frame holds, so it drives none; `rundll32.exe` hosts the old dialogs,
- * saved passwords among them.
+ * saved passwords among them. The shell is never driven either: Explorer (the desktop, the
+ * taskbar, File Explorer's address bar, Run and Control Panel), Start and Search can each start any
+ * program as the person, outside the sandbox. Nor is the driver's own cursor overlay, so a point
+ * that reaches it is refused rather than charged to it.
  */
 export const NEVER_DRIVEN_WINDOWS_APPS: ReadonlySet<string> = new Set([
   "applicationframehost.exe",
+  "explorer.exe",
+  "startmenuexperiencehost.exe",
+  "searchhost.exe",
+  "searchapp.exe",
+  "shellexperiencehost.exe",
+  "cua-driver.exe",
   "systemsettings.exe",
   "sechealthui.exe",
   "consent.exe",

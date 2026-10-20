@@ -1,29 +1,30 @@
 /**
  * What Windows itself says about the desktop, for computer control on a PC: the app that holds the
- * keyboard (the foreground window's process) and whether its focused field is a password field
- * (UI Automation's `IsPassword`), and the app a click at a screen point reaches (the root of
- * `WindowFromPoint`'s window, which is how cua-driver resolves its own desktop click). cua's window
- * list cannot say either: it lists windows on other virtual desktops and transparent overlays (a
- * game overlay over the whole screen) as on screen, and its app listing rescans every installed app.
+ * keyboard and whether its focused field is a password field (UI Automation's `IsPassword`), and the
+ * app a click at a screen point reaches (UI Automation's element at that point, up to its top-level
+ * window, as the click lands in that window). cua's window list cannot say either: it lists windows
+ * on other virtual desktops and transparent overlays (a game overlay over the whole screen) as on
+ * screen, and its app listing rescans every installed app.
  *
  * A host helper like the driver: Windows PowerShell (Microsoft's, on every Windows 10 and 11) runs a
- * fixed script outside the ProcessSandbox. The script compiles one small C# class, says it is ready,
- * then answers one JSON line for each request line on its stdin: `front`, `at <x> <y>` (physical
- * screen pixels, as cua's desktop pictures map them) or `pid <n>`. An app is its executable's name
- * and its file description (the name the person knows it by); a window no process can be read for
- * answers pid 0, which the caller refuses. A request that does not answer in time ends the helper,
- * and the next request starts a fresh one.
+ * fixed script, handed over as `-EncodedCommand` (no file, so no execution policy applies), outside
+ * the ProcessSandbox, using only .NET's own UI Automation, Windows Forms and process reads: nothing
+ * is compiled, so no generated DLL and no compiler stand between it and its first answer. It reports its start in stages, says it is ready with the primary screen's size as
+ * it sees it (Windows may scale a process's points), then answers one JSON line for each request
+ * line on its stdin: `front`, `at <x> <y>` (in its own points: the caller scales the driver's
+ * physical pixels to them) or `pid <n>`. An app is its executable's name and its file description
+ * (the name the person knows it by); a window no process can be read for answers pid 0, which the
+ * caller refuses. A request that does not answer in time ends the helper, and the next request
+ * starts a fresh one.
  */
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 
-/** How long the helper has to compile its class and say it is ready. */
+/** How long the helper has to start PowerShell, load UI Automation and say it is ready. */
 const START_MS = 30 * SECOND_MS;
 /** How long one request may take: UI Automation waits on the focused app, which can hang. */
 const REQUEST_MS = 5 * SECOND_MS;
@@ -31,145 +32,112 @@ const REQUEST_MS = 5 * SECOND_MS;
 const EXIT_WAIT_MS = 2 * SECOND_MS;
 /** How much of the helper's stderr is kept to say why it stopped. */
 const MAX_STDERR_CHARS = 2_000;
-/** The helper's script file in its private folder. */
-const SCRIPT_NAME = "window-probe.ps1";
-/** The line the helper says once its class is compiled. */
-const READY = '{"ready":true}';
+/** How long the helper waits before asking again for focus that is on no text field. */
+const FOCUS_SETTLE_MS = 250;
 
 const MESSAGE = {
   notStarted: (why: string) => `the Windows window probe did not start: ${why}`,
   ended: (why: string) => `the Windows window probe stopped: ${why}`,
   timedOut: (request: string) => `the Windows window probe did not answer "${request}" in time`,
+  startLate: (ms: number, stage: string, said: string) =>
+    `the Windows window probe was not ready after ${Math.round(ms / SECOND_MS)} s (last stage: ${stage}${said ? `; it said: ${said}` : ""})`,
   closed: "the Windows window probe was closed",
   badAnswer: (line: string) => `the Windows window probe answered something unreadable: ${line.slice(0, 200)}`,
 } as const;
 
 /**
- * The helper's script: a C# class for the Win32 and UI Automation calls, compiled once, serving
- * request lines. Its answers are ASCII (every other character escaped), so no console code page
- * can garble them.
+ * The helper's script. Its answers are ASCII JSON (every other character escaped), so no console
+ * code page can garble them.
  */
 export const WINDOW_PROBE_SCRIPT = String.raw`$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
-$references = [AppDomain]::CurrentDomain.GetAssemblies() |
-  Where-Object { $_.GetName().Name -in 'UIAutomationClient', 'UIAutomationTypes', 'WindowsBase' } |
-  ForEach-Object { $_.Location }
-Add-Type -ReferencedAssemblies $references -Language CSharp -TypeDefinition @'
-using System;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Windows.Automation;
-
-public static class GenexWindowProbe {
-  [StructLayout(LayoutKind.Sequential)]
-  struct Point { public int X; public int Y; }
-
-  [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
-  [DllImport("user32.dll")] static extern IntPtr GetThreadDpiAwarenessContext();
-  [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(IntPtr value);
-  [DllImport("user32.dll")] static extern bool IsProcessDPIAware();
-  [DllImport("user32.dll")] static extern IntPtr WindowFromPoint(Point point);
-  [DllImport("user32.dll")] static extern IntPtr GetAncestor(IntPtr window, uint flags);
-  [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
-  [DllImport("kernel32.dll")] static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
-  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-  static extern bool QueryFullProcessImageNameW(IntPtr process, uint flags, StringBuilder name, ref uint size);
-  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
-
-  const uint RootWindow = 2;
-  const uint QueryLimitedInformation = 0x1000;
-  static readonly IntPtr PerMonitorAwareV2 = new IntPtr(-4);
-  static bool physicalPoints;
-
-  public static void Serve() {
-    // Physical pixels, as cua-driver's own clicks use; a Windows before 10 1703 has no such call.
-    try { SetProcessDpiAwarenessContext(PerMonitorAwareV2); } catch (EntryPointNotFoundException) { }
-    // A process Windows still scales sees other points than the driver clicks: then no point is read.
-    try { physicalPoints = GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) > 0; }
-    catch (EntryPointNotFoundException) { physicalPoints = IsProcessDPIAware(); }
-    Console.Out.WriteLine("{\"ready\":true}");
-    Console.Out.Flush();
-    string line;
-    while ((line = Console.In.ReadLine()) != null) {
-      string answer;
-      try { answer = Ask(line.Trim()); }
-      catch (Exception error) { answer = "{\"error\":" + Json(error.Message) + "}"; }
-      Console.Out.WriteLine(answer);
-      Console.Out.Flush();
-    }
-  }
-
-  static string Ask(string line) {
-    string[] parts = line.Split(' ');
-    if (parts[0] == "front" && parts.Length == 1) return OfWindow(GetForegroundWindow(), true);
-    if (parts[0] == "at" && parts.Length == 3) {
-      if (!physicalPoints) return "{\"error\":\"Windows scales this process's screen points\"}";
-      Point point = new Point {
-        X = int.Parse(parts[1], CultureInfo.InvariantCulture),
-        Y = int.Parse(parts[2], CultureInfo.InvariantCulture)
-      };
-      IntPtr window = WindowFromPoint(point);
-      IntPtr root = window == IntPtr.Zero ? IntPtr.Zero : GetAncestor(window, RootWindow);
-      return OfWindow(root == IntPtr.Zero ? window : root, false);
-    }
-    if (parts[0] == "pid" && parts.Length == 2) return OfProcess(uint.Parse(parts[1], CultureInfo.InvariantCulture), null);
-    return "{\"error\":\"unknown request\"}";
-  }
-
-  static string OfWindow(IntPtr window, bool focus) {
-    if (window == IntPtr.Zero) return "{\"pid\":0}";
-    uint pid;
-    GetWindowThreadProcessId(window, out pid);
-    return OfProcess(pid, focus ? FocusIsPassword() : null);
-  }
-
-  static string OfProcess(uint pid, string secure) {
-    string image = ImagePath(pid);
-    if (image.Length == 0) return "{\"pid\":0}";
-    string name = "";
-    try { name = FileVersionInfo.GetVersionInfo(image).FileDescription ?? ""; } catch (Exception) { }
-    string answer = "{\"pid\":" + pid.ToString(CultureInfo.InvariantCulture) +
-      ",\"exe\":" + Json(Path.GetFileName(image)) + ",\"name\":" + Json(name.Trim());
-    return secure == null ? answer + "}" : answer + ",\"secure\":" + secure + "}";
-  }
-
-  // Whether the focused element is a password field; null when focus is on no text field (an app
-  // whose accessibility wakes on first asking may still say its window), so the caller reads the tree.
-  static string FocusIsPassword() {
-    try {
-      AutomationElement focused = AutomationElement.FocusedElement;
-      if (focused == null || focused.Current.ControlType != ControlType.Edit) return "null";
-      return focused.Current.IsPassword ? "true" : "false";
-    } catch (Exception) { return "null"; }
-  }
-
-  static string ImagePath(uint pid) {
-    if (pid == 0) return "";
-    IntPtr process = OpenProcess(QueryLimitedInformation, false, pid);
-    if (process == IntPtr.Zero) return "";
-    try {
-      StringBuilder name = new StringBuilder(1024);
-      uint size = (uint)name.Capacity;
-      return QueryFullProcessImageNameW(process, 0, name, ref size) ? name.ToString() : "";
-    } finally { CloseHandle(process); }
-  }
-
-  static string Json(string text) {
-    StringBuilder json = new StringBuilder("\"");
-    foreach (char c in text) {
-      if (c == '"' || c == '\\') json.Append('\\').Append(c);
-      else if (c < 0x20 || c > 0x7e) json.Append("\\u").Append(((int)c).ToString("x4"));
-      else json.Append(c);
-    }
-    return json.Append('"').ToString();
-  }
+function Say($value) {
+  $json = $value | ConvertTo-Json -Compress
+  [Console]::Out.WriteLine([regex]::Replace($json, '[^\x20-\x7e]', { param($m) '\u{0:x4}' -f [int][char]$m.Value }))
+  [Console]::Out.Flush()
 }
-'@
-[GenexWindowProbe]::Serve()
+Say @{ stage = 'started' }
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase, System.Windows.Forms
+Say @{ stage = 'loaded' }
+$Element = [System.Windows.Automation.AutomationElement]
+$Root = $Element::RootElement
+$Walker = [System.Windows.Automation.TreeWalker]::RawViewWalker
+$Edit = [System.Windows.Automation.ControlType]::Edit
+$Culture = [System.Globalization.CultureInfo]::InvariantCulture
+
+# The primary screen in UI Automation's own points: Windows Forms' view of it, scaled by how the two
+# see the whole desktop (both are scaled alike unless Windows treats them differently).
+$virtual = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$primary = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+$desktop = $Root.Current.BoundingRectangle
+$scaleX = if ($virtual.Width -gt 0) { $desktop.Width / $virtual.Width } else { 1 }
+$scaleY = if ($virtual.Height -gt 0) { $desktop.Height / $virtual.Height } else { 1 }
+$view = [ordered]@{ width = [int][math]::Round($primary.Width * $scaleX); height = [int][math]::Round($primary.Height * $scaleY) }
+
+# The top-level window an element is in: the window a click on it lands in.
+function TopOf($node) {
+  $current = $node
+  for ($depth = 0; $depth -lt 64; $depth++) {
+    $parent = $Walker.GetParent($current)
+    if ($null -eq $parent -or [System.Windows.Automation.Automation]::Compare($parent, $Root)) { return $current }
+    $current = $parent
+  }
+  return $current
+}
+
+# Whether the focused element is a password field; null when focus is on no text field (an app whose
+# accessibility wakes on first asking may still say its window), so the caller reads the tree.
+function SecureOf($node) {
+  try {
+    if ($node.Current.ControlType -ne $Edit) { return $null }
+    return [bool]$node.Current.IsPassword
+  } catch { return $null }
+}
+
+function AppOfProcess([int]$id) {
+  if ($id -le 0) { return @{ pid = 0 } }
+  $process = Get-Process -Id $id -ErrorAction SilentlyContinue
+  if ($null -eq $process) { return @{ pid = 0 } }
+  $name = ''
+  try { if ($process.Path) { $name = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($process.Path).FileDescription } } catch { }
+  return [ordered]@{ pid = $id; exe = "$($process.ProcessName).exe"; name = "$name".Trim() }
+}
+
+function AppOfElement($node, [bool]$focus) {
+  if ($null -eq $node) { return @{ pid = 0 } }
+  $top = TopOf $node
+  $app = AppOfProcess ([int]$top.Current.ProcessId)
+  if ($app.pid -le 0) { return $app }
+  $app.window = [int64]$top.Current.NativeWindowHandle
+  if ($focus) { $app.secure = SecureOf $node }
+  return $app
+}
+
+# The focused element. An app whose accessibility wakes on first asking (Chromium, Electron) says its
+# window before its field: focus that is on no text field is asked for once more, a moment later.
+function Focused() {
+  $node = $Element::FocusedElement
+  if ($null -eq $node -or $node.Current.ControlType -eq $Edit) { return $node }
+  Start-Sleep -Milliseconds ${FOCUS_SETTLE_MS}
+  $again = $Element::FocusedElement
+  if ($null -eq $again) { return $node }
+  return $again
+}
+
+function Ask([string]$line) {
+  $parts = $line.Trim().Split(' ')
+  if ($parts[0] -eq 'front' -and $parts.Length -eq 1) { return AppOfElement (Focused) $true }
+  if ($parts[0] -eq 'at' -and $parts.Length -eq 3) {
+    $point = New-Object System.Windows.Point ([int]::Parse($parts[1], $Culture)), ([int]::Parse($parts[2], $Culture))
+    return AppOfElement ($Element::FromPoint($point)) $false
+  }
+  if ($parts[0] -eq 'pid' -and $parts.Length -eq 2) { return AppOfProcess ([int]::Parse($parts[1], $Culture)) }
+  return @{ error = 'unknown request' }
+}
+
+Say ([ordered]@{ ready = $true; view = $view })
+while ($null -ne ($line = [Console]::In.ReadLine())) {
+  try { Say (Ask $line) } catch { Say @{ error = "$($_.Exception.Message)" } }
+}
 `;
 
 /** An app as Windows names it: its process, its executable, its file description, and (for the one in front) whether its focused field is a password field, when UI Automation could say. */
@@ -178,24 +146,34 @@ export interface ProbedApp {
   exe: string;
   name: string;
   secure: boolean | null;
+  /** Its top-level window's handle (the driver's window id), when Windows gave one. */
+  window: number | null;
+}
+
+/** A screen's size in pixels or points. */
+export interface ScreenSize {
+  width: number;
+  height: number;
 }
 
 /** What the helper answers. */
 export interface WindowsProbe {
   /** The app that holds the keyboard, with its focused field's password flag; null when none can be read. */
   front(): Promise<ProbedApp | null>;
-  /** The app a click at this physical screen point reaches; null when none can be read. */
-  at(x: number, y: number): Promise<ProbedApp | null>;
+  /**
+   * The app a click at this point reaches; null when none can be read. The point is in the driver's
+   * physical pixels of a primary screen this size, scaled here to the helper's own points.
+   */
+  at(x: number, y: number, screen: ScreenSize): Promise<ProbedApp | null>;
   /** A running process as an app; null when it cannot be read. */
   process(pid: number): Promise<ProbedApp | null>;
   /** Stop the helper. */
   close(): Promise<void>;
 }
 
-/** How the helper is started: Windows PowerShell and the environment it may see. */
+/** How the helper is started: Windows PowerShell, its arguments and the environment it may see. */
 export interface ProbeCommand {
   command: string;
-  /** The arguments before the script's path. */
   args: string[];
   env: Record<string, string>;
 }
@@ -205,11 +183,12 @@ export function windowsPowerShell(env: Record<string, string | undefined>): Prob
   return path.win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
-/** The helper as Windows PowerShell runs it: no profile, no prompt, the script file as given. */
+/** The helper as Windows PowerShell runs it: no profile, no prompt, the script as an encoded command. */
 export function probeCommand(env: Record<string, string>): ProbeCommand {
+  const script = Buffer.from(WINDOW_PROBE_SCRIPT, "utf16le").toString("base64");
   return {
     command: windowsPowerShell(env),
-    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"],
+    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", script],
     env,
   };
 }
@@ -230,24 +209,29 @@ export function parseProbeAnswer(line: string): ProbedApp | null {
   const exe = typeof answer.exe === "string" ? answer.exe : "";
   if (pid === 0 || !exe) return null;
   const secure = typeof answer.secure === "boolean" ? answer.secure : null;
-  return { pid, exe, name: typeof answer.name === "string" ? answer.name : "", secure };
+  const window =
+    typeof answer.window === "number" && Number.isSafeInteger(answer.window) && answer.window > 0
+      ? answer.window
+      : null;
+  return { pid, exe, name: typeof answer.name === "string" ? answer.name : "", secure, window };
 }
 
-/** A started helper: its process, its answers in order, and why it ended if it did. */
+/** A started helper: its process, its answers in order, why it ended if it did, and its screen. */
 interface Running {
   child: ChildProcess;
-  dir: string;
   lines: AsyncIterator<string>;
   exited: Promise<void>;
   ended: () => string | null;
+  /** What it last said of its start, and everything it wrote to stderr: why a start was late. */
+  stage: string;
+  said: () => string;
+  /** The primary screen in its own points, once it is ready. */
+  view: ScreenSize | null;
 }
 
 /** Start the helper and wait for it to say it is ready. */
 async function startProbe(command: ProbeCommand, startMs: number): Promise<Running> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "genex-probe-"));
-  const script = path.join(dir, SCRIPT_NAME);
-  await writeFile(script, WINDOW_PROBE_SCRIPT);
-  const child = spawn(command.command, [...command.args, script], {
+  const child = spawn(command.command, command.args, {
     env: command.env,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
@@ -271,10 +255,12 @@ async function startProbe(command: ProbeCommand, startMs: number): Promise<Runni
   });
   const running: Running = {
     child,
-    dir,
     lines: readline.createInterface({ input: child.stdout })[Symbol.asyncIterator](),
     exited,
     ended: () => (ended === null ? null : said.trim() || ended),
+    stage: "launched",
+    said: () => said.trim(),
+    view: null,
   };
   try {
     await untilReady(running, startMs);
@@ -285,15 +271,43 @@ async function startProbe(command: ProbeCommand, startMs: number): Promise<Runni
   }
 }
 
+/** One line the helper says while it starts: its stage, or that it is ready with its screen. */
+function startLine(line: string): { stage: string } | { view: ScreenSize | null } | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(line.replace(/^\uFEFF/, "").trim());
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== "object") return null;
+  const said = body as Record<string, unknown>;
+  if (typeof said.stage === "string") return { stage: said.stage };
+  if (said.ready !== true) return null;
+  const view = said.view && typeof said.view === "object" ? (said.view as Record<string, unknown>) : {};
+  const sized = typeof view.width === "number" && view.width > 0 && typeof view.height === "number" && view.height > 0;
+  return { view: sized ? { width: Number(view.width), height: Number(view.height) } : null };
+}
+
 /**
- * Wait for the helper's ready line. PowerShell may say something first (a compiler warning), which
- * is passed over, and its first line may carry a byte-order mark.
+ * Wait for the helper's ready line, keeping its stages so a late start says where it stood.
+ * PowerShell may say something else first, which is passed over.
  */
 async function untilReady(running: Running, startMs: number): Promise<void> {
-  const deadline = Date.now() + startMs;
+  const began = Date.now();
+  const deadline = began + startMs;
   for (;;) {
-    const line = await nextLine(running, Math.max(1, deadline - Date.now()), MESSAGE.timedOut("ready"));
-    if (line.replace(/^\uFEFF/, "").trim() === READY) return;
+    const late = MESSAGE.startLate(Date.now() - began, running.stage, running.said());
+    const line = await nextLine(running, Math.max(1, deadline - Date.now()), late).catch((error: unknown) => {
+      // The message is written before the wait: say where it stood when the wait ran out.
+      if (running.ended() !== null) throw error;
+      throw new Error(MESSAGE.startLate(Date.now() - began, running.stage, running.said()));
+    });
+    const said = startLine(line);
+    if (said && "stage" in said) running.stage = said.stage;
+    if (said && "view" in said) {
+      running.view = said.view;
+      return;
+    }
   }
 }
 
@@ -314,12 +328,15 @@ async function nextLine(running: Running, ms: number, late: string): Promise<str
   }
 }
 
-/** Stop the helper and remove its script. */
+/** Stop the helper. */
 async function stopProbe(running: Running): Promise<void> {
   running.child.stdin?.end();
   if (running.child.exitCode === null && running.child.signalCode === null) running.child.kill();
-  await rm(running.dir, { recursive: true, force: true });
+  await Promise.race([running.exited, sleep(EXIT_WAIT_MS)]);
 }
+
+/** A request line, made once the helper is live from its view of the screen. */
+type Request = (view: ScreenSize | null) => string;
 
 /**
  * The helper, started on its first request (or by `ready`) and kept for the next ones. Requests
@@ -350,9 +367,10 @@ export function windowsProbe(
   };
   /** One request to the live helper; a failed one ends it, so a late answer never meets a later request. */
   const askOnce = async (
-    request: string,
+    requestOf: Request,
   ): Promise<{ answer: ProbedApp | null } | { error: unknown; died: boolean }> => {
     const probe = await live();
+    const request = requestOf(probe.view);
     try {
       probe.child.stdin?.write(`${request}\n`);
       return { answer: parseProbeAnswer(await nextLine(probe, requestMs, MESSAGE.timedOut(request))) };
@@ -364,7 +382,7 @@ export function windowsProbe(
   };
   // A helper that ended while idle (its end not yet seen) fails the request it is sent: that request
   // is asked once more of a fresh helper. One that is alive but late is not asked again.
-  const answerOf = async (request: string): Promise<ProbedApp | null> => {
+  const answerOf = async (request: Request): Promise<ProbedApp | null> => {
     const first = await askOnce(request);
     if ("answer" in first) return first.answer;
     if (!first.died) throw first.error;
@@ -372,7 +390,7 @@ export function windowsProbe(
     if ("answer" in second) return second.answer;
     throw second.error;
   };
-  const ask = (request: string): Promise<ProbedApp | null> => {
+  const ask = (request: Request): Promise<ProbedApp | null> => {
     const answer = queue.then(() => answerOf(request));
     queue = answer.catch(() => {});
     return answer;
@@ -381,9 +399,16 @@ export function windowsProbe(
     ready: async () => {
       await live();
     },
-    front: () => ask("front"),
-    at: (x, y) => ask(`at ${Math.round(x)} ${Math.round(y)}`),
-    process: (pid) => ask(`pid ${Math.trunc(pid)}`),
+    front: () => ask(() => "front"),
+    at: (x, y, screen) =>
+      ask((seen) => {
+        // Windows may scale the helper's points: a physical pixel is a point of its own screen size.
+        const view = seen ?? screen;
+        const px = Math.round((x * view.width) / Math.max(1, screen.width));
+        const py = Math.round((y * view.height) / Math.max(1, screen.height));
+        return `at ${px} ${py}`;
+      }),
+    process: (pid) => ask(() => `pid ${Math.trunc(pid)}`),
     close: async () => {
       closed = true;
       await drop();
