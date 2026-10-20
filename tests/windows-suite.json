@@ -111,6 +111,7 @@
   "tests/conformance/harness-inbox.test.ts",
   "tests/conformance/harness-log-batch.test.ts",
   "tests/conformance/harness-types.test.ts",
+  "tests/conformance/integration-workspace.test.ts",
   "tests/conformance/io-performance.test.ts",
   "tests/conformance/ipc-contract.test.ts",
   "tests/conformance/job-entries.test.ts",
