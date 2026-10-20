@@ -62,7 +62,8 @@ const TOOL_TIMEOUT_MS = 15 * SECOND_MS;
 const TOOL_RUN = { timeout: TOOL_TIMEOUT_MS, windowsHide: true } as const;
 /**
  * How often `initialize` is tried when srt-win's egress check times out. That check runs 17-23 s
- * against a 30 s limit on a hosted runner, so a busy machine can miss it once.
+ * on a hosted runner's cold start, against SRT's 30 s limit, which Genex's SRT patch raises to two
+ * minutes (`SRT_WIN_TIMEOUT_MS`); a busy machine can still miss it once.
  */
 const INITIALIZE_ATTEMPTS = 3;
 /** sandbox-runtime's code for an srt-win call that ran out of time. */
