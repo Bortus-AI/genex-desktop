@@ -537,6 +537,24 @@ describe("Windows sandbox: kill", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () =
     assert.equal(await beats(file), atKill, "nothing keeps beating after the kill");
   });
 
+  it("a long-lived process that exits by itself leaves no background child running", async () => {
+    const file = path.join(workspace, "orphan.hb");
+    // The heartbeat ends itself after a minute, so a failure here leaves nothing running for long.
+    const orphan = `node -e 'setInterval(()=>require("fs").appendFileSync("orphan.hb", "b\\n"),200);setTimeout(()=>process.exit(),60000)'`;
+    const { child } = await sandbox.spawnLongLived({ command: `${orphan} & sleep 3; exit 0`, cwd: workspace });
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    try {
+      assert.ok((await beatsReach(file, 3)) >= 3, "the background heartbeat started");
+      await exited;
+    } finally {
+      killChild(child);
+    }
+    await sleep(KILL_SETTLE_MS);
+    const atExit = await beats(file);
+    await sleep(KILL_SETTLE_MS);
+    assert.equal(await beats(file), atExit, "the shell's background child ended with it");
+  });
+
   it("killing a long-lived process ends its children", async () => {
     const file = path.join(workspace, "long.hb");
     const { child } = await sandbox.spawnLongLived({ command: `${heartbeat("long.hb")} & wait`, cwd: workspace });
