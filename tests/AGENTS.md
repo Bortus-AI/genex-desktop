@@ -11,9 +11,10 @@ without building the affected graph. Bare `npm test` runs all non-rig files with
 then all rig files serially, including after non-rig failures. `conformance/` holds behavior suites, `property/`
 holds fast-check suites with fixed seeds, `e2e/` holds Electron runners.
 
-`scripts/test.mjs` and `scripts/affected-tests.mjs` preload `helpers/leftover-children.ts` into
-every test file's process: a file that still has a child process running after its own `after`
-hooks fails by name, instead of never exiting and holding a runner slot. Stop what a test starts:
+`scripts/test.mjs`, `scripts/affected-tests.mjs` and the Windows suite (`scripts/test-windows.mjs`)
+preload `helpers/leftover-children.ts` into every test file's process: a file that still has a
+child process running after its own `after` hooks fails by name, instead of never exiting and
+holding a runner slot. Stop what a test starts:
 a core's `stop()` (or core-lite's `close()`), a `ProcessSandbox`'s `dispose()`. On Linux,
 sandbox-runtime's socat bridges run until the last sandbox is disposed.
 
