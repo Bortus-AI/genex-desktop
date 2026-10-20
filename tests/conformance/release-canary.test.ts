@@ -4,7 +4,14 @@ import { mkdir, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, test } from "node:test";
 import { AGENT_CHECKS, agentChecksDone, agentVerdict, readSelfTest } from "../../scripts/canary/agent-command.ts";
-import { gitHubSignIn, gitHubToken, ownerResult, signInDue, sizesWithRoom } from "../../scripts/canary/azure.ts";
+import {
+  gitHubSignIn,
+  gitHubToken,
+  ownerResult,
+  signInDue,
+  sizesWithRoom,
+  triesElsewhere,
+} from "../../scripts/canary/azure.ts";
 import { readStart } from "../../scripts/canary/first-start.ts";
 import {
   assetTag,
@@ -261,6 +268,15 @@ describe("release canary Azure size", () => {
     assert.deepEqual(sizesWithRoom([usage("cores", 8, 10), usage("standardDASv5Family", 0, 10)]), ["Standard_D2as_v5"]);
     assert.deepEqual(sizesWithRoom([usage("cores", 10, 10), usage("standardDASv5Family", 0, 10)]), []);
     assert.deepEqual(sizesWithRoom([]), []);
+  });
+
+  test("a region whose quota another machine of the run took meanwhile is passed over, not the run's end", () => {
+    // v0.1.13's Windows 10 job: both Azure machines read room in westus3, Windows 11 took it first.
+    const quota =
+      "(QuotaExceeded) Operation could not be completed as it results in exceeding approved Total Regional Cores quota. Location: westus3, Current Limit: 10, Current Usage: 10, Additional Required: 2";
+    assert.equal(triesElsewhere(quota), true);
+    assert.equal(triesElsewhere("(SkuNotAvailable) The requested VM size is not available"), true);
+    assert.equal(triesElsewhere("(AuthorizationFailed) The client does not have authorization"), false);
   });
 });
 
