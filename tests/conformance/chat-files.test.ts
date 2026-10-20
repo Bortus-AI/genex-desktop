@@ -456,7 +456,8 @@ test("Studio and a chat without a game resolve only what they can reach", async 
   const draft = scope({ game: null });
   assert.deepEqual(await chat.resolve(draft, [{ name: "docs/DESIGN.md" }, { name: "~/Movies/trailer.mov" }]), [
     null,
-    { open: "app", path: "~/Movies/trailer.mov" },
+    // Home is `~`, then the platform's own separators.
+    { open: "app", path: `~${path.sep}${path.join("Movies", "trailer.mov")}` },
   ]);
 });
 
