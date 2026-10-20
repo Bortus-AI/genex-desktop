@@ -47,6 +47,7 @@ import {
   msysPath,
   msysPathList,
   granteeOf,
+  grantLauncherFolders,
   groupSidOnce,
   ownDenyStamps,
   renderEnvFile,
@@ -292,6 +293,46 @@ describe("read-attributes grants above each root", () => {
     assert.equal(granteeOf({ sid: user, groupSid: group, inSandboxGroup: false }), user, "not a member yet");
     assert.equal(granteeOf({ sid: user }), user, "an srt-win that names no group");
     assert.equal(granteeOf({}), null, "no sandbox user yet");
+  });
+
+  it("grants the folders srt-win starts from after a status probe that failed once", async () => {
+    // A per-user install sits in the profile, where the sandbox user may open nothing: without
+    // this grant srt-win's egress check fails with "CreateProcessWithLogonW(srt-sandbox): Access
+    // is denied". One probe that timed out used to skip the grant without a word.
+    const answers = [null, "S-1-5-21-9"];
+    const calls: string[] = [];
+    const logged: string[] = [];
+    const release = await grantLauncherFolders([at("AppData", "Local", "genex", "app-0.1.12")], {
+      sid: sandboxSidOnce(async () => answers.shift() ?? null, 0),
+      grant: async (sid, dirs) => void calls.push(`grant ${sid} ${dirs.join(",")}`),
+      revoke: async (sid) => void calls.push(`revoke ${sid}`),
+      log: (line) => logged.push(line),
+    });
+    assert.deepEqual(calls, [`grant S-1-5-21-9 ${at("AppData", "Local", "genex", "app-0.1.12")}`]);
+    assert.deepEqual(logged, []);
+    await release();
+    assert.deepEqual(calls.at(-1), "revoke S-1-5-21-9");
+  });
+
+  it("says why the folders srt-win starts from were not granted, and takes back a grant srt-win refused", async () => {
+    const logged: string[] = [];
+    const calls: string[] = [];
+    const deps = {
+      grant: async () => {
+        calls.push("grant");
+        throw new Error("srt-win acl grant timed out after 60000ms");
+      },
+      revoke: async () => void calls.push("revoke"),
+      log: (line: string) => logged.push(line),
+    };
+    await grantLauncherFolders([PROFILE], { ...deps, sid: async () => "S-1-5-21-9" });
+    assert.deepEqual(calls, ["grant", "revoke"]);
+    await grantLauncherFolders([PROFILE], { ...deps, sid: async () => null });
+    assert.deepEqual(calls, ["grant", "revoke"], "nothing to grant to without the user's id");
+    assert.deepEqual(logged, [
+      "launcher folders not granted: srt-win acl grant timed out after 60000ms",
+      "launcher folders not granted: srt-win did not say the sandbox user's id",
+    ]);
   });
 
   it("asks again for the sandbox user's id when a probe comes back empty, and keeps it once found", async () => {
@@ -1342,12 +1383,17 @@ describe("deny paths Genex sets itself", () => {
     assert.deepEqual(s.runtime.calls, ["own denies", "initialize"], "denied before srt-win grants anything");
   });
 
-  it("leaves every deny to srt-win, as before, where Genex cannot set them itself", async () => {
+  it("leaves every deny to srt-win, as before, where Genex cannot set them itself, and says so", async () => {
     const s = session({ ownDenies: "unavailable", exists });
     await s.session.join({}, denying(SECRETS, WRITE_ONLY));
     const sent = s.runtime.last().filesystem;
     assert.deepEqual(sent.denyRead, SECRETS);
     assert.deepEqual(sent.denyWrite, WRITE_ONLY);
+    // srt-win's stamp then walks each denied path's parent again: a timeout after it reads as that.
+    assert.ok(
+      s.logged.some((line) => line.startsWith("own denies off: srt-win stamps all 8 denies")),
+      s.logged.join("\n"),
+    );
   });
 
   it("sets them again on every regrant, and takes them back with the last member and on dispose", async () => {
