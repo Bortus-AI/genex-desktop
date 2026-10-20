@@ -137,7 +137,8 @@ macOS 26 and 15, Ubuntu 26.04 and 24.04 and Windows Server 2025 on GitHub-hosted
 Azure VMs made for the run and deleted after it. Every Windows machine starts Genex as its
 administrator on a lived-in profile (`lived-in-profile.ts`), whose first start sets the sandbox up;
 the Azure machines then log a standard user on at its own desktop, with a lived-in profile too, and
-run it again. A GitHub runner cannot: an account started inside the runner's session cannot set up
+run it again. An owner's run whose script never starts fails its machine as `owner run did not
+start`, and the standard user's run, which needs that sandbox, is skipped. A GitHub runner cannot: an account started inside the runner's session cannot set up
 that session's objects for the sandbox's runner. Logs, crash dumps and screenshots are run artifacts for 30 days.
 A failing release gets one issue labelled `canary`, assigned to whoever published it; a passing
 run closes it. The canary only reports: pulling a release stays the owner's call.
@@ -151,7 +152,8 @@ Azure setup, once: the subscription owner runs `scripts/canary/azure-setup.sh` i
 creates an app registration whose only credential is GitHub's OIDC token for the `canary`
 environment, gives it Contributor on the subscription, and sets a budget alert. Its three IDs go
 in the `canary` environment's variables (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
-`AZURE_SUBSCRIPTION_ID`); `CANARY_WIN11_IMAGE`, `CANARY_WIN10_IMAGE`, `CANARY_AZURE_SIZE` and
+`AZURE_SUBSCRIPTION_ID`). A run outlasts one OIDC sign-in, so `azure.ts` signs in again with a
+fresh token before an Azure call once the last sign-in is five minutes old. `CANARY_WIN11_IMAGE`, `CANARY_WIN10_IMAGE`, `CANARY_AZURE_SIZE` and
 `CANARY_AZURE_LOCATION` (regions, comma-separated) override the defaults. Without them the job
 takes the first two-core size its quota allows, in the first region that accepts it. Windows 11
 and 10 images need a qualifying Windows license (Microsoft 365 Business Premium, E3/E5, Windows

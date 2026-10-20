@@ -1425,6 +1425,8 @@ export class StudioCore {
    * Resolves whether the self that booted was rewound (or reset) rather than the one on disk.
    */
   async #bootHarness(notice: BootNotice, resetHarness: boolean): Promise<boolean> {
+    // A sandbox fault cannot be repaired by rewinding the harness's code.
+    await this.sandbox.ensureReady();
     if (!resetHarness) await this.#recovery.migrateHarnessLayout();
     let rewound = false;
     const bootedCode = resetHarness ? null : await this.#recovery.codeAboutToBoot();
