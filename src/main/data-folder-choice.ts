@@ -6,7 +6,7 @@
  * whose file system keeps permissions; empty, or a new `Genex` folder inside it; room for the
  * files. Only the folder picked last can be moved to: the window never names a path itself.
  */
-import { lstat, readdir, realpath } from "node:fs/promises";
+import { lstat, readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { type DataFolderChoice, DataFolderProblem, type DataFolderState } from "../shared/data-folder.ts";
 import { StudioPlatform } from "../shared/boot.ts";
@@ -41,6 +41,8 @@ export interface DataFolderChoiceDeps {
   measure(): Promise<number>;
   /** Free bytes where `dir` is. */
   free(dir: string): Promise<number>;
+  /** Whether two folders are on one volume, where the move renames and needs no room (default: their `stat`). */
+  sameVolume?: (a: string, b: string) => Promise<boolean>;
   /** Start Genex again, which makes the move. */
   restart(): void;
   log(line: string): void;
@@ -129,8 +131,7 @@ export function createDataFolderChoices(deps: DataFolderChoiceDeps): DataFolderC
       const problem = await problemWith(target.to);
       if (problem) return refused(problem, target.to);
       const bytes = await deps.measure();
-      if ((await deps.free(await nearestExisting(target.to))) < bytes + SPARE_BYTES)
-        return refused(DataFolderProblem.NoSpace, target.to);
+      if (!(await hasRoom(deps, target.to, bytes))) return refused(DataFolderProblem.NoSpace, target.to);
       picked = { to: target.to, bytes };
       return { ok: true, to: target.to, bytes };
     },
@@ -157,6 +158,19 @@ export function createDataFolderChoices(deps: DataFolderChoiceDeps): DataFolderC
       return { ok: true, to: chosen.to, bytes: chosen.bytes };
     },
   };
+}
+
+/** Whether `to` has room for `bytes`: always on the data's own volume, where the move only renames. */
+async function hasRoom(deps: DataFolderChoiceDeps, to: string, bytes: number): Promise<boolean> {
+  const nearest = await nearestExisting(to);
+  if (await (deps.sameVolume ?? onOneVolume)(deps.dataDir, nearest)) return true;
+  return (await deps.free(nearest)) >= bytes + SPARE_BYTES;
+}
+
+/** Whether two folders are on one volume, by their `stat`; false when either cannot be read. */
+async function onOneVolume(a: string, b: string): Promise<boolean> {
+  const [first, second] = await Promise.all([stat(a).catch(() => null), stat(b).catch(() => null)]);
+  return first !== null && second !== null && first.dev === second.dev;
 }
 
 /** The problem with a drive as the home of Genex's data, or null; a drive Windows cannot describe passes here. */

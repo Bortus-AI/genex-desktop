@@ -42,6 +42,17 @@ export function BootRoot({ boot }: { boot: Boot }): JSX.Element | null {
   // Try again starts the studio again: the card says so until it opens, or fails again.
   if (view === BootView.Starting || (view === BootView.Failed && retrying))
     return <StartingCard step={step ?? StartStep.Studio} update={update} onUpdate={onUpdate} />;
+  if (view === BootView.Moving && move && error !== null) {
+    return (
+      <MoveStoppedCard
+        to={move.to}
+        error={error}
+        retrying={retrying}
+        onRetry={() => void boot.retry()}
+        onQuit={() => void boot.quit()}
+      />
+    );
+  }
   if (view === BootView.Moving && move) return <MovingCard move={move} />;
   if (view === BootView.DataMissing && dataFolder !== null) {
     return (
@@ -200,6 +211,37 @@ export function MovingCard({ move }: { move: DataMoveProgress }): JSX.Element {
     <AnimationCard selector={{ "data-boot-moving": "" }} titleId="boot-moving-title" title={words.title}>
       <p className="text-ink-2">{words.line(move.to)}</p>
       <WorkingLine text={move.total > 0 ? words.progress(move.done, move.total) : words.counting} />
+    </AnimationCard>
+  );
+}
+
+/** A move that stopped part-way with some files already moved: why, Try again (carries the move on) and Quit. */
+export function MoveStoppedCard({
+  to,
+  error,
+  retrying,
+  onRetry,
+  onQuit,
+}: {
+  to: string;
+  error: string;
+  retrying: boolean;
+  onRetry: () => void;
+  onQuit: () => void;
+}): JSX.Element {
+  const words = WORDS.moveStopped;
+  return (
+    <AnimationCard selector={{ "data-boot-move-stopped": "" }} titleId="boot-move-stopped-title" title={words.title}>
+      <p className="text-ink-2">{words.line(to)}</p>
+      <div className="flex flex-wrap items-center gap-2 pt-2">
+        <Button variant="default" data-boot-try-again disabled={retrying} onClick={onRetry}>
+          {retrying ? WORDS.dataMissing.checking : words.tryAgain}
+        </Button>
+        <Button variant="ghost" data-boot-quit onClick={onQuit}>
+          {words.quit}
+        </Button>
+      </div>
+      <p className="text-sm text-orange">{error}</p>
     </AnimationCard>
   );
 }

@@ -46,6 +46,7 @@ async function machine(t: { after(fn: () => Promise<void>): void }, overrides: P
     },
     measure: async () => DATA_BYTES,
     free: async () => DATA_BYTES + SPARE_BYTES,
+    sameVolume: async () => false,
     restart: () => {
       calls.restarts++;
     },
@@ -254,4 +255,11 @@ test("a new move forgets the last one's failure and any half-finished entry list
   await m.choices.move();
   const record = JSON.parse(await readFile(path.join(m.defaultDir, DATA_FOLDER_FILE), "utf8"));
   assert.deepEqual(record, { moveTo: empty });
+});
+
+test("a folder on the data's own drive needs no free room: the move only renames", async (t) => {
+  const m = await machine(t, { free: async () => 0, sameVolume: async () => true });
+  const empty = path.join(m.drive, "Genex");
+  await mkdir(empty);
+  assert.deepEqual(await m.choices.choose(empty), { ok: true, to: empty, bytes: DATA_BYTES });
 });

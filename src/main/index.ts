@@ -200,7 +200,8 @@ import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-c
 import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
 import { freeBytes, measureData } from "../substrate/data-move.ts";
 import { lockDownFolder, windowsDriveFacts } from "../substrate/windows-drive.ts";
-import { removeLeftover, runDataMove } from "./data-move-launch.ts";
+import { type DataMoveOutcome, removeLeftover, runDataMove } from "./data-move-launch.ts";
+import { DataFolderProblem } from "../shared/data-folder.ts";
 import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migration.ts";
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
@@ -316,6 +317,7 @@ const MESSAGE = {
   keepsCrashingDetail: "Work in progress continues in the background.",
   reload: "Reload",
   dataFolderStillMissing: (dir: string) => `${dir} is still not there.`,
+  moveStopped: "A file was in use, or the drive refused it. Close other apps, then try again.",
   startTookTooLong: (minutes: number) =>
     `The protected workspace was still starting after ${minutes} minutes. Genex keeps trying and opens by itself if it finishes; Try again restarts Genex.`,
 } as const;
@@ -1921,8 +1923,11 @@ async function settleDataFolder(): Promise<boolean> {
 async function moveDataAndRestart(from: string, to: string): Promise<void> {
   bootGate.moving({ to, done: 0, total: 0 });
   const win = await createSetupWindow();
-  // Closing the window must not stop a copy half-way; the window goes when Genex starts again.
-  win.on("close", (event) => event.preventDefault());
+  let moving = true;
+  // Closing the window must not stop a copy half-way; once the move is over it may close.
+  win.on("close", (event) => {
+    if (moving) event.preventDefault();
+  });
   const lines: string[] = [];
   const log = (line: string) => {
     lines.push(line);
@@ -1935,12 +1940,22 @@ async function moveDataAndRestart(from: string, to: string): Promise<void> {
     progress: (progress) => bootGate.moving(progress),
     log,
     ...(process.platform === StudioPlatform.Windows ? { hostGit: () => ensureHostGit() } : {}),
+  }).catch((error: unknown): DataMoveOutcome => {
+    log(`data folder: the move stopped: ${errorMessage(error)}`);
+    return { moved: false, problem: DataFolderProblem.Failed, stranded: [] };
   });
+  moving = false;
   // The lines go in the log of the folder Genex now starts from, where a report reads them.
   const kept = openStudioLog(path.join(outcome.moved ? to : from, "logs"), { home: app.getPath("home") });
   for (const line of lines) kept.write("main", line);
-  app.relaunch();
-  app.exit(0);
+  const restart = async () => {
+    app.relaunch();
+    app.exit(0);
+  };
+  // Part of the data in each folder, or a move that ended without saying: no restart into it on
+  // its own (that could repeat for ever); the window offers Try again, which carries it on, and Quit.
+  if (!outcome.moved && outcome.stranded) bootGate.moveStopped(to, MESSAGE.moveStopped, restart);
+  else await restart();
 }
 
 /** Name the missing data folder with Try again (Genex starts again once it is there) and Quit. */

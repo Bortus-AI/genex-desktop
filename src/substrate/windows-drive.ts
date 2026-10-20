@@ -121,19 +121,25 @@ export function lockDownArgs(dir: string, userSid: string): string[] {
   ];
 }
 
+/** The `icacls` arguments that make this account the owner of `dir`. */
+export function takeOwnershipArgs(dir: string, userSid: string): string[] {
+  return [dir, "/setowner", `*${userSid}`, "/q"];
+}
+
 /**
- * Give `dir`, a new empty folder, the access a folder in the profile has: this account,
- * LocalSystem and Administrators, nothing inherited from the drive. Throws when Windows refuses,
- * as on a file system that keeps no permissions.
+ * Give `dir`, an empty folder, the access a folder in the profile has: owned by this account, and
+ * open to it, LocalSystem and Administrators only, nothing inherited from the drive. The owner
+ * comes first: whoever owns a folder can always open its access again, so one another account made
+ * (the sandbox's own) is taken over or refused. Throws when Windows refuses either step, as on a
+ * file system that keeps no permissions or a folder this account may not take.
  */
 export async function lockDownFolder(dir: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
-  const { stdout } = await run(systemTool("whoami.exe", env), ["/user", "/fo", "csv", "/nh"], {
-    timeout: TOOL_TIMEOUT_MS,
-    windowsHide: true,
-  });
+  const tool = { timeout: TOOL_TIMEOUT_MS, windowsHide: true };
+  const { stdout } = await run(systemTool("whoami.exe", env), ["/user", "/fo", "csv", "/nh"], tool);
   const sid = parseUserSid(stdout);
   if (!sid) throw new Error(`whoami named no account: ${stdout.trim()}`);
-  await run(systemTool("icacls.exe", env), lockDownArgs(dir, sid), { timeout: TOOL_TIMEOUT_MS, windowsHide: true });
+  await run(systemTool("icacls.exe", env), takeOwnershipArgs(dir, sid), tool);
+  await run(systemTool("icacls.exe", env), lockDownArgs(dir, sid), tool);
 }
 
 /**

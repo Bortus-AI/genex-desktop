@@ -2,7 +2,8 @@
  * Where the normal profile keeps its data, when the person moved it (Settings → Storage). Electron's
  * default data folder (`%APPDATA%\Genex`) then holds only a small record, `data-folder.json`:
  * `dir` is the folder in use, `moveTo` a move the next launch makes, `failed` the last move that did
- * not happen and why, `leftover` the entries a copy left in the old folder, still to be removed.
+ * not happen and why, `leftover` the entries copies left behind (an old folder's originals, a failed
+ * move's copies), still to be removed.
  *
  * `boot.ts` reads it first thing, before Electron opens any of its data, and points userData (and
  * the session's data with it) at the folder in use. A launch that moves the data, or cannot find
@@ -14,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { DATA_FOLDER_PROBLEMS, type DataFolderProblem, type DataMoveFailed } from "../shared/data-folder.ts";
 import { atomicWriteJson } from "../substrate/fsx.ts";
+import { samePath } from "../substrate/paths.ts";
 
 /** The record in the default data folder. */
 export const DATA_FOLDER_FILE = "data-folder.json";
@@ -30,14 +32,16 @@ export interface DataFolderRecord {
   moving?: string[];
   /** The last move that did not happen. */
   failed?: DataMoveFailed;
-  /** What the last move copied but could not remove yet: the old folder and those entries' names. */
-  leftover?: DataLeftover;
+  /** What moves copied but could not remove yet: each folder and those entries' names. */
+  leftover?: DataLeftover[];
 }
 
-/** Entries a move copied out of `dir` and could not remove yet. */
+/** Entries a move copied out of `dir`, or into it before failing, and could not remove yet. */
 export interface DataLeftover {
   dir: string;
   entries: string[];
+  /** When the copies were made, in ms since the epoch: a file changed after it is someone's edit, and stays. */
+  since: number;
 }
 
 /** What this launch does about its data. */
@@ -84,8 +88,8 @@ export function parseDataFolderRecord(raw: unknown): DataFolderRecord {
   if (moveTo) record.moveTo = moveTo;
   const moving = Array.isArray(fields.moving) ? fields.moving.filter(isEntryName) : [];
   if (moveTo && moving.length) record.moving = moving;
-  const leftover = parseLeftover(fields.leftover);
-  if (leftover) record.leftover = leftover;
+  const leftover = parseLeftovers(fields.leftover);
+  if (leftover.length) record.leftover = leftover;
   const failed = parseFailed(fields.failed);
   if (failed) record.failed = failed;
   return record;
@@ -96,12 +100,16 @@ function isEntryName(name: unknown): name is string {
   return typeof name === "string" && name !== "" && name !== "." && name !== ".." && !/[\\/]/.test(name);
 }
 
-function parseLeftover(raw: unknown): DataLeftover | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const fields = raw as Record<string, unknown>;
-  const dir = absolute(fields.dir);
-  const entries = Array.isArray(fields.entries) ? fields.entries.filter(isEntryName) : [];
-  return dir && entries.length ? { dir, entries } : undefined;
+function parseLeftovers(raw: unknown): DataLeftover[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((item): DataLeftover[] => {
+    if (!item || typeof item !== "object") return [];
+    const fields = item as Record<string, unknown>;
+    const dir = absolute(fields.dir);
+    const entries = Array.isArray(fields.entries) ? fields.entries.filter(isEntryName) : [];
+    const since = typeof fields.since === "number" && Number.isFinite(fields.since) ? fields.since : 0;
+    return dir && entries.length ? [{ dir, entries, since }] : [];
+  });
 }
 
 function parseFailed(raw: unknown): DataMoveFailed | undefined {
@@ -140,7 +148,7 @@ export function dataLaunchFor(record: DataFolderRecord, context: DataLaunchConte
   }
   if (chosen && !context.exists(chosen)) return { kind: DataLaunchKind.Missing, dir: chosen };
   const current = chosen ?? context.defaultDir;
-  if (record.moveTo && path.resolve(record.moveTo) !== path.resolve(current))
+  if (record.moveTo && !samePath(record.moveTo, current))
     return { kind: DataLaunchKind.Move, from: current, to: record.moveTo };
   return chosen
     ? { kind: DataLaunchKind.Moved, dir: chosen }

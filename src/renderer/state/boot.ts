@@ -121,9 +121,9 @@ export function bootAnswered(state: BootStoreState, boot: BootState): BootStoreS
   };
 }
 
-/** A phase whose screen shows why the last try failed. */
+/** A phase whose screen shows why the last try failed: a failed start, a missing data folder, a stopped move. */
 function showsError(boot: BootState): boolean {
-  return boot.phase === BootPhase.Failed || boot.phase === BootPhase.DataMissing;
+  return boot.phase === BootPhase.Failed || boot.phase === BootPhase.DataMissing || boot.phase === BootPhase.Moving;
 }
 
 export function retryStarted(state: BootStoreState): BootStoreState {
@@ -206,9 +206,10 @@ export interface BootOptions {
   wait?: (ms: number) => Promise<void>;
 }
 
-/** A start or a move main is working through, which the window follows by asking again. */
+/** A start or a move main is working through, which the window follows by asking again; a stopped move is not. */
 function isUnderWay(boot: BootState): boolean {
-  return boot.phase === BootPhase.Starting || boot.phase === BootPhase.Moving;
+  if (boot.phase === BootPhase.Moving) return boot.failure === undefined;
+  return boot.phase === BootPhase.Starting;
 }
 
 /** The window's own clock: run `run` after `ms`. */

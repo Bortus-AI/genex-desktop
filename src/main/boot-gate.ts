@@ -58,6 +58,11 @@ export interface BootGate {
   /** Genex is moving its data before it starts again: the window shows how far. */
   moving(progress: DataMoveProgress): void;
   /**
+   * A move that stopped part-way and could not be put back: the window says so with `error`, Try
+   * again (which runs `attempt`, starting Genex again to carry the move on) and Quit.
+   */
+  moveStopped(to: string, error: string, attempt: () => Promise<void>): void;
+  /**
    * The folder Genex keeps its data in is not there: the window names it, with Try again (which
    * runs `attempt`, throwing while it is still missing) and Quit.
    */
@@ -182,6 +187,11 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
     },
     moving(progress) {
       state = { platform, phase: BootPhase.Moving, sandbox: null, move: progress };
+    },
+    moveStopped(to, error, next) {
+      holds++;
+      state = { platform, phase: BootPhase.Moving, sandbox: null, move: { to, done: 0, total: 0 }, failure: error };
+      attempt = next;
     },
     dataMissing(dir, next) {
       holds++;

@@ -6,12 +6,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, readlink, realpath, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { DATA_FOLDER_FILE, readDataFolderRecord, writeDataFolderRecord } from "../../src/main/data-folder.ts";
 import { removeLeftover, runDataMove } from "../../src/main/data-move-launch.ts";
 import { DataFolderProblem, type DataMoveProgress } from "../../src/shared/data-folder.ts";
-import { moveData } from "../../src/substrate/data-move.ts";
+import { DataMoveError, moveData } from "../../src/substrate/data-move.ts";
+import { claudeProjectDirName } from "../../src/substrate/engines/claude-permissions.ts";
 import { rebasePaths } from "../../src/substrate/data-relink.ts";
 import { samePath } from "../../src/substrate/paths.ts";
 import { gitFile } from "../helpers/git.ts";
@@ -68,6 +69,8 @@ async function machine(t: { after(fn: () => Promise<void>): void }) {
   await writeDataFolderRecord(from, { moveTo: to });
   return { root, from, to, game, keptCopy };
 }
+
+const MINUTE = 60_000;
 
 const ACROSS_VOLUMES: typeof moveData = (plan, options) =>
   moveData(plan, { ...options, sameVolume: async () => false, freeBytes: async () => Number.MAX_SAFE_INTEGER });
@@ -169,7 +172,10 @@ test("renames cut short carry on: what was renamed stays, the rest follows", asy
 test("a later launch removes only the entries the move recorded and could not remove", async (t) => {
   const m = await machine(t);
   await writeFile(path.join(m.from, "not-ours.txt"), "keep");
-  await writeDataFolderRecord(m.from, { dir: m.to, leftover: { dir: m.from, entries: ["scratch", "../escape"] } });
+  await writeDataFolderRecord(m.from, {
+    dir: m.to,
+    leftover: [{ dir: m.from, entries: ["scratch", "../escape"], since: Date.now() + MINUTE }],
+  });
   const log: string[] = [];
   await removeLeftover(m.from, m.to, (line) => log.push(line));
   const left = (await readdir(m.from)).sort();
@@ -201,4 +207,119 @@ test("paths keep their place when the data moves: inside the old folder only, ke
       [path.join(to, "k")]: true,
     },
   );
+});
+
+test("a move that cannot put everything back stays recorded and carries on at the next start", async (t) => {
+  const m = await machine(t);
+  const stranded: typeof moveData = async () => {
+    throw new DataMoveError(DataFolderProblem.InUse, "EBUSY: scratch", { stranded: ["scratch"], left: [] });
+  };
+  await writeDataFolderRecord(m.from, {
+    moveTo: m.to,
+    moving: ["opened-copies", "projects.json", "scratch", "workspaces"],
+  });
+  const outcome = await runDataMove(deps(m, stranded).deps);
+  assert.deepEqual(outcome, { moved: false, problem: DataFolderProblem.InUse, stranded: ["scratch"] });
+  assert.deepEqual(readDataFolderRecord(m.from), {
+    moveTo: m.to,
+    moving: ["opened-copies", "projects.json", "scratch", "workspaces"],
+    failed: { to: m.to, problem: DataFolderProblem.InUse },
+  });
+});
+
+test("a failed move's own copies it could not remove are listed, and removed at the next start", async (t) => {
+  const m = await machine(t);
+  const leftCopy: typeof moveData = async (plan) => {
+    await mkdir(path.join(plan.to, "scratch"), { recursive: true });
+    throw new DataMoveError(DataFolderProblem.InUse, "EBUSY", { stranded: [], left: ["scratch"] });
+  };
+  await runDataMove(deps(m, leftCopy).deps);
+  const record = readDataFolderRecord(m.from);
+  assert.deepEqual(record.failed, { to: m.to, problem: DataFolderProblem.InUse });
+  assert.equal(record.moveTo, undefined);
+  assert.deepEqual(
+    record.leftover?.map(({ dir, entries }) => ({ dir, entries })),
+    [{ dir: m.to, entries: ["scratch"] }],
+  );
+  await removeLeftover(m.from, m.from, () => {});
+  assert.deepEqual(await readdir(m.to), [], "no file in a failed move's copy counts as an edit");
+  assert.equal(readDataFolderRecord(m.from).leftover, undefined);
+});
+
+test("an earlier move's leftovers stay listed through the next move, and ones in its target go first", async (t) => {
+  const m = await machine(t);
+  const elsewhere = path.join(m.root, "E", "Genex");
+  await mkdir(path.join(elsewhere, "old"), { recursive: true });
+  await mkdir(path.join(m.to, "scratch"), { recursive: true });
+  await writeFile(path.join(m.to, "scratch", "stale.txt"), "old copy");
+  const later = Date.now() + MINUTE;
+  await writeDataFolderRecord(m.from, {
+    moveTo: m.to,
+    leftover: [
+      { dir: elsewhere, entries: ["old"], since: later },
+      { dir: m.to, entries: ["scratch"], since: later },
+    ],
+  });
+  const outcome = await runDataMove(deps(m, ACROSS_VOLUMES).deps);
+  assert.equal(outcome.moved, true, "the stale copy in the target was cleared before the move");
+  const record = readDataFolderRecord(m.from);
+  assert.deepEqual(
+    record.leftover?.map(({ dir }) => dir),
+    [elsewhere],
+    "the one elsewhere is still listed",
+  );
+  assert.equal(await readFile(path.join(m.to, "scratch", "autopilot", "run-1", "main.js"), "utf8"), "console.log(1)\n");
+});
+
+test("a left copy someone changed after the move stays; untouched ones go", async (t) => {
+  const m = await machine(t);
+  const old = path.join(m.root, "old-data");
+  await mkdir(path.join(old, "edited"), { recursive: true });
+  await mkdir(path.join(old, "untouched"), { recursive: true });
+  await writeFile(path.join(old, "edited", "level.tscn"), "before");
+  await writeFile(path.join(old, "untouched", "level.tscn"), "before");
+  const since = Date.now() - MINUTE;
+  const { utimes } = await import("node:fs/promises");
+  const before = new Date(since - MINUTE);
+  await utimes(path.join(old, "untouched", "level.tscn"), before, before);
+  await utimes(path.join(old, "edited", "level.tscn"), before, before);
+  await writeFile(path.join(old, "edited", "level.tscn"), "edited in another editor after the copy");
+  await writeDataFolderRecord(m.from, { dir: m.to, leftover: [{ dir: old, entries: ["edited", "untouched"], since }] });
+  const log: string[] = [];
+  await removeLeftover(m.from, m.to, (line) => log.push(line));
+  assert.deepEqual(await readdir(old), ["edited"]);
+  assert.deepEqual(
+    readDataFolderRecord(m.from).leftover?.map(({ entries }) => entries),
+    [["edited"]],
+  );
+  assert.ok(log.some((line) => line.includes("changed after the move")));
+});
+
+test("links into the old folder follow the data; links elsewhere stay as they were", async (t) => {
+  const m = await machine(t);
+  const outside = path.join(m.root, "AI Games", "Racer");
+  const shadow = path.join(m.from, "scratch", "builds", "puzzle-1");
+  await mkdir(path.join(m.keptCopy, "node_modules"), { recursive: true });
+  await mkdir(shadow, { recursive: true });
+  await symlink(path.join(m.keptCopy, "node_modules"), path.join(shadow, "node_modules"), "junction");
+  await symlink(outside, path.join(m.from, "scratch", "builds", "racer-link"), "junction");
+  await runDataMove(deps(m, ACROSS_VOLUMES).deps);
+  const movedShadow = path.join(m.to, "scratch", "builds", "puzzle-1", "node_modules");
+  assert.equal(path.resolve(await readlink(movedShadow)), path.join(m.to, "opened-copies", "Puzzle", "node_modules"));
+  assert.equal(path.resolve(await readlink(path.join(m.to, "scratch", "builds", "racer-link"))), outside);
+});
+
+test("Claude Code's sessions of the moved folders follow them; a neighbour with a similar name keeps its own", async (t) => {
+  const m = await machine(t);
+  const projects = path.join(m.from, "engine-homes", "claude-code", "projects");
+  const runCopy = path.join(m.from, "scratch", "autopilot", "run-1");
+  const neighbour = claudeProjectDirName(`${m.from} Games${path.sep}Racer`);
+  for (const name of [claudeProjectDirName(runCopy), neighbour]) {
+    await mkdir(path.join(projects, name), { recursive: true });
+    await writeFile(path.join(projects, name, "session-1.jsonl"), "{}\n");
+  }
+  await runDataMove(deps(m, ACROSS_VOLUMES).deps);
+  const moved = path.join(m.to, "engine-homes", "claude-code", "projects");
+  const names = (await readdir(moved)).sort();
+  assert.deepEqual(names, [claudeProjectDirName(path.join(m.to, "scratch", "autopilot", "run-1")), neighbour].sort());
 });

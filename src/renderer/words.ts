@@ -3061,7 +3061,8 @@ export const DATA_FOLDER_WORDS = {
   keep: "Keep here",
   move: "Move and restart",
   moveTitle: (bytes: number, to: string) => `Move ${unbrokenSize(bytes)} to ${to}?`,
-  moveBody: "Genex closes, moves its files and opens again. On another drive this can take a few minutes.",
+  moveBody:
+    "Genex closes, moves its files and opens again; on another drive this takes a few minutes. Close other apps using its build copies first.",
   failed: (to: string, problem: DataFolderProblem) => `Couldn’t move to ${to}. ${DATA_FOLDER_PROBLEM_WORDS[problem]}`,
 } as const;
 
@@ -3572,6 +3573,13 @@ export const SANDBOX_SETUP_WORDS = {
     line: (to: string) => `To ${to}. Genex reopens when it’s done.`,
     counting: "Counting files",
     progress: (done: number, total: number) => `${sizeWords(done)} of ${sizeWords(total)}`,
+  },
+  /** A move that stopped with some files already in the new folder: Try again carries it on. */
+  moveStopped: {
+    title: "Genex couldn’t finish moving its files",
+    line: (to: string) => `Some are already in ${to}. Try again to finish moving them.`,
+    tryAgain: "Try again",
+    quit: "Quit",
   },
   /** The folder Genex keeps its files in is not there (its drive is unplugged). */
   dataMissing: {

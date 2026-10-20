@@ -213,3 +213,13 @@ test("a chosen folder Electron cannot use is a missing one, never an empty defau
   assert.deepEqual(pointElectronAtData(refusing), { kind: DataLaunchKind.Missing, dir: chosen });
   assert.equal(set.userData, path.join(host.temp, DATA_MOVE_SESSION));
 });
+
+test("on Windows a move to the folder already in use, spelled in another case, is no move", {
+  skip: process.platform !== "win32" && "Windows reads names in any case",
+}, () => {
+  const launch = dataLaunchFor(
+    { dir: "D:\\Genex", moveTo: "d:\\genex" },
+    { defaultDir: "C:\\Users\\Ann\\AppData\\Roaming\\Genex", normal: true, exists: () => true },
+  );
+  assert.deepEqual(launch, { kind: DataLaunchKind.Moved, dir: "D:\\Genex" });
+});

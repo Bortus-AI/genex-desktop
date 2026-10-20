@@ -5,7 +5,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmod, lstat, mkdir, readdir, readFile, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rename,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { DataFolderProblem } from "../../src/shared/data-folder.ts";
 import { removeTree, tmpDir } from "../helpers/tmp.ts";
@@ -206,5 +218,50 @@ test("a copy that fails part-way takes back what it copied and leaves the old fo
   assert.deepEqual(await readdir(to), []);
   await chmod(locked, 0o644);
   assert.equal((await readFile(locked, "utf8")).length, 4096);
+  assert.deepEqual((await readdir(from)).sort(), [RECORD, "projects.json", "scratch"]);
+});
+
+/** POSIX permissions stand in for a file another program holds; Windows and root ignore them. */
+const NO_CHMOD = process.platform === "win32" || process.getuid?.() === 0;
+
+test("renames cut short and stopped again: what cannot go back is named stranded, never silently dropped", {
+  skip: NO_CHMOD,
+}, async (t) => {
+  const root = await scratch(t);
+  const from = await dataFolder(root);
+  const to = path.join(root, "to");
+  await mkdir(to);
+  // The earlier attempt renamed projects.json, then Genex closed; now the old folder refuses changes.
+  await rename(path.join(from, "projects.json"), path.join(to, "projects.json"));
+  await chmod(from, 0o555);
+  await assert.rejects(
+    moveData({ from, to, keep: [RECORD], resume: ["projects.json", "scratch"] }),
+    (error: unknown) =>
+      error instanceof DataMoveError && error.stranded.join() === "projects.json" && error.left.length === 0,
+  );
+  await chmod(from, 0o755);
+  assert.deepEqual((await readdir(from)).sort(), [RECORD, "scratch"], "scratch never left");
+  assert.deepEqual(await readdir(to), ["projects.json"]);
+});
+
+test("a resumed copy whose half copy cannot be removed stops, names that copy left, and the old folder stays whole", {
+  skip: NO_CHMOD,
+}, async (t) => {
+  const root = await scratch(t);
+  const from = await dataFolder(root);
+  const to = path.join(root, "to");
+  const half = path.join(to, "scratch", "autopilot");
+  await mkdir(half, { recursive: true });
+  await writeFile(path.join(half, "part.bin"), "partial");
+  await chmod(half, 0o555);
+  await assert.rejects(
+    moveData({ from, to, keep: [RECORD], resume: ["projects.json", "scratch"] }, ACROSS_VOLUMES),
+    (error: unknown) =>
+      error instanceof DataMoveError &&
+      error.problem === DataFolderProblem.InUse &&
+      error.stranded.length === 0 &&
+      error.left.join() === "scratch",
+  );
+  await chmod(half, 0o755);
   assert.deepEqual((await readdir(from)).sort(), [RECORD, "projects.json", "scratch"]);
 });

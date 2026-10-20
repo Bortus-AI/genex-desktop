@@ -257,6 +257,19 @@ describe("moving Genex's files, and a data folder that is not there", () => {
     });
   });
 
+  it("a move that stopped part-way says why and offers Try again, which starts Genex again", async () => {
+    const gate = createBootGate(StudioPlatform.Windows);
+    let restarts = 0;
+    gate.moveStopped("D:\\Genex", "A file was in use.", async () => {
+      restarts++;
+    });
+    assert.equal(gate.state().phase, BootPhase.Moving);
+    assert.equal(gate.state().failure, "A file was in use.");
+    assert.equal(gate.state().move?.to, "D:\\Genex");
+    await gate.retry();
+    assert.equal(restarts, 1);
+  });
+
   it("names a missing folder, and a Try again while it is still missing keeps it with the new words", async () => {
     const gate = createBootGate(StudioPlatform.Windows);
     let tries = 0;

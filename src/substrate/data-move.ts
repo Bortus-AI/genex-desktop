@@ -58,13 +58,25 @@ export interface DataMoved {
 /** Called as bytes are copied: `done` of `total`; `total` is 0 while the files are being counted. */
 export type DataMoveProgressListener = (done: number, total: number) => void;
 
-/** A move that did not happen, with the problem Settings names and the error behind it. */
+/** What a failed move could not put back: entries left only in the new folder, and copies there it could not remove. */
+export interface DataMoveRemains {
+  /** Entries only in the new folder: the old folder is not whole until the move carries on. */
+  stranded: readonly string[];
+  /** Copies in the new folder (their originals are whole) that could not be removed yet. */
+  left: readonly string[];
+}
+
+/** A move that did not happen, with the problem Settings names, the error behind it and what it could not put back. */
 export class DataMoveError extends Error {
   readonly problem: DataFolderProblem;
-  constructor(problem: DataFolderProblem, detail: string) {
+  readonly stranded: readonly string[];
+  readonly left: readonly string[];
+  constructor(problem: DataFolderProblem, detail: string, remains: DataMoveRemains = { stranded: [], left: [] }) {
     super(detail);
     this.name = "DataMoveError";
     this.problem = problem;
+    this.stranded = remains.stranded;
+    this.left = remains.left;
   }
 }
 
@@ -113,9 +125,7 @@ async function checkPlan(plan: DataMovePlan, entries: readonly string[]): Promis
     throw new DataMoveError(DataFolderProblem.Overlaps, `${plan.to} overlaps ${plan.from}`);
   const allowed = new Set(plan.allowInTarget ?? []);
   const earlier = new Set(plan.resume ?? []);
-  const there = await readdir(plan.to).catch((error: unknown) => {
-    throw new DataMoveError(moveProblemOf(error), errorMessage(error));
-  });
+  const there = await readdir(plan.to);
   const clash = there.find((name) => !earlier.has(name) && (!allowed.has(name) || entries.includes(name)));
   if (clash !== undefined) throw new DataMoveError(DataFolderProblem.NotEmpty, `${plan.to} already holds ${clash}`);
 }
@@ -165,25 +175,31 @@ async function sameVolume(from: string, to: string): Promise<boolean> {
   return a.dev === b.dev;
 }
 
-/**
- * Rename each pending entry. A failure renames back every entry of the plan that is only in the
- * new folder, an earlier attempt's included, so the old folder is whole again; then it throws.
- */
-async function renameAll(plan: DataMovePlan, entries: readonly string[], pending: readonly string[]): Promise<void> {
-  try {
-    for (const name of pending) await whenFree(() => rename(path.join(plan.from, name), path.join(plan.to, name)));
-  } catch (error) {
-    for (const name of entries) await renameBack(plan, name);
-    throw new DataMoveError(moveProblemOf(error), errorMessage(error));
-  }
+/** Rename each pending entry into the new folder; a failure is put back by {@link putBack}. */
+async function renameAll(plan: DataMovePlan, pending: readonly string[]): Promise<void> {
+  for (const name of pending) await whenFree(() => rename(path.join(plan.from, name), path.join(plan.to, name)));
 }
 
-/** Put an entry that is only in the new folder back in the old one; best effort. */
-async function renameBack(plan: DataMovePlan, name: string): Promise<void> {
-  const moved = path.join(plan.to, name);
-  const original = path.join(plan.from, name);
-  if (!(await present(moved)) || (await present(original))) return;
-  await whenFree(() => rename(moved, original)).catch(() => {});
+/**
+ * After a failure, put the old folder back together for every entry the move owns (`owned`: the
+ * ones it set out to move once the target was checked, or an earlier attempt's): one only in the
+ * new folder is renamed back, a copy beside its original is removed. Names what it could not.
+ */
+async function putBack(plan: DataMovePlan, owned: readonly string[]): Promise<DataMoveRemains> {
+  const stranded: string[] = [];
+  const left: string[] = [];
+  for (const name of owned) {
+    const moved = path.join(plan.to, name);
+    const original = path.join(plan.from, name);
+    if (!(await present(moved))) continue;
+    if (await present(original)) {
+      left.push(...(await removeEntries(plan.to, [name])));
+      continue;
+    }
+    await whenFree(() => rename(moved, original)).catch(() => {});
+    if (!(await present(original))) stranded.push(name);
+  }
+  return { stranded, left };
 }
 
 /** A small pool: at most `size` of the calls it runs are in flight at once. */
@@ -208,7 +224,7 @@ interface CopyRun {
   copied(bytes: number): void;
 }
 
-/** Copy one link as a link; the new drive may refuse one (no symbolic links there), which Genex makes again. */
+/** Copy one link as a link (its target as it was, repointed after the move); the new drive may refuse one, which Genex makes again. */
 async function copyLink(source: string, target: string): Promise<void> {
   const to = await readlink(source);
   const pointsAtFolder = await stat(source).then(
@@ -268,7 +284,7 @@ export async function freeBytes(dir: string): Promise<number> {
   return Number(info.bavail) * Number(info.bsize);
 }
 
-/** Copy each entry with progress; a failure removes what was copied and throws. */
+/** Copy each entry with progress; a failure's copies are removed by {@link putBack}. */
 async function copyAll(
   plan: DataMovePlan,
   entries: readonly string[],
@@ -283,12 +299,7 @@ async function copyAll(
       onProgress(done, total);
     },
   };
-  try {
-    for (const name of entries) await copyTree(path.join(plan.from, name), path.join(plan.to, name), run);
-  } catch (error) {
-    await removeEntries(plan.to, entries);
-    throw new DataMoveError(moveProblemOf(error), errorMessage(error));
-  }
+  for (const name of entries) await copyTree(path.join(plan.from, name), path.join(plan.to, name), run);
 }
 
 /** How a move reports and sees the disk; each default is the real one. */
@@ -305,21 +316,31 @@ export interface DataMoveOptions {
 /**
  * Move every entry of `plan.from` but the kept ones into `plan.to`. Copied entries leave their
  * originals for {@link removeEntries}, once the caller has recorded that the data is in its new
- * folder. Throws {@link DataMoveError}; `plan.from` is whole again whenever it throws.
+ * folder. Throws {@link DataMoveError} after putting back what it can: `plan.from` is whole again
+ * unless the error names entries `stranded` in the new folder, which a later attempt carries on
+ * with (`resume`), and copies it could not remove are named `left`.
  */
 export async function moveData(plan: DataMovePlan, options: DataMoveOptions = {}): Promise<DataMoved> {
+  let owned: readonly string[] = plan.resume ?? [];
+  try {
+    const entries = plan.resume?.length ? [...plan.resume] : await entriesToMove(plan);
+    await checkPlan(plan, entries);
+    // From here the target was checked: everything the move sets out to move is its own to put back.
+    owned = entries;
+    await options.onPlanned?.(entries);
+    return await carryOut(plan, entries, options);
+  } catch (error) {
+    throw new DataMoveError(moveProblemOf(error), errorMessage(error), await putBack(plan, owned));
+  }
+}
+
+/** Rename or copy what an earlier attempt left to move; the caller puts back after a failure. */
+async function carryOut(plan: DataMovePlan, entries: readonly string[], options: DataMoveOptions): Promise<DataMoved> {
   const onProgress = options.onProgress ?? (() => {});
-  const entries = plan.resume?.length
-    ? [...plan.resume]
-    : await entriesToMove(plan).catch((error: unknown) => {
-        throw new DataMoveError(moveProblemOf(error), errorMessage(error));
-      });
-  await checkPlan(plan, entries);
-  await options.onPlanned?.(entries);
   const pending = await stillToMove(plan, entries);
   if (await (options.sameVolume ?? sameVolume)(plan.from, plan.to)) {
-    await renameAll(plan, entries, pending);
-    return { mode: DataMoveMode.Renamed, entries, bytes: 0 };
+    await renameAll(plan, pending);
+    return { mode: DataMoveMode.Renamed, entries: [...entries], bytes: 0 };
   }
   onProgress(0, 0);
   const total = await measureEntries(plan.from, pending);
@@ -327,7 +348,7 @@ export async function moveData(plan: DataMovePlan, options: DataMoveOptions = {}
     throw new DataMoveError(DataFolderProblem.NoSpace, `${total} bytes do not fit in ${plan.to}`);
   onProgress(0, total);
   await copyAll(plan, pending, total, onProgress);
-  return { mode: DataMoveMode.Copied, entries, bytes: total };
+  return { mode: DataMoveMode.Copied, entries: [...entries], bytes: total };
 }
 
 /** Remove `entries` from `dir`, waiting out busy files; the names it could not remove. */

@@ -595,6 +595,20 @@ describe("a launch that moves Genex's files", () => {
   });
 });
 
+describe("a move that stopped part-way", () => {
+  it("stops following the move and shows why, with Try again", async () => {
+    const stopped: BootState = { ...moving(0, 0), failure: "A file was in use." };
+    const { controller, waits, fake } = startingBoot([moving(10, 90), stopped]);
+    await controller.start();
+    const state = controller.store.getState();
+    assert.equal(bootView(state), BootView.Moving);
+    assert.equal(state.error, "A file was in use.");
+    assert.equal(waits.length, 1, "no more questions once it stopped");
+    await controller.retry();
+    assert.equal(fake.callsOf("retrySandboxSetup").length, 1);
+  });
+});
+
 describe("a data folder that is not there", () => {
   it("names the folder and starts nothing", async () => {
     const { controller, started } = startingBoot([MISSING]);

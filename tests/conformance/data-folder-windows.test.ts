@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
@@ -147,8 +147,24 @@ describe("a folder for Genex's data on Windows", {
     assert.match(acl, /;;;BA\)/);
     await writeFile(path.join(dir, "inside.txt"), "x");
     assert.doesNotMatch(sddl(path.join(dir, "inside.txt")), OPEN_TO_ALL, "files made in it inherit only that");
+    assert.equal(ownerSid(dir), thisAccountSid(), "owned by this account, which alone may open it again");
   });
 });
+
+/** This account's SID, from System32's own whoami. */
+function thisAccountSid(): string {
+  return (
+    parseUserSid(execFileSync(systemTool("whoami.exe"), ["/user", "/fo", "csv", "/nh"], { encoding: "utf8" })) ?? ""
+  );
+}
+
+/** The owner of `target` as a SID, from Windows PowerShell's Get-Acl. */
+function ownerSid(target: string): string {
+  const script = `(Get-Acl -LiteralPath '${target.replaceAll("'", "''")}').GetOwner([System.Security.Principal.SecurityIdentifier]).Value`;
+  return execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+    encoding: "utf8",
+  }).trim();
+}
 
 describe("moving Genex's data to a second drive", {
   skip: SECOND ? false : "needs a second drive",
@@ -175,6 +191,11 @@ describe("moving Genex's data to a second drive", {
     await gitFile(["-C", game, "worktree", "add", "-q", "--detach", runCopy], { env });
     await mkdir(path.join(from, "secrets"), { recursive: true });
     await writeFile(path.join(from, "secrets", "token"), SECRET);
+    // A build shadow's node_modules linked to a game Genex keeps a copy of, inside its data.
+    const keptModules = path.join(from, "opened-copies", "Puzzle", "node_modules");
+    await mkdir(keptModules, { recursive: true });
+    await mkdir(path.join(from, "scratch", "builds", "puzzle-1"), { recursive: true });
+    await symlink(keptModules, path.join(from, "scratch", "builds", "puzzle-1", "node_modules"), "junction");
     const to = path.join(await onSecondDrive("move"), "Genex");
     await mkdir(to);
     await lockDownFolder(to);
@@ -189,6 +210,11 @@ describe("moving Genex's data to a second drive", {
     const { stdout } = await gitFile(["-C", moved, "status", "--porcelain"]);
     assert.equal(String(stdout), "");
     assert.equal(existsSync(runCopy), false, "the original is gone");
+    const link = await readlink(path.join(to, "scratch", "builds", "puzzle-1", "node_modules"));
+    assert.equal(
+      path.resolve(link).toLowerCase(),
+      path.join(to, "opened-copies", "Puzzle", "node_modules").toLowerCase(),
+    );
   });
 });
 
