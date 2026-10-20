@@ -28,9 +28,9 @@ import { ProcessSandbox, type SandboxRuntime } from "../../src/substrate/spawn.t
 import {
   type AncestorGrantDeps,
   type AncestorGrants,
-  type OwnDenyDeps,
-  type OwnDenyEntry,
-  type OwnDenyStamps,
+  type OwnAclDeps,
+  type OwnAclEntry,
+  type OwnAclEntries,
   type SessionMember,
   WindowsSandboxSession,
   ancestorDirs,
@@ -50,9 +50,10 @@ import {
   granteeOf,
   grantLauncherFolders,
   groupSidOnce,
-  ownDenyStamps,
+  ownAclEntries,
   renderEnvFile,
   routeWindowsDenies,
+  routeWindowsGrants,
   sandboxGroupOf,
   sandboxSidOnce,
   setupGaps,
@@ -67,15 +68,16 @@ import {
 } from "../../src/substrate/windows-sandbox.ts";
 import {
   DenyAccess,
+  GrantAccess,
   type FolderAceEdit,
   type FolderAceEditor,
   FolderAceOp,
-  type FolderDenyEdit,
-  type FolderDenyEditor,
+  type FolderOwnEdit,
+  type FolderOwnEditor,
   folderAceCommand,
   folderAceEditor,
   folderAceOutcomes,
-  folderDenyEditor,
+  folderOwnEditor,
   FOLDER_ACE_SCRIPT,
   icaclsArgs,
 } from "../../src/substrate/windows-folder-ace.ts";
@@ -455,6 +457,26 @@ describe("an entry on one folder alone", () => {
     ]);
   });
 
+  it("answers a batch PowerShell ran past its deadline on as timed out, and one it could not run as nothing", async () => {
+    const edit: FolderOwnEdit = {
+      dir: "C:\\x",
+      sid: SID,
+      op: FolderAceOp.Own,
+      deny: null,
+      guard: false,
+      grant: GrantAccess.Read,
+    };
+    const killed = folderOwnEditor({
+      powershell: async () => Promise.reject(Object.assign(new Error("Command failed"), { killed: true })),
+    });
+    const [outcome] = (await killed([edit])) ?? [];
+    assert.equal(outcome?.ok, false);
+    assert.equal(outcome && !outcome.ok && outcome.timedOut, true);
+    const locked = folderOwnEditor({ powershell: async () => Promise.reject(new Error("Cannot invoke method")) });
+    assert.equal(await locked([edit]), null);
+    assert.deepEqual(folderAceOutcomes('[{"ok":true,"ms":41000}]', 1), [{ ok: true, ms: 41_000 }]);
+  });
+
   it("uses PowerShell's answer when it gives one, and runs nothing for no edits", async () => {
     let runs = 0;
     const editor = folderAceEditor({
@@ -553,7 +575,7 @@ describe("an entry on one folder alone, on Windows", {
     await mkdir(path.join(elsewhere, "moved"));
     await rename(path.join(elsewhere, "moved"), moved);
     const inheritedElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/;
-    const denies = ownDenyStamps(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
+    const denies = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
     const { own } = routeWindowsDenies({ read: [secret], write: [] });
     assert.equal(await denies.sync(own), true);
     assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, passed down");
@@ -570,13 +592,74 @@ describe("an entry on one folder alone, on Windows", {
     assert.match(sddl(moved, root), inheritedElsewhere, "nor by the take-back");
   });
 
+  it("grants a folder and what is in it, and the folder entry above the grants comes and goes beside it", async () => {
+    const root = realpathSync.native(await tmpDir("folder-grant-"));
+    const game = path.join(root, "game");
+    const file = path.join(game, "src", "main.js");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, "game");
+    const entries = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
+    assert.equal(await entries.sync(routeWindowsGrants({ write: [game], read: [] }).own), true);
+    const granted = /\(A;OICI;[^;]+;;;BG\)/;
+    const inherited = /\(A;ID;[^;]+;;;BG\)/;
+    assert.match(sddl(game, root), granted, "the folder is granted, passed down");
+    assert.match(sddl(file, root), inherited, "a file in it inherits the grant");
+    // A folder above another root gets the read-attributes entry; taking it back on this folder
+    // (it stopped being one) must leave the folder's own grant alone.
+    const editor = folderAceEditor();
+    await editor([{ dir: game, sid: GUESTS, op: FolderAceOp.Grant }]);
+    await editor([{ dir: game, sid: GUESTS, op: FolderAceOp.Remove }]);
+    assert.match(sddl(game, root), granted, "the grant stays");
+    assert.match(sddl(file, root), inherited);
+    await entries.revokeAll();
+    for (const p of [game, file]) assert.doesNotMatch(sddl(p, root), /;;;BG\)/, p);
+  });
+
+  it("walks nothing under a folder already granted when the next start sets the same entries", async () => {
+    // srt-win passed its grant down through every file under the folder again at every start; a
+    // games folder full of node_modules or a toolchain ran past its 60-second deadline each time.
+    const root = realpathSync.native(await tmpDir("folder-grant-again-"));
+    const game = path.join(root, "game");
+    const moved = path.join(game, "node_modules", "moved");
+    const elsewhere = path.join(root, "elsewhere");
+    await mkdir(path.dirname(moved), { recursive: true });
+    await mkdir(elsewhere);
+    const first = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
+    const own = routeWindowsGrants({ write: [game], read: [] }).own;
+    assert.equal(await first.sync(own), true);
+    // A folder moved in keeps what it inherited where it was made until a walk works it out again.
+    const USERS = "S-1-5-32-545";
+    execFileSync("icacls", [elsewhere, "/grant", `*${USERS}:(OI)(CI)(RA)`], { stdio: "ignore" });
+    await mkdir(path.join(elsewhere, "moved"));
+    await rename(path.join(elsewhere, "moved"), moved);
+    const keptFromElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BU\)/;
+    assert.match(sddl(moved, root), keptFromElsewhere);
+    // The first process ended without taking its entries back; the next one starts.
+    const next = ownAclEntries(path.join(root, "holders"), {
+      sid: async () => GUESTS,
+      pid: 2,
+      alive: (pid) => pid === 2,
+    });
+    assert.equal(await next.sync(own), true);
+    assert.match(sddl(moved, root), keptFromElsewhere, "nothing under the granted folder was walked again");
+    assert.match(sddl(game, root), /\(A;OICI;[^;]+;;;BG\)/, "the grant is still there");
+    await next.revokeAll();
+  });
+
   it("refuses to deny anyone the running user is, setting nothing", async () => {
     const EVERYONE = "S-1-1-0";
     const root = realpathSync.native(await tmpDir("folder-deny-self-"));
     const target = path.join(root, "target");
     await mkdir(target);
-    const edit = { dir: target, sid: EVERYONE, op: FolderAceOp.Deny, deny: DenyAccess.Read, guard: true } as const;
-    assert.equal(await folderDenyEditor()([edit]), null);
+    const edit = {
+      dir: target,
+      sid: EVERYONE,
+      op: FolderAceOp.Own,
+      deny: DenyAccess.Read,
+      guard: true,
+      grant: null,
+    } as const;
+    assert.equal(await folderOwnEditor()([edit]), null);
     assert.doesNotMatch(sddl(target, root), /\(D;/);
   });
 
@@ -595,7 +678,7 @@ describe("an entry on one folder alone, on Windows", {
         if (protectedAcl) execFileSync("icacls", [secret, "/inheritance:d"], { stdio: "ignore" });
         const protectedDacl = /D:P/;
         assert.equal(protectedDacl.test(sddl(secret, root)), protectedAcl, "fixture inheritance");
-        const denies = ownDenyStamps(path.join(root, "holders"), {
+        const denies = ownAclEntries(path.join(root, "holders"), {
           sid: async () => GUESTS,
           pid: 1,
           alive: () => false,
@@ -1021,15 +1104,15 @@ function fakeAncestors() {
 }
 
 /**
- * Genex's own deny entries over a fake: each sync's entries, logged in `calls` as "own denies";
+ * Genex's own entries over a fake: each sync's entries, logged in `calls` as "own entries";
  * `available: false` answers as a PC where Genex cannot set them (no sandbox users' group).
  */
-function fakeOwnDenies(calls: string[], options: { available?: boolean } = {}) {
-  const synced: OwnDenyEntry[][] = [];
+function fakeOwnEntries(calls: string[], options: { available?: boolean } = {}) {
+  const synced: OwnAclEntry[][] = [];
   let revoked = 0;
-  const denies: OwnDenyStamps = {
+  const entries: OwnAclEntries = {
     sync: async (entries) => {
-      calls.push("own denies");
+      calls.push("own entries");
       synced.push([...entries]);
       return options.available ?? true;
     },
@@ -1040,7 +1123,7 @@ function fakeOwnDenies(calls: string[], options: { available?: boolean } = {}) {
       revoked++;
     },
   };
-  return { denies, synced, revoked: () => revoked };
+  return { entries, synced, revoked: () => revoked };
 }
 
 /**
@@ -1057,13 +1140,13 @@ function session(
 ) {
   const runtime = fakeSessionRuntime();
   const ancestors = fakeAncestors();
-  const own = fakeOwnDenies(runtime.calls, { available: options.ownDenies !== "unavailable" });
+  const own = fakeOwnEntries(runtime.calls, { available: options.ownDenies !== "unavailable" });
   const logged: string[] = [];
   const value = new WindowsSandboxSession({
     runtime: runtime.runtime,
     profile: options.profile ?? PROFILE,
     ancestors: ancestors.ancestors,
-    ...(options.ownDenies ? { denies: own.denies } : {}),
+    ...(options.ownDenies ? { own: own.entries } : {}),
     ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths], exists: () => true }),
     ...(options.exists ? { exists: options.exists } : {}),
     log: (line) => logged.push(line),
@@ -1422,7 +1505,7 @@ describe("deny paths Genex sets itself", () => {
         { path: PROFILE, deny: null, guard: true },
         { path: at(".claude"), deny: DenyAccess.Read, guard: false },
         { path: at(".ssh"), deny: DenyAccess.Read, guard: false },
-        { path: PONG, deny: null, guard: true },
+        { path: PONG, deny: null, guard: true, grant: GrantAccess.Modify },
         { path: at("AI Games", "Pong", ".claude"), deny: DenyAccess.Write, guard: false },
         { path: at("AI Games", "Pong", ".env"), deny: DenyAccess.Read, guard: false },
         { path: at("AppData", "Local", "Roblox"), deny: null, guard: true },
@@ -1433,7 +1516,7 @@ describe("deny paths Genex sets itself", () => {
         { path: "D:\\Keys\\deploy.pem", deny: DenyAccess.Read, guard: false },
       ],
     ]);
-    assert.deepEqual(s.runtime.calls, ["own denies", "initialize"], "denied before srt-win grants anything");
+    assert.deepEqual(s.runtime.calls, ["own entries", "initialize"], "denied before srt-win grants anything");
   });
 
   it("leaves every deny to srt-win, as before, where Genex cannot set them itself, and says so", async () => {
@@ -1442,26 +1525,99 @@ describe("deny paths Genex sets itself", () => {
     const sent = s.runtime.last().filesystem;
     assert.deepEqual(sent.denyRead, SECRETS);
     assert.deepEqual(sent.denyWrite, WRITE_ONLY);
-    // srt-win's stamp then walks each denied path's parent again: a timeout after it reads as that.
+    // srt-win's grant and stamp then walk each folder again: a timeout after it reads as that.
     assert.ok(
-      s.logged.some((line) => line.startsWith("own denies off: srt-win stamps all 8 denies")),
+      s.logged.some((line) => line.startsWith("own entries off: srt-win sets all 9 grants and denies")),
       s.logged.join("\n"),
     );
   });
 
-  it("sets them again on every regrant, and takes them back with the last member and on dispose", async () => {
+  it("sets them again on every regrant, and keeps them after the last member and dispose, for the next start", async () => {
     const s = session({ ownDenies: true });
     const owner = {};
     await s.session.join(owner, denying([at(".ssh")]));
     s.session.update(owner, { write: [PONG, LATE], read: [] });
     await s.session.settled();
-    assert.deepEqual(s.runtime.calls, ["own denies", "initialize", "reset", "own denies", "initialize"]);
+    assert.deepEqual(s.runtime.calls, ["own entries", "initialize", "reset", "own entries", "initialize"]);
     s.session.leave(owner);
     await s.session.settled();
-    assert.equal(s.own.revoked(), 1);
     await s.session.join({}, denying([at(".ssh")]));
     await s.session.dispose();
-    assert.equal(s.own.revoked(), 2);
+    // Intentionally flipped: they were taken back here, and walked again at every start.
+    assert.equal(s.own.revoked(), 0);
+  });
+
+  it("hands srt-win no grant on a folder that exists, so no start walks a granted folder again", async () => {
+    // srt-win's grant passed its entry down through everything under each folder at every start
+    // (a toolchain, a games folder full of node_modules) and ran past its 60-second deadline.
+    const runtime = fakeSessionRuntime();
+    const own = fakeOwnEntries(runtime.calls);
+    const npm = at("AppData", "Roaming", "npm");
+    const install = at("AppData", "Local", "genex", "app-0.1.13");
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors: fakeAncestors().ancestors,
+      own: own.entries,
+      launchDirs: [install],
+      launcher: async () => {
+        runtime.calls.push("launcher");
+        return () => {};
+      },
+      keepDenies: (paths) => [...paths],
+      exists: (p) => p !== LATE,
+    });
+    await value.join({}, { grants: { write: [PONG, LATE], read: [npm] }, config: BASE_CONFIG });
+    const sent = runtime.last();
+    assert.deepEqual(sent.filesystem.allowWrite, [LATE], "only a folder Genex cannot grant (gone here)");
+    assert.deepEqual(sent.filesystem.allowRead, []);
+    assert.deepEqual(
+      sent.git?.safeDirectories,
+      [PONG, LATE],
+      "Git trusts the writable folders, as with srt-win's grant",
+    );
+    assert.deepEqual(own.synced[0], [
+      { path: PONG, deny: null, guard: false, grant: GrantAccess.Modify },
+      { path: install, deny: null, guard: false, grant: GrantAccess.Read },
+      { path: npm, deny: null, guard: false, grant: GrantAccess.Read },
+    ]);
+    assert.deepEqual(runtime.calls, ["own entries", "initialize"], "the launch folders are among Genex's grants");
+  });
+
+  it("grants with srt-win and its launcher where Genex cannot set entries itself", async () => {
+    const runtime = fakeSessionRuntime();
+    const own = fakeOwnEntries(runtime.calls, { available: false });
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors: fakeAncestors().ancestors,
+      own: own.entries,
+      launchDirs: [at("AppData", "Local", "genex", "app-0.1.13")],
+      launcher: async () => {
+        runtime.calls.push("launcher");
+        return () => {};
+      },
+      keepDenies: (paths) => [...paths],
+      exists: () => true,
+    });
+    await value.join({}, { grants: { write: [PONG], read: [] }, config: BASE_CONFIG });
+    assert.deepEqual(runtime.last().filesystem.allowWrite, [PONG]);
+    assert.equal(runtime.last().git, undefined);
+    assert.deepEqual(runtime.calls, ["own entries", "launcher", "initialize"]);
+  });
+
+  it("leaves srt-win a grant root that is gone, a drive root or a share", () => {
+    const table: Array<[string, string]> = [
+      ["a folder that is gone (srt-win drops it)", NEVER_MADE],
+      ["a drive root", "D:\\"],
+      ["a network share", "\\\\nas\\games"],
+    ];
+    for (const [label, root] of table) {
+      const routes = routeWindowsGrants({ write: [root], read: [root] }, { realpath: (p) => p, exists });
+      assert.deepEqual(routes, { srt: { read: [root], write: [root] }, own: [] }, label);
+    }
+    const both = routeWindowsGrants({ write: [PONG], read: [at("AI Games", "pong")] }, { realpath: (p) => p, exists });
+    assert.deepEqual(both.own, [{ path: PONG, deny: null, guard: false, grant: GrantAccess.Modify }], "write wins");
   });
 
   it("denies a path where it really is, its spelling and links worked out", () => {
@@ -1496,11 +1652,11 @@ describe("deny paths Genex sets itself", () => {
 describe("Genex's own deny entries", () => {
   const SID = "S-1-5-21-1-1002";
   const DEAD_PID = 3;
-  const done = (edits: readonly FolderDenyEdit[]) => edits.map(() => ({ ok: true }) as const);
-  const shape = (edit: FolderDenyEdit) => [edit.dir, `${edit.deny}`, edit.guard ? "guard" : "-"];
+  const done = (edits: readonly FolderOwnEdit[]) => edits.map(() => ({ ok: true }) as const);
+  const shape = (edit: FolderOwnEdit) => [edit.dir, `${edit.deny}`, edit.guard ? "guard" : "-"];
   /** Deny entries for holder `pid` in `holders`, logging every edit as `[pid, dir, deny, guard]`. */
-  const holder = (holders: string, pid: number, calls: string[][], options: Partial<OwnDenyDeps> = {}) =>
-    ownDenyStamps(holders, {
+  const holder = (holders: string, pid: number, calls: string[][], options: Partial<OwnAclDeps> = {}) =>
+    ownAclEntries(holders, {
       sid: async () => SID,
       pid,
       alive: (other) => other !== DEAD_PID,
@@ -1531,7 +1687,7 @@ describe("Genex's own deny entries", () => {
       edit: async (edits) => {
         for (const edit of edits) {
           if (edit.deny || edit.guard) {
-            const recorded = JSON.parse(await readFile(record, "utf8")) as { entries: OwnDenyEntry[] };
+            const recorded = JSON.parse(await readFile(record, "utf8")) as { entries: OwnAclEntry[] };
             assert.ok(
               recorded.entries.some((entry) => entry.path === edit.dir),
               "recorded before set",
@@ -1612,7 +1768,7 @@ describe("Genex's own deny entries", () => {
     const holders = await tmpDir("windows-denies-");
     const batches: string[][] = [];
     let refusals = 1;
-    const flaky: FolderDenyEditor = async (edits) => {
+    const flaky: FolderOwnEditor = async (edits) => {
       batches.push(edits.map((edit) => edit.dir));
       return edits.map((edit) =>
         edit.dir === at(".ssh") && refusals-- > 0 ? { ok: false, error: "being changed" } : { ok: true },
@@ -1621,14 +1777,43 @@ describe("Genex's own deny entries", () => {
     const denies = holder(holders, 1, [], { edit: flaky });
     await denies.sync([guard, ssh]);
     assert.deepEqual(batches, [[PROFILE, at(".ssh")], [at(".ssh")]]);
-    const gone: FolderDenyEditor = async (edits) =>
+    const gone: FolderOwnEditor = async (edits) =>
       edits.map((edit) => (edit.deny || edit.guard ? { ok: true } : { ok: false, error: "cannot find the file" }));
     assert.equal(await holder(holders, 1, [], { edit: gone }).sync([]), true);
-    const broken: FolderDenyEditor = async (edits) => edits.map(() => ({ ok: false, error: "Access is denied." }));
+    const broken: FolderOwnEditor = async (edits) => edits.map(() => ({ ok: false, error: "Access is denied." }));
     await assert.rejects(
       holder(holders, 2, [], { edit: broken }).sync([ssh]),
-      /could not deny the sandbox user .*\\\.ssh: Access is denied\./,
+      /could not set the sandbox user's entries on .*\\\.ssh: Access is denied\./,
     );
+  });
+
+  it("stops at a batch that ran out of time, keeping what it set for the next try", async () => {
+    const holders = await tmpDir("windows-denies-");
+    let batches = 0;
+    const slow: FolderOwnEditor = async (edits) => {
+      batches++;
+      return edits.map(
+        () => ({ ok: false, error: "still passing the entries down after 600 s", timedOut: true }) as const,
+      );
+    };
+    await assert.rejects(
+      holder(holders, 1, [], { edit: slow }).sync([guard, ssh]),
+      /could not set the sandbox user's entries on .*: still passing the entries down/,
+    );
+    assert.equal(batches, 1, "a batch that ran out of time is not run again at once");
+    const recorded = JSON.parse(await readFile(path.join(holders, "1.json"), "utf8")) as { entries: OwnAclEntry[] };
+    assert.deepEqual(recorded.entries, [guard, ssh], "what it may have set stays recorded");
+  });
+
+  it("says which edits Windows took long over: a first walk of a large folder", async () => {
+    const logged: string[] = [];
+    const timed: FolderOwnEditor = async (edits) =>
+      edits.map((edit) => ({ ok: true, ms: edit.dir === at(".ssh") ? 41_000 : 30 }) as const);
+    await holder(await tmpDir("windows-denies-"), 1, [], { edit: timed, log: (line) => logged.push(line) }).sync([
+      guard,
+      ssh,
+    ]);
+    assert.deepEqual(logged, [`own entries: ${at(".ssh")} took 41 s (once; they stay)`]);
   });
 
   it("runs nothing when it has nothing to set and nothing to take back", async () => {
