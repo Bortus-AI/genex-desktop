@@ -137,6 +137,13 @@ const TOOL_TIMEOUT_MS = 15 * SECOND_MS;
 const OWN_TIMEOUT_MS = 10 * MINUTE_MS;
 /** The variable that hands a batch to the script: base64 of its UTF-8 JSON, so no console code page touches a path. */
 const EDITS_ENV = "GENEX_FOLDER_ACES";
+/**
+ * The variable that hands over the script itself, as base64 of its UTF-8 text. The script is too
+ * long for -EncodedCommand: its UTF-16 base64 passes Windows' 32,767-character command line.
+ */
+const SCRIPT_ENV = "GENEX_FOLDER_ACE_SCRIPT";
+/** The command line's whole script: run the one {@link SCRIPT_ENV} carries. */
+const SCRIPT_LOADER = `$ErrorActionPreference = 'Stop'; Invoke-Expression ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($env:${SCRIPT_ENV})))`;
 
 /**
  * Edits each folder's DACL through GetFileSecurityW and SetFileSecurityW, which touch that folder
@@ -381,12 +388,13 @@ export function folderAceCommand(
   edits: readonly (FolderAceEdit | FolderOwnEdit)[],
   env: NodeJS.ProcessEnv = process.env,
 ) {
-  const script = Buffer.from(FOLDER_ACE_SCRIPT, "utf16le").toString("base64");
+  const loader = Buffer.from(SCRIPT_LOADER, "utf16le").toString("base64");
+  const script = Buffer.from(FOLDER_ACE_SCRIPT, "utf8").toString("base64");
   const payload = Buffer.from(JSON.stringify(edits), "utf8").toString("base64");
   return {
     file: windowsPowerShell(env),
-    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", script],
-    env: { ...env, [EDITS_ENV]: payload },
+    args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", loader],
+    env: { ...env, [SCRIPT_ENV]: script, [EDITS_ENV]: payload },
   };
 }
 

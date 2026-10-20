@@ -98,6 +98,8 @@ const POLL_MS = 10;
 const PIPE_OVERFLOW_BYTES = 1024 * 1024;
 const FAKE_PLAY_GAME = path.resolve(import.meta.dirname, "../fixtures/fake-play-game.mjs");
 const PROFILE = "C:\\Users\\Ann";
+/** The longest command line, and environment variable, Windows passes to a process. */
+const WINDOWS_COMMAND_LINE_CHARS = 32_767;
 const at = (...parts: string[]) => [PROFILE, ...parts].join("\\");
 
 describe("grant union", () => {
@@ -415,11 +417,20 @@ describe("an entry on one folder alone", () => {
   it("runs Windows PowerShell by its full path and hands it the batch out of reach of any code page", () => {
     const command = folderAceCommand(edits, { SystemRoot: "D:\\Win" });
     assert.equal(command.file, "D:\\Win\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
-    const script = command.args.at(-1) ?? "";
-    assert.equal(Buffer.from(script, "base64").toString("utf16le"), FOLDER_ACE_SCRIPT);
+    const script = command.env.GENEX_FOLDER_ACE_SCRIPT ?? "";
+    assert.equal(Buffer.from(script, "base64").toString("utf8"), FOLDER_ACE_SCRIPT);
     const payload = command.env.GENEX_FOLDER_ACES ?? "";
     assert.match(payload, /^[A-Za-z0-9+/=]+$/, "only base64 crosses the process boundary");
     assert.deepEqual(JSON.parse(Buffer.from(payload, "base64").toString("utf8")), edits);
+  });
+
+  it("keeps its command line inside Windows' 32,767 characters, however long the script grows", () => {
+    // The script outgrew it once: CreateProcess refused PowerShell ("The filename or extension is
+    // too long"), every batch answered nothing, and every grant fell back to icacls.
+    const command = folderAceCommand(edits, { SystemRoot: "C:\\Windows" });
+    assert.ok([command.file, ...command.args].join(" ").length < WINDOWS_COMMAND_LINE_CHARS / 4);
+    const variables = Object.values(command.env).map((value) => `${value}`.length);
+    assert.ok(Math.max(...variables) < WINDOWS_COMMAND_LINE_CHARS, "and each variable inside the same limit");
   });
 
   it("reads one outcome per edit, and nothing else as an answer", () => {
@@ -613,7 +624,13 @@ describe("an entry on one folder alone, on Windows", {
 
   /** The running user's SID, as `whoami` says it. */
   const runningUser = () => {
-    const sid = /"(S-1-[^"]+)"/.exec(execFileSync("whoami", ["/user", "/fo", "csv", "/nh"], { encoding: "utf8" }))?.[1];
+    const sid = /"(S-1-[^"]+)"/.exec(
+      execFileSync(
+        path.win32.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe"),
+        ["/user", "/fo", "csv", "/nh"],
+        { encoding: "utf8" },
+      ),
+    )?.[1];
     assert.ok(sid, "the running user's SID");
     return sid;
   };
