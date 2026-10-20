@@ -86,7 +86,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   protected paths use `PROTECTED_DACL_SECURITY_INFORMATION` together with the DACL mask.
   The entries name the group because srt-win's recompose of a path drops every explicit entry for
   the user's SID. Each Genex records its entries in `%LOCALAPPDATA%\genex-sandbox-denies\<pid>.json`;
-  every edit makes a path what all running holders need. An edit that finds a path as it should be
+  every edit makes a path what all running holders need. The group's passed-down allows are Genex's
+  only on a folder it grants or granted: on a path it only denies or guards, an allow someone else
+  gave the group stays. An edit that finds a path as it should be
   writes nothing, so passing entries down a folder happens once: a Genex that quits keeps its
   record, and the next sync of any Genex keeps what a running one needs and takes back the rest. A
   first walk of a large folder can take minutes (10 at most per batch; the log names each edit

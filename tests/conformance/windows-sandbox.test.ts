@@ -467,6 +467,7 @@ describe("an entry on one folder alone", () => {
       deny: null,
       guard: false,
       grant: GrantAccess.Read,
+      allows: true,
     };
     const killed = folderOwnEditor({
       powershell: async () => Promise.reject(Object.assign(new Error("Command failed"), { killed: true })),
@@ -648,6 +649,25 @@ describe("an entry on one folder alone, on Windows", {
     await next.revokeAll();
   });
 
+  it("denies a folder and guards the one above it without touching an allow Genex did not set there", async () => {
+    const root = realpathSync.native(await tmpDir("folder-deny-beside-"));
+    const above = path.join(root, "above");
+    const secret = path.join(above, "secret");
+    const open = path.join(above, "open.txt");
+    await mkdir(secret, { recursive: true });
+    await writeFile(open, "open");
+    execFileSync("icacls", [above, "/grant", `*${GUESTS}:(OI)(CI)(RX)`], { stdio: "ignore" });
+    const theirs = /\(A;OICI;0x1200a9;;;BG\)/i;
+    assert.match(sddl(above, root), theirs);
+    const entries = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
+    assert.equal(await entries.sync(routeWindowsDenies({ read: [secret], write: [] }).own), true);
+    assert.match(sddl(above, root), theirs, "the allow on the folder stays");
+    assert.match(sddl(above, root), /\(D;;(?:0x40|DT);;;BG\)/, "beside the guard");
+    assert.match(sddl(open, root), /\(A;ID;0x1200a9;;;BG\)/i, "and what is in the folder still inherits it");
+    await entries.revokeAll();
+    assert.match(sddl(above, root), theirs, "taking the deny back leaves it too");
+  });
+
   it("refuses to deny anyone the running user is, setting nothing", async () => {
     const EVERYONE = "S-1-1-0";
     const root = realpathSync.native(await tmpDir("folder-deny-self-"));
@@ -660,6 +680,7 @@ describe("an entry on one folder alone, on Windows", {
       deny: DenyAccess.Read,
       guard: true,
       grant: null,
+      allows: false,
     } as const;
     assert.equal(await folderOwnEditor()([edit]), null);
     assert.doesNotMatch(sddl(target, root), /\(D;/);
@@ -1818,6 +1839,28 @@ describe("Genex's own deny entries", () => {
     assert.deepEqual(logged, [`own entries: ${at(".ssh")} took 41 s (once; they stay)`]);
   });
 
+  it("touches the group's passed-down allows only on a folder Genex grants or once granted", async () => {
+    // A deny or a guard on a folder must leave an allow there that Genex did not set (an admin's,
+    // or the grant on the folder above a denied one) exactly as it is.
+    const holders = await tmpDir("windows-denies-");
+    const seen: FolderOwnEdit[] = [];
+    const recording: FolderOwnEditor = async (edits) => {
+      seen.push(...edits);
+      return edits.map(() => ({ ok: true }) as const);
+    };
+    const denies = holder(holders, 1, [], { edit: recording });
+    const game = { path: at("AI Games"), deny: null, guard: false, grant: GrantAccess.Modify };
+    await denies.sync([guard, ssh, game]);
+    const allows = (dir: string) => seen.filter((edit) => edit.dir === dir).map((edit) => edit.allows);
+    assert.deepEqual(allows(PROFILE), [false], "a guard leaves the folder's allows alone");
+    assert.deepEqual(allows(at(".ssh")), [false], "so does a deny");
+    assert.deepEqual(allows(at("AI Games")), [true]);
+    seen.length = 0;
+    await denies.sync([guard, ssh]);
+    const takenBack = seen.find((edit) => edit.dir === at("AI Games"));
+    assert.deepEqual(takenBack && [takenBack.allows, takenBack.grant], [true, null], "a grant Genex set goes");
+  });
+
   it("runs nothing when it has nothing to set and nothing to take back", async () => {
     let runs = 0;
     const denies = holder(await tmpDir("windows-denies-"), 1, [], {
@@ -1844,8 +1887,16 @@ describe("Genex's own deny entries", () => {
     const edits = sandboxEntriesLeft(holders, alive);
     assert.deepEqual(edits, [
       { dir: at("AppData"), sid: SID, op: FolderAceOp.Remove },
-      { dir: at("AI Games"), sid: SID, op: FolderAceOp.Own, deny: null, guard: false, grant: null },
-      { dir: at(".ssh"), sid: SID, op: FolderAceOp.Own, deny: DenyAccess.Read, guard: false, grant: null },
+      { dir: at("AI Games"), sid: SID, op: FolderAceOp.Own, deny: null, guard: false, grant: null, allows: true },
+      {
+        dir: at(".ssh"),
+        sid: SID,
+        op: FolderAceOp.Own,
+        deny: DenyAccess.Read,
+        guard: false,
+        grant: null,
+        allows: false,
+      },
     ]);
     const started: Array<{ file: string; env: NodeJS.ProcessEnv }> = [];
     const spawnBatch = (file: string, _args: string[], env: NodeJS.ProcessEnv) => {

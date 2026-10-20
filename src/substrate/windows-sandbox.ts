@@ -963,7 +963,15 @@ function ownEdits(
   touched: readonly (OwnRecord | null)[],
   live: readonly OwnRecord[],
 ): FolderOwnEdit[] {
+  const records = [mine, ...live, ...touched.filter((record): record is OwnRecord => record !== null)];
   const needed = neededEntries([mine, ...live]);
+  // Genex makes the group's passed-down allows exact only where a record grants or granted: an
+  // allow it never set (on a denied path, or a guarded parent) is left as it is.
+  const granted = new Set(
+    records.flatMap((record) =>
+      record.entries.filter((entry) => entry.grant).map((entry) => `${record.sid}|${pathKey(entry.path)}`),
+    ),
+  );
   const edits = new Map<string, FolderOwnEdit>();
   const add = (sid: string, dir: string) => {
     const key = `${sid}|${pathKey(dir)}`;
@@ -976,6 +984,7 @@ function ownEdits(
       deny: want?.deny ?? null,
       guard: want?.guard ?? false,
       grant: want?.grant ?? null,
+      allows: granted.has(key),
     });
   };
   for (const entry of mine.entries) add(mine.sid, entry.path);
