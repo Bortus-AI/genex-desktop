@@ -51,6 +51,7 @@ export { installOlderPlugins } from "./fixture-plugin-updates.ts";
 export {
   DevProviders,
   FIXTURE_GAME,
+  FIXTURE_AGENTS_FAILURE,
   FIXTURE_NAMES,
   FIXTURE_SANDBOX_PROBLEM,
   FIXTURE_UPDATE_RELEASE,

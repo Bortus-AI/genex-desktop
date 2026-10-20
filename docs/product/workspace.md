@@ -18,7 +18,7 @@ sign-outs, each opening where answered; unfocused, macOS notifications and the D
 them.
 
 **Play** shows genex.games' games, the Genex account and nickname (kept offline), **Friends**
-with invites, profiles and **Stats**; Mac apps install and play sandboxed ([Play](../play.md)).
+with invites, profiles and **Stats** ([Play](../play.md)).
 
 ## First launch
 
@@ -29,7 +29,7 @@ idea.
 Then a Genex plugin card offers **Connect Genex plugin** once.
 
 A sandbox that cannot start opens **Set up the protected workspace**; Windows needs one
-administrator prompt.
+administrator prompt (two if Secondary Logon is off).
 
 ## Main actions
 

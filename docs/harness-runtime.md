@@ -1398,6 +1398,29 @@ up to the run's working deadline, as the outage ladder's waits do. A worker the 
 any round of it was judged gives its goal attempt back (`attempt-refund.ts` `refundProviderAttempt`), so a
 restart is never refused for progress it never had the chance to make.
 
+### A workers' engine that cannot run its sandbox
+
+A worker always runs its commands in a sandbox, never without it: Claude Code's worker box keeps
+`failIfUnavailable: true`, because its sandboxed commands run unasked and the CLI itself is not inside
+ProcessSandbox. On Windows, where Claude Code's own sandbox cannot start, a worker (and an unattended
+builder) runs its commands in Genex's instead: the session gets no box of Claude Code's and none of
+its process-starting built-ins (`Bash`, `PowerShell`, `Monitor`, `REPL`: an allowlist), and runs each
+command through the studio's `run_command` in a `ProcessSandbox` made for the session on its first
+command (`engines/claude-code.ts` `studioShell`, `engines/session-commands.ts`). That box is the one
+Claude Code's would have been: the worker's roots (in Bypass the home folder too), the sign-in homes
+and the never-touch list denied, no network. The host reads the tool as `Bash` (its question card,
+the never-touch screen, the log). Its commands run under Git Bash, one at a time, nothing in the
+background, and a saved "always allow" rule for `Bash` does not cover them. Where a CLI still refuses
+its box, it refuses the session before the model says anything, and the engine reports it
+as `StopReason.SandboxUnavailable` with the CLI's own words (`engines/claude-code.ts`
+`sandboxRefusal`); a session that already replied keeps its ordinary failure. The refusal holds that
+engine for an hour across every pool and Loop of the harness (`loop/workers/sandbox-refusal.ts`): a
+director's builder facet stops on its first build (`StopCode.SandboxUnavailable`: no judge, strike,
+outage wait or rollback, its goal attempt given back), a pool worker ends with
+`WorkerStopCode.SandboxUnavailable`, and every later `worker_start` on that engine starts nothing and
+tells the lead to do the work itself, naming the other workers' engine when the host reports it
+signed in. A Loop's person is told once on a decision card, with that engine offered for Workers.
+
 ### Automatic resume
 
 A paused build is the user's to resume, with three exceptions the host takes itself

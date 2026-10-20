@@ -7,6 +7,7 @@ import type { LibraryKind } from "./asset-library.ts";
 
 import type { PlayCuration } from "./play-manage.ts";
 import type { PlayBarNative, PlayNative } from "./play-native.ts";
+import type { PlayPurchaseSheet } from "./play-purchase.ts";
 
 /** Where Play talks to genex.games: the API main calls and the website the app links to. */
 export interface PlayOrigins {
@@ -298,6 +299,8 @@ export interface PlayBarState {
   remixing: boolean;
   /** The game's native app for this computer, beside Like; null when it has none. */
   nativeApp: PlayBarNative | null;
+  /** The game asked to be paid: Studio's purchase sheet covers it. Null with none open. */
+  purchase: PlayPurchaseSheet | null;
 }
 
 /** A remix's name in the library, from the game it copies: what main adopts it as and Create shows while it is made. */

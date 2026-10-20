@@ -474,6 +474,7 @@ describe("Play's viewer cover", () => {
       signedIn: true,
       remixing: false,
       nativeApp: null,
+      purchase: null,
     };
     const drawn = viewerAfter(fresh, { slug: "a", openId: 2, phase: PlayViewerPhase.Loading, bar });
     assert.deepEqual(drawn?.bar, bar);
@@ -583,6 +584,7 @@ describe("Play's loader and header", () => {
       signedIn: true,
       remixing: false,
       nativeApp: null,
+      purchase: null,
     };
     assert.equal(noteOn(undefined, PlayControl.Share), null);
     assert.equal(noteOn(bar, PlayControl.Share), null);
@@ -616,6 +618,7 @@ describe("Play's loader and header", () => {
       signedIn: true,
       remixing: false,
       nativeApp: null,
+      purchase: null,
     };
     const liked = { ...bar, liked: true, likes: 4 };
     assert.equal(justLiked(bar, liked), true);

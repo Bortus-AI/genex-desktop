@@ -116,6 +116,7 @@ import { ensureFactIgnoreRules } from "../substrate/nested-repos.ts";
 import { mcpSecretPort, type SecretPort } from "../substrate/mcp/store.ts";
 import { isBelow, isInside } from "../substrate/paths.ts";
 import { PluginNativeServices } from "../substrate/plugins/native.ts";
+import { PluginSandboxJobs } from "../substrate/plugins/sandbox-jobs.ts";
 import { spawnNativeLongLived } from "../substrate/plugins/native-process.ts";
 import { PluginRegistry } from "../substrate/plugins/registry.ts";
 import { PluginServices } from "../substrate/plugins/services.ts";
@@ -214,6 +215,8 @@ const HARNESS_HEARTBEAT_TIMEOUT_MS = 10 * MINUTE_MS;
 const HARNESS_CRASH_LOOP = { count: 3, windowMs: 5 * MINUTE_MS } as const;
 /** Where the folder chosen in Settings → Games is remembered, under userData. */
 const GAMES_ROOT_FILE = "games-root.json";
+/** The folder in the sandbox's scratch where each engine plugin's sandbox job keeps its own. */
+const PLUGIN_JOBS_FOLDER = "plugin-jobs";
 /** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
 const ENGINE_SCRATCH_PREFIX = "genex-play-";
 
@@ -811,6 +814,7 @@ export class StudioCore {
       root: this.layout.jobs,
       spawn: this.options.jobSpawn ?? ((request) => this.sandbox.spawnLongLived(request)),
       probe: this.options.jobProbe,
+      onLog: (line) => this.options.onLog?.(line, "stderr"),
       onStarted: (record) => recordJobStarted(this, record),
       onEnded: (record) => recordJobEnded(this, record),
     });
@@ -998,6 +1002,20 @@ export class StudioCore {
     });
   }
 
+  /**
+   * The programs the host runs for plugins, each in this studio's sandbox: a manifest's `host` tool
+   * (Genex's CLI, a package install) and an engine plugin's long job (`sandbox.run`: Unreal's
+   * package on Windows), which keeps its scratch in the sandbox's own scratch folder.
+   */
+  #wirePluginPrograms(): void {
+    this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
+    this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
+    this.plugins.sandboxJobs = new PluginSandboxJobs({
+      run: (request) => this.sandbox.run(request),
+      scratch: path.join(this.layout.scratch, PLUGIN_JOBS_FOLDER),
+    });
+  }
+
   /** The plugin registry and the host services its plugins call, wired to the core and started. */
   async #wirePluginServices(): Promise<void> {
     this.pluginServices = new PluginServices(
@@ -1091,8 +1109,7 @@ export class StudioCore {
     this.plugins.agentWritable = (directory) => this.#agentWritable(directory);
     // A Finder-launched app has a bare PATH: Genex's publish found no git-lfs from Homebrew there.
     this.plugins.toolPath = async () => (await toolchain()).path;
-    this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
-    this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
+    this.#wirePluginPrograms();
     this.pluginServices.exportStage = async (binding, target, pluginId) => {
       // A panel's or toolbar's own publish reaches only here: refused as the dialog and agent tool refuse it.
       await assertPublishable(this, binding.project);
@@ -1307,6 +1324,10 @@ export class StudioCore {
         onModelsChanged: () => this.emit(UiEvent.EnginesChanged, { engine: EngineId.ClaudeCode }),
         engineHome: path.join(this.layout.engineHomes, EngineId.ClaudeCode),
         protectedPaths: this.#protectedPaths(),
+        // Windows: Genex's sandbox runs a worker's or builder's commands (`studioShell`), its scratch
+        // inside the studio's own, which every sandboxed process there is already granted.
+        scratchRoot: path.join(this.layout.scratch, EngineId.ClaudeCode),
+        toolPath: async () => (await this.sandbox.toolPath()) ?? process.env.PATH ?? "",
         // Beside the engine's home, never in it: that can be the CLI's own config folder.
         sessionCosts: path.join(this.layout.engineHomes, "session-costs", `${EngineId.ClaudeCode}.json`),
         // The app is the one caller that owns the homes the boot sweep touches.
@@ -1421,6 +1442,8 @@ export class StudioCore {
    * Resolves whether the self that booted was rewound (or reset) rather than the one on disk.
    */
   async #bootHarness(notice: BootNotice, resetHarness: boolean): Promise<boolean> {
+    // A sandbox fault cannot be repaired by rewinding the harness's code.
+    await this.sandbox.ensureReady();
     if (!resetHarness) await this.#recovery.migrateHarnessLayout();
     let rewound = false;
     const bootedCode = resetHarness ? null : await this.#recovery.codeAboutToBoot();
@@ -1485,6 +1508,8 @@ export class StudioCore {
     }
     this.#started = false;
     this.plugins?.cancel();
+    // Engine plugins' sandbox jobs are the studio's own: none outlives it.
+    await this.plugins?.sandboxJobs?.stopAll().catch(() => {});
     this.#consent.cancel({}, "stop");
     this.#permissions.cancel({}, ToolPermissionBy.Stop);
     if (this.#x.idleTimer) clearInterval(this.#x.idleTimer);
