@@ -3126,6 +3126,12 @@ Local Blender:
 - `blender__model`'s `script` is the path of a `.py` in the game (`assets/src/<name>.py` when left
   out). Code passed as the script, a path the host would refuse, and a path that is no regular file
   of the game are refused before anything runs, in words that say to write the file first.
+- It finds Blender on a Mac in Applications, and on Windows in Program Files (`Blender Foundation/
+  Blender */`), beside the program `.blend` files open with, in its Microsoft Store package, Steam
+  or Scoop, or wherever the person chose `blender.exe` (the `program` setting, Choose Blender… on
+  its card). It pins Blender's Mac `.dmg` and Windows x64 and arm64 zips. On a Windows PC with no
+  OpenGL 4.3 driver Workbench crashes Blender, so the wrapper checks with a child Blender first and
+  renders with Cycles on the CPU instead.
 - Run Blender through the tool: in a worker's sandbox Blender started from a shell cannot reach the
   GPU (Metal) and crashes while it picks its GPU backend at startup, even with `-b`. The tool's jobs
   run in the native-job sandbox, which allows the GPU.
@@ -3160,6 +3166,18 @@ answers `{started: true}` as the download starts and the installation record say
 since a call's deadline must not cut the download short. An agent cannot choose a binary, download
 URL or installation action: either way the manifest's pinned one is installed.
 
+A candidate (`native-candidates.ts`) is an absolute POSIX path (skipped on Windows), a path under
+`home:`, `studio:`, `storage:` or, on Windows, `programfiles:`, `programfilesx86:` and
+`localappdata:`; a path beside the program Windows opens a file type with (`opens:.blend/…`, from
+the registry's open command); a path inside this user's Microsoft Store package whose name starts so
+(`package:<name>/…`, from its `PackageRootFolder`); or `setting:<key>`, the absolute path the person
+chose in one of the plugin's declared string settings. One segment may hold one `*` (`Blender *`),
+every match tried newest name first. A runtime pins one download (`install`, read as macOS Apple
+Silicon) or one per platform (`installs`, each with its `platform`: `darwin-arm64`, `win32-x64`,
+`win32-arm64`; at most four, one per platform) as a `dmg`, `tar.gz` or `zip`; Windows unpacks with
+its own `tar.exe`. `runtime.detect` answers the pin for this computer as `download` (none where the
+manifest pins none), and an install there is refused in words that say to install it yourself.
+
 `nativeJobs` declares fixed argument arrays with package/input/output/value bindings, validated
 value patterns, input/output names, deadline, byte limits and optional GPU access. `native.run`
 stages only declared project input files; the child receives no full-project read grant.
@@ -3191,6 +3209,13 @@ each opened without following links and checked by device and inode (`copyDeclar
 link, a hard-linked file or a file swapped during delivery is refused. A pinned `.dmg` runtime is
 copied with its relative links kept (`copyRuntimeTree`; a link out of the runtime is refused) and
 probed after the image is detached.
+On Windows a managed job runs in the process sandbox like every other agent process
+(`runSandboxedNativeProcess`: srt-win as the sandbox user, through Git Bash), with no network. Its
+staged inputs, outputs, scratch and the plugin's package files live in the profile's `native-work`
+folder, writable from the sandbox's start; pinned runtimes unpack into `native-runtimes`, readable
+from the start, so an install never waits for a regrant. A runtime found elsewhere in the person's
+profile is granted for reading when detected; one under Program Files or a Store package is readable
+as it is. Output goes to log files whose tails are kept, and `gpu` grants nothing more.
 A runtime's version is `x.y.z` or `x.y` (read as `x.y.0`). An enabled plugin's runtime also starts a
 bridge game whose `studio.json` play names it as its `engine` (docs/play-protocol.md): the studio
 detects it as above and runs it long-lived in the same profile with the GPU, its stdio open.

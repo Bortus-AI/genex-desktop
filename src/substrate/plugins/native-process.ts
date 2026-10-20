@@ -7,6 +7,8 @@ import { promisify } from "node:util";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { StudioPlatform } from "../../shared/boot.ts";
 import { killProcessTree } from "../process-tree.ts";
+import { type ProcessSandbox, shellQuote } from "../spawn.ts";
+import { mixedPath } from "../windows-sandbox.ts";
 const quote = (s: string) => JSON.stringify(s);
 const exec = promisify(execFile);
 /**
@@ -475,4 +477,67 @@ export async function runNativeProcess(p: NativeProcessRequest): Promise<NativeP
     });
     superviseJob(child, p, resolve, reject);
   });
+}
+
+/** The part of the process sandbox (`ProcessSandbox`) a Windows native job runs in. */
+export type NativeJobSandbox = Pick<ProcessSandbox, "run" | "allowRead">;
+
+/**
+ * A native job on Windows: the runtime started by Git Bash inside the process sandbox, as the
+ * sandbox user (srt-win), with no network, the run's temp folders in its scratch, and srt-win's
+ * job object holding its whole tree. `reads` and `writes` are the folders the run needs granted:
+ * the sandbox refuses the run when its grants do not cover them yet (`SandboxLaunchCode.NotGranted`),
+ * because srt-win changes grants only while no sandboxed command runs. Folders every Windows user
+ * reads (Program Files) need no grant and are not listed.
+ */
+export async function runSandboxedNativeProcess(
+  sandbox: NativeJobSandbox,
+  p: NativeProcessRequest,
+): Promise<NativeProcessResult> {
+  p.signal.throwIfAborted();
+  // The sandbox keeps the head of a run's output and a job's record keeps its end (the result line
+  // a runtime prints last), so each stream goes to a file in the job's scratch, read from its end.
+  const logs = { stdout: path.join(p.scratch, "stdout.log"), stderr: path.join(p.scratch, "stderr.log") };
+  const program = [shellQuote(mixedPath(p.binary)), ...p.args.map(shellQuote)].join(" ");
+  const command = `exec ${program} >${shellQuote(mixedPath(logs.stdout))} 2>${shellQuote(mixedPath(logs.stderr))}`;
+  const result = await sandbox.run({
+    command,
+    cwd: p.cwd,
+    env: { TMPDIR: p.scratch, TMP: p.scratch, TEMP: p.scratch },
+    timeoutMs: p.timeoutMs,
+    maxOutputBytes: p.maxOutputBytes,
+    signal: p.signal,
+    label: `native ${path.basename(p.binary)}`,
+    policy: { allowWrite: [...p.writes, p.scratch], allowRead: p.reads, denyRead: p.denyRead },
+  });
+  return {
+    code: result.code,
+    signal: result.signal,
+    stdout: await fileTail(logs.stdout, p.maxOutputBytes),
+    // What the sandbox itself said (a refused launch) comes after what the runtime printed.
+    stderr: (await fileTail(logs.stderr, p.maxOutputBytes)) + result.stderr,
+    reason: sandboxedEndReason(result, p.signal),
+    pid: null,
+  };
+}
+
+/** The last `maxBytes` of a log file as text; empty when the run never wrote it. */
+async function fileTail(file: string, maxBytes: number): Promise<string> {
+  const handle = await open(file, "r").catch(() => null);
+  if (!handle) return "";
+  try {
+    const { size } = await handle.stat();
+    const length = Math.min(size, maxBytes);
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(length), 0, length, size - length);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Why a sandboxed run ended, in a job record's words (`NativeEndReason`, or the signal that ended it). */
+function sandboxedEndReason(result: { timedOut: boolean; signal: NodeJS.Signals | null }, stop: AbortSignal): string {
+  if (stop.aborted) return NativeEndReason.Cancelled;
+  if (result.timedOut) return NativeEndReason.Timeout;
+  return result.signal ? `Runtime terminated by ${result.signal}` : NativeEndReason.Exit;
 }

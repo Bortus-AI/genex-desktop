@@ -12,7 +12,9 @@ import {
   LocalBlenderAction,
   type LocalBlenderStatus,
 } from "../../../shared/local-blender.ts";
-import { NativeRuntimeState, type PluginInfo } from "../../../shared/plugins.ts";
+import { NativeRuntimeState } from "../../../shared/plugins.ts";
+import { StudioPlatform } from "../../../shared/boot.ts";
+import { hostPlatform } from "../../platform.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/icons.tsx";
 import { Pending } from "../../ui/Pending.tsx";
@@ -26,6 +28,11 @@ const MEGABYTE = 1024 * 1024;
 
 /** Where Blender is, as a person knows it: the app, not the binary inside it. */
 const appBundle = (binary: string): string => binary.replace(/(\.app)\/.*$/, "$1");
+
+/** The plugin setting that names the person's own Blender program (`setting:program` in its manifest). */
+const PROGRAM_SETTING = "program";
+/** What Choose Blender asks the file picker for: Blender's program on Windows. */
+const PROGRAM_REQUEST = { title: WORDS.chooseTitle, extensions: ["exe"] };
 
 /** Bytes as the card says them: "346 MB". */
 const megabytes = (bytes: number): string => `${Math.round(bytes / MEGABYTE)} MB`;
@@ -66,7 +73,19 @@ function useBlenderStatus() {
       void refresh();
     }
   };
-  return { status, error, refresh, act };
+  /** Choose file, then use the chosen program as Blender: a cancelled picker changes nothing. */
+  const choose = async (): Promise<void> => {
+    setError("");
+    try {
+      const program = await window.studio.pluginChooseFile(LOCAL_BLENDER_PLUGIN_ID, PROGRAM_REQUEST);
+      if (!program) return;
+      await window.studio.pluginSetSetting(LOCAL_BLENDER_PLUGIN_ID, PROGRAM_SETTING, program);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+    await refresh();
+  };
+  return { status, error, refresh, act, choose };
 }
 
 function Prompt({ title, children, actions }: { title: ReactNode; children?: ReactNode; actions?: ReactNode }) {
@@ -86,16 +105,18 @@ function notReadyWords(runtime: LocalBlenderStatus["runtime"], pinned: string, s
   if (runtime.state === NativeRuntimeState.Incompatible)
     return { title: WORDS.oldTitle(runtime.version ?? ""), text: WORDS.oldText(pinned, size) };
   if (runtime.state === NativeRuntimeState.Failed) return { title: WORDS.failedTitle, text: runtime.detail };
+  if (!pinned) return { title: WORDS.missingTitle, text: WORDS.missingOwnText };
   return { title: WORDS.missingTitle, text: WORDS.missingText(pinned, size) };
 }
 
 /** The card's body for where Blender stands: ready, downloading, or missing (or too old) with Download. */
-function RuntimeBody({ plugin, blender }: { plugin: PluginInfo; blender: ReturnType<typeof useBlenderStatus> }) {
+function RuntimeBody({ blender }: { blender: ReturnType<typeof useBlenderStatus> }) {
   const { status } = blender;
-  const install = plugin.manifest.nativeRuntimes?.[0]?.install;
+  if (!status) return <Pending label={WORDS.checking} className="genex-checking" spinner />;
+  // The download Genex pins for this computer, as the host found it; none where it pins none.
+  const install = status.runtime.download;
   const pinned = /(\d+\.\d+\.\d+)/.exec(install?.url ?? "")?.[1] ?? "";
   const size = install ? megabytes(install.bytes) : "";
-  if (!status) return <Pending label={WORDS.checking} className="genex-checking" spinner />;
   const job = status.installation;
   if (job?.active)
     return (
@@ -130,15 +151,20 @@ function RuntimeBody({ plugin, blender }: { plugin: PluginInfo; blender: ReturnT
       </Prompt>
     );
   const { title, text } = notReadyWords(runtime, pinned, size);
+  // On Windows Blender is a program anywhere on disk, so the person can point at their own.
+  const canChoose = hostPlatform() === StudioPlatform.Windows;
   return (
     <Prompt
       title={title}
       actions={
-        install && (
-          <Button variant="default" size="default" onClick={() => void blender.act(install.action)}>
-            {WORDS.download}
-          </Button>
-        )
+        <>
+          {install && (
+            <Button variant="default" size="default" onClick={() => void blender.act(install.action)}>
+              {WORDS.download}
+            </Button>
+          )}
+          {canChoose && <Button onClick={() => void blender.choose()}>{WORDS.choose}</Button>}
+        </>
       }
     >
       <p>{text}</p>
@@ -147,7 +173,7 @@ function RuntimeBody({ plugin, blender }: { plugin: PluginInfo; blender: ReturnT
 }
 
 /** Local Blender's setup card, first on its page. */
-export function BlenderRuntimeCard({ plugin }: { plugin: PluginInfo }): JSX.Element {
+export function BlenderRuntimeCard(): JSX.Element {
   const blender = useBlenderStatus();
   const state = blender.status?.installation?.active ? "downloading" : blender.status?.runtime.state;
   return (
@@ -157,7 +183,7 @@ export function BlenderRuntimeCard({ plugin }: { plugin: PluginInfo }): JSX.Elem
       aria-live="polite"
       aria-label={WORDS.card}
     >
-      <RuntimeBody plugin={plugin} blender={blender} />
+      <RuntimeBody blender={blender} />
       {blender.error && (
         <p role="alert" className="genex-error">
           {blender.error}

@@ -104,7 +104,7 @@ function GenericDetail({
   return (
     <>
       <PluginNotes detail={detail} />
-      {blender && isActive(detail) && <BlenderRuntimeCard plugin={detail} />}
+      {blender && isActive(detail) && <BlenderRuntimeCard />}
       <div className="extensions-detail-actions">
         <AccountStep plugin={detail} page={page} />
         <UpdateButton detail={detail} page={page} />
