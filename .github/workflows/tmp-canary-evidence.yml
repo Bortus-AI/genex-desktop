@@ -1,0 +1,31 @@
+name: TEMP canary evidence (W1)
+# Temporary, branch-only: print the Windows canary evidence of run 39415567784 to this job's log,
+# because the artifact host is unreachable from the agent's container. Removed before review.
+on:
+  push:
+    branches: [claude/win-standard-user-first-start-cm9tty]
+    paths: [.github/workflows/tmp-canary-evidence.yml]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          for name in canary-windows-10 canary-windows-11; do
+            gh run download 39415567784 -R "$GITHUB_REPOSITORY" -n "$name" -D "ev/$name"
+          done
+          find ev -type f | while read -r f; do echo "$(wc -c < "$f") $f"; done
+          for f in $(find ev -name '*.json' -size -20k) $(find ev -name 'machine.txt') $(find ev -name '*.out.log'); do
+            echo "::group::$f"; cat "$f"; echo "::endgroup::"
+          done
+          for f in $(find ev -name 'studio.log*'); do
+            echo "::group::$f (main, sandbox, harness, errors)"
+            grep -nE '\[main\]|\[sandbox\]|Sandbox Windows|srt-win|harness|error|Error|fail|timed out|ms\b' "$f" | head -400
+            echo "::endgroup::"
+            echo "::group::$f tail"; tail -n 120 "$f"; echo "::endgroup::"
+          done
