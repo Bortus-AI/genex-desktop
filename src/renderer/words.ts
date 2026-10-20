@@ -3066,6 +3066,15 @@ export const PUBLISH_PLATFORM_WORDS = {
     `Make a ${players} app of ${title} so I can publish it for ${players} players.`,
   /** Who plays what once it is published: "Mac and Windows players get the web version." */
   reach: (players: string) => `${players} players get the web version.`,
+  /** The apps Publish sends too: "Mac app", "Mac and Windows apps". */
+  apps: (players: readonly string[]) =>
+    players.length > 1 ? `${NATIVE_WORDS.platforms(players)} apps` : `${players[0] ?? ""} app`,
+  alsoSends: (apps: string) => `Publish also sends the ${apps}.`,
+  sending: "Sending…",
+  sent: "On Genex",
+  sentLabel: (name: string) => `${name}: on Genex for desktop players`,
+  failed: "Not sent",
+  failedLine: (name: string, error: string) => `Couldn’t send the ${name}: ${error}`,
 } as const;
 
 /** Each kind of space freeing deletes: its name and what it is. */

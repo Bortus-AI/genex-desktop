@@ -582,4 +582,40 @@ export interface GenexPublishState {
    * Absent from a Genex plugin older than covers.
    */
   cover?: GenexCoverRecord;
+  /**
+   * The game's Mac and Windows apps as its last publish sent them, answered beside the record like
+   * the cover. Absent from a Genex plugin older than native builds.
+   */
+  native?: GenexNativeRecord;
+}
+
+/** One app a publish sent: live for desktop players under `version`. */
+export interface GenexNativeSent {
+  platform: string;
+  arch: string;
+  version: string;
+  sizeBytes: number;
+  publishedAt: string;
+}
+
+/** One app a publish could not send, and Genex's or the CLI's words for why. */
+export interface GenexNativeFailure {
+  platform: string;
+  arch: string;
+  error: string;
+}
+
+/**
+ * A publish's apps (`genex native publish`): they go after the web build is public, one at a time,
+ * and an app that fails never fails the publish. `supported` is false while Studio's pinned CLI is
+ * older than native builds: the dialog then says they are coming soon and nothing is sent.
+ */
+export interface GenexNativeRecord {
+  supported: boolean;
+  /** Apps are being sent now. */
+  sending: boolean;
+  /** The publish the record belongs to; absent before any. */
+  jobId?: string;
+  sent: GenexNativeSent[];
+  failed: GenexNativeFailure[];
 }

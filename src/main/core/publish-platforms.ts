@@ -1,7 +1,8 @@
 /**
- * The Publish dialog's platform rows for one game (`studio:publish.platforms`): the web build as
- * Publish already sends it, and the Mac and Windows apps the game folder holds, each ready, built
- * before the game's last change, or not built yet. Read from the folder only; nothing is built or
+ * The Publish dialog's platform rows for one game (`studio:plugins.genex-publish-platforms`): the
+ * web build as Publish sends it, and the Mac and Windows apps the game folder holds, each ready,
+ * built before the game's last change, or not built yet. A ready app goes with Publish once the
+ * pinned Genex CLI can send apps (`publishedApps`). Read from the folder only; nothing is built or
  * uploaded here.
  */
 import { readdir, stat } from "node:fs/promises";
@@ -9,6 +10,7 @@ import path from "node:path";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { NativePlatform } from "../../shared/play-native.ts";
 import { publishesAsWebGame } from "../../shared/project-workspace.ts";
+import { pinnedCliSendsApps } from "../../plugins/genex/native-publish.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../shared/publish-platforms.ts";
 import type { StudioCore } from "../studio-core.ts";
 import { type FoundBuild, findNativeBuilds } from "./native-builds.ts";
@@ -65,11 +67,12 @@ async function lastChange(root: string, builds: readonly FoundBuild[]): Promise<
   return newest;
 }
 
-/** A platform's row from its newest build, or its missing row. */
+/** A platform's row from its newest build, or its missing row; a ready build goes with Publish when the CLI sends apps. */
 function nativeRow(
   target: typeof PublishTarget.Mac | typeof PublishTarget.Windows,
   build: FoundBuild | undefined,
   changed: number,
+  sendsApps: boolean,
 ): PublishPlatform {
   if (!build)
     return { target, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null, uploads: false };
@@ -80,8 +83,25 @@ function nativeRow(
     arch: build.arch,
     bytes: build.bytes,
     builtAt: new Date(build.builtAt).toISOString(),
-    // genex.games does not take native builds yet: the row shows its state and publishes nothing.
-    uploads: false,
+    // A build older than the game's last change is not what players should get: it stays here.
+    uploads: sendsApps && !stale,
+  };
+}
+
+/** What a game's folder holds for Publish: whether it is a web game, its newest app per platform, its last change. */
+async function folderFacts(core: Pick<StudioCore, "games" | "pluginBinding">, project: unknown) {
+  if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame);
+  const game = (await core.games.list()).find((listed) => listed.name === project);
+  const binding = game ? await core.pluginBinding(project) : undefined;
+  if (!game || !binding) throw new Error(MESSAGE.NoGame);
+  const builds = await findNativeBuilds(binding.directory);
+  const changed = await lastChange(binding.directory, builds);
+  const newest = (platform: NativePlatform) => builds.find((build) => build.platform === platform);
+  return {
+    web: publishesAsWebGame(game),
+    mac: newest(NativePlatform.Mac),
+    windows: newest(NativePlatform.Windows),
+    changed,
   };
 }
 
@@ -89,15 +109,9 @@ function nativeRow(
 export async function publishPlatforms(
   core: Pick<StudioCore, "games" | "pluginBinding">,
   project: unknown,
+  sendsApps = pinnedCliSendsApps(),
 ): Promise<PublishPlatform[]> {
-  if (typeof project !== "string" || !project) throw new Error(MESSAGE.NoGame);
-  const game = (await core.games.list()).find((listed) => listed.name === project);
-  const binding = game ? await core.pluginBinding(project) : undefined;
-  if (!game || !binding) throw new Error(MESSAGE.NoGame);
-  const builds = await findNativeBuilds(binding.directory);
-  const changed = await lastChange(binding.directory, builds);
-  const web = publishesAsWebGame(game);
-  const newest = (platform: NativePlatform) => builds.find((build) => build.platform === platform);
+  const { web, mac, windows, changed } = await folderFacts(core, project);
   return [
     {
       target: PublishTarget.Web,
@@ -107,7 +121,22 @@ export async function publishPlatforms(
       builtAt: null,
       uploads: web,
     },
-    nativeRow(PublishTarget.Mac, newest(NativePlatform.Mac), changed),
-    nativeRow(PublishTarget.Windows, newest(NativePlatform.Windows), changed),
+    nativeRow(PublishTarget.Mac, mac, changed, sendsApps),
+    nativeRow(PublishTarget.Windows, windows, changed, sendsApps),
   ];
+}
+
+/**
+ * The apps a Publish of `project` sends, by their place in its folder: each platform's newest build
+ * that is not older than the game's last change. None while the CLI cannot send apps.
+ */
+export async function publishedApps(
+  core: Pick<StudioCore, "games" | "pluginBinding">,
+  project: unknown,
+  sendsApps = pinnedCliSendsApps(),
+): Promise<string[]> {
+  if (!sendsApps) return [];
+  const { mac, windows, changed } = await folderFacts(core, project);
+  const fresh = (build: FoundBuild | undefined) => build !== undefined && changed - build.builtAt <= STALE_AFTER_MS;
+  return [mac, windows].filter(fresh).map((build) => build?.entry ?? "");
 }

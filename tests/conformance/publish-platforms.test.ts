@@ -8,12 +8,14 @@ import assert from "node:assert/strict";
 import { mkdir, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { publishPlatforms } from "../../src/main/core/publish-platforms.ts";
+import { publishedApps, publishPlatforms } from "../../src/main/core/publish-platforms.ts";
+import type { GenexNativeRecord } from "../../src/shared/genex.ts";
 import { MINUTE_MS } from "../../src/shared/duration.ts";
 import { CoreFact } from "../../src/shared/project-facts.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../src/shared/publish-platforms.ts";
 import {
+  failureLines,
   listsPlatforms,
   makeAppAsk,
   PlatformEnd,
@@ -66,7 +68,7 @@ describe("Publish's platform rows from the game folder", () => {
     const root = await tmpDir("publish-platforms-");
     await source(root, "src/main.js", T0);
     await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0 + 10 * MINUTE_MS);
-    const rows = byTarget(await publishPlatforms(coreWith("dust", root, []), "dust"));
+    const rows = byTarget(await publishPlatforms(coreWith("dust", root, []), "dust", false));
     assert.deepEqual(
       [rows.web.state, rows.web.uploads],
       [PublishPlatformState.Ready, true],
@@ -75,7 +77,7 @@ describe("Publish's platform rows from the game folder", () => {
     assert.equal(rows.mac.state, PublishPlatformState.Ready);
     assert.equal(rows.mac.arch, NativeArch.Universal);
     assert.ok(rows.mac.bytes > 0);
-    assert.equal(rows.mac.uploads, false, "genex.games does not take apps yet");
+    assert.equal(rows.mac.uploads, false, "a CLI without `genex native` sends no app");
     assert.deepEqual(
       [rows.windows.state, rows.windows.bytes, rows.windows.builtAt],
       [PublishPlatformState.Missing, 0, null],
@@ -103,6 +105,19 @@ describe("Publish's platform rows from the game folder", () => {
     assert.equal(rows.mac.state, PublishPlatformState.Ready);
   });
 
+  it("sends a ready app with Publish once the CLI can, and never one built before the last change", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await source(root, "Assets/Scripts/Player.cs", T0);
+    await macApp(path.join(root, "Builds", "Mac"), "Dust Runners", T0 + 10 * MINUTE_MS);
+    const core = coreWith("dust", root, []);
+    assert.equal(byTarget(await publishPlatforms(core, "dust", true)).mac.uploads, true);
+    assert.deepEqual(await publishedApps(core, "dust", true), ["Builds/Mac/Dust Runners.app"]);
+    assert.deepEqual(await publishedApps(core, "dust", false), [], "an older CLI sends none");
+    await source(root, "Assets/Scripts/Player.cs", T0 + 30 * MINUTE_MS);
+    assert.equal(byTarget(await publishPlatforms(core, "dust", true)).mac.uploads, false);
+    assert.deepEqual(await publishedApps(core, "dust", true), []);
+  });
+
   it("refuses a game that is not in the library", async () => {
     const root = await tmpDir("publish-platforms-");
     const core = coreWith("dust", root, []);
@@ -128,6 +143,14 @@ const MAC: PublishPlatform = {
   bytes: 1.4 * 1024 ** 3,
   builtAt: new Date(T0).toISOString(),
   uploads: false,
+};
+const WINDOWS_READY: PublishPlatform = {
+  target: PublishTarget.Windows,
+  state: PublishPlatformState.Ready,
+  arch: NativeArch.X64,
+  bytes: 900 * 1024 ** 2,
+  builtAt: new Date(T0).toISOString(),
+  uploads: true,
 };
 const WINDOWS: PublishPlatform = {
   target: PublishTarget.Windows,
@@ -170,10 +193,49 @@ describe("Publish's platform rows as the dialog says them", () => {
     assert.equal(listsPlatforms([WEB, MAC, WINDOWS], false), true);
   });
 
-  it("tells which players get the web version while Publish sends only the web build", () => {
+  it("tells which players get the web version, and which apps go with Publish", () => {
     assert.equal(reachLine([WEB, MAC, WINDOWS]), "Mac and Windows players get the web version.");
-    assert.equal(reachLine([WEB, { ...MAC, uploads: true }, WINDOWS]), "Windows players get the web version.");
+    assert.equal(
+      reachLine([WEB, { ...MAC, uploads: true }, WINDOWS]),
+      "Publish also sends the Mac app. Windows players get the web version.",
+    );
+    assert.equal(
+      reachLine([WEB, { ...MAC, uploads: true }, WINDOWS_READY]),
+      "Publish also sends the Mac and Windows apps.",
+    );
     assert.equal(reachLine([{ ...WEB, state: PublishPlatformState.Missing }, MAC, WINDOWS]), null);
+  });
+
+  it("says on an app's row that it is being sent, is on Genex, or was not sent and why", () => {
+    const ready = { ...MAC, uploads: true };
+    const record = (over: Partial<GenexNativeRecord>): GenexNativeRecord => ({
+      supported: true,
+      sending: false,
+      sent: [],
+      failed: [],
+      ...over,
+    });
+    const macEnd = (native?: GenexNativeRecord) => platformRows([WEB, ready, WINDOWS], NOW, native)[1]?.end;
+    assert.equal(macEnd(), PlatformEnd.None, "before Publish, the line under the rows says it goes");
+    assert.equal(macEnd(record({ sending: true })), PlatformEnd.Sending);
+    const live = { platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1, publishedAt: "" };
+    assert.equal(
+      macEnd(record({ sent: [{ ...live, publishedAt: new Date(T0 + MINUTE_MS).toISOString() }] })),
+      PlatformEnd.Sent,
+    );
+    assert.equal(
+      macEnd(record({ sent: [{ ...live, publishedAt: new Date(T0 - MINUTE_MS).toISOString() }] })),
+      PlatformEnd.None,
+      "a build made after the one on Genex goes with the next Publish",
+    );
+    const failed = record({
+      failed: [{ platform: "mac", arch: "", error: "Couldn't get an upload token (HTTP 413)." }],
+    });
+    assert.equal(macEnd(failed), PlatformEnd.Failed);
+    assert.deepEqual(failureLines([WEB, ready, WINDOWS], failed), [
+      "Couldn’t send the Mac app: Couldn't get an upload token (HTTP 413).",
+    ]);
+    assert.deepEqual(failureLines([WEB, ready, WINDOWS], record({})), []);
   });
 
   it("asks the agent for an app in the game's own name", () => {

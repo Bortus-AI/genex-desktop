@@ -195,6 +195,35 @@ describe("Play's native installer", { skip: SKIP }, () => {
     assert.equal(outcomes.length, 1, "installing the same version again does nothing");
   });
 
+  it("installs an app zipped as `genex native publish` packs it, its extended attributes set aside", async () => {
+    const work = await tmpDir("native-app-");
+    const app = await makeApp(work, "Dust Runners");
+    // The CLI zips with ditto --sequesterRsrc: a file's extended attributes travel as __MACOSX/._ entries.
+    await exec("/usr/bin/xattr", [
+      "-w",
+      "com.apple.metadata:kMDItemWhereFroms",
+      "genex",
+      path.join(app, "Contents/Info.plist"),
+    ]);
+    const zip = path.join(work, "Dust-Runners.app.zip");
+    await exec("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, zip]);
+    const archive = await readFile(zip);
+    const listed = await exec("/usr/bin/unzip", ["-Z1", zip]);
+    assert.match(listed.stdout, /^__MACOSX\//m, "the archive carries the attributes beside the app");
+    const build = buildOf("dust-runners", archive);
+    const { installs, root, outcomes } = await installer({ "dust-runners": [build] }, new Map([[build.url, archive]]));
+    await installs.install("dust-runners");
+    await installs.idle();
+    assert.equal(outcomes[0]?.failure, null);
+    assert.deepEqual(await readdir(path.join(root, "dust-runners", "1.0")), ["Dust Runners.app"]);
+    await exec("/usr/bin/codesign", [
+      "--verify",
+      "--deep",
+      "--strict",
+      path.join(root, "dust-runners", "1.0", "Dust Runners.app"),
+    ]);
+  });
+
   it("fails each bad archive with its reason and leaves no game folder", async () => {
     const work = await tmpDir("native-app-");
     const good = await zipApp(await makeApp(work, "Dust Runners"), path.join(work, "good.zip"));

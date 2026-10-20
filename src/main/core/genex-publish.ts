@@ -12,6 +12,8 @@ import { publishesAsWebGame } from "../../shared/project-workspace.ts";
 import { cleanGenexTitle, GENEX_PLUGIN_ID, GenexAction } from "../../shared/genex.ts";
 import { type ExportReview, type PluginBinding, PluginSourceKind } from "../../shared/plugins.ts";
 import type { StudioCore } from "../studio-core.ts";
+import { pinnedCliSendsApps } from "../../plugins/genex/native-publish.ts";
+import { publishedApps } from "./publish-platforms.ts";
 
 /** Why Publish is refused before Genex is asked anything. */
 const MESSAGE = {
@@ -92,19 +94,23 @@ export async function publishReview(core: DialogCore, project: unknown): Promise
 
 /**
  * Publish `project` to the Genex gallery under `title` (cleaned; the plugin picks the name when none is
- * left), after the person approved `review` in the dialog.
+ * left), after the person approved `review` in the dialog. The game's ready apps, which the dialog
+ * lists above its press, go once the web build is public (`publishedApps`).
  */
 export async function publishFromDialog(
   core: DialogCore,
   project: unknown,
   review: unknown,
   title?: unknown,
+  sendsApps = pinnedCliSendsApps(),
 ): Promise<void> {
   if (!isExportReview(review)) throw new Error(MESSAGE.NoFileList);
   const binding = await dialogBinding(core, project);
   const name = cleanGenexTitle(title);
+  const native = await publishedApps(core, binding.project, sendsApps);
+  const args = { ...(name ? { title: name } : {}), ...(native.length > 0 ? { native } : {}) };
   // Genex exports inside this call, so the approval lives exactly as long as it.
   await core.withApprovedExport(GENEX_PLUGIN_ID, binding.project, review, () =>
-    core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishGallery, name ? { title: name } : {}, binding),
+    core.plugins.action(GENEX_PLUGIN_ID, GenexAction.PublishGallery, args, binding),
   );
 }

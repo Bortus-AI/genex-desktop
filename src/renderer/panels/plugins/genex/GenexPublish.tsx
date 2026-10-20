@@ -758,7 +758,7 @@ function PublishBody({
             {problem}
           </p>
         ))}
-        <PublishPlatforms project={project} shown={!celebrate} />
+        <PublishPlatforms project={project} shown={!celebrate} native={record.state?.native} />
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />

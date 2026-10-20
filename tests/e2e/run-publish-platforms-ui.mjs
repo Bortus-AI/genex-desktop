@@ -3,7 +3,9 @@
  * a game made in an engine lists the web, Mac and Windows above the presses, each detail on one
  * line; a built Mac app says "Coming soon" and the line under the rows says its players get the
  * web version; Make with agent sends the ask to the game's chat and the row says it was asked; a
- * build older than the game's last change says so; a web game with no app shows no rows. Dark and
+ * build older than the game's last change says so; once the CLI sends apps, the line says Publish
+ * sends the Mac app and its row says Sending…, On Genex or Not sent (with why); a web game with no
+ * app shows no rows. Dark and
  * light screens.
  */
 import { build } from "esbuild";
@@ -84,12 +86,27 @@ app.whenReady().then(async()=>{
   assert.equal(stale.rows[1].detail,'Built before your last change');
   assert.equal(stale.rows[1].state,'stale');
   report.stale=await capture('dark-stale');
+  // Once the Genex CLI sends apps: Publish says it sends the Mac app, then how the send went.
+  const apps=await step('apps','window.platformsRig.open({scene:"apps"})');
+  assert.equal(apps.reach,'Publish also sends the Mac app. Windows players get the web version.');
+  assert.equal(apps.rows[1].end,null,'nothing at the end before Publish');
+  report.apps=await capture('dark-apps');
+  const sending=await step('appsSending','window.platformsRig.open({scene:"appsSending"})');
+  assert.equal(sending.rows[1].end,'Sending…');
+  const sent=await step('appsSent','window.platformsRig.open({scene:"appsSent"})');
+  assert.equal(sent.rows[1].end,'On Genex');
+  report.appsSent=await capture('dark-apps-sent');
+  const refused=await step('appsFailed','window.platformsRig.open({scene:"appsFailed"})');
+  assert.equal(refused.rows[1].end,'Not sent');
+  assert.deepEqual(refused.failures,["Couldn’t send the Mac app: Couldn't get an upload token (HTTP 413)."]);
+  assert.equal(refused.overflow,false);
+  report.appsFailed=await capture('dark-apps-failed');
   // A web game with no app: the dialog as it was, no rows.
   const plain=await step('web','window.platformsRig.open({scene:"web"})');
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

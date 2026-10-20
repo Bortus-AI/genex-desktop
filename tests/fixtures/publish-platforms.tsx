@@ -15,7 +15,7 @@ import { GenexPublishDialog } from "../../src/renderer/panels/plugins/genex/Gene
 import { studio } from "../../src/renderer/state/studio.ts";
 import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
-import { GenexAction, type GenexPublishState } from "../../src/shared/genex.ts";
+import { GenexAction, type GenexNativeRecord, type GenexPublishState } from "../../src/shared/genex.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import {
@@ -36,8 +36,8 @@ async function settle(frames = 10) {
   for (let i = 0; i < frames; i++) await frame();
 }
 
-/** What the game folder holds in each scene. */
-type Scene = "engine" | "stale" | "web";
+/** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -47,13 +47,13 @@ const web = (uploads: boolean): PublishPlatform => ({
   builtAt: null,
   uploads,
 });
-const mac = (state: PublishPlatformState): PublishPlatform => ({
+const mac = (state: PublishPlatformState, uploads = false): PublishPlatform => ({
   target: PublishTarget.Mac,
   state,
   arch: state === PublishPlatformState.Missing ? null : NativeArch.Universal,
   bytes: state === PublishPlatformState.Missing ? 0 : 1.4 * 1024 ** 3,
   builtAt: state === PublishPlatformState.Missing ? null : new Date(Date.now() - 5 * MINUTE).toISOString(),
-  uploads: false,
+  uploads,
 });
 const windows: PublishPlatform = {
   target: PublishTarget.Windows,
@@ -63,19 +63,41 @@ const windows: PublishPlatform = {
   builtAt: null,
   uploads: false,
 };
+const sendingApps = () => [web(true), mac(PublishPlatformState.Ready, true), windows];
 const SCENES: Record<Scene, () => PublishPlatform[]> = {
   engine: () => [web(true), mac(PublishPlatformState.Ready), windows],
   stale: () => [web(true), mac(PublishPlatformState.Stale), windows],
   web: () => [web(true), mac(PublishPlatformState.Missing), windows],
+  apps: sendingApps,
+  appsSending: sendingApps,
+  appsSent: sendingApps,
+  appsFailed: sendingApps,
 };
+
+/** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
+function appsOf(of: Scene): GenexNativeRecord {
+  const record: GenexNativeRecord = { supported: true, sending: of === "appsSending", sent: [], failed: [] };
+  const at = new Date().toISOString();
+  if (of === "appsSent") record.sent.push({ platform: "mac", arch: "universal", version: "1.0+3f2a9c1d0e4b", sizeBytes: 1, publishedAt: at });
+  if (of === "appsFailed")
+    record.failed.push({ platform: "mac", arch: "", error: "Couldn't get an upload token (HTTP 413)." });
+  return record;
+}
 
 let scene: Scene = "engine";
 let closed = 0;
 const composed: ComposeInChat[] = [];
 window.addEventListener(COMPOSE_IN_CHAT_EVENT, (event) => composed.push((event as CustomEvent<ComposeInChat>).detail));
-const state: GenexPublishState = { version: 1, project: GAME, connected: true, slug: GAME, status: "draft" };
+const state = (): GenexPublishState => ({
+  version: 1,
+  project: GAME,
+  connected: true,
+  slug: GAME,
+  status: "draft",
+  native: appsOf(scene),
+});
 const fake = fakeStudioApi();
-fake.stub("pluginAction", async (_id, name) => (name === GenexAction.PublishStatus ? state : {}));
+fake.stub("pluginAction", async (_id, name) => (name === GenexAction.PublishStatus ? state() : {}));
 fake.stub("genexPublishPlatforms", async () => SCENES[scene]());
 // The row that shares a game's assets on Play reads them too: this game has none.
 fake.stub("assetLibraryStates", async () => ({ project: GAME, states: [], unread: false }));
@@ -112,6 +134,9 @@ function sample() {
     listed: Boolean(list),
     rows,
     reach: list?.querySelector(".genex-publish-reach")?.textContent ?? null,
+    failures: [...(list?.querySelectorAll<HTMLElement>(".genex-publish-platform-failure") ?? [])].map(
+      (line) => line.textContent ?? "",
+    ),
     oneLine: details.every((el) => el.scrollHeight <= Math.ceil(parseFloat(getComputedStyle(el).lineHeight)) + 1),
     order,
     overflow,

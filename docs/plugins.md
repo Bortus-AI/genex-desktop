@@ -3021,10 +3021,18 @@ Genex:
   before your last change" when the game's sources (outside builds, caches and history) changed more
   than a minute after it; or "Not made yet" with Make with agent, which sends "Make a <Platform> app
   of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
-  cover does) and keeps the dialog open, the row then saying "Asked the agent". genex.games takes no native builds yet: a built app says "Coming soon" (`uploads: false`),
-  the line under the rows says its players get the web version, and Publish itself stays with games
-  served as web games. A web game with no app shows no rows. L4: `npm run test:ui --
-  publish-platforms-ui`.
+  cover does) and keeps the dialog open, the row then saying "Asked the agent". A ready app goes
+  with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
+  the rows says "Publish also sends the Mac app."): once the web build is public, the plugin sends
+  each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
+  (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
+  path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
+  and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
+  `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
+  and a stale build stays. While the pinned CLI is older than `genex native` (1.36.10), nothing is
+  sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
+  Publish itself stays with games served as web games. A web game with no app shows no rows. L4:
+  `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose

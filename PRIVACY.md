@@ -187,6 +187,10 @@ After a turn on a game, and as Publish opens, Genex takes a cover picture and, f
 stages its own clip, records a five-second cover clip of it playing. Both stay in the app
 profile; the clip is uploaded to Genex only with a publish.
 
+When Publish lists a game's Mac or Windows app as ready, the same press also uploads that app (the
+build in the game folder, zipped) to genex.games once the web version is live, where people
+playing in the Genex desktop app can install it.
+
 A plugin's staged upload requires a second review showing every included and excluded file.
 Approve only after checking that list and the contents. An unlisted draft is still uploaded to
 a remote service; listing it publicly is a separate confirmation. Hosted retention and account

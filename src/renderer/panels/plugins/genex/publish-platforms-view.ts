@@ -1,9 +1,11 @@
 /**
  * The Publish dialog's platform rows as words (canvas board "Publish"): what each platform's build
- * is, how big, and what the row offers, "Coming soon" for an app genex.games does not take yet and
- * "Make with agent" for one not made. Pure: the dialog draws it, tests read it.
+ * is, how big, and what the row offers: "Make with agent" for an app not made, "Coming soon" while
+ * Studio's Genex CLI cannot send apps, and, for an app Publish sends, whether it is being sent, is on
+ * Genex or was not sent. Pure: the dialog draws it, tests read it.
  */
 import { sizeWords } from "../../../../shared/byte-size.ts";
+import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { NATIVE_WORDS, PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 
@@ -17,6 +19,12 @@ export const PlatformEnd = {
   Soon: "soon",
   /** Not made: the agent can make it. */
   Make: "make",
+  /** Publish is sending it now. */
+  Sending: "sending",
+  /** On Genex: this build is what desktop players get. */
+  Sent: "sent",
+  /** The last Publish could not send it. */
+  Failed: "failed",
 } as const;
 export type PlatformEnd = (typeof PlatformEnd)[keyof typeof PlatformEnd];
 
@@ -45,14 +53,30 @@ function nativeDetail(row: PublishPlatform & { target: NativeTarget }, now: numb
   return [runsOn, built].filter(Boolean).join(" · ");
 }
 
-/** What a native row offers: making it while missing, else "Coming soon" until Publish sends it. */
-function nativeEnd(row: PublishPlatform): PlatformEnd {
-  if (row.state === PublishPlatformState.Missing) return PlatformEnd.Make;
-  return row.uploads ? PlatformEnd.None : PlatformEnd.Soon;
+/** Whether a record's entry is for `row`'s platform. */
+const forRow = (row: PublishPlatform) => (entry: { platform: string }) => entry.platform === row.target;
+
+/** Where an app Publish sends stands: being sent, on Genex (this build or a newer one), or not sent. */
+function sendEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
+  const sent = native?.sent.find(forRow(row));
+  const builtAt = row.builtAt ? Date.parse(row.builtAt) : 0;
+  if (sent && Date.parse(sent.publishedAt) >= builtAt) return PlatformEnd.Sent;
+  if (native?.sending) return PlatformEnd.Sending;
+  return native?.failed.some(forRow(row)) ? PlatformEnd.Failed : PlatformEnd.None;
 }
 
-/** The rows in the order they come, each as words. */
-export function platformRows(platforms: readonly PublishPlatform[], now: number): PlatformRow[] {
+/** What a native row offers: making it while missing, "Coming soon" while it cannot go, else how its send stands. */
+function nativeEnd(row: PublishPlatform, native: GenexNativeRecord | undefined): PlatformEnd {
+  if (row.state === PublishPlatformState.Missing) return PlatformEnd.Make;
+  return row.uploads ? sendEnd(row, native) : PlatformEnd.Soon;
+}
+
+/** The rows in the order they come, each as words; `native` is how the last Publish's apps went. */
+export function platformRows(
+  platforms: readonly PublishPlatform[],
+  now: number,
+  native?: GenexNativeRecord,
+): PlatformRow[] {
   return platforms.map((row) => {
     if (!isNative(row)) {
       const ready = row.state === PublishPlatformState.Ready;
@@ -71,7 +95,7 @@ export function platformRows(platforms: readonly PublishPlatform[], now: number)
       detail: nativeDetail(row, now),
       size: row.bytes > 0 && row.state !== PublishPlatformState.Missing ? sizeWords(row.bytes) : null,
       state: row.state,
-      end: nativeEnd(row),
+      end: nativeEnd(row, native),
     };
   });
 }
@@ -83,12 +107,28 @@ export function platformRows(platforms: readonly PublishPlatform[], now: number)
 export const listsPlatforms = (platforms: readonly PublishPlatform[], engineGame: boolean): boolean =>
   engineGame || platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
 
-/** The line under the rows: whose players get the web version, while Publish sends the web build. */
+/** The line under the rows: the apps Publish sends too, and whose players get the web version. */
 export function reachLine(platforms: readonly PublishPlatform[]): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
   if (web?.state !== PublishPlatformState.Ready) return null;
-  const players = platforms.filter((row) => isNative(row) && !row.uploads).map((row) => playersOf(row.target));
-  return players.length > 0 ? WORDS.reach(NATIVE_WORDS.platforms(players)) : null;
+  const native = platforms.filter(isNative);
+  const sending = native.filter((row) => row.uploads).map((row) => playersOf(row.target));
+  const webOnly = native.filter((row) => !row.uploads).map((row) => playersOf(row.target));
+  const lines = [
+    sending.length > 0 ? WORDS.alsoSends(WORDS.apps(sending)) : null,
+    webOnly.length > 0 ? WORDS.reach(NATIVE_WORDS.platforms(webOnly)) : null,
+  ].filter((line): line is string => line !== null);
+  return lines.length > 0 ? lines.join(" ") : null;
+}
+
+/** A line for each app the last Publish could not send, in the CLI's words. */
+export function failureLines(platforms: readonly PublishPlatform[], native: GenexNativeRecord | undefined): string[] {
+  return platforms
+    .filter((row) => isNative(row) && row.uploads && sendEnd(row, native) === PlatformEnd.Failed)
+    .map((row) => {
+      const error = native?.failed.find(forRow(row))?.error ?? "";
+      return WORDS.failedLine(WORDS.name[row.target], error);
+    });
 }
 
 /** The players a native row is for: "Mac", "Windows". */

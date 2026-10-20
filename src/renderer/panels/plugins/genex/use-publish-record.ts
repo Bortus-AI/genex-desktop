@@ -51,8 +51,10 @@ export function usePublishRecord(plugin: PluginInfo, project: string | null) {
       setReadError(words(e));
     }
   }, [id, project]);
-  // A Publish press shows its first steps (preparing the copy) while the press itself still runs.
-  const busy = (state ? publishView(state).running : false) || pressing === Pressing.Publish;
+  // A Publish press shows its first steps (preparing the copy) while the press itself still runs,
+  // and the game's apps going behind its web build are followed as closely as the build.
+  const sendingApps = state?.native?.sending === true;
+  const busy = (state ? publishView(state).running : false) || sendingApps || pressing === Pressing.Publish;
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), busy ? RUNNING_POLL_MS : IDLE_POLL_MS);

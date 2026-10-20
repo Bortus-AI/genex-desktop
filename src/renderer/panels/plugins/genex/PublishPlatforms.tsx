@@ -2,12 +2,14 @@
  * The Publish dialog's platforms (canvas board "Publish"): the web, Mac and Windows rows read from
  * the game folder, each with what its build runs on, when it was built and its size. An app not made
  * yet offers "Make with agent", which sends the ask through the game's chat at once and keeps the
- * dialog open, the row then saying it was asked; a built app genex.games does not take yet says
- * "Coming soon", and the line under the rows says its players get the web version. A web game with
- * no app shows none of this.
+ * dialog open, the row then saying it was asked. A ready app goes with Publish once its web build is
+ * public: the line under the rows says so, and its row then says it is being sent, is on Genex, or
+ * was not sent (with why, under the rows). While Studio's Genex CLI cannot send apps, a built one
+ * says "Coming soon" and its players get the web version. A web game with no app shows none of this.
  */
 import type { JSX } from "react";
 import { useState } from "react";
+import type { GenexNativeRecord } from "../../../../shared/genex.ts";
 import { type PublishPlatform, PublishTarget } from "../../../../shared/publish-platforms.ts";
 import { composeInChat } from "../../../compose-in-chat.ts";
 import { useLibrary } from "../../../state/hooks.ts";
@@ -15,6 +17,7 @@ import { Icon, type IconName } from "../../../ui/icons.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { PUBLISH_PLATFORM_WORDS } from "../../../words.ts";
 import {
+  failureLines,
   listsPlatforms,
   makeAppAsk,
   PlatformEnd,
@@ -50,7 +53,15 @@ function usePublishPlatforms(project: string): PublishPlatform[] | null {
   return platforms;
 }
 
-/** What a row offers at its end: "Coming soon", Make with agent, or that the agent was asked. */
+/** The quiet words a row ends with, by what it says: each with its words for a screen reader. */
+const NOTE: Partial<Record<PlatformEnd, { text: string; label: (name: string) => string }>> = {
+  [PlatformEnd.Soon]: { text: WORDS.soon, label: WORDS.soonLabel },
+  [PlatformEnd.Sending]: { text: WORDS.sending, label: (name) => `${name}: ${WORDS.sending}` },
+  [PlatformEnd.Sent]: { text: WORDS.sent, label: WORDS.sentLabel },
+  [PlatformEnd.Failed]: { text: WORDS.failed, label: (name) => `${name}: ${WORDS.failed}` },
+};
+
+/** What a row ends with: a note ("Coming soon", "On Genex"…), Make with agent, or that the agent was asked. */
 function End({
   row,
   asked,
@@ -60,10 +71,11 @@ function End({
   asked: boolean;
   onMake: (target: PublishTarget) => void;
 }): JSX.Element | null {
-  if (row.end === PlatformEnd.Soon)
+  const note = NOTE[row.end];
+  if (note)
     return (
-      <span className="genex-publish-platform-note" role="note" aria-label={WORDS.soonLabel(row.name)}>
-        {WORDS.soon}
+      <span className="genex-publish-platform-note" data-end={row.end} role="note" aria-label={note.label(row.name)}>
+        {note.text}
       </span>
     );
   if (row.end !== PlatformEnd.Make) return null;
@@ -114,7 +126,16 @@ function Row({
  * The platform rows and who plays what, or nothing for a web game with no app. Read once while the
  * dialog is open: hidden while it celebrates, they are not read again after.
  */
-export function PublishPlatforms({ project, shown }: { project: string; shown: boolean }): JSX.Element | null {
+export function PublishPlatforms({
+  project,
+  shown,
+  native,
+}: {
+  project: string;
+  shown: boolean;
+  /** How the last Publish's apps went, from the publish record. */
+  native?: GenexNativeRecord | undefined;
+}): JSX.Element | null {
   const engineGame = useLibrary((s) => Boolean(s.games.find((g) => g.name === project)?.engine));
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
   const platforms = usePublishPlatforms(project);
@@ -128,10 +149,15 @@ export function PublishPlatforms({ project, shown }: { project: string; shown: b
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
-        {platformRows(platforms, Date.now()).map((row) => (
+        {platformRows(platforms, Date.now(), native).map((row) => (
           <Row key={row.target} row={row} asked={asked.has(row.target)} onMake={make} />
         ))}
       </ul>
+      {failureLines(platforms, native).map((line) => (
+        <p key={line} className="genex-publish-platform-failure">
+          {line}
+        </p>
+      ))}
       {reach && <p className="genex-publish-reach">{reach}</p>}
     </div>
   );
