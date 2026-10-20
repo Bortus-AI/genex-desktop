@@ -16,7 +16,7 @@ the setup screen opens on `git-missing`. What differs from macOS:
   or a disposed member's folders, queue one `reset()` + `initialize()` that runs once no command
   holds the session; the last member out releases everything. A per-run grant outside the
   session's roots is refused (`not-granted`); network changes stay live (`updateConfig`).
-  `initialize()` is tried up to three times only when srt-win's egress check (`wfp`) times out; a
+  `initialize()` is tried a second time only when srt-win's egress check (`wfp`) times out; a
   timed-out ACL step fails at once, since a retry would repeat its walk under each folder srt-win
   grants and each denied path's parent.
 - Core startup awaits `ProcessSandbox.ensureReady()` before migrating or booting the harness.
@@ -25,10 +25,13 @@ the setup screen opens on `git-missing`. What differs from macOS:
   uses its existing recovery once the sandbox is ready.
 - The version-guarded [SRT patch](../scripts/patch-sandbox-runtime.mjs) runs initialization,
   failed-initialization rollback, launcher rollback and session reset ACL commands asynchronously.
-  Revoke and restore each keep their 60-second deadline, holder PID, SID and best-effort outcomes;
-  a slow cleanup must not hold Electron's main thread. The actual process `exit` event retains
-  synchronous cleanup, since promises cannot finish there. Partial grants remain eligible for
-  that exit cleanup while initialization or its rollback is pending.
+  Revoke and restore each keep their holder PID, SID and best-effort outcomes; a slow cleanup must
+  not hold Electron's main thread. Every srt-win ACL call (grant, stamp, revoke and restore, sync
+  and async) and the egress check wait two minutes instead of SRT's 60 and 30 seconds
+  (`SRT_WIN_TIMEOUT_MS`), so a slow disk, an antivirus scan or a cold first start as the sandbox
+  user does not fail a start; srt-win's setup, status and `trust-ca` calls keep SRT's. The actual
+  process `exit` event retains synchronous cleanup, since promises cannot finish there. Partial
+  grants remain eligible for that exit cleanup while initialization or its rollback is pending.
 - srt-win starts every command as `srt-sandbox` through CreateProcessWithLogonW, which the
   Secondary Logon service (`seclogon`) carries out; where hardening disabled it, Windows refuses
   every start ("Access is denied"). The setup check (`windowsSetupGaps`) reads its start type with
@@ -85,8 +88,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   toolchain, a games folder full of `node_modules`), and took it back at every exit; its stamp
   puts an inheritable FILE_DELETE_CHILD deny on each denied path's parent, which Windows passes
   down through everything under it, once per path: for `.ssh` or `.claude` the whole profile, for
-  a game's `.claude` the whole game. Either ran past srt-win's 60-second deadline on a large
-  profile ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)),
+  a game's `.claude` the whole game. Either ran past srt-win's deadline (SRT's 60 seconds; two
+  minutes now, above) on a large profile ([sandbox-runtime#457](https://github.com/anthropic-experimental/sandbox-runtime/issues/457)),
   in the background start behind the open window. Genex grants a folder to the sandbox users'
   group, passed down through what is under it (read and run, or with write and delete, without
   FILE_DELETE_CHILD, as srt-win's grants), and marks its write grants safe for Git, as srt-win
