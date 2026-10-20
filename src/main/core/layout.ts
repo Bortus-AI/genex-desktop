@@ -30,6 +30,11 @@ export type StudioLayout = {
   nativeWork: string;
   /** Windows: plugins' pinned native runtimes (Local Blender's Blender), readable by the process sandbox. */
   nativeRuntimes: string;
+  /**
+   * Games from Play installed on this computer, one folder per game with its saves beside it
+   * (`main/play/native-installs.ts`). Outside every agent-writable root, like `jobs`.
+   */
+  installedGames: string;
 };
 
 export function layoutFor(userData: string): StudioLayout {
@@ -48,5 +53,6 @@ export function layoutFor(userData: string): StudioLayout {
     reviewers: path.join(userData, "reviewers"),
     nativeWork: path.join(userData, "native-work"),
     nativeRuntimes: path.join(userData, "native-runtimes"),
+    installedGames: path.join(userData, "installed-games"),
   };
 }

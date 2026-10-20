@@ -137,6 +137,8 @@ export function nativeSandboxProfile(p: {
   extensions?: string[];
   denied: string[];
   gpu: boolean;
+  /** A game from Play: what it adds to a job's profile (`gameRules`). */
+  game?: GameSandbox;
 }): string {
   const subpaths = (values: string[]) => values.map((v) => `(subpath ${quote(v)})`).join(" ");
   const prefixes = (p.writePrefixes ?? []).filter((v) => PLAIN_PREFIX.test(v));
@@ -174,8 +176,60 @@ export function nativeSandboxProfile(p: {
         ]
       : []),
     ...(p.denied.length ? [`(deny file-read* ${subpaths(p.denied)})`] : []),
+    ...(p.game ? gameRules(p.game) : []),
     "(deny network*)",
   ].join("\n");
+}
+
+/** What a game from Play adds to a job's profile. */
+export interface GameSandbox {
+  /** Its bundle id, its own preference domain: Genex gives every installed game `games.genex.play.<slug>`. */
+  bundleId: string;
+  /** Its bundle name: macOS names the folders an atomic save goes through after it. */
+  bundleName: string;
+  /** The person's temporary folder (`DARWIN_USER_TEMP_DIR`) by its real path, where those folders are. */
+  userTemp: string;
+}
+
+/** A game's own preference domain: Genex's prefix and a slug. */
+const GAME_DOMAIN = /^games\.genex\.play\.[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$/;
+/** A bundle name the atomic-save rule may name: plain words, so it cannot change the rule's meaning. */
+const PLAIN_BUNDLE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}$/;
+/**
+ * The preference domains every game reads but never writes: the system's global defaults and the
+ * accessibility, input and graphics settings AppKit reads while a window opens.
+ */
+const GAME_GLOBAL_PREFERENCES = [
+  "kCFPreferencesAnyApplication",
+  "com.apple.universalaccess",
+  "com.apple.accessibility",
+  "com.apple.hitoolbox",
+  "com.apple.coregraphics",
+  "com.apple.gms.availability",
+];
+/** System folders a game reads beside a job's: keyboard layouts, input methods and audio plug-ins. */
+export const GAME_SYSTEM_READS = ["/Library/Keyboard Layouts", "/Library/Input Methods", "/Library/Audio"];
+
+/** A regular expression's special characters escaped, for a Seatbelt `regex`. */
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * A game's rules: read and write its own preferences (and read the system's), ask the system for
+ * facts such as free space, and use the temporary folders macOS makes for its atomic saves. A
+ * domain or name that is not plain gets no rule: that game's preferences or atomic saves fail.
+ */
+function gameRules(game: GameSandbox): string[] {
+  const own = GAME_DOMAIN.test(game.bundleId)
+    ? [`(allow user-preference-read user-preference-write (preference-domain ${quote(game.bundleId)}))`]
+    : [];
+  const name = PLAIN_BUNDLE_NAME.test(game.bundleName) && path.isAbsolute(game.userTemp);
+  const saves = `${escapeRegex(path.join(game.userTemp, "TemporaryItems", `NSIRD_${game.bundleName}_`))}[^/]+(/|$)`;
+  return [
+    ...own,
+    `(allow user-preference-read (preference-domain ${GAME_GLOBAL_PREFERENCES.map(quote).join(" ")}))`,
+    "(allow system-info)",
+    ...(name ? [`(allow file-read* file-write* (regex #"^${saves}"))`] : []),
+  ];
 }
 /** A write prefix the profile accepts: an absolute path of plain characters, never a folder's whole contents. */
 const PLAIN_PREFIX = /^\/[A-Za-z0-9._/-]*[A-Za-z0-9_-]$/;
@@ -336,7 +390,7 @@ async function prepareSandbox(p: SandboxRequest): Promise<{ profile: string; hom
 }
 
 /** Kill a child's whole tree: descendants are listed first, while each still has its parent. */
-function treeKiller(child: ChildProcess) {
+export function treeKiller(child: ChildProcess) {
   const kill = (pid: number) => {
     try {
       process.kill(pid, "SIGKILL");
@@ -540,4 +594,60 @@ function sandboxedEndReason(result: { timedOut: boolean; signal: NodeJS.Signals 
   if (stop.aborted) return NativeEndReason.Cancelled;
   if (result.timedOut) return NativeEndReason.Timeout;
   return result.signal ? `Runtime terminated by ${result.signal}` : NativeEndReason.Exit;
+}
+
+/** One game from Play to run: its app, its saves folder (its home) and what its profile names. */
+export interface NativeGameRequest {
+  /** The game's executable inside its installed app. */
+  binary: string;
+  /** The installed app bundle: what it may run programs from, read-only. */
+  app: string;
+  /** Its saves folder: its HOME (and Foundation's, `CFFIXED_USER_HOME`), the one place it writes. */
+  saves: string;
+  /** A fresh folder for its temporary files, removed by the caller after it exits. */
+  scratch: string;
+  bundleId: string;
+  bundleName: string;
+  /** Arguments for the game; a game from Play gets none. */
+  args?: string[];
+}
+
+/**
+ * A game from Play in the native-job sandbox with a window, the GPU and sound: its app read-only,
+ * its saves folder its home (Foundation's too, so Application Support lands there), its own
+ * preferences, no network, its own process group, stdin closed and its output for the caller to
+ * drain. Nothing it starts outlives it.
+ */
+export async function spawnNativeGame(p: NativeGameRequest): Promise<ChildProcessByStdio<null, Readable, Readable>> {
+  const binaryRoot = await realpath(p.app);
+  const extensions = await gpuCache(p.binary);
+  const userTemp = await realpath(
+    (await exec("/usr/bin/getconf", ["DARWIN_USER_TEMP_DIR"], { timeout: PROBE_TIMEOUT_MS })).stdout.trim(),
+  );
+  const reads = await aliases([binaryRoot, ...SYSTEM_READS, ...GAME_SYSTEM_READS]);
+  const writes = await aliases([p.saves, p.scratch, ...extensions]);
+  const game = { bundleId: p.bundleId, bundleName: p.bundleName, userTemp };
+  const profile = path.join(p.scratch, "game.sb");
+  await writeFile(
+    profile,
+    nativeSandboxProfile({ binaryRoot, reads, writes, extensions, denied: [], gpu: true, game }),
+  );
+  const home = await realpath(p.saves);
+  const child = spawn("/usr/bin/sandbox-exec", ["-f", profile, p.binary, ...(p.args ?? [])], {
+    cwd: path.dirname(binaryRoot),
+    env: {
+      HOME: home,
+      CFFIXED_USER_HOME: home,
+      TMPDIR: p.scratch,
+      TMP: p.scratch,
+      TEMP: p.scratch,
+      PATH: JOB_PATH,
+      LANG: "en_US.UTF-8",
+    },
+    detached: true,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const killAll = treeKiller(child);
+  child.once("exit", () => void killAll());
+  return child;
 }
