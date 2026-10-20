@@ -59,6 +59,7 @@
   "tests/conformance/cua-embedded.test.ts",
   "tests/conformance/custom-events.test.ts",
   "tests/conformance/delegate-ownership.test.ts",
+  "tests/conformance/dev-control-endpoint.test.ts",
   "tests/conformance/dev-inspect-dom.test.ts",
   "tests/conformance/dev-launch.test.ts",
   "tests/conformance/dev-policy.test.ts",
