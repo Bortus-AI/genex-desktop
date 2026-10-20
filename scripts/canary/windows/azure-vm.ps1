@@ -4,7 +4,8 @@
 #
 #   Prepare   fetch Node and the canary scripts, create the standard user, log the owner on next boot
 #   Owner     the owner's run on a lived-in profile: download, install, first start (sets the sandbox
-#             up), agent command, as on a home PC
+#             up), agent command, as on a home PC; an unreleased build the job put in the scripts'
+#             canary-package folder is installed instead of the download
 #   Standard  the standard user's lived-in profile and run, at its own desktop (standard-user.ps1)
 #   Collect   zip the evidence and upload it to the run's storage
 #
@@ -78,6 +79,8 @@ function Invoke-Interactive([string] $Name, [string] $Script, [string] $Log) {
   return $code
 }
 
+# An unreleased build's installer, when the job checks one (canary.yml `package_run`).
+$Built = Join-Path $Upload "canary-package\Genex-Setup.exe"
 switch ($Phase) {
   "Prepare" {
     New-Item -ItemType Directory -Force -Path $Upload, $Evidence, (Split-Path $Node) | Out-Null
@@ -115,7 +118,7 @@ switch ($Phase) {
     New-Item -ItemType Directory -Force -Path $out | Out-Null
     $script = @(
       "& '$Node' '$Upload\scripts\canary\lived-in-profile.ts' --home `$env:USERPROFILE --force-own-home --files $Files",
-      "& '$Node' '$Upload\scripts\canary\run.ts' --machine '$Machine' --kind exe --tag '$Tag' --persona owner --evidence '$out' --release-src '$Upload\release-src'",
+      "& '$Node' '$Upload\scripts\canary\run.ts' --machine '$Machine' --kind exe --tag '$Tag' --persona owner --evidence '$out' --release-src '$Upload\release-src'$(if (Test-Path $Built) { " --package '$Built'" })",
       "exit `$LASTEXITCODE"
     ) -join "`n"
     $code = Invoke-Interactive $OwnerName $script (Join-Path $Evidence "owner.out.log")
@@ -126,7 +129,7 @@ switch ($Phase) {
     Wait-Desktop $UserName
     $env:Path = "$(Split-Path $Node);$env:Path"
     & "$Upload\scripts\canary\windows\standard-user.ps1" -Machine $Machine -Tag $Tag `
-      -Package "$Evidence\owner\download\Genex-Setup.exe" -Source $Upload -ReleaseSrc "$Upload\release-src" `
+      -Package $(if (Test-Path $Built) { $Built } else { "$Evidence\owner\download\Genex-Setup.exe" }) -Source $Upload -ReleaseSrc "$Upload\release-src" `
       -Evidence "$Evidence\standard-user" -UserName $UserName -Password $UserPassword -Files $Files
     Write-Output "standard user run exit $LASTEXITCODE"
   }

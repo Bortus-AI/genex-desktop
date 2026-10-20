@@ -133,6 +133,11 @@ that session's objects for the sandbox's runner. Logs, crash dumps and screensho
 A failing release gets one issue labelled `canary`, assigned to whoever published it; a passing
 run closes it. The canary only reports: pulling a release stays the owner's call.
 
+A dispatch with `package_run` checks a build before it is released: give it a Package workflow run
+(dispatched with `only: win32`) and the Azure machines install that run's `Genex-Setup.exe` instead
+of a download, with that run's commit driving the agent command. No other machine runs and no issue
+is touched. Dispatch it from a ref the `canary` environment allows.
+
 Azure setup, once: the subscription owner runs `scripts/canary/azure-setup.sh` in Cloud Shell. It
 creates an app registration whose only credential is GitHub's OIDC token for the `canary`
 environment, gives it Contributor on the subscription, and sets a budget alert. Its three IDs go

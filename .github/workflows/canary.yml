@@ -5,6 +5,9 @@ name: Release canary
 # VMs made for the run once the repository variable CANARY_AZURE is `on` and the `canary`
 # environment holds AZURE_CLIENT_ID, AZURE_TENANT_ID and AZURE_SUBSCRIPTION_ID (OIDC, no stored
 # secret). A failing run opens or updates one issue labelled `canary`; a passing one closes it.
+# A dispatch with `package_run` checks an unreleased build instead: the Azure machines install the
+# Windows installer that Package workflow run made, its commit's e2e runner drives the agent
+# command, and no other machine runs and no issue is touched.
 on:
   release:
     types: [published]
@@ -15,6 +18,9 @@ on:
     inputs:
       tag:
         description: Release tag to check (empty for the latest release)
+        required: false
+      package_run:
+        description: A Package workflow run whose Windows installer the Azure machines install instead of a release
         required: false
 permissions:
   contents: read
@@ -27,6 +33,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      ref: ${{ steps.tag.outputs.ref }}
       azure: ${{ vars.CANARY_AZURE == 'on' }}
       expect: ${{ steps.tag.outputs.expect }}
     steps:
@@ -36,16 +43,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
           AZURE: ${{ vars.CANARY_AZURE }}
+          PACKAGE_RUN: ${{ inputs.package_run }}
         run: |
+          if [ -n "$PACKAGE_RUN" ]; then
+            [ "$AZURE" = on ] || { echo "::error::A build is checked on the Azure machines, and CANARY_AZURE is not on"; exit 1; }
+            read -r workflow sha <<< "$(gh run view "$PACKAGE_RUN" -R "$GITHUB_REPOSITORY" --json workflowName,headSha -q '"\(.workflowName) \(.headSha)"')"
+            [ "$workflow" = Package ] || { echo "::error::Run $PACKAGE_RUN is $workflow, not Package"; exit 1; }
+            echo "Checking the build of Package run $PACKAGE_RUN at $sha"
+            { echo "tag=v0.0.0-run.$PACKAGE_RUN"; echo "ref=$sha"; echo "expect=windows-11,windows-10"; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           tag=${TAG:-$(gh release view -R "$GITHUB_REPOSITORY" --json tagName -q .tagName)}
           case "$tag" in v[0-9]*) ;; *) echo "::error::Not a release tag: $tag"; exit 1 ;; esac
           echo "Checking $tag"
           expect="macos-26,macos-15,ubuntu-26.04,ubuntu-24.04,windows-server-2025,fedora"
           if [ "$AZURE" = on ]; then expect="$expect,windows-11,windows-10"; fi
-          { echo "tag=$tag"; echo "expect=$expect"; } >> "$GITHUB_OUTPUT"
+          { echo "tag=$tag"; echo "ref=$tag"; echo "expect=$expect"; } >> "$GITHUB_OUTPUT"
 
   hosted:
     needs: plan
+    if: ${{ !inputs.package_run }}
     name: ${{ matrix.machine }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -109,6 +126,7 @@ jobs:
 
   fedora:
     needs: plan
+    if: ${{ !inputs.package_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -148,6 +166,8 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      # Only a `package_run` dispatch uses it: that run's installer artifact.
+      actions: read
     strategy:
       fail-fast: false
       matrix:
@@ -163,7 +183,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          ref: ${{ needs.plan.outputs.tag }}
+          ref: ${{ needs.plan.outputs.ref }}
           path: release-src
           sparse-checkout: |
             tests/e2e
@@ -177,8 +197,16 @@ jobs:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: The build to install
+        if: ${{ inputs.package_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_RUN: ${{ inputs.package_run }}
+        run: |
+          gh run download "$PACKAGE_RUN" -R "$GITHUB_REPOSITORY" -n package-win32-x64 -D "$RUNNER_TEMP/build"
+          mkdir -p canary-package && cp "$RUNNER_TEMP/build/squirrel.windows/x64/Genex-Setup.exe" canary-package/
       - name: What the VM runs
-        run: zip -qr "$RUNNER_TEMP/canary-src.zip" scripts/canary src/shared/duration.ts package.json release-src -x 'release-src/.git/*'
+        run: zip -qr "$RUNNER_TEMP/canary-src.zip" scripts/canary src/shared/duration.ts package.json release-src $(test -d canary-package && echo canary-package) -x 'release-src/.git/*'
       - name: Canary (${{ matrix.machine }}, owner then standard user)
         env:
           IMAGE: ${{ matrix.machine == 'windows-11' && vars.CANARY_WIN11_IMAGE || matrix.machine == 'windows-10' && vars.CANARY_WIN10_IMAGE || '' }}
@@ -201,7 +229,7 @@ jobs:
 
   report:
     needs: [plan, hosted, fedora, azure]
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && !inputs.package_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
