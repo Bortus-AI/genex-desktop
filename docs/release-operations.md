@@ -156,7 +156,8 @@ creates an app registration whose only credential is GitHub's OIDC token for the
 environment, gives it Contributor on the subscription, and sets a budget alert. Its three IDs go
 in the `canary` environment's variables (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
 `AZURE_SUBSCRIPTION_ID`). A run outlasts one OIDC sign-in, so `azure.ts` signs in again with a
-fresh token before an Azure call once the last sign-in is five minutes old. `CANARY_WIN11_IMAGE`, `CANARY_WIN10_IMAGE`, `CANARY_AZURE_SIZE` and
+fresh token before an Azure call once the last sign-in is five minutes old, dropping az's cached
+Azure token first so az never renews it with an expired OIDC token. `CANARY_WIN11_IMAGE`, `CANARY_WIN10_IMAGE`, `CANARY_AZURE_SIZE` and
 `CANARY_AZURE_LOCATION` (regions, comma-separated) override the defaults. Without them the job
 takes the first two-core size its quota allows, in the first region that accepts it; a region
 whose quota the run's other machine took first is passed over too. Windows 11
