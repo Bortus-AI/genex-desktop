@@ -278,9 +278,7 @@ describe("Windows sandbox: stdio", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () 
     assert.equal(output, "the brief\n");
   });
 
-  it("drives a Play Protocol game it started, its requests reaching the game", {
-    todo: "requests go down stdin, which srt-win does not pass on; fixed in a follow-up",
-  }, async () => {
+  it("drives a Play Protocol game it started, its requests reaching the game through the input relay", async () => {
     const launched = await launchGameBridge({
       sandbox,
       command: `${q(process.execPath)} ${q(FAKE_PLAY_GAME)}`,
