@@ -45,6 +45,15 @@ the setup screen opens on `git-missing`. What differs from macOS:
   `%LOCALAPPDATA%\genex-sandbox-grants\<pid>.json` and revokes only those no other running Genex
   records. The SID is asked of srt-win up to three times; without it the apply fails. The harness gets the entries set again just before it starts, and one that exits during
   boot logs `icacls` for each folder from the profile down to its files.
+- The toolchain's PATH folders under the profile (npm's global prefix, pnpm's home, nvm, Scoop) are
+  granted for reading (`grantableToolDirs`), and srt-win's grant re-applies permissions through
+  every file under each one. pnpm's home holds its package store (`store\v3`, `store\v10`), a file
+  for every package the person's projects ever installed, which made a pnpm user's first start
+  grow with their history; no sandboxed command reads it (a sandboxed pnpm keeps its own store, and
+  global packages' files are hardlinks that share their security descriptor). So that home is
+  granted entry by entry without its store, and with no link among the entries, since srt-win
+  grants a link's target. npm's global prefix is granted whole: its `node_modules` are the global
+  CLIs that run in the sandbox, OpenCode among them.
 - Neither `spawn()`'s environment nor stdin reaches the child: each run's variables
   (`windowsRunEnv`) go to an env file in scratch and its stdin to a file, each deleted by the
   command as it reads it. The host sends nothing down the stdin pipe the command swaps away. The harness hears the host over a loopback inbox
@@ -116,7 +125,8 @@ everything under its path (a large browser profile takes the longest), within sr
 deadline for the batch. Two Genex editing one folder's entries at the same moment can lose one
 edit until the next sync, and a deny a crashed Genex left stays (still denying) until a Genex next
 starts: srt-win's own cleanup never sees it. Every sandboxed process can read a run's env file until the command deletes it, and PATH
-folders under the profile whole. A broker outlives an Electron crash.
+folders under the profile whole (pnpm's home without its store). Granting npm's global prefix still walks
+every global package's files on each apply and reset. A broker outlives an Electron crash.
 
 ## CI and curated suite
 
