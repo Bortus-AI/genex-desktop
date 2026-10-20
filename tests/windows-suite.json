@@ -152,6 +152,7 @@
   "tests/conformance/package-signing.test.ts",
   "tests/conformance/page-serve.test.ts",
   "tests/conformance/page-shim.test.ts",
+  "tests/conformance/paint-while-used.test.ts",
   "tests/conformance/paths.test.ts",
   "tests/conformance/pending-sends.test.ts",
   "tests/conformance/performance-recorder.test.ts",
