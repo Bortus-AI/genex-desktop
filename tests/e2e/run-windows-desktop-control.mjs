@@ -110,6 +110,16 @@ if ($h -ne [IntPtr]::Zero) { $r = New-Object System.Drawing.Rectangle; [void][Ge
   );
 }
 
+/**
+ * Bring a window to the front, as the person would by clicking it in the taskbar: by its process id
+ * or its title. A window launched from a background process can open behind another one.
+ */
+async function toFront(target) {
+  const which = typeof target === "number" ? String(target) : `'${target.replaceAll("'", "''")}'`;
+  await powershell(`[void](New-Object -ComObject WScript.Shell).AppActivate(${which})`);
+  await sleep(700);
+}
+
 /** The primary screen's size in pixels. */
 async function screenSize() {
   const out = await powershell(
@@ -243,12 +253,13 @@ async function firstLook(call, binary) {
   };
 }
 
-/** Notepad: click into it, type a line, read it back from its own tree; and the stop chord sent to it. */
+/** Notepad: click into it, type a line, read it back from its own tree. Answers its process. */
 async function notepadStep(call, centre) {
-  launch("notepad.exe");
+  const notepadProcess = launch("notepad.exe");
   const notepad = await untilWindow("notepad");
   check("Notepad opens a window", notepad !== null, notepad);
-  if (!notepad) return;
+  if (!notepad) return null;
+  await toFront(notepadProcess.pid);
   const click = await call({ action: "left_click", coordinate: centre(notepad) });
   check(
     "a click into Notepad is allowed once the person allows Notepad",
@@ -260,15 +271,25 @@ async function notepadStep(call, centre) {
   await call({ action: "screenshot" });
   const state = await call({ action: "state" });
   check("Notepad's own tree reads the typed line back", state.text.includes(LINE), state.text.slice(0, 600));
-  // The stop shortcut's chord, sent to Notepad: Windows must not take it for Task Manager.
+  return notepadProcess;
+}
+
+/**
+ * The stop shortcut's chord, sent to Notepad: Windows must not take it for Task Manager. With no app
+ * registering it (no Genex here), Windows reads its Alt+Esc and sends the front window back; what
+ * is in front after it is recorded.
+ */
+async function chordStep(call, notepadProcess) {
+  if (!notepadProcess) return;
+  await toFront(notepadProcess.pid);
   const before = await running("Taskmgr.exe");
   const chord = await call({ action: "key", text: "ctrl+alt+shift+escape" });
   await sleep(2000);
-  check(
-    "Windows does not take Ctrl+Alt+Shift+Esc for Task Manager",
-    before || !(await running("Taskmgr.exe")),
-    chord.text.slice(0, 200),
-  );
+  const after = await call({ action: "state" });
+  check("Windows does not take Ctrl+Alt+Shift+Esc for Task Manager", before || !(await running("Taskmgr.exe")), {
+    chord: chord.text.slice(0, 120),
+    inFrontAfter: after.text.slice(0, 160),
+  });
 }
 
 /** The saved-passwords dialog (rundll32.exe) and Windows Settings (a packaged app's frame): never driven. */
@@ -287,6 +308,7 @@ async function neverDrivenSteps(call, centre) {
   launch("explorer.exe", ["ms-settings:"]);
   const settings = await untilWindow("ApplicationFrameHost", 20_000);
   if (settings) {
+    await toFront("Settings");
     const refused = await call({ action: "left_click", coordinate: centre(settings) });
     check(
       "a click in Windows Settings (ApplicationFrameHost) is refused",
@@ -300,8 +322,10 @@ async function neverDrivenSteps(call, centre) {
 /** A focused password field in an allowed app: typing into it is refused. */
 async function passwordStep(call, centre) {
   const form = launch(windowsPowerShell(process.env), ["-NoProfile", "-Command", PASSWORD_FORM]);
-  const window = await untilWindow("Genex password field", 20_000, titledRect);
+  // Windows PowerShell and Windows Forms start slowly on a cold machine.
+  const window = await untilWindow("Genex password field", 60_000, titledRect);
   if (window) {
+    await toFront(form.pid);
     await call({ action: "left_click", coordinate: centre(window) });
     const refused = await call({ action: "type", text: "hunter2" });
     check(
@@ -360,9 +384,10 @@ async function main() {
   const { resources, binary } = await vendored();
   const { control, call } = session(binary);
   const centre = await firstLook(call, binary);
-  await notepadStep(call, centre);
+  const notepad = await notepadStep(call, centre);
   await neverDrivenSteps(call, centre);
   await passwordStep(call, centre);
+  await chordStep(call, notepad);
   await stopStep(control, call);
   await crashStep(resources);
   await run("taskkill", ["/IM", "notepad.exe", "/F"]).catch(() => {});
