@@ -297,7 +297,13 @@ const LOCK_HELD_CODES = new Set(["EBUSY", "EPERM", "EACCES"]);
 export interface FirstCommitDeps {
   clock?: { now: () => number; sleep: (ms: number) => Promise<unknown> };
   removeLock?: (file: string) => Promise<void>;
+  /** Called as each git step of a first commit finishes (`init`, `add`, `commit`), for the start's log. */
+  onStep?: (step: FirstCommitStep) => void;
 }
+
+/** The git steps of a new repository's first commit. */
+export const FirstCommitStep = { Init: "init", Add: "add", Commit: "commit" } as const;
+export type FirstCommitStep = (typeof FirstCommitStep)[keyof typeof FirstCommitStep];
 
 /** Whether `dir` has no repository yet, or one whose first commit an earlier start left unfinished. */
 export async function needsFirstCommit(dir: string): Promise<boolean> {
@@ -314,10 +320,13 @@ export async function ensureRepo(dir: string, deps: FirstCommitDeps = {}): Promi
   await ensureDir(dotGit);
   await writeFile(path.join(dotGit, FIRST_COMMIT_MARKER), "");
   await git(dir, ["init", "-q", "-b", "main"]);
+  deps.onStep?.(FirstCommitStep.Init);
   await releaseIndexLock(dotGit, deps);
   await stagePublicChanges(dir);
+  deps.onStep?.(FirstCommitStep.Add);
   if (!(await gitOrNull(dir, ["rev-parse", "--verify", "--quiet", "HEAD"])))
     await git(dir, ["commit", "-q", "--allow-empty", "-m", "substrate: initial"]);
+  deps.onStep?.(FirstCommitStep.Commit);
   await rm(path.join(dotGit, FIRST_COMMIT_MARKER), { force: true });
 }
 
@@ -492,12 +501,15 @@ export class SnapshotEngine {
     this.workspaces.set(spec.name, spec.dir);
   }
 
-  /** A repository for every workspace that has none yet; a game's rules are topped up before its first commit. */
-  async init(): Promise<void> {
+  /**
+   * A repository for every workspace that has none yet; a game's rules are topped up before its
+   * first commit. `onStep` hears each first commit's git steps by workspace name.
+   */
+  async init(onStep?: (workspace: string, step: FirstCommitStep) => void): Promise<void> {
     for (const [name, dir] of this.workspaces) {
       // Only a folder about to get its first commit: init runs for every game at each start.
       if (await needsFirstCommit(dir)) await this.#beforeCommit(name, dir);
-      await ensureRepo(dir);
+      await ensureRepo(dir, onStep ? { onStep: (step) => onStep(name, step) } : {});
     }
   }
 

@@ -304,6 +304,17 @@ describe("snapshot engine", () => {
     assert.equal((await git(dir, ["ls-files"])).trim(), "");
   });
 
+  it("names each step of a first commit as it finishes, and none for a finished repository", async () => {
+    const dir = path.join(await tmpDir(), "ws");
+    await mkdir(dir);
+    await writeFile(path.join(dir, "README.md"), "hello\n");
+    const steps: string[] = [];
+    await ensureRepo(dir, { onStep: (step) => steps.push(step) });
+    assert.deepEqual(steps, ["init", "add", "commit"]);
+    await ensureRepo(dir, { onStep: (step) => steps.push(step) });
+    assert.deepEqual(steps, ["init", "add", "commit"]);
+  });
+
   it("is idempotent about repo creation", async () => {
     const dir = path.join(await tmpDir(), "ws");
     await ensureRepo(dir);
