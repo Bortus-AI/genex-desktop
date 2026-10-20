@@ -41,6 +41,7 @@
   "tests/conformance/check-vocabulary.test.ts",
   "tests/conformance/child-env.test.ts",
   "tests/conformance/claude-cli.test.ts",
+  "tests/conformance/claude-git-bash.test.ts",
   "tests/conformance/claude-live-tool-types.test.ts",
   "tests/conformance/claude-telemetry.test.ts",
   "tests/conformance/claude-tool-loading.test.ts",
