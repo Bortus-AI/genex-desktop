@@ -783,8 +783,6 @@ const LEAD_LOOK: Record<LeadFace, { variant: Variant; fill: Fill; glyph: StepSta
   [LeadFace.Done]: { variant: Variant.Normal, fill: Fill.Flat, glyph: StepState.InBuild },
 };
 
-const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
-
 /** The lead's faces that wear the run's last save point: its work is where that save point left it. */
 const SHOWS_LAST_SAVE: ReadonlySet<LeadFace> = new Set([LeadFace.Done, LeadFace.Paused]);
 
@@ -823,7 +821,7 @@ export function LeadNode({
       rect={rect}
       variant={look.variant}
       selected={selected}
-      label={t("{name}: {status}", { name: LEAD_WORDS.name, status: lowerFirst(word) })}
+      label={LEAD_WORDS.heard[face]}
       screen={shown?.handle ?? null}
       onSelect={onSelect}
     >

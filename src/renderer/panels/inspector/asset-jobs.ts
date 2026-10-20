@@ -50,12 +50,31 @@ export const STOPPED_PHASES = [
   MakingPhase.NotInGame,
 ] as const;
 
+/** A way a job stops short. */
+type StoppedPhase = (typeof STOPPED_PHASES)[number];
+
+/** How many jobs stopped short in one way, as the run's assets line counts them: "2 didn’t finish". */
+const STOPPED_COUNT: Record<StoppedPhase, (count: number) => string> = {
+  [MakingPhase.Failed]: (count) => t("{count, plural, other {# didn’t finish}}", { count }),
+  [MakingPhase.Stopped]: (count) => t("{count, plural, other {# stopped}}", { count }),
+  [MakingPhase.Unsure]: (count) => t("{count, plural, other {# not confirmed}}", { count }),
+  [MakingPhase.NotFetched]: (count) => t("{count, plural, other {# not downloaded}}", { count }),
+  [MakingPhase.NotInGame]: (count) => t("{count, plural, other {# not in your game}}", { count }),
+};
+
+/** The jobs that stopped short in one way, in the panel's order, and how. */
+function stoppedLists(jobs: AssetInfo[]): Array<{ phase: StoppedPhase; list: AssetInfo[] }> {
+  return STOPPED_PHASES.flatMap((phase) => {
+    const list = jobs.filter((job) => stoppedShort(job) === phase);
+    return list.length ? [{ phase, list }] : [];
+  });
+}
+
 /** The jobs that stopped short, by how, in the panel's order: each with what it is called. */
 export function stoppedGroups(jobs: AssetInfo[]): Array<[string, AssetInfo[]]> {
-  return STOPPED_PHASES.flatMap((phase) => {
+  return stoppedLists(jobs).flatMap(({ phase, list }) => {
     const title = stoppedTitle(phase);
-    const list = jobs.filter((job) => stoppedShort(job) === phase);
-    return title && list.length ? [[title, list] as [string, AssetInfo[]]] : [];
+    return title ? [[title, list] as [string, AssetInfo[]]] : [];
   });
 }
 
@@ -67,17 +86,13 @@ export function assetsStatus(jobs: AssetInfo[]): { text: string; tone: Tone } {
   const made = jobs.filter((job) => job.state === AssetCardState.Delivered);
   const failed = jobs.filter((job) => job.state === AssetCardState.Failed).length;
   const making = jobs.filter(isMaking).length;
-  const [stopped] = stoppedGroups(jobs);
+  const [stopped] = stoppedLists(jobs);
   const unfinished = jobs.filter((job) => job.state === AssetCardState.Unfinished).length;
   const inGame = made.filter((job) => job.inGame).length;
   const known = made.filter((job) => job.inGame !== undefined).length;
   if (failed) return { text: t("{count, plural, other {# failed}}", { count: failed }), tone: Tone.Red };
   if (making) return { text: t("Making {count}", { count: making }), tone: Tone.Accent };
-  if (stopped)
-    return {
-      text: t("{count} {phase}", { count: stopped[1].length, phase: stopped[0].toLowerCase() }),
-      tone: Tone.Orange,
-    };
+  if (stopped) return { text: STOPPED_COUNT[stopped.phase](stopped.list.length), tone: Tone.Orange };
   if (unfinished && !made.length) return { text: ASSET_JOB_WORDS.notFinished(unfinished), tone: Tone.Muted };
   if (!known) return { text: t("{count, plural, other {# delivered}}", { count: made.length }), tone: Tone.Muted };
   if (inGame === made.length)

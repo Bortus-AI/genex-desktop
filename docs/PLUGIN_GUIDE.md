@@ -348,6 +348,15 @@ A panel is served into an opaque-origin sandboxed frame with
   panel.html` writes `locales/messages.json`, the list of every English message the panel asks
   for, and an empty catalog per language. A missing or broken translation shows the English. The
   bundled panels (`src/plugins/unity/panel.html` and the others) do all of this.
+- Your manifest speaks it too. Genex looks up the plugin.json texts a person reads (`name`,
+  `description`, `setup`, panel titles, setting and action labels, `confirmation`s and a card
+  field's `label`, toolbar `label` and `ariaLabel`, `folders[].why`, Live tab and runtime labels) by
+  their English in the same `locales/<lang>.json` of the installed package, as plain text.
+  `panel-words.mjs` adds them to `messages.json` (`node src/plugin-sdk/panel-words.mjs plugin.json`
+  for a plugin without a panel). Ids, names, values and what agents read (tool descriptions,
+  skills) stay as written. The English shows for a missing translation, a catalog that isn't a JSON
+  object of strings or is over 512 KiB, and a translation that adds a line break or a control
+  character, grows past three times its English, or names a strip button Studio's own.
 - Buttons follow Genex's rule: a padded button has a background. An action for the whole panel
   that you want quiet is a link (underlined words, no padding), never a padded button without a fill.
 

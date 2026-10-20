@@ -39,19 +39,61 @@ function runningToolLabel(items: ActivityItem[]): string | null {
   return TOOL_WORDS.get(label) ?? label;
 }
 
+/** What the chat is doing, and whether that only says the lead is between parts. */
+interface Work {
+  label: string;
+  betweenParts: boolean;
+}
+
+/** Phases whose own label only says the lead is busy: between parts, the build card says it is planning. */
+const PLANNING_PHASES: ReadonlySet<ChatActivityPhase> = new Set<ChatActivityPhase>([
+  ChatActivityPhase.Thinking,
+  ChatActivityPhase.Working,
+  ChatActivityPhase.Idle,
+]);
+
+/** Work a label names. */
+const named = (label: string): Work => ({ label, betweenParts: false });
+
+/** The activity's own label: between parts when it is a busy phase's own word, not work a record named. */
+const activityWork = (activity: ChatActivity): Work => ({
+  label: activity.label,
+  betweenParts: PLANNING_PHASES.has(activity.phase) && !activity.named,
+});
+
 /** What a running build is doing: its one task, how many, or what comes next. */
-function runLabel(run: RunSummary, activityLabel: string): string {
+function runWork(run: RunSummary, activity: ChatActivity): Work {
   const active = run.tasks.filter((task) => task.state === TaskState.Running);
   const [only] = active;
-  if (active.length === 1 && only) return only.title;
+  if (active.length === 1 && only) return named(only.title);
   if (active.length > 1)
-    return t("{count, plural, one {Working on # task} other {Working on # tasks}}", { count: active.length });
-  if (run.tasks.some((task) => task.state === TaskState.Queued)) return t("Preparing the next task");
-  // The activity's own English label (`shared/chat-activity.ts`), not words of this module.
-  return activityLabel === "Idle" ? t("Working") : activityLabel;
+    return named(t("{count, plural, one {Working on # task} other {Working on # tasks}}", { count: active.length }));
+  if (run.tasks.some((task) => task.state === TaskState.Queued)) return named(t("Preparing the next task"));
+  const idle = activity.phase === ChatActivityPhase.Idle && !activity.named;
+  return idle ? { label: t("Working"), betweenParts: true } : activityWork(activity);
 }
 
 /** Explicit conversation activity wins. A run's generic busy state names the actual work. */
+function currentWork(
+  activity: ChatActivity,
+  run: RunSummary | null,
+  finishing: boolean,
+  items: ActivityItem[],
+  planState?: PlanReview["state"],
+): Work {
+  const plan = planLabel(activity, run, planState);
+  if (plan) return named(plan);
+  if (finishing) return named(t("Finishing up"));
+  if (!GENERIC_PHASES.has(activity.phase)) return activityWork(activity);
+  const toolPhase = activity.phase === ChatActivityPhase.Tool;
+  if (toolPhase && !GENERIC_TOOL_LABELS.has(activity.label)) return activityWork(activity);
+  const tool = runningToolLabel(items);
+  if (tool !== null) return named(tool);
+  if (toolPhase || !run) return activityWork(activity);
+  return runWork(run, activity);
+}
+
+/** What the chat's busy line says: explicit conversation activity wins, a run's generic busy state names the actual work. */
 export function currentWorkLabel(
   activity: ChatActivity,
   run: RunSummary | null,
@@ -59,23 +101,8 @@ export function currentWorkLabel(
   items: ActivityItem[] = [],
   planState?: PlanReview["state"],
 ): string {
-  const plan = planLabel(activity, run, planState);
-  if (plan) return plan;
-  if (finishing) return t("Finishing up");
-  if (!GENERIC_PHASES.has(activity.phase)) return activity.label;
-  const toolPhase = activity.phase === ChatActivityPhase.Tool;
-  if (toolPhase && !GENERIC_TOOL_LABELS.has(activity.label)) return activity.label;
-  const tool = runningToolLabel(items);
-  if (tool !== null) return tool;
-  if (toolPhase || !run) return activity.label;
-  return runLabel(run, activity.label);
+  return currentWork(activity, run, finishing, items, planState).label;
 }
-
-/** Busy-line labels that only say the lead is between parts: the build card says it is planning. */
-const PLANNING_LABELS: ReadonlySet<string> = new Set(["Thinking", "Working", "Idle"]);
-
-/** Whether a label only says the lead is between parts: an activity's own label, or `runLabel`'s Working. */
-const betweenParts = (label: string): boolean => PLANNING_LABELS.has(label) || label === t("Working");
 
 /**
  * The one line in the chat's build card: what is happening right now, one thing at a time. A part
@@ -94,9 +121,9 @@ export function buildCaption(
   if (first && running.length === 1) return t("{task} · working", { task: first.title });
   if (first)
     return t("{count, plural, other {{task} and # more · working}}", { task: first.title, count: running.length - 1 });
-  const label = currentWorkLabel(activity, run, finishing, items, planState);
-  if (betweenParts(label)) return CHAT_WORDS.planningNextStep;
+  const work = currentWork(activity, run, finishing, items, planState);
+  if (work.betweenParts) return CHAT_WORDS.planningNextStep;
   // A label that names no tool: the lead is working on the build.
-  if (GENERIC_TOOL_LABELS.has(label)) return t("Working on the build");
-  return label;
+  if (GENERIC_TOOL_LABELS.has(work.label)) return t("Working on the build");
+  return work.label;
 }

@@ -123,7 +123,7 @@ const MESSAGE = {
   /** Why a lead started in Auto or Accept edits asks, once its chat has left that mode. */
   leftMode: (from: string, to: string) => t("The chat switched from {from} to {to}.", { from, to }),
   unknownMode: "Unknown permission mode.",
-  notGameChat: "Permission modes are set for a game chat.",
+  notGameChat: () => t("Permission modes are set for a game chat."),
   invalidAnswer: "Invalid permission answer",
   invalidRule: "Invalid permission rule",
   notSwitched: (mode: string) =>
@@ -1079,7 +1079,7 @@ export class ChatPermissionService {
   async setMode(threadId: string | null, mode: unknown): Promise<PermissionSettingsView> {
     if (!isPermissionMode(mode)) throw new Error(MESSAGE.unknownMode);
     if (threadId !== null) {
-      if ((await this.#threadMeta(threadId))?.kind !== ThreadKind.Game) throw new Error(MESSAGE.notGameChat);
+      if ((await this.#threadMeta(threadId))?.kind !== ThreadKind.Game) throw new Error(MESSAGE.notGameChat());
       await this.#core.store.updateThread(threadId, { metadata: { permissionMode: mode } });
     }
     if (isSteadyPermissionMode(mode)) await this.store.setDefaultMode(mode);

@@ -18,6 +18,7 @@ import { handleBaseFromName } from "../../shared/handle.ts";
 import { AvatarStyle, PLAY_NAME_LENGTH, type PlayMe, playName } from "../../shared/play-people.ts";
 import { AvatarMotion, GeneratedAvatar } from "../avatars/GeneratedAvatar.tsx";
 import { MakingDrawing } from "../making-art.ts";
+import { richText } from "../rich-text.tsx";
 import { GenexTab, openGenexPage } from "./plugins/genex/genex-tab.ts";
 import { avatarWebp } from "../play/avatar-image.ts";
 import { CreditsShard } from "../play/CreditsShard.tsx";
@@ -418,7 +419,6 @@ function CreditsRow(): JSX.Element {
       .api.openUrl(creditsPlansUrl(web))
       .catch(() => undefined);
   };
-  const note = WORDS.creditsNote;
   return (
     <div className="account-row" data-account-credits>
       <span className="account-row-label">{WORDS.credits}</span>
@@ -432,16 +432,18 @@ function CreditsRow(): JSX.Element {
           </button>
         </div>
         <span className="account-note">
-          {note.before}
-          <button
-            type="button"
-            className="account-note-link"
-            aria-label={WORDS.creditsPluginLabel}
-            onClick={() => openGenexPage(GenexTab.Tools)}
-          >
-            {note.plugin}
-          </button>
-          {note.after}
+          {richText(WORDS.creditsNote, {
+            plugin: (name) => (
+              <button
+                type="button"
+                className="account-note-link"
+                aria-label={WORDS.creditsPluginLabel}
+                onClick={() => openGenexPage(GenexTab.Tools)}
+              >
+                {name}
+              </button>
+            ),
+          })}
         </span>
       </div>
     </div>

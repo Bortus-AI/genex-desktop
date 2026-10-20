@@ -48,23 +48,15 @@ interface CardState {
   installing?: boolean;
 }
 
-const capitalise = (text: string): string => `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
-
 /** The card's one line: the step the user is on, else why a sign-in is needed. */
-function cardMessage({ engine, vendor, login, busy, flat, missingCli, installing }: CardState): string {
+function cardMessage({ vendor, login, busy, flat, missingCli, installing }: CardState): string {
   if (login?.phase === "code")
     return t("Finish signing in in the browser window that opened. This card goes away on its own when you're in.");
   if (login?.phase === "terminal") return t("Finish signing in in the terminal below.");
   if (busy) return t("Finish in the browser window that just opened. This card goes away on its own when you're in.");
   if (installing) return t("Installing {name}. This can take a minute.", { name: vendor.name });
   if (missingCli) return t("{name} isn't installed on this computer yet.", { name: vendor.name });
-  if (flat) return t("Use {product} to build games.", { product: vendor.product });
-  if (engine === EngineId.Codex)
-    return t("Connect your ChatGPT subscription to build games. Codex handles sign-in in your browser.");
-  return t("{product} expired or isn't signed in. The studio never sees your password — {who}.", {
-    product: capitalise(vendor.product),
-    who: vendor.who,
-  });
+  return flat ? vendor.useLine : vendor.signInLine;
 }
 
 /** The sign-in button's label. */

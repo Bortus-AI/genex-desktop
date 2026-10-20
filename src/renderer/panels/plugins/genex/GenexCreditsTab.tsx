@@ -24,6 +24,7 @@ import { Button } from "../../../ui/Button.tsx";
 import { Icon } from "../../../ui/icons.tsx";
 import { Pending } from "../../../ui/Pending.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
+import { richText } from "../../../rich-text.tsx";
 import { GENEX_WORDS } from "../../../words.ts";
 import { GenexTool } from "../../../../shared/asset-making.ts";
 import { accountCreditsOf, CreditsKind } from "./genex-view.ts";
@@ -222,7 +223,7 @@ function PriceList({ credits }: { credits: PlayCredits }): JSX.Element {
               hook={{ "data-credits-kind": kind }}
             >
               <span className="credits-row-amount">
-                {WORDS.from} <b>{NUMBER.format(credits.prices[kind] ?? 0)}</b>
+                {richText(WORDS.from(NUMBER.format(credits.prices[kind] ?? 0)), { b: (price) => <b>{price}</b> })}
                 <CreditsShard size={12} />
               </span>
             </CreditRow>

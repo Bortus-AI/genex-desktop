@@ -2817,6 +2817,16 @@ load nothing); `locales/messages.json` lists the English each panel asks for, an
 `plugin-panel-words.test.ts` holds the bundled panels to it. A missing translation shows the
 English. See [panels in the plugin guide](PLUGIN_GUIDE.md#3-panels).
 
+The same catalogs hold the manifest's texts a person reads (`substrate/plugins/manifest-words.ts`,
+listed in `messages.json` too). The window's plugin list (`displayList`), a panel's title, an
+action's approval dialog and a tool's consent card show them in main's language, looked up when
+served and kept per package folder and language until a plugin changes. Only those texts change:
+the manifests the registry runs on, what agents read and every id stay English. A catalog read
+through a link out of the package, over 512 KiB or not an object of strings is no translations,
+and a translation that is not plain text of a fitting length, or names a strip button Studio's
+own, shows the English (`plugin-manifest-words.test.ts`). Each bundled plugin ships its `locales/`
+beside its plugin.json (`scripts/build-plugins.mjs`).
+
 `studioPlugin.chooseFile({ title, extensions })` opens Studio's own native file picker over its
 window, so a panel never asks the person to type a path. `title` is 1–80 characters on one line;
 `extensions` lists 1–4 different extensions without the dot, each 1–10 lowercase letters or

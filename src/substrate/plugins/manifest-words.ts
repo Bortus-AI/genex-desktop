@@ -35,9 +35,9 @@ export const MANIFEST_CATALOG_MAX_BYTES = 512 * 1024;
 const TRANSLATION_GROWTH = 3;
 const TRANSLATION_ROOM_CHARS = 40;
 /** What no translation holds: a control character, a line or paragraph separator, or a text direction mark, override or isolate. */
-const UNSAFE_CHARACTER = /[\p{Cc}  ‎‏‪-‮⁦-⁩]/u;
+const UNSAFE_CHARACTER = /[\p{Cc}\u2028\u2029\u200e\u200f\u202a-\u202e\u2066-\u2069]/u;
 /** A byte order mark an editor may put before a catalog's JSON. */
-const BYTE_ORDER_MARK = /^﻿/;
+const BYTE_ORDER_MARK = /^\uFEFF/;
 
 /** One plugin's translations for one language, by their English. */
 export type ManifestCatalog = ReadonlyMap<string, string>;

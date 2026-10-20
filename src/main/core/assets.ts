@@ -38,11 +38,12 @@ import { SECOND_MS } from "../../shared/duration.ts";
 
 /**
  * Errors the user (or the renderer on their behalf) reads when an asset request is refused. The
- * asset preview shows `recordedAssetUnavailable` in the person's language; the rest answer a
- * malformed request or a refused file read no screen shows, and stay English.
+ * asset preview shows `recordedAssetUnavailable` and a note's toast `feedbackEmpty` in the
+ * person's language; the rest answer a malformed request or a refused file read no screen shows,
+ * and stay English.
  */
 const MESSAGE = {
-  feedbackEmpty: "feedback text is empty",
+  feedbackEmpty: () => t("feedback text is empty"),
   feedbackNeedsThread: "feedback needs the run's thread",
   invalidRetainedRef: "Invalid retained asset reference",
   notThisGamesAsset: "Asset does not belong to this game",
@@ -208,7 +209,7 @@ export class AssetService {
   }): Promise<{ ok: true }> {
     const text = String(p.text ?? "").trim();
     const label = typeof p.label === "string" ? p.label.trim().slice(0, FEEDBACK_LABEL_CHARS) : "";
-    if (!text) throw new Error(MESSAGE.feedbackEmpty);
+    if (!text) throw new Error(MESSAGE.feedbackEmpty());
     if (!p.threadId) throw new Error(MESSAGE.feedbackNeedsThread);
     const target = feedbackTarget(p);
     const content = `[USER FEEDBACK${target ? ` on ${target}` : ""}] ${text}`;

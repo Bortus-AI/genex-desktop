@@ -34,6 +34,8 @@ export type SessionActivityRole = (typeof SessionActivityRole)[keyof typeof Sess
 export interface ChatActivity {
   phase: ChatActivityPhase;
   label: string;
+  /** The label names the work (the record's own words, or the build's status), not only the phase. */
+  named?: true;
   sessionId?: string;
   engine?: string;
   /** The delegation whose report this is, when a delegated session made it. */
@@ -133,6 +135,7 @@ function activityAfter(current: ChatActivity, data: CustomEventData, active: boo
   return {
     phase: p.phase,
     label: p.label || labels[p.phase](),
+    ...(p.label ? { named: true } : {}),
     sessionId: p.sessionId,
     engine: p.engine,
     ...(p.delegationId ? { delegationId: p.delegationId } : {}),
@@ -145,8 +148,11 @@ export function chatActivity(events: readonly ActivityEvent[], active: boolean, 
   for (const event of events) result = activityAfter(result, event.data, active);
   if (!active && !SETTLED_PHASES.has(result.phase)) return { phase: ChatActivityPhase.Idle, label: labels.idle() };
   const finishedReply = result.phase === ChatActivityPhase.Idle || SETTLED_PHASES.has(result.phase);
-  if (active && finishedReply) return { phase: ChatActivityPhase.Working, label: fallback || labels.working() };
+  if (active && finishedReply)
+    return fallback
+      ? { phase: ChatActivityPhase.Working, label: fallback, named: true }
+      : { phase: ChatActivityPhase.Working, label: labels.working() };
   if (result.phase === ChatActivityPhase.Working && fallback && !/^building$/i.test(fallback))
-    return { ...result, label: fallback };
+    return { ...result, label: fallback, named: true };
   return result;
 }

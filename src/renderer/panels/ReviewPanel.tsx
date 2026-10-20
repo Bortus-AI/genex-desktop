@@ -371,7 +371,7 @@ function useImprovementCheck(activity: ReturnType<typeof useActivity>) {
 /** A self-update that failed and was not followed by a restore: the one recovery the user must act on. */
 function unrecoveredFailure(items: StudioActivityItem[]): StudioActivityItem | null {
   const recoveries = items.filter((item) => item.kind === "recovery");
-  const failed = recoveries.find((item) => item.title === "Studio restart failed");
+  const failed = recoveries.find((item) => item.restartFailed);
   if (!failed) return null;
   const restored = recoveries.some((item) => Boolean(item.snapshotId) && item.at >= failed.at);
   return restored ? null : failed;
@@ -499,7 +499,7 @@ function LearnedStory({ item }: { item: StudioActivityItem }): JSX.Element | nul
   if (!item.undone) return null;
   return (
     <p className="text-ink-2">
-      {item.status === "Undone"
+      {item.undoneByUser
         ? t("You undid this change. Harness works the way it did before.")
         : t("A later restore took this change back. Harness works the way it did before.")}
     </p>

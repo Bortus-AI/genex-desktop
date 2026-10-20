@@ -43,7 +43,7 @@ import { GENEX_COVER_TOOL, GENEX_PLUGIN_ID, GenexCoverOperation } from "../share
 import { SteerDelivery } from "../shared/message-queue.ts";
 import { engineLabel, roleName } from "../shared/model-roles.ts";
 import { ExecutionStatus, RoundOutcome, roundOutcome } from "../shared/run-state.ts";
-import { skillWords } from "../shared/skill-words.ts";
+import { skillUpdatedWords } from "../shared/skill-words.ts";
 import { MINUTE_MS } from "../shared/duration.ts";
 import { type ToolPermissionEvent, ToolPermissionState } from "../shared/permissions.ts";
 import { contractorIdentity } from "./chat-labels.ts";
@@ -1487,7 +1487,7 @@ function narrateSkillAccepted(chat: ChatDraft, event: EventEnvelope): void {
   const title = skillAccepted.title?.trim().replace(/\.$/, "");
   const text = title
     ? t("Harness learned to {skill}.", { skill: `${title.charAt(0).toLowerCase()}${title.slice(1)}` })
-    : t("Harness updated {skill}.", { skill: skillWords(skillAccepted.skill).replace(/^how Harness /, "how it ") });
+    : skillUpdatedWords(skillAccepted.skill);
   chat.entries.push({ id: event.id, kind: EntryKind.Learning, text, link: TRANSCRIPT_WORDS.seeInHarness });
 }
 

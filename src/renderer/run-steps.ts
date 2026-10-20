@@ -49,6 +49,7 @@ import {
   ranToItsEnd,
   savedByLead,
   spanWords,
+  stopReason,
   stoppedWords,
   TURN_WORDS,
   verdictSentence,
@@ -787,8 +788,8 @@ export function judgesOn(node: IterationNode): string {
 /** The lead's reason for stopping a try, when it gave one — without saying twice who stopped it. */
 export function leadStopped(node: IterationNode): string | null {
   if (node.status !== IterationStatus.Stopped || !node.reason) return null;
-  const words = stoppedWords(node.reason).replace(/^stopped by the lead\s*(?:—\s*)?/, "");
-  return words || null;
+  const reason = stopReason(node.reason);
+  return (reason.leadsWhy ?? reason.said) || null;
 }
 
 /** What a step was asked, minus the name the node already wears: "Tall mountain: a tall…" → "A tall…". */

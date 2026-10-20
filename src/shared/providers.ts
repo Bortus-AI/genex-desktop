@@ -34,15 +34,16 @@ export type RoleSupport = "presets" | "sessions" | "completion" | "single";
 
 /** What the sign-in card and the Models room say for a subscription. */
 export interface SignInCopy {
-  /** "your Claude subscription": the thing the user already pays for. */
-  readonly product: string;
   readonly card: string;
   readonly account: string;
   readonly install: string;
   /** The vendor's own install page for the CLI. */
   readonly installUrl: string;
   readonly get: string;
-  readonly who: string;
+  /** The flat sign-in card's line: the thing the user already pays for, put to work. */
+  readonly useLine: string;
+  /** The sign-in card's line while the subscription is not signed in: why, and who handles the password. */
+  readonly signInLine: string;
 }
 
 export interface ProviderInfo {
@@ -83,9 +84,6 @@ export const PROVIDERS = [
     roles: "presets",
     billing: "subscription",
     signIn: {
-      get product() {
-        return t("your Claude subscription");
-      },
       get card() {
         return t("Use your Claude subscription");
       },
@@ -99,8 +97,13 @@ export const PROVIDERS = [
       get get() {
         return t("Install Claude Code");
       },
-      get who() {
-        return t("Claude Code handles that part");
+      get useLine() {
+        return t("Use your Claude subscription to build games.");
+      },
+      get signInLine() {
+        return t(
+          "Your Claude subscription expired or isn't signed in. The studio never sees your password — Claude Code handles that part.",
+        );
       },
     },
   },
@@ -112,9 +115,6 @@ export const PROVIDERS = [
     roles: "presets",
     billing: "subscription",
     signIn: {
-      get product() {
-        return t("your ChatGPT subscription");
-      },
       get card() {
         return t("Use your ChatGPT subscription");
       },
@@ -128,8 +128,11 @@ export const PROVIDERS = [
       get get() {
         return t("Install Codex");
       },
-      get who() {
-        return t("Codex handles that part");
+      get useLine() {
+        return t("Use your ChatGPT subscription to build games.");
+      },
+      get signInLine() {
+        return t("Connect your ChatGPT subscription to build games. Codex handles sign-in in your browser.");
       },
     },
   },

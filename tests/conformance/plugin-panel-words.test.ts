@@ -2,8 +2,8 @@
  * A plugin panel in Genex's language: the host names the window's language in the panel's context
  * (`panel-bridge.ts`), the SDK's `words.js` speaks it from the plugin's own `locales/<lang>.json`
  * that `inline-panel-sdk.mjs` pastes in, and a missing translation shows the English. The bundled
- * panels' `locales/messages.json` lists exactly the English each panel asks for, and their catalogs
- * keep to it.
+ * plugins' `locales/messages.json` lists exactly the English each panel asks for and the texts of
+ * its manifest a person reads, and their catalogs keep to it.
  */
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -16,7 +16,9 @@ import { inlinePanelSdk } from "../../src/plugin-sdk/inline-panel-sdk.mjs";
 import {
   CATALOGS_ID,
   LOCALES_FOLDER,
+  MANIFEST_FILE,
   MESSAGES_FILE,
+  manifestMessages,
   PANEL_LOCALES,
   panelMessages,
   readPanelLocales,
@@ -266,17 +268,17 @@ describe("pasting a plugin's translations into its panel", () => {
   });
 });
 
-/** The bundled plugins whose panels speak Genex's language, each with its `locales/` folder. */
-const SPEAKING = ["blender", "godot", "roblox", "unity", "unreal"];
+/** The bundled plugins that speak Genex's language, each with its `locales/` folder. */
+const SPEAKING = ["blender", "genex", "godot", "roblox", "unity", "unreal"];
 
 describe("the bundled panels' words", () => {
   for (const id of SPEAKING) {
-    it(`${id}: messages.json lists what its panel asks for, and each catalog keeps to it`, async () => {
+    it(`${id}: messages.json lists what its panel and manifest ask for, and each catalog keeps to it`, async () => {
       const root = path.join("src/plugins", id);
-      const manifest = JSON.parse(await readFile(path.join(root, "plugin.json"), "utf8")) as {
+      const manifest = JSON.parse(await readFile(path.join(root, MANIFEST_FILE), "utf8")) as {
         panels: Array<{ file: string }>;
       };
-      const asked = new Set<string>();
+      const asked = new Set<string>(manifestMessages(manifest));
       for (const { file } of manifest.panels) {
         const { messages, problems } = panelMessages(await readFile(path.join(root, file), "utf8"));
         assert.deepEqual(problems, [], `${file} reads`);
@@ -284,7 +286,8 @@ describe("the bundled panels' words", () => {
       }
       const locales = path.join(root, LOCALES_FOLDER);
       const listed = JSON.parse(await readFile(path.join(locales, MESSAGES_FILE), "utf8")) as string[];
-      assert.deepEqual(listed, [...asked].sort(), `run: node src/plugin-sdk/panel-words.mjs ${root}/panel.html`);
+      const panels = manifest.panels.map(({ file }) => path.join(root, file)).join(" ");
+      assert.deepEqual(listed, [...asked].sort(), `run: node src/plugin-sdk/panel-words.mjs ${panels}`);
       for (const english of listed) assert.doesNotThrow(() => messageArguments(english), english);
       for (const locale of PANEL_LOCALES) {
         const file = path.join(locales, `${locale}.json`);

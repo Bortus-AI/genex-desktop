@@ -1,13 +1,16 @@
 /**
- * A panel's words, on the build's side. A plugin keeps its panel's translations in its own
- * `locales/` folder: `messages.json` lists every English message the panel asks for (its
- * `t("…")` calls and its `data-t` marks), and `<lang>.json` maps each English message to that
- * language, `{}` until it is translated. `inline-panel-sdk.mjs` pastes the translated languages
- * into the panel beside the SDK (`words.js` reads them there); a panel's frame can load nothing.
- * Plain Node, no Studio imports.
+ * A plugin's words, on the build's side. A plugin keeps its translations in its own `locales/`
+ * folder beside plugin.json: `messages.json` lists every English message its panels ask for (their
+ * `t("…")` calls and `data-t` marks) and every text of its manifest a person reads
+ * (`manifestMessages`), and `<lang>.json` maps each English message to that language, `{}` until it
+ * is translated. `inline-panel-sdk.mjs` pastes the translated languages into the panel beside the
+ * SDK (`words.js` reads them there; a panel's frame can load nothing), and Genex reads the
+ * manifest's from the installed package. Plain Node, no Studio imports.
  *
  *   node panel-words.mjs panel.html [more.html…]   writes locales/messages.json beside the first
- *                                                  panel and an empty catalog per missing language
+ *                                                  file, with the texts of the plugin.json there,
+ *                                                  and an empty catalog per missing language
+ *   node panel-words.mjs plugin.json                the same for a plugin without a panel
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -18,6 +21,8 @@ export const PANEL_LOCALES = ["ru", "es", "pt-BR", "de", "fr", "ja", "ko", "zh-H
 /** The folder beside a panel that holds its words, and the list of messages in it. */
 export const LOCALES_FOLDER = "locales";
 export const MESSAGES_FILE = "messages.json";
+/** The manifest beside the panels, whose texts a person reads go in the same catalogs. */
+export const MANIFEST_FILE = "plugin.json";
 /** The id of the element the translations are pasted into; `words.js` reads it. */
 export const CATALOGS_ID = "studio-panel-locales";
 
@@ -124,6 +129,42 @@ function markedWords(element, name, raw, problems) {
   return "";
 }
 
+/** `value` when it is a list, else none. */
+const listOf = (value) => (Array.isArray(value) ? value : []);
+
+/**
+ * The texts of a plugin.json Genex shows a person, in code-unit order: its name and description,
+ * setup steps, panel titles, setting and action labels, the confirmations its actions and tools ask
+ * with and a card field's label, toolbar labels, why it writes in a folder, Live tab and runtime
+ * names. Genex shows each in the app's language from the plugin's `locales/<lang>.json`, else the
+ * English, as plain text: no placeholders. Genex's own list is `manifestTexts` in
+ * `substrate/plugins/manifest-words.ts`, held to this one by plugin-manifest-words.test.ts.
+ * @param {unknown} manifest the parsed plugin.json
+ * @returns {string[]}
+ */
+export function manifestMessages(manifest) {
+  const found = new Set();
+  const add = (text) => {
+    if (typeof text === "string" && text) found.add(text);
+  };
+  const each = (list, read) => {
+    for (const item of listOf(list)) if (item && typeof item === "object") read(item);
+  };
+  const m = manifest && typeof manifest === "object" ? manifest : {};
+  add(m.name);
+  add(m.description);
+  for (const step of listOf(m.setup)) add(step);
+  each(m.panels, (panel) => add(panel.title));
+  each(m.settings, (setting) => add(setting.label));
+  each(m.actions, (action) => [action.label, action.confirmation].forEach(add));
+  each(m.tools, (tool) => [tool.confirmation, tool.confirmationInput?.label].forEach(add));
+  each(m.toolbar, (item) => [item.label, item.ariaLabel].forEach(add));
+  each(m.folders, (folder) => add(folder.why));
+  each(m.observers, (observer) => add(observer.label));
+  each(m.nativeRuntimes, (runtime) => add(runtime.label));
+  return [...found].sort(compareKeys);
+}
+
 /**
  * The translated languages in a `locales/` folder: each `<lang>.json` with at least one translation,
  * its empty strings left out. A folder that is missing has none; a file that is not a JSON object
@@ -168,13 +209,15 @@ export function panelLocalesScript(catalogs) {
 }
 
 /**
- * Writes `messages.json` for the panels into `dir`, and an empty catalog for each language that has
- * none yet. Answers the problems `panelMessages` found; nothing is written while there are any.
+ * Writes `messages.json` for the panels and the manifest's texts into `dir`, and an empty catalog
+ * for each language that has none yet. Answers the problems `panelMessages` found; nothing is
+ * written while there are any.
  * @param {string[]} panels the panel files
  * @param {string} dir the plugin's locales folder
+ * @param {unknown} [manifest] the plugin's parsed plugin.json, whose texts a person reads go in too
  */
-export async function writePanelMessages(panels, dir) {
-  const found = new Set();
+export async function writePanelMessages(panels, dir, manifest) {
+  const found = new Set(manifest === undefined ? [] : manifestMessages(manifest));
   const problems = [];
   for (const panel of panels) {
     const read = panelMessages(await readFile(panel, "utf8"));
@@ -192,13 +235,25 @@ export async function writePanelMessages(panels, dir) {
   return [];
 }
 
+/** The parsed plugin.json at `file`; undefined when there is none. */
+async function readManifest(file) {
+  const text = await readFile(file, "utf8").catch((error) => {
+    if (error?.code === "ENOENT") return undefined;
+    throw error;
+  });
+  return text === undefined ? undefined : JSON.parse(text);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const panels = process.argv.slice(2);
-  if (panels.length === 0) {
-    console.error("usage: node panel-words.mjs panel.html [more.html…]");
+  const files = process.argv.slice(2);
+  if (files.length === 0) {
+    console.error("usage: node panel-words.mjs panel.html [more.html…] | plugin.json");
     process.exit(1);
   }
-  const problems = await writePanelMessages(panels, path.join(path.dirname(panels[0]), LOCALES_FOLDER));
+  const root = path.dirname(files[0]);
+  const panels = files.filter((file) => path.basename(file) !== MANIFEST_FILE);
+  const manifest = await readManifest(path.join(root, MANIFEST_FILE));
+  const problems = await writePanelMessages(panels, path.join(root, LOCALES_FOLDER), manifest);
   for (const problem of problems) console.error(problem);
   process.exit(problems.length > 0 ? 1 : 0);
 }

@@ -124,6 +124,7 @@ function ProfileFriends({ friends, name }: { friends: PlayProfileFriend[]; name:
       title={WORDS.friends}
       note={String(friends.length)}
       label={name ? WORDS.friendsOf(name) : WORDS.friends}
+      arrows={WORDS.friendsArrows(name)}
       hook={{ "data-profile-friends": "" }}
     >
       {friends.map((friend) => {

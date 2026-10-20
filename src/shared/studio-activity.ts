@@ -34,6 +34,10 @@ export interface StudioActivityItem {
   runId?: string;
   snapshotId?: string;
   undone?: boolean;
+  /** A learned change the person took back themselves (Undo), not one a later restore took back. */
+  undoneByUser?: true;
+  /** A restart of Studio that failed: the one recovery the person must act on. */
+  restartFailed?: true;
   outcome?: RunOutcomeKind;
   /** The run's own plain report, when it wrote one. */
   report?: string;
@@ -143,7 +147,7 @@ type ItemReader = (record: StudioRecord) => StudioActivityItem | null;
 
 // Activity shows runs and learned changes, so their titles and details are translated. The
 // recovery, upkeep and learning items, and every `status`, are read only by the harness
-// (`studio.context`) and compared by the Activity panel, so they stay English.
+// (`studio.context`), so they stay English; the panel reads `undoneByUser` and `restartFailed`.
 function restoredItem(event: EventEnvelope, reason: string, snapshotId: string): StudioActivityItem {
   return {
     id: event.id,
@@ -185,6 +189,7 @@ const improvementItem: ItemReader = ({ event, event_type, payload: p, restored }
       : changeTitle({ title: words(p.title), skill: words(p.skill), file: words(p.file) }),
     status: improvementStatus(undone, byUser),
     undone,
+    ...(byUser ? { undoneByUser: true } : {}),
     detail:
       words(p.rationale) ||
       words(p.reason) ||
@@ -211,14 +216,16 @@ const selfChangeItem: ItemReader = ({ event, event_type, payload: p, restored })
   if (!agentChangedFile(event_type, p)) return null;
   const snapshotId = words(p.snapshot_id);
   const undone = restored.has(snapshotId);
+  const byUser = restored.get(snapshotId) === UNDONE_BY_USER;
   const summary = improvementSummary(p, false);
   return {
     id: event.id,
     at: event.created_at,
     kind: "improvement",
     title: words(p.title) || selfChangeTitle(event_type, p),
-    status: improvementStatus(undone, restored.get(snapshotId) === UNDONE_BY_USER),
+    status: improvementStatus(undone, byUser),
     undone,
+    ...(byUser ? { undoneByUser: true } : {}),
     detail: words(p.reason) || t("Harness changed one of its own files."),
     ...(summary.length ? { summary } : {}),
     ...(undone ? {} : { attention: true }),
@@ -328,6 +335,10 @@ const downgradeItem: ItemReader = ({ event, payload: p }) => {
   };
 };
 
+/** A recovery record that says Studio could not restart: a failed restart, not a provider change. */
+const isFailedRestart = (event_type: string, ok: unknown): boolean =>
+  event_type !== CustomEvent.EngineFallback && ok === false;
+
 function recoveryTitle(event_type: string, ok: unknown): string {
   if (event_type === CustomEvent.EngineFallback) return "Changed provider";
   return ok === false ? "Studio restart failed" : "Studio restarted";
@@ -340,6 +351,7 @@ const recoveryItem: ItemReader = ({ event, event_type, payload: p }) => ({
   title: recoveryTitle(event_type, p.ok),
   detail: words(p.reason) || words(p.detail),
   attention: p.ok === false || event_type === CustomEvent.HarnessReseeded,
+  ...(isFailedRestart(event_type, p.ok) ? { restartFailed: true } : {}),
 });
 
 /** Why the studio resumed a build on its own, as Activity says it (`run_auto_resumed`). */

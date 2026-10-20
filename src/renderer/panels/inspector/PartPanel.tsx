@@ -14,7 +14,7 @@ import {
   triesWord,
 } from "../../run-steps.ts";
 import { Icon } from "../../ui/icons.tsx";
-import { checkCounts, ranToItsEnd, stoppedWords } from "../../words.ts";
+import { checkCounts, ranToItsEnd, stopReason } from "../../words.ts";
 import { useRoundStill } from "../run-stills.ts";
 import { Details, NotesSection, Panel, PanelRow, Para, Quote, Row, Rows, Section } from "./chrome.tsx";
 import { capitalise, joinDots } from "./format.ts";
@@ -23,10 +23,6 @@ import { partSelection } from "./selection.ts";
 import { taskOf, taskRows } from "./SessionPanel.tsx";
 import { StateGlyph, Status } from "./tone.tsx";
 import type { InspectorProps } from "./types.ts";
-
-/** How the stop words begin when the lead, not the budget or the judges, stopped a part. */
-const LEAD_STOPPED = /^stopped by the lead/;
-const LEAD_STOPPED_PREFIX = /^stopped by the lead\s*(?:—\s*)?/;
 
 /** A step as one row of its part's panel: thumbnail, name, state and tries. */
 function StepRow({ graph, step, onSelect }: { graph: RunGraphModel; step: Step; onSelect: () => void }): JSX.Element {
@@ -81,7 +77,7 @@ function partPill(row: PartRow, active: boolean): { tone: Tone; text: string } {
   const facet = row.facet;
   if (active && row.working) return { tone: Tone.Accent, text: t("Working") };
   if (stoppedEarly(facet)) {
-    const byLead = LEAD_STOPPED.test(stoppedWords(facet.stoppedBecause));
+    const byLead = stopReason(facet.stoppedBecause).leadsWhy !== null;
     return { tone: Tone.Muted, text: byLead ? t("Stopped by the lead") : t("Stopped") };
   }
   if (row.integrated)
@@ -108,10 +104,10 @@ function partDuration(row: PartRow, active: boolean): string | null {
 }
 
 /** Why a part stopped, and whether it was the lead that stopped it. A part that finished its work has no "why it stopped" to tell. */
-function stopReason(facet: FacetNode): { lead: boolean; text: string } | null {
+function whyStopped(facet: FacetNode): { lead: boolean; text: string } | null {
   if (!stoppedShort(facet.stoppedBecause)) return null;
-  const stopped = stoppedWords(facet.stoppedBecause);
-  return { lead: LEAD_STOPPED.test(stopped), text: stopped.replace(LEAD_STOPPED_PREFIX, "") || stopped };
+  const { said, leadsWhy } = stopReason(facet.stoppedBecause);
+  return { lead: leadsWhy !== null, text: leadsWhy || said };
 }
 
 const attemptsLine = (task: RunTask | null): string | null => {
@@ -151,7 +147,7 @@ export function PartPanel(props: InspectorProps & { row: PartRow }): JSX.Element
   const notes = graph.notes.filter((note) => note.facetId === facet.facetId && note.iteration === null);
   // A part built in one session has one node and no steps to count.
   const session = row.steps.every((step) => step.session);
-  const why = stopReason(facet);
+  const why = whyStopped(facet);
   const stepCount = t("{count, plural, one {# step} other {# steps}}", { count: row.steps.length });
   return (
     <Panel

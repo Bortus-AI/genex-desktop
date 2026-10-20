@@ -28,18 +28,32 @@ export const SUBSCRIPTION_LABELS: Record<string, { card: string; account: string
  * What the sign-in card names and links for an engine; a neutral card for one the table does not
  * list, whose install link is empty (the card disables it) rather than another vendor's.
  */
-export function signInVendor(engine: string): { name: string; product: string; url: string; get: string; who: string } {
+export function signInVendor(engine: string): {
+  name: string;
+  url: string;
+  get: string;
+  useLine: string;
+  signInLine: string;
+} {
   const provider = providerInfo(engine);
   const copy = provider?.signIn;
   if (!provider || !copy)
     return {
       name: engine,
-      product: t("your subscription"),
       url: "",
       get: t("Install it"),
-      who: t("the provider handles that part"),
+      useLine: t("Use your subscription to build games."),
+      signInLine: t(
+        "Your subscription expired or isn't signed in. The studio never sees your password — the provider handles that part.",
+      ),
     };
-  return { name: provider.label, product: copy.product, url: copy.installUrl, get: copy.get, who: copy.who };
+  return {
+    name: provider.label,
+    url: copy.installUrl,
+    get: copy.get,
+    useLine: copy.useLine,
+    signInLine: copy.signInLine,
+  };
 }
 
 /** How often a sign-in in flight is re-checked through the engine status. */

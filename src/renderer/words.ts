@@ -574,14 +574,23 @@ export function stoppedWords(reason: string | null | undefined): string {
   return stopReason(reason).said;
 }
 
+/** A stop reason read once, so no caller reads its words back. */
+export interface StopReason {
+  /** The reason in the user's words. */
+  said: string;
+  /** Whether `said` already says it was stopped: the lead's own stop, or a reason the harness wrote starting with "stopped". */
+  saysStopped: boolean;
+  /** When the lead stopped it: its reason without saying who stopped it, "" when it gave none; null for any other stop. */
+  leadsWhy: string | null;
+}
+
 /**
- * A stop reason in the user's words, and whether those words already say it was stopped (the
- * lead's own stop, or a reason the harness wrote starting with "stopped"), read from the reason
- * itself so no caller has to read the words back.
+ * A stop reason in the user's words, read from the reason the harness wrote: what to say, and
+ * whether it was the lead that stopped it.
  */
-function stopReason(reason: string | null | undefined): { said: string; saysStopped: boolean } {
+export function stopReason(reason: string | null | undefined): StopReason {
   let raw = (reason ?? "").trim();
-  if (!raw) return { said: t("it finished"), saysStopped: false };
+  if (!raw) return { said: t("it finished"), saysStopped: false, leadsWhy: null };
   // A stopped builder's reason ends with the branch its work was left on. The user is told the
   // work was kept; the branch name is the harness's own bookkeeping.
   let workKept = false;
@@ -593,12 +602,37 @@ function stopReason(reason: string | null | undefined): { said: string; saysStop
   // matching the landing half anywhere in the string used to swallow the why with it.
   const landing = LANDING_CLAUSE.test(raw);
   const why = raw.replace(LANDING_CLAUSE, "").trim();
+  if (stoppedByLead(why)) return leadStop(why, workKept);
   const said = whyItEnded(why);
-  if (said) return { said: withWorkKept(said, workKept), saysStopped: stoppedByLead(why) };
+  if (said) return { said: withWorkKept(said, workKept), saysStopped: false, leadsWhy: null };
   if (landing || /^(?:nothing was landed|land=no)\b/i.test(why))
-    return { said: t("nothing was made live"), saysStopped: false };
+    return { said: t("nothing was made live"), saysStopped: false, leadsWhy: null };
   const own = withoutIds(why || raw);
-  return { said: withWorkKept(own, workKept), saysStopped: /^stopped\b/i.test(own) };
+  // A worker the lead stopped: the harness's own words for it ("stopped by the lead").
+  const leads = LEAD_STOPPED_IN_HARNESS.test(own)
+    ? leadsReason(own.replace(LEAD_STOPPED_IN_HARNESS, ""), workKept)
+    : null;
+  return { said: withWorkKept(own, workKept), saysStopped: /^stopped\b/i.test(own), leadsWhy: leads };
+}
+
+/**
+ * "stopped by the director: fixing the starting point" — the run's own words, minus the job
+ * title. The lead stopping a builder is not the owner asking for anything.
+ */
+function leadStop(why: string, workKept: boolean): StopReason {
+  const own = why.replace(/^stopped by the director\b[:\s—-]*/i, "").trim();
+  const said = own ? t("stopped by the lead — {why}", { why: withoutIds(own) }) : t("stopped by the lead");
+  return {
+    said: withWorkKept(said, workKept),
+    saysStopped: true,
+    leadsWhy: leadsReason(own && withoutIds(own), workKept),
+  };
+}
+
+/** The lead's reason for a stop, without who stopped it, saying the stopped builder's work was kept when it was. */
+function leadsReason(why: string, workKept: boolean): string {
+  if (why) return withWorkKept(why, workKept);
+  return workKept ? t("its work was kept") : "";
 }
 
 /** A stop reason, saying the stopped builder's work was kept when it was. */
@@ -612,10 +646,12 @@ const LANDING_CLAUSE = /;\s*(?:nothing was landed|the integration branch was lan
 const KEPT_ON_BRANCH = /\s*—\s*its work so far is kept on \S+\s*$/i;
 /** The lead stopping a builder: "stopped by the director: fixing the starting point". */
 const STOPPED_BY_DIRECTOR = /^stopped by the director\b/i;
+/** A worker the lead stopped, as the harness's worker pool words it: "stopped by the lead". */
+const LEAD_STOPPED_IN_HARNESS = /^stopped by the lead\s*(?:—\s*)?/;
 /** A wrap-up the owner asked for, whoever passed it on. */
 const AT_USERS_REQUEST = /at the user.s request/i;
 
-/** Did `whyItEnded` read this as the lead's own stop? */
+/** Is this the lead's own stop, not a wrap-up the owner asked for? */
 function stoppedByLead(why: string): boolean {
   return STOPPED_BY_DIRECTOR.test(why) && !AT_USERS_REQUEST.test(why);
 }
@@ -626,12 +662,6 @@ function whyItEnded(why: string): string | null {
   if (/^stopped by the user$/i.test(why)) return t("you stopped it");
   if (AT_USERS_REQUEST.test(why)) return t("you asked it to wrap up");
   if (/^the director finished the run$/i.test(why)) return t("the lead finished the build");
-  // "stopped by the director: fixing the starting point" — the run's own words, minus the
-  // job title. The lead stopping a builder is not the owner asking for anything.
-  if (STOPPED_BY_DIRECTOR.test(why)) {
-    const said = why.replace(/^stopped by the director\b[:\s—-]*/i, "").trim();
-    return said ? t("stopped by the lead — {why}", { why: withoutIds(said) }) : t("stopped by the lead");
-  }
   if (/^autopilot finished$/i.test(why)) return t("the build finished");
   // A lost provider paused it (harness provider-loss.ts `pauseEnding`): what to fix, never the provider's own words.
   if (/^the engine lost its sign-in\b/i.test(why))
@@ -2333,6 +2363,14 @@ export const LEAD_WORDS = {
     done: t("Done"),
     stopped: t("Stopped"),
   } satisfies Record<LeadFace, string>,
+  /** the lead's node as a screen reader names it, by face */
+  heard: {
+    working: t("The lead: working on the next step"),
+    waiting: t("The lead: waiting for a worker"),
+    paused: t("The lead: paused"),
+    done: t("The lead: done"),
+    stopped: t("The lead: stopped"),
+  } satisfies Record<LeadFace, string>,
   /** the card's sentence by face */
   about: {
     working: t(
@@ -2498,11 +2536,6 @@ export function improvementWords(improvement: CustomPayload<typeof CustomEvent.I
     what: improvement.reason ?? improvement.file ?? t("its own craft"),
     file: improvement.file ?? t("a file"),
   });
-}
-
-/** What a learning pass taught the harness, as a count already in words ("2 things"). */
-export function harnessLearnedWords(things: string): string {
-  return t("Harness learned {things} from this build.", { things });
 }
 
 /** What the lead offered to Live: its Reload plays it, since Live never changes under the user. */
@@ -2781,7 +2814,11 @@ export function permissionWords(plugin: string, prompt: string | undefined): str
 
 /** The suggestions card in Activity and its exact-edit view (`ui/ProposalsTable.tsx`). */
 export const SUGGESTION_WORDS = {
-  title: (changes: string) => t("Harness suggests {changes} to how it builds", { changes }),
+  title: (count: number) =>
+    t(
+      "{count, plural, one {Harness suggests # change to how it builds} other {Harness suggests # changes to how it builds}}",
+      { count },
+    ),
   subtitle: t("Nothing changes until you apply."),
   include: (title: string) => t("Include: {title}", { title }),
   fallbackSummary: t("Suggested after reviewing your recent builds."),
@@ -2790,7 +2827,7 @@ export const SUGGESTION_WORDS = {
   selected: (included: number, total: number) =>
     t("{included} of {total} selected · you can undo later", { included, total }),
   discard: t("Discard"),
-  apply: (changes: string) => t("Apply {changes}", { changes }),
+  apply: (count: number) => t("{count, plural, one {Apply # change} other {Apply # changes}}", { count }),
 } as const;
 
 /** Activity's header and its Self-improvement switch (`panels/ReviewPanel.tsx`). */
@@ -4431,7 +4468,8 @@ export const GENEX_WORDS = {
     toolsLine: t(
       "The best game dev tools, always up to date. No MCPs or API keys to install: they’re connected in one click.",
     ),
-    from: t("from"),
+    /** A kind's lowest price, the number bold. */
+    from: (price: string) => t("from <b>{price}</b>", { price }),
     pricesUnavailable: t("Prices couldn’t be read from genex.games right now."),
     recent: t("Recent spending"),
     recentLine: t("Your latest generations and refunds"),
@@ -4476,8 +4514,9 @@ export const GENEX_WORDS = {
     rooms: t("Online rooms"),
     voice: t("Voice chat"),
     economy: t("In-game economy"),
-    /** Setup's line while the plugin is off, around its name: the agent builds multiplayer with its tools. */
-    through: t("Your agent builds multiplayer with the"),
+    /** Setup's line while the plugin is off or not installed, its name a press that opens its page; the button says what is missing. */
+    turnOnLine: t("Your agent builds multiplayer with the <plugin>Genex plugin</plugin>. Turn it on to continue."),
+    installLine: t("Your agent builds multiplayer with the <plugin>Genex plugin</plugin>. Install it to continue."),
   },
   /** The Publish dialog on the game's stage, drawn by Studio. */
   publish: {
@@ -4521,8 +4560,8 @@ export const GENEX_WORDS = {
     keepsGoing: t("You can close this. It keeps going."),
     /** Under the busy button, once the test runs longer than usual. */
     slow: t("Taking longer than usual."),
-    /** After the name on the banner, the one moment an attempt the dialog watched goes live. */
-    isLive: t("is live!"),
+    /** The banner's name, the one moment an attempt the dialog watched goes live: `<name>` is the name's own press. */
+    isLive: t("<name>{title}</name> <live>is live!</live>"),
     /** The press that lists a game renamed right after it went live under its new name. */
     saveName: t("Save name"),
     replay: t("Play the celebration again"),
@@ -4580,10 +4619,6 @@ export const GENEX_WORDS = {
     termsNote: t("Review the updated Genex terms in your browser before publishing."),
     /** With no account: why to sign in, under the account card. */
     signInText: t("Your games go on your Genex profile. Sign in to publish."),
-    /** Multiplayer's setup line ends, around the plugin's name; its button says what is missing. */
-    throughEnd: t(". Turn it on to continue."),
-    installEnd: t(". Install it to continue."),
-    plugin: t("Genex plugin"),
     pluginPage: t("Open the Genex plugin page"),
     turnOn: t("Turn on Genex plugin"),
     turningOn: t("Turning on…"),
@@ -4718,6 +4753,9 @@ function commentAgo(minutes: number): string {
   return t("{count, plural, one {# year ago} other {# years ago}}", { count: Math.floor(days / 365) });
 }
 
+/** What a Play feed holds, as its messages name it (`PLAY_WORDS.search`…): a shelf, or one kind of asset. */
+export type FeedThings = PlayShelf | LibraryKind;
+
 /** Play: the genex.games catalog inside the app, its sidebar and its Genex card. */
 export const PLAY_WORDS = {
   /** The Genex account at the sidebar's foot, profiles and the Friends page. */
@@ -4771,8 +4809,14 @@ export const PLAY_WORDS = {
     friendsOf: (name: string) => t("{name}’s friends", { name }),
     previous: t("Previous"),
     next: t("Next"),
-    previousOf: (what: string) => t("Previous {what}", { what: what.toLowerCase() }),
-    nextOf: (what: string) => t("Next {what}", { what: what.toLowerCase() }),
+    /** A row of friends' arrows: a profile's, named by whose friends they are. */
+    friendsArrows: (name: string | null) =>
+      name
+        ? {
+            previous: t("Previous {name}’s friends", { name }),
+            next: t("Next {name}’s friends", { name }),
+          }
+        : { previous: t("Previous friends"), next: t("Next friends") },
     openProfile: (name: string) => t("Open {name}’s profile", { name }),
     playingLabel: (name: string, game: string) => t("{name}, playing {game}", { name, game }),
     /** A person's tile read aloud: their name, then its line. */
@@ -4878,8 +4922,6 @@ export const PLAY_WORDS = {
     liveIn: (game: string, others: number) =>
       others > 0 ? t("in {game} and {count} more", { game, count: others }) : t("in {game}", { game }),
     nobodyNow: t("nobody right now"),
-    thisMonth: t("this month"),
-    addedThisMonth: (count: number) => `+${count}`,
     chartTitle: t("Plays per day"),
     chartLabel: (days: number) => t("Plays per day over the last {days} days", { days }),
     tooltip: (count: string) => t("{count} plays", { count }),
@@ -4901,6 +4943,7 @@ export const PLAY_WORDS = {
     title: t("Top creators"),
     /** Beside the title: the rolling 30 days the ranking covers. */
     period: t("this month"),
+    arrows: { previous: t("Previous top creators"), next: t("Next top creators") },
     line: (games: number, hours: string) =>
       t("{games, plural, one {# game} other {# games}} · {hours} h", { games, hours }),
   },
@@ -4912,12 +4955,6 @@ export const PLAY_WORDS = {
     [PlayShelf.Games]: t("Games"),
     [PlayShelf.Tools]: t("Tools"),
     [PlayShelf.Assets]: t("Assets"),
-  } satisfies Record<PlayShelf, string>,
-  /** What a shelf holds, as its messages name it. */
-  nouns: {
-    [PlayShelf.Games]: t("games"),
-    [PlayShelf.Tools]: t("tools"),
-    [PlayShelf.Assets]: t("assets"),
   } satisfies Record<PlayShelf, string>,
   categoriesLabel: t("Categories"),
   categories: {
@@ -4937,7 +4974,11 @@ export const PLAY_WORDS = {
     [PlayCategory.Vfx]: t("VFX"),
     [PlayCategory.Assets]: t("All"),
   } satisfies Record<PlayCategory, string>,
-  search: (noun: string) => t("Search {things}", { things: noun }),
+  search: (things: FeedThings) =>
+    t(
+      "{things, select, games {Search games} tools {Search tools} assets {Search assets} 3d {Search 3D assets} image {Search images} sound {Search sounds} video {Search videos} other {Search}}",
+      { things },
+    ),
   searchLabel: t("Search Play"),
   play: (title: string) => t("Play {title}", { title }),
   by: (author: string) => t("By {author}", { author }),
@@ -4972,21 +5013,50 @@ export const PLAY_WORDS = {
     /** A remix finished while the person was elsewhere: its game is in the sidebar. */
     ready: (title: string) => t("{title} is ready", { title }),
   },
-  loading: (noun: string) => t("Loading {things}…", { things: noun }),
+  loading: (things: FeedThings) =>
+    t(
+      "{things, select, games {Loading games…} tools {Loading tools…} assets {Loading assets…} 3d {Loading 3D assets…} image {Loading images…} sound {Loading sounds…} video {Loading videos…} other {Loading…}}",
+      { things },
+    ),
   loadingMore: t("Loading more…"),
-  failed: (noun: string) => t("Couldn’t load {things}. Check your connection and try again.", { things: noun }),
+  failed: (things: FeedThings) =>
+    t(
+      "{things, select, games {Couldn’t load games. Check your connection and try again.} tools {Couldn’t load tools. Check your connection and try again.} assets {Couldn’t load assets. Check your connection and try again.} 3d {Couldn’t load 3D assets. Check your connection and try again.} image {Couldn’t load images. Check your connection and try again.} sound {Couldn’t load sounds. Check your connection and try again.} video {Couldn’t load videos. Check your connection and try again.} other {Couldn’t load this. Check your connection and try again.}}",
+      { things },
+    ),
   retry: t("Try again"),
-  empty: (noun: string) => t("No {things} here yet.", { things: noun }),
-  noMatches: (query: string, noun: string) => t("No {things} match “{query}”.", { things: noun, query }),
-  moreFailed: (noun: string) => t("Couldn’t load more {things}.", { things: noun }),
+  empty: (things: FeedThings) =>
+    t(
+      "{things, select, games {No games here yet.} tools {No tools here yet.} assets {No assets here yet.} 3d {No 3D assets here yet.} image {No images here yet.} sound {No sounds here yet.} video {No videos here yet.} other {Nothing here yet.}}",
+      { things },
+    ),
+  noMatches: (query: string, things: FeedThings) =>
+    t(
+      "{things, select, games {No games match “{query}”.} tools {No tools match “{query}”.} assets {No assets match “{query}”.} 3d {No 3D assets match “{query}”.} image {No images match “{query}”.} sound {No sounds match “{query}”.} video {No videos match “{query}”.} other {Nothing matches “{query}”.}}",
+      { things, query },
+    ),
+  moreFailed: (things: FeedThings) =>
+    t(
+      "{things, select, games {Couldn’t load more games.} tools {Couldn’t load more tools.} assets {Couldn’t load more assets.} 3d {Couldn’t load more 3D assets.} image {Couldn’t load more images.} sound {Couldn’t load more sounds.} video {Couldn’t load more videos.} other {Couldn’t load more.}}",
+      { things },
+    ),
   /** No network: what the dashboard, its search and the viewer say, each coming back by itself. */
   offline: {
     chip: t("Offline"),
     title: t("You’re offline"),
-    shelf: (things: string) => t("{things} load as soon as you’re back online.", { things }),
+    shelf: (shelf: PlayShelf) =>
+      t(
+        "{shelf, select, games {Games load as soon as you’re back online.} tools {Tools load as soon as you’re back online.} assets {Assets load as soon as you’re back online.} other {This loads as soon as you’re back online.}}",
+        { shelf },
+      ),
+    friends: t("Friends load as soon as you’re back online."),
     search: t("Search works again as soon as you’re back online."),
     profile: t("This profile loads as soon as you’re back online."),
-    more: (noun: string) => t("More {things} load when you’re back online.", { things: noun }),
+    more: (things: FeedThings) =>
+      t(
+        "{things, select, games {More games load when you’re back online.} tools {More tools load when you’re back online.} assets {More assets load when you’re back online.} 3d {More 3D assets load when you’re back online.} image {More images load when you’re back online.} sound {More sounds load when you’re back online.} video {More videos load when you’re back online.} other {More loads when you’re back online.}}",
+        { things },
+      ),
     game: (title: string) => t("{title} opens as soon as you’re back online.", { title }),
   },
   viewer: {
@@ -5244,7 +5314,6 @@ export const NATIVE_WORDS = {
   /** A profile's card for a game this computer has no build of. */
   onlyOn: (platform: string) => t("Only on {platform}", { platform }),
   // The game page.
-  by: t("By"),
   stats: (plays: string, likes: string, updated: string | null) =>
     [
       t("{count} plays", { count: plays }),
@@ -5475,11 +5544,7 @@ export const ACCOUNT_WORDS = {
   buyCredits: t("Buy credits"),
   buyCreditsLabel: t("Buy credits on genex.games"),
   /** Under the balance: what credits pay for, the plugin's name a link to its page. */
-  creditsNote: {
-    before: t("For "),
-    plugin: t("Genex plugin"),
-    after: t(" tools: 3D, animation, textures, music. Optional."),
-  },
+  creditsNote: t("For <plugin>Genex plugin</plugin> tools: 3D, animation, textures, music. Optional."),
   creditsPluginLabel: t("Open the Genex plugin page"),
   signOut: t("Sign out"),
   /** Signed out: the one title, the line and the button, nothing under it. */
@@ -5594,14 +5659,6 @@ export const PLAY_ASSET_WORDS = {
     [KindChoice.Image]: t("Images"),
     [KindChoice.Sound]: t("Sounds"),
     [KindChoice.Video]: t("Videos"),
-  } satisfies Record<KindChoice, string>,
-  /** What a kind's grid holds, as its messages name it. */
-  nouns: {
-    [KindChoice.All]: t("assets"),
-    [KindChoice.Model]: t("3D assets"),
-    [KindChoice.Image]: t("images"),
-    [KindChoice.Sound]: t("sounds"),
-    [KindChoice.Video]: t("videos"),
   } satisfies Record<KindChoice, string>,
   scopesLabel: t("Whose assets"),
   scopes: { [AssetScope.Everyone]: t("Everyone"), [AssetScope.Mine]: t("Mine") } satisfies Record<AssetScope, string>,

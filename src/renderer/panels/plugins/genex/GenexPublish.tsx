@@ -34,6 +34,7 @@ import { Pending } from "../../../ui/Pending.tsx";
 import { StepBar } from "../../../ui/StepBar.tsx";
 import { useAsyncEffect } from "../../../use-async-effect.ts";
 import { useCopy } from "../../../use-copy.ts";
+import { richText } from "../../../rich-text.tsx";
 import { ACCOUNT_WORDS, GENEX_WORDS, PUBLISH_PLATFORM_WORDS, problemWords } from "../../../words.ts";
 import { MakingArt } from "../../MakingArt.tsx";
 import { PluginApproval } from "../../PluginApproval.tsx";
@@ -137,6 +138,20 @@ function useBannerShot(project: string, again: unknown): string | null {
   return src;
 }
 
+/** The banner's line: the name, and the one moment it went live, the sentence "<name> is live!" around it. */
+function BannerLine({ name, live }: { name: JSX.Element; live: boolean }): JSX.Element {
+  return (
+    <span className="genex-publish-banner-line">
+      {live
+        ? richText(WORDS.isLive, {
+            name: () => name,
+            live: (words) => <span className="genex-publish-banner-live">{words}</span>,
+          })
+        : name}
+    </span>
+  );
+}
+
 /** The name on the banner: a press to rename it, its field while renaming, plain words while publishing. */
 function BannerName({
   title,
@@ -147,19 +162,20 @@ function BannerName({
   title: string;
   onTitle: (title: string) => void;
   editable: boolean;
-  /** It just went live: the name is followed by "is live!". */
+  /** It just went live: the banner says "<name> is live!". */
   live: boolean;
 }): JSX.Element {
   const [editing, setEditing] = useState(false);
-  const suffix = live ? <span className="genex-publish-banner-live">{WORDS.isLive}</span> : null;
   if (!editable)
     return (
-      <span className="genex-publish-banner-line">
-        <span className="genex-publish-banner-name" title={title}>
-          <span>{title}</span>
-        </span>
-        {suffix}
-      </span>
+      <BannerLine
+        live={live}
+        name={
+          <span className="genex-publish-banner-name" title={title}>
+            <span>{title}</span>
+          </span>
+        }
+      />
     );
   if (editing)
     return (
@@ -179,19 +195,21 @@ function BannerName({
       />
     );
   return (
-    <span className="genex-publish-banner-line">
-      <button
-        type="button"
-        className="genex-publish-banner-name"
-        title={title}
-        aria-label={WORDS.rename}
-        onClick={() => setEditing(true)}
-      >
-        <span>{title}</span>
-        <Icon name="rename" size={14} />
-      </button>
-      {suffix}
-    </span>
+    <BannerLine
+      live={live}
+      name={
+        <button
+          type="button"
+          className="genex-publish-banner-name"
+          title={title}
+          aria-label={WORDS.rename}
+          onClick={() => setEditing(true)}
+        >
+          <span>{title}</span>
+          <Icon name="rename" size={14} />
+        </button>
+      }
+    />
   );
 }
 
@@ -558,7 +576,7 @@ function ConnectStep({
 }
 
 /** The Genex plugin's name as a link to its page in Plugins; the dialog closes on the way. */
-function PluginLink({ onLeave }: { onLeave: () => void }): JSX.Element {
+function PluginLink({ onLeave, children }: { onLeave: () => void; children: ReactNode }): JSX.Element {
   return (
     <button
       type="button"
@@ -569,7 +587,7 @@ function PluginLink({ onLeave }: { onLeave: () => void }): JSX.Element {
         window.dispatchEvent(new CustomEvent(OPEN_PLUGINS_EVENT, { detail: { plugin: GENEX_PLUGIN_ID } }));
       }}
     >
-      {WORDS.plugin}
+      {children}
     </button>
   );
 }
@@ -629,8 +647,9 @@ export function GenexSetupDialog({
           ))}
         </ul>
         <p>
-          {MULTIPLAYER.through} <PluginLink onLeave={onClose} />
-          {install ? WORDS.installEnd : WORDS.throughEnd}
+          {richText(install ? MULTIPLAYER.installLine : MULTIPLAYER.turnOnLine, {
+            plugin: (name) => <PluginLink onLeave={onClose}>{name}</PluginLink>,
+          })}
         </p>
         {error && (
           <p role="alert" className="genex-publish-problem">
