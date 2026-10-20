@@ -3105,9 +3105,14 @@ Genex:
   turns settle (`use-cover-after-turns.ts`), and it records the `genex-clip` demo's clip when there is
   one. The banner flips between the record's `candidates` (the last four frames; `cover-pick` makes
   one the kept shot, pinned, which a publish sends without shooting again), shows a kept clip behind
-  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Make
-  sends "Make another Genex cover for this game: …" through the chat's own send
-  (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
+  a Picture / Clip switch, and Another cover (`[data-genex-another-cover]`) opens a field whose Ask
+  agent sends "Make another Genex cover for this game: …" through the chat's own send
+  (`renderer/compose-in-chat.ts`) and closes the dialog there. Once the chat really sent it, the ask
+  is kept per game on this Mac (`genex/cover-asks.ts`), so the banner opened again says one is being
+  made until the agent's own frame arrives: the record's `agentTook` (`covers/<project>/agent.json`,
+  set only by `genex__cover` shoot and clip, never by Studio's takes or a publish's shot). Roughly how
+  long is left shows once that game's last ask was timed (ask to `agentTook`; no number before one,
+  none once it runs over). A
   Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
 - A game that runs as its own program (a Unity, Godot or Unreal fact, or nothing served as a web

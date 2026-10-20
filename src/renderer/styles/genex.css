@@ -842,8 +842,10 @@
   gap: 10px;
   min-width: 0;
 }
-/* Dark glass over the cover, the chip's mono: Another cover, and the pill while one is taken or made. */
+/* Dark glass over the cover, the chip's mono: Another cover, and the pill while one is taken or made.
+ * Its ink is white, so Genex's loader in the pill draws white too. */
 .genex-publish-glass {
+  --ink: #fff;
   display: inline-flex;
   flex: none;
   align-items: center;
@@ -874,6 +876,13 @@ button.genex-publish-glass:hover {
 }
 .genex-publish-glass-clock {
   color: rgb(255 255 255 / 0.6);
+  font-size: 11px;
+}
+/* The time left shimmers in white on the glass, as the chat's clock does in ink. */
+@media (prefers-reduced-motion: no-preference) {
+  .genex-publish-glass-clock.chat-status-shimmer {
+    background-image: linear-gradient(100deg, rgb(255 255 255 / 0.55) 36%, #fff 50%, rgb(255 255 255 / 0.55) 64%);
+  }
 }
 /* The arrows at the banner's sides and the dots at its top, for the recent frames. */
 .genex-publish-arrow {

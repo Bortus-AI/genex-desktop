@@ -561,7 +561,8 @@ establish real browser/Keychain authorization.
 `run-publish-cover-ui.mjs` renders the production Publish dialog beside the production
 ChatPanel of the same game with a fake `window.studio`: with no shot the dialog asks the plugin to
 take one, the arrows pick a recent frame, Another cover sends its request through that chat and
-the banner says one is coming until a new frame arrives, and a kept clip plays behind its switch
+closes the dialog, the banner opened again says one is being made until a new frame arrives (with
+the time left once one was timed, in dark and light), and a kept clip plays behind its switch
 (screenshots in `.studio-dev/evidence/`). A fixture
 profile cannot show this dialog's body, since its Genex account is never connected.
 `run-publish-test-link-ui.mjs` renders the same dialog for its test link: it shows under "Publish
