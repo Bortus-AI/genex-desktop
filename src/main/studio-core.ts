@@ -1091,9 +1091,6 @@ export class StudioCore {
     this.plugins.agentWritable = (directory) => this.#agentWritable(directory);
     // A Finder-launched app has a bare PATH: Genex's publish found no git-lfs from Homebrew there.
     this.plugins.toolPath = async () => (await toolchain()).path;
-    // A slow plugin setup's log says which part held it (a first launch copies each seed).
-    this.plugins.onInitStep = (step, plugin) =>
-      this.options.markBoot?.(`core:plugins-${step}${plugin ? `:${plugin}` : ""}`);
     this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
     this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
     this.pluginServices.exportStage = async (binding, target, pluginId) => {
@@ -1105,6 +1102,14 @@ export class StudioCore {
         await this.#pluginTools.reviewExport(pluginId, binding, result);
       return result;
     };
+    await this.#initPlugins();
+  }
+
+  /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
+  async #initPlugins(): Promise<void> {
+    // A first launch also marks each seed it copies.
+    this.plugins.onInitStep = (step, plugin) =>
+      this.options.markBoot?.(`core:plugins-${step}${plugin ? `:${plugin}` : ""}`);
     await this.plugins.init();
   }
 

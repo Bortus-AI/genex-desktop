@@ -561,6 +561,8 @@ const newerVersion = (next: string | undefined, current: string) =>
 export interface PluginMcpLaunch {
   /** The installed package, the only place a `node` server's script may live. */
   packageDir: string;
+  /** A bundled plugin's seed folder in the app, which keeps the dependencies its copy leaves out. */
+  seed?: string;
   storageRoot(): Promise<string>;
   projectStorage(project: string): Promise<string>;
   settings(): Promise<Record<string, unknown>>;
@@ -613,6 +615,15 @@ export class PluginConsentDeclined extends Error {
     this.name = "PluginConsentDeclined";
     this.by = by;
   }
+}
+
+/** A bundled seed's dependencies stay in the app: its copy in the profile leaves them out. */
+const SEED_DEPENDENCIES = "node_modules";
+
+/** A copy filter for seed `seed`: everything but its top-level dependencies folder. */
+function withoutSeedDependencies(seed: string): (source: string) => boolean {
+  const dependencies = path.join(path.resolve(seed), SEED_DEPENDENCIES);
+  return (source) => path.resolve(source) !== dependencies;
 }
 
 /** The parts of `PluginRegistry.init`, in order, as `onInitStep` names them when each finishes. */
@@ -867,6 +878,15 @@ export class PluginRegistry {
   #packages() {
     return path.join(this.root, PACKAGES_DIR);
   }
+  /** Whether `directory` is one of the app's bundled seeds. */
+  #isSeed(directory: string): boolean {
+    return path.dirname(path.resolve(directory)) === path.resolve(this.seeds);
+  }
+  /** A bundled install's seed folder, where its dependencies stay (`PLUGIN_SEED_ENV`); nothing for any other. */
+  #seedOption(p: Installed): { seed?: string } {
+    if (p.source !== PluginSourceKind.Bundled) return {};
+    return { seed: this.#seedDirectories.get(p.manifest.id) ?? path.join(this.seeds, p.manifest.id) };
+  }
   #owned(directory: string) {
     return path.resolve(directory).startsWith(path.resolve(this.#packages()) + path.sep);
   }
@@ -926,7 +946,7 @@ export class PluginRegistry {
       await inspectPackage(directory);
       const installed = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
       await mkdir(path.dirname(installed), { recursive: true });
-      await cp(directory, installed, { recursive: true });
+      await cp(directory, installed, { recursive: true, filter: withoutSeedDependencies(directory) });
       this.onInitStep?.(PluginInitStep.Seed, manifest.id);
       const lost = this.#lostSeedCopies.get(manifest.id);
       this.#lostSeedCopies.delete(manifest.id);
@@ -1160,6 +1180,7 @@ export class PluginRegistry {
     const storageRoot = () => this.service(id, PluginService.StorageRoot, {}) as Promise<string>;
     return {
       packageDir: p.directory,
+      ...this.#seedOption(p),
       storageRoot,
       projectStorage: async (project) => {
         if (!MCP_PROJECT.test(project)) throw new Error(MESSAGE.InvalidProject);
@@ -1649,11 +1670,14 @@ export class PluginRegistry {
     const destination = path.join(this.#packages(), manifest.id, `${manifest.version}-${randomUUID()}`);
     await mkdir(path.dirname(destination), { recursive: true });
     try {
+      const packaged = packageCopyFilter(directory);
+      // A bundled plugin restored from its seed leaves its dependencies there, as a first launch does.
+      const fromSeed = this.#isSeed(directory) ? withoutSeedDependencies(directory) : () => true;
       await cp(directory, destination, {
         recursive: true,
         errorOnExist: true,
         force: false,
-        filter: packageCopyFilter(directory),
+        filter: (source) => packaged(source) && fromSeed(source),
       });
       await inspectPackage(destination);
     } catch (e) {
@@ -1662,7 +1686,7 @@ export class PluginRegistry {
     }
     if (!probe) return destination;
     try {
-      await this.#probe(destination, manifest);
+      await this.#probe(destination, manifest, this.#isSeed(directory) ? directory : undefined);
     } catch (e) {
       await rm(destination, { recursive: true, force: true });
       throw e;
@@ -1670,7 +1694,7 @@ export class PluginRegistry {
     return destination;
   }
   /** Prove a staged package's backend starts: it loads and answers a ping, with no host services. */
-  async #probe(directory: string, manifest: PluginManifest): Promise<void> {
+  async #probe(directory: string, manifest: PluginManifest, seed?: string): Promise<void> {
     const probe = new PluginProcess(
       this.bootstrap,
       path.join(directory, manifest.backend),
@@ -1678,6 +1702,7 @@ export class PluginRegistry {
         throw new Error(MESSAGE.NoHostServices);
       },
       () => {},
+      seed ? { seed } : {},
     );
     try {
       await probe.call("ping", "", {});
@@ -1907,6 +1932,7 @@ export class PluginRegistry {
             } catch {}
           },
           ...(this.toolPath ? { toolPath: this.toolPath } : {}),
+          ...this.#seedOption(p),
         },
       );
       this.#processes.set(id, process);
