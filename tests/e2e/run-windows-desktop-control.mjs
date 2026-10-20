@@ -380,11 +380,14 @@ async function passwordStep(call, look, probe) {
   if (free?.point) {
     await toFront(form.pid);
     await call({ action: "left_click", coordinate: look.at(free.point) });
+    // What Windows says has the keyboard, as the studio's probe reads it: why a refusal did not come.
+    const front = await probe.front().catch((error) => String(error));
     const refused = await call({ action: "type", text: "hunter2" });
     check(
       "typing into a focused password field is refused",
-      /password field/i.test(refused.text),
-      refused.text.slice(0, 300),
+      // The refusal's own words: the form's title also says "password field".
+      /the focused field is a password field/i.test(refused.text),
+      { said: refused.text.slice(0, 300), front },
     );
     await call({ action: "screenshot" });
   } else if (window)
