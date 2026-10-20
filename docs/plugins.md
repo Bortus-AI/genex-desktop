@@ -3056,7 +3056,9 @@ Genex:
   it (builds, caches, history, hidden files, notes and logs, and Unity's `UserSettings` do not count);
   or "Not made yet" with Make with agent, which sends "Make a <Platform> app
   of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
-  cover does) and keeps the dialog open, the row then saying "Asked the agent". A ready app goes
+  cover does) and keeps the dialog open, the row then saying "Asked the agent". A Unity or Godot
+  game's missing web row offers the same for a web version (`webOfferFor`, `makeWebAsk`); an Unreal
+  game's says Unreal games don't run in a browser. A ready app goes
   with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
   the rows says "Publish also sends the Mac app."): once the web build is public, the plugin sends
   each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
@@ -3069,7 +3071,8 @@ Genex:
   The dialog sends apps only through an installed Genex plugin whose record says it can
   (`native.supported`, `gateByPlugin`): a profile still on a plugin from before apps is told to
   update it in Plugins. The plugin's `publishing-apps` skill tells the game's agent how to build an
-  app for Publish, and never to send the person to another store.
+  app or a web version (in `web/`) for Publish, how to make an app open in a window, and never to
+  send the person to another store.
   A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
   on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish
   Mac app" and runs `studio:plugins.genex-publish-apps` (`publishAppsFromDialog`, no web copy, no

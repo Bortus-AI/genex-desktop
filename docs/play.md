@@ -191,7 +191,10 @@ is.
 - Playing (`main/play/native-launch.ts`): one copy per game, in the game sandbox (`spawnNativeGame`:
   the app read-only, `saves/` its HOME and `CFFIXED_USER_HOME`, its own preference domain, its
   `NSIRD_` atomic-save folder, window, GPU and sound, no network). Genex finds its window by pid and
-  brings it forward (macOS does not); the page's Quit asks it to quit, then ends its process tree;
+  brings it forward (macOS does not). A game opens full screen with its engine's own argument
+  (`launchArgs`: Unity `-screen-fullscreen 1`, Godot `--fullscreen`, Unreal `-fullscreen`; the
+  engine is the catalog's, kept in the install record), unless its app sets `GenexWindowed` in its
+  Info.plist (read at unpack, `WINDOWED_KEY`); the page's Quit asks it to quit, then ends its process tree;
   quitting Genex ends every game, and the next start ends a leftover only while it is the same
   process. A web game's Mac app is offered in the viewer's bar (install, progress, play: the viewer
   gives way), and opening a game whose app runs brings the app forward.

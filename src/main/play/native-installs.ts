@@ -52,6 +52,8 @@ const MESSAGE = {
 export interface InstallRecord extends InstalledGame, UnpackedApp {
   /** The app bundle's name inside the version folder (`Dust Runners.app`). */
   entry: string;
+  /** The engine the catalog says it was made with (`unity`), or null: how the launcher opens it full screen. */
+  engine: string | null;
 }
 
 /** How an install ended, for notifications. */
@@ -135,6 +137,9 @@ function readRecord(slug: string, value: unknown): InstallRecord | null {
     executable: String(value.executable),
     bundleId: String(value.bundleId),
     bundleName: String(value.bundleName),
+    // A record from before these were kept: an engine nobody named, and full screen.
+    engine: typeof value.engine === "string" ? value.engine : null,
+    windowed: value.windowed === true,
   };
 }
 
@@ -297,6 +302,7 @@ export class NativeInstaller {
         installedAt: at,
         lastPlayedAt: games[slug]?.lastPlayedAt ?? null,
         entry: build.entry,
+        engine: game.native?.engine ?? null,
         ...app,
       };
     });

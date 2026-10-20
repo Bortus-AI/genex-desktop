@@ -543,7 +543,7 @@ export interface NativeGameRequest {
   scratch: string;
   bundleId: string;
   bundleName: string;
-  /** Arguments for the game; a game from Play gets none. */
+  /** Arguments for the game: a game from Play gets its engine's full-screen one (`launchArgs`), or none. */
   args?: string[];
 }
 
