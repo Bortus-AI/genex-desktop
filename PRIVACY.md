@@ -128,7 +128,7 @@ only copy a genex.games link to the clipboard.
 
 A game with a Mac app has its own page, read from the Genex API (with the account's token when
 signed in, so it shows your like). The app is downloaded only when you press Install, over https
-from a build host on the list the app ships with and without your token; its size, checksum and
+from genex.games' CDN (cdn.genex.technology) and without your token; its size, checksum and
 signature are checked before it opens. Installed games and their saves live in the app profile.
 Each game runs in a sandbox with no network that can write only its own saves, preferences and
 a scratch folder removed when it ends, and removing a game keeps its saves. At start and every six hours the app reads each installed

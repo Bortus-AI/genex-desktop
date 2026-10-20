@@ -687,7 +687,7 @@ export function GenexPublishDialog({
       headerHidden
       className="genex-publish-dialog"
     >
-      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} onLeave={onClose} />
+      <PublishBody view={view} record={record} project={project ?? ""} cover={cover} />
       {record.review && <PluginApproval review={record.review} onClose={record.closeReview} />}
     </DialogSurface>
   );
@@ -717,14 +717,11 @@ function PublishBody({
   record,
   project,
   cover,
-  onLeave,
 }: {
   view: PublishView;
   record: ReturnType<typeof usePublishRecord>;
   project: string;
   cover: PublishCover;
-  /** Closes the dialog, for a press that continues in the game's chat. */
-  onLeave: () => void;
 }): JSX.Element {
   const gameTitle = useLibrary((s) => s.games.find((g) => g.name === project)?.title);
   const [title, setTitle] = useState<string | null>(null);
@@ -761,7 +758,7 @@ function PublishBody({
             {problem}
           </p>
         ))}
-        <PublishPlatforms project={project} onLeave={onLeave} shown={!celebrate} />
+        <PublishPlatforms project={project} shown={!celebrate} />
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />

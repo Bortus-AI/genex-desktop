@@ -9,9 +9,11 @@ import assert from "node:assert/strict";
 import {
   buildFor,
   compareOsVersions,
+  FIXTURE_BUILD_HOST,
   hasWebBuild,
   InstallPhase,
   NATIVE_ARCHIVE_MAX_BYTES,
+  NATIVE_BUILD_HOSTS,
   NATIVE_BUILDS_MAX,
   NativeArch,
   type NativeBuild,
@@ -130,6 +132,20 @@ describe("Native build rows", () => {
     assert.deepEqual(parseNativeBuilds([row()], new Set()), []);
   });
 
+  it("downloads a released game's builds from genex.games' CDN only", () => {
+    const on = (url: string) => parseNativeBuilds([row({ url })], NATIVE_BUILD_HOSTS).length;
+    assert.equal(on("https://cdn.genex.technology/builds/dust-runners/1.3.0/mac-universal.zip"), 1);
+    for (const url of [
+      "https://dust-runners.genex.technology/builds/mac.zip",
+      "https://assets.genex.technology/builds/mac.zip",
+      "https://cdn.genex.technology.evil.example/mac.zip",
+      "https://cdn.genex.technology:8443/mac.zip",
+      "http://cdn.genex.technology/mac.zip",
+      `https://${FIXTURE_BUILD_HOST}/mac.zip`,
+    ])
+      assert.equal(on(url), 0, url);
+  });
+
   it("keeps a Windows build in a folder of its own, and an absent minimum OS", () => {
     const [windows] = parseNativeBuilds(
       [row({ platform: "windows", arch: "x64", entry: "Dust Runners/DustRunners.exe", minOs: undefined })],
@@ -218,6 +234,7 @@ describe("The build for this computer", () => {
     assert.equal(buildFor([intel], MAC_ARM), null);
     assert.equal(buildFor([intel], { ...MAC_ARM, rosetta: true }), intel);
     assert.equal(buildFor([intel, universal], { ...MAC_ARM, rosetta: true }), universal, "a native app first");
+    assert.equal(buildFor([intel, arm], { ...MAC_ARM, rosetta: true }), arm, "an Apple silicon app first");
     assert.equal(buildFor([arm], MAC_INTEL), null);
     assert.equal(buildFor([arm], { ...MAC_INTEL, rosetta: true }), null);
   });

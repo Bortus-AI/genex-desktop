@@ -2,7 +2,7 @@
  * The Publish dialog's platform rows, in a disposable Electron profile with a fake `window.studio`:
  * a game made in an engine lists the web, Mac and Windows above the presses, each detail on one
  * line; a built Mac app says "Coming soon" and the line under the rows says its players get the
- * web version; Make with agent closes the dialog and leaves the ask in the game's chat, unsent; a
+ * web version; Make with agent sends the ask to the game's chat and the row says it was asked; a
  * build older than the game's last change says so; a web game with no app shows no rows. Dark and
  * light screens.
  */
@@ -73,10 +73,12 @@ app.whenReady().then(async()=>{
    assert.equal(engine.overflow,false);
    report[theme+'Engine']=await capture(theme+'-engine');
   }
-  // Make with agent: the dialog closes and the ask waits in the game's chat, unsent.
+  // Make with agent: the ask goes to the game's chat at once, the dialog stays open and the row says so.
   const made=await step('make','window.platformsRig.make("windows")');
-  assert.equal(made.closed,1);
-  assert.deepEqual(made.composed,[{project:'dust-runners',text:'Make a Windows app of Dust Runners so I can publish it for Windows players.',send:false}]);
+  assert.equal(made.closed,0,'the dialog stays open');
+  assert.deepEqual(made.composed,[{project:'dust-runners',text:'Make a Windows app of Dust Runners so I can publish it for Windows players.',send:true}]);
+  assert.equal(made.rows[2].end,'Asked the agent');
+  report.asked=await capture('light-asked');
   // A Mac app built before the game's last change says so.
   const stale=await step('stale','window.platformsRig.open({scene:"stale"})');
   assert.equal(stale.rows[1].detail,'Built before your last change');
@@ -87,7 +89,7 @@ app.whenReady().then(async()=>{
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent leaves the ask unsent; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

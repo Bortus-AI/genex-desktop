@@ -1207,7 +1207,7 @@ button.genex-publish-banner-name:hover {
   font: 12.5px / 18px var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
-.genex-publish-platform-soon {
+.genex-publish-platform-note {
   flex: none;
   padding: 2px 8px;
   border-radius: 999px;

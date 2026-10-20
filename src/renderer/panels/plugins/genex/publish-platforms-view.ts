@@ -94,5 +94,5 @@ export function reachLine(platforms: readonly PublishPlatform[]): string | null 
 /** The players a native row is for: "Mac", "Windows". */
 const playersOf = (target: PublishTarget): string => (target === PublishTarget.Web ? "" : WORDS.players[target]);
 
-/** What "Make with agent" leaves in the game's chat for a platform. */
+/** What "Make with agent" sends through the game's chat for a platform. */
 export const makeAppAsk = (target: PublishTarget, title: string): string => WORDS.makeAsk(playersOf(target), title);

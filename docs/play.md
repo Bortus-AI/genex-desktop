@@ -145,8 +145,9 @@ is.
   (unpacked), `sha256` (hex of the archive), `url`, `entry` (what runs, from the archive's root: a
   `.app` bundle at the root for a Mac, an `.exe` for Windows), optional `minOs` (`13.0`,
   `10.0.19041`) and `publishedAt`. The archive is a zip; its `url` is https on a build host the app
-  trusts (`NATIVE_BUILD_HOSTS`, empty until genex.games names its build CDN), with no port or
-  credentials, and answers `Range`. A row with anything off is dropped, the rest kept.
+  trusts (`NATIVE_BUILD_HOSTS`: `cdn.genex.technology` by exact name, so a game's own
+  `<slug>.genex.technology` site never hands out an app), with no port or credentials, never
+  redirecting elsewhere, and answers `Range`. A row with anything off is dropped, the rest kept.
 - The build a computer installs is its platform's for its own processor, else a universal Mac app,
   else, on Apple silicon with Rosetta installed, an Intel-only one, where its `minOs` is met
   (`buildFor`). Nothing is launched on Windows until its sandbox can show a program's window. A game with no web

@@ -3019,9 +3019,9 @@ Genex:
   `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
   the walk capped). A row says what its build runs on, when it was built and its size; "Built
   before your last change" when the game's sources (outside builds, caches and history) changed more
-  than a minute after it; or "Not made yet" with Make with agent, which closes the dialog and leaves
-  "Make a <Platform> app of <Game> so I can publish it for <Platform> players." in the game's chat,
-  unsent. genex.games takes no native builds yet: a built app says "Coming soon" (`uploads: false`),
+  than a minute after it; or "Not made yet" with Make with agent, which sends "Make a <Platform> app
+  of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
+  cover does) and keeps the dialog open, the row then saying "Asked the agent". genex.games takes no native builds yet: a built app says "Coming soon" (`uploads: false`),
   the line under the rows says its players get the web version, and Publish itself stays with games
   served as web games. A web game with no app shows no rows. L4: `npm run test:ui --
   publish-platforms-ui`.

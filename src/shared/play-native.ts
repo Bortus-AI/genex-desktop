@@ -24,11 +24,11 @@ export const NATIVE_PLATFORMS: readonly NativePlatform[] = Object.values(NativeP
 const LAUNCH_PLATFORMS: ReadonlySet<NativePlatform> = new Set([NativePlatform.Mac]);
 
 /**
- * The hosts a build archive downloads from. genex.games has not named its build CDN yet, so the
- * set is empty and every row is dropped: Play stays as it is until the server and the app switch
- * native builds on together.
+ * The hosts a build archive downloads from: genex.games' CDN, which already serves Play's covers
+ * and clips. Matched by exact name, so a game's own `<slug>.genex.technology` site never hands out
+ * an app. Until the API lists builds there, no row survives and Play stays as it is.
  */
-export const NATIVE_BUILD_HOSTS: ReadonlySet<string> = new Set();
+export const NATIVE_BUILD_HOSTS: ReadonlySet<string> = new Set(["cdn.genex.technology"]);
 
 /**
  * The build host of a fixture launch's made-up games. `.invalid` never resolves, and a fixture

@@ -3059,7 +3059,9 @@ export const PUBLISH_PLATFORM_WORDS = {
   soonLabel: (name: string) => `${name}: publishing it is coming soon`,
   make: "Make with agent",
   makeLabel: (name: string) => `Make the ${name} with the agent`,
-  /** What "Make with agent" leaves in the game's chat, unsent. */
+  /** The row once Make with agent sent its ask. */
+  asked: "Asked the agent",
+  /** What "Make with agent" sends through the game's chat. */
   makeAsk: (players: string, title: string) =>
     `Make a ${players} app of ${title} so I can publish it for ${players} players.`,
   /** Who plays what once it is published: "Mac and Windows players get the web version." */

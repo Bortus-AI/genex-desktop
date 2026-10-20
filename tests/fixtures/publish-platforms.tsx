@@ -2,8 +2,8 @@
  * Test-owned production Publish dialog over a fake `window.studio`, for its platform rows: a game
  * made in an engine lists the web, Mac and Windows, each with what its build runs on, when it was
  * built and its size; a built app says "Coming soon" and a missing one offers "Make with agent",
- * which closes the dialog and leaves the ask in the game's chat, unsent. A web game with no app
- * shows no rows.
+ * which sends the ask to the game's chat and keeps the dialog open. A web game with no app shows no
+ * rows.
  */
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
@@ -96,7 +96,7 @@ function sample() {
     detail: row.querySelector(".genex-publish-platform-detail")?.textContent ?? "",
     size: row.querySelector(".genex-publish-platform-size")?.textContent ?? null,
     end:
-      row.querySelector(".genex-publish-platform-soon")?.textContent ??
+      row.querySelector(".genex-publish-platform-note")?.textContent ??
       row.querySelector(".genex-publish-platform-make")?.textContent ??
       null,
   }));
