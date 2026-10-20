@@ -30,6 +30,7 @@ import type { Readable } from "node:stream";
 import { MINUTE_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { StudioPlatform } from "../shared/boot.ts";
+import { ownBubblewrap } from "./linux-bubblewrap.ts";
 import { prepareSandbox } from "./sandbox-prepare.ts";
 import {
   SandboxLaunchCode,
@@ -193,6 +194,11 @@ export interface SandboxOptions {
   startInBackground?: boolean;
   /** Where the sandbox says how long each step of its start took (Windows). */
   log?: (line: string) => void;
+  /**
+   * Linux: the bubblewrap to run (default: the app's own copy beside its executable when there is
+   * one, else the system's on PATH; substrate/linux-bubblewrap.ts says why).
+   */
+  bubblewrap?: string | null;
 }
 
 /** What a test may hand the Windows backend instead of letting it look for itself. */
@@ -496,6 +502,8 @@ export class ProcessSandbox {
   #starting: Promise<void> | null = null;
   #initError: Error | null = null;
   #log: ((line: string) => void) | null = null;
+  /** Linux: the bubblewrap sandbox-runtime runs, when not the system's on PATH. */
+  #bubblewrap: string | null = null;
   #toolPath: (() => Promise<string>) | null = null;
   #resolvedToolPath: Promise<string> | null = null;
   readonly #platform: NodeJS.Platform;
@@ -533,6 +541,7 @@ export class ProcessSandbox {
     sandbox.#runtime = options.runtime ?? null;
     sandbox.#seams = options.windows ?? {};
     sandbox.#log = options.log ?? null;
+    sandbox.#bubblewrap = platform === StudioPlatform.Linux ? (options.bubblewrap ?? ownBubblewrap()) : null;
     if (!sandbox.enabled) return sandbox;
     if (options.startInBackground && platform === StudioPlatform.Windows) await sandbox.#startInBackground();
     else await sandbox.#initialize();
@@ -737,6 +746,7 @@ export class ProcessSandbox {
   toRuntimeConfig(policy: SandboxPolicy): import("@anthropic-ai/sandbox-runtime").SandboxRuntimeConfig {
     return {
       ...(packagedSeccomp ? { seccomp: { applyPath: packagedSeccomp } } : {}),
+      ...(this.#bubblewrap ? { bwrapPath: this.#bubblewrap } : {}),
       network: {
         allowedDomains: policy.allowedDomains,
         deniedDomains: [],
