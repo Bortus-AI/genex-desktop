@@ -3176,7 +3176,9 @@ every match tried newest name first. A runtime pins one download (`install`, rea
 Silicon) or one per platform (`installs`, each with its `platform`: `darwin-arm64`, `win32-x64`,
 `win32-arm64`; at most four, one per platform) as a `dmg`, `tar.gz` or `zip`; Windows unpacks with
 its own `tar.exe`. `runtime.detect` answers the pin for this computer as `download` (none where the
-manifest pins none), and an install there is refused in words that say to install it yourself.
+manifest pins none), and an install there is refused in words that say to install it yourself. A version
+probe may take 30 s, and the first one after an install 2 minutes: antivirus scans a program's first
+start (Blender's took 15.8 s on a Windows VM with Defender, then 0.2 s).
 
 `nativeJobs` declares fixed argument arrays with package/input/output/value bindings, validated
 value patterns, input/output names, deadline, byte limits and optional GPU access. `native.run`
