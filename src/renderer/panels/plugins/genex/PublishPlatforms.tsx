@@ -1,8 +1,9 @@
 /**
  * The Publish dialog's platforms (canvas board "Publish"): the web, Mac and Windows rows read from
  * the game folder, each with what its build runs on, when it was built and its size. An app not made
- * yet offers "Make with agent", which sends the ask through the game's chat at once and keeps the
- * dialog open, the row then saying it was asked. A ready app goes with Publish once its web build is
+ * yet, and a Unity or Godot game's web version, offers "Make with agent", which sends the ask through
+ * the game's chat at once and keeps the dialog open, the row then saying it was asked; an Unreal
+ * game's web row says it has none. A ready app goes with Publish once its web build is
  * public: the line under the rows says so, and its row then says it is being sent, is on Genex, or
  * was not sent (with why, under the rows). While Studio's Genex CLI cannot send apps, a built one
  * says "Coming soon" and its players get the web version. A web game with no app shows none of this.
@@ -22,11 +23,13 @@ import {
   listsPlatforms,
   makeAppAsk,
   makesApps,
+  makeWebAsk,
   rebuildAsk,
   PlatformEnd,
   type PlatformRow,
   platformRows,
   reachLine,
+  webOfferFor,
 } from "./publish-platforms-view.ts";
 
 const WORDS = PUBLISH_PLATFORM_WORDS;
@@ -70,6 +73,10 @@ const ASK: Partial<Record<PlatformEnd, { text: string; label: (name: string) => 
   [PlatformEnd.Rebuild]: { text: WORDS.rebuild, label: WORDS.rebuildLabel },
 };
 
+/** What a row's press says to a screen reader: the web row's names the web version. */
+const askLabel = (row: PlatformRow, label: (name: string) => string): string =>
+  row.target === PublishTarget.Web ? WORDS.makeWebLabel : label(row.name);
+
 /** What a row ends with: a note ("Coming soon", "On Genex"…), an ask for the agent, or that the agent was asked. */
 function End({
   row,
@@ -99,7 +106,7 @@ function End({
     <button
       type="button"
       className="genex-publish-platform-make"
-      aria-label={ask.label(row.name)}
+      aria-label={askLabel(row, ask.label)}
       data-publish-platform-make={row.target}
       data-end={row.end}
       onClick={() => onMake(row.target, row.end)}
@@ -133,6 +140,12 @@ function Row({
   );
 }
 
+/** What a row's press sends through the game's chat: a web version, an app, or an app built again. */
+function askText(target: PublishTarget, end: PlatformEnd, title: string): string {
+  if (target === PublishTarget.Web) return makeWebAsk(title);
+  return end === PlatformEnd.Rebuild ? rebuildAsk(target, title) : makeAppAsk(target, title);
+}
+
 /**
  * The platform rows and who plays what, or nothing for a web game with no app. Read once while the
  * dialog is open: hidden while it celebrates, they are not read again after.
@@ -153,24 +166,24 @@ export function PublishPlatforms({
   /** How the last Publish's apps went, from the publish record. */
   native?: GenexNativeRecord | undefined;
 }): JSX.Element | null {
-  const engineGame = useLibrary((s) => {
-    const game = s.games.find((g) => g.name === project);
-    return Boolean(game?.engine) || makesApps(game?.facts ?? []);
-  });
+  const facts = useLibrary((s) => s.games.find((g) => g.name === project)?.facts);
+  const engineGame =
+    useLibrary((s) => Boolean(s.games.find((g) => g.name === project)?.engine)) || makesApps(facts ?? []);
   const title = useLibrary((s) => s.games.find((g) => g.name === project)?.title) || project;
   const [asked, setAsked] = useState<ReadonlySet<PublishTarget>>(() => new Set());
   if (!shown || !platforms || !listsPlatforms(platforms, engineGame)) return null;
-  const reach = reachLine(platforms, behind);
+  const webOffer = webOfferFor(facts ?? []);
+  const reach = reachLine(platforms, behind, webOffer);
   const listing = listingLine(platforms, native);
   const make = (target: PublishTarget, end: PlatformEnd): void => {
-    const text = end === PlatformEnd.Rebuild ? rebuildAsk(target, title) : makeAppAsk(target, title);
+    const text = askText(target, end, title);
     composeInChat({ project, text, send: true });
     setAsked((before) => new Set(before).add(target));
   };
   return (
     <div className="genex-publish-platforms" data-genex-publish-platforms>
       <ul aria-label={WORDS.label}>
-        {platformRows(platforms, Date.now(), native).map((row) => (
+        {platformRows(platforms, Date.now(), native, webOffer).map((row) => (
           <Row key={row.target} row={row} asked={asked.has(row.target)} onMake={make} />
         ))}
       </ul>

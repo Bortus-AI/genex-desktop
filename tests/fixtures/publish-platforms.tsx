@@ -17,6 +17,7 @@ import { GenexAccountStatus } from "../../src/shared/genex-account.ts";
 import type { GameProject } from "../../src/shared/game-project.ts";
 import { GenexAction, type GenexNativeRecord, type GenexPublishState } from "../../src/shared/genex.ts";
 import { NativeArch } from "../../src/shared/play-native.ts";
+import { CoreFact } from "../../src/shared/project-facts.ts";
 import type { PluginInfo } from "../../src/shared/plugins.ts";
 import {
   type PublishPlatform,
@@ -37,7 +38,7 @@ async function settle(frames = 10) {
 }
 
 /** What the game folder holds in each scene, and how its last Publish's apps went (`apps*`). */
-type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "unityNoApp" | "unitySoon" | "unityOldPlugin";
+type Scene = "engine" | "stale" | "web" | "apps" | "appsSending" | "appsSent" | "appsFailed" | "appsOnly" | "appsHeld" | "unityNoApp" | "unitySoon" | "unityOldPlugin" | "unreal";
 
 const web = (uploads: boolean): PublishPlatform => ({
   target: PublishTarget.Web,
@@ -77,6 +78,7 @@ const SCENES: Record<Scene, () => PublishPlatform[]> = {
   unityNoApp: () => [web(false), mac(PublishPlatformState.Missing), windows],
   unitySoon: () => [web(false), mac(PublishPlatformState.Ready), windows],
   unityOldPlugin: () => [web(false), mac(PublishPlatformState.Ready, true), windows],
+  unreal: () => [web(false), mac(PublishPlatformState.Missing), windows],
 };
 
 /** The publish record's apps in each scene: none sent yet, going now, on Genex, or refused. */
@@ -167,6 +169,12 @@ function sample() {
   };
 }
 
+/** A game made in Unity or Unreal, as the library knows it: its engine and the fact it was found by. */
+const engineOf = (fact: CoreFact) => ({
+  engine: { id: fact === CoreFact.UnrealProject ? "unreal" : "unity", project: "." },
+  facts: [{ id: fact, path: "." }],
+});
+
 /** Open the dialog in `theme` on the scene's game: made in an engine unless the scene is a web game. */
 async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   const mode = options.theme === "light" ? AppearanceMode.Light : AppearanceMode.Dark;
@@ -176,7 +184,7 @@ async function open(options: { theme?: "dark" | "light"; scene?: Scene } = {}) {
   composed.length = 0;
   published.length = 0;
   studio().people.setState((people) => ({ ...people, account: GenexAccountStatus.SignedIn }), true);
-  const engine = scene === "web" ? {} : { engine: { id: "unity", project: "." } };
+  const engine = scene === "web" ? {} : engineOf(scene === "unreal" ? CoreFact.UnrealProject : CoreFact.UnityProject);
   const game = { name: GAME, title: "Dust Runners", createdAt: AT, ...engine } as unknown as GameProject;
   studio().library.setState((library) => ({ ...library, games: [game] }), true);
   flushSync(() => root.render(null));

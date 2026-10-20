@@ -106,7 +106,7 @@ app.whenReady().then(async()=>{
   const only=await step('appsOnly','window.platformsRig.open({scene:"appsOnly"})');
   assert.equal(only.primary,'Publish Mac app');
   assert.equal(only.reach,'Only Mac players can play it.');
-  assert.equal(only.rows[0].detail,'Not set up for the web');
+  assert.deepEqual([only.rows[0].detail,only.rows[0].end],['Not made yet','Make with agent'],'the agent can make its web version');
   assert.equal(only.hint,'People playing in the Genex app can install it.');
   report.appsOnly=await capture('dark-apps-only');
   const pressed=await step('appsOnlyPress','window.platformsRig.press()');
@@ -118,9 +118,17 @@ app.whenReady().then(async()=>{
   const unity=await step('unityNoApp','window.platformsRig.open({scene:"unityNoApp"})');
   assert.equal(unity.listed,true);
   assert.equal(unity.primaryDisabled,true);
-  assert.equal(unity.reach,'Make a Mac or Windows app first, then publish it here.');
-  assert.deepEqual(unity.rows.map((row)=>row.end),[null,'Make with agent','Make with agent']);
+  assert.equal(unity.reach,'Make a web version or a Mac or Windows app first, then publish it here.');
+  assert.deepEqual(unity.rows.map((row)=>row.end),['Make with agent','Make with agent','Make with agent']);
   report.unityNoApp=await capture('dark-unity-no-app');
+  // Its web row asks the agent for a web version, as the app rows ask for apps.
+  const webAsk=await step('makeWeb','window.platformsRig.make("web")');
+  assert.deepEqual(webAsk.composed,[{project:'dust-runners',text:'Make a web version of Dust Runners so I can publish it on the web.',send:true}]);
+  assert.equal(webAsk.rows[0].end,'Asked the agent');
+  // An Unreal game has no web export: its web row says so and offers nothing.
+  const unreal=await step('unreal','window.platformsRig.open({scene:"unreal"})');
+  assert.deepEqual([unreal.rows[0].detail,unreal.rows[0].end],['Unreal games don’t run in a browser',null]);
+  report.unreal=await capture('dark-unreal');
   const soon=await step('unitySoon','window.platformsRig.open({scene:"unitySoon"})');
   assert.equal(soon.primaryDisabled,true);
   assert.equal(soon.rows[1].end,'Coming soon');
@@ -134,7 +142,7 @@ app.whenReady().then(async()=>{
   assert.equal(plain.listed,false);
   report.web=await capture('dark-web');
   assert.deepEqual(report.errors,[]);
-  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why; stale says so; web game unchanged');
+  console.log('PASS Publish platforms: engine game lists web, Mac and Windows; Make with agent sends the ask and keeps the dialog; apps go with Publish and say how they went; a game with only an app publishes it; a Unity game with nothing to send waits and says why, and asks the agent for a web version; an Unreal game says it has none; stale says so; web game unchanged');
  } catch(error) { report.failure=error.stack; console.error(error); await capture('failure').catch(()=>{}); }
  fs.writeFileSync(path.join(evidence,'report.json'),JSON.stringify(report,null,2));
  app.exit(report.failure?1:0);

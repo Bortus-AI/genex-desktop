@@ -1,8 +1,9 @@
 /**
  * The Publish dialog's platform rows as words (canvas board "Publish"): what each platform's build
- * is, how big, and what the row offers: "Make with agent" for an app not made, "Coming soon" while
- * Studio's Genex CLI cannot send apps, and, for an app Publish sends, whether it is being sent, is on
- * Genex or was not sent. Pure: the dialog draws it, tests read it.
+ * is, how big, and what the row offers: "Make with agent" for an app not made (and for a Unity or
+ * Godot game's web version), "Coming soon" while Studio's Genex CLI cannot send apps, and, for an app
+ * Publish sends, whether it is being sent, is on Genex or was not sent. Pure: the dialog draws it,
+ * tests read it.
  */
 import { sizeWords } from "../../../../shared/byte-size.ts";
 import { GenexListingState, type GenexNativeRecord } from "../../../../shared/genex.ts";
@@ -30,6 +31,26 @@ export const PlatformEnd = {
   Failed: "failed",
 } as const;
 export type PlatformEnd = (typeof PlatformEnd)[keyof typeof PlatformEnd];
+
+/** What a game with no web version is offered for one. Display only: never stored. */
+export const WebOffer = {
+  /** The agent makes it: Unity's WebGL build, Godot's Web export. */
+  Make: "make",
+  /** It cannot have one: Unreal has no web export. */
+  Unavailable: "unavailable",
+  /** Nothing to offer: a web game, or one Genex does not know. */
+  Quiet: "quiet",
+} as const;
+export type WebOffer = (typeof WebOffer)[keyof typeof WebOffer];
+
+/** The engines whose games the agent can build for the web. */
+const WEB_ENGINE_FACTS: ReadonlySet<string> = new Set([CoreFact.UnityProject, CoreFact.GodotProject]);
+
+/** What a game with these facts is offered while it has no web version. */
+export function webOfferFor(facts: readonly FactRef[]): WebOffer {
+  if (facts.some((fact) => WEB_ENGINE_FACTS.has(fact.id))) return WebOffer.Make;
+  return facts.some((fact) => fact.id === CoreFact.UnrealProject) ? WebOffer.Unavailable : WebOffer.Quiet;
+}
 
 /** One platform's row as the dialog draws it. */
 export interface PlatformRow {
@@ -78,24 +99,33 @@ function nativeEnd(row: PublishPlatform, native: GenexNativeRecord | undefined):
   return row.uploads ? sendEnd(row, native) : PlatformEnd.Soon;
 }
 
-/** The rows in the order they come, each as words; `native` is how the last Publish's apps went. */
+/** The web row's second line and end: ready, or, with none, what the game is offered for one. */
+function webWords(row: PublishPlatform, offer: WebOffer): { detail: string; end: PlatformEnd } {
+  if (row.state === PublishPlatformState.Ready) return { detail: WORDS.webReady, end: PlatformEnd.None };
+  if (offer === WebOffer.Make) return { detail: WORDS.missing, end: PlatformEnd.Make };
+  const detail = offer === WebOffer.Unavailable ? WORDS.webUnavailable : WORDS.webMissing;
+  return { detail, end: PlatformEnd.None };
+}
+
+/**
+ * The rows in the order they come, each as words; `native` is how the last Publish's apps went,
+ * `webOffer` what a game with no web version is offered for one.
+ */
 export function platformRows(
   platforms: readonly PublishPlatform[],
   now: number,
   native?: GenexNativeRecord,
+  webOffer: WebOffer = WebOffer.Quiet,
 ): PlatformRow[] {
   return platforms.map((row) => {
-    if (!isNative(row)) {
-      const ready = row.state === PublishPlatformState.Ready;
+    if (!isNative(row))
       return {
         target: row.target,
         name: WORDS.name[row.target],
-        detail: ready ? WORDS.webReady : WORDS.webMissing,
+        ...webWords(row, webOffer),
         size: null,
         state: row.state,
-        end: PlatformEnd.None,
       };
-    }
     return {
       target: row.target,
       name: WORDS.name[row.target],
@@ -163,24 +193,30 @@ export const nothingToPublish = (platforms: readonly PublishPlatform[]): boolean
 
 /**
  * Why a game with nothing to send waits: an app older than the game, a Genex plugin from before
- * apps, apps Studio cannot send yet, or no app made yet.
+ * apps, apps Studio cannot send yet, or nothing made yet (a web version too, when the agent can make one).
  */
-function waitingLine(platforms: readonly PublishPlatform[], behind: boolean): string {
+function waitingLine(platforms: readonly PublishPlatform[], behind: boolean, webOffer: WebOffer): string {
   const stale = platforms.filter((row) => isNative(row) && row.state === PublishPlatformState.Stale);
   if (stale.length > 0) return WORDS.rebuildFirst(WORDS.apps(stale.map((row) => playersOf(row.target))));
   if (behind) return WORDS.updateGenex;
   const built = platforms.some((row) => isNative(row) && row.state !== PublishPlatformState.Missing);
-  return built ? WORDS.appsSoon : WORDS.makeFirst;
+  if (built) return WORDS.appsSoon;
+  return webOffer === WebOffer.Make ? WORDS.makeAnyFirst : WORDS.makeFirst;
 }
 
 /**
  * The line under the rows: the apps Publish sends too, and whose players get the web version; for a
- * game with nothing to send, why. `behind`: the Genex plugin is too old to send its apps.
+ * game with nothing to send, why. `behind`: the Genex plugin is too old to send its apps; `webOffer`:
+ * what the game is offered for a web version.
  */
-export function reachLine(platforms: readonly PublishPlatform[], behind = false): string | null {
+export function reachLine(
+  platforms: readonly PublishPlatform[],
+  behind = false,
+  webOffer: WebOffer = WebOffer.Quiet,
+): string | null {
   const web = platforms.find((row) => row.target === PublishTarget.Web);
   if (onlyApps(platforms)) return WORDS.onlyPlayers(NATIVE_WORDS.platforms(sendingPlayers(platforms)));
-  if (nothingToPublish(platforms)) return waitingLine(platforms, behind);
+  if (nothingToPublish(platforms)) return waitingLine(platforms, behind, webOffer);
   if (web?.state !== PublishPlatformState.Ready) return null;
   const native = platforms.filter(isNative);
   const sending = sendingPlayers(platforms);
@@ -207,6 +243,9 @@ const playersOf = (target: PublishTarget): string => (target === PublishTarget.W
 
 /** What "Make with agent" sends through the game's chat for a platform. */
 export const makeAppAsk = (target: PublishTarget, title: string): string => WORDS.makeAsk(playersOf(target), title);
+
+/** What "Make with agent" sends through the game's chat for the web version. */
+export const makeWebAsk = (title: string): string => WORDS.makeWebAsk(title);
 
 /** What "Build again" sends through the game's chat for a platform. */
 export const rebuildAsk = (target: PublishTarget, title: string): string => WORDS.rebuildAsk(playersOf(target), title);

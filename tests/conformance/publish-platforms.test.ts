@@ -25,9 +25,12 @@ import {
   listsPlatforms,
   onlyApps,
   makeAppAsk,
+  makeWebAsk,
   PlatformEnd,
   platformRows,
   reachLine,
+  WebOffer,
+  webOfferFor,
 } from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -315,6 +318,11 @@ describe("Publish's platform rows as the dialog says them", () => {
     const noMac = { ...MAC, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
     assert.equal(nothingToPublish([noWeb, noMac, WINDOWS]), true);
     assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac or Windows app first, then publish it here.");
+    assert.equal(
+      reachLine([noWeb, noMac, WINDOWS], false, WebOffer.Make),
+      "Make a web version or a Mac or Windows app first, then publish it here.",
+      "a Unity or Godot game can start with its web version",
+    );
     assert.equal(nothingToPublish([noWeb, MAC, WINDOWS]), true, "an app Studio cannot send yet");
     assert.equal(reachLine([noWeb, MAC, WINDOWS]), "Publishing Mac and Windows apps comes with the next Genex update.");
     assert.equal(nothingToPublish([noWeb, { ...MAC, uploads: true }, WINDOWS]), false);
@@ -353,6 +361,35 @@ describe("Publish's platform rows as the dialog says them", () => {
     assert.equal(
       makeAppAsk(PublishTarget.Windows, "Dust Runners"),
       "Make a Windows app of Dust Runners so I can publish it for Windows players.",
+    );
+  });
+
+  it("offers a Unity or Godot game a web version from the agent, and tells an Unreal game it has none", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const webRow = (offer: WebOffer) => platformRows([noWeb, MAC, WINDOWS], NOW, undefined, offer)[0];
+    assert.deepEqual(
+      [
+        webOfferFor([{ id: CoreFact.UnityProject, path: "unity" }]),
+        webOfferFor([{ id: CoreFact.GodotProject, path: "." }]),
+      ],
+      [WebOffer.Make, WebOffer.Make],
+    );
+    assert.equal(webOfferFor([{ id: CoreFact.UnrealProject, path: "." }]), WebOffer.Unavailable);
+    assert.equal(webOfferFor([{ id: CoreFact.WebGame, path: "." }]), WebOffer.Quiet);
+    assert.deepEqual([webRow(WebOffer.Make)?.detail, webRow(WebOffer.Make)?.end], ["Not made yet", PlatformEnd.Make]);
+    assert.deepEqual(
+      [webRow(WebOffer.Unavailable)?.detail, webRow(WebOffer.Unavailable)?.end],
+      ["Unreal games don’t run in a browser", PlatformEnd.None],
+    );
+    assert.deepEqual(
+      [webRow(WebOffer.Quiet)?.detail, webRow(WebOffer.Quiet)?.end],
+      ["Not set up for the web", PlatformEnd.None],
+    );
+    const ready = platformRows([WEB, MAC, WINDOWS], NOW, undefined, WebOffer.Make)[0];
+    assert.equal(ready?.end, PlatformEnd.None, "a web version made already offers nothing");
+    assert.equal(
+      makeWebAsk("Simple Fast Tic Tac Toe"),
+      "Make a web version of Simple Fast Tic Tac Toe so I can publish it on the web.",
     );
   });
 });
