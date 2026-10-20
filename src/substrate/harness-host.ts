@@ -132,6 +132,10 @@ export interface UpdateRecord {
   error?: string;
 }
 
+/** The parts of a harness boot the host marks, so a slow start's log says which one held it. */
+export const HarnessBootStep = { Spawned: "spawned", Ready: "ready" } as const;
+export type HarnessBootStep = (typeof HarnessBootStep)[keyof typeof HarnessBootStep];
+
 export interface HarnessHostOptions {
   /** Directory of the agent-editable harness workspace. */
   workspace: string;
@@ -168,6 +172,8 @@ export interface HarnessHostOptions {
   now?: () => number;
   /** Test seam: the platform whose stop and launch rules apply (default: this one). */
   platform?: NodeJS.Platform;
+  /** Each part of a boot as it finishes. */
+  onBootStep?: (step: HarnessBootStep) => void;
 }
 
 export interface ExitInfo {
@@ -299,6 +305,7 @@ export class HarnessHost {
     });
     this.#child = child;
     this.#generation++;
+    this.options.onBootStep?.(HarnessBootStep.Spawned);
     void this.#inbox?.connect(() => this.#child === child);
 
     child.stdout?.setEncoding("utf8");
@@ -344,6 +351,7 @@ export class HarnessHost {
     this.#startHeartbeatMonitor();
 
     await this.#waitForReady();
+    this.options.onBootStep?.(HarnessBootStep.Ready);
     if (notice) await this.dispatch(notice);
   }
 
