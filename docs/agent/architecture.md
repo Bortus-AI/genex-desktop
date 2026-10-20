@@ -645,7 +645,8 @@ notes are `docs/notes/NOTES.<facet>.md`.
 `.studio/` is gitignored; on the long turn the studio copies `.studio/DIRECTOR.md` to run and thread
 artifacts and restores it on resume, clamped to `MAX_DIRECTOR_MEMORY`. Adoption writes a real `.gitignore` before
 `git init`. The first harness repository is `checkOutNewRepo`'s (fast-import of the installed seed,
-then checkout): nothing just written is read back. Snapshot commits land on the user's checked-out
+then checkout): nothing just written is read back. `ensureRepo` finishes a first commit an
+interrupted start left. Snapshot commits land on the user's checked-out
 branch with hooks disabled and are refused during a merge, rebase, cherry-pick or revert.
 `SnapshotEngine.restore` runs every check before any reset and refuses (`branch-changed`,
 `history-changed`, `operation-in-progress`, `rescue-failed`) leaving the folder untouched; the mandatory rescue snapshot is named on

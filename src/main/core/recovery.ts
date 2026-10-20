@@ -360,9 +360,10 @@ export class RecoveryService {
   async seedHarnessWorkspace(): Promise<void> {
     const backupDir = this.#updatesBackupDir("seed-backup");
     this.#x.seedReport = await applySeed({ ...this.#seedOptions(), backupDir });
-    // A slow first start's log then says whether the copy or the first commit took the time.
-    this.#core.options.markBoot?.("core:seed-files");
-    await this.#core.snapshots.init();
+    // A first start's slowest step on a busy Windows PC: each part gets its own boot mark.
+    const mark = (step: string): void => this.#core.options.markBoot?.(`core:${step}`);
+    mark("seed-files");
+    await this.#core.snapshots.init((workspace, step) => mark(`seed-git-${step}:${workspace}`));
   }
 
   /**
