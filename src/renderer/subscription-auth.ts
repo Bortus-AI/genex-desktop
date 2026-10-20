@@ -9,6 +9,7 @@ import { type ClaudeLoginState, isClaudeLoginActive } from "../shared/claude-log
 import { isCodexLoginActive } from "../shared/codex-login.ts";
 import { SECOND_MS } from "../shared/duration.ts";
 import { EngineStatusCode, needsSignIn } from "../shared/engine-descriptor.ts";
+import { t } from "../shared/i18n.ts";
 import { EngineId, loginKind, PROVIDERS, providerInfo } from "../shared/providers.ts";
 import { useAsyncEffect } from "./use-async-effect.ts";
 
@@ -33,10 +34,10 @@ export function signInVendor(engine: string): { name: string; product: string; u
   if (!provider || !copy)
     return {
       name: engine,
-      product: "your subscription",
+      product: t("your subscription"),
       url: "",
-      get: "Install it",
-      who: "the provider handles that part",
+      get: t("Install it"),
+      who: t("the provider handles that part"),
     };
   return { name: provider.label, product: copy.product, url: copy.installUrl, get: copy.get, who: copy.who };
 }
@@ -193,7 +194,7 @@ export function useSubscriptionAuth(
       .catch((err: Error) => ({ started: false as const, missingCli: false, error: err.message }));
     if (!result.started) {
       setMissingCli(Boolean(result.missingCli));
-      setError(result.error ?? "Couldn't start sign-in");
+      setError(result.error ?? t("Couldn't start sign-in"));
       return;
     }
     if (!consoleLogin) {

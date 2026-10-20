@@ -24,6 +24,7 @@ import {
 } from "../shared/custom-events.ts";
 import { DAY_MS, MINUTE_MS } from "../shared/duration.ts";
 import { EventKind } from "../shared/event-log.ts";
+import { t } from "../shared/i18n.ts";
 import { ExecutionStatus, executionStep } from "../shared/run-state.ts";
 import { LoopProfile } from "../shared/project-facts.ts";
 import { contractorIdentity } from "./chat-labels.ts";
@@ -436,9 +437,9 @@ export type DayGroup = (typeof DayGroup)[keyof typeof DayGroup];
 
 /** The notifications menu's heading for each day. */
 const DAY_HEADINGS = {
-  [DayGroup.Today]: "Today",
-  [DayGroup.Yesterday]: "Yesterday",
-  [DayGroup.Earlier]: "Earlier",
+  [DayGroup.Today]: t("Today"),
+  [DayGroup.Yesterday]: t("Yesterday"),
+  [DayGroup.Earlier]: t("Earlier"),
 } as const satisfies Record<DayGroup, string>;
 
 /** Which day `iso` falls on, seen from `now`: today, yesterday or earlier. */

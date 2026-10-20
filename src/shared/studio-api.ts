@@ -12,6 +12,7 @@ import type { PlayChangeResult, PlayCoverResult, PlayCoverType, PlayGameChange }
 import type { NativeInstalls, NativeSession, SessionAction } from "./play-native.ts";
 import type { PublishPlatform } from "./publish-platforms.ts";
 import type { GenexCatalogItem } from "./mention-corpus.ts";
+import type { LanguageChoice } from "./locale.ts";
 import type { MentionRef, MentionRetry } from "./prompt-mention.ts";
 import type {
   AvatarStyle,
@@ -408,6 +409,7 @@ export interface StudioApi {
     blender?: boolean;
     autoResume?: boolean;
     computerControl?: boolean;
+    language?: LanguageChoice;
   }): Promise<StudioSettingsView>;
   /** Settings → Copy diagnostics: versions, provider status and the recent log, already redacted. */
   diagnostics(): Promise<string>;
@@ -807,6 +809,8 @@ export interface StudioSettingsView {
   autoResume?: boolean;
   /** Let agents control your computer (Settings → Permissions, macOS and Windows); off by default. */
   computerControl?: boolean;
+  /** The app's language for main's menus, dialogs and notifications; System by default. */
+  language?: LanguageChoice;
 }
 
 declare global {

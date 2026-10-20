@@ -8,6 +8,7 @@
  */
 import type { JSX, ReactNode } from "react";
 import { useState } from "react";
+import { intlLocale } from "../../../../shared/i18n.ts";
 import {
   type CreditEntry,
   CreditKind,
@@ -30,9 +31,9 @@ import { ICON_TOOLS, markIsLight, toolMark } from "./routed-tools.ts";
 
 const WORDS = GENEX_WORDS.creditsTab;
 /** Credits read with the reader's own digit grouping. */
-const NUMBER = new Intl.NumberFormat();
+const NUMBER = new Intl.NumberFormat(intlLocale());
 /** "Nov 1": when the Pro allowance comes. */
-const DAY = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const DAY = new Intl.DateTimeFormat(intlLocale(), { month: "short", day: "numeric" });
 
 /** The tool each kind is made with, whose logo marks its row in both lists (the first, when two share it). */
 const KIND_TOOLS: Record<CreditKind, GenexTool> = {

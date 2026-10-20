@@ -11,6 +11,7 @@
 import type { JSX } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { avatarRecipe } from "../../shared/avatar-recipe.ts";
+import { intlLocale } from "../../shared/i18n.ts";
 import { GenexAccountStatus } from "../../shared/genex-account.ts";
 import { creditsPlansUrl } from "../../shared/play-credits.ts";
 import { handleBaseFromName } from "../../shared/handle.ts";
@@ -397,7 +398,9 @@ function NicknameRow({ me, online }: { me: PlayMe; online: boolean }): JSX.Eleme
 /** "1,700 credits": the balance as last read, or nothing before it was. */
 function creditsWords(credits: { balance: number | null; unlimited: boolean } | null): string | null {
   if (credits?.unlimited) return WORDS.creditsUnlimited;
-  return credits?.balance == null ? null : WORDS.creditsCount(new Intl.NumberFormat().format(credits.balance));
+  return credits?.balance == null
+    ? null
+    : WORDS.creditsCount(new Intl.NumberFormat(intlLocale()).format(credits.balance));
 }
 
 /**

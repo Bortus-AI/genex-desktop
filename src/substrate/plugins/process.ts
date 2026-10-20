@@ -2,6 +2,8 @@ import { fork, type ChildProcess } from "node:child_process";
 import { outlivesHarness } from "../../shared/plugin-hooks.ts";
 import { CallCutOff, type PluginBinding } from "../../shared/plugins.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { activeCatalog, currentLocale } from "../../shared/i18n.ts";
+import type { Locale } from "../../shared/locale.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { windowsBaseEnv } from "../child-env.ts";
 import { envPath, envValue, isWindows } from "../toolchain.ts";
@@ -13,6 +15,8 @@ const MessageKind = {
   Result: "result",
   Host: "host",
   HostResult: "host-result",
+  /** The app's language and its words, before the first call and again after it changes (`plugin-sdk/backend.mjs`). */
+  Language: "language",
 } as const;
 /** A message from the backend: a call's result, or a host-service request made during a call. */
 interface BackendMessage {
@@ -136,6 +140,8 @@ export interface PluginCallOptions {
 /** Crash isolation only. Installed backends remain trusted native code. Never replay a call. */
 export class PluginProcess {
   #child: ChildProcess | undefined;
+  /** The language the running backend was last told, so a call after a change tells it again. */
+  #told: Locale | undefined;
   #sequence = 0;
   #pending = new Map<
     number,
@@ -216,6 +222,13 @@ export class PluginProcess {
       reply({ error: errorMessage(e) });
     }
   }
+  /** Tell the backend the app's language when it has not heard it: its words for the person follow it. */
+  #tellLanguage(child: ChildProcess): void {
+    const locale = currentLocale();
+    if (this.#told === locale) return;
+    child.send({ kind: MessageKind.Language, locale, catalog: activeCatalog() });
+    this.#told = locale;
+  }
   /** The running backend, started with the user's PATH when this is its first call. */
   async #started(): Promise<ChildProcess> {
     if (this.#child) return this.#child;
@@ -233,6 +246,7 @@ export class PluginProcess {
       stdio: ["ignore", "ignore", "pipe", "ipc"],
     });
     this.#child = child;
+    this.#told = undefined;
     // Backend stderr may contain provider output: never surface it as sanitized account status.
     const onStderr = this.onStderr;
     if (!onStderr) child.stderr?.resume();
@@ -297,6 +311,7 @@ export class PluginProcess {
         },
       });
       signal?.addEventListener("abort", cancel, { once: true });
+      this.#tellLanguage(child);
       child.send({ kind: MessageKind.Call, id, method, name, args, context }, (error) => {
         if (error) {
           const p = this.#pending.get(id);

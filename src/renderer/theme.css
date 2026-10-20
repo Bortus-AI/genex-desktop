@@ -23,13 +23,16 @@
   font-display: swap;
   src: url("./fonts/ZalandoSansSemiExpanded-variable.woff2") format("woff2");
 }
+/* Zalando Sans has Latin only. Cyrillic and Greek come from TikTok Sans at Zalando's width, with
+   its weights shifted to Zalando's stems and its capitals to Zalando's height. */
 @font-face {
-  font-family: "Geist Fallback";
+  font-family: "TikTok Sans Genex";
   font-style: normal;
-  font-weight: 100 900;
+  font-weight: 275 792;
   font-display: swap;
-  src: url("./fonts/Geist-variable.woff2") format("woff2");
-  unicode-range: U+0301, U+0370-03FF, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+  size-adjust: 101.3%;
+  src: url("./fonts/TikTokSansGenex-variable.woff2") format("woff2");
+  unicode-range: U+0301, U+0370-03FF, U+0400-052F, U+1C80-1C88, U+1F00-1FFF, U+2116, U+2DE0-2DFF, U+A640-A69F;
 }
 @font-face {
   font-family: "Geist Mono";
@@ -38,12 +41,65 @@
   font-display: swap;
   src: url("./fonts/GeistMono-variable.woff2") format("woff2");
 }
+/* The app's language picks its script's face (--font-language below); LINE Seed JP has no middle
+   weights, so medium text is its Regular and bold its Bold. */
+@font-face {
+  font-family: "LINE Seed JP";
+  font-style: normal;
+  font-weight: 100 599;
+  font-display: swap;
+  src: url("./fonts/LINESeedJP-Regular.woff2") format("woff2");
+}
+@font-face {
+  font-family: "LINE Seed JP";
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+  src: url("./fonts/LINESeedJP-Bold.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Genex Hangul";
+  font-style: normal;
+  font-weight: 45 930;
+  font-display: swap;
+  src: url("./fonts/GenexHangul-variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Noto Sans SC";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/NotoSansSC-GB2312-variable.woff2") format("woff2");
+}
+/* The face for the app language's own script, after Zalando and TikTok Sans in every stack; a
+   generic family where the language needs none, so the stacks stay valid. */
+:root {
+  --font-language: ui-sans-serif;
+}
+:root:lang(ja) {
+  --font-language: "LINE Seed JP";
+}
+:root:lang(ko) {
+  --font-language: "Genex Hangul";
+}
+:root:lang(zh-Hans) {
+  --font-language: "Noto Sans SC";
+}
+/* Chinese, Japanese and Korean read badly squeezed: the app's tight Latin tracking stays off for
+   them, and Japanese breaks lines between phrases rather than anywhere. */
+:root:is(:lang(ja), :lang(ko), :lang(zh-Hans)) * {
+  letter-spacing: 0 !important;
+}
+:root:lang(ja) {
+  word-break: auto-phrase;
+}
 
 /* Genex dark fallback. appearance/store.ts applies the selected semantic palette before mount. */
 :root {
   color-scheme: dark;
-  --font-family-sans: "Geist Fallback", "Zalando Sans SemiExpanded", ui-sans-serif, system-ui, sans-serif;
-  --font-family-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-family-sans:
+    "Zalando Sans SemiExpanded", "TikTok Sans Genex", var(--font-language), ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "Geist Mono", var(--font-language), ui-monospace, "SF Mono", Menlo, monospace;
   --background: #0e0d0f;
   --foreground: #dee0e2;
   --card: #141416;

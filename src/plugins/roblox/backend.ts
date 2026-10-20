@@ -201,10 +201,11 @@ export const SetupMiss = {
 export type SetupMiss = (typeof SetupMiss)[keyof typeof SetupMiss];
 
 /** What the panel can offer while Studio is open and its MCP switch still has to be turned on. */
-const OPEN_STUDIO_CHOICES = [
-  { action: RobloxAction.RestartStudio, label: MESSAGE.Choice.RestartStudio },
-  { action: RobloxAction.DoItForMe, label: MESSAGE.Choice.DoItForMe },
-] as const;
+const openStudioChoices = () =>
+  [
+    { action: RobloxAction.RestartStudio, label: MESSAGE.Choice.RestartStudio() },
+    { action: RobloxAction.DoItForMe, label: MESSAGE.Choice.DoItForMe() },
+  ] as const;
 
 /** The panel's answer to Set up, Undo and Restart Studio: done, or why not and what to do instead. */
 export interface SetupAnswer {
@@ -337,25 +338,26 @@ export function studioStatusOf(facts: StudioFacts): StudioStatus {
   return facts.answering ? StudioStatus.Ready : StudioStatus.Starting;
 }
 
-/** Each status as the toolbar shows it: a dot in its tone, its word leading the tooltip. */
+/** Each status as the toolbar shows it: a dot in its tone, its word (said when shown) leading the tooltip. */
 const BADGE = {
-  [StudioStatus.Get]: { badge: MESSAGE.Badge.Get, tone: "info", dot: true },
-  [StudioStatus.SetUp]: { badge: MESSAGE.Badge.SetUp, tone: "warn", dot: true },
-  [StudioStatus.NotOpen]: { badge: MESSAGE.Badge.NotOpen, tone: "info", dot: true },
-  [StudioStatus.Starting]: { badge: MESSAGE.Badge.Starting, tone: "warn", dot: true },
-  [StudioStatus.Ready]: { badge: MESSAGE.Badge.Ready, tone: "ok", dot: true },
-} as const satisfies Record<StudioStatus, PluginToolbarStatus>;
+  [StudioStatus.Get]: { badge: MESSAGE.Badge.Get, tone: "info" },
+  [StudioStatus.SetUp]: { badge: MESSAGE.Badge.SetUp, tone: "warn" },
+  [StudioStatus.NotOpen]: { badge: MESSAGE.Badge.NotOpen, tone: "info" },
+  [StudioStatus.Starting]: { badge: MESSAGE.Badge.Starting, tone: "warn" },
+  [StudioStatus.Ready]: { badge: MESSAGE.Badge.Ready, tone: "ok" },
+} as const satisfies Record<StudioStatus, { badge: () => string; tone: PluginToolbarStatus["tone"] }>;
 
 function titleOf(status: StudioStatus, install: StudioInstall | undefined): string {
-  if (status === StudioStatus.Get) return MESSAGE.Title.Get;
-  if (status === StudioStatus.SetUp) return MESSAGE.Title.SetUp;
+  if (status === StudioStatus.Get) return MESSAGE.Title.Get();
+  if (status === StudioStatus.SetUp) return MESSAGE.Title.SetUp();
   if (status === StudioStatus.NotOpen) return MESSAGE.Title.NotOpen(install?.version);
-  return status === StudioStatus.Starting ? MESSAGE.Title.Starting : MESSAGE.Title.Ready;
+  return status === StudioStatus.Starting ? MESSAGE.Title.Starting() : MESSAGE.Title.Ready();
 }
 
 /** The toolbar button's word, dot and title for a status. */
 export function toolbarStatusOf(status: StudioStatus, install?: StudioInstall): PluginToolbarStatus {
-  return { ...BADGE[status], title: titleOf(status, install) };
+  const { badge, tone } = BADGE[status];
+  return { badge: badge(), tone, dot: true, title: titleOf(status, install) };
 }
 
 /** Whether Genex's setup record is a plain file in the plugin's storage. */
@@ -520,7 +522,7 @@ function refusedAnswer(error: unknown): SetupAnswer {
   if (!(error instanceof RobloxSetupError)) throw error;
   const answer: SetupAnswer = { done: false, reason: error.code, message: error.message };
   if (error.code !== SetupRefusal.StudioRunning) return answer;
-  return { ...answer, choices: OPEN_STUDIO_CHOICES, clickPath: MCP_SWITCH_CLICK_PATH };
+  return { ...answer, choices: openStudioChoices(), clickPath: MCP_SWITCH_CLICK_PATH };
 }
 
 function setupDoneAnswer(setup: SetupDone): SetupAnswer {
@@ -528,12 +530,12 @@ function setupDoneAnswer(setup: SetupDone): SetupAnswer {
     return {
       done: true,
       setup,
-      message: MESSAGE.Setup.DoneNoSettings,
-      choices: OPEN_STUDIO_CHOICES.filter((choice) => choice.action === RobloxAction.DoItForMe),
+      message: MESSAGE.Setup.DoneNoSettings(),
+      choices: openStudioChoices().filter((choice) => choice.action === RobloxAction.DoItForMe),
       clickPath: MCP_SWITCH_CLICK_PATH,
     };
   const newer = setup.helper === HelperChange.Kept && setup.switches.turnedOn === 0;
-  return { done: true, setup, message: newer ? MESSAGE.Setup.NewerHelper : MESSAGE.Setup.Done };
+  return { done: true, setup, message: newer ? MESSAGE.Setup.NewerHelper() : MESSAGE.Setup.Done() };
 }
 
 /** Runs Set up, answering its refusals in plain words. Studio is checked first: nothing is read while it runs. */
@@ -551,14 +553,15 @@ async function runSetup(deps: RobloxDeps, context: PluginContext): Promise<Setup
 
 async function setupAction(deps: RobloxDeps, context: PluginContext): Promise<SetupAnswer> {
   const location = await locateStudio(deps);
-  if (!location.installed) return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled };
+  if (!location.installed)
+    return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled() };
   return runSetup(deps, context);
 }
 
 async function undoAction(deps: RobloxDeps, context: PluginContext): Promise<SetupAnswer> {
   try {
     const { removed, kept } = await undoSetup(await setupOptions(deps, context));
-    const message = kept.length > 0 ? MESSAGE.Setup.UndoneKept(kept.length) : MESSAGE.Setup.Undone;
+    const message = kept.length > 0 ? MESSAGE.Setup.UndoneKept(kept.length) : MESSAGE.Setup.Undone();
     return { done: true, message, removed, kept };
   } catch (error) {
     return refusedAnswer(error);
@@ -579,17 +582,20 @@ async function buildUsingStudio(context: PluginContext): Promise<string | undefi
  */
 async function restartStudio(deps: RobloxDeps, context: PluginContext): Promise<SetupAnswer> {
   const location = await locateStudio(deps);
-  if (!location.installed) return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled };
+  if (!location.installed)
+    return { done: false, reason: SetupMiss.NotInstalled, message: MESSAGE.Setup.NotInstalled() };
   const inUse = await buildUsingStudio(context);
   if (inUse) return { done: false, reason: SetupMiss.InUse, message: MESSAGE.Quit.InUse(inUse), inUse };
-  if (!(await quitStudio(deps))) return { done: false, reason: SetupMiss.StillOpen, message: MESSAGE.Setup.StillOpen };
+  if (!(await quitStudio(deps)))
+    return { done: false, reason: SetupMiss.StillOpen, message: MESSAGE.Setup.StillOpen() };
   const answer = await runSetup(deps, context);
   // The game's own place, when it has one: Studio on its start page has no MCP server to answer.
   await openStudio(deps, context);
-  return { ...answer, reopened: true, message: `${answer.message} ${MESSAGE.Setup.Reopened}` };
+  return { ...answer, reopened: true, message: `${answer.message} ${MESSAGE.Setup.Reopened()}` };
 }
 
-const ASSIST_WORDS: Partial<Record<PluginEngineAssistRefusal, string>> = {
+/** Do it for me's refusals in the person's words, each said when it is shown. */
+const ASSIST_WORDS: Partial<Record<PluginEngineAssistRefusal, () => string>> = {
   unavailable: MESSAGE.Assist.Unavailable,
   declined: MESSAGE.Assist.Declined,
   "no-chat": MESSAGE.Assist.NoChat,
@@ -602,8 +608,9 @@ const ASSIST_WORDS: Partial<Record<PluginEngineAssistRefusal, string>> = {
  */
 async function doItForMe(context: PluginContext): Promise<AssistAnswer> {
   const answer = await context.host(PluginService.GameEngineAssist, { task: MESSAGE.Assist.Task });
-  if (answer.started) return { started: true, message: MESSAGE.Assist.Started };
-  const message = (answer.reason && ASSIST_WORDS[answer.reason]) || MESSAGE.Assist.NotStarted;
+  if (answer.started) return { started: true, message: MESSAGE.Assist.Started() };
+  const words = answer.reason ? ASSIST_WORDS[answer.reason] : undefined;
+  const message = words ? words() : MESSAGE.Assist.NotStarted();
   const refused: AssistAnswer = { started: false, message, clickPath: MCP_SWITCH_CLICK_PATH };
   if (answer.reason) refused.reason = answer.reason;
   return refused;
@@ -621,7 +628,7 @@ function writePhase(job: InstallJob, storage: string, phase: InstallPhase, now: 
 /** A step on the way: the panel sees it at once, the record follows. */
 function notePhase(job: InstallJob, storage: string, phase: InstallPhase, now: number): void {
   job.phase = phase;
-  job.message = MESSAGE.Install.Phase[phase];
+  job.message = MESSAGE.Install.Phase[phase]();
   void writePhase(job, storage, phase, now);
 }
 
@@ -647,7 +654,7 @@ async function getStudioJob(deps: RobloxDeps, job: InstallJob, storage: string):
     await finish(job, storage, { phase: InstallPhase.Done, message: done.message, now: deps.now() });
   } catch (error) {
     if (error instanceof InstallError) job.reason = error.code;
-    const message = error instanceof InstallError ? error.message : MESSAGE.Install.Phase.failed;
+    const message = error instanceof InstallError ? error.message : MESSAGE.Install.Phase.failed();
     await finish(job, storage, { phase: InstallPhase.Failed, message, now: deps.now() });
   }
 }
@@ -662,29 +669,29 @@ interface InstallSlot {
  * `status`. A Studio already here, or an install already going, is answered in words, not run.
  */
 async function getStudio(deps: RobloxDeps, context: PluginContext, slot: InstallSlot): Promise<GetStudioAnswer> {
-  if (!isFinished(slot.job)) return { started: false, message: MESSAGE.Install.AlreadyGetting };
+  if (!isFinished(slot.job)) return { started: false, message: MESSAGE.Install.AlreadyGetting() };
   const location = await locateStudio(deps);
   if (location.installed)
     return { started: false, message: MESSAGE.Install.AlreadyInstalled(location.install.version) };
-  if (!(deps.platform in INSTALLER)) return { started: false, message: MESSAGE.Install.Refused.unsupported };
+  if (!(deps.platform in INSTALLER)) return { started: false, message: MESSAGE.Install.Refused.unsupported() };
   const storage = await context.host(PluginService.StorageRoot);
   const job: InstallJob = {
     phase: InstallPhase.Downloading,
-    message: MESSAGE.Install.Phase.downloading,
+    message: MESSAGE.Install.Phase.downloading(),
     controller: new AbortController(),
     writes: Promise.resolve(),
   };
   slot.job = job;
   void getStudioJob(deps, job, storage);
-  return { started: true, message: MESSAGE.Install.Started };
+  return { started: true, message: MESSAGE.Install.Started() };
 }
 
 /** Stop: ends the download or the wait under way. Roblox's installer, once running, finishes on its own. */
 function cancelGetStudio(slot: InstallSlot): GetStudioAnswer {
   const job = slot.job;
-  if (!job || isFinished(job)) return { started: false, message: MESSAGE.Install.NothingToStop };
+  if (!job || isFinished(job)) return { started: false, message: MESSAGE.Install.NothingToStop() };
   job.controller.abort();
-  return { started: false, message: MESSAGE.Install.Stopped };
+  return { started: false, message: MESSAGE.Install.Stopped() };
 }
 
 /** Get Roblox Studio's confirmation: this computer's download, where it comes from, and the sign-in. */
@@ -703,7 +710,7 @@ async function reviewSetup(deps: RobloxDeps): Promise<PluginReview> {
     const paths = setupPaths(deps.platform, deps.env, deps.home);
     const settings = (await readSwitches(paths.settings)).length;
     const detail = planSetup({ platform: deps.platform, paths, settings }).join("\n");
-    return { message: MESSAGE.Setup.Confirm, detail };
+    return { message: MESSAGE.Setup.Confirm(), detail };
   } catch {
     return {};
   }

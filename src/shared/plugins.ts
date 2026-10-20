@@ -7,6 +7,7 @@ import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./proje
 import type { WorkerIsolation } from "./workers.ts";
 import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
 import { MINUTE_MS } from "./duration.ts";
+import { t } from "./i18n.ts";
 
 /** Where a plugin's native runtime stands on this Mac (`PluginNativeStatus.state`). */
 export const NativeRuntimeState = {
@@ -1003,13 +1004,20 @@ export type StudioConsentSource = (typeof StudioConsentSource)[keyof typeof Stud
  * The question the computer-setting card asks: the chat's card shows it as its title, and the
  * consent record keeps it as the prompt, so both say the same words.
  */
-export const COMPUTER_SETTING_QUESTION =
-  "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.";
+export function computerSettingQuestion(): string {
+  return t(
+    "Turn on computer control? Agents in every chat can then ask to use apps on this computer, one app at a time.",
+  );
+}
 
-/** The name a studio consent card shows. */
+/** The name a studio consent card shows; getters, as main reads it in the language it sets after loading. */
 export const STUDIO_CONSENT_NAMES: Readonly<Record<StudioConsentSource, string>> = {
-  [StudioConsentSource.Desktop]: "Computer control",
-  [StudioConsentSource.ComputerSetting]: "Computer control",
+  get [StudioConsentSource.Desktop]() {
+    return t("Computer control");
+  },
+  get [StudioConsentSource.ComputerSetting]() {
+    return t("Computer control");
+  },
 };
 
 export interface PluginBinding {

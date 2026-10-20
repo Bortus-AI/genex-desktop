@@ -17,6 +17,7 @@ import {
 } from "../../shared/coordinator.ts";
 import { CustomEvent, customEventData, customRecord, type AnyCustomPayload } from "../../shared/custom-events.ts";
 import { EventKind, ThreadKind, type ConversationRecord, type EventEnvelope } from "../../shared/event-log.ts";
+import { t } from "../../shared/i18n.ts";
 import { crossesCompletionEngine } from "../../shared/model-roles.ts";
 import { ToolPermissionBy } from "../../shared/permissions.ts";
 import { RunState } from "../../shared/run-state.ts";
@@ -110,9 +111,13 @@ const PLACEHOLDER_TITLES: readonly string[] = [NEW_GAME_TITLE, NEW_CHAT_TITLE];
 /** Characters of a first message kept as the thread's title. */
 const THREAD_TITLE_CHARS = 56;
 
-/** User-facing copy of this module, and what the coordinator reads when a tool call is refused. */
+/**
+ * User-facing copy of this module, and what the coordinator reads when a tool call is refused.
+ * Only `tagNoGame` is said to the person in their language: the tag retry line is the agent's, the
+ * commission refusals are kept in the chat's log, and the rest are tool results.
+ */
 const MESSAGE = {
-  tagNoGame: "Tags belong to a game's chat",
+  tagNoGame: () => t("Tags belong to a game's chat"),
   tagRetried: (handle: string) => `@${handle} did not arrive with my last message; it is attached now.`,
   autopilotOutdated:
     "This build of the studio can't run a timed build yet — your brief is saved above, and sending it again once the " +
@@ -351,7 +356,7 @@ export class ConversationService {
     const record = await this.#core.store.getRecord(threadId);
     const meta = record.metadata as ThreadMeta;
     const project = meta?.kind === ThreadKind.Game ? meta.project : undefined;
-    if (!project) throw new Error(MESSAGE.tagNoGame);
+    if (!project) throw new Error(MESSAGE.tagNoGame());
     const recordTags = (tags: MentionOutcome[]) =>
       this.#core.append([customEventData(CustomEvent.MentionTagged, { messageId, tags })], threadId);
     if (action === MentionRetry.Remove) {

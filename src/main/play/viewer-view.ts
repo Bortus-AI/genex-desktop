@@ -41,6 +41,7 @@ import { closePage, closeWithWindow, dropGameView } from "./view-drop.ts";
 import { isPurchaseWindow, wirePurchaseCapture } from "./purchase-window.ts";
 import type { PlayMicStore } from "./mic-store.ts";
 import { playViewer, type PlayViewer, type PlayViewerDeps } from "./viewer.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** Each studio window's Play views, for the development control (`dev/runtime.ts`). */
 const viewsOf = new WeakMap<BrowserWindow, PlayViews>();
@@ -79,9 +80,9 @@ const MIC_SETTINGS: Partial<Record<NodeJS.Platform, string>> = {
 };
 /** The mic menu's words. */
 const MESSAGE = {
-  micMenu: "Microphone",
-  systemDefault: "System default",
-  noNames: "Your microphones are listed once the mic is on",
+  micMenu: () => t("Microphone"),
+  systemDefault: () => t("System default"),
+  noNames: () => t("Your microphones are listed once the mic is on"),
 } as const;
 
 /** The studio window and what the viewer reaches through it. */
@@ -212,11 +213,11 @@ function showMicMenu(
     click: () => choose(device),
   });
   const template: MenuItemConstructorOptions[] = [
-    { label: MESSAGE.micMenu, enabled: false },
-    item(MESSAGE.systemDefault, null),
+    { label: MESSAGE.micMenu(), enabled: false },
+    item(MESSAGE.systemDefault(), null),
     ...names.map((name) => item(name, name)),
   ];
-  if (devices.length === 0) template.push({ type: "separator" }, { label: MESSAGE.noNames, enabled: false });
+  if (devices.length === 0) template.push({ type: "separator" }, { label: MESSAGE.noNames(), enabled: false });
   Menu.buildFromTemplate(template).popup({ window: win, ...at });
 }
 

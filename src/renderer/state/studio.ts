@@ -17,6 +17,7 @@ import type { ComposerSendOptions } from "../../shared/composer.ts";
 import type { GameUpdate } from "../../shared/game-library.ts";
 import { HarnessState } from "../../shared/protocol.ts";
 import type { GameName } from "../../shared/game-project.ts";
+import { t } from "../../shared/i18n.ts";
 import type { Bootstrap, ConversationRecord, GameProject, StudioApi } from "../../shared/studio-api.ts";
 import { UiEvent } from "../../shared/ui-events.ts";
 import { shouldWelcome } from "../onboarding/state.ts";
@@ -113,7 +114,9 @@ export const EVENT_POLL_MS = 3 * SECOND_MS;
 /** What a launch says when it stops before making a game. */
 const MESSAGE = {
   outOfUsage: (why: string) =>
-    `${why.replace(/[\s.]+$/, "")}. No game was made: send it again after the reset, from another account or with another model.`,
+    t("{why}. No game was made: send it again after the reset, from another account or with another model.", {
+      why: why.replace(/[\s.]+$/, ""),
+    }),
 } as const;
 
 /** An agent screen that went away. */
@@ -505,7 +508,7 @@ async function enterProject(
 }
 
 /** Untitled game: what a game is called when even naming it failed. */
-const UNTITLED_GAME = "Untitled game";
+const UNTITLED_GAME = t("Untitled game");
 let launches = 0;
 
 /**

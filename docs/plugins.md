@@ -2798,7 +2798,8 @@ image data URLs are supported. Use `src/plugin-sdk/panel.js` for request/respons
 same host (`PluginPanelHost`) serves a panel opened from the Plugins page and one opened from a
 toolbar button.
 
-`studioPlugin.call('context')` returns the selected project, host API version (`3`) and theme tokens:
+`studioPlugin.call('context')` returns the selected project, host API version (`3`), the window's
+language (`locale`, from `panelContext` in `renderer/panels/panel-bridge.ts`) and theme tokens:
 `background`, `foreground`, the raw `accent`, and the readable button colours Studio's own primary
 buttons use (`accentFill` under `accentForeground` text, at least 5:1, and `accentHover`);
 `call('settings')` reads standard settings; `call('action', name, args)` invokes a declared action.
@@ -2807,6 +2808,14 @@ confirmation it also carries `code: "cancelled"`, so a panel can stay quiet with
 The parent validates source frame, opaque origin and request shape, and binds plugin/project
 itself. A game change under an open panel cancels a review still waiting and posts
 `studio-plugin-context-changed`; requests already asked are answered for their own game. Closing the panel removes the listener; the SDK bounds waiting promises.
+
+A panel's words follow that language through the SDK's `words.js`: `studioPlugin.t(english,
+params)` (the app's ICU syntax), `formatList`, `locale` and `ready`, and `data-t` marks in the page.
+The translations are the plugin's own `locales/<lang>.json`, keyed by the English, which
+`inlinePanelSdk` pastes into the panel as a JSON element (`plugin-sdk/panel-words.mjs`; the frame can
+load nothing); `locales/messages.json` lists the English each panel asks for, and
+`plugin-panel-words.test.ts` holds the bundled panels to it. A missing translation shows the
+English. See [panels in the plugin guide](PLUGIN_GUIDE.md#3-panels).
 
 `studioPlugin.chooseFile({ title, extensions })` opens Studio's own native file picker over its
 window, so a panel never asks the person to type a path. `title` is 1–80 characters on one line;

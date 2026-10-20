@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { t } from "../../shared/i18n.ts";
 import { EngineHostAction } from "../../shared/game-engine.ts";
 import { isInside } from "../../substrate/paths.ts";
 import { projectRayTracing, turnOffRayTracing } from "./ray-tracing.ts";
@@ -224,17 +225,10 @@ const LOW_MEMORY_BYTES = 16 * GIB;
 /** What a plugin's host project is named after it: `<Name>Host`. */
 const HOST_SUFFIX = "Host";
 
+/** What the agent's tools answer and throw, which the agent reads: English. */
 const MESSAGE = {
-  UnknownAction: (name: string) => `Unknown Unreal action: ${name}`,
   UnknownTool: (name: string) => `Unknown Unreal tool: ${name}`,
-  SetupQuestion: (name: string) => `Set up ${name} for Genex?`,
-  SetupIntro: (name: string, file: string) => `Genex will change ${name} (${file}):`,
-  UndoQuestion: (name: string) => `Undo setup for ${name}?`,
-  RayTracingQuestion: (name: string) => `Turn off ray tracing in ${name}?`,
-  RayTracingDetail: (name: string) =>
-    `Genex will set r.RayTracing=False in ${name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.`,
   NoGame: "Open a game in Genex first: an Unreal project is used by a game.",
-  NotSetUp: (name: string) => `${name} isn't set up for Genex yet. Set it up first.`,
   NoSetUpProject:
     "No Unreal project is set up for Genex yet. Give unreal__use-project the project's .uproject path: it sets the project up and links it.",
   UnknownProject: (asked: string, names: string) =>
@@ -264,33 +258,70 @@ const MESSAGE = {
   NoLinkedProject: "This game isn't linked to an Unreal project yet.",
   LinkedNotSetUp:
     "This game's Unreal project isn't set up for Genex. Call unreal__use-project with its .uproject path: it sets the project up.",
-  XcodeMacOnly: "Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio.",
+  /** The reason of the game snapshot Open takes before it updates the helper or adds Epic's toolsets, as Rewind lists it; kept in the snapshot as written. */
+  SnapshotBeforeUpdate: "Before Genex updated the Unreal project",
+} as const;
+
+/**
+ * What a person reads: the panel's errors and notes, and Studio's confirmation (`review`) before
+ * setup, undo and turning ray tracing off.
+ */
+const WORDS = {
+  UnknownAction: (name: string) => t("Unknown Unreal action: {name}", { name }),
+  NoGame: () => t("Open a game in Genex first: an Unreal project is used by a game."),
+  NotSetUp: (name: string) => t("{name} isn't set up for Genex yet. Set it up first.", { name }),
+  XcodeMacOnly: () => t("Xcode is for a Mac. On Windows, Unreal builds C++ with Visual Studio."),
+  SetupQuestion: (name: string) => t("Set up {name} for Genex?", { name }),
+  SetupIntro: (name: string, file: string) => t("Genex will change {name} ({file}):", { name, file }),
+  UndoQuestion: (name: string) => t("Undo setup for {name}?", { name }),
+  RayTracingQuestion: (name: string) => t("Turn off ray tracing in {name}?", { name }),
+  RayTracingDetail: (name: string) =>
+    t(
+      "Genex will set r.RayTracing=False in {name}'s Config/DefaultEngine.ini. On a Mac, Unreal 5.8 can crash while it renders a ray-traced game behind another app. Lumen keeps lighting the level in software, and you can turn ray tracing back on in Project Settings. Unreal uses the change from its next start.",
+      { name },
+    ),
   [SetupStep.Engine]: (file: string, from: string, to: string) =>
-    `${file}: switch from Unreal ${from} to ${to}. Content you save in ${to} won't open in ${from}. To keep a ${from} version, duplicate the project folder first.`,
+    t(
+      "{file}: switch from Unreal {from} to {to}. Content you save in {to} won't open in {from}. To keep a {from} version, duplicate the project folder first.",
+      { file, from, to },
+    ),
   /** The plugin step names only what it still changes: Epic's MCP plugins, its toolsets, or both. */
   [SetupStep.Plugins]: (file: string, pluginsOn: boolean, toolsetsIn: boolean) => {
-    const changes = [
-      pluginsOn ? "" : "turn on Epic's ModelContextProtocol and EditorToolset plugins",
-      toolsetsIn ? "" : "add Epic's toolsets for UI, effects, AI, animation, procedural content and physics",
-    ];
-    return `${file}: ${changes.filter(Boolean).join(", and ")}.`;
+    if (pluginsOn)
+      return t("{file}: add Epic's toolsets for UI, effects, AI, animation, procedural content and physics.", { file });
+    if (toolsetsIn) return t("{file}: turn on Epic's ModelContextProtocol and EditorToolset plugins.", { file });
+    return t(
+      "{file}: turn on Epic's ModelContextProtocol and EditorToolset plugins, and add Epic's toolsets for UI, effects, AI, animation, procedural content and physics.",
+      { file },
+    );
   },
   [SetupStep.AutoStart]: (file: string, port: number) =>
-    `${file}: start Unreal's MCP server on port ${port} whenever the project opens.`,
-  [SetupStep.Helper]: (folder: string) => `${folder}: add the Genex editor helper, a few Python files.`,
+    t("{file}: start Unreal's MCP server on port {port} whenever the project opens.", { file, port }),
+  [SetupStep.Helper]: (folder: string) => t("{folder}: add the Genex editor helper, a few Python files.", { folder }),
   UpdateHelper: (folder: string, version: string | undefined) =>
-    `${folder}: update the Genex editor helper${version ? ` to ${version}` : ""}, a few changed Python files.`,
-  SetupOutro:
-    "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.",
-  NothingToChange: (name: string) => `${name} is already set up. Nothing will change.`,
+    version
+      ? t("{folder}: update the Genex editor helper to {version}, a few changed Python files.", { folder, version })
+      : t("{folder}: update the Genex editor helper, a few changed Python files.", { folder }),
+  SetupOutro: () =>
+    t(
+      "Genex keeps a copy of each file first, and Undo setup takes these changes back. A Genex editor helper file you changed is kept beside it as a .mine copy.",
+    ),
+  NothingToChange: (name: string) => t("{name} is already set up. Nothing will change.", { name }),
   Undo: (name: string) =>
-    `Genex will take back what it added to ${name}: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays.`,
+    t(
+      "Genex will take back what it added to {name}: its plugin entries, the MCP server start-up lines and the Genex editor helper. Anything else you changed stays.",
+      { name },
+    ),
   KeptAfterUndo: (count: number) =>
-    `Genex left ${count} ${count === 1 ? "file" : "files"} you changed in Plugins/${HELPER_FOLDER}.`,
-  /** The reason of the game snapshot Open takes before it updates the helper or adds Epic's toolsets, as Rewind lists it. */
-  SnapshotBeforeUpdate: "Before Genex updated the Unreal project",
+    t(
+      "{count, plural, one {Genex left # file you changed in Plugins/{folder}.} other {Genex left # files you changed in Plugins/{folder}.}}",
+      { count, folder: HELPER_FOLDER },
+    ),
   KeptOnUpdate: (version: string, count: number) =>
-    `Genex updated the Genex editor helper to ${version} and kept ${count} ${count === 1 ? "file" : "files"} you changed beside the new ${count === 1 ? "one" : "ones"} as .mine.`,
+    t(
+      "{count, plural, one {Genex updated the Genex editor helper to {version} and kept # file you changed beside the new one as .mine.} other {Genex updated the Genex editor helper to {version} and kept # files you changed beside the new ones as .mine.}}",
+      { version, count },
+    ),
 } as const;
 
 /**
@@ -797,24 +828,24 @@ async function status(
 /** What setup does to the project's Genex editor helper: updates an older one to the shipped version, else adds it. */
 async function helperChange(state: ProjectState, helper: string): Promise<string> {
   const folder = path.join("Plugins", HELPER_FOLDER);
-  if (state.helper !== HelperState.Outdated) return MESSAGE[SetupStep.Helper](folder);
-  return MESSAGE.UpdateHelper(folder, await helperVersion(helper));
+  if (state.helper !== HelperState.Outdated) return WORDS[SetupStep.Helper](folder);
+  return WORDS.UpdateHelper(folder, await helperVersion(helper));
 }
 
 async function describeSetup(file: string, options: SetupOptions): Promise<PluginReview> {
   const state = await inspectProject(file, options);
   const { steps, port, engine } = await planSetup(file, options);
-  if (steps.length === 0) return { message: MESSAGE.NothingToChange(state.name) };
+  if (steps.length === 0) return { message: WORDS.NothingToChange(state.name) };
   const helperLine = await helperChange(state, options.helper);
   const lines = steps.map((step) => {
     if (step === SetupStep.Engine)
-      return MESSAGE[step](path.basename(state.file), engine?.from ?? state.engine, engine?.to ?? "");
-    if (step === SetupStep.Plugins) return MESSAGE[step](path.basename(state.file), state.plugins, state.toolsets);
-    if (step === SetupStep.AutoStart) return MESSAGE[step](settingsIniPath(options.env), port);
+      return WORDS[step](path.basename(state.file), engine?.from ?? state.engine, engine?.to ?? "");
+    if (step === SetupStep.Plugins) return WORDS[step](path.basename(state.file), state.plugins, state.toolsets);
+    if (step === SetupStep.AutoStart) return WORDS[step](settingsIniPath(options.env), port);
     return helperLine;
   });
-  const detail = [MESSAGE.SetupIntro(state.name, state.file), ...lines.map((line) => `• ${line}`), MESSAGE.SetupOutro];
-  return { message: MESSAGE.SetupQuestion(state.name), detail: detail.join("\n") };
+  const detail = [WORDS.SetupIntro(state.name, state.file), ...lines.map((line) => `• ${line}`), WORDS.SetupOutro()];
+  return { message: WORDS.SetupQuestion(state.name), detail: detail.join("\n") };
 }
 
 /** The folder new games go in. */
@@ -940,13 +971,13 @@ async function stepsFor(env: SetupEnv, state: ProjectState | undefined): Promise
 async function setUpState(file: string, options: SetupOptions): Promise<ProjectState> {
   const state = await inspectProject(file, options);
   const { name } = state;
-  if (!isSetUp(state)) throw new Error(MESSAGE.NotSetUp(name));
+  if (!isSetUp(state)) throw new Error(WORDS.NotSetUp(name));
   return state;
 }
 
 /** Links the calling game to a set-up project through the host, which shows it in the chat with Undo. */
 async function linkGame(deps: UnrealBackendDeps, file: string, context: PluginContext): Promise<PluginEngineLink> {
-  if (!context.project) throw new Error(MESSAGE.NoGame);
+  if (!context.project) throw new Error(WORDS.NoGame());
   const state = await setUpState(file, await setupOptions(deps, context));
   return context.host(HostService.EngineLink, { project: realProjectFile(state) });
 }
@@ -1027,7 +1058,7 @@ async function namedProject(asked: string, storage: string): Promise<string> {
  * never a path or address from the caller.
  */
 async function getXcode(deps: UnrealBackendDeps, args: Record<string, unknown>) {
-  if (deps.env.platform !== "darwin") throw new Error(MESSAGE.XcodeMacOnly);
+  if (deps.env.platform !== "darwin") throw new Error(WORDS.XcodeMacOnly());
   if (args.step === XcodeStep.Downloads) {
     await deps.launch.open(xcodeDownloadsLaunch());
     return { opened: XcodeStep.Downloads };
@@ -1082,7 +1113,7 @@ async function rememberChoiceOfUnreal(deps: UnrealBackendDeps, context: PluginCo
 
 /** Where a game's Don't use Unreal is kept: one empty file per game, in the plugin's storage. */
 async function skipFile(deps: UnrealBackendDeps, context: PluginContext): Promise<string> {
-  if (!context.project) throw new Error(MESSAGE.NoGame);
+  if (!context.project) throw new Error(WORDS.NoGame());
   const { storage } = await setupOptions(deps, context);
   return path.join(storage, SKIPPED_FOLDER, encodeURIComponent(context.project));
 }
@@ -1312,7 +1343,7 @@ async function openForUser(deps: UnrealBackendDeps, file: string, context: Plugi
 /** What the panel says after an Open that kept files the user changed in the helper, as its `note`. */
 function updateNote(opened: OpenResult): { note: string } | Record<string, never> {
   const kept = opened.helper?.kept.length ?? 0;
-  return opened.helper && kept > 0 ? { note: MESSAGE.KeptOnUpdate(opened.helper.to, kept) } : {};
+  return opened.helper && kept > 0 ? { note: WORDS.KeptOnUpdate(opened.helper.to, kept) } : {};
 }
 
 /**
@@ -1424,7 +1455,7 @@ const recorded = async (file: string, options: SetupOptions): Promise<boolean> =
 async function undo(file: string, options: SetupOptions, ifSetUp = false) {
   if (ifSetUp && !(await recorded(file, options))) return null;
   const state = await undoSetup(file, options);
-  return { ...state, note: state.kept.length > 0 ? MESSAGE.KeptAfterUndo(state.kept.length) : null };
+  return { ...state, note: state.kept.length > 0 ? WORDS.KeptAfterUndo(state.kept.length) : null };
 }
 
 /** Sets the project up and makes it the chosen one, which the bridge tries first. */
@@ -1486,7 +1517,7 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
   };
   return {
     async action(name, args, context) {
-      if (!isUnrealAction(name)) throw new Error(MESSAGE.UnknownAction(name));
+      if (!isUnrealAction(name)) throw new Error(WORDS.UnknownAction(name));
       return actions[name](args, context);
     },
     async tool(name, args, context) {
@@ -1499,11 +1530,11 @@ export function createUnrealBackend(deps: UnrealBackendDeps): PluginActivation {
       if (name === UnrealAction.Setup) return describeSetup(projectArg(args), options);
       if (name === UnrealAction.UndoSetup) {
         const project = (await inspectProject(projectArg(args), options)).name;
-        return { message: MESSAGE.UndoQuestion(project), detail: MESSAGE.Undo(project) };
+        return { message: WORDS.UndoQuestion(project), detail: WORDS.Undo(project) };
       }
       if (name === UnrealAction.RayTracingOff) {
         const project = (await inspectProject(projectArg(args), options)).name;
-        return { message: MESSAGE.RayTracingQuestion(project), detail: MESSAGE.RayTracingDetail(project) };
+        return { message: WORDS.RayTracingQuestion(project), detail: WORDS.RayTracingDetail(project) };
       }
       return {};
     },

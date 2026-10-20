@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AssetScope } from "../../shared/asset-library.ts";
 import { SECOND_MS } from "../../shared/duration.ts";
 import { PlayCategory, type PlayGame, PlayShelf } from "../../shared/play.ts";
-import { SIDEBAR_TOGGLE } from "../shell/use-shell-chrome.ts";
+import { SIDEBAR_TOGGLE, SidebarToggle } from "../shell/use-shell-chrome.ts";
 import { feedOf } from "../state/play.ts";
 import { usePlay, useShallow } from "../state/hooks.ts";
 import { studio } from "../state/studio.ts";
@@ -463,6 +463,7 @@ export function PlayRoom({
             <button
               type="button"
               className="no-drag sidebar-toggle"
+              data-sidebar-toggle={SidebarToggle.Show}
               aria-label={SIDEBAR_TOGGLE.Show}
               aria-controls="studio-sidebar"
               aria-expanded="false"

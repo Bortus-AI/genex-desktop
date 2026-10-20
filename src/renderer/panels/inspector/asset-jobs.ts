@@ -1,6 +1,7 @@
 /** What the Builds tab reads off an asset job: its first picture, its kind in words, and whether it is still being made. */
 import { isUnderWay, MakingPhase } from "../../../shared/asset-making.ts";
 import { type AssetKind, assetFormat, assetKind } from "../../../shared/game-assets.ts";
+import { intlLocale, t } from "../../../shared/i18n.ts";
 import { stoppedTitle } from "../../asset-making.ts";
 import type { AssetInfo } from "../../run-graph.ts";
 import { AssetCardState, BLENDER_SOURCE } from "../../run-graph-assets.ts";
@@ -11,10 +12,10 @@ import { ASSET_JOB_WORDS } from "../../words.ts";
 export const ASSET_THUMB_PX = 128;
 
 const KIND_WORD: Partial<Record<AssetKind, string>> = {
-  model: "3D model",
-  audio: "Sound",
-  image: "Image",
-  video: "Video",
+  model: t("3D model"),
+  audio: t("Sound"),
+  image: t("Image"),
+  video: t("Video"),
 };
 
 /** A job's kind as a word, from its first file, or null when it names no kind the panel knows. */
@@ -70,14 +71,23 @@ export function assetsStatus(jobs: AssetInfo[]): { text: string; tone: Tone } {
   const unfinished = jobs.filter((job) => job.state === AssetCardState.Unfinished).length;
   const inGame = made.filter((job) => job.inGame).length;
   const known = made.filter((job) => job.inGame !== undefined).length;
-  if (failed) return { text: `${failed} failed`, tone: Tone.Red };
-  if (making) return { text: `Making ${making}`, tone: Tone.Accent };
-  if (stopped) return { text: `${stopped[1].length} ${stopped[0].toLowerCase()}`, tone: Tone.Orange };
+  if (failed) return { text: t("{count, plural, other {# failed}}", { count: failed }), tone: Tone.Red };
+  if (making) return { text: t("Making {count}", { count: making }), tone: Tone.Accent };
+  if (stopped)
+    return {
+      text: t("{count} {phase}", { count: stopped[1].length, phase: stopped[0].toLowerCase() }),
+      tone: Tone.Orange,
+    };
   if (unfinished && !made.length) return { text: ASSET_JOB_WORDS.notFinished(unfinished), tone: Tone.Muted };
-  if (!known) return { text: `${made.length} delivered`, tone: Tone.Muted };
-  if (inGame === made.length) return { text: `${inGame} in game`, tone: Tone.Green };
-  if (inGame) return { text: `${inGame} of ${made.length} in game`, tone: Tone.Orange };
-  return { text: "Not in game yet", tone: Tone.Orange };
+  if (!known) return { text: t("{count, plural, other {# delivered}}", { count: made.length }), tone: Tone.Muted };
+  if (inGame === made.length)
+    return { text: t("{count, plural, other {# in game}}", { count: inGame }), tone: Tone.Green };
+  if (inGame)
+    return {
+      text: t("{count} of {total} in game", { count: inGame, total: made.length }),
+      tone: Tone.Orange,
+    };
+  return { text: t("Not in game yet"), tone: Tone.Orange };
 }
 
 /** A modeller's render still of an asset, when it has one, keyed by when it was made. */
@@ -85,4 +95,8 @@ export const blenderRender = (job: AssetInfo): { run: string; version: string } 
   job.source === BLENDER_SOURCE && job.render ? { run: job.render, version: job.at } : null;
 
 /** A triangle count in words, grouped for reading. */
-export const trianglesWords = (triangles: number): string => `${triangles.toLocaleString("en-US")} triangles`;
+export const trianglesWords = (triangles: number): string =>
+  t("{count, plural, other {{number} triangles}}", {
+    count: triangles,
+    number: triangles.toLocaleString(intlLocale()),
+  });

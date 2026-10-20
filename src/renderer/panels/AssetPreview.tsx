@@ -15,6 +15,7 @@ import { Lightbox } from "../ui/Lightbox.tsx";
 import { prefersReducedMotion } from "../ui/media-queries.ts";
 import { hostPlatform } from "../platform.ts";
 import { ASSET_WORDS, fileManagerWords } from "../words.ts";
+import { t } from "../../shared/i18n.ts";
 
 /** How much of a text file the preview decodes. */
 const TEXT_PREVIEW_BYTES = 256 * 1024;
@@ -29,13 +30,14 @@ type Clip = { name: string; duration: number };
 
 /** Why a file could not show, by mode. */
 const MESSAGE = {
-  image: "This image could not be decoded. The file may be incomplete or unsupported.",
-  audio: "This audio codec could not be played. Try a WAV, MP3 or Ogg export.",
-  video: "This video codec could not be played. Try an MP4 (H.264) or WebM export.",
-  unsupported:
+  image: t("This image could not be decoded. The file may be incomplete or unsupported."),
+  audio: t("This audio codec could not be played. Try a WAV, MP3 or Ogg export."),
+  video: t("This video codec could not be played. Try an MP4 (H.264) or WebM export."),
+  unsupported: t(
     "This format needs its authoring app. For a 3D preview with materials and animation, export GLB; for a sprite animation, export animated GIF/WebP or video.",
-  truncated: "\n… Preview truncated at 256 KiB; original unchanged.",
-} as const;
+  ),
+  truncated: `\n${t("… Preview truncated at 256 KiB; original unchanged.")}`,
+};
 
 /** What a read file shows as: its text, truncated past the preview's limit, or an object URL for the media element. */
 function mediaFrom(
@@ -264,7 +266,7 @@ function AnimationBar({ source }: { source: Source }): JSX.Element {
     <div role="group" aria-label={ASSET_WORDS.animations} className="lightbox-bar">
       <button
         type="button"
-        aria-label={`${playing ? "Pause" : "Play"} ${clipName}`}
+        aria-label={playing ? t("Pause {clip}", { clip: clipName }) : t("Play {clip}", { clip: clipName })}
         onClick={toggle}
         className="lightbox-play"
       >
@@ -329,7 +331,7 @@ export function AssetPreview({
   const shown = ready && !error;
   const loading = !ready && !error && mode !== "unsupported";
   const animated = source.animations.length > 0;
-  const name = asset.file.split("/").pop() ?? "Asset preview";
+  const name = asset.file.split("/").pop() ?? t("Asset preview");
   return (
     <Lightbox
       title={name}

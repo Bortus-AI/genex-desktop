@@ -134,7 +134,11 @@ async function buildBlender(root, resources, sdk) {
     await cp(path.join(root, "src/plugins/blender", file), path.join(blender, file));
   await writeFile(
     path.join(blender, "panel.html"),
-    await inlinePanelSdk(await readFile(path.join(root, "src/plugins/blender/panel.html"), "utf8"), sdk),
+    await inlinePanelSdk(
+      await readFile(path.join(root, "src/plugins/blender/panel.html"), "utf8"),
+      sdk,
+      path.join(root, "src/plugins/blender/locales"),
+    ),
   );
   // A file URL: a bare Windows path (D:\...) is not an import specifier.
   const { BLENDER_WRAPPER_PY } = await import(pathToFileURL(path.join(root, "src/plugins/blender/wrapper.ts")).href);
@@ -152,7 +156,11 @@ async function buildUnreal(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/unreal", file), path.join(unreal, file));
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
-  const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/unreal/panel.html"), "utf8"), sdk);
+  const panel = await inlinePanelSdk(
+    await readFile(path.join(root, "src/plugins/unreal/panel.html"), "utf8"),
+    sdk,
+    path.join(root, "src/plugins/unreal/locales"),
+  );
   await writeFile(
     path.join(unreal, "panel.html"),
     await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")),
@@ -316,7 +324,11 @@ async function buildRoblox(root, resources, sdk) {
   await cp(path.join(root, "src/plugins/roblox/templates"), path.join(roblox, "templates"), { recursive: true });
   // The Genex helper Set up copies into Studio's Plugins folder.
   await buildRobloxHelper(root, roblox);
-  const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/roblox/panel.html"), "utf8"), sdk);
+  const panel = await inlinePanelSdk(
+    await readFile(path.join(root, "src/plugins/roblox/panel.html"), "utf8"),
+    sdk,
+    path.join(root, "src/plugins/roblox/locales"),
+  );
   await writeFile(
     path.join(roblox, "panel.html"),
     await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")),
@@ -341,7 +353,11 @@ async function buildGodot(root, resources, sdk) {
   const godot = path.join(resources, "plugins/godot");
   await mkdir(godot, { recursive: true });
   for (const file of ["plugin.json", "icon.svg"]) await cp(path.join(source, file), path.join(godot, file));
-  const panel = await inlinePanelSdk(await readFile(path.join(source, "panel.html"), "utf8"), sdk);
+  const panel = await inlinePanelSdk(
+    await readFile(path.join(source, "panel.html"), "utf8"),
+    sdk,
+    path.join(source, "locales"),
+  );
   await writeFile(path.join(godot, "panel.html"), await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")));
   // Genex's own GDScript (the check and the plays), the new-game templates and the addon a set-up
   // game carries (the Play Protocol autoload), read beside the backend.
@@ -367,7 +383,11 @@ async function buildUnity(root, resources, sdk) {
   for (const file of ["plugin.json", "icon.svg"])
     await cp(path.join(root, "src/plugins/unity", file), path.join(unity, file));
   // Genex's own type goes in as data: a panel can load no font from anywhere else.
-  const panel = await inlinePanelSdk(await readFile(path.join(root, "src/plugins/unity/panel.html"), "utf8"), sdk);
+  const panel = await inlinePanelSdk(
+    await readFile(path.join(root, "src/plugins/unity/panel.html"), "utf8"),
+    sdk,
+    path.join(root, "src/plugins/unity/locales"),
+  );
   await writeFile(path.join(unity, "panel.html"), await inlinePanelFonts(panel, path.join(root, "src/renderer/fonts")));
   await build({
     ...NODE_BACKEND,

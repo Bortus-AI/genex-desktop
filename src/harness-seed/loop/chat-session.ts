@@ -442,6 +442,13 @@ function factRules(
  * The rules every chat build follows after the game's own, in the voice of the engine that reads
  * them: a tool is named once, spelled the way this session can actually call it (M4.8b).
  */
+/**
+ * Genex speaks the person's language, and so does its agent: everything the person reads in the chat
+ * is in the language they write in, while the game's code and the agents' own files stay English.
+ */
+const LANGUAGE_RULE =
+  "Write everything the user reads (your replies, questions, plans and progress notes) in the language the user writes to you in. Code, file names, commit messages and NOTES.md stay in English.";
+
 /** Where the game's work happens: its Unreal project, its linked Godot project, or this workspace. */
 function workspaceRule(game: GameBuild): string {
   if (!servedAsWeb(game) && hasFact(game.facts, CoreFact.UnrealProject))
@@ -456,6 +463,7 @@ const linkedGodotProject = (game: GameBuild): string | null =>
 
 function contractorRules(engine: string | undefined, game: GameBuild): string[] {
   return [
+    LANGUAGE_RULE,
     "Helper scripts of your own (an inspector, a syntax check, a probe) go under .studio/ (gitignored); source scripts for generated assets live under assets/src/.",
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
     workspaceRule(game),

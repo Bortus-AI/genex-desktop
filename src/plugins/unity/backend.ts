@@ -30,6 +30,7 @@ import { mkdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { MINUTE_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { t } from "../../shared/i18n.ts";
 import { ENGINE_PLAY_TOOLS, type EnginePlayTool } from "../../shared/engine-play.ts";
 import type { Activate, PluginActivation, PluginContext } from "../../plugin-sdk/index.d.ts";
 import { getUnityLaunch, systemOpener, UnitySource } from "./editor-launch.ts";
@@ -184,18 +185,36 @@ interface RefusalWords {
   [SetupRefusal.InvalidGame]: string;
 }
 
-/** The refusals of the panel's actions, in words for the person at it. */
+/**
+ * The refusals of the panel's actions, in words for the person at it: getters, so each is said in
+ * the language of the moment it is read.
+ */
 const PANEL_MESSAGE = {
-  NoGame: "Open a game first: Unity works on the open game's project.",
-  NoProject: "This game has no Unity project.",
-  NotSetUp: "Set this project up first.",
+  get NoGame() {
+    return t("Open a game first: Unity works on the open game's project.");
+  },
+  get NoProject() {
+    return t("This game has no Unity project.");
+  },
+  get NotSetUp() {
+    return t("Set this project up first.");
+  },
   [SetupRefusal.NeedsUnity6]: (version: string) =>
-    `This project was saved with Unity ${version}, and Genex works with Unity 6 or later. Upgrade it in Unity Hub first.`,
-  [SetupRefusal.NoManifest]:
-    "This project has no Packages/manifest.json yet. Open it in Unity once, then set it up again.",
-  [SetupRefusal.Unreadable]:
-    "This project's Packages/manifest.json can't be read as Unity writes it. Fix the file, then set it up again.",
-  [SetupRefusal.InvalidGame]: "Invalid game",
+    t(
+      "This project was saved with Unity {version}, and Genex works with Unity 6 or later. Upgrade it in Unity Hub first.",
+      { version },
+    ),
+  get [SetupRefusal.NoManifest]() {
+    return t("This project has no Packages/manifest.json yet. Open it in Unity once, then set it up again.");
+  },
+  get [SetupRefusal.Unreadable]() {
+    return t(
+      "This project's Packages/manifest.json can't be read as Unity writes it. Fix the file, then set it up again.",
+    );
+  },
+  get [SetupRefusal.InvalidGame]() {
+    return t("Invalid game");
+  },
 } as const satisfies RefusalWords & { NotSetUp: string };
 
 /** The words for where an opening ended. */

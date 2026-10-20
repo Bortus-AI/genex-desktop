@@ -1,6 +1,7 @@
 import { compareIds } from "./compare-ids.ts";
 import { AutoResumeCause, CustomEvent } from "./custom-events.ts";
 import { EventKind, type EventEnvelope } from "./event-log.ts";
+import { t } from "./i18n.ts";
 import { ExecutionStatus } from "./run-state.ts";
 import {
   RunSummaryAccumulator,
@@ -140,6 +141,9 @@ interface StudioRecord {
 /** The Activity item a Studio record makes, or null for a record that names nothing it can show. */
 type ItemReader = (record: StudioRecord) => StudioActivityItem | null;
 
+// Activity shows runs and learned changes, so their titles and details are translated. The
+// recovery, upkeep and learning items, and every `status`, are read only by the harness
+// (`studio.context`) and compared by the Activity panel, so they stay English.
 function restoredItem(event: EventEnvelope, reason: string, snapshotId: string): StudioActivityItem {
   return {
     id: event.id,
@@ -177,14 +181,14 @@ const improvementItem: ItemReader = ({ event, event_type, payload: p, restored }
     at: event.created_at,
     kind: "improvement",
     title: code
-      ? "Improved its own code"
+      ? t("Improved its own code")
       : changeTitle({ title: words(p.title), skill: words(p.skill), file: words(p.file) }),
     status: improvementStatus(undone, byUser),
     undone,
     detail:
       words(p.rationale) ||
       words(p.reason) ||
-      "Updated Studio instructions. Future game results have not been verified.",
+      t("Updated Studio instructions. Future game results have not been verified."),
     ...(summary.length ? { summary } : {}),
     ...(p.approvedBy === "auto" || p.approvedBy === "human" ? { approvedBy: p.approvedBy } : {}),
     ...(snapshotId ? { snapshotId } : {}),
@@ -193,9 +197,10 @@ const improvementItem: ItemReader = ({ event, event_type, payload: p, restored }
 
 /** How Activity names a change the agent made to its own files, by the record that logged it. */
 function selfChangeTitle(event_type: string, p: Record<string, unknown>): string {
-  if (event_type === CustomEvent.SkillEdited) return `Harness rewrote ${skillWords(words(p.slug))}`;
-  if (event_type === CustomEvent.ToolInstalled) return `Harness added a tool for itself: ${words(p.file)}`;
-  return `Harness edited its own file ${words(p.file)}`;
+  if (event_type === CustomEvent.SkillEdited) return t("Harness rewrote {skill}", { skill: skillWords(words(p.slug)) });
+  if (event_type === CustomEvent.ToolInstalled)
+    return t("Harness added a tool for itself: {file}", { file: words(p.file) });
+  return t("Harness edited its own file {file}", { file: words(p.file) });
 }
 
 /**
@@ -214,7 +219,7 @@ const selfChangeItem: ItemReader = ({ event, event_type, payload: p, restored })
     title: words(p.title) || selfChangeTitle(event_type, p),
     status: improvementStatus(undone, restored.get(snapshotId) === UNDONE_BY_USER),
     undone,
-    detail: words(p.reason) || "Harness changed one of its own files.",
+    detail: words(p.reason) || t("Harness changed one of its own files."),
     ...(summary.length ? { summary } : {}),
     ...(undone ? {} : { attention: true }),
     ...(snapshotId ? { snapshotId } : {}),
@@ -411,7 +416,7 @@ function runItem(run: ActivityRun, suppliedSummary?: RunSummary): StudioActivity
     kind: "run",
     project: run.project,
     runId: run.runId,
-    title: run.goal || "Game run",
+    title: run.goal || t("Game run"),
     runOutcome: summaryOutcome(summary),
     outcome: runOutcomeKind(summary.execution, summary.landed),
     ...(report ? { report } : {}),

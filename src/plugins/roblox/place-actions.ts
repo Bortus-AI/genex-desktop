@@ -135,9 +135,9 @@ export async function createGame(
   options: CreateOptions,
 ): Promise<CreateAnswer> {
   const location = await locateStudio(deps);
-  if (!location.installed) return { created: false, message: MESSAGE.Open.NotInstalled };
+  if (!location.installed) return { created: false, message: MESSAGE.Open.NotInstalled() };
   if (context.project && (await context.host(PluginService.GameEngineRead).catch(() => null)))
-    return { created: false, message: MESSAGE.Create.Exists };
+    return { created: false, message: MESSAGE.Create.Exists() };
   const storage = await context.host(PluginService.StorageRoot);
   const home = await placeHome(context, options.title?.trim() || MESSAGE.Create.DefaultTitle);
   const name = await suggestName(home.folder, home.title);
@@ -194,15 +194,15 @@ async function bringForward(deps: PlaceActionDeps, install: StudioInstall, name:
 
 /** Opens Studio alone, unless it is already open. */
 async function openStudioAlone(deps: PlaceActionDeps, install: StudioInstall): Promise<OpenAnswer> {
-  if (await studioRunning(deps)) return { opened: false, message: MESSAGE.Open.AlreadyOpen };
+  if (await studioRunning(deps)) return { opened: false, message: MESSAGE.Open.AlreadyOpen() };
   await deps.open(openLaunch(deps.platform, install));
-  return { opened: true, message: MESSAGE.Open.Opening };
+  return { opened: true, message: MESSAGE.Open.Opening() };
 }
 
 /** Open in Studio: the game's own place, brought forward when a Studio has it open; else Studio alone. */
 export async function openStudio(deps: PlaceActionDeps, context: PluginContext): Promise<OpenAnswer> {
   const location = await locateStudio(deps);
-  if (!location.installed) return { opened: false, message: MESSAGE.Open.NotInstalled };
+  if (!location.installed) return { opened: false, message: MESSAGE.Open.NotInstalled() };
   const link = context.project ? await context.host(PluginService.GameEngineRead).catch(() => null) : null;
   if (!context.project || !link) return openStudioAlone(deps, location.install);
   const storage = await context.host(PluginService.StorageRoot);
@@ -229,9 +229,9 @@ export async function quitStudioAction(deps: PlaceActionDeps, context: PluginCon
   const busy = Array.isArray(runs) ? runs.find(isRun) : undefined;
   if (busy) return { quit: false, message: MESSAGE.Quit.InUse(busy.title), reason: QuitMiss.InUse, inUse: busy.title };
   if (!(await studioRunning(deps)))
-    return { quit: false, message: MESSAGE.Quit.NotRunning, reason: QuitMiss.NotRunning };
-  if (await quitStudio(deps)) return { quit: true, message: MESSAGE.Quit.Quitting };
-  return { quit: false, message: MESSAGE.Quit.StillOpen, reason: QuitMiss.StillOpen };
+    return { quit: false, message: MESSAGE.Quit.NotRunning(), reason: QuitMiss.NotRunning };
+  if (await quitStudio(deps)) return { quit: true, message: MESSAGE.Quit.Quitting() };
+  return { quit: false, message: MESSAGE.Quit.StillOpen(), reason: QuitMiss.StillOpen };
 }
 
 /** The agent's `show-steps`: the setup card in its chat while a step is open. */
