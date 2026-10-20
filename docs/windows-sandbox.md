@@ -7,7 +7,10 @@ share, is in [architecture](agent/architecture.md#processes-and-trust-boundaries
 drives sandbox-runtime's srt-win backend (vendored `srt-win.exe` from `app.asar.unpacked`):
 commands run as the local `srt-sandbox` user under Git Bash. The packaged app brings its own Git
 for Windows as `resources\git` and uses it only when the PC has no Git of its own (`findGitBash`);
-a development build uses the installed Git. The host runs git itself too, so the core settles which Git before
+a development build uses the installed Git. Claude Code is handed the same Git Bash
+(`CLAUDE_CODE_GIT_BASH_PATH`, unless the person set one): it looks only in Program Files and on
+PATH, and without one runs commands through its PowerShell tool, which the never-touch screen and
+saved Bash rules do not read. The host runs git itself too, so the core settles which Git before
 anything else at startup (`ensureHostGit`, which puts its `cmd` folder first on PATH); with none,
 the setup screen opens on `git-missing`. What differs from macOS:
 
