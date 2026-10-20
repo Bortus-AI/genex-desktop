@@ -43,6 +43,7 @@
   "tests/conformance/claude-cli.test.ts",
   "tests/conformance/claude-live-tool-types.test.ts",
   "tests/conformance/claude-telemetry.test.ts",
+  "tests/conformance/claude-tool-loading.test.ts",
   "tests/conformance/codex-login.test.ts",
   "tests/conformance/codex-session.test.ts",
   "tests/conformance/command-launch.test.ts",
