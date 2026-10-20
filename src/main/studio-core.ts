@@ -14,7 +14,7 @@
  * preview is injected through {@link PreviewPort}.
  */
 import type { ChildProcess } from "node:child_process";
-import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
@@ -116,6 +116,7 @@ import { ensureFactIgnoreRules } from "../substrate/nested-repos.ts";
 import { mcpSecretPort, type SecretPort } from "../substrate/mcp/store.ts";
 import { isBelow, isInside } from "../substrate/paths.ts";
 import { PluginNativeServices } from "../substrate/plugins/native.ts";
+import { PluginSandboxJobs } from "../substrate/plugins/sandbox-jobs.ts";
 import { spawnNativeLongLived } from "../substrate/plugins/native-process.ts";
 import { PluginRegistry } from "../substrate/plugins/registry.ts";
 import { PluginServices } from "../substrate/plugins/services.ts";
@@ -214,6 +215,8 @@ const HARNESS_HEARTBEAT_TIMEOUT_MS = 10 * MINUTE_MS;
 const HARNESS_CRASH_LOOP = { count: 3, windowMs: 5 * MINUTE_MS } as const;
 /** Where the folder chosen in Settings → Games is remembered, under userData. */
 const GAMES_ROOT_FILE = "games-root.json";
+/** The folder in the sandbox's scratch where each engine plugin's sandbox job keeps its own. */
+const PLUGIN_JOBS_FOLDER = "plugin-jobs";
 /** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
 const ENGINE_SCRATCH_PREFIX = "genex-play-";
 
@@ -811,6 +814,7 @@ export class StudioCore {
       root: this.layout.jobs,
       spawn: this.options.jobSpawn ?? ((request) => this.sandbox.spawnLongLived(request)),
       probe: this.options.jobProbe,
+      onLog: (line) => this.options.onLog?.(line, "stderr"),
       onStarted: (record) => recordJobStarted(this, record),
       onEnded: (record) => recordJobEnded(this, record),
     });
@@ -963,7 +967,31 @@ export class StudioCore {
     return [this.layout.secrets, this.layout.engineHomes, path.join(os.homedir(), ".genex")];
   }
 
-  #createSandbox(games: GameProject[]): Promise<ProcessSandbox> {
+  /** The plugins' native runtimes and jobs; on Windows they run in the process sandbox, from folders it is granted at start. */
+  #nativeServices(): PluginNativeServices {
+    const windows = {
+      // Null until the sandbox has started (plugins are wired beside it).
+      sandbox: () => this.#sandboxIfStarted(),
+      work: this.layout.nativeWork,
+      runtimes: this.layout.nativeRuntimes,
+    };
+    return new PluginNativeServices(this.options.paths.userData, [this.layout.secrets], {
+      settings: (id) => this.plugins.settings(id),
+      ...(process.platform === StudioPlatform.Windows ? { windows } : {}),
+    });
+  }
+
+  /** The process sandbox once `init` has set it; plugin services are wired before it is. */
+  #sandboxIfStarted(): ProcessSandbox | null {
+    const started: ProcessSandbox | undefined = this.sandbox;
+    return started ?? null;
+  }
+
+  async #createSandbox(games: GameProject[]): Promise<ProcessSandbox> {
+    // Windows: native jobs work in, and read pinned runtimes from, folders granted now. srt-win
+    // changes grants only while no sandboxed command runs, and agents keep commands running.
+    const windows = process.platform === StudioPlatform.Windows;
+    if (windows) await mkdir(this.layout.nativeRuntimes, { recursive: true });
     return ProcessSandbox.create({
       writableRoots: [
         this.layout.workspaces,
@@ -971,6 +999,7 @@ export class StudioCore {
         this.layout.exports,
         this.layout.gamesRoot,
         ...games.map((game) => game.dir),
+        ...(windows ? [this.layout.nativeWork] : []),
       ],
       scratchDir: this.layout.scratch,
       secretPaths: this.#protectedPaths(),
@@ -988,13 +1017,27 @@ export class StudioCore {
           games.map((game) => game.dir),
         ),
       ],
-      readableRoots: [this.options.paths.resources],
+      readableRoots: [this.options.paths.resources, ...(windows ? [this.layout.nativeRuntimes] : [])],
       enabled: this.options.sandbox ?? true,
       // Windows: the window opens on the games while the network check and folder grants finish.
       startInBackground: true,
       log: (line) => this.options.onLog?.(`[sandbox] ${line}`, "stderr"),
       // A Finder-launched app has no npm on its PATH; every build the studio ever ran exited 127.
       toolPath: async () => (await toolchain()).path,
+    });
+  }
+
+  /**
+   * The programs the host runs for plugins, each in this studio's sandbox: a manifest's `host` tool
+   * (Genex's CLI, a package install) and an engine plugin's long job (`sandbox.run`: Unreal's
+   * package on Windows), which keeps its scratch in the sandbox's own scratch folder.
+   */
+  #wirePluginPrograms(): void {
+    this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
+    this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
+    this.plugins.sandboxJobs = new PluginSandboxJobs({
+      run: (request) => this.sandbox.run(request),
+      scratch: path.join(this.layout.scratch, PLUGIN_JOBS_FOLDER),
     });
   }
 
@@ -1050,7 +1093,7 @@ export class StudioCore {
       path.join(this.options.paths.resources, "plugin-sdk/backend.mjs"),
       (id, method, args, binding, invocation) => this.pluginServices.call(id, method, args, binding, invocation),
     );
-    const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
+    const nativePlugins = this.#nativeServices();
     this.#nativePlugins = nativePlugins;
     this.plugins.nativeService = (manifest, directory, method, args, binding, invocation) =>
       nativePlugins.call(
@@ -1091,8 +1134,7 @@ export class StudioCore {
     this.plugins.agentWritable = (directory) => this.#agentWritable(directory);
     // A Finder-launched app has a bare PATH: Genex's publish found no git-lfs from Homebrew there.
     this.plugins.toolPath = async () => (await toolchain()).path;
-    this.plugins.hostTool = genexHostTool({ cli: this.#genexCli(), packages: this.#genexPackages() });
-    this.plugins.hostToolConsent = genexHostPreflight(this.#genexPackages());
+    this.#wirePluginPrograms();
     this.pluginServices.exportStage = async (binding, target, pluginId) => {
       // A panel's or toolbar's own publish reaches only here: refused as the dialog and agent tool refuse it.
       await assertPublishable(this, binding.project);
@@ -1491,6 +1533,8 @@ export class StudioCore {
     }
     this.#started = false;
     this.plugins?.cancel();
+    // Engine plugins' sandbox jobs are the studio's own: none outlives it.
+    await this.plugins?.sandboxJobs?.stopAll().catch(() => {});
     this.#consent.cancel({}, "stop");
     this.#permissions.cancel({}, ToolPermissionBy.Stop);
     if (this.#x.idleTimer) clearInterval(this.#x.idleTimer);

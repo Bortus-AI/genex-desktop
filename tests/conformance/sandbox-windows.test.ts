@@ -278,9 +278,7 @@ describe("Windows sandbox: stdio", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () 
     assert.equal(output, "the brief\n");
   });
 
-  it("drives a Play Protocol game it started, its requests reaching the game", {
-    todo: "requests go down stdin, which srt-win does not pass on; fixed in a follow-up",
-  }, async () => {
+  it("drives a Play Protocol game it started, its requests reaching the game through the input relay", async () => {
     const launched = await launchGameBridge({
       sandbox,
       command: `${q(process.execPath)} ${q(FAKE_PLAY_GAME)}`,
@@ -565,6 +563,24 @@ describe("Windows sandbox: kill", { skip: SKIP, timeout: TEST_TIMEOUT_MS }, () =
     const atKill = await beats(file);
     await sleep(KILL_SETTLE_MS);
     assert.equal(await beats(file), atKill, "nothing keeps beating after the kill");
+  });
+
+  it("a long-lived process that exits by itself leaves no background child running", async () => {
+    const file = path.join(workspace, "orphan.hb");
+    // The heartbeat ends itself after a minute, so a failure here leaves nothing running for long.
+    const orphan = `node -e 'setInterval(()=>require("fs").appendFileSync("orphan.hb", "b\\n"),200);setTimeout(()=>process.exit(),60000)'`;
+    const { child } = await sandbox.spawnLongLived({ command: `${orphan} & sleep 3; exit 0`, cwd: workspace });
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    try {
+      assert.ok((await beatsReach(file, 3)) >= 3, "the background heartbeat started");
+      await exited;
+    } finally {
+      killChild(child);
+    }
+    await sleep(KILL_SETTLE_MS);
+    const atExit = await beats(file);
+    await sleep(KILL_SETTLE_MS);
+    assert.equal(await beats(file), atExit, "the shell's background child ended with it");
   });
 
   it("killing a long-lived process ends its children", async () => {

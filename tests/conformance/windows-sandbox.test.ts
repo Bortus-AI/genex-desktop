@@ -18,6 +18,7 @@ import { describe, it } from "node:test";
 import { setImmediate as turn, setTimeout as delay } from "node:timers/promises";
 import type { SandboxRuntimeConfig } from "@anthropic-ai/sandbox-runtime";
 import { SandboxProblemCode, WindowsSetupNeed } from "../../src/shared/boot.ts";
+import { launchGameBridge } from "../../src/main/core/game-bridge-target.ts";
 import { openCodeEvents } from "../../src/substrate/engines/opencode.ts";
 import { HarnessHost } from "../../src/substrate/harness-host.ts";
 import {
@@ -94,6 +95,7 @@ const ENV_FILE_POLLS = 200;
 const POLL_MS = 10;
 /** Run input larger than any OS pipe buffer, so no write of it can finish before the reader closes. */
 const PIPE_OVERFLOW_BYTES = 1024 * 1024;
+const FAKE_PLAY_GAME = path.resolve(import.meta.dirname, "../fixtures/fake-play-game.mjs");
 const PROFILE = "C:\\Users\\Ann";
 const at = (...parts: string[]) => [PROFILE, ...parts].join("\\");
 
@@ -2070,6 +2072,31 @@ describe("ProcessSandbox on Windows", () => {
     const leftovers = (await readdir(w.sandbox.scratchDir)).filter((name) => name.startsWith(".stdin-"));
     assert.deepEqual(leftovers, [], "the stdin file is gone once the CLI has opened it");
     assert.equal(w.session.session.active, 0, "the CLI gave the session back");
+  });
+
+  it("drives a Play Protocol game it started, its requests reaching the game through the input relay", async () => {
+    // srt-win drops stdin, so a game's requests went nowhere and its hello never answered.
+    const w = await windowsSandbox();
+    const node = process.execPath.replaceAll("\\", "/");
+    const launched = await launchGameBridge({
+      sandbox: w.sandbox,
+      command: `'${node}' '${FAKE_PLAY_GAME.replaceAll("\\", "/")}'`,
+      cwd: w.workspace,
+      stopGraceMs: 2_000,
+    });
+    try {
+      assert.equal(launched.target.hello?.protocol, 3);
+      assert.match(
+        w.wraps[0]?.command ?? "",
+        /ELECTRON_RUN_AS_NODE=1; exec .*\.input-relay-/,
+        "the relay runs in the game's place",
+      );
+    } finally {
+      await launched.stop();
+    }
+    const leftovers = (await readdir(w.sandbox.scratchDir)).filter((name) => name.startsWith(".input-relay-"));
+    assert.deepEqual(leftovers, [], "the relay's file is gone");
+    assert.equal(w.session.session.active, 0, "the game gave the session back");
   });
 
   it("with the sandbox off (tests only), runs Git Bash with the Windows basics, never /bin/sh", async () => {
