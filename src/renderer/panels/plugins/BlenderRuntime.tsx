@@ -12,8 +12,10 @@ import {
   LocalBlenderAction,
   type LocalBlenderStatus,
 } from "../../../shared/local-blender.ts";
-import { NativeRuntimeState } from "../../../shared/plugins.ts";
+import { isUserCancelled } from "../../../shared/errors.ts";
+import { NativeRuntimeState, type PluginInfo } from "../../../shared/plugins.ts";
 import { StudioPlatform } from "../../../shared/boot.ts";
+import { runPluginAction } from "../../plugin-actions.ts";
 import { hostPlatform } from "../../platform.ts";
 import { Button } from "../../ui/Button.tsx";
 import { Icon, type IconName } from "../../ui/icons.tsx";
@@ -38,7 +40,7 @@ const PROGRAM_REQUEST = { title: WORDS.chooseTitle, extensions: ["exe"] };
 const megabytes = (bytes: number): string => `${Math.round(bytes / MEGABYTE)} MB`;
 
 /** Blender's status, re-read on open, on focus, and every two seconds while a download runs. */
-function useBlenderStatus() {
+function useBlenderStatus(plugin: PluginInfo) {
   const [status, setStatus] = useState<LocalBlenderStatus | null>(null);
   const [error, setError] = useState("");
   const refresh = useCallback(async (): Promise<void> => {
@@ -65,9 +67,10 @@ function useBlenderStatus() {
     // A download runs for minutes; the card follows it by status soon after it starts, not by waiting on it.
     const soon = window.setTimeout(() => void refresh(), DOWNLOAD_POLL_MS / 4);
     try {
-      await window.studio.pluginAction(LOCAL_BLENDER_PLUGIN_ID, name, {});
+      // Download is a confirmed action: it goes through the review, its ticket and the native approval.
+      await runPluginAction({ plugin, name, args: {}, project: null, review: (request) => request.resolve(false) });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!isUserCancelled(e)) setError(e instanceof Error ? e.message : String(e));
     } finally {
       window.clearTimeout(soon);
       void refresh();
@@ -173,8 +176,8 @@ function RuntimeBody({ blender }: { blender: ReturnType<typeof useBlenderStatus>
 }
 
 /** Local Blender's setup card, first on its page. */
-export function BlenderRuntimeCard(): JSX.Element {
-  const blender = useBlenderStatus();
+export function BlenderRuntimeCard({ plugin }: { plugin: PluginInfo }): JSX.Element {
+  const blender = useBlenderStatus(plugin);
   const state = blender.status?.installation?.active ? "downloading" : blender.status?.runtime.state;
   return (
     <section
