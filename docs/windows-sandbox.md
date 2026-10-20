@@ -102,7 +102,9 @@ exist itself; a missing one outside every grant is not sent.
 
 srt-win is alpha. Every srt host on the machine shares the
 `srt-sandbox` SID and so each other's grants and denies. Claude Code's tool-less sessions (usage,
-model list, judge) run without its own sandbox on Windows (`toollessSandbox`). DNS still resolves; the proxy token is on the
+model list, judge) run without its own sandbox on Windows (`toollessSandbox`); a worker's session
+needs it, and where the CLI cannot run it the worker is refused rather than run unboxed
+([harness runtime](harness-runtime.md#a-workers-engine-that-cannot-run-its-sandbox)). DNS still resolves; the proxy token is on the
 runner's command line. A folder opened while the harness runs is writable only after it next
 stops. srt-win's own entries are inheritable, so each apply and reset re-propagates them through
 everything under the folder they are on, holding each folder open meanwhile, and its stamp of a
