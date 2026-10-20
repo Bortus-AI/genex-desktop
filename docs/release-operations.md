@@ -133,6 +133,8 @@ macOS 26 and 15, Ubuntu 26.04 and 24.04 and Windows Server 2025 on GitHub-hosted
 (install and repository only, in a container), and with `CANARY_AZURE=on` Windows 11 and 10 on
 Azure VMs made for the run and deleted after it. Every Windows machine starts Genex as its
 administrator on a lived-in profile (`lived-in-profile.ts`), whose first start sets the sandbox up;
+after writing a profile it waits up to 15 minutes for the CPU to go quiet (`settle.ts`), since
+Windows Search and the antivirus scan the new files and a start timed in that storm measured them;
 the Azure machines then log a standard user on at its own desktop, with a lived-in profile too, and
 run it again. An owner's run whose script never starts fails its machine as `owner run did not
 start`, and the standard user's run, which needs that sandbox, is skipped. A GitHub runner cannot: an account started inside the runner's session cannot set up
