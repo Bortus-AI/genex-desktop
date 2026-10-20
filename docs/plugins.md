@@ -3046,6 +3046,34 @@ Genex:
   refuses the same games (`assertPublishable`, `PublishRefusedError` code `unreal-game` or
   `not-web-game`): the dialog's review and publish, `genex__publish`
   before its consent card, and `export.stage` (a panel's or toolbar's publish) before it exports.
+- For a game linked to an engine, or one whose folder holds a player build, the dialog lists its
+  platforms above the presses (`PublishPlatforms.tsx`, `publish-platforms-view.ts`; read by
+  `studio:plugins.genex-publish-platforms` from `main/core/publish-platforms.ts`): Web, Mac app and
+  Windows app. `main/core/native-builds.ts` finds the builds from the binaries themselves (a
+  `.app`'s Mach-O program, a PE `.exe` beside its data; never through a link, engine caches skipped,
+  the walk capped). A row says what its build runs on, when it was built and its size; "Built
+  before your last change" when the game's sources (outside builds, caches and history) changed more
+  than a minute after it; or "Not made yet" with Make with agent, which sends "Make a <Platform> app
+  of <Game> so I can publish it for <Platform> players." through the game's chat at once (as Another
+  cover does) and keeps the dialog open, the row then saying "Asked the agent". A ready app goes
+  with Publish (`publishedApps`, passed as `native` in `publish-gallery`'s arguments; the line under
+  the rows says "Publish also sends the Mac app."): once the web build is public, the plugin sends
+  each with `genex native publish <the .app, or the .exe's folder> --json` in the publish workspace
+  (`publishApps`, `native-publish.ts`, one hour each), one at a time, after resolving each by real
+  path inside the game folder. An app that fails never fails the publish; its row says "Not sent"
+  and a line under the rows says why in the CLI's words. Each result is kept in the workspace's
+  `native.json` and answered as `GenexPublishState.native` (Sending…, On Genex). A draft sends no app,
+  and a stale build stays. While the pinned CLI is older than `genex native` (1.36.11), nothing is
+  sent and a built app says "Coming soon" (`uploads: false`), its players getting the web version.
+  A game with no web build but a ready app (an Unreal or Unity game built for the Mac) gets Publish
+  on the strip too (`stripEntries`' `apps`, read through the same channel); its press says "Publish
+  Mac app" and runs `studio:plugins.genex-publish-apps` (`publishAppsFromDialog`, no web copy, no
+  `assertPublishable`) → the plugin's `publish-apps` (`publishAppsOnly`): the hosted project is made
+  the first time, each app goes with `genex native publish`, the first that goes carrying
+  `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
+  Listed, the record turns public with the game's genex.games page as its link; held for review or
+  not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
+  stays off for it. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose
