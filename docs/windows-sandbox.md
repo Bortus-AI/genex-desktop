@@ -105,6 +105,16 @@ sets `STUDIO_WINDOWS_BUNDLED_GIT_ONLY=1`, so the sandbox user runs this Git Bash
 pin; the build refuses a release that lacks a path the trim list names, so the list is reviewed.
 The terminal panel still opens an installed Git Bash, else PowerShell.
 
+## Visual C++ runtime
+
+`srt-win.exe` imports `vcruntime140.dll`, which Windows does not include: without it the broker
+exits 0xC0000135 (`srt-win user status exited 3221225781` in the log) and the sandbox never starts.
+A hosted runner hides this, since its Visual Studio installed the DLL in System32. Packaging copies
+each Visual C++ runtime DLL a bundled executable imports beside it, for its architecture, from the
+build machine's Visual Studio (`VCToolsRedistDir`, else vswhere), and refuses to package without
+one ([`scripts/package-vc-runtime.cjs`](../scripts/package-vc-runtime.cjs)). The packaged smoke
+reads every executable and DLL in the package and fails on a runtime import with no copy beside it.
+
 ## Denied reads
 
 `ProcessSandbox`'s base deny list (`baseDenyRead` in `spawn.ts`) is macOS and Linux's. Windows has its own list
