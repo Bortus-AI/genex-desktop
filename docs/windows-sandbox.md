@@ -141,7 +141,8 @@ the session already grants for reading, so it needs no grant of its own. The Squ
 runs its Git Bash and `cmd\git.exe` with no other Git on PATH, and the package job's chat turn
 sets `STUDIO_WINDOWS_BUNDLED_GIT_ONLY=1`, so the sandbox user runs this Git Bash. To move to a newer Git, change the
 pin; the build refuses a release that lacks a path the trim list names, so the list is reviewed.
-The terminal panel still opens an installed Git Bash, else PowerShell.
+The terminal panel and a chat's Run command open an installed Git Bash first, then this one, and
+PowerShell only when neither is there ([`src/main/terminal-shell.ts`](../src/main/terminal-shell.ts)).
 
 ## Visual C++ runtime
 
