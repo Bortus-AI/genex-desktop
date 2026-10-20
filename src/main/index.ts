@@ -126,7 +126,8 @@ import {
 import { devStandAccountPort } from "./dev/dev-stand-account.ts";
 import { fixtureAccountPort } from "./dev/fixture-genex-account.ts";
 import { openGenexPage } from "./genex-browser.ts";
-import { fixtureGamePage, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { fixtureGamePage, fixtureGetCoin, fixturePlayRequest } from "./dev/fixture-play.ts";
+import { FIXTURE_CONFIRM_ORIGIN } from "./dev/fixture-coin.ts";
 import { launchFixtureAccount } from "./dev/fixture-people.ts";
 import {
   fixtureUpload,
@@ -158,7 +159,9 @@ import { type MentionSources, vendorAssetModule } from "./core/mention-tags.ts";
 import type { PlayViewer } from "./play/viewer.ts";
 import { playMicStore } from "./play/mic-store.ts";
 import { playViewsOf, wirePlayViewer } from "./play/viewer-view.ts";
+import { purchaseConfirmOrigin } from "./play/purchase-window.ts";
 import { type PlayComments, playComments } from "./play/comments.ts";
+import { type PlayCoin, playCoin } from "./play/coin.ts";
 import { playOrigins } from "./play/origins.ts";
 import { PLAY_ORIGIN, type PlayPoint } from "../shared/play.ts";
 import { registerRunsIpc } from "./ipc/runs.ts";
@@ -1102,6 +1105,29 @@ function playCommentsFor(studio: StudioCore): PlayComments {
   });
 }
 
+/**
+ * genex.games' coin for a game's purchase sheet, as the Genex account. Only its reads end the sign-in
+ * on a refused token (`refused`): a confirm or cancel genex.games refuses refuses Studio's sheet, not
+ * the account, so the request is not wrapped in `refusingRequest` here.
+ */
+function playCoinFor(studio: StudioCore): PlayCoin {
+  const account = genexAccountFor(studio);
+  return playCoin({
+    request: fixtureNativePolicy ? fixturePlayRequest : networkRequest(globalThis.fetch, playOrigin.api),
+    token: account.token,
+    now: Date.now,
+    localImages: fixtureNativePolicy,
+    refused: account.refused,
+  });
+}
+
+/** The purchase sheet's Sign in: the app's own Genex sign-in in the browser; how it went shows on the sheet's next read. */
+function signInToGenex(studio: StudioCore): void {
+  void genexAccountFor(studio)
+    .signIn()
+    .catch(() => undefined);
+}
+
 /** Play's full-screen viewer in `win`: a published game, the studio's bar over its top edge. */
 function attachPlay(studio: StudioCore, win: BrowserWindow): void {
   playView = wirePlayViewer({
@@ -1118,6 +1144,15 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     barPage: path.join(distRoot, "renderer", "play-bar.html"),
     barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
     comments: playCommentsFor(studio),
+    coin: playCoinFor(studio),
+    account: { signIn: () => signInToGenex(studio) },
+    // Get coin: genex.games in the browser; a fixture launch opens nothing and tops its balance up.
+    openPage: (url) => {
+      if (fixtureNativePolicy) fixtureGetCoin();
+      else void openOutside(studio, win, url);
+    },
+    // A fixture launch's stand-in game confirms on a website that resolves nowhere (`fixture-coin.ts`).
+    confirmOrigin: fixtureNativePolicy ? FIXTURE_CONFIRM_ORIGIN : purchaseConfirmOrigin(playOrigin),
   });
 }
 
