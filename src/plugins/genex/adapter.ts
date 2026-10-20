@@ -69,6 +69,8 @@ import {
   pickCandidate,
   PROBLEM_GUIDANCE,
   PUBLISH_SHOT_TIMEOUT_MS,
+  noteAgentTook,
+  readAgentTook,
   readCandidates,
   readSent,
   readShot,
@@ -1336,16 +1338,17 @@ export class GenexTools {
   /** A publish state with the game's cover, and the cover lines of its own job among its warnings. */
   async #withCover(project: string, state: GenexPublishState): Promise<GenexPublishState> {
     const dir = this.#coverDir(project);
-    const [shot, last, candidates, clip, clipLast] = await Promise.all([
+    const [shot, last, candidates, clip, clipLast, agentTook] = await Promise.all([
       readShot(dir),
       readSent(dir),
       readCandidates(dir),
       readClip(dir),
       readClipSent(dir),
+      readAgentTook(dir),
     ]);
     const own = last?.jobId !== undefined && last.jobId === state.job?.id;
     const warnings = [...(state.warnings ?? []), ...(own ? (last.lines ?? []) : [])];
-    const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast };
+    const cover = { shot, last, sending: this.#coverSteps.has(project), candidates, clip, clipLast, agentTook };
     const native = await this.#nativeRecord(project);
     return { ...state, ...(warnings.length ? { warnings } : {}), cover, native };
   }
@@ -1369,7 +1372,11 @@ export class GenexTools {
       };
     }
     const takenAt = new Date(this.#now()).toISOString();
-    const shot = await this.#coverWrite(project, () => saveShot(dir, reading.still, takenAt));
+    const shot = await this.#coverWrite(project, async () => {
+      const kept = await saveShot(dir, reading.still, takenAt);
+      await noteAgentTook(dir, { shot: takenAt });
+      return kept;
+    });
     const delivery = coverDelivery(await this.#pages(project));
     return {
       operation: CoverOperation.Shoot,
@@ -1444,6 +1451,8 @@ export class GenexTools {
         kept: await readClip(this.#coverDir(project)),
         guidance: clipProblemGuidance(taken.problem),
       };
+    const dir = this.#coverDir(project);
+    await this.#coverWrite(project, () => noteAgentTook(dir, { clip: taken.clip.takenAt }));
     return {
       operation: CoverOperation.Clip,
       clip: taken.clip,

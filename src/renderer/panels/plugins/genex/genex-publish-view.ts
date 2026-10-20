@@ -234,19 +234,6 @@ export function flipCover(choices: { shas: string[]; index: number }, step: 1 | 
   return shas[(from + step + shas.length) % shas.length] ?? null;
 }
 
-/** How long the banner says a cover is being made after Another cover, unless a new frame arrives first. */
-export const COVER_MAKING_MS = 15 * MINUTE_MS;
-
-/** An ask for another cover: the frame it was asked over, and when. */
-export interface CoverAskRecord {
-  from: string | null;
-  at: number;
-}
-
-/** Whether the banner still says a cover is being made: no new frame since the ask, and not for too long. */
-export const coverMaking = (ask: CoverAskRecord | null, shot: string | null, now: number): boolean =>
-  ask !== null && ask.from === shot && now - ask.at < COVER_MAKING_MS;
-
 /** The dialog's view of a publish record, at `now`. */
 export function publishView(state: GenexPublishState, now = Date.now()): PublishView {
   const job = state.job;
