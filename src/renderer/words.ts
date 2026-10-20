@@ -3532,6 +3532,11 @@ export const SANDBOX_SETUP_WORDS = {
   },
   stillFailing: "Studio still couldn’t start:",
   details: "Details",
+  /** A new version downloaded before the studio opened; the button is the sidebar's (`UPDATE_WORDS`). */
+  update: {
+    ready: (version: string | null) =>
+      version ? `Genex ${version} is ready and may fix this.` : "A new version of Genex is ready and may fix this.",
+  },
 } as const;
 
 // ── the Plugins tab ───────────────────────────────────────────────────────────────────────

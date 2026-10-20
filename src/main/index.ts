@@ -85,6 +85,7 @@ import {
   UPDATE_REPO,
   UpdateMode,
   autoUpdateDecision,
+  firstCheckDelay,
   createUpdateAnnouncer,
   createUpdateChecker,
   installedFromGenexRepository,
@@ -1790,13 +1791,14 @@ async function main(): Promise<void> {
     }),
   });
   addCheckForUpdatesMenuItem();
+  // Before the core: a start that fails, waits on Set up or never ends (a Windows start can take
+  // minutes) still finds the release that fixes it, and its screen offers the relaunch.
+  setTimeout(checkForUpdates, firstCheckDelay(process.argv)).unref();
   const started = await startStudio();
   if (isSmoke) {
     if (started) app.exit(await runSmokeLaunch(started));
     return;
   }
-  // The setup screen checks too: a release that fixes the sandbox problem can arrive through it.
-  checkForUpdates();
   if (!dev) app.on("activate", reopenWindow);
 }
 
