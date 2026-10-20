@@ -134,6 +134,11 @@ const MESSAGE = {
   AncestorGrant: (dir: string, error: unknown) =>
     `could not let the sandbox user see the folder ${dir}: ${errorMessage(error)}`,
   OwnDeny: (dir: string, error: unknown) => `could not deny the sandbox user ${dir}: ${errorMessage(error)}`,
+  /** srt-win's stamp walks each denied path's parent again, so a later stamp timeout reads as this. */
+  OwnDeniesOff: (count: number) =>
+    `own denies off: srt-win stamps all ${count} denies (no sandbox users' group, or PowerShell could not set them)`,
+  LauncherNotGranted: (why: string) => `launcher folders not granted: ${why}`,
+  NoLauncherSid: "srt-win did not say the sandbox user's id",
   NoAnswer: "no answer for this folder",
   NoSandboxSid: "could not read the sandbox user's id from srt-win, so the folders above its grants stay closed to it",
   NoMembers: "the Windows sandbox session has no members",
@@ -1319,7 +1324,10 @@ export class WindowsSandboxSession {
       if (this.#ownRouted) return plan;
     }
     this.#ownRouted = false;
-    return this.#plan(grants, false);
+    const all = this.#plan(grants, false);
+    const sent = all.config.filesystem.denyRead.length + all.config.filesystem.denyWrite.length;
+    if (denies) this.#deps.log?.(MESSAGE.OwnDeniesOff(sent));
+    return all;
   }
 
   /**
@@ -1491,6 +1499,37 @@ export function sandboxSidOnce(
   };
 }
 
+/** How the launcher grant reaches srt-win ({@link grantLauncherFolders}); the session's are srt-win's own. */
+export interface LauncherGrantDeps {
+  /** The sandbox user's SID, asked again while srt-win cannot say ({@link sandboxSidOnce}); null before it exists. */
+  sid: () => Promise<string | null>;
+  /** Grant `dirs` for reading to `sid`, held for this process; throws when srt-win refuses. */
+  grant: (sid: string, dirs: readonly string[]) => Promise<void>;
+  /** Take back what this process granted `sid`. */
+  revoke: (sid: string) => Promise<void>;
+  /** Where a grant that did not happen is said (Genex's log). */
+  log?: (line: string) => void;
+}
+
+/** srt-win's own grant and take-back for {@link grantLauncherFolders}, run off the event loop. */
+export function srtLauncherGrants(srtWin: string): Pick<LauncherGrantDeps, "grant" | "revoke"> {
+  const acl = async (sid: string) => {
+    const srt = await import(SRT_PACKAGE);
+    return { srt, acl: { sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) } };
+  };
+  return {
+    async grant(sid, dirs) {
+      const { srt, acl: target } = await acl(sid);
+      // The async grant (patched into sandbox-runtime): a sync one holds the start window's thread.
+      await srt.grantWindowsAclAsync({ ...target, read: [...dirs], write: [] });
+    },
+    async revoke(sid) {
+      const { srt, acl: target } = await acl(sid);
+      await srt.revokeWindowsAclAsync(target);
+    },
+  };
+}
+
 /**
  * Let the sandbox user open the folders srt-win starts from: initialize's egress check runs
  * srt-win as that user before it applies any grant, and a per-user install (Squirrel's, under
@@ -1499,24 +1538,26 @@ export function sandboxSidOnce(
  * this process like the session's, so a reset after a successful initialize takes it back with
  * them; the answer takes it back after a failed one. Before the sandbox is set up there is no user
  * to grant to, and initialize says so. A grant that fails is taken back at once and leaves
- * initialize to report what that costs (an install outside the profile needs none).
+ * initialize to report what that costs (an install outside the profile needs none); either way the
+ * log says the folders were not granted, the cause of that refusal.
  */
-export async function grantLauncherFolders(srtWin: string, dirs: readonly string[]): Promise<() => Promise<void>> {
-  const sid = await srtSandboxSid(srtWin);
-  if (!sid) return async () => {};
-  const srt = await import(SRT_PACKAGE);
-  const acl = { sandboxUserSid: sid, srtWin: srt.resolveSrtWin({ path: srtWin }) };
+export async function grantLauncherFolders(
+  dirs: readonly string[],
+  deps: LauncherGrantDeps,
+): Promise<() => Promise<void>> {
+  const sid = await deps.sid();
+  if (!sid) {
+    deps.log?.(MESSAGE.LauncherNotGranted(MESSAGE.NoLauncherSid));
+    return async () => {};
+  }
   const release = async () => {
-    try {
-      await srt.revokeWindowsAclAsync(acl);
-    } catch {
-      // A read grant on the app's own files; the next start's grant replaces it.
-    }
+    // A read grant on the app's own files; the next start's grant replaces it.
+    await deps.revoke(sid).catch(() => {});
   };
   try {
-    // The async grant (patched into sandbox-runtime): a sync one holds the start window's thread.
-    await srt.grantWindowsAclAsync({ ...acl, read: [...dirs], write: [] });
-  } catch {
+    await deps.grant(sid, dirs);
+  } catch (error) {
+    deps.log?.(MESSAGE.LauncherNotGranted(errorMessage(error)));
     await release();
   }
   return release;
@@ -1589,8 +1630,12 @@ export function windowsSessionFor(
   const launchDirs = insideWindowsPath(options.installDir, srtWinDir)
     ? [options.installDir]
     : [options.installDir, srtWinDir];
-  const launcher = () => grantLauncherFolders(options.srtWin, launchDirs);
   const log = options.log;
+  // Asked again while srt-win cannot say, and kept once found: one probe that timed out used to
+  // skip the grant, and srt-win's egress check then could not start.
+  const userSid = sandboxSidOnce(() => srtSandboxSid(options.srtWin));
+  const launcher = () =>
+    grantLauncherFolders(launchDirs, { sid: userSid, ...srtLauncherGrants(options.srtWin), ...(log ? { log } : {}) });
   if (log) void logSrtSteps(log);
   const session = new WindowsSandboxSession({
     runtime,
