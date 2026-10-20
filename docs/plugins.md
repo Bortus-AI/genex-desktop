@@ -3081,7 +3081,9 @@ Genex:
   `--gallery --title <name>` (a refused listing exits 1 with its answer; the app is live either way).
   Listed, the record turns public with the game's genex.games page as its link; held for review or
   not listed, a line under the rows says so; refused, the publish fails in Genex's words. Multiplayer
-  stays off for it. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
+  stays off for it. Like a web publish, it takes the cover again as it starts and sends it once its
+  apps are on Genex (`#reshoot`, then the cover step); the clip is not sent, since Genex matches a
+  clip to a web build such a project lacks. A web game with no app shows no rows. L4: `npm run test:ui -- publish-platforms-ui`.
 - Every published copy gets a `<head>` tag when `deployment.ts` marks it (`withHead`): the games
   host injects its environment (`window.__GENEX__`), mobile kit, crash watchdog and cover
   responder only into one, and the marker never goes ahead of the doctype. A game whose
@@ -3106,6 +3108,18 @@ Genex:
   (`renderer/compose-in-chat.ts`); the banner says a new one is coming until a new frame arrives. A
   Genex plugin older than covers answers no record, and none of this shows. Genex-specific core UI, accepted
   by the owner; a second plugin with a cover would need a declared host surface instead.
+- A game that runs as its own program (a Unity, Godot or Unreal fact, or nothing served as a web
+  page: `takenFromReel` in `main/core/cover-reel.ts`) cannot be photographed, so its builder renders
+  the cover inside the engine: the session that owns its build is told to (`appCoverGuidance`,
+  `cover-reel-prompts.ts`, added to the brief in `core/delegation.ts`), with no Genex tool needed:
+  `.studio/cover/cover.png` (1920x1080) and `.studio/cover/clip/0001.png` onward (five seconds at
+  30 fps, 960x540), or one `clip.mp4`/`clip.webm`. A plugin's `observe` with a `still` or a `clip`
+  of such a game takes it of its cover reel (`throughCoverReel`, through `ViewStillOptions.open`):
+  the media copied, by `lstat` and never through a link, sniffed and capped, into a folder of the
+  host's scratch (`cover-reels/`) beside a page whose `__studio` answers the `genex-cover` demo with
+  the picture and `genex-clip` with the frames played from `start()`, removed when the take ends.
+  So `cover-auto`, the banner and a publish work on it as on a web game. With no media, or for a
+  web game, the game is served as before.
 - The chat shows the game's kept Genex cover as one card (`chat/GenexCoverCard.tsx`) for the
   thread's latest `genex__cover` call from plugin `genex` whose operation is `shoot` and whose
   answer carried a picture (`chat-entries.ts`, the tool read with or without `genex__` and
@@ -3193,6 +3207,12 @@ Local Blender:
 - `blender__model`'s `script` is the path of a `.py` in the game (`assets/src/<name>.py` when left
   out). Code passed as the script, a path the host would refuse, and a path that is no regular file
   of the game are refused before anything runs, in words that say to write the file first.
+- It finds Blender on a Mac in Applications, and on Windows in Program Files (`Blender Foundation/
+  Blender */`), beside the program `.blend` files open with, in its Microsoft Store package, Steam
+  or Scoop, or wherever the person chose `blender.exe` (the `program` setting, Choose Blender… on
+  its card). It pins Blender's Mac `.dmg` and Windows x64 and arm64 zips. On a Windows PC with no
+  OpenGL 4.3 driver Workbench crashes Blender, so the wrapper checks with a child Blender first and
+  renders with Cycles on the CPU instead.
 - Run Blender through the tool: in a worker's sandbox Blender started from a shell cannot reach the
   GPU (Metal) and crashes while it picks its GPU backend at startup, even with `-b`. The tool's jobs
   run in the native-job sandbox, which allows the GPU.
@@ -3227,6 +3247,20 @@ answers `{started: true}` as the download starts and the installation record say
 since a call's deadline must not cut the download short. An agent cannot choose a binary, download
 URL or installation action: either way the manifest's pinned one is installed.
 
+A candidate (`native-candidates.ts`) is an absolute POSIX path (skipped on Windows), a path under
+`home:`, `studio:`, `storage:` or, on Windows, `programfiles:`, `programfilesx86:` and
+`localappdata:`; a path beside the program Windows opens a file type with (`opens:.blend/…`, from
+the registry's open command); a path inside this user's Microsoft Store package whose name starts so
+(`package:<name>/…`, from its `PackageRootFolder`); or `setting:<key>`, the absolute path the person
+chose in one of the plugin's declared string settings. One segment may hold one `*` (`Blender *`),
+every match tried newest name first. A runtime pins one download (`install`, read as macOS Apple
+Silicon) or one per platform (`installs`, each with its `platform`: `darwin-arm64`, `win32-x64`,
+`win32-arm64`; at most four, one per platform) as a `dmg`, `tar.gz` or `zip`; Windows unpacks with
+its own `tar.exe`. `runtime.detect` answers the pin for this computer as `download` (none where the
+manifest pins none), and an install there is refused in words that say to install it yourself. A version
+probe may take 30 s, and the first one after an install 2 minutes: antivirus scans a program's first
+start (Blender's took 15.8 s on a Windows VM with Defender, then 0.2 s).
+
 `nativeJobs` declares fixed argument arrays with package/input/output/value bindings, validated
 value patterns, input/output names, deadline, byte limits and optional GPU access. `native.run`
 stages only declared project input files; the child receives no full-project read grant.
@@ -3258,6 +3292,13 @@ each opened without following links and checked by device and inode (`copyDeclar
 link, a hard-linked file or a file swapped during delivery is refused. A pinned `.dmg` runtime is
 copied with its relative links kept (`copyRuntimeTree`; a link out of the runtime is refused) and
 probed after the image is detached.
+On Windows a managed job runs in the process sandbox like every other agent process
+(`runSandboxedNativeProcess`: srt-win as the sandbox user, through Git Bash), with no network. Its
+staged inputs, outputs, scratch and the plugin's package files live in the profile's `native-work`
+folder, writable from the sandbox's start; pinned runtimes unpack into `native-runtimes`, readable
+from the start, so an install never waits for a regrant. A runtime found elsewhere in the person's
+profile is granted for reading when detected; one under Program Files or a Store package is readable
+as it is. Output goes to log files whose tails are kept, and `gpu` grants nothing more.
 A runtime's version is `x.y.z` or `x.y` (read as `x.y.0`). An enabled plugin's runtime also starts a
 bridge game whose `studio.json` play names it as its `engine` (docs/play-protocol.md): the studio
 detects it as above and runs it long-lived in the same profile with the GPU, its stdio open.

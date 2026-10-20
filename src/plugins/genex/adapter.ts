@@ -794,9 +794,16 @@ export class GenexTools {
   /**
    * Publish a game that has only apps, no web build: send each with `genex native publish` and list
    * the game in the gallery under `title` with the first that goes, creating its hosted project the
-   * first time. Runs as a publish job, so the dialog shows it like one.
+   * first time. Runs as a publish job, so the dialog shows it like one. `camera` takes the cover
+   * again first (an engine game's is the one its agent rendered); once the apps are recorded, that
+   * cover is sent as a gallery publish's is.
    */
-  async publishAppsOnly(project: string, apps: readonly NativeUpload[], title?: unknown): Promise<GenexPublishState> {
+  async publishAppsOnly(
+    project: string,
+    apps: readonly NativeUpload[],
+    title?: unknown,
+    camera?: CoverCamera,
+  ): Promise<GenexPublishState> {
     return this.#account(async () => {
       if (!this.#sendsApps || apps.length === 0) throw new Error(PUBLISH_MESSAGE.NoApps);
       const state = await this.publishStatus(project);
@@ -805,6 +812,7 @@ export class GenexTools {
       const busy =
         state.job?.state === GenexPublishJobState.Running || state.job?.state === GenexPublishJobState.Unresolved;
       if (busy) return state;
+      await this.#stopCoverStep(project);
       await this.#stopNativeStep(project);
       const dir = await this.#publishWorkspace(project);
       const meta = await readJsonOr<HostedMeta>(metaFile(dir));
@@ -816,8 +824,11 @@ export class GenexTools {
         startedAt: new Date().toISOString(),
         title: cleanGenexTitle(title) ?? state.title ?? defaultGenexTitle(project),
       };
+      // The shot is taken here, inside the invocation: a detached send gets no answer from host services.
+      const shotLines = camera ? await this.#reshoot(project, camera) : [];
       state.job = job;
       delete state.warnings;
+      if (shotLines.length) state.warnings = shotLines;
       delete state.lastError;
       await this.#savePublishState(project, state);
       const done = this.#runAppsJob(project, job, apps);
@@ -842,6 +853,8 @@ export class GenexTools {
       step.done = sending.then(() => {});
       this.#nativeSteps.set(project, step);
       await this.#recordApps(project, job, meta, await sending);
+      // The cover goes once the game is on Genex, as a gallery publish's does: never instead of an app.
+      if (job.state === GenexPublishJobState.Done) this.#startCoverStep(project, job.id);
     } catch (error) {
       finishJob(job, GenexPublishJobState.Failed, new Date().toISOString());
       job.error = errorMessage(error).slice(-PUBLISH_ERROR_TAIL_CHARS);

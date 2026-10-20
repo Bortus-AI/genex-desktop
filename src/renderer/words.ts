@@ -3678,11 +3678,15 @@ export const PLUGINS_WORDS = {
     missingTitle: "Blender isn’t installed",
     missingText: (version: string, size: string) =>
       `Download Blender ${version} (about ${size}) for Studio. A Blender you installed yourself stays as it is.`,
+    missingOwnText:
+      "Genex has no download of Blender for this computer. Install Blender 4.2 or newer, then check again.",
     oldTitle: (version: string) => `Blender ${version} is too old`,
     oldText: (version: string, size: string) =>
       `Download Blender ${version} (about ${size}) for Studio. The Blender you have stays as it is.`,
     failedTitle: "Blender couldn’t start",
     download: "Download Blender",
+    choose: "Choose Blender…",
+    chooseTitle: "Choose blender.exe",
     downloading: (version: string) => `Downloading Blender ${version}`,
     installing: (version: string) => `Installing Blender ${version}`,
     progress: (done: string, total: string) => `${done} of ${total}`,
