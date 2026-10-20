@@ -8,8 +8,10 @@
  *    "Not Responding". The same srt-win calls run through SRT's own `runSrtWinAsync` instead.
  * 3. Those steps report how long they took (`setStudioStepLog`), so Genex's log shows which part
  *    of a slow start the time went to.
- * 4. Rollback and reset also yield during ACL cleanup (two 60-second commands). Only the actual
+ * 4. Rollback and reset also yield during ACL cleanup (two srt-win commands). Only the actual
  *    process exit event keeps synchronous cleanup, including partially applied initialization.
+ * 5. Every srt-win ACL call (grant, stamp, revoke and restore, each sync and async) waits
+ *    {@link SRT_WIN_ACL_TIMEOUT_MS} instead of SRT's 60 seconds.
  *
  * Policy generation, arguments and outcomes are untouched. */
 import { createRequire } from "node:module";
@@ -38,6 +40,21 @@ async function patchFile(dist, file, marker, patch) {
 const WHICH_MARKER = "// Studio: absolute executable lookup";
 const ASYNC_MARKER = "// Studio: srt-win off the event loop";
 const CLEANUP_MARKER = "// Studio: async ACL cleanup with synchronous exit fallback";
+const DEADLINE_MARKER = "// Studio: srt-win ACL deadline";
+
+/**
+ * How long srt-win may take over one ACL call. Its grant or stamp passes an entry down through
+ * everything under a folder, so a slow disk or an antivirus scanning each file it touches can take
+ * a large folder past SRT's 60 seconds, and a grant or stamp that runs out of time fails the start.
+ */
+const SRT_WIN_ACL_TIMEOUT_MS = 120_000;
+/** SRT's deadline for each ACL call, which {@link patchAclDeadlines} replaces. */
+const SRT_ACL_TIMEOUT = "timeoutMs: 60000";
+/** The ACL calls, SRT's synchronous ones and the async twins the patches above add. */
+const ACL_CALLS = ["grant", "stamp", "revoke", "restore"].flatMap((verb) => {
+  const name = `${verb}WindowsAcl`;
+  return [name, `${name}Async`];
+});
 
 /** Derive an async twin from the pinned implementation, retaining its arguments, parsing and errors. */
 function asyncTwin(original, name, from, to) {
@@ -143,8 +160,8 @@ async function patchCleanup(dist) {
 }
 
 /**
- * The async twins of SRT's `grantWindowsAcl` and `stampWindowsAcl` (same arguments, same errors),
- * and the step log they and the egress check report to.
+ * The async twins of SRT's `grantWindowsAcl` and `stampWindowsAcl` (same arguments, same errors,
+ * SRT's deadline until {@link patchAclDeadlines}), and the step log they and the egress check report to.
  */
 const ACL_ASYNC = `
 ${ASYNC_MARKER}: initialize() grants and stamps through these.
@@ -181,6 +198,25 @@ export async function stampWindowsAclAsync(opts) {
     }
 }
 `;
+
+/** `original` with SRT's deadline replaced inside each ACL call; a call found other than once means SRT changed. */
+function patchAclDeadlines(original) {
+  let fixed = original;
+  for (const name of ACL_CALLS) {
+    const signature = `function ${name}(`;
+    if (fixed.split(signature).length !== 2) throw new Error(`SRT ${name} changed; review the ACL deadline patch`);
+    const start = fixed.indexOf(signature);
+    const end = fixed.indexOf("\n}", start);
+    if (end < 0) throw new Error(`SRT ${name} has no function boundary; review the ACL deadline patch`);
+    const body = replaceOnce(
+      fixed.slice(start, end),
+      [[SRT_ACL_TIMEOUT, `timeoutMs: ${SRT_WIN_ACL_TIMEOUT_MS}`]],
+      name,
+    );
+    fixed = fixed.slice(0, start) + body + fixed.slice(end);
+  }
+  return `${fixed}\n${DEADLINE_MARKER}: ${SRT_WIN_ACL_TIMEOUT_MS} ms for each ACL call.\n`;
+}
 
 export async function patchSandboxRuntime() {
   const pkg = require.resolve("@anthropic-ai/sandbox-runtime/package.json");
@@ -252,4 +288,6 @@ export async function patchSandboxRuntime() {
       `${original}\n${ASYNC_MARKER}.\nexport { grantWindowsAclAsync, stampWindowsAclAsync, setStudioStepLog } from './sandbox/windows-sandbox-utils.js';\n`,
   );
   await patchCleanup(dist);
+  // Last, so the async twins above carry the deadline too.
+  await patchFile(dist, "sandbox/windows-sandbox-utils.js", DEADLINE_MARKER, patchAclDeadlines);
 }

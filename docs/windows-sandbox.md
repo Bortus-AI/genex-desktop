@@ -21,10 +21,13 @@ the setup screen opens on `git-missing`. What differs from macOS:
   and each denied path's parent.
 - The version-guarded [SRT patch](../scripts/patch-sandbox-runtime.mjs) runs initialization,
   failed-initialization rollback, launcher rollback and session reset ACL commands asynchronously.
-  Revoke and restore each keep their 60-second deadline, holder PID, SID and best-effort outcomes;
-  a slow cleanup must not hold Electron's main thread. The actual process `exit` event retains
-  synchronous cleanup, since promises cannot finish there. Partial grants remain eligible for
-  that exit cleanup while initialization or its rollback is pending.
+  Revoke and restore each keep their holder PID, SID and best-effort outcomes; a slow cleanup must
+  not hold Electron's main thread. Every srt-win ACL call (grant, stamp, revoke and restore, sync
+  and async) waits two minutes instead of SRT's 60 seconds (`SRT_WIN_ACL_TIMEOUT_MS`), so a slow
+  disk or an antivirus scan does not fail a start; the egress check and srt-win's other calls keep
+  SRT's. The actual process `exit` event retains synchronous cleanup, since promises cannot finish
+  there. Partial grants remain eligible for that exit cleanup while initialization or its rollback
+  is pending.
 - srt-win starts every command as `srt-sandbox` through CreateProcessWithLogonW, which the
   Secondary Logon service (`seclogon`) carries out; where hardening disabled it, Windows refuses
   every start ("Access is denied"). The setup check (`windowsSetupGaps`) reads its start type with

@@ -747,7 +747,7 @@ function takeBack(records: readonly GrantRecord[], keep: ReadonlySet<string>): F
 // srt-win's stamp puts an inheritable FILE_DELETE_CHILD deny on the parent of every path it
 // denies, and Windows passes that down through everything under the parent, once per denied path.
 // For `~\.ssh` or `~\.claude` the parent is the profile, for a game's `.claude` the whole game, and
-// a large profile or a few large games took longer than srt-win's 60-second deadline. Genex sets
+// a large profile or a few large games took longer than srt-win's deadline. Genex sets
 // every deny on a path that exists itself, as upstream sandbox-runtime proposes to
 // (anthropic-experimental/sandbox-runtime#523): the deny on the path, passed down through what is
 // under it, and FILE_DELETE_CHILD denied on its parent folder alone, which walks nothing. They name

@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { ChildProcess, execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { MINUTE_MS } from "../../src/shared/duration.ts";
 
 const run = promisify(execFile);
 const FIXTURE = fileURLToPath(new URL("../fixtures/windows-acl-cleanup.mjs", import.meta.url));
 const CHILD_TIMEOUT_MS = 15_000;
 const REPLY = fileURLToPath(new URL("../fixtures/srt-acl-reply.mjs", import.meta.url));
+const HANG = fileURLToPath(new URL("../fixtures/srt-acl-hang.mjs", import.meta.url));
+const SYNC_DEADLINES = fileURLToPath(new URL("../fixtures/srt-acl-deadline.mjs", import.meta.url));
+/** How long srt-win may take over an ACL call: two minutes, for a slow disk or an antivirus scan. */
+const ACL_DEADLINE_MS = 2 * MINUTE_MS;
 const require = createRequire(import.meta.url);
 const dist = path.join(path.dirname(require.resolve("@anthropic-ai/sandbox-runtime/package.json")), "dist");
 const windows = await import(pathToFileURL(path.join(dist, "sandbox/windows-sandbox-utils.js")).href);
@@ -145,6 +150,47 @@ describe("async Windows ACL cleanup transport", () => {
       ]) {
         assert.equal(await windows[`${action}WindowsAclAsync`]({ sandboxUserSid: "fixture-sid", srtWin }), undefined);
       }
+    }
+  });
+});
+
+describe("srt-win's ACL calls get two minutes", () => {
+  it("gives srt-win two minutes for each synchronous grant, stamp, revoke and restore", async () => {
+    const { stdout } = await run(process.execPath, ["--experimental-test-module-mocks", SYNC_DEADLINES], {
+      timeout: CHILD_TIMEOUT_MS,
+      windowsHide: true,
+    });
+    assert.deepEqual(JSON.parse(stdout), {
+      "acl grant": ACL_DEADLINE_MS,
+      "acl stamp": ACL_DEADLINE_MS,
+      "acl revoke": ACL_DEADLINE_MS,
+      "acl restore": ACL_DEADLINE_MS,
+    });
+  });
+
+  it("stops a silent srt-win at two minutes, not before, on each async grant, stamp, revoke and restore", async (t) => {
+    const opts = { sandboxUserSid: "fixture-sid", srtWin: { exe: process.execPath, prependArgs: [HANG] } };
+    const calls = {
+      grant: () => windows.grantWindowsAclAsync({ ...opts, read: [], write: [] }),
+      stamp: () => windows.stampWindowsAclAsync({ ...opts, denyRead: [], denyWrite: [] }),
+      revoke: () => windows.revokeWindowsAclAsync(opts),
+      restore: () => windows.restoreWindowsAclAsync(opts),
+    };
+    const kill = t.mock.method(ChildProcess.prototype, "kill");
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    for (const [verb, call] of Object.entries(calls)) {
+      kill.mock.resetCalls();
+      const outcome = call().then(
+        () => null,
+        (error: { code?: string }) => error.code,
+      );
+      t.mock.timers.tick(ACL_DEADLINE_MS - 1);
+      assert.equal(kill.mock.callCount(), 0, `${verb}: srt-win still has its time`);
+      t.mock.timers.tick(1);
+      assert.equal(kill.mock.callCount(), 1, `${verb}: srt-win is stopped at the deadline`);
+      // A grant or stamp that ran out of time fails the start; a revoke or restore stays best effort.
+      const expected = verb === "grant" || verb === "stamp" ? "srt_win_timeout" : null;
+      assert.equal(await outcome, expected, verb);
     }
   });
 });
