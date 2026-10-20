@@ -268,7 +268,11 @@ test("an earlier move's leftovers stay listed through the next move, and ones in
     [elsewhere],
     "the one elsewhere is still listed",
   );
-  assert.equal(await readFile(path.join(m.to, "scratch", "autopilot", "run-1", "main.js"), "utf8"), "console.log(1)\n");
+  // Git may check the copy out with Windows line endings.
+  assert.match(
+    await readFile(path.join(m.to, "scratch", "autopilot", "run-1", "main.js"), "utf8"),
+    /^console\.log\(1\)\r?\n$/,
+  );
 });
 
 test("a left copy someone changed after the move stays; untouched ones go", async (t) => {
