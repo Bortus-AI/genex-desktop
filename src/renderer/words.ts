@@ -4001,15 +4001,19 @@ export const GENEX_WORDS = {
     anotherCoverLabel: "Make another cover",
     coverWantLabel: "What the new cover should show",
     coverWantPlaceholder: "What should it show? Or leave it empty",
-    coverMake: "Make",
+    coverMake: "Ask agent",
     coverKeep: "Keep this cover",
     coverPrevious: "Previous cover",
     coverNext: "Next cover",
     coverOf: (at: number, of: number) => `Cover ${at} of ${of}`,
-    /** While Studio or the agent is making a cover: the banner's busy pill. */
+    /** While Studio takes a cover, or the agent makes one: the banner's busy pill. */
     coverTaking: "Taking a cover",
-    coverMaking: "New cover",
-    coverMakingSoon: "The new one shows here when it’s ready.",
+    coverMaking: "Making a cover",
+    coverMakingClip: "Making a clip",
+    /** Beside the pill: roughly how long is left, from how long this game's last one took. */
+    coverLeft: (minutes: number) => `~${minutes} min`,
+    /** Under the presses while the agent makes it: who is making it, and where it shows. */
+    coverMakingSoon: "The agent is making it in the chat. It shows here when it’s ready.",
     /** What Another cover sends in the game's chat, with what the person typed. */
     coverAnotherPrompt: (want: string) =>
       want
