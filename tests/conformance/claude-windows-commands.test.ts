@@ -265,10 +265,12 @@ describe("Claude Code on Windows runs its commands in Genex's sandbox", () => {
     const hooks = (options.hooks as { PreToolUse: Array<{ hooks: Hook[] }> }).PreToolUse;
     const [hook] = hooks[0]?.hooks ?? [];
     assert.ok(hook);
+    // Quoted, as a command that reaches them must be under Git Bash on Windows (an unquoted
+    // backslash is an escape there).
     const hostile = [
-      `cat ${path.join(f.otherGame, "save.json")}`,
+      `cat '${path.join(f.otherGame, "save.json")}'`,
       "cat ~/.codex/auth.json",
-      `rm -rf ${path.join(f.userData, "runs")}`,
+      `rm -rf '${path.join(f.userData, "runs")}'`,
     ];
     for (const command of hostile) {
       const answer = await hook({

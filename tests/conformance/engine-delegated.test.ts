@@ -885,6 +885,9 @@ describe("claude code delegated engine", () => {
       systemHome: path.join(root, "no-system-login"),
       protectedPaths: [path.join(root, "secrets"), path.join(root, "engine-homes")],
       queryFn: fn,
+      // Claude Code's own sandbox runs the shell here; on Windows Genex's does
+      // (claude-windows-commands.test.ts), so the platform is pinned, not the host's.
+      platform: "darwin",
     });
     let result;
     try {
@@ -1763,7 +1766,8 @@ describe("engine registry & fallback policy", () => {
 describe("the modeller on claude code (AG-930)", () => {
   it("exposes mcp__studio__blender__model only when the studio granted it, inside the one studio server", async () => {
     const plain = fakeQuery(successRun);
-    const engine = await engineWithLogin(plain.fn);
+    // The pinned list names Claude Code's own Bash: off Windows (claude-windows-commands.test.ts).
+    const engine = await engineWithLogin(plain.fn, "darwin");
     await engine.delegate({ prompt: "build", cwd: "/tmp/game-workspace" });
     assert.deepEqual(
       (plain.seen[0] as Record<string, unknown>).allowedTools,
@@ -1773,7 +1777,7 @@ describe("the modeller on claude code (AG-930)", () => {
     );
 
     const granted = fakeQuery(successRun);
-    const withTool = await engineWithLogin(granted.fn);
+    const withTool = await engineWithLogin(granted.fn, "darwin");
 
     await withTool.delegate({
       prompt: "build",
