@@ -96,14 +96,12 @@ What Play sends is in [PRIVACY](../PRIVACY.md#play).
 
 ## Playing a game
 
-- A game plays across the whole window in a sandboxed view (`persist:genex-play`). The app's bar
-  lies over its top edge as glass, in a transparent view of its own above the game's
-  (`renderer/play-bar.html`, `main/play/bar-reveal.ts`): back, the name and facts, Like, Comments,
-  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. It is up while the game loads, for 3 seconds
-  after play starts and again when the pointer reaches the top edge or Esc is pressed in the game;
-  then it fades up and out, and macOS's window buttons go with it (on Windows and Linux it stays up,
-  since their window controls can't). A game holding the mouse doesn't bring it back. A held Esc
-  gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
+- A game plays in a sandboxed view (`persist:genex-play`) filling the window below the app's bar, a
+  48px strip of its own across the top that never covers the game and never fades, as on the
+  genex.games game page. The bar is drawn in a transparent view of its own above the game's
+  (`renderer/play-bar.html`, `main/play/bar-layout.ts`): back, the name and facts, Like, Comments,
+  Share (its icon), Invite a friend (multiplayer games), Remix, Exit. Only the game's own full screen
+  gives it the whole window; the bar comes back when it ends. A held Esc gives the bar the keyboard. Only Studio's own page and the bar's may post or delete a comment. A single-use ticket in the address's fragment signs the player in; a guest is offered
   sign-in. The rest of the app is inert until the game closes. Closing the window closes it; another
   window over the studio's, another desktop or minimizing leaves it playing (`view-drop.ts`).
 - Comments (the count, or the icon alone) opens a modal over the dimmed game: its count as the

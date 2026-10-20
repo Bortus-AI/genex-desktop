@@ -296,17 +296,13 @@ describe("Play comments in the bar's layer", () => {
     assert.equal(barNews(next, { slug: "b", openId: 2, phase: PlayViewerPhase.Closed }), null);
   });
 
-  it("tells main what holds the bar only when it changes, asking for the bar again after mounting or a new game", () => {
-    const first = holdToTell(NOTHING_TOLD, { held: false, comments: false });
-    assert.deepEqual(first?.payload, { held: false, comments: false, ready: true });
-    assert.equal(holdToTell(first?.key ?? "", { held: false, comments: false }), null, "nothing new");
-    const hovered = holdToTell(first?.key ?? "", { held: true, comments: false, ready: true });
-    assert.deepEqual(hovered?.payload, { held: true, comments: false }, "only the first word asks for the bar");
-    assert.deepEqual(holdToTell(NOTHING_TOLD, { held: true, comments: false })?.payload, {
-      held: true,
-      comments: false,
-      ready: true,
-    });
+  it("tells main whether Comments is open only when it changes, asking for the bar again after mounting or a new game", () => {
+    const first = holdToTell(NOTHING_TOLD, { comments: false });
+    assert.deepEqual(first?.payload, { comments: false, ready: true });
+    assert.equal(holdToTell(first?.key ?? "", { comments: false }), null, "nothing new");
+    const opened = holdToTell(first?.key ?? "", { comments: true, ready: true });
+    assert.deepEqual(opened?.payload, { comments: true }, "only the first word asks for the bar");
+    assert.deepEqual(holdToTell(NOTHING_TOLD, { comments: true })?.payload, { comments: true, ready: true });
   });
 
   it("acts on a fresh Esc only: back to a playing game, out of one still loading or failed, never over Comments", () => {

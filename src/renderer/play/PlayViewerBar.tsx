@@ -1,19 +1,19 @@
 /**
- * The viewer's bar: the app's own 48px strip of glass over the game's top edge, drawn in the bar's
- * layer above the game's view (`PlayBarPage.tsx`). Back and the game's name with its facts (players
+ * The viewer's bar: the app's own 48px strip across the window's top, the game below it, drawn in the
+ * bar's layer above the game's view (`PlayBarPage.tsx`). Back and the game's name with its facts (players
  * now, plays, maker) on the left; Like, Comments (its count, or the icon alone), Share (its icon
  * alone), Invite a friend in a multiplayer game, Remix and Exit on the right, as 32px buttons with 9px
  * corners, every one with a visible background. A note is worn by the button it is about, in place of its label
  * ("Link copied" on Share), and the button turns back when main drops it; a like of the player's own
- * bursts. Main keeps what it shows (`PlayViewerEvent.bar`), says when it is up, and acts on what it
- * asks (`studio:play.control`). An Esc held in the game puts the keyboard here (Esc gives it back).
+ * bursts. Main keeps what it shows (`PlayViewerEvent.bar`) and acts on what it asks
+ * (`studio:play.control`). An Esc held in the game puts the keyboard here (Esc gives it back).
  * A signed-out guest is offered a Genex account here until its ×. A game in voice chat gets the mic
  * switch beside its name, with a menu of microphones. Offline, the facts say so in place of the
  * players, and Like and Remix wait for the connection.
  */
 import { sizeWords } from "../../shared/byte-size.ts";
 import { NativeAppOffer, type PlayBarNative } from "../../shared/play-native.ts";
-import type { CSSProperties, FocusEvent, JSX, PointerEvent, ReactNode, RefObject } from "react";
+import type { CSSProperties, JSX, PointerEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { type PlayBarState, type PlayMicBar, PlayControl, type PlayPoint } from "../../shared/play.ts";
 import { Icon, type IconName } from "../ui/icons.tsx";
@@ -421,22 +421,14 @@ function NativeAppButton({ app, send }: { app: PlayBarNative; send: SendControl 
   );
 }
 
-/** What holds the bar up, as the layer tracks it: the pointer over it, or the keyboard in it. */
-export interface BarHolds {
-  pointer(over: boolean): void;
-  keyboard(inside: boolean): void;
-}
-
-/** The bar over the game `view` shows; it fades up and out while main says it is down. */
+/** The bar above the game `view` shows. */
 export function PlayViewerBar({
   view,
   send,
-  holds,
   onComments,
 }: {
   view: BarView;
   send: SendControl;
-  holds: BarHolds;
   onComments: () => void;
 }): JSX.Element {
   const { bar } = view;
@@ -448,13 +440,6 @@ export function PlayViewerBar({
   useEffect(() => {
     if (view.focusAsks) actions.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
   }, [view.focusAsks]);
-  // Only the keyboard's own focus holds the bar up; a button a click focused does not.
-  const entered = (event: FocusEvent<HTMLDivElement>): void => {
-    if (event.target.matches(":focus-visible")) holds.keyboard(true);
-  };
-  const left = (event: FocusEvent<HTMLDivElement>): void => {
-    if (!event.currentTarget.contains(event.relatedTarget)) holds.keyboard(false);
-  };
   // A press with the pointer leaves the keyboard with the game; a control that opens something keeps it.
   const pressed = (event: PointerEvent<HTMLDivElement>): void => {
     const button = event.target instanceof Element ? event.target.closest("button") : null;
@@ -466,13 +451,7 @@ export function PlayViewerBar({
       className="play-viewer-bar"
       aria-label={WORDS.label(title)}
       data-play-viewer-bar
-      data-down={bar?.shown === false ? true : undefined}
-      onPointerEnter={() => holds.pointer(true)}
-      onPointerMove={() => holds.pointer(true)}
-      onPointerLeave={() => holds.pointer(false)}
       onPointerUp={pressed}
-      onFocus={entered}
-      onBlur={left}
     >
       <button
         type="button"
