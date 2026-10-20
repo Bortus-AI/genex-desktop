@@ -25,6 +25,7 @@ import {
   lockDownFolder,
   parseDriveFacts,
   parseUserSid,
+  systemTool,
   windowsDriveFacts,
 } from "../../src/substrate/windows-drive.ts";
 import { gitFile } from "../helpers/git.ts";
@@ -231,5 +232,13 @@ describe("the sandbox in a data folder on a second drive", {
     } finally {
       await sandbox.dispose();
     }
+  });
+});
+
+describe("Windows' own tools", () => {
+  it("are run from System32, never whatever look-alike PATH finds first (Git's whoami)", () => {
+    assert.equal(systemTool("whoami.exe", { SystemRoot: "C:\\Windows" }), "C:\\Windows\\System32\\whoami.exe");
+    assert.equal(systemTool("icacls.exe", { SYSTEMROOT: "D:\\Win" }), "D:\\Win\\System32\\icacls.exe");
+    assert.equal(systemTool("icacls.exe", {}), "C:\\Windows\\System32\\icacls.exe");
   });
 });

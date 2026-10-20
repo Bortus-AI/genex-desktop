@@ -18,6 +18,8 @@ const run = promisify(execFile);
 const DRIVE_TIMEOUT_MS = 30 * SECOND_MS;
 /** How long `whoami` and `icacls` may take on a new, empty folder. */
 const TOOL_TIMEOUT_MS = 30 * SECOND_MS;
+/** Where Windows lives when the environment does not say. */
+const WINDOWS_ROOT = "C:\\Windows";
 /** A drive letter's root, as `path.win32.parse` spells it. */
 const DRIVE_ROOT = /^[A-Za-z]:\\$/;
 /** File systems that keep NTFS permissions. */
@@ -124,12 +126,21 @@ export function lockDownArgs(dir: string, userSid: string): string[] {
  * LocalSystem and Administrators, nothing inherited from the drive. Throws when Windows refuses,
  * as on a file system that keeps no permissions.
  */
-export async function lockDownFolder(dir: string): Promise<void> {
-  const { stdout } = await run("whoami", ["/user", "/fo", "csv", "/nh"], {
+export async function lockDownFolder(dir: string, env: NodeJS.ProcessEnv = process.env): Promise<void> {
+  const { stdout } = await run(systemTool("whoami.exe", env), ["/user", "/fo", "csv", "/nh"], {
     timeout: TOOL_TIMEOUT_MS,
     windowsHide: true,
   });
   const sid = parseUserSid(stdout);
   if (!sid) throw new Error(`whoami named no account: ${stdout.trim()}`);
-  await run("icacls", lockDownArgs(dir, sid), { timeout: TOOL_TIMEOUT_MS, windowsHide: true });
+  await run(systemTool("icacls.exe", env), lockDownArgs(dir, sid), { timeout: TOOL_TIMEOUT_MS, windowsHide: true });
+}
+
+/**
+ * A Windows tool by its full path under System32: Git's own `whoami` and other look-alikes sit
+ * earlier on many a PATH (Git for Windows' `usr\bin`), and answer other arguments.
+ */
+export function systemTool(name: string, env: NodeJS.ProcessEnv = process.env): string {
+  const root = env.SystemRoot || env.SYSTEMROOT || WINDOWS_ROOT;
+  return path.win32.join(root, "System32", name);
 }

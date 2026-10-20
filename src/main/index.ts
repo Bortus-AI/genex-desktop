@@ -71,6 +71,7 @@ import {
   DevProviders,
   FIRST_LAUNCH_STATUS,
   FIXTURE_AGENTS_FAILURE,
+  FIXTURE_DATA_FOLDER,
   FIXTURE_SANDBOX_PROBLEM,
   FIXTURE_UPDATE_RELEASE,
   FixtureName,
@@ -177,8 +178,8 @@ import { createLoginControllers, type SubscriptionEngine } from "./login-control
 import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
 import { DATA_FOLDER_FILE, DataLaunchKind, defaultDataDir, thisDataLaunch } from "./data-folder.ts";
-import { createDataFolderChoices } from "./data-folder-choice.ts";
-import { registerDataFolderIpc } from "./ipc/data-folder.ts";
+import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-choice.ts";
+import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
 import { freeBytes, measureData } from "../substrate/data-move.ts";
 import { lockDownFolder, windowsDriveFacts } from "../substrate/windows-drive.ts";
 import { removeLeftover, runDataMove } from "./data-move-launch.ts";
@@ -1484,6 +1485,31 @@ function bootFeedbackSources(): FeedbackSources {
   };
 }
 
+/** The data folder's channels: the real choices, or the data-folder fixture's stand-ins. */
+function dataFolderIpc(studio: StudioCore): DataFolderIpcDeps {
+  if (!fixtureProviders || dev?.fixture !== FixtureName.DataFolder)
+    return { choices: dataFolderChoices(studio), window: () => window };
+  return { choices: fixtureDataFolder(), window: () => window, pick: async () => FIXTURE_DATA_FOLDER.picked };
+}
+
+/**
+ * The data-folder fixture: Storage shows a Windows data folder as movable, a pick finds the
+ * stand-in drive good, and Move and restart shows the start window moving the files. Nothing is
+ * read, written or moved.
+ */
+function fixtureDataFolder(): DataFolderChoices {
+  const { current, to, bytes, done } = FIXTURE_DATA_FOLDER;
+  return {
+    state: () => ({ dir: current, movable: true, failed: null }),
+    choose: async () => ({ ok: true, to, bytes }),
+    move: async () => {
+      bootGate.moving({ to, done, total: bytes });
+      setImmediate(() => void reshowBoot());
+      return { ok: true, to, bytes };
+    },
+  };
+}
+
 /** Settings → Storage's data folder: the person's own launch on Windows may move it, with Genex restarting to do so. */
 function dataFolderChoices(studio: StudioCore) {
   const windows = process.platform === StudioPlatform.Windows;
@@ -1625,7 +1651,7 @@ function registerIpc(studio: StudioCore, engines: EngineBoot): void {
   });
   registerCliInstallIpc(handle, cliInstalls(studio));
   registerProjectsIpc(handle, { core: studio, window: () => window, gamesRootLabel, web: playOrigin.web });
-  registerDataFolderIpc(handle, { choices: dataFolderChoices(studio), window: () => window });
+  registerDataFolderIpc(handle, dataFolderIpc(studio));
   registerGenexAccountIpc(handle, { account: genexAccountFor(studio) });
   registerPlayIpc(handle, {
     gallery: playCatalogFor(studio),
@@ -1731,12 +1757,17 @@ async function moveDataAndRestart(from: string, to: string): Promise<void> {
 /** Name the missing data folder with Try again (Genex starts again once it is there) and Quit. */
 async function waitForDataFolder(dir: string): Promise<void> {
   studioLog.write("main", `data folder: ${dir} is not there`);
+  holdOnMissingData(dir);
+  window = await createSetupWindow();
+}
+
+/** The start window names the missing folder; Try again starts Genex again once it is there. */
+function holdOnMissingData(dir: string): void {
   bootGate.dataMissing(dir, async () => {
     if (!existsSync(dir)) throw new Error(MESSAGE.dataFolderStillMissing(dir));
     app.relaunch();
     app.exit(0);
   });
-  window = await createSetupWindow();
 }
 
 /** Is `event` from the studio window's own top frame (not a plugin page or a game)? */
@@ -2066,6 +2097,7 @@ async function launchStudio(studio: StudioCore): Promise<StartedStudio | null> {
     showFixtureAgentsFailure(userData);
     const view = requirePreview();
     if (dev && __STUDIO_DEV_BUILD__) devRuntime = await startDevRuntime(dev, studio, win, view);
+    await showFixtureDataMissing();
     return { core: studio, window: win, preview: view };
   } catch (err) {
     failStartup(err);
@@ -2085,6 +2117,13 @@ function announceReady(userData: string): void {
 function showFixtureAgentsFailure(userData: string): void {
   if (!fixtureProviders || dev?.fixture !== FixtureName.AgentsStartFailed) return;
   showAgentsFailure(FIXTURE_AGENTS_FAILURE, async () => announceReady(userData));
+}
+
+/** The data-missing fixture: over a started studio, the window shows the stand-in drive's folder as missing. */
+async function showFixtureDataMissing(): Promise<void> {
+  if (!fixtureProviders || dev?.fixture !== FixtureName.DataMissing) return;
+  holdOnMissingData(FIXTURE_DATA_FOLDER.to);
+  await reshowBoot();
 }
 
 /** The game view `createWindow` attached; every started window has one. */

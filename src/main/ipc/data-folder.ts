@@ -13,24 +13,37 @@ const MESSAGE = {
   noWindow: "The studio window is not open.",
 } as const;
 
-export function registerDataFolderIpc(
-  handle: IpcHandle,
-  deps: { choices: DataFolderChoices; window: () => BrowserWindow | null },
-): void {
+/** What the data folder's channels need: its choices, and how a folder is picked (the native picker by default). */
+export interface DataFolderIpcDeps {
+  choices: DataFolderChoices;
+  window: () => BrowserWindow | null;
+  /** The folder the person picks, or null when they cancel; the data-folder fixture names a stand-in. */
+  pick?: (window: BrowserWindow, defaultPath: string) => Promise<string | null>;
+}
+
+/** The native folder picker. */
+async function pickFolder(window: BrowserWindow, defaultPath: string): Promise<string | null> {
+  const result = await dialog.showOpenDialog(window, {
+    ...PICKER,
+    defaultPath,
+    properties: ["openDirectory", "createDirectory"],
+  });
+  const dir = result.filePaths[0];
+  return result.canceled || !dir ? null : dir;
+}
+
+export function registerDataFolderIpc(handle: IpcHandle, deps: DataFolderIpcDeps): void {
   handle("studio:data-folder", async () => deps.choices.state());
 
-  // The folder picker, then the checks; nothing is written until the move.
+  // The folder picker, then the checks; nothing is written until the move. A launch that cannot
+  // move its data (another system, a developer or test launch) says so without opening a picker.
   handle("studio:data-folder.choose", async () => {
+    const state = deps.choices.state();
+    if (!state.movable) return deps.choices.choose(state.dir);
     const window = deps.window();
     if (!window) throw new Error(MESSAGE.noWindow);
-    const result = await dialog.showOpenDialog(window, {
-      ...PICKER,
-      defaultPath: deps.choices.state().dir,
-      properties: ["openDirectory", "createDirectory"],
-    });
-    const dir = result.filePaths[0];
-    if (result.canceled || !dir) return null;
-    return deps.choices.choose(dir);
+    const dir = await (deps.pick ?? pickFolder)(window, state.dir);
+    return dir ? deps.choices.choose(dir) : null;
   });
 
   handle("studio:data-folder.move", async () => deps.choices.move());
