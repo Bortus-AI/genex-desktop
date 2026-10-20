@@ -8,7 +8,7 @@
  */
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -501,6 +501,17 @@ export async function createStudio(host: Host): Promise<object> {
     await r.host.start();
     assert.ok(r.host.capabilities.includes("loop"), r.logs.join("\n"));
     assert.equal(await r.host.healthcheck(), true, r.logs.join("\n"));
+    await r.host.stop();
+  });
+
+  it("keeps the compiled seed in the compile cache it is given, so the next boot skips type stripping", async () => {
+    const r = await seedHost("seed-compile-cache", process.execPath, false);
+    const cache = path.join(root, "seed-compile-cache", "compile-cache");
+    r.host = new HarnessHost({ ...r.host.options, compileCache: cache });
+    await r.host.start();
+    assert.ok(r.host.capabilities.includes("loop"), r.logs.join("\n"));
+    const entries = existsSync(cache) ? await readdir(cache, { recursive: true }) : [];
+    assert.ok(entries.length > 0, "the cache holds the harness's compiled modules once it is ready");
     await r.host.stop();
   });
 

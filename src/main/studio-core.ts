@@ -220,6 +220,8 @@ const GAMES_ROOT_FILE = "games-root.json";
 const PLUGIN_JOBS_FOLDER = "plugin-jobs";
 /** The folder in the sandbox's scratch where an engine game's cover reel is staged for a still or clip. */
 const COVER_REEL_FOLDER = "cover-reels";
+/** The folder in the sandbox's scratch where Node keeps the harness's compiled modules between boots. */
+const HARNESS_COMPILE_CACHE_FOLDER = "harness-compile-cache";
 /** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
 const ENGINE_SCRATCH_PREFIX = "genex-play-";
 
@@ -1418,6 +1420,7 @@ export class StudioCore {
       sandbox: this.sandbox,
       api: this.api(),
       updatesDir: this.layout.updates,
+      compileCache: path.join(this.layout.scratch, HARNESS_COMPILE_CACHE_FOLDER),
       // The harness's environment is an allow-list: the run overrides are handed on by name.
       env: harnessRunEnv(process.env),
       heartbeatTimeoutMs: HARNESS_HEARTBEAT_TIMEOUT_MS,
