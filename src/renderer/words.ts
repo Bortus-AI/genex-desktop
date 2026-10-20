@@ -3396,6 +3396,11 @@ export const SANDBOX_SETUP_WORDS = {
       sent: "Report sent",
       reportFailed: "The report didn’t send. Try again in a moment.",
     },
+    /** Windows' Secondary Logon service is disabled: agents start through it. */
+    logonService: {
+      line: "Secondary Logon is turned off on this PC. Set up turns it back on, since agents start through it.",
+      fix: "Turn on Secondary Logon in Windows Services (Startup type: Manual), then try again.",
+    },
   },
   /** A Windows window opened before the core: what the start is doing, by `StartStep`. */
   starting: {

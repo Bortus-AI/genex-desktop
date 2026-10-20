@@ -25,6 +25,16 @@ the setup screen opens on `git-missing`. What differs from macOS:
   a slow cleanup must not hold Electron's main thread. The actual process `exit` event retains
   synchronous cleanup, since promises cannot finish there. Partial grants remain eligible for
   that exit cleanup while initialization or its rollback is pending.
+- srt-win starts every command as `srt-sandbox` through CreateProcessWithLogonW, which the
+  Secondary Logon service (`seclogon`) carries out; where hardening disabled it, Windows refuses
+  every start ("Access is denied"). The setup check (`windowsSetupGaps`) reads its start type with
+  `sc qc seclogon`, which needs no administrator (the number decides; the word after it is
+  localized), beside srt-win's two status probes, and a disabled service is a setup gap
+  (`WindowsSetupNeed.LogonService`) the setup card names in one line. Set up sets it to Manual
+  (`sc config seclogon start= demand`, [`windows-logon-service.ts`](../src/substrate/windows-logon-service.ts))
+  through Windows PowerShell's `Start-Process -Verb RunAs` before srt-win's install. srt-win
+  elevates itself, so a PC that needs both sees two approval prompts. A service Set up could not
+  turn on (a policy keeps it off) leaves the card saying how to do it in Services.
 - That egress check starts srt-win as the sandbox user before any grant, and Windows opens its
   program and working folder as that user. A per-user install lives in the profile, so the session
   grants the install folder (and srt-win's, when apart) for reading first
@@ -125,7 +135,9 @@ package.yml --ref <branch> -f only=win32`). `rig.yml` runs the rig group on PRs 
 runner only, it exports `GENEX_WINDOWS_SANDBOX=ready`) and `npm run test:windows -- --suite-only`
 (the curated `tests/windows-suite.json`). Its sandbox files are `windows-sandbox.test.ts` (grant
 session, env file and launch through fakes; runs everywhere) and `sandbox-windows.test.ts` (the
-real srt-win's hostile-input tables; skipped unless `GENEX_WINDOWS_SANDBOX=ready`). A dispatch
+real srt-win's hostile-input tables; skipped unless `GENEX_WINDOWS_SANDBOX=ready`).
+`windows-logon-service.test.ts` reads the runner's real Secondary Logon service and runs Set up's
+elevated step there (Actions only: it changes a service). A dispatch
 with `backlog` also runs the rest of the fast group as an informational pass that never fails;
 the job summary and `windows-tests` artifact list failing files and tests and clean files not yet
 in the suite. Test files run side by side, so one file's sandbox re-propagates srt-win's entries
