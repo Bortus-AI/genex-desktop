@@ -121,6 +121,10 @@ counters carry the regression gates.
   are read through a sliding window.
 - The launch's seed upgrade (`substrate/seed-upgrade.ts`) hashes the seed and the harness
   workspace, and rewrites renamed names, 32 files at a time rather than one after another.
+- Each harness boot (launch, restart, self-edit reload) runs with `NODE_COMPILE_CACHE` in the
+  sandbox's scratch (`harness-compile-cache`), flushed once the harness is ready, so a boot reuses
+  the type-stripped, compiled seed (Node 24, Linux: importing the seed 640 → 225 ms median). Entries
+  are keyed by file content, so the agent's edits compile afresh.
 
 ## Packaged builds
 

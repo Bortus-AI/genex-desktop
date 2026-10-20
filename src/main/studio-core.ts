@@ -14,7 +14,7 @@
  * preview is injected through {@link PreviewPort}.
  */
 import type { ChildProcess } from "node:child_process";
-import { cp, lstat, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { sandboxBesidePlugins } from "./core/boot-side-by-side.ts";
@@ -52,7 +52,8 @@ import {
   NativeRuntimeState,
 } from "../shared/plugins.ts";
 import { EngineHostAction, type EngineLinkUndo, type EngineUndoSetUpArgs } from "../shared/game-engine.ts";
-import { viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { type ViewOpener, viewStill, type ViewStillOptions } from "./core/view-still.ts";
+import { type ReelView, throughCoverReel } from "./core/cover-reel.ts";
 import { viewClip, type ViewClipOptions } from "./core/view-clip.ts";
 import { ToolPermissionBy } from "../shared/permissions.ts";
 import { type JobRecord, JobScopeKind, JobStopper } from "../shared/jobs.ts";
@@ -217,6 +218,10 @@ const HARNESS_CRASH_LOOP = { count: 3, windowMs: 5 * MINUTE_MS } as const;
 const GAMES_ROOT_FILE = "games-root.json";
 /** The folder in the sandbox's scratch where each engine plugin's sandbox job keeps its own. */
 const PLUGIN_JOBS_FOLDER = "plugin-jobs";
+/** The folder in the sandbox's scratch where an engine game's cover reel is staged for a still or clip. */
+const COVER_REEL_FOLDER = "cover-reels";
+/** The folder in the sandbox's scratch where Node keeps the harness's compiled modules between boots. */
+const HARNESS_COMPILE_CACHE_FOLDER = "harness-compile-cache";
 /** The prefix of the scratch folder an engine's game runs with (its private home and temp files). */
 const ENGINE_SCRATCH_PREFIX = "genex-play-";
 
@@ -967,7 +972,31 @@ export class StudioCore {
     return [this.layout.secrets, this.layout.engineHomes, path.join(os.homedir(), ".genex")];
   }
 
-  #createSandbox(games: GameProject[]): Promise<ProcessSandbox> {
+  /** The plugins' native runtimes and jobs; on Windows they run in the process sandbox, from folders it is granted at start. */
+  #nativeServices(): PluginNativeServices {
+    const windows = {
+      // Null until the sandbox has started (plugins are wired beside it).
+      sandbox: () => this.#sandboxIfStarted(),
+      work: this.layout.nativeWork,
+      runtimes: this.layout.nativeRuntimes,
+    };
+    return new PluginNativeServices(this.options.paths.userData, [this.layout.secrets], {
+      settings: (id) => this.plugins.settings(id),
+      ...(process.platform === StudioPlatform.Windows ? { windows } : {}),
+    });
+  }
+
+  /** The process sandbox once `init` has set it; plugin services are wired before it is. */
+  #sandboxIfStarted(): ProcessSandbox | null {
+    const started: ProcessSandbox | undefined = this.sandbox;
+    return started ?? null;
+  }
+
+  async #createSandbox(games: GameProject[]): Promise<ProcessSandbox> {
+    // Windows: native jobs work in, and read pinned runtimes from, folders granted now. srt-win
+    // changes grants only while no sandboxed command runs, and agents keep commands running.
+    const windows = process.platform === StudioPlatform.Windows;
+    if (windows) await mkdir(this.layout.nativeRuntimes, { recursive: true });
     return ProcessSandbox.create({
       writableRoots: [
         this.layout.workspaces,
@@ -975,6 +1004,7 @@ export class StudioCore {
         this.layout.exports,
         this.layout.gamesRoot,
         ...games.map((game) => game.dir),
+        ...(windows ? [this.layout.nativeWork] : []),
       ],
       scratchDir: this.layout.scratch,
       secretPaths: this.#protectedPaths(),
@@ -992,7 +1022,7 @@ export class StudioCore {
           games.map((game) => game.dir),
         ),
       ],
-      readableRoots: [this.options.paths.resources],
+      readableRoots: [this.options.paths.resources, ...(windows ? [this.layout.nativeRuntimes] : [])],
       dataRoot: this.options.paths.userData,
       enabled: this.options.sandbox ?? true,
       // Windows: the window opens on the games while the network check and folder grants finish.
@@ -1069,7 +1099,7 @@ export class StudioCore {
       path.join(this.options.paths.resources, "plugin-sdk/backend.mjs"),
       (id, method, args, binding, invocation) => this.pluginServices.call(id, method, args, binding, invocation),
     );
-    const nativePlugins = new PluginNativeServices(this.options.paths.userData, [this.layout.secrets]);
+    const nativePlugins = this.#nativeServices();
     this.#nativePlugins = nativePlugins;
     this.plugins.nativeService = (manifest, directory, method, args, binding, invocation) =>
       nativePlugins.call(
@@ -1187,7 +1217,10 @@ export class StudioCore {
    * the asked size, never Live, given back however it ends (`core/view-still.ts`).
    */
   #observeStill(binding: PluginBinding, still: PluginStillOrder): Promise<PluginStillAnswer> {
-    return viewStill(this.#previews, binding, still, this.options.pluginStill);
+    const view = still.demo === undefined ? {} : { stillDemo: still.demo };
+    return this.#throughReel(binding, view, (open) =>
+      viewStill(this.#previews, binding, still, { ...this.options.pluginStill, ...(open ? { open } : {}) }),
+    );
   }
 
   /**
@@ -1195,7 +1228,23 @@ export class StudioCore {
    * of its own at the asked size, never Live, given back however it ends (`core/view-clip.ts`).
    */
   #observeClip(binding: PluginBinding, clip: PluginClipOrder): Promise<PluginClipAnswer> {
-    return viewClip(this.#previews, binding, clip, this.options.pluginClip);
+    return this.#throughReel(binding, { clipDemo: clip.demo }, (open) =>
+      viewClip(this.#previews, binding, clip, { ...this.options.pluginClip, ...(open ? { open } : {}) }),
+    );
+  }
+
+  /**
+   * A still or clip of an engine game is taken of the cover its agent rendered in the engine
+   * (`core/cover-reel.ts`): a web page of a game that runs as an app shows nothing of it.
+   */
+  async #throughReel<A>(
+    binding: PluginBinding,
+    view: ReelView,
+    take: (open: ViewOpener | undefined) => Promise<A>,
+  ): Promise<A> {
+    const game = await this.games.kindOf(binding.project).catch(() => null);
+    const scratch = path.join(this.layout.scratch, COVER_REEL_FOLDER);
+    return throughCoverReel({ game, gameDir: binding.directory, scratch }, view, take);
   }
 
   /**
@@ -1372,6 +1421,7 @@ export class StudioCore {
       sandbox: this.sandbox,
       api: this.api(),
       updatesDir: this.layout.updates,
+      compileCache: path.join(this.layout.scratch, HARNESS_COMPILE_CACHE_FOLDER),
       // The harness's environment is an allow-list: the run overrides are handed on by name.
       env: harnessRunEnv(process.env),
       heartbeatTimeoutMs: HARNESS_HEARTBEAT_TIMEOUT_MS,

@@ -14,6 +14,7 @@ import { freedWords, freeSpaceWords, freeUpWords, problemWords, STORAGE_KIND_WOR
 import { FreeSpaceSheet } from "./FreeSpaceSheet.tsx";
 import { DataFolderCard } from "./DataFolderCard.tsx";
 import type { DataFolderState } from "../../shared/data-folder.ts";
+import { InstalledGamesSection } from "./InstalledGamesSection.tsx";
 
 /** The one button: how much it frees, with what goes and what stays in its tooltip. */
 function FreeUpButton({
@@ -113,6 +114,7 @@ export function StorageSection(): JSX.Element {
         )}
       </section>
       {space && <StorageKinds space={space} />}
+      <InstalledGamesSection />
       {dataFolder?.movable && <DataFolderCard state={dataFolder} />}
       {notice && (
         <p role="status" className="text-ink-2">

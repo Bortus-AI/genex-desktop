@@ -16,8 +16,8 @@ import { makeResources } from "../helpers/resources.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
 test("fixtures lists the one exported fixture list without a profile or app", async () => {
-  // Flipped from 30: data-folder and data-missing joined the list (from 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
-  assert.equal(FIXTURE_NAMES.length, 32);
+  // Flipped from 31: data-folder and data-missing joined the list (from 30: native-games, 29: agents-start-failed, 28: asset-library, 27: genex-terms, 26: roblox-game, 25: building-card, 24: paused-build, 23: plugin-updates, 22: open-projects, 21: stills-game).
+  assert.equal(FIXTURE_NAMES.length, 33);
   for (const added of [
     "first-launch",
     "notifications",
@@ -36,6 +36,7 @@ test("fixtures lists the one exported fixture list without a profile or app", as
     "genex-terms",
     "asset-library",
     "agents-start-failed",
+    "native-games",
     "data-folder",
     "data-missing",
   ])
