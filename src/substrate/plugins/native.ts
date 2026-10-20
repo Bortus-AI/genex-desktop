@@ -57,7 +57,14 @@ import { credentialHomes } from "../credential-homes.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
 const exec = promisify(execFile);
-const VERSION_PROBE_TIMEOUT_MS = 8 * SECOND_MS;
+/**
+ * How long a version probe may take. A program's first start after it was unpacked or after a
+ * restart is slow where antivirus scans it: Blender 5.2.1's `--version` took 15.8 s cold on a
+ * 4-core Windows 11 VM with Defender (then 0.2 s), so 8 s read a good Blender as broken.
+ */
+const VERSION_PROBE_TIMEOUT_MS = 30 * SECOND_MS;
+/** The first probe of a runtime Genex just unpacked, which every one of its files is scanned for. */
+const FRESH_RUNTIME_PROBE_TIMEOUT_MS = 2 * MINUTE_MS;
 const VERSION_PROBE_MAX_BUFFER = 16000;
 const DISK_RESERVE_BYTES = 256 * 1024 ** 2;
 const HDIUTIL_TIMEOUT_MS = 30 * SECOND_MS;
@@ -572,12 +579,16 @@ export class PluginNativeServices {
     return { pluginId: manifest.id, settings };
   }
   /** Probe one candidate binary: ready, or why not. Undefined when it does not exist. */
-  async #probe(runtime: PluginNativeRuntime, candidate: string): Promise<PluginNativeStatus | undefined> {
+  async #probe(
+    runtime: PluginNativeRuntime,
+    candidate: string,
+    timeout = VERSION_PROBE_TIMEOUT_MS,
+  ): Promise<PluginNativeStatus | undefined> {
     try {
       await accessFile(candidate, constants.X_OK);
       const binary = await realpath(candidate);
       const result = await exec(binary, runtime.version.args, {
-        timeout: VERSION_PROBE_TIMEOUT_MS,
+        timeout,
         maxBuffer: VERSION_PROBE_MAX_BUFFER,
         env: process.platform === StudioPlatform.Windows ? windowsProbeEnv() : PROBE_ENV,
         windowsHide: true,
@@ -949,7 +960,7 @@ export class PluginNativeServices {
   async #verifyStaged(runtime: PluginNativeRuntime, install: RuntimeInstall, stage: string) {
     await containedReal(stage, install.executable);
     for (const notice of install.notices) await containedReal(stage, notice);
-    const probe = await this.#probe(runtime, path.join(stage, install.executable));
+    const probe = await this.#probe(runtime, path.join(stage, install.executable), FRESH_RUNTIME_PROBE_TIMEOUT_MS);
     if (probe?.state !== NativeRuntimeState.Ready)
       throw new Error(probe?.detail ?? MESSAGE.Missing(runtime.label, false));
   }
