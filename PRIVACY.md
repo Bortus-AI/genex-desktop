@@ -1,6 +1,6 @@
 # Desktop data and privacy
 
-Updated October 18, 2026. Contact: **team@genex.games**. This describes the desktop
+Updated October 20, 2026. Contact: **team@genex.games**. This describes the desktop
 application. Connected providers, plugins and the hosted Genex service have separate policies.
 
 ## Local storage
@@ -125,6 +125,15 @@ the account's token to the Genex API to get a single-use sign-in ticket for that
 one, the game plays as a guest), to read a game's likes including yours, to save or remove a like,
 and to read your referral code, which Invite a friend adds to the link it copies. Share and Invite
 only copy a genex.games link to the clipboard.
+
+A game with a Mac app has its own page, read from the Genex API (with the account's token when
+signed in, so it shows your like). The app is downloaded only when you press Install, over https
+from a build host on the list the app ships with and without your token; its size, checksum and
+signature are checked before it opens. Installed games and their saves live in the app profile.
+Each game runs in a sandbox with no network that can write only its own saves, preferences and
+a scratch folder removed when it ends, and removing a game keeps its saves. At start and every six hours the app reads each installed
+game's page in the same way to tell you about a newer version. genex.games does not count plays
+of a Mac app yet.
 
 A game's comments are read from the Genex API without a sign-in, a page at a time while you scroll
 them, with each writer's name and picture. Signed in, the app also sends the account's token to
