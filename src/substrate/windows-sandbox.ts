@@ -65,9 +65,11 @@ const TOOL_TIMEOUT_MS = 15 * SECOND_MS;
 const TOOL_RUN = { timeout: TOOL_TIMEOUT_MS, windowsHide: true } as const;
 /**
  * How often `initialize` is tried when srt-win's egress check times out. That check runs 17-23 s
- * against a 30 s limit on a hosted runner, so a busy machine can miss it once.
+ * on a hosted runner's cold start, against the two minutes Genex's SRT patch gives it
+ * (`SRT_WIN_TIMEOUT_MS`); one more try covers a busy machine missing it once, and keeps a check
+ * that never answers to about four minutes in the background start.
  */
-const INITIALIZE_ATTEMPTS = 3;
+const INITIALIZE_ATTEMPTS = 2;
 /** sandbox-runtime's code for an srt-win call that ran out of time. */
 const SRT_WIN_TIMEOUT = "srt_win_timeout";
 /** The srt-win subcommands sandbox-runtime names on its errors (the first CLI argument). */
@@ -799,7 +801,7 @@ function takeBack(records: readonly GrantRecord[], keep: ReadonlySet<string>): F
 // srt-win's stamp puts an inheritable FILE_DELETE_CHILD deny on the parent of every path it
 // denies, and Windows passes that down through everything under the parent, once per denied path.
 // For `~\.ssh` or `~\.claude` the parent is the profile, for a game's `.claude` the whole game, and
-// a large profile or a few large games took longer than srt-win's 60-second deadline. Genex sets
+// a large profile or a few large games took longer than srt-win's deadline. Genex sets
 // every deny on a path that exists itself, as upstream sandbox-runtime proposes to
 // (anthropic-experimental/sandbox-runtime#523): the deny on the path, passed down through what is
 // under it, and FILE_DELETE_CHILD denied on its parent folder alone, which walks nothing. They name
