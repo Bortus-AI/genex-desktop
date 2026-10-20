@@ -1407,19 +1407,19 @@ describe("the grant session", () => {
     assert.deepEqual(runtime.calls.slice(5), ["reset", "initialize"], "the egress check runs once per process");
   });
 
-  it("an srt-win timeout in the egress check is tried again, up to three attempts in all", async () => {
+  it("an srt-win timeout in the egress check is tried once more, two attempts in all", async () => {
     const s = session();
-    s.runtime.failInitialize("srt_win_timeout", "srt_win_timeout");
+    s.runtime.failInitialize("srt_win_timeout");
     await s.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
-    assert.deepEqual(s.runtime.calls, ["initialize", "initialize", "initialize"]);
+    assert.deepEqual(s.runtime.calls, ["initialize", "initialize"]);
 
     const stuck = session();
-    stuck.runtime.failInitialize("srt_win_timeout", "srt_win_timeout", "srt_win_timeout");
+    stuck.runtime.failInitialize("srt_win_timeout", "srt_win_timeout");
     await assert.rejects(
       stuck.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }),
       /srt_win_timeout/,
     );
-    assert.equal(stuck.runtime.calls.length, 3);
+    assert.equal(stuck.runtime.calls.length, 2);
   });
 
   it("waits for asynchronous launcher rollback before allowing the next initialization", async () => {

@@ -16,7 +16,7 @@ the setup screen opens on `git-missing`. What differs from macOS:
   or a disposed member's folders, queue one `reset()` + `initialize()` that runs once no command
   holds the session; the last member out releases everything. A per-run grant outside the
   session's roots is refused (`not-granted`); network changes stay live (`updateConfig`).
-  `initialize()` is tried up to three times only when srt-win's egress check (`wfp`) times out; a
+  `initialize()` is tried a second time only when srt-win's egress check (`wfp`) times out; a
   timed-out ACL step fails at once, since a retry would repeat its walk under each folder srt-win
   grants and each denied path's parent.
 - The version-guarded [SRT patch](../scripts/patch-sandbox-runtime.mjs) runs initialization,
