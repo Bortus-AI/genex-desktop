@@ -87,6 +87,7 @@ import {
   folderOwnEditor,
   FOLDER_ACE_SCRIPT,
   icaclsArgs,
+  OwnWalk,
 } from "../../src/substrate/windows-folder-ace.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -484,6 +485,11 @@ describe("an entry on one folder alone", () => {
     const locked = folderOwnEditor({ powershell: async () => Promise.reject(new Error("Cannot invoke method")) });
     assert.equal(await locked([edit]), null);
     assert.deepEqual(folderAceOutcomes('[{"ok":true,"ms":41000}]', 1), [{ ok: true, ms: 41_000 }]);
+    assert.deepEqual(
+      folderAceOutcomes('[{"ok":true,"ms":12,"deferred":true}]', 1),
+      [{ ok: true, ms: 12, deferred: true }],
+      "an edit that left its walk for later says so",
+    );
   });
 
   it("uses PowerShell's answer when it gives one, and runs nothing for no edits", async () => {
@@ -511,7 +517,11 @@ describe("an entry on one folder alone, on Windows", {
     return readFileSync(file, "utf16le");
   };
   const GUESTS = "S-1-5-32-546";
+  const USERS = "S-1-5-32-545";
   const guestsRead = /\(A;;0x100080;;;BG\)/;
+  /** The sandbox user is in BUILTIN\Users: an allow for them on `dir` reaches it in everything below. */
+  const openToUsers = (dir: string) =>
+    execFileSync("icacls", [dir, "/grant", `*${USERS}:(OI)(CI)(RX)`], { stdio: "ignore" });
 
   it("edits each folder of a batch, any name, and says which one it could not", async () => {
     const root = realpathSync.native(await tmpDir("folder-ace-"));
@@ -539,7 +549,6 @@ describe("an entry on one folder alone, on Windows", {
   });
 
   it("grants and takes back on the folder alone, never rewriting the folders under it", async () => {
-    const USERS = "S-1-5-32-545";
     const root = realpathSync.native(await tmpDir("folder-only-grant-"));
     const above = path.join(root, "above");
     const moved = path.join(above, "deep", "moved");
@@ -576,6 +585,7 @@ describe("an entry on one folder alone, on Windows", {
     const elsewhere = path.join(root, "elsewhere");
     await mkdir(path.dirname(key), { recursive: true });
     await writeFile(key, "key");
+    openToUsers(secret);
     await mkdir(path.dirname(moved), { recursive: true });
     await mkdir(elsewhere);
     // As above: the moved folder keeps what it inherited elsewhere until something walks `above`,
@@ -599,6 +609,38 @@ describe("an entry on one folder alone, on Windows", {
     await denies.revokeAll();
     for (const dir of [secret, key, above]) assert.doesNotMatch(sddl(dir, root), /\(D;[^)]*;;;BG\)/, dir);
     assert.match(sddl(moved, root), inheritedElsewhere, "nor by the take-back");
+  });
+
+  it("denies a folder only its owner may open on that folder alone at first, and passes it down later", async () => {
+    // A lived-in Windows 11 profile: passing the deny down Chrome's profile took 17 s of the first
+    // start, although only its owner, SYSTEM and the Administrators could open anything in it.
+    const root = realpathSync.native(await tmpDir("folder-deny-closed-"));
+    const secret = path.join(root, "above", "User Data");
+    const moved = path.join(secret, "Default", "moved");
+    const elsewhere = path.join(root, "elsewhere");
+    await mkdir(path.dirname(moved), { recursive: true });
+    await mkdir(elsewhere);
+    const me = /"(S-1-[^"]+)"/.exec(execFileSync("whoami", ["/user", "/fo", "csv", "/nh"], { encoding: "utf8" }))?.[1];
+    assert.ok(me, "the running user's SID");
+    const closed = [`*${me}:(OI)(CI)(F)`, "*S-1-5-18:(OI)(CI)(F)", "*S-1-5-32-544:(OI)(CI)(F)"];
+    execFileSync("icacls", [secret, "/inheritance:r", "/grant:r", ...closed], { stdio: "ignore" });
+    // A folder moved in keeps what it inherited where it was made until a walk works it out again.
+    execFileSync("icacls", [elsewhere, "/grant", `*${GUESTS}:(OI)(CI)(RA)`], { stdio: "ignore" });
+    await mkdir(path.join(elsewhere, "moved"));
+    await rename(path.join(elsewhere, "moved"), moved);
+    const inheritedElsewhere = /\(A;[A-Z]*ID[A-Z]*;(?:0x80|LO);;;BG\)/;
+    const denies = ownAclEntries(path.join(root, "holders"), { sid: async () => GUESTS, pid: 1, alive: () => false });
+    assert.equal(await denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own), true);
+    assert.match(sddl(secret, root), /\(D;OICI;FA;;;BG\)/, "the folder is denied, to pass down");
+    assert.match(sddl(moved, root), inheritedElsewhere, "nothing under it was walked during the start");
+    const later = path.join(secret, "Default", "Cookies");
+    await writeFile(later, "later");
+    assert.match(sddl(later, root), /\(D;ID;FA;;;BG\)/, "a file made in it meanwhile inherits the deny");
+    await denies.walkDeferred();
+    assert.doesNotMatch(sddl(moved, root), inheritedElsewhere, "the walk later works it out again");
+    assert.match(sddl(moved, root), /\(D;ID;FA;;;BG\)/, "and passes the deny down");
+    await denies.revokeAll();
+    assert.doesNotMatch(sddl(secret, root), /\(D;[^)]*;;;BG\)/);
   });
 
   it("grants a folder and what is in it, and the folder entry above the grants comes and goes beside it", async () => {
@@ -637,7 +679,6 @@ describe("an entry on one folder alone, on Windows", {
     const own = routeWindowsGrants({ write: [game], read: [] }).own;
     assert.equal(await first.sync(own), true);
     // A folder moved in keeps what it inherited where it was made until a walk works it out again.
-    const USERS = "S-1-5-32-545";
     execFileSync("icacls", [elsewhere, "/grant", `*${USERS}:(OI)(CI)(RA)`], { stdio: "ignore" });
     await mkdir(path.join(elsewhere, "moved"));
     await rename(path.join(elsewhere, "moved"), moved);
@@ -704,6 +745,7 @@ describe("an entry on one folder alone, on Windows", {
         await mkdir(path.dirname(key), { recursive: true });
         await mkdir(sibling);
         await writeFile(key, "fixture");
+        openToUsers(secret);
         if (protectedAcl) execFileSync("icacls", [secret, "/inheritance:d"], { stdio: "ignore" });
         const protectedDacl = /D:P/;
         assert.equal(protectedDacl.test(sddl(secret, root)), protectedAcl, "fixture inheritance");
@@ -1136,14 +1178,19 @@ function fakeAncestors() {
  * Genex's own entries over a fake: each sync's entries, logged in `calls` as "own entries";
  * `available: false` answers as a PC where Genex cannot set them (no sandbox users' group).
  */
-function fakeOwnEntries(calls: string[], options: { available?: boolean } = {}) {
+function fakeOwnEntries(calls: string[], options: { available?: boolean; walk?: () => Promise<void> } = {}) {
   const synced: OwnAclEntry[][] = [];
   let revoked = 0;
+  let walked = 0;
   const entries: OwnAclEntries = {
     sync: async (entries) => {
       calls.push("own entries");
       synced.push([...entries]);
       return options.available ?? true;
+    },
+    walkDeferred: async () => {
+      walked++;
+      await options.walk?.();
     },
     revokeAll: async () => {
       revoked++;
@@ -1152,7 +1199,7 @@ function fakeOwnEntries(calls: string[], options: { available?: boolean } = {}) 
       revoked++;
     },
   };
-  return { entries, synced, revoked: () => revoked };
+  return { entries, synced, revoked: () => revoked, walked: () => walked };
 }
 
 /**
@@ -1165,11 +1212,16 @@ function session(
     profile?: string;
     ownDenies?: boolean | "unavailable";
     exists?: (p: string) => boolean;
+    walk?: () => Promise<void>;
+    walkDelayMs?: number;
   } = {},
 ) {
   const runtime = fakeSessionRuntime();
   const ancestors = fakeAncestors();
-  const own = fakeOwnEntries(runtime.calls, { available: options.ownDenies !== "unavailable" });
+  const own = fakeOwnEntries(runtime.calls, {
+    available: options.ownDenies !== "unavailable",
+    ...(options.walk ? { walk: options.walk } : {}),
+  });
   const logged: string[] = [];
   const value = new WindowsSandboxSession({
     runtime: runtime.runtime,
@@ -1178,6 +1230,7 @@ function session(
     ...(options.ownDenies ? { own: own.entries } : {}),
     ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths], exists: () => true }),
     ...(options.exists ? { exists: options.exists } : {}),
+    ...(options.walkDelayMs === undefined ? {} : { walkDelayMs: options.walkDelayMs }),
     log: (line) => logged.push(line),
   });
   return { session: value, runtime, ancestors, own, logged };
@@ -1576,6 +1629,35 @@ describe("deny paths Genex sets itself", () => {
     assert.equal(s.own.revoked(), 0);
   });
 
+  it("passes the deferred denies down after the start, off its path, and a regrant waits for that walk", async () => {
+    let finish = () => {};
+    const walking = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const s = session({ ownDenies: true, walk: () => walking, walkDelayMs: 0 });
+    const owner = {};
+    await s.session.join(owner, denying([at(".ssh")]));
+    assert.equal(s.own.walked(), 0, "the start does not wait for the walk");
+    await delay(0);
+    await turn();
+    assert.equal(s.own.walked(), 1, "the walk starts once the start is done");
+    s.session.update(owner, { write: [PONG, LATE], read: [] });
+    await turn();
+    assert.deepEqual(s.runtime.calls, ["own entries", "initialize"], "no regrant while the walk runs");
+    finish();
+    await s.session.settled();
+    assert.deepEqual(s.runtime.calls, ["own entries", "initialize", "reset", "own entries", "initialize"]);
+    await s.session.dispose();
+  });
+
+  it("starts no deferred walk once disposed", async () => {
+    const s = session({ ownDenies: true, walkDelayMs: 0 });
+    await s.session.join({}, denying([at(".ssh")]));
+    await s.session.dispose();
+    await delay(0);
+    assert.equal(s.own.walked(), 0);
+  });
+
   it("hands srt-win no grant on a folder that exists, so no start walks a granted folder again", async () => {
     // srt-win's grant passed its entry down through everything under each folder at every start
     // (a toolchain, a games folder full of node_modules) and ran past its 60-second deadline.
@@ -1791,6 +1873,75 @@ describe("Genex's own deny entries", () => {
     assert.equal(await locked.sync([ssh]), false);
     // A batch PowerShell gave up on part way may have set some entries: the record keeps them.
     assert.deepEqual(await readdir(holders), ["2.json"]);
+  });
+
+  it("leaves the walk under a path for later where the editor may, and passes it down later, once", async () => {
+    // A lived-in Windows 11 profile: passing the deny down Chrome's profile took 17 s of a first
+    // start, although nothing in it was open to the sandbox user.
+    const holders = await tmpDir("windows-denies-");
+    const asked: FolderOwnEdit[][] = [];
+    const denies = holder(holders, 1, [], {
+      edit: async (edits) => {
+        asked.push([...edits]);
+        return edits.map((edit) =>
+          edit.dir === ssh.path && edit.walk === OwnWalk.Later
+            ? ({ ok: true, deferred: true } as const)
+            : ({ ok: true } as const),
+        );
+      },
+    });
+    assert.equal(await denies.sync([guard, ssh]), true);
+    assert.deepEqual(
+      asked[0]?.map((edit) => edit.walk),
+      [OwnWalk.Later, OwnWalk.Later],
+      "every edit of a start may leave its walk for later",
+    );
+    await denies.walkDeferred();
+    assert.deepEqual(
+      asked[1]?.map((edit) => [edit.dir, edit.deny, edit.walk]),
+      [[ssh.path, DenyAccess.Read, OwnWalk.Again]],
+      "only the deferred path is walked, with the entries it needs",
+    );
+    await denies.walkDeferred();
+    assert.equal(asked.length, 2, "a walk that ran is not run again");
+  });
+
+  it("keeps a walk a Genex that ended never ran, and runs it in the next one", async () => {
+    const holders = await tmpDir("windows-denies-");
+    const ended = { sid: SID, entries: [ssh], walks: [ssh.path] };
+    await writeFile(path.join(holders, `${DEAD_PID}.json`), JSON.stringify(ended));
+    const asked: FolderOwnEdit[][] = [];
+    const next = holder(holders, 1, [], {
+      edit: async (edits) => {
+        asked.push([...edits]);
+        return done(edits);
+      },
+    });
+    assert.equal(await next.sync([ssh]), true);
+    await next.walkDeferred();
+    assert.deepEqual(
+      asked.at(-1)?.map((edit) => [edit.dir, edit.walk]),
+      [[ssh.path, OwnWalk.Again]],
+    );
+    assert.deepEqual(await readdir(holders), ["1.json"], "the ended Genex's record is gone, its walk carried over");
+  });
+
+  it("drops a deferred walk on a path no longer needed", async () => {
+    const holders = await tmpDir("windows-denies-");
+    const asked: FolderOwnEdit[][] = [];
+    const denies = holder(holders, 1, [], {
+      edit: async (edits) => {
+        asked.push([...edits]);
+        return edits.map((edit) =>
+          edit.dir === ssh.path ? ({ ok: true, deferred: true } as const) : ({ ok: true } as const),
+        );
+      },
+    });
+    await denies.sync([ssh]);
+    await denies.sync([guard]);
+    const batches = asked.length;
+    await denies.walkDeferred();
+    assert.equal(asked.length, batches, "nothing left to walk");
   });
 
   it("tries again only the entries refused once, and lets a take-back on a path that is gone go", async () => {
