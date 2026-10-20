@@ -118,6 +118,13 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
   // Set up only starts again, without another administrator prompt.
   let installed = false;
 
+  // Every screen with a Try again: its state, and the attempt the Try again runs.
+  const holdOn = (next: BootState, run: () => Promise<void>): void => {
+    holds++;
+    state = next;
+    attempt = run;
+  };
+
   const settle = async (run: () => Promise<void>): Promise<BootState> => {
     const held = holds;
     try {
@@ -170,37 +177,22 @@ export function createBootGate(platform: string, options: BootGateOptions = {}):
       attempt = null;
       state = ready;
     },
-    hold(problem, next) {
-      holds++;
-      state = { platform, phase: BootPhase.SandboxSetup, sandbox: problem };
-      attempt = next;
-    },
-    fail(error, next) {
-      holds++;
-      state = { platform, phase: BootPhase.Failed, sandbox: null, failure: error };
-      attempt = next;
-    },
-    agentsFailed(error, next) {
-      holds++;
-      state = { ...ready, failure: error };
-      attempt = next;
-    },
+    hold: (problem, next) => holdOn({ platform, phase: BootPhase.SandboxSetup, sandbox: problem }, next),
+    fail: (error, next) => holdOn({ platform, phase: BootPhase.Failed, sandbox: null, failure: error }, next),
+    agentsFailed: (error, next) => holdOn({ ...ready, failure: error }, next),
     moving(progress) {
       state = { platform, phase: BootPhase.Moving, sandbox: null, move: progress };
     },
-    moveStopped(to, error, next) {
-      holds++;
-      state = { platform, phase: BootPhase.Moving, sandbox: null, move: { to, done: 0, total: 0 }, failure: error };
-      attempt = next;
-    },
-    dataMissing(dir, next) {
-      holds++;
-      state = { platform, phase: BootPhase.DataMissing, sandbox: null, dataFolder: dir };
-      attempt = next;
-    },
+    moveStopped: (to, error, next) =>
+      holdOn(
+        { platform, phase: BootPhase.Moving, sandbox: null, move: { to, done: 0, total: 0 }, failure: error },
+        next,
+      ),
+    dataMissing: (dir, next) =>
+      holdOn({ platform, phase: BootPhase.DataMissing, sandbox: null, dataFolder: dir }, next),
     overdue(error, next) {
       if (state.phase !== BootPhase.Starting) return false;
-      this.fail(error, next);
+      holdOn({ platform, phase: BootPhase.Failed, sandbox: null, failure: error }, next);
       return true;
     },
     retry,

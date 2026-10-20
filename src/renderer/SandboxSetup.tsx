@@ -42,29 +42,8 @@ export function BootRoot({ boot }: { boot: Boot }): JSX.Element | null {
   // Try again starts the studio again: the card says so until it opens, or fails again.
   if (view === BootView.Starting || (view === BootView.Failed && retrying))
     return <StartingCard step={step ?? StartStep.Studio} update={update} onUpdate={onUpdate} />;
-  if (view === BootView.Moving && move && error !== null) {
-    return (
-      <MoveStoppedCard
-        to={move.to}
-        error={error}
-        retrying={retrying}
-        onRetry={() => void boot.retry()}
-        onQuit={() => void boot.quit()}
-      />
-    );
-  }
-  if (view === BootView.Moving && move) return <MovingCard move={move} />;
-  if (view === BootView.DataMissing && dataFolder !== null) {
-    return (
-      <DataMissingCard
-        dir={dataFolder}
-        error={error}
-        retrying={retrying}
-        onRetry={() => void boot.retry()}
-        onQuit={() => void boot.quit()}
-      />
-    );
-  }
+  const dataCard = dataFolderCard({ view, move, dataFolder, error, retrying, boot });
+  if (dataCard) return dataCard;
   if (view === BootView.Failed) {
     return (
       <StartFailed
@@ -202,6 +181,32 @@ export function StartingCard({ step, update, onUpdate }: { step: StartStep } & U
       <BootUpdate update={update} onUpdate={onUpdate} />
     </AnimationCard>
   );
+}
+
+/** The screens of a launch that moves Genex's files or cannot find them, or null for any other. */
+function dataFolderCard({
+  view,
+  move,
+  dataFolder,
+  error,
+  retrying,
+  boot,
+}: {
+  view: BootView;
+  move: DataMoveProgress | null;
+  dataFolder: string | null;
+  error: string | null;
+  retrying: boolean;
+  boot: Boot;
+}): JSX.Element | null {
+  const onRetry = () => void boot.retry();
+  const onQuit = () => void boot.quit();
+  if (view === BootView.Moving && move && error !== null)
+    return <MoveStoppedCard to={move.to} error={error} retrying={retrying} onRetry={onRetry} onQuit={onQuit} />;
+  if (view === BootView.Moving && move) return <MovingCard move={move} />;
+  if (view === BootView.DataMissing && dataFolder !== null)
+    return <DataMissingCard dir={dataFolder} error={error} retrying={retrying} onRetry={onRetry} onQuit={onQuit} />;
+  return null;
 }
 
 /** Genex moving its files before it starts again: where to, and how far. */
