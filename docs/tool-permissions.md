@@ -397,7 +397,10 @@ sits only in the row's `input` (`{title, command, folder}`), folded under Detail
 
 A job ends by itself, by `job_stop`, at its time limit (`hours`, 2 by default, at most 24), when
 its run settles (the harness's own `run.settled`: its lead's and its workers' jobs), when the chat
-turn that started its worker returns, and when Genex quits. A harness crash or restart ends none.
+turn that started its worker returns, and when Genex quits. A harness crash or restart ends none. When Genex itself died, its next start marks
+each job still recorded as running interrupted and ends its process group (Windows: its tree,
+through `taskkill`) when that process's start time still matches the one recorded, so a reused id
+is never hit.
 The chat's own session's jobs outlive its turns, and its next turn is told which ended
 (`jobNotice`); a run's lead hears its run's ends through `jobs.list`, the harness's one read of the
 registry ([harness runtime](harness-runtime.md)). Each start and end is a host record in its chat

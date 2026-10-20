@@ -26,6 +26,7 @@ import {
   type JobClock,
   type JobExit,
   type JobKill,
+  type JobEndTree,
   type JobProbe,
   jobEnd,
   openJobLog,
@@ -52,7 +53,7 @@ import {
 import type { SandboxPolicy } from "./spawn.ts";
 import { isWindows } from "./toolchain.ts";
 
-export type { JobClock, JobKill, JobProbe, JobTail };
+export type { JobClock, JobEndTree, JobKill, JobProbe, JobTail };
 
 /** How long a job may run when its starter names no limit. */
 export const JOB_DEFAULT_HOURS = 2;
@@ -132,6 +133,8 @@ export interface JobServiceOptions {
   probe?: JobProbe;
   clock?: JobClock;
   kill?: JobKill;
+  /** Windows: ends a job's tree (default: runs `taskkill`). */
+  endTree?: JobEndTree;
   /** Hears each start once its record is on disk. */
   onStarted?: (record: JobRecord) => void | Promise<void>;
   /** Hears each end once its record is on disk, and on a later start each end not yet logged. */
@@ -193,6 +196,7 @@ export class JobService {
   readonly #probe: JobProbe;
   readonly #clock: JobClock;
   readonly #kill: JobKill | undefined;
+  readonly #endTree: JobEndTree | undefined;
   readonly #onStarted: JobServiceOptions["onStarted"];
   readonly #onEnded: JobServiceOptions["onEnded"];
   readonly #platform: NodeJS.Platform;
@@ -216,6 +220,7 @@ export class JobService {
     this.#probe = options.probe ?? psProbe(this.#platform);
     this.#clock = options.clock ?? SYSTEM_CLOCK;
     this.#kill = options.kill;
+    this.#endTree = options.endTree;
     this.#onStarted = options.onStarted;
     this.#onEnded = options.onEnded;
     this.#logMaxBytes = options.logMaxBytes ?? JOB_LOG_MAX_BYTES;
@@ -429,8 +434,7 @@ export class JobService {
 
   /** Write the record, arm the time limit, then tell `onStarted`: all before the job's end is handled. */
   async #announce(record: JobRecord, arm: () => void): Promise<JobRecord> {
-    if (record.pid && !isWindows(this.#platform))
-      record.procStart = (await this.#probe.startTime(record.pid).catch(() => null)) ?? undefined;
+    if (record.pid) record.procStart = (await this.#probe.startTime(record.pid).catch(() => null)) ?? undefined;
     await this.#locked(record.owner.project, () => writeJobRecord(this.#root, record));
     arm();
     const started = copy(record);
@@ -451,7 +455,7 @@ export class JobService {
   async #signal(live: LiveJob, signal: NodeJS.Signals): Promise<void> {
     if (!isWindows(this.#platform)) return signalGroup(live.record.pid, signal, this.#kill);
     if (live.child.exitCode !== null || live.child.signalCode !== null) return;
-    await signalJob(live.record.pid, signal, { kill: this.#kill, platform: this.#platform });
+    await signalJob(live.record.pid, signal, { kill: this.#kill, endTree: this.#endTree, platform: this.#platform });
   }
 
   async #finish(live: LiveJob, end: JobExit, log: WriteStream): Promise<JobRecord> {
@@ -525,12 +529,15 @@ export class JobService {
     return live.ended;
   }
 
-  /** Close a record an earlier app left running; kill its group only when it is the same process. */
+  /**
+   * Close a record an earlier app left running; kill its group (Windows: its tree) only when it is
+   * the same process, so a reused id is never hit.
+   */
   async #interrupt(record: JobRecord): Promise<JobRecord> {
-    if (record.pid && record.procStart && !isWindows(this.#platform)) {
+    if (record.pid && record.procStart) {
       const now = await this.#probe.startTime(record.pid).catch(() => null);
       if (now === record.procStart)
-        await signalJob(record.pid, "SIGKILL", { kill: this.#kill, platform: this.#platform });
+        await signalJob(record.pid, "SIGKILL", { kill: this.#kill, endTree: this.#endTree, platform: this.#platform });
     }
     const closed: JobRecord = {
       ...record,
