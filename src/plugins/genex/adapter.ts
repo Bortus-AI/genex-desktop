@@ -40,7 +40,7 @@ import { MINUTE_MS, SECOND_MS } from "../../shared/duration.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { PluginStillProblemCode } from "../../shared/plugins.ts";
 import { GenexCliStopped, runGenexCli, genexCliPath } from "./cli.ts";
-import { listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
+import { appClipCommit, listingOf, type NativeUpload, pinnedCliSendsApps, sendNativeBuild } from "./native-publish.ts";
 import {
   adviceLines,
   type CoverAnswer,
@@ -1704,8 +1704,9 @@ export class GenexTools {
   }
   /**
    * Send the kept clip unless Genex settled these bytes, with the build it was recorded from (the
-   * revision the last upload shipped): Genex keeps a clip only of a build the game ships. What goes
-   * out is a copy taken when the send began; a stopped send writes nothing.
+   * revision the last upload shipped, else for a game with only apps its app's archive hash): Genex
+   * keeps a clip only of a build the game ships. What goes out is a copy taken when the send began;
+   * a stopped send writes nothing.
    */
   async #sendClip(project: string, signal: AbortSignal, jobId?: string): Promise<void> {
     const dir = this.#coverDir(project);
@@ -1717,7 +1718,7 @@ export class GenexTools {
     });
     if (!planned) return;
     try {
-      const revision = (await readJsonOr<HostedMeta>(metaFile(this.#publishDir(project))))?.stagingCommit;
+      const revision = await this.#clipBuild(project);
       if (!revision || signal.aborted) return;
       const { out } = (await this.#spawnCli(
         this.#publishDir(project),
@@ -1735,6 +1736,13 @@ export class GenexTools {
     } finally {
       await rm(planned.copy, { force: true });
     }
+  }
+  /** The build a clip names: the staging revision the last upload shipped, else a sent app's archive hash. */
+  async #clipBuild(project: string): Promise<string | undefined> {
+    const dir = this.#publishDir(project);
+    const revision = (await readJsonOr<HostedMeta>(metaFile(dir)))?.stagingCommit;
+    if (revision) return revision;
+    return appClipCommit(readNativeSaved(await readJsonOr(path.join(dir, NATIVE_FILE))).sent);
   }
   /** Write a send's outcome, unless the send was stopped. */
   async #keepSent(dir: string, signal: AbortSignal, record: GenexCoverSent): Promise<GenexCoverSent | null> {
