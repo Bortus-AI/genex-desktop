@@ -532,7 +532,10 @@ reads of it at its next round.
 Codex runs Auto as before (`workspace-write` in the game folder, no network, never asks), Bypass
 with `--dangerously-bypass-approvals-and-sandbox`, and Plan from a folder of its own (`startsElsewhere`,
 as a read-only session) where only the studio's bridge is writable, told it plans
-(`planModeNote`). A pick applies to its next turn. Every Codex launch runs with Codex's own
+(`planModeNote`). A pick applies to its next turn. On Windows every launch also turns on Codex's own
+restricted-token sandbox (`windows.sandbox="unelevated"`, `windowsSandboxArgs`): Genex runs Codex
+without the person's config, and without that sandbox Codex refuses every command it does not know
+to be safe under `approval_policy=never` ("blocked by policy"). Every Codex launch runs with Codex's own
 sub-agents (`multi_agent`, `multi_agent_v2`) and its screen and browser hands (`computer_use`,
 `in_app_browser`, `browser_use`, `browser_use_external`) disabled, those its `codex features list`
 knows (`CODEX_SUBAGENT_FEATURES`, `CODEX_SCREEN_FEATURES`): the studio's `computer` tool is the

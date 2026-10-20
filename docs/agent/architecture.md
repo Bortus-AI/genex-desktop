@@ -123,7 +123,8 @@ scope: Codex's cover pre-existing files, never directories; the Claude hook matc
 ### Residual risks
 
 - **A Codex contractor can read the whole disk.** `codex exec` runs under Codex's own sandbox
-  (`workspace-write`, one writable root, no network), which restricts writes but not reads, and
+  (`workspace-write`, one writable root, no network; on Windows its unelevated restricted-token
+  sandbox), which restricts writes but not reads, and
   Studio does not wrap the CLI in `ProcessSandbox`. The studio's secrets, both CLIs' sign-in homes
   and sibling games are named off limits in the brief only; the Claude path enforces the same list
   as `Read()` deny rules, and `ProcessSandbox` enforces it for the harness and Bonsai. A
