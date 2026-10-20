@@ -169,6 +169,8 @@ export interface UiEventMap {
   "play.installs": NativeInstalls;
   /** A native game started, came on screen, ended or failed to start: every session (`main/play/native-launch.ts`). */
   "play.sessions": NativeSession[];
+  /** A `genex://game/<slug>` link waits for the page to take it (`studio:play.take-game-link`, `main/play/game-links.ts`). */
+  "play.game-link": Record<string, never>;
 
   // — plugins and connectors —
   "plugins.changed": PluginChange;
@@ -298,6 +300,7 @@ export const UiEvent = {
   PlayRemix: "play.remix",
   PlayInstalls: "play.installs",
   PlaySessions: "play.sessions",
+  PlayGameLink: "play.game-link",
   PluginsChanged: "plugins.changed",
   PluginEvent: "plugin.event",
   PluginConsent: "plugin.consent",

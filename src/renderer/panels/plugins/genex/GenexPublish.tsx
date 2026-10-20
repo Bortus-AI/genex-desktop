@@ -17,6 +17,7 @@ import {
   GENEX_PLUGIN_ID,
   GENEX_TITLE_MAX_CHARS,
   GenexAction,
+  type GenexNativeRecord,
   type GenexPublishState,
 } from "../../../../shared/genex.ts";
 import type { PluginInfo } from "../../../../shared/plugins.ts";
@@ -59,7 +60,7 @@ import { CoverKind } from "./cover-asks.ts";
 import { type PublishCover, useElapsed, usePublishCover } from "./use-publish-cover.ts";
 import { Pressing, usePublishRecord } from "./use-publish-record.ts";
 import { PublishPlatforms, usePublishPlatforms } from "./PublishPlatforms.tsx";
-import { appsLabel, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
+import { appsLabel, gateByPlugin, nothingToPublish, onlyApps } from "./publish-platforms-view.ts";
 import type { PublishPlatform } from "../../../../shared/publish-platforms.ts";
 import { PublishShareLine } from "./PublishShare.tsx";
 import { useShareWhenLive } from "./use-publish-share.ts";
@@ -701,14 +702,21 @@ export function GenexPublishDialog({
 }
 
 /** The game folder's platforms, and the main press's words when the game has only apps ("Publish Mac app"). */
-function useAppsPublish(project: string): {
+function useAppsPublish(
+  project: string,
+  native: GenexNativeRecord | undefined,
+): {
   platforms: PublishPlatform[] | null;
+  behind: boolean;
   apps: string | null;
   waiting: boolean;
 } {
-  const platforms = usePublishPlatforms(project);
+  const read = usePublishPlatforms(project);
+  // An app goes only through a Genex plugin that can send it: an older one is updated first.
+  const { platforms, behind } = read ? gateByPlugin(read, native) : { platforms: null, behind: false };
   return {
     platforms,
+    behind,
     apps: platforms && onlyApps(platforms) ? appsLabel(platforms) : null,
     // A game made in an engine with nothing to send yet: the rows say why, and the press waits.
     waiting: platforms !== null && nothingToPublish(platforms),
@@ -762,7 +770,7 @@ function PublishBody({
   const failure = record.error ? { text: record.error, details: record.error } : view.failure;
   const open = () => void record.act(GenexAction.PublishOpen, { target: LinkTarget.Gallery });
   const opening = record.pressing === Pressing.Action;
-  const { platforms, apps, waiting } = useAppsPublish(project);
+  const { platforms, behind, apps, waiting } = useAppsPublish(project, record.state?.native);
   return (
     <div
       className="genex-publish-body"
@@ -788,7 +796,13 @@ function PublishBody({
             {problem}
           </p>
         ))}
-        <PublishPlatforms project={project} platforms={platforms} shown={!celebrate} native={record.state?.native} />
+        <PublishPlatforms
+          project={project}
+          platforms={platforms}
+          behind={behind}
+          shown={!celebrate}
+          native={record.state?.native}
+        />
         {view.running && <Progress view={view} />}
         {failure && !publishing && <p className="genex-publish-failure">{failure.text}</p>}
         <PublishShareLine share={share} celebrate={celebrate} />

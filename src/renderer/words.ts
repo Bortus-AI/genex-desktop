@@ -3078,6 +3078,8 @@ export const PUBLISH_PLATFORM_WORDS = {
   players: { [PublishTarget.Mac]: "Mac", [PublishTarget.Windows]: "Windows" },
   webReady: "Plays right away",
   webMissing: "Not set up for the web",
+  /** An Unreal game: Unreal has no web export. */
+  webUnavailable: "Unreal games don’t run in a browser",
   /** What a build runs on, by its processors. */
   arch: {
     [PublishTarget.Mac]: {
@@ -3106,6 +3108,9 @@ export const PUBLISH_PLATFORM_WORDS = {
   soonLabel: (name: string) => `${name}: publishing it is coming soon`,
   make: "Make with agent",
   makeLabel: (name: string) => `Make the ${name} with the agent`,
+  /** The web row's press, for a screen reader, and what it sends through the game's chat. */
+  makeWebLabel: "Make the web version with the agent",
+  makeWebAsk: (title: string) => `Make a web version of ${title} so I can publish it on the web.`,
   /** The row once Make with agent sent its ask. */
   asked: "Asked the agent",
   /** What "Make with agent" sends through the game's chat. */
@@ -3130,7 +3135,15 @@ export const PUBLISH_PLATFORM_WORDS = {
   appsHint: "People playing in the Genex app can install it.",
   /** A game made in an engine with nothing Publish can send yet: no app, or none Studio can send. */
   makeFirst: "Make a Mac or Windows app first, then publish it here.",
+  makeAnyFirst: "Make a web version or a Mac or Windows app first, then publish it here.",
   appsSoon: "Publishing Mac and Windows apps comes with the next Genex update.",
+  /** A built app older than the game's last change: the agent builds it again. */
+  rebuild: "Build again",
+  rebuildLabel: (name: string) => `Build the ${name} again with the agent`,
+  rebuildAsk: (players: string, title: string) => `Build the ${players} app of ${title} again so I can publish it.`,
+  rebuildFirst: (app: string) => `The ${app} is older than your last change: build it again, then publish.`,
+  /** The installed Genex plugin is from before apps: its update sends them. */
+  updateGenex: "Update the Genex plugin in Plugins to publish apps.",
   notListed: "The apps are on Genex, but the game isn’t in the gallery yet. Publish again to list it.",
 } as const;
 
@@ -3532,6 +3545,11 @@ export const SANDBOX_SETUP_WORDS = {
   },
   stillFailing: "Studio still couldn’t start:",
   details: "Details",
+  /** A new version downloaded before the studio opened; the button is the sidebar's (`UPDATE_WORDS`). */
+  update: {
+    ready: (version: string | null) =>
+      version ? `Genex ${version} is ready and may fix this.` : "A new version of Genex is ready and may fix this.",
+  },
 } as const;
 
 // ── the Plugins tab ───────────────────────────────────────────────────────────────────────

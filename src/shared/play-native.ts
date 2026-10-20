@@ -71,6 +71,10 @@ export interface NativeBuild {
   publishedAt: string;
 }
 
+/** The engines the catalog names a native build's game by: what Play opens full screen in each one's own way. */
+export const NativeEngine = { Unity: "unity", Godot: "godot", Unreal: "unreal" } as const;
+export type NativeEngine = (typeof NativeEngine)[keyof typeof NativeEngine];
+
 /** What a game adds once the API names native builds for it. */
 export interface PlayNative {
   /** It also has a web build: a card press plays that, and the native app is offered beside it. */

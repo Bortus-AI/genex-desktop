@@ -19,17 +19,18 @@ import { type FoundBuild, findNativeBuilds } from "./native-builds.ts";
 const STALE_AFTER_MS = MINUTE_MS;
 /** How many entries the look for the game's last change reads at most. */
 const CHANGE_ENTRIES_MAX = 20_000;
-/** Folders whose changes are not the game's: history, packages, caches, builds and exports. */
+/**
+ * Folders whose changes are not the game's: history, packages, caches, builds, exports and an
+ * editor's own state (Unity's UserSettings: its window layout is saved after every build). Every
+ * hidden folder is skipped too (`.git`, `.studio`, `.vscode`).
+ */
 const NOT_SOURCE = new Set([
-  ".git",
+  "UserSettings",
   "node_modules",
   "Library",
   "Temp",
   "Logs",
   "obj",
-  ".godot",
-  ".import",
-  ".studio",
   "Builds",
   "Build",
   "build",
@@ -45,9 +46,12 @@ const NOT_SOURCE = new Set([
 
 const MESSAGE = { NoGame: "not a game in the library" } as const;
 
-/** Whether a folder holds the game's sources: not a cache, an export, a bundle or a found build's folder. */
+/** Files whose changes are not the game's: notes an agent keeps, logs, and hidden files such as Finder's `.DS_Store`. */
+const NOT_SOURCE_FILE = /^\.|\.(md|log)$/i;
+
+/** Whether a folder holds the game's sources: not hidden, a cache, an export, a bundle or a found build's folder. */
 const isSource = (name: string, at: string, builds: ReadonlySet<string>): boolean =>
-  !NOT_SOURCE.has(name) && !name.endsWith(".app") && !builds.has(at);
+  !name.startsWith(".") && !NOT_SOURCE.has(name) && !name.endsWith(".app") && !builds.has(at);
 
 /** When the game's sources last changed, ms since the epoch, outside its builds and caches. */
 async function lastChange(root: string, builds: readonly FoundBuild[]): Promise<number> {
@@ -61,7 +65,8 @@ async function lastChange(root: string, builds: readonly FoundBuild[]): Promise<
     for (const entry of entries) {
       const at = path.join(dir, entry.name);
       if (entry.isDirectory() && isSource(entry.name, at, inBuild)) pending.push(at);
-      if (entry.isFile()) newest = Math.max(newest, (await stat(at).catch(() => null))?.mtimeMs ?? 0);
+      if (entry.isFile() && !NOT_SOURCE_FILE.test(entry.name))
+        newest = Math.max(newest, (await stat(at).catch(() => null))?.mtimeMs ?? 0);
     }
   }
   return newest;

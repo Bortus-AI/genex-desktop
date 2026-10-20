@@ -17,15 +17,20 @@ import { type PublishPlatform, PublishPlatformState, PublishTarget } from "../..
 import {
   appsLabel,
   failureLines,
+  gateByPlugin,
+  rebuildAsk,
   makesApps,
   nothingToPublish,
   listingLine,
   listsPlatforms,
   onlyApps,
   makeAppAsk,
+  makeWebAsk,
   PlatformEnd,
   platformRows,
   reachLine,
+  WebOffer,
+  webOfferFor,
 } from "../../src/renderer/panels/plugins/genex/publish-platforms-view.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -121,6 +126,26 @@ describe("Publish's platform rows from the game folder", () => {
     await source(root, "Assets/Scripts/Player.cs", T0 + 30 * MINUTE_MS);
     assert.equal(byTarget(await publishPlatforms(core, "dust", true)).mac.uploads, false);
     assert.deepEqual(await publishedApps(core, "dust", true), []);
+  });
+
+  it("keeps an app ready when only notes, editor state or Finder's files changed after it", async () => {
+    const root = await tmpDir("publish-platforms-");
+    await source(root, "unity/Assets/Scripts/TicTacToe.cs", T0);
+    await macApp(path.join(root, "unity", "Builds", "Mac"), "Simple Fast Tic Tac Toe", T0 + 10 * MINUTE_MS);
+    // What an agent and the editor write after a build: the game is the same game.
+    const later = T0 + 30 * MINUTE_MS;
+    await source(root, "NOTES.md", later);
+    await source(root, "unity/UserSettings/Layouts/default-6000.dwlt", later);
+    await source(root, ".studio/player.log", later);
+    await source(root, "unity/.DS_Store", later);
+    await source(root, "unity/Assets/.DS_Store", later);
+    await source(root, "unity/.vscode/settings.json", later);
+    await source(root, "unity/build.log", later);
+    const rows = byTarget(await publishPlatforms(coreWith("ttt", root, []), "ttt", true));
+    assert.equal(rows.mac.state, PublishPlatformState.Ready);
+    await source(root, "unity/ProjectSettings/ProjectSettings.asset", later);
+    const changed = byTarget(await publishPlatforms(coreWith("ttt", root, []), "ttt", true));
+    assert.equal(changed.mac.state, PublishPlatformState.Stale, "a project setting is the game's");
   });
 
   it("refuses a game that is not in the library", async () => {
@@ -293,16 +318,78 @@ describe("Publish's platform rows as the dialog says them", () => {
     const noMac = { ...MAC, state: PublishPlatformState.Missing, arch: null, bytes: 0, builtAt: null };
     assert.equal(nothingToPublish([noWeb, noMac, WINDOWS]), true);
     assert.equal(reachLine([noWeb, noMac, WINDOWS]), "Make a Mac or Windows app first, then publish it here.");
+    assert.equal(
+      reachLine([noWeb, noMac, WINDOWS], false, WebOffer.Make),
+      "Make a web version or a Mac or Windows app first, then publish it here.",
+      "a Unity or Godot game can start with its web version",
+    );
     assert.equal(nothingToPublish([noWeb, MAC, WINDOWS]), true, "an app Studio cannot send yet");
     assert.equal(reachLine([noWeb, MAC, WINDOWS]), "Publishing Mac and Windows apps comes with the next Genex update.");
     assert.equal(nothingToPublish([noWeb, { ...MAC, uploads: true }, WINDOWS]), false);
     assert.equal(nothingToPublish([WEB, noMac, WINDOWS]), false, "a web game publishes its web build");
   });
 
+  it("offers to build an app again when it is older than the game's last change, and says so", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const stale = { ...MAC, state: PublishPlatformState.Stale, uploads: false };
+    assert.equal(platformRows([noWeb, stale, WINDOWS], NOW)[1]?.end, PlatformEnd.Rebuild);
+    assert.equal(platformRows([WEB, stale, WINDOWS], NOW)[1]?.end, PlatformEnd.Rebuild, "a web game's too");
+    assert.equal(
+      reachLine([noWeb, stale, WINDOWS]),
+      "The Mac app is older than your last change: build it again, then publish.",
+    );
+    assert.equal(
+      rebuildAsk(PublishTarget.Mac, "Simple Fast Tic Tac Toe"),
+      "Build the Mac app of Simple Fast Tic Tac Toe again so I can publish it.",
+    );
+  });
+
+  it("sends apps only through a Genex plugin that can, and says to update an older one", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const ready = { ...MAC, uploads: true };
+    const record = (supported: boolean): GenexNativeRecord => ({ supported, sending: false, sent: [], failed: [] });
+    assert.deepEqual(gateByPlugin([noWeb, ready, WINDOWS], record(true)).platforms[1], ready);
+    const older = gateByPlugin([noWeb, ready, WINDOWS], undefined);
+    assert.equal(older.platforms[1]?.uploads, false, "a plugin from before apps answers no record");
+    assert.equal(older.behind, true);
+    assert.equal(reachLine(older.platforms, older.behind), "Update the Genex plugin in Plugins to publish apps.");
+    assert.equal(gateByPlugin([noWeb, ready, WINDOWS], record(false)).behind, true);
+    assert.equal(gateByPlugin([noWeb, MAC, WINDOWS], undefined).behind, false, "nothing it could send anyway");
+  });
+
   it("asks the agent for an app in the game's own name", () => {
     assert.equal(
       makeAppAsk(PublishTarget.Windows, "Dust Runners"),
       "Make a Windows app of Dust Runners so I can publish it for Windows players.",
+    );
+  });
+
+  it("offers a Unity or Godot game a web version from the agent, and tells an Unreal game it has none", () => {
+    const noWeb = { ...WEB, state: PublishPlatformState.Missing, uploads: false };
+    const webRow = (offer: WebOffer) => platformRows([noWeb, MAC, WINDOWS], NOW, undefined, offer)[0];
+    assert.deepEqual(
+      [
+        webOfferFor([{ id: CoreFact.UnityProject, path: "unity" }]),
+        webOfferFor([{ id: CoreFact.GodotProject, path: "." }]),
+      ],
+      [WebOffer.Make, WebOffer.Make],
+    );
+    assert.equal(webOfferFor([{ id: CoreFact.UnrealProject, path: "." }]), WebOffer.Unavailable);
+    assert.equal(webOfferFor([{ id: CoreFact.WebGame, path: "." }]), WebOffer.Quiet);
+    assert.deepEqual([webRow(WebOffer.Make)?.detail, webRow(WebOffer.Make)?.end], ["Not made yet", PlatformEnd.Make]);
+    assert.deepEqual(
+      [webRow(WebOffer.Unavailable)?.detail, webRow(WebOffer.Unavailable)?.end],
+      ["Unreal games don’t run in a browser", PlatformEnd.None],
+    );
+    assert.deepEqual(
+      [webRow(WebOffer.Quiet)?.detail, webRow(WebOffer.Quiet)?.end],
+      ["Not set up for the web", PlatformEnd.None],
+    );
+    const ready = platformRows([WEB, MAC, WINDOWS], NOW, undefined, WebOffer.Make)[0];
+    assert.equal(ready?.end, PlatformEnd.None, "a web version made already offers nothing");
+    assert.equal(
+      makeWebAsk("Simple Fast Tic Tac Toe"),
+      "Make a web version of Simple Fast Tic Tac Toe so I can publish it on the web.",
     );
   });
 });

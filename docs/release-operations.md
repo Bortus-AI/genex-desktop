@@ -177,6 +177,12 @@ its maintainer scripts (`build/linux/postinst`, `rpm-post`) add packages.genex.g
 key the package carries (`build/linux/genex-archive-keyring.asc`), and the system's updates bring
 the next version, so the app asks nothing (`UpdateMode.System`).
 
+The first check runs at launch, before the core starts (10 s later on a fresh Windows install's
+first launch, while Squirrel holds its lock), so a start that fails, waits on Set up or hangs still
+downloads the release that may fix it. Until the studio opens, its setup, start and start-failure
+screens offer **Relaunch to update** for a downloaded version; once a version waits, quitting
+installs it too, and Squirrel.Windows starts the newest installed version at the next launch.
+
 ### Linux package repository
 
 packages.genex.games is the R2 bucket `genex-packages` behind that custom domain: a signed apt
