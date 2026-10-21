@@ -2,7 +2,11 @@
 
 The app ships in English, Russian, Spanish, Brazilian Portuguese, German, French, Japanese, Korean
 and Simplified Chinese (`Locale` in `src/shared/locale.ts`). Settings → Appearance → Language picks
-one, System follows the computer. Main reads the computer's language list once and hands it to every
+one, System follows the computer: the first language in the person's own list (macOS Language &
+Region, Windows' language order, Linux `LANGUAGE`/`LANG`) that Genex speaks, else English
+(`matchLocale`, `computerLanguages` in `shared/locale.ts`). Any Portuguese reads Brazilian, any
+Simplified Chinese reads `zh-Hans`, and Traditional Chinese (`zh-Hant`, TW, HK, MO) falls through to
+the next language in the list. Main reads the computer's language list once and hands it to every
 studio page it opens (`pageLanguageArguments`), so the window, Play's bar and the menus pick the same
 language; a switch rebuilds the menu and reloads Play's bar. The in-app agents answer in the
 language the person writes in, and Genex's own messages in the app's (`studio.language`,

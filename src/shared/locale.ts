@@ -46,9 +46,20 @@ export function isLanguageChoice(value: unknown): value is LanguageChoice {
 /** Traditional Chinese tags: Simplified would read as foreign there, so they fall through to the next language. */
 const TRADITIONAL_CHINESE = /^zh-(?:hant|tw|hk|mo)\b/;
 
-/** The supported language one tag names ("ru-RU" → ru, "pt-PT" → pt-BR, "zh-CN" → zh-Hans), or none. */
-function localeForTag(tag: string): Locale | undefined {
-  const lower = tag.trim().toLowerCase().replace(/_/g, "-");
+/**
+ * A tag as one system or another writes it, as a BCP 47 tag in lower case: macOS and Windows write
+ * "ja-JP" or "zh-Hans-CN", Linux "ja_JP.UTF-8" or "pt_PT@euro" (its codeset and modifier dropped).
+ */
+function plainTag(tag: string): string {
+  return tag
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+    .replace(/[.@].*$/, "");
+}
+
+/** The supported language one plain tag names ("ru-ru" → ru, "pt-pt" → pt-BR, "zh-cn" → zh-Hans), or none. */
+function localeForTag(lower: string): Locale | undefined {
   if (!lower) return undefined;
   const exact = LOCALES.find((locale) => locale.toLowerCase() === lower);
   if (exact) return exact;
@@ -57,6 +68,45 @@ function localeForTag(tag: string): Locale | undefined {
   if (language === "zh") return Locale.ChineseSimplified;
   if (language === "pt") return Locale.PortugueseBrazil;
   return LOCALES.find((locale) => locale === language);
+}
+
+/**
+ * The first supported language in a computer's preference list; English when none is. A bare "zh"
+ * after a Traditional Chinese tag is that same locale (glibc lists "zh_TW.UTF-8", "zh_TW", "zh"),
+ * so it falls through too.
+ */
+export function matchLocale(tags: readonly string[]): Locale {
+  let traditional = false;
+  for (const tag of tags) {
+    const plain = plainTag(tag);
+    if (TRADITIONAL_CHINESE.test(plain)) traditional = true;
+    if (traditional && plain === "zh") continue;
+    const locale = localeForTag(plain);
+    if (locale) return locale;
+  }
+  return Locale.English;
+}
+
+/** What a computer says about its languages, as Electron reads them. */
+export interface ComputerLanguages {
+  /** A `--lang` the launch pinned (fixture and test launches), or "". */
+  pinned: string;
+  /** `app.getPreferredSystemLanguages()`: the person's languages in order. */
+  preferred: readonly string[];
+  /** `app.getLocale()`: the locale Chromium picked from them. */
+  locale: string;
+  /** `app.getSystemLocale()`: the region's locale. */
+  systemLocale: string;
+}
+
+/**
+ * The computer's languages in order: a pinned `--lang` alone, else the person's list; Chromium's
+ * locale and the region's only when the system gives no list (some Linux desktops).
+ */
+export function computerLanguages({ pinned, preferred, locale, systemLocale }: ComputerLanguages): string[] {
+  if (pinned) return [pinned];
+  const listed = preferred.filter(Boolean);
+  return listed.length > 0 ? listed : [locale, systemLocale].filter(Boolean);
 }
 
 /** The page argument that carries the computer's languages from main to a studio page's preload. */
@@ -83,15 +133,6 @@ export function systemLanguagesArgument(tags: readonly string[]): string {
 export function systemLanguagesFromArgs(args: readonly string[]): string[] {
   const carried = args.find((arg) => arg.startsWith(SYSTEM_LANGUAGES_SWITCH));
   return carried ? languageTags(carried.slice(SYSTEM_LANGUAGES_SWITCH.length).split(",")) : [];
-}
-
-/** The first supported language in a computer's preference list; English when none is. */
-export function matchLocale(tags: readonly string[]): Locale {
-  for (const tag of tags) {
-    const locale = localeForTag(tag);
-    if (locale) return locale;
-  }
-  return Locale.English;
 }
 
 /** The language a choice means on this computer: a set language, or the computer's own. */

@@ -6,13 +6,17 @@
  */
 import { app } from "electron";
 import { currentLocale, setLocale } from "../shared/i18n.ts";
-import { Locale, resolveLanguage, systemLanguagesArgument } from "../shared/locale.ts";
+import { computerLanguages, Locale, resolveLanguage, systemLanguagesArgument } from "../shared/locale.ts";
 import { loadCatalog } from "../shared/locales/index.ts";
 
-/** The computer's languages in order, or the one a launch pinned with `--lang`. */
+/** The computer's languages in order, or the one a launch pinned with `--lang` (`computerLanguages`). */
 export function systemLanguages(): string[] {
-  const pinned = app.commandLine.getSwitchValue("lang");
-  return pinned ? [pinned] : app.getPreferredSystemLanguages();
+  return computerLanguages({
+    pinned: app.commandLine.getSwitchValue("lang"),
+    preferred: app.getPreferredSystemLanguages(),
+    locale: app.getLocale(),
+    systemLocale: app.getSystemLocale(),
+  });
 }
 
 /** A studio page's `additionalArguments`: the computer's languages, for its System. */

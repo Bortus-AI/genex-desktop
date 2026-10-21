@@ -18,7 +18,14 @@ import {
   t,
   tc,
 } from "../../src/shared/i18n.ts";
-import { isLanguageChoice, Locale, matchLocale, resolveLanguage, SYSTEM_LANGUAGE } from "../../src/shared/locale.ts";
+import {
+  computerLanguages,
+  isLanguageChoice,
+  Locale,
+  matchLocale,
+  resolveLanguage,
+  SYSTEM_LANGUAGE,
+} from "../../src/shared/locale.ts";
 
 const GAMES = "{count, plural, one {# game} other {# games}}";
 const GAMES_RU = "{count, plural, one {# игра} few {# игры} many {# игр} other {# игры}}";
@@ -45,6 +52,56 @@ describe("choosing a language", () => {
   for (const [tags, expected] of cases) {
     it(`${tags.join(", ") || "no languages"} → ${expected}`, () => assert.equal(matchLocale(tags), expected));
   }
+
+  // Each computer's own spelling of its language list, as Electron's getPreferredSystemLanguages()
+  // hands it over: every language Genex speaks is found, and any other falls back to English.
+  const computers: Array<[string, string[], Locale]> = [
+    ["a Mac in Japanese", ["ja-JP", "en-JP"], Locale.Japanese],
+    ["a Mac in English with its region set to Japan", ["en-JP", "ja-JP"], Locale.English],
+    ["a Mac in Russian", ["ru-RU", "en-RU"], Locale.Russian],
+    ["a Mac in Korean", ["ko-KR"], Locale.Korean],
+    ["a Mac in Simplified Chinese", ["zh-Hans-CN", "en-CN"], Locale.ChineseSimplified],
+    ["a Mac in Simplified Chinese in Hong Kong", ["zh-Hans-HK"], Locale.ChineseSimplified],
+    ["a Mac in Traditional Chinese (Taiwan), then English", ["zh-Hant-TW", "en-TW"], Locale.English],
+    ["a Mac in Traditional Chinese (Hong Kong), then Japanese", ["zh-Hant-HK", "ja-HK"], Locale.Japanese],
+    ["a Mac in Brazilian Portuguese", ["pt-BR"], Locale.PortugueseBrazil],
+    ["a Mac in European Portuguese", ["pt-PT"], Locale.PortugueseBrazil],
+    ["a Mac in Mexican Spanish", ["es-MX", "en-MX"], Locale.Spanish],
+    ["a Mac in Swiss German", ["de-CH"], Locale.German],
+    ["a Mac in Canadian French", ["fr-CA", "en-CA"], Locale.French],
+    ["a Mac in Ukrainian, then Russian", ["uk-UA", "ru-UA"], Locale.Russian],
+    ["a Mac in Italian only", ["it-IT"], Locale.English],
+    ["Windows in Japanese", ["ja"], Locale.Japanese],
+    ["Windows in Simplified Chinese", ["zh-CN"], Locale.ChineseSimplified],
+    ["Windows in Traditional Chinese", ["zh-TW"], Locale.English],
+    ["Windows in Macau Chinese", ["zh-MO"], Locale.English],
+    ["Windows in Korean, then English", ["ko", "en-US"], Locale.Korean],
+    ["Linux in Japanese", ["ja_JP.UTF-8", "ja_JP", "ja.UTF-8", "ja", "C"], Locale.Japanese],
+    ["Linux with only the codeset-bearing name", ["ja.UTF-8"], Locale.Japanese],
+    [
+      "Linux in Taiwanese Chinese: glibc's plain zh is that same locale",
+      ["zh_TW.UTF-8", "zh_TW", "zh", "C"],
+      Locale.English,
+    ],
+    ["Linux in Hong Kong Chinese, then Korean", ["zh_HK.UTF-8", "zh", "ko_KR.UTF-8"], Locale.Korean],
+    ["Linux in Simplified Chinese", ["zh_CN.UTF-8"], Locale.ChineseSimplified],
+    ["Linux in European Portuguese with a modifier", ["pt_PT@euro"], Locale.PortugueseBrazil],
+    ["Linux in German, euro modifier", ["de_DE.UTF-8@euro"], Locale.German],
+    ["Linux with the C locale first", ["C", "POSIX", "fr_FR.UTF-8"], Locale.French],
+    ["Linux with the C locale only", ["C.UTF-8", "C"], Locale.English],
+  ];
+  for (const [computer, tags, expected] of computers) {
+    it(`${computer} → ${expected}`, () => assert.equal(matchLocale(tags), expected));
+  }
+
+  it("reads the computer's list in order, Chromium's locale only when the list is empty, a pinned --lang first", () => {
+    const mac = { pinned: "", preferred: ["ja-JP", "en-US"], locale: "en-US", systemLocale: "en-US" };
+    assert.deepEqual(computerLanguages(mac), ["ja-JP", "en-US"]);
+    assert.deepEqual(computerLanguages({ ...mac, preferred: [] }), ["en-US", "en-US"]);
+    assert.deepEqual(computerLanguages({ ...mac, preferred: [], locale: "", systemLocale: "ko-KR" }), ["ko-KR"]);
+    assert.deepEqual(computerLanguages({ ...mac, pinned: "ru" }), ["ru"]);
+    assert.equal(matchLocale(computerLanguages({ ...mac, preferred: [], locale: "ja" })), Locale.Japanese);
+  });
 
   it("a set language wins over the computer's, and System or anything unknown follows the computer", () => {
     assert.equal(resolveLanguage(Locale.Japanese, ["ru-RU"]), Locale.Japanese);
