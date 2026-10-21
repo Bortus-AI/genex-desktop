@@ -326,7 +326,7 @@ const USER_COMMAND_FENCE = "bash";
 
 /** Where a web game's work happens: this workspace, and no other copy or game. */
 const WORKSPACE_RULE =
-  "The game's work happens in this workspace: never in another copy of this game or in another game's folder, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their Mac (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.";
+  "The game's work happens in this workspace: never in another copy of this game or in another game's folder, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their computer (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.";
 
 /**
  * What a brief knows about the game: what its folder holds (`facts`; `[]`: none, and then `holds`
@@ -460,7 +460,7 @@ function contractorRules(engine: string | undefined, game: GameBuild): string[] 
     "Before you build or change how the game looks, if the folder has a references/ or ref/ directory with stills, look at those pictures — they are the visual bar, not files to load as textures.",
     workspaceRule(game),
     "When your shell is sandboxed, it rejects commands it cannot statically analyze — avoid $-expansions, escaped whitespace, heredocs and long && chains; run one simple command at a time, and put multi-step logic in a script file you then run with node.",
-    `When a sandbox blocks a step only the user's own Mac can do (an install or download that needs the network, such as brew or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
+    `When a sandbox blocks a step only the user's own computer can do (an install or download that needs the network, such as brew, winget or pip, a system tool, a sign-in), do not work around it: end your reply with that one command on a single line in a \`\`\`${USER_COMMAND_FENCE} block and one plain sentence on why. The chat shows it with a Run button; how it went comes back as the user's next message. Never offer a command you can run yourself, sudo, or anything piped into a shell.`,
     "When the user named a tool, app or plugin to use (Blender, an engine, a package) and its status or a call says it can't run here, never carry on without it in silence: say so in your reply, in plain words, with the fix its answer names, before a long build starts. A plugin's own install tool (its name ends in __install) asks the user on a card: call it when its status says to.",
     // The Reload a checkpoint lights is the web preview's: any other kind is seen in its own app.
     ...(servedAsWeb(game)

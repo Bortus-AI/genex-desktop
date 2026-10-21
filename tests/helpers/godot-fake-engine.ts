@@ -9,6 +9,7 @@
 import { mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setImmediate } from "node:timers/promises";
+import { crc32, deflateRawSync } from "node:zlib";
 import type { PluginContext } from "../../src/plugin-sdk/index.d.ts";
 import {
   PLUGIN_SANDBOX_MAX_RUNNING,
@@ -272,7 +273,7 @@ export async function godotBackendFixture(
     templates: TEMPLATES,
     addon: ADDON,
     multiplayer: { ...MULTIPLAYER, ...(options.release ? { release: options.release } : {}) },
-    ...(options.install ? { install: options.install } : {}),
+    install: options.install ?? offlineInstall(mac.root),
   });
   const hostCalls: HostCall[] = [];
   /** The game's engine link as the host keeps it (`game.engine.link` / `game.engine.read`). */
@@ -333,6 +334,8 @@ export async function godotWindowsFixture(
     runningReads?: number;
     /** How the runner removes a stage, when a test stands in for one Windows holds. */
     remove?: RemoveStage;
+    /** Godot's templates archive as the network serves it (`templatesArchive`); offline unless given. */
+    templates?: typeof fetch;
   } = {},
 ) {
   const pc = await fakeWindows(options.exes);
@@ -362,6 +365,7 @@ export async function godotWindowsFixture(
     templates: TEMPLATES,
     addon: ADDON,
     multiplayer: MULTIPLAYER,
+    install: { ...offlineInstall(pc.root), ...(options.templates ? { fetch: options.templates } : {}) },
   });
   const hostCalls: HostCall[] = [];
   const sandboxRun = async (request: PluginSandboxRunArgs) => {
@@ -425,4 +429,82 @@ export async function godotWindowsFixture(
     hostCalls,
     context,
   };
+}
+
+/** A computer with no network and no programs to install with: nothing a test didn't give is reached. */
+export function offlineInstall(root: string): GodotInstallDeps {
+  return {
+    fetch: async () => {
+      throw new Error("offline");
+    },
+    run: async () => {
+      throw new Error("no programs here");
+    },
+    applications: path.join(root, "Applications"),
+    trash: path.join(root, ".Trash"),
+  };
+}
+
+/** One file of a zip as `templatesArchive` packs it: deflated, its CRC-32 and sizes in its entries. */
+type ZipFile = { name: string; data: Buffer; packed: Buffer; crc: number; local: number };
+
+/**
+ * Godot's templates archive as GitHub serves it, made of `files` (names inside the archive, such as
+ * `templates/web_nothreads_release.zip`): a zip answering HEAD with its size and GET with the byte
+ * range asked, every request kept in `asked` (`HEAD`, or the range).
+ */
+export function templatesArchive(files: Record<string, Buffer | string>) {
+  const zipped: ZipFile[] = [];
+  const parts: Buffer[] = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.from(content);
+    const packed = deflateRawSync(data);
+    const file = { name, data, packed, crc: crc32(data), local: offset };
+    const header = Buffer.alloc(30);
+    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt16LE(8, 8);
+    header.writeUInt32LE(file.crc, 14);
+    header.writeUInt32LE(packed.length, 18);
+    header.writeUInt32LE(data.length, 22);
+    header.writeUInt16LE(Buffer.byteLength(name), 26);
+    parts.push(header, Buffer.from(name), packed);
+    offset += header.length + Buffer.byteLength(name) + packed.length;
+    zipped.push(file);
+  }
+  const directoryAt = offset;
+  for (const file of zipped) {
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(8, 10);
+    entry.writeUInt32LE(file.crc, 16);
+    entry.writeUInt32LE(file.packed.length, 20);
+    entry.writeUInt32LE(file.data.length, 24);
+    entry.writeUInt16LE(Buffer.byteLength(file.name), 28);
+    entry.writeUInt32LE(file.local, 42);
+    parts.push(entry, Buffer.from(file.name));
+    offset += entry.length + Buffer.byteLength(file.name);
+  }
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(zipped.length, 8);
+  end.writeUInt16LE(zipped.length, 10);
+  end.writeUInt32LE(offset - directoryAt, 12);
+  end.writeUInt32LE(directoryAt, 16);
+  parts.push(end);
+  const archive = Buffer.concat(parts);
+  const asked: string[] = [];
+  const urls: string[] = [];
+  const served = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    urls.push(String(url));
+    if (init?.method === "HEAD") {
+      asked.push("HEAD");
+      return new Response(null, { headers: { "content-length": String(archive.length) } });
+    }
+    const wanted = /bytes=(\d+)-(\d+)/.exec(new Headers(init?.headers).get("range") ?? "");
+    asked.push(wanted?.[0] ?? "all");
+    const [from, to] = wanted ? [Number(wanted[1]), Number(wanted[2])] : [0, archive.length - 1];
+    return new Response(archive.subarray(from, to + 1), { status: wanted ? 206 : 200 });
+  };
+  return { fetch: served as typeof fetch, asked, urls, archive };
 }

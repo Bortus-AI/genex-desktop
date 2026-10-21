@@ -112,7 +112,10 @@ export type GodotCall = {
   writePrefixes?: string[];
   /** A Mac's: folders linked into the job's private home (`at`, relative to it), read-only: the person's export templates. */
   homeLinks?: ReadonlyArray<{ at: string; to: string }>;
-  /** Windows's: files outside the game the job reads (an export template), copied in before it starts. */
+  /**
+   * Windows's: files outside the game the job reads (Genex's own scripts in the plugin's package,
+   * an export template), copied in before it starts: the sandbox user reads neither folder.
+   */
   stagedInputs?: readonly string[];
 };
 
@@ -155,6 +158,7 @@ export function checkCall(project: string, scripts: string): GodotCall {
     cwd: project,
     reads: [scripts],
     writes: [project],
+    stagedInputs: [path.join(scripts, GodotScript.Check)],
     timeoutMs: CHECK_TIMEOUT_MS,
     gpu: false,
   };
@@ -232,6 +236,7 @@ export function playCall(project: string, scripts: string, request: PlayRequest)
     cwd: project,
     reads: [scripts],
     writes: [project, ...(draws && request.out ? [path.dirname(request.out)] : [])],
+    stagedInputs: [path.join(scripts, GodotScript.Play)],
     timeoutMs: RUN_START_MS + Math.ceil(seconds) * RUN_SECOND_BUDGET_MS,
     gpu: draws,
   };
@@ -257,7 +262,7 @@ export function dataCopyCall(project: string, scripts: string, file: string, to:
     cwd: project,
     reads: [scripts],
     writes: [project],
-    stagedInputs: [file],
+    stagedInputs: [file, path.join(scripts, GodotScript.Data)],
     timeoutMs: DATA_TIMEOUT_MS,
     gpu: false,
   };

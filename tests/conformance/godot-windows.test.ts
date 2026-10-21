@@ -28,6 +28,7 @@ import {
   OWN_GODOT,
   playArg,
   SCRIPTS,
+  templatesArchive,
 } from "../helpers/godot-fake-engine.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -82,6 +83,17 @@ describe("Godot on Windows: Genex's own Godot", () => {
     const done = await card(fixture);
     assert.equal(done.open, false);
     assert.match(String(done.doneSays), /Godot 4\.7 is installed on this computer/);
+  });
+
+  it("fetches the Web template with Godot on Do it for me, so the game exports for the web without Godot's editor", async () => {
+    const network = templatesArchive({
+      "templates/web_nothreads_release.zip": "web",
+      "templates/version.txt": "4.7.2.stable",
+    });
+    const fixture = await godotWindowsFixture({ templates: network.fetch });
+    await action(fixture, GodotSetupAction.Download);
+    const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
+    assert.equal(await readFile(path.join(templates, "web_nothreads_release.zip"), "utf8"), "web");
   });
 
   it("shows the host's install as it goes: the download, the unpacking, a stop and a failure", async () => {
@@ -139,8 +151,13 @@ describe("Godot on Windows: Genex's own Godot", () => {
 describe("Godot on Windows: jobs in Genex's sandbox", () => {
   it("imports and checks as sandbox jobs of Genex's own Godot, reading Godot's Windows output", async () => {
     const check = windowsWords(await godotOutput("check-parse-errors.log"));
+    const scripts: string[] = [];
     const fixture = await windowsProject({
-      sandbox: (request) => ({ stderr: request.args.includes("-s") ? check : "" }),
+      sandbox: async (request) => {
+        const script = request.args[request.args.indexOf("-s") + 1];
+        if (request.args.includes("-s") && script) scripts.push(await readFile(script, "utf8"));
+        return { stderr: request.args.includes("-s") ? check : "" };
+      },
     });
     const answer = await tool(fixture, GodotTool.Check);
     assert.equal(answer.ok, false);
@@ -159,7 +176,11 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
       timeoutMs: imported?.timeoutMs,
     });
     assert.deepEqual(checked?.reads, [path.dirname(own), SCRIPTS]);
-    assert.deepEqual(checked?.args.slice(-2), ["-s", path.join(SCRIPTS, "genex_check.gd")]);
+    // The sandbox user can't read the plugin's package: Genex's script is copied into the project's stage.
+    const script = checked?.args.at(-1) ?? "";
+    assert.equal(path.basename(script), "genex_check.gd");
+    assert.equal(script.startsWith(path.join(fixture.project, ".godot", "genex-jobs")), true, script);
+    assert.deepEqual(scripts, [await readFile(path.join(SCRIPTS, "genex_check.gd"), "utf8")]);
   });
 
   it("stages a capture's stills in the project's .godot, copies them out and removes the stage", async () => {
@@ -222,7 +243,7 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     const exported = fixture.requests.find((request) => request.args.includes("--export-release"));
     assert.deepEqual(seen, ["zip"], "the template was in the project's stage while the copy ran");
     assert.equal(copy?.args.at(-1), "to=Godot/export_templates/4.7.2.stable/web_nothreads_release.zip");
-    assert.equal(copy?.args[copy.args.indexOf("-s") + 1], path.join(SCRIPTS, "genex_data.gd"));
+    assert.equal(path.basename(copy?.args[copy.args.indexOf("-s") + 1] ?? ""), "genex_data.gd");
     assert.equal(
       fixture.requests.indexOf(copy as PluginSandboxRunArgs) <
         fixture.requests.indexOf(exported as PluginSandboxRunArgs),
@@ -360,6 +381,38 @@ describe("Godot on Windows: jobs in Genex's sandbox", () => {
     await Promise.all(runs);
     assert.equal(fixture.peak.most, 2);
     assert.equal(fixture.requests.length, 6);
+  });
+
+  it("gets the app templates the agent asks for, where its shell's Godot reads them, and a Mac export's textures", async () => {
+    const network = templatesArchive({
+      "templates/version.txt": "4.7.2.stable",
+      "templates/windows_release_x86_64.exe": "win",
+      "templates/windows_release_x86_64_console.exe": "console",
+      "templates/macos.zip": "mac",
+    });
+    const fixture = await windowsProject({
+      templates: network.fetch,
+      sandbox: (request) =>
+        request.args.some((arg) => arg.startsWith("from=")) ? { stdout: "GENEX_DATA_COPIED somewhere\r\n" } : {},
+    });
+    const answer = String(await tool(fixture, GodotTool.ExportTemplates, { platforms: "windows, mac" }));
+    assert.match(answer, /export templates for windows, mac are in place/);
+    const templates = path.join(fixture.env.dataHome, "Godot", "export_templates", "4.7.2.stable");
+    assert.deepEqual((await readdir(templates)).sort(), [
+      "macos.zip",
+      "version.txt",
+      "windows_release_x86_64.exe",
+      "windows_release_x86_64_console.exe",
+    ]);
+    const placed = fixture.requests.flatMap((request) => request.args.filter((arg) => arg.startsWith("to=")));
+    assert.deepEqual(placed, [
+      "to=Godot/export_templates/4.7.2.stable/windows_release_x86_64.exe",
+      "to=Godot/export_templates/4.7.2.stable/windows_release_x86_64_console.exe",
+      "to=Godot/export_templates/4.7.2.stable/macos.zip",
+    ]);
+    const settings = await readFile(path.join(fixture.project, "project.godot"), "utf8");
+    assert.equal(settings.split("textures/vram_compression/import_etc2_astc=true").length, 2, "said once");
+    await assert.rejects(tool(fixture, GodotTool.ExportTemplates, { platforms: "linux" }), /web, windows or mac/);
   });
 
   it("passes a Stop on to the sandbox and starts nothing after it", async () => {

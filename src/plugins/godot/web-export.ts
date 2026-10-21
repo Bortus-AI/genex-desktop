@@ -36,8 +36,8 @@ const GDIGNORE = ".gdignore";
  * temporary folder for the user whatever TMPDIR says: the one file there an export may write.
  */
 export const EXPORT_SETTINGS_TEMP = "tmpproject.binary";
-/** An export imports the whole project first, the first time with every asset. */
-const EXPORT_TIMEOUT_MS = 10 * MINUTE_MS;
+/** An export imports the whole project first, the first time with every asset; within the tool's own nine minutes. */
+const EXPORT_TIMEOUT_MS = 8 * MINUTE_MS;
 
 /** The template folder Godot looks in for a version: `4.6.1.stable`, `4.3.stable.mono`. */
 export function templateVersion(version: GodotVersion): string {
@@ -200,10 +200,17 @@ export function webExportCall(
 }
 
 /**
- * Windows's: the person's Web template for a Godot put where the sandbox user's Godot looks for it,
- * in that user's own data folder, by a Godot job of Genex's (`dataCopyCall`), before the export.
+ * Windows's: one of the person's templates for a Godot (the Web template unless named) put where
+ * the sandbox user's Godot looks for it, in that user's own data folder, by a Godot job of Genex's
+ * (`dataCopyCall`), before an export.
  */
-export function templateCopyCall(project: string, scripts: string, dataHome: string, install: GodotInstall): GodotCall {
-  const to = path.join(TEMPLATES_IN_DATA, templateVersion(install.version), WEB_TEMPLATE);
-  return dataCopyCall(project, scripts, webTemplates(dataHome, install).template, to);
+export function templateCopyCall(
+  project: string,
+  scripts: string,
+  dataHome: string,
+  install: GodotInstall,
+  name: string = WEB_TEMPLATE,
+): GodotCall {
+  const to = path.join(TEMPLATES_IN_DATA, templateVersion(install.version), name);
+  return dataCopyCall(project, scripts, path.join(webTemplates(dataHome, install).folder, name), to);
 }

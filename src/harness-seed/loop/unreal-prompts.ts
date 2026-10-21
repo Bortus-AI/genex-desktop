@@ -163,7 +163,7 @@ function unlinkedUnrealRules(found: string, notes: string): string[] {
 
 /** Where an Unreal game's work happens, in place of the web brief's "this workspace" rule. */
 export function unrealWorkspaceRule(project: string | null | undefined, found?: string): string {
-  return `The game's work happens in its Unreal project ${projectWords(project, found)} and in this workspace's notes: never in another copy of this game, in another game's folder or in another Unreal project, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their Mac (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.`;
+  return `The game's work happens in its Unreal project ${projectWords(project, found)} and in this workspace's notes: never in another copy of this game, in another game's folder or in another Unreal project, and a path the user named is a stills folder to look at, not a parent to walk. When the user asks about something elsewhere on their computer (another folder, their Downloads, their disk), that is the ask: what you may reach is your session's permissions, not this brief.`;
 }
 
 /** The brief's closing line for an Unreal game: where its work lands, and the folder of its notes. */

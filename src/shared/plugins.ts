@@ -267,6 +267,11 @@ export interface PluginManifestTool extends PluginTool {
   asset?: PluginToolAsset;
   /** API 3, with `confirmation`: the text parameter the person may edit on the card. */
   confirmationInput?: PluginConfirmationInput;
+  /**
+   * API 3: the longest one call may run in the backend when that is longer than the host's ceiling
+   * (a game engine's import or export), at most {@link PLUGIN_TOOL_MAX_TIMEOUT_MS}.
+   */
+  timeoutMs?: number;
 }
 /** Whether agents are handed a manifest tool: every one but those only the harness calls. */
 export const isAgentTool = (tool: Pick<PluginManifestTool, "audience">): boolean =>
@@ -1091,6 +1096,8 @@ export const PluginService = {
 } as const;
 export type PluginService = (typeof PluginService)[keyof typeof PluginService];
 
+/** The longest one call of a plugin tool may declare (`timeoutMs`): within an agent's own call deadline. */
+export const PLUGIN_TOOL_MAX_TIMEOUT_MS = 9 * MINUTE_MS;
 /** The longest a plugin's sandbox job may be given: an Unreal plugin's package takes up to 45 minutes. */
 export const PLUGIN_SANDBOX_MAX_TIMEOUT_MS = 60 * MINUTE_MS;
 /** How many of one plugin's sandbox jobs may run at once; another is refused until one ends. */

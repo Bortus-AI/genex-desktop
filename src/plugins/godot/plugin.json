@@ -1,7 +1,7 @@
 {
   "apiVersion": 3,
   "id": "godot",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "icon": "icon.svg",
   "name": "Godot",
   "publisher": "Genex",
@@ -34,6 +34,7 @@
     },
     {
       "name": "new-game",
+      "timeoutMs": 540000,
       "description": "Make this game's Godot project from a template, in the game's godot/ folder: 2d (a player square that moves, a Camera2D) or 3d (a capsule player that walks and jumps, a floor, a sky and a hero camera). Use it once, when the user picks Godot for a game with no project yet. It needs Godot 4 installed; it refuses when the game already has a Godot project.",
       "parameters": {
         "type": "object",
@@ -55,6 +56,7 @@
     },
     {
       "name": "check",
+      "timeoutMs": 540000,
       "description": "Import this game's Godot project and load every script, scene and resource in it, so Godot names each parse error, missing file and broken reference with its file and line. Call it after every change; fix what it finds before you say a change works. Changes nothing in the project but Godot's .godot cache.",
       "parameters": {
         "type": "object",
@@ -64,6 +66,7 @@
     },
     {
       "name": "run-scene",
+      "timeoutMs": 540000,
       "description": "Play a scene of this game's Godot project headless for a few seconds of game time at a fixed 60 frames a second, pressing keys when you give them, and answer what it printed (print()) and the errors it raised, by file and line. Use it to see that game logic and controls run; it shows nothing.",
       "parameters": {
         "type": "object",
@@ -86,6 +89,7 @@
     },
     {
       "name": "screenshot",
+      "timeoutMs": 540000,
       "description": "See this game playing: play a scene of its Godot project in a window off the screen, press keys when you give them, and answer what each camera in the genex_shot group sees (else the scene's own camera) at a moment of play, as pictures you look at; frames adds a short recording up to that moment. Use it to check controls, motion and what a player sees.",
       "parameters": {
         "type": "object",
@@ -116,6 +120,7 @@
     },
     {
       "name": "class-reference",
+      "timeoutMs": 540000,
       "description": "Godot's API exactly as the installed version has it: ask for a class (CharacterBody3D) to get what it extends and all its properties, methods with their types, signals and constants; ask for a word (velocity) to get the classes and members whose names hold it. Use it instead of guessing from older Godot versions.",
       "parameters": {
         "type": "object",
@@ -130,15 +135,32 @@
     },
     {
       "name": "web-export",
+      "timeoutMs": 540000,
       "facts": ["godot-project"],
-      "description": "Export the game for the web with Godot's own Web export into web/ at the game's root: Live's Web game tab plays it and Publish puts it online. Call it when the person wants to play the game in Genex's web preview or publish it, and again after changing the project. Needs Godot's Web export template for this Godot version (Editor → Manage Export Templates in Godot).",
+      "description": "Export the game for the web with Godot's own Web export into web/ at the game's root: Live's Web game tab plays it and Publish puts it online. Call it when the person wants to play the game in Genex's web preview or publish it, and again after changing the project. It fetches Godot's Web export template for this Godot version when it is missing (10 MB).",
       "parameters": {
         "type": "object",
         "properties": {}
       }
     },
     {
+      "name": "export-templates",
+      "timeoutMs": 540000,
+      "facts": ["godot-project"],
+      "description": "Get Godot's export templates for this Godot version so Godot's own command line can export the game as an app: web, windows and mac (comma-separated; all three when left out). Genex fetches only those templates from Godot's own release (web 10 MB, Windows 40 MB, Mac 125 MB) into the person's templates folder; on Windows it also puts them where Genex's sandbox, and so your shell, reads them. For mac it sets project.godot to import ETC2/ASTC textures, which a Mac export needs. Call it once before exporting an app with godot --headless --export-release; for the web, call web-export instead, which fetches its own.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "platforms": {
+            "type": "string",
+            "description": "The platforms to export for: web, windows, mac, comma-separated. All three when left out."
+          }
+        }
+      }
+    },
+    {
       "name": "multiplayer",
+      "timeoutMs": 540000,
       "facts": ["godot-project"],
       "description": "Make this Godot game playable online with Genex multiplayer, on the web and in native builds alike (web and native players meet in the same rooms): adds Genex's multiplayer addon and its GenexMultiplayer autoload, the Colyseus GDExtension native builds connect with (a one-time download, about 100 MB, kept by Genex), the game's Genex project in project.godot's [genex] section, its matchmaking in genex.json, and Genex's Web preset loading the multiplayer bridge. Call it once when the person wants people to play together, then read the godot-multiplayer skill and write the online play; call it again with slug after the first publish. Never add npm, a package.json or an HTML shell to a Godot game for this.",
       "parameters": {
@@ -158,6 +180,7 @@
     },
     {
       "name": "set-up",
+      "timeoutMs": 540000,
       "description": "Set this game's existing Godot project up for Genex's play, so Genex's computer tool, playtesters and judges can start it, press keys, point, step its clock and read its state: adds Genex's addon (addons/genex, a script that sleeps unless Genex starts the game) and its autoload, bin/play and studio.json's runtime. A game New Godot game made is set up already. The person confirms first.",
       "parameters": {
         "type": "object",

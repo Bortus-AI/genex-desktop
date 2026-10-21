@@ -8,7 +8,7 @@
  * and open it in the person's own Godot editor, which Genex never drives.
  */
 import { execFile } from "node:child_process";
-import { mkdir, readdir, realpath, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -43,6 +43,13 @@ import {
   usableGodot,
   versionName,
 } from "./find-godot.ts";
+import {
+  ExportPlatform,
+  ExportTemplate,
+  fetchTemplates,
+  PLATFORM_TEMPLATES,
+  withMacTextures,
+} from "./export-templates.ts";
 import { checkedCount, dataCopied, isError, MAX_PROBLEMS, problemLines, readProblems } from "./godot-output.ts";
 import {
   checkCall,
@@ -55,7 +62,7 @@ import {
   playCall,
   runCall,
 } from "./godot-run.ts";
-import { GAME_PROJECT_FOLDER, projectScene } from "./game-project.ts";
+import { GAME_PROJECT_FOLDER, PROJECT_FILE, projectScene } from "./game-project.ts";
 import {
   createGodotInstaller,
   type GodotInstallDeps,
@@ -135,6 +142,7 @@ export const GodotTool = {
   SetUp: "set-up",
   ShowSteps: "show-steps",
   Multiplayer: "multiplayer",
+  ExportTemplates: "export-templates",
 } as const;
 type GodotTool = (typeof GodotTool)[keyof typeof GodotTool];
 const TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(GodotTool));
@@ -192,11 +200,12 @@ const MESSAGE = {
   NotChecked: "Godot stopped before its check finished: the problems above are what it found.",
   TimedOut: "Godot didn't finish in time and was stopped.",
   NoStills: "Godot saved no stills: check that the scene loads (godot__check) and has a camera.",
+  NoStillsBecause: (lines: readonly string[]) => `Godot saved no stills. It said: ${lines.join(" | ")}`,
   CheckNote: (count: number, lines: readonly string[]) =>
     `Godot's check found ${count} ${count === 1 ? "problem" : "problems"}: ${lines.slice(0, NOTED_PROBLEMS).join(" | ")}${count > NOTED_PROBLEMS ? ` (and ${count - NOTED_PROBLEMS} more)` : ""}`,
   Web: {
-    NoTemplates: (version: string) =>
-      `Godot ${version}'s Web export template isn't installed on this computer. Tell the person to open the project in Godot (the Godot button above the game), choose Editor → Manage Export Templates and press Download and Install, then export again.`,
+    NoTemplates: (version: string, why: string) =>
+      `Godot ${version}'s Web export template isn't on this computer and Genex couldn't fetch it: ${why} If it keeps failing, tell the person to open the project in Godot (the Godot button above the game), choose Editor → Manage Export Templates and press Download and Install, then export again.`,
     Link: "The web export's folder or the project's export_presets.cfg is a link, so Genex won't write through it.",
     Failed: (lines: readonly string[]) =>
       `Godot's web export didn't finish${lines.length ? `: ${lines.join(" | ")}` : ""}. Fix what it names (godot__check helps), then export again.`,
@@ -225,6 +234,22 @@ const MESSAGE = {
       "On Windows, Genex downloads Godot itself: press Get Godot in the Godot panel, or Do it for me on the setup card.",
     DownloadIsWindows:
       "Genex downloads Godot this way on Windows only; on a Mac, Do it for me installs it in Applications.",
+  },
+  Templates: {
+    BadPlatforms: `platforms is web, windows or mac, comma-separated (all three when left out).`,
+    Ready: (version: string, platforms: readonly string[], fetched: readonly string[], windows: boolean) =>
+      [
+        `Godot ${version}'s export templates for ${platforms.join(", ")} are in place${fetched.length ? ` (fetched now: ${fetched.join(", ")})` : ""}.`,
+        windows
+          ? "They are also where Genex's sandbox (and so your shell) reads them, so Godot's command line in your shell can export with them."
+          : "",
+        platforms.includes(ExportPlatform.Mac)
+          ? "project.godot imports ETC2/ASTC textures, as a Mac export needs. On Windows Godot exports a Mac app only as a .zip."
+          : "",
+        "For the web, call godot__web-export instead: it writes web/, which Live and Publish read.",
+      ]
+        .filter(Boolean)
+        .join(" "),
   },
   SetUpQuestion: "Set this Godot game up for Genex's play?",
   SetUpDetail: (where: string) =>
@@ -467,8 +492,9 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
   if (!game) throw new Error(MESSAGE.NoGameOpen);
   const project = await requireProject(context);
   const install = await requireGodot(deps, context);
-  if (!(await hasWebTemplate(deps.env.dataHome, install)))
-    throw new Error(MESSAGE.Web.NoTemplates(versionName(install.version)));
+  await ensureTemplates(deps, install, [ExportTemplate.Web]).catch((error: unknown) => {
+    throw new Error(MESSAGE.Web.NoTemplates(versionName(install.version), errorMessage(error)));
+  });
   const multiplayer = await usesMultiplayer(project);
   await addWebPreset(project, MESSAGE.Web.Link, { multiplayer });
   const folder = await prepareWebFolder(game, MESSAGE.Web.Link);
@@ -494,12 +520,66 @@ async function webExport(deps: GodotBackendDeps, context: PluginContext): Promis
 }
 
 /** Windows: the person's Web template put in the sandbox user's own data folder, or why it couldn't be, before Godot exports. */
-async function placeTemplate(deps: GodotBackendDeps, install: GodotInstall, project: string, job: GodotJobScope) {
-  const call = templateCopyCall(project, deps.scripts, deps.env.dataHome, install);
+async function placeTemplate(
+  deps: GodotBackendDeps,
+  install: GodotInstall,
+  project: string,
+  job: GodotJobScope,
+  name: string = ExportTemplate.Web,
+) {
+  const call = templateCopyCall(project, deps.scripts, deps.env.dataHome, install, name);
   const copy = await deps.run(install.binary, call, job);
   const placed = dataCopied(copy.output);
   if (copy.timedOut) throw new Error(MESSAGE.Web.NoTemplateCopy(MESSAGE.TimedOut));
   if (!placed.copied) throw new Error(MESSAGE.Web.NoTemplateCopy(placed.why || MESSAGE.Web.NothingSaid));
+}
+
+/**
+ * The templates asked for in the person's templates folder for the Godot in use: there already, or
+ * fetched now from Godot's own release (`export-templates.ts`); answers the ones fetched.
+ */
+function ensureTemplates(deps: GodotBackendDeps, install: GodotInstall, names: readonly ExportTemplate[]) {
+  const { folder } = webTemplates(deps.env.dataHome, install);
+  return fetchTemplates((deps.install ?? systemInstallDeps(deps.env)).fetch, install, folder, names);
+}
+
+/** The platforms an agent's `export-templates` names: web, windows, mac, comma-separated; all three when none. */
+function platformsArg(value: unknown): ExportPlatform[] {
+  const all = Object.values(ExportPlatform);
+  if (value === undefined || value === "") return all;
+  const asked = String(value)
+    .split(",")
+    .map((word) => word.trim().toLowerCase())
+    .filter(Boolean);
+  const known = (word: string): word is ExportPlatform => (all as readonly string[]).includes(word);
+  if (asked.length === 0 || !asked.every(known)) throw new Error(MESSAGE.Templates.BadPlatforms);
+  return [...new Set(asked)] as ExportPlatform[];
+}
+
+/**
+ * The agent's `export-templates`: Godot's templates for the platforms named, fetched into the
+ * person's templates folder when missing; on Windows also put where the sandbox user's Godot (and
+ * the agent's own shell) reads them; and for a Mac export, project.godot importing ETC2/ASTC.
+ */
+async function exportTemplates(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
+  const project = await requireProject(context);
+  const install = await requireGodot(deps, context);
+  const platforms = platformsArg(args.platforms);
+  const names = platforms.flatMap((platform) => PLATFORM_TEMPLATES[platform]);
+  const fetched = await ensureTemplates(deps, install, names);
+  const windows = deps.env.platform === "win32";
+  const job = jobOf(context, project);
+  if (windows) for (const name of names) await placeTemplate(deps, install, project, job, name);
+  if (platforms.includes(ExportPlatform.Mac)) await importMacTextures(project);
+  return MESSAGE.Templates.Ready(versionName(install.version), platforms, fetched, windows);
+}
+
+/** project.godot set to import ETC2/ASTC textures, never through a link. */
+async function importMacTextures(project: string): Promise<void> {
+  const file = path.join(project, PROJECT_FILE);
+  const settings = await readFile(file, "utf8");
+  const next = withMacTextures(settings);
+  if (next !== settings) await writeFileNoFollow(file, next);
 }
 
 /** The most of a project's files `keep-web-build` looks at for the newest change. */
@@ -536,7 +616,13 @@ async function keepWebBuild(deps: GodotBackendDeps, context: PluginContext): Pro
   const game = gameFolderOf(context);
   const project = game ? await projectOf(context) : null;
   const install = usableGodot(await godots(deps, context));
-  if (!game || !project || !install || !(await hasWebTemplate(deps.env.dataHome, install))) return {};
+  if (!game || !project || !install) return {};
+  // Without a Web template a turn's end fetches it once, and says nothing when it can't.
+  const template = await ensureTemplates(deps, install, [ExportTemplate.Web]).then(
+    () => true,
+    () => false,
+  );
+  if (!template) return {};
   const pack = await stat(path.join(game, WEB_EXPORT_FOLDER, WEB_PACK)).catch(() => null);
   if (pack && pack.mtimeMs >= (await newestChange(project))) return {};
   try {
@@ -610,6 +696,12 @@ function recordingCount(args: Record<string, unknown>): number {
   return Number.isInteger(asked) && asked >= 2 ? Math.min(asked, HOOK_RECORDING_MAX) : 0;
 }
 
+/** Why a capture saved nothing: Godot's own errors when it printed any, else where to look. */
+function noStills(output: string): string {
+  const errors = readProblems(output).filter(isError);
+  return errors.length ? MESSAGE.NoStillsBecause(problemLines(errors.slice(0, NOTED_PROBLEMS))) : MESSAGE.NoStills;
+}
+
 /** The agent's `screenshot`: stills at a moment of play (after keys, when asked), and a recording up to it; the model sees them. */
 async function screenshot(deps: GodotBackendDeps, args: Record<string, unknown>, context: PluginContext) {
   const project = await requireProject(context);
@@ -630,7 +722,7 @@ async function screenshot(deps: GodotBackendDeps, args: Record<string, unknown>,
     hero: false,
   };
   const taken = await takeStills({ ...deps, storage }, install, project, request, job);
-  if (taken.stills.length === 0) throw new Error(MESSAGE.NoStills);
+  if (taken.stills.length === 0) throw new Error(noStills(taken.output));
   return stillsForAgent(taken);
 }
 
@@ -949,16 +1041,19 @@ const macSetup = (installer: GodotInstaller): Setup => ({
  * Windows's: the host's install of the pinned Godot (`download-godot`, which the person confirmed),
  * awaited to its end, its record the card's progress; a failure is on that record, never thrown here.
  */
-const windowsSetup: Setup = {
+const windowsSetup = (deps: GodotBackendDeps): Setup => ({
   job: async (context) =>
     windowsJob(await context.host(HostService.RuntimeInstallation, GODOT_RUNTIME).catch(() => null)),
   install: async (context) => {
     await context.host(HostService.RuntimeInstall, GODOT_RUNTIME).catch(() => undefined);
+    // With Godot, its Web template, so the game plays in Live and publishes without a trip to Godot's editor.
+    const installed = usableGodot(await godots(deps, context));
+    if (installed) await ensureTemplates(deps, installed, [ExportTemplate.Web]).catch(() => undefined);
   },
   stop: async (context) => {
     await context.host(HostService.RuntimeCancelInstall, GODOT_RUNTIME).catch(() => undefined);
   },
-};
+});
 
 /** Godot's setup card for this computer now, the install under way, and the game's Don't use Godot. */
 async function setupSteps(deps: GodotBackendDeps, setup: Setup, context: PluginContext) {
@@ -1006,7 +1101,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
   const windows = deps.env.platform === "win32";
   // The install goes on across calls; every call names the same plugin storage.
   const setupOf = async (context: PluginContext): Promise<Setup> => {
-    if (windows) return windowsSetup;
+    if (windows) return windowsSetup(deps);
     storageRoot = await storageOf(context);
     installing ??= createGodotInstaller(deps.install ?? systemInstallDeps(deps.env), async () => storageRoot);
     return macSetup(installing);
@@ -1060,6 +1155,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     },
     [GodotTool.ShowSteps]: async (_args, context) => showSteps(deps, await setupOf(context), context),
     [GodotTool.Multiplayer]: (args, context) => setUpMultiplayer(deps, args, context),
+    [GodotTool.ExportTemplates]: (args, context) => exportTemplates(deps, args, context),
   };
   return {
     async action(name, args, context) {

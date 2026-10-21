@@ -11,6 +11,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
 import { GodotTool } from "../../src/plugins/godot/backend.ts";
+import { withMacTextures } from "../../src/plugins/godot/export-templates.ts";
 import { GODOT_DOWNLOAD_URL, getGodotLaunch, isEditorOf } from "../../src/plugins/godot/editor.ts";
 import { GodotJob } from "../../src/plugins/godot/godot-run.ts";
 import type { PluginManifest } from "../../src/shared/plugins.ts";
@@ -119,6 +120,36 @@ describe("making a Godot game", () => {
     await assert.rejects(tool(none, GodotTool.NewGame, { template: "3d", name: "Valley" }), /isn't installed/);
     assert.deepEqual(await promisify(readdir)(none.gameDir), []);
   });
+});
+
+describe("a Mac export's textures in project.godot", () => {
+  it("turns ETC2/ASTC on where it says off, under [rendering], or in a section of its own", () => {
+    const on = "textures/vram_compression/import_etc2_astc=true";
+    const table: Array<[string, string]> = [
+      [`[rendering]\n\n${on}\n`, `[rendering]\n\n${on}\n`],
+      ["[rendering]\n\ntextures/vram_compression/import_etc2_astc=false\n", `[rendering]\n\n${on}\n`],
+      [
+        '[rendering]\n\nrenderer/rendering_method="mobile"\n',
+        `[rendering]\n\n${on}\nrenderer/rendering_method="mobile"\n`,
+      ],
+      [
+        'config_version=5\n\n[application]\n\nconfig/name="A"\n',
+        `config_version=5\n\n[application]\n\nconfig/name="A"\n\n[rendering]\n\n${on}\n`,
+      ],
+    ];
+    for (const [settings, expected] of table) assert.equal(withMacTextures(settings), expected, settings);
+  });
+});
+
+describe("a new Godot game's settings", () => {
+  for (const template of ["2d", "3d"]) {
+    it(`imports ${template} textures a Mac export can use (ETC2/ASTC)`, async () => {
+      const fixture = await godotBackendFixture();
+      await tool(fixture, GodotTool.NewGame, { template, name: "Valley" });
+      const settings = await readFile(path.join(fixture.gameDir, "godot", "project.godot"), "utf8");
+      assert.match(settings, /^\[rendering\]$[^[]*^textures\/vram_compression\/import_etc2_astc=true$/m);
+    });
+  }
 });
 
 describe("the agent's Godot tools", () => {

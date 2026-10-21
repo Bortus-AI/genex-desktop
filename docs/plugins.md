@@ -159,6 +159,7 @@ and the Plugins page — no polling is needed for a change to show.
 | `tools[]` | 1 | `{name, description, parameters}`; scalar properties only; agent-invoked as `<id>__<name>` |
 | `tools[].confirmation` | 2 | 1–300 characters. The tool needs the user's consent before it runs; see the consent model below |
 | `tools[].confirmationInput` | 3 | `{parameter, label}`, with `confirmation`: one of the tool's string parameters the person may edit on the card, under a one-line label of at most 60 characters; see the consent model below |
+| `tools[].timeoutMs` | 3 | 1,000–540,000: the longest one call may run in the backend when that is longer than the host's 190-second ceiling (a game engine's import or export), within an agent's own call deadline |
 | `tools[].host` | 3 | A program Studio runs for the tool instead of the backend; reserved for the bundled Genex plugin (see [First-party privileges](#first-party-privileges)) |
 | `tools[].facts`, `tools[].makes` | 3 | The facts of the games whose sessions get the tool, and (agent tools) the facts it makes in a game's folder; see [Scope by facts](#scope-by-facts) |
 | `skills[]` | 1 | Guidance for agents while the plugin is enabled: inline `{name, text}`, or (API 3) a file skill `{name, summary, file, references?}`, either (API 3) with `facts` (or the older `engines`) and `tools`; see [Skills](#skills) |
@@ -3386,12 +3387,14 @@ still needs the whole project, not staged inputs: each job reads Genex's shipped
 only the project (Godot's `.godot/` cache) and the job's own folder, gets a private home (a game's
 `user://` and Godot's caches) and a deadline, and a still is drawn in a window off every screen
 (`gpu`). On Windows each job is a host sandbox job instead (`sandbox.run`, `windowsRunner`):
-ProcessSandbox as the sandbox user, reading Godot's folder and Genex's scripts, writing the project
+ProcessSandbox as the sandbox user, reading Godot's folder, writing the project
 (one inside the game: a project linked from elsewhere is refused there, and the panel offers and
 links only projects inside the game); at most two at once, the host's limit, the others waiting
 their turn;
 a folder it writes outside the game (a capture's stills, the class reference) waits in the
-project's `.godot/genex-jobs/` (with no project yet, as for the class reference, in a folder of the
+project's `.godot/genex-jobs/`, and so do Genex's own scripts (the plugin's package is in the
+person's profile, which the sandbox user can't read) and any other file it reads from outside the
+game (with no project yet, as for the class reference, in a folder of the
 job's own at the game's root, `genex-godot-job-*`, which the game's `.gitignore` names so no save
 point keeps it; a stage Windows still holds is removed again a few times, and what a crash left is
 cleared before the plugin's first job in that game) and is copied out (a file it reads from outside,
@@ -3441,8 +3444,15 @@ version (`export_templates/<version>.<status>[.mono]/web_nothreads_release.zip`,
 Godot's Export Template Manager in Godot's data folder, a Mac's Application Support or Windows's
 `%APPDATA%`) linked read-only into a Mac job's private home; on Windows a Godot job of Genex's
 (`genex_data.gd`) first copies it into the sandbox user's own data folder, where that user's Godot
-looks, and the export stops with a plain message when that copy fails; without the template the tool
-is refused before Godot runs. `keep-web-build` at `turn.end` and `restore.after` makes it again
+looks, and the export stops with a plain message when that copy fails. A missing template is
+fetched first (`export-templates.ts`): for an official stable Godot, the release's templates archive
+is read by byte ranges (its central directory, then only the template, 10 MB of 1.3 GB), each file
+checked against the archive's CRC-32 and size; when that fails the tool is refused before Godot
+runs, naming Godot's Template Manager. Windows's Do it for me fetches the Web template with Godot.
+`export-templates {platforms}` (web, windows, mac) does the same for an app export the agent runs
+with Godot's command line, puts them where the sandbox user's Godot reads them on Windows, and for
+mac sets `textures/vram_compression/import_etc2_astc` (new games from either template have it).
+The tools that run Godot declare `timeoutMs` of nine minutes. `keep-web-build` at `turn.end` and `restore.after` makes it again
 whenever the project changed since the last build (its `.pck` older than the project's newest file,
 `.godot/` left out), so Live's Web game tab and Publish follow the game; with no Web template it does
 nothing, and a failure is a note. The plugin's `detect` names the folder `godot-web-export` (a folder
