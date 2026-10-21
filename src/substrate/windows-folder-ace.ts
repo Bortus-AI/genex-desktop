@@ -245,7 +245,8 @@ function Entry($flags, $qualifier, $mask, $sid) {
 # folder). Windows matches those only in an app container's second access check, and an app
 # container gets only what its user is allowed as well.
 function Unreached($sid) {
-  ($UNREACHED -contains $sid) -or $sid.Value.StartsWith('S-1-15-2-') -or $sid.Value.StartsWith('S-1-15-3-')
+  $ordinal = [StringComparison]::Ordinal
+  ($UNREACHED -contains $sid) -or $sid.Value.StartsWith('S-1-15-2-', $ordinal) -or $sid.Value.StartsWith('S-1-15-3-', $ordinal)
 }
 # Whether the path passes an allow down to anyone the sandbox user may be (Unreached).
 function PassesAllowDown($acl) {

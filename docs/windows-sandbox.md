@@ -141,7 +141,8 @@ the setup screen opens on `git-missing`. What differs from macOS:
   `User Data` refused at every start, so the agents never started) and the same check finds the
   sandbox user can open nothing at the path or under it, the start goes on without that deny, and
   the log says so (`left … as it is`). The deny stays recorded, so every start asks for it and
-  checks again; one refused anywhere else still stops the start. A per-command
+  checks again. A deny refused on a path the sandbox user could open, or refused for any other
+  reason, still stops the start. A per-command
   deny Genex already sets is not sent again. Without the group, where PowerShell cannot run the
   batch or the running user holds the SID, srt-win sets every grant and deny as before, and the
   log says so (`own entries off`). srt-win keeps a missing deny path (it makes its placeholder), a

@@ -759,18 +759,16 @@ describe("an entry on one folder alone, on Windows", {
   });
 
   /**
-   * Make `sid` the owner of `dir` and of everything under it. Only SeRestorePrivilege may name
-   * someone else, and SeTakeOwnershipPrivilege opens a folder the runner may only read: the hosted
-   * runner is elevated and holds both, disabled until asked for (icacls /setowner left them so).
+   * Token privileges and owners for the refusing fixtures, in C#: `Adjust` enables (2) or removes
+   * (4) one privilege of the PowerShell process and answers Windows' error (0 when done), `Own`
+   * sets a path's owner alone.
    */
-  const setOwner = (dir: string, sid: string) => {
-    const script = `$ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition @'
+  const TOKEN_HELPER = `Add-Type -TypeDefinition @'
 using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
-public static class GenexTestOwner {
+public static class GenexTestToken {
   [StructLayout(LayoutKind.Sequential, Pack = 4)]
   struct Privilege { public int Count; public long Luid; public int Attributes; }
   [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
@@ -778,12 +776,13 @@ public static class GenexTestOwner {
   [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool LookupPrivilegeValue(string system, string name, out long luid);
   [DllImport("advapi32.dll", SetLastError = true)] static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref Privilege state, int length, IntPtr previous, IntPtr returned);
   [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern uint SetNamedSecurityInfo(string name, int type, int info, byte[] owner, IntPtr group, IntPtr dacl, IntPtr sacl);
-  public static void Enable(string name) {
+  public static int Adjust(string name, int attributes) {
     IntPtr token;
-    if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) throw new Win32Exception();
-    var state = new Privilege { Count = 1, Attributes = 2 };
-    if (!LookupPrivilegeValue(null, name, out state.Luid)) throw new Win32Exception();
-    if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero) || Marshal.GetLastWin32Error() != 0) throw new Win32Exception(name);
+    if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) return Marshal.GetLastWin32Error();
+    var state = new Privilege { Count = 1, Attributes = attributes };
+    if (!LookupPrivilegeValue(null, name, out state.Luid)) return Marshal.GetLastWin32Error();
+    if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero)) return Marshal.GetLastWin32Error();
+    return Marshal.GetLastWin32Error();
   }
   public static void Own(string path, string sid) {
     var owner = new SecurityIdentifier(sid);
@@ -793,17 +792,50 @@ public static class GenexTestOwner {
     if (code != 0) throw new Win32Exception((int)code, path);
   }
 }
-'@
-[GenexTestOwner]::Enable('SeRestorePrivilege')
-[GenexTestOwner]::Enable('SeTakeOwnershipPrivilege')
+'@`;
+  /** The privileges that let an elevated account past a DACL: what the hosted runner holds and a person's PowerShell does not. */
+  const PAST_A_DACL = ["SeRestorePrivilege", "SeBackupPrivilege", "SeTakeOwnershipPrivilege", "SeSecurityPrivilege"];
+  /** Runs a PowerShell script, handed over as UTF-16 base64 so no quoting touches it. */
+  const powershellScript = (script: string, env: NodeJS.ProcessEnv) =>
+    execFileSync(
+      windowsPowerShell(),
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        Buffer.from(script, "utf16le").toString("base64"),
+      ],
+      { env: { ...process.env, ...env }, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  /**
+   * Make `sid` the owner of `dir` and of everything under it. Only SeRestorePrivilege may name
+   * someone else, and SeTakeOwnershipPrivilege opens a folder the runner may only read: the hosted
+   * runner is elevated and holds both, disabled until asked for (icacls /setowner left them so).
+   */
+  const setOwner = (dir: string, sid: string) => {
+    powershellScript(
+      `$ErrorActionPreference = 'Stop'
+${TOKEN_HELPER}
+foreach ($name in 'SeRestorePrivilege', 'SeTakeOwnershipPrivilege') {
+  $code = [GenexTestToken]::Adjust($name, 2)
+  if ($code -ne 0) { throw "could not enable $name ($code)" }
+}
 $paths = @($env:GENEX_OWNER_PATH) + @(Get-ChildItem -LiteralPath $env:GENEX_OWNER_PATH -Recurse -Force | ForEach-Object { $_.FullName })
-foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
-`;
-    const encoded = Buffer.from(script, "utf16le").toString("base64");
-    execFileSync(windowsPowerShell(), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
-      env: { ...process.env, GENEX_OWNER_PATH: dir, GENEX_OWNER_SID: sid },
-      stdio: "pipe",
-    });
+foreach ($p in $paths) { [GenexTestToken]::Own($p, $env:GENEX_OWNER_SID) }
+`,
+      { GENEX_OWNER_PATH: dir, GENEX_OWNER_SID: sid },
+    );
+  };
+  /**
+   * Runs the folder script as a person's PowerShell would: without {@link PAST_A_DACL}. With them,
+   * the runner's walk-now write (SetNamedSecurityInfoW) went through a folder that refused
+   * SetFileSecurityW, so a refusal there is tested only this way.
+   */
+  const withoutPrivileges = async (_file: string, args: string[], env: NodeJS.ProcessEnv) => {
+    const loader = Buffer.from(args.at(-1) ?? "", "base64").toString("utf16le");
+    const drop = PAST_A_DACL.map((name) => `[void][GenexTestToken]::Adjust('${name}', 4)`).join("\n");
+    return powershellScript(`${TOKEN_HELPER}\n${drop}\n${loader}`, env);
   };
   /**
    * A folder the person may read but whose entries they may not change: SYSTEM owns it and the
@@ -821,23 +853,20 @@ foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
   };
   /** A path's owner and DACL as SDDL, through PowerShell's Get-Acl (icacls /save leaves the owner out). */
   const ownerAndDacl = (target: string) =>
-    execFileSync(
-      windowsPowerShell(),
-      ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "(Get-Acl -LiteralPath $env:GENEX_ACL_PATH).Sddl"],
-      { env: { ...process.env, GENEX_ACL_PATH: target }, encoding: "utf8" },
-    ).trim();
+    powershellScript("(Get-Acl -LiteralPath $env:GENEX_ACL_PATH).Sddl", { GENEX_ACL_PATH: target }).trim();
   /** Give a {@link refusesChanges} folder back to the running user, as it inherits, so it can be removed. */
   const giveBack = (dir: string) => {
     setOwner(dir, runningUser());
     execFileSync("icacls", [dir, "/reset", "/T", "/C"], { stdio: "ignore" });
   };
   /** A start's own entries for denying `secret`, logging into `lines`. */
-  const startDenying = (root: string, secret: string, lines: string[], pid = 1) => {
+  const startDenying = (root: string, secret: string, lines: string[], options: Partial<OwnAclDeps> = {}) => {
     const denies = ownAclEntries(path.join(root, "holders"), {
       sid: async () => GUESTS,
-      pid,
+      pid: 1,
       alive: () => false,
       log: (line) => lines.push(line),
+      ...options,
     });
     return { denies, sync: () => denies.sync(routeWindowsDenies({ read: [secret], write: [] }).own) };
   };
@@ -867,7 +896,7 @@ foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
           lines.some((line) => line.includes(secret)),
           `the log names the folder left as it was: ${lines.join(" | ")}`,
         );
-        const next = startDenying(root, secret, lines, 2);
+        const next = startDenying(root, secret, lines, { pid: 2 });
         assert.equal(await next.sync(), true, "the next start tries again, and goes on again");
         await next.denies.revokeAll();
       } finally {
@@ -877,21 +906,79 @@ foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
     });
   }
 
-  it("still stops where Windows refuses a deny on a folder the sandbox user may list", async () => {
-    // Users may list the folder itself, though nothing under it: the walk can wait, so the deny is
-    // written on the folder alone (SetFileSecurityW), which Windows refuses. An entry passed down,
-    // or one deeper, makes the deny walk now through SetNamedSecurityInfoW, which the elevated
-    // runner's privileges let through where a person's would not.
-    const root = realpathSync.native(await tmpDir("folder-deny-refused-open-"));
-    const secret = path.join(root, "above", "User Data");
-    await mkdir(path.join(secret, "Default"), { recursive: true });
-    refusesChanges(secret, `*${USERS}:(RX)`);
-    const start = startDenying(root, secret, []);
+  it("lets a walk Windows refuses go where the sandbox user can open nothing, without the runner's privileges", async () => {
+    // A walk that runs now (here a deferred one run again) checks everything under the path itself.
+    const root = realpathSync.native(await tmpDir("folder-deny-refused-walk-"));
+    const secret = path.join(root, "User Data");
+    await mkdir(path.join(secret, "Default", "Network"), { recursive: true });
+    await writeFile(path.join(secret, "Default", "Network", "Cookies"), "cookies");
+    refusesChanges(secret);
+    const before = ownerAndDacl(secret);
     try {
-      await assert.rejects(start.sync(), /could not set the sandbox user's entries on .*User Data/);
+      const outcomes = await folderOwnEditor({ powershell: withoutPrivileges })([
+        { ...denyLater(secret), walk: OwnWalk.Again },
+      ]);
+      const [outcome] = outcomes ?? [];
+      assert.equal(outcome?.ok && typeof outcome.refused, "string", JSON.stringify(outcomes));
+      assert.equal(ownerAndDacl(secret), before, "the folder is left as it was");
     } finally {
       giveBack(secret);
-      await start.denies.revokeAll();
+    }
+  });
+
+  // Each of these opens something to the sandbox user, so a deny Windows refuses there still stops
+  // the start. An entry on the folder alone lets the walk wait, so the deny is written on the folder
+  // alone (SetFileSecurityW), which Windows refuses; one passed down or deeper walks now, refused
+  // only without the runner's privileges.
+  const refusedOpen: Array<[string, string[], Partial<OwnAclDeps>]> = [
+    ["Everyone may list it", ["*S-1-1-0:(RX)"], {}],
+    ["Authenticated Users may list it", ["*S-1-5-11:(RX)"], {}],
+    ["Users may list it", [`*${USERS}:(RX)`], {}],
+    ["the sandbox users' group itself may list it", [`*${GUESTS}:(RX)`], {}],
+    ["a SID that only looks like an app container's may list it", ["*S-1-15-21-1-2-3-4:(RX)"], {}],
+    [
+      "Users may open everything in it",
+      [`*${USERS}:(OI)(CI)(RX)`],
+      { edit: folderOwnEditor({ powershell: withoutPrivileges }) },
+    ],
+  ];
+  for (const [shape, also, options] of refusedOpen) {
+    it(`still stops where Windows refuses a deny on a folder ${shape}`, async () => {
+      const root = realpathSync.native(await tmpDir("folder-deny-refused-open-"));
+      const secret = path.join(root, "above", "User Data");
+      await mkdir(path.join(secret, "Default"), { recursive: true });
+      refusesChanges(secret, ...also);
+      const before = ownerAndDacl(secret);
+      const start = startDenying(root, secret, [], options);
+      try {
+        await assert.rejects(start.sync(), /could not set the sandbox user's entries on .*User Data/);
+        assert.equal(ownerAndDacl(secret), before, "the folder is left as it was");
+      } finally {
+        giveBack(secret);
+        await start.denies.revokeAll();
+      }
+    });
+  }
+
+  it("still refuses a grant or a guard Windows refuses, even where the sandbox user can open nothing", async () => {
+    const root = realpathSync.native(await tmpDir("folder-grant-refused-"));
+    const secret = path.join(root, "User Data");
+    await mkdir(path.join(secret, "Default"), { recursive: true });
+    refusesChanges(secret);
+    const before = ownerAndDacl(secret);
+    const own = { dir: secret, sid: GUESTS, op: FolderAceOp.Own, deny: null, walk: OwnWalk.Later } as const;
+    try {
+      const [aboveGrant] = await folderAceEditor()([{ dir: secret, sid: GUESTS, op: FolderAceOp.Grant }]);
+      assert.equal(aboveGrant?.ok, false, "a grant above the grants");
+      const [guard] = (await folderOwnEditor()([{ ...own, guard: true, grant: null, allows: false }])) ?? [];
+      assert.equal(guard?.ok, false, "a guard");
+      const granted = await folderOwnEditor({ powershell: withoutPrivileges })([
+        { ...own, guard: false, grant: GrantAccess.Read, allows: true },
+      ]);
+      assert.equal(granted?.[0]?.ok, false, `a folder's grant: ${JSON.stringify(granted)}`);
+      assert.equal(ownerAndDacl(secret), before, "the folder is left as it was");
+    } finally {
+      giveBack(secret);
     }
   });
 
