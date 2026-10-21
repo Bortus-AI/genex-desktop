@@ -102,7 +102,6 @@ export const saved = (body: string): PlayComment => ({
 export type RigOverrides = Partial<PlayViewerDeps["gallery"]> & {
   web?: string;
   comments?: Partial<PlayViewerDeps["comments"]>;
-  barFades?: boolean;
   barFocused?: () => boolean;
   coin?: Partial<ViewerCoin>;
   /** A web game's native app on this computer, for the bar's pill. */
@@ -165,12 +164,11 @@ export function rig(overrides: RigOverrides = {}) {
     window: {
       contentSize: () => WINDOW,
       buttons: (visible) => log.push(`buttons ${visible ? "shown" : "hidden"}`),
-      barFades: overrides.barFades ?? true,
     },
     game: {
-      open: (url) => {
+      open: (url, _slug, bounds) => {
         opened.push(url);
-        log.push("game.open");
+        log.push(`game.open ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`);
       },
       show: (bounds) => log.push(`game.show ${bounds.x},${bounds.y} ${bounds.width}x${bounds.height}`),
       hide: () => log.push("game.hide"),

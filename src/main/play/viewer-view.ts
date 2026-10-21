@@ -1,7 +1,8 @@
 /**
  * The Play viewer's views in the studio window (`viewer.ts` decides what they do): a fresh sandboxed
- * view per game in Play's own session, across the whole window, and above it the bar's layer, a
- * transparent view of the studio's own page (`renderer/play-bar.html`) made once and kept. The game's
+ * view per game in Play's own session, below the bar's strip (across the whole window while its page
+ * is full screen), and above it the bar's layer, a transparent view of the studio's own page
+ * (`renderer/play-bar.html`) made once and kept. The game's
  * page may move between Genex games' addresses and Genex's sign-in hop; any other link opens in the
  * browser, except a coin purchase the game asks for, which the viewer shows as its own sheet
  * (`purchase-window.ts`). Play's session grants only mouse lock, full screen and clipboard writes, and
@@ -157,12 +158,13 @@ export interface PlayViews {
 export const playViewsOf = (win: BrowserWindow): PlayViews | null => viewsOf.get(win) ?? null;
 
 /**
- * What the game's view reports to the viewer: its keys and pointer, how its page loads, its
+ * What the game's view reports to the viewer: its keys, how its page loads, its full screen, its
  * microphone and the purchases it asks for; and what it asks the viewer before catching one.
  */
 interface ViewerEvents {
   key(input: FullScreenKey): void;
-  pointer(x: number, y: number): void;
+  /** The page took the screen in full screen, or gave it back. */
+  fullScreen(on: boolean): void;
   loaded(): void;
   failed(): void;
   /** The page committed a new document: it reloaded, or moved to another Genex game. */
@@ -246,18 +248,6 @@ function guardNavigation(contents: WebContents, play: Session, deps: PlayViewDep
     purchase: events.purchase,
     page: (id) => webContents.fromId(id),
     clock: TIMERS,
-  });
-}
-
-/**
- * Where the pointer is over the game, from the mouse moves the view is sent. A game holding the mouse
- * (pointer lock) is still sent moves, all at the point where the lock began.
- */
-function hearPointer(contents: WebContents, mine: () => boolean, hear: (x: number, y: number) => void): void {
-  contents.on("input-event", (_event, input) => {
-    if (!mine() || input.type !== "mouseMove") return;
-    const { x, y } = input as Electron.MouseInputEvent;
-    if (typeof x === "number" && typeof y === "number") hear(x, y);
   });
 }
 
@@ -346,8 +336,8 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void, hear
 }
 
 /**
- * The game's view: a fresh one per game in Play's session, across the window under the bar's layer,
- * reporting how its page loads, where the pointer is and how its microphone is, with the embed SDK's
+ * The game's view: a fresh one per game in Play's session, below the bar's layer, reporting how its
+ * page loads, when it takes the screen in full screen and how its microphone is, with the embed SDK's
  * guest popover hidden on every page it shows.
  */
 function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, raiseBar: () => void) {
@@ -358,7 +348,7 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
     current = null;
     dropGameView<WebContentsView>(win, view);
   };
-  const open = (url: string): void => {
+  const open = (url: string, bounds: Rect): void => {
     close();
     const view = new WebContentsView({
       webPreferences: {
@@ -374,9 +364,8 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
     });
     view.setBackgroundColor(GAME_BACKGROUND);
     view.setVisible(false);
-    // The page boots at the size it plays at, the whole window, so a game that sizes its canvas once starts right.
-    const [width = 0, height = 0] = win.getContentSize();
-    view.setBounds({ x: 0, y: 0, width, height });
+    // The page boots at the size it plays at, so a game that sizes its canvas once starts right.
+    view.setBounds(bounds);
     win.contentView.addChildView(view);
     raiseBar();
     current = view;
@@ -384,7 +373,8 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
     const mine = () => current === view;
     micGates.set(contents, micGate());
     hearMic(contents, mine, events.mic);
-    hearPointer(contents, mine, events.pointer);
+    contents.on("enter-html-full-screen", () => mine() && events.fullScreen(true));
+    contents.on("leave-html-full-screen", () => mine() && events.fullScreen(false));
     // A purchase is caught only for the game on screen.
     guardNavigation(contents, play, deps, {
       ...events,
@@ -411,7 +401,7 @@ function gameView(win: BrowserWindow, deps: PlayViewDeps, events: ViewerEvents, 
   };
   return {
     view: (): WebContentsView | null => current,
-    open,
+    open: (url: string, _slug: string, bounds: Rect): void => open(url, bounds),
     show: (bounds: Rect): void => {
       current?.setBounds(bounds);
       current?.setVisible(true);
@@ -436,7 +426,7 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
   let viewer: PlayViewer | null = null;
   const events: ViewerEvents = {
     key: (input) => viewer?.key(input),
-    pointer: (x, y) => viewer?.pointer(x, y),
+    fullScreen: (on) => viewer?.fullScreen(on),
     loaded: () => viewer?.loaded(),
     failed: () => viewer?.failed(),
     navigated: () => viewer?.navigated(),
@@ -464,8 +454,6 @@ export function wirePlayViewer(deps: PlayViewDeps): PlayViewer {
       buttons: (visible) => {
         if (process.platform === StudioPlatform.Mac && !win.isDestroyed()) win.setWindowButtonVisibility(visible);
       },
-      // Windows and Linux draw their window controls over the bar's corner and cannot hide them with it.
-      barFades: process.platform === StudioPlatform.Mac,
     },
     game,
     // The game's view loses the keyboard to the bar, and with it any mouse lock it held.
