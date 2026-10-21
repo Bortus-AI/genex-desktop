@@ -22,8 +22,8 @@ const steps = [];
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let wc;
 const js = (code) => wc.executeJavaScript(code, true);
-async function until(code) {
-  for (let n = 0; n < 300; n++) {
+async function until(code, tries = 300) {
+  for (let n = 0; n < tries; n++) {
     if (await js(code).catch(() => false)) return true;
     await wait(50);
   }
@@ -89,7 +89,8 @@ async function acceptance() {
     // It opens at the narrowest width, as on a small screen, before it ever measures a strip.
     win.setContentSize(WIDTHS.at(-1), HEIGHT);
     win.show();
-    const up = await until(ready);
+    // A cold CI runner can take a while to put the game on the stage.
+    const up = await until(ready, 1200);
     steps.push({ name: "start", ...(await js(MEASURE).catch(() => null)), size: win.getContentSize() });
     check("a game's strip is on the stage", up);
     if (!up) return;

@@ -69,10 +69,11 @@ function firstRow(strip: HTMLElement, groups: readonly HTMLElement[]): StripWidt
   const padEnd = Number.parseFloat(style.paddingInlineEnd) || 0;
   const box = strip.getBoundingClientRect();
   const start = box.left + strip.clientLeft + padStart;
+  // A group squeezed narrower than its controls still reaches as far as they do (`scrollWidth`).
   const reach = groups
-    .map((group) => group.getBoundingClientRect())
-    .filter((rect) => rect.top - box.top < FIRST_ROW_PX)
-    .map((rect) => rect.right - start);
+    .map((group) => ({ rect: group.getBoundingClientRect(), width: group.scrollWidth }))
+    .filter(({ rect }) => rect.top - box.top < FIRST_ROW_PX)
+    .map(({ rect, width }) => Math.max(rect.right, rect.left + width) - start);
   return { row: Math.max(0, ...reach), room: strip.clientWidth - padStart - padEnd };
 }
 
@@ -122,8 +123,8 @@ export function useStripFold(
       groupChanged = false;
       measure();
       remember();
-      trail.push({ reset, fold, widths: firstRow(row, parts), pad: getComputedStyle(row).paddingInlineEnd });
-      row.dataset.foldDebug = JSON.stringify(trail.slice(-12));
+      trail.push({ t: Math.round(performance.now()), reset, fold, widths: firstRow(row, parts), pad: getComputedStyle(row).paddingInlineEnd, parts: parts.map((p) => [p.offsetWidth, p.scrollWidth, Math.round(p.getBoundingClientRect().top)]) });
+      row.dataset.foldDebug = JSON.stringify(trail.slice(-40));
     };
     const observer = new ResizeObserver((entries) => {
       // A group that changed on its own is kept until the frame settles, so a later resize can't drop it.

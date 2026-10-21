@@ -1150,6 +1150,8 @@
   column-gap: 8px;
   align-items: center;
   overflow: hidden;
+  /* A control's name never wraps to make room: the strip folds instead. */
+  white-space: nowrap;
 }
 .stage-strip-start {
   grid-area: start;
