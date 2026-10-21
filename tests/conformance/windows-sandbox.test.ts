@@ -88,6 +88,7 @@ import {
   FOLDER_ACE_SCRIPT,
   icaclsArgs,
   OwnWalk,
+  windowsPowerShell,
 } from "../../src/substrate/windows-folder-ace.ts";
 import { tmpDir } from "../helpers/tmp.ts";
 
@@ -765,8 +766,19 @@ describe("an entry on one folder alone, on Windows", {
   const refusesChanges = (dir: string, ...also: string[]) => {
     const readOnly = [`*${runningUser()}:(OI)(CI)(RX)`, "*S-1-5-18:(OI)(CI)(F)", ...also];
     execFileSync("icacls", [dir, "/inheritance:r", "/grant:r", ...readOnly], { stdio: "ignore" });
+    execFileSync("icacls", [dir, "/remove:g", "*S-1-5-32-544", "/T", "/C"], { stdio: "ignore" });
     execFileSync("icacls", [dir, "/setowner", "*S-1-5-18", "/T", "/C"], { stdio: "ignore" });
+    const descriptor = ownerAndDacl(dir);
+    assert.match(descriptor, /^O:SY/, `SYSTEM owns the fixture: ${descriptor}`);
+    assert.doesNotMatch(descriptor, /;;;BA\)/, `the Administrators have no entry: ${descriptor}`);
   };
+  /** A path's owner and DACL as SDDL, through PowerShell's Get-Acl (icacls /save leaves the owner out). */
+  const ownerAndDacl = (target: string) =>
+    execFileSync(
+      windowsPowerShell(),
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "(Get-Acl -LiteralPath $env:GENEX_ACL_PATH).Sddl"],
+      { env: { ...process.env, GENEX_ACL_PATH: target }, encoding: "utf8" },
+    ).trim();
   /** Give a {@link refusesChanges} folder back to the running user, as it inherits, so it can be removed. */
   const giveBack = (dir: string) => {
     execFileSync("icacls", [dir, "/setowner", `*${runningUser()}`, "/T", "/C"], { stdio: "ignore" });
