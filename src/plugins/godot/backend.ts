@@ -697,6 +697,8 @@ async function status(deps: GodotBackendDeps, context: PluginContext) {
   const place = project ? await projectPlace(context, project) : null;
   return {
     ...godotReadiness(installs),
+    /** Whether this computer is a Mac, the only one Genex builds Godot games on for now. */
+    mac: deps.env.platform === "darwin",
     godot: install
       ? { version: versionName(install.version), binary: install.binary, mono: install.version.mono }
       : null,

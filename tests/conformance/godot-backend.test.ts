@@ -400,6 +400,11 @@ describe("the panel and the toolbar", () => {
     );
   });
 
+  it("tells the panel whether this computer is a Mac, the only one Genex builds Godot games on", async () => {
+    assert.equal((await action(await godotBackendFixture(), "status")).mac, true);
+    assert.equal((await action(await godotBackendFixture({ platform: "win32" }), "status")).mac, false);
+  });
+
   it("sends Get Godot on Windows to Godot's Windows page", async () => {
     const fixture = await godotBackendFixture({ platform: "win32" });
     await action(fixture, "get-godot");
