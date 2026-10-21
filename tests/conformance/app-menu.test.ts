@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import type { MenuItemConstructorOptions } from "electron";
 import { appMenuTemplate } from "../../src/main/app-menu.ts";
-import { setLocale } from "../../src/shared/i18n.ts";
+import { messageKey, setLocale } from "../../src/shared/i18n.ts";
 import { Locale } from "../../src/shared/locale.ts";
 
 afterEach(() => setLocale(Locale.English, {}));
@@ -135,7 +135,11 @@ describe("the application menu", () => {
   });
 
   it("reads its labels from the language active when it is built", () => {
-    setLocale(Locale.Russian, { Edit: "Правка", "Quit {app}": "Завершить {app}", [UPDATES]: "Проверить обновления…" });
+    setLocale(Locale.Russian, {
+      [messageKey("menu", "Edit")]: "Правка",
+      "Quit {app}": "Завершить {app}",
+      [UPDATES]: "Проверить обновления…",
+    });
     const menu = template("darwin");
     assert.ok(findItem(menu, "Правка"));
     assert.ok(findItem(menu, "Завершить Genex"));
