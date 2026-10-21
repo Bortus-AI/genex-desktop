@@ -9982,7 +9982,7 @@ const ENGINE_QUESTION = "FIRST, THE ENGINE:";
  * New game makes the game before the chat's first ask, as an empty folder with no kind; with the
  * Unreal plugin on, the delegated turn finds a project that already exists. A folder with no kind
  * yet (the host's facts) is asked with the question card, exactly as a game the turn makes itself,
- * and not again in the session that asked: the answer comes back to it.
+ * and not again in the session that asked: the answer comes back to it, the card still at hand.
  */
 describe("a game New game made is asked its engine on its chat's first ask", () => {
   it("with the Unreal plugin on, a game New game made is empty, its chat's first build asks web or Unreal with the question card, and its next does not", async () => {
@@ -10035,8 +10035,8 @@ describe("a game New game made is asked its engine on its chat's first ask", () 
     assert.ok(!asks(next.prompt), "a later message is never asked again");
     assert.deepEqual(
       next.interviewTools?.map((tool) => tool.name),
-      ["start_autopilot"],
-      "no card, only Auto's Loop start (flipped: auto-loop)",
+      ["start_autopilot", "ask_user"],
+      "the session that asked keeps its card while the game has no kind (flipped: resumed card)",
     );
   });
 });
