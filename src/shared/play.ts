@@ -188,8 +188,8 @@ export const PlayViewerPhase = {
 export type PlayViewerPhase = (typeof PlayViewerPhase)[keyof typeof PlayViewerPhase];
 
 /**
- * The viewer's bar: the app's own 48px strip of glass laid over the top edge of the game, which takes
- * the whole window. It is drawn in a layer of its own above the game's native view.
+ * The viewer's bar: the app's own 48px strip across the window's top, the game below it, never under
+ * it. It is drawn in a layer of its own above the game's native view.
  */
 export const PLAY_BAR_HEIGHT = 48;
 
@@ -276,8 +276,6 @@ export function readPlayPoint(value: unknown): PlayPoint | undefined {
 export interface PlayBarState {
   /** The game's name, as the card that opened it showed it. */
   title: string;
-  /** The bar is up over the game; otherwise it has faded up and out. */
-  shown: boolean;
   liked: boolean;
   likes: number;
   /** The game may be remixed: the header shows Remix. */

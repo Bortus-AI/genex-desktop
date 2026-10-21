@@ -1150,6 +1150,14 @@ export class StudioCore {
         await this.#pluginTools.reviewExport(pluginId, binding, result);
       return result;
     };
+    await this.#initPlugins();
+  }
+
+  /** The registry's start, each part of it marked so a slow plugin setup's log says which part held it. */
+  async #initPlugins(): Promise<void> {
+    // A first launch also marks each seed it copies.
+    this.plugins.onInitStep = (step, plugin) =>
+      this.options.markBoot?.(`core:plugins-${step}${plugin ? `:${plugin}` : ""}`);
     await this.plugins.init();
   }
 
@@ -1428,6 +1436,7 @@ export class StudioCore {
       crashLoop: HARNESS_CRASH_LOOP,
       onNotify: (type, payload) => this.#onHarnessNotify(type, payload),
       ...(this.options.onLog ? { onLog: this.options.onLog } : {}),
+      onBootStep: (step) => this.options.markBoot?.(`core:harness-${step}`),
       onStateChange: (state) => {
         // A loop that stops (a planned restart too) never ends the turns it began.
         if (state !== HarnessState.Ready) {
@@ -1453,14 +1462,18 @@ export class StudioCore {
    * recover — the shipped seed is copied over the harness before it boots.
    */
   async start(bootReason: BootReason = BootReason.ColdStart, options: { resetHarness?: boolean } = {}): Promise<void> {
+    const mark = (step: string): void => this.options.markBoot?.(`core:start-${step}`);
     await this.snapshots.init();
+    mark("snapshots");
     await this.#threads.adoptOrphanedGameThreads().catch(() => {}); // a repair must never block the boot
     await this.#recovery
       .closeInterruptedWork()
       .catch((err) => this.options.onLog?.(`[core] closing interrupted work failed: ${errorMessage(err)}`, "stderr"));
+    mark("repairs");
     // If a self-update was in flight when the app died, the durable record says so.
     const pending = await this.journal.pending();
     await this.#announceSeedUpgrade();
+    mark("journal");
     const rewound = await this.#bootHarness(bootNotice(pending, bootReason), options.resetHarness === true);
     this.#started = true;
     // The first read of the whole log is the slow one; take it once the boot has settled rather
@@ -1494,10 +1507,13 @@ export class StudioCore {
    */
   async #bootHarness(notice: BootNotice, resetHarness: boolean): Promise<boolean> {
     // A sandbox fault cannot be repaired by rewinding the harness's code.
+    const mark = (step: string): void => this.options.markBoot?.(`core:start-${step}`);
     await this.sandbox.ensureReady();
+    mark("sandbox");
     if (!resetHarness) await this.#recovery.migrateHarnessLayout();
     let rewound = false;
     const bootedCode = resetHarness ? null : await this.#recovery.codeAboutToBoot();
+    mark("code");
     if (resetHarness) {
       await this.#resetHarnessToShipped();
       rewound = true;
