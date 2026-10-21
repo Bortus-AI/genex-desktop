@@ -447,6 +447,15 @@ describe("an entry on one folder alone", () => {
     assert.deepEqual(JSON.parse(Buffer.from(payload, "base64").toString("utf8")), edits);
   });
 
+  it("hands PowerShell no module path of its own: one from PowerShell 7 loses ConvertFrom-Json", () => {
+    const command = folderAceCommand(edits, {
+      SystemRoot: "C:\\Windows",
+      PSModulePath: "C:\\Program Files\\PowerShell\\7\\Modules",
+    });
+    assert.equal(command.env.PSModulePath, undefined);
+    assert.equal(command.env.SystemRoot, "C:\\Windows");
+  });
+
   it("keeps its command line inside Windows' 32,767 characters, however long the script grows", () => {
     // The script outgrew it once: CreateProcess refused PowerShell ("The filename or extension is
     // too long"), every batch answered nothing, and every grant fell back to icacls.

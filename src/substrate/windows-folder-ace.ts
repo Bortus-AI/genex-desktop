@@ -30,6 +30,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { MINUTE_MS, SECOND_MS } from "../shared/duration.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { windowsPowerShellEnv } from "./child-env.ts";
 
 const run = promisify(execFile);
 
@@ -439,10 +440,11 @@ export function folderAceCommand(
   const loader = Buffer.from(SCRIPT_LOADER, "utf16le").toString("base64");
   const script = Buffer.from(FOLDER_ACE_SCRIPT, "utf8").toString("base64");
   const payload = Buffer.from(JSON.stringify(edits), "utf8").toString("base64");
+  const variables: NodeJS.ProcessEnv = { ...windowsPowerShellEnv(env), [SCRIPT_ENV]: script, [EDITS_ENV]: payload };
   return {
     file: windowsPowerShell(env),
     args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", loader],
-    env: { ...env, [SCRIPT_ENV]: script, [EDITS_ENV]: payload },
+    env: variables,
   };
 }
 
