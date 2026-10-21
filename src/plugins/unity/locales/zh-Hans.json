@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "智能体通过 Unity 的 Pipeline 包连接编辑器。“设置”会把它加入 Packages/manifest.json，并先保存一份该文件的副本。",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "在对话中要一个 Unity 游戏，Genex 就会在这里创建它的项目。要处理已有的项目，请在“首页”选择“打开文件夹…”。",
   "Checking Unity…": "正在检查 Unity…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since": "如果 Unity 是 Genex 为某次构建打开的，且之后没人用过，就在构建结束 15 分钟后关闭它",
   "Don't use Unity": "不使用 Unity",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.": "关闭 Unity 并重新打开这个游戏的项目。适用于 Unity 不再响应的情况，比如被对话框挡住时。编辑器中未保存的内容会丢失。",
   "Engine": "引擎",

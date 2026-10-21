@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "エージェントはUnityのPipelineパッケージを通してエディターを操作します。「セットアップ」はこれをPackages/manifest.jsonに追加し、その前にファイルのコピーを残します。",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "チャットでUnityのゲームを頼むと、Genexがここにプロジェクトを作ります。手元のプロジェクトで作業するには、ホームで「フォルダーを開く…」を選んでください。",
   "Checking Unity…": "Unityを確認しています…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since": "Genexがビルドのために開いたUnityを、その後だれも使っていなければビルド終了の15分後に閉じる",
   "Don't use Unity": "Unityを使わない",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.": "Unityを終了して、このゲームのプロジェクトを開き直します。ダイアログの裏で止まっているときなど、Unityが応答しなくなったときに使ってください。エディターで保存していない作業は失われます。",
   "Engine": "エンジン",

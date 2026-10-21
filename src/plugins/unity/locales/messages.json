@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.",
   "Checking Unity…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since",
   "Don't use Unity",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.",
   "Engine",

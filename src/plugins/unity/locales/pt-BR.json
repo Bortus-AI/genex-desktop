@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "Os agentes acessam o editor pelo pacote Pipeline do Unity. “Configurar” o adiciona ao Packages/manifest.json e antes guarda uma cópia do arquivo.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "Peça um jogo do Unity no chat e o Genex cria o projeto dele aqui. Para trabalhar em um projeto que você já tem, escolha “Abrir uma pasta…” no Início.",
   "Checking Unity…": "Verificando o Unity…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since": "Fechar o Unity 15 minutos depois de um build quando o Genex o abriu para esse build e ninguém o usou desde então",
   "Don't use Unity": "Não usar Unity",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.": "Fechar o Unity e abrir de novo o projeto deste jogo. Use quando o Unity parar de responder, por exemplo por causa de uma janela de diálogo. O que você não salvou no editor será perdido.",
   "Engine": "Motor",

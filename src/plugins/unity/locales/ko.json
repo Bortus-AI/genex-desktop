@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "에이전트는 Unity의 Pipeline 패키지를 통해 에디터에 접근해요. ‘설정하기’는 이 패키지를 Packages/manifest.json에 추가하고, 그 전에 파일 사본을 남겨 둬요.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "채팅에서 Unity 게임을 요청하면 Genex가 여기에 프로젝트를 만들어요. 이미 있는 프로젝트로 작업하려면 홈에서 ‘폴더 열기…’를 선택하세요.",
   "Checking Unity…": "Unity 확인 중…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since": "Genex가 빌드를 위해 연 Unity를 그 뒤로 아무도 쓰지 않았다면 빌드가 끝나고 15분 뒤에 닫기",
   "Don't use Unity": "Unity 사용 안 함",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.": "Unity를 종료하고 이 게임의 프로젝트를 다시 열어요. 대화 상자 때문에 멈춘 경우처럼 Unity가 응답하지 않을 때 사용하세요. 에디터에서 저장하지 않은 작업은 사라져요.",
   "Engine": "엔진",

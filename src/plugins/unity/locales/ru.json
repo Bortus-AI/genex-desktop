@@ -8,6 +8,7 @@
   "Agents reach the editor through Unity's Pipeline package. Set up adds it to Packages/manifest.json and keeps a copy of the file first.": "Агенты работают с редактором через пакет Pipeline от Unity. «Настроить» добавит его в Packages/manifest.json, а перед этим сохранит копию файла.",
   "Ask for a Unity game in the chat and Genex makes its project here. To work on a project you already have, choose Open a folder… on Home.": "Попроси в чате игру на Unity, и Genex создаст её проект здесь. Чтобы работать с проектом, который у тебя уже есть, выбери «Открыть папку…» на экране «Главная».",
   "Checking Unity…": "Проверяем Unity…",
+  "Close Unity 15 minutes after a run when Genex opened it for that run and nobody used it since": "Закрывать Unity через 15 минут после сборки, если Genex открыл его для этой сборки и с тех пор им никто не пользовался",
   "Don't use Unity": "Не использовать Unity",
   "End Unity and open this game's project again. Use this when Unity stopped answering, for example behind a dialog. Work you have not saved in the editor is lost.": "Закрыть Unity и заново открыть проект этой игры. Используй это, когда Unity перестал отвечать, например из-за диалогового окна. Всё несохранённое в редакторе пропадёт.",
   "Engine": "Движок",
