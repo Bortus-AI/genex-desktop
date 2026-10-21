@@ -119,6 +119,21 @@ async function acceptance() {
         );
       }
     }
+    // Diagnostic only: the one-row layout at the widest width, forced in the DOM.
+    win.setContentSize(1440, HEIGHT);
+    await wait(SETTLE_MS);
+    const probe = await js(`(() => {
+      const strip = document.querySelector('[data-stage-strip]');
+      const was = strip.dataset.fold;
+      const read = () => { const cs = getComputedStyle(strip); const g = [...strip.children].map((c) => { const r = c.getBoundingClientRect(); const ccs = getComputedStyle(c); return { cls: c.className, left: r.left, right: r.right, top: r.top, sw: c.scrollWidth, ow: c.offsetWidth, mr: ccs.marginInlineEnd, ml: ccs.marginInlineStart, js: ccs.justifySelf, kids: [...c.children].map((k) => { const kr = k.getBoundingClientRect(); return [k.tagName, k.className.slice(0, 40), Math.round(kr.left), Math.round(kr.right)]; }) }; });
+        return { fold: strip.dataset.fold, pad: cs.paddingInlineEnd, padL: cs.paddingInlineStart, cols: cs.gridTemplateColumns, areas: cs.gridTemplateAreas, width: strip.clientWidth, rect: strip.getBoundingClientRect().toJSON(), g }; };
+      const before = read();
+      strip.dataset.fold = 'full';
+      const forced = read();
+      strip.dataset.fold = was;
+      return { before, forced };
+    })()`);
+    steps.push({ name: "probe", probe });
     // Diagnostic only: how wide the window must grow before each step undoes.
     const growth = [];
     for (let width = 1440; width <= 2400; width += 40) {
