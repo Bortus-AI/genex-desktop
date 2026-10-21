@@ -52,6 +52,16 @@ const MEASURE = `(() => {
   };
 })()`;
 
+/** Opens the folded views' menu as a pointer does (Radix opens it on the pointer going down). */
+const PRESS_VIEWS_BUTTON = `document.querySelector('[data-stage-views]')?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0, pointerType: 'mouse' }))`;
+
+/** Steps the chat's width handle to its widest (`CHAT_MAX`, 20px a key) and says whether it found it. */
+const WIDEST_CHAT = `(() => {
+  const handle = document.querySelector('[role="separator"][aria-label="Chat width"]');
+  for (let n = 0; n < 16; n++) handle?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  return !!handle;
+})()`;
+
 /** Controls past the strip's sides or the window's edge. */
 const outside = (m) =>
   m.controls.filter(
@@ -116,6 +126,36 @@ async function acceptance() {
           underControls(measured),
         );
       }
+    }
+    // At the narrowest width the views are folded: their button opens its menu, and a row switches the view.
+    win.setContentSize(WIDTHS.at(-1), HEIGHT);
+    await wait(SETTLE_MS);
+    for (const view of ["assets", "live"]) {
+      await js(PRESS_VIEWS_BUTTON);
+      const row = `document.querySelector('[role="menuitemradio"][data-stage-action="${view}"]')`;
+      const listed = await until(`!!${row}`);
+      if (listed) await js(`${row}.click()`);
+      check(
+        `the folded views' menu switches to ${view}`,
+        listed && (await until(`document.querySelector('[data-stage-view]')?.dataset.stageView === '${view}'`)),
+      );
+    }
+    // The widest chat leaves the stage its narrowest at each window width.
+    nativeTheme.themeSource = "light";
+    const widened = await js(WIDEST_CHAT);
+    check("the chat widens to its widest", widened);
+    for (const width of WIDTHS) {
+      win.setContentSize(width, HEIGHT);
+      await wait(SETTLE_MS);
+      const measured = await js(MEASURE);
+      const name = `wide-chat-${width}`;
+      steps.push({ name, picture: await photograph(win, name), ...measured });
+      check(`${name} (${measured.fold}): every control inside the strip`, !outside(measured).length, outside(measured));
+      check(
+        `${name} (${measured.fold}): no control under the window's own controls`,
+        !underControls(measured).length,
+        underControls(measured),
+      );
     }
     for (const width of WIDTHS) {
       const [light, dark] = ["light", "dark"].map(

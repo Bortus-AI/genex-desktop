@@ -1176,7 +1176,7 @@
   grid-template-areas: "start game . . ." ". . . . ." "end end end end end";
 }
 .stage-strip[data-fold="game"] {
-  grid-template-areas: "start start start start start" ". . . . ." "game . end end end";
+  grid-template-areas: "start start start start ." ". . . . ." "game . end end end";
 }
 /* On the second row (`data-row`) the plugin buttons may wrap, and end 8px from the strip's edge. */
 .stage-strip-end[data-row="second"] {

@@ -204,8 +204,9 @@ function ViewMark({
 
 /**
  * The views folded into one button (`strip-fold.ts`): the current one in the switcher's accent and a
- * chevron, opening a menu of every view with the current one ticked. Each row keeps its tab's
- * `data-stage-action`, so a check presses the same view either way.
+ * chevron, opening a menu of every view with the current one ticked. The button lists the views'
+ * keys (`data-stage-views`) and names the current one (`data-stage-current`); each row keeps its
+ * tab's `data-stage-action`, so a check finds and presses the same view either way.
  */
 function ViewMenu({
   tabs,
@@ -235,8 +236,9 @@ function ViewMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`${STAGE_WORDS.views}: ${current.label}`}
-          data-stage-views=""
+          aria-label={STAGE_WORDS.viewsButton(current.label)}
+          data-stage-views={tabs.map((tab) => tab.key).join(" ")}
+          data-stage-current={current.key}
           className="no-drag surface-glass flex shrink-0 cursor-pointer items-center gap-1 rounded-lg p-0.5 pe-1.5 text-control-text transition-colors duration-(--duration-quick) hover:text-control-text-hover"
         >
           <span className="flex h-7 items-center gap-1.5 rounded-md bg-[var(--switch-fill,var(--accent-fill))] px-2.5 font-mono text-body-sm text-accent-foreground">
