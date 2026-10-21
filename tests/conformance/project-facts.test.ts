@@ -237,10 +237,16 @@ describe("what the walk leaves out", () => {
     assert.equal((await projectFiles(dir, { maxFiles: 5 })).length, 5, "without keep, every file counts");
   });
 
-  it("throws for a folder that is gone, and skips one below the root it can't read", async () => {
+  it("throws for a folder that is gone", async () => {
     const dir = await realpath(await tmpDir("studio-facts-gone-"));
     await assert.rejects(projectFiles(path.join(dir, "missing")), "a missing root is no empty folder");
     await assert.rejects(detectFacts(path.join(dir, "missing"), []));
+  });
+
+  it("skips a folder below the root it can't read", {
+    skip: process.platform === "win32" && "a folder's mode shuts no one out on Windows",
+  }, async () => {
+    const dir = await realpath(await tmpDir("studio-facts-shut-"));
     await put(dir, "shut/project.godot");
     await put(dir, "open/Game.uproject");
     await chmod(path.join(dir, "shut"), 0o000);
