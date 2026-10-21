@@ -759,15 +759,62 @@ describe("an entry on one folder alone, on Windows", {
   });
 
   /**
+   * Make `sid` the owner of `dir` and of everything under it. Only SeRestorePrivilege may name
+   * someone else, and SeTakeOwnershipPrivilege opens a folder the runner may only read: the hosted
+   * runner is elevated and holds both, disabled until asked for (icacls /setowner left them so).
+   */
+  const setOwner = (dir: string, sid: string) => {
+    const script = `$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
+public static class GenexTestOwner {
+  [StructLayout(LayoutKind.Sequential, Pack = 4)]
+  struct Privilege { public int Count; public long Luid; public int Attributes; }
+  [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool OpenProcessToken(IntPtr process, int access, out IntPtr token);
+  [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)] static extern bool LookupPrivilegeValue(string system, string name, out long luid);
+  [DllImport("advapi32.dll", SetLastError = true)] static extern bool AdjustTokenPrivileges(IntPtr token, bool disableAll, ref Privilege state, int length, IntPtr previous, IntPtr returned);
+  [DllImport("advapi32.dll", CharSet = CharSet.Unicode)] static extern uint SetNamedSecurityInfo(string name, int type, int info, byte[] owner, IntPtr group, IntPtr dacl, IntPtr sacl);
+  public static void Enable(string name) {
+    IntPtr token;
+    if (!OpenProcessToken(GetCurrentProcess(), 0x28, out token)) throw new Win32Exception();
+    var state = new Privilege { Count = 1, Attributes = 2 };
+    if (!LookupPrivilegeValue(null, name, out state.Luid)) throw new Win32Exception();
+    if (!AdjustTokenPrivileges(token, false, ref state, 0, IntPtr.Zero, IntPtr.Zero) || Marshal.GetLastWin32Error() != 0) throw new Win32Exception(name);
+  }
+  public static void Own(string path, string sid) {
+    var owner = new SecurityIdentifier(sid);
+    var bytes = new byte[owner.BinaryLength];
+    owner.GetBinaryForm(bytes, 0);
+    uint code = SetNamedSecurityInfo(path, 1, 1, bytes, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+    if (code != 0) throw new Win32Exception((int)code, path);
+  }
+}
+'@
+[GenexTestOwner]::Enable('SeRestorePrivilege')
+[GenexTestOwner]::Enable('SeTakeOwnershipPrivilege')
+$paths = @($env:GENEX_OWNER_PATH) + @(Get-ChildItem -LiteralPath $env:GENEX_OWNER_PATH -Recurse -Force | ForEach-Object { $_.FullName })
+foreach ($p in $paths) { [GenexTestOwner]::Own($p, $env:GENEX_OWNER_SID) }
+`;
+    const encoded = Buffer.from(script, "utf16le").toString("base64");
+    execFileSync(windowsPowerShell(), ["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], {
+      env: { ...process.env, GENEX_OWNER_PATH: dir, GENEX_OWNER_SID: sid },
+      stdio: "pipe",
+    });
+  };
+  /**
    * A folder the person may read but whose entries they may not change: SYSTEM owns it and the
-   * person's own entry reads only, as security software or a profile copied from another account
-   * can leave a browser profile. `also` adds entries; the elevated runner sets the owner.
+   * person's own entry reads only, as security software or another owner can leave a browser
+   * profile. `also` adds entries.
    */
   const refusesChanges = (dir: string, ...also: string[]) => {
+    setOwner(dir, "S-1-5-18");
     const readOnly = [`*${runningUser()}:(OI)(CI)(RX)`, "*S-1-5-18:(OI)(CI)(F)", ...also];
     execFileSync("icacls", [dir, "/inheritance:r", "/grant:r", ...readOnly], { stdio: "ignore" });
-    execFileSync("icacls", [dir, "/remove:g", "*S-1-5-32-544", "/T", "/C"], { stdio: "ignore" });
-    execFileSync("icacls", [dir, "/setowner", "*S-1-5-18", "/T", "/C"], { stdio: "ignore" });
+    execFileSync("icacls", [dir, "/remove:g", "*S-1-5-32-544"], { stdio: "ignore" });
     const descriptor = ownerAndDacl(dir);
     assert.match(descriptor, /^O:SY/, `SYSTEM owns the fixture: ${descriptor}`);
     assert.doesNotMatch(descriptor, /;;;BA\)/, `the Administrators have no entry: ${descriptor}`);
@@ -781,7 +828,7 @@ describe("an entry on one folder alone, on Windows", {
     ).trim();
   /** Give a {@link refusesChanges} folder back to the running user, as it inherits, so it can be removed. */
   const giveBack = (dir: string) => {
-    execFileSync("icacls", [dir, "/setowner", `*${runningUser()}`, "/T", "/C"], { stdio: "ignore" });
+    setOwner(dir, runningUser());
     execFileSync("icacls", [dir, "/reset", "/T", "/C"], { stdio: "ignore" });
   };
   /** A start's own entries for denying `secret`, logging into `lines`. */
