@@ -156,13 +156,22 @@ import { type LibrarySharing, librarySharing } from "./core/library-sharing.ts";
 import { registerAssetLibraryIpc } from "./ipc/asset-library.ts";
 import { readAssetPreview } from "./asset-preview.ts";
 import { fixtureDownload, fixtureFileResponse } from "./dev/fixture-asset-library.ts";
-import { buildHostsFor, networkRequest, type PlayGallery, playGallery, type PlayWorld } from "./play/gallery.ts";
+import {
+  buildHostsFor,
+  mintedTicket,
+  networkRequest,
+  type PlayGallery,
+  playGallery,
+  type PlayWorld,
+  TicketDelivery,
+} from "./play/gallery.ts";
+import { relayHostsOf, startGenexGateway } from "./play/genex-gateway.ts";
 import { GAME_LINK_SCHEME, gameLinkIn, gameLinks } from "./play/game-links.ts";
 import { thisComputer } from "./play/native-host.ts";
 import { type InstallOutcome, type NativeInstaller, nativeInstalls } from "./play/native-installs.ts";
 import { checkNativeUpdates } from "./play/native-updates.ts";
 import { runTool } from "./play/native-unpack.ts";
-import { type NativeSessions, nativeSessions } from "./play/native-launch.ts";
+import { type GameGenex, type NativeSessions, nativeSessions } from "./play/native-launch.ts";
 import { hasGameWindow, showGameWindow } from "./play/native-windows.ts";
 import { spawnNativeGame } from "../substrate/plugins/native-process.ts";
 import { psProbe, SYSTEM_CLOCK } from "../substrate/job-process.ts";
@@ -1085,8 +1094,24 @@ function playSessionsFor(studio: StudioCore): NativeSessions | null {
     played: (slug) => installs.played(slug),
     ended: (slug) => installs.sweep(slug),
     log: (line) => studioLog.write("main", line),
+    // A fixture launch has no Genex to reach: its games stay offline.
+    ...(fixtureNativePolicy ? {} : { genex: (slug: string) => openGameGenex(studio, slug) }),
   });
   return nativeLauncher;
+}
+
+/**
+ * A native game's way to Genex while it plays: its own gateway to Genex's API and relays, and a
+ * single-use sign-in ticket for it while the person's Genex account is unlocked (a guest otherwise).
+ */
+async function openGameGenex(studio: StudioCore, slug: string): Promise<GameGenex> {
+  const gateway = await startGenexGateway({
+    api: playOrigin.api,
+    relay: relayHostsOf(new URL(playOrigin.api).hostname),
+  });
+  const ticket = mintedTicket(await playCatalogFor(studio).ticket(slug, TicketDelivery.Native));
+  const env = { GENEX_API_URL: gateway.apiUrl, ...(ticket ? { GENEX_EMBED_TICKET: ticket } : {}) };
+  return { ports: gateway.ports, env, close: gateway.close };
 }
 
 /**
