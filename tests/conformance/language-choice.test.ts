@@ -103,6 +103,20 @@ describe("System in the window and in main's menus", () => {
     assert.equal(windowLanguage(SYSTEM_LANGUAGE), menus);
   });
 
+  it("resolves to the same language for each computer's own spelling of its list", () => {
+    const lists = [
+      ["zh_HK.UTF-8", "zh", "ko_KR.UTF-8"],
+      ["ja_JP.UTF-8", "ja_JP", "ja.UTF-8", "ja", "C"],
+      ["C.UTF-8", "pt_PT@euro"],
+      ["zh-Hant-TW", "en-TW"],
+      ["de_DE.UTF-8@euro"],
+    ];
+    for (const list of lists) {
+      page(["en-US"], systemLanguagesFromArgs([systemLanguagesArgument(list)]));
+      assert.equal(windowLanguage(SYSTEM_LANGUAGE), resolveLanguage(SYSTEM_LANGUAGE, list), list.join(", "));
+    }
+  });
+
   it("falls back to Chromium's list in a page main gave none (a gallery, a test)", () => {
     page(["ja-JP"], null);
     assert.equal(windowLanguage(SYSTEM_LANGUAGE), Locale.Japanese);
@@ -112,11 +126,12 @@ describe("System in the window and in main's menus", () => {
 
   it("carries only language tags across the page's arguments", () => {
     const rows: Array<[string, string[], string[]]> = [
-      ["in order", ["pt-PT", "de-DE"], ["pt-PT", "de-DE"]],
+      ["in order, as plain tags", ["pt-PT", "de-DE"], ["pt-pt", "de-de"]],
+      ["a codeset and a modifier dropped", ["ja_JP.UTF-8", "pt_PT@euro"], ["ja-jp", "pt-pt"]],
       ["a separator inside a tag", ["ru,--inspect", "es"], ["es"]],
       ["a switch smuggled in as a tag", ["--remote-debugging-port=9222"], []],
       ["spaces and quotes", ['de "x"', "fr FR"], []],
-      ["underscores as macOS writes them", ["zh_Hans_CN"], ["zh_Hans_CN"]],
+      ["underscores as Linux writes them", ["zh_Hans_CN"], ["zh-hans-cn"]],
       ["nothing", [], []],
     ];
     for (const [name, tags, carried] of rows)

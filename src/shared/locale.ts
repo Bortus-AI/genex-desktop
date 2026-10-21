@@ -113,12 +113,18 @@ export function computerLanguages({ pinned, preferred, locale, systemLocale }: C
 const SYSTEM_LANGUAGES_SWITCH = "--genex-system-languages=";
 /** The most languages carried: a person lists a handful, and the argument stays short. */
 const MAX_SYSTEM_LANGUAGES = 16;
-/** A language tag as macOS and Windows write one: letters, then `-` or `_` parts; never a comma or a space. */
-const LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*$/;
+/** A plain language tag: letters, then `-` parts; never a comma or a space. */
+const LANGUAGE_TAG = /^[a-z]{2,8}(?:-[a-z0-9]{1,8})*$/;
 
-/** Up to {@link MAX_SYSTEM_LANGUAGES} of `tags` that are language tags, in order. */
+/**
+ * Up to {@link MAX_SYSTEM_LANGUAGES} of `tags` as plain tags ({@link plainTag}: "ja_JP.UTF-8" →
+ * "ja-jp"), in order, the rest dropped: they read as the same language main reads them as.
+ */
 function languageTags(tags: readonly string[]): string[] {
-  return tags.filter((tag) => LANGUAGE_TAG.test(tag)).slice(0, MAX_SYSTEM_LANGUAGES);
+  return tags
+    .map(plainTag)
+    .filter((tag) => LANGUAGE_TAG.test(tag))
+    .slice(0, MAX_SYSTEM_LANGUAGES);
 }
 
 /**
