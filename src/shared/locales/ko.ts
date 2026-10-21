@@ -4767,7 +4767,6 @@ export default {
   "merged a worker's work": "작업자의 작업을 합쳤어요",
   "mobile support\u0004Auto": "자동",
   model: "모델",
-  "modelled {name} ({details})": "{name} 모델링을 마쳤어요 ({details})",
   "movement and inhabitants": "움직임과 주민",
   "must be fixed — a round that leaves it cannot be kept":
     "꼭 고쳐야 함 — 이게 남아 있으면 그 라운드는 유지될 수 없어요",
@@ -5329,6 +5328,8 @@ export default {
   "{hours}h {minutes}m": "{hours}시간 {minutes}분",
   "{included} of {total} selected · you can undo later": "{total}개 중 {included}개 선택됨 · 나중에 되돌릴 수 있어요",
   "{input} in / {output} out per M tokens": "100만 토큰당 입력 {input} / 출력 {output}",
+  "{kept} · {count} finished.": "{kept} · {count}개 완료.",
+  "{kept}.": "{kept}.",
   "{kind} being made with {tool}": "{tool}에서 {kind} 만드는 중",
   "{kind} from {tool} waits for your choice": "{tool}의 {kind}, 선택을 기다리고 있어요",
   "{kind} from {tool}: {title}": "{tool}의 {kind}: {title}",
@@ -5374,7 +5375,6 @@ export default {
   "{name} didn't answer. Check your internet connection, then try again.":
     "{name}에서 응답이 없어요. 인터넷 연결을 확인한 뒤 다시 시도하세요.",
   "{name} didn't install. Try again.": "{name} 설치에 실패했어요. 다시 시도해 주세요.",
-  "{name} failed — {error}": "{name} 만들기에 실패했어요 — {error}",
   "{name} holds your account, so it can't be removed: turn it off instead":
     "{name}에 내 계정이 있어서 제거할 수 없어요. 대신 끄세요",
   "{name} installed, but Genex can't find it. Try again.":
@@ -5457,10 +5457,6 @@ export default {
   "{players} players get the web version.": "{players} 플레이어는 웹 버전을 받아요.",
   "{plugin} asks for permission.": "{plugin}에서 권한을 요청해요.",
   "{plugin} asks to run {tool}": "{plugin}에서 {tool} 실행을 요청해요",
-  "{plugin} could not run {tool} — {error}": "{plugin}에서 {tool} 실행에 실패했어요 — {error}",
-  "{plugin} is running {tool}": "{plugin}에서 {tool} 실행 중",
-  "{plugin} ran {tool}": "{plugin}에서 {tool} 실행을 마쳤어요",
-  "{plugin} ran {tool} — {brought}": "{plugin}에서 {tool} 실행을 마쳤어요 — {brought}",
   "{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?":
     "{plugin} 플러그인은 이 Mac의 폴더에서 불러왔고 내 권한으로 실행돼요. {tool} 실행을 허용할까요?",
   "{plugin} was loaded from a folder on this Mac and runs with your access. {question}":
@@ -5587,6 +5583,12 @@ export default {
   "{what} links somewhere else, so Genex won't use it.": "{what}: 다른 곳을 가리키는 링크라서 Genex가 사용하지 않아요.",
   "{where} in this project links somewhere else, so Genex won't write through it.":
     "이 프로젝트의 {where} 항목은 다른 곳을 가리키는 링크라서 Genex가 그곳에 기록하지 않아요.",
+  "{where}: modelled {name} ({details})": "{where}: {name} 모델링을 마쳤어요 ({details})",
+  "{where}: {name} failed — {error}": "{where}: {name} 만들기에 실패했어요 — {error}",
+  "{where}: {plugin} could not run {tool} — {error}": "{where}: {plugin}에서 {tool} 실행에 실패했어요 — {error}",
+  "{where}: {plugin} is running {tool}": "{where}: {plugin}에서 {tool} 실행 중",
+  "{where}: {plugin} ran {tool}": "{where}: {plugin}에서 {tool} 실행을 마쳤어요",
+  "{where}: {plugin} ran {tool} — {brought}": "{where}: {plugin}에서 {tool} 실행을 마쳤어요 — {brought}",
   "{who} wants to edit a file": "{who}의 파일 편집 요청",
   "{who} wants to edit {file}": "{who}의 {file} 편집 요청",
   "{who} wants to open a web page": "{who}의 웹 페이지 열기 요청",

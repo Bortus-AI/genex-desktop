@@ -36,13 +36,18 @@ export interface BridgeFiles {
 const NO_FILES: BridgeFiles = { getPathForFile: () => "" };
 
 /** Calls the preload answers itself, asking main nothing. */
-export const PRELOAD_LOCAL_CALLS = ["pathOfFile"] as const;
+export const PRELOAD_LOCAL_CALLS = ["pathOfFile", "systemLanguages"] as const;
 
 /** A channel whose payload is `undefined` is called with no payload argument. */
 type PayloadArgs<C extends StudioInvokeChannel> =
   StudioInvokePayload<C> extends undefined ? [] : [payload: StudioInvokePayload<C>];
 
-export function createStudioBridge(ipc: BridgeIpc, files: BridgeFiles = NO_FILES): StudioApi {
+/** A bridge built with no languages (a test of its IPC) has System follow Chromium's list. */
+export function createStudioBridge(
+  ipc: BridgeIpc,
+  files: BridgeFiles = NO_FILES,
+  languages: readonly string[] = [],
+): StudioApi {
   async function invoke<C extends StudioInvokeChannel>(
     channel: C,
     ...args: PayloadArgs<C>
@@ -71,6 +76,7 @@ export function createStudioBridge(ipc: BridgeIpc, files: BridgeFiles = NO_FILES
         return "";
       }
     },
+    systemLanguages: () => [...languages],
     ...threadCalls(bridge),
     ...gameCalls(bridge),
     ...runCalls(bridge),

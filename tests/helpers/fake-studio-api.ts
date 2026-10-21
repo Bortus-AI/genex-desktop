@@ -261,6 +261,7 @@ const METHODS = [
   "openChatFile",
   "messageImages",
   "pathOfFile",
+  "systemLanguages",
   "rewindPreview",
   "rewindChat",
   "undoRewind",
@@ -422,6 +423,7 @@ export function fakeStudioApi(overrides: Partial<StudioApi> = {}, options: FakeS
       subscribe(sets.onRunSummary, { project, runId, listener })) as never,
     // Answered by the preload, not main: synchronous, and no file of a test has a place on disk.
     pathOfFile: (() => "") as never,
+    systemLanguages: () => [],
   };
   const api = {} as Record<StudioMethod, (...args: unknown[]) => unknown>;
   for (const method of METHODS) {

@@ -2220,6 +2220,11 @@ export interface HarnessHostApi {
       pendingProposals: Array<{ skill: string; title?: string; summary?: string[]; rationale: string | undefined }>;
     };
   };
+  /**
+   * The language Genex speaks (Settings, else the computer's): its tag and its own name. An agent
+   * answers Genex's own messages in it (a resume, a continue), and the person in theirs.
+   */
+  "studio.language": { params: void; result: { tag: string; name: string } };
   "context.policy": { params: { engine: string; model?: string; threadId?: string }; result: ContextSettings };
   /** The Self-improvement switch, asked by the harness before each thing it would learn. */
   "learning.enabled": { params: void; result: boolean };

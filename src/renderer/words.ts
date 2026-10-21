@@ -1263,11 +1263,11 @@ export function modelWords(
   const name = withoutIds((asset.name ?? "").trim()) || t("a model");
   if (!asset.ok) {
     const error = withoutIds((asset.error ?? t("unknown error")).trim());
-    return `${where}: ${t("{name} failed — {error}", { name, error })}`;
+    return t("{where}: {name} failed — {error}", { where, name, error });
   }
   const size = kilobyteWords(asset.bytes ?? 0);
   const details = [size, modelShape(asset)].filter(Boolean).join(", ");
-  return `${where}: ${t("modelled {name} ({details})", { name, details })}`;
+  return t("{where}: modelled {name} ({details})", { where, name, details });
 }
 
 const BYTES_PER_KB = 1024;
@@ -1352,9 +1352,9 @@ export function pluginToolWords(call: PluginToolCallLine): string {
   // the counts. `ok` is only absent on the started record, which has no outcome to report.
   if (call.ok === false) {
     const error = withoutIds((call.error ?? t("unknown error")).trim());
-    return `${where}: ${t("{plugin} could not run {tool} — {error}", { plugin, tool, error })}`;
+    return t("{where}: {plugin} could not run {tool} — {error}", { where, plugin, tool, error });
   }
-  if (call.ok !== true) return `${where}: ${t("{plugin} is running {tool}", { plugin, tool })}`;
+  if (call.ok !== true) return t("{where}: {plugin} is running {tool}", { where, plugin, tool });
   const files = Array.isArray(call.files) ? call.files.length : 0;
   const images = typeof call.images === "number" && call.images > 0 ? Math.trunc(call.images) : 0;
   const brought = [
@@ -1364,8 +1364,8 @@ export function pluginToolWords(call: PluginToolCallLine): string {
     .filter(Boolean)
     .join(", ");
   return brought
-    ? `${where}: ${t("{plugin} ran {tool} — {brought}", { plugin, tool, brought })}`
-    : `${where}: ${t("{plugin} ran {tool}", { plugin, tool })}`;
+    ? t("{where}: {plugin} ran {tool} — {brought}", { where, plugin, tool, brought })
+    : t("{where}: {plugin} ran {tool}", { where, plugin, tool });
 }
 
 // ── connector steps ───────────────────────────────────────────────────────────────────────
@@ -3059,7 +3059,8 @@ export function keptSoFarWords(kept: number, finished: number): string {
   const sofar = kept
     ? t("{count, plural, one {# round} other {# rounds}} kept so far", { count: kept })
     : PROGRESS_WORDS.nothingKept;
-  return `${sofar}${finished ? ` · ${t("{count} finished", { count: finished })}` : ""}.`;
+  if (!finished) return t("{kept}.", { kept: sofar });
+  return t("{kept} · {count} finished.", { kept: sofar, count: finished });
 }
 
 /** A lead's run between builders. */

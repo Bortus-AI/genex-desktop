@@ -15,9 +15,22 @@ export function languageChoice(): LanguageChoice {
   return isLanguageChoice(stored) ? stored : SYSTEM_LANGUAGE;
 }
 
+/** A page's view of `window.studio`: the studio's, the Play bar's, or none (a gallery, a test). */
+type PageBridge = { studio?: Partial<Pick<StudioApi, "systemLanguages">> };
+
+/**
+ * The computer's languages in order: main's list, which its preload carries, so System picks here
+ * what it picks for the menus; Chromium's own list (it may hold only Chromium's locale) where main gave none.
+ */
+function systemTags(): readonly string[] {
+  const page = (globalThis as { window?: PageBridge }).window;
+  const fromMain = page?.studio?.systemLanguages?.() ?? [];
+  return fromMain.length > 0 ? fromMain : (globalThis.navigator?.languages ?? []);
+}
+
 /** The language this window speaks for `choice`, with the computer's own list for System. */
 export function windowLanguage(choice: LanguageChoice = languageChoice()): Locale {
-  return resolveLanguage(choice, globalThis.navigator?.languages ?? []);
+  return resolveLanguage(choice, systemTags());
 }
 
 /**

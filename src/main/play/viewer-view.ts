@@ -104,6 +104,8 @@ export interface PlayViewDeps {
   /** The bar's layer: its page (`dist/renderer/play-bar.html`) and its preload (`dist/preload/play-bar.cjs`). */
   barPage: string;
   barPreload: string;
+  /** The bar page's `additionalArguments` (the computer's languages, `main/language.ts`); none when absent. */
+  barArguments?: () => string[];
   /** The game's comments on genex.games. */
   comments: PlayComments;
   /** A web game's native app on this computer, for the bar's pill; absent where Genex plays no native game. */
@@ -285,7 +287,13 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void, hear
   const made = (): WebContentsView => {
     if (view && !view.webContents.isDestroyed()) return view;
     const layer = new WebContentsView({
-      webPreferences: { preload: deps.barPreload, sandbox: true, contextIsolation: true, nodeIntegration: false },
+      webPreferences: {
+        preload: deps.barPreload,
+        additionalArguments: deps.barArguments?.() ?? [],
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
     });
     layer.setBackgroundColor(TRANSPARENT);
     layer.setVisible(false);
@@ -325,6 +333,10 @@ function barLayer(win: BrowserWindow, deps: PlayViewDeps, lost: () => void, hear
     },
     warm: (): void => {
       if (!win.isDestroyed()) made();
+    },
+    reload: (): void => {
+      const contents = view?.webContents;
+      if (contents && !contents.isDestroyed()) contents.reload();
     },
     /** The viewer's news, for the bar's page. */
     tell: (event: PlayViewerEvent): void => {

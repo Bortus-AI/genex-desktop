@@ -5,15 +5,31 @@
  */
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { Locale, SYSTEM_LANGUAGE } from "../../src/shared/locale.ts";
+import {
+  Locale,
+  resolveLanguage,
+  SYSTEM_LANGUAGE,
+  systemLanguagesArgument,
+  systemLanguagesFromArgs,
+} from "../../src/shared/locale.ts";
 import type { StudioSettingsView } from "../../src/shared/studio-api.ts";
 import { languageChoice, shareLanguage, switchLanguage, windowLanguage } from "../../src/renderer/language.ts";
 
-const holder = globalThis as { localStorage?: unknown };
+const holder = globalThis as { localStorage?: unknown; window?: unknown; navigator?: unknown };
 let original: unknown;
+let originalWindow: unknown;
+let originalNavigator: PropertyDescriptor | undefined;
+
+/** A page whose Chromium knows only `chromium` and whose preload carries `fromMain`. */
+function page(chromium: string[], fromMain: string[] | null) {
+  Object.defineProperty(globalThis, "navigator", { value: { languages: chromium }, configurable: true });
+  holder.window = fromMain === null ? {} : { studio: { systemLanguages: () => fromMain } };
+}
 
 beforeEach(() => {
   original = holder.localStorage;
+  originalWindow = holder.window;
+  originalNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   const values = new Map<string, string>();
   holder.localStorage = {
     getItem: (key: string) => values.get(key) ?? null,
@@ -23,6 +39,9 @@ beforeEach(() => {
 });
 afterEach(() => {
   holder.localStorage = original;
+  holder.window = originalWindow;
+  if (originalNavigator) Object.defineProperty(globalThis, "navigator", originalNavigator);
+  else delete holder.navigator;
 });
 
 function fakeApi(saved: StudioSettingsView["language"] = SYSTEM_LANGUAGE, fail = false) {
@@ -71,5 +90,40 @@ describe("the window's language", () => {
     const same = fakeApi(Locale.German);
     await shareLanguage(same);
     assert.deepEqual(same.sent, []);
+  });
+});
+
+describe("System in the window and in main's menus", () => {
+  it("resolves to the same language: the window reads main's list, not Chromium's", () => {
+    // A Mac set to Ukrainian, then Russian: Chromium's list holds only its own locale.
+    const mac = ["uk-UA", "ru-RU"];
+    page(["uk"], systemLanguagesFromArgs(["electron", systemLanguagesArgument(mac)]));
+    const menus = resolveLanguage(SYSTEM_LANGUAGE, mac);
+    assert.equal(menus, Locale.Russian);
+    assert.equal(windowLanguage(SYSTEM_LANGUAGE), menus);
+  });
+
+  it("falls back to Chromium's list in a page main gave none (a gallery, a test)", () => {
+    page(["ja-JP"], null);
+    assert.equal(windowLanguage(SYSTEM_LANGUAGE), Locale.Japanese);
+    page(["ko-KR"], []);
+    assert.equal(windowLanguage(SYSTEM_LANGUAGE), Locale.Korean);
+  });
+
+  it("carries only language tags across the page's arguments", () => {
+    const rows: Array<[string, string[], string[]]> = [
+      ["in order", ["pt-PT", "de-DE"], ["pt-PT", "de-DE"]],
+      ["a separator inside a tag", ["ru,--inspect", "es"], ["es"]],
+      ["a switch smuggled in as a tag", ["--remote-debugging-port=9222"], []],
+      ["spaces and quotes", ['de "x"', "fr FR"], []],
+      ["underscores as macOS writes them", ["zh_Hans_CN"], ["zh_Hans_CN"]],
+      ["nothing", [], []],
+    ];
+    for (const [name, tags, carried] of rows)
+      assert.deepEqual(systemLanguagesFromArgs(["electron", systemLanguagesArgument(tags)]), carried, name);
+    const many = Array.from({ length: 40 }, () => "en");
+    assert.ok(systemLanguagesFromArgs([systemLanguagesArgument(many)]).length <= 16, "a long list is cut");
+    assert.deepEqual(systemLanguagesFromArgs(["--genex-system-languages=ru,!!,ja"]), ["ru", "ja"], "a forged argument");
+    assert.deepEqual(systemLanguagesFromArgs(["--lang=ru"]), [], "another switch");
   });
 });

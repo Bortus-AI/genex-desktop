@@ -4859,7 +4859,6 @@ export default {
   "merged a worker's work": "добавил работу помощника",
   "mobile support\u0004Auto": "Авто",
   model: "модель",
-  "modelled {name} ({details})": "смоделировано: {name} ({details})",
   "movement and inhabitants": "движение и обитатели",
   "must be fixed — a round that leaves it cannot be kept": "нужно исправить — раунд с этой проблемой не сохранится",
   "native games are not available on this computer": "нативные игры недоступны на этом компьютере",
@@ -5497,6 +5496,8 @@ export default {
   "{hours}h {minutes}m": "{hours} ч {minutes} мин",
   "{included} of {total} selected · you can undo later": "Выбрано {included} из {total} · потом можно отменить",
   "{input} in / {output} out per M tokens": "{input} ввод / {output} вывод за 1 млн токенов",
+  "{kept} · {count} finished.": "{kept} · готово: {count}.",
+  "{kept}.": "{kept}.",
   "{kind} being made with {tool}": "{kind}: создаётся в {tool}",
   "{kind} from {tool} waits for your choice": "{kind} из {tool} ждёт твоего выбора",
   "{kind} from {tool}: {title}": "{kind} из {tool}: {title}",
@@ -5545,7 +5546,6 @@ export default {
   "{name} didn't answer. Check your internet connection, then try again.":
     "{name} не отвечает. Проверь подключение к интернету и попробуй снова.",
   "{name} didn't install. Try again.": "Не удалось установить {name}. Попробуй снова.",
-  "{name} failed — {error}": "{name}: не получилось — {error}",
   "{name} holds your account, so it can't be removed: turn it off instead":
     "Плагин {name} хранит твой аккаунт, поэтому его нельзя удалить: просто выключи его",
   "{name} installed, but Genex can't find it. Try again.":
@@ -5630,10 +5630,6 @@ export default {
   "{players} players get the web version.": "Игроки на {players} получат веб-версию.",
   "{plugin} asks for permission.": "{plugin} запрашивает разрешение.",
   "{plugin} asks to run {tool}": "{plugin} просит запустить {tool}",
-  "{plugin} could not run {tool} — {error}": "{plugin}: не удалось выполнить {tool} — {error}",
-  "{plugin} is running {tool}": "{plugin} выполняет {tool}",
-  "{plugin} ran {tool}": "{plugin}: {tool} — готово",
-  "{plugin} ran {tool} — {brought}": "{plugin}: {tool} — готово, получено {brought}",
   "{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?":
     "Плагин {plugin} загружен из папки на этом Mac и работает с твоими правами. Разрешить ему запустить {tool}?",
   "{plugin} was loaded from a folder on this Mac and runs with your access. {question}":
@@ -5762,6 +5758,12 @@ export default {
     "{what} — ссылка на другое место, поэтому Genex не будет это использовать.",
   "{where} in this project links somewhere else, so Genex won't write through it.":
     "{where} в этом проекте — ссылка на другое место, поэтому Genex не будет туда записывать.",
+  "{where}: modelled {name} ({details})": "{where}: смоделировано: {name} ({details})",
+  "{where}: {name} failed — {error}": "{where}: {name}: не получилось — {error}",
+  "{where}: {plugin} could not run {tool} — {error}": "{where}: {plugin}: не удалось выполнить {tool} — {error}",
+  "{where}: {plugin} is running {tool}": "{where}: {plugin} выполняет {tool}",
+  "{where}: {plugin} ran {tool}": "{where}: {plugin}: {tool} — готово",
+  "{where}: {plugin} ran {tool} — {brought}": "{where}: {plugin}: {tool} — готово, получено {brought}",
   "{who} wants to edit a file": "{who} хочет изменить файл",
   "{who} wants to edit {file}": "{who} хочет изменить {file}",
   "{who} wants to open a web page": "{who} хочет открыть веб-страницу",

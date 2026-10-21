@@ -4876,7 +4876,6 @@ export default {
   "merged a worker's work": "ワーカーの作業を統合しました",
   "mobile support\u0004Auto": "自動",
   model: "モデル",
-  "modelled {name} ({details})": "{name}をモデリングしました（{details}）",
   "movement and inhabitants": "動きと住人",
   "must be fixed — a round that leaves it cannot be kept": "必須の修正 — これが残るラウンドは採用されません",
   "native games are not available on this computer": "このコンピューターではネイティブゲームを利用できません",
@@ -5447,6 +5446,8 @@ export default {
   "{hours}h {minutes}m": "{hours}時間{minutes}分",
   "{included} of {total} selected · you can undo later": "{total}件中{included}件を選択 · あとで元に戻せます",
   "{input} in / {output} out per M tokens": "100万トークンあたり入力{input}／出力{output}",
+  "{kept} · {count} finished.": "{kept} · {count}件完了。",
+  "{kept}.": "{kept}。",
   "{kind} being made with {tool}": "{tool}で{kind}を作成中",
   "{kind} from {tool} waits for your choice": "{tool}の{kind}が選択待ちです",
   "{kind} from {tool}: {title}": "{tool}の{kind}：{title}",
@@ -5492,7 +5493,6 @@ export default {
   "{name} didn't answer. Check your internet connection, then try again.":
     "{name}から応答がありませんでした。インターネット接続を確認して、もう一度試してください。",
   "{name} didn't install. Try again.": "{name}をインストールできませんでした。もう一度試してください。",
-  "{name} failed — {error}": "{name}を作れませんでした — {error}",
   "{name} holds your account, so it can't be removed: turn it off instead":
     "{name}にはあなたのアカウント情報が保存されているため削除できません。代わりにオフにしてください",
   "{name} installed, but Genex can't find it. Try again.":
@@ -5576,10 +5576,6 @@ export default {
   "{players} players get the web version.": "{players}のプレイヤーはWeb版で遊べます。",
   "{plugin} asks for permission.": "{plugin}が許可を求めています。",
   "{plugin} asks to run {tool}": "{plugin}が{tool}の実行を求めています",
-  "{plugin} could not run {tool} — {error}": "{plugin}で{tool}を実行できませんでした — {error}",
-  "{plugin} is running {tool}": "{plugin}で{tool}を実行しています",
-  "{plugin} ran {tool}": "{plugin}で{tool}を実行しました",
-  "{plugin} ran {tool} — {brought}": "{plugin}で{tool}を実行しました — {brought}",
   "{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?":
     "{plugin}はこのMacのフォルダーから読み込まれ、あなたの権限で動きます。{tool}を実行させますか？",
   "{plugin} was loaded from a folder on this Mac and runs with your access. {question}":
@@ -5705,6 +5701,12 @@ export default {
   "{what} links somewhere else, so Genex won't use it.": "{what}は別の場所へのリンクなので、Genexは使いません。",
   "{where} in this project links somewhere else, so Genex won't write through it.":
     "このプロジェクトの{where}は別の場所へのリンクなので、Genexはそこを経由して書き込みません。",
+  "{where}: modelled {name} ({details})": "{where}：{name}をモデリングしました（{details}）",
+  "{where}: {name} failed — {error}": "{where}：{name}を作れませんでした — {error}",
+  "{where}: {plugin} could not run {tool} — {error}": "{where}：{plugin}で{tool}を実行できませんでした — {error}",
+  "{where}: {plugin} is running {tool}": "{where}：{plugin}で{tool}を実行しています",
+  "{where}: {plugin} ran {tool}": "{where}：{plugin}で{tool}を実行しました",
+  "{where}: {plugin} ran {tool} — {brought}": "{where}：{plugin}で{tool}を実行しました — {brought}",
   "{who} wants to edit a file": "{who}がファイルを編集しようとしています",
   "{who} wants to edit {file}": "{who}が{file}を編集しようとしています",
   "{who} wants to open a web page": "{who}がWebページを開こうとしています",

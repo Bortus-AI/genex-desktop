@@ -767,6 +767,11 @@ export interface StudioApi {
    */
   pathOfFile(file: File): string;
   /**
+   * The computer's languages in order, as main reads them, so the window's System is the menus'.
+   * Answered by the preload from the page's arguments (`shared/locale.ts`), never by main.
+   */
+  systemLanguages(): readonly string[];
+  /**
    * The native folder dialog. It answers *which folder* only — nothing is written by picking, and
    * the answer goes straight back to `inspectFolder`/`adoptFolder`; the renderer shows the folder
    * as `pathLabel`, never as the path it holds here.

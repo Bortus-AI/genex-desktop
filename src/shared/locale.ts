@@ -59,6 +59,32 @@ function localeForTag(tag: string): Locale | undefined {
   return LOCALES.find((locale) => locale === language);
 }
 
+/** The page argument that carries the computer's languages from main to a studio page's preload. */
+const SYSTEM_LANGUAGES_SWITCH = "--genex-system-languages=";
+/** The most languages carried: a person lists a handful, and the argument stays short. */
+const MAX_SYSTEM_LANGUAGES = 16;
+/** A language tag as macOS and Windows write one: letters, then `-` or `_` parts; never a comma or a space. */
+const LANGUAGE_TAG = /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{1,8})*$/;
+
+/** Up to {@link MAX_SYSTEM_LANGUAGES} of `tags` that are language tags, in order. */
+function languageTags(tags: readonly string[]): string[] {
+  return tags.filter((tag) => LANGUAGE_TAG.test(tag)).slice(0, MAX_SYSTEM_LANGUAGES);
+}
+
+/**
+ * The argument main adds to a studio page (`additionalArguments`) with the computer's languages in
+ * order, so the page's System is main's: Chromium's own list may hold only the locale it picked.
+ */
+export function systemLanguagesArgument(tags: readonly string[]): string {
+  return `${SYSTEM_LANGUAGES_SWITCH}${languageTags(tags).join(",")}`;
+}
+
+/** The computer's languages a page's arguments (`process.argv` in its preload) carry from main; none when absent. */
+export function systemLanguagesFromArgs(args: readonly string[]): string[] {
+  const carried = args.find((arg) => arg.startsWith(SYSTEM_LANGUAGES_SWITCH));
+  return carried ? languageTags(carried.slice(SYSTEM_LANGUAGES_SWITCH.length).split(",")) : [];
+}
+
 /** The first supported language in a computer's preference list; English when none is. */
 export function matchLocale(tags: readonly string[]): Locale {
   for (const tag of tags) {

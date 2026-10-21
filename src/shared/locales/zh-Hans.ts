@@ -4610,7 +4610,6 @@ export default {
   "merged a worker's work": "合并了助手的工作",
   "mobile support\u0004Auto": "自动",
   model: "模型",
-  "modelled {name} ({details})": "已建模 {name}（{details}）",
   "movement and inhabitants": "动态与生灵",
   "must be fixed — a round that leaves it cannot be kept": "必须修复——留着它的轮次不能保留",
   "native games are not available on this computer": "这台电脑上无法使用原生游戏",
@@ -5161,6 +5160,8 @@ export default {
   "{hours}h {minutes}m": "{hours} 小时 {minutes} 分",
   "{included} of {total} selected · you can undo later": "已选择 {included}/{total} · 之后可以撤销",
   "{input} in / {output} out per M tokens": "每百万 token：输入 {input} / 输出 {output}",
+  "{kept} · {count} finished.": "{kept} · {count} 个已完成。",
+  "{kept}.": "{kept}。",
   "{kind} being made with {tool}": "正在用 {tool} 制作{kind}",
   "{kind} from {tool} waits for your choice": "{tool} 的{kind}等你选择",
   "{kind} from {tool}: {title}": "{tool} 的{kind}：{title}",
@@ -5205,7 +5206,6 @@ export default {
   "{name} custom": "{name} 自定义",
   "{name} didn't answer. Check your internet connection, then try again.": "{name} 没有响应。请检查网络连接后重试。",
   "{name} didn't install. Try again.": "{name} 安装失败。请重试。",
-  "{name} failed — {error}": "{name} 生成失败——{error}",
   "{name} holds your account, so it can't be removed: turn it off instead":
     "{name} 保存着你的账号，因此无法移除：请改为关闭它",
   "{name} installed, but Genex can't find it. Try again.": "{name} 已安装，但 Genex 找不到它。请重试。",
@@ -5285,10 +5285,6 @@ export default {
   "{players} players get the web version.": "{players} 玩家将获得网页版。",
   "{plugin} asks for permission.": "{plugin} 请求权限。",
   "{plugin} asks to run {tool}": "{plugin} 请求运行 {tool}",
-  "{plugin} could not run {tool} — {error}": "{plugin} 无法运行 {tool}——{error}",
-  "{plugin} is running {tool}": "{plugin} 正在运行 {tool}",
-  "{plugin} ran {tool}": "{plugin} 已运行 {tool}",
-  "{plugin} ran {tool} — {brought}": "{plugin} 已运行 {tool}——{brought}",
   "{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?":
     "{plugin} 是从这台 Mac 上的文件夹加载的，会以你的权限运行。允许它运行 {tool} 吗？",
   "{plugin} was loaded from a folder on this Mac and runs with your access. {question}":
@@ -5410,6 +5406,12 @@ export default {
   "{what} links somewhere else, so Genex won't use it.": "{what} 链接到了其他位置，所以 Genex 不会使用它。",
   "{where} in this project links somewhere else, so Genex won't write through it.":
     "此项目中的 {where} 链接到了其他位置，所以 Genex 不会通过它写入。",
+  "{where}: modelled {name} ({details})": "{where}：已建模 {name}（{details}）",
+  "{where}: {name} failed — {error}": "{where}：{name} 生成失败——{error}",
+  "{where}: {plugin} could not run {tool} — {error}": "{where}：{plugin} 无法运行 {tool}——{error}",
+  "{where}: {plugin} is running {tool}": "{where}：{plugin} 正在运行 {tool}",
+  "{where}: {plugin} ran {tool}": "{where}：{plugin} 已运行 {tool}",
+  "{where}: {plugin} ran {tool} — {brought}": "{where}：{plugin} 已运行 {tool}——{brought}",
   "{who} wants to edit a file": "{who} 想编辑一个文件",
   "{who} wants to edit {file}": "{who} 想编辑 {file}",
   "{who} wants to open a web page": "{who} 想打开一个网页",

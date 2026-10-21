@@ -1,17 +1,23 @@
 /**
  * Main's language: the menus, dialogs and notifications speak the one chosen in Settings, else
- * the computer's. The window loads its own copy before main answers (`renderer/language.ts`); both
- * resolve System from the same list, the one Chromium was started with.
+ * the computer's. A window loads its own copy before main answers (`renderer/language.ts`), and
+ * resolves System from the list main hands its preload ({@link pageLanguageArguments}): Chromium's
+ * own list may hold only the locale Chromium picked, so the two would otherwise disagree.
  */
 import { app } from "electron";
 import { currentLocale, setLocale } from "../shared/i18n.ts";
-import { Locale, resolveLanguage } from "../shared/locale.ts";
+import { Locale, resolveLanguage, systemLanguagesArgument } from "../shared/locale.ts";
 import { loadCatalog } from "../shared/locales/index.ts";
 
 /** The computer's languages in order, or the one a launch pinned with `--lang`. */
 export function systemLanguages(): string[] {
   const pinned = app.commandLine.getSwitchValue("lang");
   return pinned ? [pinned] : app.getPreferredSystemLanguages();
+}
+
+/** A studio page's `additionalArguments`: the computer's languages, for its System. */
+export function pageLanguageArguments(): string[] {
+  return [systemLanguagesArgument(systemLanguages())];
 }
 
 /**

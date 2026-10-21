@@ -14,7 +14,12 @@ import { LOCALES_FOLDER, panelLocalesScript, readPanelLocales } from "./panel-wo
 export const PANEL_SDK_MARKER = "<!-- STUDIO_PANEL_SDK -->";
 /** Where a panel that wants Genex's own type asks for it: the fonts go in here as data. */
 export const PANEL_FONTS_MARKER = "<!-- STUDIO_PANEL_FONTS -->";
-/** Genex's type, as the app ships it: words in Zalando Sans SemiExpanded, actions and machine text in Geist Mono. */
+/**
+ * Genex's type, as the app ships it: words in Zalando Sans SemiExpanded, actions and machine text in
+ * Geist Mono. The Japanese, Korean and Chinese faces (1.5–2 MB each) stay out: pasted as data they
+ * would add about 9 MB to every panel. `words.js` marks the panel's `lang`, so its stack's
+ * `system-ui` picks the Mac's own face for that language (Hiragino Sans, Apple SD Gothic Neo, PingFang SC).
+ */
 export const PANEL_FONTS = [
   { family: "Zalando Sans SemiExpanded", file: "ZalandoSansSemiExpanded-variable.woff2", weight: "200 900" },
   { family: "Geist Mono", file: "GeistMono-variable.woff2", weight: "100 900" },

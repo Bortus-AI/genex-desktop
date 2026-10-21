@@ -4984,7 +4984,6 @@ export default {
   "merged a worker's work": "Arbeit eines Helfers übernommen",
   "mobile support\u0004Auto": "Auto",
   model: "Modell",
-  "modelled {name} ({details})": "{name} modelliert ({details})",
   "movement and inhabitants": "Bewegung und Bewohner",
   "must be fixed — a round that leaves it cannot be kept":
     "muss behoben werden – eine Runde, die es nicht behebt, kann nicht behalten werden",
@@ -5592,6 +5591,8 @@ export default {
   "{included} of {total} selected · you can undo later":
     "{included} von {total} ausgewählt · später rückgängig machbar",
   "{input} in / {output} out per M tokens": "{input} Eingabe / {output} Ausgabe pro 1 Mio. Tokens",
+  "{kept} · {count} finished.": "{kept} · {count} fertig.",
+  "{kept}.": "{kept}.",
   "{kind} being made with {tool}": "{kind} wird mit {tool} erstellt",
   "{kind} from {tool} waits for your choice": "{kind} von {tool} wartet auf deine Wahl",
   "{kind} from {tool}: {title}": "{kind} von {tool}: {title}",
@@ -5637,7 +5638,6 @@ export default {
   "{name} didn't answer. Check your internet connection, then try again.":
     "{name} hat nicht geantwortet. Prüfe deine Internetverbindung und versuch es dann noch mal.",
   "{name} didn't install. Try again.": "{name} wurde nicht installiert. Versuch es noch mal.",
-  "{name} failed — {error}": "{name} fehlgeschlagen – {error}",
   "{name} holds your account, so it can't be removed: turn it off instead":
     "{name} enthält dein Konto und kann daher nicht entfernt werden: Schalte es stattdessen aus",
   "{name} installed, but Genex can't find it. Try again.":
@@ -5722,10 +5722,6 @@ export default {
   "{players} players get the web version.": "Spieler auf {players} bekommen die Webversion.",
   "{plugin} asks for permission.": "{plugin} bittet um Erlaubnis.",
   "{plugin} asks to run {tool}": "{plugin} möchte {tool} ausführen",
-  "{plugin} could not run {tool} — {error}": "{plugin} konnte {tool} nicht ausführen – {error}",
-  "{plugin} is running {tool}": "{plugin} führt {tool} aus",
-  "{plugin} ran {tool}": "{plugin} hat {tool} ausgeführt",
-  "{plugin} ran {tool} — {brought}": "{plugin} hat {tool} ausgeführt – {brought}",
   "{plugin} was loaded from a folder on this Mac and runs with your access. Let it run {tool}?":
     "{plugin} wurde aus einem Ordner auf diesem Mac geladen und läuft mit deinen Rechten. Darf es {tool} ausführen?",
   "{plugin} was loaded from a folder on this Mac and runs with your access. {question}":
@@ -5855,6 +5851,12 @@ export default {
     "{what} verweist woandershin, deshalb verwendet Genex es nicht.",
   "{where} in this project links somewhere else, so Genex won't write through it.":
     "{where} in diesem Projekt verweist woandershin, deshalb schreibt Genex nicht hinein.",
+  "{where}: modelled {name} ({details})": "{where}: {name} modelliert ({details})",
+  "{where}: {name} failed — {error}": "{where}: {name} fehlgeschlagen – {error}",
+  "{where}: {plugin} could not run {tool} — {error}": "{where}: {plugin} konnte {tool} nicht ausführen – {error}",
+  "{where}: {plugin} is running {tool}": "{where}: {plugin} führt {tool} aus",
+  "{where}: {plugin} ran {tool}": "{where}: {plugin} hat {tool} ausgeführt",
+  "{where}: {plugin} ran {tool} — {brought}": "{where}: {plugin} hat {tool} ausgeführt – {brought}",
   "{who} wants to edit a file": "{who} möchte eine Datei bearbeiten",
   "{who} wants to edit {file}": "{who} möchte {file} bearbeiten",
   "{who} wants to open a web page": "{who} möchte eine Webseite öffnen",

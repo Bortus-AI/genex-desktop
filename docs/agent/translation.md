@@ -2,7 +2,11 @@
 
 The app ships in English, Russian, Spanish, Brazilian Portuguese, German, French, Japanese, Korean
 and Simplified Chinese (`Locale` in `src/shared/locale.ts`). Settings → Appearance → Language picks
-one, System follows the computer.
+one, System follows the computer. Main reads the computer's language list once and hands it to every
+studio page it opens (`pageLanguageArguments`), so the window, Play's bar and the menus pick the same
+language; a switch rebuilds the menu and reloads Play's bar. The in-app agents answer in the
+language the person writes in, and Genex's own messages in the app's (`studio.language`,
+`loop/language-prompts.ts`).
 
 ## Writing translatable code
 

@@ -3013,8 +3013,10 @@ output and is never shown as plugin status.
 A panel places `<!-- STUDIO_PANEL_SDK -->` where the bridge goes; `plugin:new` (and the build, for
 the bundled example and Local Blender) replaces it with the current `panel.js` and `ui.js`
 (`src/plugin-sdk/inline-panel-sdk.mjs`, also runnable as `node inline-panel-sdk.mjs panel.html`).
-`<!-- STUDIO_PANEL_FONTS -->` takes Genex's two faces as `data:` fonts (`inlinePanelFonts`, used by
-the Unreal panel's build), the only fonts the panel CSP (`main/plugin-panel-csp.ts`) loads.
+`<!-- STUDIO_PANEL_FONTS -->` takes Genex's Latin and Cyrillic faces as `data:` fonts (`inlinePanelFonts`,
+used by the Unreal panel's build), the only fonts the panel CSP (`main/plugin-panel-csp.ts`) loads;
+Japanese, Korean and Chinese use the Mac's own face for the panel's `lang`, since those faces would
+add megabytes to every panel.
 The source example's panel therefore has no bridge until built or scaffolded.
 
 The scaffold itself needs nothing from Studio's tree: the panel carries the bridge and

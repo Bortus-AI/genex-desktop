@@ -197,7 +197,7 @@ import { migrateLegacyUserData, userDataMigrationLine } from "./user-data-migrat
 import { confirmPluginInstall, reacquirePlugin } from "./plugin-install-dialog.ts";
 import { PLUGIN_PANEL_CSP } from "./plugin-panel-csp.ts";
 import { HttpStatus, textResponse } from "./page-serve.ts";
-import { applyMainLanguage } from "./language.ts";
+import { applyMainLanguage, pageLanguageArguments } from "./language.ts";
 import { appMenuTemplate } from "./app-menu.ts";
 import { intlLocale, t } from "../shared/i18n.ts";
 import { SYSTEM_LANGUAGE } from "../shared/locale.ts";
@@ -900,6 +900,7 @@ function studioWindowOptions(): Electron.BrowserWindowConstructorOptions {
     ...windowTitle(),
     webPreferences: {
       preload: path.join(distRoot, "preload", "preload.cjs"),
+      additionalArguments: pageLanguageArguments(),
       ...(dev ? { backgroundThrottling: false } : {}),
       contextIsolation: true,
       sandbox: true,
@@ -1321,6 +1322,7 @@ function attachPlay(studio: StudioCore, win: BrowserWindow): void {
     micStore: playMicStore(path.join(userDataRoot, "play-mic.json")),
     barPage: path.join(distRoot, "renderer", "play-bar.html"),
     barPreload: path.join(distRoot, "preload", "play-bar.cjs"),
+    barArguments: pageLanguageArguments,
     comments: playCommentsFor(studio),
     ...(playInstallsFor(studio) ? { nativeApp: nativeAppFor(studio) } : {}),
     coin: playCoinFor(studio),
@@ -1893,9 +1895,13 @@ function checkForUpdates(): void {
   );
 }
 
-/** Redraw what main drew in the old language: the app menu. Windows reload themselves. */
+/**
+ * Redraw what main drew in the old language: the menu, and the studio pages it keeps loaded (Play's
+ * bar). The studio window reloads itself when it switches.
+ */
 function languageChanged(): void {
   setAppMenu();
+  playView?.languageChanged();
 }
 
 /**
