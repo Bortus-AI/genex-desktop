@@ -59,7 +59,7 @@ before(async () => {
   const zip = path.join(root, "godot.zip");
   const response = await fetch(ZIP);
   await writeFile(zip, Buffer.from(await response.arrayBuffer()));
-  await run("tar", ["-xf", zip, "-C", godot]);
+  await run(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "tar.exe"), ["-xf", zip, "-C", godot]);
   log("unpacked", await readdir(godot));
   sandbox = await ProcessSandbox.create({
     writableRoots: [game],
