@@ -115,9 +115,11 @@ export type FolderAceOutcome =
 export type FolderAceEditor = (edits: readonly FolderAceEdit[]) => Promise<FolderAceOutcome[]>;
 /** {@link FolderAceEditor} for process exit, when nothing asynchronous runs any more. */
 export type FolderAceEditorSync = (edits: readonly FolderAceEdit[]) => FolderAceOutcome[];
-/** How long one batch of own edits may run (default {@link OWN_TIMEOUT_MS}). */
+/** How one batch runs: how long it may (default {@link OWN_TIMEOUT_MS} for own edits), and what stops it early. */
 export interface FolderOwnRun {
   timeoutMs?: number;
+  /** Stops the batch, leaving each edit it had not finished undone (Genex quitting during a walk). */
+  signal?: AbortSignal;
 }
 /**
  * Applies own edits in order and answers one outcome per edit, or null when PowerShell could not
@@ -518,10 +520,10 @@ function icaclsFailure(error: unknown): string {
 export interface FolderAceTools {
   env?: NodeJS.ProcessEnv;
   /**
-   * Runs PowerShell for at most `timeoutMs` and answers what it wrote; rejects when it fails or does
+   * Runs PowerShell, stopped as `run` says, and answers what it wrote; rejects when it fails or does
    * not finish, with what it wrote by then as the error's `stdout`.
    */
-  powershell?: (file: string, args: string[], env: NodeJS.ProcessEnv, timeoutMs?: number) => Promise<string>;
+  powershell?: (file: string, args: string[], env: NodeJS.ProcessEnv, run?: FolderOwnRun) => Promise<string>;
   /** Runs `icacls`; rejects with its output when it fails. */
   icacls?: (args: string[]) => Promise<void>;
 }
@@ -530,9 +532,10 @@ async function runPowerShell(
   file: string,
   args: string[],
   env: NodeJS.ProcessEnv,
-  timeoutMs: number = TOOL_TIMEOUT_MS,
+  { timeoutMs = TOOL_TIMEOUT_MS, signal }: FolderOwnRun = {},
 ): Promise<string> {
-  const running = run(file, args, { env, timeout: timeoutMs, windowsHide: true, encoding: "utf8" });
+  const stop = signal ? { signal } : {};
+  const running = run(file, args, { env, timeout: timeoutMs, windowsHide: true, encoding: "utf8", ...stop });
   // PowerShell may wait for its input to end before it exits; it reads none.
   running.child.stdin?.end();
   return (await running).stdout;
@@ -633,8 +636,8 @@ function stoppedOutcomes(edits: readonly FolderOwnEdit[], finished: readonly Fol
 /**
  * An editor for Genex's own entries: one PowerShell batch, with no `icacls` to fall back to (it
  * would walk everything under each denied path's parent); null where PowerShell cannot apply the
- * batch. A batch that runs past its deadline ({@link OWN_TIMEOUT_MS} unless the run says) keeps
- * what it finished, and the rest are refused as `timedOut`.
+ * batch or the run's signal stopped it. A batch that runs past its deadline ({@link OWN_TIMEOUT_MS}
+ * unless the run says) keeps what it finished, and the rest are refused as `timedOut`.
  */
 export function folderOwnEditor(tools: Pick<FolderAceTools, "env" | "powershell"> = {}): FolderOwnEditor {
   const powershellRun = tools.powershell ?? runPowerShell;
@@ -643,7 +646,8 @@ export function folderOwnEditor(tools: Pick<FolderAceTools, "env" | "powershell"
     const timeoutMs = run.timeoutMs ?? OWN_TIMEOUT_MS;
     const command = folderAceCommand(edits, tools.env);
     try {
-      return folderAceOutcomes(await powershellRun(command.file, command.args, command.env, timeoutMs), edits.length);
+      const stdout = await powershellRun(command.file, command.args, command.env, { ...run, timeoutMs });
+      return folderAceOutcomes(stdout, edits.length);
     } catch (error) {
       if (!ranOutOfTime(error)) return null;
       return stoppedOutcomes(edits, folderAceProgress(writtenBefore(error)) ?? [], timeoutMs);

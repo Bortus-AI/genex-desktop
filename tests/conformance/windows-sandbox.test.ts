@@ -78,6 +78,7 @@ import {
   GrantAccess,
   type FolderAceEdit,
   type FolderAceEditor,
+  type FolderAceOutcome,
   FolderAceOp,
   type FolderOwnEdit,
   type FolderOwnEditor,
@@ -509,8 +510,8 @@ describe("an entry on one folder alone", () => {
     const batch = [PROFILE, at("anaconda3"), at("AppData", "Roaming", "npm")].map(own);
     const deadlines: Array<number | undefined> = [];
     const stopped = folderOwnEditor({
-      powershell: async (_file, _args, _env, timeoutMs) => {
-        deadlines.push(timeoutMs);
+      powershell: async (_file, _args, _env, run) => {
+        deadlines.push(run?.timeoutMs);
         throw Object.assign(new Error("Command failed"), { killed: true, stdout: '{"ok":true,"ms":4}\n' });
       },
     });
@@ -529,6 +530,16 @@ describe("an entry on one folder alone", () => {
     });
     await stopped(batch);
     assert.deepEqual(deadlines, [30_000, 600_000], "ten minutes unless the run says");
+    const quitting = new AbortController();
+    const signals: Array<AbortSignal | undefined> = [];
+    const aborted = folderOwnEditor({
+      powershell: async (_file, _args, _env, run) => {
+        signals.push(run?.signal);
+        throw Object.assign(new Error("The operation was aborted"), { name: "AbortError", code: "ABORT_ERR" });
+      },
+    });
+    assert.equal(await aborted(batch, { signal: quitting.signal }), null, "a stopped walk finished nothing");
+    assert.equal(signals[0], quitting.signal, "the run's signal reaches PowerShell");
   });
 
   it("makes the same change through icacls when PowerShell cannot run the batch", async () => {
@@ -1667,6 +1678,7 @@ function fakeOwnEntries(
   options: { available?: boolean; walk?: () => Promise<void>; walks?: string[] } = {},
 ) {
   const synced: OwnAclEntry[][] = [];
+  const signals: Array<AbortSignal | undefined> = [];
   let revoked = 0;
   let walked = 0;
   const entries: OwnAclEntries = {
@@ -1675,8 +1687,10 @@ function fakeOwnEntries(
       synced.push([...entries]);
       return options.available ?? true;
     },
-    walkDeferred: async () => {
+    walkDeferred: async (run) => {
       walked++;
+      run?.walking?.(options.walks ?? []);
+      signals.push(run?.signal);
       await options.walk?.();
     },
     walks: () => options.walks ?? [],
@@ -1687,7 +1701,7 @@ function fakeOwnEntries(
       revoked++;
     },
   };
-  return { entries, synced, revoked: () => revoked, walked: () => walked };
+  return { entries, synced, signals, revoked: () => revoked, walked: () => walked };
 }
 
 /**
@@ -2006,6 +2020,27 @@ describe("the grant session", () => {
     );
   });
 
+  it("does not wait out a refusal where the launcher could not open srt-win's folders: set up repairs that", async () => {
+    const runtime = fakeSessionRuntime();
+    const value = new WindowsSandboxSession({
+      runtime: runtime.runtime,
+      profile: PROFILE,
+      ancestors: fakeAncestors().ancestors,
+      launcher: async () => Object.assign(async () => {}, { granted: false }),
+      logonRetryMs: [0, 0],
+    });
+    runtime.failInitializeWith(refusedLogon("0x80070005", "Access is denied."));
+    await assert.rejects(
+      value.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }),
+      (error: unknown) => {
+        assert.ok(!(error instanceof SandboxLaunchError), "srt-win's own error, which the setup check reads");
+        assert.match(String(error), /0x80070005/);
+        return true;
+      },
+    );
+    assert.deepEqual(runtime.calls, ["initialize"]);
+  });
+
   it("does not wait out a refusal that is not the sandbox user's: a disabled service is Set up's", async () => {
     const s = session({ logonRetryMs: [0, 0] });
     s.runtime.failInitializeWith(
@@ -2200,8 +2235,65 @@ describe("deny paths Genex sets itself", () => {
     finish();
     await s.session.settled();
     assert.deepEqual(s.runtime.calls, [...regranted, "reset", "own entries", "initialize"]);
-    assert.ok(s.own.walked() >= 2, "then it runs");
+    await delay(0);
+    await turn();
+    assert.ok(s.own.walked() >= 2, "then it runs, after the regrant near it");
     await s.session.dispose();
+  });
+
+  it("takes back a grant only once a walk under way on that folder is done", async () => {
+    let finish = () => {};
+    const walking = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const s = session({ ownDenies: true, walk: () => walking, walks: [PONG], walkDelayMs: 0 });
+    const pong = {};
+    const late = {};
+    await s.session.join(pong, { grants: { write: [PONG], read: [] }, config: BASE_CONFIG });
+    await s.session.join(late, { grants: { write: [LATE], read: [] }, config: BASE_CONFIG });
+    await s.session.settled();
+    await delay(0);
+    await turn();
+    assert.equal(s.own.walked(), 1, "the walk is under way");
+    const before = [...s.runtime.calls];
+    s.session.leave(pong);
+    await turn();
+    await turn();
+    assert.deepEqual(s.runtime.calls, before, "the walk would set the grant again after it was taken back");
+    finish();
+    await s.session.settled();
+    assert.deepEqual(s.runtime.calls, [...before, "reset", "own entries", "initialize"]);
+    assert.ok(
+      s.own.synced.at(-1)?.every((entry) => entry.path !== PONG),
+      "then the grant is taken back",
+    );
+    await s.session.dispose();
+  });
+
+  it("starts a walk a grant left at once, and a deny's only after the start is past", async () => {
+    const npm = at("AppData", "Roaming", "npm");
+    const granting = session({ ownDenies: true, walks: [npm], walkDelayMs: 60_000 });
+    await granting.session.join({}, { grants: { write: [PONG], read: [npm] }, config: BASE_CONFIG });
+    await delay(0);
+    await turn();
+    assert.equal(granting.own.walked(), 1, "a command may need what the grant opens");
+    await granting.session.dispose();
+    const denying = session({ ownDenies: true, walks: [at(".ssh")], walkDelayMs: 60_000 });
+    await denying.session.join({}, { grants: { write: [PONG], read: [npm] }, config: BASE_CONFIG });
+    await delay(0);
+    await turn();
+    assert.equal(denying.own.walked(), 0, "a deny's walk opens nothing a command waits for");
+    await denying.session.dispose();
+  });
+
+  it("stops a walk under way when Genex quits, leaving it for the next start", async () => {
+    const s = session({ ownDenies: true, walk: () => new Promise<void>(() => {}), walks: [PONG], walkDelayMs: 0 });
+    await s.session.join({}, { grants: { write: [PONG], read: [] }, config: BASE_CONFIG });
+    await delay(0);
+    await turn();
+    assert.equal(s.own.signals[0]?.aborted, false);
+    s.session.stopWalks();
+    assert.equal(s.own.signals[0]?.aborted, true, "its PowerShell is stopped");
   });
 
   it("starts a deferred walk only once a regrant already running has finished", async () => {
@@ -2555,55 +2647,191 @@ describe("Genex's own deny entries", () => {
     assert.deepEqual(recorded.entries, [guard, ssh], "what it may have set stays recorded");
   });
 
-  it("waits for denies and urgent grants in full, for other grants only within a budget, and passes the rest down after", async () => {
-    // A first grant on a large folder can pass its entries down for longer than any start should
-    // wait, and nothing of the agents may wait on it meanwhile.
-    const holders = await tmpDir("windows-denies-");
+  describe("grants the start does not wait for in full", () => {
     const install = at("AppData", "Local", "genex", "app-0.1.15");
     const conda = at("anaconda3");
     const npm = at("AppData", "Roaming", "npm");
+    const game = at("AI Games", "Pong");
     const BUDGET_MS = 30_000;
     const WALK_MS = 3_600_000;
-    const grantOf = (dir: string): OwnAclEntry => ({ path: dir, deny: null, guard: false, grant: GrantAccess.Read });
-    const asked: Array<{ dirs: string[]; walk: string[]; timeoutMs: number | undefined }> = [];
-    const logged: string[] = [];
-    const windows: FolderOwnEditor = async (edits, run) => {
-      asked.push({
-        dirs: edits.map((edit) => edit.dir),
-        walk: edits.map((edit) => `${edit.walk}`),
-        timeoutMs: run?.timeoutMs,
-      });
-      if (run?.timeoutMs !== BUDGET_MS) return edits.map(() => ({ ok: true }) as const);
-      return edits.map((edit) => {
-        if (edit.dir === conda)
-          return { ok: false, error: "Windows was still passing the entries down after 30 s", timedOut: true };
-        return { ok: false, error: "Access is denied." };
-      });
-    };
-    const own = holder(holders, 1, [], {
-      edit: windows,
-      urgent: (dir) => dir === install,
-      grantBudgetMs: BUDGET_MS,
-      walkTimeoutMs: WALK_MS,
-      log: (line) => logged.push(line),
+    const STILL_ON = "Windows was still passing the entries down after 30 s";
+    const grantOf = (dir: string, grant: GrantAccess = GrantAccess.Read): OwnAclEntry => ({
+      path: dir,
+      deny: null,
+      guard: false,
+      grant,
     });
-    assert.equal(
-      await own.sync([guard, ssh, grantOf(install), grantOf(conda), grantOf(npm)]),
-      true,
-      "the start goes on",
-    );
-    assert.deepEqual(asked, [
-      { dirs: [PROFILE, at(".ssh"), install], walk: ["later", "later", "later"], timeoutMs: undefined },
-      { dirs: [conda, npm], walk: ["later", "later"], timeoutMs: BUDGET_MS },
-    ]);
-    assert.deepEqual(own.walks(), [conda, npm], "both are passed down after the start");
-    assert.deepEqual(logged, [
-      `own entries: ${conda} is passed down after the start (Windows was still passing the entries down after 30 s)`,
-      `own entries: ${npm} is passed down after the start (Access is denied.)`,
-    ]);
-    await own.walkDeferred();
-    assert.deepEqual(asked.at(-1), { dirs: [conda, npm], walk: ["again", "again"], timeoutMs: WALK_MS });
-    assert.deepEqual(own.walks(), [], "passed down once the start was past");
+    type Asked = { dirs: string[]; walk: string[]; timeoutMs: number | undefined; walks: string[] };
+    /** Windows over a batch: each edit answers `answer` within the budget, done otherwise; every batch logged with the record's walks then. */
+    const windows =
+      (holders: string, asked: Asked[], answer: (dir: string) => FolderAceOutcome): FolderOwnEditor =>
+      async (edits, run) => {
+        const record = JSON.parse(await readFile(path.join(holders, "1.json"), "utf8")) as { walks?: string[] };
+        asked.push({
+          dirs: edits.map((edit) => edit.dir),
+          walk: edits.map((edit) => `${edit.walk}`),
+          timeoutMs: run?.timeoutMs,
+          walks: record.walks ?? [],
+        });
+        return edits.map((edit) => (run?.timeoutMs === BUDGET_MS ? answer(edit.dir) : { ok: true }));
+      };
+    const budgeted = (holders: string, edit: FolderOwnEditor, logged: string[] = []) =>
+      holder(holders, 1, [], {
+        edit,
+        urgent: (dir) => dir === install,
+        grantBudgetMs: BUDGET_MS,
+        walkTimeoutMs: WALK_MS,
+        log: (line) => logged.push(line),
+      });
+
+    it("waits for denies, write grants and urgent grants in full, for read grants only within a budget", async () => {
+      // A first grant on a large folder can pass its entries down for longer than any start should
+      // wait, and nothing of the agents may wait on it meanwhile.
+      const holders = await tmpDir("windows-denies-");
+      const asked: Asked[] = [];
+      const logged: string[] = [];
+      const timedOut = (dir: string): FolderAceOutcome =>
+        dir === conda
+          ? { ok: false, error: STILL_ON, timedOut: true }
+          : { ok: false, error: "not reached: the batch ran out of time after 30 s", timedOut: true };
+      const own = budgeted(holders, windows(holders, asked, timedOut), logged);
+      const entries = [guard, ssh, grantOf(install), grantOf(game, GrantAccess.Modify), grantOf(conda), grantOf(npm)];
+      assert.equal(await own.sync(entries), true, "the start goes on");
+      assert.deepEqual(
+        asked.map(({ dirs, timeoutMs }) => ({ dirs, timeoutMs })),
+        [
+          { dirs: [PROFILE, at(".ssh"), game, install], timeoutMs: undefined },
+          { dirs: [conda, npm], timeoutMs: BUDGET_MS },
+        ],
+        "the folder the agents work in, as the ones the start needs, is set in full",
+      );
+      assert.deepEqual(asked[1]?.walks, [conda, npm], "recorded to walk before the budget runs: a crash keeps them");
+      assert.deepEqual(own.walks(), [conda, npm], "both are passed down after the start");
+      assert.deepEqual(logged, [
+        `own entries: ${conda} is passed down after the start (${STILL_ON})`,
+        `own entries: ${npm} is passed down after the start (not reached: the batch ran out of time after 30 s)`,
+      ]);
+      await own.walkDeferred();
+      assert.deepEqual(asked.at(-1)?.dirs, [conda, npm]);
+      assert.deepEqual(asked.at(-1)?.walk, [OwnWalk.Again, OwnWalk.Again]);
+      assert.equal(asked.at(-1)?.timeoutMs, WALK_MS);
+      assert.deepEqual(own.walks(), [], "passed down once the start was past");
+    });
+
+    it("leaves nothing to walk for a grant the budget finished", async () => {
+      const holders = await tmpDir("windows-denies-");
+      const own = budgeted(
+        holders,
+        windows(holders, [], () => ({ ok: true, ms: 40 })),
+      );
+      assert.equal(await own.sync([guard, grantOf(conda)]), true);
+      assert.deepEqual(own.walks(), []);
+    });
+
+    it("sets in full a write grant narrowed to reading, which a stopped walk would leave writable", async () => {
+      const holders = await tmpDir("windows-denies-");
+      const asked: Asked[] = [];
+      const own = budgeted(
+        holders,
+        windows(holders, asked, () => ({ ok: false, error: STILL_ON, timedOut: true })),
+      );
+      assert.equal(await own.sync([guard, grantOf(conda, GrantAccess.Modify)]), true);
+      asked.length = 0;
+      assert.equal(await own.sync([guard, grantOf(conda)]), true);
+      assert.deepEqual(
+        asked.map(({ dirs, timeoutMs }) => ({ dirs, timeoutMs })),
+        [{ dirs: [PROFILE, conda], timeoutMs: undefined }],
+      );
+      assert.deepEqual(own.walks(), []);
+    });
+
+    it("tries a grant Windows refused within the budget again in full, and fails the start if it still refuses", async () => {
+      const holders = await tmpDir("windows-denies-");
+      const asked: Asked[] = [];
+      let refusals = 1;
+      const flaky = windows(holders, asked, () => ({ ok: false, error: "being changed" }));
+      const once: FolderOwnEditor = async (edits, run) => {
+        const outcomes = (await flaky(edits, run)) ?? [];
+        if (run?.timeoutMs === BUDGET_MS) return outcomes;
+        return edits.map((edit) =>
+          edit.dir === npm && refusals-- > 0 ? { ok: false, error: "being changed" } : { ok: true },
+        );
+      };
+      assert.equal(await budgeted(holders, once).sync([guard, grantOf(npm)]), true);
+      assert.deepEqual(
+        asked.map(({ dirs, timeoutMs }) => ({ dirs, timeoutMs })),
+        [
+          { dirs: [PROFILE], timeoutMs: undefined },
+          { dirs: [npm], timeoutMs: BUDGET_MS },
+          { dirs: [npm], timeoutMs: undefined },
+          { dirs: [npm], timeoutMs: undefined },
+        ],
+        "refused within the budget, then once in full, then done",
+      );
+      const broken = await tmpDir("windows-denies-");
+      const refusing: FolderOwnEditor = async (edits, run) =>
+        edits.map((edit) =>
+          edit.dir === npm || run?.timeoutMs === BUDGET_MS ? { ok: false, error: "Access is denied." } : { ok: true },
+        );
+      await assert.rejects(
+        budgeted(broken, refusing).sync([guard, grantOf(npm)]),
+        /could not set the sandbox user's entries on .*\\npm: Access is denied\./,
+        "never left to a walk that would refuse it at every start",
+      );
+    });
+
+    it("keeps a grant a sync took back while the walk set it again, so the next sync takes it back", async () => {
+      const holders = await tmpDir("windows-denies-");
+      let release = () => {};
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let walking = false;
+      const asked: Asked[] = [];
+      const timed = windows(holders, asked, () => ({ ok: false, error: STILL_ON, timedOut: true }));
+      const edit: FolderOwnEditor = async (edits, run) => {
+        if (run?.timeoutMs === WALK_MS && !walking) {
+          walking = true;
+          await held;
+        }
+        return timed(edits, run);
+      };
+      const own = budgeted(holders, edit);
+      await own.sync([guard, grantOf(conda)]);
+      const walked = own.walkDeferred();
+      await turn();
+      await own.sync([guard]);
+      release();
+      await walked;
+      const recorded = JSON.parse(await readFile(path.join(holders, "1.json"), "utf8")) as { entries: OwnAclEntry[] };
+      assert.deepEqual(recorded.entries, [guard, grantOf(conda)], "the walk's grant stays recorded");
+      asked.length = 0;
+      await own.sync([guard]);
+      assert.ok(
+        asked.some((batch) => batch.dirs.includes(conda)),
+        "and the next sync takes it back",
+      );
+    });
+
+    it("says what it walks when it reads it, and stops when told", async () => {
+      const holders = await tmpDir("windows-denies-");
+      const signals: Array<AbortSignal | undefined> = [];
+      const timed = windows(holders, [], () => ({ ok: false, error: STILL_ON, timedOut: true }));
+      const own = budgeted(holders, async (edits, run) => {
+        if (run?.timeoutMs === WALK_MS) {
+          signals.push(run.signal);
+          return null;
+        }
+        return timed(edits, run);
+      });
+      await own.sync([guard, grantOf(conda)]);
+      const said: string[][] = [];
+      const quitting = new AbortController();
+      await own.walkDeferred({ signal: quitting.signal, walking: (paths) => said.push(paths) });
+      assert.deepEqual(said, [[conda]]);
+      assert.equal(signals[0], quitting.signal);
+      assert.deepEqual(own.walks(), [conda], "a walk stopped part way stays to walk");
+    });
   });
 
   it("says which edits Windows took long over: a first walk of a large folder", async () => {

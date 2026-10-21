@@ -66,7 +66,9 @@ the setup screen opens on `git-missing`. What differs from macOS:
   install can be refused with 0x80070005 although the grant is in place, and start seconds later
   with nothing changed: the session waits and tries again (`sandboxUserRefused`, `LOGON_RETRY_MS`),
   and a refusal that outlasts both pauses fails with plain words
-  (`SandboxLaunchCode.SandboxUserRefused`) while the log keeps srt-win's.
+  (`SandboxLaunchCode.SandboxUserRefused`: restart the PC) while the log keeps srt-win's. Where
+  srt-win's launcher grant was not made (no SID, or srt-win refused it), waiting cannot help: the
+  start fails at once with srt-win's error, which the setup check reads.
 - The sandbox user reads nothing in the profile unless granted, so each folder between
   `USERPROFILE` and a root gets `(S,RA)` (read attributes and synchronize, no listing) after every
   apply, since srt-win's deny stamps replace the entry. Synchronize matters before Windows 11
@@ -132,21 +134,26 @@ the setup screen opens on `git-missing`. What differs from macOS:
   record, and the next sync of any Genex keeps what a running one needs and takes back the rest. A
   first walk of a large folder can take minutes. The script answers a line per edit as it finishes,
   so a batch stopped at its deadline keeps what it set and names the edit Windows was still on; the
-  log names each edit over 2 s. Denies, guards, take-backs and grants on the folders srt-win starts
-  from and on Genex's data folder (`urgent`) are set in full before the start goes on (10 minutes at
-  most per batch). Every other grant (a toolchain, a game, a linked project) gets 30 s
-  (`GRANT_BUDGET_MS`): a missing grant only opens less, so what is not done by then, or Windows
-  refused, is passed down after the start like a deferred walk (60 minutes at most), and the log
-  says so (`… is passed down after the start`). Where the
+  log names each edit over 2 s. Denies, guards, take-backs, write grants (where the agents work: a
+  game, a linked project), a write grant narrowed to reading, and grants on the folders srt-win
+  starts from and on Genex's data folder (`urgent`) are set in full before the start goes on (10
+  minutes at most per batch). Every other read grant (a toolchain on PATH) gets 30 s
+  (`GRANT_BUDGET_MS`): unfinished, it only opens less, so what is not done by then is recorded to
+  walk before the batch runs and passed down after the start, at once and for 60 minutes at most;
+  the log says so (`… is passed down after the start`). One Windows refused there is tried again
+  in full and fails the start if it still refuses. The record is written whole (`atomicWriteText`),
+  one rewrite at a time. Where the
   sandbox user (in BUILTIN\Users) can open nothing under a denied path with or without the walk
   (the path passes no allow down to anyone but its owner, SYSTEM and the Administrators, before or
   after the edit, and every entry under it, read for its owner and DACL alone, is owned by them
   and allows only them, protected or not), the start writes the path alone, which files made in it
   inherit, and records the walk; the session runs
   it two minutes after the start (`own entries passed down` in the log), and the next start runs
-  one a Genex quit before. A regrant waits for that walk only when it sets entries in or around the
-  walked path, which the walk could undo; elsewhere it goes ahead, so a long first walk holds up no
-  command in another folder. A browser profile's walk took 17 s of a Windows 11 first start. An allow
+  one a Genex quit before. A walk says the paths it walks in the same turn it reads them, once no
+  regrant is setting entries; a regrant that starts while it is under way waits for it only when it
+  sets or takes back entries in or around those paths (or one still to walk), which the walk could
+  undo, so a long first walk holds up no command in another folder. Walks run one at a time, and
+  Genex quitting stops the one under way, which stays recorded for the next start. A browser profile's walk took 17 s of a Windows 11 first start. An allow
   for an app container or a capability SID (`S-1-15-2-*`, `S-1-15-3-*`: Chrome gives its own
   sandboxes its profile's network folder) counts as theirs: Windows matches those only in an app
   container's second access check, and an app container gets only what its user is allowed too.

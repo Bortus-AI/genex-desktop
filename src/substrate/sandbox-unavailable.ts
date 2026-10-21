@@ -68,7 +68,7 @@ const MESSAGE = {
       "This folder is not open to sandboxed commands yet. It opens once the running commands finish; try again then.",
     [SandboxLaunchCode.ProxyPortsRefused]: `Windows did not let Genex's sandbox use its network ports (${SRT_PROXY_PORTS}). Hyper-V, WSL or Docker often reserve them. Restart the PC, or run "net stop winnat" and then "net start winnat" in a terminal opened as administrator, and try again.`,
     [SandboxLaunchCode.SandboxUserRefused]:
-      "Windows would not start Genex's sandbox user. Try again in a moment; if it keeps happening, restart the PC.",
+      "Windows would not start Genex's sandbox user. Restart the PC, then try again.",
   } satisfies Record<SandboxLaunchCode, string>,
 } as const;
 
