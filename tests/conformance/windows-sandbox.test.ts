@@ -84,6 +84,7 @@ import {
   folderAceCommand,
   folderAceEditor,
   folderAceOutcomes,
+  folderAceProgress,
   folderOwnEditor,
   FOLDER_ACE_SCRIPT,
   icaclsArgs,
@@ -465,22 +466,69 @@ describe("an entry on one folder alone", () => {
     assert.ok(Math.max(...variables) < WINDOWS_COMMAND_LINE_CHARS, "and each variable inside the same limit");
   });
 
-  it("reads one outcome per edit, and nothing else as an answer", () => {
+  it("reads one outcome line per edit, and nothing else as an answer", () => {
     const table: Array<[string, string, number, unknown]> = [
       [
         "one each",
-        '[{"ok":true},{"ok":false,"error":"Access is denied"}]',
+        '{"ok":true}\r\n{"ok":false,"error":"Access is denied"}\n',
         2,
         [{ ok: true }, { ok: false, error: "Access is denied" }],
       ],
-      ["too few", '[{"ok":true}]', 2, null],
-      ["not JSON (PowerShell failed to start the script)", "#< CLIXML", 1, null],
+      ["too few", '{"ok":true}\n', 2, null],
+      ["not JSON (PowerShell failed to start the script)", "#< CLIXML\n", 1, null],
       ["empty", "", 1, null],
-      ["not a list", '{"ok":true}', 1, null],
-      ["a refusal without words", '[{"ok":false}]', 1, [{ ok: false, error: "refused" }]],
+      ["a line cut short is no answer yet", '{"ok":true}', 1, null],
+      ["a list is not a line per edit", '[{"ok":true}]\n', 1, null],
+      ["a batch refused whole", '{"refused":"the running user holds this SID"}', 1, null],
+      ["a refusal without words", '{"ok":false}\n', 1, [{ ok: false, error: "refused" }]],
     ];
     for (const [label, stdout, count, expected] of table)
       assert.deepEqual(folderAceOutcomes(stdout, count), expected, label);
+    assert.deepEqual(
+      folderAceProgress('{"ok":true,"ms":3}\n{"ok":true,"ms":41000}\n{"ok":tr'),
+      [
+        { ok: true, ms: 3 },
+        { ok: true, ms: 41_000 },
+      ],
+      "a batch stopped part way: the lines it finished",
+    );
+  });
+
+  it("keeps what a batch finished before its deadline, and names the edit Windows was still on", async () => {
+    // A batch used to answer every edit as timed out, its first one named: the profile, whose own
+    // edit is on that folder alone, while the walk Windows was on was another folder's.
+    const own = (dir: string): FolderOwnEdit => ({
+      dir,
+      sid: SID,
+      op: FolderAceOp.Own,
+      deny: null,
+      guard: dir === PROFILE,
+      grant: dir === PROFILE ? null : GrantAccess.Read,
+      allows: dir !== PROFILE,
+    });
+    const batch = [PROFILE, at("anaconda3"), at("AppData", "Roaming", "npm")].map(own);
+    const deadlines: Array<number | undefined> = [];
+    const stopped = folderOwnEditor({
+      powershell: async (_file, _args, _env, timeoutMs) => {
+        deadlines.push(timeoutMs);
+        throw Object.assign(new Error("Command failed"), { killed: true, stdout: '{"ok":true,"ms":4}\n' });
+      },
+    });
+    const outcomes = await stopped(batch, { timeoutMs: 30_000 });
+    assert.deepEqual(deadlines, [30_000], "the run's own deadline");
+    assert.deepEqual(outcomes?.[0], { ok: true, ms: 4 }, "the profile's guard was done");
+    assert.deepEqual(outcomes?.[1], {
+      ok: false,
+      error: "Windows was still passing the entries down after 30 s",
+      timedOut: true,
+    });
+    assert.deepEqual(outcomes?.[2], {
+      ok: false,
+      error: "not reached: the batch ran out of time after 30 s",
+      timedOut: true,
+    });
+    await stopped(batch);
+    assert.deepEqual(deadlines, [30_000, 600_000], "ten minutes unless the run says");
   });
 
   it("makes the same change through icacls when PowerShell cannot run the batch", async () => {
@@ -527,14 +575,14 @@ describe("an entry on one folder alone", () => {
     assert.equal(outcome && !outcome.ok && outcome.timedOut, true);
     const locked = folderOwnEditor({ powershell: async () => Promise.reject(new Error("Cannot invoke method")) });
     assert.equal(await locked([edit]), null);
-    assert.deepEqual(folderAceOutcomes('[{"ok":true,"ms":41000}]', 1), [{ ok: true, ms: 41_000 }]);
+    assert.deepEqual(folderAceOutcomes('{"ok":true,"ms":41000}\n', 1), [{ ok: true, ms: 41_000 }]);
     assert.deepEqual(
-      folderAceOutcomes('[{"ok":true,"ms":12,"deferred":true}]', 1),
+      folderAceOutcomes('{"ok":true,"ms":12,"deferred":true}\n', 1),
       [{ ok: true, ms: 12, deferred: true }],
       "an edit that left its walk for later says so",
     );
     assert.deepEqual(
-      folderAceOutcomes('[{"ok":true,"ms":9,"refused":"Access is denied."}]', 1),
+      folderAceOutcomes('{"ok":true,"ms":9,"refused":"Access is denied."}\n', 1),
       [{ ok: true, ms: 9, refused: "Access is denied." }],
       "a deny Windows refused where none was needed carries Windows' words",
     );
@@ -545,7 +593,7 @@ describe("an entry on one folder alone", () => {
     const editor = folderAceEditor({
       powershell: async () => {
         runs++;
-        return '[{"ok":true},{"ok":true}]';
+        return '{"ok":true}\n{"ok":true}\n';
       },
       icacls: async () => assert.fail("icacls runs only when PowerShell cannot"),
     });
@@ -1525,7 +1573,20 @@ function withDomains(domains: string[]): SandboxRuntimeConfig {
 }
 
 /** A sandbox-runtime error as srt-win's spawn chokepoint raises it: its code and first CLI arg. */
-type InitializeFailure = { code: string; subcommand: string };
+type InitializeFailure = { code: string; subcommand: string; message?: string };
+
+/**
+ * sandbox-runtime's error for an egress check srt-win could not start as the sandbox user, in
+ * srt-win's words: ERROR_ACCESS_DENIED (`hresult` 0x80070005) where that user could not open the
+ * program, or 0x80070422 where the Secondary Logon service is disabled.
+ */
+function refusedLogon(hresult: string, words: string): InitializeFailure {
+  return {
+    code: "wfp_verify_unparseable",
+    subcommand: "wfp",
+    message: `WFP egress fence could not be verified — \`srt-win wfp verify\` exited 1 with unparseable output "" (stderr: "srt-win: error: spawn runner for egress probe: CreateProcessWithLogonW(srt-sandbox): ${words} (${hresult}) — ensure the Secondary Logon service (seclogon) is running.")`,
+  };
+}
 
 function fakeSessionRuntime() {
   const calls: string[] = [];
@@ -1538,7 +1599,9 @@ function fakeSessionRuntime() {
       configs.push(config);
       if (gate) await gate;
       const failure = failures.shift();
-      if (failure) throw Object.assign(new Error(`srt-win ${failure.subcommand} failed: ${failure.code}`), failure);
+      if (!failure) return;
+      const { message = `srt-win ${failure.subcommand} failed: ${failure.code}`, ...fields } = failure;
+      throw Object.assign(new Error(message), fields);
     },
     reset: async () => {
       calls.push("reset");
@@ -1571,6 +1634,10 @@ function fakeSessionRuntime() {
     failInitializeIn: (subcommand: string, ...codes: string[]) => {
       failures.push(...codes.map((code) => ({ code, subcommand })));
     },
+    /** The next initializes fail with these errors, in order. */
+    failInitializeWith: (...errors: InitializeFailure[]) => {
+      failures.push(...errors);
+    },
   };
 }
 
@@ -1595,7 +1662,10 @@ function fakeAncestors() {
  * Genex's own entries over a fake: each sync's entries, logged in `calls` as "own entries";
  * `available: false` answers as a PC where Genex cannot set them (no sandbox users' group).
  */
-function fakeOwnEntries(calls: string[], options: { available?: boolean; walk?: () => Promise<void> } = {}) {
+function fakeOwnEntries(
+  calls: string[],
+  options: { available?: boolean; walk?: () => Promise<void>; walks?: string[] } = {},
+) {
   const synced: OwnAclEntry[][] = [];
   let revoked = 0;
   let walked = 0;
@@ -1609,6 +1679,7 @@ function fakeOwnEntries(calls: string[], options: { available?: boolean; walk?: 
       walked++;
       await options.walk?.();
     },
+    walks: () => options.walks ?? [],
     revokeAll: async () => {
       revoked++;
     },
@@ -1630,7 +1701,9 @@ function session(
     ownDenies?: boolean | "unavailable";
     exists?: (p: string) => boolean;
     walk?: () => Promise<void>;
+    walks?: string[];
     walkDelayMs?: number;
+    logonRetryMs?: number[];
   } = {},
 ) {
   const runtime = fakeSessionRuntime();
@@ -1638,6 +1711,7 @@ function session(
   const own = fakeOwnEntries(runtime.calls, {
     available: options.ownDenies !== "unavailable",
     ...(options.walk ? { walk: options.walk } : {}),
+    ...(options.walks ? { walks: options.walks } : {}),
   });
   const logged: string[] = [];
   const value = new WindowsSandboxSession({
@@ -1648,6 +1722,7 @@ function session(
     ...(options.realDenies ? {} : { keepDenies: (paths: readonly string[]) => [...paths], exists: () => true }),
     ...(options.exists ? { exists: options.exists } : {}),
     ...(options.walkDelayMs === undefined ? {} : { walkDelayMs: options.walkDelayMs }),
+    ...(options.logonRetryMs ? { logonRetryMs: options.logonRetryMs } : {}),
     log: (line) => logged.push(line),
   });
   return { session: value, runtime, ancestors, own, logged };
@@ -1895,6 +1970,57 @@ describe("the grant session", () => {
     assert.equal(stuck.runtime.calls.length, 2);
   });
 
+  it("starts again after a pause when Windows refused srt-win's start as the sandbox user", async () => {
+    // A first start from a new install can be refused once and start seconds later with nothing
+    // changed; srt-win's own words blame the Secondary Logon service, which was running.
+    const denied = refusedLogon("0x80070005", "Access is denied.");
+    const once = session({ logonRetryMs: [0, 0] });
+    once.runtime.failInitializeWith(denied);
+    await once.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
+    assert.deepEqual(once.runtime.calls, ["initialize", "initialize"]);
+    assert.ok(
+      once.logged.some((line) => line.startsWith("egress check: Windows refused to start srt-win as the sandbox user")),
+      once.logged.join("\n"),
+    );
+
+    const localized = session({ logonRetryMs: [0, 0] });
+    localized.runtime.failInitializeWith(refusedLogon("0x80070005", "Accesso negato."), denied);
+    await localized.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG });
+    assert.equal(localized.runtime.calls.length, 3, "Windows' words in any language: the HRESULT decides");
+
+    const stuck = session({ logonRetryMs: [0, 0] });
+    stuck.runtime.failInitializeWith(denied, denied, denied, denied);
+    await assert.rejects(
+      stuck.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }),
+      (error: unknown) => {
+        assert.ok(error instanceof SandboxLaunchError);
+        assert.equal(error.code, SandboxLaunchCode.SandboxUserRefused);
+        assert.doesNotMatch(error.message, /srt-win|CreateProcessWithLogonW|seclogon/, "plain words");
+        return true;
+      },
+    );
+    assert.equal(stuck.runtime.calls.length, 3, "two pauses, three tries");
+    assert.ok(
+      stuck.logged.some((line) => line.includes("0x80070005")),
+      "the log keeps srt-win's words",
+    );
+  });
+
+  it("does not wait out a refusal that is not the sandbox user's: a disabled service is Set up's", async () => {
+    const s = session({ logonRetryMs: [0, 0] });
+    s.runtime.failInitializeWith(
+      refusedLogon(
+        "0x80070422",
+        "The service cannot be started, either because it is disabled or because it has no enabled devices associated with it.",
+      ),
+    );
+    await assert.rejects(
+      s.session.join({}, { grants: { write: [GAMES], read: [] }, config: BASE_CONFIG }),
+      /0x80070422/,
+    );
+    assert.deepEqual(s.runtime.calls, ["initialize"]);
+  });
+
   it("waits for asynchronous launcher rollback before allowing the next initialization", async () => {
     const runtime = fakeSessionRuntime();
     let release = () => {};
@@ -2046,24 +2172,31 @@ describe("deny paths Genex sets itself", () => {
     assert.equal(s.own.revoked(), 0);
   });
 
-  it("passes the deferred denies down after the start, off its path, and a regrant waits for that walk", async () => {
+  it("passes the deferred entries down after the start, off its path, and a regrant near that walk waits for it", async () => {
     let finish = () => {};
     const walking = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    const s = session({ ownDenies: true, walk: () => walking, walkDelayMs: 0 });
+    const s = session({ ownDenies: true, walk: () => walking, walks: [at(".ssh")], walkDelayMs: 0 });
     const owner = {};
     await s.session.join(owner, denying([at(".ssh")]));
     assert.equal(s.own.walked(), 0, "the start does not wait for the walk");
     await delay(0);
     await turn();
     assert.equal(s.own.walked(), 1, "the walk starts once the start is done");
+    // Intentionally flipped: every regrant waited for the walk, and a first walk of a large folder
+    // held up each command for as long as it ran.
     s.session.update(owner, { write: [PONG, LATE], read: [] });
+    await s.session.settled();
+    const regranted = ["own entries", "initialize", "reset", "own entries", "initialize"];
+    assert.deepEqual(s.runtime.calls, regranted, "a folder elsewhere is granted while the walk runs");
+    void s.session.join({}, denying([at(".ssh"), at(".ssh", "id_ed25519")]));
     await turn();
-    assert.deepEqual(s.runtime.calls, ["own entries", "initialize"], "no regrant while the walk runs");
+    await turn();
+    assert.deepEqual(s.runtime.calls, regranted, "a deny inside the walked path waits for the walk");
     finish();
     await s.session.settled();
-    assert.deepEqual(s.runtime.calls, ["own entries", "initialize", "reset", "own entries", "initialize"]);
+    assert.deepEqual(s.runtime.calls, [...regranted, "reset", "own entries", "initialize"]);
     await s.session.dispose();
   });
 
@@ -2416,6 +2549,57 @@ describe("Genex's own deny entries", () => {
     assert.equal(batches, 1, "a batch that ran out of time is not run again at once");
     const recorded = JSON.parse(await readFile(path.join(holders, "1.json"), "utf8")) as { entries: OwnAclEntry[] };
     assert.deepEqual(recorded.entries, [guard, ssh], "what it may have set stays recorded");
+  });
+
+  it("waits for denies and urgent grants in full, for other grants only within a budget, and passes the rest down after", async () => {
+    // A first grant on a large folder can pass its entries down for longer than any start should
+    // wait, and nothing of the agents may wait on it meanwhile.
+    const holders = await tmpDir("windows-denies-");
+    const install = at("AppData", "Local", "genex", "app-0.1.15");
+    const conda = at("anaconda3");
+    const npm = at("AppData", "Roaming", "npm");
+    const BUDGET_MS = 30_000;
+    const WALK_MS = 3_600_000;
+    const grantOf = (dir: string): OwnAclEntry => ({ path: dir, deny: null, guard: false, grant: GrantAccess.Read });
+    const asked: Array<{ dirs: string[]; walk: string[]; timeoutMs: number | undefined }> = [];
+    const logged: string[] = [];
+    const windows: FolderOwnEditor = async (edits, run) => {
+      asked.push({
+        dirs: edits.map((edit) => edit.dir),
+        walk: edits.map((edit) => `${edit.walk}`),
+        timeoutMs: run?.timeoutMs,
+      });
+      if (run?.timeoutMs !== BUDGET_MS) return edits.map(() => ({ ok: true }) as const);
+      return edits.map((edit) => {
+        if (edit.dir === conda)
+          return { ok: false, error: "Windows was still passing the entries down after 30 s", timedOut: true };
+        return { ok: false, error: "Access is denied." };
+      });
+    };
+    const own = holder(holders, 1, [], {
+      edit: windows,
+      urgent: (dir) => dir === install,
+      grantBudgetMs: BUDGET_MS,
+      walkTimeoutMs: WALK_MS,
+      log: (line) => logged.push(line),
+    });
+    assert.equal(
+      await own.sync([guard, ssh, grantOf(install), grantOf(conda), grantOf(npm)]),
+      true,
+      "the start goes on",
+    );
+    assert.deepEqual(asked, [
+      { dirs: [PROFILE, at(".ssh"), install], walk: ["later", "later", "later"], timeoutMs: undefined },
+      { dirs: [conda, npm], walk: ["later", "later"], timeoutMs: BUDGET_MS },
+    ]);
+    assert.deepEqual(own.walks(), [conda, npm], "both are passed down after the start");
+    assert.deepEqual(logged, [
+      `own entries: ${conda} is passed down after the start (Windows was still passing the entries down after 30 s)`,
+      `own entries: ${npm} is passed down after the start (Access is denied.)`,
+    ]);
+    await own.walkDeferred();
+    assert.deepEqual(asked.at(-1), { dirs: [conda, npm], walk: ["again", "again"], timeoutMs: WALK_MS });
+    assert.deepEqual(own.walks(), [], "passed down once the start was past");
   });
 
   it("says which edits Windows took long over: a first walk of a large folder", async () => {
