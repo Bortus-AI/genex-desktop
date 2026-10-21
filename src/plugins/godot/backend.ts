@@ -908,7 +908,7 @@ export function createGodotBackend(deps: GodotBackendDeps): PluginActivation {
     [GodotAction.Create]: (args, context) => create(deps, args, context),
     [GodotAction.OpenEditor]: (_args, context) => openInEditor(deps, context),
     [GodotAction.GetGodot]: async () => {
-      await deps.editor.open(getGodotLaunch());
+      await deps.editor.open(getGodotLaunch(deps.env.platform));
       return { opened: true };
     },
     [GodotAction.ToolbarStatus]: (_args, context) => toolbarStatus(deps, context),
