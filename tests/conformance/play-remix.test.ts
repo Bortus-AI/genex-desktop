@@ -153,6 +153,13 @@ describe("Play remix", () => {
     assert.deepEqual(await lfsRoutedFiles(dir, []), new Set());
   });
 
+  it("fails, never crashes, when git stops reading the paths it was given", async () => {
+    // No repository: git exits at once, and a list bigger than a pipe's buffer meets a closed input.
+    const dir = await tmpDir("studio-remix-not-a-repo-");
+    const files = Array.from({ length: 20_000 }, (_, index) => `models/a-rather-long-folder-name/${index}.glb`);
+    await assert.rejects(lfsRoutedFiles(dir, files));
+  });
+
   it("claims the first free remix folder by making it, so two remixes never share one", async () => {
     const root = await tmpDir("play-remix-claim");
     await mkdir(path.join(root, "x-remix"));

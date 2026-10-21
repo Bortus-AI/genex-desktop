@@ -148,6 +148,9 @@ export function lfsRoutedFiles(dir: string, files: string[]): Promise<Set<string
         else resolve(routedIn(stdout, byGitPath));
       },
     );
+    // Git that exits before reading every path (no repository, a crash) closes its input: the write's
+    // EPIPE is this call's failure, never an uncaught error.
+    child.stdin?.on("error", reject);
     child.stdin?.end(`${[...byGitPath.keys()].join("\0")}\0`);
   });
 }

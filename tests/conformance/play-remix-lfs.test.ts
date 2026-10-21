@@ -25,6 +25,8 @@ const pointerOf = (bytes: Buffer): string =>
 interface Seen {
   url: string;
   method: string;
+  /** The Authorization header it carried, or null. */
+  authorization: string | null;
   objects: Array<{ oid: string; size: number }>;
 }
 
@@ -48,7 +50,7 @@ function fakeNetwork(store: Map<string, Buffer>, answer?: Answer, redirect?: Red
     const url = String(input);
     const method = init?.method ?? "GET";
     const objects = url === BATCH ? (JSON.parse(String(init?.body)) as { objects: Seen["objects"] }).objects : [];
-    seen.push({ url, method, objects });
+    seen.push({ url, method, objects, authorization: new Headers(init?.headers).get("authorization") });
     if (url === BATCH) return Response.json({ objects: objects.map(answer ?? located).filter(Boolean) });
     const location = redirect?.(url);
     if (location) return new Response(null, { status: 302, headers: { location } });
@@ -282,6 +284,32 @@ describe("Remix's Git LFS files over https", () => {
     await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
     assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL);
     assert.equal(seen.at(-1)?.url, `${STORAGE}/moved/${oidOf(MODEL)}`);
+  });
+
+  it("sends the answer's headers to its own storage host only, never on to another a redirect names", async () => {
+    const cases: Array<{ name: string; to: string; carried: string | null }> = [
+      { name: "another host", to: `https://cdn.genex.example/${oidOf(MODEL)}`, carried: null },
+      { name: "the same host", to: `${STORAGE}/moved/${oidOf(MODEL)}`, carried: "Bearer token" },
+    ];
+    for (const { name, to, carried } of cases) {
+      const dir = await cloneWith({ "a.glb": pointerOf(MODEL) });
+      const store = new Map([
+        [oidOf(MODEL), MODEL],
+        [`moved/${oidOf(MODEL)}`, MODEL],
+      ]);
+      const signed: Answer = (object) => ({
+        ...object,
+        actions: { download: { href: `${STORAGE}/${object.oid}`, header: { Authorization: "Bearer token" } } },
+      });
+      const { fetch, seen } = fakeNetwork(store, signed, (url) =>
+        url === `${STORAGE}/${oidOf(MODEL)}` ? to : undefined,
+      );
+      await downloadLfsFiles(dir, REPO, depsOn(fetch).deps);
+      assert.deepEqual(await readFile(path.join(dir, "a.glb")), MODEL, name);
+      const [, first, second] = seen;
+      assert.deepEqual([first?.url, first?.authorization], [`${STORAGE}/${oidOf(MODEL)}`, "Bearer token"], name);
+      assert.deepEqual([second?.url, second?.authorization], [to, carried], name);
+    }
   });
 
   it("downloads only the pointers the clone's attributes route through Git LFS", async () => {

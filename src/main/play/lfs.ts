@@ -176,19 +176,24 @@ async function askBatch(repository: string, asked: LfsObject[], deps: LfsDownloa
 
 /**
  * Fetch `href`, following a redirect only to another https address with no user or password in
- * it: each hop is checked before it is requested, so a downgrade to plain http never is. A request
- * with a body (the batch) follows none.
+ * it: each hop is checked before it is requested, so a downgrade to plain http never is, and the
+ * request's headers go no further than its own origin. A request with a body (the batch) follows
+ * none.
  */
 async function fetchHttps(fetch: LfsDownloadDeps["fetch"], href: string, init: RequestInit): Promise<Response> {
   let at = href;
+  let request = init;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const response = await fetch(at, { ...init, redirect: "manual" });
+    const response = await fetch(at, { ...request, redirect: "manual" });
     if (!REDIRECT_STATUSES.has(response.status)) return response;
     await response.body?.cancel();
     const location = response.headers.get("location");
     const followable = init.body === undefined && location !== null && URL.canParse(location, at);
     if (!followable) throw new Error(MESSAGE.DownloadRefused);
-    at = safeHref(new URL(location, at).href);
+    const next = safeHref(new URL(location, at).href);
+    // The answer's headers (an Authorization) are for the host it named, never sent on to another.
+    if (new URL(next).origin !== new URL(at).origin) request = { ...request, headers: undefined };
+    at = next;
   }
   throw new Error(MESSAGE.DownloadRefused);
 }
