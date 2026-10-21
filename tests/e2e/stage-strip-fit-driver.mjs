@@ -45,7 +45,6 @@ const MEASURE = `(() => {
     .map((el) => ({ name: el.getAttribute('aria-label') || el.textContent.trim(), ...box(el) }));
   return {
     fold: strip.dataset.fold,
-    debug: strip.dataset.foldDebug && JSON.parse(strip.dataset.foldDebug),
     strip: box(strip),
     titlebar: area && { left: area.x, right: area.x + area.width, bottom: area.y + area.height },
     window: window.innerWidth,
@@ -91,7 +90,6 @@ async function acceptance() {
     win.show();
     // A cold CI runner can take a while to put the game on the stage.
     const up = await until(ready, 1200);
-    steps.push({ name: "start", ...(await js(MEASURE).catch(() => null)), size: win.getContentSize() });
     check("a game's strip is on the stage", up);
     if (!up) return;
     // Light narrows from the widest; dark widens from the narrowest, so each width is reached both ways.
@@ -119,31 +117,6 @@ async function acceptance() {
         );
       }
     }
-    // Diagnostic only: the one-row layout at the widest width, forced in the DOM.
-    win.setContentSize(1440, HEIGHT);
-    await wait(SETTLE_MS);
-    const probe = await js(`(() => {
-      const strip = document.querySelector('[data-stage-strip]');
-      const was = strip.dataset.fold;
-      const read = () => { const cs = getComputedStyle(strip); const g = [...strip.children].map((c) => { const r = c.getBoundingClientRect(); const ccs = getComputedStyle(c); return { cls: c.className, left: r.left, right: r.right, top: r.top, sw: c.scrollWidth, ow: c.offsetWidth, mr: ccs.marginInlineEnd, ml: ccs.marginInlineStart, js: ccs.justifySelf, kids: [...c.children].map((k) => { const kr = k.getBoundingClientRect(); return [k.tagName, k.className.slice(0, 40), Math.round(kr.left), Math.round(kr.right)]; }) }; });
-        return { fold: strip.dataset.fold, pad: cs.paddingInlineEnd, padL: cs.paddingInlineStart, cols: cs.gridTemplateColumns, areas: cs.gridTemplateAreas, width: strip.clientWidth, rect: strip.getBoundingClientRect().toJSON(), g }; };
-      const before = read();
-      strip.dataset.fold = 'full';
-      const forced = read();
-      strip.dataset.fold = was;
-      return { before, forced };
-    })()`);
-    steps.push({ name: "probe", probe });
-    // Diagnostic only: how wide the window must grow before each step undoes.
-    const growth = [];
-    for (let width = 1440; width <= 2400; width += 40) {
-      win.setContentSize(width, HEIGHT);
-      await wait(SETTLE_MS);
-      const measured = await js(MEASURE);
-      growth.push({ width, fold: measured.fold, titlebar: measured.titlebar, window: measured.window });
-    }
-    steps.push({ name: "growth", growth });
-    win.setContentSize(WIDTHS[0], HEIGHT);
     for (const width of WIDTHS) {
       const [light, dark] = ["light", "dark"].map(
         (theme) => steps.find((step) => step.name === `${theme}-${width}`)?.fold,

@@ -1139,14 +1139,14 @@
 /* The stage strip (panels/stage/StageStrip.tsx): the views and the game's controls at its start, the
  * plugin buttons at its end, on one row while they fit. Narrower, it makes room in steps
  * (`strip-fold.ts`, `data-fold`): the views fold into one button, then the plugin buttons move to a
- * second row, then Sound and Full screen join them there. Only the first row keeps clear of the
- * window's controls, so the second runs to the strip's end; the line between the rows is the
- * strip's own background, edge to edge. */
+ * second row, then Sound and Full screen join them there. Its last column keeps the first row clear
+ * of the window's own controls (Windows, Linux: `--window-controls-end`), so the second row, which
+ * spans it, runs to the strip's end; the line between the rows is the strip's own background. */
 .stage-strip {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto var(--window-controls-end, 0px);
   grid-template-rows: 47px;
-  grid-template-areas: "start game . end";
+  grid-template-areas: "start game . end .";
   column-gap: 8px;
   align-items: center;
   overflow: hidden;
@@ -1173,18 +1173,18 @@
   background-repeat: no-repeat;
 }
 .stage-strip[data-fold="plugins"] {
-  grid-template-areas: "start game . ." ". . . ." "end end end end";
+  grid-template-areas: "start game . . ." ". . . . ." "end end end end end";
 }
 .stage-strip[data-fold="game"] {
-  grid-template-areas: "start start start start" ". . . ." "game . end end";
+  grid-template-areas: "start start start start start" ". . . . ." "game . end end end";
 }
-/* The group says it is on the second row itself (`data-row`), so its own style follows each step. */
+/* On the second row (`data-row`) the plugin buttons may wrap, and end 8px from the strip's edge. */
 .stage-strip-end[data-row="second"] {
   flex-wrap: wrap;
   justify-content: flex-end;
   row-gap: 8px;
   padding-block: 7px;
-  margin-inline-end: calc(-1 * var(--window-controls-end, 0px));
+  padding-inline-end: 8px;
 }
 /* A game with no plugin buttons has nothing for a second row: the strip stays one row. */
 .stage-strip[data-fold="plugins"]:has(> .stage-strip-end:empty) {

@@ -187,11 +187,19 @@ function SoundButton({ on, onToggle }: { on: boolean; onToggle: () => void }): J
 }
 
 /** A view's mark where the folded views name it: a plugin view's own picture, else the view's glyph. */
-function ViewMark({ tab, plugins }: { tab: StageTab; plugins: readonly PluginInfo[] }): JSX.Element {
-  const pluginId = tabPluginId(tab);
+function ViewMark({
+  tab,
+  views,
+  plugins,
+}: {
+  tab: StageTab;
+  views: readonly LiveView[];
+  plugins: readonly PluginInfo[];
+}): JSX.Element {
+  const pluginId = tabPluginId(tab, views);
   const plugin = pluginId ? plugins.find((candidate) => candidate.manifest.id === pluginId) : undefined;
   if (plugin) return <PluginIcon name={plugin.manifest.name} src={plugin.iconUrl} size="menu" />;
-  return <Icon name={tabGlyph(tab)} size={14} />;
+  return <Icon name={tabGlyph(tab, views)} size={14} />;
 }
 
 /**
@@ -202,6 +210,7 @@ function ViewMark({ tab, plugins }: { tab: StageTab; plugins: readonly PluginInf
 function ViewMenu({
   tabs,
   active,
+  views,
   plugins,
   open,
   onOpenChange,
@@ -209,6 +218,7 @@ function ViewMenu({
 }: {
   tabs: readonly StageTab[];
   active: StageTabKey;
+  views: readonly LiveView[];
   plugins: readonly PluginInfo[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -230,7 +240,7 @@ function ViewMenu({
           className="no-drag surface-glass flex shrink-0 cursor-pointer items-center gap-1 rounded-lg p-0.5 pe-1.5 text-control-text transition-colors duration-(--duration-quick) hover:text-control-text-hover"
         >
           <span className="flex h-7 items-center gap-1.5 rounded-md bg-[var(--switch-fill,var(--accent-fill))] px-2.5 font-mono text-body-sm text-accent-foreground">
-            <ViewMark tab={current} plugins={plugins} />
+            <ViewMark tab={current} views={views} plugins={plugins} />
             {current.label}
           </span>
           <Icon name="chevron-down" size={14} />
@@ -241,7 +251,7 @@ function ViewMenu({
           {tabs.map((tab) => (
             <DropdownMenuRadioItem key={tab.key} value={tab.key} data-stage-action={tab.key}>
               <span className="flex items-center gap-2">
-                <ViewMark tab={tab} plugins={plugins} />
+                <ViewMark tab={tab} views={views} plugins={plugins} />
                 {tab.label}
               </span>
             </DropdownMenuRadioItem>
@@ -333,7 +343,7 @@ export function StageStrip({
       ref={strip}
       data-stage-strip=""
       data-fold={step}
-      className="stage-strip titlebar-drag window-controls-end shrink-0 border-b border-line bg-canvas ps-3 pe-2"
+      className="stage-strip titlebar-drag shrink-0 border-b border-line bg-canvas ps-3"
     >
       {/* Three groups the fold measures and lays out (theme.css `.stage-strip`), none of them
           no-drag: every gap between the strip's controls still drags the window. */}
@@ -354,6 +364,7 @@ export function StageStrip({
           <ViewMenu
             tabs={tabs}
             active={active}
+            views={live.views}
             plugins={plugins}
             open={viewsOpen}
             onOpenChange={setViewsOpen}

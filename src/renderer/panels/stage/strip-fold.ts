@@ -35,10 +35,7 @@ export const STRIP_STEPS: readonly StripFoldStep[] = [
 /** A first row this much past its room is rounding, not overflow: the free space between its ends is a fraction. */
 const ROUNDING_PX = 1;
 
-/** The first row's height in px (`h-12` less its border): a group whose top is below it sits on the second row. */
-const FIRST_ROW_PX = 47;
-
-/** The first row's widths: how far its controls reach (`row`) and how much it may take (`room`). */
+/** The strip's widths: how wide its first row needs it (`row`) and how wide it is (`room`). */
 export type StripWidths = { row: number; room: number };
 
 /** The step after a measure: the next one while the first row overflows, the same one once it fits or none is left. */
@@ -47,20 +44,11 @@ export function nextFold(step: StripFoldStep, { row, room }: StripWidths): Strip
   return STRIP_STEPS[STRIP_STEPS.indexOf(step) + 1] ?? step;
 }
 
-/** How far the first row's groups reach from its start, and how wide it may be. */
-function firstRow(strip: HTMLElement, groups: readonly HTMLElement[]): StripWidths {
-  const style = getComputedStyle(strip);
-  const padStart = Number.parseFloat(style.paddingInlineStart) || 0;
-  const padEnd = Number.parseFloat(style.paddingInlineEnd) || 0;
-  const box = strip.getBoundingClientRect();
-  const start = box.left + strip.clientLeft + padStart;
-  // A group squeezed narrower than its controls still reaches as far as they do (`scrollWidth`).
-  const reach = groups
-    .map((group) => ({ rect: group.getBoundingClientRect(), width: group.scrollWidth }))
-    .filter(({ rect }) => rect.top - box.top < FIRST_ROW_PX)
-    .map(({ rect, width }) => Math.max(rect.right, rect.left + width) - start);
-  return { row: Math.max(0, ...reach), room: strip.clientWidth - padStart - padEnd };
-}
+/**
+ * The strip's widths: what its grid needs (`scrollWidth`) and what it has (`clientWidth`). Only the
+ * first row can need more: the second row's plugin buttons wrap rather than overflow.
+ */
+const stripWidths = (strip: HTMLElement): StripWidths => ({ row: strip.scrollWidth, room: strip.clientWidth });
 
 /**
  * The strip's step. One observer watches the strip (a window or pane resize, the room the window's
@@ -93,7 +81,7 @@ export function useStripFold(
     // Each step changes the first row, so one measure may take several.
     const measure = () => {
       for (const _ of STRIP_STEPS) {
-        const next = nextFold(current, firstRow(row, parts));
+        const next = nextFold(current, stripWidths(row));
         if (next === current) return;
         apply(next);
       }
@@ -103,23 +91,12 @@ export function useStripFold(
     };
     let frame = 0;
     let groupChanged = false;
-    const trail: unknown[] = [];
     const settle = () => {
-      const now = firstRow(row, parts).room;
-      const reset = groupChanged || now > room;
-      if (reset) apply(StripFoldStep.Full);
+      const now = stripWidths(row).room;
+      if (groupChanged || now > room) apply(StripFoldStep.Full);
       groupChanged = false;
       room = now;
-      const seen: unknown[] = [];
-      for (const _ of STRIP_STEPS) {
-        const w = firstRow(row, parts);
-        seen.push([current, row.dataset.fold, Math.round(w.row), Math.round(w.room), getComputedStyle(row).paddingInlineEnd, getComputedStyle(document.documentElement).getPropertyValue("--window-controls-end"), window.innerWidth, getComputedStyle(row).gridTemplateColumns, parts.map((p) => [p.dataset.row ?? "", getComputedStyle(p).marginInlineEnd, Math.round(p.getBoundingClientRect().left), Math.round(p.getBoundingClientRect().right), p.scrollWidth, getComputedStyle(p).flexWrap])]);
-        const next = nextFold(current, w);
-        if (next === current) break;
-        apply(next);
-      }
-      trail.push({ t: Math.round(performance.now()), reset, seen });
-      row.dataset.foldDebug = JSON.stringify(trail.slice(-30));
+      measure();
       remember();
     };
     const observer = new ResizeObserver((entries) => {
