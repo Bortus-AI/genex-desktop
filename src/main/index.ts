@@ -195,7 +195,14 @@ import { routeStudioLink } from "./link-policy.ts";
 import { createLoginControllers, type SubscriptionEngine } from "./login-controllers.ts";
 import { createOpenRouterLogin } from "./openrouter-login.ts";
 import { openStudioLog } from "./logs.ts";
-import { DATA_FOLDER_FILE, DataLaunchKind, defaultDataDir, quitsAtOnce, thisDataLaunch } from "./data-folder.ts";
+import {
+  DATA_FOLDER_FILE,
+  DataLaunchKind,
+  defaultDataDir,
+  quitsAtOnce,
+  quitTakenLaunch,
+  thisDataLaunch,
+} from "./data-folder.ts";
 import { createDataFolderChoices, type DataFolderChoices } from "./data-folder-choice.ts";
 import { type DataFolderIpcDeps, registerDataFolderIpc } from "./ipc/data-folder.ts";
 import { freeBytes, measureData } from "../substrate/data-move.ts";
@@ -1868,7 +1875,13 @@ async function main(): Promise<void> {
     return;
   }
   if (quitsAtOnce(dataLaunch)) {
-    app.exit(0);
+    await quitTakenLaunch({
+      ready: () => app.whenReady(),
+      tell: async (message, button) => {
+        await dialog.showMessageBox({ type: "info", message, buttons: [button] });
+      },
+      exit: (code) => app.exit(code),
+    });
     return;
   }
   if (!claimTheMac()) return;

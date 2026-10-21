@@ -18,6 +18,7 @@ import {
   parseDataFolderRecord,
   pointElectronAtData,
   quitsAtOnce,
+  quitTakenLaunch,
   readDataFolderRecord,
   thisDataLaunch,
   writeDataFolderRecord,
@@ -272,4 +273,18 @@ test("a launch whose move is taken by a running Genex only quits; every other la
     { kind: DataLaunchKind.Missing, dir: CHOSEN },
   ] as const)
     assert.equal(quitsAtOnce(launch), false, launch.kind);
+});
+
+test("a launch whose data another Genex holds says so in one line, then quits", async () => {
+  const seen: string[] = [];
+  await quitTakenLaunch({
+    ready: async () => {
+      seen.push("ready");
+    },
+    tell: async (message, button) => {
+      seen.push(`${message} [${button}]`);
+    },
+    exit: (code) => seen.push(`exit ${code}`),
+  });
+  assert.deepEqual(seen, ["ready", "Genex is already open, or its data folder is locked. [OK]", "exit 0"]);
 });

@@ -220,6 +220,31 @@ export interface DataPathsHost {
   lock(): boolean;
 }
 
+/** What a launch that cannot take its data says before it quits. */
+const MESSAGE = {
+  taken: "Genex is already open, or its data folder is locked.",
+  ok: "OK",
+} as const;
+
+/** What quitting a launch whose data another Genex holds needs: Electron's readiness, a message box, the exit. */
+export interface TakenLaunchHost {
+  ready(): Promise<void>;
+  /** One line with one button; resolves once the person closes it. */
+  tell(message: string, button: string): Promise<void>;
+  exit(code: number): void;
+}
+
+/**
+ * Quit a launch whose data another Genex holds. The lock it was refused woke a running Genex, if
+ * any; and if none runs (the old folder refused the lock), this says why, so a pending move never
+ * makes every launch quit without a word.
+ */
+export async function quitTakenLaunch(host: TakenLaunchHost): Promise<void> {
+  await host.ready();
+  await host.tell(MESSAGE.taken, MESSAGE.ok);
+  host.exit(0);
+}
+
 /**
  * Whether this launch only quits: a move is due while another Genex has the data open. That one was
  * woken when the lock was refused; this launch must not claim a lock of its own afterwards, which
