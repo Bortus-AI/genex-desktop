@@ -284,6 +284,9 @@ export function isResumeFailure(err: any): boolean {
 const TEMPLATE_RULE =
   "When you build, follow CLAUDE.md in the workspace root: keep window.__studio (seed/start/pause/step/state/debugCamera) working, keep gameplay deterministic (rng from reset(seed), never Math.random), assets come from procedural code, imports, or the currently enabled plugin tools. Follow the selected tool’s returned file paths and verification guidance.";
 
+/** The web starter's rule as a folder with no kind yet hears it: for its web answer only, never an engine's. */
+const PENDING_TEMPLATE_RULE = `For a game that plays in Genex (the web answer): ${TEMPLATE_RULE.charAt(0).toLowerCase()}${TEMPLATE_RULE.slice(1)}`;
+
 /**
  * …and the same rule for a game that came with its own shape: what it already is stays, the
  * contract is installed into its own entry, and its build is run before the turn ends. The
@@ -424,7 +427,7 @@ function factRules(
   { offered, asked }: { offered: readonly PluginKindOffer[]; asked: boolean },
 ): string[] {
   if (kindUnknown(game)) return unknownKindRules(engine, game.holds);
-  if (kindPending(game)) return [...pendingKindRule(engine, offered, null, game.holds, asked), TEMPLATE_RULE];
+  if (kindPending(game)) return [...pendingKindRule(engine, offered, null, game.holds, asked), PENDING_TEMPLATE_RULE];
   const several = game.facts.length > 1;
   // The kinds the plugins that are on make: their plugin is on already, nothing to look for.
   const made = new Set(offered.flatMap((kind) => (Array.isArray(kind.makes) ? kind.makes : [])));

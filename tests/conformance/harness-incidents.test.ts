@@ -15817,3 +15817,62 @@ describe("the reviewer's no's in a Loop that still has time", () => {
     assert.equal(report.stillToFix, undefined);
   });
 });
+
+/**
+ * A request that names an engine none of the engine question's options covers is never asked that
+ * question: it goes through `plugins_find`, as the question's own words say before they ask.
+ */
+describe("a request naming an engine the engine question doesn't offer", () => {
+  it("with only Unity on, a request for a Godot game is sent to plugins_find before the question is asked, never offered Web or Unity", async () => {
+    const { engineChoiceRule } = await import("../../src/harness-seed/loop/unreal-prompts.ts");
+    const { toolCall } = await import("../../src/harness-seed/loop/model-roles.ts");
+    const unity = { plugin: "unity", name: "Unity", tool: "unity__new-game", makes: ["unity-project"] };
+    for (const engine of ["claude-code", "codex", undefined]) {
+      const rule = engineChoiceRule(engine, null, [unity]);
+      const find = rule.indexOf(toolCall(engine, "plugins_find"));
+      const ask = rule.indexOf(toolCall(engine, "ask_user"));
+      assert.ok(find >= 0, `${engine}: another engine goes through plugins_find`);
+      assert.ok(find < ask, `${engine}: before the question is asked`);
+    }
+  });
+});
+
+/**
+ * A resumed chat session whose game still has no kind keeps the question card its first brief named:
+ * a session that remembers the engine question would otherwise call a tool it no longer has.
+ */
+describe("a resumed chat session on a game with no kind yet", () => {
+  it("a resumed session was told to ask with ask_user on its first turn and lost the card on the next: it keeps the card while the game has no kind", async () => {
+    const { runDelegatedTurn } = await import("../../src/harness-seed/loop/delegated-turn.ts");
+    const { ctxRecorder } = await import("../helpers/ctx-recorder.ts");
+    const unity = { plugin: "unity", name: "Unity", tool: "unity__new-game", makes: ["unity-project"] };
+    const made = { name: "dodger", title: "Dodger", dir: "/games/dodger", shape: null, built: false, facts: [] };
+    const recorder = ctxRecorder({
+      unknown: { value: null },
+      handlers: {
+        "events.messages": () => [{ role: "user", content: "make a game in godot" }],
+        "game.contentStamp": () => ({ all: null, source: null }),
+        "game.list": () => [made],
+        "plugins.tools": () => ({ tools: [], guidance: "", revision: 1, kinds: [unity] }),
+        "engine.describe": () => [],
+        "preview.ready": () => ({ ready: false }),
+        "engine.delegate": () => ({
+          ok: true,
+          engine: "claude-code",
+          turns: 1,
+          usage: {},
+          sessionId: "s",
+          summary: "ok",
+        }),
+      },
+    });
+    const turn = { threadId: "t", turnId: "turn-2", text: "Godot is on now", engine: "claude-code", project: "dodger" };
+    await runDelegatedTurn(
+      recorder.ctx as never,
+      { ...turn, engineLabel: "Claude Code", resume: "session-1" } as never,
+    );
+    const [delegated] = recorder.paramsOf("engine.delegate");
+    const bridged = (delegated?.interviewTools as Array<{ name: string }> | undefined)?.map((tool) => tool.name) ?? [];
+    assert.ok(bridged.includes("ask_user"), "the card is still there to call");
+  });
+});

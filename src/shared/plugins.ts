@@ -3,7 +3,7 @@ import type { EngineCatalog, EngineDeclaration, EngineId, GameEngine } from "./g
 import type { RuntimeInstallPhase } from "./model-install.ts";
 import type { ObserveContext, PluginObserver } from "./observers.ts";
 import type { HookContext, PluginHook, PluginLock } from "./plugin-hooks.ts";
-import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches } from "./project-facts.ts";
+import { ENGINE_FACT, type FactRule, type GameKind, scopeReaches, withoutEngineWebVersion } from "./project-facts.ts";
 import type { WorkerIsolation } from "./workers.ts";
 import type { CaptureSource, StillExposure, StillMimeType } from "./preview-contract.ts";
 import { MINUTE_MS } from "./duration.ts";
@@ -365,8 +365,8 @@ export interface PluginReach {
 /**
  * What of one plugin reaches a session for a game (`{ facts: [] }`: no kind yet, served as a web
  * game; one of a kind Genex can't name is served by no fact), narrowed to `offered` when the session was: the agent tools whose `facts` reach; the skills
- * whose scope reaches and, when they name tools, one of those reaches too (a skill follows its
- * tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
+ * whose scope reaches, never through a Unity or Godot game's web export, and, when they name tools,
+ * one of those reaches too (a skill follows its tools); the skill reader while a file skill reaches. A narrowed session none of whose offered
  * tools the plugin has gets nothing of it, not even its skills. The registry's snapshot and the
  * capability facts both read this one rule.
  */
@@ -380,8 +380,9 @@ export function pluginReach(
   );
   if (offered && !tools.length) return { tools, skills: [], skillTool: false };
   const reaching = new Set(tools.map((t) => t.name));
+  const known = withoutEngineWebVersion(game);
   const skills = manifest.skills.filter(
-    (s) => scopeReaches(skillScope(s), game) && (!s.tools || s.tools.some((name) => reaching.has(name))),
+    (s) => scopeReaches(skillScope(s), known) && (!s.tools || s.tools.some((name) => reaching.has(name))),
   );
   return { tools, skills, skillTool: skills.some(isFileSkill) };
 }

@@ -221,7 +221,9 @@ it is not. Studio serves it from the installed package and never writes it into 
   one of them reaches the session too ([Scope by facts](#scope-by-facts)). `engines`, a non-empty
   list of `GameEngine` values (`web`, `unreal`) each named once, is the older spelling: `web`
   reads as `web-game` and `unreal` as `unreal-project` (`skillScope`); `facts` wins when both are
-  given. Without either a skill reaches every game. The bundled Local Blender skill (GLTFLoader)
+  given. Without either a skill reaches every game. A Unity or Godot game's web export in `web/`
+  is its engine's build, so a skill reaches the game through it for no fact
+  (`withoutEngineWebVersion`). The bundled Local Blender skill (GLTFLoader)
   and Genex's three.js multiplayer, embed sign-in, publishing, play-time model and shop skills say
   `["web"]`; the Unreal editor skill names `unreal-project` and its three editor tools. API 1 and
   2 ignore the keys.

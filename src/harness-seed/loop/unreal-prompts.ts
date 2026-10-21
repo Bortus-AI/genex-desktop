@@ -78,7 +78,8 @@ function kindLine(engine: string | undefined, kind: PluginKindOffer, laterKind =
 
 /**
  * The first rule of a new game's brief while engine plugins offer kinds: which kind it builds is the
- * user's one question before the first build, unless the ask already names it; each kind is named
+ * user's one question before the first build, unless the ask already names it (one it doesn't
+ * offer goes through `plugins_find` instead); each kind is named
  * by its scaffold's label when its plugin declares scaffolds ("Unreal game"). The web answer starts
  * Genex's web starter (`start_web_game`); each kind on offer (`kinds`, from the host, each with its
  * plugin's readiness) through its own kind tool, as its line says. A kind that makes no game (`game:
@@ -98,8 +99,10 @@ export function engineChoiceRule(
   const names = games.map((kind) => `"${kindName(kind)}"`);
   const web = `When it is the web, call ${toolCall(engine, ProjectTool.StartWebGame)} first, then build it here on its starter as the rules below say.`;
   const later = (kind: PluginKindOffer, at: number) => games.findIndex((first) => first.plugin === kind.plugin) < at;
+  // A request for an engine none of these options covers is looked for, never asked web or these.
+  const find = `When the request names another engine or tool, don't ask this question: call ${toolCall(engine, ProjectTool.PluginsFind)} with what it names and follow its answer, and never turn a plugin on yourself.`;
   return [
-    `FIRST, THE ENGINE: the user has engine plugins on, so this new game can be built for the web, here, or with ${names.join(" or ")}. Unless the request already names one, ask the user that one question with ${ask} before you build anything, with the options "Web: plays right here in Genex" and ${names.join(", ")} (each worded as its line below says), and end your reply.`,
+    `FIRST, THE ENGINE: the user has engine plugins on, so this new game can be built for the web, here, or with ${names.join(" or ")}. ${find} Unless the request already names one of these, ask the user that one question with ${ask} before you build anything, with the options "Web: plays right here in Genex" and ${names.join(", ")} (each worded as its line below says), and end your reply.`,
     ...games.map((kind, at) => kindLine(engine, kind, later(kind, at))),
     web,
     ...others,
